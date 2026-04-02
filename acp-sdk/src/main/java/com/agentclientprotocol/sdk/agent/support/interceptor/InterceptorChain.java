@@ -16,9 +16,8 @@ import java.util.List;
  * Manages interceptor execution with proper lifecycle tracking.
  * Ensures afterCompletion is only called for interceptors that started.
  *
- * <p>This class follows the Spring MVC pattern of tracking the index
- * of the last successfully invoked interceptor, ensuring proper cleanup
- * even when exceptions occur.
+ * <p>Tracks the index of the last successfully invoked interceptor,
+ * ensuring proper cleanup even when exceptions occur.
  *
  * @author Mark Pollack
  * @since 1.0.0

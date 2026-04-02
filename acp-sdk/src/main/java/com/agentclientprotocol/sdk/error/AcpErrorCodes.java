@@ -91,36 +91,24 @@ public final class AcpErrorCodes {
 
 	/**
 	 * Returns a human-readable description for the given error code.
-	 *
 	 * @param code the error code
 	 * @return a description of the error code
 	 */
 	public static String getDescription(int code) {
 		switch (code) {
-			case PARSE_ERROR:
-				return "Parse error";
-			case INVALID_REQUEST:
-				return "Invalid request";
-			case METHOD_NOT_FOUND:
-				return "Method not found";
-			case INVALID_PARAMS:
-				return "Invalid params";
-			case INTERNAL_ERROR:
-				return "Internal error";
-			case CONCURRENT_PROMPT:
-				return "Concurrent prompt";
-			case CAPABILITY_NOT_SUPPORTED:
-				return "Capability not supported";
-			case SESSION_NOT_FOUND:
-				return "Session not found";
-			case NOT_INITIALIZED:
-				return "Not initialized";
-			case AUTHENTICATION_REQUIRED:
-				return "Authentication required";
-			case PERMISSION_DENIED:
-				return "Permission denied";
-			default:
-				return "Unknown error";
+			case PARSE_ERROR: return "Parse error";
+			case INVALID_REQUEST: return "Invalid request";
+			case METHOD_NOT_FOUND: return "Method not found";
+			case INVALID_PARAMS: return "Invalid params";
+			case INTERNAL_ERROR: return "Internal error";
+			case CONCURRENT_PROMPT: return "Concurrent prompt";
+			case CAPABILITY_NOT_SUPPORTED: return "Capability not supported";
+			case SESSION_NOT_FOUND: return "Session not found";
+			case NOT_INITIALIZED: return "Not initialized";
+			case AUTHENTICATION_REQUIRED: return "Authentication required";
+			case PERMISSION_DENIED: return "Permission denied";
+			default: return "Unknown error";
 		}
 	}
+
 }

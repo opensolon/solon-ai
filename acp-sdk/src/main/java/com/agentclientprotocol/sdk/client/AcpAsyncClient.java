@@ -67,12 +67,12 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * // Create session and interact
  * String sessionId = client
- *     .newSession(new AcpSchema.NewSessionRequest("/workspace", List.of()))
+ *     .newSession(new AcpSchema.NewSessionRequest("/workspace", java.util.Collections.emptyList()))
  *     .map(AcpSchema.NewSessionResponse::sessionId)
  *     .block();
  *
  * AcpSchema.PromptResponse response = client
- *     .prompt(new AcpSchema.PromptRequest(sessionId, List.of(new AcpSchema.TextContent("Fix the bug"))))
+ *     .prompt(new AcpSchema.PromptRequest(sessionId, java.util.Collections.singletonList(new AcpSchema.TextContent("Fix the bug"))))
  *     .block();
  *
  * client.closeGracefully().block();

@@ -8,10 +8,6 @@ import com.agentclientprotocol.sdk.error.AcpErrorCodes;
 import com.agentclientprotocol.sdk.error.AcpProtocolException;
 import com.agentclientprotocol.sdk.util.Assert;
 import io.modelcontextprotocol.json.TypeRef;
-import lombok.AllArgsConstructor;
-import lombok.NoArgsConstructor;
-import lombok.var;
-import org.noear.solon.Utils;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -164,10 +160,9 @@ public class AcpClientSession implements AcpSession {
 
 	private void handle(AcpSchema.JSONRPCMessage message) {
 		if (message instanceof AcpSchema.JSONRPCResponse) {
-			AcpSchema.JSONRPCResponse response = (AcpSchema.JSONRPCResponse)message;
-			logger.debug("Received response: {}", response);
+AcpSchema.JSONRPCResponse response = (AcpSchema.JSONRPCResponse) message;			logger.debug("Received response: {}", response);
 			if (response.id() != null) {
-				var sink = pendingResponses.remove(response.id());
+				MonoSink<AcpSchema.JSONRPCResponse> sink = pendingResponses.remove(response.id());
 				if (sink == null) {
 					logger.warn("Unexpected response for unknown id {}", response.id());
 				}
@@ -183,22 +178,20 @@ public class AcpClientSession implements AcpSession {
 			}
 		}
 		else if (message instanceof AcpSchema.JSONRPCRequest) {
-			AcpSchema.JSONRPCRequest request = (AcpSchema.JSONRPCRequest)message;
-			logger.debug("Received request: {}", request);
+AcpSchema.JSONRPCRequest request = (AcpSchema.JSONRPCRequest) message;			logger.debug("Received request: {}", request);
 			logger.trace("Incoming request method='{}' id={}", request.method(), request.id());
 			handleIncomingRequest(request).onErrorResume(error -> {
 				// Preserve error codes from AcpProtocolException, wrap others in INTERNAL_ERROR
 				int errorCode;
 				Object errorData = null;
 				if (error instanceof AcpProtocolException) {
-					AcpProtocolException protocolException = (AcpProtocolException) error;
-					errorCode = protocolException.getCode();
+AcpProtocolException protocolException = (AcpProtocolException) error;					errorCode = protocolException.getCode();
 					errorData = protocolException.getData();
 				}
 				else {
 					errorCode = AcpErrorCodes.INTERNAL_ERROR;
 				}
-				var errorResponse = new AcpSchema.JSONRPCResponse(AcpSchema.JSONRPC_VERSION, request.id(), null,
+				AcpSchema.JSONRPCResponse errorResponse = new AcpSchema.JSONRPCResponse(AcpSchema.JSONRPC_VERSION, request.id(), null,
 						new AcpSchema.JSONRPCError(errorCode, error.getMessage(), errorData));
 				return Mono.just(errorResponse);
 			}).flatMap(this.transport::sendMessage).onErrorComplete(t -> {
@@ -207,8 +200,7 @@ public class AcpClientSession implements AcpSession {
 			}).subscribe();
 		}
 		else if (message instanceof AcpSchema.JSONRPCNotification) {
-			AcpSchema.JSONRPCNotification notification = (AcpSchema.JSONRPCNotification)message;
-			logger.debug("Received notification: {}", notification);
+AcpSchema.JSONRPCNotification notification = (AcpSchema.JSONRPCNotification) message;			logger.debug("Received notification: {}", notification);
 			logger.trace("Incoming notification method='{}' params={}", notification.method(), notification.params());
 			handleIncomingNotification(notification).onErrorComplete(t -> {
 				logger.error("Error handling notification: {}", t.getMessage());
@@ -227,7 +219,7 @@ public class AcpClientSession implements AcpSession {
 	 */
 	private Mono<AcpSchema.JSONRPCResponse> handleIncomingRequest(AcpSchema.JSONRPCRequest request) {
 		return Mono.defer(() -> {
-			var handler = this.requestHandlers.get(request.method());
+			RequestHandler handler = this.requestHandlers.get(request.method());
 			if (handler == null) {
 				MethodNotFoundError error = getMethodNotFoundError(request.method());
 				logger.warn("No handler registered for request method '{}': {} - {}",
@@ -240,31 +232,27 @@ public class AcpClientSession implements AcpSession {
 
 			logger.debug("Invoking handler for method '{}'", request.method());
 			logger.trace("Handler params for '{}': {}", request.method(), request.params());
-			return handler.handle(request.params())
-				.doOnSuccess(result -> logger.debug("Handler for '{}' completed successfully", request.method()))
-				.doOnError(error -> logger.debug("Handler for '{}' threw error: {}", request.method(), error.getMessage()))
-				.map(result -> new AcpSchema.JSONRPCResponse(AcpSchema.JSONRPC_VERSION, request.id(), result, null));
+			@SuppressWarnings("unchecked")
+			Mono<Object> result = handler.handle(request.params());
+			return result
+				.doOnSuccess(r -> logger.debug("Handler for '{}' completed successfully", request.method()))
+				.doOnError(Throwable.class, err -> logger.debug("Handler for '{}' threw error: {}", request.method(), err.getMessage()))
+				.map(r -> new AcpSchema.JSONRPCResponse(AcpSchema.JSONRPC_VERSION, request.id(), r, null));
 		});
 	}
 
-	@NoArgsConstructor
-	@AllArgsConstructor
-	public static class MethodNotFoundError {
-		String method;
-		String message;
-		Object data;
-
-		public String method(){
-			return method;
+	static final class MethodNotFoundError {
+		private final String method;
+		private final String message;
+		private final Object data;
+		MethodNotFoundError(String method, String message, Object data) {
+			this.method = method;
+			this.message = message;
+			this.data = data;
 		}
-
-		public String message(){
-			return message;
-		}
-
-		public Object data(){
-			return data;
-		}
+		String method() { return this.method; }
+		String message() { return this.message; }
+		Object data() { return this.data; }
 	}
 
 	private MethodNotFoundError getMethodNotFoundError(String method) {
@@ -272,20 +260,20 @@ public class AcpClientSession implements AcpSession {
 		switch (method) {
 			case AcpSchema.METHOD_FS_READ_TEXT_FILE:
 				return new MethodNotFoundError(method, "File system read not supported",
-						Utils.asMap("reason", "Client does not have fs.readTextFile capability"));
+						java.util.Collections.singletonMap("reason", (Object) "Client does not have fs.readTextFile capability"));
 			case AcpSchema.METHOD_FS_WRITE_TEXT_FILE:
 				return new MethodNotFoundError(method, "File system write not supported",
-						Utils.asMap("reason", "Client does not have fs.writeTextFile capability"));
+						java.util.Collections.singletonMap("reason", (Object) "Client does not have fs.writeTextFile capability"));
 			case AcpSchema.METHOD_SESSION_REQUEST_PERMISSION:
 				return new MethodNotFoundError(method, "Permission request not supported",
-						Utils.asMap("reason", "No requestPermissionHandler registered - use --yolo flag or register a handler"));
+						java.util.Collections.singletonMap("reason", (Object) "No requestPermissionHandler registered - use --yolo flag or register a handler"));
 			case AcpSchema.METHOD_TERMINAL_CREATE:
 			case AcpSchema.METHOD_TERMINAL_OUTPUT:
 			case AcpSchema.METHOD_TERMINAL_RELEASE:
 			case AcpSchema.METHOD_TERMINAL_WAIT_FOR_EXIT:
 			case AcpSchema.METHOD_TERMINAL_KILL:
 				return new MethodNotFoundError(method, "Terminal not supported",
-						Utils.asMap("reason", "Client does not have terminal capability"));
+						java.util.Collections.singletonMap("reason", (Object) "Client does not have terminal capability"));
 			default:
 				return new MethodNotFoundError(method, "Method not found: " + method, null);
 		}
@@ -298,7 +286,7 @@ public class AcpClientSession implements AcpSession {
 	 */
 	private Mono<Void> handleIncomingNotification(AcpSchema.JSONRPCNotification notification) {
 		return Mono.defer(() -> {
-			var handler = notificationHandlers.get(notification.method());
+			NotificationHandler handler = notificationHandlers.get(notification.method());
 			if (handler == null) {
 				logger.warn("No handler registered for notification method: {}", notification);
 				return Mono.empty();
@@ -413,8 +401,8 @@ public class AcpClientSession implements AcpSession {
 		}
 
 		private static String formatErrorData(Object data) {
-			if (data instanceof Map<?, ?>) {
-				Map<?, ?> map = (Map<?, ?>)data;
+			if (data instanceof Map) {
+				Map<?, ?> map = (Map<?, ?>) data;
 				// Extract common fields for better readability
 				Object details = map.get("details");
 				if (details != null) {

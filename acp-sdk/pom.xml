@@ -18,28 +18,38 @@
     <dependencies>
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-net</artifactId>
+            <artifactId>mcp-sdk</artifactId>
+        </dependency>
+
+        <!-- Reactor for async operations -->
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-core</artifactId>
+            <version>${reactor-core.version}</version>
+        </dependency>
+
+        <!-- Jackson JSON processing -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-ai-mcp</artifactId>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-ai-agent</artifactId>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>snack4</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>java-websocket-ns</artifactId>
-            <version>1.1</version>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
         </dependency>
 
         <dependency>

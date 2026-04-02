@@ -10,10 +10,8 @@ import com.agentclientprotocol.sdk.spec.AcpSchema.*;
 import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * Default implementation of {@link PromptContext} that delegates to an {@link AcpAsyncAgent}.
@@ -138,17 +136,16 @@ class DefaultPromptContext implements PromptContext {
 				UUID.randomUUID().toString(), action, ToolKind.EDIT, ToolCallStatus.PENDING,
 				null, null, null, null);
 
-		List<PermissionOption> options = Arrays.asList(
+		List<PermissionOption> options = java.util.Arrays.asList(
 				new PermissionOption("allow", "Allow", PermissionOptionKind.ALLOW_ONCE),
 				new PermissionOption("deny", "Deny", PermissionOptionKind.REJECT_ONCE));
 
 		return requestPermission(new RequestPermissionRequest(sessionId, toolCall, options))
 				.map(response -> {
-					if(response.outcome() instanceof PermissionSelected){
+					if (response.outcome() instanceof PermissionSelected) {
 						PermissionSelected s = (PermissionSelected) response.outcome();
 						return "allow".equals(s.optionId());
 					}
-
 					return false;
 				});
 	}
@@ -192,7 +189,7 @@ class DefaultPromptContext implements PromptContext {
 		if (command.env() != null) {
 			envList = command.env().entrySet().stream()
 					.map(e -> new EnvVariable(e.getKey(), e.getValue()))
-					.collect(Collectors.toList());
+					.collect(java.util.stream.Collectors.toList());
 		}
 
 		return createTerminal(new CreateTerminalRequest(

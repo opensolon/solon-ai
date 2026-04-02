@@ -43,7 +43,6 @@ public class MonoHandler implements ReturnValueHandler {
 
 	/**
 	 * Get the generic type parameter of the Mono (e.g., PromptResponse from Mono&lt;PromptResponse&gt;).
-	 *
 	 * @param returnType the return type parameter
 	 * @return the generic type, or Object if not determinable
 	 */
@@ -58,4 +57,5 @@ public class MonoHandler implements ReturnValueHandler {
 		}
 		return Object.class;
 	}
+
 }

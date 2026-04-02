@@ -16,7 +16,6 @@ import com.agentclientprotocol.sdk.capabilities.NegotiatedCapabilities;
 import com.agentclientprotocol.sdk.spec.AcpAgentTransport;
 import com.agentclientprotocol.sdk.spec.AcpSchema.InitializeResponse;
 import com.agentclientprotocol.sdk.spec.AcpSchema.NewSessionResponse;
-import lombok.var;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,7 +31,7 @@ import java.util.function.Supplier;
  * Bootstrap class for annotation-based ACP agents.
  *
  * <p>This class provides a fluent builder API to configure and run
- * annotation-based agents without requiring Spring or other frameworks.
+ * annotation-based agents without requiring any external framework.
  *
  * <p>Example usage:
  * <pre>{@code
@@ -80,7 +79,7 @@ public class AcpAgentSupport {
 		this.interceptors = builder.interceptors;
 
 		// Build the underlying sync agent
-		var agentBuilder = AcpAgent.sync(builder.transport)
+		AcpAgent.SyncAgentBuilder agentBuilder = AcpAgent.sync(builder.transport)
 				.requestTimeout(builder.requestTimeout);
 
 		// Wire discovered handlers to the agent builder
@@ -245,7 +244,7 @@ public class AcpAgentSupport {
 				return (T) replacement;
 			}
 			if (e instanceof RuntimeException) {
-				throw (RuntimeException)e;
+				throw (RuntimeException) e;
 			}
 			throw new RuntimeException(e);
 		}

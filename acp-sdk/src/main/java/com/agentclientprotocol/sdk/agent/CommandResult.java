@@ -4,13 +4,13 @@
 
 package com.agentclientprotocol.sdk.agent;
 
-import lombok.AllArgsConstructor;
+import java.util.Objects;
 
 /**
  * Result of executing a terminal command via the convenience API.
  *
  * <p>
- * This record wraps the output and exit code from a terminal command execution,
+ * This class wraps the output and exit code from a terminal command execution,
  * providing a clean interface for the common case of running a command and
  * checking its result.
  *
@@ -30,11 +30,17 @@ import lombok.AllArgsConstructor;
  * @see SyncPromptContext#execute(String...)
  * @see PromptContext#execute(String...)
  */
-@AllArgsConstructor
-public class CommandResult {
-	String output;
-	int exitCode;
-	boolean timedOut;
+public final class CommandResult {
+
+	private final String output;
+	private final int exitCode;
+	private final boolean timedOut;
+
+	public CommandResult(String output, int exitCode, boolean timedOut) {
+		this.output = output;
+		this.exitCode = exitCode;
+		this.timedOut = timedOut;
+	}
 
 	/**
 	 * Creates a CommandResult with the given output and exit code.
@@ -46,6 +52,18 @@ public class CommandResult {
 		this(output, exitCode, false);
 	}
 
+	public String output() {
+		return this.output;
+	}
+
+	public int exitCode() {
+		return this.exitCode;
+	}
+
+	public boolean timedOut() {
+		return this.timedOut;
+	}
+
 	/**
 	 * Returns true if the command completed successfully (exit code 0).
 	 * @return true if exit code is 0 and command did not time out
@@ -54,16 +72,22 @@ public class CommandResult {
 		return exitCode == 0 && !timedOut;
 	}
 
-	public String output() {
-		return output;
+	@Override
+	public boolean equals(Object o) {
+		if (this == o) return true;
+		if (o == null || getClass() != o.getClass()) return false;
+		CommandResult that = (CommandResult) o;
+		return exitCode == that.exitCode && timedOut == that.timedOut && Objects.equals(output, that.output);
 	}
 
-	public int exitCode() {
-		return exitCode;
+	@Override
+	public int hashCode() {
+		return Objects.hash(output, exitCode, timedOut);
 	}
 
-	public boolean timedOut() {
-		return timedOut;
+	@Override
+	public String toString() {
+		return "CommandResult[output=" + output + ", exitCode=" + exitCode + ", timedOut=" + timedOut + "]";
 	}
 
 }

@@ -50,12 +50,12 @@ import java.time.Duration;
  *
  *     // Create session
  *     AcpSchema.NewSessionResponse sessionResponse = client.newSession(
- *         new AcpSchema.NewSessionRequest("/workspace", List.of()));
+ *         new AcpSchema.NewSessionRequest("/workspace", java.util.Collections.emptyList()));
  *
  *     // Send prompt
  *     AcpSchema.PromptResponse response = client.prompt(
  *         new AcpSchema.PromptRequest(sessionResponse.sessionId(),
- *             List.of(new AcpSchema.TextContent("Fix the bug"))));
+ *             java.util.Collections.singletonList(new AcpSchema.TextContent("Fix the bug"))));
  *
  *     System.out.println("Stop reason: " + response.stopReason());
  * }

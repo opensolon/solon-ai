@@ -10,7 +10,6 @@ import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCMessage;
 import com.agentclientprotocol.sdk.util.Assert;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
-import lombok.var;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -23,6 +22,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -260,12 +260,9 @@ public class StdioAcpClientTransport implements AcpClientTransport {
 
 	@Override
 	public Mono<Void> sendMessage(JSONRPCMessage message) {
-		if (this.outboundSink.tryEmitNext(message).isSuccess()) {
-			return Mono.empty();
-		}
-		else {
-			return Mono.error(new RuntimeException("Failed to enqueue message"));
-		}
+		this.outboundSink.emitNext(message,
+				Sinks.EmitFailureHandler.busyLooping(Duration.ofMillis(100)));
+		return Mono.empty();
 	}
 
 	/**
@@ -327,7 +324,7 @@ public class StdioAcpClientTransport implements AcpClientTransport {
 						jsonMessage = jsonMessage.replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\n");
 						logger.trace("SEND: {}", jsonMessage);
 
-						var os = this.process.getOutputStream();
+						java.io.OutputStream os = this.process.getOutputStream();
 						synchronized (os) {
 							os.write(jsonMessage.getBytes(StandardCharsets.UTF_8));
 							os.write("\n".getBytes(StandardCharsets.UTF_8));

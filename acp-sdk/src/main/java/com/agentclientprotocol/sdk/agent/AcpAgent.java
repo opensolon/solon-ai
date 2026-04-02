@@ -47,7 +47,7 @@ import java.util.concurrent.Executors;
  *     .agentInfo(new AcpSchema.AgentCapabilities(true, null, null))
  *     .initializeHandler(request -> {
  *         return Mono.just(new AcpSchema.InitializeResponse(1,
- *             new AcpSchema.AgentCapabilities(), List.of()));
+ *             new AcpSchema.AgentCapabilities(), java.util.Collections.emptyList()));
  *     })
  *     .newSessionHandler(request -> {
  *         return Mono.just(new AcpSchema.NewSessionResponse(
@@ -488,7 +488,7 @@ public interface AcpAgent {
 	 * <p>Example usage:</p>
 	 * <pre>{@code
 	 * AcpSyncAgent agent = AcpAgent.sync(transport)
-	 *     .initializeHandler(req -> new InitializeResponse(1, capabilities, List.of()))
+	 *     .initializeHandler(req -> new InitializeResponse(1, capabilities, java.util.Collections.emptyList()))
 	 *     .newSessionHandler(req -> new NewSessionResponse(sessionId, null, null))
 	 *     .promptHandler((req, updater) -> {
 	 *         updater.sendUpdate(sessionId, thought);  // blocks, void return

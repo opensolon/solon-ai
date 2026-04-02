@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
  * Factory class for creating Agent Client Protocol (ACP) clients. ACP is a protocol that
@@ -71,10 +70,10 @@ import java.util.stream.Collectors;
  *
  * // Initialize and use
  * client.initialize(new AcpSchema.InitializeRequest(1, new AcpSchema.ClientCapabilities()))
- *     .flatMap(initResponse -> client.newSession(new AcpSchema.NewSessionRequest("/workspace", List.of())))
+ *     .flatMap(initResponse -> client.newSession(new AcpSchema.NewSessionRequest("/workspace", java.util.Collections.emptyList())))
  *     .flatMap(sessionResponse -> client.prompt(new AcpSchema.PromptRequest(
  *         sessionResponse.sessionId(),
- *         List.of(new AcpSchema.TextContent("Fix the failing test")))))
+ *         java.util.Collections.singletonList(new AcpSchema.TextContent("Fix the failing test")))))
  *     .doOnNext(response -> System.out.println("Response: " + response))
  *     .block();
  *
@@ -515,7 +514,7 @@ public interface AcpClient {
 
 					// Call all registered consumers
 					return Mono
-						.when(sessionUpdateConsumers.stream().map(consumer -> consumer.apply(notification)).collect(Collectors.toList()));
+						.when(sessionUpdateConsumers.stream().map(consumer -> consumer.apply(notification)).collect(java.util.stream.Collectors.toList()));
 				});
 			}
 
@@ -840,8 +839,8 @@ public interface AcpClient {
 		 * <p>Example usage:
 		 * <pre>{@code
 		 * .sessionUpdateConsumer(notification -> {
-		 *     if (notification.update() instanceof AgentMessageChunk msg) {
-		 *         System.out.println(msg.content());
+		 *     if (notification.update() instanceof AgentMessageChunk) {
+AgentMessageChunk msg = (AgentMessageChunk) notification.update();		 *         System.out.println(msg.content());
 		 *     }
 		 * })
 		 * }</pre>
@@ -910,7 +909,7 @@ public interface AcpClient {
 
 					// Call all registered consumers
 					return Mono
-						.when(sessionUpdateConsumers.stream().map(consumer -> consumer.apply(notification)).collect(Collectors.toList()));
+						.when(sessionUpdateConsumers.stream().map(consumer -> consumer.apply(notification)).collect(java.util.stream.Collectors.toList()));
 				});
 			}
 

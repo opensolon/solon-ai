@@ -20,7 +20,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -131,7 +131,7 @@ public class StdioAcpAgentTransport implements AcpAgentTransport {
 
 	@Override
 	public List<Integer> protocolVersions() {
-		return Arrays.asList(AcpSchema.LATEST_PROTOCOL_VERSION);
+		return java.util.Collections.singletonList(AcpSchema.LATEST_PROTOCOL_VERSION);
 	}
 
 	@Override
@@ -274,12 +274,9 @@ public class StdioAcpAgentTransport implements AcpAgentTransport {
 	@Override
 	public Mono<Void> sendMessage(JSONRPCMessage message) {
 		return Mono.zip(inboundReady.asMono(), outboundReady.asMono()).then(Mono.defer(() -> {
-			if (outboundSink.tryEmitNext(message).isSuccess()) {
-				return Mono.empty();
-			}
-			else {
-				return Mono.error(new RuntimeException("Failed to enqueue message"));
-			}
+			outboundSink.emitNext(message,
+					Sinks.EmitFailureHandler.busyLooping(Duration.ofMillis(100)));
+			return Mono.empty();
 		}));
 	}
 

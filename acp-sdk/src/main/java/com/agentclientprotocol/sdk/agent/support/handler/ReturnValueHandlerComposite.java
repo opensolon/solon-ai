@@ -8,14 +8,14 @@ import com.agentclientprotocol.sdk.agent.support.AcpInvocationContext;
 import com.agentclientprotocol.sdk.agent.support.AcpMethodParameter;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
  * Composite that chains multiple return value handlers.
  *
  * <p>NOTE: Unlike argument resolvers, NO caching is used here.
- * This follows the Spring MVC pattern where return types vary more
- * and caching provides less benefit.
+ * Return types vary more and caching provides less benefit.
  *
  * @author Mark Pollack
  * @since 1.0.0
@@ -49,7 +49,7 @@ public class ReturnValueHandlerComposite implements ReturnValueHandler {
 	 * @return unmodifiable list of handlers
 	 */
 	public List<ReturnValueHandler> getHandlers() {
-		return new ArrayList<>(handlers);
+		return Collections.unmodifiableList(new ArrayList<ReturnValueHandler>(handlers));
 	}
 
 	@Override
