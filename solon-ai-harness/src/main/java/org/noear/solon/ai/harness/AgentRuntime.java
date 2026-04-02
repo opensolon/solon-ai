@@ -75,7 +75,7 @@ public class AgentRuntime {
     private final CliSkillProvider cliSkills = new CliSkillProvider();
 
     private final SummarizationInterceptor summarizationInterceptor;
-    private final HITLInterceptor hitlInterceptor = new HITLInterceptor().onTool("bash", new HitlStrategy());
+    private final HITLInterceptor hitlInterceptor;
 
 
     private AgentManager agentManager;
@@ -136,10 +136,16 @@ public class AgentRuntime {
         return restApiSkill;
     }
 
-    private AgentRuntime(ChatModel chatModel, AgentProperties properties, AgentSessionProvider sessionProvider, Collection<ReActAgentExtension> extensions) {
+    private AgentRuntime(ChatModel chatModel, AgentProperties properties, AgentSessionProvider sessionProvider, HITLInterceptor hitlInterceptor, Collection<ReActAgentExtension> extensions) {
         this.chatModel = chatModel;
         this.properties = properties;
         this.sessionProvider = sessionProvider;
+
+        if (hitlInterceptor == null) {
+            this.hitlInterceptor = new HITLInterceptor().onTool("bash", new HitlStrategy());
+        } else {
+            this.hitlInterceptor = hitlInterceptor;
+        }
 
         if (Assert.isNotEmpty(properties.getRestApis())) {
             restApiSkill = new RestApiSkill();
@@ -267,6 +273,7 @@ public class AgentRuntime {
         private AgentProperties properties;
         private AgentSessionProvider sessionProvider;
         private List<ReActAgentExtension> extensions = new ArrayList<>();
+        private HITLInterceptor hitlInterceptor;
 
         public Builder chatModel(ChatModel chatModel) {
             this.chatModel = chatModel;
@@ -283,6 +290,11 @@ public class AgentRuntime {
             return this;
         }
 
+        public Builder hitlInterceptor(HITLInterceptor hitlInterceptor) {
+            this.hitlInterceptor = hitlInterceptor;
+            return this;
+        }
+
         public Builder extension(ReActAgentExtension extension) {
             this.extensions.add(extension);
             return this;
@@ -293,7 +305,7 @@ public class AgentRuntime {
             Objects.nonNull(properties);
             Objects.nonNull(sessionProvider);
 
-            return new AgentRuntime(chatModel, properties, sessionProvider, extensions);
+            return new AgentRuntime(chatModel, properties, sessionProvider, hitlInterceptor, extensions);
         }
     }
 }
