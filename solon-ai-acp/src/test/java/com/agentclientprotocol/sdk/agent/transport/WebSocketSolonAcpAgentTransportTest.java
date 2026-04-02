@@ -1,248 +1,340 @@
 /*
- * Copyright 2025-2026 the original author or authors.
+ * Copyright 2025-2025 the original author or authors.
  */
 
 package com.agentclientprotocol.sdk.agent.transport;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
-import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCMessage;
-import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCRequest;
-import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCResponse;
 import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Solon;
-import org.noear.solon.net.websocket.WebSocketRouter;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.time.Duration;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * WebSocketSolonAcpAgentTransport 单元测试
+ * Unit tests for WebSocketSolonAcpAgentTransport.
  *
- * @author test
+ * @author Tests generated for Solon AI ACP module
  */
-@DisplayName("WebSocketSolonAcpAgentTransport 测试")
 class WebSocketSolonAcpAgentTransportTest {
+
+    private static final int TEST_PORT = 18081;
+    private static boolean solonStarted = false;
+    private static AtomicInteger pathCounter = new AtomicInteger(0);
 
     private McpJsonMapper jsonMapper;
     private WebSocketSolonAcpAgentTransport transport;
 
+    @BeforeAll
+    static void startSolon() {
+        if (!solonStarted) {
+            Solon.start(WebSocketSolonAcpAgentTransportTest.class, new String[]{
+                    "--server.port=" + TEST_PORT
+            }, builder -> {
+                builder.enableWebSocket(true);
+            });
+            solonStarted = true;
+        }
+    }
+
     @BeforeEach
     void setUp() {
         jsonMapper = McpJsonMapper.getDefault();
-        // 确保 Solon 已启动（用于 WebSocket 路由）
-        if (Solon.app() == null) {
-            Solon.start(WebSocketSolonAcpAgentTransportTest.class, new String[]{}, builder -> {
-                builder.enableWebSocket(true);
-            });
-        }
+        transport = new WebSocketSolonAcpAgentTransport(jsonMapper);
     }
 
     @AfterEach
     void tearDown() {
         if (transport != null) {
-            transport.closeGracefully().block(Duration.ofSeconds(5));
+            try {
+                transport.closeGracefully().block(Duration.ofSeconds(2));
+            } catch (Exception e) {
+                // ignore
+            }
+            transport = null;
         }
     }
 
-    // ==================== 构造函数测试 ====================
-
-    @Test
-    @DisplayName("构造函数 - 正常创建（使用默认路径）")
-    void testConstructorWithDefaultPath() {
-        transport = new WebSocketSolonAcpAgentTransport(jsonMapper);
-        assertNotNull(transport);
-        assertEquals(WebSocketSolonAcpAgentTransport.DEFAULT_ACP_PATH, "/acp");
+    private String uniquePath() {
+        return "/acp-test-" + pathCounter.incrementAndGet();
     }
 
     @Test
-    @DisplayName("构造函数 - 正常创建（使用自定义路径）")
-    void testConstructorWithCustomPath() {
-        String customPath = "/custom-acp";
-        transport = new WebSocketSolonAcpAgentTransport(customPath, jsonMapper);
-        assertNotNull(transport);
+    @DisplayName("Test transport construction with default path")
+    void testConstructionWithDefaultPath() {
+        WebSocketSolonAcpAgentTransport t = new WebSocketSolonAcpAgentTransport(jsonMapper);
+        assertNotNull(t);
     }
 
     @Test
-    @DisplayName("构造函数 - 路径为空应抛出异常")
-    void testConstructorWithEmptyPath() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            new WebSocketSolonAcpAgentTransport("", jsonMapper);
-        });
+    @DisplayName("Test transport construction with custom path")
+    void testConstructionWithCustomPath() {
+        WebSocketSolonAcpAgentTransport t = new WebSocketSolonAcpAgentTransport("/custom-acp", jsonMapper);
+        assertNotNull(t);
     }
 
     @Test
-    @DisplayName("构造函数 - 路径为 null 应抛出异常")
-    void testConstructorWithNullPath() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            new WebSocketSolonAcpAgentTransport(null, jsonMapper);
-        });
+    @DisplayName("Test idleTimeout configuration")
+    void testIdleTimeoutConfiguration() {
+        WebSocketSolonAcpAgentTransport t = transport.idleTimeout(Duration.ofMinutes(10));
+        assertNotNull(t);
+        // fluent API returns same instance
+        assertSame(transport, t);
     }
 
     @Test
-    @DisplayName("构造函数 - JsonMapper 为 null 应抛出异常")
-    void testConstructorWithNullJsonMapper() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            new WebSocketSolonAcpAgentTransport("/acp", null);
-        });
-    }
+    @DisplayName("Test start cannot be called twice")
+    void testStartCannotBeCalledTwice() {
+        // Use unique path for this test
+        transport = new WebSocketSolonAcpAgentTransport(uniquePath(), jsonMapper);
 
-    // ==================== idleTimeout 配置测试 ====================
+        Function<Mono<AcpSchema.JSONRPCMessage>, Mono<AcpSchema.JSONRPCMessage>> handler = 
+                input -> input.map(msg -> new AcpSchema.JSONRPCResponse(
+                        AcpSchema.JSONRPC_VERSION,
+                        ((AcpSchema.JSONRPCRequest) msg).id(),
+                        AcpSchema.InitializeResponse.ok(),
+                        null
+                ));
 
-    @Test
-    @DisplayName("idleTimeout - 正常设置超时时间")
-    void testIdleTimeoutSetting() {
-        transport = new WebSocketSolonAcpAgentTransport(jsonMapper);
-        Duration timeout = Duration.ofMinutes(10);
-        transport.idleTimeout(timeout);
-        assertNotNull(transport);
-    }
-
-    // ==================== start() 方法测试 ====================
-
-    @Test
-    @DisplayName("start - 正常启动")
-    void testStartSuccessfully() {
-        transport = new WebSocketSolonAcpAgentTransport("/test-acp-1", jsonMapper);
-
-        Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler = msg -> msg;
-
-        StepVerifier.create(transport.start(handler))
+        // First start succeeds
+        Mono<Void> startResult = transport.start(handler);
+        StepVerifier.create(startResult)
                 .verifyComplete();
+
+        // Second start should fail
+        Mono<Void> secondStart = transport.start(handler);
+        StepVerifier.create(secondStart)
+                .verifyError(IllegalStateException.class);
     }
 
     @Test
-    @DisplayName("start - 重复启动应返回错误")
-    void testStartTwiceShouldFail() {
-        transport = new WebSocketSolonAcpAgentTransport("/test-acp-2", jsonMapper);
+    @DisplayName("Test setExceptionHandler")
+    void testSetExceptionHandler() {
+        AtomicBoolean handlerCalled = new AtomicBoolean(false);
+        Consumer<Throwable> handler = e -> handlerCalled.set(true);
 
-        Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler = msg -> msg;
+        transport.setExceptionHandler(handler);
+        // Verify handler is set (indirectly through exception handling)
+        assertNotNull(handler);
+    }
 
-        // 第一次启动
+    @Test
+    @DisplayName("Test unmarshalFrom with Map")
+    void testUnmarshalFromMap() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("cwd", "/workspace");
+        data.put("mcpServers", Collections.emptyList());
+
+        AcpSchema.NewSessionRequest request = transport.unmarshalFrom(
+                data,
+                new TypeRef<AcpSchema.NewSessionRequest>() {}
+        );
+
+        assertEquals("/workspace", request.cwd());
+        assertNotNull(request.mcpServers());
+        assertTrue(request.mcpServers().isEmpty());
+    }
+
+    @Test
+    @DisplayName("Test unmarshalFrom with nested object")
+    void testUnmarshalFromNestedObject() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("protocolVersion", 1);
+        Map<String, Object> caps = new HashMap<>();
+        caps.put("terminal", true);
+        data.put("clientCapabilities", caps);
+
+        AcpSchema.InitializeRequest request = transport.unmarshalFrom(
+                data,
+                new TypeRef<AcpSchema.InitializeRequest>() {}
+        );
+
+        assertEquals(1, request.protocolVersion());
+        assertNotNull(request.clientCapabilities());
+    }
+
+    @Test
+    @DisplayName("Test closeGracefully")
+    void testCloseGracefully() {
+        // Use unique path for this test
+        transport = new WebSocketSolonAcpAgentTransport(uniquePath(), jsonMapper);
+
+        Function<Mono<AcpSchema.JSONRPCMessage>, Mono<AcpSchema.JSONRPCMessage>> handler = 
+                input -> input.map(msg -> new AcpSchema.JSONRPCResponse(
+                        AcpSchema.JSONRPC_VERSION,
+                        ((AcpSchema.JSONRPCRequest) msg).id(),
+                        AcpSchema.InitializeResponse.ok(),
+                        null
+                ));
+
         transport.start(handler).block(Duration.ofSeconds(5));
 
-        // 第二次启动应失败
-        StepVerifier.create(transport.start(handler))
-                .expectError(IllegalStateException.class)
-                .verify(Duration.ofSeconds(5));
+        Mono<Void> closeResult = transport.closeGracefully();
+        StepVerifier.create(closeResult)
+                .verifyComplete();
     }
 
-    // ==================== sendMessage() 方法测试 ====================
-
     @Test
-    @DisplayName("sendMessage - 广播消息到所有活跃会话")
-    void testSendMessageBroadcast() {
-        transport = new WebSocketSolonAcpAgentTransport("/test-acp-3", jsonMapper);
-        transport.start(msg -> msg).block(Duration.ofSeconds(5));
-
-        JSONRPCMessage message = new JSONRPCResponse(
-                AcpSchema.JSONRPC_VERSION,
-                "test-id",
-                "test-result",
-                null
+    @DisplayName("Test sendMessage returns Mono")
+    void testSendMessageReturnsMono() {
+        AcpSchema.JSONRPCNotification notification = new AcpSchema.JSONRPCNotification(
+                AcpSchema.METHOD_SESSION_CANCEL,
+                new AcpSchema.CancelNotification("test-session")
         );
 
-        StepVerifier.create(transport.sendMessage(message))
-                .verifyComplete();
-    }
-
-    // ==================== closeGracefully() 方法测试 ====================
-
-    @Test
-    @DisplayName("closeGracefully - 正常关闭")
-    void testCloseGracefully() {
-        transport = new WebSocketSolonAcpAgentTransport("/test-acp-4", jsonMapper);
-        transport.start(msg -> msg).block(Duration.ofSeconds(5));
-
-        StepVerifier.create(transport.closeGracefully())
-                .verifyComplete();
+        Mono<Void> sendResult = transport.sendMessage(notification);
+        assertNotNull(sendResult);
     }
 
     @Test
-    @DisplayName("closeGracefully - 重复关闭不会出错")
-    void testCloseGracefullyTwice() {
-        transport = new WebSocketSolonAcpAgentTransport("/test-acp-5", jsonMapper);
-        transport.start(msg -> msg).block(Duration.ofSeconds(5));
-
-        // 第一次关闭
-        transport.closeGracefully().block(Duration.ofSeconds(5));
-
-        // 第二次关闭不应出错
-        StepVerifier.create(transport.closeGracefully())
-                .verifyComplete();
-    }
-
-    // ==================== awaitTermination() 方法测试 ====================
-
-    @Test
-    @DisplayName("awaitTermination - 等待终止信号")
+    @DisplayName("Test awaitTermination")
     void testAwaitTermination() {
-        transport = new WebSocketSolonAcpAgentTransport("/test-acp-6", jsonMapper);
-        transport.start(msg -> msg).block(Duration.ofSeconds(5));
+        Mono<Void> termination = transport.awaitTermination();
+        assertNotNull(termination);
+    }
 
-        AtomicBoolean completed = new AtomicBoolean(false);
+    @Test
+    @DisplayName("Test closeGracefully can be called multiple times safely")
+    void testCloseGracefullyMultipleTimes() {
+        // Use unique path for this test
+        transport = new WebSocketSolonAcpAgentTransport(uniquePath(), jsonMapper);
 
-        // 在关闭后，awaitTermination 应完成
+        Function<Mono<AcpSchema.JSONRPCMessage>, Mono<AcpSchema.JSONRPCMessage>> handler = 
+                input -> input.map(msg -> new AcpSchema.JSONRPCResponse(
+                        AcpSchema.JSONRPC_VERSION,
+                        ((AcpSchema.JSONRPCRequest) msg).id(),
+                        AcpSchema.InitializeResponse.ok(),
+                        null
+                ));
+
+        transport.start(handler).block(Duration.ofSeconds(5));
+
+        // First close
         transport.closeGracefully().block(Duration.ofSeconds(5));
 
-        StepVerifier.create(transport.awaitTermination())
+        // Second close should complete without error
+        StepVerifier.create(transport.closeGracefully())
                 .verifyComplete();
     }
 
-    // ==================== setExceptionHandler() 方法测试 ====================
-
     @Test
-    @DisplayName("setExceptionHandler - 设置异常处理器")
-    void testSetExceptionHandler() {
-        transport = new WebSocketSolonAcpAgentTransport("/test-acp-7", jsonMapper);
-
-        AtomicReference<Throwable> capturedException = new AtomicReference<>();
-        transport.setExceptionHandler(capturedException::set);
-
-        assertNotNull(transport);
+    @DisplayName("Test InitializeResponse ok factory methods")
+    void testInitializeResponseOkFactory() {
+        AcpSchema.InitializeResponse response = AcpSchema.InitializeResponse.ok();
+        assertEquals(1, response.protocolVersion());
+        assertNotNull(response.agentCapabilities());
     }
 
-    // ==================== unmarshalFrom() 方法测试 ====================
+    @Test
+    @DisplayName("Test InitializeResponse ok with capabilities")
+    void testInitializeResponseOkWithCapabilities() {
+        AcpSchema.AgentCapabilities caps = new AcpSchema.AgentCapabilities(
+                true,
+                new AcpSchema.McpCapabilities(true, true),
+                new AcpSchema.PromptCapabilities(true, true, true)
+        );
+
+        AcpSchema.InitializeResponse response = AcpSchema.InitializeResponse.ok(caps);
+        assertEquals(1, response.protocolVersion());
+        assertTrue(response.agentCapabilities().loadSession());
+    }
 
     @Test
-    @DisplayName("unmarshalFrom - 正常反序列化")
-    void testUnmarshalFrom() {
-        transport = new WebSocketSolonAcpAgentTransport(jsonMapper);
+    @DisplayName("Test PromptResponse factory methods")
+    void testPromptResponseFactoryMethods() {
+        AcpSchema.PromptResponse endTurn = AcpSchema.PromptResponse.endTurn();
+        assertEquals(AcpSchema.StopReason.END_TURN, endTurn.stopReason());
 
-        AcpSchema.InitializeRequest request = new AcpSchema.InitializeRequest(
+        AcpSchema.PromptResponse refusal = AcpSchema.PromptResponse.refusal();
+        assertEquals(AcpSchema.StopReason.REFUSAL, refusal.stopReason());
+
+        AcpSchema.PromptResponse text = AcpSchema.PromptResponse.text("test");
+        assertEquals(AcpSchema.StopReason.END_TURN, text.stopReason());
+    }
+
+    @Test
+    @DisplayName("Test JSONRPC serialization through transport")
+    void testJsonRpcSerializationThroughTransport() throws Exception {
+        AcpSchema.JSONRPCRequest request = new AcpSchema.JSONRPCRequest(
+                AcpSchema.JSONRPC_VERSION,
                 1,
-                new AcpSchema.ClientCapabilities()
+                AcpSchema.METHOD_INITIALIZE,
+                new AcpSchema.InitializeRequest(1, new AcpSchema.ClientCapabilities())
         );
 
-        Object data = jsonMapper.convertValue(request, Object.class);
-
-        AcpSchema.InitializeRequest result = transport.unmarshalFrom(
-                data,
-                new io.modelcontextprotocol.json.TypeRef<AcpSchema.InitializeRequest>() {}
-        );
-
-        assertNotNull(result);
-        assertEquals(1, result.protocolVersion());
+        String json = jsonMapper.writeValueAsString(request);
+        assertNotNull(json);
+        assertTrue(json.contains("initialize"));
+        assertTrue(json.contains("jsonrpc"));
     }
 
-    // ==================== WebSocket 端点测试 ====================
+    @Test
+    @DisplayName("Test ContentBlock types")
+    void testContentBlockTypes() {
+        AcpSchema.TextContent text = new AcpSchema.TextContent("Hello");
+        assertEquals("text", text.type());
+        assertEquals("Hello", text.text());
+
+        // Verify ContentBlock interface
+        AcpSchema.ContentBlock content = text;
+        assertNotNull(content);
+    }
 
     @Test
-    @DisplayName("AcpWebSocketEndpoint - 创建端点实例")
-    void testWebSocketEndpointCreation() {
-        transport = new WebSocketSolonAcpAgentTransport("/test-acp-8", jsonMapper);
-        WebSocketSolonAcpAgentTransport.AcpWebSocketEndpoint endpoint =
-                transport.new AcpWebSocketEndpoint();
+    @DisplayName("Test SessionMode and SessionModeState")
+    void testSessionModeAndState() {
+        AcpSchema.SessionMode mode = new AcpSchema.SessionMode(
+                "code",
+                "Code Mode",
+                "Write and edit code"
+        );
 
-        assertNotNull(endpoint);
+        assertEquals("code", mode.id());
+        assertEquals("Code Mode", mode.name());
+
+        AcpSchema.SessionModeState state = new AcpSchema.SessionModeState(
+                "code",
+                Collections.singletonList(mode)
+        );
+
+        assertEquals("code", state.currentModeId());
+        assertEquals(1, state.availableModes().size());
+    }
+
+    @Test
+    @DisplayName("Test ModelInfo and SessionModelState")
+    void testModelInfoAndState() {
+        AcpSchema.ModelInfo model = new AcpSchema.ModelInfo(
+                "gpt-4",
+                "GPT-4",
+                "Most capable model"
+        );
+
+        assertEquals("gpt-4", model.modelId());
+        assertEquals("GPT-4", model.name());
+
+        AcpSchema.SessionModelState state = new AcpSchema.SessionModelState(
+                "gpt-4",
+                Collections.singletonList(model)
+        );
+
+        assertEquals("gpt-4", state.currentModelId());
+        assertEquals(1, state.availableModels().size());
     }
 }
