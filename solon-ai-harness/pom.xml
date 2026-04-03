@@ -28,17 +28,17 @@
 
         <dependency>
             <groupId>org.noear</groupId>
+            <artifactId>solon-ai-skill-web</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
             <artifactId>solon-ai-skill-restapi</artifactId>
         </dependency>
 
         <dependency>
             <groupId>org.noear</groupId>
             <artifactId>solon-ai-skill-toolgateway</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-ai-skill-web</artifactId>
         </dependency>
 
         <dependency>
