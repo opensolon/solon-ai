@@ -6,6 +6,7 @@ import org.noear.solon.ai.agent.session.FileAgentSession;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessProperties;
+import org.noear.solon.ai.harness.permission.ToolPermission;
 
 import java.nio.file.Paths;
 import java.util.Map;
@@ -19,6 +20,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class DemoApp {
     public static void main(String[] arg) {
         HarnessProperties agentProps = new HarnessProperties(".solon/");
+
+        agentProps.addTools(ToolPermission.TOOL_ALL_FULL);
 
         ChatModel chatModel = ChatModel.of(agentProps.getChatModel()).build();
         Map<String, AgentSession> sessionMap = new ConcurrentHashMap<>();

@@ -212,8 +212,8 @@ public class AgentDefinition {
             tools.addAll(Arrays.asList(toolNames));
         }
 
-        public void addTools(ToolPermission... toolNames) {
-            for (ToolPermission p1 : toolNames) {
+        public void addTools(ToolPermission... toolPermissions) {
+            for (ToolPermission p1 : toolPermissions) {
                 tools.add(p1.getName());
             }
         }

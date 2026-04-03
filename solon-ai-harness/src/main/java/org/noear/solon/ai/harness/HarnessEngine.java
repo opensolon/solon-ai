@@ -205,8 +205,9 @@ public class HarnessEngine {
         // 主代理
         agentDefinition.getMetadata().setPrimary(true);
         // 工具权限
-        agentDefinition.getMetadata().addTools(props.getTools());
-
+        for(String tool : props.getTools()) {
+            agentDefinition.getMetadata().addTools(tool);
+        }
         // 添加步数
         agentDefinition.getMetadata().setMaxSteps(props.getMaxSteps());
         // 添加步数自动扩展

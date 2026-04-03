@@ -3,6 +3,7 @@ package org.noear.solon.ai.harness;
 import lombok.Getter;
 import lombok.Setter;
 import org.noear.solon.ai.chat.ChatConfig;
+import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.skills.restapi.ApiSource;
 import org.noear.solon.core.util.Assert;
@@ -14,7 +15,9 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -31,7 +34,7 @@ public class HarnessProperties implements Serializable {
 
     private String workspace = "work";
 
-    private String tools = "**";
+    private List<String> tools = new ArrayList<>();
 
     private int maxSteps = 30;
     private boolean maxStepsAutoExtensible = false;
@@ -57,6 +60,12 @@ public class HarnessProperties implements Serializable {
         }
 
         this.harnessHome = harnessHome;
+    }
+
+    public void addTools(ToolPermission... toolPermissions) {
+        for (ToolPermission p1 : toolPermissions) {
+            tools.add(p1.getName());
+        }
     }
 
     /**
