@@ -5,11 +5,11 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.skill.SkillMetadata;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.skills.cli.TerminalSkill;
 import org.noear.solon.ai.skills.web.CodeSearchTool;
 import org.noear.solon.ai.skills.web.WebfetchTool;
 import org.noear.solon.ai.skills.web.WebsearchTool;
-import org.noear.solon.ai.harness.AgentRuntime;
 import org.noear.solon.core.util.Assert;
 
 import java.util.ArrayList;
@@ -25,15 +25,15 @@ public class AgentFactory {
     /**
      * 根据定义生成代理
      */
-    public static ReActAgent.Builder create(AgentRuntime agentRuntime, AgentDefinition agentDefinition) {
+    public static ReActAgent.Builder create(HarnessEngine agentRuntime, AgentDefinition agentDefinition) {
         ReActAgent.Builder builder = ReActAgent.of(agentRuntime.getChatModel());
 
         AgentDefinition.Metadata metadata = agentDefinition.getMetadata();
 
         builder.name(agentDefinition.getName());
 
-        if (Assert.isNotEmpty(agentRuntime.getProps().getWorkDir())) {
-            builder.defaultToolContextPut(AgentRuntime.ATTR_CWD, agentRuntime.getProps().getWorkDir());
+        if (Assert.isNotEmpty(agentRuntime.getProps().getWorkspace())) {
+            builder.defaultToolContextPut(HarnessEngine.ATTR_CWD, agentRuntime.getProps().getWorkspace());
         }
 
         if (Assert.isNotEmpty(agentDefinition.getSystemPrompt())) {
@@ -213,7 +213,7 @@ public class AgentFactory {
         return builder;
     }
 
-    private static void todoAddDo(AgentDefinition.Metadata metadata, ReActAgent.Builder builder, AgentRuntime agentRuntime) {
+    private static void todoAddDo(AgentDefinition.Metadata metadata, ReActAgent.Builder builder, HarnessEngine agentRuntime) {
         if (metadata.isPrimary()) {
             //主代理，用文件模式
             builder.defaultSkillAdd(agentRuntime.getTodoSkill());

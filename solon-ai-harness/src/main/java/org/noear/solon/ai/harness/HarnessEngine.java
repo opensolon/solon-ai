@@ -7,18 +7,20 @@ import org.noear.solon.ai.agent.react.ReActAgentExtension;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
-import org.noear.solon.ai.agent.react.intercept.summarize.*;
+import org.noear.solon.ai.agent.react.intercept.summarize.CompositeSummarizationStrategy;
+import org.noear.solon.ai.agent.react.intercept.summarize.HierarchicalSummarizationStrategy;
+import org.noear.solon.ai.agent.react.intercept.summarize.KeyInfoExtractionStrategy;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.agent.*;
+import org.noear.solon.ai.harness.code.CodeSkill;
+import org.noear.solon.ai.harness.hitl.HitlStrategy;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
+import org.noear.solon.ai.mcp.client.McpProviders;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
 import org.noear.solon.ai.skills.cli.TodoSkill;
 import org.noear.solon.ai.skills.restapi.ApiSource;
 import org.noear.solon.ai.skills.restapi.RestApiSkill;
 import org.noear.solon.ai.skills.toolgateway.ToolGatewaySkill;
-import org.noear.solon.ai.mcp.client.McpProviders;
-import org.noear.solon.ai.harness.code.CodeSkill;
-import org.noear.solon.ai.harness.hitl.HitlStrategy;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.IoUtil;
 import org.slf4j.Logger;
@@ -31,43 +33,30 @@ import java.nio.file.Paths;
 import java.util.*;
 
 /**
- * 智能体运行时
+ * 马具引擎
  *
  * @author noear
  */
-public class AgentRuntime {
-    private final static Logger LOG = LoggerFactory.getLogger(AgentRuntime.class);
+public class HarnessEngine {
+    private final static Logger LOG = LoggerFactory.getLogger(HarnessEngine.class);
 
     public final static String ATTR_CWD = "__cwd";
 
-    public final static String NAME_AGENTS = "AGENTS.md";
-    public final static String NAME_CONFIG = "config.yml";
-
     public final static String SESSION_DEFAULT = "default";
 
-    public final static String SOLONCODE = ".soloncode/";
-    public final static String SOLONCODE_BIN = SOLONCODE + "bin/";
+    public final static String NAME_CONFIG_YML = "config.yml";
+    public final static String NAME_AGENTS_MD = "AGENTS.md";
+    public final static String NAME_CLAUDE_MD = "CLAUDE.md";
 
-    public final static String SOLONCODE_SESSIONS = SOLONCODE + "sessions/";
-    public final static String SOLONCODE_SKILLS = SOLONCODE + "skills/";
-    public final static String SOLONCODE_AGENTS = SOLONCODE + "agents/";
-    public final static String SOLONCODE_MEMORY = SOLONCODE + "memory/";
-    public final static String SOLONCODE_CLAUDE = SOLONCODE + "CLAUDE.md";
-
-    public final static String SKILLHUB_SKILLS = ".skillhub/skills/";
-    public final static String OPENCODE_SKILLS = ".opencode/skills/";
-    public final static String CLAUDE_SKILLS = ".claude/skills/";
-
-    private final ChatModel chatModel;
     private final AgentSessionProvider sessionProvider;
-    private final AgentProperties properties;
+    private final HarnessProperties props;
+    private final Collection<ReActAgentExtension> extensions;
 
-    private final CodeSkill codeSkill = new CodeSkill();
-    private final TodoSkill todoSkill = new TodoSkill(SOLONCODE_SESSIONS);
-    private final TaskSkill taskSkill = new TaskSkill(this);
-    private final GenerateTool generateTool = new GenerateTool(this);
+    private final CodeSkill codeSkill;
+    private final TodoSkill todoSkill;
+    private final TaskSkill taskSkill;
+    private final GenerateTool generateTool;
 
-    private final ReActAgent rootAgent;
 
     private final ToolGatewaySkill mcpGatewaySkill;
     private final RestApiSkill restApiSkill;
@@ -77,19 +66,21 @@ public class AgentRuntime {
     private final SummarizationInterceptor summarizationInterceptor;
     private final HITLInterceptor hitlInterceptor;
 
+    private final AgentManager agentManager;
 
-    private AgentManager agentManager;
+    private ChatModel chatModel; //允许运行时切换
+    private ReActAgent mainAgent; //允许运行时切换
 
     public String getVersion() {
         return "v2026.4.5";
     }
 
     public String getName() {
-        return rootAgent.name();
+        return mainAgent.name();
     }
 
-    public AgentProperties getProps() {
-        return properties;
+    public HarnessProperties getProps() {
+        return props;
     }
 
     public ChatModel getChatModel() {
@@ -136,20 +127,32 @@ public class AgentRuntime {
         return restApiSkill;
     }
 
-    private AgentRuntime(ChatModel chatModel, AgentProperties properties, AgentSessionProvider sessionProvider, HITLInterceptor hitlInterceptor, Collection<ReActAgentExtension> extensions) {
+
+    public void setChatModel(ChatModel chatModel) {
+        Objects.nonNull(chatModel);
+
+        // chatModel 切换后，重新生成主代理
         this.chatModel = chatModel;
-        this.properties = properties;
+        this.mainAgent = createMainAgent();
+    }
+
+
+    private HarnessEngine(ChatModel chatModel, HarnessProperties props, AgentSessionProvider sessionProvider, SummarizationInterceptor summarizationInterceptor, HITLInterceptor hitlInterceptor, Collection<ReActAgentExtension> extensions) {
+        this.chatModel = chatModel;
+        this.props = props;
         this.sessionProvider = sessionProvider;
+        this.summarizationInterceptor = summarizationInterceptor;
+        this.hitlInterceptor = hitlInterceptor;
+        this.extensions = extensions;
 
-        if (hitlInterceptor == null) {
-            this.hitlInterceptor = new HITLInterceptor().onTool("bash", new HitlStrategy());
-        } else {
-            this.hitlInterceptor = hitlInterceptor;
-        }
+        this.todoSkill = new TodoSkill(props.getHarnessSessions());
+        this.codeSkill = new CodeSkill(this);
+        this.taskSkill = new TaskSkill(this);
+        this.generateTool = new GenerateTool(this);
 
-        if (Assert.isNotEmpty(properties.getRestApis())) {
+        if (Assert.isNotEmpty(props.getRestApis())) {
             restApiSkill = new RestApiSkill();
-            for (Map.Entry<String, ApiSource> entry : properties.getRestApis().entrySet()) {
+            for (Map.Entry<String, ApiSource> entry : props.getRestApis().entrySet()) {
                 restApiSkill.addApi(entry.getValue());
             }
         } else {
@@ -157,8 +160,8 @@ public class AgentRuntime {
         }
 
         try {
-            if (Assert.isNotEmpty(properties.getMcpServers())) {
-                McpProviders mcpProviders = McpProviders.fromMcpServers(properties.getMcpServers());
+            if (Assert.isNotEmpty(props.getMcpServers())) {
+                McpProviders mcpProviders = McpProviders.fromMcpServers(props.getMcpServers());
                 mcpGatewaySkill = new ToolGatewaySkill();
                 for (Map.Entry<String, McpClientProvider> entry : mcpProviders.getProviders().entrySet()) {
                     mcpGatewaySkill.addTool(entry.getKey(), entry.getValue());
@@ -170,53 +173,46 @@ public class AgentRuntime {
             throw new RuntimeException("Mcp servers load failure", e);
         }
 
-        cliSkills.getTerminalSkill().setSandboxMode(properties.isSandboxMode());
+        cliSkills.getTerminalSkill().setSandboxMode(props.isSandboxMode());
 
-        cliSkills.skillPool("@global", Paths.get(AgentProperties.getUserHome(), AgentRuntime.SOLONCODE_SKILLS));
-        cliSkills.skillPool("@skillhub", Paths.get(AgentProperties.getUserHome(), AgentRuntime.SKILLHUB_SKILLS));
-        cliSkills.skillPool("@local", Paths.get(properties.getWorkDir(), "skills"));
+        cliSkills.skillPool("@global", Paths.get(HarnessProperties.getUserHome(), props.getHarnessSkills()));
+        cliSkills.skillPool("@local", Paths.get(props.getWorkspace(), props.getHarnessSkills()));
 
-        cliSkills.skillPool("@soloncode_skills", Paths.get(properties.getWorkDir(), AgentRuntime.SOLONCODE_SKILLS));
-        cliSkills.skillPool("@opencode_skills", Paths.get(properties.getWorkDir(), AgentRuntime.OPENCODE_SKILLS));
-        cliSkills.skillPool("@claude_skills", Paths.get(properties.getWorkDir(), AgentRuntime.CLAUDE_SKILLS));
+        cliSkills.skillPool("@skills", Paths.get(props.getWorkspace(), "skills"));
+        cliSkills.skillPool("@skillhub", Paths.get(HarnessProperties.getUserHome(), ".skillhub/skills/"));
 
-        if (Assert.isNotEmpty(properties.getSkillPools())) {
-            properties.getSkillPools().forEach((alias, dir) -> {
+
+        if (Assert.isNotEmpty(props.getSkillPools())) {
+            props.getSkillPools().forEach((alias, dir) -> {
                 cliSkills.skillPool(alias, dir);
             });
         }
 
         agentManager = new AgentManager();
-        agentManager.agentPool(Paths.get(AgentProperties.getUserHome(), AgentRuntime.SOLONCODE_AGENTS)); //global
-        agentManager.agentPool(Paths.get(properties.getWorkDir(), AgentRuntime.SOLONCODE_AGENTS)); //local
+        agentManager.agentPool(Paths.get(HarnessProperties.getUserHome(), props.getHarnessAgents())); //global
+        agentManager.agentPool(Paths.get(props.getWorkspace(), props.getHarnessAgents())); //local
 
-        //上下文摘要
-        SummarizationStrategy strategy = new CompositeSummarizationStrategy()
-                .addStrategy(new KeyInfoExtractionStrategy(chatModel))      // 提取干货（去水）
-                .addStrategy(new HierarchicalSummarizationStrategy(chatModel)); // 滚动更新摘要
+        mainAgent = createMainAgent();
+    }
 
-        summarizationInterceptor = new SummarizationInterceptor(
-                properties.getSummaryWindowSize(),
-                properties.getSummaryWindowToken(),
-                strategy);
-
+    protected ReActAgent createMainAgent() {
         AgentDefinition agentDefinition = new AgentDefinition();
 
         // 系统提示词
         agentDefinition.setSystemPrompt(getAgentsMd());
         // 名字
-        agentDefinition.getMetadata().setName("root");
+        agentDefinition.getMetadata().setName("main");
         // 主代理
         agentDefinition.getMetadata().setPrimary(true);
         // 工具权限
-        agentDefinition.getMetadata().addTools(properties.getTools());
+        agentDefinition.getMetadata().addTools(props.getTools());
 
         // 添加步数
-        agentDefinition.getMetadata().setMaxSteps(properties.getMaxSteps());
+        agentDefinition.getMetadata().setMaxSteps(props.getMaxSteps());
         // 添加步数自动扩展
-        agentDefinition.getMetadata().setMaxStepsAutoExtensible(properties.isMaxStepsAutoExtensible());
+        agentDefinition.getMetadata().setMaxStepsAutoExtensible(props.isMaxStepsAutoExtensible());
         // 添加会话窗口大小
-        agentDefinition.getMetadata().setSessionWindowSize(properties.getSessionWindowSize());
+        agentDefinition.getMetadata().setSessionWindowSize(props.getSessionWindowSize());
 
         ReActAgent.Builder agentBuilder = AgentFactory.create(this, agentDefinition);
 
@@ -226,7 +222,7 @@ public class AgentRuntime {
             }
         }
 
-        rootAgent = agentBuilder.build();
+        return agentBuilder.build();
     }
 
 
@@ -234,8 +230,8 @@ public class AgentRuntime {
         return sessionProvider.getSession(instanceId);
     }
 
-    public ReActAgent getRootAgent() {
-        return rootAgent;
+    public ReActAgent getMainAgent() {
+        return mainAgent;
     }
 
     public ReActAgent.Builder createSubagent(AgentDefinition definition) {
@@ -244,7 +240,7 @@ public class AgentRuntime {
 
     private String getAgentsMd() {
         try {
-            URL agentsUrl = properties.getAgentsUrl();
+            URL agentsUrl = props.getAgentsUrl();
 
             if (agentsUrl != null) {
                 try (InputStream is = agentsUrl.openStream()) {
@@ -270,17 +266,18 @@ public class AgentRuntime {
 
     public static class Builder {
         private ChatModel chatModel;
-        private AgentProperties properties;
+        private HarnessProperties properties;
         private AgentSessionProvider sessionProvider;
-        private List<ReActAgentExtension> extensions = new ArrayList<>();
+        private SummarizationInterceptor summarizationInterceptor;
         private HITLInterceptor hitlInterceptor;
+        private List<ReActAgentExtension> extensions = new ArrayList<>();
 
         public Builder chatModel(ChatModel chatModel) {
             this.chatModel = chatModel;
             return this;
         }
 
-        public Builder properties(AgentProperties properties) {
+        public Builder properties(HarnessProperties properties) {
             this.properties = properties;
             return this;
         }
@@ -290,22 +287,52 @@ public class AgentRuntime {
             return this;
         }
 
+        /**
+         * 摘要拦截器
+         */
+        public Builder summarizationInterceptor(SummarizationInterceptor summarizationInterceptor) {
+            this.summarizationInterceptor = summarizationInterceptor;
+            return this;
+        }
+
+        /**
+         * 人工介入拦截器
+         */
         public Builder hitlInterceptor(HITLInterceptor hitlInterceptor) {
             this.hitlInterceptor = hitlInterceptor;
             return this;
         }
 
-        public Builder extension(ReActAgentExtension extension) {
+        /**
+         * 添加扩展
+         */
+        public Builder extensionAdd(ReActAgentExtension extension) {
             this.extensions.add(extension);
             return this;
         }
 
-        public AgentRuntime build() {
+        public HarnessEngine build() {
             Objects.nonNull(chatModel);
             Objects.nonNull(properties);
             Objects.nonNull(sessionProvider);
 
-            return new AgentRuntime(chatModel, properties, sessionProvider, hitlInterceptor, extensions);
+            //上下文摘要
+            SummarizationStrategy strategy = new CompositeSummarizationStrategy()
+                    .addStrategy(new KeyInfoExtractionStrategy(chatModel))      // 提取干货（去水）
+                    .addStrategy(new HierarchicalSummarizationStrategy(chatModel)); // 滚动更新摘要
+
+            if (summarizationInterceptor == null) {
+                summarizationInterceptor = new SummarizationInterceptor(
+                        properties.getSummaryWindowSize(),
+                        properties.getSummaryWindowToken(),
+                        strategy);
+            }
+
+            if (hitlInterceptor == null) {
+                hitlInterceptor = new HITLInterceptor().onTool("bash", new HitlStrategy());
+            }
+
+            return new HarnessEngine(chatModel, properties, sessionProvider, summarizationInterceptor, hitlInterceptor, extensions);
         }
     }
 }

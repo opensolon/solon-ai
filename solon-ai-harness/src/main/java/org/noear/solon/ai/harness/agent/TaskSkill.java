@@ -27,17 +27,17 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
+import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.annotation.Body;
 import org.noear.solon.annotation.Param;
-import org.noear.solon.ai.harness.AgentRuntime;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RunUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.concurrent.CompletableFuture;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 子代理技能
@@ -53,9 +53,9 @@ public class TaskSkill extends AbsSkill {
     public static final String TOOL_TASK = "task";
     public static final String TOOL_MULTITASK = "multitask";
 
-    private final AgentRuntime agentRuntime;
+    private final HarnessEngine agentRuntime;
 
-    public TaskSkill(AgentRuntime agentRuntime) {
+    public TaskSkill(HarnessEngine agentRuntime) {
         this.agentRuntime = agentRuntime;
     }
 
