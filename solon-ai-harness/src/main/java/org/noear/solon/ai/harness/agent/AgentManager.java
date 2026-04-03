@@ -38,16 +38,14 @@ import java.util.stream.Stream;
  */
 public class AgentManager {
     private static final Logger LOG = LoggerFactory.getLogger(AgentManager.class);
-
+    private static final String AGENT_MD_BASE = "META-INF/solon/ai/harness/";
     private final Map<String, AgentDefinition> agentMap = new ConcurrentHashMap<>();
 
     public AgentManager() {
-        loadAgentFile("bash",ResourceUtil.getResource("defaults/agents/bash.md"));
-        loadAgentFile("explore",ResourceUtil.getResource("defaults/agents/explore.md"));
-        loadAgentFile("plan",ResourceUtil.getResource("defaults/agents/plan.md"));
-        loadAgentFile("general",ResourceUtil.getResource("defaults/agents/general.md"));
-
-        loadAgentFile("supervisor",ResourceUtil.getResource("defaults/agents/supervisor.md"));
+        loadAgentFile("bash", ResourceUtil.getResource(AGENT_MD_BASE + "bash.md"));
+        loadAgentFile("explore", ResourceUtil.getResource(AGENT_MD_BASE + "explore.md"));
+        loadAgentFile("plan", ResourceUtil.getResource(AGENT_MD_BASE + "plan.md"));
+        loadAgentFile("general", ResourceUtil.getResource(AGENT_MD_BASE + "general.md"));
     }
 
     public void addAgent(AgentDefinition agentDefinition) {
@@ -94,6 +92,7 @@ public class AgentManager {
     }
 
     private final Set<Path> pathCached = new HashSet<>();
+
     /**
      * 注册自定义 agents 池
      *
@@ -116,7 +115,7 @@ public class AgentManager {
             return;
         }
 
-        if(pathCached.contains(path)){
+        if (pathCached.contains(path)) {
             return;
         } else {
             pathCached.add(path);
