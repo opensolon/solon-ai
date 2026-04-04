@@ -45,7 +45,7 @@ public class DemoApp {
     }
 
     private static void csae1(HarnessEngine engine, String prompt) throws Throwable {
-        AgentSession session = engine.getSession(HarnessEngine.SESSION_DEFAULT);
+        AgentSession session = engine.getSession("default");
 
         //--- 用主代理模式
         engine.getMainAgent().prompt(prompt)
@@ -58,7 +58,7 @@ public class DemoApp {
     }
 
     private static void case2(HarnessEngine engine, String prompt) throws Throwable {
-        AgentSession session = engine.getSession(HarnessEngine.SESSION_DEFAULT);
+        AgentSession session = engine.getSession("default");
 
         //动态定义智能体
         AgentDefinition definition = new AgentDefinition();

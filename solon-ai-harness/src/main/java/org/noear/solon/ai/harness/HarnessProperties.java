@@ -30,13 +30,18 @@ import java.util.Map;
 public class HarnessProperties implements Serializable {
     private ChatConfig chatModel;
 
+    //马具目录
     private final String harnessHome;
 
+    //默认工作区
     private String workspace = "work";
 
+    //主代理工具权限
     private List<String> tools = new ArrayList<>();
 
+    //最大步数
     private int maxSteps = 30;
+    //是否自动续步
     private boolean maxStepsAutoExtensible = false;
 
     private int sessionWindowSize = 8;
