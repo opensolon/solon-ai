@@ -10,6 +10,11 @@
 
 *  mcp channel 概念改为 transport （并保持兼容）???
 
+### 3.10.2
+
+* 添加 ChatModel.getModel 方法
+* 添加 ChatModel.getProvider 方法
+
 ### 3.10.1
 
 * 新增 acp-sdk 模块（从 solon-ai-acp 分离出来，方便独立升级）

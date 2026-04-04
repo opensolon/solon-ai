@@ -69,6 +69,14 @@ public class ChatModel implements AiModel {
         return dialect;
     }
 
+    public String getModel(){
+        return config.getModel();
+    }
+
+    public String getProvider(){
+        return config.getProvider();
+    }
+
     /**
      * 提示语
      *
