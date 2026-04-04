@@ -12,8 +12,9 @@
 
 ### 3.10.2
 
-* 添加 ChatModel.getModel 方法
-* 添加 ChatModel.getProvider 方法
+* 添加 solon-ai-core ChatModel.getModel 方法
+* 添加 solon-ai-core ChatModel.getProvider 方法
+* 调整 solon-ai-harness 取消 SESSION_DEFAULT（由应用侧处理）
 
 ### 3.10.1
 
