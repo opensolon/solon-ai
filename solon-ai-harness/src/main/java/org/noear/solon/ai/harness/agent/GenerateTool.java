@@ -40,7 +40,8 @@ public class GenerateTool extends AbsToolProvider {
             @Param(name = "model", description = "指定使用的模型名称，不填则使用默认模型", required = false) String model,
             @Param(name = "tools", required = false, description = "必须从给定列表中选择：\n" +
                     "- `read`，读取文件完整内容\n" +
-                    "- `edit`，修改文件内容\n" +
+                    "- `write`，写入文件完整内容\n" +
+                    "- `edit`，修改文件内容（包括：read,write,edit）\n" +
                     "- `glob`，使用模式匹配\n" +
                     "- `grep`，基于正则表达式的全文检索\n" +
                     "- `list`，列出目录内容\n" +
@@ -51,6 +52,7 @@ public class GenerateTool extends AbsToolProvider {
                     "- `webfetch`，直接抓取特定网页内容\n" +
                     "- `websearch`，互联网通用搜索\n" +
                     "- `codesearch`，互联网代码仓库搜索\n" +
+                    "- `pi`，核心操作能力（包括：read,write,edit,bash）\n" +
                     "- `task`，调度子代理干活\n" +
                     "- `*`，代表全选") List<String> tools,
             @Param(name = "skills", description = "子代理具备的特定专家能力标识列表", required = false) List<String> skills,

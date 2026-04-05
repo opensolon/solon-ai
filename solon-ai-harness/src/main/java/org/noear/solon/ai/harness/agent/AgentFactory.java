@@ -72,8 +72,16 @@ public class AgentFactory {
                         terminalSkillWrap.addTools("read");
                         break;
                     }
+                    case "write": {
+                        terminalSkillWrap.addTools("write");
+                        break;
+                    }
                     case "edit": {
-                        terminalSkillWrap.addTools("read", "write", "edit", "undo");
+                        terminalSkillWrap.addTools("read", "write", "edit");
+                        break;
+                    }
+                    case "pi":{
+                        terminalSkillWrap.addTools("read", "write", "edit", "bash");
                         break;
                     }
                     case "glob": {

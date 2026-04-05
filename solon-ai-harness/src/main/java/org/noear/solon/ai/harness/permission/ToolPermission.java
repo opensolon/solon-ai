@@ -25,6 +25,9 @@ public enum ToolPermission {
     TOOL_GLOB("glob"),
     TOOL_EDIT("edit"),
     TOOL_READ("read"),
+    TOOL_WRITE("write"),
+
+    TOOL_PI("pi"), //代表四个工具：read,write,edit,bash
 
     TOOL_ALL_PUBC("*"), //全部公有的
     TOOL_ALL_FULL("**"), // 全部（包括公有，私有）
