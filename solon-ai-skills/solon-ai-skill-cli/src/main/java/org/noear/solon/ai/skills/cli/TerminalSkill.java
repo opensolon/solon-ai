@@ -54,7 +54,6 @@ public class TerminalSkill extends AbsSkill {
     private final String extension;
     private final ShellMode shellMode;
     private final String envExample; // 增加范例字段
-    private final Map<String, String> undoHistory = new ConcurrentHashMap<>();
 
     //沙盒模式：只能访问相对咱径或逻辑路径；（否则为）开放模式：可以访问绝对路径
     private boolean sandboxMode = true;
@@ -323,10 +322,6 @@ public class TerminalSkill extends AbsSkill {
         Path workPath = getWorkPath(__cwd);
         Path target = resolveSafePath(workPath, filePath, true);
 
-        if (Files.exists(target)) {
-            undoHistory.put(filePath, new String(Files.readAllBytes(target), fileCharset));
-        }
-
         Files.createDirectories(target.getParent());
         Files.write(target, content.getBytes(fileCharset));
         return "文件成功写入: " + filePath;
@@ -380,22 +375,9 @@ public class TerminalSkill extends AbsSkill {
         }
 
         // 原子性保存
-        undoHistory.put(filePath, originalContent);
         Files.write(target, workingContent.getBytes(fileCharset));
 
         return String.format("文件 %s 成功完成 %d 处修改。", filePath, edits.size());
-    }
-
-    @ToolMapping(name = "undo", description = "撤销最后一次对特定文件的 write 或 edit 操作。")
-    public String undo(@Param(value = "filePath", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String filePath,
-                       String __cwd) throws IOException {
-        Path workPath = getWorkPath(__cwd);
-        Path target = resolveSafePath(workPath, filePath, true);
-
-        String history = undoHistory.remove(filePath);
-        if (history == null) return "错误：该文件无撤销记录。";
-        Files.write(target, history.getBytes(fileCharset));
-        return "文件内容已恢复。";
     }
 
     // --- 5. 搜索工具 ---
