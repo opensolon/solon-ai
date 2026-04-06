@@ -21,13 +21,11 @@ import com.aliyun.dashvector.models.Doc;
 import com.aliyun.dashvector.models.PartitionStats;
 import com.aliyun.dashvector.models.Vector;
 import com.aliyun.dashvector.models.requests.QueryDocRequest;
+import com.aliyun.dashvector.proto.CollectionInfo;
 import com.aliyun.dashvector.proto.FieldType;
 import com.aliyun.dashvector.proto.Status;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.repository.DashVectorSDKRepository;
@@ -36,6 +34,7 @@ import org.noear.solon.ai.rag.repository.aliyun.dashvector.util.DashVectorQueryC
 import org.noear.solon.ai.rag.repository.aliyun.dashvector.util.DocumentConverter;
 import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
 import org.noear.solon.ai.rag.util.QueryCondition;
+import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.test.SolonTest;
 
@@ -56,82 +55,82 @@ import static org.junit.jupiter.api.Assertions.*;
  * 包括 CRUD（默认/指定分区）、Partition 管理、SDK 直接访问、
  * DocumentConverter 互转、DashVectorQueryCondition 扩展查询等。
  *
- * <p>详情参考 <a href="https://www.aliyun.com/product/ai/dashvector">DashVector</a>，可领取免费试用。
+ * <p>使用 {@code PER_CLASS} 生命周期：全程只创建/销毁一次 collection，
+ * 避免每个用例重复创建 gRPC 连接和集合。
+ *
+ * <p>详情参考 <a href="https://www.aliyun.com/product/ai/dashvector">DashVector</a>
  *
  * @author 烧饵块
  */
 @SolonTest
 @Disabled("需要配置真实的 DashVector 凭据后再运行！！")
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class DashVectorSDKRepositoryTest {
 
     private DashVectorSDKRepository repository;
 
     // ===== 以下凭据需替换为真实值 =====
-    private static final String SERVER_URL = "https://vrs-cn-test.dashvector.cn-hangzhou.aliyuncs.com";
-    private static final String API_KEY = "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+    private static final String SERVER_URL = "vrs-cn-???.dashvector.cn-hangzhou.aliyuncs.com";
+    private static final String API_KEY = "sk-";
     private static final String COLLECTION_NAME = "test_collection_sdk";
     private static final String TEST_PARTITION = "test_partition";
 
-    private final String apiUrl = "http://127.0.0.1:11434/api/embed";
-    private final String provider = "ollama";
-    private final String model = "bge-m3:latest";
+    private final String apiUrl = "";
+    private final String apiKey = "";
+    private final String provider = "";
+    private final String model = "Qwen3-Embedding-0.6B";
 
-    // 保存在 setup 中创建的文档 ID，供后续测试使用
+    // 种子文档 ID，供搜索类测试使用
     private final List<String> seededDocIds = new ArrayList<>();
 
     // ====================================================================
-    // setUp / tearDown
+    // 全局 setUp / tearDown（只执行一次）
     // ====================================================================
 
-    @BeforeEach
-    public void setup() throws Exception {
-        EmbeddingModel embeddingModel = EmbeddingModel.of(apiUrl).provider(provider).model(model).build();
+    @BeforeAll
+    public void setupAll() throws Exception {
+        EmbeddingModel embeddingModel = EmbeddingModel.of(apiUrl)
+                .provider(provider).model(model)
+                .apiKey(apiKey)
+                .build();
 
         List<MetadataField> metadataFields = new ArrayList<>();
         metadataFields.add(new MetadataField("category", FieldType.STRING));
         metadataFields.add(new MetadataField("price", FieldType.FLOAT));
         metadataFields.add(new MetadataField("stock", FieldType.FLOAT));
 
-        // builder(embeddingModel, DashVectorClient)
         repository = DashVectorSDKRepository
                 .builder(embeddingModel, new DashVectorClient(API_KEY, SERVER_URL))
                 .collectionName(COLLECTION_NAME)
                 .metadataFields(metadataFields)
                 .build();
 
-        // initRepository() 在 build() 内部已调用，
-        // 再次调用验证幂等性
-        repository.initRepository();
-
         // 创建测试分区
         repository.createPartition(TEST_PARTITION);
 
-        // 向默认分区写入种子数据
+        // 填充种子数据到默认分区
         seedDefaultPartition();
 
-        // 向测试分区写入种子数据
+        // 填充种子数据到测试分区
         seedTestPartition();
 
         // 等待索引生效
-        Thread.sleep(1000);
+        Thread.sleep(2000);
     }
 
-    @AfterEach
-    public void tearDown() throws Exception {
+    @AfterAll
+    public void tearDownAll() throws Exception {
         if (repository != null) {
-            // dropRepository 会删除整个 collection
             repository.dropRepository();
         }
     }
 
-    /**
-     * 向默认分区填充数据（通过 URL 加载 + 手动创建文档）
-     */
     private void seedDefaultPartition() throws IOException {
-        // 从网页加载文档
+        // 从网页加载
         loadFromUrl("https://solon.noear.org/article/about?format=md");
 
-        // 手动创建几条带 metadata 的文档
+        // 手动创建带 metadata 的文档
         Document doc1 = new Document("Solon 是一个高效的 Java 应用开发框架");
         doc1.getMetadata().put("category", "framework");
         doc1.getMetadata().put("price", 0f);
@@ -153,9 +152,6 @@ public class DashVectorSDKRepositoryTest {
         seededDocIds.add(doc3.getId());
     }
 
-    /**
-     * 向测试分区填充数据
-     */
     private void seedTestPartition() throws IOException {
         Document pDoc1 = new Document("分区测试文档 A：Solon Cloud 微服务");
         pDoc1.getMetadata().put("category", "framework");
@@ -189,9 +185,14 @@ public class DashVectorSDKRepositoryTest {
     // ====================================================================
 
     @Test
+    @Order(1)
     public void testBuilderWithApiKeyEndpoint() throws Exception {
+        EmbeddingModel embeddingModel = EmbeddingModel.of(apiUrl)
+                .provider(provider).model(model)
+                .apiKey(apiKey)
+                .build();
+
         // 测试 builder(embeddingModel, apiKey, endpoint)
-        EmbeddingModel embeddingModel = EmbeddingModel.of(apiUrl).provider(provider).model(model).build();
         DashVectorSDKRepository repo2 = DashVectorSDKRepository
                 .builder(embeddingModel, API_KEY, SERVER_URL)
                 .collectionName(COLLECTION_NAME)
@@ -200,22 +201,28 @@ public class DashVectorSDKRepositoryTest {
         assertNotNull(repo2.getClient());
         assertNotNull(repo2.getCollection());
         assertEquals(COLLECTION_NAME, repo2.getCollectionName());
-        // 不调用 dropRepository，因为和主 repository 共用同一个 collection
     }
 
     @Test
+    @Order(1)
     public void testDirectSDKAccess() {
-        // getClient()
         DashVectorClient client = repository.getClient();
         assertNotNull(client, "getClient() 应返回非 null");
 
-        // getCollection()
         DashVectorCollection coll = repository.getCollection();
         assertNotNull(coll, "getCollection() 应返回非 null");
         assertTrue(coll.isSuccess());
 
-        // getCollectionName()
         assertEquals(COLLECTION_NAME, repository.getCollectionName());
+    }
+
+    @Test
+    @Order(1)
+    public void testInitRepositoryIdempotent() throws Exception {
+        // 多次调用 initRepository 不应报错（collection 已存在，直接返回）
+        repository.initRepository();
+        repository.initRepository();
+        assertNotNull(repository.getCollection());
     }
 
     // ====================================================================
@@ -223,6 +230,7 @@ public class DashVectorSDKRepositoryTest {
     // ====================================================================
 
     @Test
+    @Order(2)
     public void testSaveDefaultPartition() throws Exception {
         Document doc = new Document("testSaveDefaultPartition 文档内容");
         repository.save(Collections.singletonList(doc));
@@ -230,10 +238,12 @@ public class DashVectorSDKRepositoryTest {
         Thread.sleep(500);
         assertTrue(repository.existsById(doc.getId()));
 
+        // 清理
         repository.deleteById(doc.getId());
     }
 
     @Test
+    @Order(2)
     public void testSaveWithPartition() throws Exception {
         Document doc = new Document("testSaveWithPartition 分区文档");
         repository.save(Collections.singletonList(doc), TEST_PARTITION, null);
@@ -245,6 +255,7 @@ public class DashVectorSDKRepositoryTest {
     }
 
     @Test
+    @Order(2)
     public void testSaveWithProgressCallback() throws Exception {
         List<Document> docs = new ArrayList<>();
         for (int i = 0; i < 3; i++) {
@@ -268,6 +279,7 @@ public class DashVectorSDKRepositoryTest {
     }
 
     @Test
+    @Order(2)
     public void testSaveEmptyList() throws IOException {
         // 空列表不应报错
         repository.save(new ArrayList<>());
@@ -279,11 +291,17 @@ public class DashVectorSDKRepositoryTest {
     // ====================================================================
 
     @Test
+    @Order(3)
     public void testUpsertDocsDefaultPartition() throws Exception {
+        // 先通过 save 让 EmbeddingModel 生成正确维度的向量
         Document original = new Document("upsertDocs 原始内容");
         original.id("upsert-test-001");
-        original.embedding(new float[]{0.1f, 0.2f, 0.3f, 0.4f});
+        repository.save(Collections.singletonList(original));
 
+        Thread.sleep(500);
+        assertTrue(repository.existsById("upsert-test-001"));
+
+        // 再用 upsertDocs 更新同一条文档（验证 upsertDocs 调用通路）
         Doc sdkDoc = DocumentConverter.toDoc(original);
         repository.upsertDocs(Collections.singletonList(sdkDoc));
 
@@ -294,11 +312,15 @@ public class DashVectorSDKRepositoryTest {
     }
 
     @Test
+    @Order(3)
     public void testUpsertDocsWithPartition() throws Exception {
         Document original = new Document("upsertDocs 分区内容");
         original.id("upsert-part-001");
-        original.embedding(new float[]{0.1f, 0.2f, 0.3f, 0.4f});
+        repository.save(Collections.singletonList(original), TEST_PARTITION, null);
 
+        Thread.sleep(500);
+
+        // 用 upsertDocs 在指定分区更新
         Doc sdkDoc = DocumentConverter.toDoc(original);
         repository.upsertDocs(Collections.singletonList(sdkDoc), TEST_PARTITION);
 
@@ -313,6 +335,7 @@ public class DashVectorSDKRepositoryTest {
     // ====================================================================
 
     @Test
+    @Order(4)
     public void testDeleteByIdDefaultPartition() throws Exception {
         Document doc = new Document("待删除文档");
         repository.save(Collections.singletonList(doc));
@@ -327,6 +350,7 @@ public class DashVectorSDKRepositoryTest {
     }
 
     @Test
+    @Order(4)
     public void testDeleteByIdInPartition() throws Exception {
         Document doc = new Document("分区待删除文档");
         repository.save(Collections.singletonList(doc), TEST_PARTITION, null);
@@ -341,22 +365,28 @@ public class DashVectorSDKRepositoryTest {
     }
 
     @Test
+    @Order(4)
     public void testDeleteAll() throws Exception {
-        // 先往测试分区追加一条
+        // 单独创建一个临时分区来测试 deleteAll，避免影响其他用例
+        String tmpPart = "tmp_del_all";
+        repository.createPartition(tmpPart);
+
         Document doc = new Document("deleteAll 测试文档");
-        repository.save(Collections.singletonList(doc), TEST_PARTITION, null);
+        repository.save(Collections.singletonList(doc), tmpPart, null);
         Thread.sleep(500);
 
-        assertTrue(repository.existsByIdInPartition(TEST_PARTITION, doc.getId()));
+        assertTrue(repository.existsByIdInPartition(tmpPart, doc.getId()));
 
-        // 清空测试分区
-        repository.deleteAll(TEST_PARTITION);
+        repository.deleteAll(tmpPart);
         Thread.sleep(500);
 
-        assertFalse(repository.existsByIdInPartition(TEST_PARTITION, doc.getId()));
+        assertFalse(repository.existsByIdInPartition(tmpPart, doc.getId()));
+
+        repository.deletePartition(tmpPart);
     }
 
     @Test
+    @Order(4)
     public void testDeleteByIdEmpty() throws IOException {
         // 空 ID 不应报错
         repository.deleteById();
@@ -368,19 +398,17 @@ public class DashVectorSDKRepositoryTest {
     // ====================================================================
 
     @Test
+    @Order(5)
     public void testExistsByIdDefaultPartition() throws Exception {
-        // 种子数据中的文档应存在
         assertFalse(seededDocIds.isEmpty());
         assertTrue(repository.existsById(seededDocIds.get(0)));
 
-        // 不存在的 ID
         assertFalse(repository.existsById("non-existent-id-12345"));
-
-        // 空 ID
         assertFalse(repository.existsById(""));
     }
 
     @Test
+    @Order(5)
     public void testExistsByIdInPartition() throws Exception {
         Document doc = new Document("existsByIdInPartition 文档");
         repository.save(Collections.singletonList(doc), TEST_PARTITION, null);
@@ -397,6 +425,7 @@ public class DashVectorSDKRepositoryTest {
     // ====================================================================
 
     @Test
+    @Order(6)
     public void testGetByIdDefaultPartition() throws Exception {
         Document doc = new Document("getById 测试内容");
         doc.getMetadata().put("category", "test");
@@ -408,15 +437,14 @@ public class DashVectorSDKRepositoryTest {
         assertEquals("getById 测试内容", fetched.getContent());
         assertEquals("test", fetched.getMetadata().get("category"));
 
-        // 不存在返回 null
         assertNull(repository.getById("non-existent-id-xyz"));
-        // 空 ID 返回 null
         assertNull(repository.getById(""));
 
         repository.deleteById(doc.getId());
     }
 
     @Test
+    @Order(6)
     public void testGetByIdInPartition() throws Exception {
         Document doc = new Document("getByIdInPartition 分区内容");
         doc.getMetadata().put("category", "partition_test");
@@ -438,15 +466,21 @@ public class DashVectorSDKRepositoryTest {
     // ====================================================================
 
     @Test
+    @Order(7)
     public void testSearchBasic() throws Exception {
         List<Document> results = repository.search("solon");
         assertFalse(results.isEmpty(), "应能搜到与 solon 相关的文档");
 
-        results = repository.search("xyzzynoexist999");
-        assertTrue(results.isEmpty(), "搜不到不相关内容时应返回空");
+        // 向量搜索即使查询无意义也可能返回低分结果，
+        // 通过 similarityThreshold 过滤掉低相似度结果
+        QueryCondition condition = new QueryCondition("xyzzynoexist999")
+                .similarityThreshold(0.8);
+        results = repository.search(condition);
+        assertTrue(results.isEmpty(), "高阈值下不相关内容应被过滤");
     }
 
     @Test
+    @Order(7)
     public void testSearchWithQueryCondition() throws Exception {
         QueryCondition condition = new QueryCondition("solon").limit(2).disableRefilter(true);
         List<Document> results = repository.search(condition);
@@ -455,6 +489,7 @@ public class DashVectorSDKRepositoryTest {
     }
 
     @Test
+    @Order(7)
     public void testSearchScoreDescending() throws Exception {
         QueryCondition condition = new QueryCondition("solon 框架").disableRefilter(true);
         List<Document> results = repository.search(condition);
@@ -468,8 +503,8 @@ public class DashVectorSDKRepositoryTest {
     }
 
     @Test
+    @Order(7)
     public void testSearchWithExpressionFilter() throws Exception {
-        // category == 'framework'
         String expr = "category == 'framework'";
         QueryCondition condition = new QueryCondition("框架")
                 .filterExpression(expr)
@@ -483,6 +518,7 @@ public class DashVectorSDKRepositoryTest {
     }
 
     @Test
+    @Order(7)
     public void testSearchWithAndFilter() throws Exception {
         String expr = "category == 'framework' AND price > 100";
         QueryCondition condition = new QueryCondition("架构")
@@ -496,6 +532,7 @@ public class DashVectorSDKRepositoryTest {
     }
 
     @Test
+    @Order(7)
     public void testSearchNullCondition() throws IOException {
         List<Document> results = repository.search((QueryCondition) null);
         assertTrue(results.isEmpty());
@@ -506,6 +543,7 @@ public class DashVectorSDKRepositoryTest {
     // ====================================================================
 
     @Test
+    @Order(8)
     public void testSearchWithDashVectorQueryCondition() throws Exception {
         DashVectorQueryCondition condition = new DashVectorQueryCondition("solon")
                 .limit(5)
@@ -518,6 +556,7 @@ public class DashVectorSDKRepositoryTest {
     }
 
     @Test
+    @Order(8)
     public void testSearchInPartition() throws Exception {
         DashVectorQueryCondition condition = new DashVectorQueryCondition("微服务")
                 .partition(TEST_PARTITION)
@@ -529,8 +568,8 @@ public class DashVectorSDKRepositoryTest {
     }
 
     @Test
+    @Order(8)
     public void testSearchById() throws Exception {
-        // 先在默认分区选一条已有的文档 ID
         String existingId = seededDocIds.get(0);
 
         DashVectorQueryCondition condition = new DashVectorQueryCondition("any")
@@ -547,6 +586,7 @@ public class DashVectorSDKRepositoryTest {
     // ====================================================================
 
     @Test
+    @Order(9)
     public void testSearchAsDoc() throws Exception {
         DashVectorQueryCondition condition = new DashVectorQueryCondition("solon")
                 .limit(3)
@@ -556,13 +596,13 @@ public class DashVectorSDKRepositoryTest {
         List<Doc> docs = repository.searchAsDoc(condition);
         assertFalse(docs.isEmpty(), "searchAsDoc 应返回原始 Doc");
 
-        // 原始 Doc 转 Document
         Document document = DocumentConverter.toDocument(docs.get(0));
         assertNotNull(document);
         assertNotNull(document.getContent());
     }
 
     @Test
+    @Order(9)
     public void testBuildQueryRequest() throws Exception {
         DashVectorQueryCondition condition = new DashVectorQueryCondition("solon")
                 .partition(TEST_PARTITION)
@@ -582,6 +622,7 @@ public class DashVectorSDKRepositoryTest {
     // ====================================================================
 
     @Test
+    @Order(10)
     public void testListPartitions() throws Exception {
         List<String> partitions = repository.listPartitions();
         assertNotNull(partitions);
@@ -590,14 +631,15 @@ public class DashVectorSDKRepositoryTest {
     }
 
     @Test
+    @Order(10)
     public void testDescribePartition() throws Exception {
         Status status = repository.describePartition(TEST_PARTITION);
         assertNotNull(status);
-        // 正常状态为 SERVING
         assertEquals(Status.SERVING, status);
     }
 
     @Test
+    @Order(10)
     public void testStatsPartition() throws Exception {
         PartitionStats stats = repository.statsPartition(TEST_PARTITION);
         assertNotNull(stats);
@@ -605,6 +647,7 @@ public class DashVectorSDKRepositoryTest {
     }
 
     @Test
+    @Order(10)
     public void testCreateAndDeletePartition() throws Exception {
         String tmpPartition = "tmp_test_part";
         repository.createPartition(tmpPartition);
@@ -617,16 +660,16 @@ public class DashVectorSDKRepositoryTest {
 
         repository.deletePartition(tmpPartition);
 
-        // 删除后不应再出现
         partitions = repository.listPartitions();
         assertFalse(partitions.contains(tmpPartition));
     }
 
     // ====================================================================
-    // 11. DocumentConverter 互转
+    // 11. DocumentConverter 互转（纯内存，无需网络）
     // ====================================================================
 
     @Test
+    @Order(11)
     public void testDocumentToDocConversion() {
         Document original = new Document("互转测试内容");
         original.id("conv-001");
@@ -645,6 +688,7 @@ public class DashVectorSDKRepositoryTest {
     }
 
     @Test
+    @Order(11)
     public void testDocToDocumentConversion() {
         Doc sdkDoc = Doc.builder()
                 .id("conv-002")
@@ -659,15 +703,14 @@ public class DashVectorSDKRepositoryTest {
         assertEquals("SDK Doc 内容", restored.getContent());
         assertEquals("https://example.com/sdk", restored.getUrl());
         assertEquals("test", restored.getMetadata().get("category"));
-        // content / url 不应残留在 metadata
         assertFalse(restored.getMetadata().containsKey(DocumentConverter.CONTENT_FIELD_KEY));
         assertFalse(restored.getMetadata().containsKey(DocumentConverter.URL_FIELD_KEY));
-        // vector 回写
         assertNotNull(restored.getEmbedding());
         assertEquals(4, restored.getEmbedding().length);
     }
 
     @Test
+    @Order(11)
     public void testRoundTripConversion() {
         Document original = new Document("往返转换测试");
         original.id("rt-001");
@@ -685,6 +728,7 @@ public class DashVectorSDKRepositoryTest {
     }
 
     @Test
+    @Order(11)
     public void testBatchConversion() {
         List<Document> docs = Arrays.asList(
                 new Document("batch-1"),
@@ -705,6 +749,7 @@ public class DashVectorSDKRepositoryTest {
     }
 
     @Test
+    @Order(11)
     public void testNullConversion() {
         assertNull(DocumentConverter.toDoc(null));
         assertNull(DocumentConverter.toDocument(null));
@@ -713,6 +758,7 @@ public class DashVectorSDKRepositoryTest {
     }
 
     @Test
+    @Order(11)
     public void testFloatArrayConversions() {
         List<Float> list = DocumentConverter.floatArrayToList(new float[]{1.1f, 2.2f});
         assertEquals(2, list.size());
@@ -722,29 +768,227 @@ public class DashVectorSDKRepositoryTest {
         assertEquals(2, arr.length);
         assertEquals(3.3f, arr[0], 0.001f);
 
-        // null 安全
         assertTrue(DocumentConverter.floatArrayToList(null).isEmpty());
         assertEquals(0, DocumentConverter.toFloatArray(null).length);
     }
 
     // ====================================================================
-    // 12. dropRepository / initRepository 幂等
+    // 12. Builder 新增选项（metric / dataType / quantizeType）
     // ====================================================================
 
     @Test
-    public void testInitRepositoryIdempotent() throws Exception {
-        // 多次调用 initRepository 不应报错
-        repository.initRepository();
-        repository.initRepository();
-        assertNotNull(repository.getCollection());
+    @Order(12)
+    public void testBuilderWithEuclideanMetric() throws Exception {
+        String euclideanCollection = "test_euclidean";
+        EmbeddingModel embeddingModel = EmbeddingModel.of(apiUrl)
+                .provider(provider).model(model)
+                .apiKey(apiKey)
+                .build();
+
+        DashVectorSDKRepository euclideanRepo = DashVectorSDKRepository
+                .builder(embeddingModel, new DashVectorClient(API_KEY, SERVER_URL))
+                .collectionName(euclideanCollection)
+                .metric(CollectionInfo.Metric.euclidean)
+                .build();
+
+        try {
+            Document doc = new Document("euclidean 度量测试文档");
+            euclideanRepo.save(Collections.singletonList(doc));
+            Thread.sleep(1000);
+
+            assertTrue(euclideanRepo.existsById(doc.getId()));
+
+            // euclidean 的 score 是距离值，不在 [0,1] 范围，需要将阈值设为 0
+            List<Document> results = euclideanRepo.search(
+                    new QueryCondition("euclidean 度量")
+                            .similarityThreshold(0)
+                            .disableRefilter(true));
+            assertFalse(results.isEmpty());
+        } finally {
+            euclideanRepo.dropRepository();
+        }
     }
 
     @Test
+    @Order(12)
+    public void testBuilderWithDotProductMetric() throws Exception {
+        String dotProductCollection = "test_dotproduct";
+        EmbeddingModel embeddingModel = EmbeddingModel.of(apiUrl)
+                .provider(provider).model(model)
+                .apiKey("PESUGLZTSY4YMBA8LSGLW5PW5QJHIYDWWRGON61R")
+                .build();
+
+        DashVectorSDKRepository dotProductRepo = DashVectorSDKRepository
+                .builder(embeddingModel, new DashVectorClient(API_KEY, SERVER_URL))
+                .collectionName(dotProductCollection)
+                .metric(CollectionInfo.Metric.dotproduct)
+                .build();
+
+        try {
+            Document doc = new Document("dotproduct 度量测试文档");
+            dotProductRepo.save(Collections.singletonList(doc));
+            Thread.sleep(1000);
+
+            assertTrue(dotProductRepo.existsById(doc.getId()));
+
+            // dotproduct 的 score 不在 [0,1] 范围，需要将阈值设为 0
+            List<Document> results = dotProductRepo.search(
+                    new QueryCondition("dotproduct 度量")
+                            .similarityThreshold(0)
+                            .disableRefilter(true));
+            assertFalse(results.isEmpty());
+        } finally {
+            dotProductRepo.dropRepository();
+        }
+    }
+
+    @Test
+    @Order(12)
+    public void testBuilderWithQuantizeType() throws Exception {
+        String quantizedCollection = "test_quantized";
+        EmbeddingModel embeddingModel = EmbeddingModel.of(apiUrl)
+                .provider(provider).model(model)
+                .apiKey(apiKey)
+                .build();
+
+        DashVectorSDKRepository quantizedRepo = DashVectorSDKRepository
+                .builder(embeddingModel, new DashVectorClient(API_KEY, SERVER_URL))
+                .collectionName(quantizedCollection)
+                .metric(CollectionInfo.Metric.dotproduct)
+                .quantizeType("DT_VECTOR_INT8")
+                .build();
+
+        try {
+            Document doc = new Document("INT8 量化测试文档");
+            quantizedRepo.save(Collections.singletonList(doc));
+            Thread.sleep(1000);
+
+            assertTrue(quantizedRepo.existsById(doc.getId()));
+
+            // dotproduct + 量化，score 不在 [0,1]，阈值设为 0
+            List<Document> results = quantizedRepo.search(
+                    new QueryCondition("INT8 量化")
+                            .similarityThreshold(0)
+                            .disableRefilter(true));
+            assertFalse(results.isEmpty());
+        } finally {
+            quantizedRepo.dropRepository();
+        }
+    }
+
+    // ====================================================================
+    // 13. SimilarityUtil 三种度量方法
+    // ====================================================================
+
+    @Test
+    @Order(13)
+    public void testCosineSimilarity() {
+        float[] a = {1.0f, 0.0f, 0.0f};
+        float[] b = {1.0f, 0.0f, 0.0f};
+        float[] c = {0.0f, 1.0f, 0.0f};
+
+        // 相同向量 cosine = 1.0
+        assertEquals(1.0, SimilarityUtil.cosineSimilarity(a, b), 0.001);
+        // 正交向量 cosine = 0.0
+        assertEquals(0.0, SimilarityUtil.cosineSimilarity(a, c), 0.001);
+    }
+
+    @Test
+    @Order(13)
+    public void testEuclideanDistance() {
+        float[] a = {0.0f, 0.0f};
+        float[] b = {3.0f, 4.0f};
+
+        // 距离 = 5.0
+        assertEquals(5.0, SimilarityUtil.euclideanDistance(a, b), 0.001);
+        // 相同向量距离 = 0
+        assertEquals(0.0, SimilarityUtil.euclideanDistance(a, a), 0.001);
+    }
+
+    @Test
+    @Order(13)
+    public void testEuclideanSimilarity() {
+        float[] a = {0.0f, 0.0f};
+        float[] b = {3.0f, 4.0f};
+
+        // similarity = 1 / (1 + 5) = 1/6
+        double similarity = SimilarityUtil.euclideanSimilarity(a, b);
+        assertEquals(1.0 / 6.0, similarity, 0.001);
+
+        // 相同向量 similarity = 1 / (1 + 0) = 1.0
+        assertEquals(1.0, SimilarityUtil.euclideanSimilarity(a, a), 0.001);
+    }
+
+    @Test
+    @Order(13)
+    public void testDotProductSimilarity() {
+        float[] a = {1.0f, 2.0f, 3.0f};
+        float[] b = {4.0f, 5.0f, 6.0f};
+
+        // dotProduct = 1*4 + 2*5 + 3*6 = 32
+        assertEquals(32.0, SimilarityUtil.dotProductSimilarity(a, b), 0.001);
+    }
+
+    @Test
+    @Order(13)
+    public void testScoreMethods() {
+        float[] queryEmbed = {1.0f, 0.0f, 0.0f};
+
+        Document doc = new Document("score test");
+        doc.embedding(new float[]{0.6f, 0.8f, 0.0f});
+
+        // score (cosine)
+        Document scored = SimilarityUtil.score(doc, queryEmbed);
+        assertTrue(scored.getScore() > 0 && scored.getScore() <= 1.0);
+
+        // scoreByEuclidean
+        Document euclideanScored = SimilarityUtil.scoreByEuclidean(doc, queryEmbed);
+        assertTrue(euclideanScored.getScore() > 0 && euclideanScored.getScore() <= 1.0);
+
+        // scoreByDotProduct
+        Document dotScored = SimilarityUtil.scoreByDotProduct(doc, queryEmbed);
+        assertEquals(0.6, dotScored.getScore(), 0.001);
+    }
+
+    @Test
+    @Order(13)
+    public void testSimilarityNullAndMismatch() {
+        float[] a = {1.0f, 2.0f};
+        float[] b = {1.0f, 2.0f, 3.0f};
+
+        // 长度不等
+        assertThrows(IllegalArgumentException.class,
+                () -> SimilarityUtil.cosineSimilarity(a, b));
+        assertThrows(IllegalArgumentException.class,
+                () -> SimilarityUtil.euclideanDistance(a, b));
+        assertThrows(IllegalArgumentException.class,
+                () -> SimilarityUtil.dotProductSimilarity(a, b));
+
+        // null 输入
+        assertThrows(RuntimeException.class,
+                () -> SimilarityUtil.cosineSimilarity(null, a));
+        assertThrows(RuntimeException.class,
+                () -> SimilarityUtil.euclideanDistance(null, a));
+        assertThrows(RuntimeException.class,
+                () -> SimilarityUtil.dotProductSimilarity(null, a));
+    }
+
+    // ====================================================================
+    // 99. dropRepository / initRepository 生命周期
+    //     放在最后执行，因为 drop 会销毁 collection
+    // ====================================================================
+
+    @Test
+    @Order(100)
     public void testDropAndReinit() throws Exception {
+        // drop 后 collection 置空
         repository.dropRepository();
         assertNull(repository.getCollection());
 
-        // 重新初始化
+        // 等待服务端完成删除
+        Thread.sleep(2000);
+
+        // 重新 init —— 应重新创建 collection
         repository.initRepository();
         assertNotNull(repository.getCollection());
         assertTrue(repository.getCollection().isSuccess());
