@@ -118,8 +118,32 @@ public class DashVectorSDKRepository implements RepositoryStorable, RepositoryLi
         }
 
         this.collection = config.client.get(config.collectionName);
+
         if (!this.collection.isSuccess()) {
-            throw new IOException("Failed to get DashVector collection: " + this.collection.getMessage());
+            // 集合可能正处于 DROPPING 状态（list 能看到但 get 失败），
+            // 等待服务端完成删除后重新创建
+            for (int retry = 0; retry < 3; retry++) {
+                try {
+                    Thread.sleep(3000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Interrupted while waiting for collection to be ready", e);
+                }
+
+                try {
+                    createNewCollection();
+                } catch (IOException ignore) {
+                    // 仍在 DROPPING 中，继续等待
+                    continue;
+                }
+
+                this.collection = config.client.get(config.collectionName);
+                if (this.collection.isSuccess()) {
+                    return;
+                }
+            }
+
+            throw new IOException("Failed to get DashVector collection after retries: " + this.collection.getMessage());
         }
     }
 
@@ -140,11 +164,18 @@ public class DashVectorSDKRepository implements RepositoryStorable, RepositoryLi
         CreateCollectionRequest.CreateCollectionRequestBuilder requestBuilder = CreateCollectionRequest.builder()
                 .name(config.collectionName)
                 .dimension(config.embeddingModel.dimensions())
-                .dataType(CollectionInfo.DataType.FLOAT)
-                .metric(CollectionInfo.Metric.cosine);
+                .dataType(config.dataType)
+                .metric(config.metric);
 
         for (Map.Entry<String, FieldType> entry : fieldsSchema.entrySet()) {
             requestBuilder.filedSchema(entry.getKey(), entry.getValue());
+        }
+
+        // 量化策略
+        if (config.quantizeType != null && !config.quantizeType.isEmpty()) {
+            Map<String, String> extraParams = new HashMap<>();
+            extraParams.put("quantize_type", config.quantizeType);
+            requestBuilder.extraParams(extraParams);
         }
 
         Response<Void> resp = config.client.create(requestBuilder.build());
@@ -555,6 +586,21 @@ public class DashVectorSDKRepository implements RepositoryStorable, RepositoryLi
          */
         private String collectionName = "solon_ai";
 
+        /**
+         * 距离度量方式
+         */
+        private CollectionInfo.Metric metric = CollectionInfo.Metric.cosine;
+
+        /**
+         * 向量数据类型
+         */
+        private CollectionInfo.DataType dataType = CollectionInfo.DataType.FLOAT;
+
+        /**
+         * 量化策略（如 "DT_VECTOR_INT8"）
+         */
+        private String quantizeType;
+
         private Builder(EmbeddingModel embeddingModel, DashVectorClient client) {
             this.embeddingModel = embeddingModel;
             this.client = client;
@@ -564,6 +610,9 @@ public class DashVectorSDKRepository implements RepositoryStorable, RepositoryLi
          * 设置集合名称
          */
         public Builder collectionName(String collectionName) {
+            if (collectionName.length() > 32) {
+                throw new IllegalArgumentException("collection name too long, max 32 characters.");
+            }
             this.collectionName = collectionName;
             return this;
         }
@@ -573,6 +622,39 @@ public class DashVectorSDKRepository implements RepositoryStorable, RepositoryLi
          */
         public Builder metadataFields(List<MetadataField> metadataFields) {
             this.metadataFields = metadataFields;
+            return this;
+        }
+
+        /**
+         * 设置距离度量方式（默认 cosine）
+         *
+         * @param metric 支持 {@code cosine}、{@code euclidean}、{@code dotproduct}；
+         *               当 metric 为 cosine 时，dataType 必须为 FLOAT
+         */
+        public Builder metric(CollectionInfo.Metric metric) {
+            this.metric = metric;
+            return this;
+        }
+
+        /**
+         * 设置向量数据类型（默认 FLOAT）
+         *
+         * @param dataType 支持 {@code FLOAT}、{@code INT}
+         */
+        public Builder dataType(CollectionInfo.DataType dataType) {
+            this.dataType = dataType;
+            return this;
+        }
+
+        /**
+         * 设置量化策略，将 float32 向量量化为更紧凑的格式以节省存储和加速检索</br>
+         * 如果 Collection 设置为量化 int8 则这里必须设置量化方式，会自动完成量化步骤。
+         *
+         * @param quantizeType 目前支持 {@code "DT_VECTOR_INT8"}（将 float32 量化为 int8）
+         * @see <a href="https://help.aliyun.com/zh/document_detail/2663745.html">向量动态量化</a>
+         */
+        public Builder quantizeType(String quantizeType) {
+            this.quantizeType = quantizeType;
             return this;
         }
 
