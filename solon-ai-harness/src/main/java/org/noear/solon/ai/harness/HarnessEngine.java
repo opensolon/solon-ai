@@ -69,10 +69,6 @@ public class HarnessEngine {
     private ChatModel chatModel; //允许运行时切换
     private ReActAgent mainAgent; //允许运行时切换
 
-    public String getVersion() {
-        return "v2026.4.5";
-    }
-
     public String getName() {
         return mainAgent.name();
     }
