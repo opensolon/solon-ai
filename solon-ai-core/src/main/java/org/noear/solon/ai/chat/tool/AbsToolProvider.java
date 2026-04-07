@@ -23,45 +23,27 @@ import java.util.*;
  * @author noear
  * @since 3.10.1
  */
-public class AbsToolProvider implements ToolProvider {
-    private Map<String, FunctionTool> toolMap;
-    private List<FunctionTool> tools;
+public abstract class AbsToolProvider implements ToolProvider {
+    private final Map<String, FunctionTool> toolMap;
+    private final List<FunctionTool> tools;
 
-    public AbsToolProvider() {
-        if (autoInit()) {
-            init();
+    protected AbsToolProvider() {
+        this(null);
+    }
+
+    /**
+     * @since 3.10.2
+     */
+    protected AbsToolProvider(Map<String, Object> binding) {
+        this.tools = new ArrayList<>();
+        this.tools.addAll(new MethodToolProvider(this).binding(binding).getTools());
+
+        Map<String, FunctionTool> toolMap0 = new LinkedHashMap<>();
+        for (FunctionTool tool : tools) {
+            toolMap0.put(tool.name(), tool);
         }
-    }
 
-    /**
-     * 自动初始化
-     */
-    protected boolean autoInit() {
-        return true;
-    }
-
-    /**
-     * 初始化
-     */
-    protected void init() {
-        if (this.tools == null) {
-            this.tools = new ArrayList<>();
-            this.tools.addAll(createToolProvider().getTools());
-
-            Map<String, FunctionTool> toolMap0 = new LinkedHashMap<>();
-            for (FunctionTool tool : tools) {
-                toolMap0.put(tool.name(), tool);
-            }
-
-            toolMap = Collections.unmodifiableMap(toolMap0);
-        }
-    }
-
-    /**
-     * 生成工具提供者
-     */
-    protected MethodToolProvider createToolProvider() {
-        return new MethodToolProvider(this);
+        toolMap = Collections.unmodifiableMap(toolMap0);
     }
 
     public Map<String, FunctionTool> getToolMap() {

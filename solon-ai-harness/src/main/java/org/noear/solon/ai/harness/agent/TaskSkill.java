@@ -53,10 +53,10 @@ public class TaskSkill extends AbsSkill {
     public static final String TOOL_TASK = "task";
     public static final String TOOL_MULTITASK = "multitask";
 
-    private final HarnessEngine agentRuntime;
+    private final HarnessEngine engine;
 
-    public TaskSkill(HarnessEngine agentRuntime) {
-        this.agentRuntime = agentRuntime;
+    public TaskSkill(HarnessEngine engine) {
+        this.engine = engine;
     }
 
     @Override
@@ -70,7 +70,7 @@ public class TaskSkill extends AbsSkill {
 
         sb.append("## 当前可用的子代理注册表\n");
         sb.append("<available_agents>\n");
-        for (AgentDefinition agentDefinition : agentRuntime.getAgentManager().getAgents()) {
+        for (AgentDefinition agentDefinition : engine.getAgentManager().getAgents()) {
             sb.append(String.format("  - \"%s\": %s\n", agentDefinition.getName(), agentDefinition.getDescription()));
         }
         sb.append("</available_agents>\n\n");
@@ -85,7 +85,7 @@ public class TaskSkill extends AbsSkill {
     @ToolMapping(name = "task", description =
             "分派任务给专项子代理。所有实际开发工作必须使用此工具委派给子代理完成。")
     public String task(@Body TaskOp taskSpec, String __cwd, String __sessionId) {
-        AgentSession __parentSession = agentRuntime.getSession(__sessionId);
+        AgentSession __parentSession = engine.getSession(__sessionId);
         ReActTrace __parentTrace = ReActTrace.getCurrent(__parentSession.getContext());
 
         return taskDo(__parentTrace, __cwd, taskSpec, false);
@@ -98,7 +98,7 @@ public class TaskSkill extends AbsSkill {
             return "WARNING: 任务列表为空";
         }
 
-        AgentSession __parentSession = agentRuntime.getSession(__sessionId);
+        AgentSession __parentSession = engine.getSession(__sessionId);
         ReActTrace __parentTrace = ReActTrace.getCurrent(__parentSession.getContext());
 
         List<CompletableFuture<String>> futures = new ArrayList<>();
@@ -135,7 +135,7 @@ public class TaskSkill extends AbsSkill {
     }
 
     private String taskDo(ReActTrace __parentTrace, String __cwd, TaskOp task, boolean isMultitask) {
-        AgentDefinition agentDefinition = agentRuntime.getAgentManager().getAgent(task.getName());
+        AgentDefinition agentDefinition = engine.getAgentManager().getAgent(task.getName());
         if (agentDefinition == null) {
             return "ERROR: 未知的子代理类型 '" + task.getName() + "'。";
         }
@@ -145,7 +145,7 @@ public class TaskSkill extends AbsSkill {
         }
 
         String result = null;
-        ReActAgent agent = agentDefinition.builder(agentRuntime).build();
+        ReActAgent agent = agentDefinition.builder(engine).build();
         final AgentSession session = InMemoryAgentSession.of(agent.name());
 
         try {

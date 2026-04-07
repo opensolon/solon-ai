@@ -4,7 +4,6 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.tool.AbsToolProvider;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
@@ -29,34 +28,32 @@ import java.util.Map;
 public class GenerateTool extends AbsToolProvider {
     private static final Logger LOG = LoggerFactory.getLogger(GenerateTool.class);
 
-    private HarnessEngine agentRuntime;
+    private HarnessEngine engine;
 
-    public GenerateTool(HarnessEngine agentRuntime) {
-        this.agentRuntime = agentRuntime;
-        this.init();
+    public GenerateTool(HarnessEngine engine) {
+        super(createBinding(engine));
+        this.engine = engine;
     }
 
-    @Override
-    protected boolean autoInit() {
-        return false;
-    }
-
-    @Override
-    protected MethodToolProvider createToolProvider() {
+    private static Map<String, Object> createBinding(HarnessEngine engine) {
         Map<String, Object> binding = new LinkedHashMap<>();
 
-        if (Assert.isNotEmpty(agentRuntime.getProps().getAiModels())) {
+        if (Assert.isNotEmpty(engine.getProps().getAiModels())) {
+            //有模型配置
             StringBuilder buf = new StringBuilder("从给定列表中选择：\n");
-            for (Map.Entry<String, ChatConfig> entry : agentRuntime.getProps().getAiModels().entrySet()) {
+            for (Map.Entry<String, ChatConfig> entry : engine.getProps().getAiModels().entrySet()) {
                 buf.append("- `").append(entry.getValue()).append("`，").append(Utils.annoAlias(entry.getValue().getDescription(), entry.getKey())).append("\n");
             }
+
             binding.put("aiModels", buf.toString());
         } else {
+            //没有
             binding.put("aiModels", "暂无模型可选");
         }
 
-        return super.createToolProvider().binding(binding);
+        return binding;
     }
+
 
     @ToolMapping(name = "generate_agent",
             description = "动态创建一个具有特定能力和系统提示词的子代理\n" +
@@ -94,7 +91,7 @@ public class GenerateTool extends AbsToolProvider {
         }
 
         try {
-            AgentDefinition definition = agentRuntime.getAgentManager()
+            AgentDefinition definition = engine.getAgentManager()
                     .getAgent(AgentDefinition.AGENT_GENERAL)
                     .copy();
 
@@ -136,7 +133,7 @@ public class GenerateTool extends AbsToolProvider {
                 LOG.info("Agent 定义已保存到: {}", agentFile);
             }
 
-            agentRuntime.getAgentManager().addAgent(definition);
+            engine.getAgentManager().addAgent(definition);
 
             return "[OK] 子代理创建成功！\n\n" +
                     String.format("**标识**: %s\n", name) +

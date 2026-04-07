@@ -27,12 +27,12 @@ public class AgentFactory {
     /**
      * 根据定义生成代理
      */
-    public static ReActAgent.Builder create(HarnessEngine agentRuntime, AgentDefinition agentDefinition) {
-        ChatModel chatModel = agentRuntime.getChatModel();
+    public static ReActAgent.Builder create(HarnessEngine engine, AgentDefinition agentDefinition) {
+        ChatModel chatModel = engine.getChatModel();
 
         if (Assert.isNotEmpty(agentDefinition.getMetadata().getModel())) {
             //支持模型选择
-            ChatConfig chatConfig = agentRuntime.getProps().getAiModels().get(agentDefinition.getMetadata().getModel());
+            ChatConfig chatConfig = engine.getProps().getAiModels().get(agentDefinition.getMetadata().getModel());
             if (chatConfig != null) {
                 chatModel = ChatModel.of(chatConfig).build();
             }
@@ -44,15 +44,15 @@ public class AgentFactory {
 
         builder.name(agentDefinition.getName());
 
-        if (Assert.isNotEmpty(agentRuntime.getProps().getWorkspace())) {
-            builder.defaultToolContextPut(HarnessEngine.ATTR_CWD, agentRuntime.getProps().getWorkspace());
+        if (Assert.isNotEmpty(engine.getProps().getWorkspace())) {
+            builder.defaultToolContextPut(HarnessEngine.ATTR_CWD, engine.getProps().getWorkspace());
         }
 
         if (Assert.isNotEmpty(agentDefinition.getSystemPrompt())) {
             builder.systemPrompt(r -> agentDefinition.getSystemPrompt());
         }
 
-        builder.defaultInterceptorAdd(agentRuntime.getSummarizationInterceptor());
+        builder.defaultInterceptorAdd(engine.getSummarizationInterceptor());
 
         if (metadata.getMaxSteps() != null && metadata.getMaxSteps() > 0) {
             builder.maxSteps(metadata.getMaxSteps());
@@ -76,7 +76,7 @@ public class AgentFactory {
 
         if (Assert.isNotEmpty(metadata.getTools())) {
             //目前参考了： https://opencode.ai/docs/zh-cn/permissions/
-            TerminalSkillProxy terminalSkillWrap = new TerminalSkillProxy(agentRuntime.getCliSkills().getTerminalSkill());
+            TerminalSkillProxy terminalSkillWrap = new TerminalSkillProxy(engine.getCliSkills().getTerminalSkill());
 
             for (String toolName : metadata.getTools()) {
                 switch (toolName) {
@@ -115,17 +115,17 @@ public class AgentFactory {
                     }
                     case "subagent":
                     case "task": {
-                        builder.defaultSkillAdd(agentRuntime.getTaskSkill());
+                        builder.defaultSkillAdd(engine.getTaskSkill());
                         break;
                     }
                     case "skill": {
-                        builder.defaultSkillAdd(agentRuntime.getCliSkills().getExpertSkill());
+                        builder.defaultSkillAdd(engine.getCliSkills().getExpertSkill());
                         break;
                     }
                     case "todoread":
                     case "todowrite":
                     case "todo": {
-                        todoAddDo(metadata, builder, agentRuntime);
+                        todoAddDo(metadata, builder, engine);
                         break;
                     }
                     case "webfetch": {
@@ -141,16 +141,16 @@ public class AgentFactory {
                         break;
                     }
                     case "*": {
-                        builder.defaultSkillAdd(agentRuntime.getCliSkills());
-                        todoAddDo(metadata, builder, agentRuntime);
-                        builder.defaultSkillAdd(agentRuntime.getCodeSkill());
+                        builder.defaultSkillAdd(engine.getCliSkills());
+                        todoAddDo(metadata, builder, engine);
+                        builder.defaultSkillAdd(engine.getCodeSkill());
 
                         builder.defaultToolAdd(WebfetchTool.getInstance());
                         builder.defaultToolAdd(WebsearchTool.getInstance());
                         builder.defaultToolAdd(CodeSearchTool.getInstance());
 
-                        if (agentRuntime.getProps().isSubagentEnabled()) {
-                            builder.defaultSkillAdd(agentRuntime.getTaskSkill());
+                        if (engine.getProps().isSubagentEnabled()) {
+                            builder.defaultSkillAdd(engine.getTaskSkill());
                         }
                         break;
                     }
@@ -159,65 +159,65 @@ public class AgentFactory {
 
 
                     case "generate": {
-                        if (agentRuntime.getProps().isSubagentEnabled()) {
-                            builder.defaultToolAdd(agentRuntime.getGenerateTool());
+                        if (engine.getProps().isSubagentEnabled()) {
+                            builder.defaultToolAdd(engine.getGenerateTool());
                         }
                         break;
                     }
                     case "code": {
-                        builder.defaultSkillAdd(agentRuntime.getCodeSkill());
+                        builder.defaultSkillAdd(engine.getCodeSkill());
                         break;
                     }
                     case "mcp": {
-                        if (agentRuntime.getMcpGatewaySkill() != null) {
-                            builder.defaultSkillAdd(agentRuntime.getMcpGatewaySkill());
+                        if (engine.getMcpGatewaySkill() != null) {
+                            builder.defaultSkillAdd(engine.getMcpGatewaySkill());
                         }
                         break;
                     }
                     case "restapi": {
-                        if (agentRuntime.getRestApiSkill() != null) {
-                            builder.defaultSkillAdd(agentRuntime.getRestApiSkill());
+                        if (engine.getRestApiSkill() != null) {
+                            builder.defaultSkillAdd(engine.getRestApiSkill());
                         }
                     }
                     case "hitl": {
-                        if (agentRuntime.getProps().isHitlEnabled()) {
-                            builder.defaultInterceptorAdd(agentRuntime.getHitlInterceptor());
+                        if (engine.getProps().isHitlEnabled()) {
+                            builder.defaultInterceptorAdd(engine.getHitlInterceptor());
                         }
                         break;
                     }
 
                     case "**": {
-                        builder.defaultSkillAdd(agentRuntime.getCliSkills());
-                        todoAddDo(metadata, builder, agentRuntime);
-                        builder.defaultSkillAdd(agentRuntime.getCodeSkill());
+                        builder.defaultSkillAdd(engine.getCliSkills());
+                        todoAddDo(metadata, builder, engine);
+                        builder.defaultSkillAdd(engine.getCodeSkill());
 
                         builder.defaultToolAdd(WebfetchTool.getInstance());
                         builder.defaultToolAdd(WebsearchTool.getInstance());
                         builder.defaultToolAdd(CodeSearchTool.getInstance());
 
-                        if (agentRuntime.getProps().isSubagentEnabled()) {
-                            builder.defaultSkillAdd(agentRuntime.getTaskSkill());
+                        if (engine.getProps().isSubagentEnabled()) {
+                            builder.defaultSkillAdd(engine.getTaskSkill());
                         }
 
                         //---
 
-                        if (agentRuntime.getProps().isSubagentEnabled()) {
-                            builder.defaultToolAdd(agentRuntime.getGenerateTool());
+                        if (engine.getProps().isSubagentEnabled()) {
+                            builder.defaultToolAdd(engine.getGenerateTool());
                         }
 
                         //mcp
-                        if (agentRuntime.getMcpGatewaySkill() != null) {
-                            builder.defaultSkillAdd(agentRuntime.getMcpGatewaySkill());
+                        if (engine.getMcpGatewaySkill() != null) {
+                            builder.defaultSkillAdd(engine.getMcpGatewaySkill());
                         }
 
                         //rest-api
-                        if (agentRuntime.getRestApiSkill() != null) {
-                            builder.defaultSkillAdd(agentRuntime.getRestApiSkill());
+                        if (engine.getRestApiSkill() != null) {
+                            builder.defaultSkillAdd(engine.getRestApiSkill());
                         }
 
                         //hitl
-                        if (agentRuntime.getProps().isHitlEnabled()) {
-                            builder.defaultInterceptorAdd(agentRuntime.getHitlInterceptor());
+                        if (engine.getProps().isHitlEnabled()) {
+                            builder.defaultInterceptorAdd(engine.getHitlInterceptor());
                         }
                         break;
                     }

@@ -31,41 +31,26 @@ import java.util.*;
 @Preview("3.8.4")
 public abstract class AbsSkill implements Skill {
     private volatile SkillMetadata metadata;
-    private Map<String, FunctionTool> toolMap;
-    private List<FunctionTool> tools;
+    private final Map<String, FunctionTool> toolMap;
+    private final List<FunctionTool> tools;
 
     protected AbsSkill() {
-        if (autoInit()) {
-            init();
-        }
+        this(null);
     }
 
     /**
-     * 自动初始化
+     * @since 3.10.2
      */
-    protected boolean autoInit() {
-        return true;
-    }
+    protected AbsSkill(Map<String, Object> binding) {
+        this.tools = new ArrayList<>();
+        this.tools.addAll(new MethodToolProvider(this).binding(binding).getTools());
 
-    /**
-     * 初始化
-     */
-    protected void init() {
-        if (this.tools == null) {
-            this.tools = new ArrayList<>();
-            this.tools.addAll(createToolProvider().getTools());
-
-            Map<String, FunctionTool> toolMap0 = new LinkedHashMap<>();
-            for (FunctionTool tool : tools) {
-                toolMap0.put(tool.name(), tool);
-            }
-
-            toolMap = Collections.unmodifiableMap(toolMap0);
+        Map<String, FunctionTool> toolMap0 = new LinkedHashMap<>();
+        for (FunctionTool tool : tools) {
+            toolMap0.put(tool.name(), tool);
         }
-    }
 
-    protected MethodToolProvider createToolProvider() {
-        return new MethodToolProvider(this);
+        toolMap = Collections.unmodifiableMap(toolMap0);
     }
 
     public Map<String, FunctionTool> getToolMap() {
