@@ -1,6 +1,8 @@
 package org.noear.solon.ai.harness.agent;
 
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.chat.ChatConfig;
+import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.skill.SkillMetadata;
@@ -26,7 +28,17 @@ public class AgentFactory {
      * 根据定义生成代理
      */
     public static ReActAgent.Builder create(HarnessEngine agentRuntime, AgentDefinition agentDefinition) {
-        ReActAgent.Builder builder = ReActAgent.of(agentRuntime.getChatModel());
+        ChatModel chatModel = agentRuntime.getChatModel();
+
+        if (Assert.isNotEmpty(agentDefinition.getMetadata().getModel())) {
+            //支持模型选择
+            ChatConfig chatConfig = agentRuntime.getProps().getAiModels().get(agentDefinition.getMetadata().getModel());
+            if (chatConfig != null) {
+                chatModel = ChatModel.of(chatConfig).build();
+            }
+        }
+
+        ReActAgent.Builder builder = ReActAgent.of(chatModel);
 
         AgentDefinition.Metadata metadata = agentDefinition.getMetadata();
 
@@ -80,7 +92,7 @@ public class AgentFactory {
                         terminalSkillWrap.addTools("read", "write", "edit");
                         break;
                     }
-                    case "pi":{
+                    case "pi": {
                         terminalSkillWrap.addTools("read", "write", "edit", "bash");
                         break;
                     }
