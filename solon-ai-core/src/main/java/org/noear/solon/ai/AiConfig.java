@@ -37,6 +37,7 @@ public class AiConfig {
     protected String apiKey;
     protected String provider;
     protected String model;
+    protected String description;
     protected long contextLength;
     protected final Map<String, String> headers = new LinkedHashMap<>();
     protected String userAgent;
@@ -60,6 +61,10 @@ public class AiConfig {
 
     public String getModel() {
         return model;
+    }
+
+    public String getDescription() {
+        return description;
     }
 
     public long getContextLength() {
@@ -104,6 +109,10 @@ public class AiConfig {
 
     public void setModel(String model) {
         this.model = model;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
     }
 
     public void setContextLength(long contextLength) {
