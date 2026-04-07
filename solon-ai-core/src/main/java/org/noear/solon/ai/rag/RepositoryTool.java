@@ -16,11 +16,15 @@
 package org.noear.solon.ai.rag;
 
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.ai.rag.util.QueryCondition;
+import org.noear.solon.ai.reranking.RerankingModel;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.lang.Nullable;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 知识库检索工具（协助实现 Agent RAG，从 “被动检索” 到 “主动寻知”）
@@ -28,11 +32,19 @@ import java.util.List;
  * @author noear
  * @since 3.10.1
  */
-public class RepositoryTool {
-    private Repository repository;
+public class RepositoryTool extends AbsToolProvider {
+    private final Repository repository;
+    private final @Nullable RerankingModel rerankingModel;
 
     public RepositoryTool(Repository repository) {
+        this(repository, null);
+    }
+
+    public RepositoryTool(Repository repository, @Nullable RerankingModel rerankingModel) {
+        Objects.requireNonNull(repository, "repository");
+
         this.repository = repository;
+        this.rerankingModel = rerankingModel;
     }
 
     @ToolMapping(name = "repository_query", description = "知识库检索工具。当需要查询特定领域知识、文档或背景资料时调用。")
@@ -50,11 +62,19 @@ public class RepositoryTool {
         StringBuilder sb = new StringBuilder("### 多重检索结果汇总\n\n");
         for (int i = 0; i < maxQueries; i++) {
             String q = queries.get(i);
-            if (q == null || q.trim().isEmpty()) continue;
+            if (q == null || q.trim().isEmpty()) {
+                continue;
+            }
 
             QueryCondition condition = new QueryCondition(q).limit(topK > 0 ? topK : 3);
+
+            List<Document> result = repository.search(condition);
+            if (rerankingModel != null) {
+                result = rerankingModel.rerank(q, result);
+            }
+
             sb.append("#### 针对关键词 [").append(q).append("] 的结果：\n");
-            sb.append(formatResults(repository.search(condition)));
+            sb.append(formatResults(result));
             sb.append("\n---\n");
         }
         return sb.toString();
