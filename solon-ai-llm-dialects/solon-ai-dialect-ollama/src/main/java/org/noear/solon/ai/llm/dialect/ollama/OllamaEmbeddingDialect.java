@@ -23,6 +23,7 @@ import org.noear.solon.ai.embedding.EmbeddingConfig;
 import org.noear.solon.ai.embedding.EmbeddingException;
 import org.noear.solon.ai.embedding.EmbeddingResponse;
 import org.noear.solon.ai.embedding.dialect.AbstractEmbeddingDialect;
+import org.noear.solon.core.util.Assert;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,7 +43,8 @@ public class OllamaEmbeddingDialect extends AbstractEmbeddingDialect {
 
     @Override
     public boolean matched(EmbeddingConfig config) {
-        return "ollama".equals(config.getProvider());
+        return "ollama".equals(config.getProvider()) ||
+                (Assert.isEmpty(config.getProvider()) && config.getApiUrl().endsWith("/api/embed"));
     }
 
     @Override
