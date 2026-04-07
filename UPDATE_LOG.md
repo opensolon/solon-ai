@@ -15,7 +15,11 @@
 * 新增 solon-ai-repo-dashvector-official 插件
 * 添加 solon-ai-core ChatModel.getModel 方法
 * 添加 solon-ai-core ChatModel.getProvider 方法
+* 添加 solon-ai-core 基于语义的分割器 SemanticSplitter
+* 优化 solon-ai-core OllamaEmbeddingDialect.matched 添加 endsWith 匹配
+* 调整 solon-ai-cli 取消 TerminalSkill.undo 工具（几乎用不到，由 git 控制）
 * 调整 solon-ai-harness 取消 SESSION_DEFAULT（由应用侧处理）
+* 调整 solon-ai-harness 去除 getVersion 方法（由应用侧定义）
 
 ### 3.10.1
 
