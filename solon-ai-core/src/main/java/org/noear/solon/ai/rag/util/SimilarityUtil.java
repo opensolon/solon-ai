@@ -75,7 +75,7 @@ public final class SimilarityUtil {
     }
 
     /**
-     * 评分（评分与数量并排序）
+     * 对文档根据参照的向量进行相似度评分（余弦相似度）
      */
     public static Document score(Document doc, float[] queryEmbed) {
         //方便调试
@@ -83,7 +83,21 @@ public final class SimilarityUtil {
     }
 
     /**
-     * 复制并评分
+     * 对文档根据参照的向量进行相似度评分（欧几里得距离，归一化到 0-1 相似度）
+     */
+    public static Document scoreByEuclidean(Document doc, float[] queryEmbed) {
+        return doc.score(euclideanSimilarity(queryEmbed, doc.getEmbedding()));
+    }
+
+    /**
+     * 对文档根据参照的向量进行相似度评分（点积）
+     */
+    public static Document scoreByDotProduct(Document doc, float[] queryEmbed) {
+        return doc.score(dotProductSimilarity(queryEmbed, doc.getEmbedding()));
+    }
+
+    /**
+     * 复制文档并评分
      */
     public static Document copyAndScore(Document doc, float[] queryEmbed) {
         //方便调试
@@ -105,7 +119,7 @@ public final class SimilarityUtil {
     /// //////////////////////////
 
     /**
-     * 余弦相似度
+     * 余弦相似度（返回 -1 到 1）
      *
      * @param embedA 嵌入矢量1
      * @param embedB 嵌入矢量2
@@ -130,9 +144,58 @@ public final class SimilarityUtil {
     }
 
     /**
+     * 欧几里得距离
+     *
+     * @param embedA 嵌入矢量1
+     * @param embedB 嵌入矢量2
+     * @return 距离值（>= 0），越小越相似
+     */
+    public static double euclideanDistance(float[] embedA, float[] embedB) {
+        if (embedA == null || embedB == null) {
+            throw new RuntimeException("Embed must not be null");
+        }
+        if (embedA.length != embedB.length) {
+            throw new IllegalArgumentException("Embed length must be equal");
+        }
+
+        float sum = 0.0F;
+        for (int i = 0; i < embedA.length; i++) {
+            float diff = embedA[i] - embedB[i];
+            sum += diff * diff;
+        }
+        return Math.sqrt(sum);
+    }
+
+    /**
+     * 欧几里得相似度（将距离归一化到 0-1，越大越相似）
+     *
+     * <p>公式：{@code 1 / (1 + distance)}
+     *
+     * @param embedA 嵌入矢量1
+     * @param embedB 嵌入矢量2
+     */
+    public static double euclideanSimilarity(float[] embedA, float[] embedB) {
+        return 1.0 / (1.0 + euclideanDistance(embedA, embedB));
+    }
+
+    /**
+     * 点积相似度
+     *
+     * @param embedA 嵌入矢量1
+     * @param embedB 嵌入矢量2
+     * @return 点积值，越大越相似（适用于归一化后的向量）
+     */
+    public static double dotProductSimilarity(float[] embedA, float[] embedB) {
+        if (embedA == null || embedB == null) {
+            throw new RuntimeException("Embed must not be null");
+        }
+        return dotProduct(embedA, embedB);
+    }
+
+    /**
      * 点积
      */
-    private static float dotProduct(float[] embedA, float[] embedB) {
+    public static float dotProduct(float[] embedA, float[] embedB) {
         if (embedA.length != embedB.length) {
             throw new IllegalArgumentException("Embed length must be equal");
         } else {
