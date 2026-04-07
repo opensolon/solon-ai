@@ -27,6 +27,7 @@
 * 新增 solon-ai-harness 智能体马具框架
 * 添加 solon-ai-core ChatModel.of().systemPrompt 方法
 * 添加 solon-ai-core 工具执行时的参数注解支持
+* 添加 solon-ai-core RepositoryTool 工具，为实现 Agent RAG 提供支持
 * 添加 solon-ai-core AbsToolProvider 类（取代之前添加 toolObj 的方式）
 * 优化 solon-ai-skill-cli ExpertSkill 原来的二档展示升为三级
 * 优化 solon-ai-skill-restapi 原来的三档展示升为四级，并添加分组（可增强注意力）
