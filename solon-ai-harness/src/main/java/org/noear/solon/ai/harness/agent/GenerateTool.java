@@ -1,5 +1,6 @@
 package org.noear.solon.ai.harness.agent;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.tool.AbsToolProvider;
@@ -47,7 +48,7 @@ public class GenerateTool extends AbsToolProvider {
         if (Assert.isNotEmpty(agentRuntime.getProps().getAiModels())) {
             StringBuilder buf = new StringBuilder("从给定列表中选择：\n");
             for (Map.Entry<String, ChatConfig> entry : agentRuntime.getProps().getAiModels().entrySet()) {
-                buf.append("- `").append(entry.getValue()).append("`，").append(entry.getValue().getDescription()).append("\n");
+                buf.append("- `").append(entry.getValue()).append("`，").append(Utils.annoAlias(entry.getValue().getDescription(), entry.getKey())).append("\n");
             }
             binding.put("aiModels", buf.toString());
         } else {
