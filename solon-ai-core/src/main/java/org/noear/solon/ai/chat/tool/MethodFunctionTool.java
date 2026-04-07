@@ -28,6 +28,7 @@ import org.noear.solon.core.handle.ContextEmpty;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.ClassUtil;
 import org.noear.solon.core.wrap.MethodWrap;
+import org.noear.solon.expression.snel.SnEL;
 import org.noear.solon.rx.SimpleSubscriber;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
@@ -60,12 +61,17 @@ public class MethodFunctionTool implements FunctionTool {
     private final Map<String, ParamDesc> params;
     private final ToolCallResultConverter resultConverter;
     private final String inputSchema;
+    private final Map<String, Object> binding;
     private String outputSchema;
 
-
     public MethodFunctionTool(BeanWrap beanWrap, MethodEggg methodEggg) {
+        this(beanWrap, methodEggg, null);
+    }
+
+    public MethodFunctionTool(BeanWrap beanWrap, MethodEggg methodEggg, Map<String, Object> binding) {
         this.beanWrap = beanWrap;
         this.methodWrap = new MethodWrap(beanWrap.context(), beanWrap.clz(), methodEggg);
+        this.binding = binding;
         this.returnType = methodEggg.getGenericReturnType();
 
         ToolMapping mapping = methodEggg.getMethod().getAnnotation(ToolMapping.class);
@@ -77,11 +83,16 @@ public class MethodFunctionTool implements FunctionTool {
 
         this.name = Utils.annoAlias(mapping.name(), methodEggg.getName());
         this.title = mapping.title();
-        this.description = mapping.description();
+        if (Assert.isNotEmpty(binding)) {
+            this.description = SnEL.evalTmpl(mapping.description(), binding);
+        } else {
+            this.description = mapping.description();
+        }
+
         this.returnDirect = mapping.returnDirect();
         this.params = new LinkedHashMap<>();
 
-        if(Assert.isNotEmpty(mapping.meta()) && mapping.meta().length() > 3) {
+        if (Assert.isNotEmpty(mapping.meta()) && mapping.meta().length() > 3) {
             Map<String, Object> tmp = ONode.deserialize(mapping.meta(), Map.class);
             meta.putAll(tmp);
         }
@@ -98,7 +109,7 @@ public class MethodFunctionTool implements FunctionTool {
         }
 
         for (ParamEggg p1 : methodEggg.getParamEgggAry()) {
-            Map<String, ParamDesc> paramMap = ToolSchemaUtil.buildInputParams(p1.getParam(), p1.getTypeEggg());
+            Map<String, ParamDesc> paramMap = ToolSchemaUtil.buildInputParams(p1.getParam(), p1.getTypeEggg(), binding);
             if (Utils.isNotEmpty(paramMap)) {
                 params.putAll(paramMap);
             }
@@ -149,7 +160,7 @@ public class MethodFunctionTool implements FunctionTool {
 
     @Override
     public void metaPut(String key, Object value) {
-        meta.put(key,value);
+        meta.put(key, value);
     }
 
     @Override

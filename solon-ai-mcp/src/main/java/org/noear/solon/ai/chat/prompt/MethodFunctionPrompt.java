@@ -72,7 +72,7 @@ public class MethodFunctionPrompt implements FunctionPrompt {
         this.params = new LinkedHashMap<>();
 
         for (ParamEggg p1 : methodEggg.getParamEgggAry()) {
-            Map<String, ParamDesc> paramMap = ToolSchemaUtil.buildInputParams(p1.getParam(), p1.getTypeEggg());
+            Map<String, ParamDesc> paramMap = ToolSchemaUtil.buildInputParams(p1.getParam(), p1.getTypeEggg(), null);
             if (Utils.isNotEmpty(paramMap)) {
                 params.putAll(paramMap);
             }

@@ -82,7 +82,7 @@ public class Text2SqlSkill extends AbsSkill {
         this.tableNames = Arrays.asList(tables);
     }
 
-    private void init() {
+    private void schemaInit() {
         if (globalRelations != null) {
             return;
         }
@@ -171,7 +171,7 @@ public class Text2SqlSkill extends AbsSkill {
 
     @Override
     public void onAttach(Prompt prompt) {
-        init();
+        schemaInit();
     }
 
     @Override

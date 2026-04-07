@@ -31,31 +31,53 @@ import java.util.*;
 @Preview("3.8.4")
 public abstract class AbsSkill implements Skill {
     private volatile SkillMetadata metadata;
-    private final Map<String, FunctionTool> toolMap;
-    private final List<FunctionTool> tools;
+    private Map<String, FunctionTool> toolMap;
+    private List<FunctionTool> tools;
 
     protected AbsSkill() {
-        this.tools = new ArrayList<>();
-        this.tools.addAll(new MethodToolProvider(this).getTools());
-
-        Map<String, FunctionTool> toolMap0 = new LinkedHashMap<>();
-        for (FunctionTool tool : tools) {
-            toolMap0.put(tool.name(), tool);
+        if (autoInit()) {
+            init();
         }
+    }
 
-        toolMap = Collections.unmodifiableMap(toolMap0);
+    /**
+     * 自动初始化
+     */
+    protected boolean autoInit() {
+        return true;
+    }
+
+    /**
+     * 初始化
+     */
+    protected void init() {
+        if (this.tools == null) {
+            this.tools = new ArrayList<>();
+            this.tools.addAll(createToolProvider().getTools());
+
+            Map<String, FunctionTool> toolMap0 = new LinkedHashMap<>();
+            for (FunctionTool tool : tools) {
+                toolMap0.put(tool.name(), tool);
+            }
+
+            toolMap = Collections.unmodifiableMap(toolMap0);
+        }
+    }
+
+    protected MethodToolProvider createToolProvider() {
+        return new MethodToolProvider(this);
     }
 
     public Map<String, FunctionTool> getToolMap() {
         return toolMap;
     }
 
-    public Collection<FunctionTool> getToolAry(){
+    public Collection<FunctionTool> getToolAry() {
         return tools;
     }
 
     public Collection<FunctionTool> getToolAry(String... names) {
-       return getToolAry(Arrays.asList(names));
+        return getToolAry(Arrays.asList(names));
     }
 
     public Collection<FunctionTool> getToolAry(Collection<String> names) {

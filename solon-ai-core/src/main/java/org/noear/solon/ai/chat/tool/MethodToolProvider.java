@@ -25,6 +25,7 @@ import org.noear.solon.core.util.EgggUtil;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -35,6 +36,7 @@ import java.util.function.Consumer;
  */
 public class MethodToolProvider implements ToolProvider {
     private final List<FunctionTool> tools = new ArrayList<>();
+    private Map<String, Object> binding;
 
     public MethodToolProvider(Object toolObj) {
         this(toolObj.getClass(), toolObj);
@@ -50,7 +52,7 @@ public class MethodToolProvider implements ToolProvider {
         for (MethodEggg me : classEggg.getPublicMethodEgggs()) {
             //兼容 mvc 注解
             if (me.getMethod().isAnnotationPresent(ToolMapping.class)) {
-                MethodFunctionTool func = new MethodFunctionTool(beanWrap, me);
+                MethodFunctionTool func = new MethodFunctionTool(beanWrap, me, binding);
                 tools.add(func);
             }
         }
@@ -61,6 +63,11 @@ public class MethodToolProvider implements ToolProvider {
                 tools.add(t1);
             }
         }
+    }
+
+    public MethodToolProvider binding(Map<String, Object> binding) {
+        this.binding = binding;
+        return this;
     }
 
     public MethodToolProvider then(Consumer<MethodToolProvider> consumer) {

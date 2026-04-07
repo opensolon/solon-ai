@@ -65,7 +65,7 @@ public class ToolSchemaUtil {
             if (Utils.isEmpty(name)) {
                 if (ae instanceof FieldEggg) {
                     name = ((FieldEggg) ae).getName();
-                } else if(ae instanceof ParamEggg){
+                } else if (ae instanceof ParamEggg) {
                     name = ((ParamEggg) ae).getName();
                 } else {
                     return null;
@@ -143,10 +143,11 @@ public class ToolSchemaUtil {
     /**
      * 构建参数申明（支持 @Param 和 @Body 注解）
      */
-    public static @Nullable Map<String, ParamDesc> buildInputParams(AnnotatedElement ae, TypeEggg typeEggg) {
+    public static @Nullable Map<String, ParamDesc> buildInputParams(AnnotatedElement ae, TypeEggg typeEggg, Map<String, Object> binding) {
         ParamDesc pd1 = getParamDesc(ae, typeEggg);
 
         if (pd1 != null) {
+            pd1.binding(binding);
             return Collections.singletonMap(pd1.name(), pd1);
         } else {
             Map<String, ParamDesc> paramMap = new LinkedHashMap<>();
@@ -156,7 +157,7 @@ public class ToolSchemaUtil {
                     pd1 = getParamDesc(fg1.getField(), fg1.getTypeEggg());
 
                     if (pd1 == null) {
-                        pd1 = new ParamDesc(fg1.getAlias(), fg1.getGenericType(), false, "", null, null);
+                        pd1 = new ParamDesc(fg1.getAlias(), fg1.getGenericType(), false, null, null, null);
                     }
 
                     paramMap.put(pd1.name(), pd1);

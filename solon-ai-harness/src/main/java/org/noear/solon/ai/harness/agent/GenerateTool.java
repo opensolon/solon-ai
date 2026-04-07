@@ -1,9 +1,12 @@
 package org.noear.solon.ai.harness.agent;
 
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.tool.AbsToolProvider;
+import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,7 +16,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  *
@@ -27,6 +32,29 @@ public class GenerateTool extends AbsToolProvider {
 
     public GenerateTool(HarnessEngine agentRuntime) {
         this.agentRuntime = agentRuntime;
+        this.init();
+    }
+
+    @Override
+    protected boolean autoInit() {
+        return false;
+    }
+
+    @Override
+    protected MethodToolProvider createToolProvider() {
+        Map<String, Object> binding = new LinkedHashMap<>();
+
+        if (Assert.isNotEmpty(agentRuntime.getProps().getAiModels())) {
+            StringBuilder buf = new StringBuilder("从给定列表中选择：\n");
+            for (Map.Entry<String, ChatConfig> entry : agentRuntime.getProps().getAiModels().entrySet()) {
+                buf.append("- `").append(entry.getValue()).append("`，").append(entry.getValue().getDescription()).append("\n");
+            }
+            binding.put("aiModels", buf.toString());
+        } else {
+            binding.put("aiModels", "暂无模型可选");
+        }
+
+        return super.createToolProvider().binding(binding);
     }
 
     @ToolMapping(name = "generate_agent",
@@ -37,8 +65,8 @@ public class GenerateTool extends AbsToolProvider {
             @Param(name = "name", description = "子代理的唯一英文标识符（如 code_reviewer）") String name,
             @Param(name = "description", description = "简要描述该代理的职责") String description,
             @Param(name = "systemPrompt", description = "详细的角色设定和工作准则") String systemPrompt,
-            @Param(name = "model", description = "指定使用的模型名称，不填则使用默认模型", required = false) String model,
-            @Param(name = "tools", required = false, description = "必须从给定列表中选择：\n" +
+            @Param(name = "model", description = "指定使用的模型名称。#{aiModels}\n", required = false) String model,
+            @Param(name = "tools", required = false, description = "指定可以使用的工具。从给定列表中选择：\n" +
                     "- `read`，读取文件完整内容\n" +
                     "- `write`，写入文件完整内容\n" +
                     "- `edit`，修改文件内容（包括：read,write,edit）\n" +

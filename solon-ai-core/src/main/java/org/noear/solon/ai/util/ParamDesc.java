@@ -16,8 +16,11 @@
 package org.noear.solon.ai.util;
 
 import org.noear.solon.core.Constants;
+import org.noear.solon.core.util.Assert;
+import org.noear.solon.expression.snel.SnEL;
 
 import java.lang.reflect.Type;
+import java.util.Map;
 
 /**
  * 函数工具参数描述
@@ -29,9 +32,9 @@ public class ParamDesc {
     private final String name;
     private final Type type;
     private final boolean required;
-    private final String description;
     private final String defaultValue;
     private final String format;
+    private String description;
 
     public ParamDesc(String name, Type type, boolean required, String description, String defaultValue, String format) {
         this.name = name;
@@ -40,6 +43,14 @@ public class ParamDesc {
         this.description = (description == null ? "" : description);
         this.defaultValue = Constants.PARM_UNDEFINED_VALUE.equals(defaultValue) ? null : defaultValue;
         this.format = format;
+    }
+
+    public ParamDesc binding(Map<String, Object> binding) {
+        if (Assert.isNotEmpty(binding)) {
+            this.description = SnEL.evalTmpl(description, binding);
+        }
+
+        return this;
     }
 
     /**
