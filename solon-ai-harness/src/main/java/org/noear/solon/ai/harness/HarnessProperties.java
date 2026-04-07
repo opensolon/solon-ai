@@ -52,9 +52,13 @@ public class HarnessProperties implements Serializable {
     private boolean hitlEnabled = false;
     private boolean subagentEnabled = true;
 
+    //大模型
+    private Map<String, ChatConfig> aiModels = new LinkedHashMap<>();
+    //技能池
     private Map<String, String> skillPools = new LinkedHashMap<>();
-
+    //mcp集
     private Map<String, McpServerParameters> mcpServers = new LinkedHashMap<>();
+    //api集
     private Map<String, ApiSource> restApis = new LinkedHashMap<>();
 
     public HarnessProperties(String harnessHome) {
