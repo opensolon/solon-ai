@@ -28,6 +28,7 @@
 
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-chroma</module>
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-dashvector</module>
+        <module>../../solon-ai-rag-repositorys/solon-ai-repo-dashvector-official</module>
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-elasticsearch</module>
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-milvus</module>
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-qdrant</module>
@@ -39,7 +40,6 @@
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-mysql</module>
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-vectorex</module>
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-weaviate</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-dashvector-official</module>
 
         <module>../../solon-ai-rag-searchs/solon-ai-search-baidu</module>
         <module>../../solon-ai-rag-searchs/solon-ai-search-bocha</module>

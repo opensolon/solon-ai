@@ -12,6 +12,7 @@
 
 ### 3.10.2
 
+* 新增 solon-ai-repo-dashvector-official 插件
 * 添加 solon-ai-core ChatModel.getModel 方法
 * 添加 solon-ai-core ChatModel.getProvider 方法
 * 调整 solon-ai-harness 取消 SESSION_DEFAULT（由应用侧处理）
