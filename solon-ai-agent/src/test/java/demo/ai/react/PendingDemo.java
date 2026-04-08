@@ -30,6 +30,10 @@ public class PendingDemo {
         //调步调用
         AgentSession session = InMemoryAgentSession.of();
         ReActResponse resp = agent.prompt("查一下杭州今天的天气").session(session).call();
+
+        if(session.isPending()){
+            System.out.println("已挂起");
+        }
     }
 
     public void case2() throws Throwable {
