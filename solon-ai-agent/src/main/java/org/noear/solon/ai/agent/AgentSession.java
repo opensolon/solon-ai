@@ -44,10 +44,7 @@ public interface AgentSession extends ChatSession, NonSerializable {
 
     /**
      * 获取当前状态快照（用于状态回溯或持久化导出）
-     *
-     * @deprecated 3.9.6
      */
-    @Deprecated
     default FlowContext getSnapshot() {
         return getContext();
     }
