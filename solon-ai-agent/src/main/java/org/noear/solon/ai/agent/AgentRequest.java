@@ -15,9 +15,12 @@
  */
 package org.noear.solon.ai.agent;
 
+import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
 import reactor.core.publisher.Flux;
+
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 智能体请求构建器
@@ -45,6 +48,13 @@ public interface AgentRequest<Req extends AgentRequest<Req,Resp>,Resp extends Ag
      * 同步调用：阻塞等待推理结束并返回完整响应
      */
     Resp call() throws Throwable;
+
+    /**
+     * 异步调用：异步推理结束并返回完整响应
+     */
+    default CompletableFuture<Resp> callAsync() {
+        return RunUtil.parallel(this::call);
+    }
 
     /**
      * 响应式流输出：实时推送推理过程中的中间结果（如思考、动作、内容片段）
