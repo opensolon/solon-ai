@@ -17,6 +17,8 @@
 * 添加 solon-ai-core ChatModel.getProvider 方法
 * 添加 solon-ai-core 基于语义的分割器 SemanticSplitter
 * 添加 solon-ai-core AiConfig.description 配置属性
+* 添加 solon-ai-agent AgentRequest.callAsync 异步调用方法
+* 添加 solon-ai-agent AgentResponse.getTrace 方法
 * 添加 solon-ai-harness HarnessProperties.aiModels 配置属性
 * 优化 solon-ai-core RepositoryTool 增加重排支持
 * 优化 solon-ai-core OllamaEmbeddingDialect.matched 添加 endsWith 匹配

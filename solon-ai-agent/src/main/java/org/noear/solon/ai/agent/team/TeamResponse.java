@@ -29,7 +29,7 @@ import org.noear.solon.lang.Preview;
  * @since 3.8.4
  */
 @Preview("3.8.4")
-public class TeamResponse implements AgentResponse {
+public class TeamResponse implements AgentResponse<TeamTrace> {
     private final AgentSession session;
     private final TeamTrace trace;
     private final AssistantMessage message;
@@ -40,6 +40,7 @@ public class TeamResponse implements AgentResponse {
         this.message = message;
     }
 
+    @Override
     public TeamTrace getTrace() {
         return trace;
     }

@@ -27,7 +27,12 @@ import org.noear.solon.lang.Preview;
  * @since 3.8.4
  */
 @Preview("3.8.4")
-public interface AgentResponse {
+public interface AgentResponse<Tra> {
+    /**
+     * 获取跟踪
+     */
+    Tra getTrace();
+
     /**
      * 获取会话
      */
