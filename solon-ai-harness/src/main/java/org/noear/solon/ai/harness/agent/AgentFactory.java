@@ -28,14 +28,11 @@ public class AgentFactory {
      * 根据定义生成代理
      */
     public static ReActAgent.Builder create(HarnessEngine engine, AgentDefinition agentDefinition) {
-        ChatModel chatModel = engine.getChatModel();
+        ChatModel chatModel = engine.getMainModel();
 
-        if (Assert.isNotEmpty(agentDefinition.getMetadata().getModel())) {
-            //支持模型选择
-            ChatConfig chatConfig = engine.getProps().getModels().get(agentDefinition.getMetadata().getModel());
-            if (chatConfig != null) {
-                chatModel = ChatModel.of(chatConfig).build();
-            }
+        //支持模型选择
+        if(Assert.isNotEmpty(agentDefinition.getMetadata().getModel())) {
+            chatModel = engine.getModel(agentDefinition.getMetadata().getModel());
         }
 
         ReActAgent.Builder builder = ReActAgent.of(chatModel);
@@ -52,26 +49,32 @@ public class AgentFactory {
             builder.systemPrompt(r -> agentDefinition.getSystemPrompt());
         }
 
-        builder.defaultInterceptorAdd(engine.getSummarizationInterceptor());
-
         if (metadata.getMaxSteps() != null && metadata.getMaxSteps() > 0) {
             builder.maxSteps(metadata.getMaxSteps());
         } else if (metadata.hasMaxTurns()) {
             builder.maxSteps(metadata.getMaxTurns());
         } else {
-            builder.maxSteps(30);
+            builder.maxSteps(engine.getProps().getMaxSteps());
         }
 
         if (metadata.getMaxStepsAutoExtensible() != null) {
             builder.maxStepsExtensible(metadata.getMaxStepsAutoExtensible());
         } else {
-            builder.maxStepsExtensible(true);
+            builder.maxStepsExtensible(engine.getProps().isMaxStepsAutoExtensible());
         }
 
         if (metadata.getSessionWindowSize() != null) {
             builder.sessionWindowSize(metadata.getSessionWindowSize());
         } else {
-            builder.sessionWindowSize(8);
+            builder.sessionWindowSize(engine.getProps().getSessionWindowSize());
+        }
+
+        if (metadata.getSummaryWindowSize() == null && metadata.getSummaryWindowToken() == null) {
+            builder.defaultInterceptorAdd(engine.getSummarizationInterceptor());
+        } else {
+            int summaryWindowSize = metadata.getSummaryWindowSize() == null ? engine.getProps().getSummaryWindowSize() : metadata.getSummaryWindowSize();
+            int summaryWindowToken = metadata.getSummaryWindowToken() == null ? engine.getProps().getSummaryWindowToken() : metadata.getSummaryWindowToken();
+            builder.defaultInterceptorAdd(engine.getSummarizationInterceptor().copyWith(summaryWindowSize, summaryWindowToken));
         }
 
         if (Assert.isNotEmpty(metadata.getTools())) {

@@ -157,13 +157,15 @@ public class AgentDefinition {
         // 模型配置
         private String model;
 
-        // 最大步数（新增）
+        // 最大步数（执行限制）
         private Integer maxSteps;
 
         // 最大步数自动扩展（新增）
         private Boolean maxStepsAutoExtensible;
 
         private Integer sessionWindowSize;
+        private Integer summaryWindowSize;
+        private Integer summaryWindowToken;
 
         // 工具配置
         private List<String> tools = new ArrayList<>();
@@ -174,7 +176,7 @@ public class AgentDefinition {
         // 权限配置
         private String permissionMode;
 
-        // 执行限制
+        // 执行限制（最大回合）
         private Integer maxTurns;
 
         // Skills 配置

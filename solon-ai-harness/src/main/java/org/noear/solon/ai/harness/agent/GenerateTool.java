@@ -38,17 +38,17 @@ public class GenerateTool extends AbsToolProvider {
     private static Map<String, Object> createBinding(HarnessEngine engine) {
         Map<String, Object> binding = new LinkedHashMap<>();
 
-        if (Assert.isNotEmpty(engine.getProps().getModels())) {
+        if (Assert.isNotEmpty(engine.getProps().getModels().getList())) {
             //有模型配置
             StringBuilder buf = new StringBuilder("从给定列表中选择：\n");
-            for (Map.Entry<String, ChatConfig> entry : engine.getProps().getModels().entrySet()) {
-                buf.append("- `").append(entry.getValue()).append("`，").append(Utils.annoAlias(entry.getValue().getDescription(), entry.getKey())).append("\n");
+            for (Map.Entry<String, ChatConfig> entry : engine.getProps().getModels().getList().entrySet()) {
+                buf.append("- `").append(entry.getKey()).append("`，").append(Utils.annoAlias(entry.getValue().getDescription(), entry.getKey())).append("\n");
             }
 
-            binding.put("aiModels", buf.toString());
+            binding.put("models", buf.toString());
         } else {
             //没有
-            binding.put("aiModels", "暂无模型可选");
+            binding.put("models", "暂无模型可选");
         }
 
         return binding;
@@ -63,7 +63,7 @@ public class GenerateTool extends AbsToolProvider {
             @Param(name = "name", description = "子代理的唯一英文标识符（如 code_reviewer）") String name,
             @Param(name = "description", description = "简要描述该代理的职责") String description,
             @Param(name = "systemPrompt", description = "详细的角色设定和工作准则") String systemPrompt,
-            @Param(name = "model", description = "指定使用的模型名称。#{aiModels}\n", required = false) String model,
+            @Param(name = "model", description = "指定使用的模型名称。#{models}", required = false) String model,
             @Param(name = "tools", required = false, description = "指定可以使用的工具。从给定列表中选择：\n" +
                     "- `read`，读取文件完整内容\n" +
                     "- `write`，写入文件完整内容\n" +

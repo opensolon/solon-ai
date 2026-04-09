@@ -2,8 +2,8 @@ package org.noear.solon.ai.harness;
 
 import lombok.Getter;
 import lombok.Setter;
-import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.permission.ToolPermission;
+import org.noear.solon.ai.harness.props.ModelsProperties;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.skills.restapi.ApiSource;
 import org.noear.solon.core.util.Assert;
@@ -21,9 +21,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 马具属性
+ * 马具配置属性
  *
  * @author noear
+ * @since 3.10.0
  */
 @Getter
 @Setter
@@ -45,13 +46,14 @@ public class HarnessProperties implements Serializable {
     private int sessionWindowSize = 8;
     private int summaryWindowSize = 15;
     private int summaryWindowToken = 15000;
+    private String summaryModel; //摘要大模型
 
     private boolean sandboxMode = true;
     private boolean hitlEnabled = false;
     private boolean subagentEnabled = true;
 
     //大模型
-    private Map<String, ChatConfig> models = new LinkedHashMap<>();
+    private ModelsProperties models = new ModelsProperties();
     //技能池
     private Map<String, String> skillPools = new LinkedHashMap<>();
     //mcp集
@@ -69,6 +71,9 @@ public class HarnessProperties implements Serializable {
         this.harnessHome = harnessHome;
     }
 
+    /**
+     * 添加工具权限
+     */
     public void addTools(ToolPermission... toolPermissions) {
         for (ToolPermission p1 : toolPermissions) {
             tools.add(p1.getName());

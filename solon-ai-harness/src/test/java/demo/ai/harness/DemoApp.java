@@ -18,9 +18,9 @@ public class DemoApp {
         //--- 1. 初始化
         HarnessProperties harnessProps = new HarnessProperties(".tmp/");
         harnessProps.addTools(ToolPermission.TOOL_ALL_FULL); //设定工具权限
-        harnessProps.setChatModel(null); //设定大模型配置
+        harnessProps.getModels().add("xxx", null); //设定大模型配置
+        harnessProps.getModels().setDefault("xxx");
 
-        ChatModel chatModel = ChatModel.of(harnessProps.getChatModel()).build();
         AgentSessionProvider sessionProvider = new AgentSessionProvider() {
             private Map<String, AgentSession> sessionMap = new ConcurrentHashMap<>();
 
@@ -32,7 +32,6 @@ public class DemoApp {
 
         HarnessEngine engine = HarnessEngine.builder()
                 .properties(harnessProps)
-                .chatModel(chatModel)
                 .sessionProvider(sessionProvider)
                 .build();
 

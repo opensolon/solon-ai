@@ -10,6 +10,7 @@ import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.agent.react.intercept.summarize.CompositeSummarizationStrategy;
 import org.noear.solon.ai.agent.react.intercept.summarize.HierarchicalSummarizationStrategy;
 import org.noear.solon.ai.agent.react.intercept.summarize.KeyInfoExtractionStrategy;
+import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.code.CodeSkill;
@@ -66,7 +67,7 @@ public class HarnessEngine {
 
     private final AgentManager agentManager;
 
-    private ChatModel chatModel; //允许运行时切换
+    private ChatModel mainModel; //允许运行时切换
     private ReActAgent mainAgent; //允许运行时切换
 
     public String getName() {
@@ -77,8 +78,13 @@ public class HarnessEngine {
         return props;
     }
 
-    public ChatModel getChatModel() {
-        return chatModel;
+    public ChatModel getMainModel() {
+        return mainModel;
+    }
+
+    public ChatModel getModel(String name) {
+        ChatConfig tmp = props.getModels().getRequired(name);
+        return ChatModel.of(tmp).build();
     }
 
     public AgentManager getAgentManager() {
@@ -122,18 +128,41 @@ public class HarnessEngine {
     }
 
 
-    public void setChatModel(ChatModel chatModel) {
-        Objects.nonNull(chatModel);
+    /**
+     * 切换模型
+     *
+     */
+    public void switchModel(String name) {
+        Objects.requireNonNull(name, "name");
 
         // chatModel 切换后，重新生成主代理
-        this.chatModel = chatModel;
+        this.mainModel = getModel(name);
         this.mainAgent = createMainAgent();
     }
 
 
-    private HarnessEngine(ChatModel chatModel, HarnessProperties props, AgentSessionProvider sessionProvider, SummarizationInterceptor summarizationInterceptor, HITLInterceptor hitlInterceptor, Collection<ReActAgentExtension> extensions) {
-        this.chatModel = chatModel;
+    private HarnessEngine(HarnessProperties props, AgentSessionProvider sessionProvider, SummarizationInterceptor summarizationInterceptor, HITLInterceptor hitlInterceptor, Collection<ReActAgentExtension> extensions) {
+        //上下文摘要拦截器默认处理
+        if (summarizationInterceptor == null) {
+            ChatModel summaryModel = getModel(props.getSummaryModel());
+
+            SummarizationStrategy strategy = new CompositeSummarizationStrategy()
+                    .addStrategy(new KeyInfoExtractionStrategy(summaryModel))      // 提取干货（去水）
+                    .addStrategy(new HierarchicalSummarizationStrategy(summaryModel)); // 滚动更新摘要
+
+            summarizationInterceptor = new SummarizationInterceptor(
+                    props.getSummaryWindowSize(),
+                    props.getSummaryWindowToken(),
+                    strategy);
+        }
+
+        //人工介入拉截器默认处理
+        if (hitlInterceptor == null) {
+            hitlInterceptor = new HITLInterceptor().onTool("bash", new HitlStrategy());
+        }
+
         this.props = props;
+        this.mainModel = getModel(null);
         this.sessionProvider = sessionProvider;
         this.summarizationInterceptor = summarizationInterceptor;
         this.hitlInterceptor = hitlInterceptor;
@@ -199,7 +228,7 @@ public class HarnessEngine {
         // 主代理
         agentDefinition.getMetadata().setPrimary(true);
         // 工具权限
-        for(String tool : props.getTools()) {
+        for (String tool : props.getTools()) {
             agentDefinition.getMetadata().addTools(tool);
         }
         // 添加步数
@@ -260,17 +289,11 @@ public class HarnessEngine {
     }
 
     public static class Builder {
-        private ChatModel chatModel;
         private HarnessProperties properties;
         private AgentSessionProvider sessionProvider;
         private SummarizationInterceptor summarizationInterceptor;
         private HITLInterceptor hitlInterceptor;
         private List<ReActAgentExtension> extensions = new ArrayList<>();
-
-        public Builder chatModel(ChatModel chatModel) {
-            this.chatModel = chatModel;
-            return this;
-        }
 
         public Builder properties(HarnessProperties properties) {
             this.properties = properties;
@@ -307,27 +330,27 @@ public class HarnessEngine {
         }
 
         public HarnessEngine build() {
-            Objects.nonNull(chatModel);
             Objects.nonNull(properties);
             Objects.nonNull(sessionProvider);
 
-            //上下文摘要
-            SummarizationStrategy strategy = new CompositeSummarizationStrategy()
-                    .addStrategy(new KeyInfoExtractionStrategy(chatModel))      // 提取干货（去水）
-                    .addStrategy(new HierarchicalSummarizationStrategy(chatModel)); // 滚动更新摘要
-
-            if (summarizationInterceptor == null) {
-                summarizationInterceptor = new SummarizationInterceptor(
-                        properties.getSummaryWindowSize(),
-                        properties.getSummaryWindowToken(),
-                        strategy);
+            //验证模型配置
+            if (Assert.isEmpty(properties.getModels().getList())) {
+                throw new IllegalStateException("Missing models config");
             }
 
-            if (hitlInterceptor == null) {
-                hitlInterceptor = new HITLInterceptor().onTool("bash", new HitlStrategy());
+            if (Assert.isEmpty(properties.getModels().getDefault())) {
+                //如果没有默认，则第一项为默认（可能是随机的）
+                String def = properties.getModels().getList().entrySet().iterator().next().getKey();
+                properties.getModels().setDefault(def);
+            } else {
+                //如果有，则校验
+                if (properties.getModels().getRequired(null) == null) {
+                    throw new IllegalStateException("NotFound default model");
+                }
             }
 
-            return new HarnessEngine(chatModel, properties, sessionProvider, summarizationInterceptor, hitlInterceptor, extensions);
+
+            return new HarnessEngine(properties, sessionProvider, summarizationInterceptor, hitlInterceptor, extensions);
         }
     }
 }
