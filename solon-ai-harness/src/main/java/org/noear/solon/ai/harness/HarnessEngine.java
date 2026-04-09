@@ -82,6 +82,15 @@ public class HarnessEngine {
         return mainModel;
     }
 
+    public ChatModel getModelOrMain(String name) {
+        if(Assert.isEmpty(name)){
+            return mainModel;
+        }
+
+
+        return getModel(name);
+    }
+
     public ChatModel getModel(String name) {
         ChatConfig tmp = props.getModels().getRequired(name);
         return ChatModel.of(tmp).build();

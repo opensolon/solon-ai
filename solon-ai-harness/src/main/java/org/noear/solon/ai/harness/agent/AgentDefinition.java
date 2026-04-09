@@ -57,6 +57,9 @@ public class AgentDefinition {
         return metadata.getDescription();
     }
 
+    public String getModel() {
+        return metadata.getModel();
+    }
 
     public void setMetadata(Metadata metadata) {
         if (metadata == null) {

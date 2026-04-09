@@ -28,12 +28,7 @@ public class AgentFactory {
      * 根据定义生成代理
      */
     public static ReActAgent.Builder create(HarnessEngine engine, AgentDefinition agentDefinition) {
-        ChatModel chatModel = engine.getMainModel();
-
-        //支持模型选择
-        if(Assert.isNotEmpty(agentDefinition.getMetadata().getModel())) {
-            chatModel = engine.getModel(agentDefinition.getMetadata().getModel());
-        }
+        ChatModel chatModel = engine.getModelOrMain(agentDefinition.getModel());
 
         ReActAgent.Builder builder = ReActAgent.of(chatModel);
 
