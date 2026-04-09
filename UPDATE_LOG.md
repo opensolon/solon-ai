@@ -19,12 +19,15 @@
 * 添加 solon-ai-core AiConfig.description 配置属性
 * 添加 solon-ai-agent AgentRequest.callAsync 异步调用方法
 * 添加 solon-ai-agent AgentResponse.getTrace 方法
-* 添加 solon-ai-harness HarnessProperties.aiModels 配置属性
+* 添加 solon-ai-agent SummarizationInterceptor.copyWith 方法（方便复制实例并调整限制）
+* 添加 solon-ai-harness HarnessProperties.models 配置属性
+* 添加 solon-ai-harness 子代理切换模型的能力
 * 优化 solon-ai-core RepositoryTool 增加重排支持
 * 优化 solon-ai-core OllamaEmbeddingDialect.matched 添加 endsWith 匹配
 * 调整 solon-ai-cli 取消 TerminalSkill.undo 工具（几乎用不到，由 git 控制）
 * 调整 solon-ai-harness 取消 SESSION_DEFAULT（由应用侧处理）
 * 调整 solon-ai-harness 去除 getVersion 方法（由应用侧定义）
+* 调整 solon-ai-harness HarnessProperties.restApis 更名为 apiServers；取消 chatModel（由 models 替代）
 
 ### 3.10.1
 
