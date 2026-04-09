@@ -21,7 +21,7 @@ public class LlmUtil {
 //                .build();
 
         return ChatModel.of("https://apis.iflow.cn/v1/chat/completions")
-                .apiKey("sk-cbe17fad468ca9525dc9491bf4ff7c4e")
+                .apiKey("sk-af71cac1da33bfd40e7c26a6dcc1969a")
                 .model("qwen3-32b")
                 .build();
 
