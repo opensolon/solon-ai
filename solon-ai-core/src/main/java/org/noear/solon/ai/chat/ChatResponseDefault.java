@@ -19,6 +19,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Nullable;
 
 import java.util.ArrayList;
@@ -140,6 +141,31 @@ public class ChatResponseDefault implements ChatResponse {
 
     public String getAggregationContent() {
         return contentBuilder.toString();
+    }
+
+    @Override
+    public boolean isEmpty() {
+        if (hasChoices() == false) {
+            return true;
+        }
+
+        AssistantMessage last = lastChoice().getMessage();
+
+        if (last == null) {
+            return true;
+        }
+
+        if (stream) {
+            if (contentBuilder.length() == 0 && Assert.isEmpty(last.getToolCalls())) {
+                return true;
+            }
+        } else {
+            if (Assert.isEmpty(last.getContent()) && Assert.isEmpty(last.getToolCalls())) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

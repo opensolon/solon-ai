@@ -58,6 +58,11 @@ public interface ChatResponse {
     ChatException getError();
 
     /**
+     * 是否为空（没有内容，也没有工具调用）
+     */
+    boolean isEmpty();
+
+    /**
      * 是否有选择
      */
     boolean hasChoices();
