@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.agent.util.AgentUtil;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
@@ -97,9 +98,18 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
                     "### 任务指令\n" +
                     "请根据系统指令对上述执行过程进行语义总结：";
 
-            String summary = AgentUtil.callWithRetry(() -> chatModel.prompt(userData)
-                    .options(o -> o.systemPrompt(systemInstruction))
-                    .call().getContent());
+            String summary = AgentUtil.callWithRetry(() -> {
+                ChatResponse resp = chatModel.prompt(userData)
+                        .options(o -> o.systemPrompt(systemInstruction))
+                        .call();
+
+                if (resp.hasContent()) {
+                    return resp.getContent();
+                } else {
+                    //触发重试
+                    throw new IllegalStateException("The LLM did not return");
+                }
+            });
 
             if (Assert.isEmpty(summary) || summary.contains("(无显著进度)")) {
                 return null;

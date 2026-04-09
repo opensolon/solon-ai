@@ -322,7 +322,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                         .blockLast();
             }
 
-            if (response.hasChoices() == false && response.isFinished() == false) {
+            if (response.isEmpty()) {
                 //触发重试
                 throw new IllegalStateException("The LLM did not return");
             }

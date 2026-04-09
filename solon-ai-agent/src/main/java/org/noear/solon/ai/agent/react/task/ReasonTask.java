@@ -421,14 +421,13 @@ public class ReasonTask implements NamedTaskComponent {
 
                 if (trace.getOptions().getStreamSink() != null) {
                      response = req.stream().doOnNext(resp -> {
-                        trace.getOptions().getStreamSink()
-                                .next(new ReasonChunk(node, trace, resp));
+                        trace.getOptions().getStreamSink().next(new ReasonChunk(node, trace, resp));
                     }).blockLast();
                 } else {
                     response = req.call();
                 }
 
-                if (response.hasChoices() == false && response.isFinished() == false) {
+                if (response.isEmpty()) {
                     //触发重试
                     throw new IllegalStateException("The LLM did not return");
                 }

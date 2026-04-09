@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.agent.util.AgentUtil;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
@@ -98,9 +99,18 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
                     "### 审计要求\n" +
                     "请根据系统指令，提取上述片段中的关键信息。";
 
-            String keyInfo = AgentUtil.callWithRetry(() -> chatModel.prompt(userData)
-                    .options(o -> o.systemPrompt(systemInstruction))
-                    .call().getContent());
+            String keyInfo = AgentUtil.callWithRetry(() -> {
+                ChatResponse resp = chatModel.prompt(userData)
+                        .options(o -> o.systemPrompt(systemInstruction))
+                        .call();
+
+                if (resp.hasContent()) {
+                    return resp.getContent();
+                } else {
+                    //触发重试
+                    throw new IllegalStateException("The LLM did not return");
+                }
+            });
 
             if (Assert.isEmpty(keyInfo) || keyInfo.contains("(无关键增量)")) {
                 return null; // 如果没有新干货，就不产生这次摘要注入，节省上下文

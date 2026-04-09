@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.agent.util.AgentUtil;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
@@ -83,8 +84,8 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
         // 过滤初心，只总结“中间增量”
         List<ChatMessage> pureExpired = (messagesToSummarize == null) ? new ArrayList<>() :
                 messagesToSummarize.stream()
-                        .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
-                        .collect(Collectors.toList());
+                .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
+                .collect(Collectors.toList());
 
         if (pureExpired.isEmpty()) {
             return buildMessage(lastSummary);
@@ -119,9 +120,18 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
                     "请根据 System Message（系统指令）中的逻辑，输出更新后的『进度摘要』：";
 
             // 3. 调用模型生成增量摘要
-            lastSummary = AgentUtil.callWithRetry(() -> chatModel.prompt(userData)
-                    .options(o -> o.systemPrompt(systemInstruction))
-                    .call().getContent());
+            lastSummary = AgentUtil.callWithRetry(() -> {
+                ChatResponse resp = chatModel.prompt(userData)
+                        .options(o -> o.systemPrompt(systemInstruction))
+                        .call();
+
+                if (resp.hasContent()) {
+                    return resp.getContent();
+                } else {
+                    //触发重试
+                    throw new IllegalStateException("The LLM did not return");
+                }
+            });
 
             if (lastSummary != null && lastSummary.length() > maxSummaryLength) {
                 lastSummary = lastSummary.substring(0, maxSummaryLength) + "...[Truncated]";
