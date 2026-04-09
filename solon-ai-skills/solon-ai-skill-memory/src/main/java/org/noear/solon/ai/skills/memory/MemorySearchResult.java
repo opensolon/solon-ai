@@ -24,14 +24,14 @@ package org.noear.solon.ai.skills.memory;
 public class MemorySearchResult {
     private String key;
     private String content;
-    private int importance;
+    private double importance;
     private String time; // 新增：记录时间，用于时序冲突判断
 
     public MemorySearchResult() {
         //用于反序列化
     }
 
-    public MemorySearchResult(String key, String content, int importance, String time) {
+    public MemorySearchResult(String key, String content, double importance, String time) {
         this.key = key;
         this.content = content;
         this.importance = importance;
@@ -46,7 +46,7 @@ public class MemorySearchResult {
         return content;
     }
 
-    public int getImportance() {
+    public double getImportance() {
         return importance;
     }
 
