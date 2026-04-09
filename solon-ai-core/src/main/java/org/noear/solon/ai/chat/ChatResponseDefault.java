@@ -200,7 +200,11 @@ public class ChatResponseDefault implements ChatResponse {
      */
     @Override
     public boolean hasContent() {
-        return getContent() != null;
+        if (hasChoices()) {
+            return lastChoice().getMessage().hasContent();
+        } else {
+            return false;
+        }
     }
 
     /**
