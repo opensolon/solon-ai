@@ -145,22 +145,12 @@ public class ChatResponseDefault implements ChatResponse {
 
     @Override
     public boolean isEmpty() {
-        if (hasChoices() == false) {
-            return true;
-        }
-
-        AssistantMessage last = lastChoice().getMessage();
-
-        if (last == null) {
-            return true;
-        }
-
         if (stream) {
-            if (contentBuilder.length() == 0 && Assert.isEmpty(last.getToolCalls())) {
+            if (contentBuilder.length() == 0 && toolCallBuilders.isEmpty()) {
                 return true;
             }
         } else {
-            if (Assert.isEmpty(last.getContent()) && Assert.isEmpty(last.getToolCalls())) {
+            if (choices.isEmpty()) {
                 return true;
             }
         }
