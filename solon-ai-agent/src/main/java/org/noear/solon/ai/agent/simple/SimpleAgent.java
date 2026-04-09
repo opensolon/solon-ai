@@ -17,8 +17,8 @@ package org.noear.solon.ai.agent.simple;
 
 import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
-import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.*;
+import org.noear.solon.ai.agent.exception.LlmNoReturnException;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.*;
@@ -300,7 +300,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             }
         }
 
-        throw new IllegalStateException("Should not reach here");
+        throw new IllegalStateException("Unreachable");
     }
 
     /**
@@ -324,7 +324,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
             if (response.isEmpty()) {
                 //触发重试
-                throw new IllegalStateException("The LLM did not return");
+                throw new LlmNoReturnException("The LLM did not return");
             }
 
             final AssistantMessage responseMessage;

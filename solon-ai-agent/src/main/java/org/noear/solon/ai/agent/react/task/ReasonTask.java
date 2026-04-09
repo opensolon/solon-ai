@@ -19,6 +19,7 @@ import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.exception.LlmNoReturnException;
 import org.noear.solon.ai.agent.react.*;
 import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.agent.react.intercept.HITLDecision;
@@ -429,7 +430,7 @@ public class ReasonTask implements NamedTaskComponent {
 
                 if (response.isEmpty()) {
                     //触发重试
-                    throw new IllegalStateException("The LLM did not return");
+                    throw new LlmNoReturnException("The LLM did not return");
                 }
 
                 return response;
@@ -452,7 +453,12 @@ public class ReasonTask implements NamedTaskComponent {
 
         // 设置故障状态并终止路由
         trace.setRoute(Agent.ID_END);
-        trace.setFinalAnswer("抱歉，暂时无法连接模型服务 (" + lastException.getMessage() + ")。请稍后重试。");
+
+        if(lastException instanceof LlmNoReturnException){
+            trace.setFinalAnswer("抱歉，模型服务没有内容返回。请稍后重试。");
+        } else {
+            trace.setFinalAnswer("抱歉，暂时无法连接模型服务 (" + lastException.getMessage() + ")。请稍后重试。");
+        }
 
         return null; // 返回 null，由 run 方法处理
     }

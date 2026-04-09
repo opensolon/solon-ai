@@ -11,6 +11,7 @@ package org.noear.solon.ai.agent.team.task;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.exception.LlmNoReturnException;
 import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
@@ -329,7 +330,7 @@ public class SupervisorTask implements NamedTaskComponent {
 
                 if (response.isEmpty()) {
                     //触发重试
-                    throw new IllegalStateException("The LLM did not return");
+                    throw new LlmNoReturnException("The LLM did not return");
                 }
 
                 return response;
