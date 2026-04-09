@@ -51,7 +51,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
     //轻量级 10，均衡型 13， 代码专家型 16
     private final int maxMessages;
     //轻量级 8000，均衡型 12000，代码专家型 20000+
-    private int maxTokens;
+    private final int maxTokens;
     private final SummarizationStrategy summarizationStrategy;
 
     public SummarizationInterceptor(int maxMessages, int maxTokens, SummarizationStrategy summarizationStrategy) {
@@ -73,6 +73,18 @@ public class SummarizationInterceptor implements ReActInterceptor {
          * */
 
         this(15, 12000,null);
+    }
+
+    /**
+     * 复制实例，并使用新的限制
+     */
+    public SummarizationInterceptor copyWith(int maxMessages, int maxTokens){
+        SummarizationInterceptor tmp = new SummarizationInterceptor(
+                maxMessages,
+                maxTokens,
+                this.summarizationStrategy);
+
+        return tmp;
     }
 
     @Override
