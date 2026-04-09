@@ -144,9 +144,9 @@ public class HarnessEngine {
         this.taskSkill = new TaskSkill(this);
         this.generateTool = new GenerateTool(this);
 
-        if (Assert.isNotEmpty(props.getRestApis())) {
+        if (Assert.isNotEmpty(props.getApiServers())) {
             restApiSkill = new RestApiSkill();
-            for (Map.Entry<String, ApiSource> entry : props.getRestApis().entrySet()) {
+            for (Map.Entry<String, ApiSource> entry : props.getApiServers().entrySet()) {
                 restApiSkill.addApi(entry.getValue());
             }
         } else {

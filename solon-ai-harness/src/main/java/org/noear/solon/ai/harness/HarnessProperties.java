@@ -28,8 +28,6 @@ import java.util.Map;
 @Getter
 @Setter
 public class HarnessProperties implements Serializable {
-    private ChatConfig chatModel;
-
     //马具目录
     private final String harnessHome;
 
@@ -53,13 +51,13 @@ public class HarnessProperties implements Serializable {
     private boolean subagentEnabled = true;
 
     //大模型
-    private Map<String, ChatConfig> aiModels = new LinkedHashMap<>();
+    private Map<String, ChatConfig> models = new LinkedHashMap<>();
     //技能池
     private Map<String, String> skillPools = new LinkedHashMap<>();
     //mcp集
     private Map<String, McpServerParameters> mcpServers = new LinkedHashMap<>();
     //api集
-    private Map<String, ApiSource> restApis = new LinkedHashMap<>();
+    private Map<String, ApiSource> apiServers = new LinkedHashMap<>();
 
     public HarnessProperties(String harnessHome) {
         if (Assert.isEmpty(harnessHome)) {

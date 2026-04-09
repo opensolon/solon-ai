@@ -32,7 +32,7 @@ public class AgentFactory {
 
         if (Assert.isNotEmpty(agentDefinition.getMetadata().getModel())) {
             //支持模型选择
-            ChatConfig chatConfig = engine.getProps().getAiModels().get(agentDefinition.getMetadata().getModel());
+            ChatConfig chatConfig = engine.getProps().getModels().get(agentDefinition.getMetadata().getModel());
             if (chatConfig != null) {
                 chatModel = ChatModel.of(chatConfig).build();
             }

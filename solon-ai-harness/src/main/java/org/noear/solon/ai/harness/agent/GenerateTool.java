@@ -38,10 +38,10 @@ public class GenerateTool extends AbsToolProvider {
     private static Map<String, Object> createBinding(HarnessEngine engine) {
         Map<String, Object> binding = new LinkedHashMap<>();
 
-        if (Assert.isNotEmpty(engine.getProps().getAiModels())) {
+        if (Assert.isNotEmpty(engine.getProps().getModels())) {
             //有模型配置
             StringBuilder buf = new StringBuilder("从给定列表中选择：\n");
-            for (Map.Entry<String, ChatConfig> entry : engine.getProps().getAiModels().entrySet()) {
+            for (Map.Entry<String, ChatConfig> entry : engine.getProps().getModels().entrySet()) {
                 buf.append("- `").append(entry.getValue()).append("`，").append(Utils.annoAlias(entry.getValue().getDescription(), entry.getKey())).append("\n");
             }
 
