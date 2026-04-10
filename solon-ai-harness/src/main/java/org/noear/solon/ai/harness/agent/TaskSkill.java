@@ -85,6 +85,10 @@ public class TaskSkill extends AbsSkill {
     @ToolMapping(name = "task", description =
             "分派任务给专项子代理。所有实际开发工作必须使用此工具委派给子代理完成。")
     public String task(@Body TaskOp taskSpec, String __cwd, String __sessionId) {
+        if(Assert.isEmpty(__sessionId)){
+            throw new IllegalArgumentException("__sessionId is required");
+        }
+
         AgentSession __parentSession = engine.getSession(__sessionId);
         ReActTrace __parentTrace = ReActTrace.getCurrent(__parentSession.getContext());
 
@@ -96,6 +100,10 @@ public class TaskSkill extends AbsSkill {
     public String multitask(@Param(name = "tasks", description = "任务列表") List<TaskOp> tasks, String __cwd, String __sessionId) {
         if (Assert.isEmpty(tasks)) {
             return "WARNING: 任务列表为空";
+        }
+
+        if(Assert.isEmpty(__sessionId)){
+            throw new IllegalArgumentException("__sessionId is required");
         }
 
         AgentSession __parentSession = engine.getSession(__sessionId);
