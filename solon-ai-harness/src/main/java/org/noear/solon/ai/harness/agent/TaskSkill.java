@@ -25,6 +25,7 @@ import org.noear.solon.ai.agent.react.task.ReasonChunk;
 import org.noear.solon.ai.agent.react.task.ThoughtChunk;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.ai.harness.HarnessEngine;
@@ -85,14 +86,14 @@ public class TaskSkill extends AbsSkill {
     @ToolMapping(name = "task", description =
             "分派任务给专项子代理。所有实际开发工作必须使用此工具委派给子代理完成。")
     public String task(@Body TaskOp taskSpec, String __cwd, String __sessionId) {
-        if(Assert.isEmpty(__sessionId)){
+        if (Assert.isEmpty(__sessionId)) {
             throw new IllegalStateException("__sessionId is required");
         }
 
         AgentSession __parentSession = engine.getSession(__sessionId);
         ReActTrace __parentTrace = ReActTrace.getCurrent(__parentSession.getContext());
 
-        return taskDo(__parentTrace, __cwd, taskSpec, false);
+        return taskDo(__parentTrace, __cwd, __sessionId, taskSpec, false);
     }
 
     @ToolMapping(name = "multitask", description =
@@ -102,7 +103,7 @@ public class TaskSkill extends AbsSkill {
             return "WARNING: 任务列表为空";
         }
 
-        if(Assert.isEmpty(__sessionId)){
+        if (Assert.isEmpty(__sessionId)) {
             throw new IllegalStateException("__sessionId is required");
         }
 
@@ -113,7 +114,7 @@ public class TaskSkill extends AbsSkill {
         for (TaskOp task : tasks) {
             // 使用 RunUtil.io() 是正确的，因为这主要是 I/O 密集型（等待 AI 响应）
             CompletableFuture<String> future = CompletableFuture.supplyAsync(() ->
-                    taskDo(__parentTrace, __cwd, task, true), RunUtil.io());
+                    taskDo(__parentTrace, __cwd, __sessionId, task, true), RunUtil.io());
             futures.add(future);
         }
 
@@ -144,7 +145,7 @@ public class TaskSkill extends AbsSkill {
                 }).join();
     }
 
-    private String taskDo(ReActTrace __parentTrace, String __cwd, TaskOp task, boolean isMultitask) {
+    private String taskDo(ReActTrace __parentTrace, String __cwd, String __sessionId, TaskOp task, boolean isMultitask) {
         AgentDefinition agentDefinition = engine.getAgentManager().getAgent(task.getAgentName());
         if (agentDefinition == null) {
             return "ERROR: 未知的子代理类型 '" + task.getAgentName() + "'。";
@@ -164,7 +165,8 @@ public class TaskSkill extends AbsSkill {
                 AgentResponse response = agent.prompt(task.getPrompt())
                         .session(session)
                         .options(o -> {
-                            o.toolContextPut("__cwd", __cwd);
+                            o.toolContextPut(HarnessEngine.ATTR_CWD, __cwd);
+                            o.toolContextPut(ChatSession.ATTR_SESSIONID, __sessionId);
                         })
                         .call();
 
@@ -175,7 +177,8 @@ public class TaskSkill extends AbsSkill {
                 ReActChunk response = (ReActChunk) agent.prompt(task.getPrompt())
                         .session(session)
                         .options(o -> {
-                            o.toolContextPut("__cwd", __cwd);
+                            o.toolContextPut(HarnessEngine.ATTR_CWD, __cwd);
+                            o.toolContextPut(ChatSession.ATTR_SESSIONID, __sessionId);
                         })
                         .stream()
                         .doOnNext(chunk -> {
@@ -229,7 +232,7 @@ public class TaskSkill extends AbsSkill {
      * 任务定义
      */
     public static class TaskOp {
-        @Param(name = "task_id", description = "任务ID（仅支持字母和数字）")
+        @Param(name = "task_id", description = "任务ID（仅支持字母和数字）。示例：task1，task2")
         private String task_id;
         @Param(name = "agent_name", description = "子代理名称")
         private String agent_name;
