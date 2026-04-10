@@ -40,36 +40,41 @@ import java.util.*;
 public class FileAgentSession implements AgentSession {
     private static final Logger LOG = LoggerFactory.getLogger(FileAgentSession.class);
 
+    private final String sessionId;
     private final File messagesFile;
     private final File snapshotFile;
     private final InMemoryAgentSession cache;
 
     public FileAgentSession(String sessionId, String dir) {
+        Objects.requireNonNull(sessionId, "sessionId is required");
+        Objects.requireNonNull(dir, "dir is required");
+
         File baseDir = new File(dir);
         if (!baseDir.exists()) {
             baseDir.mkdirs();
         }
 
+        this.sessionId = sessionId;
         this.messagesFile = new File(baseDir, sessionId + ".messages.ndjson");
         this.snapshotFile = new File(baseDir, sessionId + ".snapshot.json");
 
         // --- 1. 初始化快照 ---
-        FlowContext loadedSnapshot = null;
+        FlowContext snapshot = null;
         if (snapshotFile.exists()) {
             try {
                 byte[] bytes = Files.readAllBytes(snapshotFile.toPath());
-                loadedSnapshot = FlowContext.fromJson(new String(bytes, StandardCharsets.UTF_8));
+                snapshot = FlowContext.fromJson(new String(bytes, StandardCharsets.UTF_8));
             } catch (Throwable e) {
                 LOG.warn("Load snapshot failed, session: {}", sessionId, e);
             }
         }
 
-        // --- 2. 初始化缓存层 ---
-        if (loadedSnapshot != null) {
-            this.cache = new InMemoryAgentSession(loadedSnapshot);
-        } else {
-            this.cache = new InMemoryAgentSession(sessionId);
+        if (snapshot == null) {
+            snapshot = FlowContext.of(sessionId);
         }
+
+        // --- 2. 初始化缓存层 ---
+        this.cache = new InMemoryAgentSession(snapshot);
 
         // --- 3. 加载历史消息到缓存 ---
         loadMessagesToCache();
@@ -98,7 +103,7 @@ public class FileAgentSession implements AgentSession {
 
     @Override
     public String getSessionId() {
-        return cache.getSessionId();
+        return sessionId;
     }
 
     @Override

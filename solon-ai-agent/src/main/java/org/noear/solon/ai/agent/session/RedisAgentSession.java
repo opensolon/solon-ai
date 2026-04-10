@@ -38,7 +38,7 @@ import java.util.*;
 public class RedisAgentSession implements AgentSession {
     private static final Logger LOG = LoggerFactory.getLogger(RedisAgentSession.class);
 
-    private final String instanceId;
+    private final String sessionId;
     private final String messagesKey;
     private final String snapshotKey;
     private final RedisClient redisClient;
@@ -46,25 +46,27 @@ public class RedisAgentSession implements AgentSession {
     // 内存缓存层
     private final InMemoryAgentSession cache;
 
-    public RedisAgentSession(String instanceId, RedisClient redisClient) {
-        Objects.requireNonNull(instanceId, "instanceId is required");
+    public RedisAgentSession(String sessionId, RedisClient redisClient) {
+        Objects.requireNonNull(sessionId, "sessionId is required");
         Objects.requireNonNull(redisClient, "redisClient is required");
 
-        this.instanceId = instanceId;
-        this.messagesKey = instanceId + ":messages";
-        this.snapshotKey = instanceId + ":snapshot";
+        this.sessionId = sessionId;
+        this.messagesKey = sessionId + ":messages";
+        this.snapshotKey = sessionId + ":snapshot";
         this.redisClient = redisClient;
 
         // --- 1. 严格遵循原逻辑加载快照 (使用 instanceId 读取) ---
-        FlowContext snapshot;
-        String json = redisClient.getBucket().get(instanceId);
+        FlowContext snapshot = null;
+        String json = redisClient.getBucket().get(sessionId);
         if (json != null) {
             snapshot = FlowContext.fromJson(json);
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Session [{}] loaded from Redis.", instanceId);
+                LOG.debug("Session [{}] loaded from Redis.", sessionId);
             }
-        } else {
-            snapshot = FlowContext.of(instanceId);
+        }
+
+        if (snapshot == null) {
+            snapshot = FlowContext.of(sessionId);
         }
 
         // --- 2. 初始化缓存层 ---
@@ -93,7 +95,7 @@ public class RedisAgentSession implements AgentSession {
 
     @Override
     public String getSessionId() {
-        return instanceId;
+        return sessionId;
     }
 
     @Override
@@ -133,7 +135,7 @@ public class RedisAgentSession implements AgentSession {
         cache.clear();
         redisClient.getList(messagesKey).clear();
         // 物理清理按照原逻辑涉及的 key
-        redisClient.getBucket().remove(instanceId);
+        redisClient.getBucket().remove(sessionId);
         redisClient.getBucket().remove(snapshotKey);
     }
 

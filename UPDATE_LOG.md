@@ -29,6 +29,7 @@
 * 调整 solon-ai-harness 去除 getVersion 方法（由应用侧定义）
 * 调整 solon-ai-harness CLAUDE.md 更名为 CODE.md（内部自动生成）
 * 调整 solon-ai-harness HarnessProperties.restApis 更名为 apiServers；取消 chatModel（由 models 替代）
+* 修复 solon-ai-agent FileAgentSession.getSessionId 可能为空的问题
 
 ### 3.10.1
 
