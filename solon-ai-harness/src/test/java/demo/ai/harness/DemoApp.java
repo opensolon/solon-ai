@@ -18,8 +18,7 @@ public class DemoApp {
         //--- 1. 初始化
         HarnessProperties harnessProps = new HarnessProperties(".tmp/");
         harnessProps.addTools(ToolPermission.TOOL_ALL_FULL); //设定工具权限
-        harnessProps.getModels().add("xxx", null); //设定大模型配置
-        harnessProps.getModels().setDefault("xxx");
+        harnessProps.addModel( null); //设定大模型配置
 
         AgentSessionProvider sessionProvider = new AgentSessionProvider() {
             private Map<String, AgentSession> sessionMap = new ConcurrentHashMap<>();
