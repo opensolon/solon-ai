@@ -92,7 +92,7 @@ public class TaskSkill extends AbsSkill {
     }
 
     @ToolMapping(name = "multitask", description =
-            "并行执行多个独立子任务。仅用于互不干扰的任务（如不同模块的修改或多路搜索）。")
+            "并行执行多个独立子任务。仅用于互不干扰的任务（如不同模块的修改或多路搜索）。单次调用中的每个任务必须使用不同的 task_id，用于在结果中区分各任务的响应")
     public String multitask(@Param(name = "tasks", description = "任务列表") List<TaskOp> tasks, String __cwd, String __sessionId) {
         if (Assert.isEmpty(tasks)) {
             return "WARNING: 任务列表为空";
@@ -221,7 +221,7 @@ public class TaskSkill extends AbsSkill {
      * 任务定义
      */
     public static class TaskOp {
-        @Param(name = "task_id", description = "任务Id（由字母或数字组成，用于区分不同的任务）")
+        @Param(name = "task_id", description = "任务唯一标识符（仅支持字母和数字）")
         private String task_id;
         @Param(name = "agent_name", description = "子代理名称")
         private String agent_name;
