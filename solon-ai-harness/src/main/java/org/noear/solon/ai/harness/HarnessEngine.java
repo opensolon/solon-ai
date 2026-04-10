@@ -10,7 +10,6 @@ import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.agent.react.intercept.summarize.CompositeSummarizationStrategy;
 import org.noear.solon.ai.agent.react.intercept.summarize.HierarchicalSummarizationStrategy;
 import org.noear.solon.ai.agent.react.intercept.summarize.KeyInfoExtractionStrategy;
-import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.code.CodeSkill;
@@ -93,22 +92,7 @@ public class HarnessEngine {
             return mainModel;
         }
 
-        return getModel(name);
-    }
-
-    /**
-     * 获取模型
-     */
-    private ChatModel getModel(String name) {
-        ChatConfig tmp = props.getModels().getRequired(name);
-        return ChatModel.of(tmp).build();
-    }
-
-    /**
-     * 是否有模型
-     */
-    public boolean hasModel(String name) {
-        return props.getModels().getList().containsKey(name);
+        return props.getModelOrDef(name).toChatModel();
     }
 
     public AgentManager getAgentManager() {
@@ -158,12 +142,12 @@ public class HarnessEngine {
     public void switchMainModel(String name) {
         Objects.requireNonNull(name, "name");
 
-        if (hasModel(name) == false) {
+        if (props.hasModel(name) == false) {
             throw new IllegalArgumentException("The model not found: " + name);
         }
 
         // chatModel 切换后，重新生成主代理
-        this.mainModel = getModel(name);
+        this.mainModel = props.getModelOrDef(name).toChatModel();
         this.mainAgent = createMainAgent();
     }
 
@@ -171,7 +155,7 @@ public class HarnessEngine {
     private HarnessEngine(HarnessProperties props, AgentSessionProvider sessionProvider, SummarizationInterceptor summarizationInterceptor, HITLInterceptor hitlInterceptor, Collection<ReActAgentExtension> extensions) {
 
         this.props = props;
-        this.mainModel = getModel(null);
+        this.mainModel = props.getModelOrDef(null).toChatModel();
 
         //上下文摘要拦截器默认处理
         if (summarizationInterceptor == null) {
@@ -363,21 +347,9 @@ public class HarnessEngine {
             Objects.nonNull(sessionProvider);
 
             //验证模型配置
-            if (Assert.isEmpty(properties.getModels().getList())) {
+            if (Assert.isEmpty(properties.getModels())) {
                 throw new IllegalStateException("Missing models config");
             }
-
-            if (Assert.isEmpty(properties.getModels().getDefault())) {
-                //如果没有默认，则第一项为默认（可能是随机的）
-                String def = properties.getModels().getList().entrySet().iterator().next().getKey();
-                properties.getModels().setDefault(def);
-            } else {
-                //如果有，则校验
-                if (properties.getModels().getRequired(null) == null) {
-                    throw new IllegalStateException("NotFound default model");
-                }
-            }
-
 
             return new HarnessEngine(properties, sessionProvider, summarizationInterceptor, hitlInterceptor, extensions);
         }

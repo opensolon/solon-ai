@@ -142,6 +142,13 @@ public class ChatConfig extends AiConfig {
         getModelOptions().optionSet(key, value);
     }
 
+    /**
+     * 快速转为聊天模型
+     */
+    public ChatModel toChatModel() {
+        return ChatModel.of(this).build();
+    }
+
     @Override
     public String toString() {
         return "ChatConfig{" +

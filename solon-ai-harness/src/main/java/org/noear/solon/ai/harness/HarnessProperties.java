@@ -2,8 +2,8 @@ package org.noear.solon.ai.harness;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.permission.ToolPermission;
-import org.noear.solon.ai.harness.props.ModelsProperties;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.skills.restapi.ApiSource;
 import org.noear.solon.core.util.Assert;
@@ -53,7 +53,7 @@ public class HarnessProperties implements Serializable {
     private boolean subagentEnabled = true;
 
     //大模型
-    private ModelsProperties models = new ModelsProperties();
+    private List<ChatConfig> models = new ArrayList<>();
     //技能池
     private Map<String, String> skillPools = new LinkedHashMap<>();
     //mcp集
@@ -78,6 +78,45 @@ public class HarnessProperties implements Serializable {
         for (ToolPermission p1 : toolPermissions) {
             tools.add(p1.getName());
         }
+    }
+
+    /**
+     * 添加模型配置
+     */
+    public void addModel(ChatConfig chatConfig) {
+        models.add(chatConfig);
+    }
+
+    public boolean hasModel(String modelName){
+        if (Assert.isEmpty(modelName)) {
+            return false;
+        }
+
+        for (ChatConfig c : models) {
+            if (c.getModel().equals(modelName)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public ChatConfig getModelOrDef(String modelName) {
+        if (models.isEmpty()) {
+            return null;
+        }
+
+        if (Assert.isEmpty(modelName)) {
+            return models.get(0);
+        }
+
+        for (ChatConfig c : models) {
+            if (c.getModel().equals(modelName)) {
+                return c;
+            }
+        }
+
+        return models.get(0);
     }
 
     /**
@@ -175,9 +214,16 @@ public class HarnessProperties implements Serializable {
     }
 
     /**
-     * 马具主记忆存放区
+     * 马具记忆存放区
      */
     public final String getHarnessMemory() {
         return getHarnessHome() + "memory/";
+    }
+
+    /**
+     * 马具下载存放区
+     */
+    public final String getHarnessDownload() {
+        return getHarnessHome() + "download/";
     }
 }
