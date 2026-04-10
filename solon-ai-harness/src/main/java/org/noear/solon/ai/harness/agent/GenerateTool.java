@@ -42,7 +42,7 @@ public class GenerateTool extends AbsToolProvider {
             //有模型配置
             StringBuilder buf = new StringBuilder("从给定列表中选择：\n");
             for (ChatConfig entry : engine.getProps().getModels()) {
-                buf.append("- `").append(entry.getModel()).append("`，").append(Utils.annoAlias(entry.getDescription(), entry.getModel())).append("\n");
+                buf.append("- `").append(entry.getNameOrModel()).append("`，").append(entry.getDescriptionOrModel()).append("\n");
             }
 
             binding.put("models", buf.toString());
@@ -95,24 +95,16 @@ public class GenerateTool extends AbsToolProvider {
                     .getAgent(AgentDefinition.AGENT_GENERAL)
                     .copy();
 
+            definition.setSystemPrompt(systemPrompt);
+
             definition.getMetadata().setName(name);
             definition.getMetadata().setDescription(description);
             definition.getMetadata().setEnabled(true);
 
-            if (model != null && !model.isEmpty()) {
-                definition.getMetadata().setModel(model);
-            }
-            if (tools != null && !tools.isEmpty()) {
-                definition.getMetadata().setTools(tools);
-            }
-            if (skills != null && !skills.isEmpty()) {
-                definition.getMetadata().setSkills(skills);
-            }
-            if (maxTurns != null && maxTurns > 0) {
-                definition.getMetadata().setMaxTurns(maxTurns);
-            }
-
-            definition.setSystemPrompt(systemPrompt);
+            definition.getMetadata().setModel(model);
+            definition.getMetadata().setTools(tools);
+            definition.getMetadata().setSkills(skills);
+            definition.getMetadata().setMaxTurns(maxTurns);
 
             boolean shouldSave = saveToFile != null && saveToFile;
 

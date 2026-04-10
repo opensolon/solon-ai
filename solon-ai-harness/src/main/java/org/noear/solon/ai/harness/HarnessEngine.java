@@ -10,6 +10,7 @@ import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.agent.react.intercept.summarize.CompositeSummarizationStrategy;
 import org.noear.solon.ai.agent.react.intercept.summarize.HierarchicalSummarizationStrategy;
 import org.noear.solon.ai.agent.react.intercept.summarize.KeyInfoExtractionStrategy;
+import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.code.CodeSkill;
@@ -142,18 +143,18 @@ public class HarnessEngine {
     public void switchMainModel(String name) {
         Objects.requireNonNull(name, "name");
 
-        if (props.hasModel(name) == false) {
+        ChatConfig chatConfig = props.getModelOrNil(name);
+        if (chatConfig == null) {
             throw new IllegalArgumentException("The model not found: " + name);
         }
 
         // chatModel 切换后，重新生成主代理
-        this.mainModel = props.getModelOrDef(name).toChatModel();
+        this.mainModel = chatConfig.toChatModel();
         this.mainAgent = createMainAgent();
     }
 
 
     private HarnessEngine(HarnessProperties props, AgentSessionProvider sessionProvider, SummarizationInterceptor summarizationInterceptor, HITLInterceptor hitlInterceptor, Collection<ReActAgentExtension> extensions) {
-
         this.props = props;
         this.mainModel = props.getModelOrDef(null).toChatModel();
 

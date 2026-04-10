@@ -87,18 +87,22 @@ public class HarnessProperties implements Serializable {
         models.add(chatConfig);
     }
 
-    public boolean hasModel(String modelName){
+    public ChatConfig getModelOrNil(String modelName) {
+        if (models.isEmpty()) {
+            return null;
+        }
+
         if (Assert.isEmpty(modelName)) {
-            return false;
+            return models.get(0);
         }
 
         for (ChatConfig c : models) {
-            if (c.getModel().equals(modelName)) {
-                return true;
+            if (c.getNameOrModel().equals(modelName)) {
+                return c;
             }
         }
 
-        return false;
+        return null;
     }
 
     public ChatConfig getModelOrDef(String modelName) {
@@ -111,7 +115,7 @@ public class HarnessProperties implements Serializable {
         }
 
         for (ChatConfig c : models) {
-            if (c.getModel().equals(modelName)) {
+            if (c.getNameOrModel().equals(modelName)) {
                 return c;
             }
         }
