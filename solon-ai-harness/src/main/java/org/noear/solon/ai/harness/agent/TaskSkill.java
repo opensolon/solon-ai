@@ -221,7 +221,7 @@ public class TaskSkill extends AbsSkill {
      * 任务定义
      */
     public static class TaskOp {
-        @Param(name = "task_id", description = "任务唯一标识符（仅支持字母和数字）")
+        @Param(name = "task_id", description = "任务ID（仅支持字母和数字）")
         private String task_id;
         @Param(name = "agent_name", description = "子代理名称")
         private String agent_name;
