@@ -16,7 +16,7 @@
 * 添加 solon-ai-core ChatModel.getModel 方法
 * 添加 solon-ai-core ChatModel.getProvider 方法
 * 添加 solon-ai-core 基于语义的分割器 SemanticSplitter
-* 添加 solon-ai-core AiConfig.description 配置属性
+* 添加 solon-ai-core AiConfig.name, description 配置属性（用于管理显示）
 * 添加 solon-ai-agent AgentRequest.callAsync 异步调用方法
 * 添加 solon-ai-agent AgentResponse.getTrace 方法
 * 添加 solon-ai-agent SummarizationInterceptor.copyWith 方法（方便复制实例并调整限制）
