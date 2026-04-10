@@ -17,6 +17,8 @@ package org.noear.solon.ai;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.util.ProxyDesc;
+import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 
@@ -33,11 +35,15 @@ import java.util.Map;
  * @since 3.1
  */
 public class AiConfig {
+    //用于管理显示
+    protected @Nullable String name;
+    //用于管理显示
+    protected @Nullable String description;
+
     protected String apiUrl;
     protected String apiKey;
     protected String provider;
     protected String model;
-    protected String description;
     protected long contextLength;
     protected final Map<String, String> headers = new LinkedHashMap<>();
     protected String userAgent;
@@ -45,7 +51,32 @@ public class AiConfig {
     protected ProxyDesc proxy;
     protected Proxy proxyInstance;
 
+
     /// ///////////////////
+
+    public String getName() {
+        return name;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public String getNameOrModel() {
+        if(Assert.isEmpty(name)) {
+            return model;
+        }
+
+        return name;
+    }
+
+    public String getDescriptionOrModel() {
+        if(Assert.isEmpty(description)) {
+            return model;
+        }
+
+        return description;
+    }
 
     public String getApiKey() {
         return apiKey;
@@ -61,10 +92,6 @@ public class AiConfig {
 
     public String getModel() {
         return model;
-    }
-
-    public String getDescription() {
-        return description;
     }
 
     public long getContextLength() {
@@ -95,6 +122,14 @@ public class AiConfig {
 
     /// ///////////////////
 
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
     public void setApiUrl(String apiUrl) {
         this.apiUrl = apiUrl;
     }
@@ -109,10 +144,6 @@ public class AiConfig {
 
     public void setModel(String model) {
         this.model = model;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
     }
 
     public void setContextLength(long contextLength) {
