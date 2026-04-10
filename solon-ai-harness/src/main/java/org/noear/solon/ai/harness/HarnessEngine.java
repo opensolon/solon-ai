@@ -78,22 +78,37 @@ public class HarnessEngine {
         return props;
     }
 
+    /**
+     * 获取主模型
+     */
     public ChatModel getMainModel() {
         return mainModel;
     }
 
+    /**
+     * 获取模型或主模型
+     */
     public ChatModel getModelOrMain(String name) {
-        if(Assert.isEmpty(name)){
+        if (Assert.isEmpty(name)) {
             return mainModel;
         }
-
 
         return getModel(name);
     }
 
-    public ChatModel getModel(String name) {
+    /**
+     * 获取模型
+     */
+    private ChatModel getModel(String name) {
         ChatConfig tmp = props.getModels().getRequired(name);
         return ChatModel.of(tmp).build();
+    }
+
+    /**
+     * 是否有模型
+     */
+    public boolean hasModel(String name) {
+        return props.getModels().getList().containsKey(name);
     }
 
     public AgentManager getAgentManager() {
@@ -138,11 +153,14 @@ public class HarnessEngine {
 
 
     /**
-     * 切换模型
-     *
+     * 切换主模型
      */
-    public void switchModel(String name) {
+    public void switchMainModel(String name) {
         Objects.requireNonNull(name, "name");
+
+        if (hasModel(name) == false) {
+            throw new IllegalArgumentException("The model not found: " + name);
+        }
 
         // chatModel 切换后，重新生成主代理
         this.mainModel = getModel(name);
@@ -151,9 +169,13 @@ public class HarnessEngine {
 
 
     private HarnessEngine(HarnessProperties props, AgentSessionProvider sessionProvider, SummarizationInterceptor summarizationInterceptor, HITLInterceptor hitlInterceptor, Collection<ReActAgentExtension> extensions) {
+
+        this.props = props;
+        this.mainModel = getModel(null);
+
         //上下文摘要拦截器默认处理
         if (summarizationInterceptor == null) {
-            ChatModel summaryModel = getModel(props.getSummaryModel());
+            ChatModel summaryModel = getModelOrMain(props.getSummaryModel());
 
             SummarizationStrategy strategy = new CompositeSummarizationStrategy()
                     .addStrategy(new KeyInfoExtractionStrategy(summaryModel))      // 提取干货（去水）
@@ -170,8 +192,6 @@ public class HarnessEngine {
             hitlInterceptor = new HITLInterceptor().onTool("bash", new HitlStrategy());
         }
 
-        this.props = props;
-        this.mainModel = getModel(null);
         this.sessionProvider = sessionProvider;
         this.summarizationInterceptor = summarizationInterceptor;
         this.hitlInterceptor = hitlInterceptor;
