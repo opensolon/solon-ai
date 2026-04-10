@@ -140,7 +140,7 @@ public class AgentDefinition {
 
 
     /**
-     * 代理元数据（兼容 Claude Code Agent Skills 规范）
+     * 代理元数据
      *
      * @author bai
      * @author noear

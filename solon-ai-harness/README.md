@@ -32,7 +32,7 @@ solon-ai-harness/
 │   │   ├── TaskSkill.java          # 子代理技能（task/multitask 工具）
 │   │   └── GenerateTool.java       # 动态代理生成工具
 │   ├── code/
-│   │   └── CodeSkill.java          # 代码工程规约技能（技术栈识别、CLAUDE.md 生成）
+│   │   └── CodeSkill.java          # 代码工程规约技能（技术栈识别、CODE.md 生成）
 │   ├── hitl/
 │   │   └── HitlStrategy.java       # 人工介入策略（bash 安全审计规则）
 │   └── permission/

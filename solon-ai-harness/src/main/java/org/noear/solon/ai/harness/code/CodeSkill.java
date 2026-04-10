@@ -13,7 +13,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 
 /**
- * Claude Code 规范对齐的代码专精技能
+ * Code 规范对齐的专家技能
  *
  * @author noear
  * @since 3.9.4
@@ -27,14 +27,14 @@ public class CodeSkill extends AbsSkill {
         this.engine = engine;
     }
 
-    public String HOME_CLAUDE_MD(){
-        return engine.getProps().getHarnessHome() + engine.NAME_CLAUDE_MD;
+    public String HOME_CODE_MD(){
+        return engine.getProps().getHarnessHome() + engine.NAME_CODE_MD;
     }
 
 
     @Override
     public String description() {
-        return "代码专家技能。支持项目初始化、技术栈自动识别以及 `" + HOME_CLAUDE_MD() + "` 规约生成。";
+        return "代码专家技能。支持项目初始化、技术栈自动识别以及 `" + HOME_CODE_MD() + "` 规约生成。";
     }
 
     @Override
@@ -42,7 +42,7 @@ public class CodeSkill extends AbsSkill {
         String __cwd = prompt.attrAs(HarnessEngine.ATTR_CWD);
         Path rootPath = getRootPath(__cwd);
 
-        if (rootExists(rootPath, HOME_CLAUDE_MD())) {
+        if (rootExists(rootPath, HOME_CODE_MD())) {
             return true;
         }
 
@@ -67,8 +67,8 @@ public class CodeSkill extends AbsSkill {
         buf.append("> Project Context: ").append(msg).append("\n\n");
 
         buf.append("为了确保工程质量，要严格执行以下操作：\n")
-                .append("1. **动作前导**: 在开始任何任务前，先读取根目录的 `" + HOME_CLAUDE_MD() + "` 以获取构建和测试指令。\n")
-                .append("2. **验证驱动**: 修改代码后，根据 `" + HOME_CLAUDE_MD() + "` 中的指令运行测试，严禁未验证提交。\n")
+                .append("1. **动作前导**: 在开始任何任务前，先读取根目录的 `" + HOME_CODE_MD() + "` 以获取构建和测试指令。\n")
+                .append("2. **验证驱动**: 修改代码后，根据 `" + HOME_CODE_MD() + "` 中的指令运行测试，严禁未验证提交。\n")
                 .append("3. **路径规范**: 严禁使用 `./` 前缀。使用相对于当前工作目录的纯净相对路径。\n");
 
         return buf.toString();
@@ -172,7 +172,7 @@ public class CodeSkill extends AbsSkill {
 
             appendGuidelines(newContent);
 
-            Path targetPath = rootPath.resolve(HOME_CLAUDE_MD());
+            Path targetPath = rootPath.resolve(HOME_CODE_MD());
             String finalContent = newContent.toString();
             boolean updated = true;
             if (Files.exists(targetPath)) {
