@@ -17,6 +17,7 @@ package org.noear.solon.ai.skills.web;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
@@ -33,7 +34,7 @@ import java.util.Map;
  * @author noear
  * @since 3.9.6
  */
-public class WebsearchTool {
+public class WebsearchTool extends AbsToolProvider {
     private static final String BASE_URL = "https://mcp.exa.ai/mcp";
     private static final int TIMEOUT_MS = 30_000;
 
@@ -65,6 +66,12 @@ public class WebsearchTool {
         return instance;
     }
 
+    public WebsearchTool() {
+        super();
+
+        getMcpClient();
+    }
+
 
     @ToolMapping(name = "websearch", description = "执行实时web搜索")
     public Document websearch(
@@ -86,7 +93,7 @@ public class WebsearchTool {
         ToolResult result;
 
         try {
-            result = mcpClient.callTool("web_search_exa", args);
+            result = getMcpClient().callTool("web_search_exa", args);
         } catch (Exception e) {
             // 如果是超时相关的异常，转换为与 opencode 一致的文案
             if (e.getMessage() != null && e.getMessage().toLowerCase().contains("timeout")) {

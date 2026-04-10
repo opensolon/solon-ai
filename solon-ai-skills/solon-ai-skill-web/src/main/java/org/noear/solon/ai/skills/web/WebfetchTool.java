@@ -18,6 +18,7 @@ package org.noear.solon.ai.skills.web;
 import com.vladsch.flexmark.html2md.converter.FlexmarkHtmlConverter;
 import org.jsoup.Jsoup;
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.net.http.HttpResponse;
@@ -32,7 +33,7 @@ import java.util.Base64;
  * @author noear
  * @since 3.9.6
  * */
-public class WebfetchTool {
+public class WebfetchTool extends AbsToolProvider {
     private static final int DEFAULT_TIMEOUT_MS = 30000;
     private static final int MAX_TIMEOUT_MS = 120000;
     private static final long MAX_RESPONSE_SIZE = 5 * 1024 * 1024; // 5MB 硬限制
