@@ -122,7 +122,9 @@ public class TaskSkill extends AbsSkill {
                         } catch (Exception e) {
                             TaskOp task = tasks.get(i);
 
-                            String result = String.format("ERROR: 子代理 '%s' 执行任务失败: %s", task.getName(), e.getMessage());
+                            LOG.error("任务[{} - {}]执行失败: {}", task.getTaskId(), task.getAgentName(), e.getMessage(), e);
+
+                            String result = String.format("ERROR: 任务执行失败: %s", e.getMessage());
 
                             String subTaskXml = formatTaskResp(task, false, result);
                             compositeResult.append(subTaskXml).append("\n");
@@ -135,9 +137,9 @@ public class TaskSkill extends AbsSkill {
     }
 
     private String taskDo(ReActTrace __parentTrace, String __cwd, TaskOp task, boolean isMultitask) {
-        AgentDefinition agentDefinition = engine.getAgentManager().getAgent(task.getName());
+        AgentDefinition agentDefinition = engine.getAgentManager().getAgent(task.getAgentName());
         if (agentDefinition == null) {
-            return "ERROR: 未知的子代理类型 '" + task.getName() + "'。";
+            return "ERROR: 未知的子代理类型 '" + task.getAgentName() + "'。";
         }
 
         if (LOG.isDebugEnabled()) {
@@ -192,9 +194,9 @@ public class TaskSkill extends AbsSkill {
 
             return formatTaskResp(task, true, result);
         } catch (Throwable e) {
-            LOG.error("子代理[{}]执行失败: {}", task.getName(), e.getMessage(), e);
+            LOG.error("任务[{} - {}]执行失败: {}", task.getTaskId(), task.getAgentName(), e.getMessage(), e);
 
-            result = String.format("ERROR: 子代理 '%s' 执行任务失败: %s", task.getName(), e.getMessage());
+            result = String.format("ERROR: 任务执行失败: %s", e.getMessage());
 
             return formatTaskResp(task, false, result);
         }
@@ -204,7 +206,8 @@ public class TaskSkill extends AbsSkill {
         StringBuilder buf = new StringBuilder();
 
         buf.append("<task_response>");
-        buf.append("<agent_name>").append(task.getName()).append("</agent_name>");
+        buf.append("<task_id>").append(task.getTaskId()).append("</task_id>");
+        buf.append("<agent_name>").append(task.getAgentName()).append("</agent_name>");
         buf.append("<status>").append(successful ? "success" : "failure").append("</status>");
         buf.append("<content><![CDATA[").append(result != null ? result : "").append("]]></content>");
 
@@ -218,15 +221,21 @@ public class TaskSkill extends AbsSkill {
      * 任务定义
      */
     public static class TaskOp {
-        @Param(name = "name", description = "子代理名称")
-        private String name;
+        @Param(name = "task_id", description = "任务Id（由字母或数字组成，用于区分不同的任务）")
+        private String task_id;
+        @Param(name = "agent_name", description = "子代理名称")
+        private String agent_name;
         @Param(name = "prompt", description = "派给子代理的任务描述。子代理看不见当前历史，每次都是重新开始，必须要非常详细的描述任务，并传递用户的原始意图。")
         private String prompt;
         @Param(name = "description", required = false, description = "简短的任务描述")
         private String description;
 
-        public String getName() {
-            return name;
+        public String getTaskId() {
+            return task_id;
+        }
+
+        public String getAgentName() {
+            return agent_name;
         }
 
         public String getPrompt() {
@@ -240,7 +249,8 @@ public class TaskSkill extends AbsSkill {
         @Override
         public String toString() {
             return "TaskOp{" +
-                    "name='" + name + '\'' +
+                    "task_id='" + task_id + '\'' +
+                    "agent_name='" + agent_name + '\'' +
                     ", desc='" + description + '\'' +
                     '}';
         }
