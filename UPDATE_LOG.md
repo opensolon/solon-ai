@@ -27,6 +27,7 @@
 * 调整 solon-ai-cli 取消 TerminalSkill.undo 工具（几乎用不到，由 git 控制）
 * 调整 solon-ai-harness 取消 SESSION_DEFAULT（由应用侧处理）
 * 调整 solon-ai-harness 去除 getVersion 方法（由应用侧定义）
+* 调整 solon-ai-harness CLAUDE.md 更名为 CODE.md（内部自动生成）
 * 调整 solon-ai-harness HarnessProperties.restApis 更名为 apiServers；取消 chatModel（由 models 替代）
 
 ### 3.10.1
