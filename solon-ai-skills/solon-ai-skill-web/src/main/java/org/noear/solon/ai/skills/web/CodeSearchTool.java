@@ -18,8 +18,10 @@ package org.noear.solon.ai.skills.web;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.AbsTool;
 import org.noear.solon.ai.chat.tool.ToolResult;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -31,17 +33,34 @@ import java.util.Map;
  * @since 3.9.6
  */
 public class CodeSearchTool extends AbsTool {
+    private static final String BASE_URL = "https://mcp.exa.ai/mcp?tools=get_code_context_exa";
+    private static final int TIMEOUT_MS = 30_000;
+
+    private static McpClientProvider mcpClient;
+
+    public static McpClientProvider getMcpClient() {
+        if (mcpClient == null) {
+            // 使用 STREAMABLE 适配 Exa 的 JSON-RPC over SSE 模式
+            mcpClient = McpClientProvider.builder()
+                    .url(BASE_URL)
+                    .channel(McpChannel.STREAMABLE)
+                    .timeout(Duration.ofMillis(TIMEOUT_MS))
+                    .build();
+        }
+
+        return mcpClient;
+    }
+
+    //---------
+
     private static CodeSearchTool instance = new CodeSearchTool();
     public static CodeSearchTool getInstance(){
         return instance;
     }
 
     private static final int DEFAULT_TOKENS = 5000;
-    private final McpClientProvider mcpClient;
 
     public CodeSearchTool() {
-        this.mcpClient = ExaAiClient.getMcpClient();
-
         addParam("query", String.class, true,
                 "搜索查询词，用于查找 API、库和 SDK 的相关上下文。 " +
                         "例如：'React useState 钩子示例'、'Python pandas 数据框过滤'、" +

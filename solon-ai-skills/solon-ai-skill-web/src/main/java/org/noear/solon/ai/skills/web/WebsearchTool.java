@@ -18,10 +18,12 @@ package org.noear.solon.ai.skills.web;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.tool.ToolResult;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.annotation.Param;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -32,6 +34,25 @@ import java.util.Map;
  * @since 3.9.6
  */
 public class WebsearchTool {
+    private static final String BASE_URL = "https://mcp.exa.ai/mcp";
+    private static final int TIMEOUT_MS = 30_000;
+
+    private static McpClientProvider mcpClient;
+
+    public static McpClientProvider getMcpClient() {
+        if (mcpClient == null) {
+            // 使用 STREAMABLE 适配 Exa 的 JSON-RPC over SSE 模式
+            mcpClient = McpClientProvider.builder()
+                    .url(BASE_URL)
+                    .channel(McpChannel.STREAMABLE)
+                    .timeout(Duration.ofMillis(TIMEOUT_MS))
+                    .build();
+        }
+
+        return mcpClient;
+    }
+
+    //---------
 
     private static final int DEFAULT_NUM_RESULTS = 8;
     private static final int DEFAULT_CONTEXT_CHARS = 10000;
@@ -44,12 +65,6 @@ public class WebsearchTool {
         return instance;
     }
 
-    private final McpClientProvider mcpClient;
-
-    public WebsearchTool() {
-        // 使用 STREAMABLE 适配 Exa 的 text/event-stream 模式
-        this.mcpClient = ExaAiClient.getMcpClient();
-    }
 
     @ToolMapping(name = "websearch", description = "执行实时web搜索")
     public Document websearch(
