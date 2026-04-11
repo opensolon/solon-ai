@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness.agent;
 
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.AgentResponse;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
@@ -131,7 +132,7 @@ public class TaskSkill extends AbsSkill {
                         } catch (Exception e) {
                             TaskOp task = tasks.get(i);
 
-                            LOG.error("任务[{} - {}]执行失败: {}", task.index, task.agent_name, e.getMessage(), e);
+                            LOG.error("任务失败[{} - {}]: {}", task.index, task.agent_name, e.getMessage(), e);
 
                             String result = String.format("ERROR: 任务执行失败: %s", e.getMessage());
 
@@ -152,7 +153,7 @@ public class TaskSkill extends AbsSkill {
         }
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("task-description: {}\ntask-prompt: {}", task.description, task.prompt);
+            LOG.debug("任务开始[{} - {}]: {}", task.index, task.agent_name, ONode.serialize(task));
         }
 
         String result = null;
@@ -203,9 +204,14 @@ public class TaskSkill extends AbsSkill {
                 result = response.getContent();
             }
 
+
+            if(LOG.isDebugEnabled()) {
+                LOG.debug("任务成功[{} - {}]: {}", task.index, task.agent_name, task.description);
+            }
+
             return formatTaskResp(task, true, result);
         } catch (Throwable e) {
-            LOG.error("任务[{} - {}]执行失败: {}", task.index, task.agent_name, e.getMessage(), e);
+            LOG.error("任务失败[{} - {}]: {}", task.index, task.agent_name, e.getMessage(), e);
 
             result = String.format("ERROR: 任务执行失败: %s", e.getMessage());
 
