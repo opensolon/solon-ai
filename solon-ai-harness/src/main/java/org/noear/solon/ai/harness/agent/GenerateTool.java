@@ -82,7 +82,7 @@ public class GenerateTool extends AbsToolProvider {
                     "- `task`，调度子代理干活\n" +
                     "- `*`，代表全选") List<String> tools,
             @Param(name = "skills", description = "子代理具备的特定专家能力标识列表", required = false) List<String> skills,
-            @Param(name = "maxTurns", description = "单次任务的最大思考/对话轮数，通常建议 5-10", required = false) Integer maxTurns,
+            @Param(name = "maxTurns", description = "单次任务的最大思考/对话轮数，通常建议 10-30", required = false) Integer maxTurns,
             @Param(name = "saveToFile", description = "是否将代理定义保存为 .md 文件（如果存为文件，进程重启后可复用）", defaultValue = "false", required = false) Boolean saveToFile,
             String __cwd
     ) {
