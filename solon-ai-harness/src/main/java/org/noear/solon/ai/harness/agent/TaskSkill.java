@@ -97,7 +97,7 @@ public class TaskSkill extends AbsSkill {
     }
 
     @ToolMapping(name = "multitask", description =
-            "并行执行多个独立子任务。仅用于互不干扰的任务（如不同模块的修改或多路搜索）。单次调用中的每个任务必须使用不同的 task_id，用于在结果中区分各任务的响应")
+            "并行执行多个独立子任务。仅用于互不干扰的任务（如不同模块的修改或多路搜索）")
     public String multitask(@Param(name = "tasks", description = "任务列表") List<TaskOp> tasks, String __cwd, String __sessionId) {
         if (Assert.isEmpty(tasks)) {
             return "WARNING: 任务列表为空";
@@ -131,7 +131,7 @@ public class TaskSkill extends AbsSkill {
                         } catch (Exception e) {
                             TaskOp task = tasks.get(i);
 
-                            LOG.error("任务[{} - {}]执行失败: {}", task.task_id, task.agent_name, e.getMessage(), e);
+                            LOG.error("任务[{} - {}]执行失败: {}", task.index, task.agent_name, e.getMessage(), e);
 
                             String result = String.format("ERROR: 任务执行失败: %s", e.getMessage());
 
@@ -205,7 +205,7 @@ public class TaskSkill extends AbsSkill {
 
             return formatTaskResp(task, true, result);
         } catch (Throwable e) {
-            LOG.error("任务[{} - {}]执行失败: {}", task.task_id, task.agent_name, e.getMessage(), e);
+            LOG.error("任务[{} - {}]执行失败: {}", task.index, task.agent_name, e.getMessage(), e);
 
             result = String.format("ERROR: 任务执行失败: %s", e.getMessage());
 
@@ -216,13 +216,13 @@ public class TaskSkill extends AbsSkill {
     private String formatTaskResp(TaskOp task, boolean successful, String result) {
         StringBuilder buf = new StringBuilder();
 
-        buf.append("<task_response>");
-        buf.append("<task_id>").append(task.task_id).append("</task_id>");
+        buf.append("<task_result>");
+        buf.append("<index>").append(task.index).append("</index>");
+        buf.append("<description>").append(task.description).append("</description>");
         buf.append("<agent_name>").append(task.agent_name).append("</agent_name>");
-        buf.append("<status>").append(successful ? "success" : "failure").append("</status>");
-        buf.append("<content><![CDATA[").append(result != null ? result : "").append("]]></content>");
-
-        buf.append("</task_response>");
+        buf.append("<result_status>").append(successful ? "success" : "failure").append("</result_status>");
+        buf.append("<result_content><![CDATA[").append(result != null ? result : "").append("]]></result_content>");
+        buf.append("</task_result>");
 
         return buf.toString();
     }
@@ -232,19 +232,19 @@ public class TaskSkill extends AbsSkill {
      * 任务定义
      */
     public static class TaskOp {
-        @Param(name = "task_id", description = "任务ID（仅支持字母和数字）。示例：task1，task2")
-        private String task_id;
+        @Param(name = "index", description = "任务序号（从1开始）", defaultValue = "1")
+        private int index = 1;
         @Param(name = "agent_name", description = "子代理名称")
         private String agent_name;
         @Param(name = "prompt", description = "派给子代理的任务描述。子代理看不见当前历史，每次都是重新开始，必须要非常详细的描述任务，并传递用户的原始意图。")
         private String prompt;
-        @Param(name = "description", required = false, description = "简短的任务描述")
+        @Param(name = "description", description = "简短的任务描述（50字以内）。返回结果时会附上这个描述，方便识别")
         private String description;
 
         @Override
         public String toString() {
             return "TaskOp{" +
-                    "task_id='" + task_id + '\'' +
+                    "index='" + index + '\'' +
                     "agent_name='" + agent_name + '\'' +
                     ", desc='" + description + '\'' +
                     '}';
