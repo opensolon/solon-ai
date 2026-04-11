@@ -131,7 +131,7 @@ public class TaskSkill extends AbsSkill {
                         } catch (Exception e) {
                             TaskOp task = tasks.get(i);
 
-                            LOG.error("任务[{} - {}]执行失败: {}", task.getTaskId(), task.getAgentName(), e.getMessage(), e);
+                            LOG.error("任务[{} - {}]执行失败: {}", task.task_id, task.agent_name, e.getMessage(), e);
 
                             String result = String.format("ERROR: 任务执行失败: %s", e.getMessage());
 
@@ -146,13 +146,13 @@ public class TaskSkill extends AbsSkill {
     }
 
     private String taskDo(ReActTrace __parentTrace, String __cwd, String __sessionId, TaskOp task, boolean isMultitask) {
-        AgentDefinition agentDefinition = engine.getAgentManager().getAgent(task.getAgentName());
+        AgentDefinition agentDefinition = engine.getAgentManager().getAgent(task.agent_name);
         if (agentDefinition == null) {
-            return "ERROR: 未知的子代理类型 '" + task.getAgentName() + "'。";
+            return "ERROR: 未知的子代理类型 '" + task.agent_name + "'。";
         }
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("task-description: {}\ntask-prompt: {}", task.getDescription(), task.getPrompt());
+            LOG.debug("task-description: {}\ntask-prompt: {}", task.description, task.prompt);
         }
 
         String result = null;
@@ -162,7 +162,7 @@ public class TaskSkill extends AbsSkill {
         try {
             if (__parentTrace.getOptions().getStreamSink() == null) {
                 // 同步模式
-                AgentResponse response = agent.prompt(task.getPrompt())
+                AgentResponse response = agent.prompt(task.prompt)
                         .session(session)
                         .options(o -> {
                             o.toolContextPut(HarnessEngine.ATTR_CWD, __cwd);
@@ -174,7 +174,7 @@ public class TaskSkill extends AbsSkill {
                 result = response.getContent();
             } else {
                 // 流式模式
-                ReActChunk response = (ReActChunk) agent.prompt(task.getPrompt())
+                ReActChunk response = (ReActChunk) agent.prompt(task.prompt)
                         .session(session)
                         .options(o -> {
                             o.toolContextPut(HarnessEngine.ATTR_CWD, __cwd);
@@ -205,7 +205,7 @@ public class TaskSkill extends AbsSkill {
 
             return formatTaskResp(task, true, result);
         } catch (Throwable e) {
-            LOG.error("任务[{} - {}]执行失败: {}", task.getTaskId(), task.getAgentName(), e.getMessage(), e);
+            LOG.error("任务[{} - {}]执行失败: {}", task.task_id, task.agent_name, e.getMessage(), e);
 
             result = String.format("ERROR: 任务执行失败: %s", e.getMessage());
 
@@ -217,8 +217,8 @@ public class TaskSkill extends AbsSkill {
         StringBuilder buf = new StringBuilder();
 
         buf.append("<task_response>");
-        buf.append("<task_id>").append(task.getTaskId()).append("</task_id>");
-        buf.append("<agent_name>").append(task.getAgentName()).append("</agent_name>");
+        buf.append("<task_id>").append(task.task_id).append("</task_id>");
+        buf.append("<agent_name>").append(task.agent_name).append("</agent_name>");
         buf.append("<status>").append(successful ? "success" : "failure").append("</status>");
         buf.append("<content><![CDATA[").append(result != null ? result : "").append("]]></content>");
 
@@ -240,22 +240,6 @@ public class TaskSkill extends AbsSkill {
         private String prompt;
         @Param(name = "description", required = false, description = "简短的任务描述")
         private String description;
-
-        public String getTaskId() {
-            return task_id;
-        }
-
-        public String getAgentName() {
-            return agent_name;
-        }
-
-        public String getPrompt() {
-            return prompt;
-        }
-
-        public String getDescription() {
-            return description;
-        }
 
         @Override
         public String toString() {
