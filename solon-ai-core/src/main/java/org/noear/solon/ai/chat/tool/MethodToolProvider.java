@@ -35,8 +35,12 @@ import java.util.function.Consumer;
  * @since 3.1
  */
 public class MethodToolProvider implements ToolProvider {
-    private final List<FunctionTool> tools = new ArrayList<>();
+    private final BeanWrap beanWrap;
+
+    private List<FunctionTool> tools;
+
     private Map<String, Object> binding;
+    private boolean includeProvider = true;
 
     public MethodToolProvider(Object toolObj) {
         this(toolObj.getClass(), toolObj);
@@ -47,26 +51,22 @@ public class MethodToolProvider implements ToolProvider {
     }
 
     public MethodToolProvider(BeanWrap beanWrap) {
-        //添加带注释的工具
-        ClassEggg classEggg = EgggUtil.getClassEggg(beanWrap.clz());
-        for (MethodEggg me : classEggg.getPublicMethodEgggs()) {
-            //兼容 mvc 注解
-            if (me.getMethod().isAnnotationPresent(ToolMapping.class)) {
-                MethodFunctionTool func = new MethodFunctionTool(beanWrap, me, binding);
-                tools.add(func);
-            }
-        }
-
-        //如果自己就是工具集，再添加
-        if (beanWrap.raw() instanceof ToolProvider) {
-            for (FunctionTool t1 : ((ToolProvider) beanWrap.raw()).getTools()) {
-                tools.add(t1);
-            }
-        }
+        this.beanWrap = beanWrap;
     }
 
+    /**
+     * 绑定模板变量（即：如果描述里使用了 SnEL 模型）
+     */
     public MethodToolProvider binding(Map<String, Object> binding) {
         this.binding = binding;
+        return this;
+    }
+
+    /**
+     * 包括接口提供（即：如果自身实现了 ToolProvider）
+     */
+    public MethodToolProvider includeProvide(boolean includeProvider) {
+        this.includeProvider = includeProvider;
         return this;
     }
 
@@ -77,6 +77,27 @@ public class MethodToolProvider implements ToolProvider {
 
     @Override
     public Collection<FunctionTool> getTools() {
+        if (tools == null) {
+            tools = new ArrayList<>();
+            //添加带注释的工具
+            ClassEggg classEggg = EgggUtil.getClassEggg(beanWrap.clz());
+            for (MethodEggg me : classEggg.getPublicMethodEgggs()) {
+                if (me.getMethod().isAnnotationPresent(ToolMapping.class)) {
+                    MethodFunctionTool func = new MethodFunctionTool(beanWrap, me, binding);
+                    tools.add(func);
+                }
+            }
+
+            //如果自己就是工具集，再添加
+            if (includeProvider) {
+                if (beanWrap.raw() instanceof ToolProvider) {
+                    for (FunctionTool t1 : ((ToolProvider) beanWrap.raw()).getTools()) {
+                        tools.add(t1);
+                    }
+                }
+            }
+        }
+
         return tools;
     }
 }

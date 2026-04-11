@@ -43,7 +43,10 @@ public abstract class AbsSkill implements Skill {
      */
     protected AbsSkill(Map<String, Object> binding) {
         this.tools = new ArrayList<>();
-        this.tools.addAll(new MethodToolProvider(this).binding(binding).getTools());
+        this.tools.addAll(new MethodToolProvider(this)
+                .binding(binding)
+                .includeProvide(false)
+                .getTools());
 
         Map<String, FunctionTool> toolMap0 = new LinkedHashMap<>();
         for (FunctionTool tool : tools) {
