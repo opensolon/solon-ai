@@ -108,46 +108,35 @@ public class TaskSkill extends AbsSkill {
             throw new IllegalStateException("__sessionId is required");
         }
 
-        if(LOG.isDebugEnabled()) {
+        if (LOG.isDebugEnabled()) {
             LOG.debug("任务接收：{}", ONode.serialize(tasks));
         }
 
         AgentSession __parentSession = engine.getSession(__sessionId);
         ReActTrace __parentTrace = ReActTrace.getCurrent(__parentSession.getContext());
 
+
         List<CompletableFuture<String>> futures = new ArrayList<>();
+
         for (TaskOp task : tasks) {
-            // 使用 RunUtil.io() 是正确的，因为这主要是 I/O 密集型（等待 AI 响应）
             CompletableFuture<String> future = CompletableFuture.supplyAsync(() ->
                     taskDo(__parentTrace, __cwd, __sessionId, task, true), RunUtil.io());
             futures.add(future);
         }
 
         return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                .handle((v, ex) -> {
+                .thenApply(v -> {
                     StringBuilder compositeResult = new StringBuilder();
                     compositeResult.append("<multitask_results>\n");
-
-                    for (int i = 0; i < futures.size(); i++) {
-                        try {
-                            // 获取子代理返回的 XML 片段
-                            String subTaskXml = futures.get(i).get();
-                            compositeResult.append(subTaskXml).append("\n");
-                        } catch (Exception e) {
-                            TaskOp task = tasks.get(i);
-
-                            LOG.error("任务失败[{} - {}]: {}", task.index, task.agent_name, e.getMessage(), e);
-
-                            String result = String.format("ERROR: 任务执行失败: %s", e.getMessage());
-
-                            String subTaskXml = formatTaskResp(task, false, result);
-                            compositeResult.append(subTaskXml).append("\n");
-                        }
+                    for (CompletableFuture<String> f : futures) {
+                        compositeResult.append(f.join()).append("\n");
                     }
                     compositeResult.append("</multitask_results>");
-
                     return compositeResult.toString();
-                }).join();
+                })
+                .exceptionally(ex -> "ERROR: Multitask aggregate failed: " + ex.getMessage())
+                .join();
+
     }
 
     private String taskDo(ReActTrace __parentTrace, String __cwd, String __sessionId, TaskOp task, boolean isMultitask) {
@@ -209,7 +198,7 @@ public class TaskSkill extends AbsSkill {
             }
 
 
-            if(LOG.isDebugEnabled()) {
+            if (LOG.isDebugEnabled()) {
                 LOG.debug("任务成功[{} - {}]: {}", task.index, task.agent_name, task.description);
             }
 
