@@ -59,7 +59,7 @@ public class TodoSkill extends AbsSkill {
         return "## 任务规划指南 (Task Planning Guide)\n" +
                 "1. **启动机制**: 超过3步以上的复杂任务，要通过 `todowrite` 创建计划。\n" +
                 "2. **状态感知**: 开始新任务或任务中途，应执行 `todoread` 确认当前进度。\n" +
-                "3. **进度同步**: 每完成一步，必须调用 `todowrite` 更新计划进度。**状态标记**: `[ ]` 待办；`[/]` 进行中（全局唯一）；`[x]` 已完成。\n" +
+                "3. **进度同步**: 每完成一步，必须调用 `todowrite` 更新计划进度。**状态标记**: `[ ]` 待办；`[/]` 进行中；`[x]` 已完成。\n" +
                 "4. **动态修订**: 若任务目标发生重大偏移或原计划失效，要重新执行 `todowrite` 重构完整计划。\n" +
                 "5. **适用边界**: 不要为常识性提问、简单计算或单次工具创建计划。";
     }
@@ -104,31 +104,9 @@ public class TodoSkill extends AbsSkill {
         Path todoFile = workPath.resolve("TODO.md");
 
         Files.write(todoFile, todosMarkdown.trim().getBytes(StandardCharsets.UTF_8));
-        ensureInGitignore(workPath, "TODO.md");
 
         int lines = todosMarkdown.split("\n").length;
-        return "TODO.md saved (" + lines + " lines).";
-    }
 
-    private void ensureInGitignore(Path rootPath, String fileName) {
-        try {
-            Path gitignore = rootPath.resolve(".gitignore");
-            if (Files.exists(gitignore)) {
-                List<String> lines = Files.readAllLines(gitignore, StandardCharsets.UTF_8);
-                boolean exists = false;
-                for (String line : lines) {
-                    if (line.trim().equals(fileName)) {
-                        exists = true;
-                        break;
-                    }
-                }
-                if (!exists) {
-                    String entry = "\n# AI Task Tracker\n" + fileName + "\n";
-                    Files.write(gitignore, entry.getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND);
-                }
-            }
-        } catch (Throwable ignored) {
-            LOG.warn("Failed to update .gitignore", ignored);
-        }
+        return "TODO saved (" + lines + " lines).";
     }
 }
