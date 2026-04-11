@@ -236,7 +236,7 @@ public class TaskSkill extends AbsSkill {
         private int index = 1;
         @Param(name = "agent_name", description = "子代理名称")
         private String agent_name;
-        @Param(name = "prompt", description = "派给子代理的任务描述。子代理看不见当前历史，每次都是重新开始，必须要非常详细的描述任务，并传递用户的原始意图。")
+        @Param(name = "prompt", description = "派给子代理的任务描述。每次都是重新开始，要非常详细的描述任务，并传递用户的原始意图。")
         private String prompt;
         @Param(name = "description", description = "简短的任务描述（50字以内）。返回结果时会附上这个描述，方便识别")
         private String description;

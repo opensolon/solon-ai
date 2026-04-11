@@ -171,7 +171,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
         if (n1fArgs.isValue()) {
             //有可能是 json string（还可能只是流的中间消息）
             if (hasNestedJsonBlock(argStr)) {
-                JsonReader reader = new JsonReader(argStr, Options.of(Feature.Read_AutoRepair));
+                JsonReader reader = new JsonReader(argStr, Options.of(Feature.Read_AutoRepair, Feature.Read_UnwrapJsonString));
                 n1fArgs = reader.readLast();
 
                 if (n1fArgs == null) {
