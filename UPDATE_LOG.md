@@ -24,6 +24,7 @@
 * 添加 solon-ai-harness 子代理切换模型的能力
 * 优化 solon-ai-core RepositoryTool 增加重排支持
 * 优化 solon-ai-core OllamaEmbeddingDialect.matched 添加 endsWith 匹配
+* 优化 solon-ai-core MethodToolProvider 允许是否使用自身的 ToolProvider 内容（同时优化 AbsSkill，AbsToolProvider）
 * 调整 solon-ai-cli 取消 TerminalSkill.undo 工具（几乎用不到，由 git 控制）
 * 调整 solon-ai-harness 取消 SESSION_DEFAULT（由应用侧处理）
 * 调整 solon-ai-harness 去除 getVersion 方法（由应用侧定义）
@@ -31,6 +32,7 @@
 * 调整 solon-ai-harness HarnessProperties.restApis 更名为 apiServers；取消 chatModel（由 models 替代）
 * 修复 solon-ai-agent FileAgentSession.getSessionId 可能为空的问题
 * 修复 solon-ai-skill-web CodeSearchTool 失效的问题（mcp.exa.ai 变了地址）
+* 修复 solon-ai-harness TaskOp jsonSchema 问题（可能造成 multitask 调度失败）
 
 ### 3.10.1
 
