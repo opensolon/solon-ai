@@ -31,7 +31,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.List;
 
 /**
- * 任务进度追踪技能 (对齐 OpenCode/Claude Code 规范)
+ * 任务进度追踪技能
  *
  * @author noear
  * @since 3.9.5
@@ -51,16 +51,17 @@ public class TodoSkill extends AbsSkill {
 
     @Override
     public String description() {
-        return "任务进度追踪专家。通过维护 TODO.md 状态机，确保复杂任务的原子性与执行进度透明。";
+        return "提供复杂任务的拆解、进度跟踪及计划修订能力。适用于需要多步协作的长链路任务。";
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
-        return "## 任务执行 SOP (Task Lifecycle)\n" +
-                "1. **规划优先**: 超过 3 个步骤的复杂任务，先使用 `todowrite` 初始化计划。\n" +
+        return "## 任务规划指南 (Task Planning Guide)\n" +
+                "1. **启动机制**: 超过3步以上的复杂任务，要通过 `todowrite` 创建计划。\n" +
                 "2. **状态感知**: 开始新任务或任务中途，应执行 `todoread` 确认当前进度。\n" +
-                "3. **状态标记**: `[ ]` 待办；`[/]` 进行中（全局唯一）；`[x]` 已完成。\n" +
-                "4. **重构机制**: 若任务目标发生重大偏移或原计划失效，要重新执行 `todowrite` 重构完整计划。";
+                "3. **进度同步**: 每完成一步，必须调用 `todowrite` 更新计划进度。**状态标记**: `[ ]` 待办；`[/]` 进行中（全局唯一）；`[x]` 已完成。\n" +
+                "4. **动态修订**: 若任务目标发生重大偏移或原计划失效，要重新执行 `todowrite` 重构完整计划。\n" +
+                "5. **适用边界**: 不要为常识性提问、简单计算或单次工具创建计划。";
     }
 
     protected Path getWorkPath(String __cwd, String __sessionId) {
