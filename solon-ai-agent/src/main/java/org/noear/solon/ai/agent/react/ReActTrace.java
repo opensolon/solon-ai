@@ -343,8 +343,8 @@ public class ReActTrace implements AgentTrace {
      * 更新路由状态
      */
     public void setRoute(String route) {
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("Agent [{}] route changed: {} -> {}", getAgentName(), this.route, route);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Agent [{}] route changed: {} -> {}", getAgentName(), this.route, route);
         }
         this.route = route;
     }

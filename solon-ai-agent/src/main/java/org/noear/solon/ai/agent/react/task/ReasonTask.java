@@ -253,8 +253,8 @@ public class ReasonTask implements NamedTaskComponent {
                     systemPromptBuf);
         }
 
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("ReActAgent SystemPrompt rendered for trace [{}]: {}", trace.getAgentName(), systemPromptBuf);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("ReActAgent SystemPrompt rendered for trace [{}]: {}", trace.getAgentName(), systemPromptBuf);
         }
 
         List<ChatMessage> messages = new ArrayList<>();
@@ -378,8 +378,8 @@ public class ReasonTask implements NamedTaskComponent {
     }
 
     private @Nullable ChatResponse callWithRetry(Node node, ReActTrace trace, List<ChatMessage> messages) throws RuntimeException {
-        if(LOG.isTraceEnabled()){
-            LOG.trace("ReActAgent [{}] calling model... messages: {}",
+        if(LOG.isDebugEnabled()){
+            LOG.debug("ReActAgent [{}] calling model... messages: {}",
                     config.getName(),
                     ONode.serialize(messages, Feature.Write_PrettyFormat, Feature.Write_EnumUsingName));
         }

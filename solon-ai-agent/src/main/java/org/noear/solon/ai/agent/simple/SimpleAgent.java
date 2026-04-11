@@ -214,8 +214,8 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 //                    .append(config.getOutputSchema());
         }
 
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("SimpleAgent SystemPrompt rendered for trace [{}]: {}", name(), systemPromptBuf);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("SimpleAgent SystemPrompt rendered for trace [{}]: {}", name(), systemPromptBuf);
         }
 
         List<ChatMessage> messages = new ArrayList<>();
@@ -249,8 +249,8 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
      * 实现带指数延迟的自动重试调用
      */
     private AssistantMessage callWithRetry(SimpleTrace trace, AgentSession session, Prompt finalPrompt, ModelOptionsAmend<?, SimpleInterceptor> options) throws Throwable {
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("SimpleAgent [{}] calling model... messages: {}",
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("SimpleAgent [{}] calling model... messages: {}",
                     config.getName(),
                     ONode.serialize(finalPrompt.getMessages(), Feature.Write_PrettyFormat, Feature.Write_EnumUsingName));
         }

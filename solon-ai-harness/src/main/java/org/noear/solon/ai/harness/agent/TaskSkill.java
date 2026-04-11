@@ -108,6 +108,10 @@ public class TaskSkill extends AbsSkill {
             throw new IllegalStateException("__sessionId is required");
         }
 
+        if(LOG.isDebugEnabled()) {
+            LOG.debug("任务接收：{}", ONode.serialize(tasks));
+        }
+
         AgentSession __parentSession = engine.getSession(__sessionId);
         ReActTrace __parentTrace = ReActTrace.getCurrent(__parentSession.getContext());
 

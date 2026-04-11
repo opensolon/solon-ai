@@ -99,8 +99,8 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
                     // 将保底标书持久化到协议状态中
                     state.addBid(agent.name(), bidProposal);
 
-                    if (LOG.isTraceEnabled()) {
-                        LOG.trace("Agent [{}] auto-submitted a bid: {}", agent.name(), bidProposal.toJson());
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("Agent [{}] auto-submitted a bid: {}", agent.name(), bidProposal.toJson());
                     }
 
                     autoBidCount++;

@@ -144,8 +144,8 @@ public interface TeamProtocol extends NonSerializable {
      * 协作任务结束清理
      */
     default void onTeamFinished(FlowContext context, TeamTrace trace) {
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("Protocol [{}] session finished for trace: {}", name(), trace.getConfig().getTraceKey());
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Protocol [{}] session finished for trace: {}", name(), trace.getConfig().getTraceKey());
         }
     }
 }

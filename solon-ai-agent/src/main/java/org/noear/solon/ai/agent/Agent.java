@@ -166,8 +166,8 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
         long start = System.currentTimeMillis();
         AssistantMessage msg = call(effectivePrompt, session);
 
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("Agent [{}] return message: {}",
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Agent [{}] return message: {}",
                     name(),
                     ONode.serialize(msg, Feature.Write_PrettyFormat, Feature.Write_EnumUsingName));
         }
