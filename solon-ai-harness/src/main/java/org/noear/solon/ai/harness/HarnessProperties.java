@@ -84,6 +84,20 @@ public class HarnessProperties implements Serializable {
      * 添加模型配置
      */
     public void addModel(ChatConfig chatConfig) {
+        models.removeIf(m -> {
+            if (Assert.isNotEmpty(chatConfig.getName())) {
+                if (chatConfig.getName().equals(m.getName())) {
+                    return true;
+                }
+            }
+
+            if (Assert.isNotEmpty(chatConfig.getModel())) {
+                return chatConfig.getModel().equals(m.getModel());
+            }
+
+            return false;
+        });
+
         models.add(chatConfig);
     }
 
