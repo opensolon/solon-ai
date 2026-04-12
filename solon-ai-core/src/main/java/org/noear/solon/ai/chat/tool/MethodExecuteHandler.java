@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat.tool;
 
+import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.snack4.codec.BeanDecoder;
 import org.noear.solon.core.handle.AbstractEntityReader;
@@ -56,7 +57,7 @@ public class MethodExecuteHandler extends AbstractEntityReader {
      */
     @Override
     protected Object changeBody(Context ctx, MethodWrap mWrap) {
-        return ONode.ofBean(ctx.attr(MCP_BODY_ATTR));
+        return ONode.ofBean(ctx.attr(MCP_BODY_ATTR), Feature.Read_AutoRepair);
     }
 
     /**
