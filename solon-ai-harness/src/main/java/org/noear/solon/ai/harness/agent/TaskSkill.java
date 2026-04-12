@@ -85,8 +85,8 @@ public class TaskSkill extends AbsSkill {
     }
 
     @ToolMapping(name = "task", description =
-            "分派任务给专项子代理。所有实际开发工作必须使用此工具委派给子代理完成。")
-    public String task(@Body TaskOp taskSpec, String __cwd, String __sessionId) {
+            "委派单一任务给专项子代理。适用于需要深度思考、多步操作或特定领域知识（如文件操作、代码分析）的场景。")
+    public String task(@Body SingleTaskOp taskSpec, String __cwd, String __sessionId) {
         if (Assert.isEmpty(__sessionId)) {
             throw new IllegalStateException("__sessionId is required");
         }
@@ -94,12 +94,17 @@ public class TaskSkill extends AbsSkill {
         AgentSession __parentSession = engine.getSession(__sessionId);
         ReActTrace __parentTrace = ReActTrace.getCurrent(__parentSession.getContext());
 
-        return taskDo(__parentTrace, __cwd, __sessionId, taskSpec, false);
+        MultiTaskOp taskOp = new MultiTaskOp();
+        taskOp.agent_name = taskSpec.agent_name;
+        taskOp.description = taskSpec.description;
+        taskOp.prompt = taskSpec.prompt;
+
+        return taskDo(__parentTrace, __cwd, __sessionId, taskOp, false);
     }
 
     @ToolMapping(name = "multitask", description =
-            "并行执行多个独立子任务。仅用于互不干扰的任务（如不同模块的修改或多路搜索）")
-    public String multitask(@Param(name = "tasks", description = "任务列表") List<TaskOp> tasks, String __cwd, String __sessionId) {
+            "并行执行多个互不依赖的子任务。要求任务之间必须没有资源竞争（例如：不同的模块开发、多路搜索）。")
+    public String multitask(@Param(name = "tasks", description = "任务列表") List<MultiTaskOp> tasks, String __cwd, String __sessionId) {
         if (Assert.isEmpty(tasks)) {
             return "WARNING: 任务列表为空";
         }
@@ -118,7 +123,7 @@ public class TaskSkill extends AbsSkill {
 
         List<CompletableFuture<String>> futures = new ArrayList<>();
 
-        for (TaskOp task : tasks) {
+        for (MultiTaskOp task : tasks) {
             CompletableFuture<String> future = CompletableFuture.supplyAsync(() ->
                     taskDo(__parentTrace, __cwd, __sessionId, task, true), RunUtil.io());
             futures.add(future);
@@ -139,7 +144,7 @@ public class TaskSkill extends AbsSkill {
 
     }
 
-    private String taskDo(ReActTrace __parentTrace, String __cwd, String __sessionId, TaskOp task, boolean isMultitask) {
+    private String taskDo(ReActTrace __parentTrace, String __cwd, String __sessionId, MultiTaskOp task, boolean isMultitask) {
         AgentDefinition agentDefinition = engine.getAgentManager().getAgent(task.agent_name);
         if (agentDefinition == null) {
             return "ERROR: 未知的子代理类型 '" + task.agent_name + "'。";
@@ -202,21 +207,23 @@ public class TaskSkill extends AbsSkill {
                 LOG.debug("任务成功[{} - {}]: {}", task.index, task.agent_name, task.description);
             }
 
-            return formatTaskResp(task, true, result);
+            return formatTaskResp(task, true, result, isMultitask);
         } catch (Throwable e) {
             LOG.error("任务失败[{} - {}]: {}", task.index, task.agent_name, e.getMessage(), e);
 
             result = String.format("ERROR: 任务执行失败: %s", e.getMessage());
 
-            return formatTaskResp(task, false, result);
+            return formatTaskResp(task, false, result, isMultitask);
         }
     }
 
-    private String formatTaskResp(TaskOp task, boolean successful, String result) {
+    private String formatTaskResp(MultiTaskOp task, boolean successful, String result, boolean isMultitask) {
         StringBuilder buf = new StringBuilder();
 
         buf.append("<task_result>");
-        buf.append("<index>").append(task.index).append("</index>");
+        if (isMultitask) {
+            buf.append("<index>").append(task.index).append("</index>");
+        }
         buf.append("<description>").append(task.description).append("</description>");
         buf.append("<agent_name>").append(task.agent_name).append("</agent_name>");
         buf.append("<result_status>").append(successful ? "success" : "failure").append("</result_status>");
@@ -226,26 +233,38 @@ public class TaskSkill extends AbsSkill {
         return buf.toString();
     }
 
+    public static class SingleTaskOp {
+        @Param(name = "agent_name", description = "子代理名称")
+        public String agent_name;
+        @Param(name = "prompt", description = "发给子代理的详细指令。由于子代理是无状态的（上下文隔离），必须在此提供任务所需的所有背景信息、具体要求及预期输出格式。")
+        public String prompt;
+        @Param(name = "description", description = "任务内容的极简摘要（如：'重构用户认证逻辑'）。该描述将作为标签出现在执行日志和结果摘要中，用于快速识别任务意图。")
+        public String description;
+
+        @Override
+        public String toString() {
+            return "SingleTaskOp{" +
+                    "agent_name='" + agent_name + '\'' +
+                    ", description='" + description + '\'' +
+                    '}';
+        }
+    }
 
     /**
      * 任务定义
      */
-    public static class TaskOp {
-        @Param(name = "index", description = "任务序号（从1开始）", defaultValue = "1")
-        private int index = 1;
-        @Param(name = "agent_name", description = "子代理名称")
-        private String agent_name;
-        @Param(name = "prompt", description = "派给子代理的任务描述。每次都是重新开始，要非常详细的描述任务，并传递用户的原始意图。")
-        private String prompt;
-        @Param(name = "description", description = "简短的任务描述（50字以内）。返回结果时会附上这个描述，方便识别")
-        private String description;
+    public static class MultiTaskOp extends SingleTaskOp {
+        @Param(name = "index",
+                description = "任务唯一序号，每个任务分配唯一的递增整数（从1开始），以便匹配返回结果",
+                defaultValue = "1")
+        public int index = 1;
 
         @Override
         public String toString() {
-            return "TaskOp{" +
+            return "MultiTaskOp{" +
                     "index='" + index + '\'' +
                     "agent_name='" + agent_name + '\'' +
-                    ", desc='" + description + '\'' +
+                    ", description='" + description + '\'' +
                     '}';
         }
     }
