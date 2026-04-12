@@ -22,6 +22,7 @@
 * 添加 solon-ai-agent SummarizationInterceptor.copyWith 方法（方便复制实例并调整限制）
 * 添加 solon-ai-harness HarnessProperties.models 配置属性（替代 chatModel）
 * 添加 solon-ai-harness 子代理切换模型的能力
+* 添加 solon-ai-harness HarnessProperties.removeModel 方法
 * 优化 solon-ai-core RepositoryTool 增加重排支持
 * 优化 solon-ai-core OllamaEmbeddingDialect.matched 添加 endsWith 匹配
 * 优化 solon-ai-core MethodToolProvider 允许是否使用自身的 ToolProvider 内容（同时优化 AbsSkill，AbsToolProvider）
