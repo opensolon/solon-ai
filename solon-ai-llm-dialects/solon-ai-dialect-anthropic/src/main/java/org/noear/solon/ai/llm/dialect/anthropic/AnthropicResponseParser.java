@@ -280,7 +280,7 @@ public class AnthropicResponseParser {
                         Map<String, Object> arguments = new HashMap<>();
 
                         if (FormatUtil.hasNestedJsonBlock(argStr)) {
-                            JsonReader reader = new JsonReader(argStr, Options.of(Feature.Read_AutoRepair, Feature.Read_UnwrapJsonString));
+                            JsonReader reader = new JsonReader(argStr, Options.of(Feature.Read_AutoRepair));
                             ONode n1fArgs = reader.readLast();
 
                             if (n1fArgs == null) {
