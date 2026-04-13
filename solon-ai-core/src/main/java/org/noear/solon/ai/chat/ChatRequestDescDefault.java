@@ -201,13 +201,21 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         String reqJson = req.toRequestData();
 
         if (log.isDebugEnabled()) {
-            log.debug("llm-request: {}", reqJson);
+            if (req.getOptions().name() == null) {
+                log.debug("llm-request: {}", reqJson);
+            } else {
+                log.debug("llm-request[{}]: {}", req.getOptions().name(), reqJson);
+            }
         }
 
         String respJson = httpUtils.bodyOfJson(reqJson).post();
 
         if (log.isDebugEnabled()) {
-            log.debug("llm-response: {}", respJson);
+            if (req.getOptions().name() == null) {
+                log.debug("llm-response: {}", respJson);
+            } else {
+                log.debug("llm-response[{}]: {}", req.getOptions().name(), respJson);
+            }
         }
 
         ChatResponseDefault resp = new ChatResponseDefault(req, false);
@@ -269,7 +277,11 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         String reqJson = req.toRequestData();
 
         if (log.isDebugEnabled()) {
-            log.debug("llm-request: {}", reqJson);
+            if (req.getOptions().name() == null) {
+                log.debug("llm-request: {}", reqJson);
+            } else {
+                log.debug("llm-request[{}]: {}", req.getOptions().name(), reqJson);
+            }
         }
 
         return Mono.fromFuture(httpUtils.bodyOfJson(reqJson).execAsync("POST"))
@@ -356,7 +368,11 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      */
     private boolean onEventStream(ChatResponseDefault resp, ServerSentEvent event, FluxSink<? super ChatResponse> sink) {
         if (log.isDebugEnabled()) {
-            log.debug("llm-response: {}", event.data());
+            if (resp.getOptions().name() == null) {
+                log.debug("llm-response: {}", event.data());
+            } else {
+                log.debug("llm-response[{}]: {}", resp.getOptions().name(), event.data());
+            }
         }
 
         resp.setResponseData(event.data());

@@ -17,7 +17,6 @@ package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.tool.*;
-import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.Preview;
 
 import java.lang.reflect.Type;
@@ -40,10 +39,26 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
 
     /// ///////////////////////////////////
 
+    private String name;
     private String role;
     private String instruction;
     private String systemPrompt;
     private String outputSchema;
+
+    /**
+     * 名字（用于打印或管理）
+     */
+    public String name() {
+        return name;
+    }
+
+    /**
+     * 名字（用于打印或管理）
+     */
+    public ChatOptions name(String name) {
+        this.name = name;
+        return this;
+    }
 
     /**
      * 角色

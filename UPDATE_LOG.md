@@ -15,6 +15,7 @@
 * 新增 solon-ai-repo-dashvector-official 插件
 * 添加 solon-ai-core ChatModel.getModel 方法
 * 添加 solon-ai-core ChatModel.getProvider 方法
+* 添加 solon-ai-core ChatOptions.name 方便 agent 传递 name（打印日志）
 * 添加 solon-ai-core 基于语义的分割器 SemanticSplitter
 * 添加 solon-ai-core AiConfig.name, description 配置属性（用于管理显示）
 * 添加 solon-ai-agent AgentRequest.callAsync 异步调用方法
