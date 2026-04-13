@@ -387,6 +387,8 @@ public class ReasonTask implements NamedTaskComponent {
         ChatRequestDesc req = config.getChatModel()
                 .prompt(messages)
                 .options(o -> {
+                    o.name(trace.getAgentName());
+
                     if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
                         o.toolAdd(trace.getOptions().getTools());
                         o.toolAdd(trace.getProtocolTools());

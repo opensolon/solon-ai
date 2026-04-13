@@ -289,6 +289,8 @@ public class SupervisorTask implements NamedTaskComponent {
      */
     protected ChatResponse callWithRetry(Node node, TeamTrace trace, List<ChatMessage> messages) {
         ChatRequestDesc req = config.getChatModel().prompt(messages).options(o -> {
+            o.name(trace.getAgentName());
+
             if(trace.getOptions().isFeedbackMode()) {
                 o.toolAdd(FeedbackTool.getTool(
                         trace.getOptions().getFeedbackDescription(trace),
