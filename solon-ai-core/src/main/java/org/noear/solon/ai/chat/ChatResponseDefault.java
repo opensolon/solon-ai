@@ -146,7 +146,9 @@ public class ChatResponseDefault implements ChatResponse {
     @Override
     public boolean isEmpty() {
         if (stream) {
-            if (contentBuilder.length() == 0 && toolCallBuilders.isEmpty()) {
+            if (contentBuilder.length() == 0 &&
+                    toolCallBuilders.isEmpty() &&
+                    choices.isEmpty()) {
                 return true;
             }
         } else {
