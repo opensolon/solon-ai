@@ -100,7 +100,10 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
 
             String summary = AgentUtil.callWithRetry(() -> {
                 ChatResponse resp = chatModel.prompt(userData)
-                        .options(o -> o.systemPrompt(systemInstruction))
+                        .options(o -> {
+                            o.name(LLMSummarizationStrategy.class.getSimpleName());
+                            o.systemPrompt(systemInstruction);
+                        })
                         .call();
 
                 if (resp.hasContent()) {

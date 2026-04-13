@@ -101,7 +101,10 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
 
             String keyInfo = AgentUtil.callWithRetry(() -> {
                 ChatResponse resp = chatModel.prompt(userData)
-                        .options(o -> o.systemPrompt(systemInstruction))
+                        .options(o -> {
+                            o.name(KeyInfoExtractionStrategy.class.getSimpleName());
+                            o.systemPrompt(systemInstruction);
+                        })
                         .call();
 
                 if (resp.hasContent()) {

@@ -122,7 +122,10 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
             // 3. 调用模型生成增量摘要
             lastSummary = AgentUtil.callWithRetry(() -> {
                 ChatResponse resp = chatModel.prompt(userData)
-                        .options(o -> o.systemPrompt(systemInstruction))
+                        .options(o -> {
+                            o.name(HierarchicalSummarizationStrategy.class.getSimpleName());
+                            o.systemPrompt(systemInstruction);
+                        })
                         .call();
 
                 if (resp.hasContent()) {
