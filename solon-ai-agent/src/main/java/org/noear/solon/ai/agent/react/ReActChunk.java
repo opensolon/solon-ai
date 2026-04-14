@@ -46,7 +46,7 @@ public class ReActChunk extends AbsAgentChunk {
         return response.getMetrics();
     }
 
-    public boolean isNormal() {
-        return response.getTrace().isNormal();
+    public boolean isAbnormal() {
+        return response.getTrace().isAbnormal();
     }
 }

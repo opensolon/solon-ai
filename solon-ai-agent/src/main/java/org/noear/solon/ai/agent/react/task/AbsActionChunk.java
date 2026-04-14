@@ -18,7 +18,6 @@ package org.noear.solon.ai.agent.react.task;
 import org.noear.solon.ai.agent.AbsAgentChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.flow.Node;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
@@ -33,15 +32,13 @@ import java.util.Map;
  */
 @Preview("3.9.6")
 public class AbsActionChunk extends AbsAgentChunk {
-    private final transient Node node;
     private final transient ReActTrace trace;
     private final transient String toolName;
     private final transient Map<String, Object> args;
 
-    public AbsActionChunk(Node node, ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage message) {
+    public AbsActionChunk(ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage message) {
         super(trace.getAgentName(), trace.getSession(), message);
 
-        this.node = node;
         this.trace = trace;
         this.toolName = toolName;
         if (args == null) {
@@ -49,10 +46,6 @@ public class AbsActionChunk extends AbsAgentChunk {
         } else {
             this.args = Collections.unmodifiableMap(args);
         }
-    }
-
-    public Node getNode() {
-        return node;
     }
 
     public @Nullable String getToolName() {

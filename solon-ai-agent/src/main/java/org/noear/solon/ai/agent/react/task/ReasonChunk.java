@@ -18,9 +18,9 @@ package org.noear.solon.ai.agent.react.task;
 import org.noear.solon.ai.agent.AbsAgentChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.flow.Node;
 import org.noear.solon.lang.Preview;
 
 import java.util.List;
@@ -33,38 +33,50 @@ import java.util.List;
  */
 @Preview("3.9.1")
 public class ReasonChunk extends AbsAgentChunk {
-    private final transient Node node;
     private final transient ReActTrace trace;
     private final transient ChatResponse response;
+    private final transient AssistantMessage assistantMessage;
 
-    public ReasonChunk(Node node, ReActTrace trace, ChatResponse response) {
-        super(trace.getAgentName(), trace.getSession(), response.getMessage());
-        this.node = node;
+    public ReasonChunk(ReActTrace trace, ChatResponse response, AssistantMessage assistantMessage) {
+        super(trace.getAgentName(), trace.getSession(), assistantMessage);
         this.trace = trace;
         this.response = response;
-    }
-
-    public Node getNode() {
-        return node;
+        this.assistantMessage = assistantMessage;
     }
 
     public ReActTrace getTrace() {
         return trace;
     }
 
-    public ChatResponse getResponse() {
-        return response;
+    /**
+     * 是否已完成
+     */
+    public boolean isFinished() {
+        if (response == null) {
+            return true;
+        } else {
+            return response.isFinished();
+        }
     }
 
-    public boolean isFinished(){
-        return response.isFinished();
+    /**
+     * 是否异常结束
+     */
+    public boolean isAbnormal() {
+        return response == null;
     }
 
+    /**
+     * 是否为工具调用
+     */
     public boolean isToolCalls() {
-        return Assert.isNotEmpty(response.getMessage().getToolCalls());
+        return Assert.isNotEmpty(assistantMessage.getToolCalls());
     }
 
+    /**
+     * 获取工具调用
+     */
     public List<ToolCall> getToolCalls() {
-        return response.getMessage().getToolCalls();
+        return assistantMessage.getToolCalls();
     }
 }

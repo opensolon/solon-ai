@@ -339,6 +339,13 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             LOG.debug("ReActAgent [{}] finished: {}", config.getName(), assistantMessage.getContent());
         }
 
+        if (trace.isAbnormal()) {
+            if (trace.getOptions().getStreamSink() != null) {
+                //异常结束时，补位一个 ReasonChunk （否则要靠 ReActChunk 在应用侧补位）
+                trace.getOptions().getStreamSink().next(new ReasonChunk(trace, null, assistantMessage));
+            }
+        }
+
         return assistantMessage;
     }
 

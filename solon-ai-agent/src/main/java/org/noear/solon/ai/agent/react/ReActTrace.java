@@ -31,7 +31,6 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
-import org.noear.solon.flow.FlowContextInternal;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -105,7 +104,7 @@ public class ReActTrace implements AgentTrace {
      * 最终回答内容 (Final Answer)
      */
     private volatile String finalAnswer;
-    private volatile boolean normal;
+    private volatile boolean abnormal; //异常结束的
     /**
      * 模型最近一次原始思考内容
      */
@@ -165,7 +164,7 @@ public class ReActTrace implements AgentTrace {
         this.session = session;
         this.protocol = protocol;
         this.finalAnswer = null;
-        this.normal = false;
+        this.abnormal = false;
 
         //每次执行重置中断状态
         session.pending(false, null);
@@ -349,8 +348,12 @@ public class ReActTrace implements AgentTrace {
         this.route = route;
     }
 
-    public boolean isNormal() {
-        return normal;
+
+    /**
+     * 是否异常结束的
+     */
+    public boolean isAbnormal() {
+        return abnormal;
     }
 
     public String getFinalAnswer() {
@@ -360,12 +363,12 @@ public class ReActTrace implements AgentTrace {
 
     public void setFinalAnswer(String finalAnswer) {
         this.finalAnswer = finalAnswer;
-        this.normal = false;
+        this.abnormal = true;
     }
 
-    public void setFinalAnswer(String finalAnswer, boolean normal) {
+    public void setFinalAnswer(String finalAnswer, boolean abnormal) {
         this.finalAnswer = finalAnswer;
-        this.normal = normal;
+        this.abnormal = abnormal;
     }
 
     public AssistantMessage getLastReasonMessage() {

@@ -43,7 +43,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.StringReader;
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -127,7 +126,7 @@ public class ActionTask implements NamedTaskComponent {
 
         if (trace.getOptions().getStreamSink() != null) {
             trace.getOptions().getStreamSink().next(
-                    new ActionStartChunk(node, trace, toolName, args, ChatMessage.ofAssistant("")));
+                    new ActionStartChunk(trace, toolName, args, ChatMessage.ofAssistant("")));
         }
 
         // 4. 执行工具
@@ -189,7 +188,7 @@ public class ActionTask implements NamedTaskComponent {
 
         if (trace.getOptions().getStreamSink() != null) {
             trace.getOptions().getStreamSink().next(
-                    new ActionEndChunk(node, trace, call.getName(), args, toolMessage));
+                    new ActionEndChunk(trace, call.getName(), args, toolMessage));
         }
     }
 
@@ -293,7 +292,7 @@ public class ActionTask implements NamedTaskComponent {
         // 在旧逻辑中，多工具并发时用户只能看到最后的结果，现在可以逐个看到每个工具的输出
         if (trace.getOptions().getStreamSink() != null) {
             trace.getOptions().getStreamSink().next(
-                    new ActionEndChunk(node, trace, toolName, args, chatMessage));
+                    new ActionEndChunk(trace, toolName, args, chatMessage));
         }
     }
 

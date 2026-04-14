@@ -17,7 +17,6 @@ package org.noear.solon.ai.agent.react.task;
 
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.flow.Node;
 import org.noear.solon.lang.Preview;
 
 import java.util.Map;
@@ -30,7 +29,7 @@ import java.util.Map;
  */
 @Preview("3.9.6")
 public class ActionStartChunk extends AbsActionChunk {
-    public ActionStartChunk(Node node, ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage message) {
-        super(node, trace, toolName, args, message);
+    public ActionStartChunk(ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage message) {
+        super(trace, toolName, args, message);
     }
 }

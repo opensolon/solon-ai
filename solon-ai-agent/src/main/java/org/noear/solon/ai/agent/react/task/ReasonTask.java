@@ -40,7 +40,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.regex.Pattern;
 
 /**
  * ReAct 推理任务 (Reasoning)
@@ -347,7 +346,7 @@ public class ReasonTask implements NamedTaskComponent {
         if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
             if (Assert.isNotEmpty(clearContent)) {
                 trace.setRoute(Agent.ID_END);
-                trace.setFinalAnswer(clearContent, true); // 直接取干净的正文
+                trace.setFinalAnswer(clearContent, false); // 直接取干净的正文
                 return;
             }
         }
@@ -359,7 +358,7 @@ public class ReasonTask implements NamedTaskComponent {
         // 1. 优先判断任务是否结束（Finish）
         if (clearContent.contains(config.getFinishMarker())) {
             trace.setRoute(Agent.ID_END);
-            trace.setFinalAnswer(extractFinalAnswer(clearContent), true);
+            trace.setFinalAnswer(extractFinalAnswer(clearContent), false);
             return;
         }
 
@@ -374,7 +373,7 @@ public class ReasonTask implements NamedTaskComponent {
 
         // 3. 兜底逻辑：既无明确工具调用也无完成标识，视为直接回复 Final Answer
         trace.setRoute(Agent.ID_END);
-        trace.setFinalAnswer(extractFinalAnswer(clearContent), true);
+        trace.setFinalAnswer(extractFinalAnswer(clearContent), false);
     }
 
     private @Nullable ChatResponse callWithRetry(Node node, ReActTrace trace, List<ChatMessage> messages) throws RuntimeException {
@@ -424,7 +423,7 @@ public class ReasonTask implements NamedTaskComponent {
 
                 if (trace.getOptions().getStreamSink() != null) {
                      response = req.stream().doOnNext(resp -> {
-                        trace.getOptions().getStreamSink().next(new ReasonChunk(node, trace, resp));
+                        trace.getOptions().getStreamSink().next(new ReasonChunk(trace, resp, resp.getMessage()));
                     }).blockLast();
                 } else {
                     response = req.call();
