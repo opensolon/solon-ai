@@ -63,23 +63,24 @@ public class TaskSkill extends AbsSkill {
 
     @Override
     public String description() {
-        return "子代理管理专家：委派任务给专门的子代理（比如：explore、plan、bash 等）";
+        return "多任务调度专家：将复杂任务拆解并委派给专项子代理（如 explore, plan, bash 等），支持并行处理以提高效率。";
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
         StringBuilder sb = new StringBuilder();
 
-        sb.append("## 当前可用的子代理注册表\n");
+        sb.append("## 当前可用的子代理\n");
         sb.append("<available_agents>\n");
         for (AgentDefinition agentDefinition : engine.getAgentManager().getAgents()) {
             sb.append(String.format("  - \"%s\": %s\n", agentDefinition.getName(), agentDefinition.getDescription()));
         }
         sb.append("</available_agents>\n\n");
 
-        sb.append("**规则提示**：\n");
-        sb.append("1. **上下文隔离**: 子代理不共享主会话历史，请在 prompt 中提供必要的背景信息。\n");
-        sb.append("2. **并行限制**: 使用 multitask 时，确保任务间不存在同一文件的写冲突。");
+        sb.append("## 任务分配策略：\n");
+        sb.append("1. **优先并行**: 当任务可以被拆分为互不干扰的独立单元（如：同时分析 A 文件和 B 文件）时，**必须**使用 `multitask` 以节省时间。\n");
+        sb.append("2. **原子性**: 每个子任务应具备明确的边界。\n");
+        sb.append("3. **上下文感知**: 必须在 prompt 中提供任务所需的全部背景，子代理无法看到主会话的完整历史。\n");
 
         return sb.toString();
     }
