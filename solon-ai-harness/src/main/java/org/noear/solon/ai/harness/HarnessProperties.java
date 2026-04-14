@@ -44,8 +44,8 @@ public class HarnessProperties implements Serializable {
     private boolean maxStepsAutoExtensible = false;
 
     private int sessionWindowSize = 8;
-    private int summaryWindowSize = 15;
-    private int summaryWindowToken = 15000;
+    private int summaryWindowSize = 30;
+    private int summaryWindowToken = 30000;
     private String summaryModel; //摘要大模型
 
     private boolean sandboxMode = true;
