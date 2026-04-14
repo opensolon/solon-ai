@@ -118,9 +118,7 @@ public class AnthropicResponseParser {
         if (json == null || json.isEmpty()) {
             return false;
         }
-        if (logEnabled) {
-            LOG.debug("Claude stream raw response: {}", json);
-        }
+
         String[] lines = json.split("\n");
         boolean hasChoices = false;
 
