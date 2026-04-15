@@ -124,6 +124,12 @@ public class OpenaiResponsesResponseParser {
             if (!oResp.isObject()) {
                 continue;
             }
+
+            if(oResp.hasKey("error")){
+                resp.setError(new ChatException(oResp.get("error").getString()));
+                return true;
+            }
+
             String eventType = oResp.get("type").getString();
             if ("error".equals(eventType)) {
                 streamStates.remove(resp);

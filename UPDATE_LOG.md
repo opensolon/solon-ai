@@ -10,6 +10,12 @@
 
 *  mcp channel 概念改为 transport （并保持兼容）???
 
+
+### 3.10.4
+
+* 优化 solon-ai-dialect-anthropic anthropic 方言的异常兼容处理
+* 优化 solon-ai-dialect-openai openai-response 方言的异常兼容处理
+
 ### 3.10.2
 
 * 新增 solon-ai-repo-dashvector-official 插件

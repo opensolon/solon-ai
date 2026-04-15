@@ -146,6 +146,12 @@ public class AnthropicResponseParser {
             if (oResp.isObject() == false) {
                 continue;
             }
+
+            if(oResp.hasKey("error")){
+                resp.setError(new ChatException(oResp.get("error").getString()));
+                return true;
+            }
+
             // Claude 流式响应事件类型
             String eventType = oResp.get("type").getString();
             if ("error".equals(eventType)) {
