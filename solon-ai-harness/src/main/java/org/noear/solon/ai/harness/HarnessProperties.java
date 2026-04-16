@@ -71,12 +71,27 @@ public class HarnessProperties implements Serializable {
         this.harnessHome = harnessHome;
     }
 
-    public void addApi(String name, ApiSource apiSource) {
+    /**
+     * 添加接口源
+     */
+    public void addApiSource(String name, ApiSource apiSource) {
         getApiServers().put(name, apiSource);
     }
 
-    public void addMcp(String name, McpServerParameters mcpParameters) {
+    /**
+     * 添加 mcp 服务
+     */
+    public void addMcpServer(String name, McpServerParameters mcpParameters) {
         getMcpServers().put(name, mcpParameters);
+    }
+
+    /**
+     * 添加技能池
+     *
+     * @param alias 必须 @ 开头
+     */
+    public void addSkillPool(String alias, String path) {
+        getSkillPools().put(alias, path);
     }
 
     /**
