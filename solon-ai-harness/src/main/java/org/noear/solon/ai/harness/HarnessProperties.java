@@ -71,6 +71,14 @@ public class HarnessProperties implements Serializable {
         this.harnessHome = harnessHome;
     }
 
+    public void addApi(String name, ApiSource apiSource) {
+        getApiServers().put(name, apiSource);
+    }
+
+    public void addMcp(String name, McpServerParameters mcpParameters) {
+        getMcpServers().put(name, mcpParameters);
+    }
+
     /**
      * 添加工具权限
      */
@@ -90,7 +98,7 @@ public class HarnessProperties implements Serializable {
     /**
      * 移除模型
      */
-    public void removeModel(String modelName){
+    public void removeModel(String modelName) {
         models.removeIf(m -> m.getNameOrModel().equals(modelName));
     }
 

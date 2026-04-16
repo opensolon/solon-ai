@@ -21,6 +21,7 @@ import org.noear.solon.core.util.Assert;
 import java.io.Serializable;
 import java.time.Duration;
 import java.util.*;
+import java.util.function.Consumer;
 
 /**
  * Mcp 服务端配置参数
@@ -40,10 +41,18 @@ public class McpServerParameters implements Serializable {
     private List<String> args = new ArrayList<>();
     private Map<String, String> env = new HashMap<>();
 
+    public McpServerParameters() {
+        //反序列化用
+    }
+
     /// ////////////
     ///
     ///
 
+    public McpServerParameters then(Consumer<McpServerParameters> build) {
+        build.accept(this);
+        return this;
+    }
 
     public String getTransport() {
         return transport;
@@ -77,6 +86,13 @@ public class McpServerParameters implements Serializable {
         return headers;
     }
 
+    public void addHeaderVar(String key, String value) {
+        Assert.notNull(key, "The key can not be null");
+        Assert.notNull(value, "The value can not be null");
+
+        headers.put(key, value);
+    }
+
     public Duration getTimeout() {
         return timeout;
     }
@@ -92,6 +108,8 @@ public class McpServerParameters implements Serializable {
     }
 
     public void setCommand(String command) {
+        Assert.notNull(command, "The command can not be null");
+
         this.command = command;
     }
 
@@ -100,7 +118,14 @@ public class McpServerParameters implements Serializable {
     }
 
     public void setArgs(List<String> args) {
+        Assert.notNull(args, "The args can not be null");
+
         this.args = args;
+    }
+
+    public void addArgVar(String arg) {
+        Assert.notNull(arg, "The arg can not be null");
+        this.args.add(arg);
     }
 
     public Map<String, String> getEnv() {
@@ -111,10 +136,27 @@ public class McpServerParameters implements Serializable {
         this.env = env;
     }
 
+    public void addEnvVar(String key, String value) {
+        Assert.notNull(key, "The key can not be null");
+        Assert.notNull(value, "The value can not be null");
+
+        this.env.put(key, value);
+    }
+
+    /**
+     * @deprecated 3.10.4
+     *
+     */
+    @Deprecated
     public static Builder builder(String command) {
         return new Builder(command);
     }
 
+    /**
+     * @deprecated 3.10.4
+     *
+     */
+    @Deprecated
     public static class Builder {
         private McpServerParameters params = new McpServerParameters();
 
