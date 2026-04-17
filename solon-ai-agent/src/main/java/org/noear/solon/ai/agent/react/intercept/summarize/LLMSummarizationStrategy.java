@@ -41,6 +41,9 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
     private static final Logger log = LoggerFactory.getLogger(LLMSummarizationStrategy.class);
 
     private final ChatModel chatModel;
+    private int maxRetries = 3;
+    private long retryDelayMs = 1000L;
+
     // 1. 系统指令：定义总结逻辑和约束
     private String systemInstruction = "## 角色定义\n" +
             "你是一个高效的任务进度分析员。请简要总结 AI Agent 的执行历史片段。\n\n" +
@@ -58,6 +61,11 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
      */
     public LLMSummarizationStrategy(ChatModel chatModel) {
         this.chatModel = chatModel;
+    }
+
+    protected void setRetryConfig(int maxRetries, long retryDelayMs) {
+        this.maxRetries = Math.max(1, maxRetries);
+        this.retryDelayMs = Math.max(500, retryDelayMs);
     }
 
     public void setSystemInstruction(String systemInstruction) {
@@ -98,7 +106,7 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
                     "### 任务指令\n" +
                     "请根据系统指令对上述执行过程进行语义总结：";
 
-            String summary = AgentUtil.callWithRetry(() -> {
+            String summary = AgentUtil.callWithRetry(maxRetries, retryDelayMs, () -> {
                 ChatResponse resp = chatModel.prompt(userData)
                         .options(o -> {
                             o.name(LLMSummarizationStrategy.class.getSimpleName());

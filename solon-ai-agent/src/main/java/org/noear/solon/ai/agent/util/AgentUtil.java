@@ -54,7 +54,7 @@ public class AgentUtil {
     }
 
     public static <T> T callWithRetry(CallableTx<T, Throwable> callable) throws Throwable {
-        return callWithRetry(3, 1000, callable);
+        return callWithRetry(3, 1000L, callable);
     }
 
     public static <T> T callWithRetry(int maxRetries, long etryDelayMs, CallableTx<T, Throwable> callable) throws Throwable {

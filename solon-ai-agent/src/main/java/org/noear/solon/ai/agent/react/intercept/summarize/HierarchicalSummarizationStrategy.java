@@ -44,8 +44,11 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
 
     private final ChatModel chatModel;
 
+    private int maxRetries = 3;
+    private long retryDelayMs = 1000L;
+
     // 1. 定义系统指令（静态部分）
-    String systemInstruction = "## 角色定义\n" +
+    private String systemInstruction = "## 角色定义\n" +
             "你是一个专业的记忆管理专家，负责对 Agent 的执行历史进行层级化压缩。\n\n" +
             "## 处理逻辑\n" +
             "请将『旧的摘要内容』与『新增的过期历史记录』合并，生成精炼的『当前进度摘要』。\n\n" +
@@ -64,6 +67,11 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
 
     public HierarchicalSummarizationStrategy(ChatModel chatModel) {
         this.chatModel = chatModel;
+    }
+
+    protected void setRetryConfig(int maxRetries, long retryDelayMs) {
+        this.maxRetries = Math.max(1, maxRetries);
+        this.retryDelayMs = Math.max(500, retryDelayMs);
     }
 
     public void setSystemInstruction(String systemInstruction) {
@@ -120,7 +128,7 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
                     "请根据 System Message（系统指令）中的逻辑，输出更新后的『进度摘要』：";
 
             // 3. 调用模型生成增量摘要
-            lastSummary = AgentUtil.callWithRetry(() -> {
+            lastSummary = AgentUtil.callWithRetry(maxRetries, retryDelayMs, () -> {
                 ChatResponse resp = chatModel.prompt(userData)
                         .options(o -> {
                             o.name(HierarchicalSummarizationStrategy.class.getSimpleName());
