@@ -7,6 +7,7 @@ import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolResult;
+import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.annotation.Param;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +38,15 @@ public class ToolGatewaySkill extends AbsSkill {
     private int dynamicThreshold = 8;   // 超过此值，进入摘要模式（SUMMARY）
     private int listThreshold = 30;     // 超过此值，进入仅名字模式（LIST）
     private int searchThreshold = 100;  // 超过此值，进入强制搜索模式（SEARCH）
+
+    private int maxRetries = 3;
+    private long retryDelayMs = 1000L;
+
+    public ToolGatewaySkill retryConfig(int maxRetries, long retryDelayMs) {
+        this.maxRetries = Math.max(1, maxRetries);
+        this.retryDelayMs = Math.max(500, retryDelayMs);
+        return this;
+    }
 
     /**
      * 设置全量平铺的阈值（默认为 8）
@@ -240,7 +250,7 @@ public class ToolGatewaySkill extends AbsSkill {
         }
 
         try {
-            return tool.call(args);
+            return RetryUtil.callWithRetry(maxRetries, retryDelayMs, () -> tool.call(args));
         } catch (Throwable e) {
             LOG.error("Tool gateway execution failed: {}", name, e);
             return ToolResult.success("执行异常: " +
