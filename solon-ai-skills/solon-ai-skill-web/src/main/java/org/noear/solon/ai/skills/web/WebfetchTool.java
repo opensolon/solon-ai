@@ -20,6 +20,7 @@ import org.jsoup.Jsoup;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.ai.rag.Document;
+import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.net.http.HttpResponse;
 import org.noear.solon.net.http.HttpUtils;
@@ -42,6 +43,14 @@ public class WebfetchTool extends AbsToolProvider {
 
     public static WebfetchTool getInstance() {
         return instance;
+    }
+
+    private int maxRetries = 3;
+    private long retryDelayMs = 1000L;
+
+    public void setRetryConfig(int maxRetries, long retryDelayMs) {
+        this.maxRetries = Math.max(1, maxRetries);
+        this.retryDelayMs = Math.max(500, retryDelayMs);
     }
 
     @ToolMapping(name = "webfetch", description = "从 URL 获取网页内容。返回格式支持 markdown, text 或 html。")
@@ -70,11 +79,17 @@ public class WebfetchTool extends AbsToolProvider {
                 .header("Accept-Language", "en-US,en;q=0.9")
                 .timeout(timeout);
 
-        // 4. 执行请求与 Cloudflare 穿透逻辑
-        HttpResponse response = http.exec("GET");
-        if (response.code() == 403 && "challenge".equals(response.header("cf-mitigated"))) {
-            response = http.header("User-Agent", "opencode").exec("GET");
-        }
+        // 4. 执行请求
+        HttpResponse response = RetryUtil.callWithRetry(maxRetries,retryDelayMs, ()->{
+            HttpResponse resp = http.exec("GET");
+            if (resp.code() == 403 && "challenge".equals(resp.header("cf-mitigated"))) {
+                // Cloudflare 穿透逻辑
+                resp = http.header("User-Agent", "opencode")
+                        .exec("GET");
+            }
+
+            return resp;
+        });
 
         if (response.code() >= 400) {
             throw new RuntimeException("Request failed with status code: " + response.code());

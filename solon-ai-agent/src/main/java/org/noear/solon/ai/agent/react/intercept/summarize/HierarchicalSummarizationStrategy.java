@@ -18,7 +18,7 @@ package org.noear.solon.ai.agent.react.intercept.summarize;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
-import org.noear.solon.ai.agent.util.AgentUtil;
+import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -69,7 +69,7 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
         this.chatModel = chatModel;
     }
 
-    protected void setRetryConfig(int maxRetries, long retryDelayMs) {
+    public void setRetryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(500, retryDelayMs);
     }
@@ -128,7 +128,7 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
                     "请根据 System Message（系统指令）中的逻辑，输出更新后的『进度摘要』：";
 
             // 3. 调用模型生成增量摘要
-            lastSummary = AgentUtil.callWithRetry(maxRetries, retryDelayMs, () -> {
+            lastSummary = RetryUtil.callWithRetry(maxRetries, retryDelayMs, () -> {
                 ChatResponse resp = chatModel.prompt(userData)
                         .options(o -> {
                             o.name(HierarchicalSummarizationStrategy.class.getSimpleName());

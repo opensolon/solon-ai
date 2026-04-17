@@ -21,6 +21,7 @@ import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
+import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.annotation.Param;
 
 import java.time.Duration;
@@ -37,6 +38,7 @@ import java.util.Map;
 public class CodeSearchTool extends AbsToolProvider {
     private static final String BASE_URL = "https://mcp.exa.ai/mcp?tools=get_code_context_exa";
     private static final int TIMEOUT_MS = 30_000;
+    private static final int DEFAULT_TOKENS = 5000;
 
     private static McpClientProvider mcpClient;
 
@@ -61,11 +63,17 @@ public class CodeSearchTool extends AbsToolProvider {
         return instance;
     }
 
-    private static final int DEFAULT_TOKENS = 5000;
+    private int maxRetries = 3;
+    private long retryDelayMs = 1000L;
 
     public CodeSearchTool() {
         super();
         getMcpClient();
+    }
+
+    public void setRetryConfig(int maxRetries, long retryDelayMs) {
+        this.maxRetries = Math.max(1, maxRetries);
+        this.retryDelayMs = Math.max(500, retryDelayMs);
     }
 
     @ToolMapping(name = "codesearch", description =
@@ -100,7 +108,8 @@ public class CodeSearchTool extends AbsToolProvider {
         ToolResult result;
         try {
             // 工具名: get_code_context_exa
-            result = getMcpClient().callTool("get_code_context_exa", toolArgs);
+            result = RetryUtil.callWithRetry(maxRetries, retryDelayMs, () ->
+                    getMcpClient().callTool("get_code_context_exa", toolArgs));
         } catch (Throwable e) {
             if (e.getMessage() != null && e.getMessage().toLowerCase().contains("timeout")) {
                 throw new RuntimeException("代码搜索请求超时");

@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.rag.Document;
+import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.annotation.Param;
 
 import java.time.Duration;
@@ -37,6 +38,11 @@ import java.util.Map;
 public class WebsearchTool extends AbsToolProvider {
     private static final String BASE_URL = "https://mcp.exa.ai/mcp";
     private static final int TIMEOUT_MS = 30_000;
+
+    private static final int DEFAULT_NUM_RESULTS = 8;
+    private static final int DEFAULT_CONTEXT_CHARS = 10000;
+    private static final String DEFAULT_LIVECRAWL = "fallback";
+    private static final String DEFAULT_TYPE = "auto";
 
     private static McpClientProvider mcpClient;
 
@@ -55,21 +61,24 @@ public class WebsearchTool extends AbsToolProvider {
 
     //---------
 
-    private static final int DEFAULT_NUM_RESULTS = 8;
-    private static final int DEFAULT_CONTEXT_CHARS = 10000;
-    private static final String DEFAULT_LIVECRAWL = "fallback";
-    private static final String DEFAULT_TYPE = "auto";
-
     private static final WebsearchTool instance = new WebsearchTool();
 
     public static WebsearchTool getInstance() {
         return instance;
     }
 
+    private int maxRetries = 3;
+    private long retryDelayMs = 1000L;
+
     public WebsearchTool() {
         super();
 
         getMcpClient();
+    }
+
+    public void setRetryConfig(int maxRetries, long retryDelayMs) {
+        this.maxRetries = Math.max(1, maxRetries);
+        this.retryDelayMs = Math.max(500, retryDelayMs);
     }
 
 
@@ -93,7 +102,8 @@ public class WebsearchTool extends AbsToolProvider {
         ToolResult result;
 
         try {
-            result = getMcpClient().callTool("web_search_exa", args);
+            result = RetryUtil.callWithRetry(maxRetries,retryDelayMs, ()->
+                    getMcpClient().callTool("web_search_exa", args));
         } catch (Exception e) {
             // 如果是超时相关的异常，转换为与 opencode 一致的文案
             if (e.getMessage() != null && e.getMessage().toLowerCase().contains("timeout")) {

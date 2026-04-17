@@ -18,7 +18,7 @@ package org.noear.solon.ai.agent.react.intercept.summarize;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
-import org.noear.solon.ai.agent.util.AgentUtil;
+import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -64,7 +64,7 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
         this.chatModel = chatModel;
     }
 
-    protected void setRetryConfig(int maxRetries, long retryDelayMs) {
+    public void setRetryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(500, retryDelayMs);
     }
@@ -107,7 +107,7 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
                     "### 审计要求\n" +
                     "请根据系统指令，提取上述片段中的关键信息。";
 
-            String keyInfo = AgentUtil.callWithRetry(maxRetries, retryDelayMs, () -> {
+            String keyInfo = RetryUtil.callWithRetry(maxRetries, retryDelayMs, () -> {
                 ChatResponse resp = chatModel.prompt(userData)
                         .options(o -> {
                             o.name(KeyInfoExtractionStrategy.class.getSimpleName());

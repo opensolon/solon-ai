@@ -18,7 +18,7 @@ package org.noear.solon.ai.agent.react.intercept.summarize;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
-import org.noear.solon.ai.agent.util.AgentUtil;
+import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -63,7 +63,7 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
         this.chatModel = chatModel;
     }
 
-    protected void setRetryConfig(int maxRetries, long retryDelayMs) {
+    public void setRetryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(500, retryDelayMs);
     }
@@ -106,7 +106,7 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
                     "### 任务指令\n" +
                     "请根据系统指令对上述执行过程进行语义总结：";
 
-            String summary = AgentUtil.callWithRetry(maxRetries, retryDelayMs, () -> {
+            String summary = RetryUtil.callWithRetry(maxRetries, retryDelayMs, () -> {
                 ChatResponse resp = chatModel.prompt(userData)
                         .options(o -> {
                             o.name(LLMSummarizationStrategy.class.getSimpleName());

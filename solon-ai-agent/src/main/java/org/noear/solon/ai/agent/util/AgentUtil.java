@@ -20,7 +20,6 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
-import org.noear.solon.util.CallableTx;
 
 /**
  * 智能体辅助工具类
@@ -51,34 +50,5 @@ public class AgentUtil {
         }
 
         return node;
-    }
-
-    public static <T> T callWithRetry(CallableTx<T, Throwable> callable) throws Throwable {
-        return callWithRetry(3, 1000L, callable);
-    }
-
-    public static <T> T callWithRetry(int maxRetries, long etryDelayMs, CallableTx<T, Throwable> callable) throws Throwable {
-        Throwable lastException = null;
-        for (int i = 0; i < maxRetries; i++) { // 注意是 <，确保至少执行一次
-            try {
-                return callable.call();
-            } catch (Throwable e) {
-                lastException = e;
-                if (i < (maxRetries - 1)) {
-                    try {
-                        Thread.sleep(etryDelayMs * (i + 1));
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (lastException == null) {
-            return null;
-        } else {
-            throw lastException;
-        }
     }
 }
