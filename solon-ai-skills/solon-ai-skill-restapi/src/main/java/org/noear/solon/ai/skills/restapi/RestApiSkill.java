@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.skills.restapi.resolver.OpenApiResolver;
+import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.ResourceUtil;
@@ -65,6 +66,15 @@ public class RestApiSkill extends AbsSkill {
     private int searchThreshold = 100;
 
     private int maxContextLength = 8000;
+
+    private int maxRetries = 3;
+    private long retryDelayMs = 1000L;
+
+    public RestApiSkill retryConfig(int maxRetries, long retryDelayMs) {
+        this.maxRetries = Math.max(1, maxRetries);
+        this.retryDelayMs = Math.max(500, retryDelayMs);
+        return this;
+    }
 
     // --- 配置方法 ---
 
@@ -379,7 +389,7 @@ public class RestApiSkill extends AbsSkill {
         try {
             log.debug("RestApiSkill calling: {} {} (API: {})", tool.getMethod(), baseUrl + finalPath, apiName);
 
-            String result = http.exec(tool.getMethod()).bodyAsString();
+            String result = RetryUtil.callWithRetry(maxRetries, retryDelayMs, () -> http.exec(tool.getMethod()).bodyAsString());
 
             // 结果截断处理，防止撑爆 AI 上下文
             if (result != null && result.length() > maxContextLength) {
