@@ -181,7 +181,7 @@ public class ReasonTask implements NamedTaskComponent {
                         );
 
                         trace.getWorkingMemory().addMessage(ChatMessage.ofUser(interventionPrompt));
-                        LOG.info("ReActAgent [{}] critical intervention injected (Claude-style) at step {}", config.getName(), currentStep);
+                        LOG.info("ReActAgent [{}] critical intervention injected at step {}", config.getName(), currentStep);
                     }
                 }
             }
