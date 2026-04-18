@@ -67,7 +67,7 @@ public class FileChatSession implements ChatSession {
             // 批量加入缓存（内存层会自动过滤 System 消息）
             this.cache.addMessage(history);
         } catch (IOException e) {
-            LOG.error("Load messages to cache failed", e);
+            LOG.error("Load messages to cache failed: {}", e.getMessage());
         }
     }
 
@@ -106,7 +106,7 @@ public class FileChatSession implements ChatSession {
             }
             writer.flush();
         } catch (IOException e) {
-            LOG.error("Persistence messages failed", e);
+            LOG.error("Persistence messages failed: {}", e.getMessage());
         }
     }
 
