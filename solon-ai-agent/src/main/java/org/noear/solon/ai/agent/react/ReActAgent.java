@@ -336,12 +336,16 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         if (LOG.isInfoEnabled()) {
-            LOG.info("ReActAgent [{}] finished, abnormal:{}, finalAnswe: {}", config.getName(), trace.isAbnormal(), assistantMessage.getContent());
+            LOG.info("ReActAgent [{}] finished, abnormal:{}, finalAnswer: {}", config.getName(), trace.isAbnormal(), assistantMessage.getContent());
         }
 
         if (trace.isAbnormal()) {
             if (trace.getOptions().getStreamSink() != null) {
                 //异常结束时，补位一个 ReasonChunk （否则要靠 ReActChunk 在应用侧补位）
+                if (LOG.isInfoEnabled()) {
+                    LOG.info("ReActAgent [{}] abnormal reason chunk: {}", config.getName(), assistantMessage.getContent());
+                }
+
                 trace.getOptions().getStreamSink().next(new ReasonChunk(trace, null, assistantMessage));
             }
         }
