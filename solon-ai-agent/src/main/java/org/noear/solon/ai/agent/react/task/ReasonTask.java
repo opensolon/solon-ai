@@ -445,7 +445,7 @@ public class ReasonTask implements NamedTaskComponent {
                 return response;
             } catch (Throwable e) {
                 lastException = e;
-                LOG.warn("ReActAgent [{}] retry {}/{} due to: {}", config.getName(), i + 1, maxRetries, e.getMessage());
+                LOG.warn("ReActAgent [{}] retry {}/{} due to: {}", config.getName(), i + 1, maxRetries, e.toString());
 
                 if (i < maxRetries) {
                     try {

@@ -345,8 +345,12 @@ public class SupervisorTask implements NamedTaskComponent {
 
                 return response;
             } catch (Throwable e) {
-                if (i == maxRetries - 1) throw new RuntimeException("Supervisor call failed", e);
+                if (i == maxRetries - 1) {
+                    throw new RuntimeException("Supervisor call failed", e);
+                }
+
                 LOG.warn("Supervisor call failed, retrying ({}/{})...", i + 1, maxRetries);
+
                 try {
                     Thread.sleep(trace.getOptions().getRetryDelayMs() * (i + 1));
                 } catch (InterruptedException ie) {

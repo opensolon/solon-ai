@@ -307,7 +307,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                     throw new RuntimeException("SimpleAgent [" + name() + "] failed after " + maxRetries + " retries", e);
                 }
                 long delay = config.getRetryDelayMs() * (i + 1);
-                LOG.warn("SimpleAgent [{}] call failed, retrying({}/{}). Error: {}", name(), i + 1, maxRetries, e.getMessage());
+                LOG.warn("SimpleAgent [{}] call failed, retrying({}/{}). Error: {}", name(), i + 1, maxRetries, e.toString());
                 Thread.sleep(delay);
             }
         }
