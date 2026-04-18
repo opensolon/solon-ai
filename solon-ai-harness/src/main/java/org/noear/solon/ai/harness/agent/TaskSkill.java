@@ -86,7 +86,7 @@ public class TaskSkill extends AbsSkill {
     }
 
     @ToolMapping(name = "task", description =
-            "委派单一任务给专项子代理。适用于需要深度思考、多步操作或特定领域知识（如文件操作、代码分析）的场景。")
+            "委派单一任务给专项子代理。适用于需要深度思考、多步操作或特定领域知识（如文件操作、代码分析）的场景。不支持并行调用（并行请用 multitask）。")
     public String task(@Body SingleTaskOp taskSpec, String __cwd, String __sessionId) {
         if (Assert.isEmpty(__sessionId)) {
             throw new IllegalStateException("__sessionId is required");
