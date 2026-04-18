@@ -119,6 +119,12 @@ public class TeamRequest implements AgentRequest<TeamRequest, TeamResponse> {
 
         return Flux.<AgentChunk>create(sink -> {
             try {
+                Thread currentThread = Thread.currentThread();
+                sink.onCancel(() -> {
+                    // 触发线程中断，强制让正在阻塞的 callWithRetry 抛出异常退出
+                    currentThread.interrupt();
+                });
+
                 options.setStreamSink(sink);
                 AssistantMessage message = agent.call(prompt, session, options);
                 TeamTrace trace = agent.getTrace(session);
