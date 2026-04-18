@@ -106,7 +106,8 @@ public class FileChatSession implements ChatSession {
             }
             writer.flush();
         } catch (IOException e) {
-            LOG.error("Persistence messages failed: {}", e.getMessage());
+            LOG.error("Persistence messages failed: {}",
+                    e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
         }
     }
 

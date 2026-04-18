@@ -157,7 +157,8 @@ public class FileAgentSession implements AgentSession {
             String json = cache.getContext().toJson();
             Files.write(snapshotFile.toPath(), json.getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
-            LOG.error("Persistence snapshot failed: {}", e.getMessage());
+            LOG.error("Persistence snapshot failed: {}",
+                    e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
         }
     }
 
