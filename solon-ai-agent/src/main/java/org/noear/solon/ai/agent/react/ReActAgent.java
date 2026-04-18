@@ -335,8 +335,8 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             item.target.onAgentEnd(trace);
         }
 
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("ReActAgent [{}] finished: {}", config.getName(), assistantMessage.getContent());
+        if (LOG.isInfoEnabled()) {
+            LOG.info("ReActAgent [{}] finished, abnormal:{}, finalAnswe: {}", config.getName(), trace.isAbnormal(), assistantMessage.getContent());
         }
 
         if (trace.isAbnormal()) {

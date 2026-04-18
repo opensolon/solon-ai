@@ -178,8 +178,8 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
         session.updateSnapshot();
 
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("SimpleAgent [{}] finished: {}", config.getName(), assistantMessage.getContent());
+        if (LOG.isInfoEnabled()) {
+            LOG.info("SimpleAgent [{}] finished: {}", config.getName(), assistantMessage.getContent());
         }
 
         return assistantMessage;

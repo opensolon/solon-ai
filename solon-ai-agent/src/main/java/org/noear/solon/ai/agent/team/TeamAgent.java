@@ -296,8 +296,8 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             options.getInterceptors().forEach(item -> item.target.onTeamEnd(trace));
 
 
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("TeamAgent [{}] completed: {}", config.getName(), assistantMessage.getContent());
+            if (LOG.isInfoEnabled()) {
+                LOG.info("TeamAgent [{}] completed: {}", config.getName(), assistantMessage.getContent());
             }
 
             return assistantMessage;
