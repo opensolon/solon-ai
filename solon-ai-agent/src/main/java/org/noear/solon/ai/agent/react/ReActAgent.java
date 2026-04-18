@@ -347,7 +347,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
                 }
 
                 trace.getOptions().getStreamSink().next(new ReasonChunk(trace, null, assistantMessage));
-                Thread.sleep(50);
             }
         }
 
