@@ -295,6 +295,12 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             }
 
             try {
+                if(trace.getOptions().getStreamSink() != null) {
+                    if (trace.getOptions().getStreamSink().isCancelled()) {
+                        break;
+                    }
+                }
+
                 return doCall(trace, session, finalPrompt, chatReq);
             } catch (Throwable e) {
                 if (i == maxRetries - 1) {

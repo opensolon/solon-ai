@@ -426,7 +426,11 @@ public class ReasonTask implements NamedTaskComponent {
                 final ChatResponse response;
 
                 if (trace.getOptions().getStreamSink() != null) {
-                     response = req.stream().doOnNext(resp -> {
+                    if (trace.getOptions().getStreamSink().isCancelled()) {
+                        break;
+                    }
+
+                    response = req.stream().doOnNext(resp -> {
                         trace.getOptions().getStreamSink().next(new ReasonChunk(trace, resp, resp.getMessage()));
                     }).blockLast();
                 } else {

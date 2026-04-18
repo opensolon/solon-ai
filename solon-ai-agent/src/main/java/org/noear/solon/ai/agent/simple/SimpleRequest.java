@@ -110,7 +110,9 @@ public class SimpleRequest implements AgentRequest<SimpleRequest, SimpleResponse
                 sink.next(new SimpleChunk(resp));
                 sink.complete();
             } catch (Throwable e) {
-                sink.error(e);
+                if (!sink.isCancelled()) {
+                    sink.error(e);
+                }
             }
         });
     }

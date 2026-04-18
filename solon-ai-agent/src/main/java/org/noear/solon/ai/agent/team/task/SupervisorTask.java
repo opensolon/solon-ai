@@ -324,6 +324,10 @@ public class SupervisorTask implements NamedTaskComponent {
                 final ChatResponse response;
 
                 if(trace.getOptions().getStreamSink() == null) {
+                    if (trace.getOptions().getStreamSink().isCancelled()) {
+                        break;
+                    }
+
                     response = req.call();
                 } else {
                     response = req.stream()

@@ -133,7 +133,9 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
                 sink.next(new ReActChunk(resp));
                 sink.complete();
             } catch (Throwable e) {
-                sink.error(e);
+                if (!sink.isCancelled()) {
+                    sink.error(e);
+                }
             }
         });
     }

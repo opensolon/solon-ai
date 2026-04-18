@@ -128,7 +128,9 @@ public class TeamRequest implements AgentRequest<TeamRequest, TeamResponse> {
                 sink.next(new TeamChunk(resp));
                 sink.complete();
             } catch (Throwable e) {
-                sink.error(e);
+                if (!sink.isCancelled()) {
+                    sink.error(e);
+                }
             }
         });
     }
