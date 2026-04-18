@@ -122,6 +122,10 @@ public class TerminalSkill extends AbsSkill {
         nodeCmd = executor.probeNodeCommand();
     }
 
+    public ProcessExecutor getExecutor() {
+        return executor;
+    }
+
     @Override
     public String description() {
         return "提供终端交互、文件发现、分页读取、全文搜索及精准编辑能力。";
