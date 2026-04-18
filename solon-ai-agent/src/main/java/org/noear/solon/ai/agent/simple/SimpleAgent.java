@@ -290,6 +290,10 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
         int maxRetries = config.getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
+            if(Thread.interrupted()){
+                break;
+            }
+
             try {
                 return doCall(trace, session, finalPrompt, chatReq);
             } catch (Throwable e) {

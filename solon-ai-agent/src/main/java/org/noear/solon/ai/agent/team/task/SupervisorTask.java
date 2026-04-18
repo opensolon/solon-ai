@@ -316,6 +316,10 @@ public class SupervisorTask implements NamedTaskComponent {
 
         int maxRetries = trace.getOptions().getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
+            if(Thread.interrupted()){
+                break;
+            }
+
             try {
                 final ChatResponse response;
 
@@ -347,6 +351,7 @@ public class SupervisorTask implements NamedTaskComponent {
                 }
             }
         }
+
         throw new RuntimeException("Unreachable");
     }
 

@@ -418,6 +418,10 @@ public class ReasonTask implements NamedTaskComponent {
         Throwable lastException = null;
 
         for (int i = 0; i < maxRetries; i++) { // 注意是 <，确保至少执行一次
+            if(Thread.interrupted()){
+                break;
+            }
+
             try {
                 final ChatResponse response;
 

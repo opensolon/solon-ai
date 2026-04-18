@@ -55,9 +55,12 @@ public class ToolRetryInterceptor implements ReActInterceptor {
         String toolName = chain.getTool().name();
 
         for (int i = 0; i < maxRetries; i++) {
+            if(Thread.interrupted()){
+                break;
+            }
+
             try {
                 return chain.doIntercept(req);
-
             } catch (IllegalArgumentException e) {
                 // 1. 参数自愈：逻辑错误。直接回馈给模型，提示其修正参数。
                 // 这种错误重试物理链路没有意义，直接返回 Observation

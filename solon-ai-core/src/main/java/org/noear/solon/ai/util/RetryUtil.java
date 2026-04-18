@@ -31,6 +31,10 @@ public class RetryUtil {
     public static <T, X extends Throwable> T callWithRetry(int maxRetries, long retryDelayMs, CallableTx<T, Throwable> callable) throws X {
         Throwable lastException = null;
         for (int i = 0; i < maxRetries; i++) { // 注意是 <，确保至少执行一次
+            if(Thread.interrupted()){
+                break;
+            }
+
             try {
                 return callable.call();
             } catch (Throwable e) {
