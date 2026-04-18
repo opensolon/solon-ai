@@ -437,8 +437,9 @@ public class ReasonTask implements NamedTaskComponent {
                 return response;
             } catch (Throwable e) {
                 lastException = e;
+                LOG.warn("ReActAgent [{}] retry {}/{} due to: {}", config.getName(), i + 1, maxRetries, e.getMessage());
+
                 if (i < maxRetries) {
-                    LOG.warn("ReActAgent [{}] retry {}/{} due to: {}", config.getName(), i + 1, maxRetries, e.getMessage());
                     try {
                         Thread.sleep(trace.getOptions().getRetryDelayMs() * (i + 1));
                     } catch (InterruptedException ie) {
@@ -448,9 +449,6 @@ public class ReasonTask implements NamedTaskComponent {
                 }
             }
         }
-
-        // [核心优化]：如果到这里还没 return，说明全部失败了
-        LOG.error("ReActAgent [{}] totally failed after {} retries", config.getName(), maxRetries, lastException);
 
         // 设置故障状态并终止路由
         trace.setRoute(Agent.ID_END);

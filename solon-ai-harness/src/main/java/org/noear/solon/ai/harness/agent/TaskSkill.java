@@ -40,6 +40,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 子代理技能
@@ -174,6 +175,7 @@ public class TaskSkill extends AbsSkill {
                 result = response.getContent();
             } else {
                 // 流式模式
+                AtomicReference<Throwable> errRef = new AtomicReference<>();
                 ReActChunk response = (ReActChunk) agent.prompt(task.prompt)
                         .session(session)
                         .options(o -> {
@@ -197,7 +199,14 @@ public class TaskSkill extends AbsSkill {
                                 }
                             }
                         })
+                        .doOnError(err -> {
+                            errRef.set(err);
+                        })
                         .blockLast();
+
+                if (errRef.get() != null) {
+                    throw errRef.get();
+                }
 
                 __parentTrace.getMetrics().addMetrics(response.getMetrics());
                 result = response.getContent();
