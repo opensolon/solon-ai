@@ -42,6 +42,10 @@ public class ToolRetryInterceptor implements ReActInterceptor {
         this.retryDelayMs = Math.max(500L, retryDelayMs);
     }
 
+    public ToolRetryInterceptor(int maxRetries) {
+        this(maxRetries, 1000L);
+    }
+
     public ToolRetryInterceptor() {
         this(3, 1000L);
     }

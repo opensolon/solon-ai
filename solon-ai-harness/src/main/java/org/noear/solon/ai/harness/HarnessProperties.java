@@ -52,6 +52,13 @@ public class HarnessProperties implements Serializable {
     private boolean hitlEnabled = false;
     private boolean subagentEnabled = true;
 
+    //api 重试次数
+    private int apiRetries = 3;
+    //Mcp 重试次数
+    private int mcpRetries = 3;
+    //模型重试次数
+    private int modelRetries = 3;
+
     //大模型
     private List<ChatConfig> models = new ArrayList<>();
     //技能池

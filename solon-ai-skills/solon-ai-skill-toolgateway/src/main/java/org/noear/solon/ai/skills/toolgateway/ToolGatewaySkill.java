@@ -48,6 +48,11 @@ public class ToolGatewaySkill extends AbsSkill {
         return this;
     }
 
+    public ToolGatewaySkill retryConfig(int maxRetries) {
+        this.maxRetries = Math.max(1, maxRetries);
+        return this;
+    }
+
     /**
      * 设置全量平铺的阈值（默认为 8）
      */

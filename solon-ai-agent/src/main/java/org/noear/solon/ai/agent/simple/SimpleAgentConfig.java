@@ -122,6 +122,10 @@ public class SimpleAgentConfig {
         this.retryDelayMs = Math.max(500, retryDelayMs);
     }
 
+    protected void setRetryConfig(int maxRetries) {
+        this.maxRetries = Math.max(1, maxRetries);
+    }
+
     /** 设置短期记忆回溯深度 */
     protected void setSessionWindowSize(int sessionWindowSize) {
         this.sessionWindowSize = Math.max(0, sessionWindowSize);

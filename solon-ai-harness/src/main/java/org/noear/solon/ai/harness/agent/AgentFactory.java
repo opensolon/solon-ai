@@ -9,9 +9,6 @@ import org.noear.solon.ai.chat.skill.SkillMetadata;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.skills.cli.TerminalSkill;
-import org.noear.solon.ai.skills.web.CodeSearchTool;
-import org.noear.solon.ai.skills.web.WebfetchTool;
-import org.noear.solon.ai.skills.web.WebsearchTool;
 import org.noear.solon.core.util.Assert;
 
 import java.util.ArrayList;
@@ -30,7 +27,8 @@ public class AgentFactory {
     public static ReActAgent.Builder create(HarnessEngine engine, AgentDefinition agentDefinition) {
         ChatModel chatModel = engine.getModelOrMain(agentDefinition.getModel());
 
-        ReActAgent.Builder builder = ReActAgent.of(chatModel);
+        ReActAgent.Builder builder = ReActAgent.of(chatModel)
+                .retryConfig(engine.getProps().getModelRetries(), 1000L);
 
         AgentDefinition.Metadata metadata = agentDefinition.getMetadata();
 
@@ -127,15 +125,15 @@ public class AgentFactory {
                         break;
                     }
                     case "webfetch": {
-                        builder.defaultToolAdd(WebfetchTool.getInstance());
+                        builder.defaultToolAdd(engine.getWebfetchTool());
                         break;
                     }
                     case "websearch": {
-                        builder.defaultToolAdd(WebsearchTool.getInstance());
+                        builder.defaultToolAdd(engine.getWebsearchTool());
                         break;
                     }
                     case "codesearch": {
-                        builder.defaultToolAdd(CodeSearchTool.getInstance());
+                        builder.defaultToolAdd(engine.getCodeSearchTool());
                         break;
                     }
                     case "*": {
@@ -143,9 +141,9 @@ public class AgentFactory {
                         todoAddDo(metadata, builder, engine);
                         builder.defaultSkillAdd(engine.getCodeSkill());
 
-                        builder.defaultToolAdd(WebfetchTool.getInstance());
-                        builder.defaultToolAdd(WebsearchTool.getInstance());
-                        builder.defaultToolAdd(CodeSearchTool.getInstance());
+                        builder.defaultToolAdd(engine.getCodeSearchTool());
+                        builder.defaultToolAdd(engine.getWebsearchTool());
+                        builder.defaultToolAdd(engine.getWebfetchTool());
 
                         if (engine.getProps().isSubagentEnabled()) {
                             builder.defaultSkillAdd(engine.getTaskSkill());
@@ -189,9 +187,9 @@ public class AgentFactory {
                         todoAddDo(metadata, builder, engine);
                         builder.defaultSkillAdd(engine.getCodeSkill());
 
-                        builder.defaultToolAdd(WebfetchTool.getInstance());
-                        builder.defaultToolAdd(WebsearchTool.getInstance());
-                        builder.defaultToolAdd(CodeSearchTool.getInstance());
+                        builder.defaultToolAdd(engine.getCodeSearchTool());
+                        builder.defaultToolAdd(engine.getWebsearchTool());
+                        builder.defaultToolAdd(engine.getWebfetchTool());
 
                         if (engine.getProps().isSubagentEnabled()) {
                             builder.defaultSkillAdd(engine.getTaskSkill());

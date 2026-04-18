@@ -110,6 +110,10 @@ public class TeamOptions implements NonSerializable {
         this.retryDelayMs = Math.max(1000, retryDelayMs);
     }
 
+    protected void setRetryConfig(int maxRetries) {
+        this.maxRetries = Math.max(1, maxRetries);
+    }
+
     /** 设置会话回溯深度 */
     protected void setSessionWindowSize(int sessionWindowSize) {
         this.sessionWindowSize = Math.max(0, sessionWindowSize);

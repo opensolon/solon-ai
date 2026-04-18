@@ -76,6 +76,11 @@ public class RestApiSkill extends AbsSkill {
         return this;
     }
 
+    public RestApiSkill retryConfig(int maxRetries) {
+        this.maxRetries = Math.max(1, maxRetries);
+        return this;
+    }
+
     // --- 配置方法 ---
 
     public RestApiSkill dynamicThreshold(int dynamicThreshold) {

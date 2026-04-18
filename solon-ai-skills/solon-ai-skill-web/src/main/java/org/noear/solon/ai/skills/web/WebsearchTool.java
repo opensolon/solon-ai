@@ -76,11 +76,16 @@ public class WebsearchTool extends AbsToolProvider {
         getMcpClient();
     }
 
-    public void setRetryConfig(int maxRetries, long retryDelayMs) {
+    public WebsearchTool retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(500, retryDelayMs);
+        return this;
     }
 
+    public WebsearchTool retryConfig(int maxRetries) {
+        this.maxRetries = Math.max(1, maxRetries);
+        return this;
+    }
 
     @ToolMapping(name = "websearch", description = "执行实时web搜索")
     public Document websearch(

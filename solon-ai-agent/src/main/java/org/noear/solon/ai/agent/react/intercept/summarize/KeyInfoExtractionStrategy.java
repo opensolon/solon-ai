@@ -64,13 +64,20 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
         this.chatModel = chatModel;
     }
 
-    public void setRetryConfig(int maxRetries, long retryDelayMs) {
+    public KeyInfoExtractionStrategy retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(500, retryDelayMs);
+        return this;
     }
 
-    public void setSystemInstruction(String systemInstruction) {
+    public KeyInfoExtractionStrategy retryConfig(int maxRetries) {
+        this.maxRetries = Math.max(1, maxRetries);
+        return this;
+    }
+
+    public KeyInfoExtractionStrategy systemInstruction(String systemInstruction) {
         this.systemInstruction = systemInstruction;
+        return this;
     }
 
     @Override

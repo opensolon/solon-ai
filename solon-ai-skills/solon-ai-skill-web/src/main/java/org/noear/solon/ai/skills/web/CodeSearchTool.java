@@ -71,9 +71,15 @@ public class CodeSearchTool extends AbsToolProvider {
         getMcpClient();
     }
 
-    public void setRetryConfig(int maxRetries, long retryDelayMs) {
+    public CodeSearchTool retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(500, retryDelayMs);
+        return this;
+    }
+
+    public CodeSearchTool retryConfig(int maxRetries) {
+        this.maxRetries = Math.max(1, maxRetries);
+        return this;
     }
 
     @ToolMapping(name = "codesearch", description =

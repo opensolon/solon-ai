@@ -131,6 +131,13 @@ public class ReActOptions implements NonSerializable {
     }
 
     /**
+     * 设置容错策略
+     */
+    protected void setRetryConfig(int maxRetries) {
+        this.maxRetries = Math.max(1, maxRetries);
+    }
+
+    /**
      * 设置会话回溯深度
      */
     protected void setSessionWindowSize(int sessionWindowSize) {

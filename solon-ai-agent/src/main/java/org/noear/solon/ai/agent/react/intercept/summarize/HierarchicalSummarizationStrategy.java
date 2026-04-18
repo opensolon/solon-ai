@@ -69,17 +69,25 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
         this.chatModel = chatModel;
     }
 
-    public void setRetryConfig(int maxRetries, long retryDelayMs) {
+    public HierarchicalSummarizationStrategy retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(500, retryDelayMs);
+        return this;
     }
 
-    public void setSystemInstruction(String systemInstruction) {
+    public HierarchicalSummarizationStrategy retryConfig(int maxRetries) {
+        this.maxRetries = Math.max(1, maxRetries);
+        return this;
+    }
+
+    public HierarchicalSummarizationStrategy systemInstruction(String systemInstruction) {
         this.systemInstruction = systemInstruction;
+        return this;
     }
 
-    public void setMaxSummaryLength(int maxSummaryLength) {
+    public HierarchicalSummarizationStrategy maxSummaryLength(int maxSummaryLength) {
         this.maxSummaryLength = maxSummaryLength;
+        return this;
     }
 
     @Override

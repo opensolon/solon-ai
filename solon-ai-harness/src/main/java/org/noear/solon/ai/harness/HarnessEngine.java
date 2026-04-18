@@ -22,6 +22,9 @@ import org.noear.solon.ai.skills.cli.TodoSkill;
 import org.noear.solon.ai.skills.restapi.ApiSource;
 import org.noear.solon.ai.skills.restapi.RestApiSkill;
 import org.noear.solon.ai.skills.toolgateway.ToolGatewaySkill;
+import org.noear.solon.ai.skills.web.CodeSearchTool;
+import org.noear.solon.ai.skills.web.WebfetchTool;
+import org.noear.solon.ai.skills.web.WebsearchTool;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.IoUtil;
 import org.slf4j.Logger;
@@ -55,6 +58,10 @@ public class HarnessEngine {
     private final TodoSkill todoSkill;
     private final TaskSkill taskSkill;
     private final GenerateTool generateTool;
+
+    private final WebfetchTool webfetchTool;
+    private final WebsearchTool websearchTool;
+    private final CodeSearchTool codeSearchTool;
 
 
     private final ToolGatewaySkill mcpGatewaySkill;
@@ -128,6 +135,18 @@ public class HarnessEngine {
         return generateTool;
     }
 
+    public CodeSearchTool getCodeSearchTool() {
+        return codeSearchTool;
+    }
+
+    public WebsearchTool getWebsearchTool() {
+        return websearchTool;
+    }
+
+    public WebfetchTool getWebfetchTool() {
+        return webfetchTool;
+    }
+
     public ToolGatewaySkill getMcpGatewaySkill() {
         return mcpGatewaySkill;
     }
@@ -163,8 +182,8 @@ public class HarnessEngine {
             ChatModel summaryModel = getModelOrMain(props.getSummaryModel());
 
             SummarizationStrategy strategy = new CompositeSummarizationStrategy()
-                    .addStrategy(new KeyInfoExtractionStrategy(summaryModel))      // 提取干货（去水）
-                    .addStrategy(new HierarchicalSummarizationStrategy(summaryModel)); // 滚动更新摘要
+                    .addStrategy(new KeyInfoExtractionStrategy(summaryModel).retryConfig(props.getModelRetries()))      // 提取干货（去水）
+                    .addStrategy(new HierarchicalSummarizationStrategy(summaryModel).retryConfig(props.getModelRetries())); // 滚动更新摘要
 
             summarizationInterceptor = new SummarizationInterceptor(
                     props.getSummaryWindowSize(),
@@ -187,8 +206,12 @@ public class HarnessEngine {
         this.taskSkill = new TaskSkill(this);
         this.generateTool = new GenerateTool(this);
 
+        this.codeSearchTool = new CodeSearchTool().retryConfig(props.getMcpRetries());
+        this.websearchTool = new WebsearchTool().retryConfig(props.getMcpRetries());
+        this.webfetchTool = new WebfetchTool().retryConfig(props.getApiRetries());
+
         if (Assert.isNotEmpty(props.getApiServers())) {
-            restApiSkill = new RestApiSkill();
+            restApiSkill = new RestApiSkill().retryConfig(props.getApiRetries());
             for (Map.Entry<String, ApiSource> entry : props.getApiServers().entrySet()) {
                 restApiSkill.addApi(entry.getValue());
             }
@@ -199,7 +222,7 @@ public class HarnessEngine {
         try {
             if (Assert.isNotEmpty(props.getMcpServers())) {
                 McpProviders mcpProviders = McpProviders.fromMcpServers(props.getMcpServers());
-                mcpGatewaySkill = new ToolGatewaySkill();
+                mcpGatewaySkill = new ToolGatewaySkill().retryConfig(props.getMcpRetries());
                 for (Map.Entry<String, McpClientProvider> entry : mcpProviders.getProviders().entrySet()) {
                     mcpGatewaySkill.addTool(entry.getKey(), entry.getValue());
                 }

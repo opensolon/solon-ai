@@ -48,9 +48,15 @@ public class WebfetchTool extends AbsToolProvider {
     private int maxRetries = 3;
     private long retryDelayMs = 1000L;
 
-    public void setRetryConfig(int maxRetries, long retryDelayMs) {
+    public WebfetchTool retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(500, retryDelayMs);
+        return this;
+    }
+
+    public WebfetchTool retryConfig(int maxRetries) {
+        this.maxRetries = Math.max(1, maxRetries);
+        return this;
     }
 
     @ToolMapping(name = "webfetch", description = "从 URL 获取网页内容。返回格式支持 markdown, text 或 html。")
