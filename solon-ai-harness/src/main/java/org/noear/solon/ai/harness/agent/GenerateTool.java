@@ -122,7 +122,9 @@ public class GenerateTool extends AbsToolProvider {
                     writer.write(definition.toMarkdown());
                 }
 
-                LOG.info("Agent 定义已保存到: {}", agentFile);
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Agent 定义已保存到: {}", agentFile);
+                }
             }
 
             engine.getAgentManager().addAgent(definition);
