@@ -13,6 +13,7 @@
 
 ### 3.10.4
 
+* 添加 solon-ai-harness 重试次数配置支持
 * 优化 solon-ai-dialect-anthropic anthropic 方言的异常兼容处理
 * 优化 solon-ai-dialect-openai openai-response 方言的异常兼容处理
 
