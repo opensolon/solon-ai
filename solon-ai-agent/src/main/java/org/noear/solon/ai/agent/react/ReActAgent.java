@@ -341,11 +341,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
         if (trace.isAbnormal()) {
             if (trace.getOptions().getStreamSink() != null) {
-                //异常结束时，补位一个 ReasonChunk （否则要靠 ReActChunk 在应用侧补位）
-                if (LOG.isInfoEnabled()) {
-                    LOG.info("ReActAgent [{}] abnormal reason chunk: {}", config.getName(), assistantMessage.getContent());
-                }
-
                 trace.getOptions().getStreamSink().next(new ReasonChunk(trace, null, assistantMessage));
             }
         }
