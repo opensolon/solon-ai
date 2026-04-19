@@ -31,7 +31,6 @@ public enum ToolPermission {
     TOOL_WEBSEARCH("websearch"),
     TOOL_WEBFETCH("webfetch"),
     TOOL_TODO("todo"),
-    TOOL_SKILL("skill"),
     TOOL_TASK("task"),
 
     TOOL_BASH("bash"),
@@ -42,10 +41,11 @@ public enum ToolPermission {
     TOOL_READ("read"),
     TOOL_WRITE("write"),
 
-    TOOL_PI("pi"), //代表四个工具：read,write,edit,bash
+    TOOL_SKILL("skill"),
 
-    TOOL_ALL_PUBC("*"), //全部公有的
-    TOOL_ALL_FULL("**"), // 全部（包括公有，私有）
+    TOOL_PI("pi"), //代表四个终端工具：read,write,edit,bash
+    TOOL_ALL_PUBLIC("*"), //全部公有的
+    TOOL_ALL_FULL("**"), // 全部完整的（包括公有，私有）
     ;
 
     private final String name;

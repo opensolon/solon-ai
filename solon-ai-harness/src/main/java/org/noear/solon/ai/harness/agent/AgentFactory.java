@@ -35,6 +35,14 @@ import java.util.List;
  * @author noear 2026/3/20 created
  */
 public class AgentFactory {
+    //**
+    private static String[] TOOL_ALL_FULL = {"read", "write", "edit", "glob", "grep", "ls", "bash", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "generate", "mcp", "restapi", "hitl"};
+    //*
+    private static String[] TOOL_ALL_PUBLIC = {"read", "write", "edit", "glob", "grep", "ls", "bash", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task"};
+    //pi
+    private static String[] TOOL_PI = {"read", "write", "edit", "bash"};
+
+
     /**
      * 根据定义生成代理
      */
@@ -89,148 +97,20 @@ public class AgentFactory {
             TerminalSkillProxy terminalSkillWrap = new TerminalSkillProxy(engine.getCliSkills().getTerminalSkill());
 
             for (String toolName : metadata.getTools()) {
-                switch (toolName) {
-                    case "read": {
-                        terminalSkillWrap.addTools("read");
-                        break;
+                if ("**".equals(toolName)) {
+                    for (String t1 : TOOL_ALL_FULL) {
+                        toolAddDo(engine, builder, terminalSkillWrap, metadata, t1);
                     }
-                    case "write": {
-                        terminalSkillWrap.addTools("write");
-                        break;
+                } else if ("*".equals(toolName)) {
+                    for (String t1 : TOOL_ALL_PUBLIC) {
+                        toolAddDo(engine, builder, terminalSkillWrap, metadata, t1);
                     }
-                    case "edit": {
-                        terminalSkillWrap.addTools("read", "write", "edit");
-                        break;
+                } else if ("pi".equals(toolName)) {
+                    for (String t1 : TOOL_PI) {
+                        toolAddDo(engine, builder, terminalSkillWrap, metadata, t1);
                     }
-                    case "pi": {
-                        terminalSkillWrap.addTools("read", "write", "edit", "bash");
-                        break;
-                    }
-                    case "glob": {
-                        terminalSkillWrap.addTools("glob");
-                        break;
-                    }
-                    case "grep": {
-                        terminalSkillWrap.addTools("grep");
-                        break;
-                    }
-                    case "ls":
-                    case "list": {
-                        terminalSkillWrap.addTools("ls");
-                        break;
-                    }
-                    case "bash": {
-                        terminalSkillWrap.addTools("bash");
-                        break;
-                    }
-                    case "subagent":
-                    case "task": {
-                        builder.defaultSkillAdd(engine.getTaskSkill());
-                        break;
-                    }
-                    case "skill": {
-                        builder.defaultSkillAdd(engine.getCliSkills().getExpertSkill());
-                        break;
-                    }
-                    case "todoread":
-                    case "todowrite":
-                    case "todo": {
-                        todoAddDo(metadata, builder, engine);
-                        break;
-                    }
-                    case "webfetch": {
-                        builder.defaultToolAdd(engine.getWebfetchTool());
-                        break;
-                    }
-                    case "websearch": {
-                        builder.defaultToolAdd(engine.getWebsearchTool());
-                        break;
-                    }
-                    case "codesearch": {
-                        builder.defaultToolAdd(engine.getCodeSearchTool());
-                        break;
-                    }
-                    case "*": {
-                        builder.defaultSkillAdd(engine.getCliSkills());
-                        todoAddDo(metadata, builder, engine);
-                        builder.defaultSkillAdd(engine.getCodeSkill());
-
-                        builder.defaultToolAdd(engine.getCodeSearchTool());
-                        builder.defaultToolAdd(engine.getWebsearchTool());
-                        builder.defaultToolAdd(engine.getWebfetchTool());
-
-                        if (engine.getProps().isSubagentEnabled()) {
-                            builder.defaultSkillAdd(engine.getTaskSkill());
-                        }
-                        break;
-                    }
-
-                    //-------
-
-
-                    case "generate": {
-                        if (engine.getProps().isSubagentEnabled()) {
-                            builder.defaultToolAdd(engine.getGenerateTool());
-                        }
-                        break;
-                    }
-                    case "code": {
-                        builder.defaultSkillAdd(engine.getCodeSkill());
-                        break;
-                    }
-                    case "mcp": {
-                        if (engine.getMcpGatewaySkill() != null) {
-                            builder.defaultSkillAdd(engine.getMcpGatewaySkill());
-                        }
-                        break;
-                    }
-                    case "restapi": {
-                        if (engine.getRestApiSkill() != null) {
-                            builder.defaultSkillAdd(engine.getRestApiSkill());
-                        }
-                    }
-                    case "hitl": {
-                        if (engine.getProps().isHitlEnabled()) {
-                            builder.defaultInterceptorAdd(engine.getHitlInterceptor());
-                        }
-                        break;
-                    }
-
-                    case "**": {
-                        builder.defaultSkillAdd(engine.getCliSkills());
-                        todoAddDo(metadata, builder, engine);
-                        builder.defaultSkillAdd(engine.getCodeSkill());
-
-                        builder.defaultToolAdd(engine.getCodeSearchTool());
-                        builder.defaultToolAdd(engine.getWebsearchTool());
-                        builder.defaultToolAdd(engine.getWebfetchTool());
-
-                        if (engine.getProps().isSubagentEnabled()) {
-                            builder.defaultSkillAdd(engine.getTaskSkill());
-                        }
-
-                        //---
-
-                        if (engine.getProps().isSubagentEnabled()) {
-                            builder.defaultToolAdd(engine.getGenerateTool());
-                        }
-
-                        //mcp
-                        if (engine.getMcpGatewaySkill() != null) {
-                            builder.defaultSkillAdd(engine.getMcpGatewaySkill());
-                        }
-
-                        //rest-api
-                        if (engine.getRestApiSkill() != null) {
-                            builder.defaultSkillAdd(engine.getRestApiSkill());
-                        }
-
-                        //hitl
-                        if (engine.getProps().isHitlEnabled()) {
-                            builder.defaultInterceptorAdd(engine.getHitlInterceptor());
-                        }
-                        break;
-                    }
+                } else {
+                    toolAddDo(engine, builder, terminalSkillWrap, metadata, toolName);
                 }
             }
 
@@ -243,7 +123,163 @@ public class AgentFactory {
         return builder;
     }
 
-    private static void todoAddDo(AgentDefinition.Metadata metadata, ReActAgent.Builder builder, HarnessEngine agentRuntime) {
+    private static void toolAddDo(HarnessEngine engine, ReActAgent.Builder builder, TerminalSkillProxy terminalSkillWrap, AgentDefinition.Metadata metadata, String toolName) {
+        //当前禁止
+        if (metadata.getDisallowedTools().contains(toolName)) {
+            return;
+        }
+
+        //全局禁止
+        if(engine.getProps().getDisallowedTools().contains(toolName)){
+            return;
+        }
+
+        switch (toolName) {
+            case "read": {
+                terminalSkillWrap.addTools("read");
+                break;
+            }
+            case "write": {
+                terminalSkillWrap.addTools("write");
+                break;
+            }
+            case "edit": {
+                terminalSkillWrap.addTools("read", "write", "edit");
+                break;
+            }
+            case "glob": {
+                terminalSkillWrap.addTools("glob");
+                break;
+            }
+            case "grep": {
+                terminalSkillWrap.addTools("grep");
+                break;
+            }
+            case "ls":
+            case "list": {
+                terminalSkillWrap.addTools("ls");
+                break;
+            }
+            case "bash": {
+                terminalSkillWrap.addTools("bash");
+                break;
+            }
+            case "subagent":
+            case "task": {
+                builder.defaultSkillAdd(engine.getTaskSkill());
+                break;
+            }
+            case "todoread":
+            case "todowrite":
+            case "todo": {
+                todoToolAddDo(metadata, builder, engine);
+                break;
+            }
+            case "webfetch": {
+                builder.defaultToolAdd(engine.getWebfetchTool());
+                break;
+            }
+            case "websearch": {
+                builder.defaultToolAdd(engine.getWebsearchTool());
+                break;
+            }
+            case "codesearch": {
+                builder.defaultToolAdd(engine.getCodeSearchTool());
+                break;
+            }
+            case "skill": {
+                builder.defaultSkillAdd(engine.getCliSkills().getExpertSkill());
+                break;
+            }
+
+            //-------
+
+
+            case "generate": {
+                if (engine.getProps().isSubagentEnabled()) {
+                    builder.defaultToolAdd(engine.getGenerateTool());
+                }
+                break;
+            }
+            case "code": {
+                builder.defaultSkillAdd(engine.getCodeSkill());
+                break;
+            }
+            case "mcp": {
+                if (engine.getMcpGatewaySkill() != null) {
+                    builder.defaultSkillAdd(engine.getMcpGatewaySkill());
+                }
+                break;
+            }
+            case "restapi": {
+                if (engine.getRestApiSkill() != null) {
+                    builder.defaultSkillAdd(engine.getRestApiSkill());
+                }
+            }
+            case "hitl": {
+                if (engine.getProps().isHitlEnabled()) {
+                    builder.defaultInterceptorAdd(engine.getHitlInterceptor());
+                }
+                break;
+            }
+
+//                    case "pi": { // {"read", "write", "edit", "bash"}
+//                        terminalSkillWrap.addTools("read", "write", "edit", "bash");
+//                        break;
+//                    }
+//                    case "*": { // {"skill","cli","todo","code","codesearch","websearch","webfetch","task"}
+//                        builder.defaultSkillAdd(engine.getCliSkills());
+//                        todoAddDo(metadata, builder, engine);
+//                        builder.defaultSkillAdd(engine.getCodeSkill());
+//
+//                        builder.defaultToolAdd(engine.getCodeSearchTool());
+//                        builder.defaultToolAdd(engine.getWebsearchTool());
+//                        builder.defaultToolAdd(engine.getWebfetchTool());
+//
+//                        if (engine.getProps().isSubagentEnabled()) {
+//                            builder.defaultSkillAdd(engine.getTaskSkill());
+//                        }
+//                        break;
+//                    }
+//                    case "**": { //{"skill","cli","todo","code","codesearch","websearch","webfetch","task","generate","mcp","restapi","hitl"};
+//                        builder.defaultSkillAdd(engine.getCliSkills());
+//                        todoAddDo(metadata, builder, engine);
+//                        builder.defaultSkillAdd(engine.getCodeSkill());
+//
+//                        builder.defaultToolAdd(engine.getCodeSearchTool());
+//                        builder.defaultToolAdd(engine.getWebsearchTool());
+//                        builder.defaultToolAdd(engine.getWebfetchTool());
+//
+//                        if (engine.getProps().isSubagentEnabled()) {
+//                            builder.defaultSkillAdd(engine.getTaskSkill());
+//                        }
+//
+//                        //---
+//
+//                        if (engine.getProps().isSubagentEnabled()) {
+//                            builder.defaultToolAdd(engine.getGenerateTool());
+//                        }
+//
+//                        //mcp
+//                        if (engine.getMcpGatewaySkill() != null) {
+//                            builder.defaultSkillAdd(engine.getMcpGatewaySkill());
+//                        }
+//
+//                        //rest-api
+//                        if (engine.getRestApiSkill() != null) {
+//                            builder.defaultSkillAdd(engine.getRestApiSkill());
+//                        }
+//
+//                        //hitl
+//                        if (engine.getProps().isHitlEnabled()) {
+//                            builder.defaultInterceptorAdd(engine.getHitlInterceptor());
+//                        }
+//                        break;
+//                    }
+        }
+    }
+
+    private static void todoToolAddDo(AgentDefinition.Metadata metadata, ReActAgent.Builder builder, HarnessEngine agentRuntime) {
         if (metadata.isPrimary()) {
             //主代理，用文件模式
             builder.defaultSkillAdd(agentRuntime.getTodoSkill());

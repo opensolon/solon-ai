@@ -14,10 +14,11 @@
 ### 3.10.4
 
 * 添加 solon-ai-harness 重试次数配置支持
+* 添加 solon-ai-harness disallowedTools 配置支持
 * 优化 solon-ai-dialect-anthropic anthropic 方言的异常兼容处理
 * 优化 solon-ai-dialect-openai openai-response 方言的异常兼容处理
 * 优化 solon-ai-agent 中断传递处理
-* 优化 solon-ai-agent retrying 中断处理
+* 优化 solon-ai-agent retrying 中断处理（这前的 task 内部的 stream 可能会中断传递）
 
 ### 3.10.2
 

@@ -280,9 +280,8 @@ public class HarnessEngine {
         // 主代理
         agentDefinition.getMetadata().setPrimary(true);
         // 工具权限
-        for (String tool : props.getTools()) {
-            agentDefinition.getMetadata().addTools(tool);
-        }
+        agentDefinition.getMetadata().getTools().addAll(props.getTools()); //允许
+
         // 添加步数
         agentDefinition.getMetadata().setMaxSteps(props.getMaxSteps());
         // 添加步数自动扩展
