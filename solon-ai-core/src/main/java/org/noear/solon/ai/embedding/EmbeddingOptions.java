@@ -34,6 +34,12 @@ public class EmbeddingOptions {
 
     private Map<String, Object> options = new LinkedHashMap<>();
 
+    public void putAll(EmbeddingOptions from){
+        if(from != null){
+            options.putAll(from.options);
+        }
+    }
+
     /**
      * 所有选项
      */

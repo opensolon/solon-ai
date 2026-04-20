@@ -15,6 +15,7 @@
 
 * 添加 solon-ai-harness 重试次数配置支持
 * 添加 solon-ai-harness disallowedTools 配置支持
+* 优化 solon-ai-core embedding 配置默认选项的能力（之前只能在请求时添加）
 * 优化 solon-ai-dialect-anthropic anthropic 方言的异常兼容处理
 * 优化 solon-ai-dialect-openai openai-response 方言的异常兼容处理
 * 优化 solon-ai-agent 中断传递处理

@@ -42,7 +42,9 @@ public class EmbeddingRequestDesc {
         this.config = config;
         this.dialect = dialect;
         this.input = input;
-        this.options = config.getModelOptions();
+
+        this.options = new EmbeddingOptions();
+        this.options.putAll(config.getModelOptions());
     }
 
     /**
