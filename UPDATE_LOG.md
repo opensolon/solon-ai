@@ -14,6 +14,7 @@
 ### 3.10.4
 
 * 添加 solon-ai-harness 重试次数配置支持
+* 添加 solon-ai-harness lsp 功能
 * 添加 solon-ai-harness HarnessProperties.disallowedTools 配置支持（全局禁用工具配置）
 * 添加 solon-ai-harness HarnessProperties.agentPools（子代理池） 配置支持
 * 添加 solon-ai-harness HarnessProperties.systemPrompt 配置支持（替代之前的 AGENT.md 预设处理，由外部定制）
@@ -23,6 +24,7 @@
 * 优化 solon-ai-dialect-openai openai-response 方言的异常兼容处理
 * 优化 solon-ai-agent 中断传递处理
 * 优化 solon-ai-agent retrying 中断处理（这前的 task 内部的 stream 可能会中断传递）
+* 优化 solon-ai-skill-lsp 重构 LspSkill 实现（之前名为 LspTool）
 
 ### 3.10.2
 
