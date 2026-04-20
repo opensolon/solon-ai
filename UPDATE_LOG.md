@@ -14,7 +14,9 @@
 ### 3.10.4
 
 * 添加 solon-ai-harness 重试次数配置支持
-* 添加 solon-ai-harness disallowedTools 配置支持
+* 添加 solon-ai-harness HarnessProperties.disallowedTools 配置支持（全局禁用工具配置）
+* 添加 solon-ai-harness HarnessProperties.agentPools（子代理池） 配置支持
+* 添加 solon-ai-harness HarnessProperties.systemPrompt 配置支持（替代之前的 AGENT.md 预设处理，由外部定制）
 * 优化 solon-ai-core embedding 配置默认选项的能力（之前只能在请求时添加）
 * 优化 solon-ai-core ChatRequestDesc.internalStream 添加流接收超时处理（避免因 llm 服务原因一直卡着）
 * 优化 solon-ai-dialect-anthropic anthropic 方言的异常兼容处理

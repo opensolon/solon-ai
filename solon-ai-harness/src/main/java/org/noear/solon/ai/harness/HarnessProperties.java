@@ -57,7 +57,7 @@ public class HarnessProperties implements Serializable {
     //主代理工具权限
     private List<String> tools = new ArrayList<>();
 
-    // 禁用工具
+    // 禁用工具（全局）
     private List<String> disallowedTools = new ArrayList<>();
 
     //最大步数
