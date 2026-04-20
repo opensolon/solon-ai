@@ -40,6 +40,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.TimeoutException;
 
 /**
  * ReAct 推理任务 (Reasoning)
@@ -463,8 +464,10 @@ public class ReasonTask implements NamedTaskComponent {
 
         if(lastException instanceof LlmNoReturnException){
             trace.setFinalAnswer("抱歉，模型服务没有内容返回。请稍后重试。");
+        } else if(lastException instanceof TimeoutException) {
+            trace.setFinalAnswer("抱歉，模型服务响应超时。请稍后重试。");
         } else {
-            trace.setFinalAnswer("抱歉，暂时无法连接模型服务 (" + lastException.getMessage() + ")。请稍后重试。");
+            trace.setFinalAnswer("抱歉，暂时无法使用模型服务 (" + lastException.getMessage() + ")。请稍后重试。");
         }
 
         return null; // 返回 null，由 run 方法处理
