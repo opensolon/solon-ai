@@ -43,11 +43,11 @@ public class LspToolTest {
     public void setup() throws Exception {
         // 创建临时目录
         worktree = Files.createTempDirectory("lsp-test");
-        
+
         // 创建一个测试文件
         Path testFile = worktree.resolve("Test.java");
         Files.write(testFile, "public class Test { public void foo() {} }".getBytes());
-        
+
         mockClient = new MockLspClient();
     }
 
@@ -58,10 +58,10 @@ public class LspToolTest {
             Path testFile = worktree.resolve("Test.java");
             Files.write(testFile, "public class Test { public void foo() {} }".getBytes());
         }
-        
-        LspTool tool = new LspTool(worktree.toString(), mockClient);
-        Document doc = tool.lsp("goToDefinition", "Test.java", 1, 10);
-        
+
+        LspTool tool = new LspTool(mockClient, worktree.toString());
+        Document doc = tool.lsp("goToDefinition", "Test.java", 1, 10, null, null);
+
         assertNotNull(doc);
         assertEquals("goToDefinition Test.java:1:10", doc.getTitle());
         assertTrue(doc.getContent().contains("location"));
@@ -69,75 +69,75 @@ public class LspToolTest {
 
     @Test
     public void testFindReferences() throws Exception {
-        LspTool tool = new LspTool(worktree.toString(), mockClient);
-        
-        Document doc = tool.lsp("findReferences", "Test.java", 1, 10);
-        
+        LspTool tool = new LspTool(mockClient, worktree.toString());
+
+        Document doc = tool.lsp("findReferences", "Test.java", 1, 10, null, null);
+
         assertNotNull(doc);
         assertEquals("findReferences Test.java:1:10", doc.getTitle());
     }
 
     @Test
     public void testHover() throws Exception {
-        LspTool tool = new LspTool(worktree.toString(), mockClient);
-        
-        Document doc = tool.lsp("hover", "Test.java", 1, 10);
-        
+        LspTool tool = new LspTool(mockClient, worktree.toString());
+
+        Document doc = tool.lsp("hover", "Test.java", 1, 10, null, null);
+
         assertNotNull(doc);
         assertTrue(doc.getMetadata("operation").equals("hover"));
     }
 
     @Test
     public void testDocumentSymbol() throws Exception {
-        LspTool tool = new LspTool(worktree.toString(), mockClient);
-        
-        Document doc = tool.lsp("documentSymbol", "Test.java", 1, 1);
-        
+        LspTool tool = new LspTool(mockClient, worktree.toString());
+
+        Document doc = tool.lsp("documentSymbol", "Test.java", 1, 1, null, null);
+
         assertNotNull(doc);
     }
 
     @Test
     public void testWorkspaceSymbol() throws Exception {
-        LspTool tool = new LspTool(worktree.toString(), mockClient);
-        
-        Document doc = tool.lsp("workspaceSymbol", "Test.java", 1, 1);
-        
+        LspTool tool = new LspTool(mockClient, worktree.toString());
+
+        Document doc = tool.lsp("workspaceSymbol", "Test.java", 1, 1, null, null);
+
         assertNotNull(doc);
     }
 
     @Test
     public void testGoToImplementation() throws Exception {
-        LspTool tool = new LspTool(worktree.toString(), mockClient);
-        
-        Document doc = tool.lsp("goToImplementation", "Test.java", 1, 10);
-        
+        LspTool tool = new LspTool(mockClient, worktree.toString());
+
+        Document doc = tool.lsp("goToImplementation", "Test.java", 1, 10, null, null);
+
         assertNotNull(doc);
     }
 
     @Test
     public void testPrepareCallHierarchy() throws Exception {
-        LspTool tool = new LspTool(worktree.toString(), mockClient);
-        
-        Document doc = tool.lsp("prepareCallHierarchy", "Test.java", 1, 10);
-        
+        LspTool tool = new LspTool(mockClient, worktree.toString());
+
+        Document doc = tool.lsp("prepareCallHierarchy", "Test.java", 1, 10, null, null);
+
         assertNotNull(doc);
     }
 
     @Test
     public void testIncomingCalls() throws Exception {
-        LspTool tool = new LspTool(worktree.toString(), mockClient);
-        
-        Document doc = tool.lsp("incomingCalls", "Test.java", 1, 10);
-        
+        LspTool tool = new LspTool(mockClient, worktree.toString());
+
+        Document doc = tool.lsp("incomingCalls", "Test.java", 1, 10, null, null);
+
         assertNotNull(doc);
     }
 
     @Test
     public void testOutgoingCalls() throws Exception {
-        LspTool tool = new LspTool(worktree.toString(), mockClient);
-        
-        Document doc = tool.lsp("outgoingCalls", "Test.java", 1, 10);
-        
+        LspTool tool = new LspTool(mockClient, worktree.toString());
+
+        Document doc = tool.lsp("outgoingCalls", "Test.java", 1, 10, null, null);
+
         assertNotNull(doc);
     }
 
@@ -149,39 +149,39 @@ public class LspToolTest {
                 return CompletableFuture.completedFuture(Either.forLeft(Collections.emptyList()));
             }
         };
-        
-        LspTool tool = new LspTool(worktree.toString(), emptyClient);
-        
-        Document doc = tool.lsp("goToDefinition", "Test.java", 1, 10);
-        
+
+        LspTool tool = new LspTool(emptyClient, worktree.toString());
+
+        Document doc = tool.lsp("goToDefinition", "Test.java", 1, 10, null, null);
+
         assertNotNull(doc);
         assertTrue(doc.getContent().contains("No results found"));
     }
 
     @Test
     public void testPathSecurityCheck() {
-        LspTool tool = new LspTool(worktree.toString(), mockClient);
-        
+        LspTool tool = new LspTool(mockClient, worktree.toString());
+
         assertThrows(SecurityException.class, () -> {
-            tool.lsp("goToDefinition", "../outside.java", 1, 1);
+            tool.lsp("goToDefinition", "../outside.java", 1, 1, null, null);
         });
     }
 
     @Test
     public void testFileNotFound() {
-        LspTool tool = new LspTool(worktree.toString(), mockClient);
-        
+        LspTool tool = new LspTool(mockClient, worktree.toString());
+
         assertThrows(RuntimeException.class, () -> {
-            tool.lsp("goToDefinition", "NotExists.java", 1, 1);
+            tool.lsp("goToDefinition", "NotExists.java", 1, 1, null, null);
         });
     }
 
     @Test
     public void testUnknownOperation() {
-        LspTool tool = new LspTool(worktree.toString(), mockClient);
-        
+        LspTool tool = new LspTool(mockClient, worktree.toString());
+
         assertThrows(IllegalArgumentException.class, () -> {
-            tool.lsp("unknownOperation", "Test.java", 1, 1);
+            tool.lsp("unknownOperation", "Test.java", 1, 1, null, null);
         });
     }
 
@@ -196,9 +196,9 @@ public class LspToolTest {
                 return super.definition(params);
             }
         };
-        
-        LspTool tool = new LspTool(worktree.toString(), trackingClient);
-        tool.lsp("goToDefinition", "Test.java", 1, 10);
+
+        LspTool tool = new LspTool(trackingClient, worktree.toString());
+        tool.lsp("goToDefinition", "Test.java", 1, 10, null, null);
     }
 
     /**
@@ -240,9 +240,9 @@ public class LspToolTest {
         @Override
         public CompletableFuture<List<Either<SymbolInformation, DocumentSymbol>>> documentSymbol(DocumentSymbolParams params) {
             List<Either<SymbolInformation, DocumentSymbol>> symbols = new ArrayList<>();
-            DocumentSymbol ds = new DocumentSymbol("foo", SymbolKind.Method, 
-                new Range(new Position(0,0), new Position(0,10)), 
-                new Range(new Position(0,0), new Position(0,10)));
+            DocumentSymbol ds = new DocumentSymbol("foo", SymbolKind.Method,
+                    new Range(new Position(0, 0), new Position(0, 10)),
+                    new Range(new Position(0, 0), new Position(0, 10)));
             symbols.add(Either.forRight(ds));
             return CompletableFuture.completedFuture(symbols);
         }

@@ -33,13 +33,19 @@ import java.util.concurrent.CompletableFuture;
  * 使用 Eclipse LSP4J 实现 IDE 级代码分析能力（Java 8 语法版）
  */
 public class LspTool {
-
-    private final Path worktree;
     private final LspClient lspClient;
+    //工作区
+    private final String workDir;
 
-    public LspTool(String workDir, LspClient lspClient) {
-        this.worktree = Paths.get(workDir).toAbsolutePath().normalize();
+    public LspTool(LspClient lspClient, String workDir) {
         this.lspClient = lspClient;
+        this.workDir = workDir;
+    }
+
+    private Path getWorkPath(String __cwd) {
+        String path = (__cwd != null) ? __cwd : workDir;
+        if (path == null) throw new IllegalStateException("Working directory is not set.");
+        return Paths.get(path).toAbsolutePath().normalize();
     }
 
     @ToolMapping(
@@ -52,8 +58,11 @@ public class LspTool {
             @Param(name = "operation") String operation,
             @Param(name = "filePath") String filePath,
             @Param(name = "line") int line,
-            @Param(name = "character") int character
+            @Param(name = "character") int character,
+            String __cwd,
+            String __sessionId
     ) throws Exception {
+        Path worktree = getWorkPath(__cwd);
 
         // 1. 路径与安全校验
         Path path = worktree.resolve(filePath).toAbsolutePath().normalize();
