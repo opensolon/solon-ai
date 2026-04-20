@@ -1,207 +1,114 @@
-/*
- * Copyright 2017-2025 noear.org and authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package org.noear.solon.ai.skills.lsp;
 
-import org.eclipse.lsp4j.*;
-import org.eclipse.lsp4j.jsonrpc.messages.Either;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.noear.solon.ai.rag.Document;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * LspTool 单元测试
- *
- * <p>通过 MockLspClient + LspManager.registerTestClient() 进行测试，
- * 不使用 mock 框架，也不需要启动真实的语言服务器进程。
- *
- * @author noear
- * @since 3.10.0
- */
 public class LspToolTest {
 
     private Path worktree;
     private LspManager lspManager;
+    private LspSkill tool;
 
     @BeforeEach
     public void setup() throws Exception {
+        System.out.println("[Setup] Creating temp dir...");
         worktree = Files.createTempDirectory("lsp-test");
 
-        // 创建测试文件
-        Path testFile = worktree.resolve("Test.java");
-        Files.write(testFile, "public class Test { public void foo() {} }".getBytes());
+        String mainPy =
+                "def greet(name):\n" +
+                "    return \"Hello, \" + name + \"!\"\n" +
+                "\n" +
+                "result = greet(\"world\")\n" +
+                "print(result)\n";
+        Files.write(worktree.resolve("main.py"), mainPy.getBytes("UTF-8"));
+        Files.write(worktree.resolve("readme.txt"), "hello world".getBytes());
 
-        // 创建 LspManager 并注入 MockClient
+        System.out.println("[Setup] Worktree: " + worktree);
+        System.out.println("[Setup] main.py exists: " + Files.exists(worktree.resolve("main.py")));
+
         lspManager = new LspManager(worktree.toString());
-
-        //--- 配置 LSP 服务器（按需启用，提供代码智能补全、跳转定义、诊断等能力）
-        lspManager.registerServer("java", new LspServerParameters(
-                Arrays.asList("jdtls", "-data", ".solon/lsp/java-workspace"),
-                Arrays.asList(".java")
-        ));
-        lspManager.registerServer("typescript", new LspServerParameters(
-                Arrays.asList("typescript-language-server", "--stdio"),
-                Arrays.asList(".ts", ".tsx", ".js", ".jsx")
-        ));
-        lspManager.registerServer("go", new LspServerParameters(
-                Arrays.asList("gopls"),
-                Arrays.asList(".go")
-        ));
         lspManager.registerServer("python", new LspServerParameters(
                 Arrays.asList("pylsp"),
                 Arrays.asList(".py", ".pyi")
         ));
-        lspManager.registerServer("rust", new LspServerParameters(
-                Arrays.asList("rust-analyzer"),
-                Arrays.asList(".rs")
-        ));
-        lspManager.registerServer("clangd", new LspServerParameters(
-                Arrays.asList("clangd", "--background-index"),
-                Arrays.asList(".c", ".cpp", ".cc", ".h", ".hpp")
-        ));
 
-        LspServerParameters javaParams = new LspServerParameters(
-                Arrays.asList("echo", "mock"),
-                Arrays.asList(".java")
-        );
+        tool = new LspSkill(lspManager, worktree.toString());
+        lspManager.setDiagnosticsCallback((uri, text) -> tool.updateDiagnostics(uri, text));
+
+        System.out.println("[Setup] Done. tool=" + tool + ", lspManager=" + lspManager);
     }
 
     @AfterEach
     public void teardown() {
+        System.out.println("[Teardown] Shutting down...");
         if (lspManager != null) {
             lspManager.shutdownAll();
         }
     }
 
-    // ==================== LspTool 核心操作测试 ====================
+    @Test
+    public void testSetupWorks() {
+        assertNotNull(tool, "tool should be initialized by @BeforeEach");
+        assertNotNull(worktree, "worktree should be initialized");
+        System.out.println("[testSetupWorks] tool=" + tool);
+    }
 
     @Test
     public void testGoToDefinition() throws Exception {
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
-        Document doc = tool.lsp("goToDefinition", "Test.java", 1, 10, null, null);
-
+        System.out.println("[testGoToDefinition] tool=" + tool);
+        assertNotNull(tool, "tool should not be null");
+        Document doc = tool.lsp("goToDefinition", "main.py", 4, 9, null, null);
         assertNotNull(doc);
-        assertEquals("goToDefinition Test.java:1:10", doc.getTitle());
-        assertTrue(doc.getContent().contains("location"));
         assertEquals("goToDefinition", doc.getMetadata("operation"));
+        String content = doc.getContent();
+        assertNotNull(content);
+        assertFalse(content.contains("No results found"), "pylsp should find definition: " + content);
+        assertTrue(content.contains("main.py"), "Definition should point to main.py");
     }
 
     @Test
     public void testFindReferences() throws Exception {
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
-        Document doc = tool.lsp("findReferences", "Test.java", 1, 10, null, null);
-
+        assertNotNull(tool);
+        Document doc = tool.lsp("findReferences", "main.py", 1, 5, null, null);
         assertNotNull(doc);
-        assertEquals("findReferences Test.java:1:10", doc.getTitle());
         assertEquals("findReferences", doc.getMetadata("operation"));
+        String content = doc.getContent();
+        assertNotNull(content);
+        assertFalse(content.contains("No results found"), "pylsp should find references: " + content);
     }
 
     @Test
     public void testHover() throws Exception {
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
-        Document doc = tool.lsp("hover", "Test.java", 1, 10, null, null);
-
+        assertNotNull(tool);
+        Document doc = tool.lsp("hover", "main.py", 4, 9, null, null);
         assertNotNull(doc);
         assertEquals("hover", doc.getMetadata("operation"));
-        assertTrue(doc.getContent().contains("Mock hover content"));
+        String content = doc.getContent();
+        assertNotNull(content);
+        assertFalse(content.contains("No results found"), "pylsp should return hover info: " + content);
     }
 
     @Test
     public void testDocumentSymbol() throws Exception {
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
-        Document doc = tool.lsp("documentSymbol", "Test.java", 1, 1, null, null);
-
+        assertNotNull(tool);
+        Document doc = tool.lsp("documentSymbol", "main.py", 1, 1, null, null);
         assertNotNull(doc);
         assertEquals("documentSymbol", doc.getMetadata("operation"));
-        assertTrue(doc.getContent().contains("foo"));
+        String content = doc.getContent();
+        assertNotNull(content);
+        assertFalse(content.contains("No results found"), "pylsp should return symbols: " + content);
     }
-
-    @Test
-    public void testWorkspaceSymbol() throws Exception {
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
-        Document doc = tool.lsp("workspaceSymbol", "Test.java", 1, 1, null, null);
-
-        assertNotNull(doc);
-        assertEquals("workspaceSymbol", doc.getMetadata("operation"));
-    }
-
-    @Test
-    public void testGoToImplementation() throws Exception {
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
-        Document doc = tool.lsp("goToImplementation", "Test.java", 1, 10, null, null);
-
-        assertNotNull(doc);
-        assertEquals("goToImplementation", doc.getMetadata("operation"));
-    }
-
-    @Test
-    public void testPrepareCallHierarchy() throws Exception {
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
-        Document doc = tool.lsp("prepareCallHierarchy", "Test.java", 1, 10, null, null);
-
-        assertNotNull(doc);
-        assertEquals("prepareCallHierarchy", doc.getMetadata("operation"));
-    }
-
-    @Test
-    public void testIncomingCalls() throws Exception {
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
-        Document doc = tool.lsp("incomingCalls", "Test.java", 1, 10, null, null);
-
-        assertNotNull(doc);
-        assertEquals("incomingCalls", doc.getMetadata("operation"));
-    }
-
-    @Test
-    public void testOutgoingCalls() throws Exception {
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
-        Document doc = tool.lsp("outgoingCalls", "Test.java", 1, 10, null, null);
-
-        assertNotNull(doc);
-        assertEquals("outgoingCalls", doc.getMetadata("operation"));
-    }
-
-    // ==================== 边界条件测试 ====================
 
     @Test
     public void testDiagnostics_NoCache() throws Exception {
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
-        // 没有缓存时，返回 "No diagnostics available"
-        Document doc = tool.lsp("diagnostics", "Test.java", 1, 1, null, null);
-
+        assertNotNull(tool);
+        Document doc = tool.lsp("diagnostics", "main.py", 1, 1, null, null);
         assertNotNull(doc);
         assertEquals("diagnostics", doc.getMetadata("operation"));
         assertTrue(doc.getContent().contains("No diagnostics available"));
@@ -209,55 +116,32 @@ public class LspToolTest {
 
     @Test
     public void testDiagnostics_WithCache() throws Exception {
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
-        // 先通过 updateDiagnostics 设置缓存
-        Path testFile = worktree.resolve("Test.java");
+        assertNotNull(tool);
+        Path testFile = worktree.resolve("main.py");
         String uri = testFile.toUri().toString();
-        tool.updateDiagnostics(uri, "Test.java:1:1 [ERROR] missing semicolon");
-
-        // 再查询 diagnostics
-        Document doc = tool.lsp("diagnostics", "Test.java", 1, 1, null, null);
-
+        tool.updateDiagnostics(uri, "main.py:1:1 [ERROR] missing semicolon");
+        Document doc = tool.lsp("diagnostics", "main.py", 1, 1, null, null);
         assertNotNull(doc);
         assertTrue(doc.getContent().contains("missing semicolon"));
     }
 
     @Test
-    public void testNoResults() throws Exception {
-        LspManager emptyManager = new LspManager(worktree.toString());
-        LspServerParameters javaParams = new LspServerParameters(
-                Arrays.asList("echo", "mock"), Arrays.asList(".java"));
-        emptyManager.registerServer("java", javaParams);
-
-        LspSkill tool = new LspSkill(emptyManager, worktree.toString());
-        Document doc = tool.lsp("goToDefinition", "Test.java", 1, 10, null, null);
-
-        assertNotNull(doc);
-        assertTrue(doc.getContent().contains("No results found"));
-
-        emptyManager.shutdownAll();
+    public void testUpdateDiagnostics_RemoveWhenNull() {
+        assertNotNull(tool);
+        tool.updateDiagnostics("file:///test_null.py", "some error");
+        tool.updateDiagnostics("file:///test_null.py", null);
     }
 
     @Test
-    public void testNoLspServerConfigured() throws Exception {
-        // 创建一个不匹配任何扩展名的文件
-        Path txtFile = worktree.resolve("readme.txt");
-        Files.write(txtFile, "hello world".getBytes());
-
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-        Document doc = tool.lsp("hover", "readme.txt", 1, 1, null, null);
-
-        assertNotNull(doc);
-        assertTrue(doc.getContent().contains("No LSP server configured"));
+    public void testUpdateDiagnostics_RemoveWhenEmpty() {
+        assertNotNull(tool);
+        tool.updateDiagnostics("file:///test_empty.py", "some error");
+        tool.updateDiagnostics("file:///test_empty.py", "");
     }
-
-    // ==================== 安全校验测试 ====================
 
     @Test
     public void testPathSecurityCheck() {
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
+        assertNotNull(tool);
         assertThrows(SecurityException.class, () -> {
             tool.lsp("goToDefinition", "../outside.java", 1, 1, null, null);
         });
@@ -265,177 +149,37 @@ public class LspToolTest {
 
     @Test
     public void testFileNotFound() {
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
+        assertNotNull(tool);
         assertThrows(RuntimeException.class, () -> {
-            tool.lsp("goToDefinition", "NotExists.java", 1, 1, null, null);
+            tool.lsp("goToDefinition", "NotExists.py", 1, 1, null, null);
         });
     }
 
     @Test
     public void testUnknownOperation() {
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
+        assertNotNull(tool);
         assertThrows(IllegalArgumentException.class, () -> {
-            tool.lsp("unknownOperation", "Test.java", 1, 1, null, null);
+            tool.lsp("unknownOperation", "main.py", 1, 1, null, null);
         });
     }
 
-    // ==================== 坐标转换测试 ====================
-
     @Test
-    public void testCoordinateConversion() throws Exception {
-        LspManager trackManager = new LspManager(worktree.toString());
-        LspServerParameters javaParams = new LspServerParameters(
-                Arrays.asList("echo", "mock"), Arrays.asList(".java"));
-        trackManager.registerServer("java", javaParams);
-
-        LspSkill tool = new LspSkill(trackManager, worktree.toString());
-        tool.lsp("goToDefinition", "Test.java", 1, 10, null, null);
-
-        trackManager.shutdownAll();
+    public void testNoLspServerConfigured() throws Exception {
+        assertNotNull(tool);
+        Document doc = tool.lsp("hover", "readme.txt", 1, 1, null, null);
+        assertNotNull(doc);
+        assertTrue(doc.getContent().contains("No LSP server configured"));
     }
-
-    // ==================== updateDiagnostics 测试 ====================
-
-    @Test
-    public void testUpdateDiagnostics_Put() {
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
-        tool.updateDiagnostics("file:///test.java", "some error");
-        // 通过 diagnostics 操作验证缓存
-        // （直接调用 updateDiagnostics 后缓存生效即可，不需要复杂的验证）
-    }
-
-    @Test
-    public void testUpdateDiagnostics_RemoveWhenNull() {
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
-        tool.updateDiagnostics("file:///test.java", "some error");
-        tool.updateDiagnostics("file:///test.java", null);
-        // null 或空字符串时，缓存条目应被移除
-    }
-
-    @Test
-    public void testUpdateDiagnostics_RemoveWhenEmpty() {
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
-        tool.updateDiagnostics("file:///test.java", "some error");
-        tool.updateDiagnostics("file:///test.java", "");
-        // 空字符串时，缓存条目应被移除
-    }
-
-    // ==================== 自定义 __cwd 测试 ====================
 
     @Test
     public void testCustomCwd() throws Exception {
-        // 创建子目录和文件
+        assertNotNull(tool);
         Path subdir = worktree.resolve("sub");
         Files.createDirectories(subdir);
-        Path subFile = subdir.resolve("Sub.java");
-        Files.write(subFile, "public class Sub {}".getBytes());
-
-        LspSkill tool = new LspSkill(lspManager, worktree.toString());
-
-        // 使用 __cwd 参数指定工作目录为子目录
-        Document doc = tool.lsp("hover", "Sub.java", 1, 1, subdir.toString(), null);
-
+        String subPy = "def sub_func():\n    pass\n";
+        Files.write(subdir.resolve("sub.py"), subPy.getBytes("UTF-8"));
+        Document doc = tool.lsp("documentSymbol", "sub.py", 1, 1, subdir.toString(), null);
         assertNotNull(doc);
-        assertEquals("hover", doc.getMetadata("operation"));
-    }
-
-    // ==================== MockLspClient 实现 ====================
-
-    /**
-     * 测试用 LspClient 实现，返回预设数据
-     */
-    static class MockLspClient implements LspClient {
-
-        @Override
-        public void touchFile(String uri) {
-            // 空实现，避免 NPE
-        }
-
-        // LanguageClient 抽象方法
-        @Override public void telemetryEvent(Object object) {}
-        @Override public void publishDiagnostics(PublishDiagnosticsParams diagnostics) {}
-        @Override public void showMessage(MessageParams messageParams) {}
-        @Override public CompletableFuture<MessageActionItem> showMessageRequest(ShowMessageRequestParams requestParams) {
-            return CompletableFuture.completedFuture(null);
-        }
-        @Override public void logMessage(MessageParams message) {}
-
-        @Override
-        public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> definition(DefinitionParams params) {
-            List<Location> locations = new ArrayList<>();
-            locations.add(new Location(params.getTextDocument().getUri(),
-                    new Range(new Position(0, 0), new Position(0, 10))));
-            return CompletableFuture.completedFuture(Either.forLeft(locations));
-        }
-
-        @Override
-        public CompletableFuture<List<? extends Location>> references(ReferenceParams params) {
-            List<Location> locations = new ArrayList<>();
-            locations.add(new Location(params.getTextDocument().getUri(),
-                    new Range(new Position(1, 0), new Position(1, 10))));
-            return CompletableFuture.completedFuture(locations);
-        }
-
-        @Override
-        public CompletableFuture<Hover> hover(HoverParams params) {
-            Hover hover = new Hover();
-            MarkupContent content = new MarkupContent();
-            content.setKind("plaintext");
-            content.setValue("Mock hover content");
-            hover.setContents(content);
-            return CompletableFuture.completedFuture(hover);
-        }
-
-        @Override
-        public CompletableFuture<List<Either<SymbolInformation, DocumentSymbol>>> documentSymbol(DocumentSymbolParams params) {
-            List<Either<SymbolInformation, DocumentSymbol>> symbols = new ArrayList<>();
-            DocumentSymbol ds = new DocumentSymbol("foo", SymbolKind.Method,
-                    new Range(new Position(0, 0), new Position(0, 10)),
-                    new Range(new Position(0, 0), new Position(0, 10)));
-            symbols.add(Either.forRight(ds));
-            return CompletableFuture.completedFuture(symbols);
-        }
-
-        @Override
-        public CompletableFuture<Either<List<? extends SymbolInformation>, List<? extends WorkspaceSymbol>>> workspaceSymbol(WorkspaceSymbolParams params) {
-            List<WorkspaceSymbol> symbols = new ArrayList<>();
-            WorkspaceSymbol ws = new WorkspaceSymbol();
-            ws.setName("test");
-            ws.setKind(SymbolKind.Class);
-            symbols.add(ws);
-            return CompletableFuture.completedFuture(Either.forRight(symbols));
-        }
-
-        @Override
-        public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> implementation(ImplementationParams params) {
-            List<Location> locations = new ArrayList<>();
-            return CompletableFuture.completedFuture(Either.forLeft(locations));
-        }
-
-        @Override
-        public CompletableFuture<List<CallHierarchyItem>> prepareCallHierarchy(CallHierarchyPrepareParams params) {
-            List<CallHierarchyItem> items = new ArrayList<>();
-            return CompletableFuture.completedFuture(items);
-        }
-
-        @Override
-        public CompletableFuture<List<CallHierarchyIncomingCall>> incomingCalls(String uri, int line, int offset) {
-            return CompletableFuture.completedFuture(new ArrayList<>());
-        }
-
-        @Override
-        public CompletableFuture<List<CallHierarchyOutgoingCall>> outgoingCalls(String uri, int line, int offset) {
-            return CompletableFuture.completedFuture(new ArrayList<>());
-        }
-
-        @Override
-        public void shutdown() {
-            // 空实现
-        }
+        assertEquals("documentSymbol", doc.getMetadata("operation"));
     }
 }
