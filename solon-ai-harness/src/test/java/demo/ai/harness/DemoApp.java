@@ -9,7 +9,9 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessProperties;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.permission.ToolPermission;
+import org.noear.solon.ai.skills.lsp.LspServerParameters;
 
+import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -19,6 +21,32 @@ public class DemoApp {
         HarnessProperties harnessProps = new HarnessProperties(".tmp/");
         harnessProps.addTools(ToolPermission.TOOL_ALL_FULL); //设定工具权限
         harnessProps.addModel( null); //设定大模型配置
+
+        //--- 配置 LSP 服务器（按需启用，提供代码智能补全、跳转定义、诊断等能力）
+        harnessProps.addLspServer("java", new LspServerParameters(
+                Arrays.asList("jdtls", "-data", ".solon/lsp/java-workspace"),
+                Arrays.asList(".java")
+        ));
+        harnessProps.addLspServer("typescript", new LspServerParameters(
+                Arrays.asList("typescript-language-server", "--stdio"),
+                Arrays.asList(".ts", ".tsx", ".js", ".jsx")
+        ));
+        harnessProps.addLspServer("go", new LspServerParameters(
+                Arrays.asList("gopls"),
+                Arrays.asList(".go")
+        ));
+        harnessProps.addLspServer("python", new LspServerParameters(
+                Arrays.asList("pylsp"),
+                Arrays.asList(".py", ".pyi")
+        ));
+        harnessProps.addLspServer("rust", new LspServerParameters(
+                Arrays.asList("rust-analyzer"),
+                Arrays.asList(".rs")
+        ));
+        harnessProps.addLspServer("clangd", new LspServerParameters(
+                Arrays.asList("clangd", "--background-index"),
+                Arrays.asList(".c", ".cpp", ".cc", ".h", ".hpp")
+        ));
 
         AgentSessionProvider sessionProvider = new AgentSessionProvider() {
             private Map<String, AgentSession> sessionMap = new ConcurrentHashMap<>();
