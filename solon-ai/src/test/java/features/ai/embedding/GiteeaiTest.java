@@ -26,6 +26,7 @@ public class GiteeaiTest {
                 .apiKey(apiKey)
                 .provider(provider) //需要指定供应商，用于识别接口风格（也称为方言）
                 .model(model)
+                .modelOptions(o -> o.dimensions(1024))
                 .build();
 
         //一次性返回
