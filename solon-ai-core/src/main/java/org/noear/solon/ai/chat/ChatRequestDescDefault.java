@@ -43,6 +43,7 @@ import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -265,7 +266,13 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
         StreamChain chain = new StreamChain(options.interceptors(), this::doStream);
 
-        return chain.doIntercept(req);
+        return chain.doIntercept(req)
+                .timeout(java.time.Duration.ofSeconds(30))
+                .doOnError(e -> {
+                    if (e instanceof TimeoutException) {
+                        log.error("LLM stream request timeout!");
+                    }
+                });
     }
 
     /**
