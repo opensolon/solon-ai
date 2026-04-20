@@ -36,9 +36,9 @@ import java.util.List;
  */
 public class AgentFactory {
     //**
-    private static String[] TOOL_ALL_FULL = {"read", "write", "edit", "glob", "grep", "ls", "bash", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "generate", "mcp", "restapi", "hitl"};
+    private static String[] TOOL_ALL_FULL = {"read", "write", "edit", "glob", "grep", "ls", "bash", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "generate", "mcp", "restapi", "hitl", "lsp"};
     //*
-    private static String[] TOOL_ALL_PUBLIC = {"read", "write", "edit", "glob", "grep", "ls", "bash", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task"};
+    private static String[] TOOL_ALL_PUBLIC = {"read", "write", "edit", "glob", "grep", "ls", "bash", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "lsp"};
     //pi
     private static String[] TOOL_PI = {"read", "write", "edit", "bash"};
 
@@ -215,6 +215,13 @@ public class AgentFactory {
                 if (engine.getRestApiSkill() != null) {
                     builder.defaultSkillAdd(engine.getRestApiSkill());
                 }
+                break;
+            }
+            case "lsp": {
+                if (engine.getLspTool() != null) {
+                    builder.defaultToolAdd(engine.getLspTool());
+                }
+                break;
             }
             case "hitl": {
                 if (engine.getProps().isHitlEnabled()) {

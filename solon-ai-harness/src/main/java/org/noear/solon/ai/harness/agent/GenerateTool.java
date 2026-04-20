@@ -87,6 +87,7 @@ public class GenerateTool extends AbsToolProvider {
                     "- `list`，列出目录内容\n" +
                     "- `bash`，运行 Shell 命令\n" +
                     "- `skill`，调用预定义的专家技能模块\n" +
+                    "- `lsp`，代码跳转定义、找引用、悬停提示、文档符号等\n" +
                     "- `code`，编码指导模块\n" +
                     "- `todo`，任务清单管理\n" +
                     "- `webfetch`，直接抓取特定网页内容\n" +

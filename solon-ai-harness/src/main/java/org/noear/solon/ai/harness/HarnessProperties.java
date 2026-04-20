@@ -21,6 +21,7 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.skills.restapi.ApiSource;
+import org.noear.solon.ai.skills.lsp.LspServerParameters;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.ResourceUtil;
 
@@ -85,8 +86,8 @@ public class HarnessProperties implements Serializable {
     private Map<String, McpServerParameters> mcpServers = new LinkedHashMap<>();
     //api集
     private Map<String, ApiSource> apiServers = new LinkedHashMap<>();
-    //lsp集（未完成）
-    private Map<String, Object> lspServers = new LinkedHashMap<>();
+    //lsp集
+    private Map<String, LspServerParameters> lspServers = new LinkedHashMap<>();
 
     public HarnessProperties(String harnessHome) {
         if (Assert.isEmpty(harnessHome)) {
@@ -110,6 +111,13 @@ public class HarnessProperties implements Serializable {
      */
     public void addMcpServer(String name, McpServerParameters mcpParameters) {
         getMcpServers().put(name, mcpParameters);
+    }
+
+    /**
+     * 添加 lsp 服务
+     */
+    public void addLspServer(String name, LspServerParameters lspParameters) {
+        getLspServers().put(name, lspParameters);
     }
 
     /**

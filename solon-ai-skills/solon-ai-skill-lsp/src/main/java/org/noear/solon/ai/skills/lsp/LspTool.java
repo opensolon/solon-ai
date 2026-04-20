@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ *       https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,7 +16,6 @@
 package org.noear.solon.ai.skills.lsp;
 
 import org.eclipse.lsp4j.*;
-import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.tool.AbsToolProvider;
@@ -27,24 +26,33 @@ import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * LspTool - 对齐 OpenCode 逻辑
- * 使用 Eclipse LSP4J 实现 IDE 级代码分析能力（Java 8 语法版）
+ * LSP 技能 - 对齐 OpenCode 的 LSP 工具模型
+ *
+ * <p>支持按文件扩展名自动路由到对应的 LSP 服务器。
+ * 提供跳转定义、查找引用、悬停提示、文档符号、调用层次等操作。
+ *
+ * @author noear
+ * @since 3.10.0
  */
 public class LspTool extends AbsToolProvider {
-    private final LspClient lspClient;
-    //工作区
+    private final LspManager lspManager;
     private final String workDir;
 
-    public LspTool(LspClient lspClient) {
-        this(lspClient, null);
+    /**
+     * 诊断信息缓存：uri -> 诊断文本
+     */
+    private final ConcurrentHashMap<String, String> diagnosticsCache = new ConcurrentHashMap<>();
+
+    public LspTool(LspManager lspManager, String workDir) {
+        this.lspManager = lspManager;
+        this.workDir = workDir;
     }
 
-    public LspTool(LspClient lspClient, String workDir) {
-        this.lspClient = lspClient;
-        this.workDir = workDir;
+    public LspManager getLspManager() {
+        return lspManager;
     }
 
     private Path getWorkPath(String __cwd) {
@@ -55,9 +63,9 @@ public class LspTool extends AbsToolProvider {
 
     @ToolMapping(
             name = "lsp",
-            description = "执行 LSP 操作（跳转定义、找引用、悬停提示等）。" +
+            description = "执行 LSP 操作（跳转定义、找引用、悬停提示、文档符号等）。" +
                     "支持操作：goToDefinition, findReferences, hover, documentSymbol, workspaceSymbol, " +
-                    "goToImplementation, prepareCallHierarchy, incomingCalls, outgoingCalls"
+                    "goToImplementation, prepareCallHierarchy, incomingCalls, outgoingCalls, diagnostics"
     )
     public Document lsp(
             @Param(name = "operation") String operation,
@@ -80,15 +88,47 @@ public class LspTool extends AbsToolProvider {
             throw new RuntimeException("File not found: " + filePath);
         }
 
-        // 2. 坐标转换 (1-based -> 0-based)
-        int lspLine = line - 1;
-        int lspChar = character - 1;
         String uri = path.toUri().toString();
 
-        // 3. 执行 LSP 操作并等待结果
-        Object result = executeLspOperation(operation, uri, lspLine, lspChar).get();
+        // 2. diagnostics 操作直接返回缓存
+        if ("diagnostics".equals(operation)) {
+            String diagnostics = diagnosticsCache.getOrDefault(uri, "No diagnostics available for " + filePath);
+            return new Document()
+                    .title(String.format("diagnostics %s", worktree.relativize(path)))
+                    .content(diagnostics)
+                    .metadata("operation", "diagnostics")
+                    .metadata("uri", uri);
+        }
 
-        // 4. 格式化输出
+        // 3. 路由到对应的 LSP 服务器
+        LspClient client = lspManager.getClientForFile(filePath);
+        if (client == null) {
+            return new Document()
+                    .title(String.format("%s %s", operation, filePath))
+                    .content("No LSP server configured for file: " + filePath +
+                            ". Supported extensions: " + lspManager.getServerConfigs().values()
+                            .stream()
+                            .flatMap(p -> p.getExtensions().stream())
+                            .reduce((a, b) -> a + ", " + b)
+                            .orElse("none"))
+                    .metadata("operation", operation)
+                    .metadata("uri", uri);
+        }
+
+        // 4. 坐标转换 (1-based -> 0-based)
+        int lspLine = line - 1;
+        int lspChar = character - 1;
+
+        // 5. 确保文件已同步给 Language Server
+        client.touchFile(uri);
+
+        // 6. 构造参数并执行
+        TextDocumentIdentifier docId = new TextDocumentIdentifier(uri);
+        Position pos = new Position(lspLine, lspChar);
+
+        Object result = executeOperation(client, operation, docId, pos, uri, lspLine, lspChar);
+
+        // 7. 格式化输出
         String output;
         if (result == null || (result instanceof List && ((List<?>) result).isEmpty())) {
             output = "No results found for " + operation;
@@ -105,60 +145,41 @@ public class LspTool extends AbsToolProvider {
                 .metadata("uri", uri);
     }
 
-    private CompletableFuture<?> executeLspOperation(String op, String uri, int line, int offset) throws Exception {
-        // 确保文件已同步给 Language Server
-        lspClient.touchFile(uri);
-
-        TextDocumentIdentifier docId = new TextDocumentIdentifier(uri);
-        Position pos = new Position(line, offset);
-
-        // Java 8 不支持 switch 表达式，回归传统 switch 语句
+    private Object executeOperation(LspClient client, String op,
+                                    TextDocumentIdentifier docId, Position pos,
+                                    String uri, int line, int offset) throws Exception {
         switch (op) {
             case "goToDefinition":
-                return lspClient.definition(new DefinitionParams(docId, pos));
+                return client.definition(new DefinitionParams(docId, pos)).get();
             case "findReferences":
-                return lspClient.references(new ReferenceParams(docId, pos, new ReferenceContext(true)));
+                return client.references(new ReferenceParams(docId, pos, new ReferenceContext(true))).get();
             case "hover":
-                return lspClient.hover(new HoverParams(docId, pos));
+                return client.hover(new HoverParams(docId, pos)).get();
             case "documentSymbol":
-                return lspClient.documentSymbol(new DocumentSymbolParams(docId));
+                return client.documentSymbol(new DocumentSymbolParams(docId)).get();
             case "workspaceSymbol":
-                return lspClient.workspaceSymbol(new WorkspaceSymbolParams(""));
+                return client.workspaceSymbol(new WorkspaceSymbolParams("")).get();
             case "goToImplementation":
-                return lspClient.implementation(new ImplementationParams(docId, pos));
+                return client.implementation(new ImplementationParams(docId, pos)).get();
             case "prepareCallHierarchy":
-                return lspClient.prepareCallHierarchy(new CallHierarchyPrepareParams(docId, pos));
+                return client.prepareCallHierarchy(new CallHierarchyPrepareParams(docId, pos)).get();
             case "incomingCalls":
-                return lspClient.incomingCalls(uri, line, offset);
+                return client.incomingCalls(uri, line, offset).get();
             case "outgoingCalls":
-                return lspClient.outgoingCalls(uri, line, offset);
+                return client.outgoingCalls(uri, line, offset).get();
             default:
                 throw new IllegalArgumentException("Unknown LSP operation: " + op);
         }
     }
 
     /**
-     * 对齐 OpenCode 逻辑的 LSP 客户端接口
+     * 更新诊断信息缓存（由 LspClientImpl 的 publishDiagnostics 回调调用）
      */
-    public interface LspClient {
-        void touchFile(String uri) throws Exception;
-
-        CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> definition(DefinitionParams params);
-
-        CompletableFuture<List<? extends Location>> references(ReferenceParams params);
-
-        CompletableFuture<Hover> hover(HoverParams params);
-
-        CompletableFuture<List<Either<SymbolInformation, DocumentSymbol>>> documentSymbol(DocumentSymbolParams params);
-
-        CompletableFuture<Either<List<? extends SymbolInformation>, List<? extends WorkspaceSymbol>>> workspaceSymbol(WorkspaceSymbolParams params);
-
-        CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> implementation(ImplementationParams params);
-
-        CompletableFuture<List<CallHierarchyItem>> prepareCallHierarchy(CallHierarchyPrepareParams params);
-
-        CompletableFuture<List<CallHierarchyIncomingCall>> incomingCalls(String uri, int line, int offset);
-
-        CompletableFuture<List<CallHierarchyOutgoingCall>> outgoingCalls(String uri, int line, int offset);
+    public void updateDiagnostics(String uri, String diagnosticsText) {
+        if (diagnosticsText == null || diagnosticsText.isEmpty()) {
+            diagnosticsCache.remove(uri);
+        } else {
+            diagnosticsCache.put(uri, diagnosticsText);
+        }
     }
 }

@@ -30,11 +30,13 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.code.CodeSkill;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
+import org.noear.solon.ai.skills.lsp.LspManager;
+import org.noear.solon.ai.skills.lsp.LspServerParameters;
+import org.noear.solon.ai.skills.lsp.LspTool;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.client.McpProviders;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
 import org.noear.solon.ai.skills.cli.TodoSkill;
-import org.noear.solon.ai.skills.lsp.LspTool;
 import org.noear.solon.ai.skills.restapi.ApiSource;
 import org.noear.solon.ai.skills.restapi.RestApiSkill;
 import org.noear.solon.ai.skills.toolgateway.ToolGatewaySkill;
@@ -78,8 +80,9 @@ public class HarnessEngine {
     private final WebfetchTool webfetchTool;
     private final WebsearchTool websearchTool;
     private final CodeSearchTool codeSearchTool;
-    private LspTool lspTool;
 
+    private final LspManager lspManager;
+    private final LspTool lspTool;
 
     private final ToolGatewaySkill mcpGatewaySkill;
     private final RestApiSkill restApiSkill;
@@ -156,6 +159,10 @@ public class HarnessEngine {
         return codeSearchTool;
     }
 
+    public LspTool getLspTool() {
+        return lspTool;
+    }
+
     public WebsearchTool getWebsearchTool() {
         return websearchTool;
     }
@@ -227,8 +234,17 @@ public class HarnessEngine {
         this.websearchTool = new WebsearchTool().retryConfig(props.getMcpRetries());
         this.webfetchTool = new WebfetchTool().retryConfig(props.getApiRetries());
 
-        //lsp未完成
-        this.lspTool = new LspTool(null);
+        //lsp
+        this.lspManager = new LspManager(props.getWorkspace());
+        if (Assert.isNotEmpty(props.getLspServers())) {
+            for (Map.Entry<String, LspServerParameters> entry : props.getLspServers().entrySet()) {
+                lspManager.registerServer(entry.getKey(), entry.getValue());
+            }
+        }
+        this.lspTool = lspManager.hasServers() ? new LspTool(lspManager, props.getWorkspace()) : null;
+        if (this.lspTool != null) {
+            lspManager.setDiagnosticsCallback(lspTool::updateDiagnostics);
+        }
 
         if (Assert.isNotEmpty(props.getApiServers())) {
             restApiSkill = new RestApiSkill().retryConfig(props.getApiRetries());

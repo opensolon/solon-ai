@@ -204,7 +204,7 @@ public class LspToolTest {
     /**
      * Mock LspClient 实现
      */
-    static class MockLspClient implements LspTool.LspClient {
+    static class MockLspClient implements LspClient {
         private String lastUri;
 
         @Override

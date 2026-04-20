@@ -25,6 +25,7 @@ public enum ToolPermission {
     TOOL_GENERATE("generate"),
     TOOL_RESTAPI("restapi"),
     TOOL_MCP("mcp"),
+    TOOL_LSP("lsp"),
     TOOL_CODE("code"),
 
     TOOL_CODESEARCH("codesearch"),
