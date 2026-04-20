@@ -51,6 +51,10 @@ public class LspManager {
         this.workspace = workspace;
     }
 
+    public boolean isEmpty(){
+        return serverConfigs.isEmpty();
+    }
+
     /**
      * 设置诊断信息回调
      */

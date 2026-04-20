@@ -32,7 +32,7 @@ import org.noear.solon.ai.harness.code.CodeSkill;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
 import org.noear.solon.ai.skills.lsp.LspManager;
 import org.noear.solon.ai.skills.lsp.LspServerParameters;
-import org.noear.solon.ai.skills.lsp.LspTool;
+import org.noear.solon.ai.skills.lsp.LspSkill;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.client.McpProviders;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
@@ -44,13 +44,10 @@ import org.noear.solon.ai.skills.web.CodeSearchTool;
 import org.noear.solon.ai.skills.web.WebfetchTool;
 import org.noear.solon.ai.skills.web.WebsearchTool;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.core.util.IoUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.URL;
 import java.nio.file.Paths;
 import java.util.*;
 
@@ -82,7 +79,7 @@ public class HarnessEngine {
     private final CodeSearchTool codeSearchTool;
 
     private final LspManager lspManager;
-    private final LspTool lspTool;
+    private final LspSkill lspSkill;
 
     private final ToolGatewaySkill mcpGatewaySkill;
     private final RestApiSkill restApiSkill;
@@ -159,8 +156,8 @@ public class HarnessEngine {
         return codeSearchTool;
     }
 
-    public LspTool getLspTool() {
-        return lspTool;
+    public LspSkill getLspSkill() {
+        return lspSkill;
     }
 
     public WebsearchTool getWebsearchTool() {
@@ -241,9 +238,9 @@ public class HarnessEngine {
                 lspManager.registerServer(entry.getKey(), entry.getValue());
             }
         }
-        this.lspTool = lspManager.hasServers() ? new LspTool(lspManager, props.getWorkspace()) : null;
-        if (this.lspTool != null) {
-            lspManager.setDiagnosticsCallback(lspTool::updateDiagnostics);
+        this.lspSkill = lspManager.hasServers() ? new LspSkill(lspManager, props.getWorkspace()) : null;
+        if (this.lspSkill != null) {
+            lspManager.setDiagnosticsCallback(lspSkill::updateDiagnostics);
         }
 
         if (Assert.isNotEmpty(props.getApiServers())) {

@@ -18,7 +18,8 @@ package org.noear.solon.ai.skills.lsp;
 import org.eclipse.lsp4j.*;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.ai.chat.tool.AbsToolProvider;
+import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.annotation.Param;
 
@@ -37,7 +38,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author noear
  * @since 3.10.0
  */
-public class LspTool extends AbsToolProvider {
+public class LspSkill extends AbsSkill {
     private final LspManager lspManager;
     private final String workDir;
 
@@ -46,7 +47,7 @@ public class LspTool extends AbsToolProvider {
      */
     private final ConcurrentHashMap<String, String> diagnosticsCache = new ConcurrentHashMap<>();
 
-    public LspTool(LspManager lspManager, String workDir) {
+    public LspSkill(LspManager lspManager, String workDir) {
         this.lspManager = lspManager;
         this.workDir = workDir;
     }
@@ -59,6 +60,11 @@ public class LspTool extends AbsToolProvider {
         String path = (__cwd != null) ? __cwd : workDir;
         if (path == null) throw new IllegalStateException("Working directory is not set.");
         return Paths.get(path).toAbsolutePath().normalize();
+    }
+
+    @Override
+    public boolean isSupported(Prompt prompt) {
+        return lspManager.isEmpty() == false;
     }
 
     @ToolMapping(

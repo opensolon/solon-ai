@@ -218,8 +218,8 @@ public class AgentFactory {
                 break;
             }
             case "lsp": {
-                if (engine.getLspTool() != null) {
-                    builder.defaultToolAdd(engine.getLspTool());
+                if (engine.getLspSkill() != null) {
+                    builder.defaultSkillAdd(engine.getLspSkill());
                 }
                 break;
             }

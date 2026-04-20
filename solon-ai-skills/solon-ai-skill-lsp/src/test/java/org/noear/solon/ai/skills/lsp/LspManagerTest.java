@@ -15,17 +15,12 @@
  */
 package org.noear.solon.ai.skills.lsp;
 
-import org.eclipse.lsp4j.*;
-import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -279,7 +274,7 @@ public class LspManagerTest {
         });
 
         // 通过 LspTool 接收回调
-        LspTool tool = new LspTool(manager, "/tmp/test-workspace");
+        LspSkill tool = new LspSkill(manager, "/tmp/test-workspace");
         manager.setDiagnosticsCallback(tool::updateDiagnostics);
 
         // 手动触发 updateDiagnostics 验证回调链

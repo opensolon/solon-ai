@@ -77,7 +77,7 @@ public class LspToolTest {
 
     @Test
     public void testGoToDefinition() throws Exception {
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         Document doc = tool.lsp("goToDefinition", "Test.java", 1, 10, null, null);
 
@@ -89,7 +89,7 @@ public class LspToolTest {
 
     @Test
     public void testFindReferences() throws Exception {
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         Document doc = tool.lsp("findReferences", "Test.java", 1, 10, null, null);
 
@@ -100,7 +100,7 @@ public class LspToolTest {
 
     @Test
     public void testHover() throws Exception {
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         Document doc = tool.lsp("hover", "Test.java", 1, 10, null, null);
 
@@ -111,7 +111,7 @@ public class LspToolTest {
 
     @Test
     public void testDocumentSymbol() throws Exception {
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         Document doc = tool.lsp("documentSymbol", "Test.java", 1, 1, null, null);
 
@@ -122,7 +122,7 @@ public class LspToolTest {
 
     @Test
     public void testWorkspaceSymbol() throws Exception {
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         Document doc = tool.lsp("workspaceSymbol", "Test.java", 1, 1, null, null);
 
@@ -132,7 +132,7 @@ public class LspToolTest {
 
     @Test
     public void testGoToImplementation() throws Exception {
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         Document doc = tool.lsp("goToImplementation", "Test.java", 1, 10, null, null);
 
@@ -142,7 +142,7 @@ public class LspToolTest {
 
     @Test
     public void testPrepareCallHierarchy() throws Exception {
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         Document doc = tool.lsp("prepareCallHierarchy", "Test.java", 1, 10, null, null);
 
@@ -152,7 +152,7 @@ public class LspToolTest {
 
     @Test
     public void testIncomingCalls() throws Exception {
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         Document doc = tool.lsp("incomingCalls", "Test.java", 1, 10, null, null);
 
@@ -162,7 +162,7 @@ public class LspToolTest {
 
     @Test
     public void testOutgoingCalls() throws Exception {
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         Document doc = tool.lsp("outgoingCalls", "Test.java", 1, 10, null, null);
 
@@ -174,7 +174,7 @@ public class LspToolTest {
 
     @Test
     public void testDiagnostics_NoCache() throws Exception {
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         // 没有缓存时，返回 "No diagnostics available"
         Document doc = tool.lsp("diagnostics", "Test.java", 1, 1, null, null);
@@ -186,7 +186,7 @@ public class LspToolTest {
 
     @Test
     public void testDiagnostics_WithCache() throws Exception {
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         // 先通过 updateDiagnostics 设置缓存
         Path testFile = worktree.resolve("Test.java");
@@ -215,7 +215,7 @@ public class LspToolTest {
                 Arrays.asList("echo", "mock"), Arrays.asList(".java"));
         emptyManager.registerTestClient("java", javaParams, emptyClient);
 
-        LspTool tool = new LspTool(emptyManager, worktree.toString());
+        LspSkill tool = new LspSkill(emptyManager, worktree.toString());
         Document doc = tool.lsp("goToDefinition", "Test.java", 1, 10, null, null);
 
         assertNotNull(doc);
@@ -230,7 +230,7 @@ public class LspToolTest {
         Path txtFile = worktree.resolve("readme.txt");
         Files.write(txtFile, "hello world".getBytes());
 
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
         Document doc = tool.lsp("hover", "readme.txt", 1, 1, null, null);
 
         assertNotNull(doc);
@@ -241,7 +241,7 @@ public class LspToolTest {
 
     @Test
     public void testPathSecurityCheck() {
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         assertThrows(SecurityException.class, () -> {
             tool.lsp("goToDefinition", "../outside.java", 1, 1, null, null);
@@ -250,7 +250,7 @@ public class LspToolTest {
 
     @Test
     public void testFileNotFound() {
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         assertThrows(RuntimeException.class, () -> {
             tool.lsp("goToDefinition", "NotExists.java", 1, 1, null, null);
@@ -259,7 +259,7 @@ public class LspToolTest {
 
     @Test
     public void testUnknownOperation() {
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         assertThrows(IllegalArgumentException.class, () -> {
             tool.lsp("unknownOperation", "Test.java", 1, 1, null, null);
@@ -286,7 +286,7 @@ public class LspToolTest {
                 Arrays.asList("echo", "mock"), Arrays.asList(".java"));
         trackManager.registerTestClient("java", javaParams, trackingClient);
 
-        LspTool tool = new LspTool(trackManager, worktree.toString());
+        LspSkill tool = new LspSkill(trackManager, worktree.toString());
         tool.lsp("goToDefinition", "Test.java", 1, 10, null, null);
 
         trackManager.shutdownAll();
@@ -296,7 +296,7 @@ public class LspToolTest {
 
     @Test
     public void testUpdateDiagnostics_Put() {
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         tool.updateDiagnostics("file:///test.java", "some error");
         // 通过 diagnostics 操作验证缓存
@@ -305,7 +305,7 @@ public class LspToolTest {
 
     @Test
     public void testUpdateDiagnostics_RemoveWhenNull() {
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         tool.updateDiagnostics("file:///test.java", "some error");
         tool.updateDiagnostics("file:///test.java", null);
@@ -314,7 +314,7 @@ public class LspToolTest {
 
     @Test
     public void testUpdateDiagnostics_RemoveWhenEmpty() {
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         tool.updateDiagnostics("file:///test.java", "some error");
         tool.updateDiagnostics("file:///test.java", "");
@@ -331,7 +331,7 @@ public class LspToolTest {
         Path subFile = subdir.resolve("Sub.java");
         Files.write(subFile, "public class Sub {}".getBytes());
 
-        LspTool tool = new LspTool(lspManager, worktree.toString());
+        LspSkill tool = new LspSkill(lspManager, worktree.toString());
 
         // 使用 __cwd 参数指定工作目录为子目录
         Document doc = tool.lsp("hover", "Sub.java", 1, 1, subdir.toString(), null);
