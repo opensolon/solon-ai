@@ -69,31 +69,34 @@ public class ExpertSkill extends AbsSkill {
         int total = skillMap.size();
         StringBuilder sb = new StringBuilder();
 
-        sb.append("优先使用合适的技能解决问题（不确定用什么技能时，可通过 skillsearch 搜索）。**注意：在执行任务中，请务必通过 `skillread` 读取或回顾规约。**\n\n");
+        sb.append("优先使用合适的专家技能解决问题（不确定用什么专家技能时，可通过 skillsearch 搜索）。**注意：在执行任务中，请务必通过 `skillread` 读取或回顾规约。**\n\n");
 
-        sb.append("## 专家技能库执行规约 (当前可用技能: " + total + ")\n");
+        sb.append("## 专家技能库执行规约 (当前可用专家技能: " + total + ")\n");
 
         if (total <= listThreshold) {
             // --- 档位 1: SUMMARY  ---
             sb.append("### 运行模式: 摘要发现\n");
-            sb.append("请根据描述选定技能名，调用 `skillread` 获取详情：\n");
+            sb.append("请审阅下方专家技能清单。若某个专家技能匹配当前需求，请调用 `skillread` 获取具体执行规约与工具参数：\n");
 
-            for (PoolManager.SkillDir skill : skillMap.values()) {
-                sb.append("- `").append(skill.aliasPath).append("`: ").append(skill.description).append("\n");
+            sb.append("<skill_list>\n");
+            for (PoolManager.SkillDir s : skillMap.values()) {
+                sb.append("  <skill aliasPath=\"").append(s.aliasPath).append("\">").append(s.description).append("</skill>\n");
             }
+            sb.append("</skill_list>");
         } else if (total <= searchThreshold) {
             // --- 模式 2: LIST ---
             sb.append("### 运行模式: 路径导航\n");
-            sb.append("由于技能较多，仅展示路径。请推断功能并调用 `skillread`，或使用 `skillsearch` 检索：\n");
+            sb.append("当前专家技能较多，仅展示路径索引（没有描述）。请推断功能并调用 `skillread`。如果不确定，请使用 `skillsearch` 检索：\n");
 
-            String names = skillMap.values().stream()
-                    .map(s -> "`" + s.aliasPath + "`")
-                    .collect(Collectors.joining(", "));
-            sb.append("> 可用技能: ").append(names).append("\n");
+            sb.append("<skill_list>\n");
+            for (PoolManager.SkillDir s : skillMap.values()) {
+                sb.append("  <skill aliasPath=\"").append(s.aliasPath).append("\" />\n");
+            }
+            sb.append("</skill_list>");
         } else {
             // --- 模式 3: SEARCH ---
             sb.append("### 运行模式: 动态发现\n");
-            sb.append("由于专家技能库规模较大（" + total + "）。**必须**先通过 `skillsearch` 检索，确认路径后再用 `skillread` 读取。\n");
+            sb.append("由于专家技能库规模较大。**禁止猜测路径**。你必须先通过 `skillsearch` 检索关键字，确认 aliasPath 后再调用 `skillread` 读取。\n");
         }
 
         return sb.toString();
@@ -133,9 +136,13 @@ public class ExpertSkill extends AbsSkill {
         }
 
         StringBuilder sb = new StringBuilder("可用专家技能列表：\n");
+
+        sb.append("<skill_list>\n");
         for (PoolManager.SkillDir s : skillMap.values()) {
-            sb.append("- ").append(s.aliasPath).append(": ").append(s.description).append("\n");
+            sb.append("  <skill aliasPath=\"").append(s.aliasPath).append("\">").append(s.description).append("</skill>\n");
         }
+        sb.append("</skill_list>");
+
         return sb.toString();
     }
 
@@ -153,29 +160,29 @@ public class ExpertSkill extends AbsSkill {
 
         if (matches.isEmpty()) return "未找到匹配专家技能。";
 
-        StringBuilder sb = new StringBuilder("<search_results>\n");
+        StringBuilder sb = new StringBuilder("<skill_list>\n");
         for (PoolManager.SkillDir s : matches) {
-            sb.append("  <skill path=\"").append(s.aliasPath).append("\">")
-                    .append(s.description).append("</skill>\n");
+            sb.append("  <skill aliasPath=\"").append(s.aliasPath).append("\">").append(s.description).append("</skill>\n");
         }
-        sb.append("</search_results>");
+        sb.append("</skill_list>");
+
         return sb.toString();
     }
 
     @ToolMapping(name = "skillread", description = "读取技能详细说明书。当需要确认具体工具参数或规约细节时使用。")
-    public String skillread(@Param("path") String path, String __cwd) throws IOException {
+    public String skillread(@Param(value = "aliasPath", description = "技能的唯一路径标识（例如：'@skills/deep-research'）") String aliasPath, String __cwd) throws IOException {
         Map<String, PoolManager.SkillDir> skillMap = poolManager.getSkillMap();
         // 1. 优先从内存 Map 查找逻辑路径
-        PoolManager.SkillDir cachedSkill = skillMap.get(path);
+        PoolManager.SkillDir cachedSkill = skillMap.get(aliasPath);
         if (cachedSkill != null) {
             return renderSkillXml(cachedSkill, true);
         }
 
         // 2. 回退到物理路径解析
-        Path target = resolvePathExtended(__cwd, path);
-        if (!isSkillDir(target)) return "Error: 路径 " + path + " 不是有效的专家技能目录 (缺少 SKILL.md)";
+        Path target = resolvePathExtended(__cwd, aliasPath);
+        if (!isSkillDir(target)) return "Error: 路径 " + aliasPath + " 不是有效的专家技能目录 (缺少 SKILL.md)";
 
-        return renderSkillXml(new PoolManager.SkillDir(path, target, null), true);
+        return renderSkillXml(new PoolManager.SkillDir(aliasPath, target, null), true);
     }
 
     @ToolMapping(name = "skillrefresh", description = "重新扫描所有专家技能池，更新专家技能列表。")
