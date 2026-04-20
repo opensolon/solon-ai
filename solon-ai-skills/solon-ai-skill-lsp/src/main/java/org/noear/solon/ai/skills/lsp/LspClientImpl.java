@@ -22,6 +22,7 @@ import org.eclipse.lsp4j.services.LanguageServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -30,6 +31,7 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
 import java.util.function.BiConsumer;
 
 /**
@@ -61,11 +63,11 @@ public class LspClientImpl implements LspClient {
 
     public LspClientImpl(String[] command, String rootDir) throws Exception {
         this.rootDir = rootDir;
-        this.rootUri = new java.io.File(rootDir).toURI().toString();
+        this.rootUri = new File(rootDir).toURI().toString();
 
         // 1. 启动语言服务器进程
         ProcessBuilder builder = new ProcessBuilder(command);
-        builder.directory(new java.io.File(rootDir));
+        builder.directory(new File(rootDir));
         this.process = builder.start();
 
         InputStream in = process.getInputStream();
@@ -73,7 +75,7 @@ public class LspClientImpl implements LspClient {
 
         // 2. 建立 JSON-RPC 连接
         Launcher<LanguageServer> launcher = Launcher.createLauncher(
-                this, LanguageServer.class, in, out, java.util.concurrent.Executors.newCachedThreadPool(), (consume) -> consume
+                this, LanguageServer.class, in, out, Executors.newCachedThreadPool(), (consume) -> consume
         );
 
         launcher.startListening();
