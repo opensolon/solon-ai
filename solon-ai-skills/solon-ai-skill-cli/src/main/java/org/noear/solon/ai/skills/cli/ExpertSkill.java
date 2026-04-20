@@ -169,8 +169,8 @@ public class ExpertSkill extends AbsSkill {
         return sb.toString();
     }
 
-    @ToolMapping(name = "skillread", description = "读取技能详细说明书。当需要确认具体工具参数或规约细节时使用。")
-    public String skillread(@Param(value = "aliasPath", description = "技能的唯一路径标识（例如：'@skills/deep-research'）") String aliasPath, String __cwd) throws IOException {
+    @ToolMapping(name = "skillread", description = "读取专家技能详细说明书。在选定技能后、开始执行具体任务前，必须调用此工具以获取具体的环境要求、参数规约及可用文件别名。")
+    public String skillread(@Param(value = "aliasPath", description = "专家技能的唯一路径标识（例如：'@skills/deep-research'）") String aliasPath, String __cwd) throws IOException {
         Map<String, PoolManager.SkillDir> skillMap = poolManager.getSkillMap();
         // 1. 优先从内存 Map 查找逻辑路径
         PoolManager.SkillDir cachedSkill = skillMap.get(aliasPath);
