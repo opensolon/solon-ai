@@ -139,50 +139,43 @@ public class LspManagerTest {
 
     @Test
     public void testGetClientForFile_MatchJava() {
-        MockLspClient mockClient = new MockLspClient();
         LspServerParameters params = new LspServerParameters(
                 Arrays.asList("jdtls"), Arrays.asList(".java"));
 
-        manager.registerTestClient("java", params, mockClient);
+        manager.registerServer("java", params);
 
         LspClient client = manager.getClientForFile("Test.java");
         assertNotNull(client);
-        assertSame(mockClient, client);
     }
 
     @Test
     public void testGetClientForFile_MatchGo() {
-        MockLspClient mockClient = new MockLspClient();
         LspServerParameters params = new LspServerParameters(
                 Arrays.asList("gopls"), Arrays.asList(".go"));
 
-        manager.registerTestClient("go", params, mockClient);
+        manager.registerServer("go", params);
 
         LspClient client = manager.getClientForFile("main.go");
         assertNotNull(client);
-        assertSame(mockClient, client);
     }
 
     @Test
     public void testGetClientForFile_PathWithDirectory() {
-        MockLspClient mockClient = new MockLspClient();
         LspServerParameters params = new LspServerParameters(
                 Arrays.asList("jdtls"), Arrays.asList(".java"));
 
-        manager.registerTestClient("java", params, mockClient);
+        manager.registerServer("java", params);
 
         LspClient client = manager.getClientForFile("src/main/java/Hello.java");
         assertNotNull(client);
-        assertSame(mockClient, client);
     }
 
     @Test
     public void testGetClientForFile_NoMatch() {
-        MockLspClient mockClient = new MockLspClient();
         LspServerParameters params = new LspServerParameters(
                 Arrays.asList("jdtls"), Arrays.asList(".java"));
 
-        manager.registerTestClient("java", params, mockClient);
+        manager.registerServer("java", params);
 
         LspClient client = manager.getClientForFile("script.py");
         assertNull(client);
@@ -196,11 +189,10 @@ public class LspManagerTest {
 
     @Test
     public void testGetClientForFile_CaseInsensitive() {
-        MockLspClient mockClient = new MockLspClient();
         LspServerParameters params = new LspServerParameters(
                 Arrays.asList("jdtls"), Arrays.asList(".Java"));
 
-        manager.registerTestClient("java", params, mockClient);
+        manager.registerServer("java", params);
 
         LspClient client = manager.getClientForFile("test.JAVA");
         assertNotNull(client);
@@ -210,15 +202,13 @@ public class LspManagerTest {
 
     @Test
     public void testGetClient_ByName() {
-        MockLspClient mockClient = new MockLspClient();
         LspServerParameters params = new LspServerParameters(
                 Arrays.asList("jdtls"), Arrays.asList(".java"));
 
-        manager.registerTestClient("java", params, mockClient);
+        manager.registerServer("java", params);
 
         LspClient client = manager.getClient("java");
         assertNotNull(client);
-        assertSame(mockClient, client);
     }
 
     @Test
@@ -245,14 +235,12 @@ public class LspManagerTest {
     public void testGetActiveClientCount() {
         assertEquals(0, manager.getActiveClientCount());
 
-        manager.registerTestClient("java",
-                new LspServerParameters(Arrays.asList("jdtls"), Arrays.asList(".java")),
-                new MockLspClient());
+        manager.registerServer("java",
+                new LspServerParameters(Arrays.asList("jdtls"), Arrays.asList(".java")));
         assertEquals(1, manager.getActiveClientCount());
 
-        manager.registerTestClient("go",
-                new LspServerParameters(Arrays.asList("gopls"), Arrays.asList(".go")),
-                new MockLspClient());
+        manager.registerServer("go",
+                new LspServerParameters(Arrays.asList("gopls"), Arrays.asList(".go")));
         assertEquals(2, manager.getActiveClientCount());
     }
 
@@ -260,11 +248,10 @@ public class LspManagerTest {
 
     @Test
     public void testDiagnosticsCallback_ViaTool() {
-        MockLspClient mockClient = new MockLspClient();
         LspServerParameters params = new LspServerParameters(
                 Arrays.asList("jdtls"), Arrays.asList(".java"));
 
-        manager.registerTestClient("java", params, mockClient);
+        manager.registerServer("java", params);
 
         AtomicReference<String> receivedUri = new AtomicReference<>();
         AtomicReference<String> receivedText = new AtomicReference<>();
@@ -287,15 +274,11 @@ public class LspManagerTest {
 
     @Test
     public void testShutdownAll() {
-        MockLspClient mockClient1 = new MockLspClient();
-        MockLspClient mockClient2 = new MockLspClient();
 
-        manager.registerTestClient("java",
-                new LspServerParameters(Arrays.asList("jdtls"), Arrays.asList(".java")),
-                mockClient1);
-        manager.registerTestClient("go",
-                new LspServerParameters(Arrays.asList("gopls"), Arrays.asList(".go")),
-                mockClient2);
+        manager.registerServer("java",
+                new LspServerParameters(Arrays.asList("jdtls"), Arrays.asList(".java")));
+        manager.registerServer("go",
+                new LspServerParameters(Arrays.asList("gopls"), Arrays.asList(".go")));
 
         assertEquals(2, manager.getActiveClientCount());
 
@@ -314,25 +297,15 @@ public class LspManagerTest {
     @Test
     public void testRegisterTestClient_NullName() {
         assertThrows(NullPointerException.class, () -> {
-            manager.registerTestClient(null,
-                    new LspServerParameters(Arrays.asList("cmd"), Arrays.asList(".java")),
-                    new MockLspClient());
+            manager.registerServer(null,
+                    new LspServerParameters(Arrays.asList("cmd"), Arrays.asList(".java")));
         });
     }
 
     @Test
     public void testRegisterTestClient_NullParams() {
         assertThrows(NullPointerException.class, () -> {
-            manager.registerTestClient("java", null, new MockLspClient());
-        });
-    }
-
-    @Test
-    public void testRegisterTestClient_NullClient() {
-        assertThrows(NullPointerException.class, () -> {
-            manager.registerTestClient("java",
-                    new LspServerParameters(Arrays.asList("cmd"), Arrays.asList(".java")),
-                    null);
+            manager.registerServer("java", null);
         });
     }
 }

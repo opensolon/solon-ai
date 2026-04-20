@@ -169,25 +169,6 @@ public class LspManager {
     }
 
     /**
-     * 注册测试用的 LSP 客户端（跳过进程启动，直接注入已有实例）
-     *
-     * <p>用于测试场景，避免需要启动真实的语言服务器进程。
-     *
-     * @param name   服务器名称
-     * @param params 服务器配置（用于扩展名匹配）
-     * @param client 预构建的 LspClient 实例
-     * @since 3.10.0
-     */
-    public void registerTestClient(String name, LspServerParameters params, LspClient client) {
-        Objects.requireNonNull(name, "Server name cannot be null");
-        Objects.requireNonNull(params, "Server params cannot be null");
-        Objects.requireNonNull(client, "Client cannot be null");
-
-        serverConfigs.put(name, params);
-        activeClients.put(name, client);
-    }
-
-    /**
      * 关闭所有 LSP 服务器
      */
     public void shutdownAll() {

@@ -45,7 +45,6 @@ public class LspToolTest {
 
     private Path worktree;
     private LspManager lspManager;
-    private MockLspClient mockClient;
 
     @BeforeEach
     public void setup() throws Exception {
@@ -57,13 +56,37 @@ public class LspToolTest {
 
         // 创建 LspManager 并注入 MockClient
         lspManager = new LspManager(worktree.toString());
-        mockClient = new MockLspClient();
+
+        //--- 配置 LSP 服务器（按需启用，提供代码智能补全、跳转定义、诊断等能力）
+        lspManager.registerServer("java", new LspServerParameters(
+                Arrays.asList("jdtls", "-data", ".solon/lsp/java-workspace"),
+                Arrays.asList(".java")
+        ));
+        lspManager.registerServer("typescript", new LspServerParameters(
+                Arrays.asList("typescript-language-server", "--stdio"),
+                Arrays.asList(".ts", ".tsx", ".js", ".jsx")
+        ));
+        lspManager.registerServer("go", new LspServerParameters(
+                Arrays.asList("gopls"),
+                Arrays.asList(".go")
+        ));
+        lspManager.registerServer("python", new LspServerParameters(
+                Arrays.asList("pylsp"),
+                Arrays.asList(".py", ".pyi")
+        ));
+        lspManager.registerServer("rust", new LspServerParameters(
+                Arrays.asList("rust-analyzer"),
+                Arrays.asList(".rs")
+        ));
+        lspManager.registerServer("clangd", new LspServerParameters(
+                Arrays.asList("clangd", "--background-index"),
+                Arrays.asList(".c", ".cpp", ".cc", ".h", ".hpp")
+        ));
 
         LspServerParameters javaParams = new LspServerParameters(
                 Arrays.asList("echo", "mock"),
                 Arrays.asList(".java")
         );
-        lspManager.registerTestClient("java", javaParams, mockClient);
     }
 
     @AfterEach
@@ -202,18 +225,10 @@ public class LspToolTest {
 
     @Test
     public void testNoResults() throws Exception {
-        // 使用返回空结果的 MockClient
-        MockLspClient emptyClient = new MockLspClient() {
-            @Override
-            public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> definition(DefinitionParams params) {
-                return CompletableFuture.completedFuture(Either.forLeft(Collections.emptyList()));
-            }
-        };
-
         LspManager emptyManager = new LspManager(worktree.toString());
         LspServerParameters javaParams = new LspServerParameters(
                 Arrays.asList("echo", "mock"), Arrays.asList(".java"));
-        emptyManager.registerTestClient("java", javaParams, emptyClient);
+        emptyManager.registerServer("java", javaParams);
 
         LspSkill tool = new LspSkill(emptyManager, worktree.toString());
         Document doc = tool.lsp("goToDefinition", "Test.java", 1, 10, null, null);
@@ -270,21 +285,10 @@ public class LspToolTest {
 
     @Test
     public void testCoordinateConversion() throws Exception {
-        // 通过匿名类拦截参数，验证坐标从 1-based 转为 0-based
-        MockLspClient trackingClient = new MockLspClient() {
-            @Override
-            public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> definition(DefinitionParams params) {
-                // 验证坐标已被转换为 0-based
-                assertEquals(0, params.getPosition().getLine());     // line 1 -> 0
-                assertEquals(9, params.getPosition().getCharacter()); // char 10 -> 9
-                return super.definition(params);
-            }
-        };
-
         LspManager trackManager = new LspManager(worktree.toString());
         LspServerParameters javaParams = new LspServerParameters(
                 Arrays.asList("echo", "mock"), Arrays.asList(".java"));
-        trackManager.registerTestClient("java", javaParams, trackingClient);
+        trackManager.registerServer("java", javaParams);
 
         LspSkill tool = new LspSkill(trackManager, worktree.toString());
         tool.lsp("goToDefinition", "Test.java", 1, 10, null, null);
