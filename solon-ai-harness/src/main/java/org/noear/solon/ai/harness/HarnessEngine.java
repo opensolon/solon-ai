@@ -34,6 +34,7 @@ import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.client.McpProviders;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
 import org.noear.solon.ai.skills.cli.TodoSkill;
+import org.noear.solon.ai.skills.lsp.LspTool;
 import org.noear.solon.ai.skills.restapi.ApiSource;
 import org.noear.solon.ai.skills.restapi.RestApiSkill;
 import org.noear.solon.ai.skills.toolgateway.ToolGatewaySkill;
@@ -77,6 +78,7 @@ public class HarnessEngine {
     private final WebfetchTool webfetchTool;
     private final WebsearchTool websearchTool;
     private final CodeSearchTool codeSearchTool;
+    private LspTool lspTool;
 
 
     private final ToolGatewaySkill mcpGatewaySkill;
@@ -224,6 +226,7 @@ public class HarnessEngine {
         this.codeSearchTool = new CodeSearchTool().retryConfig(props.getMcpRetries());
         this.websearchTool = new WebsearchTool().retryConfig(props.getMcpRetries());
         this.webfetchTool = new WebfetchTool().retryConfig(props.getApiRetries());
+        this.lspTool = new LspTool(null);
 
         if (Assert.isNotEmpty(props.getApiServers())) {
             restApiSkill = new RestApiSkill().retryConfig(props.getApiRetries());

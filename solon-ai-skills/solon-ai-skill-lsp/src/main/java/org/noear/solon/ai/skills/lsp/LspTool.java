@@ -19,6 +19,7 @@ import org.eclipse.lsp4j.*;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.annotation.Param;
 
@@ -32,10 +33,14 @@ import java.util.concurrent.CompletableFuture;
  * LspTool - 对齐 OpenCode 逻辑
  * 使用 Eclipse LSP4J 实现 IDE 级代码分析能力（Java 8 语法版）
  */
-public class LspTool {
+public class LspTool extends AbsToolProvider {
     private final LspClient lspClient;
     //工作区
     private final String workDir;
+
+    public LspTool(LspClient lspClient) {
+        this(lspClient, null);
+    }
 
     public LspTool(LspClient lspClient, String workDir) {
         this.lspClient = lspClient;
