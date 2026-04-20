@@ -267,7 +267,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         StreamChain chain = new StreamChain(options.interceptors(), this::doStream);
 
         return chain.doIntercept(req)
-                .timeout(java.time.Duration.ofSeconds(30))
+                .timeout(config.getTimeout())
                 .doOnError(e -> {
                     if (e instanceof TimeoutException) {
                         log.error("LLM stream request timeout!");

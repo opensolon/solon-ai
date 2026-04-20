@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 
 /**
  * LSP 服务器管理器，负责多语言服务器的生命周期管理与路由
@@ -43,12 +44,22 @@ public class LspManager {
     private final Map<String, LspClient> activeClients = new ConcurrentHashMap<>();
     private final String workspace;
     private BiConsumer<String, String> diagnosticsCallback;
+    private BiFunction<String, String, LspClient> clientFactory;
 
     /**
      * @param workspace 工作区根目录
      */
     public LspManager(String workspace) {
         this.workspace = workspace;
+    }
+
+    /**
+     * 设置客户端工厂（用于测试或自定义客户端创建逻辑）
+     *
+     * @param factory 接受 (workspace, serverName)，返回 LspClient 实例
+     */
+    public void setClientFactory(BiFunction<String, String, LspClient> factory) {
+        this.clientFactory = factory;
     }
 
     public boolean isEmpty(){
@@ -146,6 +157,16 @@ public class LspManager {
     private LspClient getOrCreateClient(String name, LspServerParameters params) {
         return activeClients.computeIfAbsent(name, k -> {
             try {
+                // 优先使用自定义工厂
+                if (clientFactory != null) {
+                    LOG.info("Creating LSP client via factory for '{}'", name);
+                    LspClient client = clientFactory.apply(workspace, name);
+                    if (client != null) {
+                        LOG.info("LSP client for '{}' created via factory", name);
+                        return client;
+                    }
+                }
+
                 LOG.info("Starting LSP server '{}': {}", name, params.getCommand());
                 LspClientImpl client = new LspClientImpl(
                         params.getCommandArray(),
