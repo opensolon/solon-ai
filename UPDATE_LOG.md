@@ -25,6 +25,7 @@
 * 优化 solon-ai-agent 中断传递处理
 * 优化 solon-ai-agent retrying 中断处理（这前的 task 内部的 stream 可能会中断传递）
 * 优化 solon-ai-skill-lsp 重构 LspSkill 实现（之前名为 LspTool）
+* 优化 solon-ai-skill-cli ExpertSkill 引导词
 
 ### 3.10.2
 
