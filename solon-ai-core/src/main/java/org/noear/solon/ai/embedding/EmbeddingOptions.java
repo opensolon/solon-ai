@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.embedding;
 
+import org.noear.solon.core.util.Assert;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -47,10 +49,26 @@ public class EmbeddingOptions {
     }
 
     /**
+     * 移除选项
+     */
+    public EmbeddingOptions optionRemove(String key){
+        options.remove(key);
+        return this;
+    }
+
+    /**
      * 选项添加
      */
     public EmbeddingOptions optionSet(String key, Object val) {
         options.put(key, val);
+        return this;
+    }
+
+    public EmbeddingOptions optionSet(Map<String, Object> map) {
+        if (Assert.isNotEmpty(map)) {
+            options.putAll(map);
+        }
+
         return this;
     }
 

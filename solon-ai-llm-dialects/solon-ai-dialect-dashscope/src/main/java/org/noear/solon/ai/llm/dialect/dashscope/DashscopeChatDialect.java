@@ -100,7 +100,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
 
             n.getOrNew("parameters").then(n1 -> {
                 for (Map.Entry<String, Object> kv : options.options().entrySet()) {
-                    n1.set(kv.getKey(), kv.getValue());
+                    n1.set(kv.getKey(), ONode.ofBean(kv.getValue()));
                 }
 
                 n1.set("result_format", "message");

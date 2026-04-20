@@ -348,18 +348,18 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     }
 
     /**
+     * 选项获取
+     */
+    public Object option(String key) {
+        return options.get(key);
+    }
+
+    /**
      * 移除选项
      */
     public T optionRemove(String key) {
         options.remove(key);
         return (T) this;
-    }
-
-    /**
-     * 选项获取
-     */
-    public Object option(String key) {
-        return options.get(key);
     }
 
     /**

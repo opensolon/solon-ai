@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
+import java.util.function.Consumer;
 
 /**
  * 嵌入模型（相当于翻译器）
@@ -204,9 +205,9 @@ public class EmbeddingModel implements AiModel {
         }
 
         /**
-         *  User-Agent
+         * User-Agent
          */
-        public Builder userAgent(String userAgent){
+        public Builder userAgent(String userAgent) {
             config.setUserAgent(userAgent);
             return this;
         }
@@ -240,6 +241,11 @@ public class EmbeddingModel implements AiModel {
          */
         public Builder batchSize(int batchSize) {
             config.setBatchSize(batchSize);
+            return this;
+        }
+
+        public Builder modelOptions(Consumer<EmbeddingOptions> consumer) {
+            consumer.accept(config.getModelOptions());
             return this;
         }
 

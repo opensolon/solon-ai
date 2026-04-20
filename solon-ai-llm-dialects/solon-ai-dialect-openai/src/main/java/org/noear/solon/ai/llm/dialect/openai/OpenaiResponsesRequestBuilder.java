@@ -94,6 +94,7 @@ public class OpenaiResponsesRequestBuilder {
                 buildReasoningNode(root, kv.getValue());
                 continue;
             }
+
             root.set(key, ONode.ofBean(kv.getValue()));
         }
         // 构建 tools

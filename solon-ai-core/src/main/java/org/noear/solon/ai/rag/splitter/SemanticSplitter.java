@@ -263,7 +263,7 @@ public class SemanticSplitter implements DocumentSplitter {
         List<List<String>> batches = ListUtil.partition(texts, batchSize);
 
         for (List<String> batch : batches) {
-            EmbeddingResponse resp = embeddingModel.input(batch).options(new EmbeddingOptions().dimensions(512)).call();
+            EmbeddingResponse resp = embeddingModel.input(batch).options(o->o.dimensions(512)).call();
             if (resp.getError() != null) {
                 throw resp.getError();
             }

@@ -45,7 +45,7 @@ public abstract class AbstractEmbeddingDialect implements EmbeddingDialect {
             n.set("encoding_format", "float");
 
             for (Map.Entry<String, Object> kv : options.options().entrySet()) {
-                n.set(kv.getKey(), kv.getValue());
+                n.set(kv.getKey(), ONode.ofBean(kv.getValue()));
             }
         }).toJson();
     }

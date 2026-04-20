@@ -19,6 +19,8 @@ import org.noear.solon.ai.AiConfig;
 import org.noear.solon.annotation.BindProps;
 import org.noear.solon.lang.Preview;
 
+import java.util.Map;
+
 /**
  * 嵌入配置
  *
@@ -27,7 +29,24 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.1")
 public class EmbeddingConfig extends AiConfig {
-    protected int batchSize = 10;
+
+    private Map<String, Object> defaultOptions;
+    private int batchSize = 10;
+
+    private transient EmbeddingOptions modelOptions;
+
+    public EmbeddingOptions getModelOptions() {
+        if (modelOptions == null) {
+            modelOptions = new EmbeddingOptions();
+
+            if (defaultOptions != null) {
+                modelOptions.optionSet(defaultOptions);
+                defaultOptions = null;
+            }
+        }
+
+        return modelOptions;
+    }
 
     /**
      * 获取批次大数

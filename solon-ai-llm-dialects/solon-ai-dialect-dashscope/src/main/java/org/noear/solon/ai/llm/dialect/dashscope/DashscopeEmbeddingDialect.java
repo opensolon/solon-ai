@@ -74,7 +74,7 @@ public class DashscopeEmbeddingDialect extends AbstractEmbeddingDialect {
 
             n.getOrNew("parameters").then(n1 -> {
                 for (Map.Entry<String, Object> kv : options.options().entrySet()) {
-                    n1.set(kv.getKey(), kv.getValue());
+                    n1.set(kv.getKey(), ONode.ofBean(kv.getValue()));
                 }
             });
 
