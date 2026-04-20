@@ -270,14 +270,6 @@ public class HarnessEngine {
         }
 
         cliSkills.getTerminalSkill().setSandboxMode(props.isSandboxMode());
-
-        cliSkills.skillPool("@global", Paths.get(HarnessProperties.getUserHome(), props.getHarnessSkills()));
-        cliSkills.skillPool("@local", Paths.get(props.getWorkspace(), props.getHarnessSkills()));
-
-        cliSkills.skillPool("@skills", Paths.get(props.getWorkspace(), "skills"));
-        cliSkills.skillPool("@skillhub", Paths.get(HarnessProperties.getUserHome(), ".skillhub/skills/"));
-
-
         if (Assert.isNotEmpty(props.getSkillPools())) {
             props.getSkillPools().forEach((alias, dir) -> {
                 cliSkills.skillPool(alias, dir);
@@ -285,8 +277,11 @@ public class HarnessEngine {
         }
 
         agentManager = new AgentManager();
-        agentManager.agentPool(Paths.get(HarnessProperties.getUserHome(), props.getHarnessAgents())); //global
-        agentManager.agentPool(Paths.get(props.getWorkspace(), props.getHarnessAgents())); //local
+        if(Assert.isNotEmpty(props.getAgentPools())) {
+            props.getAgentPools().forEach(dir -> {
+                agentManager.agentPool(Paths.get(dir));
+            });
+        }
 
         mainAgent = createMainAgent();
     }
@@ -295,7 +290,7 @@ public class HarnessEngine {
         AgentDefinition agentDefinition = new AgentDefinition();
 
         // 系统提示词
-        agentDefinition.setSystemPrompt(getAgentsMd());
+        agentDefinition.setSystemPrompt(props.getSystemPrompt());
         // 名字
         agentDefinition.getMetadata().setName("main");
         // 主代理
@@ -334,27 +329,7 @@ public class HarnessEngine {
         return AgentFactory.create(this, definition);
     }
 
-    private String getAgentsMd() {
-        try {
-            URL agentsUrl = props.getAgentsUrl();
 
-            if (agentsUrl != null) {
-                try (InputStream is = agentsUrl.openStream()) {
-                    String content = IoUtil.transferToString(is, "utf-8").trim();
-
-                    if (content.length() > 10000) { // 例如限制在 1万字符以内
-                        LOG.warn("AGENTS.md is too large, truncating...");
-                        return content.substring(0, 10000);
-                    }
-                    return content;
-                }
-            }
-        } catch (Throwable e) {
-            LOG.warn("AGENTS.md load failure: {}", e.getMessage(), e);
-        }
-
-        return null;
-    }
 
     public static Builder builder() {
         return new Builder();

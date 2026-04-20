@@ -51,6 +51,9 @@ public class HarnessProperties implements Serializable {
     //默认工作区
     private String workspace = "work";
 
+    //系统提示词
+    private String systemPrompt;
+
     //主代理工具权限
     private List<String> tools = new ArrayList<>();
 
@@ -82,6 +85,8 @@ public class HarnessProperties implements Serializable {
     private List<ChatConfig> models = new ArrayList<>();
     //技能池
     private Map<String, String> skillPools = new LinkedHashMap<>();
+    //代理池
+    private List<String> agentPools = new ArrayList<>();
     //mcp集
     private Map<String, McpServerParameters> mcpServers = new LinkedHashMap<>();
     //api集
@@ -186,72 +191,6 @@ public class HarnessProperties implements Serializable {
         }
 
         return models.get(0);
-    }
-
-    /**
-     * 当前目录
-     */
-    public static String getUserDir() {
-        return System.getProperty("user.dir");
-    }
-
-    /**
-     * 用户主目录
-     */
-    public static String getUserHome() {
-        return System.getProperty("user.home");
-    }
-
-    public URL getConfigUrl() throws MalformedURLException {
-        //1. 资源文件（一般开发时）
-        URL tmp = ResourceUtil.getResource(HarnessEngine.NAME_CONFIG_YML);
-        if (tmp != null) {
-            return tmp;
-        }
-
-        //2. 工作区配置
-        Path path = Paths.get(HarnessProperties.getUserDir(), getHarnessHome(), HarnessEngine.NAME_CONFIG_YML);
-        if (Files.exists(path)) {
-            return path.toUri().toURL();
-        }
-
-        //3. 用户目录区配置
-        path = Paths.get(HarnessProperties.getUserHome(), getHarnessHome(), HarnessEngine.NAME_CONFIG_YML);
-
-        if (Files.exists(path)) {
-            return path.toUri().toURL();
-        }
-
-        //4. 程序边上的配置文件
-        tmp = ResourceUtil.getResourceByFile(HarnessEngine.NAME_CONFIG_YML);
-        if (tmp != null) {
-            return tmp;
-        }
-
-        return null;
-    }
-
-    public URL getAgentsUrl() throws MalformedURLException {
-        //1. 工作区配置
-        Path path = Paths.get(getWorkspace(), getHarnessHome(), HarnessEngine.NAME_AGENTS_MD);
-        if (Files.exists(path)) {
-            return path.toUri().toURL();
-        }
-
-        //2. 用户目录区配置
-        path = Paths.get(HarnessProperties.getUserHome(), getHarnessHome(), HarnessEngine.NAME_AGENTS_MD);
-
-        if (Files.exists(path)) {
-            return path.toUri().toURL();
-        }
-
-        //3. 程序边上的配置文件
-        URL tmp = ResourceUtil.getResourceByFile(HarnessEngine.NAME_AGENTS_MD);
-        if (tmp != null) {
-            return tmp;
-        }
-
-        return null;
     }
 
     /**
