@@ -226,6 +226,8 @@ public class HarnessEngine {
         this.codeSearchTool = new CodeSearchTool().retryConfig(props.getMcpRetries());
         this.websearchTool = new WebsearchTool().retryConfig(props.getMcpRetries());
         this.webfetchTool = new WebfetchTool().retryConfig(props.getApiRetries());
+
+        //lsp未完成
         this.lspTool = new LspTool(null);
 
         if (Assert.isNotEmpty(props.getApiServers())) {

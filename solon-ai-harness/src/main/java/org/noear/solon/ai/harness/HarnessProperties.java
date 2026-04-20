@@ -85,6 +85,8 @@ public class HarnessProperties implements Serializable {
     private Map<String, McpServerParameters> mcpServers = new LinkedHashMap<>();
     //api集
     private Map<String, ApiSource> apiServers = new LinkedHashMap<>();
+    //lsp集（未完成）
+    private Map<String, Object> lspServers = new LinkedHashMap<>();
 
     public HarnessProperties(String harnessHome) {
         if (Assert.isEmpty(harnessHome)) {
