@@ -19,10 +19,17 @@ public class DemoApp {
         //--- 1. 初始化
         HarnessProperties harnessProps = new HarnessProperties(".tmp/");
         harnessProps.addTools(ToolPermission.TOOL_ALL_FULL); //设定工具权限
+        harnessProps.addDisallowedTools(ToolPermission.TOOL_ALL_FULL);
+
+        harnessProps.addAgentPool("~/.soloncode/agents/");
+
         harnessProps.addModel(null); //设定大模型配置
         harnessProps.addExtension((name, builder) -> {
             //...
         });
+
+
+        harnessProps.setSystemPrompt("xxx");
 
         //--- 配置 LSP 服务器（按需启用，提供代码智能补全、跳转定义、诊断等能力）
         harnessProps.addLspServer("java", new LspServerParameters(

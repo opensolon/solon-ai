@@ -139,11 +139,24 @@ public class HarnessProperties implements Serializable {
     }
 
     /**
+     * 添加代理池
+     */
+    public void addAgentPool(String path){
+        getAgentPools().add(path);
+    }
+
+    /**
      * 添加工具权限
      */
     public void addTools(ToolPermission... toolPermissions) {
         for (ToolPermission p1 : toolPermissions) {
             tools.add(p1.getName());
+        }
+    }
+
+    public void addDisallowedTools(ToolPermission... toolPermissions){
+        for (ToolPermission p1 : toolPermissions) {
+            disallowedTools.add(p1.getName());
         }
     }
 
