@@ -16,6 +16,7 @@
 package org.noear.solon.ai.harness.agent;
 
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
@@ -66,7 +67,7 @@ public class AgentFactory {
 
         if (metadata.getMaxSteps() != null && metadata.getMaxSteps() > 0) {
             builder.maxSteps(metadata.getMaxSteps());
-        } else if (metadata.hasMaxTurns()) {
+        } else if (metadata.getMaxTurns() != null && metadata.getMaxTurns() > 0) {
             builder.maxSteps(metadata.getMaxTurns());
         } else {
             builder.maxSteps(engine.getProps().getMaxSteps());
@@ -118,6 +119,10 @@ public class AgentFactory {
                 // terminalSkill / tools 需要通过以 skill 形态加载（getInstruction 里有 SOP）
                 builder.defaultSkillAdd(terminalSkillWrap);
             }
+        }
+
+        for (HarnessExtension extension : engine.getProps().getExtensions()) {
+            extension.configure(builder);
         }
 
         return builder;

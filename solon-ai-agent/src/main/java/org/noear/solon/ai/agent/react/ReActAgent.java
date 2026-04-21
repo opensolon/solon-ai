@@ -355,10 +355,14 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
     }
 
     public static class Builder {
-        private ReActAgentConfig config;
+        private final ReActAgentConfig config;
 
         public Builder(ChatModel chatModel) {
             this.config = new ReActAgentConfig(chatModel);
+        }
+
+        public String name() {
+            return config.getName();
         }
 
         public Builder then(Consumer<Builder> consumer) {

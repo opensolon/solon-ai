@@ -26,6 +26,8 @@
 * 优化 solon-ai-agent retrying 中断处理（这前的 task 内部的 stream 可能会中断传递）
 * 优化 solon-ai-skill-lsp 重构 LspSkill 实现（之前名为 LspTool）
 * 优化 solon-ai-skill-cli ExpertSkill 引导词
+* 优化 solon-ai-harness HarnessEngine 扩展机制（支持为子代理扩展，通过名字识别）
+* 调整 solon-ai-harness ReActAgentExtension 更名为 ReActAgentExtension
 
 ### 3.10.2
 

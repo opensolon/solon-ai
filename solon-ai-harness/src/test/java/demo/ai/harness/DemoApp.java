@@ -4,7 +4,6 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
-import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessProperties;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
@@ -20,7 +19,10 @@ public class DemoApp {
         //--- 1. 初始化
         HarnessProperties harnessProps = new HarnessProperties(".tmp/");
         harnessProps.addTools(ToolPermission.TOOL_ALL_FULL); //设定工具权限
-        harnessProps.addModel( null); //设定大模型配置
+        harnessProps.addModel(null); //设定大模型配置
+        harnessProps.addExtension(b -> {
+            //...
+        });
 
         //--- 配置 LSP 服务器（按需启用，提供代码智能补全、跳转定义、诊断等能力）
         harnessProps.addLspServer("java", new LspServerParameters(
@@ -57,8 +59,7 @@ public class DemoApp {
             }
         };
 
-        HarnessEngine engine = HarnessEngine.builder()
-                .properties(harnessProps)
+        HarnessEngine engine = HarnessEngine.of(harnessProps)
                 .sessionProvider(sessionProvider)
                 .build();
 
@@ -74,7 +75,7 @@ public class DemoApp {
         AgentSession session = engine.getSession("default");
 
         //--- 用主代理模式
-        engine.getMainAgent().prompt(prompt)
+        engine.prompt(prompt)
                 .session(session) //没有，则为临时会话
                 .options(o -> {
                     //按需，动态指定工作区（没有，则为默认工作区）

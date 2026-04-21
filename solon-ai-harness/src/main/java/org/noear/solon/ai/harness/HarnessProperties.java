@@ -23,18 +23,10 @@ import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.skills.restapi.ApiSource;
 import org.noear.solon.ai.skills.lsp.LspServerParameters;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.core.util.ResourceUtil;
+import org.noear.solon.lang.Preview;
 
 import java.io.Serializable;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * 马具配置属性
@@ -44,6 +36,7 @@ import java.util.Map;
  */
 @Getter
 @Setter
+@Preview("3.10")
 public class HarnessProperties implements Serializable {
     //马具目录
     private final String harnessHome;
@@ -83,6 +76,10 @@ public class HarnessProperties implements Serializable {
 
     //大模型
     private List<ChatConfig> models = new ArrayList<>();
+
+    //扩展
+    private List<HarnessExtension> extensions = new ArrayList<>();
+
     //技能池
     private Map<String, String> skillPools = new LinkedHashMap<>();
     //代理池
@@ -102,6 +99,13 @@ public class HarnessProperties implements Serializable {
         }
 
         this.harnessHome = harnessHome;
+    }
+
+    /**
+     * 添加扩展
+     */
+    public void addExtension(HarnessExtension extension){
+        this.extensions.add(extension);
     }
 
     /**

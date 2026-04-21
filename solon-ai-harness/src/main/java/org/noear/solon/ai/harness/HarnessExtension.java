@@ -13,15 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.react;
+package org.noear.solon.ai.harness;
+
+import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.lang.Preview;
 
 /**
- * ReAct 智能体扩展接口
+ * 马具扩展接口
  *
  * @author noear
- * @since 3.9.6
+ * @since 3.10.4
  */
-public interface ReActAgentExtension {
+@Preview("3.10")
+public interface HarnessExtension {
     /**
      * 配置
      */

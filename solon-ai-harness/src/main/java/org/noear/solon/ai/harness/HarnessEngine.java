@@ -18,7 +18,7 @@ package org.noear.solon.ai.harness;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActAgentExtension;
+import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
@@ -27,6 +27,7 @@ import org.noear.solon.ai.agent.react.intercept.summarize.HierarchicalSummarizat
 import org.noear.solon.ai.agent.react.intercept.summarize.KeyInfoExtractionStrategy;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.code.CodeSkill;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
@@ -44,6 +45,7 @@ import org.noear.solon.ai.skills.web.CodeSearchTool;
 import org.noear.solon.ai.skills.web.WebfetchTool;
 import org.noear.solon.ai.skills.web.WebsearchTool;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,6 +58,7 @@ import java.util.*;
  *
  * @author noear
  */
+@Preview("3.10")
 public class HarnessEngine {
     private final static Logger LOG = LoggerFactory.getLogger(HarnessEngine.class);
 
@@ -67,7 +70,6 @@ public class HarnessEngine {
 
     private final AgentSessionProvider sessionProvider;
     private final HarnessProperties props;
-    private final Collection<ReActAgentExtension> extensions;
 
     private final CodeSkill codeSkill;
     private final TodoSkill todoSkill;
@@ -194,7 +196,7 @@ public class HarnessEngine {
     }
 
 
-    private HarnessEngine(HarnessProperties props, AgentSessionProvider sessionProvider, SummarizationInterceptor summarizationInterceptor, HITLInterceptor hitlInterceptor, Collection<ReActAgentExtension> extensions) {
+    private HarnessEngine(HarnessProperties props, AgentSessionProvider sessionProvider, SummarizationInterceptor summarizationInterceptor, HITLInterceptor hitlInterceptor) {
         this.props = props;
         this.mainModel = props.getModelOrDef(null).toChatModel();
 
@@ -220,7 +222,6 @@ public class HarnessEngine {
         this.sessionProvider = sessionProvider;
         this.summarizationInterceptor = summarizationInterceptor;
         this.hitlInterceptor = hitlInterceptor;
-        this.extensions = extensions;
 
         this.todoSkill = new TodoSkill(props.getHarnessSessions());
         this.codeSkill = new CodeSkill(this);
@@ -289,7 +290,7 @@ public class HarnessEngine {
         // 系统提示词
         agentDefinition.setSystemPrompt(props.getSystemPrompt());
         // 名字
-        agentDefinition.getMetadata().setName("main");
+        agentDefinition.getMetadata().setName(AgentDefinition.AGENT_MAIN);
         // 主代理
         agentDefinition.getMetadata().setPrimary(true);
         // 工具权限
@@ -304,12 +305,6 @@ public class HarnessEngine {
 
         ReActAgent.Builder agentBuilder = AgentFactory.create(this, agentDefinition);
 
-        if (Assert.isNotEmpty(extensions)) {
-            for (ReActAgentExtension extension : extensions) {
-                extension.configure(agentBuilder);
-            }
-        }
-
         return agentBuilder.build();
     }
 
@@ -318,18 +313,31 @@ public class HarnessEngine {
         return sessionProvider.getSession(instanceId);
     }
 
-    public ReActAgent getMainAgent() {
-        return mainAgent;
-    }
-
     public ReActAgent.Builder createSubagent(AgentDefinition definition) {
         return AgentFactory.create(this, definition);
     }
 
+    public ReActAgent getMainAgent() {
+        return mainAgent;
+    }
+
+    public ReActRequest prompt(Prompt prompt) {
+        return mainAgent.prompt(prompt);
+    }
 
 
-    public static Builder builder() {
-        return new Builder();
+    public ReActRequest prompt(String prompt) {
+       return mainAgent.prompt(prompt);
+    }
+
+
+    public ReActRequest prompt() {
+        return mainAgent.prompt();
+    }
+
+
+    public static Builder of(HarnessProperties props) {
+        return new Builder(props);
     }
 
     public static class Builder {
@@ -337,11 +345,9 @@ public class HarnessEngine {
         private AgentSessionProvider sessionProvider;
         private SummarizationInterceptor summarizationInterceptor;
         private HITLInterceptor hitlInterceptor;
-        private List<ReActAgentExtension> extensions = new ArrayList<>();
 
-        public Builder properties(HarnessProperties properties) {
+        public Builder(HarnessProperties properties) {
             this.properties = properties;
-            return this;
         }
 
         public Builder sessionProvider(AgentSessionProvider sessionProvider) {
@@ -367,9 +373,12 @@ public class HarnessEngine {
 
         /**
          * 添加扩展
+         *
+         * @deprecated 3.10.4
          */
-        public Builder extensionAdd(ReActAgentExtension extension) {
-            this.extensions.add(extension);
+        @Deprecated
+        public Builder extensionAdd(HarnessExtension extension) {
+            this.properties.addExtension(extension);
             return this;
         }
 
@@ -382,7 +391,7 @@ public class HarnessEngine {
                 throw new IllegalStateException("Missing models config");
             }
 
-            return new HarnessEngine(properties, sessionProvider, summarizationInterceptor, hitlInterceptor, extensions);
+            return new HarnessEngine(properties, sessionProvider, summarizationInterceptor, hitlInterceptor);
         }
     }
 }
