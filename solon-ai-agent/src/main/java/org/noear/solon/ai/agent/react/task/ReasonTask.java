@@ -243,7 +243,7 @@ public class ReasonTask implements NamedTaskComponent {
         }
 
         if (Assert.isNotEmpty(trace.getOptions().getOutputSchema())) {
-            config.getChatModel().getDialect().prepareOutputSchemaInstruction(
+            trace.getOptions().getChatModel().getDialect().prepareOutputSchemaInstruction(
                     trace.getOptions().getOutputSchema(),
                     systemPromptBuf);
         }
@@ -384,7 +384,7 @@ public class ReasonTask implements NamedTaskComponent {
                     ONode.serialize(messages, Feature.Write_PrettyFormat, Feature.Write_EnumUsingName));
         }
 
-        ChatRequestDesc req = config.getChatModel()
+        ChatRequestDesc req = trace.getOptions().getChatModel()
                 .prompt(messages)
                 .options(o -> {
                     o.name(trace.getAgentName());
@@ -400,7 +400,7 @@ public class ReasonTask implements NamedTaskComponent {
                     trace.getOptions().getInterceptors().forEach(item -> o.interceptorAdd(item.index, item.target));
 
                     if (trace.getOptions().getOutputSchema() != null) {
-                        config.getChatModel().getDialect().prepareOutputFormatOptions(o);
+                        trace.getOptions().getChatModel().getDialect().prepareOutputFormatOptions(o);
                         //o.optionSet("response_format", Utils.asMap("type", "json_object"));
                     }
 

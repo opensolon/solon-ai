@@ -15,10 +15,14 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.snack4.util.Asserts;
+import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
+import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Objects;
 import java.util.function.Function;
 
 /**
@@ -37,6 +41,12 @@ public class ReActOptionsAmend extends ModelOptionsAmend<ReActOptionsAmend, ReAc
     }
 
     // --- Setter Methods (Fluent) ---
+
+    public ReActOptionsAmend chatModel(ChatModel chatModel){
+        Assert.notNull(chatModel, "chatModel");
+        options.setChatModel(chatModel);
+        return this;
+    }
 
     /**
      * 配置容错策略

@@ -43,8 +43,6 @@ public class ReActAgentConfig {
     private String role;
     /** 智能体画像 */
     private AgentProfile profile;
-    /** 执行推理的基础模型 */
-    private final ChatModel chatModel;
     /** 计算图微调器（自定义执行链路） */
     private Consumer<GraphSpec> graphAdjuster;
     /** 提示词模板（默认中文） */
@@ -57,14 +55,14 @@ public class ReActAgentConfig {
     private ReActStyle style = ReActStyle.NATIVE_TOOL;
 
     /** 默认运行选项（限流、重试、窗口等） */
-    private final ReActOptions defaultOptions = new ReActOptions();
+    private final ReActOptions defaultOptions;
 
     /**
      * @param chatModel 执行推理的模型，不能为空
      */
     public ReActAgentConfig(ChatModel chatModel) {
         Objects.requireNonNull(chatModel, "chatModel is required");
-        this.chatModel = chatModel;
+        this.defaultOptions = new ReActOptions(chatModel);
     }
 
     // --- 配置注入 (Protected) ---
@@ -105,8 +103,6 @@ public class ReActAgentConfig {
         if (profile == null) profile = new AgentProfile();
         return profile;
     }
-
-    public ChatModel getChatModel() { return chatModel; }
 
     public Consumer<GraphSpec> getGraphAdjuster() { return graphAdjuster; }
 

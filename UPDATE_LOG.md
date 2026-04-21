@@ -13,6 +13,7 @@
 
 ### 3.10.4
 
+* 添加 solon-ai-agent 动态切换 llm 支持（支持不同会话，在各自请求时切换）
 * 添加 solon-ai-harness 重试次数配置支持
 * 添加 solon-ai-harness lsp 功能
 * 添加 solon-ai-harness HarnessProperties.disallowedTools 配置支持（全局禁用工具配置）
@@ -28,6 +29,7 @@
 * 优化 solon-ai-skill-cli ExpertSkill 引导词
 * 优化 solon-ai-harness HarnessEngine 扩展机制（支持为子代理扩展，通过名字识别）
 * 调整 solon-ai-harness ReActAgentExtension 更名为 ReActAgentExtension
+* 调整 solon-ai-harness 切换 llm 的机制，并取消 switchMainModel 方法（有自由的机制了）
 
 ### 3.10.2
 

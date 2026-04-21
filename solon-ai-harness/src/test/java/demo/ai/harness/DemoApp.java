@@ -78,6 +78,10 @@ public class DemoApp {
         engine.prompt(prompt)
                 .session(session) //没有，则为临时会话
                 .options(o -> {
+
+                    //切换大模型
+                    o.chatModel(engine.getMainModel());
+
                     //按需，动态指定工作区（没有，则为默认工作区）
                     o.toolContextPut(HarnessEngine.ATTR_CWD, "xxx");
                 })

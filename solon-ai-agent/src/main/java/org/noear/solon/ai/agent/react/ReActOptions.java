@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.AgentChunk;
+import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.core.util.RankEntity;
@@ -40,6 +41,9 @@ public class ReActOptions implements NonSerializable {
     private static final Logger LOG = LoggerFactory.getLogger(ReActOptions.class);
 
     private transient FluxSink<AgentChunk> streamSink;
+
+    /** 执行推理的基础模型 */
+    private ChatModel chatModel;
 
     /**
      * 工具调用上下文（透传给 FunctionTool）
@@ -87,12 +91,22 @@ public class ReActOptions implements NonSerializable {
     private Function<ReActTrace, String> planningInstructionProvider;
 
 
+    public ReActOptions(ChatModel chatModel){
+        this.chatModel = chatModel;
+    }
+
+    private ReActOptions(){
+
+    }
+
     /**
      * 浅拷贝选项实例
      */
     protected ReActOptions copy() {
         ReActOptions tmp = new ReActOptions();
+        tmp.chatModel = chatModel;
         tmp.modelOptions.putAll(modelOptions);
+
         tmp.maxSteps = maxSteps;
         tmp.maxStepsLimit = maxStepsLimit;
         tmp.maxStepsExtensible = maxStepsExtensible;
@@ -121,6 +135,10 @@ public class ReActOptions implements NonSerializable {
 
     // --- 配置注入 (Protected) ---
 
+
+    protected void setChatModel(ChatModel chatModel) {
+        this.chatModel = chatModel;
+    }
 
     /**
      * 设置容错策略
@@ -202,6 +220,10 @@ public class ReActOptions implements NonSerializable {
 
     public Map<String, Object> getToolContext() {
         return modelOptions.toolContext();
+    }
+
+    public ChatModel getChatModel() {
+        return chatModel;
     }
 
     public ModelOptionsAmend<?, ReActInterceptor> getModelOptions() {
