@@ -238,5 +238,47 @@ public class AgentDefinition {
                 tools.add(p1.getName());
             }
         }
+
+        //------------
+
+        public boolean hasModel() {
+            return model != null && !model.isEmpty();
+        }
+
+        public boolean hasPermissionMode() {
+            return permissionMode != null && !permissionMode.isEmpty();
+        }
+
+        public boolean hasMaxTurns() {
+            return maxTurns != null && maxTurns > 0;
+        }
+
+        public boolean hasSkills() {
+            return skills != null && !skills.isEmpty();
+        }
+
+        public boolean hasMcpServers() {
+            return mcpServers != null && !mcpServers.isEmpty();
+        }
+
+        public boolean hasDisallowedTools() {
+            return disallowedTools != null && !disallowedTools.isEmpty();
+        }
+
+        public boolean hasMemory() {
+            return memory != null && !memory.isEmpty();
+        }
+
+        public boolean isBackground() {
+            return background != null && background;
+        }
+
+        public boolean hasIsolation() {
+            return isolation != null && !isolation.isEmpty();
+        }
+
+        public boolean hasTeamName() {
+            return teamName != null && !teamName.isEmpty();
+        }
     }
 }
