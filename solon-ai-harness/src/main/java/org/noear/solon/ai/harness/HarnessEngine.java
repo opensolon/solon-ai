@@ -174,6 +174,22 @@ public class HarnessEngine {
         return restApiSkill;
     }
 
+    /**
+     * 切换默认主模型
+     */
+    public void switchMainModel(String name) {
+        Objects.requireNonNull(name, "name");
+
+        ChatConfig chatConfig = props.getModelOrNil(name);
+        if (chatConfig == null) {
+            throw new IllegalArgumentException("The model not found: " + name);
+        }
+
+        // chatModel 切换后，重新生成主代理
+        this.mainModel = chatConfig.toChatModel();
+        this.mainAgent = createMainAgent();
+    }
+
     private HarnessEngine(HarnessProperties props, AgentSessionProvider sessionProvider, SummarizationInterceptor summarizationInterceptor, HITLInterceptor hitlInterceptor) {
         this.props = props;
         this.mainModel = props.getModelOrDef(null).toChatModel();
