@@ -32,7 +32,9 @@ public class ToolCall implements Serializable {
     private String name;
     private String argumentsStr;
     private Map<String, Object> arguments;
-    /** 思考签名（Gemini thinking signature，用于多轮工具调用时回传）
+    /**
+     * 思考签名（Gemini thinking signature，用于多轮工具调用时回传）
+     *
      * @since Google Gemini 3 models
      */
     private String thoughtSignature;
@@ -100,5 +102,15 @@ public class ToolCall implements Serializable {
 
     public void setThoughtSignature(String thoughtSignature) {
         this.thoughtSignature = thoughtSignature;
+    }
+
+    @Override
+    public String toString() {
+        return "ToolCall{" +
+                "index='" + index + '\'' +
+                ", id='" + id + '\'' +
+                ", name='" + name + '\'' +
+                ", arguments='" + argumentsStr + '\'' +
+                '}';
     }
 }
