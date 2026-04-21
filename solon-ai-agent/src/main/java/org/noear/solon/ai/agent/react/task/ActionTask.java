@@ -109,6 +109,10 @@ public class ActionTask implements NamedTaskComponent {
 
 
     private String doAction(Node node, ReActTrace trace, String toolName, Map<String, Object> args) {
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Action for agent [{}], toolName:{}, args:{}", config.getName(), toolName, args);
+        }
+
         trace.setLastObservation(null);
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onAction(trace, toolName, args);
@@ -166,10 +170,6 @@ public class ActionTask implements NamedTaskComponent {
      * 处理标准 ToolCall 协议调用
      */
     private void processNativeToolCall(Node node, ToolCall call, ReActTrace trace, TeamTrace parentTeamTrace, AtomicBoolean lastAssistantAdded) throws Throwable {
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Processing native tool call for agent [{}]: {}.", config.getName(), call);
-        }
-
         Map<String, Object> args = (call.getArguments() == null) ? new HashMap<>() : call.getArguments();
 
         // 触发 Action 生命周期拦截
