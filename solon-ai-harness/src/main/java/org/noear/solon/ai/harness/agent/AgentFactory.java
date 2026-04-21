@@ -122,7 +122,7 @@ public class AgentFactory {
         }
 
         for (HarnessExtension extension : engine.getProps().getExtensions()) {
-            extension.configure(builder);
+            extension.configure(agentDefinition.getName(), builder);
         }
 
         return builder;

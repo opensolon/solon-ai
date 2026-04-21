@@ -29,5 +29,5 @@ public interface HarnessExtension {
     /**
      * 配置
      */
-    void configure(ReActAgent.Builder agentBuilder);
+    void configure(String agentName, ReActAgent.Builder agentBuilder);
 }

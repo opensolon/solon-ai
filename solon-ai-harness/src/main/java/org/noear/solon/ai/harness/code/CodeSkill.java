@@ -36,6 +36,8 @@ import java.util.*;
 public class CodeSkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(CodeSkill.class);
 
+    public final static String NAME_CODE_MD = "CODE.md";
+
     private final HarnessEngine engine;
 
     public CodeSkill(HarnessEngine engine) {
@@ -43,7 +45,7 @@ public class CodeSkill extends AbsSkill {
     }
 
     public String HOME_CODE_MD(){
-        return engine.getProps().getHarnessHome() + engine.NAME_CODE_MD;
+        return engine.getProps().getHarnessHome() + NAME_CODE_MD;
     }
 
 

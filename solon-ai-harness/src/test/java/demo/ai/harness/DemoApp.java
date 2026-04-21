@@ -20,7 +20,7 @@ public class DemoApp {
         HarnessProperties harnessProps = new HarnessProperties(".tmp/");
         harnessProps.addTools(ToolPermission.TOOL_ALL_FULL); //设定工具权限
         harnessProps.addModel(null); //设定大模型配置
-        harnessProps.addExtension(b -> {
+        harnessProps.addExtension((name, builder) -> {
             //...
         });
 

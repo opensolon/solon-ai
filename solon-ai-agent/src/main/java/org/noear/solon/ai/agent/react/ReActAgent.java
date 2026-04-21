@@ -361,10 +361,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             this.config = new ReActAgentConfig(chatModel);
         }
 
-        public String name() {
-            return config.getName();
-        }
-
         public Builder then(Consumer<Builder> consumer) {
             consumer.accept(this);
             return this;

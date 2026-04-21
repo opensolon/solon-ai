@@ -64,10 +64,6 @@ public class HarnessEngine {
 
     public final static String ATTR_CWD = "__cwd";
 
-    public final static String NAME_CONFIG_YML = "config.yml";
-    public final static String NAME_AGENTS_MD = "AGENTS.md";
-    public final static String NAME_CODE_MD = "CODE.md";
-
     private final AgentSessionProvider sessionProvider;
     private final HarnessProperties props;
 
