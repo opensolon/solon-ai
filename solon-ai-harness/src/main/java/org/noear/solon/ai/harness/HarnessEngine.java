@@ -60,8 +60,6 @@ import java.util.*;
  */
 @Preview("3.10")
 public class HarnessEngine {
-    private final static Logger LOG = LoggerFactory.getLogger(HarnessEngine.class);
-
     public final static String ATTR_CWD = "__cwd";
 
     private final AgentSessionProvider sessionProvider;
