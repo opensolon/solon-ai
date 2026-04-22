@@ -58,7 +58,7 @@ public class NodejsSkill extends AbsProcessSkill {
 
     @Override
     public boolean isSupported(Prompt prompt) {
-        return prompt.getUserContent().toLowerCase().matches(".*(nodejs|javascript|js|npm).*");
+       return true;
     }
 
     @ToolMapping(name = "execute_js", description = "执行 Node.js 代码")

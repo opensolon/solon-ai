@@ -146,8 +146,7 @@ public class TerminalSkill extends AbsSkill {
 
         sb.append("- **进程安全约束**: \n");
         sb.append("  - **当前宿主进程**: Java (PID: `").append(Utils.pid()).append("`)\n");
-        sb.append("  - **执行禁令**: 严禁执行任何可能导致宿主进程退出的命令（如 `kill -9 ").append(Utils.pid())
-                .append("`, `pkill java`, `killall java` 等）。在清理进程前，必须先通过 `ps` 或 `jps` 确认目标 PID。\n");
+        sb.append("  - **执行禁令**: 严禁执行任何可能导致宿主进程退出的命令（如 `kill -9 ").append(Utils.pid()).append("`, `pkill java`, `killall java` 等）。在清理进程前，必须先通过 `ps` 或 `jps` 确认目标 PID。\n");
 
         sb.append("- **执行环境**: \n");
         sb.append("  - Python 命令: `").append(pythonCmd).append("` (系统已预置变量 `$PYTHON`)\n");

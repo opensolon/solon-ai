@@ -83,7 +83,7 @@ public class PythonSkill extends AbsProcessSkill {
 
     @Override
     public boolean isSupported(Prompt prompt) {
-        return prompt.getUserContent().toLowerCase().matches(".*(python|代码|分析|计算).*");
+        return true;
     }
 
     @ToolMapping(name = "execute_python", description = "执行 Python 代码并获取输出")

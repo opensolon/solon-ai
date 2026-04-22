@@ -15,15 +15,16 @@
  */
 package org.noear.solon.ai.skills.sys;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.annotation.Param;
-import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Shell 脚本执行技能：为 AI 提供系统级的自动化运维、环境探测与资源管理能力。
@@ -41,10 +42,14 @@ import java.io.File;
  */
 @Preview("3.9.1")
 public class ShellSkill extends AbsProcessSkill {
+    private static enum ShellMode {
+        CMD, POWERSHELL, UNIX_SHELL
+    }
     private static final Logger LOG = LoggerFactory.getLogger(ShellSkill.class);
 
     private final String shellCmd;
     private final String extension;
+    private final ShellMode shellMode;
 
     public ShellSkill(String workDir) {
         super(workDir);
@@ -57,20 +62,17 @@ public class ShellSkill extends AbsProcessSkill {
             if (comspec != null && comspec.toLowerCase().contains("powershell")) {
                 this.shellCmd = "powershell -Command";
                 this.extension = ".ps1";
+                this.shellMode = ShellMode.POWERSHELL;
             } else {
                 this.shellCmd = "cmd /c";
                 this.extension = ".bat";
+                this.shellMode = ShellMode.CMD;
             }
         } else {
             this.shellCmd = probeUnixShell();
             this.extension = ".sh";
+            this.shellMode = ShellMode.UNIX_SHELL;
         }
-    }
-
-    public ShellSkill(String workDir, String shellCmd, String extension) {
-        super(workDir);
-        this.shellCmd = shellCmd;
-        this.extension = extension;
     }
 
     private static String probeUnixShell() {
@@ -93,14 +95,30 @@ public class ShellSkill extends AbsProcessSkill {
 
     @Override
     public String description() {
-        String osType = System.getProperty("os.name");
-        return "Shell 专家：执行系统命令，管理文件与环境。当前系统类型：" + osType;
+        return "Shell 专家：执行系统命令";
+    }
+
+    @Override
+    public String getInstruction(Prompt prompt) {
+        String currentTime = ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss (z)"));
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("## Terminal 环境状态\n");
+
+        sb.append("- **当前时间**: ").append(currentTime).append("\n");
+        sb.append("- **运行环境**: ").append(System.getProperty("os.name")).append(" (").append(System.getProperty("os.arch")).append(")\n");
+        sb.append("- **终端类型**: ").append(shellMode).append("\n");
+
+        sb.append("- **进程安全约束**: \n");
+        sb.append("  - **当前宿主进程**: Java (PID: `").append(Utils.pid()).append("`)\n");
+        sb.append("  - **执行禁令**: 严禁执行任何可能导致宿主进程退出的命令（如 `kill -9 ").append(Utils.pid()).append("`, `pkill java`, `killall java` 等）。在清理进程前，必须先通过 `ps` 或 `jps` 确认目标 PID。\n");
+
+        return sb.toString();
     }
 
     @Override
     public boolean isSupported(Prompt prompt) {
-        return prompt.getUserContent().toLowerCase()
-                .matches(".*(shell|linux|bash|cmd|windows|命令|dir|ls|运维).*");
+        return true;
     }
 
     /**
