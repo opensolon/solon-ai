@@ -447,7 +447,11 @@ public class ReasonTask implements NamedTaskComponent {
 
                 return response;
             } catch (Throwable e) {
-                lastException = e;
+                if (e instanceof InterruptedException || e.getCause() instanceof InterruptedException) {
+                    LOG.debug("InterruptedException");
+                    return null;
+                }
+
                 LOG.warn("ReActAgent [{}] retry {}/{} due to: {}", config.getName(), i + 1, maxRetries, e.toString());
 
                 if (i < maxRetries) {
@@ -463,11 +467,6 @@ public class ReasonTask implements NamedTaskComponent {
 
         // 设置故障状态并终止路由
         trace.setRoute(Agent.ID_END);
-
-        if(lastException instanceof InterruptedException){
-            LOG.debug("InterruptedException");
-            return null;
-        }
 
         if (lastException instanceof LlmNoReturnException) {
             trace.setFinalAnswer("抱歉，模型服务没有内容返回。请稍后重试。");

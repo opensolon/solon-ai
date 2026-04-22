@@ -307,7 +307,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
                 return doCall(trace, session, finalPrompt, chatReq);
             } catch (Throwable e) {
-                if (e instanceof InterruptedException) {
+                if (e instanceof InterruptedException || e.getCause() instanceof InterruptedException) {
                     LOG.debug("InterruptedException");
                     return null;
                 }
