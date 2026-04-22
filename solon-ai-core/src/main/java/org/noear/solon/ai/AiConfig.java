@@ -36,8 +36,6 @@ import java.util.Map;
  */
 public class AiConfig {
     //用于管理显示
-    protected @Nullable String name;
-    //用于管理显示
     protected @Nullable String description;
 
     protected String apiUrl;
@@ -54,20 +52,8 @@ public class AiConfig {
 
     /// ///////////////////
 
-    public String getName() {
-        return name;
-    }
-
     public String getDescription() {
         return description;
-    }
-
-    public String getNameOrModel() {
-        if(Assert.isEmpty(name)) {
-            return model;
-        }
-
-        return name;
     }
 
     public String getDescriptionOrModel() {
@@ -121,10 +107,6 @@ public class AiConfig {
     }
 
     /// ///////////////////
-
-    public void setName(String name) {
-        this.name = name;
-    }
 
     public void setDescription(String description) {
         this.description = description;

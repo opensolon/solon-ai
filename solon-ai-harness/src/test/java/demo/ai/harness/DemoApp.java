@@ -28,6 +28,8 @@ public class DemoApp {
             //...
         });
 
+        harnessProps.addMcpServer("xxx", null);
+
 
         harnessProps.setSystemPrompt("xxx");
 
