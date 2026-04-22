@@ -45,20 +45,23 @@ public class ShellSkill extends AbsProcessSkill {
 
     private final String shellCmd;
     private final String extension;
-    private final boolean isWindows;
 
     public ShellSkill(String workDir) {
         super(workDir);
 
         // 1. 判断操作系统
-        this.isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
 
         if (isWindows) {
-            // Windows 环境
-            this.shellCmd = "cmd /c";
-            this.extension = ".bat";
+            String comspec = System.getenv("COMSPEC");
+            if (comspec != null && comspec.toLowerCase().contains("powershell")) {
+                this.shellCmd = "powershell -Command";
+                this.extension = ".ps1";
+            } else {
+                this.shellCmd = "cmd /c";
+                this.extension = ".bat";
+            }
         } else {
-            // Unix/Linux 环境：优先使用 bash
             this.shellCmd = probeUnixShell();
             this.extension = ".sh";
         }
@@ -68,7 +71,6 @@ public class ShellSkill extends AbsProcessSkill {
         super(workDir);
         this.shellCmd = shellCmd;
         this.extension = extension;
-        this.isWindows = System.getProperty("os.name").toLowerCase().contains("win");
     }
 
     private static String probeUnixShell() {
@@ -91,7 +93,7 @@ public class ShellSkill extends AbsProcessSkill {
 
     @Override
     public String description() {
-        String osType = isWindows ? "Windows" : "Unix/Linux";
+        String osType = System.getProperty("os.name");
         return "Shell 专家：执行系统命令，管理文件与环境。当前系统类型：" + osType;
     }
 
@@ -102,46 +104,15 @@ public class ShellSkill extends AbsProcessSkill {
     }
 
     /**
-     * 辅助工具 1：探测环境
-     */
-    @ToolMapping(name = "exists_cmd", description = "检查系统是否支持某命令 (如 python3, git)。返回 true 表示可用。")
-    public boolean existsCmd(@Param("cmd") String cmd) {
-        if (Assert.isBlank(cmd)) return false;
-
-        String cleanCmd = cmd.trim().split("\\s+")[0];
-        String checkPattern = isWindows ? "where " + cleanCmd : "command -v " + cleanCmd;
-
-        try {
-            Process p = Runtime.getRuntime().exec(checkPattern);
-            return p.waitFor() == 0;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    /**
-     * 辅助工具 2：感知文件
-     */
-    @ToolMapping(name = "list_files", description = "列出当前工作目录下的文件和目录列表")
-    public String listFiles() {
-        File[] files = rootPath.toFile().listFiles();
-        if (files == null) return "空目录";
-        StringBuilder sb = new StringBuilder();
-        for (File f : files) {
-            sb.append(f.isDirectory() ? "[DIR] " : "[FILE] ").append(f.getName()).append("\n");
-        }
-        return sb.toString();
-    }
-
-    /**
      * 核心工具：执行指令
      */
     @ToolMapping(name = "execute_shell", description = "在本地系统中执行单行指令或多行脚本，并获取标准输出。")
-    public String execute(@Param("code") String code) {
+    public String execute(@Param("code") String code,
+                       @Param(name = "timeout", required = false, defaultValue = "120000", description = "可选超时时间，单位为毫秒") Integer timeout) {
         if (LOG.isTraceEnabled()) {
             LOG.trace("Executing shell code: {}", code);
         }
 
-        return runCode(code, shellCmd, extension, null);
+        return executor.executeCode(workPath, code, shellCmd, extension, null, timeout, null);
     }
 }

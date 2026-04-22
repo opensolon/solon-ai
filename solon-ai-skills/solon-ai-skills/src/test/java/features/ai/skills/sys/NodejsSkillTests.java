@@ -42,7 +42,7 @@ public class NodejsSkillTests {
     public void testSimpleJsExecution() {
         // 测试基础打印和数学运算
         String code = "console.log(1024 * 2);";
-        String result = nodejsSkill.execute(code);
+        String result = nodejsSkill.execute(code, null);
 
         System.out.println("Node.js Output: " + result);
         Assertions.assertTrue(result.contains("2048"));
@@ -55,7 +55,7 @@ public class NodejsSkillTests {
                 "const data = {name: 'Solon', version: '3.0'};\n" +
                         "console.log(JSON.stringify(data));";
 
-        String result = nodejsSkill.execute(code);
+        String result = nodejsSkill.execute(code, null);
         Assertions.assertTrue(result.contains("\"name\":\"Solon\""));
     }
 
@@ -67,7 +67,7 @@ public class NodejsSkillTests {
                         "  console.log('Done');\n" +
                         "}, 100);";
 
-        String result = nodejsSkill.execute(code);
+        String result = nodejsSkill.execute(code, null);
         Assertions.assertTrue(result.contains("Done"));
     }
 

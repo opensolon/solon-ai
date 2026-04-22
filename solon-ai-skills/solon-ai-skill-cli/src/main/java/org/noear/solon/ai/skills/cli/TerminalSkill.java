@@ -190,7 +190,7 @@ public class TerminalSkill extends AbsSkill {
             description = "在终端执行非交互式 Shell 指令。支持多行脚本，支持逻辑路径（如 @pool）自动转环境变量。"
     )
     public String bash(@Param(value = "command", description = "要执行的指令。") String command,
-                       @Param(name = "timeout", required = false, description = "可选超时时间，单位为毫秒") Integer timeout,
+                       @Param(name = "timeout", required = false, defaultValue = "120000", description = "可选超时时间，单位为毫秒") Integer timeout,
                        String __cwd) {
 
         Path workPath = getWorkPath(__cwd);

@@ -62,11 +62,12 @@ public class NodejsSkill extends AbsProcessSkill {
     }
 
     @ToolMapping(name = "execute_js", description = "执行 Node.js 代码")
-    public String execute(@Param("code") String code) {
+    public String execute(@Param("code") String code,
+                          @Param(name = "timeout", required = false, defaultValue = "120000", description = "可选超时时间，单位为毫秒") Integer timeout) {
         if (LOG.isTraceEnabled()) {
             LOG.trace("Executing Node.js code: {}", code);
         }
 
-        return runCode(code, "node", ".js", Collections.singletonMap("NODE_SKIP_PLATFORM_CHECK", "1"));
+        return executor.executeCode(workPath, code, "node", ".js", Collections.singletonMap("NODE_SKIP_PLATFORM_CHECK", "1"), timeout, null);
     }
 }

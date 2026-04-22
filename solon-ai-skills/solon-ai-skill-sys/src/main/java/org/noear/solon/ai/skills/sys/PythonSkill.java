@@ -87,11 +87,12 @@ public class PythonSkill extends AbsProcessSkill {
     }
 
     @ToolMapping(name = "execute_python", description = "执行 Python 代码并获取输出")
-    public String execute(@Param("code") String code) {
+    public String execute(@Param("code") String code,
+                          @Param(name = "timeout", required = false, defaultValue = "120000",description = "可选超时时间，单位为毫秒") Integer timeout) {
         if (LOG.isTraceEnabled()) {
             LOG.trace("Executing Python code: {}", code);
         }
 
-        return runCode(code, pythonCmd, ".py", Collections.singletonMap("PYTHONIOENCODING", "UTF-8"));
+        return executor.executeCode(workPath,code, pythonCmd, ".py", Collections.singletonMap("PYTHONIOENCODING", "UTF-8"), timeout, null);
     }
 }

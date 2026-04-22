@@ -20,8 +20,6 @@ import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
 import java.nio.file.*;
-import java.util.Map;
-import java.util.function.Consumer;
 
 /**
  * 外部进程执行基类
@@ -35,16 +33,16 @@ import java.util.function.Consumer;
 @Preview("3.9.1")
 public abstract class AbsProcessSkill extends AbsSkill {
 
-    protected final Path rootPath;
+    protected final Path workPath;
     protected final ProcessExecutor executor = new ProcessExecutor();
 
     public AbsProcessSkill(String workDir) {
-        this.rootPath = Paths.get(workDir).toAbsolutePath().normalize();
+        this.workPath = Paths.get(workDir).toAbsolutePath().normalize();
         ensureDir();
     }
 
     public AbsProcessSkill(Path workDir) {
-        this.rootPath = workDir;
+        this.workPath = workDir;
         ensureDir();
     }
 
@@ -55,28 +53,14 @@ public abstract class AbsProcessSkill extends AbsSkill {
         executor.setMaxOutputSize(maxOutputSize);
     }
 
-    /**
-     * 配置超时时间（秒）
-     */
-    public void setTimeoutSeconds(int timeoutSeconds) {
-        executor.setTimeoutSeconds(timeoutSeconds);
-    }
-
-    protected String runCode(String code, String cmd, String ext, Map<String, String> envs) {
-        return executor.executeCode(rootPath, code, cmd, ext, envs, null);
-    }
-
-    protected String runCode(String code, String cmd, String ext, Map<String, String> envs, Consumer<String> onOutput) {
-        return executor.executeCode(rootPath, code, cmd, ext, envs, onOutput);
-    }
 
     private void ensureDir() {
         try {
-            if (!Files.exists(rootPath)) {
-                Files.createDirectories(rootPath);
+            if (!Files.exists(workPath)) {
+                Files.createDirectories(workPath);
             }
         } catch (IOException e) {
-            throw new IllegalStateException("Unable to initialize work directory: " + rootPath, e);
+            throw new IllegalStateException("Unable to initialize work directory: " + workPath, e);
         }
     }
 }

@@ -42,7 +42,7 @@ public class ShellSkillTests {
     public void testBasicCommand() throws Exception {
         // 测试标准输出捕获
         String code = "echo 'Hello Solon AI' && pwd";
-        String result = shellSkill.execute(code);
+        String result = shellSkill.execute(code, null);
 
         System.out.println("Shell Output: " + result);
         Assertions.assertTrue(result.contains("Hello Solon AI"));
@@ -61,7 +61,7 @@ public class ShellSkillTests {
                         "  echo 'Count is large'\n" +
                         "fi";
 
-        String result = shellSkill.execute(code);
+        String result = shellSkill.execute(code, null);
         Assertions.assertTrue(result.contains("Count is large"));
     }
 
@@ -69,11 +69,6 @@ public class ShellSkillTests {
 
     @Test
     public void testDiscoveryAndPerception() throws IOException {
-        // A. 测试命令探测 (探测系统必有的命令)
-        String cmdToTest = System.getProperty("os.name").toLowerCase().contains("win") ? "cmd" : "sh";
-        boolean hasCmd = shellSkill.existsCmd(cmdToTest);
-        Assertions.assertTrue(hasCmd, "系统应当能探测到基础 Shell 环境: " + cmdToTest);
-
         // B. 测试文件列表感知
         Files.write(Paths.get(workDir, "perception.test"), "data".getBytes());
         String listResult = shellSkill.listFiles();
@@ -133,7 +128,7 @@ public class ShellSkillTests {
     public void testInvalidCommand() {
         // 执行一个肯定不存在的命令
         String code = "non_existent_command_12345";
-        String result = shellSkill.execute(code);
+        String result = shellSkill.execute(code, null);
 
         System.out.println("Invalid Command Output: " + result);
         // 应该是包含 command not found 或类似的系统错误提示
@@ -147,7 +142,7 @@ public class ShellSkillTests {
                 ? "timeout /t 60" : "sleep 60";
 
         long start = System.currentTimeMillis();
-        String result = shellSkill.execute(code);
+        String result = shellSkill.execute(code, null);
         long end = System.currentTimeMillis();
 
         System.out.println("Timeout Result: " + result);
@@ -170,7 +165,7 @@ public class ShellSkillTests {
         String cdCode = System.getProperty("os.name").toLowerCase().contains("win")
                 ? "cd a\\b\\c && type deep.txt"
                 : "cd a/b/c && cat deep.txt";
-        String output = shellSkill.execute(cdCode);
+        String output = shellSkill.execute(cdCode, null);
         Assertions.assertTrue(output.contains("found me"));
     }
 

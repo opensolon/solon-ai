@@ -42,7 +42,7 @@ public class PythonSkillTests {
     public void testSimpleCalculation() {
         // 测试数学计算输出
         String code = "print(123 + 456)";
-        String result = pythonSkill.execute(code);
+        String result = pythonSkill.execute(code, null);
 
         System.out.println("Result: " + result);
         Assertions.assertTrue(result.contains("579"));
@@ -55,7 +55,7 @@ public class PythonSkillTests {
                 "data = [1, 2, 3, 4, 5]\n" +
                         "print(sum(data) / len(data))";
 
-        String result = pythonSkill.execute(code);
+        String result = pythonSkill.execute(code, null);
         Assertions.assertTrue(result.contains("3.0"));
     }
 
@@ -63,7 +63,7 @@ public class PythonSkillTests {
     public void testSecurityBounds() {
         // 验证沙箱内的文件写操作（虽然 AbsProcessSkill 主要是隔离运行目录）
         String code = "with open('test.txt', 'w') as f: f.write('hello')\nprint('ok')";
-        pythonSkill.execute(code);
+        pythonSkill.execute(code, null);
 
         Assertions.assertTrue(Files.exists(Paths.get(workDir, "test.txt")), "文件应生成在指定的 workDir 目录下");
     }
