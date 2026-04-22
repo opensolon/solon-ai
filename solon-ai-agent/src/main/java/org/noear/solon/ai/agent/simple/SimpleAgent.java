@@ -164,6 +164,10 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             }
         }
 
+        if (assistantMessage == null) {
+            return ChatMessage.ofAssistant(null);
+        }
+
         // 3. 状态回填：将输出结果自动映射到 FlowContext
         if (Assert.isNotEmpty(config.getOutputKey())) {
             context.put(config.getOutputKey(), assistantMessage.getContent());
@@ -290,12 +294,12 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
         int maxRetries = config.getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
-            if(Thread.interrupted()){
+            if (Thread.interrupted()) {
                 break;
             }
 
             try {
-                if(trace.getOptions().getStreamSink() != null) {
+                if (trace.getOptions().getStreamSink() != null) {
                     if (trace.getOptions().getStreamSink().isCancelled()) {
                         break;
                     }
@@ -303,12 +307,23 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
                 return doCall(trace, session, finalPrompt, chatReq);
             } catch (Throwable e) {
+                if (e instanceof InterruptedException) {
+                    LOG.debug("InterruptedException");
+                    return null;
+                }
+
                 if (i == maxRetries - 1) {
                     throw new RuntimeException("SimpleAgent [" + name() + "] failed after " + maxRetries + " retries", e);
                 }
                 long delay = config.getRetryDelayMs() * (i + 1);
                 LOG.warn("SimpleAgent [{}] call failed, retrying({}/{}). Error: {}", name(), i + 1, maxRetries, e.toString());
-                Thread.sleep(delay);
+
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException ie) {
+                    LOG.debug("InterruptedException");
+                    return null;
+                }
             }
         }
 

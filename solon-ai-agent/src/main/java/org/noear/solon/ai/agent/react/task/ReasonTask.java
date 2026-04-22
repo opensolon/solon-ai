@@ -264,6 +264,7 @@ public class ReasonTask implements NamedTaskComponent {
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
         ChatResponse response = callWithRetry(node, trace, messages);
         if(response == null || trace.getSession().isPending()){
+            trace.setRoute(Agent.ID_END);
             return;
         }
 
@@ -275,6 +276,7 @@ public class ReasonTask implements NamedTaskComponent {
         }
 
         if(responseMessage == null){
+            trace.setRoute(Agent.ID_END);
             return;
         }
 
@@ -411,7 +413,7 @@ public class ReasonTask implements NamedTaskComponent {
             item.target.onModelStart(trace, req);
         }
 
-        if(trace.getSession().isPending()){
+        if (trace.getSession().isPending()) {
             return null;
         }
 
@@ -419,7 +421,7 @@ public class ReasonTask implements NamedTaskComponent {
         Throwable lastException = null;
 
         for (int i = 0; i < maxRetries; i++) { // 注意是 <，确保至少执行一次
-            if(Thread.interrupted()){
+            if (Thread.interrupted()) {
                 break;
             }
 
@@ -462,9 +464,14 @@ public class ReasonTask implements NamedTaskComponent {
         // 设置故障状态并终止路由
         trace.setRoute(Agent.ID_END);
 
-        if(lastException instanceof LlmNoReturnException){
+        if(lastException instanceof InterruptedException){
+            LOG.debug("InterruptedException");
+            return null;
+        }
+
+        if (lastException instanceof LlmNoReturnException) {
             trace.setFinalAnswer("抱歉，模型服务没有内容返回。请稍后重试。");
-        } else if(lastException instanceof TimeoutException) {
+        } else if (lastException instanceof TimeoutException) {
             trace.setFinalAnswer("抱歉，模型服务响应超时。请稍后重试。");
         } else {
             trace.setFinalAnswer("抱歉，暂时无法使用模型服务 (" + lastException.getMessage() + ")。请稍后重试。");

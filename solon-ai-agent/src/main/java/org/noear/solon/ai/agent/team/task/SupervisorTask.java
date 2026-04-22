@@ -158,7 +158,7 @@ public class SupervisorTask implements NamedTaskComponent {
 
 
         ChatResponse response = callWithRetry(node, trace, messages);
-        if (trace.getSession().isPending()) {
+        if (response == null || trace.getSession().isPending()) {
             return;
         }
 
@@ -287,11 +287,11 @@ public class SupervisorTask implements NamedTaskComponent {
     /**
      * 带重试机制的模型调用
      */
-    protected ChatResponse callWithRetry(Node node, TeamTrace trace, List<ChatMessage> messages) {
+    protected ChatResponse callWithRetry(Node node, TeamTrace trace, List<ChatMessage> messages) throws InterruptedException {
         ChatRequestDesc req = config.getChatModel().prompt(messages).options(o -> {
             o.name(trace.getAgentName());
 
-            if(trace.getOptions().isFeedbackMode()) {
+            if (trace.getOptions().isFeedbackMode()) {
                 o.toolAdd(FeedbackTool.getTool(
                         trace.getOptions().getFeedbackDescription(trace),
                         trace.getOptions().getFeedbackReasonDescription(trace)));
@@ -306,24 +306,24 @@ public class SupervisorTask implements NamedTaskComponent {
             o.optionSet(trace.getOptions().getModelOptions().options());
         });
 
-        for(RankEntity<TeamInterceptor> item: trace.getOptions().getInterceptors()){
+        for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onModelStart(trace, req);
         }
-        if(trace.getSession().isPending()){
+        if (trace.getSession().isPending()) {
             return null;
         }
 
 
         int maxRetries = trace.getOptions().getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
-            if(Thread.interrupted()){
+            if (Thread.interrupted()) {
                 break;
             }
 
             try {
                 final ChatResponse response;
 
-                if(trace.getOptions().getStreamSink() == null) {
+                if (trace.getOptions().getStreamSink() == null) {
                     if (trace.getOptions().getStreamSink().isCancelled()) {
                         break;
                     }
@@ -345,6 +345,11 @@ public class SupervisorTask implements NamedTaskComponent {
 
                 return response;
             } catch (Throwable e) {
+                if (e instanceof InterruptedException) {
+                    LOG.debug("InterruptedException");
+                    return null;
+                }
+
                 if (i == maxRetries - 1) {
                     throw new RuntimeException("Supervisor call failed", e);
                 }
@@ -354,8 +359,8 @@ public class SupervisorTask implements NamedTaskComponent {
                 try {
                     Thread.sleep(trace.getOptions().getRetryDelayMs() * (i + 1));
                 } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException(ie);
+                    LOG.debug("InterruptedException");
+                    return null;
                 }
             }
         }
