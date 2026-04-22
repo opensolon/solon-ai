@@ -29,6 +29,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 文件型智能体会话适配器 (带内存缓存层)
@@ -44,6 +45,7 @@ public class FileAgentSession implements AgentSession {
     private final File messagesFile;
     private final File snapshotFile;
     private final InMemoryAgentSession cache;
+    private final ReentrantLock locker = new ReentrantLock();
 
     public FileAgentSession(String sessionId, String dir) {
         Objects.requireNonNull(sessionId, "sessionId is required");
@@ -152,12 +154,15 @@ public class FileAgentSession implements AgentSession {
 
     @Override
     public void updateSnapshot() {
+        locker.lock();
         try {
             // 将缓存中的快照全量持久化
             String json = cache.getContext().toJson();
             Files.write(snapshotFile.toPath(), json.getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
+        } catch (Exception e) {
             LOG.error("Persistence snapshot failed: {}", e.toString());
+        } finally {
+            locker.unlock();
         }
     }
 

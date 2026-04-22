@@ -27,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Redis 智能体会话适配器 (带内存缓存层)
@@ -42,6 +43,7 @@ public class RedisAgentSession implements AgentSession {
     private final String messagesKey;
     private final String snapshotKey;
     private final RedisClient redisClient;
+    private final ReentrantLock locker = new ReentrantLock();
 
     // 内存缓存层
     private final InMemoryAgentSession cache;
@@ -146,8 +148,16 @@ public class RedisAgentSession implements AgentSession {
 
     @Override
     public void updateSnapshot() {
-        // 严格遵循原逻辑：使用 snapshotKey 持久化
-        redisClient.getBucket().store(snapshotKey, cache.getContext().toJson());
+        locker.lock();
+
+        try {
+            // 严格遵循原逻辑：使用 snapshotKey 持久化
+            redisClient.getBucket().store(snapshotKey, cache.getContext().toJson());
+        } catch (Exception e) {
+            LOG.error("Persistence snapshot failed: {}", e.toString());
+        } finally {
+            locker.unlock();
+        }
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("Session [{}] snapshot persisted to Redis.", snapshotKey);
