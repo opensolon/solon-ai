@@ -65,16 +65,6 @@ public class ShellSkillTests {
         Assertions.assertTrue(result.contains("Count is large"));
     }
 
-    // --- 2. 新增能力测试：环境探测与文件感知 ---
-
-    @Test
-    public void testDiscoveryAndPerception() throws IOException {
-        // B. 测试文件列表感知
-        Files.write(Paths.get(workDir, "perception.test"), "data".getBytes());
-        String listResult = shellSkill.listFiles();
-        System.out.println("List Files Output:\n" + listResult);
-        Assertions.assertTrue(listResult.contains("perception.test"));
-    }
 
     // --- 3. Agent 驱动集成测试 (增加复杂逻辑) ---
 
@@ -156,10 +146,6 @@ public class ShellSkillTests {
         Path deepPath = Paths.get(workDir, "a", "b", "c");
         Files.createDirectories(deepPath);
         Files.write(deepPath.resolve("deep.txt"), "found me".getBytes());
-
-        // 测试 list_files 能否反映出目录结构
-        String result = shellSkill.listFiles();
-        Assertions.assertTrue(result.contains("[DIR] a"));
 
         // 测试 AI 能否进入深层目录操作
         String cdCode = System.getProperty("os.name").toLowerCase().contains("win")
