@@ -109,7 +109,7 @@ public class HarnessEngine {
      * 获取模型或主模型
      */
     public ChatModel getModelOrMain(String name) {
-        if (Assert.isEmpty(name) || mainModel.getModel().equals(name)) {
+        if (Assert.isEmpty(name) || mainModel.getConfig().getNameOrModel().equals(name)) {
             return mainModel;
         }
 

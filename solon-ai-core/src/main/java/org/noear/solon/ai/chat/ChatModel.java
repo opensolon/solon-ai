@@ -46,6 +46,7 @@ import java.util.function.Consumer;
 @Preview("3.1")
 public class ChatModel implements AiModel {
     private final ChatConfig config;
+    private final ChatConfigReadonly configReadonly;
     private final ChatDialect dialect;
 
     public ChatModel(Properties properties) {
@@ -59,6 +60,7 @@ public class ChatModel implements AiModel {
         Assert.notNull(config.getModel(), "The config.model is required");
 
         this.config = config;
+        this.configReadonly = new ChatConfigReadonly(config);
         this.dialect = ChatDialectManager.select(config);
 
         Assert.notNull(dialect, "The dialect(provider) no matched, check config or dependencies");
@@ -67,6 +69,10 @@ public class ChatModel implements AiModel {
 
     public ChatDialect getDialect() {
         return dialect;
+    }
+
+    public ChatConfigReadonly getConfig() {
+        return configReadonly;
     }
 
     public String getModel(){

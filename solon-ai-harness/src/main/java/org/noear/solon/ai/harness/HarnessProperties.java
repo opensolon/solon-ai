@@ -171,7 +171,7 @@ public class HarnessProperties implements Serializable {
      * 移除模型
      */
     public void removeModel(String modelName) {
-        models.removeIf(m -> m.getModel().equals(modelName));
+        models.removeIf(m -> m.getNameOrModel().equals(modelName));
     }
 
     public ChatConfig getModelOrNil(String modelName) {
@@ -184,7 +184,7 @@ public class HarnessProperties implements Serializable {
         }
 
         for (ChatConfig c : models) {
-            if (c.getModel().equals(modelName)) {
+            if (c.getNameOrModel().equals(modelName)) {
                 return c;
             }
         }
@@ -202,7 +202,7 @@ public class HarnessProperties implements Serializable {
         }
 
         for (ChatConfig c : models) {
-            if (c.getModel().equals(modelName)) {
+            if (c.getNameOrModel().equals(modelName)) {
                 return c;
             }
         }

@@ -44,6 +44,22 @@ public class ChatConfigReadonly {
         this.config = config;
     }
 
+    public String getName(){
+       return config.getName();
+    }
+
+    public String getNameOrModel(){
+        return config.getNameOrModel();
+    }
+
+    public String getDescription(){
+        return config.getDescription();
+    }
+
+    public String getDescriptionOrModel(){
+        return config.getDescriptionOrModel();
+    }
+
     public String getApiKey() {
         return config.getApiKey();
     }
