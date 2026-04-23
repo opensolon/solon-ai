@@ -450,6 +450,8 @@ public class ReasonTask implements NamedTaskComponent {
                 if (e instanceof InterruptedException || e.getCause() instanceof InterruptedException) {
                     LOG.debug("InterruptedException");
                     return null;
+                } else {
+                    lastException = e;
                 }
 
                 LOG.warn("ReActAgent [{}] retry {}/{} due to: {}", config.getName(), i + 1, maxRetries, e.toString());
