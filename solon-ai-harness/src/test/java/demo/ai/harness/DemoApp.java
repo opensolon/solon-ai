@@ -4,6 +4,8 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
+import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessProperties;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
@@ -71,6 +73,8 @@ public class DemoApp {
         HarnessEngine engine = HarnessEngine.of(harnessProps)
                 .sessionProvider(sessionProvider)
                 .build();
+
+        //engine.getMcpGatewaySkill().addTool(new AbsToolProvider(){});
 
         //--- 用主代理执行
         csae1(engine, "hello");
