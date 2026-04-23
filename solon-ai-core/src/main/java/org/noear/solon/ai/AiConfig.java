@@ -36,6 +36,7 @@ import java.util.Map;
  */
 public class AiConfig {
     //用于管理显示
+    protected @Nullable String name;
     protected @Nullable String description;
 
     protected String apiUrl;
@@ -50,7 +51,22 @@ public class AiConfig {
     protected Proxy proxyInstance;
 
 
+
     /// ///////////////////
+
+
+    public String getName() {
+        return name;
+    }
+
+
+    public String getNameOrModel() {
+        if(Assert.isEmpty(name)) {
+            return model;
+        }
+
+        return name;
+    }
 
     public String getDescription() {
         return description;
