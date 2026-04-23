@@ -24,6 +24,9 @@ import java.util.*;
  * @since 3.10.1
  */
 public abstract class AbsToolProvider implements ToolProvider {
+    private final Map<String, FunctionTool> toolMap0;
+    private final List<FunctionTool> tools0;
+
     private final Map<String, FunctionTool> toolMap;
     private final List<FunctionTool> tools;
 
@@ -35,18 +38,24 @@ public abstract class AbsToolProvider implements ToolProvider {
      * @since 3.10.2
      */
     protected AbsToolProvider(Map<String, Object> binding) {
-        this.tools = new ArrayList<>();
-        this.tools.addAll(new MethodToolProvider(this)
+        this.tools0 = new ArrayList<>();
+        this.tools0.addAll(new MethodToolProvider(this)
                 .binding(binding)
                 .includeProvide(false)
                 .getTools());
 
-        Map<String, FunctionTool> toolMap0 = new LinkedHashMap<>();
-        for (FunctionTool tool : tools) {
+        this.toolMap0 = new LinkedHashMap<>();
+        for (FunctionTool tool : tools0) {
             toolMap0.put(tool.name(), tool);
         }
 
-        toolMap = Collections.unmodifiableMap(toolMap0);
+        this.tools = Collections.unmodifiableList(tools0);
+        this.toolMap = Collections.unmodifiableMap(toolMap0);
+    }
+
+    protected void internalAddTool(FunctionTool tool) {
+        this.tools0.add(tool);
+        this.toolMap0.put(tool.name(), tool);
     }
 
     public Map<String, FunctionTool> getToolMap() {

@@ -1,9 +1,11 @@
 package org.noear.solon.ai.skills.toolgateway;
 
+import org.noear.snack4.codec.TypeRef;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
+import org.noear.solon.ai.chat.tool.AbsTool;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolResult;
@@ -36,11 +38,18 @@ public class ToolGatewaySkill extends AbsSkill {
     private final Map<String, FunctionTool> allTools = new LinkedHashMap<>();
 
     private int dynamicThreshold = 8;   // 超过此值，进入摘要模式（SUMMARY）
-    private int listThreshold = 30;     // 超过此值，进入仅名字模式（LIST）
+    private int listThreshold = 40;     // 超过此值，进入仅名字模式（LIST）
     private int searchThreshold = 100;  // 超过此值，进入强制搜索模式（SEARCH）
 
     private int maxRetries = 3;
     private long retryDelayMs = 1000L;
+
+    private final ToolCallTool callTool;
+
+    public ToolGatewaySkill() {
+        this.callTool = new ToolCallTool(this);
+        internalAddTool(callTool);
+    }
 
     public ToolGatewaySkill retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
@@ -241,25 +250,69 @@ public class ToolGatewaySkill extends AbsSkill {
         return "错误：未找到工具 '" + name + "'，请检查名称拼写是否正确。";
     }
 
-    @ToolMapping(name = "call_tool", description = "代理执行特定的业务工具")
-    public ToolResult callTool(@Param("tool_name") String name,
-                               @Param("tool_args") Map<String, Object> args) {
-        if (Utils.isEmpty(name)) {
-            return ToolResult.success("错误：tool_name 不能为空");
-        }
-
-        FunctionTool tool = allTools.get(name.trim().toLowerCase());
-
-        if (tool == null) {
-            return ToolResult.success("错误：未找到业务工具 '" + name + "'");
-        }
-
+    //测试用
+    public ToolResult callTool(String tool_name,
+                               Map<String, Object> tool_args) {
         try {
-            return RetryUtil.callWithRetry(maxRetries, retryDelayMs, () -> tool.call(args));
-        } catch (Throwable e) {
-            LOG.error("Tool gateway execution failed: {}", name, e);
-            return ToolResult.success("执行异常: " +
-                    (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
+            return callTool.call(Utils.asMap(
+                    "tool_name", tool_name,
+                    "tool_args", tool_args));
+        }catch (Throwable e){
+            throw  new RuntimeException(e);
+        }
+    }
+
+    public static class ToolCallTool extends AbsTool {
+        private final ToolGatewaySkill gatewaySkill;
+
+        public ToolCallTool(ToolGatewaySkill gatewaySkill) {
+            this.gatewaySkill = gatewaySkill;
+
+            addParam("tool_name", String.class, "");
+            addParam("tool_args", TypeRef.mapOf(String.class, Object.class).getType(), "");
+        }
+
+        @Override
+        public String name() {
+            return "call_tool";
+        }
+
+        @Override
+        public String description() {
+            return "代理执行特定的业务工具";
+        }
+
+        @Override
+        public Object handle(Map<String, Object> args) {
+            String tool_name = (String) args.get("tool_name");
+            Map<String, Object> tool_args = (Map) args.get("tool_args");
+
+            //传导工具上下文
+            for (Map.Entry<String, Object> entry : args.entrySet()) {
+                if ("tool_name".equals(entry.getKey()) == false && "tool_args".equals(entry.getKey()) == false) {
+                    tool_args.put(entry.getKey(), entry.getValue());
+                }
+            }
+
+            //-------
+
+            if (Utils.isEmpty(tool_name)) {
+                return ToolResult.success("错误：tool_name 不能为空");
+            }
+
+            FunctionTool tool = gatewaySkill.allTools.get(tool_name.trim().toLowerCase());
+
+            if (tool == null) {
+                return ToolResult.success("错误：未找到业务工具 '" + tool_name + "'");
+            }
+
+            try {
+                return RetryUtil.callWithRetry(gatewaySkill.maxRetries, gatewaySkill.retryDelayMs, () -> tool.call(tool_args));
+            } catch (Throwable e) {
+                LOG.error("Tool gateway execution failed: {}", tool_name, e);
+                return ToolResult.success("执行异常: " +
+                        (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
+            }
         }
     }
 }
