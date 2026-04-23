@@ -24,12 +24,17 @@
 * 优化 solon-ai-dialect-anthropic anthropic 方言的异常兼容处理
 * 优化 solon-ai-dialect-openai openai-response 方言的异常兼容处理
 * 优化 solon-ai-agent 中断传递处理
+* 优化 solon-ai-agent ActionTask onAction 日志
 * 优化 solon-ai-agent retrying 中断处理（这前的 task 内部的 stream 可能会中断传递）
+* 优化 solon-ai-agent AgentSession.updateSnapshot 添加锁机制
 * 优化 solon-ai-skill-lsp 重构 LspSkill 实现（之前名为 LspTool）
 * 优化 solon-ai-skill-cli ExpertSkill 引导词
+* 优化 solon-ai-skill-sys 从 cli 同步 ProcessExecutor
 * 优化 solon-ai-harness HarnessEngine 扩展机制（支持为子代理扩展，通过名字识别）
 * 调整 solon-ai-harness ReActAgentExtension 更名为 ReActAgentExtension
 * 调整 solon-ai-harness 切换 llm 的机制，并取消 switchMainModel 方法（有自由的机制了）
+* 调整 solon-ai-harness TerminalSkillProxy 转到 solon-ai-skill-cli
+* 修复 solon-ai-skill-toolgateway ToolGatewaySkill call_tool 不能传递 toolContext 的问题
 
 ### 3.10.2
 
