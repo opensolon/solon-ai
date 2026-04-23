@@ -68,9 +68,13 @@
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-skill-social</artifactId>
+            <artifactId>solon-ai-skill-toolgateway</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-ai-skill-social</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.noear</groupId>
