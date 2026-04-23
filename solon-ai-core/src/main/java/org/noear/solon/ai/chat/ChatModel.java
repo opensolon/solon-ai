@@ -75,6 +75,10 @@ public class ChatModel implements AiModel {
         return configReadonly;
     }
 
+    public String getNameOrModel(){
+        return config.getNameOrModel();
+    }
+
     public String getModel(){
         return config.getModel();
     }
