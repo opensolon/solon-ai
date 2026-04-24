@@ -267,7 +267,7 @@ public class HarnessEngine {
         }
 
         agentManager = new AgentManager();
-        if(Assert.isNotEmpty(props.getAgentPools())) {
+        if (Assert.isNotEmpty(props.getAgentPools())) {
             props.getAgentPools().forEach(dir -> {
                 agentManager.agentPool(Paths.get(dir));
             });
@@ -319,7 +319,7 @@ public class HarnessEngine {
 
 
     public ReActRequest prompt(String prompt) {
-       return mainAgent.prompt(prompt);
+        return mainAgent.prompt(prompt);
     }
 
 
@@ -381,6 +381,15 @@ public class HarnessEngine {
             //验证模型配置
             if (Assert.isEmpty(properties.getModels())) {
                 throw new IllegalStateException("Missing models config");
+            }
+
+            //缺省 userAgent 补尝
+            if (Assert.isNotEmpty(properties.getUserAgent())) {
+                for (ChatConfig m1 : properties.getModels()) {
+                    if (Assert.isEmpty(m1.getUserAgent())) {
+                        m1.setUserAgent(properties.getUserAgent());
+                    }
+                }
             }
 
             return new HarnessEngine(properties, sessionProvider, summarizationInterceptor, hitlInterceptor);

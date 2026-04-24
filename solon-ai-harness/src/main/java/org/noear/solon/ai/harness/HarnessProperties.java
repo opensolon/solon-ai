@@ -67,6 +67,8 @@ public class HarnessProperties implements Serializable {
     private boolean hitlEnabled = false;
     private boolean subagentEnabled = true;
 
+    private String userAgent;
+
     //api 重试次数
     private int apiRetries = 3;
     //Mcp 重试次数
