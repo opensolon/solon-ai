@@ -180,7 +180,8 @@ public class ChatResponseDefault implements ChatResponse {
             }
         } else {
             if (contentBuilder.length() > 0) {
-                return new AssistantMessage(contentBuilder.toString(), false);
+                return new AssistantMessage(contentBuilder.toString(), false)
+                        .reasoningFieldName(reasoning_field_name);
             } else {
                 return null;
             }

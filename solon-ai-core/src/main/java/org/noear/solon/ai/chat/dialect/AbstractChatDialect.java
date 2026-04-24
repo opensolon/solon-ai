@@ -430,8 +430,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
             toolCallsRaw = toolCallsNode.toBean(List.class);
             if (resp.in_thinking && resp.isStream()) {
                 //说明是思考结束立刻调用了工具，需要添加思考的结束标识
-                messageList.add(new AssistantMessage("</think>", true));
-                messageList.add(new AssistantMessage("\n\n", false));
+                messageList.add(new AssistantMessage("</think>", true).reasoningFieldName(resp.reasoning_field_name));
+                messageList.add(new AssistantMessage("\n\n", false).reasoningFieldName(resp.reasoning_field_name));
             }
             resp.in_thinking = false; //重置状态
         }
@@ -467,8 +467,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 if (Utils.isEmpty(content)) {
                     if (resp.in_thinking == false) {
                         //说明是第一次
-                        messageList.add(new AssistantMessage("<think>", true));
-                        messageList.add(new AssistantMessage("\n\n", true));
+                        messageList.add(new AssistantMessage("<think>", true).reasoningFieldName(resp.reasoning_field_name));
+                        messageList.add(new AssistantMessage("\n\n", true).reasoningFieldName(resp.reasoning_field_name));
                         if (Utils.isNotEmpty(reasoning_content)) {
                             content = reasoning_content;
                         }
@@ -480,8 +480,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 } else {
                     if (resp.in_thinking) {
                         //说明是最后一次
-                        messageList.add(new AssistantMessage("</think>", true));
-                        messageList.add(new AssistantMessage("\n\n", false));
+                        messageList.add(new AssistantMessage("</think>", true).reasoningFieldName(resp.reasoning_field_name));
+                        messageList.add(new AssistantMessage("\n\n", false).reasoningFieldName(resp.reasoning_field_name));
                     }
 
                     resp.in_thinking = false;
@@ -498,8 +498,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 if (resp.in_thinking) {
                     if (resp.isStream()) {
                         //说明是最后一次
-                        messageList.add(new AssistantMessage("</think>", true));
-                        messageList.add(new AssistantMessage("\n\n", false));
+                        messageList.add(new AssistantMessage("</think>", true).reasoningFieldName(resp.reasoning_field_name));
+                        messageList.add(new AssistantMessage("\n\n", false).reasoningFieldName(resp.reasoning_field_name));
                     }
 
                     resp.in_thinking = false;
@@ -515,7 +515,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                             int thinkEnd = content.indexOf("</think>");
                             if (thinkEnd >= 0) { //可能是个开始符
                                 resp.in_thinking = false;
-                                messageList.add(new AssistantMessage(content, true));
+                                messageList.add(new AssistantMessage(content, true).reasoningFieldName(resp.reasoning_field_name));
                                 return messageList;
                             }
                         }

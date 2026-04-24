@@ -35,6 +35,7 @@
 * 调整 solon-ai-harness 切换 llm 的机制，并取消 switchMainModel 方法（有自由的机制了）
 * 调整 solon-ai-harness TerminalSkillProxy 转到 solon-ai-skill-cli
 * 修复 solon-ai-skill-toolgateway ToolGatewaySkill call_tool 不能传递 toolContext 的问题
+* 修复 solon-ai-core AbstractChatDialect reasoning_field_name 可能传递中断的问题
 
 ### 3.10.2
 
