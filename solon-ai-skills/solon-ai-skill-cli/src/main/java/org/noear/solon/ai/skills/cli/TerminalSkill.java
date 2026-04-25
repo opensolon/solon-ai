@@ -144,9 +144,18 @@ public class TerminalSkill extends AbsSkill {
                 .append(" (").append(System.getProperty("os.arch")).append(")\n");
         sb.append("- **终端类型**: ").append(shellMode).append("\n");
 
-        sb.append("- **进程安全约束**: \n");
-        sb.append("  - **当前宿主进程**: Java (PID: `").append(Utils.pid()).append("`)\n");
-        sb.append("  - **执行禁令**: 严禁执行任何可能导致宿主进程退出的命令（如 `kill -9 ").append(Utils.pid()).append("`, `pkill java`, `killall java` 等）。在清理进程前，必须先通过 `ps` 或 `jps` 确认目标 PID。\n");
+
+        // 在 getInstruction 增加以下逻辑
+        sb.append("- **自我保护机制**:\n");
+        sb.append("  - 你的所有指令都在 Java 进程 (PID: ").append(Utils.pid()).append(") 的子 shell 中运行。\n");
+        sb.append("  - 杀死该 PID 或其父进程会导致你立即停止工作并丢失所有上下文。\n");
+        sb.append("  - 严禁执行 `pkill java`, `killall java`。严禁执行 `kill -9` 任何数字，除非你先执行了 `ps` 明确该 PID 与当前 Java 进程无关。\n");
+        sb.append("  - 建议：若需清理任务，请使用 `pkill -P [PID]` 仅停止子进程。\n");
+
+        sb.append("- **严禁指令**:\n");
+        sb.append("  - 严禁执行 `exit`。如果你需要结束脚本，请让脚本自然执行完毕。\n");
+        sb.append("  - 严禁执行任何针对根目录 `/` 或系统目录（如 `/etc`, `/usr`）的删除操作。\n");
+        sb.append("  - 严禁执行任何可能改变宿主系统状态的命令（如修改网络配置、安装系统驱动等）。\n");
 
         sb.append("- **执行环境**: \n");
         sb.append("  - Python 命令: `").append(pythonCmd).append("` (系统已预置变量 `$PYTHON`)\n");
@@ -192,6 +201,27 @@ public class TerminalSkill extends AbsSkill {
                        @Param(name = "timeout", required = false, defaultValue = "120000", description = "可选超时时间，单位为毫秒") Integer timeout,
                        String __cwd) {
 
+        // 拦截直接针对当前 PID 的 kill 操作
+        String pid = Utils.pid();
+        String lowerCmd = command.toLowerCase();
+        String dangerPattern = "(?s).*(kill|pkill|killall)\\s+.*\\b" + pid + "\\b.*";
+
+        if (lowerCmd.matches(dangerPattern) ||
+                lowerCmd.contains("pkill java") ||
+                lowerCmd.contains("killall java") ||
+                lowerCmd.contains("shutdown") ||
+                lowerCmd.contains("reboot")) {
+
+            return "错误：检测到危险命令。严禁试图停止或重启宿主进程 (PID: " + pid + ")。";
+        }
+
+        if(lowerCmd.matches("(?s).*\\bexit\\b.*") ||
+                lowerCmd.matches("(?s).*rm\\s+.*-rf\\s+/.*")){
+            // 这里建议把提示信息补全，因为拦截了 exit，不仅仅是“重启或删除”
+            return "错误：检测到高危指令。出于安全策略，禁止执行 exit、系统重启或根目录删除的操作。";
+        }
+
+        // 正常执行
         Path workPath = getWorkPath(__cwd);
         Map<String, String> envs = new HashMap<>();
 

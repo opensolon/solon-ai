@@ -29,6 +29,7 @@
 * 优化 solon-ai-agent AgentSession.updateSnapshot 添加锁机制
 * 优化 solon-ai-skill-lsp 重构 LspSkill 实现（之前名为 LspTool）
 * 优化 solon-ai-skill-cli ExpertSkill 引导词
+* 优化 solon-ai-skill-cli TerminalSkill 安全引导词
 * 优化 solon-ai-skill-sys 从 cli 同步 ProcessExecutor
 * 优化 solon-ai-harness HarnessEngine 扩展机制（支持为子代理扩展，通过名字识别）
 * 调整 solon-ai-harness ReActAgentExtension 更名为 ReActAgentExtension
