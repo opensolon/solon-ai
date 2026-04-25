@@ -39,19 +39,45 @@ import java.util.function.Supplier;
 @Preview("3.9.1")
 public class PdfSkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(PdfSkill.class);
+
+    /**
+     * PDF 文件读写根目录。
+     * <p>
+     * 所有传入文件名都会基于该目录解析，并通过路径归一化防止越权访问。
+     */
     private final Path rootPath;
-    private final Supplier<InputStream> fontSupplier; // 使用 Supplier 延迟加载流
+
+    /**
+     * PDF 渲染字体流供应器。
+     * <p>
+     * 通过 {@link Supplier} 延迟打开字体流，确保每次渲染都能获得新的输入流。
+     * 当值为 {@code null} 时，使用 OpenHTMLToPDF 的默认字体回退机制。
+     */
+    private final Supplier<InputStream> fontSupplier;
+
+    /**
+     * 单次读取文本内容的最大字符数。
+     */
     private static final int MAX_READ_LEN = 1024 * 30;
 
     /**
-     * 基础构造：不强制要求字体（默认西文）
+     * 基础构造。
+     * <p>
+     * 会自动尝试发现系统中的中文/CJK 字体；若未发现可用字体，则回退到默认字体。
+     *
+     * @param workDir PDF 文件读写根目录
      */
     public PdfSkill(String workDir) {
-        this(workDir, null);
+        this(workDir, PdfFontResolver.resolveSupplier());
     }
 
     /**
-     * 高级构造：允许传入自定义字体流（如来自 resources 或外部文件）
+     * 高级构造。
+     * <p>
+     * 允许传入自定义字体流供应器，例如来自 classpath resources、外部字体文件或业务配置。
+     *
+     * @param workDir      PDF 文件读写根目录
+     * @param fontSupplier 字体流供应器；为 {@code null} 时使用默认字体回退
      */
     public PdfSkill(String workDir, Supplier<InputStream> fontSupplier) {
         this.rootPath = Paths.get(workDir).toAbsolutePath().normalize();
@@ -59,7 +85,9 @@ public class PdfSkill extends AbsSkill {
     }
 
     @Override
-    public String name() { return "pdf_tool"; }
+    public String name() {
+        return "pdf_tool";
+    }
 
     @Override
     public String description() {
@@ -67,8 +95,18 @@ public class PdfSkill extends AbsSkill {
     }
 
     @Override
-    public boolean isSupported(Prompt prompt) { return true; }
+    public boolean isSupported(Prompt prompt) {
+        return true;
+    }
 
+    /**
+     * 生成 PDF 文件。
+     *
+     * @param fileName PDF 文件名，未包含 {@code .pdf} 后缀时会自动追加
+     * @param content  待写入内容
+     * @param format   内容格式，支持 {@code markdown}、{@code html}、{@code text}
+     * @return 生成结果描述
+     */
     @ToolMapping(name = "pdf_create", description = "生成 PDF。format: 'markdown', 'html', 'text'。")
     public String create(@Param("fileName") String fileName,
                          @Param("content") String content,
@@ -99,7 +137,10 @@ public class PdfSkill extends AbsSkill {
     }
 
     /**
-     * 解析功能（保持不变）
+     * 解析 PDF 文件文本内容。
+     *
+     * @param fileName PDF 文件名
+     * @return 解析出的文本内容，或错误描述
      */
     @ToolMapping(name = "pdf_parse", description = "读取本地 PDF 文件的文本。")
     public String parse(@Param("fileName") String fileName) {
@@ -112,6 +153,13 @@ public class PdfSkill extends AbsSkill {
         }
     }
 
+    /**
+     * 将输入内容转换为可渲染的 HTML 文档。
+     *
+     * @param content 输入内容
+     * @param format  输入格式
+     * @return 完整 HTML 文档字符串
+     */
     private String convertToHtml(String content, String format) {
         String body;
         if ("markdown".equalsIgnoreCase(format)) {
@@ -131,6 +179,13 @@ public class PdfSkill extends AbsSkill {
                 "</style></head><body>" + body + "</body></html>";
     }
 
+    /**
+     * 将文件名解析为工作目录内的安全路径。
+     *
+     * @param name 文件名或相对路径
+     * @return 归一化后的目标路径
+     * @throws SecurityException 当路径越过工作目录边界时抛出
+     */
     private Path resolvePath(String name) {
         Path p = rootPath.resolve(name).normalize();
         if (!p.startsWith(rootPath)) throw new SecurityException("非法路径访问");
