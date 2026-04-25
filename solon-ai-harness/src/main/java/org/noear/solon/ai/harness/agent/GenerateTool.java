@@ -70,15 +70,15 @@ public class GenerateTool extends AbsToolProvider {
 
 
     @ToolMapping(name = "generate",
-            description = "创建一个具有特定能力和系统提示词的子代理\n" +
-                    "- 优先使用“当前可用的子代理”（如果不适合，才考虑创建新的子代理）\n" +
-                    "- 创建前，可以先查阅任务相关的专家技能（如果有，可以更好的为子代理设计系统提示词）")
+            description = "动态构建一个具备特定专家知识和工具权限的子代理。用于将复杂大任务拆解给垂直领域的‘虚拟专家’执行。\n" +
+                    "- 只有当‘当前可用代理列表’中无匹配项时，才允许调用此工具。\n" +
+                    "- 创建前应查阅相关知识库和专家技能，以确保 systemPrompt 的专业性。")
     public String generate(
             @Param(name = "name", description = "子代理的唯一英文标识符（如 code_reviewer）") String name,
-            @Param(name = "description", description = "简要描述该代理的职责") String description,
-            @Param(name = "systemPrompt", description = "详细的角色设定和工作准则") String systemPrompt,
-            @Param(name = "model", description = "指定使用的模型名称。#{models}", required = false) String model,
-            @Param(name = "tools", required = false, description = "指定可以使用的工具。从给定列表中选择：\n" +
+            @Param(name = "description", description = "对该代理职能的精炼描述，便于主代理后续识别和调用") String description,
+            @Param(name = "systemPrompt", description = "核心指令集。需包含角色身份、技能范畴、输出格式规范及负面约束（避免废话）") String systemPrompt,
+            @Param(name = "model", description = "使用的模型标识。建议复杂逻辑用高级模型，简单任务用基础模型。#{models}", required = false) String model,
+            @Param(name = "tools", required = false, description = "赋予子代理的工具权限（严禁全选，仅勾选任务相关项）。从给定列表中选择：\n" +
                     "- `read`，读取文件完整内容\n" +
                     "- `write`，写入文件完整内容\n" +
                     "- `edit`，修改文件内容（包括：read,write,edit）\n" +
@@ -87,18 +87,18 @@ public class GenerateTool extends AbsToolProvider {
                     "- `list`，列出目录内容\n" +
                     "- `bash`，运行 Shell 命令\n" +
                     "- `skill`，调用预定义的专家技能模块\n" +
-                    "- `lsp`，代码跳转定义、找引用、悬停提示、文档符号等\n" +
+                    "- `lsp`，深度代码理解\n" +
                     "- `code`，编码指导模块\n" +
                     "- `todo`，任务清单管理\n" +
                     "- `webfetch`，直接抓取特定网页内容\n" +
                     "- `websearch`，互联网通用搜索\n" +
                     "- `codesearch`，互联网代码仓库搜索\n" +
-                    "- `pi`，核心操作能力（包括：read,write,edit,bash）\n" +
-                    "- `task`，调度子代理干活\n" +
-                    "- `*`，代表全选") List<String> tools,
+                    "- `pi`，核心操作能力包（包括：read,write,edit,bash）\n" +
+                    "- `task`，允许其进一步开启下级代理(递归分发)\n" +
+                    "- `*`，全量授权") List<String> tools,
             @Param(name = "skills", description = "子代理具备的特定专家能力标识列表", required = false) List<String> skills,
             @Param(name = "maxTurns", description = "单次任务的最大思考/对话轮数，通常建议 10-30", required = false) Integer maxTurns,
-            @Param(name = "saveToFile", description = "是否将代理定义保存为 .md 文件（如果存为文件，进程重启后可复用）", defaultValue = "false", required = false) Boolean saveToFile,
+            @Param(name = "saveToFile", description = "是否持久化。如果是通用的、可复用的专家角色，建议设为 true；如果是临时任务助手，设为 false。", defaultValue = "false", required = false) Boolean saveToFile,
             String __cwd
     ) {
         if (name == null || !name.matches("^[a-zA-Z0-9_-]+$")) {
