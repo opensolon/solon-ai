@@ -30,6 +30,7 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.code.CodeSkill;
+import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
 import org.noear.solon.ai.skills.lsp.LspManager;
 import org.noear.solon.ai.skills.lsp.LspServerParameters;
@@ -85,6 +86,8 @@ public class HarnessEngine {
     private final SummarizationInterceptor summarizationInterceptor;
     private final HITLInterceptor hitlInterceptor;
 
+    private final CommandRegistry commandRegistry = new CommandRegistry();
+
     private final AgentManager agentManager;
 
     private ChatModel mainModel; //允许运行时切换
@@ -114,6 +117,10 @@ public class HarnessEngine {
         }
 
         return props.getModelOrDef(name).toChatModel();
+    }
+
+    public CommandRegistry getCommandRegistry() {
+        return commandRegistry;
     }
 
     public AgentManager getAgentManager() {

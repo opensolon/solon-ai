@@ -13,6 +13,7 @@
 
 ### 3.10.5
 
+* 添加 solon-ai-harness command 接口管理
 * 优化 solon-ai-dialect OpenaiChatDialect 添加自动补地址处理
 
 ### 3.10.4

@@ -38,6 +38,7 @@ import java.util.*;
 @Setter
 @Preview("3.10")
 public class HarnessProperties implements Serializable {
+
     //马具目录
     private final String harnessHome;
 
