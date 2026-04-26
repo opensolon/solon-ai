@@ -38,6 +38,20 @@ public class OpenaiChatDialect extends AbstractChatDialect {
         return instance;
     }
 
+    @Override
+    protected String getApiUrl(ChatConfig config) {
+        //自动补全地址
+        if (config.getApiUrl().endsWith("/chat/completions")) {
+            return config.getApiUrl();
+        } else {
+            if (config.getApiUrl().endsWith("/")) {
+                return config.getApiUrl() + "chat/completions";
+            } else {
+                return config.getApiUrl() + "/chat/completions";
+            }
+        }
+    }
+
     /**
      * 是否为默认
      */

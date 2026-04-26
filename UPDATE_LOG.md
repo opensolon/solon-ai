@@ -11,6 +11,10 @@
 *  mcp channel 概念改为 transport （并保持兼容）???
 
 
+### 3.10.5
+
+* 优化 solon-ai-dialect OpenaiChatDialect 添加自动补地址处理
+
 ### 3.10.4
 
 * 添加 solon-ai-agent 动态切换 llm 支持（支持不同会话，在各自请求时切换）

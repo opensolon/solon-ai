@@ -46,8 +46,12 @@ import java.util.*;
 public abstract class AbstractChatDialect implements ChatDialect {
     private static final Logger LOG = LoggerFactory.getLogger(AbstractChatDialect.class);
 
+    protected String getApiUrl(ChatConfig config){
+        return config.getApiUrl();
+    }
+
     public HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
-        HttpUtils httpUtils = HttpUtils.http(config.getApiUrl())
+        HttpUtils httpUtils = HttpUtils.http(getApiUrl(config))
                 .ssl(HttpSslSupplierAny.getInstance())
                 .timeout((int) config.getTimeout().getSeconds());
 
