@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.harness.command;
 
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -36,22 +35,15 @@ import java.util.List;
  */
 public class MarkdownCommand implements Command {
     private final String name;
-    private final String description;
-    private final String argumentHint;
     private final String template;
-    private final List<String> allowedTools;
+    private final String description;
+    private final String model;
 
-    public MarkdownCommand(String name, String template) {
-        this(name, null, null, template, null);
-    }
-
-    public MarkdownCommand(String name, String description, String argumentHint,
-                           String template, List<String> allowedTools) {
+    public MarkdownCommand(String name, String template, String description, String model) {
         this.name = name;
-        this.description = description != null ? description : "Custom command: " + name;
-        this.argumentHint = argumentHint != null ? argumentHint : "";
         this.template = template;
-        this.allowedTools = allowedTools != null ? allowedTools : Collections.<String>emptyList();
+        this.description = description != null ? description : "Custom command: " + name;
+        this.model = model;
     }
 
     @Override
@@ -65,18 +57,13 @@ public class MarkdownCommand implements Command {
     }
 
     @Override
+    public String model() {
+        return model;
+    }
+
+    @Override
     public CommandType type() {
         return CommandType.AGENT;
-    }
-
-    @Override
-    public String argumentHint() {
-        return argumentHint;
-    }
-
-    @Override
-    public List<String> allowedTools() {
-        return allowedTools;
     }
 
     /**

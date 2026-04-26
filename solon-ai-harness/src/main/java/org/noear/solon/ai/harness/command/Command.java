@@ -15,13 +15,10 @@
  */
 package org.noear.solon.ai.harness.command;
 
-import java.util.List;
-
 /**
  * 通用命令接口（适用于 CLI、Web 等所有端）
  *
  * @author noear
- * @since 2026.4.28
  */
 public interface Command {
     /**
@@ -35,23 +32,16 @@ public interface Command {
     String description();
 
     /**
+     * 使用模型
+     */
+    default String model(){
+        return null;
+    }
+
+    /**
      * 命令类型
      */
     CommandType type();
-
-    /**
-     * 参数提示文本
-     */
-    default String argumentHint() {
-        return null;
-    }
-
-    /**
-     * 允许使用的工具列表（null 或空表示不限制）
-     */
-    default List<String> allowedTools() {
-        return null;
-    }
 
     /**
      * 是否仅 CLI 环境可用

@@ -53,7 +53,7 @@ public class MarkdownCommandLoader {
         // 递归扫描子目录，支持 deploy/staging.md → deploy:staging
         try (Stream<Path> files = Files.walk(baseDir)) {
             files.filter(p -> p.toString().endsWith(".md"))
-                 .filter(p -> Files.isRegularFile(p))
+                    .filter(p -> Files.isRegularFile(p))
                     .forEach(p -> registerMarkdownCommand(p, baseDir, registry));
         } catch (IOException e) {
             LOG.warn("Failed to load commands from {}: {}", baseDir, e.getMessage());
@@ -80,74 +80,20 @@ public class MarkdownCommandLoader {
      * @param registry 注册表
      */
     private static void registerMarkdownCommand(Path mdFile, Path baseDir, CommandRegistry registry) {
-        // 1. 计算命令名（含命名空间）
-
         try {
-            // 2. 读取文件所有行
             List<String> lines = Files.readAllLines(mdFile, StandardCharsets.UTF_8);
 
-            // 3. 使用 MarkdownUtil 解析（自动处理 YAML Frontmatter）
             Markdown md = MarkdownUtil.resolve(lines);
 
-            // 4. 提取元数据
             String name = buildCommandName(mdFile, baseDir);
-
+            String template = md.getContent();
             String description = md.getDescription();
-            String argumentHint = md.getMeta("argument-hint").getString();
-            List<String> allowedTools = parseAllowedTools(md.getMeta("allowed-tools").getString());
-            String body = md.getContent();
+            String model = md.getMeta("model").getString();
 
-            // 5. 如果没有 Frontmatter 的 description，尝试从 HTML 注释提取（向后兼容）
-            if (description == null && !lines.isEmpty()) {
-                String firstLine = lines.get(0).trim();
-                if (firstLine.startsWith("<!--") && firstLine.endsWith("-->")) {
-                    description = firstLine.substring(4, firstLine.length() - 3).trim();
-                }
-            }
-
-            // 6. 注册命令
-            registry.register(new MarkdownCommand(name, description, argumentHint, body, allowedTools));
+            registry.register(new MarkdownCommand(name, template, description, model));
 
         } catch (IOException e) {
             LOG.warn("Failed to read command file {}: {}", mdFile, e.getMessage());
         }
-    }
-
-    /**
-     * 解析 allowed-tools 字段值
-     * <p>
-     * 格式："Bash(git add:*), Bash(git status:*), FileRead(*)"
-     * → ["Bash(git add:*)", "Bash(git status:*)", "FileRead(*)"]
-     */
-    static List<String> parseAllowedTools(String value) {
-        if (value == null || value.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        List<String> tools = new ArrayList<>();
-        // 按逗号分割，但要处理括号内的逗号（如 Bash(a,b) 不应被分割）
-        int depth = 0;
-        int start = 0;
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            if (c == '(') {
-                depth++;
-            } else if (c == ')') {
-                depth--;
-            } else if (c == ',' && depth == 0) {
-                String tool = value.substring(start, i).trim();
-                if (!tool.isEmpty()) {
-                    tools.add(tool);
-                }
-                start = i + 1;
-            }
-        }
-        // 最后一个
-        String last = value.substring(start).trim();
-        if (!last.isEmpty()) {
-            tools.add(last);
-        }
-
-        return tools;
     }
 }
