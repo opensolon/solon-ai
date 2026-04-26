@@ -42,22 +42,21 @@ public class MarkdownCommandLoader {
     /**
      * 扫描目录（含子目录），注册 .md 文件为命令
      *
-     * @param dirPath  命令目录根路径
+     * @param baseDir  命令目录根路径
      * @param registry 注册表
      */
-    public static void loadFromDirectory(String dirPath, CommandRegistry registry) {
-        Path dir = Paths.get(dirPath);
-        if (!Files.isDirectory(dir)) {
+    public static void loadFromDirectory(Path baseDir, CommandRegistry registry) {
+        if (!Files.isDirectory(baseDir)) {
             return;
         }
 
         // 递归扫描子目录，支持 deploy/staging.md → deploy:staging
-        try (Stream<Path> files = Files.walk(dir)) {
+        try (Stream<Path> files = Files.walk(baseDir)) {
             files.filter(p -> p.toString().endsWith(".md"))
                  .filter(p -> Files.isRegularFile(p))
-                    .forEach(p -> registerMarkdownCommand(p, dir, registry));
+                    .forEach(p -> registerMarkdownCommand(p, baseDir, registry));
         } catch (IOException e) {
-            LOG.warn("Failed to load commands from {}: {}", dirPath, e.getMessage());
+            LOG.warn("Failed to load commands from {}: {}", baseDir, e.getMessage());
         }
     }
 

@@ -19,6 +19,7 @@ import org.noear.solon.ai.harness.HarnessProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -38,12 +39,19 @@ public class CommandRegistry {
 
     private final Map<String, Command> commands = new ConcurrentHashMap<>();
 
-    public void loadFromDirectory(String dirPath, CommandRegistry registry) {
-        MarkdownCommandLoader.loadFromDirectory(dirPath, this);
+    /**
+     * 从目录加载
+     *
+     * @param baseDir 目录
+     */
+    public void load(Path baseDir) {
+        MarkdownCommandLoader.loadFromDirectory(baseDir, this);
     }
 
     /**
      * 注册命令
+     *
+     * @param command 命令
      */
     public void register(Command command) {
         Command existing = commands.putIfAbsent(command.name(), command);

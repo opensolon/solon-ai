@@ -242,6 +242,13 @@ public class HarnessProperties implements Serializable {
     }
 
     /**
+     * 马具命令描述存放区
+     */
+    public final String getHarnessCommands() {
+        return getHarnessHome() + "commands/";
+    }
+
+    /**
      * 马具记忆存放区
      */
     public final String getHarnessMemory() {
