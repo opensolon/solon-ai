@@ -33,6 +33,20 @@ public class Markdown {
         return metadata;
     }
 
+    /**
+     * @since 3.10.5
+     */
+    public boolean hasMeta(String name) {
+        return metadata.hasKey(name);
+    }
+
+    /**
+     * @since 3.10.5
+     */
+    public ONode getMeta(String name) {
+        return metadata.get(name);
+    }
+
     public String getName() {
         return metadata.get("name").getString();
     }
