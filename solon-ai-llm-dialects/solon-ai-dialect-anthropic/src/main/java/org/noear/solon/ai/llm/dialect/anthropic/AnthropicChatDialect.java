@@ -85,9 +85,7 @@ public class AnthropicChatDialect extends AbstractChatDialect {
 
     @Override
     public HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
-        String apiUrl = config.getApiUrl().toString();
-
-        HttpUtils httpUtils = HttpUtils.http(apiUrl)
+        HttpUtils httpUtils = HttpUtils.http(getApiUrl(config))
                 .ssl(HttpSslSupplierAny.getInstance())
                 .timeout((int) config.getTimeout().getSeconds());
 
