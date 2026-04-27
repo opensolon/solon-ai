@@ -108,7 +108,7 @@ public class MarkdownCommand implements Command {
         String prompt = getResolvedPrompt(ctx.getArgs());
 
         // 作为 Agent 任务执行
-        ctx.runAgentTask(prompt);
+        ctx.runAgentTask(prompt, model());
         return true;
     }
 }
