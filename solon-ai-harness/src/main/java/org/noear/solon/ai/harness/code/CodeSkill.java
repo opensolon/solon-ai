@@ -85,7 +85,7 @@ public class CodeSkill extends AbsSkill {
 
         buf.append("为了确保工程质量，要严格执行以下操作：\n")
                 .append("1. **动作前导**: 在开始任何任务前，先读 `" + HOME_CODE_MD() + "` 以获取构建和测试指令。\n")
-                .append("2. **验证驱动**: 修改代码后，根据 `" + HOME_CODE_MD() + "` 中的指令运行测试，严禁未验证提交。\n");
+                .append("2. **验证驱动**: 修改代码后，参考 `" + HOME_CODE_MD() + "` 中的指令运行测试，严禁未验证提交。\n");
 
         return buf.toString();
     }
