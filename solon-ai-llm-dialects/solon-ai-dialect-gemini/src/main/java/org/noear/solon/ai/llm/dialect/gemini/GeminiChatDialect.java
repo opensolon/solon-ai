@@ -76,7 +76,7 @@ public class GeminiChatDialect extends AbstractChatDialect {
      */
     @Override
     public boolean matched(ChatConfig config) {
-        return "gemini".equals(config.getProvider()) ||
+        return "gemini".equalsIgnoreCase(config.getProvider()) ||
                 (Assert.isEmpty(config.getProvider()) && config.getApiUrl().contains("/v1beta/models/") && config.getApiUrl().endsWith("generateContent"));
     }
 

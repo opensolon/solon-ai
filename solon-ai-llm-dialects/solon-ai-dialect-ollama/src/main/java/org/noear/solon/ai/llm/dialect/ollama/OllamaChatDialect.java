@@ -50,6 +50,7 @@ import java.util.Map;
  * @since 3.1
  */
 public class OllamaChatDialect extends AbstractChatDialect {
+
     private static final Logger LOG = LoggerFactory.getLogger(OllamaChatDialect.class);
 
     private static OllamaChatDialect instance = new OllamaChatDialect();
@@ -65,8 +66,28 @@ public class OllamaChatDialect extends AbstractChatDialect {
      */
     @Override
     public boolean matched(ChatConfig config) {
-        return "ollama".equals(config.getProvider()) ||
+        return "ollama".equalsIgnoreCase(config.getProvider()) ||
                 (Assert.isEmpty(config.getProvider()) && config.getApiUrl().endsWith("/api/chat"));
+    }
+
+    @Override
+    protected String getApiUrl(ChatConfig config) {
+
+        //处理后缀#
+        if (config.getApiUrl().indexOf("#") > 0) {
+            return config.getApiUrl();
+        }
+
+        //自动补全地址
+        if (config.getApiUrl().endsWith("/api/chat")) {
+            return config.getApiUrl();
+        } else {
+            if (config.getApiUrl().endsWith("/")) {
+                return config.getApiUrl() + "api/chat";
+            } else {
+                return config.getApiUrl() + "/api/chat";
+            }
+        }
     }
 
     @Override

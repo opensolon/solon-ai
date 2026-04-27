@@ -58,9 +58,29 @@ public class AnthropicChatDialect extends AbstractChatDialect {
      */
     @Override
     public boolean matched(ChatConfig config) {
-        return "claude".equals(config.getProvider()) ||
-                "anthropic".equals(config.getProvider()) ||
+        return "claude".equalsIgnoreCase(config.getProvider()) ||
+                "anthropic".equalsIgnoreCase(config.getProvider()) ||
                 (Assert.isEmpty(config.getProvider()) && config.getApiUrl().endsWith("/v1/messages"));
+    }
+
+    @Override
+    protected String getApiUrl(ChatConfig config) {
+
+        //处理后缀#
+        if (config.getApiUrl().indexOf("#") > 0) {
+            return config.getApiUrl();
+        }
+
+        //自动补全地址
+        if (config.getApiUrl().endsWith("/v1/messages")) {
+            return config.getApiUrl();
+        } else {
+            if (config.getApiUrl().endsWith("/")) {
+                return config.getApiUrl() + "v1/messages";
+            } else {
+                return config.getApiUrl() + "/v1/messages";
+            }
+        }
     }
 
     @Override
