@@ -32,6 +32,7 @@ import java.util.List;
  * @since 3.1
  */
 public class OpenaiChatDialect extends AbstractChatDialect {
+
     private static final OpenaiChatDialect instance = new OpenaiChatDialect();
 
     public static OpenaiChatDialect getInstance() {
@@ -40,6 +41,12 @@ public class OpenaiChatDialect extends AbstractChatDialect {
 
     @Override
     protected String getApiUrl(ChatConfig config) {
+
+        //处理后缀#
+        if (config.getApiUrl().indexOf("#") > 0) {
+            return config.getApiUrl();
+        }
+
         //自动补全地址
         if (config.getApiUrl().endsWith("/chat/completions")) {
             return config.getApiUrl();
