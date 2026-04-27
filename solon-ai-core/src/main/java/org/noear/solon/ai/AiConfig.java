@@ -38,12 +38,12 @@ public class AiConfig {
     //用于管理显示
     protected @Nullable String name;
     protected @Nullable String description;
+    protected long contextLength;
 
     protected String apiUrl;
     protected String apiKey;
     protected String provider;
     protected String model;
-    protected long contextLength;
     protected final Map<String, String> headers = new LinkedHashMap<>();
     protected String userAgent;
     protected Duration timeout = Duration.ofSeconds(60);
