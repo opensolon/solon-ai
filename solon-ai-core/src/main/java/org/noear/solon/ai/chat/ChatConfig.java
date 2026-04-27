@@ -23,6 +23,7 @@ import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 
 import java.util.*;
+import java.util.function.Consumer;
 
 /**
  * 聊天模型配置
@@ -43,6 +44,12 @@ public class ChatConfig extends AiConfig {
 
     //作为构建载体（方便转换）
     private transient ChatOptions modelOptions;
+
+
+    public ChatConfig then(Consumer<ChatConfig> build){
+        build.accept(this);
+        return this;
+    }
 
     public ChatOptions getModelOptions() {
         if (modelOptions == null) {
