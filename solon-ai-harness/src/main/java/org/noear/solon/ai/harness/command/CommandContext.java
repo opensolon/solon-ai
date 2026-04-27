@@ -105,9 +105,4 @@ public interface CommandContext {
      * CLI 端实现为阻塞等待；Web 端实现为返回 Flux 流。
      */
     void runAgentTask(String prompt, String model);
-
-    /**
-     * 获取 Agent 任务的 prompt（由 runAgentTask 设置）
-     */
-    String getAgentTaskPrompt();
 }
