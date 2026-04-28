@@ -237,8 +237,10 @@ public class CodeSkill extends AbsSkill {
                 .append("- **Read-Before-Edit**: Always read the full file content before applying any changes.\n") // 增加读前必改
                 .append("- **Atomic Work**: Implement one feature/fix at a time.\n")
                 .append("- **Verification**: Run tests before considering a task complete.\n")
-                .append("- **Path Usage**: Use relative paths only (e.g., `src/main.java`, NOT `./src/main.java`).\n") // 明确路径格式
-                .append("- **Style**: Follow existing patterns in the codebase.\n\n");
+                .append("- **Path Usage**: Use relative paths only (e.g., `src/main/java/App.java`, NOT `./src/main/java/App.java`).\n")
+                .append("- **Style**: Follow existing patterns in the codebase.\n")
+                .append("- **Environment Awareness**: Utilize your knowledge of default local repository paths (e.g., Maven, Node) to assist in dependency troubleshooting and source code analysis.\n\n");
+
     }
 
     private void ensureInGitignore(Path rootPath, String fileName) {
