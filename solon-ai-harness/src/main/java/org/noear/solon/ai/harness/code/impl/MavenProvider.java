@@ -24,6 +24,11 @@ public class MavenProvider implements LanguageProvider {
     }
 
     @Override
+    public String[] ignoreFolders() {
+        return new String[]{"target"};
+    }
+
+    @Override
     public void appendRootCommands(StringBuilder buf) {
         buf.append("### 根项目 (Maven)\n")
                 .append("- 构建: `mvn clean compile`\n")

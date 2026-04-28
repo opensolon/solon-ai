@@ -24,6 +24,11 @@ public class GoProvider implements LanguageProvider {
     }
 
     @Override
+    public String[] ignoreFolders() {
+        return new String[]{"vendor"};
+    }
+
+    @Override
     public void appendRootCommands(StringBuilder buf) {
         buf.append("### 根项目 (Go)\n")
                 .append("- 依赖同步: `go mod tidy`\n")

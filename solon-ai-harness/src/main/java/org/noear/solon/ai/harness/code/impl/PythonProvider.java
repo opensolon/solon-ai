@@ -21,7 +21,7 @@ public class PythonProvider implements LanguageProvider {
                 .append("- 环境: 优先检查并激活 `venv` 或 `.venv`\n")
                 .append("- 依赖: `pip install -r requirements.txt` (或使用 poetry/pdm)\n")
                 .append("- 全量测试: `pytest` 或 `python -m unittest discover`\n")
-                .append("- 单文件测试: `pytest path/to/test_file.py` (替换为实际路径)\n\n");
+                .append("- 单文件测试: `pytest -m path/to/test_file.py` (替换为实际路径)\n\n");
     }
 
     @Override

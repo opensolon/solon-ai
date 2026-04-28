@@ -22,6 +22,11 @@ public class RustProvider implements LanguageProvider {
     }
 
     @Override
+    public String[] ignoreFolders() {
+        return new String[]{"target"};
+    }
+
+    @Override
     public void appendRootCommands(StringBuilder buf) {
         buf.append("### 根项目 (Rust)\n")
                 .append("- 构建: `cargo build`\n")

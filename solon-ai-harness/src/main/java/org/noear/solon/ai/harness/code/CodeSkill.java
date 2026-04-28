@@ -281,14 +281,13 @@ public class CodeSkill extends AbsSkill {
 
     private boolean isIgnored(Path path) {
         String name = path.getFileName().toString();
-        // 过滤隐藏目录、依赖目录和构建输出目录
-        boolean ignored = name.startsWith(".")
-                || "node_modules".equals(name) || "target".equals(name)
-                || "bin".equals(name) || "vendor".equals(name) || "build".equals(name);
+        // 1. 全局通用的基础忽略（隐藏目录）
+        if (name.startsWith(".")) {
+            // 特殊：有些隐藏目录可能包含 markers，但在 walkTree 扫描模块时通常跳过
+            return true;
+        }
 
-        if (ignored) return true;
-
-        return providers.stream()
-                .anyMatch(p -> Arrays.asList(p.ignoreFolders()).contains(name));
+        // 2. 询问所有 Provider 是否要忽略此目录
+        return providers.stream().anyMatch(p -> p.isIgnored(path));
     }
 }

@@ -22,6 +22,11 @@ public class NodeProvider implements LanguageProvider {
     }
 
     @Override
+    public String[] ignoreFolders() {
+        return new String[]{"node_modules"};
+    }
+
+    @Override
     public void appendRootCommands(StringBuilder buf) {
         buf.append("### 根项目 (Node/TS)\n")
                 .append("- 安装: `npm install`\n")
