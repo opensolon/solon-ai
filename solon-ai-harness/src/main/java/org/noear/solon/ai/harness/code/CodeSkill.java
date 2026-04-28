@@ -108,6 +108,7 @@ public class CodeSkill extends AbsSkill {
             List<String> detectedStacks = new ArrayList<>();
             boolean rootHasMaven = rootExists(rootPath, "pom.xml");
             boolean rootHasNode = rootExists(rootPath, "package.json");
+            boolean rootHasGo = rootExists(rootPath, "go.mod");
 
             if (rootHasMaven) {
                 detectedStacks.add("Maven(Root)");
@@ -116,6 +117,10 @@ public class CodeSkill extends AbsSkill {
             if (rootHasNode) {
                 detectedStacks.add("Node(Root)");
                 appendNodeCommands(newContent, null);
+            }
+            if (rootHasGo) { // 新增
+                detectedStacks.add("Go(Root)");
+                appendGoCommands(newContent, null);
             }
 
 
@@ -153,24 +158,29 @@ public class CodeSkill extends AbsSkill {
 
                 boolean isMaven = Files.exists(dir.resolve("pom.xml"));
                 boolean isNode = Files.exists(dir.resolve("package.json"));
+                boolean isGo = Files.exists(dir.resolve("go.mod"));
 
-                if (isMaven || isNode) {
+                if (isMaven || isNode || isGo) {
                     processedPaths.add(relativePath); // 标记此路径已处理
 
                     // 判断是否是异构项目（比如 Root 是 Maven，子目录是 Node）
-                    boolean isHeterogeneous = (isMaven && !rootHasMaven) || (isNode && !rootHasNode);
+                    boolean isHeterogeneous = (isMaven && !rootHasMaven)
+                            || (isNode && !rootHasNode)
+                            || (isGo && !rootHasGo);
 
                     if (isHeterogeneous) {
-                        detectedStacks.add(relativePath + (isMaven ? "(Maven)" : "(Node)"));
+                        detectedStacks.add(relativePath + (isMaven ? "(Maven)" : (isNode ? "(Node)" : "(Go)")));
                         if (isMaven) appendMavenCommands(newContent, relativePath);
                         if (isNode) appendNodeCommands(newContent, relativePath);
+                        if (isGo) appendGoCommands(newContent, relativePath);
                     } else {
                         if (!hasSubModulesSection) {
                             newContent.append("### 子模块与子项目 (Sub-modules & Sub-projects)\n");
                             hasSubModulesSection = true;
                         }
+                        String type = isMaven ? "Maven 模块" : (isNode ? "Node 项目" : "Go 模块");
                         newContent.append("- ").append(relativePath).append(": ")
-                                .append(isMaven ? "Maven 模块" : "Node 项目")
+                                .append(type)
                                 .append("。受根项目指令统一控制。\n");
                     }
                 }
@@ -214,21 +224,36 @@ public class CodeSkill extends AbsSkill {
         } else {
             buf.append("### 模块 (Module): ").append(moduleName).append(" (Maven)\n")
                     .append("- 构建: `cd ").append(moduleName).append(" && mvn clean compile`\n")
-                    .append("- 测试: `cd ").append(moduleName).append(" && mvn test`\n\n");
+                    .append("- 测试: `cd ").append(moduleName).append(" && mvn test`\n")
+                    .append("- 单测: `cd ").append(moduleName).append(" && mvn test -Dtest=ClassName` (替换为实际类名)\n\n");
         }
     }
 
     private void appendNodeCommands(StringBuilder buf, String moduleName) {
         if (moduleName == null) {
-            buf.append("### 根项目 (Node)\n")
+            buf.append("### 根项目 (Node/TS)\n")
                     .append("- 安装: `npm install`\n")
                     .append("- 构建: `npm run build`\n")
                     .append("- 测试: `npm test`\n\n");
         } else {
-            buf.append("### 模块 (Module): ").append(moduleName).append(" (Node)\n")
+            buf.append("### 模块 (Module): ").append(moduleName).append(" (Node/TS)\n")
                     .append("- 安装: `cd ").append(moduleName).append(" && npm install`\n")
                     .append("- 构建: `cd ").append(moduleName).append(" && npm run build`\n")
                     .append("- 测试: `cd ").append(moduleName).append(" && npm test`\n\n");
+        }
+    }
+
+    private void appendGoCommands(StringBuilder buf, String moduleName) {
+        if (moduleName == null) {
+            buf.append("### 根项目 (Go)\n")
+                    .append("- 依赖同步: `go mod tidy`\n")
+                    .append("- 构建: `go build ./...`\n")
+                    .append("- 测试: `go test ./...`\n\n");
+        } else {
+            buf.append("### 模块 (Module): ").append(moduleName).append(" (Go)\n")
+                    .append("- 构建: `cd ").append(moduleName).append(" && go build`\n")
+                    .append("- 测试: `cd ").append(moduleName).append(" && go test ./...`\n")
+                    .append("- 单测: `cd ").append(moduleName).append(" && go test -v -run TestName` (替换为实际函数名)\n\n");
         }
     }
 
