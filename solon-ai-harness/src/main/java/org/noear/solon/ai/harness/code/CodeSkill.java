@@ -47,10 +47,16 @@ public class CodeSkill extends AbsSkill {
         this.engine = engine;
 
         providers.add(new MavenProvider());
+        providers.add(new GradleProvider());
         providers.add(new NodeProvider());
         providers.add(new GoProvider());
         providers.add(new PythonProvider());
         providers.add(new RustProvider());
+
+        providers.add(new CangjieProvider());
+        providers.add(new CMakeProvider());
+        providers.add(new FlutterProvider());
+        providers.add(new PhpProvider());
         providers.add(new DotNetProvider());
     }
 
