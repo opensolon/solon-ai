@@ -3,9 +3,7 @@ package org.noear.solon.ai.harness.code.impl;
 import org.noear.solon.ai.harness.code.LanguageProvider;
 
 /**
- *
  * @author noear 2026/4/28 created
- *
  */
 public class NodeProvider implements LanguageProvider {
     @Override
@@ -28,7 +26,8 @@ public class NodeProvider implements LanguageProvider {
         buf.append("### 根项目 (Node/TS)\n")
                 .append("- 安装: `npm install`\n")
                 .append("- 构建: `npm run build`\n")
-                .append("- 测试: `npm test`\n\n");
+                .append("- 全量测试: `npm test`\n")
+                .append("- 单文件测试: `npm test -- path/to/file.test.ts` (替换为实际文件路径)\n\n");
     }
 
     @Override
@@ -36,6 +35,7 @@ public class NodeProvider implements LanguageProvider {
         buf.append("### 模块 (Module): ").append(moduleName).append(" (Node/TS)\n")
                 .append("- 安装: `cd ").append(moduleName).append(" && npm install`\n")
                 .append("- 构建: `cd ").append(moduleName).append(" && npm run build`\n")
-                .append("- 测试: `cd ").append(moduleName).append(" && npm test`\n\n");
+                .append("- 全量测试: `cd ").append(moduleName).append(" && npm test`\n")
+                .append("- 单文件测试: `cd ").append(moduleName).append(" && npm test -- path/to/file.test.ts` (替换为实际文件路径)\n\n");
     }
 }
