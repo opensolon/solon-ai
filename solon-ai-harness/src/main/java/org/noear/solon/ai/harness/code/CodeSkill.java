@@ -81,7 +81,7 @@ public class CodeSkill extends AbsSkill {
         String msg = init(__cwd);
 
         buf.append("\n## 核心工程规约 (Core Engineering Protocol)\n");
-        buf.append("> Project Context: ").append(msg).append("\n\n");
+        buf.append("> 项目当前上下文: ").append(msg).append("\n\n");
 
         buf.append("为了确保工程质量，要严格执行以下操作：\n")
                 .append("1. **动作前导**: 在开始任何任务前，先读 `" + HOME_CODE_MD() + "` 以获取构建和测试指令。\n")
@@ -103,7 +103,7 @@ public class CodeSkill extends AbsSkill {
             if (!Files.isWritable(rootPath)) return "错误：目录不可写。";
 
             StringBuilder newContent = new StringBuilder();
-            newContent.append("## Build and Test Commands\n\n");
+            newContent.append("## 构建与测试指令 (Build and Test Commands)\n\n");
 
             List<String> detectedStacks = new ArrayList<>();
             boolean rootHasMaven = rootExists(rootPath, "pom.xml");
@@ -166,12 +166,12 @@ public class CodeSkill extends AbsSkill {
                         if (isNode) appendNodeCommands(newContent, relativePath);
                     } else {
                         if (!hasSubModulesSection) {
-                            newContent.append("### Sub-modules / Sub-projects\n");
+                            newContent.append("### 子模块与子项目 (Sub-modules & Sub-projects)\n");
                             hasSubModulesSection = true;
                         }
                         newContent.append("- ").append(relativePath).append(": ")
-                                .append(isMaven ? "Maven module" : "Node project")
-                                .append(". Controlled by root project commands.\n");
+                                .append(isMaven ? "Maven 模块" : "Node 项目")
+                                .append("。受根项目指令统一控制。\n");
                     }
                 }
             }
@@ -207,39 +207,39 @@ public class CodeSkill extends AbsSkill {
 
     private void appendMavenCommands(StringBuilder buf, String moduleName) {
         if (moduleName == null) {
-            buf.append("### Root Project (Maven)\n")
-                    .append("- Build: `mvn clean compile`\n")
-                    .append("- Test all: `mvn test`\n")
-                    .append("- Test single: `mvn test -Dtest=ClassName` (Replace with actual class)\n\n");
+            buf.append("### 根项目 (Maven)\n")
+                    .append("- 构建: `mvn clean compile`\n")
+                    .append("- 全量测试: `mvn test`\n")
+                    .append("- 单测执行: `mvn test -Dtest=ClassName` (替换为实际类名)\n\n");
         } else {
-            buf.append("### Module: ").append(moduleName).append(" (Maven)\n")
-                    .append("- Build: `cd ").append(moduleName).append(" && mvn clean compile`\n")
-                    .append("- Test: `cd ").append(moduleName).append(" && mvn test`\n\n");
+            buf.append("### 模块 (Module): ").append(moduleName).append(" (Maven)\n")
+                    .append("- 构建: `cd ").append(moduleName).append(" && mvn clean compile`\n")
+                    .append("- 测试: `cd ").append(moduleName).append(" && mvn test`\n\n");
         }
     }
 
     private void appendNodeCommands(StringBuilder buf, String moduleName) {
         if (moduleName == null) {
-            buf.append("### Root Project (Node)\n")
-                    .append("- Install: `npm install`\n")
-                    .append("- Build: `npm run build`\n")
-                    .append("- Test: `npm test`\n\n"); // 建议增加 Test 项
+            buf.append("### 根项目 (Node)\n")
+                    .append("- 安装: `npm install`\n")
+                    .append("- 构建: `npm run build`\n")
+                    .append("- 测试: `npm test`\n\n");
         } else {
-            buf.append("### Module: ").append(moduleName).append(" (Node)\n")
-                    .append("- Install: `cd ").append(moduleName).append(" && npm install`\n")
-                    .append("- Build: `cd ").append(moduleName).append(" && npm run build`\n")
-                    .append("- Test: `cd ").append(moduleName).append(" && npm test`\n\n");
+            buf.append("### 模块 (Module): ").append(moduleName).append(" (Node)\n")
+                    .append("- 安装: `cd ").append(moduleName).append(" && npm install`\n")
+                    .append("- 构建: `cd ").append(moduleName).append(" && npm run build`\n")
+                    .append("- 测试: `cd ").append(moduleName).append(" && npm test`\n\n");
         }
     }
 
     private void appendGuidelines(StringBuilder buf) {
-        buf.append("## Guidelines\n\n")
-                .append("- **Read-Before-Edit**: Always read the full file content before applying any changes.\n") // 增加读前必改
-                .append("- **Atomic Work**: Implement one feature/fix at a time.\n")
-                .append("- **Verification**: Run tests before considering a task complete.\n")
-                .append("- **Path Usage**: Use relative paths only (e.g., `src/main/java/App.java`, NOT `./src/main/java/App.java`).\n")
-                .append("- **Style**: Follow existing patterns in the codebase.\n")
-                .append("- **Environment Awareness**: Utilize your knowledge of default local repository paths (e.g., Maven, Node) to assist in dependency troubleshooting and source code analysis.\n\n");
+        buf.append("## 工程规约 (Guidelines)\n\n")
+                .append("- **读前必改**: 在进行任何修改前，务必完整阅读相关文件内容。\n")
+                .append("- **原子作业**: 每次仅实现一个功能或修复一个 Bug。\n")
+                .append("- **验证驱动**: 任务完成前必须运行测试进行验证。\n")
+                .append("- **路径规范**: 仅使用相对路径（例如：`src/main/java/App.java`，严禁使用 `./src/...`）。\n")
+                .append("- **风格对齐**: 必须遵循代码库中已有的编码风格和设计模式。\n")
+                .append("- **环境感知**: 利用你对各语言默认本地仓库路径（如 Maven、Node）的知识，协助排查依赖问题或进行源码分析。\n\n");
 
     }
 
