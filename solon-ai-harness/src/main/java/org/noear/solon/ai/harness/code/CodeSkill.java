@@ -18,6 +18,7 @@ package org.noear.solon.ai.harness.code;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.code.impl.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Code 规范对齐的专家技能
@@ -39,12 +41,20 @@ public class CodeSkill extends AbsSkill {
     public final static String NAME_CODE_MD = "CODE.md";
 
     private final HarnessEngine engine;
+    private final List<LanguageProvider> providers = new ArrayList<>();
 
     public CodeSkill(HarnessEngine engine) {
         this.engine = engine;
+
+        providers.add(new MavenProvider());
+        providers.add(new NodeProvider());
+        providers.add(new GoProvider());
+        providers.add(new PythonProvider());
+        providers.add(new RustProvider());
+        providers.add(new DotNetProvider());
     }
 
-    public String HOME_CODE_MD(){
+    public String HOME_CODE_MD() {
         return engine.getProps().getHarnessHome() + NAME_CODE_MD;
     }
 
@@ -63,15 +73,11 @@ public class CodeSkill extends AbsSkill {
             return true;
         }
 
-        String[] markers = {
-                "pom.xml",                                        // java
-                "package.json",                                   // node
-                "go.mod",                                         //go
-                "requirements.txt", "pyproject.toml", "setup.py", // Python
-                "Cargo.toml",                                     // Rust
-                "*.sln", "*.csproj",                              // C# (.NET)
-                ".git", ".github", "src", "lib"
-        };
+        Set<String> markers = providers.stream()
+                .flatMap(p -> Arrays.stream(p.markers()))
+                .collect(Collectors.toSet());
+
+        markers.addAll(Arrays.asList(".git", ".github", ".gitee", "src", "lib"));
 
         for (String marker : markers) {
             if (rootExists(rootPath, marker)) return true;
@@ -118,21 +124,15 @@ public class CodeSkill extends AbsSkill {
             newContent.append("## 构建与测试指令 (Build and Test Commands)\n\n");
 
             List<String> detectedStacks = new ArrayList<>();
+            Set<LanguageProvider> rootMatched = new HashSet<>();
 
-            boolean rootHasMaven = rootExists(rootPath, "pom.xml");
-            boolean rootHasNode = rootExists(rootPath, "package.json");
-            boolean rootHasGo = rootExists(rootPath, "go.mod");
-            boolean rootHasPython = rootExists(rootPath, "requirements.txt") || rootExists(rootPath, "pyproject.toml");
-            boolean rootHasRust = rootExists(rootPath, "Cargo.toml");
-            boolean rootHasDotNet = hasFileWithExtension(rootPath, ".sln") || hasFileWithExtension(rootPath, ".csproj");
-
-            if (rootHasMaven) { detectedStacks.add("Maven(Root)"); appendMavenCommands(newContent, null); }
-            if (rootHasNode) { detectedStacks.add("Node(Root)"); appendNodeCommands(newContent, null); }
-            if (rootHasGo) { detectedStacks.add("Go(Root)"); appendGoCommands(newContent, null); }
-            if (rootHasPython) { detectedStacks.add("Python(Root)"); appendPythonCommands(newContent, null); }
-            if (rootHasRust) { detectedStacks.add("Rust(Root)"); appendRustCommands(newContent, null); }
-            if (rootHasDotNet) { detectedStacks.add("C#/.NET(Root)"); appendDotNetCommands(newContent, null); }
-
+            for (LanguageProvider provider : providers) {
+                if (provider.isMatch(rootPath)) {
+                    rootMatched.add(provider);
+                    detectedStacks.add(provider.id() + "(Root)");
+                    provider.appendRootCommands(newContent);
+                }
+            }
 
             List<Path> allNodes = new ArrayList<>();
             try {
@@ -166,40 +166,29 @@ public class CodeSkill extends AbsSkill {
                 // 如果父目录已经作为模块处理过了，子目录就不再单独列出（Maven 惯例）
                 if (processedPaths.stream().anyMatch(p -> relativePath.startsWith(p + "/"))) continue;
 
-                boolean isMaven = Files.exists(dir.resolve("pom.xml"));
-                boolean isNode = Files.exists(dir.resolve("package.json"));
-                boolean isGo = Files.exists(dir.resolve("go.mod"));
-                boolean isPython = Files.exists(dir.resolve("requirements.txt")) || Files.exists(dir.resolve("pyproject.toml"));
-                boolean isRust = Files.exists(dir.resolve("Cargo.toml"));
-                boolean isDotNet = hasFileWithExtension(dir, ".sln") || hasFileWithExtension(dir, ".csproj");
+                for (LanguageProvider provider : providers) {
+                    if (provider.isMatch(dir)) {
+                        processedPaths.add(relativePath);
 
-                if (isMaven || isNode || isGo || isPython || isRust || isDotNet) {
-                    processedPaths.add(relativePath); // 标记此路径已处理
+                        // 判断异构：如果当前 Provider 没在根目录出现过，则是异构
+                        boolean isHeterogeneous = !rootMatched.contains(provider);
 
-                    // 判断是否是异构项目（比如 Root 是 Maven，子目录是 Node）
-                    boolean isHeterogeneous = (isMaven && !rootHasMaven) || (isNode && !rootHasNode)
-                            || (isGo && !rootHasGo) || (isPython && !rootHasPython)
-                            || (isRust && !rootHasRust) || (isDotNet && !rootHasDotNet);
-
-                    if (isHeterogeneous) {
-                        String stack = isMaven ? "Maven" : (isNode ? "Node" : (isGo ? "Go" : (isPython ? "Python" : (isRust ? "Rust" : "C#"))));
-                        detectedStacks.add(relativePath + "(" + stack + ")");
-                        if (isMaven) appendMavenCommands(newContent, relativePath);
-                        if (isNode) appendNodeCommands(newContent, relativePath);
-                        if (isGo) appendGoCommands(newContent, relativePath);
-                        if (isPython) appendPythonCommands(newContent, relativePath);
-                        if (isRust) appendRustCommands(newContent, relativePath);
-                        if (isDotNet) appendDotNetCommands(newContent, relativePath);
-                    } else {
-                        if (!hasSubModulesSection) {
-                            newContent.append("### 子模块与子项目 (Sub-modules & Sub-projects)\n");
-                            hasSubModulesSection = true;
+                        if (isHeterogeneous) {
+                            detectedStacks.add(relativePath + "(" + provider.id() + ")");
+                            provider.appendModuleCommands(newContent, relativePath);
+                        } else {
+                            if (!hasSubModulesSection) {
+                                newContent.append("### 子模块与子项目 (Sub-modules & Sub-projects)\n");
+                                hasSubModulesSection = true;
+                            }
+                            newContent.append("- ").append(relativePath).append(": ")
+                                    .append(provider.typeName()).append("。受根项目指令统一控制。\n");
                         }
-                        String type = isMaven ? "Maven 模块" : (isNode ? "Node 项目" : (isGo ? "Go 模块" : (isPython ? "Python 项目" : (isRust ? "Rust 项目" : "C# 项目"))));
-                        newContent.append("- ").append(relativePath).append(": ").append(type).append("。受根项目指令统一控制。\n");
+                        break; // 一个目录识别为一个主语言即可
                     }
                 }
             }
+
             if (hasSubModulesSection) newContent.append("\n");
 
 
@@ -227,97 +216,6 @@ public class CodeSkill extends AbsSkill {
         } catch (Throwable e) {
             LOG.error("Init failed", e);
             return "初始化失败: " + e.getMessage();
-        }
-    }
-
-    private void appendMavenCommands(StringBuilder buf, String moduleName) {
-        if (moduleName == null) {
-            buf.append("### 根项目 (Maven)\n")
-                    .append("- 构建: `mvn clean compile`\n")
-                    .append("- 全量测试: `mvn test`\n")
-                    .append("- 单测执行: `mvn test -Dtest=ClassName` (替换为实际类名)\n\n");
-        } else {
-            buf.append("### 模块 (Module): ").append(moduleName).append(" (Maven)\n")
-                    .append("- 构建: `cd ").append(moduleName).append(" && mvn clean compile`\n")
-                    .append("- 测试: `cd ").append(moduleName).append(" && mvn test`\n")
-                    .append("- 单测: `cd ").append(moduleName).append(" && mvn test -Dtest=ClassName` (替换为实际类名)\n\n");
-        }
-    }
-
-    private void appendNodeCommands(StringBuilder buf, String moduleName) {
-        if (moduleName == null) {
-            buf.append("### 根项目 (Node/TS)\n")
-                    .append("- 安装: `npm install`\n")
-                    .append("- 构建: `npm run build`\n")
-                    .append("- 测试: `npm test`\n\n");
-        } else {
-            buf.append("### 模块 (Module): ").append(moduleName).append(" (Node/TS)\n")
-                    .append("- 安装: `cd ").append(moduleName).append(" && npm install`\n")
-                    .append("- 构建: `cd ").append(moduleName).append(" && npm run build`\n")
-                    .append("- 测试: `cd ").append(moduleName).append(" && npm test`\n\n");
-        }
-    }
-
-    private void appendGoCommands(StringBuilder buf, String moduleName) {
-        if (moduleName == null) {
-            buf.append("### 根项目 (Go)\n")
-                    .append("- 依赖同步: `go mod tidy`\n")
-                    .append("- 构建: `go build ./...`\n")
-                    .append("- 测试: `go test ./...`\n\n");
-        } else {
-            buf.append("### 模块 (Module): ").append(moduleName).append(" (Go)\n")
-                    .append("- 构建: `cd ").append(moduleName).append(" && go build`\n")
-                    .append("- 测试: `cd ").append(moduleName).append(" && go test ./...`\n")
-                    .append("- 单测: `cd ").append(moduleName).append(" && go test -v -run TestName` (替换为实际函数名)\n\n");
-        }
-    }
-
-    private void appendPythonCommands(StringBuilder buf, String moduleName) {
-        if (moduleName == null) {
-            buf.append("### 根项目 (Python)\n")
-                    .append("- 环境: 优先检查并激活 `venv` 或 `.venv`\n")
-                    .append("- 依赖: `pip install -r requirements.txt` (或使用 poetry/pdm)\n")
-                    .append("- 测试: `pytest` 或 `python -m unittest discover`\n\n");
-        } else {
-            buf.append("### 模块 (Module): ").append(moduleName).append(" (Python)\n")
-                    .append("- 环境: 优先检查并激活 `venv` 或 `.venv`\n")
-                    .append("- 依赖: `cd ").append(moduleName).append(" && pip install -r requirements.txt`\n")
-                    .append("- 测试: `cd ").append(moduleName).append(" && pytest`\n\n");
-        }
-    }
-
-    private void appendRustCommands(StringBuilder buf, String moduleName) {
-        if (moduleName == null) {
-            buf.append("### 根项目 (Rust)\n")
-                    .append("- 构建: `cargo build`\n")
-                    .append("- 测试: `cargo test`\n")
-                    .append("- 运行: `cargo run`\n\n");
-        } else {
-            buf.append("### 模块 (Module): ").append(moduleName).append(" (Rust)\n")
-                    .append("- 构建: `cd ").append(moduleName).append(" && cargo build`\n")
-                    .append("- 测试: `cd ").append(moduleName).append(" && cargo test`\n\n");
-        }
-    }
-
-    private void appendDotNetCommands(StringBuilder buf, String moduleName) {
-        if (moduleName == null) {
-            buf.append("### 根项目 (C#/.NET)\n")
-                    .append("- 还原: `dotnet restore`\n")
-                    .append("- 构建: `dotnet build`\n")
-                    .append("- 测试: `dotnet test`\n\n");
-        } else {
-            buf.append("### 模块 (Module): ").append(moduleName).append(" (C#/.NET)\n")
-                    .append("- 还原: `cd ").append(moduleName).append(" && dotnet restore`\n")
-                    .append("- 构建: `cd ").append(moduleName).append(" && dotnet build`\n")
-                    .append("- 测试: `cd ").append(moduleName).append(" && dotnet test`\n\n");
-        }
-    }
-
-    private boolean hasFileWithExtension(Path dir, String ext) {
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, "*" + ext)) {
-            return stream.iterator().hasNext();
-        } catch (IOException e) {
-            return false;
         }
     }
 
@@ -384,10 +282,13 @@ public class CodeSkill extends AbsSkill {
     private boolean isIgnored(Path path) {
         String name = path.getFileName().toString();
         // 过滤隐藏目录、依赖目录和构建输出目录
-        return name.startsWith(".")
+        boolean ignored = name.startsWith(".")
                 || "node_modules".equals(name) || "target".equals(name)
-                || "bin".equals(name) || "venv".equals(name) || ".venv".equals(name)
-                || "vendor".equals(name) || "build".equals(name) || "obj".equals(name)
-                || "__pycache__".equals(name);
+                || "bin".equals(name) || "vendor".equals(name) || "build".equals(name);
+
+        if (ignored) return true;
+
+        return providers.stream()
+                .anyMatch(p -> Arrays.asList(p.ignoreFolders()).contains(name));
     }
 }
