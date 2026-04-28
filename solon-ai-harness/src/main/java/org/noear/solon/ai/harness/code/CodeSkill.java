@@ -280,14 +280,19 @@ public class CodeSkill extends AbsSkill {
     }
 
     private boolean isIgnored(Path path) {
-        String name = path.getFileName().toString();
-        // 1. 全局通用的基础忽略（隐藏目录）
-        if (name.startsWith(".")) {
-            // 特殊：有些隐藏目录可能包含 markers，但在 walkTree 扫描模块时通常跳过
+        String pathName = path.getFileName().toString();
+
+        // 1. 基础全局忽略（隐藏目录如 .git, .idea, .soloncode 等）
+        if (pathName.startsWith(".")) {
             return true;
         }
 
-        // 2. 询问所有 Provider 是否要忽略此目录
-        return providers.stream().anyMatch(p -> p.isIgnored(path));
+        // 2. 业务无关的通用忽略
+        if ("bin".equals(pathName) || "build".equals(pathName)) {
+            return true;
+        }
+
+        // 3. 委派给各语言实现类
+        return providers.stream().anyMatch(p -> p.isIgnored(pathName));
     }
 }

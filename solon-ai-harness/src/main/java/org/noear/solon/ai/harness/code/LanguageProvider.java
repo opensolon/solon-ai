@@ -30,9 +30,8 @@ public interface LanguageProvider {
     /**
      * 判定该目录是否属于该语言应该忽略的范畴
      */
-    default boolean isIgnored(Path dir) {
-        String name = dir.getFileName().toString();
-        return Arrays.asList(ignoreFolders()).contains(name);
+    default boolean isIgnored(String pathName) {
+        return Arrays.asList(ignoreFolders()).contains(pathName);
     }
 
     /**
