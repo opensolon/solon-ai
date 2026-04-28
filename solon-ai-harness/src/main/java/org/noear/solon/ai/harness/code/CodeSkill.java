@@ -63,10 +63,14 @@ public class CodeSkill extends AbsSkill {
             return true;
         }
 
-        if (deepExists(rootPath, "pom.xml") || deepExists(rootPath, "package.json") || deepExists(rootPath, "go.mod") ||
-                deepExists(rootPath, ".git") || deepExists(rootPath, ".github") ||
-                deepExists(rootPath, "src") || deepExists(rootPath, "lib")) {
-            return true;
+        String[] markers = {"pom.xml", "package.json", "go.mod", ".git", ".github", "src", "lib"};
+
+        for (String marker : markers) {
+            if (rootExists(rootPath, marker)) return true;
+        }
+
+        for (String marker : markers) {
+            if (deepExists(rootPath, marker)) return true;
         }
 
         return false;
