@@ -92,7 +92,7 @@ public class MemorySkill extends AbsSkill {
         String mentalModel = "";
 
         if (searchProvider != null) {
-            String __sessionId =  prompt.attrAs(ChatSession.ATTR_SESSIONID);
+            String __sessionId = prompt.attrAs(ChatSession.ATTR_SESSIONID);
             String bucketKey = getBucketKey(__sessionId);
 
             List<MemorySearchResult> hot = searchProvider.getHotMemories(bucketKey, 8);
@@ -100,7 +100,7 @@ public class MemorySkill extends AbsSkill {
             if (!hot.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
                 for (MemorySearchResult r : hot) {
-                    sb.append(String.format("- [%s] %s: %s (Imp: %d)\n",
+                    sb.append(String.format("- [%s] %s: %s (Imp: %.2f)\n",
                             r.getTime(), r.getKey(), r.getContent(), r.getImportance()));
                 }
                 mentalModel = sb.toString();
@@ -272,5 +272,13 @@ public class MemorySkill extends AbsSkill {
         }
 
         return "已从模型中清理 Key: " + key;
+    }
+
+    public static boolean isMemoryTool(String toolName) {
+        if (toolName != null && toolName.startsWith("memory_")) {
+            return true;
+        }
+
+        return false;
     }
 }
