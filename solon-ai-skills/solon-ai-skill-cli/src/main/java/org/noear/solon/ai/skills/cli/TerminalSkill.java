@@ -138,7 +138,7 @@ public class TerminalSkill extends AbsSkill {
 
 
         sb.append("## Terminal 环境状态\n");
-        sb.append("- **当前时间**: ").append(currentTime).append("\n");
+        sb.append("- **当前时间**: ").append(currentTime).append("（已动态更新）\n");
         sb.append("- **沙盒模式**: ").append((sandboxMode ? "开启 (受限)" : "关闭 (开放)")).append("\n");
         sb.append("- **运行环境**: ").append(System.getProperty("os.name"))
                 .append(" (").append(System.getProperty("os.arch")).append(")\n");
