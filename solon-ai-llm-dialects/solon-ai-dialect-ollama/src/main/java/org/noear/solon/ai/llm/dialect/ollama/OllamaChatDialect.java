@@ -74,8 +74,9 @@ public class OllamaChatDialect extends AbstractChatDialect {
     protected String getApiUrl(ChatConfig config) {
 
         //处理后缀#
-        if (config.getApiUrl().indexOf("#") > 0) {
-            return config.getApiUrl();
+        int index = config.getApiUrl().indexOf('#');
+        if (index > 0) {
+            config.getApiUrl().substring(0, index);
         }
 
         //自动补全地址
