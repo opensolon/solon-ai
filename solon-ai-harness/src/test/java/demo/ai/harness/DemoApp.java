@@ -4,6 +4,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.harness.HarnessEngine;
@@ -25,7 +26,11 @@ public class DemoApp {
 
         harnessProps.addAgentPool("~/.soloncode/agents/");
 
-        harnessProps.addModel(null); //设定大模型配置
+        harnessProps.addModel(new ChatConfig().then(slf->{
+            slf.setApiUrl("https://api.deepseek.com");
+            slf.setApiKey("sk-***");
+            slf.setModel("deepseek-v4-flash");
+        })); //设定大模型配置
         harnessProps.addExtension((name, builder) -> {
             //...
         });
@@ -61,17 +66,9 @@ public class DemoApp {
                 Arrays.asList(".c", ".cpp", ".cc", ".h", ".hpp")
         ));
 
-        AgentSessionProvider sessionProvider = new AgentSessionProvider() {
-            private Map<String, AgentSession> sessionMap = new ConcurrentHashMap<>();
-
-            @Override
-            public AgentSession getSession(String instanceId) {
-                return sessionMap.computeIfAbsent(instanceId, k -> InMemoryAgentSession.of(k));
-            }
-        };
 
         HarnessEngine engine = HarnessEngine.of(harnessProps)
-                .sessionProvider(sessionProvider)
+                .sessionProvider(InMemoryAgentSession::of)
                 .build();
 
         //engine.getMcpGatewaySkill().addTool(new AbsToolProvider(){});
