@@ -48,7 +48,7 @@ public class AiConfig {
     protected String userAgent;
     protected Duration timeout = Duration.ofSeconds(60);
     protected ProxyDesc proxy;
-    protected Proxy proxyInstance;
+    protected transient Proxy proxyInstance;
 
 
 
