@@ -274,7 +274,9 @@ public class McpClientProperties {
     public Proxy getHttpProxy() {
         if (httpProxyInstance == null) {
             if (httpProxy != null) {
-                httpProxyInstance = new Proxy(httpProxy.type, new InetSocketAddress(httpProxy.host, httpProxy.port));
+                httpProxyInstance = new Proxy(
+                        Proxy.Type.valueOf(httpProxy.type),
+                        new InetSocketAddress(httpProxy.host, httpProxy.port));
             }
         }
 

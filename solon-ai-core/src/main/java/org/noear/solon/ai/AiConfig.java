@@ -115,7 +115,9 @@ public class AiConfig {
     public Proxy getProxy() {
         if (proxyInstance == null) {
             if (proxy != null) {
-                proxyInstance = new Proxy(proxy.type, new InetSocketAddress(proxy.host, proxy.port));
+                proxyInstance = new Proxy(
+                        Proxy.Type.valueOf(proxy.type),
+                        new InetSocketAddress(proxy.host, proxy.port));
             }
         }
 

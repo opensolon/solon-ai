@@ -25,7 +25,7 @@ import java.net.Proxy;
  * @since 3.3
  */
 public class ProxyDesc implements Serializable {
-    public Proxy.Type type;
+    public String type;
     public String host;
     public int port;
 }
