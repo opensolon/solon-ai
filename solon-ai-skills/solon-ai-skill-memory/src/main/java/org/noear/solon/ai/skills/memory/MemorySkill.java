@@ -45,7 +45,7 @@ public class MemorySkill extends AbsSkill {
     private static final String BASE_PREFIX = "ai:memskill:";
 
     private final MemorySolution.Factory solutionFactory;
-    private boolean sessionIsolation = true; // 默认开启会话隔离
+    private boolean sessionIsolation = false; // 默认会话不隔离
 
     public MemorySkill(MemorySolution.Factory solutionFactory) {
         this.solutionFactory = solutionFactory;
