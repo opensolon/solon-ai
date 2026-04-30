@@ -397,7 +397,7 @@ public class ChatModel implements AiModel {
          * 网络代理
          */
         public Builder proxy(Proxy proxy) {
-            config.setProxy(proxy);
+            config.setProxyInstance(proxy);
 
             return this;
         }

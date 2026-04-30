@@ -47,8 +47,8 @@ public class AiConfig {
     protected final Map<String, String> headers = new LinkedHashMap<>();
     protected String userAgent;
     protected Duration timeout = Duration.ofSeconds(60);
-    protected ProxyDesc proxy;
-    protected transient Proxy proxyInstance;
+    protected ProxyDesc proxy; //给配置用
+    protected transient Proxy proxyInstance; //给代码用
 
 
 
@@ -174,7 +174,7 @@ public class AiConfig {
         }
     }
 
-    public void setProxy(Proxy proxyInstance) {
+    public void setProxyInstance(Proxy proxyInstance) {
         this.proxyInstance = proxyInstance;
         this.proxy = null;
     }
