@@ -196,11 +196,11 @@ public class ContractNetProtocol extends TeamProtocolBase {
 
                 // 构建通知消息
                 String awardNotice = isZh
-                        ? "\n### 中标执行指令\n> 你已在竞标中胜出。请严格按你提交的计划执行：\n" + plan
-                        : "\n### Award Execution Order\n> You won the bid. Execute strictly according to your plan:\n" + plan;
+                        ? "\n【中标执行指令】\n> 你已在竞标中胜出。请严格按你提交的计划执行：\n" + plan
+                        : "\n [Award Execution Order] \n> You won the bid. Execute strictly according to your plan:\n" + plan;
 
                 // 将此指令作为 System 消息追加，确保 Agent 的 ReAct 逻辑以此为准
-                return finalPrompt.addMessage(ChatMessage.ofSystem(awardNotice));
+                return finalPrompt.addMessage(ChatMessage.ofUser(awardNotice));
             }
         }
 

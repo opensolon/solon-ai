@@ -213,10 +213,11 @@ public class BlackboardProtocol extends HierarchicalProtocol {
 
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         List<ChatMessage> messages = new ArrayList<>(originalPrompt.getMessages());
-        String info = isZh ? "当前协作黑板内容：" : "Current blackboard content: ";
+        String info = isZh ? "【协作黑板快照】" : "[Blackboard Snapshot]";
 
         // 注入到消息列表顶部，作为 Agent 的上下文感知
-        messages.add(1, ChatMessage.ofSystem(info + "\n" + state));
+        String blackboardContext = info + "\n```json\n" + ONode.serialize(state) + "\n```";
+        messages.add(ChatMessage.ofUser(blackboardContext));
         return Prompt.of(messages).attrPut(originalPrompt.attrs());
     }
 
