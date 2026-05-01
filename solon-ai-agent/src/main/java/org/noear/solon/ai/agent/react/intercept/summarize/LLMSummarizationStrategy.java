@@ -134,7 +134,7 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
             }
 
             // 3. 返回包含标记的消息
-            return ChatMessage.ofSystem("--- [Execution Summary] ---\n" + summary)
+            return ChatMessage.ofUser("--- [执行进度总结] ---\n" + summary)
                     .addMetadata(ReActAgent.META_SUMMARY, 1);
 
         } catch (Throwable e) {

@@ -87,7 +87,7 @@ public class CompositeSummarizationStrategy implements SummarizationStrategy {
             return null;
         }
 
-        return ChatMessage.ofSystem(buf.toString())
+        return ChatMessage.ofUser(buf.toString())
                 .addMetadata(ReActAgent.META_SUMMARY, 1);
     }
 }

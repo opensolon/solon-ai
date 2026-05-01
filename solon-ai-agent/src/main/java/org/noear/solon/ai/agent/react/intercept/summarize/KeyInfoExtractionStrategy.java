@@ -135,7 +135,7 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
             }
 
             // 3. 将提取到的“干货”作为系统信息注入
-            return ChatMessage.ofSystem("--- [Confirmed Key Information] ---\n" + keyInfo)
+            return ChatMessage.ofUser("--- [已确认的关键信息] ---\n" + keyInfo)
                     .addMetadata(ReActAgent.META_SUMMARY, 1);
 
         } catch (Throwable e) {
