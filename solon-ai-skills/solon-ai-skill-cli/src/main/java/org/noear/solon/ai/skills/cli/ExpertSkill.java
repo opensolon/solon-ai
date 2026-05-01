@@ -124,7 +124,7 @@ public class ExpertSkill extends AbsSkill {
         return getToolAry();
     }
 
-    @ToolMapping(name = "skilllist", description = "列出所有已挂载专家技能池中的可用清单。")
+    @ToolMapping(name = "skilllist", description = "列出本地所有已挂载专家技能池中的可用清单。")
     public String skilllist() {
         Map<String, PoolManager.SkillDir> skillMap = poolManager.getSkillMap();
         if (skillMap.isEmpty()) {
@@ -146,7 +146,7 @@ public class ExpertSkill extends AbsSkill {
         return sb.toString();
     }
 
-    @ToolMapping(name = "skillsearch", description = "在所有专家技能池中搜索关键字。支持空格分隔多个词。")
+    @ToolMapping(name = "skillsearch", description = "在所有本地专家技能池中搜索关键字。支持空格分隔多个词。")
     public String skillsearch(@Param("query") String query) {
         Map<String, PoolManager.SkillDir> skillMap = poolManager.getSkillMap();
         String[] keys = query.toLowerCase().split("\\s+");
@@ -169,7 +169,7 @@ public class ExpertSkill extends AbsSkill {
         return sb.toString();
     }
 
-    @ToolMapping(name = "skillread", description = "读取专家技能详细说明书。在选定技能后、开始执行具体任务前，必须调用此工具以获取具体的环境要求、参数规约及可用文件别名。")
+    @ToolMapping(name = "skillread", description = "读取本地专家技能详细说明书。在选定技能后、开始执行具体任务前，必须调用此工具以获取具体的环境要求、参数规约及可用文件别名。")
     public String skillread(@Param(value = "aliasPath", description = "专家技能的唯一路径标识（例如：'@skills/deep-research'）") String aliasPath, String __cwd) throws IOException {
         Map<String, PoolManager.SkillDir> skillMap = poolManager.getSkillMap();
         // 1. 优先从内存 Map 查找逻辑路径
@@ -185,7 +185,7 @@ public class ExpertSkill extends AbsSkill {
         return renderSkillXml(new PoolManager.SkillDir(aliasPath, target, null), true);
     }
 
-    @ToolMapping(name = "skillrefresh", description = "重新扫描所有专家技能池，更新专家技能列表。")
+    @ToolMapping(name = "skillrefresh", description = "重新扫描本地所有专家技能池，更新专家技能列表。")
     public String skillrefresh() {
         poolManager.refresh();
         return "专家技能库已刷新，当前可用专家技能数：" + poolManager.getSkillMap().size();
