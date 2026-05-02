@@ -320,6 +320,17 @@ public class HarnessEngine {
         return mainAgent;
     }
 
+    public ReActAgent getAgentOrMain(String agentName) {
+        if (Assert.isEmpty(agentName)) {
+            return mainAgent;
+        } else if (agentManager.hasAgent(agentName)) {
+            AgentDefinition definition = agentManager.getAgent(agentName);
+            return AgentFactory.create(this, definition).build();
+        } else {
+            return mainAgent;
+        }
+    }
+
     public ReActRequest prompt(Prompt prompt) {
         return mainAgent.prompt(prompt);
     }
