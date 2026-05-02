@@ -37,7 +37,9 @@ import java.util.List;
  * @since 3.9.5
  */
 public class TodoSkill extends AbsSkill {
-    private static final Logger LOG = LoggerFactory.getLogger(TodoSkill.class);
+    public static final String TOOL_TODOREAD = "todoread";
+    public static final String TOOL_TODOWRITE = "todowrite";
+
     private final String relativeDir;
 
     public TodoSkill() {
