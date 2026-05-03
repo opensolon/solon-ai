@@ -1,6 +1,6 @@
 ---
 name: "plan"
-description: "规划与计划子代理，用于制定复杂任务的逻辑路径、执行步骤与资源方案（没有文件写权限）"
+description: "规划与计划专家，用于制定复杂任务的逻辑路径、执行步骤与资源方案（没有文件写权限）"
 tools: ["list", "read", "grep", "glob", "skill", "webfetch", "websearch", "codesearch"]
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: "bash"
-description: "Bash 命令执行子代理，专门执行 git 操作、命令行任务和终端操作（没有文件写权限）"
+description: "Bash 命令执行专家，专门执行 git 操作、命令行任务和终端操作（没有文件写权限）"
 tools: ["list", "read", "bash"]
 ---
 
