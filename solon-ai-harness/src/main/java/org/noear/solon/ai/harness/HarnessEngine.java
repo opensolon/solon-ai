@@ -332,7 +332,7 @@ public class HarnessEngine {
     }
 
     public ReActRequest prompt(Prompt prompt) {
-        return mainAgent.prompt(prompt.attrPut("start_time", System.currentTimeMillis()));
+        return mainAgent.prompt(prompt.attrPut(HarnessFlags.ATTR_START_TIME, System.currentTimeMillis()));
     }
 
 

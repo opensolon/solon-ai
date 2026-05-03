@@ -30,6 +30,7 @@ import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.HarnessFlags;
 import org.noear.solon.annotation.Body;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
@@ -160,7 +161,7 @@ public class TaskSkill extends AbsSkill {
         ReActAgent agent = agentDefinition.builder(engine).build();
         final AgentSession session = InMemoryAgentSession.of(agent.name());
 
-        Prompt originalPrompt = Prompt.of(task.prompt).attrPut("start_time", System.currentTimeMillis());
+        Prompt originalPrompt = Prompt.of(task.prompt).attrPut(HarnessFlags.ATTR_START_TIME, System.currentTimeMillis());
 
         try {
             if (__parentTrace.getOptions().getStreamSink() == null) {
