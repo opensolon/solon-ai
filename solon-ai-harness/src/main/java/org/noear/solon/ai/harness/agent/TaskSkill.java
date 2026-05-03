@@ -102,7 +102,7 @@ public class TaskSkill extends AbsSkill {
         taskOp.description = taskSpec.description;
         taskOp.prompt = taskSpec.prompt;
 
-        return taskDo(__parentTrace, __cwd, __sessionId, taskOp, false);
+        return taskDo(__parentTrace, __cwd, __sessionId, __parentSession, taskOp, false);
     }
 
     @ToolMapping(name = "multitask", description =
@@ -128,7 +128,7 @@ public class TaskSkill extends AbsSkill {
 
         for (MultiTaskOp task : tasks) {
             CompletableFuture<String> future = CompletableFuture.supplyAsync(() ->
-                    taskDo(__parentTrace, __cwd, __sessionId, task, true), RunUtil.io());
+                    taskDo(__parentTrace, __cwd, __sessionId, __parentSession, task, true), RunUtil.io());
             futures.add(future);
         }
 
@@ -147,7 +147,7 @@ public class TaskSkill extends AbsSkill {
 
     }
 
-    private String taskDo(ReActTrace __parentTrace, String __cwd, String __sessionId, MultiTaskOp task, boolean isMultitask) {
+    private String taskDo(ReActTrace __parentTrace, String __cwd, String __sessionId, AgentSession __parentSession, MultiTaskOp task, boolean isMultitask) {
         AgentDefinition agentDefinition = engine.getAgentManager().getAgent(task.agent_name);
         if (agentDefinition == null) {
             return "ERROR: 未知的子代理类型 '" + task.agent_name + "'。";
@@ -157,10 +157,13 @@ public class TaskSkill extends AbsSkill {
             LOG.debug("任务开始[{} - {}]: {}", task.index, task.agent_name, ONode.serialize(task));
         }
 
-        String result = null;
-        ReActAgent agent = agentDefinition.builder(engine).build();
+        String modelSelected = __parentSession.getContext().getAs(HarnessFlags.VAR_MODEL_SELECTED);
+        ;
+
+        ReActAgent agent = agentDefinition.builder(engine, modelSelected).build();
         final AgentSession session = InMemoryAgentSession.of(agent.name());
 
+        String result = null;
         Prompt originalPrompt = Prompt.of(task.prompt).attrPut(HarnessFlags.ATTR_START_TIME, System.currentTimeMillis());
 
         try {

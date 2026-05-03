@@ -21,6 +21,7 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.skills.cli.TerminalSkillProxy;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Nullable;
 
 /**
  * 代理工厂
@@ -40,7 +41,17 @@ public class AgentFactory {
      * 根据定义生成代理
      */
     public static ReActAgent.Builder create(HarnessEngine engine, AgentDefinition agentDefinition) {
-        ChatModel chatModel = engine.getModelOrMain(agentDefinition.getModel());
+        return create(engine, agentDefinition, null);
+    }
+    /**
+     * 根据定义生成代理
+     */
+    public static ReActAgent.Builder create(HarnessEngine engine, AgentDefinition agentDefinition, @Nullable String sessionModel) {
+        if(sessionModel == null){
+            sessionModel = agentDefinition.getModel();
+        }
+
+        ChatModel chatModel = engine.getModelOrMain(sessionModel);
 
         ReActAgent.Builder builder = ReActAgent.of(chatModel)
                 .retryConfig(engine.getProps().getModelRetries(), 1000L);

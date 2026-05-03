@@ -302,7 +302,7 @@ public class HarnessEngine {
         // 添加会话窗口大小
         agentDefinition.getMetadata().setSessionWindowSize(props.getSessionWindowSize());
 
-        ReActAgent.Builder agentBuilder = AgentFactory.create(this, agentDefinition);
+        ReActAgent.Builder agentBuilder = AgentFactory.create(this, agentDefinition, null);
 
         return agentBuilder.build();
     }
@@ -313,7 +313,7 @@ public class HarnessEngine {
     }
 
     public ReActAgent.Builder createSubagent(AgentDefinition definition) {
-        return AgentFactory.create(this, definition);
+        return AgentFactory.create(this, definition, null);
     }
 
     public ReActAgent getMainAgent() {
@@ -325,7 +325,7 @@ public class HarnessEngine {
             return mainAgent;
         } else if (agentManager.hasAgent(agentName)) {
             AgentDefinition definition = agentManager.getAgent(agentName);
-            return AgentFactory.create(this, definition).build();
+            return AgentFactory.create(this, definition, null).build();
         } else {
             return mainAgent;
         }

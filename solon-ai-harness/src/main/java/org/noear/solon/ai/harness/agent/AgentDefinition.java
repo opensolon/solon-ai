@@ -151,6 +151,10 @@ public class AgentDefinition {
         return AgentFactory.create(agentRuntime, this);
     }
 
+    public ReActAgent.Builder builder(HarnessEngine agentRuntime, String sessionModel) {
+        return AgentFactory.create(agentRuntime, this, sessionModel);
+    }
+
 
     //-------------------------
 
