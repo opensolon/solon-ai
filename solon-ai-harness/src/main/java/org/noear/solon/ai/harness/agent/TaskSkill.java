@@ -160,10 +160,12 @@ public class TaskSkill extends AbsSkill {
         ReActAgent agent = agentDefinition.builder(engine).build();
         final AgentSession session = InMemoryAgentSession.of(agent.name());
 
+        Prompt originalPrompt = Prompt.of(task.prompt).attrPut("start_time", System.currentTimeMillis());
+
         try {
             if (__parentTrace.getOptions().getStreamSink() == null) {
                 // 同步模式
-                AgentResponse response = agent.prompt(task.prompt)
+                AgentResponse response = agent.prompt(originalPrompt)
                         .session(session)
                         .options(o -> {
                             o.toolContextPut(HarnessEngine.ATTR_CWD, __cwd);
@@ -176,7 +178,7 @@ public class TaskSkill extends AbsSkill {
             } else {
                 // 流式模式
                 AtomicReference<Throwable> errRef = new AtomicReference<>();
-                ReActChunk response = (ReActChunk) agent.prompt(task.prompt)
+                ReActChunk response = (ReActChunk) agent.prompt(originalPrompt)
                         .session(session)
                         .options(o -> {
                             o.toolContextPut(HarnessEngine.ATTR_CWD, __cwd);

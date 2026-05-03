@@ -332,12 +332,12 @@ public class HarnessEngine {
     }
 
     public ReActRequest prompt(Prompt prompt) {
-        return mainAgent.prompt(prompt);
+        return mainAgent.prompt(prompt.attrPut("start_time", System.currentTimeMillis()));
     }
 
 
     public ReActRequest prompt(String prompt) {
-        return mainAgent.prompt(prompt);
+        return prompt(Prompt.of(prompt));
     }
 
 
