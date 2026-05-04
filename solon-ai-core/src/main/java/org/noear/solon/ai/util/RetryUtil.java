@@ -17,6 +17,8 @@ package org.noear.solon.ai.util;
 
 import org.noear.solon.util.CallableTx;
 
+import java.util.concurrent.ThreadLocalRandom;
+
 /**
  * 智能体辅助工具类
  *
@@ -24,14 +26,31 @@ import org.noear.solon.util.CallableTx;
  * @since 3.9.0
  */
 public class RetryUtil {
+    private static final long DEFAULT_INITIAL_DELAY_MS = 1000L;
+    private static final long DEFAULT_MAX_DELAY_MS = 30 * 1000L; // 默认最大等待 30 秒
+    private static final int DEFAULT_MAX_RETRIES = 3;
+
     public static <T, X extends Throwable> T callWithRetry(CallableTx<T, Throwable> callable) throws X {
-        return callWithRetry(3, 1000L, callable);
+        return callWithRetry(DEFAULT_MAX_RETRIES, DEFAULT_INITIAL_DELAY_MS, DEFAULT_MAX_DELAY_MS, callable);
     }
 
-    public static <T, X extends Throwable> T callWithRetry(int maxRetries, long retryDelayMs, CallableTx<T, Throwable> callable) throws X {
+    public static <T, X extends Throwable> T callWithRetry(int maxRetries, CallableTx<T, Throwable> callable) throws X {
+        return callWithRetry(maxRetries, DEFAULT_INITIAL_DELAY_MS, DEFAULT_MAX_DELAY_MS, callable);
+    }
+
+    /**
+     * 带指数退避和随机抖动的重试实现
+     *
+     * @param maxRetries      最大重试次数
+     * @param initialDelayMs  初始延迟毫秒数
+     * @param maxDelayMs      最大延迟毫秒数（Cap）
+     * @param callable        业务回调
+     */
+    public static <T, X extends Throwable> T callWithRetry(int maxRetries, long initialDelayMs, long maxDelayMs, CallableTx<T, Throwable> callable) throws X {
         Throwable lastException = null;
-        for (int i = 0; i < maxRetries; i++) { // 注意是 <，确保至少执行一次
-            if(Thread.interrupted()){
+
+        for (int i = 0; i < maxRetries; i++) {
+            if (Thread.interrupted()) {
                 break;
             }
 
@@ -39,9 +58,23 @@ public class RetryUtil {
                 return callable.call();
             } catch (Throwable e) {
                 lastException = e;
+
+                // 如果还没到最后一次，执行等待逻辑
                 if (i < (maxRetries - 1)) {
+                    // 1. 计算基础指数延迟：initialDelay * 2^i
+                    long exponentialDelay = initialDelayMs * (1L << i);
+
+                    // 2. 限制在最大延迟范围内
+                    long cappedDelay = Math.min(exponentialDelay, maxDelayMs);
+
+                    // 3. 引入随机抖动 (Full Jitter 策略)
+                    // 在 0 到 cappedDelay 之间取随机值，能有效平滑瞬时压力
+                    long actualDelay = ThreadLocalRandom.current().nextLong(0, cappedDelay + 1);
+
                     try {
-                        Thread.sleep(retryDelayMs * (i + 1));
+                        if (actualDelay > 0) {
+                            Thread.sleep(actualDelay);
+                        }
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         break;
@@ -50,6 +83,7 @@ public class RetryUtil {
             }
         }
 
+        // 统一异常抛出逻辑
         if (lastException instanceof RuntimeException) {
             throw (RuntimeException) lastException;
         } else if (lastException instanceof Error) {
