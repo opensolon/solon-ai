@@ -15,6 +15,9 @@
 
 * 添加 solon-ai-harness command 接口管理
 * 优化 solon-ai-dialect OpenaiChatDialect 添加自动补地址处理
+* 优化 solon-ai-core ChatModel llm- 日志打印，添加 agentName
+* 优化 solon-ai-core EmbeddingModel、RerankingModel、GenerateModel llm- 日志打印，添加 modelName
+* 调整 solon-ai-core ChatOptions.name 更名为 agentName
 
 ### 3.10.4
 

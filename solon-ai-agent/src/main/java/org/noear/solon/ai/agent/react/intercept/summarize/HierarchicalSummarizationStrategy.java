@@ -139,7 +139,7 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
             lastSummary = RetryUtil.callWithRetry(maxRetries, retryDelayMs, () -> {
                 ChatResponse resp = chatModel.prompt(userData)
                         .options(o -> {
-                            o.name(HierarchicalSummarizationStrategy.class.getSimpleName());
+                            o.agentName(HierarchicalSummarizationStrategy.class.getSimpleName());
                             o.systemPrompt(systemInstruction);
                         })
                         .call();

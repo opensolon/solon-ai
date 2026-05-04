@@ -266,7 +266,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             chatReq = config.getChatModel()
                     .prompt(finalPrompt)
                     .options(o -> {
-                        o.name(trace.getAgentName());
+                        o.agentName(trace.getAgentName());
 
                         //配置工具
                         o.toolAdd(options.tools());

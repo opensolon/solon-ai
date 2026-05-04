@@ -202,21 +202,13 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         String reqJson = req.toRequestData();
 
         if (log.isDebugEnabled()) {
-            if (req.getOptions().name() == null) {
-                log.debug("llm-request: {}", reqJson);
-            } else {
-                log.debug("llm-request[{}]: {}", req.getOptions().name(), reqJson);
-            }
+            log.debug("llm-request[{}]: {}", req.getAgentAndModel(), reqJson);
         }
 
         String respJson = httpUtils.bodyOfJson(reqJson).post();
 
         if (log.isDebugEnabled()) {
-            if (req.getOptions().name() == null) {
-                log.debug("llm-response: {}", respJson);
-            } else {
-                log.debug("llm-response[{}]: {}", req.getOptions().name(), respJson);
-            }
+            log.debug("llm-response[{}]: {}", req.getAgentAndModel(), respJson);
         }
 
         ChatResponseDefault resp = new ChatResponseDefault(req, false);
@@ -284,11 +276,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         String reqJson = req.toRequestData();
 
         if (log.isDebugEnabled()) {
-            if (req.getOptions().name() == null) {
-                log.debug("llm-request: {}", reqJson);
-            } else {
-                log.debug("llm-request[{}]: {}", req.getOptions().name(), reqJson);
-            }
+            log.debug("llm-request[{}]: {}", req.getAgentAndModel(), reqJson);
         }
 
         return Mono.fromFuture(httpUtils.bodyOfJson(reqJson).execAsync("POST"))
@@ -375,11 +363,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      */
     private boolean onEventStream(ChatResponseDefault resp, ServerSentEvent event, FluxSink<? super ChatResponse> sink) {
         if (log.isDebugEnabled()) {
-            if (resp.getOptions().name() == null) {
-                log.debug("llm-response: {}", event.data());
-            } else {
-                log.debug("llm-response[{}]: {}", resp.getOptions().name(), event.data());
-            }
+            log.debug("llm-response[{}]: {}", resp.getRequest().getAgentAndModel(), event.data());
         }
 
         resp.setResponseData(event.data());

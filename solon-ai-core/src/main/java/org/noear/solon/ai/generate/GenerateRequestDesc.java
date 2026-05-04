@@ -85,13 +85,13 @@ public class GenerateRequestDesc {
         String reqJson = dialect.buildRequestJson(config, options, promptStr, promptMap);
 
         if (log.isDebugEnabled()) {
-            log.debug("llm-request: {}", reqJson);
+            log.debug("llm-request[{}]: {}", config.getNameOrModel(), reqJson);
         }
 
         String respJson = httpUtils.bodyOfJson(reqJson).post();
 
         if (log.isDebugEnabled()) {
-            log.debug("llm-response: {}", respJson);
+            log.debug("llm-response[{}]: {}", config.getNameOrModel(), respJson);
         }
 
         GenerateResponse resp = dialect.parseResponseJson(config, respJson);

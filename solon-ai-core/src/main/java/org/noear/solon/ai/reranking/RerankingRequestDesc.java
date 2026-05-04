@@ -78,13 +78,13 @@ public class RerankingRequestDesc {
         String reqJson = dialect.buildRequestJson(config, options, query, documents);
 
         if (log.isDebugEnabled()) {
-            log.debug("llm-request: {}", reqJson);
+            log.debug("llm-request[{}]: {}", config.getNameOrModel(), reqJson);
         }
 
         String respJson = httpUtils.bodyOfJson(reqJson).post();
 
         if (log.isDebugEnabled()) {
-            log.debug("llm-response: {}", respJson);
+            log.debug("llm-response[{}]: {}", config.getNameOrModel(), respJson);
         }
 
         RerankingResponse resp = dialect.parseResponseJson(config, respJson);

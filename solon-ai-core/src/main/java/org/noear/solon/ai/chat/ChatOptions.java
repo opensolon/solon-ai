@@ -21,7 +21,6 @@ import org.noear.solon.lang.Preview;
 
 import java.lang.reflect.Type;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
@@ -39,24 +38,24 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
 
     /// ///////////////////////////////////
 
-    private String name;
+    private String agentName;
     private String role;
     private String instruction;
     private String systemPrompt;
     private String outputSchema;
 
     /**
-     * 名字（用于打印或管理）
+     * 代理名字（用于打印或管理）
      */
-    public String name() {
-        return name;
+    public String agentName() {
+        return agentName;
     }
 
     /**
-     * 名字（用于打印或管理）
+     * 代理名字（用于打印或管理）
      */
-    public ChatOptions name(String name) {
-        this.name = name;
+    public ChatOptions agentName(String agentName) {
+        this.agentName = agentName;
         return this;
     }
 

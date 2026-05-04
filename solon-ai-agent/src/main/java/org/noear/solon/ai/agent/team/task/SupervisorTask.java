@@ -289,7 +289,7 @@ public class SupervisorTask implements NamedTaskComponent {
      */
     protected ChatResponse callWithRetry(Node node, TeamTrace trace, List<ChatMessage> messages) throws InterruptedException {
         ChatRequestDesc req = config.getChatModel().prompt(messages).options(o -> {
-            o.name(trace.getAgentName());
+            o.agentName(trace.getAgentName());
 
             if (trace.getOptions().isFeedbackMode()) {
                 o.toolAdd(FeedbackTool.getTool(

@@ -18,7 +18,6 @@ package org.noear.solon.ai.chat;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.NonSerializable;
 
 /**
@@ -48,6 +47,17 @@ public class ChatRequest implements NonSerializable {
                 .addMessage(session.getMessages());
 
         this.originalPrompt = (originalPrompt == null ? finalPrompt : originalPrompt);
+    }
+
+    /**
+     * 获取代理及模型名字
+     */
+    public String getAgentAndModel() {
+        if (options.agentName() == null) {
+            return configReadonly.getNameOrModel();
+        } else {
+            return options.agentName() + ", " + configReadonly.getNameOrModel();
+        }
     }
 
     /**
