@@ -58,6 +58,6 @@
         <module>../../solon-ai-skills/solon-ai-skill-lucene</module>
 
         <module>../../solon-ai-ui/solon-ai-ui-aisdk</module>
-
+        <module>../../solon-ai-ui/solon-ai-ui-agui</module>
     </modules>
 </project>
