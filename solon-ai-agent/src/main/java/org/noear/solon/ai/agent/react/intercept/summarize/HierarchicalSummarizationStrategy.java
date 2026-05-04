@@ -45,7 +45,6 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
     private final ChatModel chatModel;
 
     private int maxRetries = 3;
-    private long retryDelayMs = 1000L;
 
     // 1. 定义系统指令（静态部分）
     private String systemInstruction = "## 角色定义\n" +
@@ -69,9 +68,12 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
         this.chatModel = chatModel;
     }
 
+    /**
+     * @deprecated 3.10.5
+     */
+    @Deprecated
     public HierarchicalSummarizationStrategy retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
-        this.retryDelayMs = Math.max(500, retryDelayMs);
         return this;
     }
 
@@ -136,7 +138,7 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
                     "请根据 System Message（系统指令）中的逻辑，输出更新后的『进度摘要』：";
 
             // 3. 调用模型生成增量摘要
-            lastSummary = RetryUtil.callWithRetry(maxRetries, retryDelayMs, () -> {
+            lastSummary = RetryUtil.callWithRetry(maxRetries, () -> {
                 ChatResponse resp = chatModel.prompt(userData)
                         .options(o -> {
                             o.agentName(HierarchicalSummarizationStrategy.class.getSimpleName());

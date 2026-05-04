@@ -68,11 +68,13 @@ public class RestApiSkill extends AbsSkill {
     private int maxContextLength = 8000;
 
     private int maxRetries = 3;
-    private long retryDelayMs = 1000L;
 
+    /**
+     * @deprecated 3.10.5
+     */
+    @Deprecated
     public RestApiSkill retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
-        this.retryDelayMs = Math.max(500, retryDelayMs);
         return this;
     }
 
@@ -394,7 +396,7 @@ public class RestApiSkill extends AbsSkill {
         try {
             log.debug("RestApiSkill calling: {} {} (API: {})", tool.getMethod(), baseUrl + finalPath, apiName);
 
-            String result = RetryUtil.callWithRetry(maxRetries, retryDelayMs, () -> http.exec(tool.getMethod()).bodyAsString());
+            String result = RetryUtil.callWithRetry(maxRetries, () -> http.exec(tool.getMethod()).bodyAsString());
 
             // 结果截断处理，防止撑爆 AI 上下文
             if (result != null && result.length() > maxContextLength) {

@@ -42,7 +42,6 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
 
     private final ChatModel chatModel;
     private int maxRetries = 3;
-    private long retryDelayMs = 1000L;
 
     // 1. 系统指令：定义总结逻辑和约束
     private String systemInstruction = "## 角色定义\n" +
@@ -63,9 +62,12 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
         this.chatModel = chatModel;
     }
 
+    /**
+     * @deprecated 3.10.5
+     */
+    @Deprecated
     public LLMSummarizationStrategy retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
-        this.retryDelayMs = Math.max(500, retryDelayMs);
         return this;
     }
 
@@ -113,7 +115,7 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
                     "### 任务指令\n" +
                     "请根据系统指令对上述执行过程进行语义总结：";
 
-            String summary = RetryUtil.callWithRetry(maxRetries, retryDelayMs, () -> {
+            String summary = RetryUtil.callWithRetry(maxRetries, () -> {
                 ChatResponse resp = chatModel.prompt(userData)
                         .options(o -> {
                             o.agentName(LLMSummarizationStrategy.class.getSimpleName());

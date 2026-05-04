@@ -42,7 +42,6 @@ public class ToolGatewaySkill extends AbsSkill {
     private int searchThreshold = 100;  // 超过此值，进入强制搜索模式（SEARCH）
 
     private int maxRetries = 3;
-    private long retryDelayMs = 1000L;
 
     private final ToolCallTool callTool;
 
@@ -51,9 +50,12 @@ public class ToolGatewaySkill extends AbsSkill {
         internalAddTool(callTool);
     }
 
+    /**
+     * @deprecated 3.10.5
+     */
+    @Deprecated
     public ToolGatewaySkill retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
-        this.retryDelayMs = Math.max(500, retryDelayMs);
         return this;
     }
 
@@ -307,7 +309,7 @@ public class ToolGatewaySkill extends AbsSkill {
             }
 
             try {
-                return RetryUtil.callWithRetry(gatewaySkill.maxRetries, gatewaySkill.retryDelayMs, () -> tool.call(tool_args));
+                return RetryUtil.callWithRetry(gatewaySkill.maxRetries,  () -> tool.call(tool_args));
             } catch (Throwable e) {
                 LOG.error("Tool gateway execution failed: {}", tool_name, e);
                 return ToolResult.success("执行异常: " +

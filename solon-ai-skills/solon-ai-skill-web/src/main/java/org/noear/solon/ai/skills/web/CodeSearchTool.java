@@ -64,16 +64,18 @@ public class CodeSearchTool extends AbsToolProvider {
     }
 
     private int maxRetries = 3;
-    private long retryDelayMs = 1000L;
 
     public CodeSearchTool() {
         super();
         getMcpClient();
     }
 
+    /**
+     * @deprecated 3.10.5
+     */
+    @Deprecated
     public CodeSearchTool retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
-        this.retryDelayMs = Math.max(500, retryDelayMs);
         return this;
     }
 
@@ -114,7 +116,7 @@ public class CodeSearchTool extends AbsToolProvider {
         ToolResult result;
         try {
             // 工具名: get_code_context_exa
-            result = RetryUtil.callWithRetry(maxRetries, retryDelayMs, () ->
+            result = RetryUtil.callWithRetry(maxRetries, () ->
                     getMcpClient().callTool("get_code_context_exa", toolArgs));
         } catch (Throwable e) {
             if (e.getMessage() != null && e.getMessage().toLowerCase().contains("timeout")) {

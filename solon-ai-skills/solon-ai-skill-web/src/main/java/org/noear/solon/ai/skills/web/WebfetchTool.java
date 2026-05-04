@@ -46,11 +46,13 @@ public class WebfetchTool extends AbsToolProvider {
     }
 
     private int maxRetries = 3;
-    private long retryDelayMs = 1000L;
 
+    /**
+     * @deprecated 3.10.5
+     */
+    @Deprecated
     public WebfetchTool retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
-        this.retryDelayMs = Math.max(500, retryDelayMs);
         return this;
     }
 
@@ -86,7 +88,7 @@ public class WebfetchTool extends AbsToolProvider {
                 .timeout(timeout);
 
         // 4. 执行请求
-        HttpResponse response = RetryUtil.callWithRetry(maxRetries,retryDelayMs, ()->{
+        HttpResponse response = RetryUtil.callWithRetry(maxRetries, ()->{
             HttpResponse resp = http.exec("GET");
             if (resp.code() == 403 && "challenge".equals(resp.header("cf-mitigated"))) {
                 // Cloudflare 穿透逻辑

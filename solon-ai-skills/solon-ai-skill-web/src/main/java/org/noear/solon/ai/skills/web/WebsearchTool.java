@@ -68,7 +68,6 @@ public class WebsearchTool extends AbsToolProvider {
     }
 
     private int maxRetries = 3;
-    private long retryDelayMs = 1000L;
 
     public WebsearchTool() {
         super();
@@ -76,9 +75,12 @@ public class WebsearchTool extends AbsToolProvider {
         getMcpClient();
     }
 
+    /**
+     * @deprecated 3.10.5
+     */
+    @Deprecated
     public WebsearchTool retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
-        this.retryDelayMs = Math.max(500, retryDelayMs);
         return this;
     }
 
@@ -107,7 +109,7 @@ public class WebsearchTool extends AbsToolProvider {
         ToolResult result;
 
         try {
-            result = RetryUtil.callWithRetry(maxRetries,retryDelayMs, ()->
+            result = RetryUtil.callWithRetry(maxRetries, ()->
                     getMcpClient().callTool("web_search_exa", args));
         } catch (Exception e) {
             // 如果是超时相关的异常，转换为与 opencode 一致的文案

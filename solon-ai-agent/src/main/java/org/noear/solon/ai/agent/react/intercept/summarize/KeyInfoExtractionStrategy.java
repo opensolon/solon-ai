@@ -43,7 +43,6 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
 
     private final ChatModel chatModel;
     private int maxRetries = 3;
-    private long retryDelayMs = 1000L;
 
     // 1. 系统指令：定义提取协议和专家身份
     private String systemInstruction = "## 角色定义\n" +
@@ -64,9 +63,12 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
         this.chatModel = chatModel;
     }
 
+    /**
+     * @deprecated 3.10.5
+     */
+    @Deprecated
     public KeyInfoExtractionStrategy retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
-        this.retryDelayMs = Math.max(500, retryDelayMs);
         return this;
     }
 
@@ -114,7 +116,7 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
                     "### 审计要求\n" +
                     "请根据系统指令，提取上述片段中的关键信息。";
 
-            String keyInfo = RetryUtil.callWithRetry(maxRetries, retryDelayMs, () -> {
+            String keyInfo = RetryUtil.callWithRetry(maxRetries, () -> {
                 ChatResponse resp = chatModel.prompt(userData)
                         .options(o -> {
                             o.agentName(KeyInfoExtractionStrategy.class.getSimpleName());
