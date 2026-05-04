@@ -106,6 +106,10 @@ public class TeamTrace implements AgentTrace {
      * 度量指标
      */
     private final Metrics metrics = new Metrics();
+    /**
+     * 任务开始时间
+     */
+    private long beginTimeMs;
 
     /**
      * 协议私有存储空间（供 TeamProtocol 存储私有状态）
@@ -138,6 +142,7 @@ public class TeamTrace implements AgentTrace {
     public TeamTrace(Prompt originalPrompt) {
         this();
         this.originalPrompt = originalPrompt;
+        this.beginTimeMs = System.currentTimeMillis();
     }
 
     public static TeamTrace getCurrent(FlowContext context) {
@@ -276,12 +281,18 @@ public class TeamTrace implements AgentTrace {
     // --- 属性访问 ---
 
     @Override
+    public String getAgentName() {
+        return agentName;
+    }
+
+    @Override
     public Metrics getMetrics() {
         return metrics;
     }
 
-    public String getAgentName() {
-        return agentName;
+    @Override
+    public long getBeginTimeMs() {
+        return beginTimeMs;
     }
 
     public TeamAgentConfig getConfig() {

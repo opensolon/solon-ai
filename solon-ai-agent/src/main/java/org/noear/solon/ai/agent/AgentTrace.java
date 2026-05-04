@@ -35,5 +35,18 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.8.1")
 public interface AgentTrace {
+    /**
+     * 获取代理名称
+     */
+    String getAgentName();
+
+    /**
+     * 获取任务开始时间
+     */
+    long getBeginTimeMs();
+
+    /**
+     * 监控指标
+     */
     Metrics getMetrics();
 }

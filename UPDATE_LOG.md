@@ -13,6 +13,7 @@
 
 ### 3.10.5
 
+* 添加 solon-ai-agent AgentTrace.getAgentName, getBeginTimeMs 方法
 * 添加 solon-ai-harness command 接口管理
 * 添加 solon-ai-harness TaskSkill start_time 计时
 * 添加 solon-ai-harness HarnessEngine.getAgentOrMain 方法

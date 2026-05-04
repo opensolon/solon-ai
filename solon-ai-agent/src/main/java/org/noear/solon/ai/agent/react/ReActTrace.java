@@ -79,6 +79,10 @@ public class ReActTrace implements AgentTrace {
     private final Metrics metrics = new Metrics();
 
     /**
+     * 任务开始时间
+     */
+    private long beginTimeMs;
+    /**
      * 任务提示词
      */
     private Prompt originalPrompt;
@@ -104,7 +108,10 @@ public class ReActTrace implements AgentTrace {
      * 最终回答内容 (Final Answer)
      */
     private volatile String finalAnswer;
-    private volatile boolean abnormal; //异常结束的
+    /**
+     * 是否异常（结束的）
+     */
+    private volatile boolean abnormal;
     /**
      * 模型最近一次原始思考内容
      */
@@ -136,12 +143,14 @@ public class ReActTrace implements AgentTrace {
     }
 
     public ReActTrace() {
+        //反序列化用
         this.route = ReActAgent.ID_REASON;
     }
 
     public ReActTrace(Prompt originalPrompt) {
         this();
         this.originalPrompt = originalPrompt;
+        this.beginTimeMs = System.currentTimeMillis();
     }
 
     public static ReActTrace getCurrent(FlowContext context) {
@@ -255,9 +264,20 @@ public class ReActTrace implements AgentTrace {
     }
 
     @Override
+    public String getAgentName() {
+        return config.getName();
+    }
+
+    @Override
     public Metrics getMetrics() {
         return metrics;
     }
+
+    @Override
+    public long getBeginTimeMs() {
+        return beginTimeMs;
+    }
+
 
     public ReActAgentConfig getConfig() {
         return config;
@@ -299,10 +319,6 @@ public class ReActTrace implements AgentTrace {
 
     public Collection<FunctionTool> getProtocolTools() {
         return protocolToolMap.values();
-    }
-
-    public String getAgentName() {
-        return config.getName();
     }
 
     public Prompt getOriginalPrompt() {

@@ -38,12 +38,18 @@ public class SimpleTrace implements AgentTrace {
     private Prompt originalPrompt;
     private final Metrics metrics = new Metrics();
 
+    /**
+     * 任务开始时间
+     */
+    private long beginTimeMs;
+
     public SimpleTrace() {
         this.originalPrompt = null;
     }
 
     public SimpleTrace(Prompt originalPrompt) {
         this.originalPrompt = originalPrompt;
+        this.beginTimeMs = System.currentTimeMillis();
     }
 
     protected void prepare(SimpleAgentConfig config, SimpleOptions options, AgentSession session, TeamProtocol protocol) {
@@ -53,8 +59,20 @@ public class SimpleTrace implements AgentTrace {
         this.protocol = protocol;
     }
 
+    @Override
     public String getAgentName() {
         return config.getName();
+    }
+
+
+    @Override
+    public Metrics getMetrics() {
+        return metrics;
+    }
+
+    @Override
+    public long getBeginTimeMs() {
+        return beginTimeMs;
     }
 
     public SimpleAgentConfig getConfig() {
@@ -89,8 +107,4 @@ public class SimpleTrace implements AgentTrace {
         return originalPrompt;
     }
 
-    @Override
-    public Metrics getMetrics() {
-        return metrics;
-    }
 }
