@@ -70,10 +70,10 @@ import java.util.function.Function;
  *
  * // Initialize and use
  * client.initialize(new AcpSchema.InitializeRequest(1, new AcpSchema.ClientCapabilities()))
- *     .flatMap(initResponse -> client.newSession(new AcpSchema.NewSessionRequest("/workspace", java.util.Collections.emptyList())))
+ *     .flatMap(initResponse -> client.newSession(new AcpSchema.NewSessionRequest("/workspace", List.of())))
  *     .flatMap(sessionResponse -> client.prompt(new AcpSchema.PromptRequest(
  *         sessionResponse.sessionId(),
- *         java.util.Collections.singletonList(new AcpSchema.TextContent("Fix the failing test")))))
+ *         List.of(new AcpSchema.TextContent("Fix the failing test")))))
  *     .doOnNext(response -> System.out.println("Response: " + response))
  *     .block();
  *
@@ -839,8 +839,8 @@ public interface AcpClient {
 		 * <p>Example usage:
 		 * <pre>{@code
 		 * .sessionUpdateConsumer(notification -> {
-		 *     if (notification.update() instanceof AgentMessageChunk) {
-AgentMessageChunk msg = (AgentMessageChunk) notification.update();		 *         System.out.println(msg.content());
+		 *     if (notification.update() instanceof AgentMessageChunk msg) {
+		 *         System.out.println(msg.content());
 		 *     }
 		 * })
 		 * }</pre>

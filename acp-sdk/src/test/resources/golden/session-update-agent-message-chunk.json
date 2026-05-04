@@ -1,0 +1,7 @@
+{
+  "sessionUpdate": "agent_message_chunk",
+  "content": {
+    "type": "text",
+    "text": "I'll help you fix the failing test."
+  }
+}

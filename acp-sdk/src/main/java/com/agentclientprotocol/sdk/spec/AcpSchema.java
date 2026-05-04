@@ -4,9 +4,9 @@
 
 package com.agentclientprotocol.sdk.spec;
 
+import com.fasterxml.jackson.annotation.*;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
-import com.fasterxml.jackson.annotation.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,7 +55,7 @@ public final class AcpSchema {
 
 		logger.debug("Received JSON message: {}", jsonText);
 
-		Map<String, Object> map = jsonMapper.readValue(jsonText, MAP_TYPE_REF);
+		HashMap<String, Object> map = jsonMapper.readValue(jsonText, MAP_TYPE_REF);
 
 		// Determine message type based on specific JSON structure
 		if (map.containsKey("method") && map.containsKey("id")) {
@@ -119,17 +119,21 @@ public final class AcpSchema {
 
 	/**
 	 * A JSON-RPC request that expects a response.
+	 *
+	 * @param jsonrpc The JSON-RPC version (must be "2.0")
+	 * @param id A unique identifier for the request
+	 * @param method The name of the method to be invoked
+	 * @param params Parameters for the method call
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class JSONRPCRequest implements JSONRPCMessage {
-		private final String jsonrpc;
-		private final Object id;
-		private final String method;
-		private final Object params;
+		private final @JsonProperty("jsonrpc") String jsonrpc;
+		private final @JsonProperty("id") Object id;
+		private final @JsonProperty("method") String method;
+		private final @JsonProperty("params") Object params;
 
-		public JSONRPCRequest(@JsonProperty("jsonrpc") String jsonrpc, @JsonProperty("id") Object id,
-				@JsonProperty("method") String method, @JsonProperty("params") Object params) {
+		public JSONRPCRequest(@JsonProperty("jsonrpc") String jsonrpc, @JsonProperty("id") Object id, @JsonProperty("method") String method, @JsonProperty("params") Object params) {
 			this.jsonrpc = jsonrpc;
 			this.id = id;
 			this.method = method;
@@ -140,16 +144,9 @@ public final class AcpSchema {
 			this(JSONRPC_VERSION, id, method, params);
 		}
 
-		@JsonProperty("jsonrpc")
 		public String jsonrpc() { return jsonrpc; }
-
-		@JsonProperty("id")
 		public Object id() { return id; }
-
-		@JsonProperty("method")
 		public String method() { return method; }
-
-		@JsonProperty("params")
 		public Object params() { return params; }
 
 		@Override
@@ -157,10 +154,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			JSONRPCRequest that = (JSONRPCRequest) o;
-			return Objects.equals(jsonrpc, that.jsonrpc) &&
-					Objects.equals(id, that.id) &&
-					Objects.equals(method, that.method) &&
-					Objects.equals(params, that.params);
+			return Objects.equals(jsonrpc, that.jsonrpc) && Objects.equals(id, that.id) && Objects.equals(method, that.method) && Objects.equals(params, that.params);
 		}
 
 		@Override
@@ -170,27 +164,25 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "JSONRPCRequest{" +
-					"jsonrpc='" + jsonrpc + '\'' +
-					", id=" + id +
-					", method='" + method + '\'' +
-					", params=" + params +
-					'}';
+			return "JSONRPCRequest[jsonrpc=" + jsonrpc + ", id=" + id + ", method=" + method + ", params=" + params + "]";
 		}
 	}
 
 	/**
 	 * A JSON-RPC notification that does not expect a response.
+	 *
+	 * @param jsonrpc The JSON-RPC version (must be "2.0")
+	 * @param method The name of the method to be invoked
+	 * @param params Parameters for the method call
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class JSONRPCNotification implements JSONRPCMessage {
-		private final String jsonrpc;
-		private final String method;
-		private final Object params;
+		private final @JsonProperty("jsonrpc") String jsonrpc;
+		private final @JsonProperty("method") String method;
+		private final @JsonProperty("params") Object params;
 
-		public JSONRPCNotification(@JsonProperty("jsonrpc") String jsonrpc, @JsonProperty("method") String method,
-				@JsonProperty("params") Object params) {
+		public JSONRPCNotification(@JsonProperty("jsonrpc") String jsonrpc, @JsonProperty("method") String method, @JsonProperty("params") Object params) {
 			this.jsonrpc = jsonrpc;
 			this.method = method;
 			this.params = params;
@@ -200,13 +192,8 @@ public final class AcpSchema {
 			this(JSONRPC_VERSION, method, params);
 		}
 
-		@JsonProperty("jsonrpc")
 		public String jsonrpc() { return jsonrpc; }
-
-		@JsonProperty("method")
 		public String method() { return method; }
-
-		@JsonProperty("params")
 		public Object params() { return params; }
 
 		@Override
@@ -214,9 +201,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			JSONRPCNotification that = (JSONRPCNotification) o;
-			return Objects.equals(jsonrpc, that.jsonrpc) &&
-					Objects.equals(method, that.method) &&
-					Objects.equals(params, that.params);
+			return Objects.equals(jsonrpc, that.jsonrpc) && Objects.equals(method, that.method) && Objects.equals(params, that.params);
 		}
 
 		@Override
@@ -226,44 +211,36 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "JSONRPCNotification{" +
-					"jsonrpc='" + jsonrpc + '\'' +
-					", method='" + method + '\'' +
-					", params=" + params +
-					'}';
+			return "JSONRPCNotification[jsonrpc=" + jsonrpc + ", method=" + method + ", params=" + params + "]";
 		}
 	}
 
 	/**
 	 * A JSON-RPC response to a request.
+	 *
+	 * @param jsonrpc The JSON-RPC version (must be "2.0")
+	 * @param id The request ID this response corresponds to
+	 * @param result The result of the method call (null if error occurred)
+	 * @param error The error information (null if successful)
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class JSONRPCResponse implements JSONRPCMessage {
-		private final String jsonrpc;
-		private final Object id;
-		private final Object result;
-		private final JSONRPCError error;
+		private final @JsonProperty("jsonrpc") String jsonrpc;
+		private final @JsonProperty("id") Object id;
+		private final @JsonProperty("result") Object result;
+		private final @JsonProperty("error") JSONRPCError error;
 
-		public JSONRPCResponse(@JsonProperty("jsonrpc") String jsonrpc, @JsonProperty("id") Object id,
-				@JsonProperty("result") Object result,
-				@JsonProperty("error") JSONRPCError error) {
+		public JSONRPCResponse(@JsonProperty("jsonrpc") String jsonrpc, @JsonProperty("id") Object id, @JsonProperty("result") Object result, @JsonProperty("error") JSONRPCError error) {
 			this.jsonrpc = jsonrpc;
 			this.id = id;
 			this.result = result;
 			this.error = error;
 		}
 
-		@JsonProperty("jsonrpc")
 		public String jsonrpc() { return jsonrpc; }
-
-		@JsonProperty("id")
 		public Object id() { return id; }
-
-		@JsonProperty("result")
 		public Object result() { return result; }
-
-		@JsonProperty("error")
 		public JSONRPCError error() { return error; }
 
 		@Override
@@ -271,10 +248,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			JSONRPCResponse that = (JSONRPCResponse) o;
-			return Objects.equals(jsonrpc, that.jsonrpc) &&
-					Objects.equals(id, that.id) &&
-					Objects.equals(result, that.result) &&
-					Objects.equals(error, that.error);
+			return Objects.equals(jsonrpc, that.jsonrpc) && Objects.equals(id, that.id) && Objects.equals(result, that.result) && Objects.equals(error, that.error);
 		}
 
 		@Override
@@ -284,36 +258,25 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "JSONRPCResponse{" +
-					"jsonrpc='" + jsonrpc + '\'' +
-					", id=" + id +
-					", result=" + result +
-					", error=" + error +
-					'}';
+			return "JSONRPCResponse[jsonrpc=" + jsonrpc + ", id=" + id + ", result=" + result + ", error=" + error + "]";
 		}
 	}
 
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class JSONRPCError {
-		private final int code;
-		private final String message;
-		private final Object data;
+		private final @JsonProperty("code") int code;
+		private final @JsonProperty("message") String message;
+		private final @JsonProperty("data") Object data;
 
-		public JSONRPCError(@JsonProperty("code") int code, @JsonProperty("message") String message,
-				@JsonProperty("data") Object data) {
+		public JSONRPCError(@JsonProperty("code") int code, @JsonProperty("message") String message, @JsonProperty("data") Object data) {
 			this.code = code;
 			this.message = message;
 			this.data = data;
 		}
 
-		@JsonProperty("code")
 		public int code() { return code; }
-
-		@JsonProperty("message")
 		public String message() { return message; }
-
-		@JsonProperty("data")
 		public Object data() { return data; }
 
 		@Override
@@ -321,9 +284,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			JSONRPCError that = (JSONRPCError) o;
-			return code == that.code &&
-					Objects.equals(message, that.message) &&
-					Objects.equals(data, that.data);
+			return code == that.code && Objects.equals(message, that.message) && Objects.equals(data, that.data);
 		}
 
 		@Override
@@ -333,11 +294,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "JSONRPCError{" +
-					"code=" + code +
-					", message='" + message + '\'' +
-					", data=" + data +
-					'}';
+			return "JSONRPCError[code=" + code + ", message=" + message + ", data=" + data + "]";
 		}
 	}
 
@@ -360,30 +317,25 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class InitializeRequest {
-		private final Integer protocolVersion;
-		private final ClientCapabilities clientCapabilities;
-		@JsonProperty("_meta")
-		private final Map<String, Object> meta;
+		private final @JsonProperty("protocolVersion") Integer protocolVersion;
+		private final @JsonProperty("clientCapabilities") ClientCapabilities clientCapabilities;
+		private final @JsonProperty("clientInfo") Implementation clientInfo;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public InitializeRequest(@JsonProperty("protocolVersion") Integer protocolVersion,
-				@JsonProperty("clientCapabilities") ClientCapabilities clientCapabilities,
-			@JsonProperty("_meta") Map<String, Object> meta) {
+		public InitializeRequest(@JsonProperty("protocolVersion") Integer protocolVersion, @JsonProperty("clientCapabilities") ClientCapabilities clientCapabilities, @JsonProperty("clientInfo") Implementation clientInfo, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.protocolVersion = protocolVersion;
 			this.clientCapabilities = clientCapabilities;
+			this.clientInfo = clientInfo;
 			this.meta = meta;
 		}
 
 		public InitializeRequest(Integer protocolVersion, ClientCapabilities clientCapabilities) {
-			this(protocolVersion, clientCapabilities, null);
+			this(protocolVersion, clientCapabilities, null, null);
 		}
 
-		@JsonProperty("protocolVersion")
 		public Integer protocolVersion() { return protocolVersion; }
-
-		@JsonProperty("clientCapabilities")
 		public ClientCapabilities clientCapabilities() { return clientCapabilities; }
-
-		@JsonProperty("_meta")
+		public Implementation clientInfo() { return clientInfo; }
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -391,23 +343,17 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			InitializeRequest that = (InitializeRequest) o;
-			return Objects.equals(protocolVersion, that.protocolVersion) &&
-					Objects.equals(clientCapabilities, that.clientCapabilities) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(protocolVersion, that.protocolVersion) && Objects.equals(clientCapabilities, that.clientCapabilities) && Objects.equals(clientInfo, that.clientInfo) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(protocolVersion, clientCapabilities, meta);
+			return Objects.hash(protocolVersion, clientCapabilities, clientInfo, meta);
 		}
 
 		@Override
 		public String toString() {
-			return "InitializeRequest{" +
-					"protocolVersion=" + protocolVersion +
-					", clientCapabilities=" + clientCapabilities +
-					", meta=" + meta +
-					'}';
+			return "InitializeRequest[protocolVersion=" + protocolVersion + ", clientCapabilities=" + clientCapabilities + ", clientInfo=" + clientInfo + ", meta=" + meta + "]";
 		}
 	}
 
@@ -417,25 +363,23 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class InitializeResponse {
-		private final Integer protocolVersion;
-		private final AgentCapabilities agentCapabilities;
-		private final List<AuthMethod> authMethods;
-		@JsonProperty("_meta")
-		private final Map<String, Object> meta;
+		private final @JsonProperty("protocolVersion") Integer protocolVersion;
+		private final @JsonProperty("agentCapabilities") AgentCapabilities agentCapabilities;
+		private final @JsonProperty("authMethods") List<AuthMethod> authMethods;
+		private final @JsonProperty("agentInfo") Implementation agentInfo;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public InitializeResponse(@JsonProperty("protocolVersion") Integer protocolVersion,
-				@JsonProperty("agentCapabilities") AgentCapabilities agentCapabilities,
-				@JsonProperty("authMethods") List<AuthMethod> authMethods,
-			@JsonProperty("_meta") Map<String, Object> meta) {
+		public InitializeResponse(@JsonProperty("protocolVersion") Integer protocolVersion, @JsonProperty("agentCapabilities") AgentCapabilities agentCapabilities, @JsonProperty("authMethods") List<AuthMethod> authMethods, @JsonProperty("agentInfo") Implementation agentInfo, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.protocolVersion = protocolVersion;
 			this.agentCapabilities = agentCapabilities;
 			this.authMethods = authMethods;
+			this.agentInfo = agentInfo;
 			this.meta = meta;
 		}
 
 		public InitializeResponse(Integer protocolVersion, AgentCapabilities agentCapabilities,
 				List<AuthMethod> authMethods) {
-			this(protocolVersion, agentCapabilities, authMethods, null);
+			this(protocolVersion, agentCapabilities, authMethods, null, null);
 		}
 
 		/**
@@ -456,16 +400,10 @@ public final class AcpSchema {
 			return new InitializeResponse(1, capabilities, null);
 		}
 
-		@JsonProperty("protocolVersion")
 		public Integer protocolVersion() { return protocolVersion; }
-
-		@JsonProperty("agentCapabilities")
 		public AgentCapabilities agentCapabilities() { return agentCapabilities; }
-
-		@JsonProperty("authMethods")
 		public List<AuthMethod> authMethods() { return authMethods; }
-
-		@JsonProperty("_meta")
+		public Implementation agentInfo() { return agentInfo; }
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -473,25 +411,17 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			InitializeResponse that = (InitializeResponse) o;
-			return Objects.equals(protocolVersion, that.protocolVersion) &&
-					Objects.equals(agentCapabilities, that.agentCapabilities) &&
-					Objects.equals(authMethods, that.authMethods) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(protocolVersion, that.protocolVersion) && Objects.equals(agentCapabilities, that.agentCapabilities) && Objects.equals(authMethods, that.authMethods) && Objects.equals(agentInfo, that.agentInfo) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(protocolVersion, agentCapabilities, authMethods, meta);
+			return Objects.hash(protocolVersion, agentCapabilities, authMethods, agentInfo, meta);
 		}
 
 		@Override
 		public String toString() {
-			return "InitializeResponse{" +
-					"protocolVersion=" + protocolVersion +
-					", agentCapabilities=" + agentCapabilities +
-					", authMethods=" + authMethods +
-					", meta=" + meta +
-					'}';
+			return "InitializeResponse[protocolVersion=" + protocolVersion + ", agentCapabilities=" + agentCapabilities + ", authMethods=" + authMethods + ", agentInfo=" + agentInfo + ", meta=" + meta + "]";
 		}
 	}
 
@@ -501,13 +431,12 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class AuthenticateRequest {
-		private final String methodId;
+		private final @JsonProperty("methodId") String methodId;
 
 		public AuthenticateRequest(@JsonProperty("methodId") String methodId) {
 			this.methodId = methodId;
 		}
 
-		@JsonProperty("methodId")
 		public String methodId() { return methodId; }
 
 		@Override
@@ -525,9 +454,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "AuthenticateRequest{" +
-					"methodId='" + methodId + '\'' +
-					'}';
+			return "AuthenticateRequest[methodId=" + methodId + "]";
 		}
 	}
 
@@ -544,17 +471,18 @@ public final class AcpSchema {
 		public boolean equals(Object o) {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
+			AuthenticateResponse that = (AuthenticateResponse) o;
 			return true;
 		}
 
 		@Override
 		public int hashCode() {
-			return 1;
+			return 0;
 		}
 
 		@Override
 		public String toString() {
-			return "AuthenticateResponse{}";
+			return "AuthenticateResponse[]";
 		}
 	}
 
@@ -564,14 +492,11 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class NewSessionRequest {
-		private final String cwd;
-		private final List<McpServer> mcpServers;
-		@JsonProperty("_meta")
-		private final Map<String, Object> meta;
+		private final @JsonProperty("cwd") String cwd;
+		private final @JsonProperty("mcpServers") List<McpServer> mcpServers;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public NewSessionRequest(@JsonProperty("cwd") String cwd,
-				@JsonProperty("mcpServers") List<McpServer> mcpServers,
-			@JsonProperty("_meta") Map<String, Object> meta) {
+		public NewSessionRequest(@JsonProperty("cwd") String cwd, @JsonProperty("mcpServers") List<McpServer> mcpServers, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.cwd = cwd;
 			this.mcpServers = mcpServers;
 			this.meta = meta;
@@ -581,13 +506,8 @@ public final class AcpSchema {
 			this(cwd, mcpServers, null);
 		}
 
-		@JsonProperty("cwd")
 		public String cwd() { return cwd; }
-
-		@JsonProperty("mcpServers")
 		public List<McpServer> mcpServers() { return mcpServers; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -595,9 +515,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			NewSessionRequest that = (NewSessionRequest) o;
-			return Objects.equals(cwd, that.cwd) &&
-					Objects.equals(mcpServers, that.mcpServers) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(cwd, that.cwd) && Objects.equals(mcpServers, that.mcpServers) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -607,11 +525,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "NewSessionRequest{" +
-					"cwd='" + cwd + '\'' +
-					", mcpServers=" + mcpServers +
-					", meta=" + meta +
-					'}';
+			return "NewSessionRequest[cwd=" + cwd + ", mcpServers=" + mcpServers + ", meta=" + meta + "]";
 		}
 	}
 
@@ -621,15 +535,12 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class NewSessionResponse {
-		private final String sessionId;
-		private final SessionModeState modes;
-		private final SessionModelState models;
-		@JsonProperty("_meta")
-		private final Map<String, Object> meta;
+		private final @JsonProperty("sessionId") String sessionId;
+		private final @JsonProperty("modes") SessionModeState modes;
+		private final @JsonProperty("models") SessionModelState models;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public NewSessionResponse(@JsonProperty("sessionId") String sessionId,
-				@JsonProperty("modes") SessionModeState modes, @JsonProperty("models") SessionModelState models,
-			@JsonProperty("_meta") Map<String, Object> meta) {
+		public NewSessionResponse(@JsonProperty("sessionId") String sessionId, @JsonProperty("modes") SessionModeState modes, @JsonProperty("models") SessionModelState models, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.sessionId = sessionId;
 			this.modes = modes;
 			this.models = models;
@@ -640,16 +551,9 @@ public final class AcpSchema {
 			this(sessionId, modes, models, null);
 		}
 
-		@JsonProperty("sessionId")
 		public String sessionId() { return sessionId; }
-
-		@JsonProperty("modes")
 		public SessionModeState modes() { return modes; }
-
-		@JsonProperty("models")
 		public SessionModelState models() { return models; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -657,10 +561,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			NewSessionResponse that = (NewSessionResponse) o;
-			return Objects.equals(sessionId, that.sessionId) &&
-					Objects.equals(modes, that.modes) &&
-					Objects.equals(models, that.models) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(sessionId, that.sessionId) && Objects.equals(modes, that.modes) && Objects.equals(models, that.models) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -670,12 +571,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "NewSessionResponse{" +
-					"sessionId='" + sessionId + '\'' +
-					", modes=" + modes +
-					", models=" + models +
-					", meta=" + meta +
-					'}';
+			return "NewSessionResponse[sessionId=" + sessionId + ", modes=" + modes + ", models=" + models + ", meta=" + meta + "]";
 		}
 	}
 
@@ -685,15 +581,12 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class LoadSessionRequest {
-		private final String sessionId;
-		private final String cwd;
-		private final List<McpServer> mcpServers;
-		@JsonProperty("_meta")
-		private final Map<String, Object> meta;
+		private final @JsonProperty("sessionId") String sessionId;
+		private final @JsonProperty("cwd") String cwd;
+		private final @JsonProperty("mcpServers") List<McpServer> mcpServers;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public LoadSessionRequest(@JsonProperty("sessionId") String sessionId, @JsonProperty("cwd") String cwd,
-				@JsonProperty("mcpServers") List<McpServer> mcpServers,
-			@JsonProperty("_meta") Map<String, Object> meta) {
+		public LoadSessionRequest(@JsonProperty("sessionId") String sessionId, @JsonProperty("cwd") String cwd, @JsonProperty("mcpServers") List<McpServer> mcpServers, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.sessionId = sessionId;
 			this.cwd = cwd;
 			this.mcpServers = mcpServers;
@@ -704,16 +597,9 @@ public final class AcpSchema {
 			this(sessionId, cwd, mcpServers, null);
 		}
 
-		@JsonProperty("sessionId")
 		public String sessionId() { return sessionId; }
-
-		@JsonProperty("cwd")
 		public String cwd() { return cwd; }
-
-		@JsonProperty("mcpServers")
 		public List<McpServer> mcpServers() { return mcpServers; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -721,10 +607,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			LoadSessionRequest that = (LoadSessionRequest) o;
-			return Objects.equals(sessionId, that.sessionId) &&
-					Objects.equals(cwd, that.cwd) &&
-					Objects.equals(mcpServers, that.mcpServers) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(sessionId, that.sessionId) && Objects.equals(cwd, that.cwd) && Objects.equals(mcpServers, that.mcpServers) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -734,12 +617,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "LoadSessionRequest{" +
-					"sessionId='" + sessionId + '\'' +
-					", cwd='" + cwd + '\'' +
-					", mcpServers=" + mcpServers +
-					", meta=" + meta +
-					'}';
+			return "LoadSessionRequest[sessionId=" + sessionId + ", cwd=" + cwd + ", mcpServers=" + mcpServers + ", meta=" + meta + "]";
 		}
 	}
 
@@ -749,14 +627,11 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class LoadSessionResponse {
-		private final SessionModeState modes;
-		private final SessionModelState models;
-		@JsonProperty("_meta")
-		private final Map<String, Object> meta;
+		private final @JsonProperty("modes") SessionModeState modes;
+		private final @JsonProperty("models") SessionModelState models;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public LoadSessionResponse(@JsonProperty("modes") SessionModeState modes,
-				@JsonProperty("models") SessionModelState models,
-			@JsonProperty("_meta") Map<String, Object> meta) {
+		public LoadSessionResponse(@JsonProperty("modes") SessionModeState modes, @JsonProperty("models") SessionModelState models, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.modes = modes;
 			this.models = models;
 			this.meta = meta;
@@ -766,13 +641,8 @@ public final class AcpSchema {
 			this(modes, models, null);
 		}
 
-		@JsonProperty("modes")
 		public SessionModeState modes() { return modes; }
-
-		@JsonProperty("models")
 		public SessionModelState models() { return models; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -780,9 +650,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			LoadSessionResponse that = (LoadSessionResponse) o;
-			return Objects.equals(modes, that.modes) &&
-					Objects.equals(models, that.models) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(modes, that.modes) && Objects.equals(models, that.models) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -792,11 +660,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "LoadSessionResponse{" +
-					"modes=" + modes +
-					", models=" + models +
-					", meta=" + meta +
-					'}';
+			return "LoadSessionResponse[modes=" + modes + ", models=" + models + ", meta=" + meta + "]";
 		}
 	}
 
@@ -806,13 +670,11 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class PromptRequest {
-		private final String sessionId;
-		private final List<ContentBlock> prompt;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("sessionId") String sessionId;
+		private final @JsonProperty("prompt") List<ContentBlock> prompt;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public PromptRequest(@JsonProperty("sessionId") String sessionId,
-				@JsonProperty("prompt") List<ContentBlock> prompt,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public PromptRequest(@JsonProperty("sessionId") String sessionId, @JsonProperty("prompt") List<ContentBlock> prompt, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.sessionId = sessionId;
 			this.prompt = prompt;
 			this.meta = meta;
@@ -837,13 +699,8 @@ public final class AcpSchema {
 				.orElse("");
 		}
 
-		@JsonProperty("sessionId")
 		public String sessionId() { return sessionId; }
-
-		@JsonProperty("prompt")
 		public List<ContentBlock> prompt() { return prompt; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -851,9 +708,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			PromptRequest that = (PromptRequest) o;
-			return Objects.equals(sessionId, that.sessionId) &&
-					Objects.equals(prompt, that.prompt) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(sessionId, that.sessionId) && Objects.equals(prompt, that.prompt) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -863,11 +718,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "PromptRequest{" +
-					"sessionId='" + sessionId + '\'' +
-					", prompt=" + prompt +
-					", meta=" + meta +
-					'}';
+			return "PromptRequest[sessionId=" + sessionId + ", prompt=" + prompt + ", meta=" + meta + "]";
 		}
 	}
 
@@ -877,11 +728,10 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class PromptResponse {
-		private final StopReason stopReason;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("stopReason") StopReason stopReason;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public PromptResponse(@JsonProperty("stopReason") StopReason stopReason,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public PromptResponse(@JsonProperty("stopReason") StopReason stopReason, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.stopReason = stopReason;
 			this.meta = meta;
 		}
@@ -917,10 +767,7 @@ public final class AcpSchema {
 			return new PromptResponse(StopReason.REFUSAL);
 		}
 
-		@JsonProperty("stopReason")
 		public StopReason stopReason() { return stopReason; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -928,8 +775,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			PromptResponse that = (PromptResponse) o;
-			return Objects.equals(stopReason, that.stopReason) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(stopReason, that.stopReason) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -939,10 +785,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "PromptResponse{" +
-					"stopReason=" + stopReason +
-					", meta=" + meta +
-					'}';
+			return "PromptResponse[stopReason=" + stopReason + ", meta=" + meta + "]";
 		}
 	}
 
@@ -952,19 +795,15 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class SetSessionModeRequest {
-		private final String sessionId;
-		private final String modeId;
+		private final @JsonProperty("sessionId") String sessionId;
+		private final @JsonProperty("modeId") String modeId;
 
-		public SetSessionModeRequest(@JsonProperty("sessionId") String sessionId,
-				@JsonProperty("modeId") String modeId) {
+		public SetSessionModeRequest(@JsonProperty("sessionId") String sessionId, @JsonProperty("modeId") String modeId) {
 			this.sessionId = sessionId;
 			this.modeId = modeId;
 		}
 
-		@JsonProperty("sessionId")
 		public String sessionId() { return sessionId; }
-
-		@JsonProperty("modeId")
 		public String modeId() { return modeId; }
 
 		@Override
@@ -972,8 +811,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			SetSessionModeRequest that = (SetSessionModeRequest) o;
-			return Objects.equals(sessionId, that.sessionId) &&
-					Objects.equals(modeId, that.modeId);
+			return Objects.equals(sessionId, that.sessionId) && Objects.equals(modeId, that.modeId);
 		}
 
 		@Override
@@ -983,10 +821,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "SetSessionModeRequest{" +
-					"sessionId='" + sessionId + '\'' +
-					", modeId='" + modeId + '\'' +
-					'}';
+			return "SetSessionModeRequest[sessionId=" + sessionId + ", modeId=" + modeId + "]";
 		}
 	}
 
@@ -1003,6 +838,7 @@ public final class AcpSchema {
 		public boolean equals(Object o) {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
+			SetSessionModeResponse that = (SetSessionModeResponse) o;
 			return true;
 		}
 
@@ -1013,7 +849,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "SetSessionModeResponse{}";
+			return "SetSessionModeResponse[]";
 		}
 	}
 
@@ -1023,19 +859,15 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class SetSessionModelRequest {
-		private final String sessionId;
-		private final String modelId;
+		private final @JsonProperty("sessionId") String sessionId;
+		private final @JsonProperty("modelId") String modelId;
 
-		public SetSessionModelRequest(@JsonProperty("sessionId") String sessionId,
-				@JsonProperty("modelId") String modelId) {
+		public SetSessionModelRequest(@JsonProperty("sessionId") String sessionId, @JsonProperty("modelId") String modelId) {
 			this.sessionId = sessionId;
 			this.modelId = modelId;
 		}
 
-		@JsonProperty("sessionId")
 		public String sessionId() { return sessionId; }
-
-		@JsonProperty("modelId")
 		public String modelId() { return modelId; }
 
 		@Override
@@ -1043,8 +875,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			SetSessionModelRequest that = (SetSessionModelRequest) o;
-			return Objects.equals(sessionId, that.sessionId) &&
-					Objects.equals(modelId, that.modelId);
+			return Objects.equals(sessionId, that.sessionId) && Objects.equals(modelId, that.modelId);
 		}
 
 		@Override
@@ -1054,10 +885,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "SetSessionModelRequest{" +
-					"sessionId='" + sessionId + '\'' +
-					", modelId='" + modelId + '\'' +
-					'}';
+			return "SetSessionModelRequest[sessionId=" + sessionId + ", modelId=" + modelId + "]";
 		}
 	}
 
@@ -1074,6 +902,7 @@ public final class AcpSchema {
 		public boolean equals(Object o) {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
+			SetSessionModelResponse that = (SetSessionModelResponse) o;
 			return true;
 		}
 
@@ -1084,7 +913,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "SetSessionModelResponse{}";
+			return "SetSessionModelResponse[]";
 		}
 	}
 
@@ -1094,13 +923,12 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class CancelNotification {
-		private final String sessionId;
+		private final @JsonProperty("sessionId") String sessionId;
 
 		public CancelNotification(@JsonProperty("sessionId") String sessionId) {
 			this.sessionId = sessionId;
 		}
 
-		@JsonProperty("sessionId")
 		public String sessionId() { return sessionId; }
 
 		@Override
@@ -1118,9 +946,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "CancelNotification{" +
-					"sessionId='" + sessionId + '\'' +
-					'}';
+			return "CancelNotification[sessionId=" + sessionId + "]";
 		}
 	}
 
@@ -1134,25 +960,18 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class RequestPermissionRequest {
-		private final String sessionId;
-		private final ToolCallUpdate toolCall;
-		private final List<PermissionOption> options;
+		private final @JsonProperty("sessionId") String sessionId;
+		private final @JsonProperty("toolCall") ToolCallUpdate toolCall;
+		private final @JsonProperty("options") List<PermissionOption> options;
 
-		public RequestPermissionRequest(@JsonProperty("sessionId") String sessionId,
-				@JsonProperty("toolCall") ToolCallUpdate toolCall,
-				@JsonProperty("options") List<PermissionOption> options) {
+		public RequestPermissionRequest(@JsonProperty("sessionId") String sessionId, @JsonProperty("toolCall") ToolCallUpdate toolCall, @JsonProperty("options") List<PermissionOption> options) {
 			this.sessionId = sessionId;
 			this.toolCall = toolCall;
 			this.options = options;
 		}
 
-		@JsonProperty("sessionId")
 		public String sessionId() { return sessionId; }
-
-		@JsonProperty("toolCall")
 		public ToolCallUpdate toolCall() { return toolCall; }
-
-		@JsonProperty("options")
 		public List<PermissionOption> options() { return options; }
 
 		@Override
@@ -1160,9 +979,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			RequestPermissionRequest that = (RequestPermissionRequest) o;
-			return Objects.equals(sessionId, that.sessionId) &&
-					Objects.equals(toolCall, that.toolCall) &&
-					Objects.equals(options, that.options);
+			return Objects.equals(sessionId, that.sessionId) && Objects.equals(toolCall, that.toolCall) && Objects.equals(options, that.options);
 		}
 
 		@Override
@@ -1172,11 +989,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "RequestPermissionRequest{" +
-					"sessionId='" + sessionId + '\'' +
-					", toolCall=" + toolCall +
-					", options=" + options +
-					'}';
+			return "RequestPermissionRequest[sessionId=" + sessionId + ", toolCall=" + toolCall + ", options=" + options + "]";
 		}
 	}
 
@@ -1186,13 +999,12 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class RequestPermissionResponse {
-		private final RequestPermissionOutcome outcome;
+		private final @JsonProperty("outcome") RequestPermissionOutcome outcome;
 
 		public RequestPermissionResponse(@JsonProperty("outcome") RequestPermissionOutcome outcome) {
 			this.outcome = outcome;
 		}
 
-		@JsonProperty("outcome")
 		public RequestPermissionOutcome outcome() { return outcome; }
 
 		@Override
@@ -1210,9 +1022,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "RequestPermissionResponse{" +
-					"outcome=" + outcome +
-					'}';
+			return "RequestPermissionResponse[outcome=" + outcome + "]";
 		}
 	}
 
@@ -1222,13 +1032,11 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class SessionNotification {
-		private final String sessionId;
-		private final SessionUpdate update;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("sessionId") String sessionId;
+		private final @JsonProperty("update") SessionUpdate update;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public SessionNotification(@JsonProperty("sessionId") String sessionId,
-				@JsonProperty("update") SessionUpdate update,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public SessionNotification(@JsonProperty("sessionId") String sessionId, @JsonProperty("update") SessionUpdate update, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.sessionId = sessionId;
 			this.update = update;
 			this.meta = meta;
@@ -1238,13 +1046,8 @@ public final class AcpSchema {
 			this(sessionId, update, null);
 		}
 
-		@JsonProperty("sessionId")
 		public String sessionId() { return sessionId; }
-
-		@JsonProperty("update")
 		public SessionUpdate update() { return update; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -1252,9 +1055,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			SessionNotification that = (SessionNotification) o;
-			return Objects.equals(sessionId, that.sessionId) &&
-					Objects.equals(update, that.update) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(sessionId, that.sessionId) && Objects.equals(update, that.update) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -1264,11 +1065,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "SessionNotification{" +
-					"sessionId='" + sessionId + '\'' +
-					", update=" + update +
-					", meta=" + meta +
-					'}';
+			return "SessionNotification[sessionId=" + sessionId + ", update=" + update + ", meta=" + meta + "]";
 		}
 	}
 
@@ -1278,29 +1075,21 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class ReadTextFileRequest {
-		private final String sessionId;
-		private final String path;
-		private final Integer line;
-		private final Integer limit;
+		private final @JsonProperty("sessionId") String sessionId;
+		private final @JsonProperty("path") String path;
+		private final @JsonProperty("line") Integer line;
+		private final @JsonProperty("limit") Integer limit;
 
-		public ReadTextFileRequest(@JsonProperty("sessionId") String sessionId, @JsonProperty("path") String path,
-				@JsonProperty("line") Integer line, @JsonProperty("limit") Integer limit) {
+		public ReadTextFileRequest(@JsonProperty("sessionId") String sessionId, @JsonProperty("path") String path, @JsonProperty("line") Integer line, @JsonProperty("limit") Integer limit) {
 			this.sessionId = sessionId;
 			this.path = path;
 			this.line = line;
 			this.limit = limit;
 		}
 
-		@JsonProperty("sessionId")
 		public String sessionId() { return sessionId; }
-
-		@JsonProperty("path")
 		public String path() { return path; }
-
-		@JsonProperty("line")
 		public Integer line() { return line; }
-
-		@JsonProperty("limit")
 		public Integer limit() { return limit; }
 
 		@Override
@@ -1308,10 +1097,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			ReadTextFileRequest that = (ReadTextFileRequest) o;
-			return Objects.equals(sessionId, that.sessionId) &&
-					Objects.equals(path, that.path) &&
-					Objects.equals(line, that.line) &&
-					Objects.equals(limit, that.limit);
+			return Objects.equals(sessionId, that.sessionId) && Objects.equals(path, that.path) && Objects.equals(line, that.line) && Objects.equals(limit, that.limit);
 		}
 
 		@Override
@@ -1321,12 +1107,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "ReadTextFileRequest{" +
-					"sessionId='" + sessionId + '\'' +
-					", path='" + path + '\'' +
-					", line=" + line +
-					", limit=" + limit +
-					'}';
+			return "ReadTextFileRequest[sessionId=" + sessionId + ", path=" + path + ", line=" + line + ", limit=" + limit + "]";
 		}
 	}
 
@@ -1336,13 +1117,12 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class ReadTextFileResponse {
-		private final String content;
+		private final @JsonProperty("content") String content;
 
 		public ReadTextFileResponse(@JsonProperty("content") String content) {
 			this.content = content;
 		}
 
-		@JsonProperty("content")
 		public String content() { return content; }
 
 		@Override
@@ -1360,9 +1140,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "ReadTextFileResponse{" +
-					"content='" + content + '\'' +
-					'}';
+			return "ReadTextFileResponse[content=" + content + "]";
 		}
 	}
 
@@ -1372,24 +1150,18 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class WriteTextFileRequest {
-		private final String sessionId;
-		private final String path;
-		private final String content;
+		private final @JsonProperty("sessionId") String sessionId;
+		private final @JsonProperty("path") String path;
+		private final @JsonProperty("content") String content;
 
-		public WriteTextFileRequest(@JsonProperty("sessionId") String sessionId, @JsonProperty("path") String path,
-				@JsonProperty("content") String content) {
+		public WriteTextFileRequest(@JsonProperty("sessionId") String sessionId, @JsonProperty("path") String path, @JsonProperty("content") String content) {
 			this.sessionId = sessionId;
 			this.path = path;
 			this.content = content;
 		}
 
-		@JsonProperty("sessionId")
 		public String sessionId() { return sessionId; }
-
-		@JsonProperty("path")
 		public String path() { return path; }
-
-		@JsonProperty("content")
 		public String content() { return content; }
 
 		@Override
@@ -1397,9 +1169,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			WriteTextFileRequest that = (WriteTextFileRequest) o;
-			return Objects.equals(sessionId, that.sessionId) &&
-					Objects.equals(path, that.path) &&
-					Objects.equals(content, that.content);
+			return Objects.equals(sessionId, that.sessionId) && Objects.equals(path, that.path) && Objects.equals(content, that.content);
 		}
 
 		@Override
@@ -1409,11 +1179,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "WriteTextFileRequest{" +
-					"sessionId='" + sessionId + '\'' +
-					", path='" + path + '\'' +
-					", content='" + content + '\'' +
-					'}';
+			return "WriteTextFileRequest[sessionId=" + sessionId + ", path=" + path + ", content=" + content + "]";
 		}
 	}
 
@@ -1430,6 +1196,7 @@ public final class AcpSchema {
 		public boolean equals(Object o) {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
+			WriteTextFileResponse that = (WriteTextFileResponse) o;
 			return true;
 		}
 
@@ -1440,7 +1207,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "WriteTextFileResponse{}";
+			return "WriteTextFileResponse[]";
 		}
 	}
 
@@ -1450,17 +1217,14 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class CreateTerminalRequest {
-		private final String sessionId;
-		private final String command;
-		private final List<String> args;
-		private final String cwd;
-		private final List<EnvVariable> env;
-		private final Long outputByteLimit;
+		private final @JsonProperty("sessionId") String sessionId;
+		private final @JsonProperty("command") String command;
+		private final @JsonProperty("args") List<String> args;
+		private final @JsonProperty("cwd") String cwd;
+		private final @JsonProperty("env") List<EnvVariable> env;
+		private final @JsonProperty("outputByteLimit") Long outputByteLimit;
 
-		public CreateTerminalRequest(@JsonProperty("sessionId") String sessionId,
-				@JsonProperty("command") String command, @JsonProperty("args") List<String> args,
-				@JsonProperty("cwd") String cwd, @JsonProperty("env") List<EnvVariable> env,
-				@JsonProperty("outputByteLimit") Long outputByteLimit) {
+		public CreateTerminalRequest(@JsonProperty("sessionId") String sessionId, @JsonProperty("command") String command, @JsonProperty("args") List<String> args, @JsonProperty("cwd") String cwd, @JsonProperty("env") List<EnvVariable> env, @JsonProperty("outputByteLimit") Long outputByteLimit) {
 			this.sessionId = sessionId;
 			this.command = command;
 			this.args = args;
@@ -1469,22 +1233,11 @@ public final class AcpSchema {
 			this.outputByteLimit = outputByteLimit;
 		}
 
-		@JsonProperty("sessionId")
 		public String sessionId() { return sessionId; }
-
-		@JsonProperty("command")
 		public String command() { return command; }
-
-		@JsonProperty("args")
 		public List<String> args() { return args; }
-
-		@JsonProperty("cwd")
 		public String cwd() { return cwd; }
-
-		@JsonProperty("env")
 		public List<EnvVariable> env() { return env; }
-
-		@JsonProperty("outputByteLimit")
 		public Long outputByteLimit() { return outputByteLimit; }
 
 		@Override
@@ -1492,12 +1245,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			CreateTerminalRequest that = (CreateTerminalRequest) o;
-			return Objects.equals(sessionId, that.sessionId) &&
-					Objects.equals(command, that.command) &&
-					Objects.equals(args, that.args) &&
-					Objects.equals(cwd, that.cwd) &&
-					Objects.equals(env, that.env) &&
-					Objects.equals(outputByteLimit, that.outputByteLimit);
+			return Objects.equals(sessionId, that.sessionId) && Objects.equals(command, that.command) && Objects.equals(args, that.args) && Objects.equals(cwd, that.cwd) && Objects.equals(env, that.env) && Objects.equals(outputByteLimit, that.outputByteLimit);
 		}
 
 		@Override
@@ -1507,14 +1255,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "CreateTerminalRequest{" +
-					"sessionId='" + sessionId + '\'' +
-					", command='" + command + '\'' +
-					", args=" + args +
-					", cwd='" + cwd + '\'' +
-					", env=" + env +
-					", outputByteLimit=" + outputByteLimit +
-					'}';
+			return "CreateTerminalRequest[sessionId=" + sessionId + ", command=" + command + ", args=" + args + ", cwd=" + cwd + ", env=" + env + ", outputByteLimit=" + outputByteLimit + "]";
 		}
 	}
 
@@ -1524,13 +1265,12 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class CreateTerminalResponse {
-		private final String terminalId;
+		private final @JsonProperty("terminalId") String terminalId;
 
 		public CreateTerminalResponse(@JsonProperty("terminalId") String terminalId) {
 			this.terminalId = terminalId;
 		}
 
-		@JsonProperty("terminalId")
 		public String terminalId() { return terminalId; }
 
 		@Override
@@ -1548,9 +1288,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "CreateTerminalResponse{" +
-					"terminalId='" + terminalId + '\'' +
-					'}';
+			return "CreateTerminalResponse[terminalId=" + terminalId + "]";
 		}
 	}
 
@@ -1560,19 +1298,15 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class TerminalOutputRequest {
-		private final String sessionId;
-		private final String terminalId;
+		private final @JsonProperty("sessionId") String sessionId;
+		private final @JsonProperty("terminalId") String terminalId;
 
-		public TerminalOutputRequest(@JsonProperty("sessionId") String sessionId,
-				@JsonProperty("terminalId") String terminalId) {
+		public TerminalOutputRequest(@JsonProperty("sessionId") String sessionId, @JsonProperty("terminalId") String terminalId) {
 			this.sessionId = sessionId;
 			this.terminalId = terminalId;
 		}
 
-		@JsonProperty("sessionId")
 		public String sessionId() { return sessionId; }
-
-		@JsonProperty("terminalId")
 		public String terminalId() { return terminalId; }
 
 		@Override
@@ -1580,8 +1314,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			TerminalOutputRequest that = (TerminalOutputRequest) o;
-			return Objects.equals(sessionId, that.sessionId) &&
-					Objects.equals(terminalId, that.terminalId);
+			return Objects.equals(sessionId, that.sessionId) && Objects.equals(terminalId, that.terminalId);
 		}
 
 		@Override
@@ -1591,10 +1324,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "TerminalOutputRequest{" +
-					"sessionId='" + sessionId + '\'' +
-					", terminalId='" + terminalId + '\'' +
-					'}';
+			return "TerminalOutputRequest[sessionId=" + sessionId + ", terminalId=" + terminalId + "]";
 		}
 	}
 
@@ -1604,24 +1334,18 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class TerminalOutputResponse {
-		private final String output;
-		private final boolean truncated;
-		private final TerminalExitStatus exitStatus;
+		private final @JsonProperty("output") String output;
+		private final @JsonProperty("truncated") boolean truncated;
+		private final @JsonProperty("exitStatus") TerminalExitStatus exitStatus;
 
-		public TerminalOutputResponse(@JsonProperty("output") String output,
-				@JsonProperty("truncated") boolean truncated, @JsonProperty("exitStatus") TerminalExitStatus exitStatus) {
+		public TerminalOutputResponse(@JsonProperty("output") String output, @JsonProperty("truncated") boolean truncated, @JsonProperty("exitStatus") TerminalExitStatus exitStatus) {
 			this.output = output;
 			this.truncated = truncated;
 			this.exitStatus = exitStatus;
 		}
 
-		@JsonProperty("output")
 		public String output() { return output; }
-
-		@JsonProperty("truncated")
 		public boolean truncated() { return truncated; }
-
-		@JsonProperty("exitStatus")
 		public TerminalExitStatus exitStatus() { return exitStatus; }
 
 		@Override
@@ -1629,9 +1353,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			TerminalOutputResponse that = (TerminalOutputResponse) o;
-			return truncated == that.truncated &&
-					Objects.equals(output, that.output) &&
-					Objects.equals(exitStatus, that.exitStatus);
+			return Objects.equals(output, that.output) && truncated == that.truncated && Objects.equals(exitStatus, that.exitStatus);
 		}
 
 		@Override
@@ -1641,11 +1363,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "TerminalOutputResponse{" +
-					"output='" + output + '\'' +
-					", truncated=" + truncated +
-					", exitStatus=" + exitStatus +
-					'}';
+			return "TerminalOutputResponse[output=" + output + ", truncated=" + truncated + ", exitStatus=" + exitStatus + "]";
 		}
 	}
 
@@ -1655,19 +1373,15 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class ReleaseTerminalRequest {
-		private final String sessionId;
-		private final String terminalId;
+		private final @JsonProperty("sessionId") String sessionId;
+		private final @JsonProperty("terminalId") String terminalId;
 
-		public ReleaseTerminalRequest(@JsonProperty("sessionId") String sessionId,
-				@JsonProperty("terminalId") String terminalId) {
+		public ReleaseTerminalRequest(@JsonProperty("sessionId") String sessionId, @JsonProperty("terminalId") String terminalId) {
 			this.sessionId = sessionId;
 			this.terminalId = terminalId;
 		}
 
-		@JsonProperty("sessionId")
 		public String sessionId() { return sessionId; }
-
-		@JsonProperty("terminalId")
 		public String terminalId() { return terminalId; }
 
 		@Override
@@ -1675,8 +1389,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			ReleaseTerminalRequest that = (ReleaseTerminalRequest) o;
-			return Objects.equals(sessionId, that.sessionId) &&
-					Objects.equals(terminalId, that.terminalId);
+			return Objects.equals(sessionId, that.sessionId) && Objects.equals(terminalId, that.terminalId);
 		}
 
 		@Override
@@ -1686,10 +1399,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "ReleaseTerminalRequest{" +
-					"sessionId='" + sessionId + '\'' +
-					", terminalId='" + terminalId + '\'' +
-					'}';
+			return "ReleaseTerminalRequest[sessionId=" + sessionId + ", terminalId=" + terminalId + "]";
 		}
 	}
 
@@ -1706,6 +1416,7 @@ public final class AcpSchema {
 		public boolean equals(Object o) {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
+			ReleaseTerminalResponse that = (ReleaseTerminalResponse) o;
 			return true;
 		}
 
@@ -1716,7 +1427,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "ReleaseTerminalResponse{}";
+			return "ReleaseTerminalResponse[]";
 		}
 	}
 
@@ -1726,19 +1437,15 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class WaitForTerminalExitRequest {
-		private final String sessionId;
-		private final String terminalId;
+		private final @JsonProperty("sessionId") String sessionId;
+		private final @JsonProperty("terminalId") String terminalId;
 
-		public WaitForTerminalExitRequest(@JsonProperty("sessionId") String sessionId,
-				@JsonProperty("terminalId") String terminalId) {
+		public WaitForTerminalExitRequest(@JsonProperty("sessionId") String sessionId, @JsonProperty("terminalId") String terminalId) {
 			this.sessionId = sessionId;
 			this.terminalId = terminalId;
 		}
 
-		@JsonProperty("sessionId")
 		public String sessionId() { return sessionId; }
-
-		@JsonProperty("terminalId")
 		public String terminalId() { return terminalId; }
 
 		@Override
@@ -1746,8 +1453,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			WaitForTerminalExitRequest that = (WaitForTerminalExitRequest) o;
-			return Objects.equals(sessionId, that.sessionId) &&
-					Objects.equals(terminalId, that.terminalId);
+			return Objects.equals(sessionId, that.sessionId) && Objects.equals(terminalId, that.terminalId);
 		}
 
 		@Override
@@ -1757,10 +1463,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "WaitForTerminalExitRequest{" +
-					"sessionId='" + sessionId + '\'' +
-					", terminalId='" + terminalId + '\'' +
-					'}';
+			return "WaitForTerminalExitRequest[sessionId=" + sessionId + ", terminalId=" + terminalId + "]";
 		}
 	}
 
@@ -1770,19 +1473,15 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class WaitForTerminalExitResponse {
-		private final Integer exitCode;
-		private final String signal;
+		private final @JsonProperty("exitCode") Integer exitCode;
+		private final @JsonProperty("signal") String signal;
 
-		public WaitForTerminalExitResponse(@JsonProperty("exitCode") Integer exitCode,
-				@JsonProperty("signal") String signal) {
+		public WaitForTerminalExitResponse(@JsonProperty("exitCode") Integer exitCode, @JsonProperty("signal") String signal) {
 			this.exitCode = exitCode;
 			this.signal = signal;
 		}
 
-		@JsonProperty("exitCode")
 		public Integer exitCode() { return exitCode; }
-
-		@JsonProperty("signal")
 		public String signal() { return signal; }
 
 		@Override
@@ -1790,8 +1489,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			WaitForTerminalExitResponse that = (WaitForTerminalExitResponse) o;
-			return Objects.equals(exitCode, that.exitCode) &&
-					Objects.equals(signal, that.signal);
+			return Objects.equals(exitCode, that.exitCode) && Objects.equals(signal, that.signal);
 		}
 
 		@Override
@@ -1801,10 +1499,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "WaitForTerminalExitResponse{" +
-					"exitCode=" + exitCode +
-					", signal='" + signal + '\'' +
-					'}';
+			return "WaitForTerminalExitResponse[exitCode=" + exitCode + ", signal=" + signal + "]";
 		}
 	}
 
@@ -1814,19 +1509,15 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class KillTerminalCommandRequest {
-		private final String sessionId;
-		private final String terminalId;
+		private final @JsonProperty("sessionId") String sessionId;
+		private final @JsonProperty("terminalId") String terminalId;
 
-		public KillTerminalCommandRequest(@JsonProperty("sessionId") String sessionId,
-				@JsonProperty("terminalId") String terminalId) {
+		public KillTerminalCommandRequest(@JsonProperty("sessionId") String sessionId, @JsonProperty("terminalId") String terminalId) {
 			this.sessionId = sessionId;
 			this.terminalId = terminalId;
 		}
 
-		@JsonProperty("sessionId")
 		public String sessionId() { return sessionId; }
-
-		@JsonProperty("terminalId")
 		public String terminalId() { return terminalId; }
 
 		@Override
@@ -1834,8 +1525,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			KillTerminalCommandRequest that = (KillTerminalCommandRequest) o;
-			return Objects.equals(sessionId, that.sessionId) &&
-					Objects.equals(terminalId, that.terminalId);
+			return Objects.equals(sessionId, that.sessionId) && Objects.equals(terminalId, that.terminalId);
 		}
 
 		@Override
@@ -1845,10 +1535,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "KillTerminalCommandRequest{" +
-					"sessionId='" + sessionId + '\'' +
-					", terminalId='" + terminalId + '\'' +
-					'}';
+			return "KillTerminalCommandRequest[sessionId=" + sessionId + ", terminalId=" + terminalId + "]";
 		}
 	}
 
@@ -1865,6 +1552,7 @@ public final class AcpSchema {
 		public boolean equals(Object o) {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
+			KillTerminalCommandResponse that = (KillTerminalCommandResponse) o;
 			return true;
 		}
 
@@ -1875,7 +1563,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "KillTerminalCommandResponse{}";
+			return "KillTerminalCommandResponse[]";
 		}
 	}
 
@@ -1889,13 +1577,11 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class ClientCapabilities {
-		private final FileSystemCapability fs;
-		private final Boolean terminal;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("fs") FileSystemCapability fs;
+		private final @JsonProperty("terminal") Boolean terminal;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public ClientCapabilities(@JsonProperty("fs") FileSystemCapability fs,
-				@JsonProperty("terminal") Boolean terminal,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public ClientCapabilities(@JsonProperty("fs") FileSystemCapability fs, @JsonProperty("terminal") Boolean terminal, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.fs = fs;
 			this.terminal = terminal;
 			this.meta = meta;
@@ -1909,13 +1595,8 @@ public final class AcpSchema {
 			this(fs, terminal, null);
 		}
 
-		@JsonProperty("fs")
 		public FileSystemCapability fs() { return fs; }
-
-		@JsonProperty("terminal")
 		public Boolean terminal() { return terminal; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -1923,9 +1604,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			ClientCapabilities that = (ClientCapabilities) o;
-			return Objects.equals(fs, that.fs) &&
-					Objects.equals(terminal, that.terminal) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(fs, that.fs) && Objects.equals(terminal, that.terminal) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -1935,11 +1614,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "ClientCapabilities{" +
-					"fs=" + fs +
-					", terminal=" + terminal +
-					", meta=" + meta +
-					'}';
+			return "ClientCapabilities[fs=" + fs + ", terminal=" + terminal + ", meta=" + meta + "]";
 		}
 	}
 
@@ -1949,11 +1624,10 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class FileSystemCapability {
-		private final Boolean readTextFile;
-		private final Boolean writeTextFile;
+		private final @JsonProperty("readTextFile") Boolean readTextFile;
+		private final @JsonProperty("writeTextFile") Boolean writeTextFile;
 
-		public FileSystemCapability(@JsonProperty("readTextFile") Boolean readTextFile,
-				@JsonProperty("writeTextFile") Boolean writeTextFile) {
+		public FileSystemCapability(@JsonProperty("readTextFile") Boolean readTextFile, @JsonProperty("writeTextFile") Boolean writeTextFile) {
 			this.readTextFile = readTextFile;
 			this.writeTextFile = writeTextFile;
 		}
@@ -1962,10 +1636,7 @@ public final class AcpSchema {
 			this(false, false);
 		}
 
-		@JsonProperty("readTextFile")
 		public Boolean readTextFile() { return readTextFile; }
-
-		@JsonProperty("writeTextFile")
 		public Boolean writeTextFile() { return writeTextFile; }
 
 		@Override
@@ -1973,8 +1644,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			FileSystemCapability that = (FileSystemCapability) o;
-			return Objects.equals(readTextFile, that.readTextFile) &&
-					Objects.equals(writeTextFile, that.writeTextFile);
+			return Objects.equals(readTextFile, that.readTextFile) && Objects.equals(writeTextFile, that.writeTextFile);
 		}
 
 		@Override
@@ -1984,10 +1654,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "FileSystemCapability{" +
-					"readTextFile=" + readTextFile +
-					", writeTextFile=" + writeTextFile +
-					'}';
+			return "FileSystemCapability[readTextFile=" + readTextFile + ", writeTextFile=" + writeTextFile + "]";
 		}
 	}
 
@@ -1997,15 +1664,12 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class AgentCapabilities {
-		private final Boolean loadSession;
-		private final McpCapabilities mcpCapabilities;
-		private final PromptCapabilities promptCapabilities;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("loadSession") Boolean loadSession;
+		private final @JsonProperty("mcpCapabilities") McpCapabilities mcpCapabilities;
+		private final @JsonProperty("promptCapabilities") PromptCapabilities promptCapabilities;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public AgentCapabilities(@JsonProperty("loadSession") Boolean loadSession,
-				@JsonProperty("mcpCapabilities") McpCapabilities mcpCapabilities,
-				@JsonProperty("promptCapabilities") PromptCapabilities promptCapabilities,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public AgentCapabilities(@JsonProperty("loadSession") Boolean loadSession, @JsonProperty("mcpCapabilities") McpCapabilities mcpCapabilities, @JsonProperty("promptCapabilities") PromptCapabilities promptCapabilities, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.loadSession = loadSession;
 			this.mcpCapabilities = mcpCapabilities;
 			this.promptCapabilities = promptCapabilities;
@@ -2021,16 +1685,9 @@ public final class AcpSchema {
 			this(loadSession, mcpCapabilities, promptCapabilities, null);
 		}
 
-		@JsonProperty("loadSession")
 		public Boolean loadSession() { return loadSession; }
-
-		@JsonProperty("mcpCapabilities")
 		public McpCapabilities mcpCapabilities() { return mcpCapabilities; }
-
-		@JsonProperty("promptCapabilities")
 		public PromptCapabilities promptCapabilities() { return promptCapabilities; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -2038,10 +1695,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			AgentCapabilities that = (AgentCapabilities) o;
-			return Objects.equals(loadSession, that.loadSession) &&
-					Objects.equals(mcpCapabilities, that.mcpCapabilities) &&
-					Objects.equals(promptCapabilities, that.promptCapabilities) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(loadSession, that.loadSession) && Objects.equals(mcpCapabilities, that.mcpCapabilities) && Objects.equals(promptCapabilities, that.promptCapabilities) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -2051,12 +1705,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "AgentCapabilities{" +
-					"loadSession=" + loadSession +
-					", mcpCapabilities=" + mcpCapabilities +
-					", promptCapabilities=" + promptCapabilities +
-					", meta=" + meta +
-					'}';
+			return "AgentCapabilities[loadSession=" + loadSession + ", mcpCapabilities=" + mcpCapabilities + ", promptCapabilities=" + promptCapabilities + ", meta=" + meta + "]";
 		}
 	}
 
@@ -2066,8 +1715,8 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class McpCapabilities {
-		private final Boolean http;
-		private final Boolean sse;
+		private final @JsonProperty("http") Boolean http;
+		private final @JsonProperty("sse") Boolean sse;
 
 		public McpCapabilities(@JsonProperty("http") Boolean http, @JsonProperty("sse") Boolean sse) {
 			this.http = http;
@@ -2078,10 +1727,7 @@ public final class AcpSchema {
 			this(false, false);
 		}
 
-		@JsonProperty("http")
 		public Boolean http() { return http; }
-
-		@JsonProperty("sse")
 		public Boolean sse() { return sse; }
 
 		@Override
@@ -2089,8 +1735,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			McpCapabilities that = (McpCapabilities) o;
-			return Objects.equals(http, that.http) &&
-					Objects.equals(sse, that.sse);
+			return Objects.equals(http, that.http) && Objects.equals(sse, that.sse);
 		}
 
 		@Override
@@ -2100,10 +1745,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "McpCapabilities{" +
-					"http=" + http +
-					", sse=" + sse +
-					'}';
+			return "McpCapabilities[http=" + http + ", sse=" + sse + "]";
 		}
 	}
 
@@ -2113,13 +1755,11 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class PromptCapabilities {
-		private final Boolean audio;
-		private final Boolean embeddedContext;
-		private final Boolean image;
+		private final @JsonProperty("audio") Boolean audio;
+		private final @JsonProperty("embeddedContext") Boolean embeddedContext;
+		private final @JsonProperty("image") Boolean image;
 
-		public PromptCapabilities(@JsonProperty("audio") Boolean audio,
-				@JsonProperty("embeddedContext") Boolean embeddedContext,
-				@JsonProperty("image") Boolean image) {
+		public PromptCapabilities(@JsonProperty("audio") Boolean audio, @JsonProperty("embeddedContext") Boolean embeddedContext, @JsonProperty("image") Boolean image) {
 			this.audio = audio;
 			this.embeddedContext = embeddedContext;
 			this.image = image;
@@ -2129,13 +1769,8 @@ public final class AcpSchema {
 			this(false, false, false);
 		}
 
-		@JsonProperty("audio")
 		public Boolean audio() { return audio; }
-
-		@JsonProperty("embeddedContext")
 		public Boolean embeddedContext() { return embeddedContext; }
-
-		@JsonProperty("image")
 		public Boolean image() { return image; }
 
 		@Override
@@ -2143,9 +1778,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			PromptCapabilities that = (PromptCapabilities) o;
-			return Objects.equals(audio, that.audio) &&
-					Objects.equals(embeddedContext, that.embeddedContext) &&
-					Objects.equals(image, that.image);
+			return Objects.equals(audio, that.audio) && Objects.equals(embeddedContext, that.embeddedContext) && Objects.equals(image, that.image);
 		}
 
 		@Override
@@ -2155,11 +1788,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "PromptCapabilities{" +
-					"audio=" + audio +
-					", embeddedContext=" + embeddedContext +
-					", image=" + image +
-					'}';
+			return "PromptCapabilities[audio=" + audio + ", embeddedContext=" + embeddedContext + ", image=" + image + "]";
 		}
 	}
 
@@ -2173,19 +1802,15 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class SessionModeState {
-		private final String currentModeId;
-		private final List<SessionMode> availableModes;
+		private final @JsonProperty("currentModeId") String currentModeId;
+		private final @JsonProperty("availableModes") List<SessionMode> availableModes;
 
-		public SessionModeState(@JsonProperty("currentModeId") String currentModeId,
-				@JsonProperty("availableModes") List<SessionMode> availableModes) {
+		public SessionModeState(@JsonProperty("currentModeId") String currentModeId, @JsonProperty("availableModes") List<SessionMode> availableModes) {
 			this.currentModeId = currentModeId;
 			this.availableModes = availableModes;
 		}
 
-		@JsonProperty("currentModeId")
 		public String currentModeId() { return currentModeId; }
-
-		@JsonProperty("availableModes")
 		public List<SessionMode> availableModes() { return availableModes; }
 
 		@Override
@@ -2193,8 +1818,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			SessionModeState that = (SessionModeState) o;
-			return Objects.equals(currentModeId, that.currentModeId) &&
-					Objects.equals(availableModes, that.availableModes);
+			return Objects.equals(currentModeId, that.currentModeId) && Objects.equals(availableModes, that.availableModes);
 		}
 
 		@Override
@@ -2204,10 +1828,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "SessionModeState{" +
-					"currentModeId='" + currentModeId + '\'' +
-					", availableModes=" + availableModes +
-					'}';
+			return "SessionModeState[currentModeId=" + currentModeId + ", availableModes=" + availableModes + "]";
 		}
 	}
 
@@ -2217,24 +1838,18 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class SessionMode {
-		private final String id;
-		private final String name;
-		private final String description;
+		private final @JsonProperty("id") String id;
+		private final @JsonProperty("name") String name;
+		private final @JsonProperty("description") String description;
 
-		public SessionMode(@JsonProperty("id") String id, @JsonProperty("name") String name,
-				@JsonProperty("description") String description) {
+		public SessionMode(@JsonProperty("id") String id, @JsonProperty("name") String name, @JsonProperty("description") String description) {
 			this.id = id;
 			this.name = name;
 			this.description = description;
 		}
 
-		@JsonProperty("id")
 		public String id() { return id; }
-
-		@JsonProperty("name")
 		public String name() { return name; }
-
-		@JsonProperty("description")
 		public String description() { return description; }
 
 		@Override
@@ -2242,9 +1857,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			SessionMode that = (SessionMode) o;
-			return Objects.equals(id, that.id) &&
-					Objects.equals(name, that.name) &&
-					Objects.equals(description, that.description);
+			return Objects.equals(id, that.id) && Objects.equals(name, that.name) && Objects.equals(description, that.description);
 		}
 
 		@Override
@@ -2254,11 +1867,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "SessionMode{" +
-					"id='" + id + '\'' +
-					", name='" + name + '\'' +
-					", description='" + description + '\'' +
-					'}';
+			return "SessionMode[id=" + id + ", name=" + name + ", description=" + description + "]";
 		}
 	}
 
@@ -2268,19 +1877,15 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class SessionModelState {
-		private final String currentModelId;
-		private final List<ModelInfo> availableModels;
+		private final @JsonProperty("currentModelId") String currentModelId;
+		private final @JsonProperty("availableModels") List<ModelInfo> availableModels;
 
-		public SessionModelState(@JsonProperty("currentModelId") String currentModelId,
-				@JsonProperty("availableModels") List<ModelInfo> availableModels) {
+		public SessionModelState(@JsonProperty("currentModelId") String currentModelId, @JsonProperty("availableModels") List<ModelInfo> availableModels) {
 			this.currentModelId = currentModelId;
 			this.availableModels = availableModels;
 		}
 
-		@JsonProperty("currentModelId")
 		public String currentModelId() { return currentModelId; }
-
-		@JsonProperty("availableModels")
 		public List<ModelInfo> availableModels() { return availableModels; }
 
 		@Override
@@ -2288,8 +1893,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			SessionModelState that = (SessionModelState) o;
-			return Objects.equals(currentModelId, that.currentModelId) &&
-					Objects.equals(availableModels, that.availableModels);
+			return Objects.equals(currentModelId, that.currentModelId) && Objects.equals(availableModels, that.availableModels);
 		}
 
 		@Override
@@ -2299,10 +1903,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "SessionModelState{" +
-					"currentModelId='" + currentModelId + '\'' +
-					", availableModels=" + availableModels +
-					'}';
+			return "SessionModelState[currentModelId=" + currentModelId + ", availableModels=" + availableModels + "]";
 		}
 	}
 
@@ -2312,24 +1913,18 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class ModelInfo {
-		private final String modelId;
-		private final String name;
-		private final String description;
+		private final @JsonProperty("modelId") String modelId;
+		private final @JsonProperty("name") String name;
+		private final @JsonProperty("description") String description;
 
-		public ModelInfo(@JsonProperty("modelId") String modelId, @JsonProperty("name") String name,
-				@JsonProperty("description") String description) {
+		public ModelInfo(@JsonProperty("modelId") String modelId, @JsonProperty("name") String name, @JsonProperty("description") String description) {
 			this.modelId = modelId;
 			this.name = name;
 			this.description = description;
 		}
 
-		@JsonProperty("modelId")
 		public String modelId() { return modelId; }
-
-		@JsonProperty("name")
 		public String name() { return name; }
-
-		@JsonProperty("description")
 		public String description() { return description; }
 
 		@Override
@@ -2337,9 +1932,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			ModelInfo that = (ModelInfo) o;
-			return Objects.equals(modelId, that.modelId) &&
-					Objects.equals(name, that.name) &&
-					Objects.equals(description, that.description);
+			return Objects.equals(modelId, that.modelId) && Objects.equals(name, that.name) && Objects.equals(description, that.description);
 		}
 
 		@Override
@@ -2349,11 +1942,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "ModelInfo{" +
-					"modelId='" + modelId + '\'' +
-					", name='" + name + '\'' +
-					", description='" + description + '\'' +
-					'}';
+			return "ModelInfo[modelId=" + modelId + ", name=" + name + ", description=" + description + "]";
 		}
 	}
 
@@ -2380,14 +1969,12 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class TextContent implements ContentBlock {
-		private final String type;
-		private final String text;
-		private final Annotations annotations;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("type") String type;
+		private final @JsonProperty("text") String text;
+		private final @JsonProperty("annotations") Annotations annotations;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public TextContent(@JsonProperty("type") String type, @JsonProperty("text") String text,
-				@JsonProperty("annotations") Annotations annotations,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public TextContent(@JsonProperty("type") String type, @JsonProperty("text") String text, @JsonProperty("annotations") Annotations annotations, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.type = type;
 			this.text = text;
 			this.annotations = annotations;
@@ -2398,16 +1985,9 @@ public final class AcpSchema {
 			this("text", text, null, null);
 		}
 
-		@JsonProperty("type")
 		public String type() { return type; }
-
-		@JsonProperty("text")
 		public String text() { return text; }
-
-		@JsonProperty("annotations")
 		public Annotations annotations() { return annotations; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -2415,10 +1995,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			TextContent that = (TextContent) o;
-			return Objects.equals(type, that.type) &&
-					Objects.equals(text, that.text) &&
-					Objects.equals(annotations, that.annotations) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(type, that.type) && Objects.equals(text, that.text) && Objects.equals(annotations, that.annotations) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -2428,12 +2005,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "TextContent{" +
-					"type='" + type + '\'' +
-					", text='" + text + '\'' +
-					", annotations=" + annotations +
-					", meta=" + meta +
-					'}';
+			return "TextContent[type=" + type + ", text=" + text + ", annotations=" + annotations + ", meta=" + meta + "]";
 		}
 	}
 
@@ -2443,17 +2015,14 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class ImageContent implements ContentBlock {
-		private final String type;
-		private final String data;
-		private final String mimeType;
-		private final String uri;
-		private final Annotations annotations;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("type") String type;
+		private final @JsonProperty("data") String data;
+		private final @JsonProperty("mimeType") String mimeType;
+		private final @JsonProperty("uri") String uri;
+		private final @JsonProperty("annotations") Annotations annotations;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public ImageContent(@JsonProperty("type") String type, @JsonProperty("data") String data,
-				@JsonProperty("mimeType") String mimeType, @JsonProperty("uri") String uri,
-				@JsonProperty("annotations") Annotations annotations,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public ImageContent(@JsonProperty("type") String type, @JsonProperty("data") String data, @JsonProperty("mimeType") String mimeType, @JsonProperty("uri") String uri, @JsonProperty("annotations") Annotations annotations, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.type = type;
 			this.data = data;
 			this.mimeType = mimeType;
@@ -2462,22 +2031,11 @@ public final class AcpSchema {
 			this.meta = meta;
 		}
 
-		@JsonProperty("type")
 		public String type() { return type; }
-
-		@JsonProperty("data")
 		public String data() { return data; }
-
-		@JsonProperty("mimeType")
 		public String mimeType() { return mimeType; }
-
-		@JsonProperty("uri")
 		public String uri() { return uri; }
-
-		@JsonProperty("annotations")
 		public Annotations annotations() { return annotations; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -2485,12 +2043,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			ImageContent that = (ImageContent) o;
-			return Objects.equals(type, that.type) &&
-					Objects.equals(data, that.data) &&
-					Objects.equals(mimeType, that.mimeType) &&
-					Objects.equals(uri, that.uri) &&
-					Objects.equals(annotations, that.annotations) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(type, that.type) && Objects.equals(data, that.data) && Objects.equals(mimeType, that.mimeType) && Objects.equals(uri, that.uri) && Objects.equals(annotations, that.annotations) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -2500,14 +2053,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "ImageContent{" +
-					"type='" + type + '\'' +
-					", data='" + data + '\'' +
-					", mimeType='" + mimeType + '\'' +
-					", uri='" + uri + '\'' +
-					", annotations=" + annotations +
-					", meta=" + meta +
-					'}';
+			return "ImageContent[type=" + type + ", data=" + data + ", mimeType=" + mimeType + ", uri=" + uri + ", annotations=" + annotations + ", meta=" + meta + "]";
 		}
 	}
 
@@ -2517,15 +2063,13 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class AudioContent implements ContentBlock {
-		private final String type;
-		private final String data;
-		private final String mimeType;
-		private final Annotations annotations;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("type") String type;
+		private final @JsonProperty("data") String data;
+		private final @JsonProperty("mimeType") String mimeType;
+		private final @JsonProperty("annotations") Annotations annotations;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public AudioContent(@JsonProperty("type") String type, @JsonProperty("data") String data,
-				@JsonProperty("mimeType") String mimeType, @JsonProperty("annotations") Annotations annotations,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public AudioContent(@JsonProperty("type") String type, @JsonProperty("data") String data, @JsonProperty("mimeType") String mimeType, @JsonProperty("annotations") Annotations annotations, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.type = type;
 			this.data = data;
 			this.mimeType = mimeType;
@@ -2533,19 +2077,10 @@ public final class AcpSchema {
 			this.meta = meta;
 		}
 
-		@JsonProperty("type")
 		public String type() { return type; }
-
-		@JsonProperty("data")
 		public String data() { return data; }
-
-		@JsonProperty("mimeType")
 		public String mimeType() { return mimeType; }
-
-		@JsonProperty("annotations")
 		public Annotations annotations() { return annotations; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -2553,11 +2088,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			AudioContent that = (AudioContent) o;
-			return Objects.equals(type, that.type) &&
-					Objects.equals(data, that.data) &&
-					Objects.equals(mimeType, that.mimeType) &&
-					Objects.equals(annotations, that.annotations) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(type, that.type) && Objects.equals(data, that.data) && Objects.equals(mimeType, that.mimeType) && Objects.equals(annotations, that.annotations) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -2567,13 +2098,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "AudioContent{" +
-					"type='" + type + '\'' +
-					", data='" + data + '\'' +
-					", mimeType='" + mimeType + '\'' +
-					", annotations=" + annotations +
-					", meta=" + meta +
-					'}';
+			return "AudioContent[type=" + type + ", data=" + data + ", mimeType=" + mimeType + ", annotations=" + annotations + ", meta=" + meta + "]";
 		}
 	}
 
@@ -2583,21 +2108,17 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class ResourceLink implements ContentBlock {
-		private final String type;
-		private final String name;
-		private final String uri;
-		private final String title;
-		private final String description;
-		private final String mimeType;
-		private final Long size;
-		private final Annotations annotations;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("type") String type;
+		private final @JsonProperty("name") String name;
+		private final @JsonProperty("uri") String uri;
+		private final @JsonProperty("title") String title;
+		private final @JsonProperty("description") String description;
+		private final @JsonProperty("mimeType") String mimeType;
+		private final @JsonProperty("size") Long size;
+		private final @JsonProperty("annotations") Annotations annotations;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public ResourceLink(@JsonProperty("type") String type, @JsonProperty("name") String name,
-				@JsonProperty("uri") String uri, @JsonProperty("title") String title,
-				@JsonProperty("description") String description, @JsonProperty("mimeType") String mimeType,
-				@JsonProperty("size") Long size, @JsonProperty("annotations") Annotations annotations,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public ResourceLink(@JsonProperty("type") String type, @JsonProperty("name") String name, @JsonProperty("uri") String uri, @JsonProperty("title") String title, @JsonProperty("description") String description, @JsonProperty("mimeType") String mimeType, @JsonProperty("size") Long size, @JsonProperty("annotations") Annotations annotations, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.type = type;
 			this.name = name;
 			this.uri = uri;
@@ -2609,31 +2130,14 @@ public final class AcpSchema {
 			this.meta = meta;
 		}
 
-		@JsonProperty("type")
 		public String type() { return type; }
-
-		@JsonProperty("name")
 		public String name() { return name; }
-
-		@JsonProperty("uri")
 		public String uri() { return uri; }
-
-		@JsonProperty("title")
 		public String title() { return title; }
-
-		@JsonProperty("description")
 		public String description() { return description; }
-
-		@JsonProperty("mimeType")
 		public String mimeType() { return mimeType; }
-
-		@JsonProperty("size")
 		public Long size() { return size; }
-
-		@JsonProperty("annotations")
 		public Annotations annotations() { return annotations; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -2641,15 +2145,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			ResourceLink that = (ResourceLink) o;
-			return Objects.equals(type, that.type) &&
-					Objects.equals(name, that.name) &&
-					Objects.equals(uri, that.uri) &&
-					Objects.equals(title, that.title) &&
-					Objects.equals(description, that.description) &&
-					Objects.equals(mimeType, that.mimeType) &&
-					Objects.equals(size, that.size) &&
-					Objects.equals(annotations, that.annotations) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(type, that.type) && Objects.equals(name, that.name) && Objects.equals(uri, that.uri) && Objects.equals(title, that.title) && Objects.equals(description, that.description) && Objects.equals(mimeType, that.mimeType) && Objects.equals(size, that.size) && Objects.equals(annotations, that.annotations) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -2659,17 +2155,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "ResourceLink{" +
-					"type='" + type + '\'' +
-					", name='" + name + '\'' +
-					", uri='" + uri + '\'' +
-					", title='" + title + '\'' +
-					", description='" + description + '\'' +
-					", mimeType='" + mimeType + '\'' +
-					", size=" + size +
-					", annotations=" + annotations +
-					", meta=" + meta +
-					'}';
+			return "ResourceLink[type=" + type + ", name=" + name + ", uri=" + uri + ", title=" + title + ", description=" + description + ", mimeType=" + mimeType + ", size=" + size + ", annotations=" + annotations + ", meta=" + meta + "]";
 		}
 	}
 
@@ -2679,31 +2165,21 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class Resource implements ContentBlock {
-		private final String type;
-		private final EmbeddedResourceResource resource;
-		private final Annotations annotations;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("type") String type;
+		private final @JsonProperty("resource") EmbeddedResourceResource resource;
+		private final @JsonProperty("annotations") Annotations annotations;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public Resource(@JsonProperty("type") String type,
-				@JsonProperty("resource") EmbeddedResourceResource resource,
-				@JsonProperty("annotations") Annotations annotations,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public Resource(@JsonProperty("type") String type, @JsonProperty("resource") EmbeddedResourceResource resource, @JsonProperty("annotations") Annotations annotations, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.type = type;
 			this.resource = resource;
 			this.annotations = annotations;
 			this.meta = meta;
 		}
 
-		@JsonProperty("type")
 		public String type() { return type; }
-
-		@JsonProperty("resource")
 		public EmbeddedResourceResource resource() { return resource; }
-
-		@JsonProperty("annotations")
 		public Annotations annotations() { return annotations; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -2711,10 +2187,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			Resource that = (Resource) o;
-			return Objects.equals(type, that.type) &&
-					Objects.equals(resource, that.resource) &&
-					Objects.equals(annotations, that.annotations) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(type, that.type) && Objects.equals(resource, that.resource) && Objects.equals(annotations, that.annotations) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -2724,12 +2197,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "Resource{" +
-					"type='" + type + '\'' +
-					", resource=" + resource +
-					", annotations=" + annotations +
-					", meta=" + meta +
-					'}';
+			return "Resource[type=" + type + ", resource=" + resource + ", annotations=" + annotations + ", meta=" + meta + "]";
 		}
 	}
 
@@ -2749,24 +2217,18 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class TextResourceContents implements EmbeddedResourceResource {
-		private final String text;
-		private final String uri;
-		private final String mimeType;
+		private final @JsonProperty("text") String text;
+		private final @JsonProperty("uri") String uri;
+		private final @JsonProperty("mimeType") String mimeType;
 
-		public TextResourceContents(@JsonProperty("text") String text, @JsonProperty("uri") String uri,
-				@JsonProperty("mimeType") String mimeType) {
+		public TextResourceContents(@JsonProperty("text") String text, @JsonProperty("uri") String uri, @JsonProperty("mimeType") String mimeType) {
 			this.text = text;
 			this.uri = uri;
 			this.mimeType = mimeType;
 		}
 
-		@JsonProperty("text")
 		public String text() { return text; }
-
-		@JsonProperty("uri")
 		public String uri() { return uri; }
-
-		@JsonProperty("mimeType")
 		public String mimeType() { return mimeType; }
 
 		@Override
@@ -2774,9 +2236,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			TextResourceContents that = (TextResourceContents) o;
-			return Objects.equals(text, that.text) &&
-					Objects.equals(uri, that.uri) &&
-					Objects.equals(mimeType, that.mimeType);
+			return Objects.equals(text, that.text) && Objects.equals(uri, that.uri) && Objects.equals(mimeType, that.mimeType);
 		}
 
 		@Override
@@ -2786,11 +2246,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "TextResourceContents{" +
-					"text='" + text + '\'' +
-					", uri='" + uri + '\'' +
-					", mimeType='" + mimeType + '\'' +
-					'}';
+			return "TextResourceContents[text=" + text + ", uri=" + uri + ", mimeType=" + mimeType + "]";
 		}
 	}
 
@@ -2800,24 +2256,18 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class BlobResourceContents implements EmbeddedResourceResource {
-		private final String blob;
-		private final String uri;
-		private final String mimeType;
+		private final @JsonProperty("blob") String blob;
+		private final @JsonProperty("uri") String uri;
+		private final @JsonProperty("mimeType") String mimeType;
 
-		public BlobResourceContents(@JsonProperty("blob") String blob, @JsonProperty("uri") String uri,
-				@JsonProperty("mimeType") String mimeType) {
+		public BlobResourceContents(@JsonProperty("blob") String blob, @JsonProperty("uri") String uri, @JsonProperty("mimeType") String mimeType) {
 			this.blob = blob;
 			this.uri = uri;
 			this.mimeType = mimeType;
 		}
 
-		@JsonProperty("blob")
 		public String blob() { return blob; }
-
-		@JsonProperty("uri")
 		public String uri() { return uri; }
-
-		@JsonProperty("mimeType")
 		public String mimeType() { return mimeType; }
 
 		@Override
@@ -2825,9 +2275,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			BlobResourceContents that = (BlobResourceContents) o;
-			return Objects.equals(blob, that.blob) &&
-					Objects.equals(uri, that.uri) &&
-					Objects.equals(mimeType, that.mimeType);
+			return Objects.equals(blob, that.blob) && Objects.equals(uri, that.uri) && Objects.equals(mimeType, that.mimeType);
 		}
 
 		@Override
@@ -2837,11 +2285,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "BlobResourceContents{" +
-					"blob='" + blob + '\'' +
-					", uri='" + uri + '\'' +
-					", mimeType='" + mimeType + '\'' +
-					'}';
+			return "BlobResourceContents[blob=" + blob + ", uri=" + uri + ", mimeType=" + mimeType + "]";
 		}
 	}
 
@@ -2851,24 +2295,18 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class Annotations {
-		private final List<Role> audience;
-		private final Double priority;
-		private final String lastModified;
+		private final @JsonProperty("audience") List<Role> audience;
+		private final @JsonProperty("priority") Double priority;
+		private final @JsonProperty("lastModified") String lastModified;
 
-		public Annotations(@JsonProperty("audience") List<Role> audience, @JsonProperty("priority") Double priority,
-				@JsonProperty("lastModified") String lastModified) {
+		public Annotations(@JsonProperty("audience") List<Role> audience, @JsonProperty("priority") Double priority, @JsonProperty("lastModified") String lastModified) {
 			this.audience = audience;
 			this.priority = priority;
 			this.lastModified = lastModified;
 		}
 
-		@JsonProperty("audience")
 		public List<Role> audience() { return audience; }
-
-		@JsonProperty("priority")
 		public Double priority() { return priority; }
-
-		@JsonProperty("lastModified")
 		public String lastModified() { return lastModified; }
 
 		@Override
@@ -2876,9 +2314,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			Annotations that = (Annotations) o;
-			return Objects.equals(audience, that.audience) &&
-					Objects.equals(priority, that.priority) &&
-					Objects.equals(lastModified, that.lastModified);
+			return Objects.equals(audience, that.audience) && Objects.equals(priority, that.priority) && Objects.equals(lastModified, that.lastModified);
 		}
 
 		@Override
@@ -2888,11 +2324,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "Annotations{" +
-					"audience=" + audience +
-					", priority=" + priority +
-					", lastModified='" + lastModified + '\'' +
-					'}';
+			return "Annotations[audience=" + audience + ", priority=" + priority + ", lastModified=" + lastModified + "]";
 		}
 	}
 
@@ -2911,7 +2343,8 @@ public final class AcpSchema {
 			@JsonSubTypes.Type(value = ToolCallUpdateNotification.class, name = "tool_call_update"),
 			@JsonSubTypes.Type(value = Plan.class, name = "plan"),
 			@JsonSubTypes.Type(value = AvailableCommandsUpdate.class, name = "available_commands_update"),
-			@JsonSubTypes.Type(value = CurrentModeUpdate.class, name = "current_mode_update") })
+			@JsonSubTypes.Type(value = CurrentModeUpdate.class, name = "current_mode_update"),
+			@JsonSubTypes.Type(value = UsageUpdate.class, name = "usage_update") })
 	public interface SessionUpdate {
 
 	}
@@ -2922,13 +2355,11 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class UserMessageChunk implements SessionUpdate {
-		private final String sessionUpdate;
-		private final ContentBlock content;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("sessionUpdate") String sessionUpdate;
+		private final @JsonProperty("content") ContentBlock content;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public UserMessageChunk(@JsonProperty("sessionUpdate") String sessionUpdate,
-				@JsonProperty("content") ContentBlock content,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public UserMessageChunk(@JsonProperty("sessionUpdate") String sessionUpdate, @JsonProperty("content") ContentBlock content, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.sessionUpdate = sessionUpdate;
 			this.content = content;
 			this.meta = meta;
@@ -2938,13 +2369,8 @@ public final class AcpSchema {
 			this(sessionUpdate, content, null);
 		}
 
-		@JsonProperty("sessionUpdate")
 		public String sessionUpdate() { return sessionUpdate; }
-
-		@JsonProperty("content")
 		public ContentBlock content() { return content; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -2952,9 +2378,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			UserMessageChunk that = (UserMessageChunk) o;
-			return Objects.equals(sessionUpdate, that.sessionUpdate) &&
-					Objects.equals(content, that.content) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(sessionUpdate, that.sessionUpdate) && Objects.equals(content, that.content) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -2964,11 +2388,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "UserMessageChunk{" +
-					"sessionUpdate='" + sessionUpdate + '\'' +
-					", content=" + content +
-					", meta=" + meta +
-					'}';
+			return "UserMessageChunk[sessionUpdate=" + sessionUpdate + ", content=" + content + ", meta=" + meta + "]";
 		}
 	}
 
@@ -2978,13 +2398,11 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class AgentMessageChunk implements SessionUpdate {
-		private final String sessionUpdate;
-		private final ContentBlock content;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("sessionUpdate") String sessionUpdate;
+		private final @JsonProperty("content") ContentBlock content;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public AgentMessageChunk(@JsonProperty("sessionUpdate") String sessionUpdate,
-				@JsonProperty("content") ContentBlock content,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public AgentMessageChunk(@JsonProperty("sessionUpdate") String sessionUpdate, @JsonProperty("content") ContentBlock content, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.sessionUpdate = sessionUpdate;
 			this.content = content;
 			this.meta = meta;
@@ -2994,13 +2412,8 @@ public final class AcpSchema {
 			this(sessionUpdate, content, null);
 		}
 
-		@JsonProperty("sessionUpdate")
 		public String sessionUpdate() { return sessionUpdate; }
-
-		@JsonProperty("content")
 		public ContentBlock content() { return content; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -3008,9 +2421,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			AgentMessageChunk that = (AgentMessageChunk) o;
-			return Objects.equals(sessionUpdate, that.sessionUpdate) &&
-					Objects.equals(content, that.content) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(sessionUpdate, that.sessionUpdate) && Objects.equals(content, that.content) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -3020,11 +2431,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "AgentMessageChunk{" +
-					"sessionUpdate='" + sessionUpdate + '\'' +
-					", content=" + content +
-					", meta=" + meta +
-					'}';
+			return "AgentMessageChunk[sessionUpdate=" + sessionUpdate + ", content=" + content + ", meta=" + meta + "]";
 		}
 	}
 
@@ -3034,13 +2441,11 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class AgentThoughtChunk implements SessionUpdate {
-		private final String sessionUpdate;
-		private final ContentBlock content;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("sessionUpdate") String sessionUpdate;
+		private final @JsonProperty("content") ContentBlock content;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public AgentThoughtChunk(@JsonProperty("sessionUpdate") String sessionUpdate,
-				@JsonProperty("content") ContentBlock content,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public AgentThoughtChunk(@JsonProperty("sessionUpdate") String sessionUpdate, @JsonProperty("content") ContentBlock content, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.sessionUpdate = sessionUpdate;
 			this.content = content;
 			this.meta = meta;
@@ -3050,13 +2455,8 @@ public final class AcpSchema {
 			this(sessionUpdate, content, null);
 		}
 
-		@JsonProperty("sessionUpdate")
 		public String sessionUpdate() { return sessionUpdate; }
-
-		@JsonProperty("content")
 		public ContentBlock content() { return content; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -3064,9 +2464,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			AgentThoughtChunk that = (AgentThoughtChunk) o;
-			return Objects.equals(sessionUpdate, that.sessionUpdate) &&
-					Objects.equals(content, that.content) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(sessionUpdate, that.sessionUpdate) && Objects.equals(content, that.content) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -3076,11 +2474,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "AgentThoughtChunk{" +
-					"sessionUpdate='" + sessionUpdate + '\'' +
-					", content=" + content +
-					", meta=" + meta +
-					'}';
+			return "AgentThoughtChunk[sessionUpdate=" + sessionUpdate + ", content=" + content + ", meta=" + meta + "]";
 		}
 	}
 
@@ -3090,24 +2484,18 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class ToolCall implements SessionUpdate {
-		private final String sessionUpdate;
-		private final String toolCallId;
-		private final String title;
-		private final ToolKind kind;
-		private final ToolCallStatus status;
-		private final List<ToolCallContent> content;
-		private final List<ToolCallLocation> locations;
-		private final Object rawInput;
-		private final Object rawOutput;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("sessionUpdate") String sessionUpdate;
+		private final @JsonProperty("toolCallId") String toolCallId;
+		private final @JsonProperty("title") String title;
+		private final @JsonProperty("kind") ToolKind kind;
+		private final @JsonProperty("status") ToolCallStatus status;
+		private final @JsonProperty("content") List<ToolCallContent> content;
+		private final @JsonProperty("locations") List<ToolCallLocation> locations;
+		private final @JsonProperty("rawInput") Object rawInput;
+		private final @JsonProperty("rawOutput") Object rawOutput;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public ToolCall(@JsonProperty("sessionUpdate") String sessionUpdate,
-				@JsonProperty("toolCallId") String toolCallId, @JsonProperty("title") String title,
-				@JsonProperty("kind") ToolKind kind, @JsonProperty("status") ToolCallStatus status,
-				@JsonProperty("content") List<ToolCallContent> content,
-				@JsonProperty("locations") List<ToolCallLocation> locations, @JsonProperty("rawInput") Object rawInput,
-				@JsonProperty("rawOutput") Object rawOutput,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public ToolCall(@JsonProperty("sessionUpdate") String sessionUpdate, @JsonProperty("toolCallId") String toolCallId, @JsonProperty("title") String title, @JsonProperty("kind") ToolKind kind, @JsonProperty("status") ToolCallStatus status, @JsonProperty("content") List<ToolCallContent> content, @JsonProperty("locations") List<ToolCallLocation> locations, @JsonProperty("rawInput") Object rawInput, @JsonProperty("rawOutput") Object rawOutput, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.sessionUpdate = sessionUpdate;
 			this.toolCallId = toolCallId;
 			this.title = title;
@@ -3120,34 +2508,15 @@ public final class AcpSchema {
 			this.meta = meta;
 		}
 
-		@JsonProperty("sessionUpdate")
 		public String sessionUpdate() { return sessionUpdate; }
-
-		@JsonProperty("toolCallId")
 		public String toolCallId() { return toolCallId; }
-
-		@JsonProperty("title")
 		public String title() { return title; }
-
-		@JsonProperty("kind")
 		public ToolKind kind() { return kind; }
-
-		@JsonProperty("status")
 		public ToolCallStatus status() { return status; }
-
-		@JsonProperty("content")
 		public List<ToolCallContent> content() { return content; }
-
-		@JsonProperty("locations")
 		public List<ToolCallLocation> locations() { return locations; }
-
-		@JsonProperty("rawInput")
 		public Object rawInput() { return rawInput; }
-
-		@JsonProperty("rawOutput")
 		public Object rawOutput() { return rawOutput; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -3155,16 +2524,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			ToolCall that = (ToolCall) o;
-			return Objects.equals(sessionUpdate, that.sessionUpdate) &&
-					Objects.equals(toolCallId, that.toolCallId) &&
-					Objects.equals(title, that.title) &&
-					kind == that.kind &&
-					status == that.status &&
-					Objects.equals(content, that.content) &&
-					Objects.equals(locations, that.locations) &&
-					Objects.equals(rawInput, that.rawInput) &&
-					Objects.equals(rawOutput, that.rawOutput) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(sessionUpdate, that.sessionUpdate) && Objects.equals(toolCallId, that.toolCallId) && Objects.equals(title, that.title) && Objects.equals(kind, that.kind) && Objects.equals(status, that.status) && Objects.equals(content, that.content) && Objects.equals(locations, that.locations) && Objects.equals(rawInput, that.rawInput) && Objects.equals(rawOutput, that.rawOutput) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -3174,18 +2534,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "ToolCall{" +
-					"sessionUpdate='" + sessionUpdate + '\'' +
-					", toolCallId='" + toolCallId + '\'' +
-					", title='" + title + '\'' +
-					", kind=" + kind +
-					", status=" + status +
-					", content=" + content +
-					", locations=" + locations +
-					", rawInput=" + rawInput +
-					", rawOutput=" + rawOutput +
-					", meta=" + meta +
-					'}';
+			return "ToolCall[sessionUpdate=" + sessionUpdate + ", toolCallId=" + toolCallId + ", title=" + title + ", kind=" + kind + ", status=" + status + ", content=" + content + ", locations=" + locations + ", rawInput=" + rawInput + ", rawOutput=" + rawOutput + ", meta=" + meta + "]";
 		}
 	}
 
@@ -3195,20 +2544,16 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class ToolCallUpdate {
-		private final String toolCallId;
-		private final String title;
-		private final ToolKind kind;
-		private final ToolCallStatus status;
-		private final List<ToolCallContent> content;
-		private final List<ToolCallLocation> locations;
-		private final Object rawInput;
-		private final Object rawOutput;
+		private final @JsonProperty("toolCallId") String toolCallId;
+		private final @JsonProperty("title") String title;
+		private final @JsonProperty("kind") ToolKind kind;
+		private final @JsonProperty("status") ToolCallStatus status;
+		private final @JsonProperty("content") List<ToolCallContent> content;
+		private final @JsonProperty("locations") List<ToolCallLocation> locations;
+		private final @JsonProperty("rawInput") Object rawInput;
+		private final @JsonProperty("rawOutput") Object rawOutput;
 
-		public ToolCallUpdate(@JsonProperty("toolCallId") String toolCallId, @JsonProperty("title") String title,
-				@JsonProperty("kind") ToolKind kind, @JsonProperty("status") ToolCallStatus status,
-				@JsonProperty("content") List<ToolCallContent> content,
-				@JsonProperty("locations") List<ToolCallLocation> locations, @JsonProperty("rawInput") Object rawInput,
-				@JsonProperty("rawOutput") Object rawOutput) {
+		public ToolCallUpdate(@JsonProperty("toolCallId") String toolCallId, @JsonProperty("title") String title, @JsonProperty("kind") ToolKind kind, @JsonProperty("status") ToolCallStatus status, @JsonProperty("content") List<ToolCallContent> content, @JsonProperty("locations") List<ToolCallLocation> locations, @JsonProperty("rawInput") Object rawInput, @JsonProperty("rawOutput") Object rawOutput) {
 			this.toolCallId = toolCallId;
 			this.title = title;
 			this.kind = kind;
@@ -3219,28 +2564,13 @@ public final class AcpSchema {
 			this.rawOutput = rawOutput;
 		}
 
-		@JsonProperty("toolCallId")
 		public String toolCallId() { return toolCallId; }
-
-		@JsonProperty("title")
 		public String title() { return title; }
-
-		@JsonProperty("kind")
 		public ToolKind kind() { return kind; }
-
-		@JsonProperty("status")
 		public ToolCallStatus status() { return status; }
-
-		@JsonProperty("content")
 		public List<ToolCallContent> content() { return content; }
-
-		@JsonProperty("locations")
 		public List<ToolCallLocation> locations() { return locations; }
-
-		@JsonProperty("rawInput")
 		public Object rawInput() { return rawInput; }
-
-		@JsonProperty("rawOutput")
 		public Object rawOutput() { return rawOutput; }
 
 		@Override
@@ -3248,14 +2578,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			ToolCallUpdate that = (ToolCallUpdate) o;
-			return Objects.equals(toolCallId, that.toolCallId) &&
-					Objects.equals(title, that.title) &&
-					kind == that.kind &&
-					status == that.status &&
-					Objects.equals(content, that.content) &&
-					Objects.equals(locations, that.locations) &&
-					Objects.equals(rawInput, that.rawInput) &&
-					Objects.equals(rawOutput, that.rawOutput);
+			return Objects.equals(toolCallId, that.toolCallId) && Objects.equals(title, that.title) && Objects.equals(kind, that.kind) && Objects.equals(status, that.status) && Objects.equals(content, that.content) && Objects.equals(locations, that.locations) && Objects.equals(rawInput, that.rawInput) && Objects.equals(rawOutput, that.rawOutput);
 		}
 
 		@Override
@@ -3265,16 +2588,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "ToolCallUpdate{" +
-					"toolCallId='" + toolCallId + '\'' +
-					", title='" + title + '\'' +
-					", kind=" + kind +
-					", status=" + status +
-					", content=" + content +
-					", locations=" + locations +
-					", rawInput=" + rawInput +
-					", rawOutput=" + rawOutput +
-					'}';
+			return "ToolCallUpdate[toolCallId=" + toolCallId + ", title=" + title + ", kind=" + kind + ", status=" + status + ", content=" + content + ", locations=" + locations + ", rawInput=" + rawInput + ", rawOutput=" + rawOutput + "]";
 		}
 	}
 
@@ -3284,24 +2598,18 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class ToolCallUpdateNotification implements SessionUpdate {
-		private final String sessionUpdate;
-		private final String toolCallId;
-		private final String title;
-		private final ToolKind kind;
-		private final ToolCallStatus status;
-		private final List<ToolCallContent> content;
-		private final List<ToolCallLocation> locations;
-		private final Object rawInput;
-		private final Object rawOutput;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("sessionUpdate") String sessionUpdate;
+		private final @JsonProperty("toolCallId") String toolCallId;
+		private final @JsonProperty("title") String title;
+		private final @JsonProperty("kind") ToolKind kind;
+		private final @JsonProperty("status") ToolCallStatus status;
+		private final @JsonProperty("content") List<ToolCallContent> content;
+		private final @JsonProperty("locations") List<ToolCallLocation> locations;
+		private final @JsonProperty("rawInput") Object rawInput;
+		private final @JsonProperty("rawOutput") Object rawOutput;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public ToolCallUpdateNotification(@JsonProperty("sessionUpdate") String sessionUpdate,
-				@JsonProperty("toolCallId") String toolCallId, @JsonProperty("title") String title,
-				@JsonProperty("kind") ToolKind kind, @JsonProperty("status") ToolCallStatus status,
-				@JsonProperty("content") List<ToolCallContent> content,
-				@JsonProperty("locations") List<ToolCallLocation> locations, @JsonProperty("rawInput") Object rawInput,
-				@JsonProperty("rawOutput") Object rawOutput,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public ToolCallUpdateNotification(@JsonProperty("sessionUpdate") String sessionUpdate, @JsonProperty("toolCallId") String toolCallId, @JsonProperty("title") String title, @JsonProperty("kind") ToolKind kind, @JsonProperty("status") ToolCallStatus status, @JsonProperty("content") List<ToolCallContent> content, @JsonProperty("locations") List<ToolCallLocation> locations, @JsonProperty("rawInput") Object rawInput, @JsonProperty("rawOutput") Object rawOutput, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.sessionUpdate = sessionUpdate;
 			this.toolCallId = toolCallId;
 			this.title = title;
@@ -3314,34 +2622,15 @@ public final class AcpSchema {
 			this.meta = meta;
 		}
 
-		@JsonProperty("sessionUpdate")
 		public String sessionUpdate() { return sessionUpdate; }
-
-		@JsonProperty("toolCallId")
 		public String toolCallId() { return toolCallId; }
-
-		@JsonProperty("title")
 		public String title() { return title; }
-
-		@JsonProperty("kind")
 		public ToolKind kind() { return kind; }
-
-		@JsonProperty("status")
 		public ToolCallStatus status() { return status; }
-
-		@JsonProperty("content")
 		public List<ToolCallContent> content() { return content; }
-
-		@JsonProperty("locations")
 		public List<ToolCallLocation> locations() { return locations; }
-
-		@JsonProperty("rawInput")
 		public Object rawInput() { return rawInput; }
-
-		@JsonProperty("rawOutput")
 		public Object rawOutput() { return rawOutput; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -3349,16 +2638,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			ToolCallUpdateNotification that = (ToolCallUpdateNotification) o;
-			return Objects.equals(sessionUpdate, that.sessionUpdate) &&
-					Objects.equals(toolCallId, that.toolCallId) &&
-					Objects.equals(title, that.title) &&
-					kind == that.kind &&
-					status == that.status &&
-					Objects.equals(content, that.content) &&
-					Objects.equals(locations, that.locations) &&
-					Objects.equals(rawInput, that.rawInput) &&
-					Objects.equals(rawOutput, that.rawOutput) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(sessionUpdate, that.sessionUpdate) && Objects.equals(toolCallId, that.toolCallId) && Objects.equals(title, that.title) && Objects.equals(kind, that.kind) && Objects.equals(status, that.status) && Objects.equals(content, that.content) && Objects.equals(locations, that.locations) && Objects.equals(rawInput, that.rawInput) && Objects.equals(rawOutput, that.rawOutput) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -3368,18 +2648,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "ToolCallUpdateNotification{" +
-					"sessionUpdate='" + sessionUpdate + '\'' +
-					", toolCallId='" + toolCallId + '\'' +
-					", title='" + title + '\'' +
-					", kind=" + kind +
-					", status=" + status +
-					", content=" + content +
-					", locations=" + locations +
-					", rawInput=" + rawInput +
-					", rawOutput=" + rawOutput +
-					", meta=" + meta +
-					'}';
+			return "ToolCallUpdateNotification[sessionUpdate=" + sessionUpdate + ", toolCallId=" + toolCallId + ", title=" + title + ", kind=" + kind + ", status=" + status + ", content=" + content + ", locations=" + locations + ", rawInput=" + rawInput + ", rawOutput=" + rawOutput + ", meta=" + meta + "]";
 		}
 	}
 
@@ -3389,13 +2658,11 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class Plan implements SessionUpdate {
-		private final String sessionUpdate;
-		private final List<PlanEntry> entries;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("sessionUpdate") String sessionUpdate;
+		private final @JsonProperty("entries") List<PlanEntry> entries;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public Plan(@JsonProperty("sessionUpdate") String sessionUpdate,
-				@JsonProperty("entries") List<PlanEntry> entries,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public Plan(@JsonProperty("sessionUpdate") String sessionUpdate, @JsonProperty("entries") List<PlanEntry> entries, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.sessionUpdate = sessionUpdate;
 			this.entries = entries;
 			this.meta = meta;
@@ -3405,13 +2672,8 @@ public final class AcpSchema {
 			this(sessionUpdate, entries, null);
 		}
 
-		@JsonProperty("sessionUpdate")
 		public String sessionUpdate() { return sessionUpdate; }
-
-		@JsonProperty("entries")
 		public List<PlanEntry> entries() { return entries; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -3419,9 +2681,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			Plan that = (Plan) o;
-			return Objects.equals(sessionUpdate, that.sessionUpdate) &&
-					Objects.equals(entries, that.entries) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(sessionUpdate, that.sessionUpdate) && Objects.equals(entries, that.entries) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -3431,11 +2691,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "Plan{" +
-					"sessionUpdate='" + sessionUpdate + '\'' +
-					", entries=" + entries +
-					", meta=" + meta +
-					'}';
+			return "Plan[sessionUpdate=" + sessionUpdate + ", entries=" + entries + ", meta=" + meta + "]";
 		}
 	}
 
@@ -3445,13 +2701,11 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class AvailableCommandsUpdate implements SessionUpdate {
-		private final String sessionUpdate;
-		private final List<AvailableCommand> availableCommands;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("sessionUpdate") String sessionUpdate;
+		private final @JsonProperty("availableCommands") List<AvailableCommand> availableCommands;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public AvailableCommandsUpdate(@JsonProperty("sessionUpdate") String sessionUpdate,
-				@JsonProperty("availableCommands") List<AvailableCommand> availableCommands,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public AvailableCommandsUpdate(@JsonProperty("sessionUpdate") String sessionUpdate, @JsonProperty("availableCommands") List<AvailableCommand> availableCommands, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.sessionUpdate = sessionUpdate;
 			this.availableCommands = availableCommands;
 			this.meta = meta;
@@ -3461,13 +2715,8 @@ public final class AcpSchema {
 			this(sessionUpdate, availableCommands, null);
 		}
 
-		@JsonProperty("sessionUpdate")
 		public String sessionUpdate() { return sessionUpdate; }
-
-		@JsonProperty("availableCommands")
 		public List<AvailableCommand> availableCommands() { return availableCommands; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -3475,9 +2724,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			AvailableCommandsUpdate that = (AvailableCommandsUpdate) o;
-			return Objects.equals(sessionUpdate, that.sessionUpdate) &&
-					Objects.equals(availableCommands, that.availableCommands) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(sessionUpdate, that.sessionUpdate) && Objects.equals(availableCommands, that.availableCommands) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -3487,11 +2734,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "AvailableCommandsUpdate{" +
-					"sessionUpdate='" + sessionUpdate + '\'' +
-					", availableCommands=" + availableCommands +
-					", meta=" + meta +
-					'}';
+			return "AvailableCommandsUpdate[sessionUpdate=" + sessionUpdate + ", availableCommands=" + availableCommands + ", meta=" + meta + "]";
 		}
 	}
 
@@ -3501,13 +2744,11 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class CurrentModeUpdate implements SessionUpdate {
-		private final String sessionUpdate;
-		private final String currentModeId;
-		private final Map<String, Object> meta;
+		private final @JsonProperty("sessionUpdate") String sessionUpdate;
+		private final @JsonProperty("currentModeId") String currentModeId;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
 
-		public CurrentModeUpdate(@JsonProperty("sessionUpdate") String sessionUpdate,
-				@JsonProperty("currentModeId") String currentModeId,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+		public CurrentModeUpdate(@JsonProperty("sessionUpdate") String sessionUpdate, @JsonProperty("currentModeId") String currentModeId, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.sessionUpdate = sessionUpdate;
 			this.currentModeId = currentModeId;
 			this.meta = meta;
@@ -3517,13 +2758,8 @@ public final class AcpSchema {
 			this(sessionUpdate, currentModeId, null);
 		}
 
-		@JsonProperty("sessionUpdate")
 		public String sessionUpdate() { return sessionUpdate; }
-
-		@JsonProperty("currentModeId")
 		public String currentModeId() { return currentModeId; }
-
-		@JsonProperty("_meta")
 		public Map<String, Object> meta() { return meta; }
 
 		@Override
@@ -3531,9 +2767,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			CurrentModeUpdate that = (CurrentModeUpdate) o;
-			return Objects.equals(sessionUpdate, that.sessionUpdate) &&
-					Objects.equals(currentModeId, that.currentModeId) &&
-					Objects.equals(meta, that.meta);
+			return Objects.equals(sessionUpdate, that.sessionUpdate) && Objects.equals(currentModeId, that.currentModeId) && Objects.equals(meta, that.meta);
 		}
 
 		@Override
@@ -3543,11 +2777,92 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "CurrentModeUpdate{" +
-					"sessionUpdate='" + sessionUpdate + '\'' +
-					", currentModeId='" + currentModeId + '\'' +
-					", meta=" + meta +
-					'}';
+			return "CurrentModeUpdate[sessionUpdate=" + sessionUpdate + ", currentModeId=" + currentModeId + ", meta=" + meta + "]";
+		}
+	}
+
+	/**
+	 * Usage update - context window and cost update for the session (UNSTABLE)
+	 */
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	public static final class UsageUpdate implements SessionUpdate {
+		private final @JsonProperty("sessionUpdate") String sessionUpdate;
+		private final @JsonProperty("used") Long used;
+		private final @JsonProperty("size") Long size;
+		private final @JsonProperty("cost") Cost cost;
+		private final @JsonProperty("_meta") Map<String, Object> meta;
+
+		public UsageUpdate(@JsonProperty("sessionUpdate") String sessionUpdate, @JsonProperty("used") Long used, @JsonProperty("size") Long size, @JsonProperty("cost") Cost cost, @JsonProperty("_meta") Map<String, Object> meta) {
+			this.sessionUpdate = sessionUpdate;
+			this.used = used;
+			this.size = size;
+			this.cost = cost;
+			this.meta = meta;
+		}
+
+		public UsageUpdate(String sessionUpdate, Long used, Long size) {
+			this(sessionUpdate, used, size, null, null);
+		}
+
+		public String sessionUpdate() { return sessionUpdate; }
+		public Long used() { return used; }
+		public Long size() { return size; }
+		public Cost cost() { return cost; }
+		public Map<String, Object> meta() { return meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (o == null || getClass() != o.getClass()) return false;
+			UsageUpdate that = (UsageUpdate) o;
+			return Objects.equals(sessionUpdate, that.sessionUpdate) && Objects.equals(used, that.used) && Objects.equals(size, that.size) && Objects.equals(cost, that.cost) && Objects.equals(meta, that.meta);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(sessionUpdate, used, size, cost, meta);
+		}
+
+		@Override
+		public String toString() {
+			return "UsageUpdate[sessionUpdate=" + sessionUpdate + ", used=" + used + ", size=" + size + ", cost=" + cost + ", meta=" + meta + "]";
+		}
+	}
+
+	/**
+	 * Cost information for a session (UNSTABLE)
+	 */
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	public static final class Cost {
+		private final @JsonProperty("amount") Double amount;
+		private final @JsonProperty("currency") String currency;
+
+		public Cost(@JsonProperty("amount") Double amount, @JsonProperty("currency") String currency) {
+			this.amount = amount;
+			this.currency = currency;
+		}
+
+		public Double amount() { return amount; }
+		public String currency() { return currency; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (o == null || getClass() != o.getClass()) return false;
+			Cost that = (Cost) o;
+			return Objects.equals(amount, that.amount) && Objects.equals(currency, that.currency);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(amount, currency);
+		}
+
+		@Override
+		public String toString() {
+			return "Cost[amount=" + amount + ", currency=" + currency + "]";
 		}
 	}
 
@@ -3572,19 +2887,15 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class ToolCallContentBlock implements ToolCallContent {
-		private final String type;
-		private final ContentBlock content;
+		private final @JsonProperty("type") String type;
+		private final @JsonProperty("content") ContentBlock content;
 
-		public ToolCallContentBlock(@JsonProperty("type") String type,
-				@JsonProperty("content") ContentBlock content) {
+		public ToolCallContentBlock(@JsonProperty("type") String type, @JsonProperty("content") ContentBlock content) {
 			this.type = type;
 			this.content = content;
 		}
 
-		@JsonProperty("type")
 		public String type() { return type; }
-
-		@JsonProperty("content")
 		public ContentBlock content() { return content; }
 
 		@Override
@@ -3592,8 +2903,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			ToolCallContentBlock that = (ToolCallContentBlock) o;
-			return Objects.equals(type, that.type) &&
-					Objects.equals(content, that.content);
+			return Objects.equals(type, that.type) && Objects.equals(content, that.content);
 		}
 
 		@Override
@@ -3603,10 +2913,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "ToolCallContentBlock{" +
-					"type='" + type + '\'' +
-					", content=" + content +
-					'}';
+			return "ToolCallContentBlock[type=" + type + ", content=" + content + "]";
 		}
 	}
 
@@ -3616,30 +2923,21 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class ToolCallDiff implements ToolCallContent {
-		private final String type;
-		private final String path;
-		private final String oldText;
-		private final String newText;
+		private final @JsonProperty("type") String type;
+		private final @JsonProperty("path") String path;
+		private final @JsonProperty("oldText") String oldText;
+		private final @JsonProperty("newText") String newText;
 
-		public ToolCallDiff(@JsonProperty("type") String type, @JsonProperty("path") String path,
-				@JsonProperty("oldText") String oldText,
-				@JsonProperty("newText") String newText) {
+		public ToolCallDiff(@JsonProperty("type") String type, @JsonProperty("path") String path, @JsonProperty("oldText") String oldText, @JsonProperty("newText") String newText) {
 			this.type = type;
 			this.path = path;
 			this.oldText = oldText;
 			this.newText = newText;
 		}
 
-		@JsonProperty("type")
 		public String type() { return type; }
-
-		@JsonProperty("path")
 		public String path() { return path; }
-
-		@JsonProperty("oldText")
 		public String oldText() { return oldText; }
-
-		@JsonProperty("newText")
 		public String newText() { return newText; }
 
 		@Override
@@ -3647,10 +2945,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			ToolCallDiff that = (ToolCallDiff) o;
-			return Objects.equals(type, that.type) &&
-					Objects.equals(path, that.path) &&
-					Objects.equals(oldText, that.oldText) &&
-					Objects.equals(newText, that.newText);
+			return Objects.equals(type, that.type) && Objects.equals(path, that.path) && Objects.equals(oldText, that.oldText) && Objects.equals(newText, that.newText);
 		}
 
 		@Override
@@ -3660,12 +2955,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "ToolCallDiff{" +
-					"type='" + type + '\'' +
-					", path='" + path + '\'' +
-					", oldText='" + oldText + '\'' +
-					", newText='" + newText + '\'' +
-					'}';
+			return "ToolCallDiff[type=" + type + ", path=" + path + ", oldText=" + oldText + ", newText=" + newText + "]";
 		}
 	}
 
@@ -3675,19 +2965,15 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class ToolCallTerminal implements ToolCallContent {
-		private final String type;
-		private final String terminalId;
+		private final @JsonProperty("type") String type;
+		private final @JsonProperty("terminalId") String terminalId;
 
-		public ToolCallTerminal(@JsonProperty("type") String type,
-				@JsonProperty("terminalId") String terminalId) {
+		public ToolCallTerminal(@JsonProperty("type") String type, @JsonProperty("terminalId") String terminalId) {
 			this.type = type;
 			this.terminalId = terminalId;
 		}
 
-		@JsonProperty("type")
 		public String type() { return type; }
-
-		@JsonProperty("terminalId")
 		public String terminalId() { return terminalId; }
 
 		@Override
@@ -3695,8 +2981,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			ToolCallTerminal that = (ToolCallTerminal) o;
-			return Objects.equals(type, that.type) &&
-					Objects.equals(terminalId, that.terminalId);
+			return Objects.equals(type, that.type) && Objects.equals(terminalId, that.terminalId);
 		}
 
 		@Override
@@ -3706,10 +2991,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "ToolCallTerminal{" +
-					"type='" + type + '\'' +
-					", terminalId='" + terminalId + '\'' +
-					'}';
+			return "ToolCallTerminal[type=" + type + ", terminalId=" + terminalId + "]";
 		}
 	}
 
@@ -3719,18 +3001,15 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class ToolCallLocation {
-		private final String path;
-		private final Integer line;
+		private final @JsonProperty("path") String path;
+		private final @JsonProperty("line") Integer line;
 
 		public ToolCallLocation(@JsonProperty("path") String path, @JsonProperty("line") Integer line) {
 			this.path = path;
 			this.line = line;
 		}
 
-		@JsonProperty("path")
 		public String path() { return path; }
-
-		@JsonProperty("line")
 		public Integer line() { return line; }
 
 		@Override
@@ -3738,8 +3017,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			ToolCallLocation that = (ToolCallLocation) o;
-			return Objects.equals(path, that.path) &&
-					Objects.equals(line, that.line);
+			return Objects.equals(path, that.path) && Objects.equals(line, that.line);
 		}
 
 		@Override
@@ -3749,10 +3027,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "ToolCallLocation{" +
-					"path='" + path + '\'' +
-					", line=" + line +
-					'}';
+			return "ToolCallLocation[path=" + path + ", line=" + line + "]";
 		}
 	}
 
@@ -3838,6 +3113,49 @@ public final class AcpSchema {
 	// ---------------------------
 
 	/**
+	 * Metadata about an implementation (client or agent).
+	 */
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	public static final class Implementation {
+		private final @JsonProperty("name") String name;
+		private final @JsonProperty("version") String version;
+		private final @JsonProperty("title") String title;
+
+		public Implementation(@JsonProperty("name") String name, @JsonProperty("version") String version, @JsonProperty("title") String title) {
+			this.name = name;
+			this.version = version;
+			this.title = title;
+		}
+
+		public Implementation(String name, String version) {
+			this(name, version, null);
+		}
+
+		public String name() { return name; }
+		public String version() { return version; }
+		public String title() { return title; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (o == null || getClass() != o.getClass()) return false;
+			Implementation that = (Implementation) o;
+			return Objects.equals(name, that.name) && Objects.equals(version, that.version) && Objects.equals(title, that.title);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(name, version, title);
+		}
+
+		@Override
+		public String toString() {
+			return "Implementation[name=" + name + ", version=" + version + ", title=" + title + "]";
+		}
+	}
+
+	/**
 	 * MCP server configuration.
 	 * <p>
 	 * Per the ACP spec:
@@ -3869,29 +3187,21 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class McpServerStdio implements McpServer {
-		private final String name;
-		private final String command;
-		private final List<String> args;
-		private final List<EnvVariable> env;
+		private final @JsonProperty("name") String name;
+		private final @JsonProperty("command") String command;
+		private final @JsonProperty("args") List<String> args;
+		private final @JsonProperty("env") List<EnvVariable> env;
 
-		public McpServerStdio(@JsonProperty("name") String name, @JsonProperty("command") String command,
-				@JsonProperty("args") List<String> args, @JsonProperty("env") List<EnvVariable> env) {
+		public McpServerStdio(@JsonProperty("name") String name, @JsonProperty("command") String command, @JsonProperty("args") List<String> args, @JsonProperty("env") List<EnvVariable> env) {
 			this.name = name;
 			this.command = command;
 			this.args = args;
 			this.env = env;
 		}
 
-		@JsonProperty("name")
 		public String name() { return name; }
-
-		@JsonProperty("command")
 		public String command() { return command; }
-
-		@JsonProperty("args")
 		public List<String> args() { return args; }
-
-		@JsonProperty("env")
 		public List<EnvVariable> env() { return env; }
 
 		@Override
@@ -3899,10 +3209,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			McpServerStdio that = (McpServerStdio) o;
-			return Objects.equals(name, that.name) &&
-					Objects.equals(command, that.command) &&
-					Objects.equals(args, that.args) &&
-					Objects.equals(env, that.env);
+			return Objects.equals(name, that.name) && Objects.equals(command, that.command) && Objects.equals(args, that.args) && Objects.equals(env, that.env);
 		}
 
 		@Override
@@ -3912,12 +3219,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "McpServerStdio{" +
-					"name='" + name + '\'' +
-					", command='" + command + '\'' +
-					", args=" + args +
-					", env=" + env +
-					'}';
+			return "McpServerStdio[name=" + name + ", command=" + command + ", args=" + args + ", env=" + env + "]";
 		}
 	}
 
@@ -3927,16 +3229,16 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class McpServerHttp implements McpServer {
-		private final String name;
-		private final String url;
-		private final List<HttpHeader> headers;
+		private final @JsonProperty("name") String name;
+		private final @JsonProperty("url") String url;
+		private final @JsonProperty("headers") List<HttpHeader> headers;
 
-		public McpServerHttp(@JsonProperty("name") String name, @JsonProperty("url") String url,
-				@JsonProperty("headers") List<HttpHeader> headers) {
+		public McpServerHttp(@JsonProperty("name") String name, @JsonProperty("url") String url, @JsonProperty("headers") List<HttpHeader> headers) {
 			this.name = name;
 			this.url = url;
 			this.headers = headers;
 		}
+
 
 		/**
 		 * Returns the transport type identifier.
@@ -3946,13 +3248,8 @@ public final class AcpSchema {
 			return "http";
 		}
 
-		@JsonProperty("name")
 		public String name() { return name; }
-
-		@JsonProperty("url")
 		public String url() { return url; }
-
-		@JsonProperty("headers")
 		public List<HttpHeader> headers() { return headers; }
 
 		@Override
@@ -3960,9 +3257,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			McpServerHttp that = (McpServerHttp) o;
-			return Objects.equals(name, that.name) &&
-					Objects.equals(url, that.url) &&
-					Objects.equals(headers, that.headers);
+			return Objects.equals(name, that.name) && Objects.equals(url, that.url) && Objects.equals(headers, that.headers);
 		}
 
 		@Override
@@ -3972,11 +3267,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "McpServerHttp{" +
-					"name='" + name + '\'' +
-					", url='" + url + '\'' +
-					", headers=" + headers +
-					'}';
+			return "McpServerHttp[name=" + name + ", url=" + url + ", headers=" + headers + "]";
 		}
 	}
 
@@ -3986,16 +3277,16 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class McpServerSse implements McpServer {
-		private final String name;
-		private final String url;
-		private final List<HttpHeader> headers;
+		private final @JsonProperty("name") String name;
+		private final @JsonProperty("url") String url;
+		private final @JsonProperty("headers") List<HttpHeader> headers;
 
-		public McpServerSse(@JsonProperty("name") String name, @JsonProperty("url") String url,
-				@JsonProperty("headers") List<HttpHeader> headers) {
+		public McpServerSse(@JsonProperty("name") String name, @JsonProperty("url") String url, @JsonProperty("headers") List<HttpHeader> headers) {
 			this.name = name;
 			this.url = url;
 			this.headers = headers;
 		}
+
 
 		/**
 		 * Returns the transport type identifier.
@@ -4005,13 +3296,8 @@ public final class AcpSchema {
 			return "sse";
 		}
 
-		@JsonProperty("name")
 		public String name() { return name; }
-
-		@JsonProperty("url")
 		public String url() { return url; }
-
-		@JsonProperty("headers")
 		public List<HttpHeader> headers() { return headers; }
 
 		@Override
@@ -4019,9 +3305,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			McpServerSse that = (McpServerSse) o;
-			return Objects.equals(name, that.name) &&
-					Objects.equals(url, that.url) &&
-					Objects.equals(headers, that.headers);
+			return Objects.equals(name, that.name) && Objects.equals(url, that.url) && Objects.equals(headers, that.headers);
 		}
 
 		@Override
@@ -4031,11 +3315,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "McpServerSse{" +
-					"name='" + name + '\'' +
-					", url='" + url + '\'' +
-					", headers=" + headers +
-					'}';
+			return "McpServerSse[name=" + name + ", url=" + url + ", headers=" + headers + "]";
 		}
 	}
 
@@ -4045,18 +3325,15 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class EnvVariable {
-		private final String name;
-		private final String value;
+		private final @JsonProperty("name") String name;
+		private final @JsonProperty("value") String value;
 
 		public EnvVariable(@JsonProperty("name") String name, @JsonProperty("value") String value) {
 			this.name = name;
 			this.value = value;
 		}
 
-		@JsonProperty("name")
 		public String name() { return name; }
-
-		@JsonProperty("value")
 		public String value() { return value; }
 
 		@Override
@@ -4064,8 +3341,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			EnvVariable that = (EnvVariable) o;
-			return Objects.equals(name, that.name) &&
-					Objects.equals(value, that.value);
+			return Objects.equals(name, that.name) && Objects.equals(value, that.value);
 		}
 
 		@Override
@@ -4075,10 +3351,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "EnvVariable{" +
-					"name='" + name + '\'' +
-					", value='" + value + '\'' +
-					'}';
+			return "EnvVariable[name=" + name + ", value=" + value + "]";
 		}
 	}
 
@@ -4088,18 +3361,15 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class HttpHeader {
-		private final String name;
-		private final String value;
+		private final @JsonProperty("name") String name;
+		private final @JsonProperty("value") String value;
 
 		public HttpHeader(@JsonProperty("name") String name, @JsonProperty("value") String value) {
 			this.name = name;
 			this.value = value;
 		}
 
-		@JsonProperty("name")
 		public String name() { return name; }
-
-		@JsonProperty("value")
 		public String value() { return value; }
 
 		@Override
@@ -4107,8 +3377,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			HttpHeader that = (HttpHeader) o;
-			return Objects.equals(name, that.name) &&
-					Objects.equals(value, that.value);
+			return Objects.equals(name, that.name) && Objects.equals(value, that.value);
 		}
 
 		@Override
@@ -4118,10 +3387,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "HttpHeader{" +
-					"name='" + name + '\'' +
-					", value='" + value + '\'' +
-					'}';
+			return "HttpHeader[name=" + name + ", value=" + value + "]";
 		}
 	}
 
@@ -4131,19 +3397,15 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class TerminalExitStatus {
-		private final Integer exitCode;
-		private final String signal;
+		private final @JsonProperty("exitCode") Integer exitCode;
+		private final @JsonProperty("signal") String signal;
 
-		public TerminalExitStatus(@JsonProperty("exitCode") Integer exitCode,
-				@JsonProperty("signal") String signal) {
+		public TerminalExitStatus(@JsonProperty("exitCode") Integer exitCode, @JsonProperty("signal") String signal) {
 			this.exitCode = exitCode;
 			this.signal = signal;
 		}
 
-		@JsonProperty("exitCode")
 		public Integer exitCode() { return exitCode; }
-
-		@JsonProperty("signal")
 		public String signal() { return signal; }
 
 		@Override
@@ -4151,8 +3413,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			TerminalExitStatus that = (TerminalExitStatus) o;
-			return Objects.equals(exitCode, that.exitCode) &&
-					Objects.equals(signal, that.signal);
+			return Objects.equals(exitCode, that.exitCode) && Objects.equals(signal, that.signal);
 		}
 
 		@Override
@@ -4162,10 +3423,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "TerminalExitStatus{" +
-					"exitCode=" + exitCode +
-					", signal='" + signal + '\'' +
-					'}';
+			return "TerminalExitStatus[exitCode=" + exitCode + ", signal=" + signal + "]";
 		}
 	}
 
@@ -4175,24 +3433,18 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class AuthMethod {
-		private final String id;
-		private final String name;
-		private final String description;
+		private final @JsonProperty("id") String id;
+		private final @JsonProperty("name") String name;
+		private final @JsonProperty("description") String description;
 
-		public AuthMethod(@JsonProperty("id") String id, @JsonProperty("name") String name,
-				@JsonProperty("description") String description) {
+		public AuthMethod(@JsonProperty("id") String id, @JsonProperty("name") String name, @JsonProperty("description") String description) {
 			this.id = id;
 			this.name = name;
 			this.description = description;
 		}
 
-		@JsonProperty("id")
 		public String id() { return id; }
-
-		@JsonProperty("name")
 		public String name() { return name; }
-
-		@JsonProperty("description")
 		public String description() { return description; }
 
 		@Override
@@ -4200,9 +3452,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			AuthMethod that = (AuthMethod) o;
-			return Objects.equals(id, that.id) &&
-					Objects.equals(name, that.name) &&
-					Objects.equals(description, that.description);
+			return Objects.equals(id, that.id) && Objects.equals(name, that.name) && Objects.equals(description, that.description);
 		}
 
 		@Override
@@ -4212,11 +3462,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "AuthMethod{" +
-					"id='" + id + '\'' +
-					", name='" + name + '\'' +
-					", description='" + description + '\'' +
-					'}';
+			return "AuthMethod[id=" + id + ", name=" + name + ", description=" + description + "]";
 		}
 	}
 
@@ -4226,24 +3472,18 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class PermissionOption {
-		private final String optionId;
-		private final String name;
-		private final PermissionOptionKind kind;
+		private final @JsonProperty("optionId") String optionId;
+		private final @JsonProperty("name") String name;
+		private final @JsonProperty("kind") PermissionOptionKind kind;
 
-		public PermissionOption(@JsonProperty("optionId") String optionId, @JsonProperty("name") String name,
-				@JsonProperty("kind") PermissionOptionKind kind) {
+		public PermissionOption(@JsonProperty("optionId") String optionId, @JsonProperty("name") String name, @JsonProperty("kind") PermissionOptionKind kind) {
 			this.optionId = optionId;
 			this.name = name;
 			this.kind = kind;
 		}
 
-		@JsonProperty("optionId")
 		public String optionId() { return optionId; }
-
-		@JsonProperty("name")
 		public String name() { return name; }
-
-		@JsonProperty("kind")
 		public PermissionOptionKind kind() { return kind; }
 
 		@Override
@@ -4251,9 +3491,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			PermissionOption that = (PermissionOption) o;
-			return Objects.equals(optionId, that.optionId) &&
-					Objects.equals(name, that.name) &&
-					kind == that.kind;
+			return Objects.equals(optionId, that.optionId) && Objects.equals(name, that.name) && Objects.equals(kind, that.kind);
 		}
 
 		@Override
@@ -4263,11 +3501,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "PermissionOption{" +
-					"optionId='" + optionId + '\'' +
-					", name='" + name + '\'' +
-					", kind=" + kind +
-					'}';
+			return "PermissionOption[optionId=" + optionId + ", name=" + name + ", kind=" + kind + "]";
 		}
 	}
 
@@ -4287,7 +3521,7 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class PermissionCancelled implements RequestPermissionOutcome {
-		private final String outcome;
+		private final @JsonProperty("outcome") String outcome;
 
 		public PermissionCancelled(@JsonProperty("outcome") String outcome) {
 			this.outcome = outcome;
@@ -4297,7 +3531,6 @@ public final class AcpSchema {
 			this("cancelled");
 		}
 
-		@JsonProperty("outcome")
 		public String outcome() { return outcome; }
 
 		@Override
@@ -4315,9 +3548,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "PermissionCancelled{" +
-					"outcome='" + outcome + '\'' +
-					'}';
+			return "PermissionCancelled[outcome=" + outcome + "]";
 		}
 	}
 
@@ -4327,11 +3558,10 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class PermissionSelected implements RequestPermissionOutcome {
-		private final String outcome;
-		private final String optionId;
+		private final @JsonProperty("outcome") String outcome;
+		private final @JsonProperty("optionId") String optionId;
 
-		public PermissionSelected(@JsonProperty("outcome") String outcome,
-				@JsonProperty("optionId") String optionId) {
+		public PermissionSelected(@JsonProperty("outcome") String outcome, @JsonProperty("optionId") String optionId) {
 			this.outcome = outcome;
 			this.optionId = optionId;
 		}
@@ -4340,10 +3570,7 @@ public final class AcpSchema {
 			this("selected", optionId);
 		}
 
-		@JsonProperty("outcome")
 		public String outcome() { return outcome; }
-
-		@JsonProperty("optionId")
 		public String optionId() { return optionId; }
 
 		@Override
@@ -4351,8 +3578,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			PermissionSelected that = (PermissionSelected) o;
-			return Objects.equals(outcome, that.outcome) &&
-					Objects.equals(optionId, that.optionId);
+			return Objects.equals(outcome, that.outcome) && Objects.equals(optionId, that.optionId);
 		}
 
 		@Override
@@ -4362,10 +3588,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "PermissionSelected{" +
-					"outcome='" + outcome + '\'' +
-					", optionId='" + optionId + '\'' +
-					'}';
+			return "PermissionSelected[outcome=" + outcome + ", optionId=" + optionId + "]";
 		}
 	}
 
@@ -4375,24 +3598,18 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class PlanEntry {
-		private final String content;
-		private final PlanEntryPriority priority;
-		private final PlanEntryStatus status;
+		private final @JsonProperty("content") String content;
+		private final @JsonProperty("priority") PlanEntryPriority priority;
+		private final @JsonProperty("status") PlanEntryStatus status;
 
-		public PlanEntry(@JsonProperty("content") String content,
-				@JsonProperty("priority") PlanEntryPriority priority, @JsonProperty("status") PlanEntryStatus status) {
+		public PlanEntry(@JsonProperty("content") String content, @JsonProperty("priority") PlanEntryPriority priority, @JsonProperty("status") PlanEntryStatus status) {
 			this.content = content;
 			this.priority = priority;
 			this.status = status;
 		}
 
-		@JsonProperty("content")
 		public String content() { return content; }
-
-		@JsonProperty("priority")
 		public PlanEntryPriority priority() { return priority; }
-
-		@JsonProperty("status")
 		public PlanEntryStatus status() { return status; }
 
 		@Override
@@ -4400,9 +3617,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			PlanEntry that = (PlanEntry) o;
-			return Objects.equals(content, that.content) &&
-					priority == that.priority &&
-					status == that.status;
+			return Objects.equals(content, that.content) && Objects.equals(priority, that.priority) && Objects.equals(status, that.status);
 		}
 
 		@Override
@@ -4412,11 +3627,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "PlanEntry{" +
-					"content='" + content + '\'' +
-					", priority=" + priority +
-					", status=" + status +
-					'}';
+			return "PlanEntry[content=" + content + ", priority=" + priority + ", status=" + status + "]";
 		}
 	}
 
@@ -4426,24 +3637,18 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class AvailableCommand {
-		private final String name;
-		private final String description;
-		private final AvailableCommandInput input;
+		private final @JsonProperty("name") String name;
+		private final @JsonProperty("description") String description;
+		private final @JsonProperty("input") AvailableCommandInput input;
 
-		public AvailableCommand(@JsonProperty("name") String name, @JsonProperty("description") String description,
-				@JsonProperty("input") AvailableCommandInput input) {
+		public AvailableCommand(@JsonProperty("name") String name, @JsonProperty("description") String description, @JsonProperty("input") AvailableCommandInput input) {
 			this.name = name;
 			this.description = description;
 			this.input = input;
 		}
 
-		@JsonProperty("name")
 		public String name() { return name; }
-
-		@JsonProperty("description")
 		public String description() { return description; }
-
-		@JsonProperty("input")
 		public AvailableCommandInput input() { return input; }
 
 		@Override
@@ -4451,9 +3656,7 @@ public final class AcpSchema {
 			if (this == o) return true;
 			if (o == null || getClass() != o.getClass()) return false;
 			AvailableCommand that = (AvailableCommand) o;
-			return Objects.equals(name, that.name) &&
-					Objects.equals(description, that.description) &&
-					Objects.equals(input, that.input);
+			return Objects.equals(name, that.name) && Objects.equals(description, that.description) && Objects.equals(input, that.input);
 		}
 
 		@Override
@@ -4463,11 +3666,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "AvailableCommand{" +
-					"name='" + name + '\'' +
-					", description='" + description + '\'' +
-					", input=" + input +
-					'}';
+			return "AvailableCommand[name=" + name + ", description=" + description + ", input=" + input + "]";
 		}
 	}
 
@@ -4477,13 +3676,12 @@ public final class AcpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public static final class AvailableCommandInput {
-		private final String hint;
+		private final @JsonProperty("hint") String hint;
 
 		public AvailableCommandInput(@JsonProperty("hint") String hint) {
 			this.hint = hint;
 		}
 
-		@JsonProperty("hint")
 		public String hint() { return hint; }
 
 		@Override
@@ -4501,9 +3699,7 @@ public final class AcpSchema {
 
 		@Override
 		public String toString() {
-			return "AvailableCommandInput{" +
-					"hint='" + hint + '\'' +
-					'}';
+			return "AvailableCommandInput[hint=" + hint + "]";
 		}
 	}
 

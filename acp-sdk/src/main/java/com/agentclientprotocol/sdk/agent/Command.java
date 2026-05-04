@@ -10,7 +10,7 @@ import java.util.*;
  * Builder for terminal command execution via the convenience API.
  *
  * <p>
- * This class allows configuring command execution with options like
+ * This record allows configuring command execution with options like
  * working directory, environment variables, and output limits.
  *
  * <p>
@@ -23,8 +23,8 @@ import java.util.*;
  * CommandResult result = context.execute(
  *     Command.of("make", "build")
  *         .cwd("/workspace")
- *         .env(Collections.singletonMap("DEBUG", "true"))
- *         .outputByteLimit(10000));
+ *         .env(Map.of("DEBUG", "true"))
+ *         .outputLimit(10000));
  * }</pre>
  *
  * @author Mark Pollack
@@ -40,7 +40,13 @@ public final class Command {
 	private final Map<String, String> env;
 	private final Long outputByteLimit;
 
-	public Command(String executable, List<String> args, String cwd, Map<String, String> env, Long outputByteLimit) {
+	public Command(
+			String executable,
+			List<String> args,
+			String cwd,
+			Map<String, String> env,
+			Long outputByteLimit
+	) {
 		this.executable = executable;
 		this.args = args;
 		this.cwd = cwd;
@@ -48,24 +54,33 @@ public final class Command {
 		this.outputByteLimit = outputByteLimit;
 	}
 
-	public String executable() {
-		return this.executable;
+	public String executable() { return executable; }
+	public List<String> args() { return args; }
+	public String cwd() { return cwd; }
+	public Map<String, String> env() { return env; }
+	public Long outputByteLimit() { return outputByteLimit; }
+
+	@Override
+	public boolean equals(Object o) {
+		if (this == o) return true;
+		if (o == null || getClass() != o.getClass()) return false;
+		Command that = (Command) o;
+		return Objects.equals(executable, that.executable)
+				&& Objects.equals(args, that.args)
+				&& Objects.equals(cwd, that.cwd)
+				&& Objects.equals(env, that.env)
+				&& Objects.equals(outputByteLimit, that.outputByteLimit);
 	}
 
-	public List<String> args() {
-		return this.args;
+	@Override
+	public int hashCode() {
+		return Objects.hash(executable, args, cwd, env, outputByteLimit);
 	}
 
-	public String cwd() {
-		return this.cwd;
-	}
-
-	public Map<String, String> env() {
-		return this.env;
-	}
-
-	public Long outputByteLimit() {
-		return this.outputByteLimit;
+	@Override
+	public String toString() {
+		return "Command[executable=" + executable + ", args=" + args + ", cwd=" + cwd
+				+ ", env=" + env + ", outputByteLimit=" + outputByteLimit + "]";
 	}
 
 	/**
@@ -82,7 +97,7 @@ public final class Command {
 				commandAndArgs[0],
 				commandAndArgs.length > 1
 						? Arrays.asList(commandAndArgs).subList(1, commandAndArgs.length)
-						: Collections.<String>emptyList(),
+						: Collections.emptyList(),
 				null, null, null);
 	}
 
@@ -111,27 +126,6 @@ public final class Command {
 	 */
 	public Command outputByteLimit(long limit) {
 		return new Command(executable, args, cwd, env, limit);
-	}
-
-	@Override
-	public boolean equals(Object o) {
-		if (this == o) return true;
-		if (o == null || getClass() != o.getClass()) return false;
-		Command that = (Command) o;
-		return Objects.equals(executable, that.executable) && Objects.equals(args, that.args)
-				&& Objects.equals(cwd, that.cwd) && Objects.equals(env, that.env)
-				&& Objects.equals(outputByteLimit, that.outputByteLimit);
-	}
-
-	@Override
-	public int hashCode() {
-		return Objects.hash(executable, args, cwd, env, outputByteLimit);
-	}
-
-	@Override
-	public String toString() {
-		return "Command[executable=" + executable + ", args=" + args + ", cwd=" + cwd
-				+ ", env=" + env + ", outputByteLimit=" + outputByteLimit + "]";
 	}
 
 }

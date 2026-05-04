@@ -1,0 +1,28 @@
+{
+  "cwd": "/workspace",
+  "mcpServers": [
+    {
+      "name": "filesystem",
+      "command": "/usr/bin/mcp-fs",
+      "args": ["--mode", "read-write"],
+      "env": []
+    },
+    {
+      "type": "http",
+      "name": "remote-api",
+      "url": "https://api.example.com/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer xyz"
+        }
+      ]
+    },
+    {
+      "type": "sse",
+      "name": "realtime",
+      "url": "https://realtime.example.com/events",
+      "headers": []
+    }
+  ]
+}

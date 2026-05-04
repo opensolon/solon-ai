@@ -21,6 +21,7 @@ import reactor.core.scheduler.Schedulers;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -131,7 +132,7 @@ public class StdioAcpAgentTransport implements AcpAgentTransport {
 
 	@Override
 	public List<Integer> protocolVersions() {
-		return java.util.Collections.singletonList(AcpSchema.LATEST_PROTOCOL_VERSION);
+		return Collections.singletonList(AcpSchema.LATEST_PROTOCOL_VERSION);
 	}
 
 	@Override

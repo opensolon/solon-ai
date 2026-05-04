@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "result": {
+    "protocolVersion": 1,
+    "capabilities": {
+      "loadSession": false,
+      "mcp": null,
+      "prompt": null
+    },
+    "authMethods": []
+  },
+  "error": null
+}

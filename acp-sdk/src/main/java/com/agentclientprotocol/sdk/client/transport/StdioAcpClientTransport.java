@@ -21,6 +21,7 @@ import reactor.core.scheduler.Schedulers;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -324,7 +325,7 @@ public class StdioAcpClientTransport implements AcpClientTransport {
 						jsonMessage = jsonMessage.replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\n");
 						logger.trace("SEND: {}", jsonMessage);
 
-						java.io.OutputStream os = this.process.getOutputStream();
+						OutputStream os = this.process.getOutputStream();
 						synchronized (os) {
 							os.write(jsonMessage.getBytes(StandardCharsets.UTF_8));
 							os.write("\n".getBytes(StandardCharsets.UTF_8));

@@ -1,0 +1,20 @@
+{
+  "sessionUpdate": "plan",
+  "entries": [
+    {
+      "content": "Check for syntax errors",
+      "priority": "high",
+      "status": "completed"
+    },
+    {
+      "content": "Identify potential type issues",
+      "priority": "medium",
+      "status": "in_progress"
+    },
+    {
+      "content": "Run unit tests",
+      "priority": "low",
+      "status": "pending"
+    }
+  ]
+}

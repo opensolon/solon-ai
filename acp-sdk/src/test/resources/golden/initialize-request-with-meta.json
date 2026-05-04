@@ -1,0 +1,14 @@
+{
+  "protocolVersion": 1,
+  "clientCapabilities": {
+    "fs": {
+      "readTextFile": true,
+      "writeTextFile": true
+    },
+    "terminal": true
+  },
+  "_meta": {
+    "zed.dev/debugMode": true,
+    "custom/version": "1.0.0"
+  }
+}

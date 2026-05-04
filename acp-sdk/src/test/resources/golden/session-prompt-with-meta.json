@@ -1,0 +1,12 @@
+{
+  "sessionId": "sess_abc123def456",
+  "prompt": [
+    {
+      "type": "text",
+      "text": "Hello, world!"
+    }
+  ],
+  "_meta": {
+    "zed.dev/debugMode": true
+  }
+}

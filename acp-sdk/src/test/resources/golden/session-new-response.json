@@ -1,0 +1,28 @@
+{
+  "jsonrpc": "2.0",
+  "id": "2",
+  "result": {
+    "sessionId": "session-abc123",
+    "modes": {
+      "mode": "code",
+      "availableModes": [
+        {
+          "id": "code",
+          "name": "Code Mode",
+          "description": "Code editing mode"
+        }
+      ]
+    },
+    "models": {
+      "model": "test-model",
+      "availableModels": [
+        {
+          "id": "test-model",
+          "name": "Test Model",
+          "description": "Test model description"
+        }
+      ]
+    }
+  },
+  "error": null
+}

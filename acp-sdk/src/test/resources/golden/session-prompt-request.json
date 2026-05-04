@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "id": "3",
+  "method": "session/prompt",
+  "params": {
+    "sessionId": "session-abc123",
+    "content": [
+      {
+        "type": "text",
+        "text": "Fix the failing test"
+      }
+    ]
+  }
+}

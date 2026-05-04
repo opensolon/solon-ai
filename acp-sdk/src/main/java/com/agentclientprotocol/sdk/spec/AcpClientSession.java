@@ -17,8 +17,7 @@ import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
@@ -160,7 +159,8 @@ public class AcpClientSession implements AcpSession {
 
 	private void handle(AcpSchema.JSONRPCMessage message) {
 		if (message instanceof AcpSchema.JSONRPCResponse) {
-AcpSchema.JSONRPCResponse response = (AcpSchema.JSONRPCResponse) message;			logger.debug("Received response: {}", response);
+			AcpSchema.JSONRPCResponse response = (AcpSchema.JSONRPCResponse) message;
+			logger.debug("Received response: {}", response);
 			if (response.id() != null) {
 				MonoSink<AcpSchema.JSONRPCResponse> sink = pendingResponses.remove(response.id());
 				if (sink == null) {
@@ -178,14 +178,16 @@ AcpSchema.JSONRPCResponse response = (AcpSchema.JSONRPCResponse) message;			logg
 			}
 		}
 		else if (message instanceof AcpSchema.JSONRPCRequest) {
-AcpSchema.JSONRPCRequest request = (AcpSchema.JSONRPCRequest) message;			logger.debug("Received request: {}", request);
+			AcpSchema.JSONRPCRequest request = (AcpSchema.JSONRPCRequest) message;
+			logger.debug("Received request: {}", request);
 			logger.trace("Incoming request method='{}' id={}", request.method(), request.id());
 			handleIncomingRequest(request).onErrorResume(error -> {
 				// Preserve error codes from AcpProtocolException, wrap others in INTERNAL_ERROR
 				int errorCode;
 				Object errorData = null;
 				if (error instanceof AcpProtocolException) {
-AcpProtocolException protocolException = (AcpProtocolException) error;					errorCode = protocolException.getCode();
+					AcpProtocolException protocolException = (AcpProtocolException) error;
+					errorCode = protocolException.getCode();
 					errorData = protocolException.getData();
 				}
 				else {
@@ -200,7 +202,8 @@ AcpProtocolException protocolException = (AcpProtocolException) error;					error
 			}).subscribe();
 		}
 		else if (message instanceof AcpSchema.JSONRPCNotification) {
-AcpSchema.JSONRPCNotification notification = (AcpSchema.JSONRPCNotification) message;			logger.debug("Received notification: {}", notification);
+			AcpSchema.JSONRPCNotification notification = (AcpSchema.JSONRPCNotification) message;
+			logger.debug("Received notification: {}", notification);
 			logger.trace("Incoming notification method='{}' params={}", notification.method(), notification.params());
 			handleIncomingNotification(notification).onErrorComplete(t -> {
 				logger.error("Error handling notification: {}", t.getMessage());
@@ -219,7 +222,7 @@ AcpSchema.JSONRPCNotification notification = (AcpSchema.JSONRPCNotification) mes
 	 */
 	private Mono<AcpSchema.JSONRPCResponse> handleIncomingRequest(AcpSchema.JSONRPCRequest request) {
 		return Mono.defer(() -> {
-			RequestHandler handler = this.requestHandlers.get(request.method());
+			RequestHandler<?> handler = this.requestHandlers.get(request.method());
 			if (handler == null) {
 				MethodNotFoundError error = getMethodNotFoundError(request.method());
 				logger.warn("No handler registered for request method '{}': {} - {}",
@@ -232,27 +235,57 @@ AcpSchema.JSONRPCNotification notification = (AcpSchema.JSONRPCNotification) mes
 
 			logger.debug("Invoking handler for method '{}'", request.method());
 			logger.trace("Handler params for '{}': {}", request.method(), request.params());
-			@SuppressWarnings("unchecked")
-			Mono<Object> result = handler.handle(request.params());
-			return result
-				.doOnSuccess(r -> logger.debug("Handler for '{}' completed successfully", request.method()))
-				.doOnError(Throwable.class, err -> logger.debug("Handler for '{}' threw error: {}", request.method(), err.getMessage()))
-				.map(r -> new AcpSchema.JSONRPCResponse(AcpSchema.JSONRPC_VERSION, request.id(), r, null));
+			return handler.handle(request.params())
+				.doOnSuccess(result -> logger.debug("Handler for '{}' completed successfully", request.method()))
+				.doOnError(error -> logger.debug("Handler for '{}' threw error: {}", request.method(), error.getMessage()))
+				.map(result -> new AcpSchema.JSONRPCResponse(AcpSchema.JSONRPC_VERSION, request.id(), result, null));
 		});
 	}
 
-	static final class MethodNotFoundError {
+	private static final class MethodNotFoundError {
+
 		private final String method;
 		private final String message;
 		private final Object data;
+
 		MethodNotFoundError(String method, String message, Object data) {
 			this.method = method;
 			this.message = message;
 			this.data = data;
 		}
-		String method() { return this.method; }
-		String message() { return this.message; }
-		Object data() { return this.data; }
+
+		String method() {
+			return method;
+		}
+
+		String message() {
+			return message;
+		}
+
+		Object data() {
+			return data;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (o == null || getClass() != o.getClass()) return false;
+			MethodNotFoundError that = (MethodNotFoundError) o;
+			return Objects.equals(method, that.method)
+					&& Objects.equals(message, that.message)
+					&& Objects.equals(data, that.data);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(method, message, data);
+		}
+
+		@Override
+		public String toString() {
+			return "MethodNotFoundError[method=" + method + ", message=" + message + ", data=" + data + "]";
+		}
+
 	}
 
 	private MethodNotFoundError getMethodNotFoundError(String method) {
@@ -260,20 +293,28 @@ AcpSchema.JSONRPCNotification notification = (AcpSchema.JSONRPCNotification) mes
 		switch (method) {
 			case AcpSchema.METHOD_FS_READ_TEXT_FILE:
 				return new MethodNotFoundError(method, "File system read not supported",
-						java.util.Collections.singletonMap("reason", (Object) "Client does not have fs.readTextFile capability"));
+						Collections.unmodifiableMap(new HashMap<String, Object>() {{
+							put("reason", "Client does not have fs.readTextFile capability");
+						}}));
 			case AcpSchema.METHOD_FS_WRITE_TEXT_FILE:
 				return new MethodNotFoundError(method, "File system write not supported",
-						java.util.Collections.singletonMap("reason", (Object) "Client does not have fs.writeTextFile capability"));
+						Collections.unmodifiableMap(new HashMap<String, Object>() {{
+							put("reason", "Client does not have fs.writeTextFile capability");
+						}}));
 			case AcpSchema.METHOD_SESSION_REQUEST_PERMISSION:
 				return new MethodNotFoundError(method, "Permission request not supported",
-						java.util.Collections.singletonMap("reason", (Object) "No requestPermissionHandler registered - use --yolo flag or register a handler"));
+						Collections.unmodifiableMap(new HashMap<String, Object>() {{
+							put("reason", "No requestPermissionHandler registered - use --yolo flag or register a handler");
+						}}));
 			case AcpSchema.METHOD_TERMINAL_CREATE:
 			case AcpSchema.METHOD_TERMINAL_OUTPUT:
 			case AcpSchema.METHOD_TERMINAL_RELEASE:
 			case AcpSchema.METHOD_TERMINAL_WAIT_FOR_EXIT:
 			case AcpSchema.METHOD_TERMINAL_KILL:
 				return new MethodNotFoundError(method, "Terminal not supported",
-						java.util.Collections.singletonMap("reason", (Object) "Client does not have terminal capability"));
+						Collections.unmodifiableMap(new HashMap<String, Object>() {{
+							put("reason", "Client does not have terminal capability");
+						}}));
 			default:
 				return new MethodNotFoundError(method, "Method not found: " + method, null);
 		}
@@ -401,7 +442,7 @@ AcpSchema.JSONRPCNotification notification = (AcpSchema.JSONRPCNotification) mes
 		}
 
 		private static String formatErrorData(Object data) {
-			if (data instanceof Map) {
+			if (data instanceof Map<?, ?>) {
 				Map<?, ?> map = (Map<?, ?>) data;
 				// Extract common fields for better readability
 				Object details = map.get("details");

@@ -69,7 +69,7 @@ public class ArgumentResolverComposite implements ArgumentResolver {
 	 * @return unmodifiable list of resolvers
 	 */
 	public List<ArgumentResolver> getResolvers() {
-		return Collections.unmodifiableList(new ArrayList<ArgumentResolver>(resolvers));
+		return Collections.unmodifiableList(new ArrayList<>(resolvers));
 	}
 
 	/**

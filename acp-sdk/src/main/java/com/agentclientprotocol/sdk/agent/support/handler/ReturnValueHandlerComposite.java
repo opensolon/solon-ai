@@ -49,7 +49,7 @@ public class ReturnValueHandlerComposite implements ReturnValueHandler {
 	 * @return unmodifiable list of handlers
 	 */
 	public List<ReturnValueHandler> getHandlers() {
-		return Collections.unmodifiableList(new ArrayList<ReturnValueHandler>(handlers));
+		return Collections.unmodifiableList(new ArrayList<>(handlers));
 	}
 
 	@Override

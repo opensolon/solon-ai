@@ -1,0 +1,20 @@
+{
+  "sessionUpdate": "available_commands_update",
+  "availableCommands": [
+    {
+      "name": "/help",
+      "description": "Show available commands"
+    },
+    {
+      "name": "/clear",
+      "description": "Clear the conversation history"
+    },
+    {
+      "name": "/review",
+      "description": "Review pending changes",
+      "input": {
+        "hint": "file path (optional)"
+      }
+    }
+  ]
+}

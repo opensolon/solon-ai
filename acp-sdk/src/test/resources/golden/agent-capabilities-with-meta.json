@@ -1,0 +1,18 @@
+{
+  "loadSession": true,
+  "mcpCapabilities": {
+    "http": true,
+    "sse": false
+  },
+  "promptCapabilities": {
+    "audio": false,
+    "embeddedContext": true,
+    "image": true
+  },
+  "_meta": {
+    "zed.dev": {
+      "workspace": true,
+      "fileNotifications": true
+    }
+  }
+}

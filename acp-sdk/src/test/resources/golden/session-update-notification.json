@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/update",
+  "params": {
+    "sessionId": "session-abc123",
+    "update": {
+      "sessionUpdate": "agentMessage",
+      "content": {
+        "type": "text",
+        "text": "I'll help you fix the failing test."
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "sessionUpdate": "tool_call",
+  "toolCallId": "call_002",
+  "title": "Editing source file",
+  "kind": "edit",
+  "status": "completed",
+  "locations": [
+    {
+      "path": "/home/user/project/src/main.java",
+      "line": 42
+    }
+  ],
+  "rawInput": {
+    "path": "/home/user/project/src/main.java",
+    "content": "new code here"
+  },
+  "rawOutput": {
+    "result": "success",
+    "linesModified": 5
+  },
+  "content": [
+    {
+      "type": "content",
+      "content": {
+        "type": "text",
+        "text": "File edited successfully."
+      }
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "cwd": "/home/user/project",
+  "mcpServers": [
+    {
+      "type": "http",
+      "name": "api-server",
+      "url": "https://api.example.com/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer token123"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ]
+    }
+  ]
+}

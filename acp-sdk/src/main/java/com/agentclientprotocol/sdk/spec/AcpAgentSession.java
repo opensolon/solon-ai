@@ -17,6 +17,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -86,15 +87,36 @@ public class AcpAgentSession implements AcpSession {
 	 * Represents an active prompt session for single-turn enforcement.
 	 */
 	private static final class ActivePrompt {
-	private final String sessionId;
-	private final Object requestId;
-	ActivePrompt(String sessionId, Object requestId) {
-		this.sessionId = sessionId;
-		this.requestId = requestId;
+
+		private final String sessionId;
+		private final Object requestId;
+
+		ActivePrompt(String sessionId, Object requestId) {
+			this.sessionId = sessionId;
+			this.requestId = requestId;
+		}
+
+		String sessionId() { return sessionId; }
+		Object requestId() { return requestId; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (o == null || getClass() != o.getClass()) return false;
+			ActivePrompt that = (ActivePrompt) o;
+			return Objects.equals(sessionId, that.sessionId) && Objects.equals(requestId, that.requestId);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(sessionId, requestId);
+		}
+
+		@Override
+		public String toString() {
+			return "ActivePrompt[sessionId=" + sessionId + ", requestId=" + requestId + "]";
+		}
 	}
-	String sessionId() { return this.sessionId; }
-	Object requestId() { return this.requestId; }
-}
 
 	/**
 	 * Functional interface for handling incoming JSON-RPC requests. Implementations
@@ -176,7 +198,8 @@ public class AcpAgentSession implements AcpSession {
 	 */
 	private Mono<AcpSchema.JSONRPCMessage> handle(AcpSchema.JSONRPCMessage message) {
 		if (message instanceof AcpSchema.JSONRPCResponse) {
-AcpSchema.JSONRPCResponse response = (AcpSchema.JSONRPCResponse) message;			logger.debug("Received response: {}", response);
+			AcpSchema.JSONRPCResponse response = (AcpSchema.JSONRPCResponse) message;
+			logger.debug("Received response: {}", response);
 			if (response.id() != null) {
 				MonoSink<AcpSchema.JSONRPCResponse> sink = pendingResponses.remove(response.id());
 				if (sink == null) {
@@ -194,13 +217,15 @@ AcpSchema.JSONRPCResponse response = (AcpSchema.JSONRPCResponse) message;			logg
 			return Mono.empty();
 		}
 		else if (message instanceof AcpSchema.JSONRPCRequest) {
-AcpSchema.JSONRPCRequest request = (AcpSchema.JSONRPCRequest) message;			logger.debug("Received request: {}", request);
+			AcpSchema.JSONRPCRequest request = (AcpSchema.JSONRPCRequest) message;
+			logger.debug("Received request: {}", request);
 			return handleIncomingRequest(request).onErrorResume(error -> {
 				// Preserve error codes from AcpProtocolException, wrap others in INTERNAL_ERROR
 				int errorCode;
 				Object errorData = null;
 				if (error instanceof AcpProtocolException) {
-AcpProtocolException protocolException = (AcpProtocolException) error;					errorCode = protocolException.getCode();
+					AcpProtocolException protocolException = (AcpProtocolException) error;
+					errorCode = protocolException.getCode();
 					errorData = protocolException.getData();
 				}
 				else {
@@ -212,7 +237,8 @@ AcpProtocolException protocolException = (AcpProtocolException) error;					error
 			}).map(response -> (AcpSchema.JSONRPCMessage) response);
 		}
 		else if (message instanceof AcpSchema.JSONRPCNotification) {
-AcpSchema.JSONRPCNotification notification = (AcpSchema.JSONRPCNotification) message;			logger.debug("Received notification: {}", notification);
+			AcpSchema.JSONRPCNotification notification = (AcpSchema.JSONRPCNotification) message;
+			logger.debug("Received notification: {}", notification);
 			return handleIncomingNotification(notification).then(Mono.empty());
 		}
 		else {
@@ -229,7 +255,7 @@ AcpSchema.JSONRPCNotification notification = (AcpSchema.JSONRPCNotification) mes
 	 */
 	private Mono<AcpSchema.JSONRPCResponse> handleIncomingRequest(AcpSchema.JSONRPCRequest request) {
 		return Mono.defer(() -> {
-			RequestHandler handler = this.requestHandlers.get(request.method());
+			RequestHandler<?> handler = this.requestHandlers.get(request.method());
 			if (handler == null) {
 				MethodNotFoundError error = getMethodNotFoundError(request.method());
 				return Mono.just(new AcpSchema.JSONRPCResponse(AcpSchema.JSONRPC_VERSION, request.id(), null,
@@ -271,7 +297,7 @@ AcpSchema.JSONRPCNotification notification = (AcpSchema.JSONRPCNotification) mes
 	 */
 	@SuppressWarnings("unchecked")
 	private String extractSessionId(Object params) {
-		if (params instanceof Map) {
+		if (params instanceof Map<?, ?>) {
 			Map<?, ?> map = (Map<?, ?>) params;
 			Object sessionId = map.get("sessionId");
 			return sessionId != null ? sessionId.toString() : "unknown";
@@ -279,18 +305,39 @@ AcpSchema.JSONRPCNotification notification = (AcpSchema.JSONRPCNotification) mes
 		return "unknown";
 	}
 
-	static final class MethodNotFoundError {
+	private static final class MethodNotFoundError {
+
 		private final String method;
 		private final String message;
 		private final Object data;
+
 		MethodNotFoundError(String method, String message, Object data) {
 			this.method = method;
 			this.message = message;
 			this.data = data;
 		}
-		String method() { return this.method; }
-		String message() { return this.message; }
-		Object data() { return this.data; }
+
+		String method() { return method; }
+		String message() { return message; }
+		Object data() { return data; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (o == null || getClass() != o.getClass()) return false;
+			MethodNotFoundError that = (MethodNotFoundError) o;
+			return Objects.equals(method, that.method) && Objects.equals(message, that.message) && Objects.equals(data, that.data);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(method, message, data);
+		}
+
+		@Override
+		public String toString() {
+			return "MethodNotFoundError[method=" + method + ", message=" + message + ", data=" + data + "]";
+		}
 	}
 
 	private MethodNotFoundError getMethodNotFoundError(String method) {
@@ -451,7 +498,7 @@ AcpSchema.JSONRPCNotification notification = (AcpSchema.JSONRPCNotification) mes
 		}
 
 		private static String formatErrorData(Object data) {
-			if (data instanceof Map) {
+			if (data instanceof Map<?, ?>) {
 				Map<?, ?> map = (Map<?, ?>) data;
 				// Extract common fields for better readability
 				Object details = map.get("details");

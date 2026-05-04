@@ -1,0 +1,12 @@
+{
+  "sessionId": "sess_789xyz",
+  "cwd": "/home/user/project",
+  "mcpServers": [
+    {
+      "name": "filesystem",
+      "command": "/path/to/mcp-server",
+      "args": ["--mode", "filesystem"],
+      "env": []
+    }
+  ]
+}
