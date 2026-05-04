@@ -43,15 +43,21 @@ public class AgentFactory {
     public static ReActAgent.Builder create(HarnessEngine engine, AgentDefinition agentDefinition) {
         return create(engine, agentDefinition, null);
     }
+
     /**
      * 根据定义生成代理
      */
     public static ReActAgent.Builder create(HarnessEngine engine, AgentDefinition agentDefinition, @Nullable String sessionModel) {
-        if(sessionModel == null){
-            sessionModel = agentDefinition.getModel();
+        final String selectedModel;
+
+        if (Assert.isEmpty(agentDefinition.getModel())) {
+            //如果没有配置指定，则用会话选中的
+            selectedModel = sessionModel;
+        } else {
+            selectedModel = agentDefinition.getModel();
         }
 
-        ChatModel chatModel = engine.getModelOrMain(sessionModel);
+        ChatModel chatModel = engine.getModelOrMain(selectedModel);
 
         ReActAgent.Builder builder = ReActAgent.of(chatModel)
                 .retryConfig(engine.getProps().getModelRetries(), 1000L);
@@ -138,7 +144,7 @@ public class AgentFactory {
         }
 
         //全局禁止
-        if(engine.getProps().getDisallowedTools().contains(toolName)){
+        if (engine.getProps().getDisallowedTools().contains(toolName)) {
             return;
         }
 
@@ -237,60 +243,6 @@ public class AgentFactory {
                 }
                 break;
             }
-
-//                    case "pi": { // {"read", "write", "edit", "bash"}
-//                        terminalSkillWrap.addTools("read", "write", "edit", "bash");
-//                        break;
-//                    }
-//                    case "*": { // {"skill","cli","todo","code","codesearch","websearch","webfetch","task"}
-//                        builder.defaultSkillAdd(engine.getCliSkills());
-//                        todoAddDo(metadata, builder, engine);
-//                        builder.defaultSkillAdd(engine.getCodeSkill());
-//
-//                        builder.defaultToolAdd(engine.getCodeSearchTool());
-//                        builder.defaultToolAdd(engine.getWebsearchTool());
-//                        builder.defaultToolAdd(engine.getWebfetchTool());
-//
-//                        if (engine.getProps().isSubagentEnabled()) {
-//                            builder.defaultSkillAdd(engine.getTaskSkill());
-//                        }
-//                        break;
-//                    }
-//                    case "**": { //{"skill","cli","todo","code","codesearch","websearch","webfetch","task","generate","mcp","restapi","hitl"};
-//                        builder.defaultSkillAdd(engine.getCliSkills());
-//                        todoAddDo(metadata, builder, engine);
-//                        builder.defaultSkillAdd(engine.getCodeSkill());
-//
-//                        builder.defaultToolAdd(engine.getCodeSearchTool());
-//                        builder.defaultToolAdd(engine.getWebsearchTool());
-//                        builder.defaultToolAdd(engine.getWebfetchTool());
-//
-//                        if (engine.getProps().isSubagentEnabled()) {
-//                            builder.defaultSkillAdd(engine.getTaskSkill());
-//                        }
-//
-//                        //---
-//
-//                        if (engine.getProps().isSubagentEnabled()) {
-//                            builder.defaultToolAdd(engine.getGenerateTool());
-//                        }
-//
-//                        //mcp
-//                        if (engine.getMcpGatewaySkill() != null) {
-//                            builder.defaultSkillAdd(engine.getMcpGatewaySkill());
-//                        }
-//
-//                        //rest-api
-//                        if (engine.getRestApiSkill() != null) {
-//                            builder.defaultSkillAdd(engine.getRestApiSkill());
-//                        }
-//
-//                        //hitl
-//                        if (engine.getProps().isHitlEnabled()) {
-//                            builder.defaultInterceptorAdd(engine.getHitlInterceptor());
-//                        }
-//                        break;
-//                    }
         }
     }
 
