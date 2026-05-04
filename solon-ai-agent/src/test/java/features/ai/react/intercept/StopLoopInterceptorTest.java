@@ -2,8 +2,10 @@ package features.ai.react.intercept;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.StopLoopInterceptor;
+import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 
@@ -24,6 +26,7 @@ public class StopLoopInterceptorTest {
     public void setUp() {
         trace = mock(ReActTrace.class);
         extras = new HashMap<>();
+        AgentSession session = InMemoryAgentSession.of();
 
         // 模拟 Trace 的状态存储能力
         when(trace.getExtraAs(anyString())).thenAnswer(inv -> extras.get(inv.getArgument(0)));
@@ -33,6 +36,7 @@ public class StopLoopInterceptorTest {
         }).when(trace).setExtra(anyString(), any());
 
         when(trace.getAgentName()).thenReturn("TestAgent");
+        when(trace.getSession()).thenReturn(session);
 
         // 阈值 3 次，窗口 6
         interceptor = new StopLoopInterceptor(3, 6);
