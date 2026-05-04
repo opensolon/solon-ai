@@ -193,20 +193,16 @@ public class TaskSkill extends AbsSkill {
                             if (chunk instanceof ActionEndChunk) {
                                 __parentTrace.getOptions().getStreamSink().next(chunk);
                             } else {
-                                if (chunk instanceof ThoughtChunk) {
-                                    chunk.getMeta().put(TOOL_MULTITASK, 1);
-                                    __parentTrace.getOptions().getStreamSink().next(chunk);
+                                if (isMultitask) {
+                                    if (chunk instanceof ThoughtChunk) {
+                                        chunk.getMeta().put(TOOL_MULTITASK, 1);
+                                        __parentTrace.getOptions().getStreamSink().next(chunk);
+                                    }
+                                } else {
+                                    if (chunk instanceof ReasonChunk) {
+                                        __parentTrace.getOptions().getStreamSink().next(chunk);
+                                    }
                                 }
-//                                if (isMultitask) {
-//                                    if (chunk instanceof ThoughtChunk) {
-//                                        chunk.getMeta().put(TOOL_MULTITASK, 1);
-//                                        __parentTrace.getOptions().getStreamSink().next(chunk);
-//                                    }
-//                                } else {
-//                                    if (chunk instanceof ReasonChunk) {
-//                                        __parentTrace.getOptions().getStreamSink().next(chunk);
-//                                    }
-//                                }
                             }
                         })
                         .doOnError(err -> {
