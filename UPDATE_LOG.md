@@ -15,7 +15,6 @@
 
 * 添加 solon-ai-agent AgentTrace.getAgentName, getBeginTimeMs 方法
 * 添加 solon-ai-harness command 接口管理
-* 添加 solon-ai-harness TaskSkill start_time 计时
 * 添加 solon-ai-harness HarnessEngine.getAgentOrMain 方法
 * 优化 solon-ai-core AiConfig.proxy 配置兼容（减少反序列化反射）
 * 优化 solon-ai-core ChatModel llm- 日志打印，添加 agentName

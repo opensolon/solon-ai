@@ -164,7 +164,7 @@ public class TaskSkill extends AbsSkill {
         final AgentSession session = InMemoryAgentSession.of(agent.name());
 
         String result = null;
-        Prompt originalPrompt = Prompt.of(task.prompt).attrPut(HarnessFlags.ATTR_START_TIME, System.currentTimeMillis());
+        Prompt originalPrompt = Prompt.of(task.prompt);
 
         try {
             if (__parentTrace.getOptions().getStreamSink() == null) {

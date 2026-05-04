@@ -7,5 +7,4 @@ package org.noear.solon.ai.harness;
  */
 public interface HarnessFlags {
     String VAR_MODEL_SELECTED = "_model_selected";
-    String ATTR_START_TIME = "start_time";
 }
