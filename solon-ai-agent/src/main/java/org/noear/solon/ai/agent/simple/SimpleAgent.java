@@ -30,6 +30,7 @@ import org.noear.solon.ai.chat.skill.SkillProvider;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
+import org.noear.solon.ai.util.RetryTask;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
@@ -259,7 +260,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                     ONode.serialize(finalPrompt.getMessages(), Feature.Write_PrettyFormat, Feature.Write_EnumUsingName));
         }
 
-        ChatRequestDesc chatReq = null;
+        final ChatRequestDesc chatReq;
 
         if (config.getChatModel() != null) {
             //构建 chatModel 请求
@@ -289,45 +290,38 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                         o.autoToolCall(options.isAutoToolCall());
                         o.optionSet(options.options());
                     });
+        } else {
+            chatReq = null;
         }
 
+        try {
+            return new RetryTask()
+                    .maxRetries(config.getMaxRetries())
+                    .initialDelayMs(config.getRetryDelayMs())
+                    .onRetry((attempt, e) -> {
+                        if (attempt == config.getMaxRetries()) {
+                            throw new RuntimeException("SimpleAgent [" + name() + "] failed after " + config.getMaxRetries() + " retries", e);
+                        }
 
-        int maxRetries = config.getMaxRetries();
-        for (int i = 0; i < maxRetries; i++) {
-            if (Thread.interrupted()) {
-                break;
+                        LOG.warn("SimpleAgent [{}] call failed, retrying({}/{}). Error: {}",
+                                name(), attempt, config.getMaxRetries(), e.toString());
+                    })
+                    .callWithRetry(() -> {
+                        // 运行中检查：如果流已被取消，直接跳出重试
+                        if (trace.getOptions().getStreamSink() != null && trace.getOptions().getStreamSink().isCancelled()) {
+                            return null;
+                        }
+
+                        return doCall(trace, session, finalPrompt, chatReq);
+                    });
+        } catch (Throwable e) {
+            if (e instanceof InterruptedException || e.getCause() instanceof InterruptedException) {
+                LOG.debug("InterruptedException");
+                return null;
             }
 
-            try {
-                if (trace.getOptions().getStreamSink() != null) {
-                    if (trace.getOptions().getStreamSink().isCancelled()) {
-                        break;
-                    }
-                }
-
-                return doCall(trace, session, finalPrompt, chatReq);
-            } catch (Throwable e) {
-                if (e instanceof InterruptedException || e.getCause() instanceof InterruptedException) {
-                    LOG.debug("InterruptedException");
-                    return null;
-                }
-
-                if (i == maxRetries - 1) {
-                    throw new RuntimeException("SimpleAgent [" + name() + "] failed after " + maxRetries + " retries", e);
-                }
-                long delay = config.getRetryDelayMs() * (i + 1);
-                LOG.warn("SimpleAgent [{}] call failed, retrying({}/{}). Error: {}", name(), i + 1, maxRetries, e.toString());
-
-                try {
-                    Thread.sleep(delay);
-                } catch (InterruptedException ie) {
-                    LOG.debug("InterruptedException");
-                    return null;
-                }
-            }
+            throw e;
         }
-
-        throw new IllegalStateException("Unreachable");
     }
 
     /**

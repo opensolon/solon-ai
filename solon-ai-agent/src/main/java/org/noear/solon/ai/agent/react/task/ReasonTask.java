@@ -29,6 +29,7 @@ import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.util.RetryTask;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
@@ -380,7 +381,7 @@ public class ReasonTask implements NamedTaskComponent {
     }
 
     private @Nullable ChatResponse callWithRetry(Node node, ReActTrace trace, List<ChatMessage> messages) throws RuntimeException {
-        if(LOG.isDebugEnabled()){
+        if (LOG.isDebugEnabled()) {
             LOG.debug("ReActAgent [{}] calling model... messages: {}",
                     config.getName(),
                     ONode.serialize(messages, Feature.Write_PrettyFormat, Feature.Write_EnumUsingName));
@@ -420,51 +421,47 @@ public class ReasonTask implements NamedTaskComponent {
         int maxRetries = trace.getOptions().getMaxRetries();
         Throwable lastException = null;
 
-        for (int i = 0; i < maxRetries; i++) { // 注意是 <，确保至少执行一次
-            if (Thread.interrupted()) {
-                break;
-            }
+        try {
+            return new RetryTask()
+                    .maxRetries(maxRetries)
+                    .initialDelayMs(trace.getOptions().getRetryDelayMs())
+                    .onRetry((attempt,e)->{
+                        LOG.warn("ReActAgent [{}] retry {}/{} due to: {}",
+                                config.getName(), attempt, maxRetries, e.toString());
+                    })
+                    .callWithRetry(() -> {
+                        final ChatResponse response;
 
-            try {
-                final ChatResponse response;
+                        if (trace.getOptions().getStreamSink() != null) {
+                            if (trace.getOptions().getStreamSink().isCancelled()) {
+                                return null;
+                            }
 
-                if (trace.getOptions().getStreamSink() != null) {
-                    if (trace.getOptions().getStreamSink().isCancelled()) {
-                        break;
+                            response = req.stream().doOnNext(resp -> {
+                                trace.getOptions().getStreamSink().next(new ReasonChunk(trace, resp, resp.getMessage()));
+                            }).blockLast();
+                        } else {
+                            response = req.call();
+                        }
+
+                        if (response.isEmpty()) {
+                            //触发重试
+                            throw new LlmNoReturnException("The LLM did not return");
+                        }
+
+                        return response;
                     }
+            );
+        } catch (Throwable e) {
+            // 4. 异常后续处理（保留原有的文案逻辑）
+            return handleLastException(trace, e);
+        }
+    }
 
-                    response = req.stream().doOnNext(resp -> {
-                        trace.getOptions().getStreamSink().next(new ReasonChunk(trace, resp, resp.getMessage()));
-                    }).blockLast();
-                } else {
-                    response = req.call();
-                }
-
-                if (response.isEmpty()) {
-                    //触发重试
-                    throw new LlmNoReturnException("The LLM did not return");
-                }
-
-                return response;
-            } catch (Throwable e) {
-                if (e instanceof InterruptedException || e.getCause() instanceof InterruptedException) {
-                    LOG.debug("InterruptedException");
-                    return null;
-                } else {
-                    lastException = e;
-                }
-
-                LOG.warn("ReActAgent [{}] retry {}/{} due to: {}", config.getName(), i + 1, maxRetries, e.toString());
-
-                if (i < maxRetries) {
-                    try {
-                        Thread.sleep(trace.getOptions().getRetryDelayMs() * (i + 1));
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                }
-            }
+    private ChatResponse handleLastException(ReActTrace trace, Throwable lastException) {
+        if (lastException instanceof InterruptedException || lastException.getCause() instanceof InterruptedException) {
+            LOG.debug("InterruptedException");
+            return null;
         }
 
         // 设置故障状态并终止路由
@@ -478,7 +475,7 @@ public class ReasonTask implements NamedTaskComponent {
             trace.setFinalAnswer("抱歉，暂时无法使用模型服务 (" + lastException.getMessage() + ")。请稍后重试。");
         }
 
-        return null; // 返回 null，由 run 方法处理
+        return null;
     }
 
     /**

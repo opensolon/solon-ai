@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.util.RetryTask;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
@@ -313,59 +314,49 @@ public class SupervisorTask implements NamedTaskComponent {
             return null;
         }
 
+        try {
+            return new RetryTask()
+                    .maxRetries(trace.getOptions().getMaxRetries())
+                    .onRetry((attempt, e) -> {
+                        if (attempt == trace.getOptions().getMaxRetries()) {
+                            throw new RuntimeException("Supervisor call failed", e);
+                        }
 
-        int maxRetries = trace.getOptions().getMaxRetries();
-        for (int i = 0; i < maxRetries; i++) {
-            if (Thread.interrupted()) {
-                break;
+                        LOG.warn("Supervisor call failed, retrying ({}/{})...", attempt + 1, trace.getOptions().getMaxRetries());
+                    })
+                    .callWithRetry(() -> {
+                        final ChatResponse response;
+
+                        if (trace.getOptions().getStreamSink() == null) {
+                            if (trace.getOptions().getStreamSink().isCancelled()) {
+                                return null;
+                            }
+
+                            response = req.call();
+                        } else {
+                            response = req.stream()
+                                    .doOnNext(resp -> {
+                                        trace.getOptions().getStreamSink().next(
+                                                new SupervisorChunk(node, trace, resp));
+                                    })
+                                    .blockLast();
+                        }
+
+                        if (response.isEmpty()) {
+                            //触发重试
+                            throw new LlmNoReturnException("The LLM did not return");
+                        }
+
+                        return response;
+                    });
+        } catch (Throwable e) {
+            if (e instanceof InterruptedException || e.getCause() instanceof InterruptedException) {
+                LOG.debug("InterruptedException");
+                return null;
             }
 
-            try {
-                final ChatResponse response;
-
-                if (trace.getOptions().getStreamSink() == null) {
-                    if (trace.getOptions().getStreamSink().isCancelled()) {
-                        break;
-                    }
-
-                    response = req.call();
-                } else {
-                    response = req.stream()
-                            .doOnNext(resp -> {
-                                trace.getOptions().getStreamSink().next(
-                                        new SupervisorChunk(node, trace, resp));
-                            })
-                            .blockLast();
-                }
-
-                if (response.isEmpty()) {
-                    //触发重试
-                    throw new LlmNoReturnException("The LLM did not return");
-                }
-
-                return response;
-            } catch (Throwable e) {
-                if (e instanceof InterruptedException || e.getCause() instanceof InterruptedException) {
-                    LOG.debug("InterruptedException");
-                    return null;
-                }
-
-                if (i == maxRetries - 1) {
-                    throw new RuntimeException("Supervisor call failed", e);
-                }
-
-                LOG.warn("Supervisor call failed, retrying ({}/{})...", i + 1, maxRetries);
-
-                try {
-                    Thread.sleep(trace.getOptions().getRetryDelayMs() * (i + 1));
-                } catch (InterruptedException ie) {
-                    LOG.debug("InterruptedException");
-                    return null;
-                }
-            }
+            throw e;
         }
-
-        throw new RuntimeException("Unreachable");
     }
 
     protected void routeTo(FlowContext context, TeamTrace trace, String targetName) {
