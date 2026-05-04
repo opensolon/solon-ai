@@ -14,10 +14,18 @@
 ### 3.10.5
 
 * 添加 solon-ai-harness command 接口管理
-* 优化 solon-ai-dialect OpenaiChatDialect 添加自动补地址处理
+* 添加 solon-ai-harness TaskSkill start_time 计时
+* 添加 solon-ai-harness HarnessEngine.getAgentOrMain 方法
+* 优化 solon-ai-core AiConfig.proxy 配置兼容（减少反序列化反射）
 * 优化 solon-ai-core ChatModel llm- 日志打印，添加 agentName
 * 优化 solon-ai-core EmbeddingModel、RerankingModel、GenerateModel llm- 日志打印，添加 modelName
+* 优化 solon-ai-dialect apiUrl 自动补全的#号处理
+* 优化 solon-ai-dialect OpenaiChatDialect 添加自动补地址处理
+* 优化 solon-ai-harness CodeSkill 拆解语言支持
+* 优化 solon-ai-skill-cli ExpertSkill 引导词
+* 优化 solon-ai-skill-memory （默认不会话隔离）
 * 调整 solon-ai-core ChatOptions.name 更名为 agentName
+* 调整 solon-ai-harness TaskSkill 只输出 ThoughtChunk（不输出 ReasonChunk）
 
 ### 3.10.4
 
