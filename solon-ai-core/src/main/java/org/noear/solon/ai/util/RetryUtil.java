@@ -24,11 +24,11 @@ import org.noear.solon.util.CallableTx;
  * @since 3.9.0
  */
 public class RetryUtil {
-    public static <T, X extends Throwable> T callWithRetry(CallableTx<T, Throwable> callable) throws X {
+    public static <T, X extends Throwable> T callWithRetry(CallableTx<T, Throwable> callable) throws X, InterruptedException {
         return callWithRetry(RetryTask.DEFAULT_MAX_RETRIES, RetryTask.DEFAULT_INITIAL_DELAY_MS, RetryTask.DEFAULT_MAX_DELAY_MS, callable);
     }
 
-    public static <T, X extends Throwable> T callWithRetry(int maxRetries, CallableTx<T, Throwable> callable) throws X {
+    public static <T, X extends Throwable> T callWithRetry(int maxRetries, CallableTx<T, Throwable> callable) throws X, InterruptedException {
         return callWithRetry(maxRetries, RetryTask.DEFAULT_INITIAL_DELAY_MS, RetryTask.DEFAULT_MAX_DELAY_MS, callable);
     }
 
@@ -40,7 +40,7 @@ public class RetryUtil {
      * @param maxDelayMs     最大延迟毫秒数（Cap）
      * @param callable       业务回调
      */
-    public static <T, X extends Throwable> T callWithRetry(int maxRetries, long initialDelayMs, long maxDelayMs, CallableTx<T, Throwable> callable) throws X {
+    public static <T, X extends Throwable> T callWithRetry(int maxRetries, long initialDelayMs, long maxDelayMs, CallableTx<T, Throwable> callable) throws X, InterruptedException {
         return new RetryTask()
                 .maxRetries(maxRetries)
                 .initialDelayMs(initialDelayMs)
