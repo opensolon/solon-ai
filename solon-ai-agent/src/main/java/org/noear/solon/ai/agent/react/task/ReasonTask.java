@@ -472,7 +472,7 @@ public class ReasonTask implements NamedTaskComponent {
         } else if (lastException instanceof TimeoutException) {
             trace.setFinalAnswer("抱歉，模型服务响应超时。请稍后重试。");
         } else {
-            trace.setFinalAnswer("抱歉，暂时无法使用模型服务 (" + lastException.getMessage() + ")。请稍后重试。");
+            trace.setFinalAnswer("抱歉，暂时无法使用模型服务 (" + lastException + ")。请稍后重试。");
         }
 
         return null;
