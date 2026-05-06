@@ -119,6 +119,11 @@ public class RetryTask {
         }
 
         // 统一异常抛出逻辑
+        if (lastException == null) {
+            // 线程被中断退出，没有业务异常（Thread.interrupted() 为 true 导致 break，未进入 catch）
+            throw new InterruptedException("Retry aborted: thread interrupted before any attempt");
+        }
+
         if (lastException instanceof RuntimeException) {
             throw (RuntimeException) lastException;
         } else if (lastException instanceof Error) {
