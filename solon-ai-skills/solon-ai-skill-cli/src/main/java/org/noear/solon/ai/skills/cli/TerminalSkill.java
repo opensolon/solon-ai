@@ -158,8 +158,12 @@ public class TerminalSkill extends AbsSkill {
         sb.append("  - 严禁执行任何可能改变宿主系统状态的命令（如修改网络配置、安装系统驱动等）。\n");
 
         sb.append("- **执行环境**: \n");
-        sb.append("  - Python 命令: `").append(pythonCmd).append("` (系统已预置变量 `$PYTHON`)\n");
-        sb.append("  - Node.js 命令: `").append(nodeCmd).append("` (系统已预置变量 `$NODE`)\n");
+        if(Assert.isNotEmpty(pythonCmd)) {
+            sb.append("  - Python 命令: `").append(pythonCmd).append("` (系统已预置变量 `$PYTHON`)\n");
+        }
+        if(Assert.isNotEmpty(nodeCmd)) {
+            sb.append("  - Node.js 命令: `").append(nodeCmd).append("` (系统已预置变量 `$NODE`)\n");
+        }
 
         sb.append("- **环境变量**: 挂载池已注入变量（如 @pool1 映射为 ").append(envExample).append("）。\n");
 
@@ -225,8 +229,13 @@ public class TerminalSkill extends AbsSkill {
         Path workPath = getWorkPath(__cwd);
         Map<String, String> envs = new HashMap<>();
 
-        envs.put("PYTHON", pythonCmd);
-        envs.put("NODE", nodeCmd);
+        if(Assert.isNotEmpty(pythonCmd)) {
+            envs.put("PYTHON", pythonCmd);
+        }
+
+        if(Assert.isNotEmpty(nodeCmd)) {
+            envs.put("NODE", nodeCmd);
+        }
 
         String finalCommand = translateCommandToEnv(command, envs);
 

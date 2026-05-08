@@ -15,6 +15,9 @@
  */
 package org.noear.solon.ai.skills.cli;
 
+import org.noear.solon.ai.util.CmdUtil;
+import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.JavaUtil;
 import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -84,29 +87,60 @@ public class ProcessExecutor {
      * 探测系统命令是否可用
      */
     public boolean isCommandAvailable(String cmd) {
+        Process process = null;
         try {
-            boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
-            ProcessBuilder pb = new ProcessBuilder(isWindows ? Arrays.asList("where", cmd) : Arrays.asList("which", cmd));
-            Process process = pb.start();
-            return process.waitFor(2, TimeUnit.SECONDS) && process.exitValue() == 0;
+            ProcessBuilder pb = new ProcessBuilder(cmd, "--version");
+            pb.redirectErrorStream(true);
+            process = pb.start();
+
+            try (java.io.InputStream in = process.getInputStream()) {
+                byte[] buf = new byte[1024];
+                while (in.read(buf) != -1) ;
+            }
+
+            if (process.waitFor(2, TimeUnit.SECONDS)) {
+                return process.exitValue() == 0;
+            } else {
+                return false; // 超时视作不可用
+            }
         } catch (Throwable e) {
             return false;
+        } finally {
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly(); // 关键：确保探测进程一定关闭
+            }
         }
     }
 
 
     public String probePythonCommand() {
-        return isCommandAvailable("python3") ? "python3" : "python";
+        if (isCommandAvailable("python3")) {
+            return "python3";
+        }
+        if (isCommandAvailable("python")) {
+            return "python";
+        }
+        return null; // 或者返回 ""，表示没找到
     }
 
     public String probeNodeCommand() {
-        return isCommandAvailable("node") ? "node" : "nodejs";
+        if (isCommandAvailable("node")) {
+            return "node";
+        }
+        if (isCommandAvailable("nodejs")) {
+            return "nodejs";
+        }
+        return null; // 或者返回 ""，表示没找到
     }
 
     /**
      * 执行代码脚本（持久化为临时文件后执行）
      */
     public String executeCode(Path rootPath, String code, String cmd, String ext, Map<String, String> envs, Integer timeoutMs, Consumer<String> onOutput) {
+        if (Assert.isEmpty(cmd)) {
+            return "执行失败: 未找到可用的运行命令（Command not found）";
+        }
+
         Path tempScript = null;
         try {
             // 1. 持久化脚本（Windows .bat 文件需前置 chcp 65001 以确保 UTF-8 输出）
@@ -118,7 +152,7 @@ public class ProcessExecutor {
             Files.write(tempScript, finalCode.getBytes(scriptCharset));
 
             // 2. 构建完整命令（处理带空格的命令字符串）
-            List<String> fullCmd = new ArrayList<>(Arrays.asList(cmd.split("\\s+")));
+            List<String> fullCmd = CmdUtil.parseArguments(cmd);
             fullCmd.add(tempScript.toAbsolutePath().toString());
 
             return executeCmd(rootPath, fullCmd, envs, timeoutMs, onOutput);

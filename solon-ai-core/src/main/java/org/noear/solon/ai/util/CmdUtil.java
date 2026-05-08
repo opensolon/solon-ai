@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.harness.command;
+package org.noear.solon.ai.util;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +24,7 @@ import java.util.List;
  * @author noear 2026/5/6 created
  * @since 3.10.5
  */
-public class CommandUtil {
+public class CmdUtil {
     public static List<String> parseArguments(String input) {
         if (input == null || input.isEmpty()) {
             return new ArrayList<>();
