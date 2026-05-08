@@ -51,16 +51,12 @@ public class MemorySearchProviderMdImpl implements MemorySearchProvider {
 
     @Override
     public List<MemorySearchResult> search(String userId, String query, int limit) {
-        return data.search(userId, query, limit).stream()
-                .map(r -> new MemorySearchResult(r.key, r.content, r.importance, r.time))
-                .collect(Collectors.toList());
+        return data.search(userId, query, limit);
     }
 
     @Override
     public List<MemorySearchResult> getHotMemories(String userId, int limit) {
-        return data.getHotMemories(userId, limit).stream()
-                .map(r -> new MemorySearchResult(r.key, r.content, r.importance, r.time))
-                .collect(Collectors.toList());
+        return data.getHotMemories(userId, limit);
     }
 
     @Override

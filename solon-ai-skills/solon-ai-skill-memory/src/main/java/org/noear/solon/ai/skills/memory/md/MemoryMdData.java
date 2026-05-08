@@ -16,6 +16,9 @@
 package org.noear.solon.ai.skills.memory.md;
 
 import org.noear.snack4.ONode;
+import org.noear.solon.ai.skills.memory.MemorySearchResult;
+import org.noear.solon.ai.util.Markdown;
+import org.noear.solon.ai.util.MarkdownUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +30,9 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -61,16 +67,21 @@ public class MemoryMdData {
     private final Map<String, MemoryEntry> cache = new ConcurrentHashMap<>();
 
     /**
-     * 搜索索引：docId → IndexEntry
-     * docId 格式："{bucketKey}:{userKey}"
+     * 搜索索引：bucketKey → { docId → IndexEntry }
+     * 按桶分组，搜索时直接定位 bucket，避免全量遍历
      */
-    private final Map<String, IndexEntry> index = new ConcurrentHashMap<>();
+    private final Map<String, Map<String, IndexEntry>> indexByBucket = new ConcurrentHashMap<>();
 
     /**
      * 分词缓存：content → tokens
      * 直接以 content 文本为 key，避免 hashCode 碰撞导致的分词错误
      */
     private final Map<String, Set<String>> tokenizeCache = new ConcurrentHashMap<>();
+
+    /**
+     * 后台过期清理调度器（可选，通过 enableAutoCleanup 开启）
+     */
+    private ScheduledExecutorService cleanupScheduler;
 
     public MemoryMdData(Path baseDir) {
         this.baseDir = baseDir;
@@ -89,7 +100,10 @@ public class MemoryMdData {
     // ==================== Store 操作 ====================
 
     /**
-     * 存入记忆条目：写 MD 文件 + 更新缓存 + 更新搜索索引
+     * 存入记忆条目：写 MD 文件 + 更新内存缓存
+     *
+     * <p>注意：搜索索引的更新由 MemorySkill 统一调用 updateIndex() 完成，
+     * 保持与其他方案（Lucene/Repository/Rogue）的调用约定一致，避免双写冗余。
      */
     public void put(String storeKey, String val, int ttl) {
         try {
@@ -105,15 +119,6 @@ public class MemoryMdData {
 
             // 2. 更新内存缓存
             cache.put(storeKey, new MemoryEntry(content, time, importance, ttl, storedTime));
-
-            // 3. 更新搜索索引
-            String[] parts = splitStoreKey(storeKey);
-            if (parts != null) {
-                String docId = parts[0] + ":" + parts[1];
-                index.put(docId, new IndexEntry(parts[0], parts[1], content, importance, time));
-                // content 变了，清除旧的分词缓存
-                invalidateTokenizeCache(content);
-            }
         } catch (Exception e) {
             LOG.error("MdMemoryData put error, key={}", storeKey, e);
         }
@@ -137,8 +142,9 @@ public class MemoryMdData {
             String[] parts = splitStoreKey(storeKey);
             if (parts != null) {
                 String docId = parts[0] + ":" + parts[1];
-                index.putIfAbsent(docId, new IndexEntry(parts[0], parts[1],
-                        entry.content, entry.importance, entry.time));
+                indexByBucket.computeIfAbsent(parts[0], k -> new ConcurrentHashMap<>())
+                        .putIfAbsent(docId, new IndexEntry(parts[0], parts[1],
+                                entry.content, entry.importance, entry.time));
             }
         }
 
@@ -170,9 +176,12 @@ public class MemoryMdData {
         String[] parts = splitStoreKey(storeKey);
         if (parts != null) {
             String docId = parts[0] + ":" + parts[1];
-            IndexEntry removedIdx = index.remove(docId);
-            if (removedIdx != null) {
-                invalidateTokenizeCache(removedIdx.content);
+            Map<String, IndexEntry> bucket = indexByBucket.get(parts[0]);
+            if (bucket != null) {
+                IndexEntry removedIdx = bucket.remove(docId);
+                if (removedIdx != null) {
+                    invalidateTokenizeCache(removedIdx.content);
+                }
             }
         }
     }
@@ -181,20 +190,22 @@ public class MemoryMdData {
 
     /**
      * 搜索：基于缓存的关键词匹配 + 重要性权重评分
+     * 按 bucketKey 直接定位索引桶，避免全量遍历
      */
-    public List<SearchResult> search(String bucketKey, String query, int limit) {
+    public List<MemorySearchResult> search(String bucketKey, String query, int limit) {
         if (query == null || query.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<String, IndexEntry> bucket = indexByBucket.get(bucketKey);
+        if (bucket == null || bucket.isEmpty()) {
             return Collections.emptyList();
         }
 
         Set<String> queryTokens = tokenize(query.toLowerCase());
 
         List<ScoredEntry> scored = new ArrayList<>();
-        for (IndexEntry entry : index.values()) {
-            if (!entry.bucketKey.equals(bucketKey)) {
-                continue;
-            }
-
+        for (IndexEntry entry : bucket.values()) {
             double score = computeScore(entry, queryTokens);
             if (score > 0) {
                 scored.add(new ScoredEntry(entry, score));
@@ -204,29 +215,35 @@ public class MemoryMdData {
         return scored.stream()
                 .sorted(Comparator.comparingDouble((ScoredEntry se) -> se.score).reversed())
                 .limit(limit)
-                .map(se -> new SearchResult(se.entry.userKey, se.entry.content, se.entry.importance, se.entry.time))
+                .map(se -> new MemorySearchResult(se.entry.userKey, se.entry.content, se.entry.importance, se.entry.time))
                 .collect(Collectors.toList());
     }
 
     /**
      * 获取高价值热记忆
      */
-    public List<SearchResult> getHotMemories(String bucketKey, int limit) {
-        return index.values().stream()
-                .filter(e -> e.bucketKey.equals(bucketKey) && e.importance >= 5)
+    public List<MemorySearchResult> getHotMemories(String bucketKey, int limit) {
+        Map<String, IndexEntry> bucket = indexByBucket.get(bucketKey);
+        if (bucket == null || bucket.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return bucket.values().stream()
+                .filter(e -> e.importance >= 5)
                 .sorted(Comparator.comparingInt((IndexEntry e) -> e.importance).reversed()
                         .thenComparing((IndexEntry e) -> e.time, Comparator.reverseOrder()))
                 .limit(limit)
-                .map(e -> new SearchResult(e.userKey, e.content, e.importance, e.time))
+                .map(e -> new MemorySearchResult(e.userKey, e.content, e.importance, e.time))
                 .collect(Collectors.toList());
     }
 
     /**
-     * 手动更新搜索索引（兼容 MemorySearchProvider.updateIndex 接口）
+     * 手动更新搜索索引（由 MemorySkill 统一调用，兼容 MemorySearchProvider.updateIndex 接口）
      */
     public void updateIndex(String bucketKey, String userKey, String fact, int importance, String time) {
         String docId = bucketKey + ":" + userKey;
-        IndexEntry old = index.put(docId, new IndexEntry(bucketKey, userKey, fact, importance, time));
+        Map<String, IndexEntry> bucket = indexByBucket.computeIfAbsent(bucketKey, k -> new ConcurrentHashMap<>());
+        IndexEntry old = bucket.put(docId, new IndexEntry(bucketKey, userKey, fact, importance, time));
         if (old != null) {
             invalidateTokenizeCache(old.content);
         }
@@ -234,13 +251,16 @@ public class MemoryMdData {
     }
 
     /**
-     * 手动移除搜索索引（兼容 MemorySearchProvider.removeIndex 接口）
+     * 手动移除搜索索引（由 MemorySkill 统一调用，兼容 MemorySearchProvider.removeIndex 接口）
      */
     public void removeIndex(String bucketKey, String userKey) {
         String docId = bucketKey + ":" + userKey;
-        IndexEntry removed = index.remove(docId);
-        if (removed != null) {
-            invalidateTokenizeCache(removed.content);
+        Map<String, IndexEntry> bucket = indexByBucket.get(bucketKey);
+        if (bucket != null) {
+            IndexEntry removed = bucket.remove(docId);
+            if (removed != null) {
+                invalidateTokenizeCache(removed.content);
+            }
         }
     }
 
@@ -305,7 +325,8 @@ public class MemoryMdData {
             String[] parts = splitStoreKey(storeKey);
             if (parts != null) {
                 String docId = parts[0] + ":" + parts[1];
-                index.put(docId, new IndexEntry(parts[0], parts[1], fm.content, fm.importance, fm.time));
+                indexByBucket.computeIfAbsent(parts[0], k -> new ConcurrentHashMap<>())
+                        .put(docId, new IndexEntry(parts[0], parts[1], fm.content, fm.importance, fm.time));
             }
 
             return LoadResult.LOADED;
@@ -427,56 +448,38 @@ public class MemoryMdData {
 
     /**
      * 解析 MD 文件的 Front Matter
+     *
+     * <p>使用项目自带的 {@link MarkdownUtil} 解析 YAML Front Matter，替代手写解析。
+     * MarkdownUtil 基于 SnakeYAML，可复原地处理转义字符（先 \\ 再 \"），
+     * 且只在前几行内查找结束符 --- ，避免 body 中的 --- 被误识别。
      */
     private FrontMatter parseFrontMatter(String md) {
         if (md == null || md.isEmpty()) return null;
 
-        String content = md.trim();
-        if (!content.startsWith(FRONT_MATTER_DELIMITER)) return null;
+        // 将文本按行分割，交给 MarkdownUtil 解析
+        List<String> lines = Arrays.asList(md.split("\n"));
+        Markdown markdown = MarkdownUtil.resolve(lines);
 
-        int secondDelimiter = content.indexOf(FRONT_MATTER_DELIMITER, FRONT_MATTER_DELIMITER.length());
-        if (secondDelimiter < 0) return null;
-
-        String frontMatter = content.substring(FRONT_MATTER_DELIMITER.length(), secondDelimiter).trim();
-        String body = content.substring(secondDelimiter + FRONT_MATTER_DELIMITER.length()).trim();
+        ONode meta = markdown.getMetadata();
+        if (meta.size() == 0) return null;
 
         FrontMatter fm = new FrontMatter();
-        fm.content = body;
+        fm.content = markdown.getContent();
 
-        String[] lines = frontMatter.split("\n");
-        for (String line : lines) {
-            line = line.trim();
-            if (line.isEmpty()) continue;
-
-            int colonIdx = line.indexOf(':');
-            if (colonIdx < 0) continue;
-
-            String key = line.substring(0, colonIdx).trim();
-            String val = line.substring(colonIdx + 1).trim();
-
-            if (val.startsWith("\"") && val.endsWith("\"") && val.length() > 1) {
-                val = val.substring(1, val.length() - 1);
-                // 处理反转义
-                val = val.replace("\\\"", "\"").replace("\\\\", "\\");
-            }
-
-            switch (key) {
-                case "store_key":
-                    fm.storeKey = val;
-                    break;
-                case "time":
-                    fm.time = val;
-                    break;
-                case "importance":
-                    fm.importance = Integer.parseInt(val);
-                    break;
-                case "ttl":
-                    fm.ttl = Integer.parseInt(val);
-                    break;
-                case "stored_time":
-                    fm.storedTime = val;
-                    break;
-            }
+        if (meta.hasKey("store_key")) {
+            fm.storeKey = meta.get("store_key").getString();
+        }
+        if (meta.hasKey("time")) {
+            fm.time = meta.get("time").getString();
+        }
+        if (meta.hasKey("importance")) {
+            fm.importance = meta.get("importance").getInt();
+        }
+        if (meta.hasKey("ttl")) {
+            fm.ttl = meta.get("ttl").getInt();
+        }
+        if (meta.hasKey("stored_time")) {
+            fm.storedTime = meta.get("stored_time").getString();
         }
 
         return fm;
@@ -504,6 +507,41 @@ public class MemoryMdData {
         return LocalDateTime.now().format(FORMATTER);
     }
 
+    // ==================== 后台过期清理（编号11） ====================
+
+    /**
+     * 启用后台定时清理过期条目
+     *
+     * @param intervalSeconds 清理间隔（秒）
+     */
+    public MemoryMdData enableAutoCleanup(long intervalSeconds) {
+        if (cleanupScheduler != null) {
+            return this; // 已启用
+        }
+        cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "md-memory-cleanup");
+            t.setDaemon(true);
+            return t;
+        });
+        cleanupScheduler.scheduleAtFixedRate(this::cleanupExpired,
+                intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
+        LOG.info("MdMemoryData auto-cleanup enabled, interval={}s", intervalSeconds);
+        return this;
+    }
+
+    /**
+     * 主动清理所有过期条目（缓存 + 磁盘文件）
+     */
+    public void cleanupExpired() {
+        Iterator<Map.Entry<String, MemoryEntry>> it = cache.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<String, MemoryEntry> e = it.next();
+            if (isExpired(e.getValue())) {
+                remove(e.getKey());
+            }
+        }
+    }
+
     // ==================== 搜索评分 ====================
 
     /**
@@ -522,15 +560,63 @@ public class MemoryMdData {
         }
     }
 
+    /**
+     * 分词：支持英文单词切分 + 中文 bi-gram
+     *
+     * <p>英文：按非字母数字字符分割，长度 >1 的 token 保留。
+     * <p>中文：对连续中文字符做 bi-gram（每两个相邻字组成一个 token），
+     * 提升“用户偏好使用Solon框架”这类混合文本的搜索命中率。
+     */
     private Set<String> tokenize(String text) {
         Set<String> tokens = new HashSet<>();
-        String[] parts = text.split("[^a-zA-Z0-9\\u4e00-\\u9fff]+");
-        for (String part : parts) {
-            if (part.length() > 1) {
-                tokens.add(part.toLowerCase());
+
+        // 提取所有连续的英文片段和中文片段
+        StringBuilder englishBuf = new StringBuilder();
+        StringBuilder chineseBuf = new StringBuilder();
+
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c >= '\u4e00' && c <= '\u9fff') {
+                // 先 flush 英文缓冲区
+                flushEnglish(englishBuf, tokens);
+                chineseBuf.append(c);
+            } else if (Character.isLetterOrDigit(c)) {
+                // 先 flush 中文缓冲区
+                flushChinese(chineseBuf, tokens);
+                englishBuf.append(c);
+            } else {
+                // 分隔符：flush 两个缓冲区
+                flushEnglish(englishBuf, tokens);
+                flushChinese(chineseBuf, tokens);
             }
         }
+
+        // flush 尾部
+        flushEnglish(englishBuf, tokens);
+        flushChinese(chineseBuf, tokens);
+
         return tokens;
+    }
+
+    private void flushEnglish(StringBuilder buf, Set<String> tokens) {
+        if (buf.length() > 1) {
+            tokens.add(buf.toString().toLowerCase());
+        }
+        buf.setLength(0);
+    }
+
+    private void flushChinese(StringBuilder buf, Set<String> tokens) {
+        if (buf.length() >= 2) {
+            // bi-gram 分词：每两个相邻字组成一个 token
+            String str = buf.toString();
+            for (int i = 0; i < str.length() - 1; i++) {
+                tokens.add(str.substring(i, i + 2));
+            }
+        } else if (buf.length() == 1) {
+            // 单字也保留，避免丢失短词匹配
+            tokens.add(buf.toString());
+        }
+        buf.setLength(0);
     }
 
     private double computeScore(IndexEntry entry, Set<String> queryTokens) {
@@ -607,23 +693,6 @@ public class MemoryMdData {
         ScoredEntry(IndexEntry entry, double score) {
             this.entry = entry;
             this.score = score;
-        }
-    }
-
-    /**
-     * 搜索结果（对外暴露的简单结构）
-     */
-    public static class SearchResult {
-        public final String key;
-        public final String content;
-        public final double importance;
-        public final String time;
-
-        public SearchResult(String key, String content, double importance, String time) {
-            this.key = key;
-            this.content = content;
-            this.importance = importance;
-            this.time = time;
         }
     }
 }
