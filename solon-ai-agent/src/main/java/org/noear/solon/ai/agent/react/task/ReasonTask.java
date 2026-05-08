@@ -21,10 +21,6 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.exception.LlmNoReturnException;
 import org.noear.solon.ai.agent.react.*;
-import org.noear.solon.ai.agent.react.intercept.HITL;
-import org.noear.solon.ai.agent.react.intercept.HITLDecision;
-import org.noear.solon.ai.agent.react.intercept.HITLTask;
-import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -251,6 +247,7 @@ public class ReasonTask implements NamedTaskComponent {
 
         // 容错处理：模型响应内容及工具调用均为空时，引导其重新生成
         if (Assert.isEmpty(responseMessage.getResultContent()) && Assert.isEmpty(responseMessage.getToolCalls())) {
+            trace.getWorkingMemory().addMessage(responseMessage);
             trace.getWorkingMemory().addMessage(ChatMessage.ofUser("您上一次的回答是空的。请提供行动步骤或最终答案。"));
             trace.setRoute(ReActAgent.ID_REASON);
             return;
