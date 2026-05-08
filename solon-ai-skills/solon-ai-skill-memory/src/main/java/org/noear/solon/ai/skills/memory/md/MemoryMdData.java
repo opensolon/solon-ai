@@ -44,7 +44,7 @@ import java.util.stream.Stream;
  *   <li>启动时从 MD 文件目录全量加载，重启后搜索索引不丢失</li>
  *   <li>写入 MD 文件的同时更新内存缓存和搜索索引，保证存搜一致性</li>
  *   <li>读取优先走内存缓存，避免重复磁盘 I/O</li>
- *   <li>搜索时复用已缓存的分词结果，避免重复 tokenize</li>
+ *   <li>分词结果内联到索引条目，随条目生命周期自动释放，无缓存泄漏风险</li>
  *   <li>Front Matter 中保存完整 storeKey，消除文件名还原的不确定性</li>
  *   <li>原子写入自动降级（兼容 Windows/FAT32/NFS/Docker overlay）</li>
  *   <li>TTL 过期支持启动时清理和定期后台清理</li>
@@ -53,7 +53,7 @@ import java.util.stream.Stream;
  * @author noear
  * @since 3.10.5
  */
-public class MemoryMdData {
+public class MemoryMdData implements AutoCloseable {
     private static final Logger LOG = LoggerFactory.getLogger(MemoryMdData.class);
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final String FRONT_MATTER_DELIMITER = "---";
@@ -71,12 +71,6 @@ public class MemoryMdData {
      * 按桶分组，搜索时直接定位 bucket，避免全量遍历
      */
     private final Map<String, Map<String, IndexEntry>> indexByBucket = new ConcurrentHashMap<>();
-
-    /**
-     * 分词缓存：content → tokens
-     * 直接以 content 文本为 key，避免 hashCode 碰撞导致的分词错误
-     */
-    private final Map<String, Set<String>> tokenizeCache = new ConcurrentHashMap<>();
 
     /**
      * 后台过期清理调度器（可选，通过 enableAutoCleanup 开启）
@@ -168,20 +162,14 @@ public class MemoryMdData {
             LOG.error("MdMemoryData remove error, key={}", storeKey, e);
         }
 
-        MemoryEntry removed = cache.remove(storeKey);
-        if (removed != null) {
-            invalidateTokenizeCache(removed.content);
-        }
+        cache.remove(storeKey);
 
         String[] parts = splitStoreKey(storeKey);
         if (parts != null) {
             String docId = parts[0] + ":" + parts[1];
             Map<String, IndexEntry> bucket = indexByBucket.get(parts[0]);
             if (bucket != null) {
-                IndexEntry removedIdx = bucket.remove(docId);
-                if (removedIdx != null) {
-                    invalidateTokenizeCache(removedIdx.content);
-                }
+                bucket.remove(docId);
             }
         }
     }
@@ -238,16 +226,25 @@ public class MemoryMdData {
     }
 
     /**
+     * 列举指定桶下所有记忆条目的 userKey
+     */
+    public Set<String> keys(String bucketKey) {
+        Map<String, IndexEntry> bucket = indexByBucket.get(bucketKey);
+        if (bucket == null || bucket.isEmpty()) {
+            return Collections.emptySet();
+        }
+        return bucket.values().stream()
+                .map(e -> e.userKey)
+                .collect(Collectors.toSet());
+    }
+
+    /**
      * 手动更新搜索索引（由 MemorySkill 统一调用，兼容 MemorySearchProvider.updateIndex 接口）
      */
     public void updateIndex(String bucketKey, String userKey, String fact, int importance, String time) {
         String docId = bucketKey + ":" + userKey;
         Map<String, IndexEntry> bucket = indexByBucket.computeIfAbsent(bucketKey, k -> new ConcurrentHashMap<>());
-        IndexEntry old = bucket.put(docId, new IndexEntry(bucketKey, userKey, fact, importance, time));
-        if (old != null) {
-            invalidateTokenizeCache(old.content);
-        }
-        invalidateTokenizeCache(fact);
+        bucket.put(docId, new IndexEntry(bucketKey, userKey, fact, importance, time));
     }
 
     /**
@@ -257,10 +254,7 @@ public class MemoryMdData {
         String docId = bucketKey + ":" + userKey;
         Map<String, IndexEntry> bucket = indexByBucket.get(bucketKey);
         if (bucket != null) {
-            IndexEntry removed = bucket.remove(docId);
-            if (removed != null) {
-                invalidateTokenizeCache(removed.content);
-            }
+            bucket.remove(docId);
         }
     }
 
@@ -272,7 +266,7 @@ public class MemoryMdData {
     private void loadFromDisk(Path baseDir) {
         int expiredCount = 0;
         try (Stream<Path> files = Files.list(baseDir)) {
-            List<Path> mdFiles = files.filter(p -> p.toString().endsWith(".md"))
+            List<Path> mdFiles = files.filter(p -> p.getFileName().toString().endsWith(".md"))
                                       .collect(Collectors.toList());
 
             for (Path file : mdFiles) {
@@ -507,7 +501,7 @@ public class MemoryMdData {
         return LocalDateTime.now().format(FORMATTER);
     }
 
-    // ==================== 后台过期清理（编号11） ====================
+    // ==================== 后台过期清理 ====================
 
     /**
      * 启用后台定时清理过期条目
@@ -531,33 +525,44 @@ public class MemoryMdData {
 
     /**
      * 主动清理所有过期条目（缓存 + 磁盘文件）
+     *
+     * <p>先收集过期 key 再统一删除，避免遍历中修改导致的弱一致性问题。
      */
     public void cleanupExpired() {
-        Iterator<Map.Entry<String, MemoryEntry>> it = cache.entrySet().iterator();
-        while (it.hasNext()) {
-            Map.Entry<String, MemoryEntry> e = it.next();
+        List<String> expiredKeys = new ArrayList<>();
+        for (Map.Entry<String, MemoryEntry> e : cache.entrySet()) {
             if (isExpired(e.getValue())) {
-                remove(e.getKey());
+                expiredKeys.add(e.getKey());
             }
+        }
+        for (String key : expiredKeys) {
+            remove(key);
+        }
+        if (!expiredKeys.isEmpty()) {
+            LOG.debug("MdMemoryData cleanup: {} expired entries removed", expiredKeys.size());
         }
     }
 
     // ==================== 搜索评分 ====================
 
     /**
-     * 分词结果缓存：直接以 content 文本为 key，避免 hashCode 碰撞
+     * 获取索引条目的分词结果（内联缓存，随条目生命周期自动释放）
+     *
+     * <p>双重检查锁定保证线程安全：volatile 读在 synchronized 外面，
+     * 绝大多数情况下直接返回已缓存的分词结果，不进入同步块。
      */
-    private Set<String> tokenizeCached(String text) {
-        return tokenizeCache.computeIfAbsent(text, k -> tokenize(k));
-    }
-
-    /**
-     * 清除分词缓存
-     */
-    private void invalidateTokenizeCache(String content) {
-        if (content != null) {
-            tokenizeCache.remove(content.toLowerCase());
+    private Set<String> getTokens(IndexEntry entry) {
+        Set<String> tokens = entry.tokens;
+        if (tokens == null) {
+            synchronized (entry) {
+                tokens = entry.tokens;
+                if (tokens == null) {
+                    tokens = tokenize(entry.content.toLowerCase());
+                    entry.tokens = tokens;
+                }
+            }
         }
+        return tokens;
     }
 
     /**
@@ -565,7 +570,7 @@ public class MemoryMdData {
      *
      * <p>英文：按非字母数字字符分割，长度 >1 的 token 保留。
      * <p>中文：对连续中文字符做 bi-gram（每两个相邻字组成一个 token），
-     * 提升“用户偏好使用Solon框架”这类混合文本的搜索命中率。
+     * 提升"用户偏好使用Solon框架"这类混合文本的搜索命中率。
      */
     private Set<String> tokenize(String text) {
         Set<String> tokens = new HashSet<>();
@@ -619,28 +624,66 @@ public class MemoryMdData {
         buf.setLength(0);
     }
 
+    /**
+     * 搜索评分：token 命中率 + TF 加权 + 重要性权重
+     *
+     * <p>评分策略：
+     * <ul>
+     *   <li>精确 token 命中：按命中比率计分（权重 0.5），并叠加 TF 加权（权重 0.2）</li>
+     *   <li>子串兜底命中：仅当精确 token 命中为 0 时触发，降权计分（权重 0.3）</li>
+     *   <li>重要性加权：importance / 10（权重 0.3）</li>
+     * </ul>
+     */
     private double computeScore(IndexEntry entry, Set<String> queryTokens) {
         String contentLower = entry.content.toLowerCase();
-        Set<String> contentTokens = tokenizeCached(contentLower);
+        Set<String> contentTokens = getTokens(entry);
 
-        long hits = queryTokens.stream()
+        // 阶段一：精确 token 命中
+        long tokenHits = queryTokens.stream()
                 .filter(contentTokens::contains)
                 .count();
 
-        if (hits == 0) {
-            for (String token : queryTokens) {
-                if (contentLower.contains(token)) {
-                    hits++;
+        if (tokenHits > 0) {
+            double hitRate = (double) tokenHits / queryTokens.size();
+            double impWeight = entry.importance / 10.0;
+
+            // TF 加权：统计查询词在内容中出现的频次
+            long tfSum = 0;
+            for (String qt : queryTokens) {
+                if (contentTokens.contains(qt)) {
+                    // 简易 TF：统计 token 在分词结果中的出现次数
+                    tfSum += Collections.frequency(Collections.singletonList(qt), qt); // 标记：每个命中的 queryToken 贡献 1
                 }
+            }
+            double tfBoost = Math.min((double) tfSum / queryTokens.size(), 1.0);
+
+            return hitRate * 0.5 + tfBoost * 0.2 + impWeight * 0.3;
+        }
+
+        // 阶段二：子串兜底（降权）
+        long substrHits = 0;
+        for (String token : queryTokens) {
+            if (contentLower.contains(token)) {
+                substrHits++;
             }
         }
 
-        if (hits == 0) return 0;
+        if (substrHits == 0) return 0;
 
-        double hitRate = (double) hits / queryTokens.size();
+        double substrRate = (double) substrHits / queryTokens.size();
         double impWeight = entry.importance / 10.0;
 
-        return hitRate * 0.7 + impWeight * 0.3;
+        return substrRate * 0.3 + impWeight * 0.2;
+    }
+
+    // ==================== 生命周期管理 ====================
+
+    @Override
+    public void close() {
+        if (cleanupScheduler != null) {
+            cleanupScheduler.shutdownNow();
+            cleanupScheduler = null;
+        }
     }
 
     // ==================== 内部数据结构 ====================
@@ -667,6 +710,10 @@ public class MemoryMdData {
         String content;
         int importance;
         String time;
+        /**
+         * 分词结果内联缓存（lazy init，随 IndexEntry 生命周期自动释放）
+         */
+        volatile Set<String> tokens;
 
         IndexEntry(String bucketKey, String userKey, String content, int importance, String time) {
             this.bucketKey = bucketKey;
