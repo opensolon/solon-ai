@@ -59,7 +59,7 @@ public class MemorySkill extends AbsSkill {
         return this;
     }
 
-    private String getBucketKey(String __sessionId) {
+    private String getUserId(String __sessionId) {
         if (sessionIsolation) {
             return __sessionId == null ? "tmp" : __sessionId;
         } else {
@@ -89,9 +89,9 @@ public class MemorySkill extends AbsSkill {
 
         if (searchProvider != null) {
             String __sessionId = prompt.attrAs(ChatSession.ATTR_SESSIONID);
-            String bucketKey = getBucketKey(__sessionId);
+            String userId = getUserId(__sessionId);
 
-            List<MemorySearchResult> hot = searchProvider.getHotMemories(bucketKey, 8);
+            List<MemorySearchResult> hot = searchProvider.getHotMemories(userId, 8);
 
             if (!hot.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
@@ -132,13 +132,13 @@ public class MemorySkill extends AbsSkill {
                           @Param(value = "importance", description = "权重(1-10)：1-3琐碎事实, 4-6偏好习惯, 7-9核心规约, 10重大身份定论") int importance,
                           String __cwd,
                           String __sessionId) {
-        String bucketKey = getBucketKey(__sessionId);
+        String userId = getUserId(__sessionId);
 
         MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
         MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
 
         try {
-            String oldJson = storeProvider.get(bucketKey, key);
+            String oldJson = storeProvider.get(userId, key);
             String now = getNow();
 
             StringBuilder feedback = new StringBuilder("【操作成功】心智模型已更新。");
@@ -161,10 +161,10 @@ public class MemorySkill extends AbsSkill {
             else if (importance >= 5) ttl = 2592000;
             else ttl = 604800;
 
-            storeProvider.put(bucketKey, key, ONode.serialize(data), ttl);
+            storeProvider.put(userId, key, ONode.serialize(data), ttl);
 
             if (searchProvider != null) {
-                searchProvider.updateIndex(bucketKey, key, fact, importance, now);
+                searchProvider.updateIndex(userId, key, fact, importance, now);
             }
 
             return feedback.toString();
@@ -182,14 +182,14 @@ public class MemorySkill extends AbsSkill {
     public String search(@Param("query") String query,
                          String __cwd,
                          String __sessionId) {
-        String bucketKey = getBucketKey(__sessionId);
+        String userId = getUserId(__sessionId);
         MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
 
         if (searchProvider == null) {
             return "搜索适配器未配置。";
         }
 
-        List<MemorySearchResult> results = searchProvider.search(bucketKey, query, 3);
+        List<MemorySearchResult> results = searchProvider.search(userId, query, 3);
         if (results.isEmpty()) {
             return "未发现相关认知片段。";
         }
@@ -209,11 +209,11 @@ public class MemorySkill extends AbsSkill {
     public String recall(@Param("key") String key,
                          String __cwd,
                          String __sessionId) {
-        String bucketKey = getBucketKey(__sessionId);
+        String userId = getUserId(__sessionId);
         MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
 
         try {
-            String val = storeProvider.get(bucketKey, key);
+            String val = storeProvider.get(userId, key);
 
             if (Utils.isEmpty(val)) {
                 return "未找到认知条目 [" + key + "]。";
@@ -256,14 +256,14 @@ public class MemorySkill extends AbsSkill {
     public String prune(@Param("key") String key,
                         String __cwd,
                         String __sessionId) {
-        String bucketKey = getBucketKey(__sessionId);
+        String userId = getUserId(__sessionId);
         MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
         MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
 
-        storeProvider.remove(bucketKey, key);
+        storeProvider.remove(userId, key);
 
         if (searchProvider != null) {
-            searchProvider.removeIndex(bucketKey, key);
+            searchProvider.removeIndex(userId, key);
         }
 
         return "已从模型中清理 Key: " + key;
