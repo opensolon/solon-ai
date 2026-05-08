@@ -72,6 +72,11 @@ public class ActionTask implements NamedTaskComponent {
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
         String traceKey = context.getAs(ReActAgent.KEY_CURRENT_UNIT_TRACE_KEY);
+        if(traceKey == null) {
+            LOG.error("Missing '" + ReActAgent.KEY_CURRENT_UNIT_TRACE_KEY + "': {}", context.toJson(context.vars()));
+            throw new IllegalArgumentException("Missing '" + ReActAgent.KEY_CURRENT_UNIT_TRACE_KEY + "'");
+        }
+
         ReActTrace trace = context.getAs(traceKey);
         final TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
 
