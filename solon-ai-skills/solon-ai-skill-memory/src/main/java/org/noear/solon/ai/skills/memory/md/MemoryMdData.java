@@ -72,8 +72,8 @@ public class MemoryMdData {
      */
     private final Map<String, Set<String>> tokenizeCache = new ConcurrentHashMap<>();
 
-    public MemoryMdData(String baseDir) {
-        this.baseDir = Paths.get(baseDir).toAbsolutePath();
+    public MemoryMdData(Path baseDir) {
+        this.baseDir = baseDir;
         init();
     }
 

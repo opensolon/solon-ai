@@ -50,15 +50,6 @@ public class MemoryStoreProviderMdImpl implements MemoryStoreProvider {
     private final MemoryMdData data;
 
     /**
-     * 基于 MD 文件目录创建（自动加载已有文件）
-     *
-     * @param baseDir MD 文件存储根目录
-     */
-    public MemoryStoreProviderMdImpl(String baseDir) {
-        this.data = new MemoryMdData(baseDir);
-    }
-
-    /**
      * 基于共享 MdMemoryData 创建（与 Search 共享同一实例）
      *
      * @param data 共享数据层实例

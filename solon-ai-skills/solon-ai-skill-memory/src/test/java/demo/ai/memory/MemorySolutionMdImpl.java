@@ -7,6 +7,7 @@ import org.noear.solon.ai.skills.memory.md.MemoryMdData;
 import org.noear.solon.ai.skills.memory.search.MemorySearchProviderMdImpl;
 import org.noear.solon.ai.skills.memory.store.MemoryStoreProviderMdImpl;
 
+import java.nio.file.Path;
 import java.nio.file.Paths;
 
 /**
@@ -26,7 +27,7 @@ public class MemorySolutionMdImpl implements MemorySolution {
     private final MemoryStoreProvider storeProvider;
 
     public MemorySolutionMdImpl(String __cwd) {
-        String mdPath = Paths.get(__cwd, "memory_md").toAbsolutePath().toString();
+        Path mdPath = Paths.get(__cwd, "memory_md").toAbsolutePath();
 
         // 创建共享数据层（启动时自动加载已有 MD 文件）
         MemoryMdData data = new MemoryMdData(mdPath);
