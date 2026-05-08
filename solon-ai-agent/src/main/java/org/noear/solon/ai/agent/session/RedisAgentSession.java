@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.session;
 
 import org.noear.redisx.RedisClient;
+import org.noear.redisx.plus.RedisList;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
@@ -110,6 +111,26 @@ public class RedisAgentSession implements AgentSession {
     public List<ChatMessage> getLatestMessages(int windowSize) {
         // 走缓存
         return cache.getLatestMessages(windowSize);
+    }
+
+    @Override
+    public void removeLatestMessage(int windowSize) {
+        // 记录删除前的消息数
+        int sizeBefore = cache.getMessages().size();
+
+        // 1. 先从内存层安全删除
+        cache.removeLatestMessage(windowSize);
+
+        // 2. 计算实际删除的条数（ToolCall 链可能会导致实际删除数量大于 windowSize）
+        int actualRemoved = sizeBefore - cache.getMessages().size();
+
+        // 3. 同步到 Redis：从末尾删除实际被移除的条数
+        RedisList list = redisClient.getList(messagesKey);
+        for (int i = 0; i < actualRemoved; i++) {
+            if (list.size() > 0) {
+                list.removeAt(list.size() - 1);
+            }
+        }
     }
 
     @Override

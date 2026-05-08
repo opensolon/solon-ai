@@ -86,4 +86,26 @@ public class FileChatSessionTest {
         Assertions.assertEquals(1, latest.size());
         Assertions.assertEquals("msg 2", latest.get(0).getContent());
     }
+
+    @Test
+    public void testRemoveLatestMessage_persistence() {
+        String sessionId = "s-remove-" + UUID.randomUUID();
+        FileChatSession session = new FileChatSession(sessionId, tempDir);
+
+        session.addMessage(ChatMessage.ofUser("msg 1"));
+        session.addMessage(ChatMessage.ofAssistant("ans 1"));
+        session.addMessage(ChatMessage.ofUser("msg 2"));
+        session.addMessage(ChatMessage.ofAssistant("ans 2"));
+
+        // 删除最后 2 条
+        session.removeLatestMessage(2);
+        Assertions.assertEquals(2, session.getMessages().size());
+        Assertions.assertEquals("msg 1", session.getMessages().get(0).getContent());
+
+        // 模拟重启：重新加载磁盘文件
+        FileChatSession sessionRecovered = new FileChatSession(sessionId, tempDir);
+        Assertions.assertEquals(2, sessionRecovered.getMessages().size());
+        Assertions.assertEquals("msg 1", sessionRecovered.getMessages().get(0).getContent());
+        Assertions.assertEquals("ans 1", sessionRecovered.getMessages().get(1).getContent());
+    }
 }
