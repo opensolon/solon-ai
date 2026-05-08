@@ -53,7 +53,14 @@ public interface ChatSession extends NonSerializable {
      *
      * @param windowSize 窗口大小
      */
-     List<ChatMessage> getLatestMessages(int windowSize);
+    List<ChatMessage> getLatestMessages(int windowSize);
+
+    /**
+     * 移除最近消息
+     *
+     * @param windowSize 窗口大小
+     */
+    void removeLatestMessage(int windowSize);
 
     /**
      * 添加消息

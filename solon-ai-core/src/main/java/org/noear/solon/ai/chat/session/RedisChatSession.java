@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.session;
 
 import org.noear.redisx.RedisClient;
+import org.noear.redisx.plus.RedisList;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.ChatSession;
@@ -86,6 +87,16 @@ public class RedisChatSession implements ChatSession {
     public List<ChatMessage> getLatestMessages(int windowSize) {
         // 走缓存
         return cache.getLatestMessages(windowSize);
+    }
+
+    @Override
+    public void removeLatestMessage(int windowSize) {
+        cache.removeLatestMessage(windowSize);
+
+        RedisList list = redisClient.getList(messagesKey);
+        for (int i = 0; i < windowSize; i++) {
+            list.removeAt(list.size() - 1);
+        }
     }
 
     @Override

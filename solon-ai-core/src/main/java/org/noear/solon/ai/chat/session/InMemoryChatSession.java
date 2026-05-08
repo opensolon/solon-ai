@@ -54,7 +54,8 @@ public class InMemoryChatSession implements ChatSession {
 
     /**
      * @deprecated 3.9.1 不建议在会话里放系统消息
-     * */
+     *
+     */
     @Deprecated
     public InMemoryChatSession(String sessionId, List<SystemMessage> systemMessages, List<ChatMessage> messages, int maxMessages) {
         this(sessionId, maxMessages);
@@ -134,6 +135,14 @@ public class InMemoryChatSession implements ChatSession {
         }
 
         return all.subList(start, size);
+    }
+
+
+    @Override
+    public void removeLatestMessage(int windowSize) {
+        for (int i = 0; i < windowSize; i++) {
+            messages.remove(messages.size() - 1);
+        }
     }
 
     /**

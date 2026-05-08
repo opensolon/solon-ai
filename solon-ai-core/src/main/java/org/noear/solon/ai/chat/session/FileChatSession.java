@@ -89,6 +89,11 @@ public class FileChatSession implements ChatSession {
     }
 
     @Override
+    public void removeLatestMessage(int windowSize) {
+        cache.removeLatestMessage(windowSize);
+    }
+
+    @Override
     public void addMessage(Collection<? extends ChatMessage> messages) {
         if (Utils.isEmpty(messages)) return;
 
