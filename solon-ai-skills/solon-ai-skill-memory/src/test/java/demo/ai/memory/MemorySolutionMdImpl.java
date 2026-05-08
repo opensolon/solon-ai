@@ -23,18 +23,28 @@ import java.nio.file.Paths;
  * @author noear 2026/5/8 created
  */
 public class MemorySolutionMdImpl implements MemorySolution {
+    private final MemoryMdData data;
     private final MemorySearchProvider searchProvider;
     private final MemoryStoreProvider storeProvider;
 
     public MemorySolutionMdImpl(String __cwd) {
         Path mdPath = Paths.get(__cwd, "memory_md").toAbsolutePath();
 
-        // 创建共享数据层（启动时自动加载已有 MD 文件）
-        MemoryMdData data = new MemoryMdData(mdPath);
+        // 创建共享数据层（启动时自动加载已有 MD 文件，启用后台过期清理）
+        data = new MemoryMdData(mdPath).enableAutoCleanup(3600);
 
         // Store 和 Search 共享同一个 data 实例
         storeProvider = new MemoryStoreProviderMdImpl(data);
         searchProvider = new MemorySearchProviderMdImpl(data);
+    }
+
+    /**
+     * 关闭资源（释放后台清理线程）
+     */
+    public void close() {
+        if (data != null) {
+            data.close();
+        }
     }
 
     @Override

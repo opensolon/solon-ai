@@ -90,6 +90,7 @@ public class MemoryMdData implements AutoCloseable {
             throw new RuntimeException("Failed to create memory storage directory: " + baseDir, e);
         }
         loadFromDisk(baseDir);
+        cleanupTmpFiles(baseDir);
     }
 
     // ==================== Store 操作 ====================
@@ -100,7 +101,8 @@ public class MemoryMdData implements AutoCloseable {
      * <p>注意：搜索索引的更新由 MemorySkill 统一调用 updateIndex() 完成，
      * 保持与其他方案（Lucene/Repository/Rogue）的调用约定一致，避免双写冗余。
      */
-    public void put(String storeKey, String val, int ttl) {
+    public void put(String bucket, String key, String val, int ttl) {
+        String storeKey = buildStoreKey(bucket, key);
         try {
             ONode node = ONode.ofJson(val);
             String content = node.get("content").getString();
@@ -115,14 +117,15 @@ public class MemoryMdData implements AutoCloseable {
             // 2. 更新内存缓存
             cache.put(storeKey, new MemoryEntry(content, time, importance, ttl, storedTime));
         } catch (Exception e) {
-            LOG.error("MdMemoryData put error, key={}", storeKey, e);
+            LOG.error("MdMemoryData put error, bucket={}, key={}", bucket, key, e);
         }
     }
 
     /**
      * 获取记忆条目：优先走内存缓存，缓存未命中再读磁盘
      */
-    public String get(String storeKey) {
+    public String get(String bucket, String key) {
+        String storeKey = buildStoreKey(bucket, key);
         MemoryEntry entry = cache.get(storeKey);
 
         if (entry == null) {
@@ -134,18 +137,14 @@ public class MemoryMdData implements AutoCloseable {
             cache.put(storeKey, entry);
 
             // 同步到搜索索引
-            String[] parts = splitStoreKey(storeKey);
-            if (parts != null) {
-                String docId = parts[0] + ":" + parts[1];
-                indexByBucket.computeIfAbsent(parts[0], k -> new ConcurrentHashMap<>())
-                        .putIfAbsent(docId, new IndexEntry(parts[0], parts[1],
-                                entry.content, entry.importance, entry.time));
-            }
+            indexByBucket.computeIfAbsent(bucket, k -> new ConcurrentHashMap<>())
+                    .putIfAbsent(buildDocId(bucket, key),
+                            new IndexEntry(bucket, key, entry.content, entry.importance, entry.time));
         }
 
         // TTL 过期检查
         if (isExpired(entry)) {
-            remove(storeKey);
+            remove(bucket, key);
             return null;
         }
 
@@ -155,23 +154,20 @@ public class MemoryMdData implements AutoCloseable {
     /**
      * 删除记忆条目：删 MD 文件 + 清缓存 + 清搜索索引
      */
-    public void remove(String storeKey) {
+    public void remove(String bucket, String key) {
+        String storeKey = buildStoreKey(bucket, key);
         Path file = resolveFile(storeKey);
         try {
             Files.deleteIfExists(file);
         } catch (IOException e) {
-            LOG.error("MdMemoryData remove error, key={}", storeKey, e);
+            LOG.error("MdMemoryData remove error, bucket={}, key={}", bucket, key, e);
         }
 
         cache.remove(storeKey);
 
-        String[] parts = splitStoreKey(storeKey);
-        if (parts != null) {
-            String docId = parts[0] + ":" + parts[1];
-            Map<String, IndexEntry> bucket = indexByBucket.get(parts[0]);
-            if (bucket != null) {
-                bucket.remove(docId);
-            }
+        Map<String, IndexEntry> bucketMap = indexByBucket.get(bucket);
+        if (bucketMap != null) {
+            bucketMap.remove(buildDocId(bucket, key));
         }
     }
 
@@ -243,19 +239,17 @@ public class MemoryMdData implements AutoCloseable {
      * 手动更新搜索索引（由 MemorySkill 统一调用，兼容 MemorySearchProvider.updateIndex 接口）
      */
     public void updateIndex(String bucketKey, String userKey, String fact, int importance, String time) {
-        String docId = bucketKey + ":" + userKey;
         Map<String, IndexEntry> bucket = indexByBucket.computeIfAbsent(bucketKey, k -> new ConcurrentHashMap<>());
-        bucket.put(docId, new IndexEntry(bucketKey, userKey, fact, importance, time));
+        bucket.put(buildDocId(bucketKey, userKey), new IndexEntry(bucketKey, userKey, fact, importance, time));
     }
 
     /**
      * 手动移除搜索索引（由 MemorySkill 统一调用，兼容 MemorySearchProvider.removeIndex 接口）
      */
     public void removeIndex(String bucketKey, String userKey) {
-        String docId = bucketKey + ":" + userKey;
         Map<String, IndexEntry> bucket = indexByBucket.get(bucketKey);
         if (bucket != null) {
-            bucket.remove(docId);
+            bucket.remove(buildDocId(bucketKey, userKey));
         }
     }
 
@@ -300,6 +294,7 @@ public class MemoryMdData implements AutoCloseable {
             if (storeKey == null || storeKey.isEmpty()) {
                 // 兼容旧格式文件：从文件名启发式还原
                 storeKey = fileNameToStoreKey(file.getFileName().toString());
+                LOG.warn("MdMemoryData: file has no store_key field, heuristic restore may be inaccurate: {}", file);
             }
 
             // TTL 过期检查，过期的不加载并删除文件
@@ -318,9 +313,9 @@ public class MemoryMdData implements AutoCloseable {
 
             String[] parts = splitStoreKey(storeKey);
             if (parts != null) {
-                String docId = parts[0] + ":" + parts[1];
                 indexByBucket.computeIfAbsent(parts[0], k -> new ConcurrentHashMap<>())
-                        .put(docId, new IndexEntry(parts[0], parts[1], fm.content, fm.importance, fm.time));
+                        .put(buildDocId(parts[0], parts[1]),
+                                new IndexEntry(parts[0], parts[1], fm.content, fm.importance, fm.time));
             }
 
             return LoadResult.LOADED;
@@ -366,7 +361,15 @@ public class MemoryMdData implements AutoCloseable {
                 return null;
             }
 
-            // 同步 Front Matter 中的 storeKey（首次兼容旧文件时补写）
+            MemoryEntry tempEntry = new MemoryEntry(fm.content, fm.time, fm.importance, fm.ttl, fm.storedTime);
+
+            // 先检查 TTL，过期的直接删除文件返回 null，避免无意义的补写 I/O
+            if (isExpired(tempEntry)) {
+                try { Files.deleteIfExists(file); } catch (IOException ignored) {}
+                return null;
+            }
+
+            // 未过期且 Front Matter 中缺少 storeKey 时补写
             if (fm.storeKey == null || fm.storeKey.isEmpty()) {
                 try {
                     writeMdFile(file, storeKey, fm.time, fm.importance, fm.ttl, fm.storedTime, fm.content);
@@ -374,7 +377,7 @@ public class MemoryMdData implements AutoCloseable {
                 }
             }
 
-            return new MemoryEntry(fm.content, fm.time, fm.importance, fm.ttl, fm.storedTime);
+            return tempEntry;
         } catch (IOException e) {
             LOG.error("MdMemoryData loadFromMdFile error, key={}", storeKey, e);
             return null;
@@ -383,9 +386,38 @@ public class MemoryMdData implements AutoCloseable {
 
     // ===================== 内部工具方法 =====================
 
+    /**
+     * 构建完整 storeKey："ai:memskill:{bucket}:{key}"
+     */
+    private String buildStoreKey(String bucket, String key) {
+        return "ai:memskill:" + bucket + ":" + key;
+    }
+
+    /**
+     * 构建 docId："{bucket}:{key}"
+     */
+    private String buildDocId(String bucket, String key) {
+        return bucket + ":" + key;
+    }
+
     private Path resolveFile(String storeKey) {
-        String safeKey = storeKey.replace(":", "_").replace("/", "_");
+        // 加 hash 前缀降低 key 碰撞风险（key 可能含 _ 或 : 的组合）
+        int h = Math.abs(storeKey.hashCode());
+        String safeKey = h + "_" + storeKey.replace(":", "_").replace("/", "_");
         return baseDir.resolve(safeKey + ".md");
+    }
+
+    /**
+     * 清理残留的 .tmp 文件（writeMdFile 中 move 失败时可能残留）
+     */
+    private void cleanupTmpFiles(Path baseDir) {
+        try (Stream<Path> files = Files.list(baseDir)) {
+            files.filter(p -> p.getFileName().toString().endsWith(".tmp"))
+                 .forEach(p -> {
+                     try { Files.deleteIfExists(p); } catch (IOException ignored) {}
+                 });
+        } catch (IOException ignored) {
+        }
     }
 
     /**
@@ -526,14 +558,17 @@ public class MemoryMdData implements AutoCloseable {
      * <p>先收集过期 key 再统一删除，避免遍历中修改导致的弱一致性问题。
      */
     public void cleanupExpired() {
-        List<String> expiredKeys = new ArrayList<>();
+        List<String[]> expiredKeys = new ArrayList<>();
         for (Map.Entry<String, MemoryEntry> e : cache.entrySet()) {
             if (isExpired(e.getValue())) {
-                expiredKeys.add(e.getKey());
+                String[] parts = splitStoreKey(e.getKey());
+                if (parts != null) {
+                    expiredKeys.add(parts);
+                }
             }
         }
-        for (String key : expiredKeys) {
-            remove(key);
+        for (String[] parts : expiredKeys) {
+            remove(parts[0], parts[1]);
         }
         if (!expiredKeys.isEmpty()) {
             LOG.debug("MdMemoryData cleanup: {} expired entries removed", expiredKeys.size());
@@ -609,8 +644,10 @@ public class MemoryMdData implements AutoCloseable {
 
     private void flushChinese(StringBuilder buf, Set<String> tokens) {
         if (buf.length() >= 2) {
-            // bi-gram 分词：每两个相邻字组成一个 token
             String str = buf.toString();
+            // 保留完整短语（提升短查询的精确匹配）
+            tokens.add(str);
+            // bi-gram 分词：每两个相邻字组成一个 token
             for (int i = 0; i < str.length() - 1; i++) {
                 tokens.add(str.substring(i, i + 2));
             }
@@ -622,13 +659,12 @@ public class MemoryMdData implements AutoCloseable {
     }
 
     /**
-     * 搜索评分：token 命中率 + TF 加权 + 重要性权重
+     * 搜索评分：token 命中率 + 重要性权重
      *
      * <p>评分策略：
      * <ul>
-     *   <li>精确 token 命中：按命中比率计分（权重 0.5），并叠加 TF 加权（权重 0.2）</li>
-     *   <li>子串兜底命中：仅当精确 token 命中为 0 时触发，降权计分（权重 0.3）</li>
-     *   <li>重要性加权：importance / 10（权重 0.3）</li>
+     *   <li>精确 token 命中：按命中比率计分（权重 0.7）+ 重要性加权（权重 0.3）</li>
+     *   <li>子串兜底命中：仅当精确 token 命中为 0 时触发，降权计分（权重 0.3）+ 重要性加权（权重 0.2）</li>
      * </ul>
      */
     private double computeScore(IndexEntry entry, Set<String> queryTokens) {
@@ -644,17 +680,7 @@ public class MemoryMdData implements AutoCloseable {
             double hitRate = (double) tokenHits / queryTokens.size();
             double impWeight = entry.importance / 10.0;
 
-            // TF 加权：统计查询词在内容中出现的频次
-            long tfSum = 0;
-            for (String qt : queryTokens) {
-                if (contentTokens.contains(qt)) {
-                    // 简易 TF：统计 token 在分词结果中的出现次数
-                    tfSum += Collections.frequency(Collections.singletonList(qt), qt); // 标记：每个命中的 queryToken 贡献 1
-                }
-            }
-            double tfBoost = Math.min((double) tfSum / queryTokens.size(), 1.0);
-
-            return hitRate * 0.5 + tfBoost * 0.2 + impWeight * 0.3;
+            return hitRate * 0.7 + impWeight * 0.3;
         }
 
         // 阶段二：子串兜底（降权）
