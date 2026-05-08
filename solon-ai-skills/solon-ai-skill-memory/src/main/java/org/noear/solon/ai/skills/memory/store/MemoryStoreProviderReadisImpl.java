@@ -17,6 +17,7 @@ package org.noear.solon.ai.skills.memory.store;
 
 import org.noear.redisx.RedisClient;
 import org.noear.solon.ai.skills.memory.MemoryStoreProvider;
+import org.noear.solon.core.util.Assert;
 
 /**
  *
@@ -25,22 +26,38 @@ import org.noear.solon.ai.skills.memory.MemoryStoreProvider;
  */
 public class MemoryStoreProviderReadisImpl implements MemoryStoreProvider {
     private final RedisClient redis;
-    public MemoryStoreProviderReadisImpl(RedisClient redis){
+    private String basePrefix;
+
+    public MemoryStoreProviderReadisImpl(RedisClient redis) {
         this.redis = redis;
     }
 
-    @Override
-    public void put(String key, String val, int ttl) {
-       redis.getBucket().store(key, val, ttl);
+
+    public MemoryStoreProviderReadisImpl basePrefix(String basePrefix) {
+        this.basePrefix = basePrefix;
+        return this;
+    }
+
+    private String getFinalKey(String bucketKey, String key) {
+        if (Assert.isEmpty(bucketKey)) {
+            return basePrefix + bucketKey + ":" + key;
+        } else {
+            return bucketKey + ":" + key;
+        }
     }
 
     @Override
-    public String get(String key) {
-        return redis.getBucket().get(key);
+    public void put(String userId, String key, String val, int ttl) {
+        redis.getBucket().store(getFinalKey(userId, key), val, ttl);
     }
 
     @Override
-    public void remove(String key) {
-        redis.getBucket().remove(key);
+    public String get(String userId, String key) {
+        return redis.getBucket().get(getFinalKey(userId, key));
+    }
+
+    @Override
+    public void remove(String userId, String key) {
+        redis.getBucket().remove(getFinalKey(userId, key));
     }
 }

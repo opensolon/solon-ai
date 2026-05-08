@@ -42,7 +42,7 @@ import java.time.format.DateTimeFormatter;
 @Preview("3.9.4")
 public class MemorySkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(MemorySkill.class);
-    private static final String BASE_PREFIX = "ai:memskill:";
+
 
     private final MemorySolution.Factory solutionFactory;
     private boolean sessionIsolation = false; // 默认会话不隔离
@@ -65,10 +65,6 @@ public class MemorySkill extends AbsSkill {
         } else {
             return "shared";
         }
-    }
-
-    private String getFinalKey(String bucketKey, String key) {
-        return BASE_PREFIX + bucketKey + ":" + key;
     }
 
     private String getNow() {
@@ -142,8 +138,7 @@ public class MemorySkill extends AbsSkill {
         MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
 
         try {
-            String finalKey = getFinalKey(bucketKey, key);
-            String oldJson = storeProvider.get(finalKey); //redis.getBucket().get(finalKey);
+            String oldJson = storeProvider.get(bucketKey, key);
             String now = getNow();
 
             StringBuilder feedback = new StringBuilder("【操作成功】心智模型已更新。");
@@ -166,7 +161,7 @@ public class MemorySkill extends AbsSkill {
             else if (importance >= 5) ttl = 2592000;
             else ttl = 604800;
 
-            storeProvider.put(finalKey, ONode.serialize(data), ttl);
+            storeProvider.put(bucketKey, key, ONode.serialize(data), ttl);
 
             if (searchProvider != null) {
                 searchProvider.updateIndex(bucketKey, key, fact, importance, now);
@@ -218,7 +213,7 @@ public class MemorySkill extends AbsSkill {
         MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
 
         try {
-            String val = storeProvider.get(getFinalKey(bucketKey, key));
+            String val = storeProvider.get(bucketKey, key);
 
             if (Utils.isEmpty(val)) {
                 return "未找到认知条目 [" + key + "]。";
@@ -265,7 +260,7 @@ public class MemorySkill extends AbsSkill {
         MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
         MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
 
-        storeProvider.remove(getFinalKey(bucketKey, key));
+        storeProvider.remove(bucketKey, key);
 
         if (searchProvider != null) {
             searchProvider.removeIndex(bucketKey, key);

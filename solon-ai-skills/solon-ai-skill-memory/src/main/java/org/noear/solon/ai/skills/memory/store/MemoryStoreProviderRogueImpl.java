@@ -18,6 +18,7 @@ package org.noear.solon.ai.skills.memory.store;
 import com.yomahub.roguemap.RogueMap;
 import com.yomahub.roguemap.serialization.StringCodec;
 import org.noear.solon.ai.skills.memory.MemoryStoreProvider;
+import org.noear.solon.core.util.Assert;
 
 import java.nio.file.Paths;
 import java.util.concurrent.TimeUnit;
@@ -44,20 +45,24 @@ public class MemoryStoreProviderRogueImpl implements MemoryStoreProvider {
         this.rogueMap = rogueMap;
     }
 
+    private String getFinalKey(String bucketKey, String key) {
+        return bucketKey + ":" + key;
+    }
+
     @Override
-    public void put(String key, String val, int ttl) {
-        rogueMap.put(key, val, ttl, TimeUnit.SECONDS);
+    public void put(String userId, String key, String val, int ttl) {
+        rogueMap.put(getFinalKey(userId, key), val, ttl, TimeUnit.SECONDS);
         rogueMap.checkpoint();
     }
 
     @Override
-    public String get(String key) {
-        return rogueMap.get(key);
+    public String get(String userId, String key) {
+        return rogueMap.get(getFinalKey(userId, key));
     }
 
     @Override
-    public void remove(String key) {
-        rogueMap.remove(key);
+    public void remove(String userId, String key) {
+        rogueMap.remove(getFinalKey(userId, key));
         rogueMap.checkpoint();
     }
 }

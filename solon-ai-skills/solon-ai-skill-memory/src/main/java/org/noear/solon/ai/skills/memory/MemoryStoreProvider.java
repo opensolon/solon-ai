@@ -31,7 +31,7 @@ public interface MemoryStoreProvider {
      * @param val   序列化后的记忆 JSON 内容
      * @param ttl   存活时间，单位：秒（-1 表示永久存储）
      */
-    void put(String key, String val, int ttl);
+    void put(String userId, String key, String val, int ttl);
 
     /**
      * 获取记忆条目
@@ -39,12 +39,12 @@ public interface MemoryStoreProvider {
      * @param key   存储键
      * @return      序列化内容，若不存在则返回 null
      */
-    String get(String key);
+    String get(String userId, String key);
 
     /**
      * 移除特定记忆
      *
      * @param key   存储键
      */
-    void remove(String key);
+    void remove(String userId, String key);
 }

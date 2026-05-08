@@ -59,17 +59,17 @@ public class MemoryStoreProviderMdImpl implements MemoryStoreProvider {
     }
 
     @Override
-    public void put(String key, String val, int ttl) {
+    public void put(String userId, String key, String val, int ttl) {
         data.put(key, val, ttl);
     }
 
     @Override
-    public String get(String key) {
+    public String get(String userId, String key) {
         return data.get(key);
     }
 
     @Override
-    public void remove(String key) {
+    public void remove(String userId, String key) {
         data.remove(key);
     }
 }
