@@ -67,47 +67,6 @@ public class ReasonTask implements NamedTaskComponent {
         return ReActAgent.ID_REASON;
     }
 
-    private boolean handleHitlExtension(ReActTrace trace, int currentStep, int maxSteps, int maxStepsLimit){
-        // 检查用户是否已经通过 HITL 决策过“继续”
-        HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + FeedbackTool.TOOL_NAME);
-
-        if (decision == null) {
-            // 核心创新：伪造一个 Feedback 请求，挂起任务
-            String warningMsg = String.format("Agent 已执行 %d 步（上限 %d 步），任务尚未完成。是否允许继续执行？",
-                    currentStep, maxSteps);
-
-            // 1. 记录挂起任务
-            Map<String, Object> args = new HashMap<>();
-            args.put("reason", warningMsg);
-            args.put("type", "step_limit_warning");
-
-            trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(FeedbackTool.TOOL_NAME, args, warningMsg));
-
-            // 2. 设为挂起状态
-            trace.getSession().pending(true, warningMsg);
-            trace.setFinalAnswer(warningMsg); // 让前端能展示这个询问提示
-
-            LOG.info("ReActAgent [{}] paused at threshold step: {}/{}", config.getName(), currentStep, maxSteps);
-            return true;
-        } else {
-            // 如果用户已经决策了（approve），则重置步数或扩大步数，让 Agent 继续跑
-            if (decision.isApproved()) {
-                // 方案：给 Agent 续命，增加步数上限（或者简单地将 stepCount 减去一部分）
-                int nextMaxSteps = Math.min(maxSteps + 10, maxStepsLimit);
-                trace.getOptions().setMaxSteps(nextMaxSteps);
-
-                LOG.info("ReActAgent [{}] approved to continue. New max steps: {}",
-                        config.getName(), trace.getOptions().getMaxSteps());
-
-                // 清理决策状态，防止死循环
-                trace.getContext().remove(HITL.DECISION_PREFIX + FeedbackTool.TOOL_NAME);
-                trace.getContext().remove(HITL.LAST_INTERVENED);
-            }
-        }
-
-        return false;
-    }
-
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
         String traceKey = context.getAs(ReActAgent.KEY_CURRENT_UNIT_TRACE_KEY);
@@ -152,23 +111,11 @@ public class ReasonTask implements NamedTaskComponent {
             }
         }
 
-        //软限拦截与自动/人工分流
         if(trace.getOptions().isMaxStepsExtensible()) {
+            //续航模式
             int thresholdStep = Math.max(maxSteps - 1, (int) (maxSteps * 0.8));
-
             if (currentStep >= thresholdStep) {
-                // 检查是否有 HITL 拦截器（人工模式 vs 自动模式）
-                boolean hasHitl = trace.getOptions().getInterceptors().stream()
-                        .anyMatch(i -> i.target instanceof HITL);
-
-                if (hasHitl) {
-                    // 模式 A：由人类判断是否继续。若返回 true 表示任务已挂起等待。
-                    if (handleHitlExtension(trace, currentStep, maxSteps, trace.getOptions().getMaxStepsLimit())) {
-                        return;
-                    }
-                } else {
-                    // 模式 B：真正的无限续航（自动模式）
-                    // 只要没到物理硬限，就自动延展
+                    // 提醒自我审核
                     if (maxSteps < trace.getOptions().getMaxStepsLimit()) {
                         trace.getOptions().setMaxSteps(maxSteps + 10);
 
@@ -185,7 +132,7 @@ public class ReasonTask implements NamedTaskComponent {
                         trace.getWorkingMemory().addMessage(ChatMessage.ofUser(interventionPrompt));
                         LOG.info("ReActAgent [{}] critical intervention injected at step {}", config.getName(), currentStep);
                     }
-                }
+
             }
         } else  if (currentStep > maxSteps) {
             // 非续航模式下的标准熔断
@@ -303,8 +250,8 @@ public class ReasonTask implements NamedTaskComponent {
         }
 
         // 容错处理：模型响应内容及工具调用均为空时，引导其重新生成
-        if (Assert.isEmpty(responseMessage.getContent()) && Assert.isEmpty(responseMessage.getToolCalls())) {
-            trace.getWorkingMemory().addMessage(ChatMessage.ofUser("Your last response was empty. Please provide Action or Final Answer."));
+        if (Assert.isEmpty(responseMessage.getResultContent()) && Assert.isEmpty(responseMessage.getToolCalls())) {
+            trace.getWorkingMemory().addMessage(ChatMessage.ofUser("您上一次的回答是空的。请提供行动步骤或最终答案。"));
             trace.setRoute(ReActAgent.ID_REASON);
             return;
         }
