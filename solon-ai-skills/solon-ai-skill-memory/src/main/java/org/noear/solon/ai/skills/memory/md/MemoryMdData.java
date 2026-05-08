@@ -19,6 +19,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.ai.skills.memory.MemorySearchResult;
 import org.noear.solon.ai.util.Markdown;
 import org.noear.solon.ai.util.MarkdownUtil;
+import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -289,8 +290,7 @@ public class MemoryMdData implements AutoCloseable {
 
     private LoadResult loadSingleFile(Path file) {
         try {
-            String md = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
-            FrontMatter fm = parseFrontMatter(md);
+            FrontMatter fm = parseFrontMatter(Files.readAllLines(file, StandardCharsets.UTF_8));
             if (fm == null) {
                 return LoadResult.SKIPPED;
             }
@@ -361,8 +361,7 @@ public class MemoryMdData implements AutoCloseable {
         }
 
         try {
-            String md = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
-            FrontMatter fm = parseFrontMatter(md);
+            FrontMatter fm = parseFrontMatter(Files.readAllLines(file, StandardCharsets.UTF_8));
             if (fm == null) {
                 return null;
             }
@@ -447,11 +446,9 @@ public class MemoryMdData implements AutoCloseable {
      * MarkdownUtil 基于 SnakeYAML，可复原地处理转义字符（先 \\ 再 \"），
      * 且只在前几行内查找结束符 --- ，避免 body 中的 --- 被误识别。
      */
-    private FrontMatter parseFrontMatter(String md) {
-        if (md == null || md.isEmpty()) return null;
+    private FrontMatter parseFrontMatter(List<String> lines) {
+        if (Assert.isEmpty(lines)) return null;
 
-        // 将文本按行分割，交给 MarkdownUtil 解析
-        List<String> lines = Arrays.asList(md.split("\n"));
         Markdown markdown = MarkdownUtil.resolve(lines);
 
         ONode meta = markdown.getMetadata();
