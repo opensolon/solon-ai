@@ -32,7 +32,6 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -389,6 +388,16 @@ public class TerminalSkill extends AbsSkill {
         // 在尝试应用任何修改前，先校验所有 oldStr 的有效性，确保原子性
         for (int i = 0; i < edits.size(); i++) {
             EditOp edit = edits.get(i);
+
+            // 安全检测：防止 LLM 生成不完整的工具调用参数导致 NPE
+            if (edit.oldStr == null || edit.oldStr.isEmpty()) {
+                return String.format("预检查失败（操作 #%d）: old_str 不能为空。请确保调用 edit 时传入 old_str 参数，指定要替换的原始文本块。", i + 1);
+            }
+
+            if (edit.newStr == null) {
+                edit.newStr = "";
+            }
+
             String finalOld = normalizeNewlines(originalContent, edit.oldStr);
 
             int firstIndex = originalContent.indexOf(finalOld);
