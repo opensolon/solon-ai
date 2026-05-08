@@ -90,7 +90,29 @@ public class FileChatSession implements ChatSession {
 
     @Override
     public void removeLatestMessage(int windowSize) {
+        // 1. 先从内存层安全删除
         cache.removeLatestMessage(windowSize);
+
+        // 2. 同步到磁盘：重写整个消息文件
+        persistMessages();
+    }
+
+    /**
+     * 将当前内存缓存中的所有非 System 消息持久化到磁盘（全量覆盖）
+     */
+    private void persistMessages() {
+        try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
+                new FileOutputStream(messagesFile, false), StandardCharsets.UTF_8))) {
+            for (ChatMessage msg : cache.getMessages()) {
+                if (msg.getRole() != ChatRole.SYSTEM) {
+                    writer.write(ChatMessage.toJson(msg));
+                    writer.newLine();
+                }
+            }
+            writer.flush();
+        } catch (IOException e) {
+            LOG.error("Persist messages failed: {}", e.toString());
+        }
     }
 
     @Override

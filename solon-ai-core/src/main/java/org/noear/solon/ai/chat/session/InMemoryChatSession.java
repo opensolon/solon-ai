@@ -94,7 +94,14 @@ public class InMemoryChatSession implements ChatSession {
     }
 
     /**
-     * 获取最近消息
+     * 获取最近消息（带安全截断）
+     *
+     * <p>从全量消息列表中截取最近 windowSize 条消息，并保证截断后的起始位置是合法的：</p>
+     * <ul>
+     *   <li>优先以 UserMessage 作为起始点，保证对话轮次的完整性</li>
+     *   <li>不会以 ToolMessage 作为起始点（ToolMessage 必须跟在带 ToolCall 的 AssistantMessage 之后）</li>
+     *   <li>如果起始点落在带 ToolCall 的 AssistantMessage 之前，会回退到包含该 AssistantMessage</li>
+     * </ul>
      *
      * @param windowSize 窗口大小
      */
@@ -106,7 +113,7 @@ public class InMemoryChatSession implements ChatSession {
         int size = all.size();
         if (size <= windowSize || windowSize <= 0) return all;
 
-        // 1. 先定位到初步的截断点
+        // 1. 初步截断点
         int start = size - windowSize;
 
         // 2. 向前寻找最近的一个 UserMessage 作为安全的起始点
@@ -118,7 +125,7 @@ public class InMemoryChatSession implements ChatSession {
             }
         }
 
-        // 3. 兜底检查：如果往前找了一圈没找到 User（比如全是 Tool/Assistant）
+        // 3. 兜底：如果往前找了一圈没找到 User（比如全是 Tool/Assistant）
         // 那就只能向后找第一个 User
         if (!(all.get(start) instanceof UserMessage)) {
             for (int i = start; i < size; i++) {
@@ -129,19 +136,86 @@ public class InMemoryChatSession implements ChatSession {
             }
         }
 
-        // 4. 最终修剪：如果起始点还是 ToolMessage（极端情况），物理剔除它
+        // 4. 跳过起始位置的 ToolMessage（ToolMessage 不能独立出现）
         while (start < size && (all.get(start) instanceof ToolMessage)) {
             start++;
+        }
+
+        // 5. 回溯检查：如果 start 前面是带 ToolCall 的 AssistantMessage，
+        //    需要把该 AssistantMessage 也包含进来，以保证 ToolCall 链完整
+        //    场景：[Assistant(toolCalls), ToolMessage, ToolMessage, start=UserMessage, ...]
+        //    -> 回退后：[Assistant(toolCalls), ToolMessage, ToolMessage, UserMessage, ...]
+        while (start > 0) {
+            ChatMessage prev = all.get(start - 1);
+            if (prev instanceof ToolMessage) {
+                // 向前跳过连续的 ToolMessage，找到对应的带 ToolCall 的 AssistantMessage
+                start--;
+            } else if (prev instanceof AssistantMessage) {
+                AssistantMessage am = (AssistantMessage) prev;
+                if (am.isToolCalls()) {
+                    // 找到了带 ToolCall 的 AssistantMessage，把它包含进来
+                    start--;
+                }
+                break;
+            } else {
+                break;
+            }
         }
 
         return all.subList(start, size);
     }
 
 
+    /**
+     * 移除最近消息（带安全删除）
+     *
+     * <p>从消息列表末尾向前删除 windowSize 条消息，并保证删除后消息链路的完整性：</p>
+     * <ul>
+     *   <li>如果删除的是带 ToolCall 的 AssistantMessage，会顺带删除其后续对应的 ToolMessage</li>
+     *   <li>如果删除的是 ToolMessage，会检查前面是否有孤立的带 ToolCall 的 AssistantMessage 也一并删除</li>
+     * </ul>
+     *
+     * @param windowSize 要删除的消息数量
+     */
     @Override
     public void removeLatestMessage(int windowSize) {
-        for (int i = 0; i < windowSize; i++) {
-            messages.remove(messages.size() - 1);
+        if (windowSize <= 0 || messages.isEmpty()) return;
+
+        for (int i = 0; i < windowSize && !messages.isEmpty(); i++) {
+            int lastIndex = messages.size() - 1;
+            ChatMessage last = messages.get(lastIndex);
+
+            if (last instanceof AssistantMessage) {
+                AssistantMessage am = (AssistantMessage) last;
+                if (am.isToolCalls()) {
+                    // 删除带 toolCalls 的 AssistantMessage
+                    messages.remove(lastIndex);
+                    // 顺带删除其后续紧邻的 ToolMessage
+                    while (!messages.isEmpty() && messages.get(messages.size() - 1) instanceof ToolMessage) {
+                        messages.remove(messages.size() - 1);
+                    }
+                } else {
+                    // 普通 AssistantMessage，直接删除
+                    messages.remove(lastIndex);
+                }
+            } else if (last instanceof ToolMessage) {
+                // 删除当前 ToolMessage
+                messages.remove(lastIndex);
+                // 检查前面是否还有属于同一组 ToolCall 的 ToolMessage
+                while (!messages.isEmpty() && messages.get(messages.size() - 1) instanceof ToolMessage) {
+                    messages.remove(messages.size() - 1);
+                }
+                // 再检查前面是否有对应的带 toolCalls 的 AssistantMessage
+                if (!messages.isEmpty() && messages.get(messages.size() - 1) instanceof AssistantMessage) {
+                    AssistantMessage am = (AssistantMessage) messages.get(messages.size() - 1);
+                    if (am.isToolCalls()) {
+                        messages.remove(messages.size() - 1);
+                    }
+                }
+            } else {
+                // UserMessage / SystemMessage 等直接删除
+                messages.remove(lastIndex);
+            }
         }
     }
 
