@@ -61,11 +61,6 @@ public class MarkdownCommand implements Command {
         return model;
     }
 
-    @Override
-    public CommandType type() {
-        return CommandType.AGENT;
-    }
-
     /**
      * 获取替换变量后的 prompt 文本
      * <p>

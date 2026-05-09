@@ -39,11 +39,6 @@ public interface Command {
     }
 
     /**
-     * 命令类型
-     */
-    CommandType type();
-
-    /**
      * 是否仅 CLI 环境可用
      * <p>
      * 返回 true 时，Web 端将不展示也不执行该命令
