@@ -120,10 +120,12 @@ public class TaskSkill extends AbsSkill {
         AgentSession __parentSession = engine.getSession(__sessionId);
         ReActTrace __parentTrace = ReActTrace.getCurrent(__parentSession.getContext());
 
-        if (LOG.isDebugEnabled()) {
-            if (__parentTrace == null) {
-                LOG.debug("任务接收[{}, __parentTrace=null]：{}", __sessionId, ONode.serialize(tasks));
-            } else {
+        if (__parentTrace == null) {
+            if (LOG.isWarnEnabled()) {
+                LOG.warn("任务接收[{}, __parentTrace=null]：{}", __sessionId, ONode.serialize(tasks));
+            }
+        } else {
+            if (LOG.isDebugEnabled()) {
                 LOG.debug("任务接收[{}]：{}", __sessionId, ONode.serialize(tasks));
             }
         }
