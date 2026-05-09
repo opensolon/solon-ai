@@ -401,7 +401,7 @@ public class MemoryMdData implements AutoCloseable {
         if (userId == null || userId.isEmpty()) {
             throw new IllegalArgumentException("userId must not be empty");
         }
-        return userId + ":" + key;
+        return userId + "__" + key;
     }
 
     /**
@@ -414,10 +414,7 @@ public class MemoryMdData implements AutoCloseable {
     }
 
     private Path resolveFile(String storeKey) {
-        // 加 hash 前缀降低 key 碰撞风险（key 可能含 _ 或 : 的组合）
-        int h = storeKey.hashCode() & 0x7FFFFFFF;
-        String safeKey = h + "_" + storeKey.replace(":", "_").replace("/", "_");
-        return baseDir.resolve(safeKey + ".md");
+        return baseDir.resolve(storeKey + ".md");
     }
 
     /**
