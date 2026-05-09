@@ -40,9 +40,9 @@ public class MemoryStoreProviderReadisImpl implements MemoryStoreProvider {
 
     private String getFinalKey(String bucketKey, String key) {
         if (Assert.isEmpty(bucketKey)) {
-            return basePrefix + bucketKey + ":" + key;
-        } else {
             return bucketKey + ":" + key;
+        } else {
+            return basePrefix + bucketKey + ":" + key;
         }
     }
 
