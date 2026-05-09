@@ -38,11 +38,11 @@ public class MemoryStoreProviderReadisImpl implements MemoryStoreProvider {
         return this;
     }
 
-    private String getFinalKey(String bucketKey, String key) {
-        if (Assert.isEmpty(bucketKey)) {
-            return bucketKey + ":" + key;
+    private String getFinalKey(String userId, String key) {
+        if (Assert.isEmpty(basePrefix)) {
+            return userId + ":" + key;
         } else {
-            return basePrefix + bucketKey + ":" + key;
+            return basePrefix + userId + ":" + key;
         }
     }
 

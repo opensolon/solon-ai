@@ -37,7 +37,7 @@ import org.noear.solon.ai.skills.memory.md.MemoryMdData;
  * time: "2026-05-08 21:24:30"
  * importance: 7
  * ttl: 2592000
- * stored_time: "2026-05-08 21:24:30"
+ * stored_at: "2026-05-08 21:24:30"
  * ---
  *
  * 用户偏好使用 Solon 框架进行后端开发

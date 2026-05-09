@@ -168,6 +168,9 @@ public class MemoryMdData implements AutoCloseable {
         Map<String, IndexEntry> userMap = indexByUser.get(userId);
         if (userMap != null) {
             userMap.remove(buildDocId(userId, key));
+            if (userMap.isEmpty()) {
+                indexByUser.remove(userId);
+            }
         }
     }
 
@@ -309,6 +312,11 @@ public class MemoryMdData implements AutoCloseable {
                 }
             }
 
+            if (fm.content == null || fm.content.trim().isEmpty()) {
+                LOG.warn("MdMemoryData: file has empty content: {}", file);
+                return LoadResult.SKIPPED;
+            }
+
             cache.put(storeKey, new MemoryEntry(fm.content, fm.time, fm.importance, fm.ttl, fm.storedTime));
 
             String[] parts = splitStoreKey(storeKey);
@@ -390,6 +398,9 @@ public class MemoryMdData implements AutoCloseable {
      * 构建完整 storeKey："{userId}:{key}"
      */
     private String buildStoreKey(String userId, String key) {
+        if (userId == null || userId.isEmpty()) {
+            throw new IllegalArgumentException("userId must not be empty");
+        }
         return userId + ":" + key;
     }
 
@@ -404,7 +415,7 @@ public class MemoryMdData implements AutoCloseable {
 
     private Path resolveFile(String storeKey) {
         // 加 hash 前缀降低 key 碰撞风险（key 可能含 _ 或 : 的组合）
-        int h = Math.abs(storeKey.hashCode());
+        int h = storeKey.hashCode() & 0x7FFFFFFF;
         String safeKey = h + "_" + storeKey.replace(":", "_").replace("/", "_");
         return baseDir.resolve(safeKey + ".md");
     }
@@ -459,7 +470,7 @@ public class MemoryMdData implements AutoCloseable {
         sb.append("time: \"").append(time).append("\"\n");
         sb.append("importance: ").append(importance).append("\n");
         sb.append("ttl: ").append(ttl).append("\n");
-        sb.append("stored_time: \"").append(storedTime).append("\"\n");
+        sb.append("stored_at: \"").append(storedTime).append("\"\n");
         sb.append(FRONT_MATTER_DELIMITER).append("\n\n");
         sb.append(content).append("\n");
         return sb.toString();
@@ -503,8 +514,8 @@ public class MemoryMdData implements AutoCloseable {
         if (meta.hasKey("ttl")) {
             fm.ttl = meta.get("ttl").getInt();
         }
-        if (meta.hasKey("stored_time")) {
-            fm.storedTime = meta.get("stored_time").getString();
+        if (meta.hasKey("stored_at")) {
+            fm.storedTime = meta.get("stored_at").getString();
         }
 
         return fm;
@@ -548,7 +559,13 @@ public class MemoryMdData implements AutoCloseable {
             t.setDaemon(true);
             return t;
         });
-        cleanupScheduler.scheduleAtFixedRate(this::cleanupExpired,
+        cleanupScheduler.scheduleAtFixedRate(() -> {
+                    try {
+                        cleanupExpired();
+                    } catch (Exception e) {
+                        LOG.error("MdMemoryData cleanup error", e);
+                    }
+                },
                 intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
         LOG.info("MdMemoryData auto-cleanup enabled, interval={}s", intervalSeconds);
         return this;
