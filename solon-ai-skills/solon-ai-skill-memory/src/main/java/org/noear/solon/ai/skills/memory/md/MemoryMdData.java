@@ -294,7 +294,7 @@ public class MemoryMdData implements AutoCloseable {
             if (storeKey == null || storeKey.isEmpty()) {
                 // 兼容旧格式文件：从文件名启发式还原
                 storeKey = fileNameToStoreKey(file.getFileName().toString());
-                LOG.warn("MdMemoryData: file has no store_key field, heuristic restore may be inaccurate: {}", file);
+                LOG.warn("MdMemoryData: file has no name field, heuristic restore may be inaccurate: {}", file);
             }
 
             // TTL 过期检查，过期的不加载并删除文件
@@ -426,7 +426,7 @@ public class MemoryMdData implements AutoCloseable {
      * 从文件名启发式还原 storeKey（仅用于兼容不含 storeKey 字段的旧格式文件）
      * <p>
      * 注意：此还原将 _ 替换为 : ，如果 key 本身含 _ 还原会不准确。
-     * 建议新文件都通过 Front Matter 中的 store_key 字段精确还原。
+     * 建议新文件都通过 Front Matter 中的 name 字段精确还原。
      */
     private String fileNameToStoreKey(String fileName) {
         String name = fileName.endsWith(".md") ? fileName.substring(0, fileName.length() - 3) : fileName;
@@ -455,7 +455,7 @@ public class MemoryMdData implements AutoCloseable {
                                   String storedTime, String content) {
         StringBuilder sb = new StringBuilder();
         sb.append(FRONT_MATTER_DELIMITER).append("\n");
-        sb.append("store_key: \"").append(escapeYaml(storeKey)).append("\"\n");
+        sb.append("name: \"").append(escapeYaml(storeKey)).append("\"\n");
         sb.append("time: \"").append(time).append("\"\n");
         sb.append("importance: ").append(importance).append("\n");
         sb.append("ttl: ").append(ttl).append("\n");
@@ -491,8 +491,8 @@ public class MemoryMdData implements AutoCloseable {
         FrontMatter fm = new FrontMatter();
         fm.content = markdown.getContent();
 
-        if (meta.hasKey("store_key")) {
-            fm.storeKey = meta.get("store_key").getString();
+        if (meta.hasKey("name")) {
+            fm.storeKey = meta.get("name").getString();
         }
         if (meta.hasKey("time")) {
             fm.time = meta.get("time").getString();
