@@ -24,6 +24,7 @@ import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.content.Contents;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.NonNull;
 
 import java.io.*;
 import java.time.LocalDateTime;
@@ -47,6 +48,12 @@ public interface ChatMessage extends Serializable {
      * 内容
      */
     String getContent();
+
+    /**
+     * 生成时间
+     */
+    @NonNull
+    Long getCreateAt();
 
     /**
      * 获取元数据
@@ -83,7 +90,7 @@ public interface ChatMessage extends Serializable {
     /**
      * 是否为工具调用
      */
-    default boolean isToolCalls(){
+    default boolean isToolCalls() {
         return false;
     }
 

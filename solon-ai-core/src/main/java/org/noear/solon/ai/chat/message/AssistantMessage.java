@@ -67,6 +67,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
            content = "";
         }
 
+        this.createAt = System.currentTimeMillis();
         this.content = content;
         this.isThinking = isThinking;
         this.toolCallsRaw = toolCallsRaw;

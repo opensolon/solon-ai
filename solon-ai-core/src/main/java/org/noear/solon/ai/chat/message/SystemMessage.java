@@ -35,6 +35,7 @@ public class SystemMessage extends ChatMessageBase<SystemMessage> {
     }
 
     public SystemMessage(String content) {
+        this.createAt = System.currentTimeMillis();
         this.content = content;
     }
 
