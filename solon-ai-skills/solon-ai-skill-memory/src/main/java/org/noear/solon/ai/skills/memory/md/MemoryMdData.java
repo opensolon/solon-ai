@@ -63,15 +63,15 @@ public class MemoryMdData implements AutoCloseable {
 
     /**
      * 内存缓存：storeKey → MemoryEntry
-     * storeKey 格式："ai:memskill:{bucketKey}:{userKey}"
+     * storeKey 格式："{userId}:{key}"
      */
     private final Map<String, MemoryEntry> cache = new ConcurrentHashMap<>();
 
     /**
-     * 搜索索引：bucketKey → { docId → IndexEntry }
-     * 按桶分组，搜索时直接定位 bucket，避免全量遍历
+     * 搜索索引：userId → { docId → IndexEntry }
+     * 按用户分组，搜索时直接定位用户，避免全量遍历
      */
-    private final Map<String, Map<String, IndexEntry>> indexByBucket = new ConcurrentHashMap<>();
+    private final Map<String, Map<String, IndexEntry>> indexByUser = new ConcurrentHashMap<>();
 
     /**
      * 后台过期清理调度器（可选，通过 enableAutoCleanup 开启）
@@ -101,8 +101,8 @@ public class MemoryMdData implements AutoCloseable {
      * <p>注意：搜索索引的更新由 MemorySkill 统一调用 updateIndex() 完成，
      * 保持与其他方案（Lucene/Repository/Rogue）的调用约定一致，避免双写冗余。
      */
-    public void put(String bucket, String key, String val, int ttl) {
-        String storeKey = buildStoreKey(bucket, key);
+    public void put(String userId, String key, String val, int ttl) {
+        String storeKey = buildStoreKey(userId, key);
         try {
             ONode node = ONode.ofJson(val);
             String content = node.get("content").getString();
@@ -117,15 +117,15 @@ public class MemoryMdData implements AutoCloseable {
             // 2. 更新内存缓存
             cache.put(storeKey, new MemoryEntry(content, time, importance, ttl, storedTime));
         } catch (Exception e) {
-            LOG.error("MdMemoryData put error, bucket={}, key={}", bucket, key, e);
+            LOG.error("MdMemoryData put error, userId={}, key={}", userId, key, e);
         }
     }
 
     /**
      * 获取记忆条目：优先走内存缓存，缓存未命中再读磁盘
      */
-    public String get(String bucket, String key) {
-        String storeKey = buildStoreKey(bucket, key);
+    public String get(String userId, String key) {
+        String storeKey = buildStoreKey(userId, key);
         MemoryEntry entry = cache.get(storeKey);
 
         if (entry == null) {
@@ -137,14 +137,14 @@ public class MemoryMdData implements AutoCloseable {
             cache.put(storeKey, entry);
 
             // 同步到搜索索引
-            indexByBucket.computeIfAbsent(bucket, k -> new ConcurrentHashMap<>())
-                    .putIfAbsent(buildDocId(bucket, key),
-                            new IndexEntry(bucket, key, entry.content, entry.importance, entry.time));
+            indexByUser.computeIfAbsent(userId, k -> new ConcurrentHashMap<>())
+                    .putIfAbsent(buildDocId(userId, key),
+                            new IndexEntry(userId, key, entry.content, entry.importance, entry.time));
         }
 
         // TTL 过期检查
         if (isExpired(entry)) {
-            remove(bucket, key);
+            remove(userId, key);
             return null;
         }
 
@@ -154,20 +154,20 @@ public class MemoryMdData implements AutoCloseable {
     /**
      * 删除记忆条目：删 MD 文件 + 清缓存 + 清搜索索引
      */
-    public void remove(String bucket, String key) {
-        String storeKey = buildStoreKey(bucket, key);
+    public void remove(String userId, String key) {
+        String storeKey = buildStoreKey(userId, key);
         Path file = resolveFile(storeKey);
         try {
             Files.deleteIfExists(file);
         } catch (IOException e) {
-            LOG.error("MdMemoryData remove error, bucket={}, key={}", bucket, key, e);
+            LOG.error("MdMemoryData remove error, userId={}, key={}", userId, key, e);
         }
 
         cache.remove(storeKey);
 
-        Map<String, IndexEntry> bucketMap = indexByBucket.get(bucket);
-        if (bucketMap != null) {
-            bucketMap.remove(buildDocId(bucket, key));
+        Map<String, IndexEntry> userMap = indexByUser.get(userId);
+        if (userMap != null) {
+            userMap.remove(buildDocId(userId, key));
         }
     }
 
@@ -175,22 +175,22 @@ public class MemoryMdData implements AutoCloseable {
 
     /**
      * 搜索：基于缓存的关键词匹配 + 重要性权重评分
-     * 按 bucketKey 直接定位索引桶，避免全量遍历
+     * 按 userId 直接定位索引，避免全量遍历
      */
-    public List<MemorySearchResult> search(String bucketKey, String query, int limit) {
+    public List<MemorySearchResult> search(String userId, String query, int limit) {
         if (query == null || query.trim().isEmpty()) {
             return Collections.emptyList();
         }
 
-        Map<String, IndexEntry> bucket = indexByBucket.get(bucketKey);
-        if (bucket == null || bucket.isEmpty()) {
+        Map<String, IndexEntry> userIndex = indexByUser.get(userId);
+        if (userIndex == null || userIndex.isEmpty()) {
             return Collections.emptyList();
         }
 
         Set<String> queryTokens = tokenize(query.toLowerCase());
 
         List<ScoredEntry> scored = new ArrayList<>();
-        for (IndexEntry entry : bucket.values()) {
+        for (IndexEntry entry : userIndex.values()) {
             double score = computeScore(entry, queryTokens);
             if (score > 0) {
                 scored.add(new ScoredEntry(entry, score));
@@ -207,13 +207,13 @@ public class MemoryMdData implements AutoCloseable {
     /**
      * 获取高价值热记忆
      */
-    public List<MemorySearchResult> getHotMemories(String bucketKey, int limit) {
-        Map<String, IndexEntry> bucket = indexByBucket.get(bucketKey);
-        if (bucket == null || bucket.isEmpty()) {
+    public List<MemorySearchResult> getHotMemories(String userId, int limit) {
+        Map<String, IndexEntry> userIndex = indexByUser.get(userId);
+        if (userIndex == null || userIndex.isEmpty()) {
             return Collections.emptyList();
         }
 
-        return bucket.values().stream()
+        return userIndex.values().stream()
                 .filter(e -> e.importance >= 5)
                 .sorted(Comparator.comparingInt((IndexEntry e) -> e.importance).reversed()
                         .thenComparing((IndexEntry e) -> e.time, Comparator.reverseOrder()))
@@ -223,14 +223,14 @@ public class MemoryMdData implements AutoCloseable {
     }
 
     /**
-     * 列举指定桶下所有记忆条目的 userKey
+     * 列举指定用户下所有记忆条目的 key
      */
-    public Set<String> keys(String bucketKey) {
-        Map<String, IndexEntry> bucket = indexByBucket.get(bucketKey);
-        if (bucket == null || bucket.isEmpty()) {
+    public Set<String> keys(String userId) {
+        Map<String, IndexEntry> userIndex = indexByUser.get(userId);
+        if (userIndex == null || userIndex.isEmpty()) {
             return Collections.emptySet();
         }
-        return bucket.values().stream()
+        return userIndex.values().stream()
                 .map(e -> e.userKey)
                 .collect(Collectors.toSet());
     }
@@ -238,18 +238,18 @@ public class MemoryMdData implements AutoCloseable {
     /**
      * 手动更新搜索索引（由 MemorySkill 统一调用，兼容 MemorySearchProvider.updateIndex 接口）
      */
-    public void updateIndex(String bucketKey, String userKey, String fact, int importance, String time) {
-        Map<String, IndexEntry> bucket = indexByBucket.computeIfAbsent(bucketKey, k -> new ConcurrentHashMap<>());
-        bucket.put(buildDocId(bucketKey, userKey), new IndexEntry(bucketKey, userKey, fact, importance, time));
+    public void updateIndex(String userId, String key, String fact, int importance, String time) {
+        Map<String, IndexEntry> userIndex = indexByUser.computeIfAbsent(userId, k -> new ConcurrentHashMap<>());
+        userIndex.put(buildDocId(userId, key), new IndexEntry(userId, key, fact, importance, time));
     }
 
     /**
      * 手动移除搜索索引（由 MemorySkill 统一调用，兼容 MemorySearchProvider.removeIndex 接口）
      */
-    public void removeIndex(String bucketKey, String userKey) {
-        Map<String, IndexEntry> bucket = indexByBucket.get(bucketKey);
-        if (bucket != null) {
-            bucket.remove(buildDocId(bucketKey, userKey));
+    public void removeIndex(String userId, String key) {
+        Map<String, IndexEntry> userIndex = indexByUser.get(userId);
+        if (userIndex != null) {
+            userIndex.remove(buildDocId(userId, key));
         }
     }
 
@@ -313,7 +313,7 @@ public class MemoryMdData implements AutoCloseable {
 
             String[] parts = splitStoreKey(storeKey);
             if (parts != null) {
-                indexByBucket.computeIfAbsent(parts[0], k -> new ConcurrentHashMap<>())
+                indexByUser.computeIfAbsent(parts[0], k -> new ConcurrentHashMap<>())
                         .put(buildDocId(parts[0], parts[1]),
                                 new IndexEntry(parts[0], parts[1], fm.content, fm.importance, fm.time));
             }
@@ -387,17 +387,19 @@ public class MemoryMdData implements AutoCloseable {
     // ===================== 内部工具方法 =====================
 
     /**
-     * 构建完整 storeKey："ai:memskill:{bucket}:{key}"
+     * 构建完整 storeKey："{userId}:{key}"
      */
-    private String buildStoreKey(String bucket, String key) {
-        return "ai:memskill:" + bucket + ":" + key;
+    private String buildStoreKey(String userId, String key) {
+        return userId + ":" + key;
     }
 
     /**
-     * 构建 docId："{bucket}:{key}"
+     * 构建 docId："{userId}:{key}"
+     * <p>
+     * 当前与 storeKey 格式一致，独立方法便于后续格式变化时统一修改。
      */
-    private String buildDocId(String bucket, String key) {
-        return bucket + ":" + key;
+    private String buildDocId(String userId, String key) {
+        return userId + ":" + key;
     }
 
     private Path resolveFile(String storeKey) {
@@ -422,31 +424,31 @@ public class MemoryMdData implements AutoCloseable {
 
     /**
      * 从文件名启发式还原 storeKey（仅用于兼容不含 storeKey 字段的旧格式文件）
-     * "ai_memskill_shared_user_pref.md" → "ai:memskill:shared:user_pref"
+     * <p>
+     * 注意：此还原将 _ 替换为 : ，如果 key 本身含 _ 还原会不准确。
+     * 建议新文件都通过 Front Matter 中的 store_key 字段精确还原。
      */
     private String fileNameToStoreKey(String fileName) {
         String name = fileName.endsWith(".md") ? fileName.substring(0, fileName.length() - 3) : fileName;
-        if (name.startsWith("ai_memskill_")) {
-            String rest = name.substring("ai_memskill_".length());
-            return "ai:memskill:" + rest.replace("_", ":");
+        // 去掉 hash 前缀（格式：{hash}_xxx）
+        int underscoreIdx = name.indexOf('_');
+        if (underscoreIdx > 0) {
+            name = name.substring(underscoreIdx + 1);
         }
         return name.replace("_", ":");
     }
 
     /**
-     * 拆分 storeKey 为 bucketKey 和 userKey
-     * "ai:memskill:{bucketKey}:{userKey}" → ["{bucketKey}", "{userKey}"]
+     * 拆分 storeKey 为 userId 和 key
+     * "{userId}:{key}" → ["{userId}", "{key}"]
      */
     private String[] splitStoreKey(String storeKey) {
         if (storeKey == null) return null;
-        String prefix = "ai:memskill:";
-        if (!storeKey.startsWith(prefix)) return null;
-        String rest = storeKey.substring(prefix.length());
-        int firstColon = rest.indexOf(':');
+        int firstColon = storeKey.indexOf(':');
         if (firstColon < 0) return null;
-        String bucketKey = rest.substring(0, firstColon);
-        String userKey = rest.substring(firstColon + 1);
-        return new String[]{bucketKey, userKey};
+        String userId = storeKey.substring(0, firstColon);
+        String key = storeKey.substring(firstColon + 1);
+        return new String[]{userId, key};
     }
 
     private String buildMdContent(String storeKey, String time, int importance, int ttl,
@@ -728,7 +730,7 @@ public class MemoryMdData implements AutoCloseable {
     }
 
     static class IndexEntry {
-        String bucketKey;
+        String userId;
         String userKey;
         String content;
         int importance;
@@ -738,8 +740,8 @@ public class MemoryMdData implements AutoCloseable {
          */
         volatile Set<String> tokens;
 
-        IndexEntry(String bucketKey, String userKey, String content, int importance, String time) {
-            this.bucketKey = bucketKey;
+        IndexEntry(String userId, String userKey, String content, int importance, String time) {
+            this.userId = userId;
             this.userKey = userKey;
             this.content = content;
             this.importance = importance;

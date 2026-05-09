@@ -33,7 +33,7 @@ import org.noear.solon.ai.skills.memory.md.MemoryMdData;
  * <p>单文件格式（YAML Front Matter + 正文）：
  * <pre>
  * ---
- * store_key: "ai:memskill:shared:user_pref_framework"
+ * store_key: "shared:user_pref_framework"
  * time: "2026-05-08 21:24:30"
  * importance: 7
  * ttl: 2592000
