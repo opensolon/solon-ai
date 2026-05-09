@@ -16,7 +16,7 @@
 package org.noear.solon.ai.harness.agent;
 
 import org.noear.snack4.ONode;
-import org.noear.solon.ai.agent.AgentResponse;
+import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActChunk;
@@ -116,12 +116,17 @@ public class TaskSkill extends AbsSkill {
             throw new IllegalStateException("__sessionId is required");
         }
 
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("任务接收：{}", ONode.serialize(tasks));
-        }
 
         AgentSession __parentSession = engine.getSession(__sessionId);
         ReActTrace __parentTrace = ReActTrace.getCurrent(__parentSession.getContext());
+
+        if (LOG.isDebugEnabled()) {
+            if (__parentTrace == null) {
+                LOG.debug("任务接收[{}, __parentTrace=null]：{}", __sessionId, ONode.serialize(tasks));
+            } else {
+                LOG.debug("任务接收[{}]：{}", __sessionId, ONode.serialize(tasks));
+            }
+        }
 
 
         List<CompletableFuture<String>> futures = new ArrayList<>();
@@ -158,7 +163,7 @@ public class TaskSkill extends AbsSkill {
         }
 
         String modelSelected = __parentSession.getContext().getAs(HarnessFlags.VAR_MODEL_SELECTED);
-        ;
+
 
         ReActAgent agent = agentDefinition.builder(engine, modelSelected).build();
         final AgentSession session = InMemoryAgentSession.of(agent.name());
@@ -167,21 +172,32 @@ public class TaskSkill extends AbsSkill {
         Prompt originalPrompt = Prompt.of(task.prompt);
 
         try {
-            if (__parentTrace.getOptions().getStreamSink() == null) {
+            AtomicReference<Throwable> errRef = new AtomicReference<>();
+            if (__parentTrace == null || __parentTrace.getOptions() == null || __parentTrace.getOptions().getStreamSink() == null) {
                 // 同步模式
-                AgentResponse response = agent.prompt(originalPrompt)
+                AgentChunk agentChunk = agent.prompt(originalPrompt)
                         .session(session)
                         .options(o -> {
                             o.toolContextPut(HarnessEngine.ATTR_CWD, __cwd);
                             o.toolContextPut(ChatSession.ATTR_SESSIONID, __sessionId);
                         })
-                        .call();
+                        .stream()
+                        .doOnError(err -> {
+                            errRef.set(err);
+                        })
+                        .blockLast();
 
-                __parentTrace.getMetrics().addMetrics(response.getMetrics());
-                result = response.getContent();
+                if (errRef.get() != null) {
+                    throw errRef.get();
+                }
+
+                if (__parentTrace != null) {
+                    __parentTrace.getMetrics().addMetrics(((ReActChunk) agentChunk).getResponse().getMetrics());
+                }
+
+                result = agentChunk.getContent();
             } else {
                 // 流式模式
-                AtomicReference<Throwable> errRef = new AtomicReference<>();
                 ReActChunk response = (ReActChunk) agent.prompt(originalPrompt)
                         .session(session)
                         .options(o -> {
