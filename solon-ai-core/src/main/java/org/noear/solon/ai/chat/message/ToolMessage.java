@@ -47,7 +47,7 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
     }
 
     public ToolMessage(ToolResult toolResult, String name, String toolCallId, boolean returnDirect) {
-        this.createAt = System.currentTimeMillis();
+        this.createdAt = System.currentTimeMillis();
         this.name = name;
         this.toolCallId = toolCallId;
         this.returnDirect = returnDirect;

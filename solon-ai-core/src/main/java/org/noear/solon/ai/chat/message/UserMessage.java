@@ -44,7 +44,7 @@ public class UserMessage extends ChatMessageBase<UserMessage> {
     }
 
     public UserMessage(Contents contents) {
-        this.createAt = System.currentTimeMillis();
+        this.createdAt = System.currentTimeMillis();
 
         if (contents != null) {
             this.blocks.addAll(contents.getBlocks());

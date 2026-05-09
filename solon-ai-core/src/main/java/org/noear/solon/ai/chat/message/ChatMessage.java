@@ -53,7 +53,7 @@ public interface ChatMessage extends Serializable {
      * 生成时间
      */
     @NonNull
-    Long getCreateAt();
+    Long getCreatedAt();
 
     /**
      * 获取元数据

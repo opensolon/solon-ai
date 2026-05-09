@@ -27,16 +27,16 @@ import java.util.Map;
  * @since 3.1
  */
 public abstract class ChatMessageBase<Slf extends ChatMessageBase> implements ChatMessage {
-    protected Long createAt;
+    protected Long createdAt;
     protected Map<String, Object> metadata;
 
     @Override
-    public Long getCreateAt() {
-        if (createAt == null) {
-            createAt = System.currentTimeMillis();
+    public Long getCreatedAt() {
+        if (createdAt == null) {
+            createdAt = System.currentTimeMillis();
         }
 
-        return createAt;
+        return createdAt;
     }
 
     /**
