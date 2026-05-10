@@ -15,18 +15,26 @@
 
 * 添加 solon-ai-agent AgentTrace.getAgentName, getBeginTimeMs 方法
 * 添加 solon-ai-harness command 接口管理
-* 添加 solon-ai-harness CommandUtil 辅助工具（主要解析参数）
 * 添加 solon-ai-harness HarnessEngine.getAgentOrMain 方法
+* 添加 solon-ai-core CmdUtil 辅助工具（主要解析参数）
+* 添加 solon-ai-core ChatMessage.getCreatedAt 方法
+* 添加 solon-ai-core ChatSession.removeLatestMessage 方法（对话回退支持）
+* 添加 solon-ai-skill-cli TerminalSkill.edit old_str 预检处理（llm 可能会传空）
+* 优化 solon-ai-agent ReasonTask Missing traceKey 处理
 * 优化 solon-ai-core AiConfig.proxy 配置兼容（减少反序列化反射）
 * 优化 solon-ai-core ChatModel llm- 日志打印，添加 agentName
 * 优化 solon-ai-core EmbeddingModel、RerankingModel、GenerateModel llm- 日志打印，添加 modelName
 * 优化 solon-ai-dialect apiUrl 自动补全的#号处理
 * 优化 solon-ai-dialect OpenaiChatDialect 添加自动补地址处理
 * 优化 solon-ai-harness CodeSkill 拆解语言支持
+* 优化 solon-ai-harness taskDo 多层子代理嵌套时的容错处理
 * 优化 solon-ai-skill-cli ExpertSkill 引导词
-* 优化 solon-ai-skill-memory （默认不会话隔离）
+* 优化 solon-ai-skill-cli read 引导词（优先一次读完）
+* 优化 solon-ai-skill-cli 关于 py 和 nodejs 环境识别
+* 优化 solon-ai-skill-memory 添加 markdown 轻量实现方案（默认不启用会话隔离）
 * 调整 solon-ai-core ChatOptions.name 更名为 agentName
 * 调整 solon-ai-harness TaskSkill 只输出 ThoughtChunk（不输出 ReasonChunk）
+* acp-sdk 升为 0.11.0
 
 ### 3.10.4
 
