@@ -38,6 +38,7 @@
 * 调整 solon-ai-harness TaskSkill 只输出 ThoughtChunk（不输出 ReasonChunk）
 * 调整 solon-ai-agent 移除 ReActOptions.maxStepsLimit 属性 (没什么必要)
 * acp-sdk 升为 0.11.0
+* roguemap 升为 1.1.5
 
 ### 3.10.4
 
