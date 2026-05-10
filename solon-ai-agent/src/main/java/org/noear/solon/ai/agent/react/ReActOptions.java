@@ -55,7 +55,8 @@ public class ReActOptions implements NonSerializable {
     /**
      * 最大推理步数（防止死循环）
      */
-    private int maxSteps = 8;
+    private int maxSteps = 8; //初始 maxSteps
+    private int maxStepsNew = 0; //被改过后的 maxSteps
 
     /**
      * 自动反思
@@ -162,8 +163,16 @@ public class ReActOptions implements NonSerializable {
         this.sessionWindowSize = Math.max(0, sessionWindowSize);
     }
 
-    public void setMaxSteps(int val) {
+    protected void setMaxSteps(int val) {
         this.maxSteps = val;
+    }
+
+    public void addMaxSteps(int val) {
+        if (maxStepsNew > 0) {
+            this.maxStepsNew += val;
+        } else {
+            this.maxStepsNew = maxSteps + val;
+        }
     }
 
     /**
@@ -232,8 +241,19 @@ public class ReActOptions implements NonSerializable {
         return modelOptions.interceptors();
     }
 
-    public int getMaxSteps() {
+    /**
+     * 初始 maxSteps 值
+     */
+    public int getInitialMaxSteps(){
         return maxSteps;
+    }
+
+    public int getMaxSteps() {
+        if (maxStepsNew > 0) {
+            return maxStepsNew;
+        } else {
+            return maxSteps;
+        }
     }
 
     public boolean isAutoRethink() {

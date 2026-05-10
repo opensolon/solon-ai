@@ -298,7 +298,7 @@ public class HarnessEngine {
         // 添加步数
         agentDefinition.getMetadata().setMaxSteps(props.getMaxSteps());
         // 添加步数自动扩展
-        agentDefinition.getMetadata().setMaxStepsAutoExtensible(props.isMaxStepsAutoExtensible());
+        agentDefinition.getMetadata().setAutoRethink(props.isMaxStepsAutoExtensible());
         // 添加会话窗口大小
         agentDefinition.getMetadata().setSessionWindowSize(props.getSessionWindowSize());
 

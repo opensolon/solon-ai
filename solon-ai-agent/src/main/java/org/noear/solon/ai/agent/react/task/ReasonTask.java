@@ -101,12 +101,14 @@ public class ReasonTask implements NamedTaskComponent {
         // 逻辑更加扁平化：要么进入 AutoRethink 机制，要么直接达到 maxSteps 熔断
         if (trace.getOptions().isAutoRethink()) {
             // [AutoRethink 模式]
-            // 当步数接近或超过阈值（80% 或 max-1）时触发干预
+            // 达到 80% 步数时提前介入，留出 20% 的 buffer 让模型执行自审和策略调整
             int thresholdStep = Math.max(maxSteps - 1, (int) (maxSteps * 0.8));
 
             if (currentStep >= thresholdStep) {
                 // 自动扩展步数上限（续航）
-                trace.getOptions().setMaxSteps(maxSteps + 10);
+                int addSteps = Math.max(10, trace.getOptions().getInitialMaxSteps() / 2);
+                trace.getOptions().addMaxSteps(addSteps);
+                LOG.info("ReActAgent [{}] auto-rethink triggered. New maxSteps: {}", config.getName(), trace.getOptions().getMaxSteps());
 
                 String rethinkPrompt = String.format(
                         "【自动重审 (Auto-Rethink)】任务执行已达第 %d 步（上限 %d）。\n" +
