@@ -183,8 +183,11 @@ public class AgentDefinition {
         // 最大步数（执行限制）
         private Integer maxSteps;
 
-        // 最大步数自动扩展（新增）
-        private Boolean maxStepsAutoExtensible;
+        // 执行限制（最大回合），同 maxSteps
+        private Integer maxTurns;
+
+        // 自我反思
+        private Boolean autoRethink;
 
         private Integer sessionWindowSize;
         private Integer summaryWindowSize;
@@ -198,9 +201,6 @@ public class AgentDefinition {
 
         // 权限配置
         private String permissionMode;
-
-        // 执行限制（最大回合）
-        private Integer maxTurns;
 
         // Skills 配置
         private List<String> skills;

@@ -14,6 +14,7 @@
 ### 3.10.5
 
 * 添加 solon-ai-agent AgentTrace.getAgentName, getBeginTimeMs 方法
+* 添加 solon-ai-agent 使用 autoRethink 替代 maxStepsAutoExtensible（后者标为弃用）
 * 添加 solon-ai-harness command 接口管理
 * 添加 solon-ai-harness HarnessEngine.getAgentOrMain 方法
 * 添加 solon-ai-core CmdUtil 辅助工具（主要解析参数）
@@ -35,6 +36,7 @@
 * 优化 solon-ai-skill-memory 添加 markdown 轻量实现方案（默认不启用会话隔离）
 * 调整 solon-ai-core ChatOptions.name 更名为 agentName
 * 调整 solon-ai-harness TaskSkill 只输出 ThoughtChunk（不输出 ReasonChunk）
+* 调整 solon-ai-agent 移除 ReActOptions.maxStepsLimit 属性 (没什么必要)
 * acp-sdk 升为 0.11.0
 
 ### 3.10.4

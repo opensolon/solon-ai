@@ -93,55 +93,43 @@ public class ReasonTask implements NamedTaskComponent {
             }
         }
 
-        // [逻辑 1: 安全限流 & 互动续航]
-        int currentStep = trace.nextStep(); // 这里会自增步数
+        // --- 优化点 1: 步数计数逻辑简化 ---
+        int currentStep = trace.nextStep();
         int maxSteps = trace.getOptions().getMaxSteps();
-        int maxStepsLimit = trace.getOptions().getMaxStepsLimit();
 
-        // 只有在不可扩展时，currentStep > maxStepsLimit 才触发硬熔断
-        if (currentStep > maxStepsLimit) {
-            if (trace.getOptions().isMaxStepsExtensible()) {
-                // 如果开启了续航，硬限自动向后推演，保持“无限”可能，但保留日志警告
-                LOG.warn("ReActAgent [{}] hard limit hit ({}), but extensible is ON. Pushing limit to {}",
-                        config.getName(), maxStepsLimit, maxStepsLimit + 20);
-                trace.getOptions().setMaxStepsLimit(maxStepsLimit + 20);
-            } else {
-                LOG.error("ReActAgent [{}] hard limit hit: {}", config.getName(), maxStepsLimit);
+        // --- 优化点 2: 统一流控逻辑，移除 maxStepsLimit 硬熔断 ---
+        // 逻辑更加扁平化：要么进入 AutoRethink 机制，要么直接达到 maxSteps 熔断
+        if (trace.getOptions().isAutoRethink()) {
+            // [AutoRethink 模式]
+            // 当步数接近或超过阈值（80% 或 max-1）时触发干预
+            int thresholdStep = Math.max(maxSteps - 1, (int) (maxSteps * 0.8));
+
+            if (currentStep >= thresholdStep) {
+                // 自动扩展步数上限（续航）
+                trace.getOptions().setMaxSteps(maxSteps + 10);
+
+                String rethinkPrompt = String.format(
+                        "【自动重审 (Auto-Rethink)】任务执行已达第 %d 步（上限 %d）。\n" +
+                                "请停止当前的常规推理循环，立即进行自审：\n" +
+                                "1. **核心目标检查**：你距离解决最初提出的问题还有多远？\n" +
+                                "2. **有效性评估**：如果最近的尝试没有带来新线索，说明策略已失效，请更换思路。\n" +
+                                "3. **强制收敛**：若确定无法达成，请总结已知线索并在 Final Answer 中申请用户协助。\n" +
+                                "请在下一轮 Thought 中陈述新策略后继续。",
+                        currentStep, maxSteps
+                );
+
+                trace.getWorkingMemory().addMessage(ChatMessage.ofUser(rethinkPrompt));
+                LOG.info("ReActAgent [{}] auto-rethink triggered at step {}", config.getName(), currentStep);
+            }
+        } else {
+            // [标准模式]
+            // --- 优化点 3: 严格边界判定 ---
+            if (currentStep > maxSteps) {
+                LOG.warn("ReActAgent [{}] reached max steps: {}", config.getName(), maxSteps);
                 trace.setRoute(Agent.ID_END);
-                trace.setFinalAnswer("已达到硬性步数上限 (" + maxStepsLimit + ")，任务终止。");
+                trace.setFinalAnswer("Agent error: Maximum steps reached (" + maxSteps + ").");
                 return;
             }
-        }
-
-        if(trace.getOptions().isMaxStepsExtensible()) {
-            //续航模式
-            int thresholdStep = Math.max(maxSteps - 1, (int) (maxSteps * 0.8));
-            if (currentStep >= thresholdStep) {
-                    // 提醒自我审核
-                    if (maxSteps < trace.getOptions().getMaxStepsLimit()) {
-                        trace.getOptions().setMaxSteps(maxSteps + 10);
-
-                        String interventionPrompt = String.format(
-                                "【运行干预】任务执行时长已超出预期（当前第 %d 步）。\n" +
-                                        "请停止当前的常规推理循环，先执行以下自审：\n" +
-                                        "1. **核心目标检查**：你距离解决最初提出的问题还有多远？\n" +
-                                        "2. **有效性评估**：如果过去几步的 Observation 没有带来新信息，说明当前策略已失效，请立即更换思路或尝试其他工具。\n" +
-                                        "3. **强制收敛**：严禁在原地打转。若确定无法达成，请总结已发现的线索并在 Final Answer 中申请用户协助。\n" +
-                                        "请在下一轮 Thought 中简要陈述你的新策略，然后继续。",
-                                currentStep
-                        );
-
-                        trace.getWorkingMemory().addMessage(ChatMessage.ofUser(interventionPrompt));
-                        LOG.info("ReActAgent [{}] critical intervention injected at step {}", config.getName(), currentStep);
-                    }
-
-            }
-        } else  if (currentStep > maxSteps) {
-            // 非续航模式下的标准熔断
-            LOG.warn("ReActAgent [{}] reached max steps: {}", config.getName(), maxSteps);
-            trace.setRoute(Agent.ID_END);
-            trace.setFinalAnswer("Agent error: Maximum steps reached (" + maxSteps + ").");
-            return;
         }
 
         // [逻辑 2: 提示词工程] 融合系统角色、执行计划、输出格式约束及协议指令
@@ -183,7 +171,6 @@ public class ReasonTask implements NamedTaskComponent {
             } else {
                 systemPromptBuf.append("- **目标达成**: 计划看板已全部标记为 [√]。请综合上述执行过程中的所有观察结果，直接给出最终的详细回答。");
             }
-
         }
 
         if (trace.getSession().isPending()) {
@@ -283,7 +270,6 @@ public class ReasonTask implements NamedTaskComponent {
             return;
         }
 
-
         if(trace.getOptions().getStreamSink() != null){
             trace.getOptions().getStreamSink().next(new ThoughtChunk(node, trace, responseMessage));
         }
@@ -300,7 +286,7 @@ public class ReasonTask implements NamedTaskComponent {
         if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
             if (Assert.isNotEmpty(clearContent)) {
                 trace.setRoute(Agent.ID_END);
-                trace.setFinalAnswer(clearContent, false); // 直接取干净的正文
+                trace.setFinalAnswer(clearContent, false);
                 return;
             }
         }
@@ -354,7 +340,6 @@ public class ReasonTask implements NamedTaskComponent {
 
                     if (trace.getOptions().getOutputSchema() != null) {
                         trace.getOptions().getChatModel().getDialect().prepareOutputFormatOptions(o);
-                        //o.optionSet("response_format", Utils.asMap("type", "json_object"));
                     }
 
                     o.optionSet(trace.getOptions().getModelOptions().options());
@@ -369,7 +354,6 @@ public class ReasonTask implements NamedTaskComponent {
         }
 
         int maxRetries = trace.getOptions().getMaxRetries();
-        Throwable lastException = null;
 
         try {
             return new RetryTask()
@@ -380,28 +364,27 @@ public class ReasonTask implements NamedTaskComponent {
                                 config.getName(), attempt, maxRetries, e.toString());
                     })
                     .callWithRetry(() -> {
-                        final ChatResponse response;
+                                final ChatResponse response;
 
-                        if (trace.getOptions().getStreamSink() != null) {
-                            if (trace.getOptions().getStreamSink().isCancelled()) {
-                                return null;
+                                if (trace.getOptions().getStreamSink() != null) {
+                                    if (trace.getOptions().getStreamSink().isCancelled()) {
+                                        return null;
+                                    }
+
+                                    response = req.stream().doOnNext(resp -> {
+                                        trace.getOptions().getStreamSink().next(new ReasonChunk(trace, resp, resp.getMessage()));
+                                    }).blockLast();
+                                } else {
+                                    response = req.call();
+                                }
+
+                                if (response.isEmpty()) {
+                                    throw new LlmNoReturnException("The LLM did not return");
+                                }
+
+                                return response;
                             }
-
-                            response = req.stream().doOnNext(resp -> {
-                                trace.getOptions().getStreamSink().next(new ReasonChunk(trace, resp, resp.getMessage()));
-                            }).blockLast();
-                        } else {
-                            response = req.call();
-                        }
-
-                        if (response.isEmpty()) {
-                            //触发重试
-                            throw new LlmNoReturnException("The LLM did not return");
-                        }
-
-                        return response;
-                    }
-            );
+                    );
         } catch (Throwable e) {
             // 4. 异常后续处理（保留原有的文案逻辑）
             return handleLastException(trace, e);

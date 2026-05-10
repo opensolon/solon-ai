@@ -56,8 +56,14 @@ public class HarnessProperties implements Serializable {
 
     //最大步数
     private int maxSteps = 30;
-    //是否自动续步
+
+    /**
+     * @deprecated 3.10.5 {@link #autoRethink}
+     */
+    @Deprecated
     private boolean maxStepsAutoExtensible = false;
+    //自我反思
+    private boolean autoRethink = false;
 
     private int sessionWindowSize = 8;
     private int summaryWindowSize = 30;
@@ -212,6 +218,12 @@ public class HarnessProperties implements Serializable {
 
         return models.get(0);
     }
+
+    public boolean isAutoRethink() {
+        return autoRethink || maxStepsAutoExtensible;
+    }
+
+    //--------------------------
 
     /**
      * 马具主目录

@@ -449,13 +449,16 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
-        public Builder maxStepsLimit(int val) {
-            config.getDefaultOptions().setMaxStepsLimit(val);
-            return this;
+        /**
+         * @deprecated 3.10.5 {{@link #autoRethink(boolean)}}
+         */
+        @Deprecated
+        public Builder maxStepsExtensible(boolean val) {
+            return autoRethink(val);
         }
 
-        public Builder maxStepsExtensible(boolean val) {
-            config.getDefaultOptions().setMaxStepsExtensible(val);
+        public Builder autoRethink(boolean val) {
+            config.getDefaultOptions().setAutoRethink(val);
             return this;
         }
 

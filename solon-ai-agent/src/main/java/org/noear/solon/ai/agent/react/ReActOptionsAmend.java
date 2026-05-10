@@ -15,14 +15,12 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.snack4.util.Asserts;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Objects;
 import java.util.function.Function;
 
 /**
@@ -78,13 +76,17 @@ public class ReActOptionsAmend extends ModelOptionsAmend<ReActOptionsAmend, ReAc
         return this;
     }
 
-    public ReActOptionsAmend maxStepsLimit(int val) {
-        options.setMaxStepsLimit(val);
-        return this;
+
+    /**
+     * @deprecated 3.10.5 {{@link #autoRethink(boolean)}}
+     */
+    @Deprecated
+    public ReActOptionsAmend maxStepsExtensible(boolean val) {
+        return autoRethink(val);
     }
 
-    public ReActOptionsAmend maxStepsExtensible(boolean val) {
-        options.setMaxStepsExtensible(val);
+    public ReActOptionsAmend autoRethink(boolean val) {
+        options.setAutoRethink(val);
         return this;
     }
 

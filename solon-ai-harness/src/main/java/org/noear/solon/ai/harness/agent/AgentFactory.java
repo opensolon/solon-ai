@@ -82,10 +82,10 @@ public class AgentFactory {
             builder.maxSteps(engine.getProps().getMaxSteps());
         }
 
-        if (metadata.getMaxStepsAutoExtensible() != null) {
-            builder.maxStepsExtensible(metadata.getMaxStepsAutoExtensible());
+        if (metadata.getAutoRethink() != null) {
+            builder.autoRethink(metadata.getAutoRethink());
         } else {
-            builder.maxStepsExtensible(engine.getProps().isMaxStepsAutoExtensible());
+            builder.autoRethink(engine.getProps().isAutoRethink());
         }
 
         if (metadata.getSessionWindowSize() != null) {
