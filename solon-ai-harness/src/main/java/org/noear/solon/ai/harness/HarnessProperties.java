@@ -265,7 +265,7 @@ public class HarnessProperties implements Serializable {
     /**
      * 马具连接通道存放区
      */
-    public final String getHarnessChannel() {
-        return getHarnessHome() + "channel/";
+    public final String getHarnessChannels() {
+        return getHarnessHome() + "channels/";
     }
 }
