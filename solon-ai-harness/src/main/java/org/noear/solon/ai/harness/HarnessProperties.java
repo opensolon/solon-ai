@@ -219,6 +219,14 @@ public class HarnessProperties implements Serializable {
         return models.get(0);
     }
 
+    /**
+     * @deprecated 3.10.5 {@link #isAutoRethink()}
+     */
+    @Deprecated
+    public boolean isMaxStepsAutoExtensible(){
+        return isAutoRethink();
+    }
+
     public boolean isAutoRethink() {
         return autoRethink && maxStepsAutoExtensible;
     }
