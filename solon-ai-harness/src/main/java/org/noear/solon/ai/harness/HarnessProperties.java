@@ -61,9 +61,9 @@ public class HarnessProperties implements Serializable {
      * @deprecated 3.10.5 {@link #autoRethink}
      */
     @Deprecated
-    private boolean maxStepsAutoExtensible = false;
+    private boolean maxStepsAutoExtensible = true;
     //自我反思
-    private boolean autoRethink = false;
+    private boolean autoRethink = true;
 
     private int sessionWindowSize = 8;
     private int summaryWindowSize = 30;
@@ -220,7 +220,7 @@ public class HarnessProperties implements Serializable {
     }
 
     public boolean isAutoRethink() {
-        return autoRethink || maxStepsAutoExtensible;
+        return autoRethink && maxStepsAutoExtensible;
     }
 
     //--------------------------
