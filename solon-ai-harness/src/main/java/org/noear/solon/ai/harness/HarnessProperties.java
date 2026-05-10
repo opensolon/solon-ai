@@ -107,7 +107,7 @@ public class HarnessProperties implements Serializable {
     /**
      * 添加扩展
      */
-    public void addExtension(HarnessExtension extension){
+    public void addExtension(HarnessExtension extension) {
         this.extensions.add(extension);
     }
 
@@ -144,7 +144,7 @@ public class HarnessProperties implements Serializable {
     /**
      * 添加代理池
      */
-    public void addAgentPool(String path){
+    public void addAgentPool(String path) {
         getAgentPools().add(path);
     }
 
@@ -157,7 +157,7 @@ public class HarnessProperties implements Serializable {
         }
     }
 
-    public void addDisallowedTools(ToolPermission... toolPermissions){
+    public void addDisallowedTools(ToolPermission... toolPermissions) {
         for (ToolPermission p1 : toolPermissions) {
             disallowedTools.add(p1.getName());
         }
@@ -260,5 +260,12 @@ public class HarnessProperties implements Serializable {
      */
     public final String getHarnessDownload() {
         return getHarnessHome() + "download/";
+    }
+
+    /**
+     * 马具连接通道存放区
+     */
+    public final String getHarnessChannel() {
+        return getHarnessHome() + "channel/";
     }
 }
