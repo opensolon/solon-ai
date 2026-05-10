@@ -19,10 +19,8 @@ public class WebSearchTest {
         WebSearchRepository repository = TestUtils.getWebSearchRepository();
         String query = "solon 是谁开发的？";
 
-        List<Document> context = repository.search(query);
-
         ChatResponse resp = TestUtils.getChatModel()
-                .prompt(ChatMessage.ofUserAugment(query, context))
+                .prompt(repository.promptAugment(query))
                 .call();
 
         //打印

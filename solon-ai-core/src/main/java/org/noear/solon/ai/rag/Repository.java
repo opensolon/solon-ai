@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.rag;
 
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.lang.Preview;
 
@@ -44,4 +45,12 @@ public interface Repository {
      * @param condition 查询条件
      */
     List<Document> search(QueryCondition condition) throws IOException;
+
+    /**
+     * 提示词简单增强
+     */
+    default ChatMessage promptAugment(String query) throws IOException {
+        List<Document> context = search(query);
+        return ChatMessage.ofUserAugment(query, context);
+    }
 }
