@@ -65,10 +65,10 @@ public class LspManagerTest {
     }
 
     @Test
-    public void testRegisterServer_Disabled() {
+    public void testRegisterServer_Enabled() {
         LspServerParameters params = new LspServerParameters(
                 Arrays.asList("some-server"), Arrays.asList(".java"));
-        params.setDisabled(true);
+        params.setEnabled(false);
 
         manager.registerServer("disabled-server", params);
 

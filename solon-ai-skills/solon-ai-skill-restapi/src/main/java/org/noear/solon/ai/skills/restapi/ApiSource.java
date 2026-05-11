@@ -28,10 +28,11 @@ import java.util.function.Consumer;
  * @since 3.9.6
  */
 public class ApiSource {
-    protected String docUrl;
-    protected String apiBaseUrl;
-    protected Map<String, String> headers = new HashMap<>();
-    protected ApiAuthenticator authenticator;
+    private String docUrl;
+    private String apiBaseUrl;
+    private Map<String, String> headers = new HashMap<>();
+    private ApiAuthenticator authenticator;
+    private boolean enabled = true;
 
     public ApiSource() {
         //反序列化用
@@ -80,5 +81,13 @@ public class ApiSource {
 
     public void setAuthenticator(ApiAuthenticator authenticator) {
         this.authenticator = authenticator;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
     }
 }

@@ -40,6 +40,7 @@ public class McpServerParameters implements Serializable {
     private String command;
     private List<String> args = new ArrayList<>();
     private Map<String, String> env = new HashMap<>();
+    private boolean enabled = true;
 
     public McpServerParameters() {
         //反序列化用
@@ -141,6 +142,14 @@ public class McpServerParameters implements Serializable {
         Assert.notNull(value, "The value can not be null");
 
         this.env.put(key, value);
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
     }
 
     /**

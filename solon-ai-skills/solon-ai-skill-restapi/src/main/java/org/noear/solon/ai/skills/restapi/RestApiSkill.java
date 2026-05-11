@@ -53,7 +53,7 @@ import java.util.stream.Collectors;
  */
 @Preview("3.9.1")
 public class RestApiSkill extends AbsSkill {
-    private static final Logger log = LoggerFactory.getLogger(RestApiSkill.class);
+    private static final Logger LOG = LoggerFactory.getLogger(RestApiSkill.class);
 
     private final Map<String, Map<String, ApiTool>> categoryTools = new LinkedHashMap<>();
     private final Map<String, ApiTool> allTools = new LinkedHashMap<>();
@@ -155,10 +155,10 @@ public class RestApiSkill extends AbsSkill {
     public RestApiSkill addApi(String docUrl, String apiBaseUrl, Map<String, String> headers, ApiAuthenticator authenticator) {
 
         ApiSource source = new ApiSource();
-        source.docUrl = docUrl;
-        source.apiBaseUrl = apiBaseUrl;
-        source.headers = headers;
-        source.authenticator = authenticator;
+        source.setDocUrl(docUrl);
+        source.setApiBaseUrl(apiBaseUrl);
+        source.setHeaders(headers);
+        source.setAuthenticator(authenticator);
 
         return addApi(source);
     }
@@ -170,11 +170,16 @@ public class RestApiSkill extends AbsSkill {
      * @param apiSource 接口源
      */
     public RestApiSkill addApi(ApiSource apiSource) {
+        if (apiSource.isEnabled() == false) {
+            LOG.info("API server '{}' is disabled, skipping registration", apiSource.getDocUrl());
+            return this;
+        }
+
         try {
             loadApiFromDefinition(apiSource);
             return this;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to load API from: " + apiSource.docUrl, e);
+            throw new RuntimeException("Failed to load API from: " + apiSource.getDocUrl(), e);
         }
     }
 
@@ -364,12 +369,12 @@ public class RestApiSkill extends AbsSkill {
 
         // 3. 认证处理
 
-        if (tool.getSource() != null && Assert.isNotEmpty(tool.getSource().headers)) {
-            http.headers(tool.getSource().headers);
+        if (tool.getSource() != null && Assert.isNotEmpty(tool.getSource().getHeaders())) {
+            http.headers(tool.getSource().getHeaders());
         }
 
-        if (tool.getSource() != null && tool.getSource().authenticator != null) {
-            tool.getSource().authenticator.apply(http, tool);
+        if (tool.getSource() != null && tool.getSource().getAuthenticator() != null) {
+            tool.getSource().getAuthenticator().apply(http, tool);
         } else {
             if (defaultAuthenticator != null) {
                 defaultAuthenticator.apply(http, tool);
@@ -394,7 +399,7 @@ public class RestApiSkill extends AbsSkill {
 
         // 6. 执行并处理响应
         try {
-            log.debug("RestApiSkill calling: {} {} (API: {})", tool.getMethod(), baseUrl + finalPath, apiName);
+            LOG.debug("RestApiSkill calling: {} {} (API: {})", tool.getMethod(), baseUrl + finalPath, apiName);
 
             String result = RetryUtil.callWithRetry(maxRetries, () -> http.exec(tool.getMethod()).bodyAsString());
 
@@ -405,7 +410,7 @@ public class RestApiSkill extends AbsSkill {
 
             return Utils.isEmpty(result) ? "Success: API executed, but returned an empty response." : result;
         } catch (Exception e) {
-            log.warn("API Call Failed: {} - {}", tool.getName(), e.getMessage());
+            LOG.warn("API Call Failed: {} - {}", tool.getName(), e.getMessage());
             String errorMsg = e.getMessage() != null ? e.getMessage() : "远程服务未响应";
             return "接口执行异常: " + errorMsg + " (请检查服务可用性或参数正确性)";
         }
@@ -416,15 +421,15 @@ public class RestApiSkill extends AbsSkill {
     private void loadApiFromDefinition(ApiSource source) throws IOException {
         final String json;
 
-        if (source.docUrl.startsWith("http://") || source.docUrl.startsWith("https://")) {
-            HttpUtils http = HttpUtils.http(source.docUrl);
+        if (source.getDocUrl().startsWith("http://") || source.getDocUrl().startsWith("https://")) {
+            HttpUtils http = HttpUtils.http(source.getDocUrl());
 
-            if (Assert.isNotEmpty(source.headers)) {
-                http.headers(source.headers);
+            if (Assert.isNotEmpty(source.getHeaders())) {
+                http.headers(source.getHeaders());
             }
 
-            if (source.authenticator != null) {
-                source.authenticator.apply(http, null);
+            if (source.getAuthenticator() != null) {
+                source.getAuthenticator().apply(http, null);
             } else {
                 if (defaultAuthenticator != null) {
                     defaultAuthenticator.apply(http, null);
@@ -433,18 +438,18 @@ public class RestApiSkill extends AbsSkill {
 
             json = http.get();
         } else {
-            json = ResourceUtil.findResourceAsString(source.docUrl);
+            json = ResourceUtil.findResourceAsString(source.getDocUrl());
         }
 
         if (Utils.isEmpty(json)) {
-            log.warn("RestApiSkill: Source empty for {}", source.docUrl);
+            LOG.warn("RestApiSkill: Source empty for {}", source.getDocUrl());
             return;
         }
 
-        List<ApiTool> tools = resolver.resolve(source.docUrl, json);
+        List<ApiTool> tools = resolver.resolve(source.getDocUrl(), json);
         for (ApiTool tool : tools) {
             if (!tool.isDeprecated()) {
-                tool.setBaseUrl(source.apiBaseUrl);
+                tool.setBaseUrl(source.getApiBaseUrl());
                 tool.setSource(source);
 
                 String nameLower = tool.getName().toLowerCase();
@@ -456,7 +461,7 @@ public class RestApiSkill extends AbsSkill {
             }
         }
 
-        log.info("RestApiSkill: Loaded {} tools from {}", tools.size(), source.docUrl);
+        LOG.info("RestApiSkill: Loaded {} tools from {}", tools.size(), source.getDocUrl());
     }
 
     private String formatApiDocs(Collection<ApiTool> tools) {

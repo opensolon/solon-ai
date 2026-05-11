@@ -70,7 +70,7 @@ public class LspManager {
         Objects.requireNonNull(name, "Server name cannot be null");
         Objects.requireNonNull(params, "Server params cannot be null");
 
-        if (params.isDisabled()) {
+        if (params.isEnabled() == false) {
             LOG.info("LSP server '{}' is disabled, skipping registration", name);
             return;
         }

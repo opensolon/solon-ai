@@ -41,7 +41,7 @@ public class LspServerParametersTest {
         assertTrue(params.getCommand().isEmpty());
         assertNotNull(params.getExtensions());
         assertTrue(params.getExtensions().isEmpty());
-        assertFalse(params.isDisabled());
+        assertTrue(params.isEnabled());
         assertNotNull(params.getInitialization());
         assertTrue(params.getInitialization().isEmpty());
         assertNotNull(params.getEnv());
@@ -135,13 +135,13 @@ public class LspServerParametersTest {
     public void testDisabledGetterSetter() {
         LspServerParameters params = new LspServerParameters();
 
-        assertFalse(params.isDisabled());
+        assertTrue(params.isEnabled());
 
-        params.setDisabled(true);
-        assertTrue(params.isDisabled());
+        params.setEnabled(false);
+        assertFalse(params.isEnabled());
 
-        params.setDisabled(false);
-        assertFalse(params.isDisabled());
+        params.setEnabled(true);
+        assertTrue(params.isEnabled());
     }
 
     @Test

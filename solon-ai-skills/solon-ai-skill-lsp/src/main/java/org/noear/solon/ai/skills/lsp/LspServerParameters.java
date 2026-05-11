@@ -60,9 +60,9 @@ public class LspServerParameters implements Serializable {
     private List<String> extensions = new ArrayList<>();
 
     /**
-     * 是否禁用（可选，默认 false）
+     * 是否启用（可选，默认 true）
      */
-    private boolean disabled = false;
+    private boolean enabled = true;
 
     /**
      * 服务器初始化选项（可选）
@@ -100,12 +100,12 @@ public class LspServerParameters implements Serializable {
         this.extensions = extensions;
     }
 
-    public boolean isDisabled() {
-        return disabled;
+    public boolean isEnabled() {
+        return enabled;
     }
 
-    public void setDisabled(boolean disabled) {
-        this.disabled = disabled;
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
     }
 
     public Map<String, Object> getInitialization() {
