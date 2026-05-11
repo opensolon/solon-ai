@@ -102,7 +102,7 @@ public class TaskSkill extends AbsSkill {
         taskOp.description = taskSpec.description;
         taskOp.prompt = taskSpec.prompt;
 
-        return taskDo(__parentTrace, __cwd, __sessionId, __parentSession, taskOp, false);
+        return taskDo(__parentTrace, __cwd, __sessionId, __parentSession, taskOp, 1, false);
     }
 
     @ToolMapping(name = "multitask", description =
@@ -135,7 +135,7 @@ public class TaskSkill extends AbsSkill {
 
         for (MultiTaskOp task : tasks) {
             CompletableFuture<String> future = CompletableFuture.supplyAsync(() ->
-                    taskDo(__parentTrace, __cwd, __sessionId, __parentSession, task, true), RunUtil.io());
+                    taskDo(__parentTrace, __cwd, __sessionId, __parentSession, task, tasks.size(), true), RunUtil.io());
             futures.add(future);
         }
 
@@ -154,14 +154,14 @@ public class TaskSkill extends AbsSkill {
 
     }
 
-    private String taskDo(ReActTrace __parentTrace, String __cwd, String __sessionId, AgentSession __parentSession, MultiTaskOp task, boolean isMultitask) {
+    private String taskDo(ReActTrace __parentTrace, String __cwd, String __sessionId, AgentSession __parentSession, MultiTaskOp task, int count, boolean isMultitask) {
         AgentDefinition agentDefinition = engine.getAgentManager().getAgent(task.agent_name);
         if (agentDefinition == null) {
             return "ERROR: 未知的子代理类型 '" + task.agent_name + "'。";
         }
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("任务开始[{} - {}]: {}", task.index, task.agent_name, ONode.serialize(task));
+            LOG.debug("任务开始[{}/{} - {}]: {}", task.index, count, task.agent_name, ONode.serialize(task));
         }
 
         String modelSelected = __parentSession.getContext().getAs(HarnessFlags.VAR_MODEL_SELECTED);
@@ -238,12 +238,12 @@ public class TaskSkill extends AbsSkill {
 
 
             if (LOG.isDebugEnabled()) {
-                LOG.debug("任务成功[{} - {}]: {}", task.index, task.agent_name, task.description);
+                LOG.debug("任务成功[{}/{} - {}]: {}", task.index, count, task.agent_name, task.description);
             }
 
             return formatTaskResp(task, true, result, isMultitask);
         } catch (Throwable e) {
-            LOG.error("任务失败[{} - {}]: {}", task.index, task.agent_name, e.getMessage(), e);
+            LOG.error("任务失败[{}/{} - {}]: {}", task.index, count, task.agent_name, e.getMessage(), e);
 
             result = String.format("ERROR: 任务执行失败: %s", e.getMessage());
 
