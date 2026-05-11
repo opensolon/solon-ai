@@ -19,6 +19,7 @@ import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.exception.LlmNoReturnException;
 import org.noear.solon.ai.agent.react.*;
 import org.noear.solon.ai.chat.ChatRequestDesc;
@@ -33,6 +34,7 @@ import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.FluxSink;
 
 import java.util.*;
 import java.util.concurrent.TimeoutException;
@@ -354,15 +356,20 @@ public class ReasonTask {
                     })
                     .callWithRetry(() -> {
                                 final ChatResponse response;
-
                                 if (trace.getOptions().getStreamSink() != null) {
-                                    if (trace.getOptions().getStreamSink().isCancelled()) {
+                                    final FluxSink<AgentChunk> sink = trace.getOptions().getStreamSink();
+
+                                    if (sink.isCancelled()) {
                                         return null;
                                     }
 
-                                    response = req.stream().doOnNext(resp -> {
-                                        trace.getOptions().getStreamSink().next(new ReasonChunk(trace, resp, resp.getMessage()));
-                                    }).blockLast();
+                                    response = req.stream()
+                                            .takeUntil(r -> sink.isCancelled())
+                                            .doOnNext(resp -> {
+                                                if (!sink.isCancelled()) {
+                                                    sink.next(new ReasonChunk(trace, resp, resp.getMessage()));
+                                                }
+                                            }).blockLast();
                                 } else {
                                     response = req.call();
                                 }

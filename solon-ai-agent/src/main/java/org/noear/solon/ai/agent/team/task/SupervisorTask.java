@@ -11,6 +11,7 @@ package org.noear.solon.ai.agent.team.task;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.exception.LlmNoReturnException;
 import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.agent.team.TeamAgent;
@@ -31,6 +32,7 @@ import org.noear.solon.flow.Node;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.FluxSink;
 
 import java.util.*;
 import java.util.regex.Matcher;
@@ -328,16 +330,18 @@ public class SupervisorTask implements NamedTaskComponent {
                         final ChatResponse response;
 
                         if (trace.getOptions().getStreamSink() == null) {
-                            if (trace.getOptions().getStreamSink().isCancelled()) {
+                            response = req.call();
+                        } else {
+                            FluxSink<AgentChunk> sink = trace.getOptions().getStreamSink();
+
+                            if (sink.isCancelled()) {
                                 return null;
                             }
 
-                            response = req.call();
-                        } else {
                             response = req.stream()
+                                    .takeUntil(r -> sink.isCancelled())
                                     .doOnNext(resp -> {
-                                        trace.getOptions().getStreamSink().next(
-                                                new SupervisorChunk(node, trace, resp));
+                                        sink.next(new SupervisorChunk(node, trace, resp));
                                     })
                                     .blockLast();
                         }

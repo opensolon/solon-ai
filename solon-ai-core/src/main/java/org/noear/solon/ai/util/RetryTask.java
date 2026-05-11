@@ -82,6 +82,10 @@ public class RetryTask {
             } catch (Throwable e) {
                 lastException = e;
 
+                if(e instanceof NullPointerException){
+                    throw (NullPointerException)e;
+                }
+
                 if (e instanceof InterruptedException) {
                     throw (InterruptedException) e;
                 }

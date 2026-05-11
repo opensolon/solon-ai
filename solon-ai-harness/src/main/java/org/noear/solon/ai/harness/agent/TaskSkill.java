@@ -37,6 +37,7 @@ import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RunUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.FluxSink;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -175,9 +176,10 @@ public class TaskSkill extends AbsSkill {
 
         try {
             AtomicReference<Throwable> errRef = new AtomicReference<>();
+
             if (__parentTrace == null || __parentTrace.getOptions() == null || __parentTrace.getOptions().getStreamSink() == null) {
                 // 同步模式
-                AgentChunk agentChunk = agent.prompt(originalPrompt)
+                ReActChunk agentChunk = (ReActChunk) agent.prompt(originalPrompt)
                         .session(session)
                         .options(o -> {
                             o.toolContextPut(HarnessEngine.ATTR_CWD, __cwd);
@@ -194,12 +196,14 @@ public class TaskSkill extends AbsSkill {
                 }
 
                 if (__parentTrace != null) {
-                    __parentTrace.getMetrics().addMetrics(((ReActChunk) agentChunk).getResponse().getMetrics());
+                    __parentTrace.getMetrics().addMetrics(agentChunk.getMetrics());
                 }
 
                 result = agentChunk.getContent();
             } else {
                 // 流式模式
+                final FluxSink<AgentChunk> sink = __parentTrace.getOptions().getStreamSink();
+
                 ReActChunk response = (ReActChunk) agent.prompt(originalPrompt)
                         .session(session)
                         .options(o -> {
@@ -207,18 +211,19 @@ public class TaskSkill extends AbsSkill {
                             o.toolContextPut(ChatSession.ATTR_SESSIONID, __sessionId);
                         })
                         .stream()
+                        .takeUntil(r -> sink.isCancelled())
                         .doOnNext(chunk -> {
                             if (chunk instanceof ActionEndChunk) {
-                                __parentTrace.getOptions().getStreamSink().next(chunk);
+                                sink.next(chunk);
                             } else {
                                 if (isMultitask) {
                                     if (chunk instanceof ThoughtChunk) {
                                         chunk.getMeta().put(TOOL_MULTITASK, 1);
-                                        __parentTrace.getOptions().getStreamSink().next(chunk);
+                                        sink.next(chunk);
                                     }
                                 } else {
                                     if (chunk instanceof ReasonChunk) {
-                                        __parentTrace.getOptions().getStreamSink().next(chunk);
+                                        sink.next(chunk);
                                     }
                                 }
                             }
