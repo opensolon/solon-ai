@@ -21,6 +21,7 @@
 * 添加 solon-ai-core ChatMessage.getCreatedAt 方法
 * 添加 solon-ai-core ChatSession.removeLatestMessage 方法（对话回退支持）
 * 添加 solon-ai-core Repository.promptAugment 快捷方法
+* 添加 solon-ai-core AiConfig.enabled 配置属性
 * 添加 solon-ai-skill-cli TerminalSkill.edit old_str 预检处理（llm 可能会传空）
 * 优化 solon-ai-agent ReasonTask Missing traceKey 处理
 * 优化 solon-ai-core AiConfig.proxy 配置兼容（减少反序列化反射）

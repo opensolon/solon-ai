@@ -39,6 +39,7 @@ public class AiConfig {
     protected @Nullable String name;
     protected @Nullable String description;
     protected long contextLength;
+    protected boolean enabled = true;
 
     protected String apiUrl;
     protected String apiKey;
@@ -177,6 +178,14 @@ public class AiConfig {
     public void setProxyInstance(Proxy proxyInstance) {
         this.proxyInstance = proxyInstance;
         this.proxy = null;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
     }
 
     /**
