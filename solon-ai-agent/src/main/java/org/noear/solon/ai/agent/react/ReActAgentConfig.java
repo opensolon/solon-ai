@@ -43,8 +43,6 @@ public class ReActAgentConfig {
     private String role;
     /** 智能体画像 */
     private AgentProfile profile;
-    /** 计算图微调器（自定义执行链路） */
-    private Consumer<GraphSpec> graphAdjuster;
     /** 提示词模板（默认中文） */
     private AgentSystemPrompt<ReActTrace> systemPrompt = ReActSystemPromptCn.getDefault();
     /** 终止标识符（模型输出此词时停止思考循环） */
@@ -72,8 +70,6 @@ public class ReActAgentConfig {
     protected void setRole(String role) { this.role = role; }
 
     protected void setProfile(AgentProfile profile) { this.profile = profile; }
-
-    protected void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) { this.graphAdjuster = graphAdjuster; }
 
     protected void setFinishMarker(String val) { this.finishMarker = val; }
 
@@ -103,8 +99,6 @@ public class ReActAgentConfig {
         if (profile == null) profile = new AgentProfile();
         return profile;
     }
-
-    public Consumer<GraphSpec> getGraphAdjuster() { return graphAdjuster; }
 
     public ReActOptions getDefaultOptions() { return defaultOptions; }
 

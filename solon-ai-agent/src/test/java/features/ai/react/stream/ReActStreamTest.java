@@ -104,9 +104,7 @@ public class ReActStreamTest {
 
         Flux<AgentChunk> stream = agent.prompt("hello").stream();
 
-        StepVerifier.create(stream)
-                .expectErrorMatches(throwable -> throwable.getMessage().contains("暂时无法使用模型服务"))
-                .verify();
+        assert stream.blockLast().getContent().contains("暂时无法使用模型服务");
     }
 
     // --- 模拟工具类 ---

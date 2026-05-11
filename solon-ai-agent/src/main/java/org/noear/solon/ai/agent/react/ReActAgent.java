@@ -320,6 +320,10 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         while (true) {
+            if (trace.getSession().isPending()) {
+                break;
+            }
+
             if (ReActAgent.ID_REASON.equals(trace.getRoute())) {
                 reasonTask.run(trace, context);
             } else if (ReActAgent.ID_ACTION.equals(trace.getRoute())) {
@@ -394,14 +398,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
         public Builder systemPrompt(AgentSystemPrompt<ReActTrace> val) {
             config.setSystemPrompt(val);
-            return this;
-        }
-
-        /**
-         * 微调推理图结构
-         */
-        public Builder graphAdjuster(Consumer<GraphSpec> graphBuilder) {
-            config.setGraphAdjuster(graphBuilder);
             return this;
         }
 

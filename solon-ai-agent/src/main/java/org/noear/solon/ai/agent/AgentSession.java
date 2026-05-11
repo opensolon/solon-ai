@@ -55,10 +55,13 @@ public interface AgentSession extends ChatSession, NonSerializable {
      * 挂起
      */
     default void pending(boolean pending, String reason) {
+        FlowContextInternal contextInternal = ((FlowContextInternal) getContext());
+
         if (pending == true) {
-            getContext().stop();
+            contextInternal.stop();
+            contextInternal.stopped(true);
         } else {
-            ((FlowContextInternal) getContext()).stopped(false);
+            contextInternal.stopped(false);
         }
 
         if (reason == null) {
