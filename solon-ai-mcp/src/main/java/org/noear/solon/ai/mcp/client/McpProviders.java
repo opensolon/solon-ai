@@ -186,9 +186,11 @@ public class McpProviders implements ToolProvider, ResourceProvider, PromptProvi
 
         if (Utils.isNotEmpty(mcpServers)) {
             for (Map.Entry<String, McpServerParameters> kv : mcpServers.entrySet()) {
-                McpClientProvider mcpClient = fromMcpServer(kv.getValue());
+                if (kv.getValue().isEnabled()) {
+                    McpClientProvider mcpClient = fromMcpServer(kv.getValue());
 
-                mcpClients.put(kv.getKey(), mcpClient);
+                    mcpClients.put(kv.getKey(), mcpClient);
+                }
             }
         }
 

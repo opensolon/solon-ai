@@ -32,6 +32,7 @@ import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.code.CodeSkill;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
+import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.skills.lsp.LspManager;
 import org.noear.solon.ai.skills.lsp.LspServerParameters;
 import org.noear.solon.ai.skills.lsp.LspSkill;
@@ -255,9 +256,14 @@ public class HarnessEngine {
         try {
             if (Assert.isNotEmpty(props.getMcpServers())) {
                 McpProviders mcpProviders = McpProviders.fromMcpServers(props.getMcpServers());
-                mcpGatewaySkill = new ToolGatewaySkill().retryConfig(props.getMcpRetries());
-                for (Map.Entry<String, McpClientProvider> entry : mcpProviders.getProviders().entrySet()) {
-                    mcpGatewaySkill.addTool(entry.getKey(), entry.getValue());
+
+                if (mcpProviders.getProviders().size() > 0) {
+                    mcpGatewaySkill = new ToolGatewaySkill().retryConfig(props.getMcpRetries());
+                    for (Map.Entry<String, McpClientProvider> entry : mcpProviders.getProviders().entrySet()) {
+                        mcpGatewaySkill.addTool(entry.getKey(), entry.getValue());
+                    }
+                } else {
+                    mcpGatewaySkill = null;
                 }
             } else {
                 mcpGatewaySkill = null;
@@ -297,8 +303,8 @@ public class HarnessEngine {
 
         // 添加步数
         agentDefinition.getMetadata().setMaxSteps(props.getMaxSteps());
-        // 添加步数自动扩展
-        agentDefinition.getMetadata().setAutoRethink(props.isMaxStepsAutoExtensible());
+        // 添加自我反思
+        agentDefinition.getMetadata().setAutoRethink(props.isAutoRethink());
         // 添加会话窗口大小
         agentDefinition.getMetadata().setSessionWindowSize(props.getSessionWindowSize());
 

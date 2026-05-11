@@ -56,7 +56,9 @@ public class GenerateTool extends AbsToolProvider {
             //有模型配置
             StringBuilder buf = new StringBuilder("从给定列表中选择：\n");
             for (ChatConfig entry : engine.getProps().getModels()) {
-                buf.append("- `").append(entry.getNameOrModel()).append("`，").append(entry.getDescriptionOrModel()).append("\n");
+                if (entry.isEnabled()) {
+                    buf.append("- `").append(entry.getNameOrModel()).append("`，").append(entry.getDescriptionOrModel()).append("\n");
+                }
             }
 
             binding.put("models", buf.toString());

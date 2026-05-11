@@ -27,6 +27,7 @@ import org.noear.solon.lang.Preview;
 
 import java.io.Serializable;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 马具配置属性
@@ -169,6 +170,10 @@ public class HarnessProperties implements Serializable {
         }
     }
 
+    public List<ChatConfig> getModels() {
+        return models;
+    }
+
     /**
      * 添加模型配置
      */
@@ -193,8 +198,11 @@ public class HarnessProperties implements Serializable {
         }
 
         for (ChatConfig c : models) {
-            if (c.getNameOrModel().equals(modelName)) {
-                return c;
+            if (c.isEnabled()) {
+                //只检查已启用的
+                if (c.getNameOrModel().equals(modelName)) {
+                    return c;
+                }
             }
         }
 
@@ -211,8 +219,11 @@ public class HarnessProperties implements Serializable {
         }
 
         for (ChatConfig c : models) {
-            if (c.getNameOrModel().equals(modelName)) {
-                return c;
+            if (c.isEnabled()) {
+                //只检查已启用的
+                if (c.getNameOrModel().equals(modelName)) {
+                    return c;
+                }
             }
         }
 
