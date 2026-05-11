@@ -80,48 +80,18 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
     private static final Logger LOG = LoggerFactory.getLogger(ReActAgent.class);
 
     private final ReActAgentConfig config;
-    private final Graph graph;
     private final FlowEngine flowEngine;
+
+    private final ReasonTask reasonTask;
+    private final ActionTask actionTask;
 
     public ReActAgent(ReActAgentConfig config) {
         Objects.requireNonNull(config, "Missing config!");
         this.config = config;
         this.flowEngine = FlowEngine.newInstance(true);
-        // 初始化推理计算图
-        this.graph = buildGraph();
-    }
 
-    /**
-     * 构建 ReAct 执行图：Start -> [Plan -> Reason <-> Action] -> End
-     */
-    protected Graph buildGraph() {
-        return Graph.create(config.getTraceKey(), spec -> {
-            spec.addStart(Agent.ID_START).linkAdd(ReActAgent.ID_REASON_BEF);
-            spec.addActivity(ID_REASON_BEF).title("Pre-Reasoning").linkAdd(ID_REASON);
-
-            spec.addExclusive(new ReasonTask(config, this))
-                    .linkAdd(ID_REASON_AFT, l -> l.title("route = ACTION").when(ctx ->
-                            ID_ACTION.equals(ctx.<ReActTrace>getAs(config.getTraceKey()).getRoute())))
-                    .linkAdd(Agent.ID_END);
-
-            spec.addActivity(ID_REASON_AFT).title("Post-Reasoning").linkAdd(ID_ACTION_BEF);
-
-            spec.addActivity(ID_ACTION_BEF).title("Pre-Action").linkAdd(ID_ACTION);
-
-            // 执行节点：调用工具，产生观察结果（Observation），然后返回推理节点
-            spec.addActivity(new ActionTask(config)).linkAdd(ID_ACTION_AFT);
-            spec.addActivity(ID_ACTION_AFT).title("Post-Action").linkAdd(ID_REASON_BEF);
-
-            spec.addEnd(Agent.ID_END);
-
-            if (config.getGraphAdjuster() != null) {
-                config.getGraphAdjuster().accept(spec);
-            }
-        });
-    }
-
-    public Graph getGraph() {
-        return graph;
+        reasonTask = new ReasonTask(config, this);
+        actionTask = new ActionTask(config);
     }
 
     public ReActAgentConfig getConfig() {
@@ -229,7 +199,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         } else {
             // 新任务（重置相关数据）
             trace.reset(prompt);
-            context.trace().recordNode(graph, null);
 
             // 1. 加载历史上下文（短期记忆）
             if (trace.getWorkingMemory().isEmpty() && options.getSessionWindowSize() > 0) {
@@ -281,14 +250,11 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
             long startTime = System.currentTimeMillis();
             try {
-                final FlowOptions flowOptions = new FlowOptions();
-                options.getInterceptors().forEach(item -> flowOptions.interceptorAdd(item.target, item.index));
-
                 trace.getMetrics().reset();
 
                 // 核心执行：基于计算图进行循环推理
                 context.with(KEY_CURRENT_UNIT_TRACE_KEY, config.getTraceKey(), () -> {
-                    flowEngine.eval(graph, -1, context, flowOptions);
+                    evalDo(trace, context);
                 });
             } finally {
                 // 记录性能指标
@@ -346,6 +312,22 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         return assistantMessage;
+    }
+
+    private void evalDo(ReActTrace trace, FlowContext context) throws Throwable {
+        if (Assert.isEmpty(trace.getRoute())) {
+            trace.setRoute(ReActAgent.ID_REASON);
+        }
+
+        while (true) {
+            if (ReActAgent.ID_REASON.equals(trace.getRoute())) {
+                reasonTask.run(trace, context);
+            } else if (ReActAgent.ID_ACTION.equals(trace.getRoute())) {
+                actionTask.run(trace, context);
+            } else {
+                break;
+            }
+        }
     }
 
     /// //////////// Builder 模式 ////////////

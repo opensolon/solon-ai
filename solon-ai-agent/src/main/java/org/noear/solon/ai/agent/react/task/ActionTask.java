@@ -55,7 +55,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class ActionTask implements NamedTaskComponent {
+public class ActionTask {
     private static final Logger LOG = LoggerFactory.getLogger(ActionTask.class);
 
     private final ReActAgentConfig config;
@@ -64,21 +64,14 @@ public class ActionTask implements NamedTaskComponent {
         this.config = config;
     }
 
-    @Override
     public String name() {
         return ReActAgent.ID_ACTION;
     }
 
-    @Override
-    public void run(FlowContext context, Node node) throws Throwable {
-        String traceKey = context.getAs(ReActAgent.KEY_CURRENT_UNIT_TRACE_KEY);
-        if(traceKey == null) {
-            //并发调度时：可能提前结束，但有些 ation 还在跑
-            LOG.warn("Missing '" + ReActAgent.KEY_CURRENT_UNIT_TRACE_KEY + "': {}", context.toJson(context.vars()));
-            return;
-        }
+    public void run(ReActTrace trace, FlowContext context) throws Throwable {
+        //重置默认路由
+        trace.setRoute(ReActAgent.ID_REASON);
 
-        ReActTrace trace = context.getAs(traceKey);
         final TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
 
         if (LOG.isDebugEnabled()) {
@@ -97,7 +90,7 @@ public class ActionTask implements NamedTaskComponent {
             // 1. 优先处理原生工具调用（Native Tool Calls）
             if (lastAssistant != null && Assert.isNotEmpty(lastAssistant.getToolCalls())) {
                 for (ToolCall call : lastAssistant.getToolCalls()) {
-                    processNativeToolCall(node, call, trace, parentTeamTrace, lastAssistantAdded);
+                    processNativeToolCall(call, trace, parentTeamTrace, lastAssistantAdded);
                     if (Agent.ID_END.equals(trace.getRoute())) {
                         break;
                     }
@@ -106,7 +99,7 @@ public class ActionTask implements NamedTaskComponent {
             }
 
             // 2. 文本模式：解析模型输出中的 Action 块
-            processTextModeAction(node, trace, parentTeamTrace, lastAssistantAdded);
+            processTextModeAction(trace, parentTeamTrace, lastAssistantAdded);
         } finally {
             //刷新快照
             trace.getSession().updateSnapshot();
@@ -114,7 +107,7 @@ public class ActionTask implements NamedTaskComponent {
     }
 
 
-    private String doAction(Node node, ReActTrace trace, String toolName, Map<String, Object> args) {
+    private String doAction(ReActTrace trace, String toolName, Map<String, Object> args) {
         if (LOG.isDebugEnabled()) {
             LOG.debug("Action for agent [{}], toolName:{}, args:{}", config.getName(), toolName, args);
         }
@@ -175,11 +168,11 @@ public class ActionTask implements NamedTaskComponent {
     /**
      * 处理标准 ToolCall 协议调用
      */
-    private void processNativeToolCall(Node node, ToolCall call, ReActTrace trace, TeamTrace parentTeamTrace, AtomicBoolean lastAssistantAdded) throws Throwable {
+    private void processNativeToolCall(ToolCall call, ReActTrace trace, TeamTrace parentTeamTrace, AtomicBoolean lastAssistantAdded) throws Throwable {
         Map<String, Object> args = (call.getArguments() == null) ? new HashMap<>() : call.getArguments();
 
         // 触发 Action 生命周期拦截
-        String result = doAction(node, trace, call.getName(), args);
+        String result = doAction(trace, call.getName(), args);
         if (result == null) {
             return;
         }
@@ -205,7 +198,7 @@ public class ActionTask implements NamedTaskComponent {
      * 解析并执行文本模式下的 Action 指令
      * 核心逻辑优化：从“全执行后拼接”改为“逐个执行并即时回填与反馈”
      */
-    private void processTextModeAction(Node node, ReActTrace trace, TeamTrace parentTeamTrace, AtomicBoolean lastAssistantAdded) throws Throwable {
+    private void processTextModeAction(ReActTrace trace, TeamTrace parentTeamTrace, AtomicBoolean lastAssistantAdded) throws Throwable {
         AssistantMessage lastReason = trace.getLastReasonMessage();
         if (lastReason == null) {
             return;
@@ -245,11 +238,11 @@ public class ActionTask implements NamedTaskComponent {
                         Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : new HashMap<>();
 
                         // 执行并即时处理 (优化点 1)
-                        handleSingleAction(node, trace, toolName, args, lastAssistantAdded);
+                        handleSingleAction(trace, toolName, args, lastAssistantAdded);
 
                     } catch (Throwable e) {
                         // 解析异常回传 (优化点 2)
-                        handleSingleObservation(node, trace, null, null, "Observation: Error parsing Action JSON: " + e.getMessage(), lastAssistantAdded);
+                        handleSingleObservation(trace, null, null, "Observation: Error parsing Action JSON: " + e.getMessage(), lastAssistantAdded);
                         foundAny = true;
                         break;
                     }
@@ -259,24 +252,24 @@ public class ActionTask implements NamedTaskComponent {
                 String toolName = lastContent.substring(actionLabelIndex + 7).trim();
                 if (trace.getOptions().getTool(toolName) != null || FeedbackTool.TOOL_NAME.equals(toolName)) {
                     foundAny = true;
-                    handleSingleAction(node, trace, toolName, new HashMap<>(), lastAssistantAdded);
+                    handleSingleAction(trace, toolName, new HashMap<>(), lastAssistantAdded);
                 }
             }
         }
 
         // 容错处理：如果声明了 Action 但没解析成功，或模型说话不规整 (优化点 3)
         if (!foundAny && actionLabelIndex >= 0) {
-            handleSingleObservation(node, trace, null, null, "Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}", lastAssistantAdded);
+            handleSingleObservation(trace, null, null, "Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}", lastAssistantAdded);
         }
     }
 
     /**
      * 优化点 1：提取独立执行方法，确保 Observation 即时生成
      */
-    private void handleSingleAction(Node node, ReActTrace trace, String toolName, Map<String, Object> args, AtomicBoolean lastAssistantAdded) throws Throwable {
-        String result = doAction(node, trace, toolName, args);
+    private void handleSingleAction(ReActTrace trace, String toolName, Map<String, Object> args, AtomicBoolean lastAssistantAdded) throws Throwable {
+        String result = doAction(trace, toolName, args);
         if (result != null) {
-            handleSingleObservation(node, trace, toolName, args, "Observation: " + result, lastAssistantAdded);
+            handleSingleObservation(trace, toolName, args, "Observation: " + result, lastAssistantAdded);
         }
     }
 
@@ -284,7 +277,7 @@ public class ActionTask implements NamedTaskComponent {
      * 优化点 4：统一 Observation 落地逻辑。
      * 改变了原有 StringBuilder 拼接逻辑，直接进行 WorkingMemory 入库并触发流
      */
-    private void handleSingleObservation(Node node, ReActTrace trace, String toolName, Map<String, Object> args, String observationContent, AtomicBoolean lastAssistantAdded) {
+    private void handleSingleObservation(ReActTrace trace, String toolName, Map<String, Object> args, String observationContent, AtomicBoolean lastAssistantAdded) {
         ChatMessage chatMessage = ChatMessage.ofUser(observationContent);
 
         // 回填 Reason 和本次 Observation

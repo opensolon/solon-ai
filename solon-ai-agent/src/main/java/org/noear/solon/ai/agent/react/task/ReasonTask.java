@@ -29,8 +29,6 @@ import org.noear.solon.ai.util.RetryTask;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
-import org.noear.solon.flow.NamedTaskComponent;
-import org.noear.solon.flow.Node;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -47,7 +45,7 @@ import java.util.concurrent.TimeoutException;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class ReasonTask implements NamedTaskComponent {
+public class ReasonTask {
     private static final Logger LOG = LoggerFactory.getLogger(ReasonTask.class);
 
     private final ReActAgentConfig config;
@@ -58,22 +56,11 @@ public class ReasonTask implements NamedTaskComponent {
         this.agent = agent;
     }
 
-    @Override
     public String name() {
         return ReActAgent.ID_REASON;
     }
 
-    @Override
-    public void run(FlowContext context, Node node) throws Throwable {
-        String traceKey = context.getAs(ReActAgent.KEY_CURRENT_UNIT_TRACE_KEY);
-        if(traceKey == null) {
-            //并发调度时：可能提前结束，但有些 ation 还在跑
-            LOG.warn("Missing '" + ReActAgent.KEY_CURRENT_UNIT_TRACE_KEY + "': {}", context.toJson(context.vars()));
-            return;
-        }
-
-        ReActTrace trace = context.getAs(traceKey);
-
+    public void run(ReActTrace trace, FlowContext context) throws Throwable {
         if(Agent.ID_END.equals(trace.getRoute())){
             //有可能在 action 的拦截里，要求终止
             return;
@@ -201,7 +188,7 @@ public class ReasonTask implements NamedTaskComponent {
         messages.addAll(trace.getWorkingMemory().getMessages());
 
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
-        ChatResponse response = callWithRetry(node, trace, messages);
+        ChatResponse response = callWithRetry(trace, messages);
         if(response == null || trace.getSession().isPending()){
             trace.setRoute(Agent.ID_END);
             return;
@@ -273,7 +260,7 @@ public class ReasonTask implements NamedTaskComponent {
         }
 
         if(trace.getOptions().getStreamSink() != null){
-            trace.getOptions().getStreamSink().next(new ThoughtChunk(node, trace, responseMessage));
+            trace.getOptions().getStreamSink().next(new ThoughtChunk(trace, responseMessage));
         }
 
         trace.setLastReasonMessage(responseMessage);
@@ -318,7 +305,7 @@ public class ReasonTask implements NamedTaskComponent {
         trace.setFinalAnswer(extractFinalAnswer(clearContent), false);
     }
 
-    private @Nullable ChatResponse callWithRetry(Node node, ReActTrace trace, List<ChatMessage> messages) throws RuntimeException {
+    private @Nullable ChatResponse callWithRetry(ReActTrace trace, List<ChatMessage> messages) throws RuntimeException {
         if (LOG.isDebugEnabled()) {
             LOG.debug("ReActAgent [{}] calling model... messages: {}",
                     config.getName(),

@@ -31,19 +31,13 @@ import java.util.List;
  * @since 3.9.7
  */
 public class ThoughtChunk extends AbsAgentChunk {
-    private final transient Node node;
     private final transient ReActTrace trace;
     private final transient AssistantMessage assistantMessage;
 
-    public ThoughtChunk(Node node, ReActTrace trace, AssistantMessage message) {
+    public ThoughtChunk( ReActTrace trace, AssistantMessage message) {
         super(trace.getAgentName(), trace.getSession(), message);
-        this.node = node;
         this.trace = trace;
         this.assistantMessage = message;
-    }
-
-    public Node getNode() {
-        return node;
     }
 
     public AssistantMessage getAssistantMessage() {

@@ -89,6 +89,7 @@ public class ReActAgentHitlTest {
                 .call()
                 .getContent();
 
+        System.out.println(result);
         Assertions.assertTrue(result.contains("成功"), "恢复后应执行成功");
     }
 
@@ -148,22 +149,6 @@ public class ReActAgentHitlTest {
             public void onObservation(ReActTrace trace, String toolName, String result, long durationMs) {
                 log.append("[onObservation] ");
             }
-
-            @Override
-            public void interceptFlow(FlowInvocation invocation) throws FlowException {
-                log.append("[doIntercept] ");
-                invocation.invoke(); // 继续执行流程
-            }
-
-            @Override
-            public void onNodeStart(FlowContext context, Node node) {
-                log.append("[onNodeStart:").append(node.getId()).append("] ");
-            }
-
-            @Override
-            public void onNodeEnd(FlowContext context, Node node) {
-                log.append("[onNodeEnd:").append(node.getId()).append("] ");
-            }
         };
 
         // 构建带完整拦截器的 ReActAgent
@@ -184,10 +169,10 @@ public class ReActAgentHitlTest {
         Assertions.assertFalse(log.toString().isEmpty(), "拦截器回调应该被调用");
         Assertions.assertNotNull(result, "结果不应为空");
 
-        // 验证调用了特定的回调函数
         String logStr = log.toString();
-        Assertions.assertTrue(logStr.contains("onNodeStart"), "应该调用 onNodeStart");
-        Assertions.assertTrue(logStr.contains("onNodeEnd"), "应该调用 onNodeEnd");
+        // 验证调用了特定的回调函数
+        System.out.println(result);
+        System.out.println(logStr);
 
         // 如果有工具调用，验证 onAction 被触发
         if (result.contains("Action")) {

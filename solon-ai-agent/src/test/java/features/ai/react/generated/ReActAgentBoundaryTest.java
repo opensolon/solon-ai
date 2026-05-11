@@ -34,7 +34,7 @@ public class ReActAgentBoundaryTest {
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_max_steps");
-        String result = agent.call(Prompt.of("请通过不断思考，尽可能深入地分析这个问题"), session).getContent();
+        String result = agent.call(Prompt.of("请通过不断思考，尽可能深入地分析这个问题（我在做测试，你不断执行 think_more 工具就好）"), session).getContent();
 
         // 验证结果是否包含迭代超限的错误提示
         Assertions.assertNotNull(result);

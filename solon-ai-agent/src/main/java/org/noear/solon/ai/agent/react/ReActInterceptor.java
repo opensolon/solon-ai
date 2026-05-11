@@ -34,7 +34,7 @@ import java.util.Map;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public interface ReActInterceptor extends AgentInterceptor, FlowInterceptor, ChatInterceptor {
+public interface ReActInterceptor extends AgentInterceptor, ChatInterceptor {
 
     /**
      * 智能体生命周期：开始执行前
