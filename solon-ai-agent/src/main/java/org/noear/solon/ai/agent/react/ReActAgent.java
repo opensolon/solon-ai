@@ -314,6 +314,9 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         return assistantMessage;
     }
 
+    /**
+     * ReAct 调度执行
+     */
     private void evalDo(ReActTrace trace, FlowContext context) throws Throwable {
         if (Assert.isEmpty(trace.getRoute())) {
             trace.setRoute(ReActAgent.ID_REASON);
