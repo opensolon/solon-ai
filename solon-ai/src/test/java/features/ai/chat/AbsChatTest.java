@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -442,6 +443,28 @@ public abstract class AbsChatTest {
         assert respHolder.get().getAggregationMessage() != null;
         assert respHolder.get().getAggregationMessage().getContent().contains("晴，24度");
         assert respHolder.get().getAggregationMessage().getContent().contains("555毫米");
+    }
+
+    @Test
+    public void case7_stream_timeout() throws Throwable {
+        ChatModel chatModel = getChatModelBuilder()
+                .build();
+
+        ChatSession chatSession = InMemoryChatSession.builder().build();
+
+        Throwable lastErr = null;
+        try {
+            chatModel.prompt("今天杭州的天气情况？")
+                    .session(chatSession)
+                    .options(o -> o.toolAdd(new Tools()))
+                    .stream()
+                    .timeout(Duration.ofSeconds(1))
+                    .blockLast();
+        } catch (Throwable err) {
+            lastErr = err.getCause();
+        }
+
+        assert lastErr instanceof TimeoutException;
     }
 
     @Test
