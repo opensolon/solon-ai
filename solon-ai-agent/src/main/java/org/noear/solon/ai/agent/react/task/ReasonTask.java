@@ -308,12 +308,6 @@ public class ReasonTask {
     }
 
     private @Nullable ChatResponse callWithRetry(ReActTrace trace, List<ChatMessage> messages) throws RuntimeException {
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("ReActAgent [{}] calling model... messages: {}",
-                    config.getName(),
-                    ONode.serialize(messages, Feature.Write_PrettyFormat, Feature.Write_EnumUsingName));
-        }
-
         ChatRequestDesc req = trace.getOptions().getChatModel()
                 .prompt(messages)
                 .options(o -> {

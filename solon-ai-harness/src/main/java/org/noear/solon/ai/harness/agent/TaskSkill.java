@@ -140,7 +140,7 @@ public class TaskSkill extends AbsSkill {
             futures.add(future);
         }
 
-        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+        String result = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
                 .thenApply(v -> {
                     StringBuilder compositeResult = new StringBuilder();
                     compositeResult.append("<multitask_results>\n");
@@ -153,6 +153,11 @@ public class TaskSkill extends AbsSkill {
                 .exceptionally(ex -> "ERROR: Multitask aggregate failed: " + ex.getMessage())
                 .join();
 
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("任务完成[{}]：{} 个全部完成", __sessionId, tasks.size());
+        }
+
+        return result;
     }
 
     private String taskDo(ReActTrace __parentTrace, String __cwd, String __sessionId, AgentSession __parentSession, MultiTaskOp task, int count, boolean isMultitask) {

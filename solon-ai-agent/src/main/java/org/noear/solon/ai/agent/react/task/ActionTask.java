@@ -317,7 +317,7 @@ public class ActionTask {
         if (tool != null) {
             try {
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("Agent [{}] invoking tool [{}], args: {}", config.getName(), name, args);
+                    LOG.debug("Agent [{}] invoking tool start [{}], args: {}", config.getName(), name, args);
                 }
 
                 //合并工具上个文和参数，形成请求
@@ -330,6 +330,9 @@ public class ActionTask {
                 }
                 trace.incrementToolCallCount();
 
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Agent [{}] invoking tool end [{}], args: {}", config.getName(), name, args);
+                }
 
                 return result.getContent();
             } catch (IllegalArgumentException | StatusException e) {
