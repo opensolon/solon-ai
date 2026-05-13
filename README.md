@@ -281,3 +281,112 @@ layout:
 | [/opensolon/solon-idea-plugin](../../../../opensolon/solon-idea-plugin)     | Solon Idea ,Plugin code repository                              | 
 | [/opensolon/solon-vscode-plugin](../../../../opensolon/solon-vscode-plugin) | Solon VsCode ,Plugin code repository                            | 
 
+## FAQ
+
+### What is Solon AI?
+
+Solon AI is a full-scenario Java AI development framework that deeply integrates LLM large models, RAG knowledge bases, MCP protocol, and Agent collaboration orchestration. It's designed for building production-grade AI applications with Java.
+
+### How does Solon AI differ from Python frameworks like LangChain?
+
+Solon AI is built **specifically for Java developers** with seamless integration into the Java ecosystem:
+
+**Key differences:**
+- **Java-native**: Fits perfectly into Solon, SpringBoot, Vert.X, Quarkus ecosystems
+- **JDK 8-25 support**: Broad Java version compatibility
+- **Multi-model dialects**: Unified interface adapts model differences automatically
+- **Graph-driven orchestration**: Transforms Agent reasoning into observable computation flow graphs
+
+### What components does Solon AI provide?
+
+- **ChatModel**: General-purpose LLM call interface with Tool, Skill, ChatSession support
+- **Skills**: Dynamic admission and instruction injection
+- **RAG**: Full-link support (DocumentLoader, DocumentSplitter, EmbeddingModel, RerankingModel)
+- **MCP**: Deep integration with Model Context Protocol (MCP_2025_06_18)
+- **Agent**: ReAct introspective reasoning and Team collaboration
+- **Ai Flow**: YAML-based flow orchestration (Dify-like low-code experience)
+
+### What LLM providers are supported?
+
+Supported via dialect adaptation:
+- OpenAI, Gemini, Claude
+- Ollama (local models)
+- DeepSeek, Dashscope (Alibaba)
+- Custom endpoints
+
+### How do I get started?
+
+Add Maven dependency:
+```xml
+<dependency>
+    <groupId>org.noear</groupId>
+    <artifactId>solon-ai</artifactId>
+</dependency>
+```
+
+Basic usage:
+```java
+ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
+    .provider("ollama")
+    .model("qwen2.5:1.5b")
+    .build();
+
+AssistantMessage result = chatModel.prompt("Hello").call().getMessage();
+```
+
+### How do I add tools?
+
+```java
+chatModel.prompt("What's the weather?")
+    .options(op -> op.toolAdd(new WeatherTools()))
+    .call();
+```
+
+### How do I use RAG?
+
+```java
+EmbeddingModel embeddingModel = EmbeddingModel.of(apiUrl)
+    .apiKey(apiKey).provider(provider).model(model).build();
+
+InMemoryRepository repository = new InMemoryRepository(embeddingModel);
+repository.insert(new PdfLoader(pdfUri).load());
+
+List<Document> docs = repository.search(query);
+ChatMessage message = ChatMessage.ofUserAugment(query, docs);
+chatModel.prompt(message).call();
+```
+
+### What is MCP integration?
+
+Solon AI provides both MCP server and client:
+
+**Server:**
+```java
+@McpServerEndpoint(channel = McpChannel.STREAMABLE, mcpEndpoint = "/mcp")
+public class MyMcpServer {
+    @ToolMapping(description = "Checking the weather")
+    public String getWeather(@Param(description = "city") String location) {
+        return "It's sunny, 25 degrees";
+    }
+}
+```
+
+**Client:**
+```java
+McpClientProvider client = McpClientProvider.builder()
+    .channel(McpChannel.STREAMABLE)
+    .url("http://localhost:8080/mcp")
+    .build();
+```
+
+### What are the Agent patterns?
+
+- **ReActAgent**: Reflective agent with Think → Call → Observe → Summarize loop
+- **TeamAgent**: Multi-agent collaboration with 6 preset protocols (HIERARCHICAL, etc.)
+
+### Where can I find help?
+
+- **Documentation**: [solon.noear.org/article/learn-solon-ai](https://solon.noear.org/article/learn-solon-ai)
+- **Examples**: [solonlab/solon-ai-mcp-embedded-examples](https://github.com/solonlab/solon-ai-mcp-embedded-examples)
+- **SolonCode**: Java version of "Claude Code" - [github.com/opensolon/soloncode](https://github.com/opensolon/soloncode)
+- **SolonClaw**: Java version of "OpenClaw" - [github.com/opensolon/solonclaw](https://github.com/opensolon/solonclaw)
