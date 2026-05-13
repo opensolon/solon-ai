@@ -11,6 +11,11 @@
 *  mcp channel 概念改为 transport （并保持兼容）???
 
 
+### 3.10.6
+
+* 调整 ChatDialect.buildRequestJson 返回类型（String 改为 ONode，方便日志定制）
+* 修复 solon-ai-skill-web WebfetchTool 超时转换错位问题
+
 ### 3.10.5
 
 * 添加 solon-ai-agent AgentTrace.getAgentName, getBeginTimeMs 方法

@@ -22,10 +22,13 @@ import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.net.http.HttpResponse;
+import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Base64;
 
 /**
@@ -46,6 +49,7 @@ public class WebfetchTool extends AbsToolProvider {
     }
 
     private int maxRetries = 3;
+    private String userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36";
 
     /**
      * @deprecated 3.10.5
@@ -61,11 +65,18 @@ public class WebfetchTool extends AbsToolProvider {
         return this;
     }
 
+    public WebfetchTool userAgent(String userAgent) {
+        if (Assert.isNotEmpty(userAgent)) {
+            this.userAgent = userAgent;
+        }
+        return this;
+    }
+
     @ToolMapping(name = "webfetch", description = "从 URL 获取网页内容。返回格式支持 markdown, text 或 html。")
     public Document webfetch(
             @Param(name = "url", description = "目标网页的完整 URL（必须包含 http:// 或 https://）") String url,
             @Param(name = "format", required = false, defaultValue = "markdown", description = "返回格式：'markdown', 'text', 'html'") String format,
-            @Param(name = "timeout", required = false, description = "超时时间（秒），最大 120 秒") Integer timeoutSeconds
+            @Param(name = "timeoutMs", required = false, description = "超时时间（毫秒），最大 120_000 毫秒") Integer timeoutMs
     ) throws Exception {
 
         // 1. URL 校验
@@ -74,21 +85,26 @@ public class WebfetchTool extends AbsToolProvider {
         }
 
         // 2. 超时计算
-        int timeout = (timeoutSeconds == null)
-                ? DEFAULT_TIMEOUT_MS
-                : Math.min(timeoutSeconds * 1000, MAX_TIMEOUT_MS);
+        int finalTimeoutMs = (timeoutMs == null) ? DEFAULT_TIMEOUT_MS : timeoutMs;
+        if(finalTimeoutMs > 0){
+            finalTimeoutMs = Math.min(finalTimeoutMs, MAX_TIMEOUT_MS);
+        } else {
+            finalTimeoutMs = DEFAULT_TIMEOUT_MS;
+        }
+
+        Duration timeout = Duration.ofMillis(finalTimeoutMs);
 
         String finalFormat = (format == null) ? "markdown" : format.toLowerCase();
 
-        // 3. 构建请求 (对齐 opencode 的 Headers)
+        // 3. 构建请求 headers
         HttpUtils http = HttpUtils.http(url)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36")
+                .header("User-Agent", userAgent)
                 .header("Accept", getAcceptHeader(finalFormat))
                 .header("Accept-Language", "en-US,en;q=0.9")
-                .timeout(timeout);
+                .timeout(HttpTimeout.of(timeout));
 
         // 4. 执行请求
-        HttpResponse response = RetryUtil.callWithRetry(maxRetries, ()->{
+        HttpResponse response = RetryUtil.callWithRetry(maxRetries, () -> {
             HttpResponse resp = http.exec("GET");
             if (resp.code() == 403 && "challenge".equals(resp.header("cf-mitigated"))) {
                 // Cloudflare 穿透逻辑
@@ -103,7 +119,7 @@ public class WebfetchTool extends AbsToolProvider {
             throw new RuntimeException("Request failed with status code: " + response.code());
         }
 
-        // 5. 5MB 限制校验 (对齐 opencode)
+        // 5. 5MB 限制校验
         long contentLength = response.contentLength();
         if (contentLength > MAX_RESPONSE_SIZE) {
             throw new RuntimeException("Response too large (exceeds 5MB limit)");
