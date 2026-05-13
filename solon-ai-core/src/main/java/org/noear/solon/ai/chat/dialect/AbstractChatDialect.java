@@ -255,7 +255,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
     }
 
     @Override
-    public String buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
+    public ONode buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
         return new ONode().then(n -> {
             if (Utils.isNotEmpty(config.getModel())) {
                 n.set("model", config.getModel());
@@ -277,7 +277,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
             ChatMessage lastMessage = messages.get(messages.size() - 1);
             buildReqToolsNode(n, config, options, lastMessage);
-        }).toJson();
+        });
     }
 
     @Override

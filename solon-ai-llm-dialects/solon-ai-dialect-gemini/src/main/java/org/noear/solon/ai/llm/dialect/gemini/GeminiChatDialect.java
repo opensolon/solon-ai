@@ -194,7 +194,7 @@ public class GeminiChatDialect extends AbstractChatDialect {
      * @return 符合 Gemini API 规范的 JSON 字符串
      */
     @Override
-    public String buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
+    public ONode buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
         return requestBuilder.build(config, options, messages, isStream);
     }
 

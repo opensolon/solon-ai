@@ -80,7 +80,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    public String buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
+    public ONode buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
         return new ONode().then(n -> {
             if (Utils.isNotEmpty(config.getModel())) {
                 n.set("model", config.getModel());
@@ -105,7 +105,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
                 //buildReqToolsNodeDo(n1, config.getDefaultTools());
                 buildReqToolsNodeDo(n1, options.tools());
             });
-        }).toJson();
+        });
     }
 
 

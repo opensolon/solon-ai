@@ -50,7 +50,7 @@ public class OpenaiResponsesRequestBuilder {
      * @param isStream 是否使用流式模式
      * @return 符合 Responses JSON 字符串
      */
-    public String build(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
+    public ONode build(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
         ONode root = new ONode();
         if (Utils.isNotEmpty(config.getModel())) {
             root.set("model", config.getModel());
@@ -99,7 +99,7 @@ public class OpenaiResponsesRequestBuilder {
         }
         // 构建 tools
         buildToolsNode(root, options);
-        return root.toJson();
+        return root;
     }
 
     /**

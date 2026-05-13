@@ -64,8 +64,8 @@ public interface ChatDialect extends AiModelDialect {
      * 准备输出架构
      */
     void prepareOutputSchemaInstruction(String outputSchema, StringBuilder instructionBuilder);
-    void prepareOutputFormatOptions(ChatOptions options);
 
+    void prepareOutputFormatOptions(ChatOptions options);
 
 
     /**
@@ -76,7 +76,7 @@ public interface ChatDialect extends AiModelDialect {
      * @param messages 消息
      * @param isStream 是否流式获取
      */
-    String buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream);
+    ONode buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream);
 
     /**
      * 构建助理消息节点

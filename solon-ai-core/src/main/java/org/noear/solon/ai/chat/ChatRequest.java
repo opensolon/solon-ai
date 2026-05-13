@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat;
 
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -108,7 +109,8 @@ public class ChatRequest implements NonSerializable {
      */
     public String toRequestData() {
         //留个变量方便调试
-        String reqJson = dialect.buildRequestJson(config, options, finalPrompt.getMessages(), stream);
-        return reqJson;
+        ONode oNode = dialect.buildRequestJson(config, options, finalPrompt.getMessages(), stream);
+
+        return oNode.toJson();
     }
 }

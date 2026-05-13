@@ -50,7 +50,7 @@ public class AnthropicRequestBuilder {
      * @param isStream 是否使用流式模式
      * @return 符合 Messages API 规范的 JSON 字符串
      */
-    public String build(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
+    public ONode build(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
         ONode root = new ONode();
 
         if (Utils.isNotEmpty(config.getModel())) {
@@ -122,7 +122,7 @@ public class AnthropicRequestBuilder {
 
         buildToolsNode(root, options);
 
-        return root.toJson();
+        return root;
     }
 
     /**

@@ -145,7 +145,7 @@ public class AnthropicChatDialect extends AbstractChatDialect {
      * @date 2026年1月27日
      */
     @Override
-    public String buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
+    public ONode buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
         return requestBuilder.build(config, options, messages, isStream);
     }
 
