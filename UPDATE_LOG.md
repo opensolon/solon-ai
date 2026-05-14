@@ -14,6 +14,7 @@
 ### 3.11.0
 
 * 修复 solon-ai-skill-memory MemoryMdData 因key格式问题未完全加载的问题
+* 修复 solon-ai-agent ReasonTask ‘您上一次的回答是空的’ 可能造成死循环的问题
 
 ### 3.10.6
 
