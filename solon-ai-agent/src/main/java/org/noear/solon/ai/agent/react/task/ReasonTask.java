@@ -15,8 +15,6 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
-import org.noear.snack4.Feature;
-import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentChunk;
@@ -231,10 +229,16 @@ public class ReasonTask {
 
         // 容错处理：模型响应内容及工具调用均为空时，引导其重新生成
         if (Assert.isEmpty(responseMessage.getResultContent()) && Assert.isEmpty(responseMessage.getToolCalls())) {
-            trace.getWorkingMemory().addMessage(responseMessage);
-            trace.getWorkingMemory().addMessage(ChatMessage.ofUser("您上一次的回答是空的。请提供行动步骤或最终答案。"));
-            trace.setRoute(ReActAgent.ID_REASON);
+            if (trace.getReasonCounter().incrementAndGet() < 3) {
+                //做3次重复
+                trace.getWorkingMemory().addMessage(responseMessage);
+                trace.getWorkingMemory().addMessage(ChatMessage.ofUser("您上一次的回答是空的。请提供行动步骤或最终答案。"));
+                trace.setRoute(ReActAgent.ID_REASON);
+            }
+
             return;
+        } else {
+            trace.getReasonCounter().set(0);
         }
 
         // [逻辑 3.5: 思考事件] 无论是否有 tool_calls，都先提取思考内容并触发 onThought 事件
