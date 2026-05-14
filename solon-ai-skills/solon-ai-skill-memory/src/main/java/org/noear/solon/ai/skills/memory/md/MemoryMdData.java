@@ -158,9 +158,14 @@ public class MemoryMdData implements AutoCloseable {
         String storeKey = buildStoreKey(userId, key);
         Path file = resolveFile(storeKey);
         try {
-            Files.deleteIfExists(file);
+            boolean deleted = Files.deleteIfExists(file);
+            if (!deleted) {
+                LOG.warn("MdMemoryData remove: file not found, userId={}, key={}, file={}", userId, key, file);
+            } else {
+                LOG.debug("MdMemoryData remove: file deleted, userId={}, key={}", userId, key);
+            }
         } catch (IOException e) {
-            LOG.error("MdMemoryData remove error, userId={}, key={}", userId, key, e);
+            LOG.error("MdMemoryData remove error (file may be locked), userId={}, key={}, file={}", userId, key, file, e);
         }
 
         cache.remove(storeKey);

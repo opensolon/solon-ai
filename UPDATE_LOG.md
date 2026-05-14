@@ -11,6 +11,10 @@
 *  mcp channel 概念改为 transport （并保持兼容）???
 
 
+### 3.11.0
+
+* 修复 solon-ai-skill-memory MemoryMdData 因key格式问题未完全加载的问题
+
 ### 3.10.6
 
 * 调整 ChatDialect.buildRequestJson 返回类型（String 改为 ONode，方便日志定制）
