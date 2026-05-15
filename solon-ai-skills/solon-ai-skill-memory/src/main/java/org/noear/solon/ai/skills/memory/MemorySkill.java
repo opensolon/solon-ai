@@ -239,14 +239,34 @@ public class MemorySkill extends AbsSkill {
                               String __cwd,
                               String __sessionId) {
         // 原论文精神：通过整合减少上下文占用，提高信噪比
+        String userId = getUserId(__sessionId);
         String fact = "[Evolved Insight] " + insight;
-        extract(newKey, fact, 10, __cwd, __sessionId); // 核心洞察赋予最高重要度
 
-        for (String k : oldKeys) {
-            prune(k, __cwd, __sessionId); // 彻底清理旧碎片，防止语义干扰
+        // 步骤1：写入新的合并洞察
+        try {
+            extract(newKey, fact, 10, __cwd, __sessionId); // 核心洞察赋予最高重要度
+        } catch (Exception e) {
+            LOG.error("MemSkill consolidate extract error, newKey={}", newKey, e);
+            return "【合并异常】新洞察写入失败，旧碎片保留：" + e.getMessage();
         }
 
-        return "【心智进化成功】已将碎片认知升维为核心洞察，删除了冗余记录。";
+        // 步骤2：逐个清理旧碎片（即使某个失败也不影响其余）
+        List<String> failedKeys = new ArrayList<>();
+        for (String k : oldKeys) {
+            try {
+                prune(k, __cwd, __sessionId); // 彻底清理旧碎片，防止语义干扰
+                LOG.info("MemSkill consolidate prune ok, userId={}, key={}", userId, k);
+            } catch (Exception e) {
+                LOG.error("MemSkill consolidate prune error, userId={}, key={}", userId, k, e);
+                failedKeys.add(k);
+            }
+        }
+
+        if (failedKeys.isEmpty()) {
+            return "【心智进化成功】已将碎片认知升维为核心洞察，删除了" + oldKeys.size() + "条冗余记录。";
+        } else {
+            return "【心智进化部分成功】新洞察已写入，但以下碎片清理失败：" + failedKeys + "。可再次调用 memory_prune 清理。";
+        }
     }
 
     /**
@@ -260,10 +280,19 @@ public class MemorySkill extends AbsSkill {
         MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
         MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
 
-        storeProvider.remove(userId, key);
+        try {
+            storeProvider.remove(userId, key);
+        } catch (Exception e) {
+            LOG.error("MemSkill prune remove error, userId={}, key={}", userId, key, e);
+            return "清理失败 Key: " + key + "，原因：" + e.getMessage();
+        }
 
         if (searchProvider != null) {
-            searchProvider.removeIndex(userId, key);
+            try {
+                searchProvider.removeIndex(userId, key);
+            } catch (Exception e) {
+                LOG.error("MemSkill prune removeIndex error, userId={}, key={}", userId, key, e);
+            }
         }
 
         return "已从模型中清理 Key: " + key;

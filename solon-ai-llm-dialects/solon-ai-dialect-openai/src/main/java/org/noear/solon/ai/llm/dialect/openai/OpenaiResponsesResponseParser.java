@@ -27,7 +27,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * OpenAI Responses API 响应解析器
@@ -49,9 +48,7 @@ public class OpenaiResponsesResponseParser {
         String currentFunctionName;
         StringBuilder currentFunctionArguments;
     }
-
-    // 按 resp 隔离的流式状态，支持多并发流式请求
-    private final ConcurrentHashMap<ChatResponseDefault, StreamState> streamStates = new ConcurrentHashMap<>();
+    private static final String STREAM_STATE_KEY = "StreamState";
 
     public OpenaiResponsesResponseParser() {
         this.logEnabled = log.isDebugEnabled();
@@ -78,7 +75,7 @@ public class OpenaiResponsesResponseParser {
      * 获取或创建流式状态
      */
     private StreamState getOrCreateState(ChatResponseDefault resp) {
-        return streamStates.computeIfAbsent(resp, k -> new StreamState());
+        return resp.attrIfAbsent(STREAM_STATE_KEY, k -> new StreamState());
     }
 
     /**
@@ -111,8 +108,8 @@ public class OpenaiResponsesResponseParser {
             }
             if (jsonData.isEmpty() || "[DONE]".equals(jsonData)) {
                 if ("[DONE]".equals(jsonData)) {
-                    streamStates.remove(resp);
-                    if (!resp.isFinished()) {
+                    resp.attrRemove(STREAM_STATE_KEY);
+                    if (resp.isFinished() == false) {
                         resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                         resp.setFinished(true);
                     }
@@ -132,7 +129,7 @@ public class OpenaiResponsesResponseParser {
 
             String eventType = oResp.get("type").getString();
             if ("error".equals(eventType)) {
-                streamStates.remove(resp);
+                resp.attrRemove(STREAM_STATE_KEY);
                 ONode oError = oResp.get("error");
                 String errorType = oError.get("type").getString();
                 String errorMsg = oError.get("message").getString();
@@ -181,7 +178,7 @@ public class OpenaiResponsesResponseParser {
                 // 文本增量
                 String delta = oResp.get("delta").getString();
                 if (Utils.isNotEmpty(delta)) {
-                    StreamState state = streamStates.get(resp);
+                    StreamState state = resp.attrAs(STREAM_STATE_KEY);
                     if (state != null && state.currentTextContent != null) {
                         state.currentTextContent.append(delta);
                     }
@@ -194,7 +191,7 @@ public class OpenaiResponsesResponseParser {
                 if (delta != null) {
                     String text = delta.get("text").getString();
                     if (Utils.isNotEmpty(text)) {
-                        StreamState state = streamStates.get(resp);
+                        StreamState state = resp.attrAs(STREAM_STATE_KEY);
                         if (state != null && state.currentTextContent != null) {
                             state.currentTextContent.append(text);
                         }
@@ -206,14 +203,14 @@ public class OpenaiResponsesResponseParser {
                 // 函数调用参数增量
                 String delta = oResp.get("delta").getString();
                 if (Utils.isNotEmpty(delta)) {
-                    StreamState state = streamStates.get(resp);
+                    StreamState state = resp.attrAs(STREAM_STATE_KEY);
                     if (state != null && state.currentFunctionArguments != null) {
                         state.currentFunctionArguments.append(delta);
                     }
                 }
             } else if ("response.function_call_arguments.done".equals(eventType)) {
                 // 函数调用参数完成
-                StreamState state = streamStates.get(resp);
+                StreamState state = resp.attrAs(STREAM_STATE_KEY);
                 if (state != null && state.currentFunctionCallId != null && state.currentFunctionName != null) {
                     String arguments = oResp.get("arguments").getString();
                     if (Utils.isEmpty(arguments) && state.currentFunctionArguments != null) {
@@ -256,7 +253,7 @@ public class OpenaiResponsesResponseParser {
                 }
             } else if ("response.output_item.done".equals(eventType)) {
                 // 输出项完成
-                StreamState state = streamStates.get(resp);
+                StreamState state = resp.attrAs(STREAM_STATE_KEY);
                 if (state != null) {
                     state.currentItemId = null;
                     state.currentItemType = null;
@@ -266,7 +263,7 @@ public class OpenaiResponsesResponseParser {
                 // 文本/内容部分完成
                 // 不需要特殊处理
             } else if ("response.completed".equals(eventType)) {
-                streamStates.remove(resp);
+                resp.attrRemove(STREAM_STATE_KEY);
                 ONode response = oResp.get("response");
                 if (response != null) {
                     resp.setModel(response.get("model").getString());
@@ -276,13 +273,17 @@ public class OpenaiResponsesResponseParser {
                         resp.setUsage(usage);
                     }
                 }
+
                 // 添加一个空的结束标记 choice，让框架能够将 isFinished=true 进行传递
-                resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
+                if(resp.isEmpty()) { //完成时。如果为空，则补位
+                    resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
+                }
+
                 resp.setFinished(true);
                 hasChoices = true;
             } else if ("response.failed".equals(eventType)) {
                 // 响应失败，清理状态
-                streamStates.remove(resp);
+                resp.attrRemove(STREAM_STATE_KEY);
                 ONode response = oResp.get("response");
                 if (response != null) {
                     ONode error = response.get("error");
@@ -305,7 +306,7 @@ public class OpenaiResponsesResponseParser {
      */
     public boolean parseNonStreamResponse(ChatResponseDefault resp, String json) {
         if ("[DONE]".equals(json)) {
-            if (!resp.isFinished()) {
+            if (resp.isFinished() == false) {
                 resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 resp.setFinished(true);
             }

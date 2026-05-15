@@ -63,7 +63,7 @@ public class MemoryMdData implements AutoCloseable {
 
     /**
      * 内存缓存：storeKey → MemoryEntry
-     * storeKey 格式："{userId}:{key}"
+     * storeKey 格式："{userId}__{key}"
      */
     private final Map<String, MemoryEntry> cache = new ConcurrentHashMap<>();
 
@@ -158,9 +158,14 @@ public class MemoryMdData implements AutoCloseable {
         String storeKey = buildStoreKey(userId, key);
         Path file = resolveFile(storeKey);
         try {
-            Files.deleteIfExists(file);
+            boolean deleted = Files.deleteIfExists(file);
+            if (!deleted) {
+                LOG.warn("MdMemoryData remove: file not found, userId={}, key={}, file={}", userId, key, file);
+            } else {
+                LOG.debug("MdMemoryData remove: file deleted, userId={}, key={}", userId, key);
+            }
         } catch (IOException e) {
-            LOG.error("MdMemoryData remove error, userId={}, key={}", userId, key, e);
+            LOG.error("MdMemoryData remove error (file may be locked), userId={}, key={}, file={}", userId, key, file, e);
         }
 
         cache.remove(storeKey);
@@ -395,7 +400,7 @@ public class MemoryMdData implements AutoCloseable {
     // ===================== 内部工具方法 =====================
 
     /**
-     * 构建完整 storeKey："{userId}:{key}"
+     * 构建完整 storeKey："{userId}__{key}"
      */
     private String buildStoreKey(String userId, String key) {
         if (userId == null || userId.isEmpty()) {
@@ -448,14 +453,14 @@ public class MemoryMdData implements AutoCloseable {
 
     /**
      * 拆分 storeKey 为 userId 和 key
-     * "{userId}:{key}" → ["{userId}", "{key}"]
+     * "{userId}__{key}" → ["{userId}", "{key}"]
      */
     private String[] splitStoreKey(String storeKey) {
         if (storeKey == null) return null;
-        int firstColon = storeKey.indexOf(':');
-        if (firstColon < 0) return null;
-        String userId = storeKey.substring(0, firstColon);
-        String key = storeKey.substring(firstColon + 1);
+        int sepIdx = storeKey.indexOf("__");
+        if (sepIdx < 0) return null;
+        String userId = storeKey.substring(0, sepIdx);
+        String key = storeKey.substring(sepIdx + 2);
         return new String[]{userId, key};
     }
 

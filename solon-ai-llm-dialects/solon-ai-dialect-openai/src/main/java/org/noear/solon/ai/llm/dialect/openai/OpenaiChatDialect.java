@@ -127,7 +127,7 @@ public class OpenaiChatDialect extends AbstractChatDialect {
             }
 
             if (resp.isFinished()) {
-                if (resp.hasChoices() == false) {
+                if (resp.isEmpty()) { //完成时。如果为空，则补位
                     resp.addChoice(new ChatChoice(0, created, resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 }
             }

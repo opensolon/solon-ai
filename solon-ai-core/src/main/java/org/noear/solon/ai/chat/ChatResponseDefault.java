@@ -19,13 +19,13 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
-import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Nullable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * 聊天响应实现
@@ -50,6 +50,21 @@ public class ChatResponseDefault implements ChatResponse {
     protected final StringBuilder contentBuilder = new StringBuilder();
     public final StringBuilder reasoningBuilder = new StringBuilder();
     protected final Map<String, ToolCallBuilder> toolCallBuilders = new LinkedHashMap<>();
+
+    //附件属性
+    protected final Map<String, Object> attrs = new LinkedHashMap<>();
+    public <T> T attrAs(String name) {
+        return (T) attrs.get(name);
+    }
+    public void attrPut(String name, Object val){
+        attrs.put(name, val);
+    }
+    public <T> T attrIfAbsent(String name, Function<String, T> function) {
+        return (T) attrs.computeIfAbsent(name, function);
+    }
+    public <T> T  attrRemove(String name) {
+        return (T) attrs.remove(name);
+    }
 
     public ChatResponseDefault(ChatRequest req, boolean stream) {
         this.request = req;

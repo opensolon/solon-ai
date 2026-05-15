@@ -101,6 +101,11 @@ public class ReActTrace implements AgentTrace {
     private AtomicInteger toolCounter = new AtomicInteger(0);
 
     /**
+     * 连续思考计数器
+     */
+    private transient AtomicInteger emptyRetryCounter = new AtomicInteger(0);
+
+    /**
      * 逻辑路由标识 (REASON, ACTION, END)
      */
     private volatile String route;
@@ -195,6 +200,7 @@ public class ReActTrace implements AgentTrace {
         // 1. 基础计数器重置
         stepCounter.set(0);
         toolCounter.set(0);
+        emptyRetryCounter.set(0);
 
         // 2. 核心状态重置（非常重要，防止直接跳过推理进入上一次的 END 状态）
         this.route = ReActAgent.ID_REASON;
@@ -440,6 +446,10 @@ public class ReActTrace implements AgentTrace {
      */
     public int getToolCallCount() {
         return toolCounter.get();
+    }
+
+    public AtomicInteger getEmptyRetryCounter() {
+        return emptyRetryCounter;
     }
 
     //------------------

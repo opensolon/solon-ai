@@ -15,8 +15,6 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
-import org.noear.snack4.Feature;
-import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentChunk;
@@ -231,10 +229,18 @@ public class ReasonTask {
 
         // 容错处理：模型响应内容及工具调用均为空时，引导其重新生成
         if (Assert.isEmpty(responseMessage.getResultContent()) && Assert.isEmpty(responseMessage.getToolCalls())) {
-            trace.getWorkingMemory().addMessage(responseMessage);
-            trace.getWorkingMemory().addMessage(ChatMessage.ofUser("您上一次的回答是空的。请提供行动步骤或最终答案。"));
-            trace.setRoute(ReActAgent.ID_REASON);
+            if (trace.getEmptyRetryCounter().incrementAndGet() < 3) {
+                //做3次重复
+                LOG.warn("ReActAgent[{}] choices size:{}, responseMessage is empty: {}", trace.getAgentName(), response.getChoices().size(), responseMessage);
+
+                trace.getWorkingMemory().addMessage(responseMessage);
+                trace.getWorkingMemory().addMessage(ChatMessage.ofUser("您上一次的回答是空的。请提供行动步骤或最终答案。"));
+                trace.setRoute(ReActAgent.ID_REASON);
+            }
+
             return;
+        } else {
+            trace.getEmptyRetryCounter().set(0);
         }
 
         // [逻辑 3.5: 思考事件] 无论是否有 tool_calls，都先提取思考内容并触发 onThought 事件
@@ -382,9 +388,15 @@ public class ReasonTask {
     }
 
     private ChatResponse handleLastException(ReActTrace trace, Throwable lastException) {
+        if(lastException.getMessage() == null && lastException.getCause() != null){
+            lastException = lastException.getCause();
+        }
+
         if (lastException instanceof InterruptedException || lastException.getCause() instanceof InterruptedException) {
             LOG.debug("InterruptedException");
             return null;
+        } else {
+            LOG.warn("ReActAgent [{}] call failed", config.getName(), lastException);
         }
 
         // 设置故障状态并终止路由
@@ -392,7 +404,8 @@ public class ReasonTask {
 
         if (lastException instanceof LlmNoReturnException) {
             trace.setFinalAnswer("抱歉，模型服务没有内容返回。请稍后重试。");
-        } else if (lastException instanceof TimeoutException) {
+        } else if (lastException instanceof TimeoutException ||
+                lastException.getCause() instanceof TimeoutException) {
             trace.setFinalAnswer("抱歉，模型服务响应超时。请稍后重试。");
         } else {
             trace.setFinalAnswer("抱歉，暂时无法使用模型服务 (" + lastException + ")。请稍后重试。");
