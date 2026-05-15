@@ -147,7 +147,7 @@ public class AnthropicResponseParser {
                 continue;
             }
 
-            if(oResp.hasKey("error")){
+            if (oResp.hasKey("error")) {
                 resp.setError(new ChatException(oResp.get("error").getString()));
                 return true;
             }
@@ -330,14 +330,18 @@ public class AnthropicResponseParser {
                 if (stopReason != null) {
                     String finishReason = stopReason.get("stop_reason").getString();
                     if (Utils.isNotEmpty(finishReason)) {
-                        resp.setFinished(true);
+                        //resp.setFinished(true); //统一由 message_stop 处理
                         resp.lastFinishReason = finishReason;
                     }
                 }
             } else if ("message_stop".equals(eventType)) {
                 // 消息结束，清理状态并添加信息对 finished 进行透传
                 streamStates.remove(resp);
-                resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
+
+                if (resp.isEmpty()) { //如果响应完全为空才补加
+                    resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
+                }
+
                 resp.setFinished(true);
                 hasChoices = true;
             } else if ("ping".equals(eventType)) {
