@@ -388,6 +388,10 @@ public class ReasonTask {
     }
 
     private ChatResponse handleLastException(ReActTrace trace, Throwable lastException) {
+        if(lastException.getMessage() == null && lastException.getCause() != null){
+            lastException = lastException.getCause();
+        }
+
         if (lastException instanceof InterruptedException || lastException.getCause() instanceof InterruptedException) {
             LOG.debug("InterruptedException");
             return null;
