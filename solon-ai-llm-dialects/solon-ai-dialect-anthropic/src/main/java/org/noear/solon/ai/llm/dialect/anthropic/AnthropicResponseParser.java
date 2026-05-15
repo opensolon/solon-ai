@@ -52,6 +52,8 @@ public class AnthropicResponseParser {
         StringBuilder toolInput;
     }
 
+    private static final String STREAM_TOOL_STATE_KEY = "StreamToolState";
+
     public AnthropicResponseParser() {
         this.logEnabled = LOG.isDebugEnabled();
     }
@@ -132,7 +134,7 @@ public class AnthropicResponseParser {
                 continue;
             }
             if ("[DONE]".equals(jsonData)) {
-                resp.attrRemove(StreamToolState.class.getSimpleName());
+                resp.attrRemove(STREAM_TOOL_STATE_KEY);
                 if (resp.isFinished() == false) {
                     resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                     resp.setFinished(true);
@@ -152,7 +154,7 @@ public class AnthropicResponseParser {
             // Claude 流式响应事件类型
             String eventType = oResp.get("type").getString();
             if ("error".equals(eventType)) {
-                resp.attrRemove(StreamToolState.class.getSimpleName());
+                resp.attrRemove(STREAM_TOOL_STATE_KEY);
 
                 ONode oError = oResp.get("error");
                 String errorType = oError.get("type").getString();
@@ -233,7 +235,7 @@ public class AnthropicResponseParser {
                         state.toolName = contentBlock.get("name").getString();
                         state.toolInput = new StringBuilder();
 
-                        resp.attrPut(StreamToolState.class.getSimpleName(), state);
+                        resp.attrPut(STREAM_TOOL_STATE_KEY, state);
                     }
                 }
             } else if ("content_block_delta".equals(eventType)) {
@@ -266,7 +268,7 @@ public class AnthropicResponseParser {
                         // 工具调用参数增量更新，按需从 map 获取状态
                         String partialJson = delta.get("partial_json").getString();
                         if (Utils.isNotEmpty(partialJson)) {
-                            StreamToolState state = resp.attrAs(StreamToolState.class.getSimpleName());
+                            StreamToolState state = resp.attrAs(STREAM_TOOL_STATE_KEY);
                             if (state != null) {
                                 state.toolInput.append(partialJson);
                             }
@@ -275,7 +277,7 @@ public class AnthropicResponseParser {
                 }
             } else if ("content_block_stop".equals(eventType)) {
                 // 内容块结束，按需从 map 获取并清理工具调用状态
-                StreamToolState state = resp.attrRemove(StreamToolState.class.getSimpleName());
+                StreamToolState state = resp.attrRemove(STREAM_TOOL_STATE_KEY);
                 if (state != null) {
                     try {
                         String argStr = state.toolInput.toString();
@@ -334,7 +336,7 @@ public class AnthropicResponseParser {
                 }
             } else if ("message_stop".equals(eventType)) {
                 // 消息结束，清理状态并添加信息对 finished 进行透传
-                resp.attrRemove(StreamToolState.class.getSimpleName());
+                resp.attrRemove(STREAM_TOOL_STATE_KEY);
 
                 //if (resp.isEmpty()) { //如果响应完全为空才补加 //不需要补位（如果没有，则没有）
                 //    resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
