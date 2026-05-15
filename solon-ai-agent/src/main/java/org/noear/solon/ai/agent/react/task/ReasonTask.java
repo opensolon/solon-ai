@@ -391,6 +391,8 @@ public class ReasonTask {
         if (lastException instanceof InterruptedException || lastException.getCause() instanceof InterruptedException) {
             LOG.debug("InterruptedException");
             return null;
+        } else {
+            LOG.warn("ReActAgent [{}] call failed", config.getName(), lastException);
         }
 
         // 设置故障状态并终止路由
@@ -398,7 +400,8 @@ public class ReasonTask {
 
         if (lastException instanceof LlmNoReturnException) {
             trace.setFinalAnswer("抱歉，模型服务没有内容返回。请稍后重试。");
-        } else if (lastException instanceof TimeoutException) {
+        } else if (lastException instanceof TimeoutException ||
+                lastException.getCause() instanceof TimeoutException) {
             trace.setFinalAnswer("抱歉，模型服务响应超时。请稍后重试。");
         } else {
             trace.setFinalAnswer("抱歉，暂时无法使用模型服务 (" + lastException + ")。请稍后重试。");
