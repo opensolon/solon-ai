@@ -338,9 +338,9 @@ public class AnthropicResponseParser {
                 // 消息结束，清理状态并添加信息对 finished 进行透传
                 streamStates.remove(resp);
 
-                if (resp.isEmpty()) { //如果响应完全为空才补加
-                    resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
-                }
+                //if (resp.isEmpty()) { //如果响应完全为空才补加 //不需要补位（如果没有，则没有）
+                //    resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
+                //}
 
                 resp.setFinished(true);
                 hasChoices = true;
