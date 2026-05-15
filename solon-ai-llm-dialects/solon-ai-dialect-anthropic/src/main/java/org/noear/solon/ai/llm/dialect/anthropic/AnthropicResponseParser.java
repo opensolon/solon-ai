@@ -330,7 +330,7 @@ public class AnthropicResponseParser {
                 if (stopReason != null) {
                     String finishReason = stopReason.get("stop_reason").getString();
                     if (Utils.isNotEmpty(finishReason)) {
-                        //resp.setFinished(true); //统一由 message_stop 处理
+                        resp.setFinished(true);
                         resp.lastFinishReason = finishReason;
                     }
                 }
@@ -338,9 +338,9 @@ public class AnthropicResponseParser {
                 // 消息结束，清理状态并添加信息对 finished 进行透传
                 resp.attrRemove(STREAM_TOOL_STATE_KEY);
 
-                //if (resp.isEmpty()) { //如果响应完全为空才补加 //不需要补位（如果没有，则没有）
-                //    resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
-                //}
+                if (resp.isEmpty()) { //完成时。如果为空，则补位
+                    resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
+                }
 
                 resp.setFinished(true);
                 hasChoices = true;

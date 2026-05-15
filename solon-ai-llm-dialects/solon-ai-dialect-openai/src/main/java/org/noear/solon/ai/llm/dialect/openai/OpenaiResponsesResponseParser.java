@@ -109,7 +109,7 @@ public class OpenaiResponsesResponseParser {
             if (jsonData.isEmpty() || "[DONE]".equals(jsonData)) {
                 if ("[DONE]".equals(jsonData)) {
                     resp.attrRemove(STREAM_STATE_KEY);
-                    if (!resp.isFinished()) {
+                    if (resp.isFinished() == false) {
                         resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                         resp.setFinished(true);
                     }
@@ -273,8 +273,12 @@ public class OpenaiResponsesResponseParser {
                         resp.setUsage(usage);
                     }
                 }
+
                 // 添加一个空的结束标记 choice，让框架能够将 isFinished=true 进行传递
-                resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
+                if(resp.isEmpty()) { //完成时。如果为空，则补位
+                    resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
+                }
+
                 resp.setFinished(true);
                 hasChoices = true;
             } else if ("response.failed".equals(eventType)) {
@@ -302,7 +306,7 @@ public class OpenaiResponsesResponseParser {
      */
     public boolean parseNonStreamResponse(ChatResponseDefault resp, String json) {
         if ("[DONE]".equals(json)) {
-            if (!resp.isFinished()) {
+            if (resp.isFinished() == false) {
                 resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 resp.setFinished(true);
             }
