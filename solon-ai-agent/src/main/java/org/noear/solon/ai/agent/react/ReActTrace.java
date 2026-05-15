@@ -103,7 +103,7 @@ public class ReActTrace implements AgentTrace {
     /**
      * 连续思考计数器
      */
-    private AtomicInteger emptyRetryCounter = new AtomicInteger(0);
+    private transient AtomicInteger emptyRetryCounter = new AtomicInteger(0);
 
     /**
      * 逻辑路由标识 (REASON, ACTION, END)
