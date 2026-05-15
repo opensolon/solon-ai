@@ -231,6 +231,8 @@ public class ReasonTask {
         if (Assert.isEmpty(responseMessage.getResultContent()) && Assert.isEmpty(responseMessage.getToolCalls())) {
             if (trace.getEmptyRetryCounter().incrementAndGet() < 3) {
                 //做3次重复
+                LOG.warn("ReActAgent[{}] choices size:{}, responseMessage is empty: {}", trace.getAgentName(), response.getChoices().size(), responseMessage);
+
                 trace.getWorkingMemory().addMessage(responseMessage);
                 trace.getWorkingMemory().addMessage(ChatMessage.ofUser("您上一次的回答是空的。请提供行动步骤或最终答案。"));
                 trace.setRoute(ReActAgent.ID_REASON);
