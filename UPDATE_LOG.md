@@ -11,6 +11,13 @@
 *  mcp channel 概念改为 transport （并保持兼容）???
 
 
+### 3.10.7
+
+* 添加 solon-ai-core ChatResponseDefault attrs 附件属性机制（方便方言解析处理），及 openai、anthropic、openai-response 方言调整
+* 优化 solon-ai-dialect-anthropic message_stop 处理（增加 isEmpty 检测）
+* 修复 solon-ai-skill-memory MemoryMdData 因key格式问题未完全加载的问题
+* 修复 solon-ai-agent ReasonTask ‘您上一次的回答是空的’ 可能造成死循环的问题
+
 ### 3.10.6
 
 * 调整 ChatDialect.buildRequestJson 返回类型（String 改为 ONode，方便日志定制）
