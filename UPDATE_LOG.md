@@ -13,6 +13,7 @@
 
 ### 3.11.0
 
+* 优化 solon-ai-dialect-anthropic message_stop 处理（增加 isEmpty 检测）
 * 修复 solon-ai-skill-memory MemoryMdData 因key格式问题未完全加载的问题
 * 修复 solon-ai-agent ReasonTask ‘您上一次的回答是空的’ 可能造成死循环的问题
 
