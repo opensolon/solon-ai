@@ -51,6 +51,18 @@ public class ChatResponseDefault implements ChatResponse {
     public final StringBuilder reasoningBuilder = new StringBuilder();
     protected final Map<String, ToolCallBuilder> toolCallBuilders = new LinkedHashMap<>();
 
+    //附件属性
+    protected final Map<String, Object> attrs = new LinkedHashMap<>();
+    public <T> T attrAs(String name) {
+        return (T) attrs.get(name);
+    }
+    public void attrPut(String name, Object val){
+        attrs.put(name, val);
+    }
+    public <T> T  attrRemove(String name) {
+        return (T) attrs.remove(name);
+    }
+
     public ChatResponseDefault(ChatRequest req, boolean stream) {
         this.request = req;
         this.config = req.getConfig();
