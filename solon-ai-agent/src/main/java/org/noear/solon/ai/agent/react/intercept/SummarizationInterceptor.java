@@ -114,7 +114,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
             }
         }
 
-        // 2. 计算固定开销（不可压缩部分：systemPrompt + 初心链） —— 【已加入 Null 兜底】
+        // 2. 计算固定开销（不可压缩部分：systemPrompt + 初心链） —— 【已引入完备兜底】
         int fixedTokens = 0;
         if (!Assert.isEmpty(systemPrompt)) {
             fixedTokens += encoding.countTokens(systemPrompt) + 4;
@@ -122,7 +122,20 @@ public class SummarizationInterceptor implements ReActInterceptor {
         for (ChatMessage firstMsg : firstList) {
             Integer cachedSize = firstMsg.getMetadataAs(META_TOKEN_SIZE);
             if (cachedSize == null) {
-                cachedSize = firstMsg.getContent() != null ? encoding.countTokens(firstMsg.getContent()) : 0;
+                cachedSize = 0;
+                if (firstMsg.getContent() != null) {
+                    cachedSize += encoding.countTokens(firstMsg.getContent());
+                }
+                if (firstMsg instanceof AssistantMessage) {
+                    AssistantMessage am = (AssistantMessage) firstMsg;
+                    if (Assert.isNotEmpty(am.getToolCalls())) {
+                        for (ToolCall tc : am.getToolCalls()) {
+                            String name = tc.getName() != null ? tc.getName() : "";
+                            String args = tc.getArgumentsStr() != null ? tc.getArgumentsStr() : "";
+                            cachedSize += encoding.countTokens(name + args) + 10;
+                        }
+                    }
+                }
                 firstMsg.addMetadata(META_TOKEN_SIZE, cachedSize);
             }
             fixedTokens += cachedSize + 4;
@@ -199,7 +212,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
             }
         }
 
-        // 7. 重构 WorkingMemory —— 【你的安全 subList 重构版本】
+        // 7. 重构 WorkingMemory
         List<ChatMessage> compressed = new ArrayList<>();
         compressed.addAll(firstList);
 
@@ -223,7 +236,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
 
         compressed.addAll(messages.subList(targetIdx, messages.size()));
 
-        // 8. 更新工作区 —— 【干净清爽，无硬裁剪副作用】
+        // 8. 更新工作区
         if (compressed.size() < messages.size()) {
             trace.getWorkingMemory().replaceMessages(compressed);
 
@@ -237,7 +250,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
     private int estimateTokens(List<ChatMessage> messages, String systemPrompt) {
         int totalTokens = 0;
         for (ChatMessage m : messages) {
-            // 尝试从元数据获取缓存值 (META_TOKEN_COUNT 可以定义在 ReActAgent 中)
+            // 尝试从元数据获取缓存值
             Integer cachedCount = m.getMetadataAs(META_TOKEN_SIZE);
 
             if (cachedCount == null) {
@@ -246,7 +259,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
                     cachedCount += encoding.countTokens(m.getContent());
                 }
 
-                // 补算 AssistantMessage 的 toolCalls 序列化开销（content 不包含 toolCalls）
+                // 补算 AssistantMessage 的 toolCalls 序列化开销
                 if (m instanceof AssistantMessage) {
                     AssistantMessage am = (AssistantMessage) m;
                     if (Assert.isNotEmpty(am.getToolCalls())) {
@@ -260,14 +273,14 @@ public class SummarizationInterceptor implements ReActInterceptor {
                     }
                 }
 
-                // 将计算结果回填到消息元数据中，下次无需计算
+                // 将计算结果回填到消息元数据中
                 m.addMetadata(META_TOKEN_SIZE, cachedCount);
             }
 
             totalTokens += cachedCount + 4; // Overhead
         }
 
-        // systemPrompt 的 token 开销（baseSp、计划看板、Protocol 指令等）
+        // systemPrompt 的 token 开销
         if (systemPrompt != null && !systemPrompt.isEmpty()) {
             totalTokens += encoding.countTokens(systemPrompt) + 4;
         }
