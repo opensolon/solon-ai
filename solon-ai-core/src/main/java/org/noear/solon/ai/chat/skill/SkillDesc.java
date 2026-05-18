@@ -26,7 +26,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * 技能描述实现类（提供流式构建支持）
+ * 工具包描述实现类（提供流式构建支持）
  * <p>查询示例：</p>
  *
  * <pre>{@code

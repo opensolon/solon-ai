@@ -29,10 +29,10 @@ solon-ai-harness/
 │   │   ├── AgentDefinition.java    # 代理定义（支持 Markdown YAML Frontmatter 解析）
 │   │   ├── AgentFactory.java       # 代理工厂（根据定义构建 ReActAgent）
 │   │   ├── AgentManager.java       # 代理管理器（注册/加载/扫描 agents 目录）
-│   │   ├── TaskSkill.java          # 子代理技能（task/multitask 工具）
+│   │   ├── TaskSkill.java          # 子代理工具包（task/multitask 工具）
 │   │   └── GenerateTool.java       # 动态代理生成工具
 │   ├── code/
-│   │   └── CodeSkill.java          # 代码工程规约技能（技术栈识别、CODE.md 生成）
+│   │   └── CodeSkill.java          # 代码工程规约工具包（技术栈识别、CODE.md 生成）
 │   ├── hitl/
 │   │   └── HitlStrategy.java       # 人工介入策略（bash 安全审计规则）
 │   └── permission/
@@ -246,10 +246,10 @@ maxTurns: 10
 ## 依赖
 
 - `solon-lib` — Solon 基础库
-- `solon-ai-skill-cli` — CLI 技能
-- `solon-ai-skill-web` — Web 技能（webfetch/websearch/codesearch）
-- `solon-ai-skill-restapi` — REST API 技能
-- `solon-ai-skill-toolgateway` — MCP 网关技能
+- `solon-ai-skill-cli` — CLI 工具包
+- `solon-ai-skill-web` — Web 工具包（webfetch/websearch/codesearch）
+- `solon-ai-skill-restapi` — REST API 工具包
+- `solon-ai-skill-toolgateway` — MCP 网关工具包
 - `solon-ai-agent` — Agent 核心
 - `solon-serialization-snack4` — JSON 序列化
 - `lombok` — 代码简化

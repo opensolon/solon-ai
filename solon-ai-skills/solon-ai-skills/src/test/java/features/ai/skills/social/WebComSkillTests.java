@@ -8,7 +8,7 @@ import org.noear.solon.ai.agent.simple.SimpleResponse;
 import org.noear.solon.ai.skills.social.WeComSkill;
 
 /**
- * 社交/通知类技能单元测试：验证逻辑、签名与报文结构
+ * 社交/通知类工具包单元测试：验证逻辑、签名与报文结构
  */
 public class WebComSkillTests {
     private final String apiUrl = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=8a05cb93-7f9a-40ad-af14-7f925acd11aa";
@@ -28,7 +28,7 @@ public class WebComSkillTests {
 
     @Test
     public void testAgentDrivenNotification() throws Throwable {
-        // 1. 初始化 Agent 并注入钉钉技能
+        // 1. 初始化 Agent 并注入钉钉工具包
         SimpleAgent agent = SimpleAgent.of(LlmUtil.getChatModel())
                 .role("运维告警助手")
                 .defaultSkillAdd(getSocialSkill())

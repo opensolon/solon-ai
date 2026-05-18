@@ -121,14 +121,14 @@ public class FinancialAnalysisLlmDynamicTests {
         sqlUtils.initDatabase("classpath:db.sql");
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 模拟一个干扰技能
+        // 模拟一个干扰工具包
         Text2SqlSkill sqlSkill = new Text2SqlSkill(sqlUtils, "users", "orders")
                 .schemaMode(SchemaMode.DYNAMIC);
 
         SimpleAgent agent = SimpleAgent.of(chatModel)
                 .role("全能助手")
                 .defaultSkillAdd(sqlSkill)
-                .defaultSkillAdd(new AbsSkill() { // 模拟一个容易混淆的技能
+                .defaultSkillAdd(new AbsSkill() { // 模拟一个容易混淆的工具包
                     @Override public String name() { return "file_expert"; }
                     @Override public String description() { return "文件专家，严禁读写数据库"; }
                     @Override public String getInstruction(Prompt p) { return "只能操作 .txt 文件"; }

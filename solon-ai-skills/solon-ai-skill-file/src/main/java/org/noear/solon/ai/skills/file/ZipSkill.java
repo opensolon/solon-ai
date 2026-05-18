@@ -33,9 +33,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 压缩归档技能：支持文件与目录的混合打包。
+ * 压缩归档工具包：支持文件与目录的混合打包。
  *
- * <p>该技能基于 NIO FileSystem 提供 ZIP 归档能力，支持递归处理深层目录。
+ * <p>该工具包基于 NIO FileSystem 提供 ZIP 归档能力，支持递归处理深层目录。
  * 核心特性包括：
  * <ul>
  * <li><b>沙箱安全</b>：严格限制在 WorkDir 根路径下操作，防止路径穿越攻击。</li>

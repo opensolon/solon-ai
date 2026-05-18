@@ -222,12 +222,12 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             }
         }
 
-        //添加模式技能（要在激活技能之前）
+        //添加计划模式（要在激活工具包之前）
         if (trace.getOptions().isPlanningMode()) {
             trace.getOptions().getModelOptions().skillAdd(new PlanSkill(trace));
         }
 
-        //如果提示词没问题，开始激活技能
+        //如果提示词没问题，开始激活工具包
         trace.activeSkills();
 
         //添加模式工具

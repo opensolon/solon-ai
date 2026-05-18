@@ -27,9 +27,9 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
- * Shell 脚本执行技能：为 AI 提供系统级的自动化运维、环境探测与资源管理能力。
+ * Shell 脚本执行工具包：为 AI 提供系统级的自动化运维、环境探测与资源管理能力。
  *
- * <p>该技能允许 Agent 在受限的工作目录（WorkDir）中执行系统指令。核心特性包括：
+ * <p>该工具包允许 Agent 在受限的工作目录（WorkDir）中执行系统指令。核心特性包括：
  * <ul>
  * <li><b>环境自感知</b>：提供工具探测（exists_cmd）与文件遍历（list_files）能力，辅助 AI 决策。</li>
  * <li><b>跨平台适配</b>：自动识别 Windows (CMD) 与 Unix/Linux (Bash/Sh) 环境。</li>

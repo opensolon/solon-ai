@@ -36,7 +36,7 @@ public class SkillUtil {
     private static final Logger LOG = LoggerFactory.getLogger(SkillUtil.class);
 
     /**
-     * 激活技能
+     * 激活工具包
      */
     public static StringBuilder activeSkills(ModelOptionsAmend<?, ?> modelOptions, Prompt prompt, StringBuilder builder) {
         for (RankEntity<Skill> item : modelOptions.skills()) {
@@ -97,24 +97,24 @@ public class SkillUtil {
         if (Assert.isNotEmpty(ins) || Assert.isNotEmpty(tools)) {
             combinedInstruction.append("\n---\n"); // 使用分割线开启独立空间
 
-            // 技能标题行：### [Skill: Name] Description
+            // 工具包标题行：# [Toolkit: Name] Description
             combinedInstruction.append("# [Toolkit: ").append(skill.name()).append("]");
             if (Utils.isNotEmpty(skill.description())) {
                 combinedInstruction.append(" - ").append(skill.description());
             }
             combinedInstruction.append("\n<Toolkit:").append(skill.name()).append(">\n\n");
 
-            // 注入技能特有的指令（如数据库结构、API 限制等）
+            // 注入工具包特有的指令（如数据库结构、API 限制等）
             if (Assert.isNotEmpty(ins)) {
                 combinedInstruction.append(ins.trim()).append("\n");
             }
 
-            // 显式声明该技能控制的工具范围
+            // 显式声明该工具包控制的工具范围
             if (Assert.isNotEmpty(tools)) {
                 String toolNames = tools.stream()
                         .map(t -> "`" + t.name() + "`") // 给工具名加反引号，增强识别度
                         .collect(Collectors.joining(", "));
-                combinedInstruction.append("\n> **工具作用域**: 此技能指令适用于以下工具的调用: ").append(toolNames).append("\n");
+                combinedInstruction.append("\n> **工具作用域**: 此工具包指令适用于以下工具的调用: ").append(toolNames).append("\n");
             }
 
             combinedInstruction.append("\n\n</Toolkit:").append(skill.name()).append(">\n");

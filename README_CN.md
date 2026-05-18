@@ -93,7 +93,7 @@ Solon AI 是 Solon 项目核心子项目之一。它是一个全场景的 Java A
 
 * ChatModel（通用大语言模型 LLM 调用接口）
 
-支持同步、流式（Reactive）调用，内置方言适配，工具（Tool），技能（Skill），会话记忆（ChatSession）等能力。
+支持同步、流式（Reactive）调用，内置方言适配，工具（Tool），工具包（Skill），会话记忆（ChatSession）等能力。
 
 ```java
 ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
@@ -113,7 +113,7 @@ System.out.println(result);
 chatModel.prompt("hello").stream(); //Publisher<ChatResponse>
 ```
 
-* Skills（Solon AI Skills 技能）
+* Skills（Solon AI Skills 工具包）
 
 
 ```java

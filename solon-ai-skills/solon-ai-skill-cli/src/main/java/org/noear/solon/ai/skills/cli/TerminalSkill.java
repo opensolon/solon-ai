@@ -37,7 +37,7 @@ import java.util.stream.Stream;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 
 /**
- * Claude Code 规范对齐的 CLI 基础执行技能
+ * Claude Code 规范对齐的 CLI 基础执行工具包
  *
  * @author noear
  * @since 3.9.1
@@ -57,7 +57,7 @@ public class TerminalSkill extends AbsSkill {
 
     //沙盒模式：只能访问相对路径或逻辑路径；（否则为）开放模式：可以访问绝对路径
     private boolean sandboxMode = true;
-    private final PoolManager poolManager; // 引入技能管理器
+    private final PoolManager poolManager; // 引入池管理器
 
     private final String pythonCmd;
     private final String nodeCmd;

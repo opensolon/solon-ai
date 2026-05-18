@@ -37,7 +37,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * 基于 Lucene 的代码搜索技能 (Indexing & Semantic Search)
+ * 基于 Lucene 的代码搜索工具包 (Indexing & Semantic Search)
  *
  * @author noear
  * @since 3.9.1

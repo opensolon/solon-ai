@@ -25,9 +25,9 @@ import org.slf4j.LoggerFactory;
 import java.util.Collections;
 
 /**
- * Python 脚本执行技能：为 AI 提供科学计算、数据分析及自动化脚本处理能力。
+ * Python 脚本执行工具包：为 AI 提供科学计算、数据分析及自动化脚本处理能力。
  *
- * <p>该技能允许 Agent 在本地环境中安全地运行 Python 逻辑，特别适用于以下场景：
+ * <p>该工具包允许 Agent 在本地环境中安全地运行 Python 逻辑，特别适用于以下场景：
  * <ul>
  * <li><b>科学计算</b>：处理复杂的数学公式、统计学分析。</li>
  * <li><b>数据清洗</b>：利用 Python 强大的字符串和数据处理能力转换大规模 JSON 或文本。</li>

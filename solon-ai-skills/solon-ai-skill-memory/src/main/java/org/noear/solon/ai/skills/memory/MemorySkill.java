@@ -32,7 +32,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
- * MemSkill：基于自演进心智模型的长期记忆技能
+ * MemSkill：基于自演进心智模型的长期记忆工具包
  *
  * 遵从 MemSkill 论文核心：Extract (提取), Consolidate (整合), Prune (修剪), Search (检索)
  *

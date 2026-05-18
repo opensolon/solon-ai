@@ -26,10 +26,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Redis 存储技能：为 AI 提供跨会话的“长期记忆”能力
+ * Redis 存储工具包：为 AI 提供跨会话的“长期记忆”能力
  *
- * <p>该技能允许 AI Agent 将关键信息（如用户偏好、任务中间状态、历史事实）以 Key-Value 形式持久化。
- *  相比于 Context Window 的短期记忆，本技能提供了可跨越不同会话周期的状态保持方案。</p>
+ * <p>该工具包允许 AI Agent 将关键信息（如用户偏好、任务中间状态、历史事实）以 Key-Value 形式持久化。
+ *  相比于 Context Window 的短期记忆，本工具包提供了可跨越不同会话周期的状态保持方案。</p>
  *
  * @author noear
  * @since 3.9.1

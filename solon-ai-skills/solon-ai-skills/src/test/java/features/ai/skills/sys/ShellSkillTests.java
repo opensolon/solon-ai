@@ -16,7 +16,7 @@ import java.nio.file.Paths;
 import java.util.Comparator;
 
 /**
- * Shell 脚本执行技能测试
+ * Shell 脚本执行工具包测试
  */
 public class ShellSkillTests {
 
@@ -32,7 +32,7 @@ public class ShellSkillTests {
         }
         Files.createDirectories(root);
 
-        // 2. 初始化技能（默认使用 /bin/sh，macOS 完美支持）
+        // 2. 初始化工具包（默认使用 /bin/sh，macOS 完美支持）
         shellSkill = new ShellSkill(workDir);
     }
 

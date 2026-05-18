@@ -111,7 +111,7 @@ public class ChatConfigReadonly {
     }
 
     /**
-     * 获取所有默认技能
+     * 获取所有默认工具包
      */
     public Collection<Skill> getDefaultSkills() {
         return config.getModelOptions().skills()

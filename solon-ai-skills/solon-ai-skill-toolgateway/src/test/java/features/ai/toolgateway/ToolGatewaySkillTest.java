@@ -14,7 +14,7 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 工具网关技能单元测试
+ * 工具网关工具包单元测试
  * 覆盖：FULL模式、SUMMARY模式、LIST模式、SEARCH模式、搜索引导、代理执行
  */
 public class ToolGatewaySkillTest {

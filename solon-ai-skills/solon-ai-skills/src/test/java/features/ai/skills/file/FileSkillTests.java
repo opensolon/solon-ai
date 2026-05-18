@@ -18,7 +18,7 @@ import java.nio.file.Paths;
 import java.util.Comparator;
 
 /**
- * 文件与压缩技能综合测试
+ * 文件与压缩工具包综合测试
  */
 @SolonTest
 public class FileSkillTests {
@@ -82,7 +82,7 @@ public class FileSkillTests {
         Assertions.assertTrue(Files.size(zipPath) > 0);
     }
 
-    // --- 3. Agent 集成测试 (多技能联动) ---
+    // --- 3. Agent 集成测试 (多工具包联动) ---
 
     @Test
     public void testAgentFileAndZipLinkage() throws Throwable {

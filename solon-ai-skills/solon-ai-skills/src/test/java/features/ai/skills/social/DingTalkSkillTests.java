@@ -8,7 +8,7 @@ import org.noear.solon.ai.agent.simple.SimpleResponse;
 import org.noear.solon.ai.skills.social.DingTalkSkill;
 
 /**
- * 社交/通知类技能单元测试：验证逻辑、签名与报文结构
+ * 社交/通知类工具包单元测试：验证逻辑、签名与报文结构
  */
 public class DingTalkSkillTests {
     private final String apiUrl = "https://oapi.dingtalk.com/robot/send?access_token=b964e5004733ef1541e7497a96c75a0a860a911498b7b340aa6b1523ae7351b3";
@@ -28,7 +28,7 @@ public class DingTalkSkillTests {
 
     @Test
     public void testAgentDrivenNotification() throws Throwable {
-        // 1. 初始化 Agent 并注入钉钉技能
+        // 1. 初始化 Agent 并注入钉钉工具包
         SimpleAgent agent = SimpleAgent.of(LlmUtil.getChatModel())
                 .role("运维告警助手")
                 .defaultSkillAdd(getSocialSkill())

@@ -208,7 +208,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     //===================
 
     /**
-     * 添加技能
+     * 添加工具包
      *
      * @since 3.8.4
      */
@@ -223,7 +223,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     }
 
     /**
-     * 添加技能
+     * 添加工具包
      *
      * @since 3.8.4
      */
@@ -236,7 +236,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     }
 
     /**
-     * 添加技能
+     * 添加工具包
      *
      * @since 3.9.5
      */
@@ -249,7 +249,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     }
 
     /**
-     * 添加技能
+     * 添加工具包
      *
      * @since 3.8.4
      */
@@ -260,7 +260,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     }
 
     /**
-     * 获取所有技能
+     * 获取所有工具包
      */
     public Collection<RankEntity<Skill>> skills() {
         return skills.values();

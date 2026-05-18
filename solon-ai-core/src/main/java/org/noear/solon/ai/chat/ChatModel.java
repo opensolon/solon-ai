@@ -331,7 +331,7 @@ public class ChatModel implements AiModel {
 
 
         /**
-         * 默认技能添加
+         * 默认工具包添加
          *
          * @since 3.8.4
          */
@@ -343,7 +343,7 @@ public class ChatModel implements AiModel {
         }
 
         /**
-         * 默认技能添加
+         * 默认工具包添加
          *
          * @since 3.9.5
          */
@@ -355,7 +355,7 @@ public class ChatModel implements AiModel {
         }
 
         /**
-         * 默认技能添加
+         * 默认工具包添加
          *
          * @since 3.8.4
          */

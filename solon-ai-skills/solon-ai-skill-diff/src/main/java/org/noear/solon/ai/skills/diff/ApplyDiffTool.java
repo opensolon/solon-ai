@@ -32,7 +32,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 基于 Unified Diff 的代码编辑技能 (Precise Code Editing)
+ * 基于 Unified Diff 的代码编辑工具包 (Precise Code Editing)
  * 解决大文件修改时全量替换容易出错且消耗 Token 的问题。
  *
  * @author noear

@@ -16,7 +16,7 @@ import java.nio.file.Paths;
 import java.util.Comparator;
 
 /**
- * Node.js 脚本执行技能测试
+ * Node.js 脚本执行工具包测试
  */
 public class NodejsSkillTests {
 
@@ -32,7 +32,7 @@ public class NodejsSkillTests {
         }
         Files.createDirectories(root);
 
-        // 2. 初始化技能
+        // 2. 初始化工具包
         nodejsSkill = new NodejsSkill(workDir);
     }
 
@@ -75,7 +75,7 @@ public class NodejsSkillTests {
 
     @Test
     public void testAgentJsTask() throws Throwable {
-        // 初始化 Agent，注入 Node.js 专家技能
+        // 初始化 Agent，注入 Node.js 工具包
         SimpleAgent agent = SimpleAgent.of(LlmUtil.getChatModel())
                 .role("JavaScript 开发者")
                 .defaultSkillAdd(nodejsSkill)

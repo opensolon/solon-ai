@@ -48,7 +48,7 @@ public class WebSearchAndCrawlerTests {
     public void testAgentSearchAndResearch() throws Throwable {
         if (serperKey == null) return; // 没 Key 跳过集成测试
 
-        // 1. 组合技能
+        // 1. 组合工具包
         WebSearchDriverSkill searchSkill = new WebSearchDriverSkill(WebSearchDriverSkill.SERPER, serperKey);
         WebCrawlerDriverSkill crawlerSkill = new WebCrawlerDriverSkill(WebCrawlerDriverSkill.JINA, jinaKey);
 

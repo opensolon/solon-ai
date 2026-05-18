@@ -9,7 +9,7 @@ import org.noear.solon.ai.skills.social.FeishuSkill;
 import org.noear.solon.ai.skills.social.WeComSkill;
 
 /**
- * 社交/通知类技能单元测试：验证逻辑、签名与报文结构
+ * 社交/通知类工具包单元测试：验证逻辑、签名与报文结构
  */
 public class FeishuSkillTests {
     private final String apiUrl = "https://open.feishu.cn/open-apis/bot/v2/hook/5b9a04a5-e051-420a-94b2-9b1473c4ec16";
@@ -29,7 +29,7 @@ public class FeishuSkillTests {
 
     @Test
     public void testAgentDrivenNotification() throws Throwable {
-        // 1. 初始化 Agent 并注入钉钉技能
+        // 1. 初始化 Agent 并注入钉钉工具包
         SimpleAgent agent = SimpleAgent.of(LlmUtil.getChatModel())
                 .role("运维告警助手")
                 .defaultSkillAdd(getSocialSkill())

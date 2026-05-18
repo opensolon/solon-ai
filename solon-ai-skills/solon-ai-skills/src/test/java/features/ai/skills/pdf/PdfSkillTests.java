@@ -17,7 +17,7 @@ import java.nio.file.Paths;
 import java.util.Comparator;
 
 /**
- * PDF 技能综合测试（macOS 环境优化）
+ * PDF 工具包综合测试（macOS 环境优化）
  */
 public class PdfSkillTests {
 

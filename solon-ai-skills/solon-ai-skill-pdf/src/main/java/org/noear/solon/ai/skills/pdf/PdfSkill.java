@@ -23,7 +23,7 @@ import java.nio.file.Paths;
 import java.util.function.Supplier;
 
 /**
- * PDF 专家技能：提供 PDF 文档的结构化读取与精美排版生成能力。
+ * PDF 工具包：提供 PDF 文档的结构化读取与精美排版生成能力。
  *
  * <p>核心职责：
  * <ul>

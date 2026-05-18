@@ -45,7 +45,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * 子代理技能
+ * 子代理工具包
  *
  * 将子代理能力暴露为可调用的工具（Claude Code Subagent 类似实现）
  *

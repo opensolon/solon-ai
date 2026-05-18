@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * LSP 技能 - 对齐 OpenCode 的 LSP 工具模型
+ * LSP 工具包 - 对齐 OpenCode 的 LSP 工具模型
  *
  * <p>支持按文件扩展名自动路由到对应的 LSP 服务器。
  * 提供跳转定义、查找引用、悬停提示、文档符号、调用层次等操作。

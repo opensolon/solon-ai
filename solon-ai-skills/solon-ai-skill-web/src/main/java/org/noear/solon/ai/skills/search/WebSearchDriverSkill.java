@@ -28,9 +28,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * 联网搜索技能：为 AI 代理提供实时动态的互联网信息检索能力。
+ * 联网搜索工具包：为 AI 代理提供实时动态的互联网信息检索能力。
  *
- * <p>该技能集成了全球主流搜索引擎驱动，具备以下特性：
+ * <p>该工具包集成了全球主流搜索引擎驱动，具备以下特性：
  * <ul>
  * <li><b>全场景覆盖</b>：内置 {@code SERPER}(Google)、{@code BING} 与 {@code BAIDU} 驱动，适配全球与中文本地化搜索需求。</li>
  * <li><b>结构化上下文</b>：自动将搜索原始结果转化为包含标题、链接与摘要的 Markdown 格式，便于 AI 进行二次引用与溯源。</li>

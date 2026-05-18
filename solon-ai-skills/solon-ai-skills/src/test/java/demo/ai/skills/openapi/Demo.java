@@ -10,7 +10,7 @@ public class Demo {
         String docUrl = "http://api.example.com/v3/api-docs";
         String baseUrl = "http://api.example.com";
 
-        // 2. 创建技能
+        // 2. 创建工具包
         RestApiSkill apiSkill = new RestApiSkill().addApi(docUrl, baseUrl);
 
         // 3. 构建 Agent 或 ChatModel

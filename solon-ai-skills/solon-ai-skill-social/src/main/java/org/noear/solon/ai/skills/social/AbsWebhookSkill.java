@@ -20,7 +20,7 @@ import org.noear.solon.lang.Preview;
 import org.noear.solon.net.http.HttpUtils;
 
 /**
- * Webhook 技能基类
+ * Webhook 工具包基类
  *
  * @author noear
  * @since 3.9.1

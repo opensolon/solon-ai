@@ -25,9 +25,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 网页抓取技能：为 AI 代理提供实时互联网信息的“阅读器”。
+ * 网页抓取工具包：为 AI 代理提供实时互联网信息的“阅读器”。
  *
- * <p>该技能通过高度优化的爬虫驱动，将复杂的 HTML 页面转化为 LLM 友好的 Markdown 格式：
+ * <p>该工具包通过高度优化的爬虫驱动，将复杂的 HTML 页面转化为 LLM 友好的 Markdown 格式：
  * <ul>
  * <li><b>多驱动支持</b>：内置 {@code JINA}（极简高效）与 {@code FIRECRAWL}（深度降噪）双引擎。</li>
  * <li><b>智能降噪</b>：自动剔除网页中的侧边栏、广告、导航栏及冗余脚本，仅保留正文核心。</li>

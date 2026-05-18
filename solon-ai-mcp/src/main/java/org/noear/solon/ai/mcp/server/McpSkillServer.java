@@ -29,10 +29,10 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * MCP 服务端技能适配器
+ * MCP 服务端工具包适配器
  * <p>
  * 职责：将本地定义的 {@link Skill} 逻辑通过 MCP 协议导出。
- * 机制：利用注解将技能的生命周期方法（isSupported, getInstruction）映射为 MCP 的 Tool 或 Resource，
+ * 机制：利用注解将工具包的生命周期方法（isSupported, getInstruction）映射为 MCP 的 Tool 或 Resource，
  * 供远程 {@link org.noear.solon.ai.mcp.client.McpSkillClient} 发现并调用。
  *
  * @author noear
@@ -42,7 +42,7 @@ import java.util.List;
 public abstract class McpSkillServer implements Skill {
 
     /**
-     * 导出技能元数据作为 MCP 资源
+     * 导出工具包元数据作为 MCP 资源
      */
     @ResourceMapping(uri = "skill://metadataMcp", meta = "{hide:1}")
     public String metadataMcp() {

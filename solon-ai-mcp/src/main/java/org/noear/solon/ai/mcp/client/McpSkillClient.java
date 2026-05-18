@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * MCP 客户端技能代理
+ * MCP 客户端工具包代理
  * <p>
  * 职责：作为 MCP 客户端，将远程 MCP 服务的能力（工具、资源、指令）封装为本地 {@link Skill} 接口。
  * 特点：支持跨进程的能力调用，并通过 {@link Prompt} 上下文实现远程准入检查与动态指令获取。
@@ -46,7 +46,7 @@ public class McpSkillClient implements Skill {
      */
     protected final McpClientProvider clientProvider;
     /**
-     * 缓存的技能元信息
+     * 缓存的工具包元信息
      */
     protected SkillMetadata metadata;
 
@@ -76,7 +76,7 @@ public class McpSkillClient implements Skill {
     }
 
     /**
-     * 跨进程准入检查：请求远程服务端判断当前 Prompt 环境是否允许激活该技能
+     * 跨进程准入检查：请求远程服务端判断当前 Prompt 环境是否允许激活该工具包
      */
     @Override
     public boolean isSupported(Prompt prompt) {

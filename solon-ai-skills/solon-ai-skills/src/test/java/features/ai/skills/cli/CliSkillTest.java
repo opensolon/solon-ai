@@ -15,7 +15,7 @@ import java.nio.file.*;
 
 /**
  * ClaudeCodeAgentSkills 综合集成测试
- * * <p>本测试覆盖了 opencode-skills 库中所有技能的自动化发现与驱动逻辑。</p>
+ * * <p>本测试覆盖了 opencode-skills 库中所有工具包的自动化发现与驱动逻辑。</p>
  *
  * @author noear
  * @since 3.9.1
@@ -23,7 +23,7 @@ import java.nio.file.*;
 public class CliSkillTest {
     // 下载 skills： https://github.com/solonlab/opencode-skills
 
-    // 技能库根目录
+    // 技能池根目录
     private final String workDir = "/Users/noear/WORK/work_github/solonlab/opencode-skills";
 
     /**

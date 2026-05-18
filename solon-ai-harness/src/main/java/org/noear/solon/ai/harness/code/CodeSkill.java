@@ -30,7 +30,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Code 规范对齐的专家技能
+ * Code 规范对齐的工具包
  *
  * @author noear
  * @since 3.9.4
@@ -67,7 +67,7 @@ public class CodeSkill extends AbsSkill {
 
     @Override
     public String description() {
-        return "代码专家技能。支持项目初始化、技术栈自动识别以及 `" + HOME_CODE_MD() + "` 规约生成。";
+        return "代码专家。支持项目初始化、技术栈自动识别以及 `" + HOME_CODE_MD() + "` 规约生成。";
     }
 
     @Override

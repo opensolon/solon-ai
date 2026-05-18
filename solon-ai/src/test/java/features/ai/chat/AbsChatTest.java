@@ -523,7 +523,7 @@ public abstract class AbsChatTest {
 
     @Test
     public void case11_skill_call() throws IOException {
-        // 1. 定义一个简单的技能
+        // 1. 定义一个简单的工具包
         Skill timeSkill = SkillDesc.builder("time")
                 .instruction("当前时间是 2026-01-19，请基于此日期回答。")
                 .isSupported(prompt -> {
@@ -558,7 +558,7 @@ public abstract class AbsChatTest {
 
     @Test
     public void case12_skill_stream() throws Exception {
-        // 1. 定义一个带工具的技能
+        // 1. 定义一个带工具的工具包
         ToolProvider toolProvider = new MethodToolProvider(new Tools());
         Skill weatherSkill = SkillDesc.builder("weather")
                 .instruction("你是一个气象专家。")

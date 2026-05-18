@@ -21,15 +21,15 @@ import org.noear.solon.lang.Preview;
 import java.io.Serializable;
 
 /**
- * 技能元信息
+ * 工具包元信息
  *
  * @author noear
  * @since 3.8.4
  */
 @Preview("3.8.4")
 public class SkillMetadata implements Serializable {
-    private String name;        // 技能名称
-    private String description; // 技能简介
+    private String name;        // 工具包名称
+    private String description; // 工具包简介
     private String category;    // 分类
     private String[] tags;      // 标签
     private boolean sensitive;  // 是否敏感（用于安全拦截）

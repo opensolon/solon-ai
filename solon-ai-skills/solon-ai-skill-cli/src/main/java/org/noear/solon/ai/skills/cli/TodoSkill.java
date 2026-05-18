@@ -27,11 +27,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.util.List;
 
 /**
- * 任务进度追踪技能
+ * 任务进度追踪工具包
  *
  * @author noear
  * @since 3.9.5

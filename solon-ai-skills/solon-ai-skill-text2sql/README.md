@@ -1,6 +1,6 @@
 # solon-ai-skill-text2sql
 
-solon-ai-skill-text2sql 是基于 Solon AI 框架封装的数据库交互技能模块。
+solon-ai-skill-text2sql 是基于 Solon AI 框架封装的数据库交互工具包。
 
 它通过 JDBC 自动提取数据库元数据，并将其转化为自然语言模型（LLM）可理解的 Schema 上下文，使 Agent 具备精准的 Text-to-SQL 转化与执行能力。
 
@@ -38,7 +38,7 @@ import javax.sql.DataSource;
 
 public class Demo {
     public void test(DataSource dataSource) throws Throwable {
-        // 实例化技能：指定受控的数据源和表名
+        // 实例化工具包：指定受控的数据源和表名
         Text2SqlSkill sqlSkill = new Text2SqlSkill(dataSource, "users", "orders", "order_refunds")
                 .maxRows(50); // 限制返回行数，保护内存
 
@@ -48,7 +48,7 @@ public class Demo {
                 .model("Qwen3-32B")
                 .role("财务数据分析师")
                 .instruction("你负责分析订单与退款数据。金额单位均为元。")
-                .defaultSkillAdd(sqlSkill) // 注入 SQL 技能
+                .defaultSkillAdd(sqlSkill) // 注入 SQL 工具包
                 .build();
 
         // 发起自然语言查询

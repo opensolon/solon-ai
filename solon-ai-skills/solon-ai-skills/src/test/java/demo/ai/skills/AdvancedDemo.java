@@ -10,7 +10,7 @@ import org.noear.solon.ai.skills.search.WebSearchDriverSkill;
 import org.noear.solon.ai.skills.generation.ImageGenerationSkill;
 
 /**
- * 高级 AI 技能联动示例（2026 增强版）
+ * 高级 AI 工具包联动示例（2026 增强版）
  */
 public class AdvancedDemo {
 

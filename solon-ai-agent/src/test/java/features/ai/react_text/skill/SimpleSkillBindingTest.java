@@ -58,7 +58,7 @@ public class SimpleSkillBindingTest {
     }
 
     /**
-     * 自定义业务技能：订单管理
+     * 自定义业务工具包：订单管理
      */
     public static class OrderSkill implements Skill {
         private ToolProvider toolProvider = new MethodToolProvider(new OrderTools()).then(slf->{

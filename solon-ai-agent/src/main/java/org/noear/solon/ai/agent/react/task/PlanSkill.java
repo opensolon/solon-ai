@@ -29,7 +29,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * 任务规划技能
+ * 任务规划工具包
  * 集成了计划的创建、进度更新与动态修订功能
  *
  * @author noear

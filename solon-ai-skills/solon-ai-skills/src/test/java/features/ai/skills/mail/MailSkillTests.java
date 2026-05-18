@@ -17,7 +17,7 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * 邮件技能单元测试：使用 Mock 模式避免真实网络请求
+ * 邮件工具包单元测试：使用 Mock 模式避免真实网络请求
  */
 public class MailSkillTests {
 
@@ -35,7 +35,7 @@ public class MailSkillTests {
         }
         Files.createDirectories(root);
 
-        // 2. 初始化技能（使用 Mock 服务器参数）
+        // 2. 初始化工具包（使用 Mock 服务器参数）
         // 在 Simple Java Mail 中，如果检测到环境或显式指定，可以使用 MockMailer
         mailSkill = new MailSkill(workDir,
                 "smtp.mock.com",
@@ -86,7 +86,7 @@ public class MailSkillTests {
 
     @Test
     public void testAgentDrivenMailTask() throws Throwable {
-        // 1. 初始化 Agent，并注入邮件技能
+        // 1. 初始化 Agent，并注入邮件工具包
         // 注意：LlmUtil.getChatModel() 需根据你的环境确保可用
         SimpleAgent agent = SimpleAgent.of(LlmUtil.getChatModel())
                 .role("办公助手")

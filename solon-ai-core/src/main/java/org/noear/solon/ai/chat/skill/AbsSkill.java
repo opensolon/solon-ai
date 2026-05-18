@@ -23,7 +23,7 @@ import org.noear.solon.lang.Preview;
 import java.util.*;
 
 /**
- * 技能定制基类
+ * 工具包定制基类
  *
  * @author noear
  * @since 3.8.4

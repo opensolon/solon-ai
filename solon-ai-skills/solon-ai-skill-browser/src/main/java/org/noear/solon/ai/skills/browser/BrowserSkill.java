@@ -46,7 +46,7 @@ public class BrowserSkill extends AbsSkill {
 
     @Override
     public String description() {
-        return "高级无头浏览器技能：支持多标签切换、编号精准定位、文件上传与下载。";
+        return "高级无头浏览器工具包：支持多标签切换、编号精准定位、文件上传与下载。";
     }
 
     @Override

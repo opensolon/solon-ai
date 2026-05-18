@@ -244,7 +244,7 @@ public class ChatConfig extends AiConfig {
     }
 
     /**
-     * 获取默认的技能
+     * 获取默认的工具包
      *
      * @deprecated 3.8.4 {@link #getModelOptions()}
      */

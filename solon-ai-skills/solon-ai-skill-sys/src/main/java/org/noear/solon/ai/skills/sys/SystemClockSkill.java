@@ -24,7 +24,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
 /**
- * 系统时钟技能：为 AI 代理赋予精准的“时间维度感知”能力。
+ * 系统时钟工具包：为 AI 代理赋予精准的“时间维度感知”能力。
  *
  * @author noear
  * @since 3.9.1

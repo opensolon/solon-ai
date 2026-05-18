@@ -20,7 +20,7 @@ import org.noear.solon.lang.Preview;
 import java.util.Collection;
 
 /**
- * 技能集提供者
+ * 工具包集提供者
  *
  * @author noear
  * @since 3.9.5
@@ -28,7 +28,7 @@ import java.util.Collection;
 @Preview("3.9.5")
 public interface SkillProvider {
     /**
-     * 获取技能集
+     * 获取工具包集
      */
     Collection<Skill> getSkills();
 }

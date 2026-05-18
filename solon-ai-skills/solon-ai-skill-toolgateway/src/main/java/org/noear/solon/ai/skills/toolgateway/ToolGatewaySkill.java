@@ -18,7 +18,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * 工具网关技能：解决工具过多导致的上下文溢出（Context Overflow）问题。
+ * 工具网关工具包：解决工具过多导致的上下文溢出（Context Overflow）问题。
  *
  * 通过工具数量自动切换四阶段模式，平衡模型推理精度与 Token 消耗：
  * 1. FULL (全量): 数量 <= dynamicThreshold。平铺所有工具的完整 Schema。

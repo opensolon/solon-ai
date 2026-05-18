@@ -37,7 +37,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * 智能 REST API 接入技能：支持分组与四阶段自动发现模式。
+ * 智能 REST API 接入工具包：支持分组与四阶段自动发现模式。
  *
  * 逻辑档位：
  * 1. FULL: 数量 <= dynamicThreshold。平铺所有 API 的完整定义。

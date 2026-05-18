@@ -216,7 +216,7 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             }
         }
 
-        //如果提示词没问题，开始部署技能
+        //如果提示词没问题，开始部署工具包
         trace.activeSkills();
 
         // 触发团队启动拦截

@@ -16,7 +16,7 @@ import java.nio.file.Paths;
 import java.util.Comparator;
 
 /**
- * Python 脚本执行技能测试
+ * Python 脚本执行工具包测试
  */
 public class PythonSkillTests {
 
@@ -32,7 +32,7 @@ public class PythonSkillTests {
         }
         Files.createDirectories(root);
 
-        // 2. 初始化技能 (会自动探测系统的 python 指令)
+        // 2. 初始化工具包 (会自动探测系统的 python 指令)
         pythonSkill = new PythonSkill(workDir);
     }
 

@@ -18,7 +18,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 /**
- * 邮件通信技能：为 AI 提供正式的对外联络与附件分发能力。
+ * 邮件通信工具包：为 AI 提供正式的对外联络与附件分发能力。
  *
  * <p>基于 Simple Java Mail 实现，具备以下企业级特性：
  * <ul>
