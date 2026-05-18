@@ -15,14 +15,11 @@
  */
 package org.noear.solon.ai.chat.skill;
 
-import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.lang.Preview;
 
 import java.util.Collection;
-import java.util.stream.Collectors;
 
 /**
  * AI 技能接口

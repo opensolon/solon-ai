@@ -49,7 +49,7 @@ public class SkillUtil {
                 }
             } catch (Throwable e) {
                 //出错？跳过
-                LOG.error("Skill support check failed: {}", skill.getClass().getName(), e);
+                LOG.error("Toolkit support check failed: {}", skill.getClass().getName(), e);
                 continue;
             }
 
@@ -57,7 +57,7 @@ public class SkillUtil {
                 // 开始挂载（可以做些初始化）
                 skill.onAttach(prompt);
             } catch (Throwable e) {
-                LOG.error("Skill active failed: {}", skill.getClass().getName(), e);
+                LOG.error("Toolkit active failed: {}", skill.getClass().getName(), e);
                 throw e;
             }
 
@@ -89,7 +89,7 @@ public class SkillUtil {
         if (Assert.isNotEmpty(tools)) {
             for (FunctionTool tool : tools) {
                 // 将所属 Skill 的名字注入工具的 meta
-                tool.metaPut("skill", skill.name());
+                tool.metaPut("toolkit", skill.name());
             }
         }
 
@@ -98,11 +98,11 @@ public class SkillUtil {
             combinedInstruction.append("\n---\n"); // 使用分割线开启独立空间
 
             // 技能标题行：### [Skill: Name] Description
-            combinedInstruction.append("# [Skill: ").append(skill.name()).append("]");
+            combinedInstruction.append("# [Toolkit: ").append(skill.name()).append("]");
             if (Utils.isNotEmpty(skill.description())) {
                 combinedInstruction.append(" - ").append(skill.description());
             }
-            combinedInstruction.append("\n<Skill:").append(skill.name()).append(">\n\n");
+            combinedInstruction.append("\n<Toolkit:").append(skill.name()).append(">\n\n");
 
             // 注入技能特有的指令（如数据库结构、API 限制等）
             if (Assert.isNotEmpty(ins)) {
@@ -117,7 +117,7 @@ public class SkillUtil {
                 combinedInstruction.append("\n> **工具作用域**: 此技能指令适用于以下工具的调用: ").append(toolNames).append("\n");
             }
 
-            combinedInstruction.append("\n\n</Skill:").append(skill.name()).append(">\n");
+            combinedInstruction.append("\n\n</Toolkit:").append(skill.name()).append(">\n");
             combinedInstruction.append("---\n"); // 闭合分割线
         }
     }
