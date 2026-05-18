@@ -73,13 +73,13 @@ public class SummarizationInterceptor implements ReActInterceptor {
          * 推荐 maxMessages: 10 - 12
          * */
 
-        this(15, 12000,null);
+        this(15, 12000, null);
     }
 
     /**
      * 复制实例，并使用新的限制
      */
-    public SummarizationInterceptor copyWith(int maxMessages, int maxTokens){
+    public SummarizationInterceptor copyWith(int maxMessages, int maxTokens) {
         SummarizationInterceptor tmp = new SummarizationInterceptor(
                 maxMessages,
                 maxTokens,
@@ -118,7 +118,8 @@ public class SummarizationInterceptor implements ReActInterceptor {
         int targetIdx = Math.max(lastFirstIdx + 1, messages.size() - maxMessages);
 
         if (currentTokens > maxTokens * 0.8) {
-            int runningTokens = 0;
+            // runningTokens 口径需与 L102 的 currentTokens 保持一致（含 systemPrompt）
+            int runningTokens = Assert.isEmpty(systemPrompt) ? 0 : encoding.countTokens(systemPrompt) + 4;
             for (int i = messages.size() - 1; i > lastFirstIdx; i--) {
                 ChatMessage msg = messages.get(i);
                 // 直接从 metadata 取，因为前面的 estimateTokens(messages) 已经保证了所有消息都有缓存
@@ -165,10 +166,15 @@ public class SummarizationInterceptor implements ReActInterceptor {
                     .filter(m -> !m.hasMetadata(ReActAgent.META_SUMMARY))
                     .collect(Collectors.toList());
 
-            if (summarizationStrategy != null && !pureHistory.isEmpty()) {
-                ChatMessage summaryMsg = summarizationStrategy.summarize(trace, pureHistory);
-                if (summaryMsg != null) {
-                    compressed.add(summaryMsg);
+            if (!pureHistory.isEmpty()) {
+                if (summarizationStrategy != null) {
+                    ChatMessage summaryMsg = summarizationStrategy.summarize(trace, pureHistory);
+                    if (summaryMsg != null) {
+                        compressed.add(summaryMsg);
+                    }
+                } else {
+                    // 无摘要策略时，至少保留 expired 区间的最后一条消息，避免上下文完全断裂
+                    compressed.add(pureHistory.get(pureHistory.size() - 1));
                 }
             }
         }
