@@ -22,6 +22,7 @@ import com.knuddels.jtokkit.api.ModelType;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
@@ -88,7 +89,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
     }
 
     @Override
-    public void onObservation(ReActTrace trace, String toolName, String result, long durationMs) {
+    public void onModelStart(ReActTrace trace, ChatRequestDesc req) {
         List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
 
         long messageSize = messages.stream()

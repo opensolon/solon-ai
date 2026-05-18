@@ -65,7 +65,7 @@ public class SummarizationInterceptorTest {
         }
 
         // 执行拦截
-        interceptor.onObservation(trace, "any", "any", 0L);
+        interceptor.onModelStart(trace, null);
 
         // 验证截断发生
         assertTrue(workingMemory.getMessages().size() < 17);
@@ -110,7 +110,7 @@ public class SummarizationInterceptorTest {
             workingMemory.addMessage(ChatMessage.ofAssistant("Active " + i));
         }
 
-        interceptor.onObservation(trace, "t1", "res", 0L);
+        interceptor.onModelStart(trace, null);
 
         List<ChatMessage> result = workingMemory.getMessages();
 
@@ -182,7 +182,7 @@ public class SummarizationInterceptorTest {
             workingMemory.addMessage(ChatMessage.ofAssistant("Step " + i));
         }
 
-        interceptor.onObservation(trace, "any", "any", 0L);
+        interceptor.onModelStart(trace, null);
 
         // 验证：thought 消息虽然在 maxMessages 范围外，但由于语义补齐逻辑，它应该被保留
         assertTrue(workingMemory.getMessages().contains(thought), "Thought message should be preserved for semantic continuity");
@@ -228,7 +228,7 @@ public class SummarizationInterceptorTest {
             workingMemory.addMessage(ChatMessage.ofUser("msg " + i));
         }
 
-        interceptor.onObservation(trace, "any", "any", 0L);
+        interceptor.onModelStart(trace, null);
 
         // 验证：第一条消息依然是原生的 System 消息
         assertEquals(globalSystem.getContent(), workingMemory.getMessages().get(0).getContent());
