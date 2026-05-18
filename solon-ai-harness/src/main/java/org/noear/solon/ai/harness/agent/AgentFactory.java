@@ -30,11 +30,11 @@ import org.noear.solon.lang.Nullable;
  */
 public class AgentFactory {
     //**
-    private static String[] TOOL_ALL_FULL = {"read", "write", "edit", "glob", "grep", "ls", "bash", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "generate", "mcp", "restapi", "hitl", "lsp"};
+    private static String[] TOOL_ALL_FULL = {"read", "write", "edit", "glob", "grep", "ls", "bash", "bash_start", "bash_wait", "bash_stdin", "bash_stop", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "generate", "mcp", "restapi", "hitl", "lsp"};
     //*
-    private static String[] TOOL_ALL_PUBLIC = {"read", "write", "edit", "glob", "grep", "ls", "bash", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "lsp"};
+    private static String[] TOOL_ALL_PUBLIC = {"read", "write", "edit", "glob", "grep", "ls", "bash", "bash_start", "bash_wait", "bash_stdin", "bash_stop", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "lsp"};
     //pi
-    private static String[] TOOL_PI = {"read", "write", "edit", "bash"};
+    private static String[] TOOL_PI = {"read", "write", "edit", "bash", "bash_start", "bash_wait", "bash_stdin", "bash_stop"};
 
 
     /**
@@ -83,9 +83,9 @@ public class AgentFactory {
         }
 
         if (metadata.getAutoRethink() != null) {
-            builder.autoRethink(metadata.getAutoRethink());
+            builder.maxStepsExtensible(metadata.getAutoRethink());
         } else {
-            builder.autoRethink(engine.getProps().isAutoRethink());
+            builder.maxStepsExtensible(engine.getProps().isMaxStepsAutoExtensible());
         }
 
         if (metadata.getSessionWindowSize() != null) {
@@ -176,6 +176,22 @@ public class AgentFactory {
             }
             case "bash": {
                 terminalSkillWrap.addTools("bash");
+                break;
+            }
+            case "bash_start": {
+                terminalSkillWrap.addTools("bash_start");
+                break;
+            }
+            case "bash_wait": {
+                terminalSkillWrap.addTools("bash_wait");
+                break;
+            }
+            case "bash_stdin": {
+                terminalSkillWrap.addTools("bash_stdin");
+                break;
+            }
+            case "bash_stop": {
+                terminalSkillWrap.addTools("bash_stop");
                 break;
             }
             case "subagent":

@@ -63,6 +63,7 @@ public class TerminalSkill extends AbsSkill {
 
     protected Charset fileCharset = StandardCharsets.UTF_8;
     protected final ProcessExecutor executor = new ProcessExecutor();
+    protected final CommandSessionManager commandSessionManager = new CommandSessionManager();
 
     private final List<String> DEFAULT_IGNORES_DIR = Arrays.asList(
             ".soloncode", ".claude", ".opencode",
@@ -182,6 +183,7 @@ public class TerminalSkill extends AbsSkill {
         } else {
             sb.append("- **命令执行**: 在 `bash` 中，优先使用环境变量访问工具，例如使用 `" + envExample + "/bin/tool`，支持绝对路径访问。\n");
         }
+        sb.append("- **长命令执行**: 对可能耗时较长、持续输出、等待输入或需要观察状态的命令，优先使用 `bash_start`。如果结果包含 `Process running with session ID`，表示命令仍在运行；需要继续观察时调用 `bash_wait`，需要向进程输入时调用 `bash_stdin`，需要主动停止时调用 `bash_stop`。\n");
 
         if (sandboxMode) {
             sb.append("\n<SYSTEM_CONSTRAINTS>\n");
@@ -239,6 +241,62 @@ public class TerminalSkill extends AbsSkill {
         String finalCommand = translateCommandToEnv(command, envs);
 
         return executor.executeCode(workPath, finalCommand, shellCmd, extension, envs, timeout, null);
+    }
+
+    @ToolMapping(
+            name = "bash_start",
+            description = "启动 shell 命令会话。命令超过 yield_time_ms 仍未结束时不会失败，而是返回 session_id，后续可用 bash_wait 继续等待、bash_stdin 输入或 bash_stop 终止。")
+    public String bashStart(@Param(value = "command", description = "要执行的 shell 命令。") String command,
+                            @Param(value = "workdir", required = false, description = "工作目录。默认使用当前 workspace。") String workdir,
+                            @Param(value = "yield_time_ms", required = false, defaultValue = "1000", description = "先等待多久再把控制权交还给模型，单位毫秒。") Integer yieldTimeMs,
+                            @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符输出，超出保留最新部分。") Integer maxOutputChars,
+                            @Param(value = "hard_timeout_ms", required = false, defaultValue = "120000", description = "硬超时兜底，超过后终止进程树，单位毫秒。") Integer hardTimeoutMs,
+                            String __cwd) throws IOException {
+        String danger = validateDangerousCommand(command);
+        if (danger != null) {
+            return danger;
+        }
+
+        Path workPath = getWorkPath(__cwd);
+        Path targetWorkPath = resolveCommandWorkPath(workPath, workdir);
+        Map<String, String> envs = new HashMap<>();
+        envs.put("PYTHON", pythonCmd);
+        envs.put("NODE", nodeCmd);
+        String finalCommand = translateCommandToEnv(command, envs);
+
+        CommandSessionManager.CommandSnapshot snapshot =
+                commandSessionManager.exec(finalCommand, targetWorkPath, envs, yieldTimeMs, maxOutputChars, hardTimeoutMs);
+        return formatCommandSnapshot(snapshot, "bash_start");
+    }
+
+    @ToolMapping(
+            name = "bash_wait",
+            description = "继续等待仍在运行的命令会话，返回自上次读取后的新增输出或最终状态。")
+    public String bashWait(@Param(value = "session_id", description = "bash_start 返回的命令会话 id。") String sessionId,
+                           @Param(value = "yield_time_ms", required = false, defaultValue = "1000", description = "等待新增输出或进程结束的时长，单位毫秒。") Integer yieldTimeMs,
+                           @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符新增输出，超出保留最新部分。") Integer maxOutputChars) throws IOException {
+        CommandSessionManager.CommandSnapshot snapshot =
+                commandSessionManager.writeStdin(sessionId, "", yieldTimeMs, maxOutputChars);
+        return formatCommandSnapshot(snapshot, "bash_wait");
+    }
+
+    @ToolMapping(name = "bash_stdin", description = "向仍在运行的命令会话写入 stdin，然后等待新增输出或进程结束。")
+    public String bashStdin(@Param(value = "session_id", description = "bash_start 返回的命令会话 id。") String sessionId,
+                            @Param(value = "chars", description = "写入 stdin 的文本。") String chars,
+                            @Param(value = "yield_time_ms", required = false, defaultValue = "1000", description = "写入后等待新增输出或进程结束的时长，单位毫秒。") Integer yieldTimeMs,
+                            @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符新增输出，超出保留最新部分。") Integer maxOutputChars) throws IOException {
+        CommandSessionManager.CommandSnapshot snapshot =
+                commandSessionManager.writeStdin(sessionId, chars, yieldTimeMs, maxOutputChars);
+        return formatCommandSnapshot(snapshot, "bash_stdin");
+    }
+
+    @ToolMapping(name = "bash_stop", description = "终止仍在运行的命令会话及其子进程树。")
+    public String bashStop(@Param(value = "session_id", description = "bash_start 返回的命令会话 id。") String sessionId,
+                           @Param(value = "reason", required = false, description = "终止原因，便于日志诊断。") String reason,
+                           @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "终止后最多返回多少字符新增输出。") Integer maxOutputChars) {
+        CommandSessionManager.CommandSnapshot snapshot =
+                commandSessionManager.terminate(sessionId, reason, maxOutputChars);
+        return formatCommandSnapshot(snapshot, "bash_stop");
     }
 
     // --- 2. 发现文件 ---
@@ -579,6 +637,74 @@ public class TerminalSkill extends AbsSkill {
         String path = (__cwd != null) ? __cwd : workDir;
         if (path == null) throw new IllegalStateException("Working directory is not set.");
         return Paths.get(path).toAbsolutePath().normalize();
+    }
+
+    private Path resolveCommandWorkPath(Path workPath, String workdir) {
+        if (Assert.isEmpty(workdir) || ".".equals(workdir)) {
+            return workPath;
+        }
+        return resolveSafePath(workPath, workdir, false);
+    }
+
+    private String validateDangerousCommand(String command) {
+        if (command == null) {
+            return "错误：command 不能为空。";
+        }
+        String pid = Utils.pid();
+        String lowerCmd = command.toLowerCase();
+        String dangerPattern = "(?s).*(kill|pkill|killall)\\s+.*\\b" + pid + "\\b.*";
+
+        if (lowerCmd.matches(dangerPattern) ||
+                lowerCmd.contains("pkill java") ||
+                lowerCmd.contains("killall java") ||
+                lowerCmd.contains("shutdown") ||
+                lowerCmd.contains("reboot")) {
+
+            return "错误：检测到危险命令。严禁试图停止或重启宿主进程 (PID: " + pid + ")。";
+        }
+
+        if(lowerCmd.matches("(?s).*\\bexit\\b.*") ||
+                lowerCmd.matches("(?s).*rm\\s+.*-rf\\s+/.*")){
+            return "错误：检测到高危指令。出于安全策略，禁止执行 exit、系统重启或根目录删除的操作。";
+        }
+
+        return null;
+    }
+
+    private String formatCommandSnapshot(CommandSessionManager.CommandSnapshot snapshot, String sourceTool) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Command Session\n");
+        sb.append("source_tool: ").append(sourceTool).append('\n');
+        sb.append("session_id: ").append(snapshot.sessionId()).append('\n');
+        sb.append("status: ").append(snapshot.running() ? "running" : "completed").append('\n');
+        if (snapshot.exitCode() != null) {
+            sb.append("exit_code: ").append(snapshot.exitCode()).append('\n');
+        }
+        if (snapshot.timedOut()) {
+            sb.append("hard_timeout: true\n");
+        }
+        if (snapshot.terminated()) {
+            sb.append("terminated: true\n");
+        }
+        if (snapshot.terminateReason() != null) {
+            sb.append("terminate_reason: ").append(snapshot.terminateReason()).append('\n');
+        }
+        sb.append("wall_time_ms: ").append(snapshot.wallTimeMs()).append('\n');
+        sb.append("workdir: ").append(snapshot.workdir()).append('\n');
+        sb.append("output_chars_total: ").append(snapshot.outputChars()).append('\n');
+        sb.append("output_chars_returned: ").append(snapshot.returnedChars()).append('\n');
+        sb.append("output_truncated: ").append(snapshot.outputTruncated()).append('\n');
+        if (snapshot.running()) {
+            sb.append("Process running with session ID: ").append(snapshot.sessionId()).append('\n');
+            sb.append("Use bash_wait to continue waiting, bash_stdin to send input, or bash_stop to stop it.\n");
+        }
+        sb.append("Output:\n");
+        if (Assert.isEmpty(snapshot.output())) {
+            sb.append("(no new output)");
+        } else {
+            sb.append(snapshot.output());
+        }
+        return sb.toString();
     }
 
     private String preprocessUserHome(String pStr) {
