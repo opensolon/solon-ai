@@ -64,8 +64,8 @@ public class CliSkillProvider implements SkillProvider {
     /**
      * 异步 Bash 会话模式
      */
-    public CliSkillProvider bashAsync(boolean bashAsync) {
-        terminalSkill.setBashAsync(bashAsync);
+    public CliSkillProvider bashAsyncEnabled(boolean bashAsyncEnabled) {
+        terminalSkill.setBashAsyncEnabled(bashAsyncEnabled);
         return this;
     }
 

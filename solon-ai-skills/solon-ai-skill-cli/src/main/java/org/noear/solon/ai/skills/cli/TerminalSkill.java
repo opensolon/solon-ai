@@ -66,7 +66,7 @@ public class TerminalSkill extends AbsSkill {
     protected final ProcessExecutor executor = new ProcessExecutor();
     protected final TerminalSessionManager bashSessionManager = new TerminalSessionManager();
     //异步会话模式：启用后提供 bash_start/wait/stdin/stop 工具
-    private boolean bashAsync = true;
+    private boolean bashAsyncEnabled = true;
 
     private final List<String> DEFAULT_IGNORES_DIR = Arrays.asList(
             ".soloncode", ".claude", ".opencode",
@@ -82,12 +82,12 @@ public class TerminalSkill extends AbsSkill {
         this.sandboxMode = sandboxMode;
     }
 
-    public void setBashAsync(boolean bashAsync) {
-        this.bashAsync = bashAsync;
+    public void setBashAsyncEnabled(boolean bashAsyncEnabled) {
+        this.bashAsyncEnabled = bashAsyncEnabled;
     }
 
-    public boolean isBashAsync() {
-        return bashAsync;
+    public boolean isBashAsyncEnabled() {
+        return bashAsyncEnabled;
     }
 
     public TerminalSkill(PoolManager poolManager) {
@@ -194,7 +194,7 @@ public class TerminalSkill extends AbsSkill {
         } else {
             sb.append("- **命令执行**: 在 `bash` 中，优先使用环境变量访问工具，例如使用 `" + envExample + "/bin/tool`，支持绝对路径访问。\n");
         }
-        if (bashAsync) {
+        if (bashAsyncEnabled) {
             sb.append("- **长命令执行**: 对可能耗时较长、持续输出、等待输入或需要观察状态的命令，优先使用 `bash_start`。如果结果包含 `Process running with session ID`，表示命令仍在运行；需要继续观察时调用 `bash_wait`，需要向进程输入时调用 `bash_stdin`，需要主动停止时调用 `bash_stop`。\n");
         }
 
@@ -219,7 +219,7 @@ public class TerminalSkill extends AbsSkill {
 
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
-        if (bashAsync) {
+        if (bashAsyncEnabled) {
             return super.getTools(prompt);
         }
 
