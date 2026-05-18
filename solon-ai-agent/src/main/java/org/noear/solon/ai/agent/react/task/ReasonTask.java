@@ -183,8 +183,19 @@ public class ReasonTask {
             LOG.debug("ReActAgent SystemPrompt rendered for trace [{}]: {}", trace.getAgentName(), systemPromptBuf);
         }
 
+        String systemPromptStr = systemPromptBuf.toString();
+
+        // [逻辑 2.1: 上下文预处理] 在消息组装前触发，允许拦截器压缩 WorkingMemory
+        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
+            item.target.onReasonStart(trace, systemPromptStr);
+        }
+
+        if (Agent.ID_END.equals(trace.getRoute())) {
+            return;
+        }
+
         List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.ofSystem(systemPromptBuf.toString()));
+        messages.add(ChatMessage.ofSystem(systemPromptStr));
         messages.addAll(trace.getWorkingMemory().getMessages());
 
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器

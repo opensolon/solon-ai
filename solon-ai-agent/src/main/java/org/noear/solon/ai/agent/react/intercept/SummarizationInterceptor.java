@@ -22,7 +22,6 @@ import com.knuddels.jtokkit.api.ModelType;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
@@ -89,14 +88,14 @@ public class SummarizationInterceptor implements ReActInterceptor {
     }
 
     @Override
-    public void onModelStart(ReActTrace trace, ChatRequestDesc req) {
+    public void onReasonStart(ReActTrace trace, String systemPrompt) {
         List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
 
         long messageSize = messages.stream()
                 .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
                 .count();
 
-        int currentTokens = estimateTokens(messages);
+        int currentTokens = estimateTokens(messages, systemPrompt);
 
         // 预留缓冲，避免频繁重构 (maxMessages + 触发阈值)
         if (messageSize <= maxMessages && currentTokens <= (maxTokens * 0.8)) {
@@ -186,7 +185,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
         }
     }
 
-    private int estimateTokens(List<ChatMessage> messages) {
+    private int estimateTokens(List<ChatMessage> messages, String systemPrompt) {
         int totalTokens = 0;
         for (ChatMessage m : messages) {
             // 尝试从元数据获取缓存值 (META_TOKEN_COUNT 可以定义在 ReActAgent 中)
@@ -204,6 +203,12 @@ public class SummarizationInterceptor implements ReActInterceptor {
 
             totalTokens += cachedCount + 4; // Overhead
         }
+
+        // systemPrompt 的 token 开销（baseSp、计划看板、Protocol 指令等）
+        if (systemPrompt != null && !systemPrompt.isEmpty()) {
+            totalTokens += encoding.countTokens(systemPrompt) + 4;
+        }
+
         return totalTokens + 3;
     }
 

@@ -65,7 +65,7 @@ public class SummarizationInterceptorTest {
         }
 
         // 执行拦截
-        interceptor.onModelStart(trace, null);
+        interceptor.onReasonStart(trace, null);
 
         // 验证截断发生
         assertTrue(workingMemory.getMessages().size() < 17);
@@ -110,7 +110,7 @@ public class SummarizationInterceptorTest {
             workingMemory.addMessage(ChatMessage.ofAssistant("Active " + i));
         }
 
-        interceptor.onModelStart(trace, null);
+        interceptor.onReasonStart(trace, null);
 
         List<ChatMessage> result = workingMemory.getMessages();
 
@@ -182,7 +182,7 @@ public class SummarizationInterceptorTest {
             workingMemory.addMessage(ChatMessage.ofAssistant("Step " + i));
         }
 
-        interceptor.onModelStart(trace, null);
+        interceptor.onReasonStart(trace, null);
 
         // 验证：thought 消息虽然在 maxMessages 范围外，但由于语义补齐逻辑，它应该被保留
         assertTrue(workingMemory.getMessages().contains(thought), "Thought message should be preserved for semantic continuity");
@@ -220,15 +220,16 @@ public class SummarizationInterceptorTest {
 
     @Test
     public void testGlobalSystemMessagePreservation() {
-        // 构造一个没有 _first 标记的全局 System 指令
+        // 构造全局 System 指令（框架会为其注入 META_FIRST 标记，以在压缩时保护）
         ChatMessage globalSystem = ChatMessage.ofSystem("You are a helpful assistant.");
+        globalSystem.addMetadata(ReActAgent.META_FIRST, 1);
         workingMemory.addMessage(globalSystem);
 
         for (int i = 0; i < 20; i++) {
             workingMemory.addMessage(ChatMessage.ofUser("msg " + i));
         }
 
-        interceptor.onModelStart(trace, null);
+        interceptor.onReasonStart(trace, null);
 
         // 验证：第一条消息依然是原生的 System 消息
         assertEquals(globalSystem.getContent(), workingMemory.getMessages().get(0).getContent());

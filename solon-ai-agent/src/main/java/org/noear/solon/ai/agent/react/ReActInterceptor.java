@@ -43,6 +43,13 @@ public interface ReActInterceptor extends AgentInterceptor, ChatInterceptor {
     }
 
     /**
+     * 推理节点：Reason 阶段开始前（在 systemPrompt 构建和消息组装之前触发）
+     * <p>适合做上下文压缩、工作记忆窗口管理等预处理操作</p>
+     */
+    default void onReasonStart(ReActTrace trace, String systemPrompt) {
+    }
+
+    /**
      * 模型推理周期：发起 LLM 请求前
      * <p>可用于动态修改请求参数、Stop 词或注入 Context</p>
      */
