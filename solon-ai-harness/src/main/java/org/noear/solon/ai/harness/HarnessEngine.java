@@ -272,6 +272,7 @@ public class HarnessEngine {
             throw new RuntimeException("Mcp servers load failure", e);
         }
 
+        cliSkills.bashAsyncEnabled(props.isBashAsyncEnabled());
         cliSkills.getTerminalSkill().setSandboxMode(props.isSandboxMode());
         if (Assert.isNotEmpty(props.getSkillPools())) {
             props.getSkillPools().forEach((alias, dir) -> {

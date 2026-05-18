@@ -74,6 +74,7 @@ public class HarnessProperties implements Serializable {
     private boolean sandboxMode = true;
     private boolean hitlEnabled = false;
     private boolean subagentEnabled = true;
+    private boolean bashAsyncEnabled = false;
 
     private String userAgent;
 
