@@ -63,7 +63,7 @@ public class TerminalSkill extends AbsSkill {
 
     protected Charset fileCharset = StandardCharsets.UTF_8;
     protected final ProcessExecutor executor = new ProcessExecutor();
-    protected final CommandSessionManager commandSessionManager = new CommandSessionManager();
+    protected final TerminalSessionManager commandSessionManager = new TerminalSessionManager();
 
     private final List<String> DEFAULT_IGNORES_DIR = Arrays.asList(
             ".soloncode", ".claude", ".opencode",
@@ -264,7 +264,7 @@ public class TerminalSkill extends AbsSkill {
         envs.put("NODE", nodeCmd);
         String finalCommand = translateCommandToEnv(command, envs);
 
-        CommandSessionManager.CommandSnapshot snapshot =
+        TerminalSessionManager.CommandSnapshot snapshot =
                 commandSessionManager.exec(finalCommand, targetWorkPath, envs, yieldTimeMs, maxOutputChars, hardTimeoutMs);
         return formatCommandSnapshot(snapshot, "bash_start");
     }
@@ -275,7 +275,7 @@ public class TerminalSkill extends AbsSkill {
     public String bashWait(@Param(value = "session_id", description = "bash_start 返回的命令会话 id。") String sessionId,
                            @Param(value = "yield_time_ms", required = false, defaultValue = "1000", description = "等待新增输出或进程结束的时长，单位毫秒。") Integer yieldTimeMs,
                            @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符新增输出，超出保留最新部分。") Integer maxOutputChars) throws IOException {
-        CommandSessionManager.CommandSnapshot snapshot =
+        TerminalSessionManager.CommandSnapshot snapshot =
                 commandSessionManager.writeStdin(sessionId, "", yieldTimeMs, maxOutputChars);
         return formatCommandSnapshot(snapshot, "bash_wait");
     }
@@ -285,7 +285,7 @@ public class TerminalSkill extends AbsSkill {
                             @Param(value = "chars", description = "写入 stdin 的文本。") String chars,
                             @Param(value = "yield_time_ms", required = false, defaultValue = "1000", description = "写入后等待新增输出或进程结束的时长，单位毫秒。") Integer yieldTimeMs,
                             @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符新增输出，超出保留最新部分。") Integer maxOutputChars) throws IOException {
-        CommandSessionManager.CommandSnapshot snapshot =
+        TerminalSessionManager.CommandSnapshot snapshot =
                 commandSessionManager.writeStdin(sessionId, chars, yieldTimeMs, maxOutputChars);
         return formatCommandSnapshot(snapshot, "bash_stdin");
     }
@@ -294,7 +294,7 @@ public class TerminalSkill extends AbsSkill {
     public String bashStop(@Param(value = "session_id", description = "bash_start 返回的命令会话 id。") String sessionId,
                            @Param(value = "reason", required = false, description = "终止原因，便于日志诊断。") String reason,
                            @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "终止后最多返回多少字符新增输出。") Integer maxOutputChars) {
-        CommandSessionManager.CommandSnapshot snapshot =
+        TerminalSessionManager.CommandSnapshot snapshot =
                 commandSessionManager.terminate(sessionId, reason, maxOutputChars);
         return formatCommandSnapshot(snapshot, "bash_stop");
     }
@@ -671,7 +671,7 @@ public class TerminalSkill extends AbsSkill {
         return null;
     }
 
-    private String formatCommandSnapshot(CommandSessionManager.CommandSnapshot snapshot, String sourceTool) {
+    private String formatCommandSnapshot(TerminalSessionManager.CommandSnapshot snapshot, String sourceTool) {
         StringBuilder sb = new StringBuilder();
         sb.append("Command Session\n");
         sb.append("source_tool: ").append(sourceTool).append('\n');

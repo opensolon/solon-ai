@@ -12,16 +12,16 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
-import org.noear.solon.ai.skills.cli.CommandSessionManager;
+import org.noear.solon.ai.skills.cli.TerminalSessionManager;
 
-public class CommandSessionManagerTest {
+public class TerminalSessionManagerTest {
 
     @Test
     public void shortCommandCompletes() throws Exception {
         Path workDir = Files.createTempDirectory("solon-ai-command-session-short-");
         try {
-            CommandSessionManager manager = new CommandSessionManager();
-            CommandSessionManager.CommandSnapshot snapshot =
+            TerminalSessionManager manager = new TerminalSessionManager();
+            TerminalSessionManager.CommandSnapshot snapshot =
                     manager.exec("printf hello", workDir, null, 2_000, 1_000, 10_000);
 
             assertFalse(snapshot.running());
@@ -39,8 +39,8 @@ public class CommandSessionManagerTest {
         }
         Path workDir = Files.createTempDirectory("solon-ai-command-session-long-");
         try {
-            CommandSessionManager manager = new CommandSessionManager();
-            CommandSessionManager.CommandSnapshot first =
+            TerminalSessionManager manager = new TerminalSessionManager();
+            TerminalSessionManager.CommandSnapshot first =
                     manager.exec(
                             "printf start; sleep 0.4; printf end",
                             workDir,
@@ -52,7 +52,7 @@ public class CommandSessionManagerTest {
             assertTrue(first.running(), first.output());
             assertTrue(first.output().contains("start"), first.output());
 
-            CommandSessionManager.CommandSnapshot second =
+            TerminalSessionManager.CommandSnapshot second =
                     manager.writeStdin(first.sessionId(), "", 2_000, 1_000);
             assertFalse(second.running(), second.output());
             assertTrue(second.output().contains("end"), second.output());
@@ -69,13 +69,13 @@ public class CommandSessionManagerTest {
         Path workDir = Files.createTempDirectory("solon-ai-command-session-terminate-");
         Path marker = workDir.resolve("child.pid");
         try {
-            CommandSessionManager manager = new CommandSessionManager();
-            CommandSessionManager.CommandSnapshot first =
+            TerminalSessionManager manager = new TerminalSessionManager();
+            TerminalSessionManager.CommandSnapshot first =
                     manager.exec("sleep 30 & echo $! > child.pid; wait", workDir, null, 50, 1_000, 60_000);
             assertTrue(first.running(), first.output());
 
             long childPid = Long.parseLong(readFile(marker).trim());
-            CommandSessionManager.CommandSnapshot terminated =
+            TerminalSessionManager.CommandSnapshot terminated =
                     manager.terminate(first.sessionId(), "test", 1_000);
             assertFalse(terminated.running());
             assertTrue(terminated.terminated());
@@ -94,8 +94,8 @@ public class CommandSessionManagerTest {
         Path workDir = Files.createTempDirectory("solon-ai-command-session-hard-timeout-");
         Path marker = workDir.resolve("child.pid");
         try {
-            CommandSessionManager manager = new CommandSessionManager();
-            CommandSessionManager.CommandSnapshot first =
+            TerminalSessionManager manager = new TerminalSessionManager();
+            TerminalSessionManager.CommandSnapshot first =
                     manager.exec("sleep 30 & echo $! > child.pid; wait", workDir, null, 20, 1_000, 200);
             assertTrue(first.running(), first.output());
 
@@ -103,7 +103,7 @@ public class CommandSessionManagerTest {
             waitUntilNotAlive(childPid);
             assertFalse(isProcessAlive(childPid));
 
-            CommandSessionManager.CommandSnapshot second =
+            TerminalSessionManager.CommandSnapshot second =
                     manager.writeStdin(first.sessionId(), "", 500, 1_000);
             assertFalse(second.running());
             assertTrue(second.timedOut(), second.output());

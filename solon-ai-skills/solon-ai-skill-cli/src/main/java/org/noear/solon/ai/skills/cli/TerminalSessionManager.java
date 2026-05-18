@@ -28,13 +28,13 @@ import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public final class CommandSessionManager {
+public final class TerminalSessionManager {
 
     public static final int DEFAULT_YIELD_TIME_MS = 1_000;
     public static final int DEFAULT_HARD_TIMEOUT_MS = 120_000;
     public static final int DEFAULT_MAX_OUTPUT_CHARS = 64_000;
 
-    private static final Logger LOG = LoggerFactory.getLogger(CommandSessionManager.class);
+    private static final Logger LOG = LoggerFactory.getLogger(TerminalSessionManager.class);
     private static final long DESTROY_GRACE_MS = 250L;
     private static final long COMPLETED_SESSION_TTL_MS = Duration.ofMinutes(10).toMillis();
     private static final ScheduledExecutorService TIMEOUT_EXECUTOR =
@@ -48,11 +48,11 @@ public final class CommandSessionManager {
     private final ConcurrentMap<String, CommandSession> sessions = new ConcurrentHashMap<>();
     private final Charset outputCharset;
 
-    public CommandSessionManager() {
+    public TerminalSessionManager() {
         this(StandardCharsets.UTF_8);
     }
 
-    public CommandSessionManager(Charset outputCharset) {
+    public TerminalSessionManager(Charset outputCharset) {
         this.outputCharset = outputCharset == null ? StandardCharsets.UTF_8 : outputCharset;
     }
 
