@@ -34,6 +34,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.noear.solon.ai.chat.tool.FunctionTool;
 
 /**
  * Claude Code 规范对齐的 CLI 基础执行技能
@@ -54,7 +55,7 @@ public class TerminalSkill extends AbsSkill {
     private final ShellMode shellMode;
     private final String envExample; // 增加范例字段
 
-    //沙盒模式：只能访问相对咱径或逻辑路径；（否则为）开放模式：可以访问绝对路径
+    //沙盒模式：只能访问相对路径或逻辑路径；（否则为）开放模式：可以访问绝对路径
     private boolean sandboxMode = true;
     private final PoolManager poolManager; // 引入技能管理器
 
@@ -64,6 +65,8 @@ public class TerminalSkill extends AbsSkill {
     protected Charset fileCharset = StandardCharsets.UTF_8;
     protected final ProcessExecutor executor = new ProcessExecutor();
     protected final TerminalSessionManager bashSessionManager = new TerminalSessionManager();
+    //异步会话模式：启用后提供 bash_start/wait/stdin/stop 工具
+    private boolean bashAsync = true;
 
     private final List<String> DEFAULT_IGNORES_DIR = Arrays.asList(
             ".soloncode", ".claude", ".opencode",
@@ -77,6 +80,14 @@ public class TerminalSkill extends AbsSkill {
 
     public void setSandboxMode(boolean sandboxMode) {
         this.sandboxMode = sandboxMode;
+    }
+
+    public void setBashAsync(boolean bashAsync) {
+        this.bashAsync = bashAsync;
+    }
+
+    public boolean isBashAsync() {
+        return bashAsync;
     }
 
     public TerminalSkill(PoolManager poolManager) {
@@ -183,7 +194,9 @@ public class TerminalSkill extends AbsSkill {
         } else {
             sb.append("- **命令执行**: 在 `bash` 中，优先使用环境变量访问工具，例如使用 `" + envExample + "/bin/tool`，支持绝对路径访问。\n");
         }
-        sb.append("- **长命令执行**: 对可能耗时较长、持续输出、等待输入或需要观察状态的命令，优先使用 `bash_start`。如果结果包含 `Process running with session ID`，表示命令仍在运行；需要继续观察时调用 `bash_wait`，需要向进程输入时调用 `bash_stdin`，需要主动停止时调用 `bash_stop`。\n");
+        if (bashAsync) {
+            sb.append("- **长命令执行**: 对可能耗时较长、持续输出、等待输入或需要观察状态的命令，优先使用 `bash_start`。如果结果包含 `Process running with session ID`，表示命令仍在运行；需要继续观察时调用 `bash_wait`，需要向进程输入时调用 `bash_stdin`，需要主动停止时调用 `bash_stop`。\n");
+        }
 
         if (sandboxMode) {
             sb.append("\n<SYSTEM_CONSTRAINTS>\n");
@@ -196,6 +209,24 @@ public class TerminalSkill extends AbsSkill {
         return sb.toString();
     }
 
+
+    /**
+     * 异步会话工具名称集合，用于过滤
+     */
+    private static final Set<String> ASYNC_BASH_TOOLS = new HashSet<>(Arrays.asList(
+            "bash_start", "bash_wait", "bash_stdin", "bash_stop"
+    ));
+
+    @Override
+    public Collection<FunctionTool> getTools(Prompt prompt) {
+        if (bashAsync) {
+            return super.getTools(prompt);
+        }
+
+        return super.getTools(prompt).stream()
+                .filter(t -> !ASYNC_BASH_TOOLS.contains(t.name()))
+                .collect(Collectors.toList());
+    }
 
     // --- 1. 执行命令 ---
     @ToolMapping(

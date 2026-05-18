@@ -61,6 +61,14 @@ public class CliSkillProvider implements SkillProvider {
         return this;
     }
 
+    /**
+     * 异步 Bash 会话模式
+     */
+    public CliSkillProvider bashAsync(boolean bashAsync) {
+        terminalSkill.setBashAsync(bashAsync);
+        return this;
+    }
+
 
     public PoolManager getPoolManager() {
         return poolManager;
