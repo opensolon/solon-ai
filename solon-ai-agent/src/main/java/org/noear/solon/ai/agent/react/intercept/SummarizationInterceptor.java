@@ -23,6 +23,7 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.*;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -44,7 +45,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
 
     // 在类中预加载注册表
     private static final EncodingRegistry registry = Encodings.newDefaultEncodingRegistry();
-    // 适配 GPT-4, GPT-3.5 或 DeepSeek (多数使用 cl100k_base)
+    // 适配 GPT-4o (o200k_base)，对 DeepSeek 等使用 cl100k_base 的模型有微小偏差（通常 <5%）
     private static final Encoding encoding = registry.getEncodingForModel(ModelType.GPT_4O);
     private static final String META_TOKEN_SIZE = "token_size";
 
@@ -192,13 +193,24 @@ public class SummarizationInterceptor implements ReActInterceptor {
             Integer cachedCount = m.getMetadataAs(META_TOKEN_SIZE);
 
             if (cachedCount == null) {
+                cachedCount = 0;
                 if (m.getContent() != null) {
-                    cachedCount = encoding.countTokens(m.getContent());
-                    // 将计算结果回填到消息元数据中，下次无需计算
-                    m.addMetadata(META_TOKEN_SIZE, cachedCount);
-                } else {
-                    cachedCount = 0;
+                    cachedCount += encoding.countTokens(m.getContent());
                 }
+
+                // 补算 AssistantMessage 的 toolCalls 序列化开销（content 不包含 toolCalls）
+                if (m instanceof AssistantMessage) {
+                    AssistantMessage am = (AssistantMessage) m;
+                    if (Assert.isNotEmpty(am.getToolCalls())) {
+                        for (ToolCall tc : am.getToolCalls()) {
+                            cachedCount += encoding.countTokens(tc.getName() + tc.getArgumentsStr());
+                            cachedCount += 10; // id + JSON 结构开销
+                        }
+                    }
+                }
+
+                // 将计算结果回填到消息元数据中，下次无需计算
+                m.addMetadata(META_TOKEN_SIZE, cachedCount);
             }
 
             totalTokens += cachedCount + 4; // Overhead
