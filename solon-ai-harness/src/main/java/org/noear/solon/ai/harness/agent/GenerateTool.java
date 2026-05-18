@@ -74,7 +74,7 @@ public class GenerateTool extends AbsToolProvider {
     @ToolMapping(name = "generate",
             description = "动态构建一个具备特定专家知识和工具权限的子代理。用于将复杂大任务拆解给垂直领域的‘虚拟专家’执行。\n" +
                     "- 只有当‘当前可用代理列表’中无匹配项时，才允许调用此工具。\n" +
-                    "- 创建前应查阅相关知识库和专家技能，以确保 systemPrompt 的专业性。")
+                    "- 创建前应查阅相关知识库和技能，以确保 systemPrompt 的专业性。")
     public String generate(
             @Param(name = "name", description = "子代理的唯一英文标识符（如 code_reviewer）") String name,
             @Param(name = "description", description = "对该代理职能的精炼描述，便于主代理后续识别和调用") String description,
@@ -88,7 +88,7 @@ public class GenerateTool extends AbsToolProvider {
                     "- `grep`，基于正则表达式的全文检索\n" +
                     "- `list`，列出目录内容\n" +
                     "- `bash`，运行 Shell 命令\n" +
-                    "- `skill`，调用预定义的专家技能模块\n" +
+                    "- `skill`，调用预定义的技能模块\n" +
                     "- `lsp`，深度代码理解\n" +
                     "- `code`，编码指导模块\n" +
                     "- `todo`，任务清单管理\n" +

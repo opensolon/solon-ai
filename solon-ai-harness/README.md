@@ -119,7 +119,7 @@ subagent.prompt("审查 src/main/java 目录下的代码")
 | `ls` / `list` | 列出目录内容 |
 | `pi` | 核心操作（read + write + edit + bash） |
 | `task` | 调度子代理 |
-| `skill` | 调用预定义的专家技能模块 |
+| `skill` | 调用预定义的技能模块 |
 | `code` | 编码指导模块 |
 | `todo` | 任务清单管理 |
 | `webfetch` | 抓取网页内容 |

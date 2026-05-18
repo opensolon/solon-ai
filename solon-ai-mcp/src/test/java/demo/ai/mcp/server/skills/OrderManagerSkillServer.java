@@ -15,7 +15,7 @@ import java.util.List;
 public class OrderManagerSkillServer extends McpSkillServer {
     @Override
     public String description() {
-        return "订单处理技能";
+        return "订单处理专家";
     }
 
     @Override
@@ -48,7 +48,7 @@ public class OrderManagerSkillServer extends McpSkillServer {
 
         List<String> tools = new ArrayList<>();
 
-        // 基础查询工具（所有激活技能的用户都有）
+        // 基础查询工具（所有用户都有）
         tools.add("OrderQueryTool");
 
         // 4. 权限隔离：只有属性中标记为 ADMIN 的用户，才动态挂载“取消订单”工具

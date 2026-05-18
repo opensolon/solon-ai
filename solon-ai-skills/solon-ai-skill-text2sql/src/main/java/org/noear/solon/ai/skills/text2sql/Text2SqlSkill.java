@@ -39,9 +39,9 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * 智能 Text-to-SQL 专家技能：实现自然语言到结构化查询的桥接。
+ * 智能 Text-to-SQL 工具包：实现自然语言到结构化查询的桥接。
  *
- * <p>该技能集成了企业级数据分析所需的深度适配与安全策略：
+ * <p>该工具包集成了企业级数据分析所需的深度适配与安全策略：
  * <ul>
  * <li><b>自适应方言引擎</b>：内置多种 {@link SqlDialect}，支持对引号、分页、元数据提取等差异进行底层平替，确保 AI 编写的 SQL 具有极高执行率。</li>
  * <li><b>分级元数据策略</b>：支持 FULL（注入全量 DDL）与 DYNAMIC（仅注入目录，按需探测）两种模式，自动应对超大规模数据表带来的 Token 挑战。</li>

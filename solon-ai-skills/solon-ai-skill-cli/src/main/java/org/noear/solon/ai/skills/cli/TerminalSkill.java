@@ -777,7 +777,7 @@ public class TerminalSkill extends AbsSkill {
             boolean inPool = poolManager.getPoolMap().containsKey(alias);
 
             if (!inPool) {
-                throw new SecurityException("权限拒绝：未知的技能池路径 " + pStr);
+                throw new SecurityException("权限拒绝：未知的挂载池路径 " + pStr);
             }
 
             if (writeMode) {

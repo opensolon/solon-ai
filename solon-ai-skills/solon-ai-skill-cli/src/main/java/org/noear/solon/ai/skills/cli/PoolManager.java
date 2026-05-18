@@ -168,13 +168,13 @@ public class PoolManager {
             String desc = markdown.getDescription();
 
             if (Assert.isEmpty(desc)) {
-                return "专家技能规约。";
+                return "技能规约。";
             } else {
                 // 增加长度到 150，确保 LLM 能看到足够的语义信息
                 return desc.length() > 150 ? desc.substring(0, 147) + "..." : desc;
             }
         } catch (Throwable e) {
-            return "专家技能规约。";
+            return "技能规约。";
         }
     }
 }
