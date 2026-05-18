@@ -98,12 +98,12 @@ public class SummarizationInterceptor implements ReActInterceptor {
 
         int currentTokens = estimateTokens(messages, systemPrompt);
 
-        // 预留缓冲，避免频繁重构 (maxMessages + 触发阈值)
+        // 预留缓冲，避免频繁重构
         if (messageSize <= maxMessages && currentTokens <= (maxTokens * 0.8)) {
             return;
         }
 
-        // 1. 提取“初心链” (The Original Intent Chain)
+        // 1. 提取“初心链”
         List<ChatMessage> firstList = new ArrayList<>();
         int lastFirstIdx = -1;
         for (int i = 0; i < messages.size(); i++) {
@@ -114,39 +114,67 @@ public class SummarizationInterceptor implements ReActInterceptor {
             }
         }
 
-        // 2. 确定截断起始点 (Sliding Window Start)
-        int targetIdx = Math.max(lastFirstIdx + 1, messages.size() - maxMessages);
+        // 2. 计算固定开销（不可压缩部分：systemPrompt + 初心链） —— 【已加入 Null 兜底】
+        int fixedTokens = 0;
+        if (!Assert.isEmpty(systemPrompt)) {
+            fixedTokens += encoding.countTokens(systemPrompt) + 4;
+        }
+        for (ChatMessage firstMsg : firstList) {
+            Integer cachedSize = firstMsg.getMetadataAs(META_TOKEN_SIZE);
+            if (cachedSize == null) {
+                cachedSize = firstMsg.getContent() != null ? encoding.countTokens(firstMsg.getContent()) : 0;
+                firstMsg.addMetadata(META_TOKEN_SIZE, cachedSize);
+            }
+            fixedTokens += cachedSize + 4;
+        }
 
-        if (currentTokens > maxTokens * 0.8) {
-            // runningTokens 口径需与 L102 的 currentTokens 保持一致（含 systemPrompt）
-            int runningTokens = Assert.isEmpty(systemPrompt) ? 0 : encoding.countTokens(systemPrompt) + 4;
-            for (int i = messages.size() - 1; i > lastFirstIdx; i--) {
-                ChatMessage msg = messages.get(i);
-                // 直接从 metadata 取，因为前面的 estimateTokens(messages) 已经保证了所有消息都有缓存
-                Integer cachedSize = msg.getMetadataAs(META_TOKEN_SIZE);
-                runningTokens += (cachedSize != null ? cachedSize : 0) + 4;
+        // 极端场景防御
+        if (fixedTokens >= maxTokens) {
+            if (log.isWarnEnabled()) {
+                log.warn("ReActAgent [{}] first chain + systemPrompt ({} tokens) exceeds maxTokens ({}), keep first chain only",
+                        trace.getAgentName(), fixedTokens, maxTokens);
+            }
+            if (firstList.size() < messages.size()) {
+                trace.getWorkingMemory().replaceMessages(new ArrayList<>(firstList));
+            }
+            return;
+        }
 
-                if (runningTokens > maxTokens * 0.5) {
-                    targetIdx = Math.max(targetIdx, i);
-                    break;
-                }
+        // 3. 为摘要消息预留空间
+        int availableTokens = maxTokens - fixedTokens;
+        int summaryReserve = Math.max(200, (int) (availableTokens * 0.1));
+        int windowBudget = availableTokens - summaryReserve;
+
+        // 4. 双维度确定截断点
+        int targetByCount = Math.max(lastFirstIdx + 1, messages.size() - maxMessages);
+
+        int targetByTokens = lastFirstIdx + 1;
+        int runningTokens = 0;
+        for (int i = messages.size() - 1; i > lastFirstIdx; i--) {
+            ChatMessage msg = messages.get(i);
+            Integer cachedSize = msg.getMetadataAs(META_TOKEN_SIZE);
+            runningTokens += (cachedSize != null ? cachedSize : 0) + 4;
+            if (runningTokens > windowBudget) {
+                targetByTokens = Math.max(lastFirstIdx + 1, i);
+                break;
             }
         }
 
-        // 3. 增强版原子对齐 (Atomic Alignment)
+        int targetIdx = Math.max(targetByCount, targetByTokens);
+
+        // 5. 增强版原子对齐
         while (targetIdx > (lastFirstIdx + 1) && targetIdx < messages.size()) {
             ChatMessage msg = messages.get(targetIdx);
             if (msg instanceof ToolMessage || isObservation(msg)) {
                 targetIdx--;
             } else if (msg instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls())) {
-                // 停止回溯，这是一个 Action 节点
                 break;
             } else {
                 break;
             }
         }
 
-        // 4. 语义连贯补齐 (Semantic Completion)
+        // 6. 语义连贯补齐
         if (targetIdx > (lastFirstIdx + 1)) {
             ChatMessage prev = messages.get(targetIdx - 1);
             if (prev instanceof AssistantMessage && Assert.isEmpty(((AssistantMessage) prev).getToolCalls())) {
@@ -154,14 +182,29 @@ public class SummarizationInterceptor implements ReActInterceptor {
             }
         }
 
-        // 5. 重构 WorkingMemory
-        List<ChatMessage> compressed = new ArrayList<>();
+        // 6.1 Token 补偿校验
+        if (targetIdx < targetByTokens) {
+            int actualWindowTokens = 0;
+            for (int i = targetIdx; i < messages.size(); i++) {
+                Integer cachedSize = messages.get(i).getMetadataAs(META_TOKEN_SIZE);
+                actualWindowTokens += (cachedSize != null ? cachedSize : 0) + 4;
+            }
+            if (actualWindowTokens > windowBudget) {
+                targetIdx = targetByTokens;
+                while (targetIdx < messages.size() - 1
+                        && (messages.get(targetIdx) instanceof ToolMessage
+                        || isObservation(messages.get(targetIdx)))) {
+                    targetIdx++;
+                }
+            }
+        }
 
+        // 7. 重构 WorkingMemory —— 【你的安全 subList 重构版本】
+        List<ChatMessage> compressed = new ArrayList<>();
         compressed.addAll(firstList);
 
         if (targetIdx > (lastFirstIdx + 1) && targetIdx <= messages.size()) {
-            List<ChatMessage> expired = messages.subList(lastFirstIdx + 1, targetIdx);
-            // 过滤掉 expired 中可能存在的旧摘要标记消息，避免“摘要的摘要”产生标题堆叠
+            List<ChatMessage> expired = new ArrayList<>(messages.subList(lastFirstIdx + 1, targetIdx));
             List<ChatMessage> pureHistory = expired.stream()
                     .filter(m -> !m.hasMetadata(ReActAgent.META_SUMMARY))
                     .collect(Collectors.toList());
@@ -173,7 +216,6 @@ public class SummarizationInterceptor implements ReActInterceptor {
                         compressed.add(summaryMsg);
                     }
                 } else {
-                    // 无摘要策略时，至少保留 expired 区间的最后一条消息，避免上下文完全断裂
                     compressed.add(pureHistory.get(pureHistory.size() - 1));
                 }
             }
@@ -181,7 +223,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
 
         compressed.addAll(messages.subList(targetIdx, messages.size()));
 
-        // 6. 更新工作区
+        // 8. 更新工作区 —— 【干净清爽，无硬裁剪副作用】
         if (compressed.size() < messages.size()) {
             trace.getWorkingMemory().replaceMessages(compressed);
 
@@ -209,7 +251,10 @@ public class SummarizationInterceptor implements ReActInterceptor {
                     AssistantMessage am = (AssistantMessage) m;
                     if (Assert.isNotEmpty(am.getToolCalls())) {
                         for (ToolCall tc : am.getToolCalls()) {
-                            cachedCount += encoding.countTokens(tc.getName() + tc.getArgumentsStr());
+                            String name = tc.getName() != null ? tc.getName() : "";
+                            String args = tc.getArgumentsStr() != null ? tc.getArgumentsStr() : "";
+
+                            cachedCount += encoding.countTokens(name + args);
                             cachedCount += 10; // id + JSON 结构开销
                         }
                     }
