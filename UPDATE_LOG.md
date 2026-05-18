@@ -15,6 +15,7 @@
 
 * 添加 solon-ai-agent ReActInterceptor.onReasonStart 事件方法
 * 添加 solon-ai-harness bashAsyncEnabled 开关
+* 优化 solon-ai-harness AgentFactory `edit` 权限添加 `read`、`write` 控制
 * 调整 solon-ai-agent SummarizationInterceptor 压缩时机（从 onObservation 改为 onReasonStart）
 * 调整 solon skill “概念”初步改为 solon toolkit（避免与 agent skill 的冲突）
 

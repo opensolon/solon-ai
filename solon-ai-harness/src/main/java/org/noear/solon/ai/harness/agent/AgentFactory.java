@@ -83,9 +83,9 @@ public class AgentFactory {
         }
 
         if (metadata.getAutoRethink() != null) {
-            builder.maxStepsExtensible(metadata.getAutoRethink());
+            builder.autoRethink(metadata.getAutoRethink());
         } else {
-            builder.maxStepsExtensible(engine.getProps().isMaxStepsAutoExtensible());
+            builder.autoRethink(engine.getProps().isAutoRethink());
         }
 
         if (metadata.getSessionWindowSize() != null) {
@@ -158,7 +158,10 @@ public class AgentFactory {
                 break;
             }
             case "edit": {
-                terminalSkillWrap.addTools("read", "write", "edit");
+                terminalSkillWrap.addTools("edit");
+
+                toolAddDo(engine, builder, terminalSkillWrap, metadata, "read");
+                toolAddDo(engine, builder, terminalSkillWrap, metadata, "write");
                 break;
             }
             case "glob": {
