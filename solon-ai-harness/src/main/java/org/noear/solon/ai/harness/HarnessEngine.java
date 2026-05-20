@@ -32,12 +32,12 @@ import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.code.CodeSkill;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
-import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.skills.lsp.LspManager;
 import org.noear.solon.ai.skills.lsp.LspServerParameters;
 import org.noear.solon.ai.skills.lsp.LspSkill;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.client.McpProviders;
+import org.noear.solon.ai.skills.cli.PoolManager;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
 import org.noear.solon.ai.skills.cli.TodoSkill;
 import org.noear.solon.ai.skills.memory.MemorySkill;
@@ -50,8 +50,6 @@ import org.noear.solon.ai.skills.web.WebfetchTool;
 import org.noear.solon.ai.skills.web.WebsearchTool;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Paths;
@@ -142,6 +140,10 @@ public class HarnessEngine {
 
     public CliSkillProvider getCliSkills() {
         return cliSkills;
+    }
+
+    public PoolManager getPoolManager() {
+        return cliSkills.getPoolManager();
     }
 
     public TodoSkill getTodoSkill() {
