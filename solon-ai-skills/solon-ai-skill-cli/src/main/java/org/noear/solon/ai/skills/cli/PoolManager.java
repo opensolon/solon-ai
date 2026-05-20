@@ -102,38 +102,12 @@ public class PoolManager {
         return skillMap;
     }
 
-    public Map<String, Path> getPoolMap() {
-        return poolMap;
+    public SkillDir getSkill(String aliasPath) {
+        return skillMap.get(aliasPath);
     }
 
-    public static class SkillDir {
-        public final String name;
-        public final String aliasPath;
-        public final Path realPath;
-        public final String description;
-
-        SkillDir(String name, String aliasPath, Path realPath, String description) {
-            this.name = name;
-            this.aliasPath = aliasPath;
-            this.realPath = realPath;
-            this.description = description;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public String getAliasPath() {
-            return aliasPath;
-        }
-
-        public Path getRealPath() {
-            return realPath;
-        }
-
-        public String getDescription() {
-            return description;
-        }
+    public Map<String, Path> getPoolMap() {
+        return poolMap;
     }
 
     private boolean isSkillDir(Path p) {
@@ -149,7 +123,7 @@ public class PoolManager {
                     if (isSkillDir(dir)) {
                         String name = root.relativize(dir).toString().replace("\\", "/");
                         String aliasPath = alias + (name.isEmpty() ? "" : "/" + name);
-                        skillMap.put(aliasPath, new PoolManager.SkillDir(name, aliasPath, dir, parseDescription(dir)));
+                        skillMap.put(aliasPath, new SkillDir(name, aliasPath, dir, parseDescription(dir)));
                         return FileVisitResult.SKIP_SUBTREE;
                     }
                     if (dir.getFileName().toString().startsWith(".")) return FileVisitResult.SKIP_SUBTREE;
