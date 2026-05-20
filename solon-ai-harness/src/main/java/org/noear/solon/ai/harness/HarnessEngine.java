@@ -253,14 +253,7 @@ public class HarnessEngine {
         }
 
         if (props.isMemoryEnabled() && memorySolution != null) {
-            this.memorySkill = new MemorySkill(memorySolution).sessionIsolation(props.isMemoryIsolation());
-
-
-//            props.addExtension((agentName, agentBuilder) -> {
-//                if ("main".equals(agentName)) {
-//                    agentBuilder.defaultSkillAdd(memorySkill);
-//                }
-//            });
+            this.memorySkill = new MemorySkill(memorySolution).sessionIsolation(false);
         } else {
             this.memorySkill = null;
         }
