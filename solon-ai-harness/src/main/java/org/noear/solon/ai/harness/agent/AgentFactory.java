@@ -30,7 +30,7 @@ import org.noear.solon.lang.Nullable;
  */
 public class AgentFactory {
     //**
-    private static String[] TOOL_ALL_FULL = {"read", "write", "edit", "glob", "grep", "ls", "bash", "bash_start", "bash_wait", "bash_stdin", "bash_stop", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "generate", "mcp", "restapi", "hitl", "lsp"};
+    private static String[] TOOL_ALL_FULL = {"read", "write", "edit", "glob", "grep", "ls", "bash", "bash_start", "bash_wait", "bash_stdin", "bash_stop", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "generate", "mcp", "restapi", "hitl", "lsp", "memory"};
     //*
     private static String[] TOOL_ALL_PUBLIC = {"read", "write", "edit", "glob", "grep", "ls", "bash", "bash_start", "bash_wait", "bash_stdin", "bash_stop", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "lsp"};
     //pi
@@ -232,6 +232,10 @@ public class AgentFactory {
                 if (engine.getProps().isSubagentEnabled()) {
                     builder.defaultToolAdd(engine.getGenerateTool());
                 }
+                break;
+            }
+            case "memory": {
+                builder.defaultSkillAdd(engine.getMemorySkill());
                 break;
             }
             case "code": {

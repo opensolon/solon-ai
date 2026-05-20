@@ -40,6 +40,8 @@ import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.client.McpProviders;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
 import org.noear.solon.ai.skills.cli.TodoSkill;
+import org.noear.solon.ai.skills.memory.MemorySkill;
+import org.noear.solon.ai.skills.memory.MemorySolution;
 import org.noear.solon.ai.skills.restapi.ApiSource;
 import org.noear.solon.ai.skills.restapi.RestApiSkill;
 import org.noear.solon.ai.skills.toolgateway.ToolGatewaySkill;
@@ -81,6 +83,8 @@ public class HarnessEngine {
 
     private final ToolGatewaySkill mcpGatewaySkill;
     private final RestApiSkill restApiSkill;
+
+    private final MemorySkill memorySkill;
 
     private final CliSkillProvider cliSkills = new CliSkillProvider();
 
@@ -152,6 +156,10 @@ public class HarnessEngine {
         return codeSkill;
     }
 
+    public MemorySkill getMemorySkill() {
+        return memorySkill;
+    }
+
     public GenerateTool getGenerateTool() {
         return generateTool;
     }
@@ -196,7 +204,7 @@ public class HarnessEngine {
         this.mainAgent = createMainAgent();
     }
 
-    private HarnessEngine(HarnessProperties props, AgentSessionProvider sessionProvider, SummarizationInterceptor summarizationInterceptor, HITLInterceptor hitlInterceptor) {
+    private HarnessEngine(HarnessProperties props, AgentSessionProvider sessionProvider, MemorySolution.Factory memorySolution, SummarizationInterceptor summarizationInterceptor, HITLInterceptor hitlInterceptor) {
         this.props = props;
         this.mainModel = props.getModelOrDef(null).toChatModel();
 
@@ -242,6 +250,19 @@ public class HarnessEngine {
         this.lspSkill = lspManager.hasServers() ? new LspSkill(lspManager, props.getWorkspace()) : null;
         if (this.lspSkill != null) {
             lspManager.setDiagnosticsCallback(lspSkill::updateDiagnostics);
+        }
+
+        if (props.isMemoryEnabled() && memorySolution != null) {
+            this.memorySkill = new MemorySkill(memorySolution).sessionIsolation(props.isMemoryIsolation());
+
+
+//            props.addExtension((agentName, agentBuilder) -> {
+//                if ("main".equals(agentName)) {
+//                    agentBuilder.defaultSkillAdd(memorySkill);
+//                }
+//            });
+        } else {
+            this.memorySkill = null;
         }
 
         if (Assert.isNotEmpty(props.getApiServers())) {
@@ -362,6 +383,7 @@ public class HarnessEngine {
         private AgentSessionProvider sessionProvider;
         private SummarizationInterceptor summarizationInterceptor;
         private HITLInterceptor hitlInterceptor;
+        private MemorySolution.Factory memorySolution;
 
         public Builder(HarnessProperties properties) {
             this.properties = properties;
@@ -385,6 +407,14 @@ public class HarnessEngine {
          */
         public Builder hitlInterceptor(HITLInterceptor hitlInterceptor) {
             this.hitlInterceptor = hitlInterceptor;
+            return this;
+        }
+
+        /**
+         * 心智记忆存储方案
+         */
+        public Builder memorySolution(MemorySolution.Factory memorySolution) {
+            this.memorySolution = memorySolution;
             return this;
         }
 
@@ -417,7 +447,7 @@ public class HarnessEngine {
                 }
             }
 
-            return new HarnessEngine(properties, sessionProvider, summarizationInterceptor, hitlInterceptor);
+            return new HarnessEngine(properties, sessionProvider, memorySolution, summarizationInterceptor, hitlInterceptor);
         }
     }
 }
