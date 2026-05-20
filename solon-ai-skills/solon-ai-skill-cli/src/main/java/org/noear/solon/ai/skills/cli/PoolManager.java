@@ -107,14 +107,20 @@ public class PoolManager {
     }
 
     public static class SkillDir {
+        public final String name;
         public final String aliasPath;
         public final Path realPath;
         public final String description;
 
-        SkillDir(String aliasPath, Path realPath, String description) {
+        SkillDir(String name, String aliasPath, Path realPath, String description) {
+            this.name = name;
             this.aliasPath = aliasPath;
             this.realPath = realPath;
             this.description = description;
+        }
+
+        public String getName() {
+            return name;
         }
 
         public String getAliasPath() {
@@ -141,9 +147,9 @@ public class PoolManager {
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
                     if (isSkillDir(dir)) {
-                        String rel = root.relativize(dir).toString().replace("\\", "/");
-                        String aliasPath = alias + (rel.isEmpty() ? "" : "/" + rel);
-                        skillMap.put(aliasPath, new PoolManager.SkillDir(aliasPath, dir, parseDescription(dir)));
+                        String name = root.relativize(dir).toString().replace("\\", "/");
+                        String aliasPath = alias + (name.isEmpty() ? "" : "/" + name);
+                        skillMap.put(aliasPath, new PoolManager.SkillDir(name, aliasPath, dir, parseDescription(dir)));
                         return FileVisitResult.SKIP_SUBTREE;
                     }
                     if (dir.getFileName().toString().startsWith(".")) return FileVisitResult.SKIP_SUBTREE;
