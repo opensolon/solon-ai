@@ -68,7 +68,7 @@ public class TerminalSkill extends AbsSkill {
     //异步会话模式：启用后提供 bash_start/wait/stdin/stop 工具
     private boolean bashAsyncEnabled = true;
 
-    private final List<String> DEFAULT_IGNORES_DIR = Arrays.asList(
+    private final Set<String> ignoreDirs = new HashSet<>(Arrays.asList(
             ".soloncode", ".claude", ".opencode",
             ".idea", ".vscode", ".settings",
             ".git", ".gradle",".mvn",
@@ -76,7 +76,15 @@ public class TerminalSkill extends AbsSkill {
             ".DS_Store",
             "node_modules", "venv", "vendor",
             "target", "build"
-    );
+    ));
+
+
+    /**
+     * 获取乎略目录
+     */
+    public Set<String> getIgnoreDirs() {
+        return ignoreDirs;
+    }
 
     public void setSandboxMode(boolean sandboxMode) {
         this.sandboxMode = sandboxMode;
@@ -912,13 +920,13 @@ public class TerminalSkill extends AbsSkill {
 
     private boolean isIgnored(Path workPath, Path path) {
         String name = path.getFileName().toString();
-        if (DEFAULT_IGNORES_DIR.contains(name)) return true;
+        if (ignoreDirs.contains(name)) return true;
         try {
             // 只有在 workPath 内部时才进行递归片段检查
             if (path.startsWith(workPath)) {
                 Path relative = workPath.relativize(path);
                 for (Path segment : relative) {
-                    if (DEFAULT_IGNORES_DIR.contains(segment.toString())) return true;
+                    if (ignoreDirs.contains(segment.toString())) return true;
                 }
             }
         } catch (Throwable ignored) {
