@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.harness;
 
-import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.ReActAgent;
@@ -56,6 +55,7 @@ import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 
 /**
  * 马具引擎
@@ -126,6 +126,10 @@ public class HarnessEngine {
         }
 
         return props.getModelOrDef(name).toChatModel();
+    }
+
+    public ChatModel getModelForSummary() {
+        return getModelOrMain(props.getSummaryModel());
     }
 
     public CommandRegistry getCommandRegistry() {
@@ -244,11 +248,9 @@ public class HarnessEngine {
 
         //上下文摘要拦截器默认处理
         if (summarizationInterceptor == null) {
-            ChatModel summaryModel = getModelOrMain(props.getSummaryModel());
-
             SummarizationStrategy strategy = new CompositeSummarizationStrategy()
-                    .addStrategy(new KeyInfoExtractionStrategy(summaryModel).retryConfig(props.getModelRetries()))      // 提取干货（去水）
-                    .addStrategy(new HierarchicalSummarizationStrategy(summaryModel).retryConfig(props.getModelRetries())); // 滚动更新摘要
+                    .addStrategy(new KeyInfoExtractionStrategy(this::getModelForSummary).retryConfig(props.getModelRetries()))      // 提取干货（去水）
+                    .addStrategy(new HierarchicalSummarizationStrategy(this::getModelForSummary).retryConfig(props.getModelRetries())); // 滚动更新摘要
 
             summarizationInterceptor = new SummarizationInterceptor(
                     props.getSummaryWindowSize(),
