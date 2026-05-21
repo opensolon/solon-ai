@@ -27,6 +27,8 @@ import org.noear.solon.lang.Preview;
 
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 /**
@@ -50,10 +52,10 @@ public class HarnessProperties implements Serializable {
     private String systemPrompt;
 
     //主代理工具权限
-    private List<String> tools = new ArrayList<>();
+    private List<String> tools = new CopyOnWriteArrayList<>();
 
     // 禁用工具（全局）
-    private List<String> disallowedTools = new ArrayList<>();
+    private List<String> disallowedTools = new CopyOnWriteArrayList<>();
 
     //最大步数
     private int maxSteps = 30;
@@ -88,22 +90,21 @@ public class HarnessProperties implements Serializable {
     //模型重试次数
     private int modelRetries = 3;
 
-    //大模型
-    private List<ChatConfig> models = new ArrayList<>();
-
     //扩展
-    private List<HarnessExtension> extensions = new ArrayList<>();
+    private List<HarnessExtension> extensions = new CopyOnWriteArrayList<>();
 
+    //大模型
+    private List<ChatConfig> models = new CopyOnWriteArrayList<>();
     //技能池
-    private Map<String, String> skillPools = new LinkedHashMap<>();
+    private Map<String, String> skillPools = new ConcurrentHashMap<>();
     //代理池
-    private List<String> agentPools = new ArrayList<>();
+    private List<String> agentPools = new CopyOnWriteArrayList<>();
     //mcp集
-    private Map<String, McpServerParameters> mcpServers = new LinkedHashMap<>();
+    private Map<String, McpServerParameters> mcpServers = new ConcurrentHashMap<>();
     //api集
-    private Map<String, ApiSource> apiServers = new LinkedHashMap<>();
+    private Map<String, ApiSource> apiServers = new ConcurrentHashMap<>();
     //lsp集
-    private Map<String, LspServerParameters> lspServers = new LinkedHashMap<>();
+    private Map<String, LspServerParameters> lspServers = new ConcurrentHashMap<>();
 
     public HarnessProperties(String harnessHome) {
         if (Assert.isEmpty(harnessHome)) {

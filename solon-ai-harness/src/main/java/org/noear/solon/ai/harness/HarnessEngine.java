@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.ReActAgent;
@@ -93,11 +94,11 @@ public class HarnessEngine {
 
     private final AgentManager agentManager;
 
-    private ChatModel mainModel; //允许运行时切换
-    private ReActAgent mainAgent; //允许运行时切换
+    private volatile ChatModel mainModel; //允许运行时切换
+    private volatile ReActAgent mainAgent; //允许运行时切换
 
     public String getName() {
-        return mainAgent.name();
+        return getMainAgent().name();
     }
 
     public HarnessProperties getProps() {
@@ -190,6 +191,17 @@ public class HarnessEngine {
         return restApiSkill;
     }
 
+    public void extensionAdd(HarnessExtension extension) {
+        Utils.locker().lock();
+        try {
+            props.addExtension(extension);
+
+            this.mainAgent = createMainAgent();
+        } finally {
+            Utils.locker().unlock();
+        }
+    }
+
     /**
      * 切换默认主模型
      */
@@ -201,9 +213,15 @@ public class HarnessEngine {
             throw new IllegalArgumentException("The model not found: " + name);
         }
 
-        // chatModel 切换后，重新生成主代理
-        this.mainModel = chatConfig.toChatModel();
-        this.mainAgent = createMainAgent();
+
+        Utils.locker().lock();
+        try {
+            // chatModel 切换后，重新生成主代理
+            this.mainModel = chatConfig.toChatModel();
+            this.mainAgent = createMainAgent();
+        } finally {
+            Utils.locker().unlock();
+        }
     }
 
     private HarnessEngine(HarnessProperties props, AgentSessionProvider sessionProvider, MemorySolution.Factory memorySolution, SummarizationInterceptor summarizationInterceptor, HITLInterceptor hitlInterceptor) {
@@ -303,7 +321,7 @@ public class HarnessEngine {
             });
         }
 
-        mainAgent = createMainAgent();
+        //mainAgent = createMainAgent(); //改为懒加载
     }
 
     protected ReActAgent createMainAgent() {
@@ -340,22 +358,34 @@ public class HarnessEngine {
     }
 
     public ReActAgent getMainAgent() {
+        if (mainAgent == null) {
+            Utils.locker().lock();
+
+            try {
+                if (mainAgent == null) {
+                    mainAgent = createMainAgent();
+                }
+            } finally {
+                Utils.locker().unlock();
+            }
+        }
+
         return mainAgent;
     }
 
     public ReActAgent getAgentOrMain(String agentName) {
         if (Assert.isEmpty(agentName)) {
-            return mainAgent;
+            return getMainAgent();
         } else if (agentManager.hasAgent(agentName)) {
             AgentDefinition definition = agentManager.getAgent(agentName);
             return AgentFactory.create(this, definition, null).build();
         } else {
-            return mainAgent;
+            return getMainAgent();
         }
     }
 
     public ReActRequest prompt(Prompt prompt) {
-        return mainAgent.prompt(prompt);
+        return getMainAgent().prompt(prompt);
     }
 
 
@@ -365,7 +395,7 @@ public class HarnessEngine {
 
 
     public ReActRequest prompt() {
-        return mainAgent.prompt();
+        return getMainAgent().prompt();
     }
 
 
