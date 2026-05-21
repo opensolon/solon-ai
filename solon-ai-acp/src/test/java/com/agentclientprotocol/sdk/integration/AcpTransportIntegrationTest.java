@@ -49,7 +49,7 @@ class AcpTransportIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        jsonMapper = McpJsonMapper.getDefault();
+        jsonMapper = McpJsonDefaults.getMapper();
         receivedByAgent = new AtomicReference<>();
         receivedByClient = new AtomicReference<>();
 

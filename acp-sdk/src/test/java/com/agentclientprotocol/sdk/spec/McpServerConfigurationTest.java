@@ -11,6 +11,7 @@ import java.util.List;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import org.junit.jupiter.api.Test;
@@ -35,7 +36,7 @@ import java.util.Arrays;
  */
 class McpServerConfigurationTest {
 
-	private final McpJsonMapper jsonMapper = McpJsonMapper.getDefault();
+	private final McpJsonMapper jsonMapper = McpJsonDefaults.getMapper();
 
 	private final ObjectMapper objectMapper = new ObjectMapper();
 

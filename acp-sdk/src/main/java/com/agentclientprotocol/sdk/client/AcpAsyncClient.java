@@ -53,7 +53,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * AgentParameters params = AgentParameters.builder("gemini")
  *     .arg("--experimental-acp")
  *     .build();
- * StdioAcpClientTransport transport = new StdioAcpClientTransport(params, McpJsonMapper.getDefault());
+ * StdioAcpClientTransport transport = new StdioAcpClientTransport(params, McpJsonDefaults.getMapper());
  *
  * // Create client
  * AcpAsyncClient client = AcpClient.async(transport)

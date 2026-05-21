@@ -6,7 +6,6 @@ package io.modelcontextprotocol.spec;
 
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse.JSONRPCError;
 import io.modelcontextprotocol.util.Assert;
-import lombok.var;
 
 import java.util.Collections;
 import java.util.function.Function;
@@ -28,18 +27,13 @@ public class McpError extends RuntimeException {
 		this.jsonRpcError = jsonRpcError;
 	}
 
-	@Deprecated
-	public McpError(Object error) {
-		super(error.toString());
-	}
-
 	public JSONRPCError getJsonRpcError() {
 		return jsonRpcError;
 	}
 
 	@Override
 	public String toString() {
-		var builder = new StringBuilder(super.toString());
+		StringBuilder builder = new StringBuilder(super.toString());
 		if (jsonRpcError != null) {
 			builder.append("\n");
 			builder.append(jsonRpcError.toString());

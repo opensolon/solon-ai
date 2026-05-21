@@ -6,12 +6,11 @@ package io.modelcontextprotocol.server;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpLoggableSession;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
-import io.modelcontextprotocol.spec.McpSession;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
 
@@ -37,6 +36,8 @@ public class McpAsyncServerExchange {
 
 	private final McpTransportContext transportContext;
 
+	private final JsonSchemaValidator jsonSchemaValidator;
+
 	private static final TypeRef<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeRef<McpSchema.CreateMessageResult>() {
 	};
 
@@ -51,28 +52,29 @@ public class McpAsyncServerExchange {
 
 	/**
 	 * Create a new asynchronous exchange with the client.
+	 * @param sessionId the session ID
 	 * @param session The server session representing a 1-1 interaction.
 	 * @param clientCapabilities The client capabilities that define the supported
 	 * features and functionality.
 	 * @param clientInfo The client implementation information.
-	 * @deprecated Use
-	 * {@link #McpAsyncServerExchange(String, McpLoggableSession, McpSchema.ClientCapabilities, McpSchema.Implementation, McpTransportContext)}
+	 * @param transportContext context associated with the client as extracted from the
+	 * transport
+	 * @param jsonSchemaValidator optional validator used to verify elicitation schemas
 	 */
-	@Deprecated
-	public McpAsyncServerExchange(McpSession session, McpSchema.ClientCapabilities clientCapabilities,
-								  McpSchema.Implementation clientInfo) {
-		this.sessionId = null;
-		if (!(session instanceof McpLoggableSession)) {
-			throw new IllegalArgumentException("Expecting session to be a McpLoggableSession instance");
-		}
-		this.session = (McpLoggableSession) session;
+	public McpAsyncServerExchange(String sessionId, McpLoggableSession session,
+			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
+			McpTransportContext transportContext, JsonSchemaValidator jsonSchemaValidator) {
+		this.sessionId = sessionId;
+		this.session = session;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
-		this.transportContext = McpTransportContext.EMPTY;
+		this.transportContext = transportContext;
+		this.jsonSchemaValidator = jsonSchemaValidator;
 	}
 
 	/**
 	 * Create a new asynchronous exchange with the client.
+	 * @param sessionId the session ID
 	 * @param session The server session representing a 1-1 interaction.
 	 * @param clientCapabilities The client capabilities that define the supported
 	 * features and functionality.
@@ -81,13 +83,9 @@ public class McpAsyncServerExchange {
 	 * transport
 	 */
 	public McpAsyncServerExchange(String sessionId, McpLoggableSession session,
-								  McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
-								  McpTransportContext transportContext) {
-		this.sessionId = sessionId;
-		this.session = session;
-		this.clientCapabilities = clientCapabilities;
-		this.clientInfo = clientInfo;
-		this.transportContext = transportContext;
+			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
+			McpTransportContext transportContext) {
+		this(sessionId, session, clientCapabilities, clientInfo, transportContext, null);
 	}
 
 	/**
@@ -142,10 +140,11 @@ public class McpAsyncServerExchange {
 	 */
 	public Mono<McpSchema.CreateMessageResult> createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
 		if (this.clientCapabilities == null) {
-			return Mono.error(new McpError("Client must be initialized. Call the initialize method first!"));
+			return Mono
+				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
 		}
 		if (this.clientCapabilities.sampling() == null) {
-			return Mono.error(new McpError("Client must be configured with sampling capabilities"));
+			return Mono.error(new IllegalStateException("Client must be configured with sampling capabilities"));
 		}
 		return this.session.sendRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, createMessageRequest,
 				CREATE_MESSAGE_RESULT_TYPE_REF);
@@ -167,10 +166,20 @@ public class McpAsyncServerExchange {
 	 */
 	public Mono<McpSchema.ElicitResult> createElicitation(McpSchema.ElicitRequest elicitRequest) {
 		if (this.clientCapabilities == null) {
-			return Mono.error(new McpError("Client must be initialized. Call the initialize method first!"));
+			return Mono
+				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
 		}
 		if (this.clientCapabilities.elicitation() == null) {
-			return Mono.error(new McpError("Client must be configured with elicitation capabilities"));
+			return Mono.error(new IllegalStateException("Client must be configured with elicitation capabilities"));
+		}
+		if (this.jsonSchemaValidator != null) {
+			try {
+				this.jsonSchemaValidator.assertConforms("ElicitRequest requestedSchema",
+						elicitRequest.requestedSchema());
+			}
+			catch (IllegalArgumentException e) {
+				return Mono.error(e);
+			}
 		}
 		return this.session.sendRequest(McpSchema.METHOD_ELICITATION_CREATE, elicitRequest,
 				ELICITATION_RESULT_TYPE_REF);
@@ -184,15 +193,15 @@ public class McpAsyncServerExchange {
 
 		// @formatter:off
 		return this.listRoots(McpSchema.FIRST_PAGE)
-				.expand(result -> (result.nextCursor() != null) ?
-						this.listRoots(result.nextCursor()) : Mono.empty())
-				.reduce(new McpSchema.ListRootsResult(new ArrayList<>(), null),
-						(allRootsResult, result) -> {
-							allRootsResult.roots().addAll(result.roots());
-							return allRootsResult;
-						})
-				.map(result -> new McpSchema.ListRootsResult(Collections.unmodifiableList(result.roots()),
-						result.nextCursor()));
+			.expand(result -> (result.nextCursor() != null) ?
+					this.listRoots(result.nextCursor()) : Mono.empty())
+			.reduce(McpSchema.ListRootsResult.builder(new ArrayList<>()).build(),
+				(allRootsResult, result) -> {
+					allRootsResult.roots().addAll(result.roots());
+					return allRootsResult;
+				})
+			.map(result -> McpSchema.ListRootsResult.builder(Collections.unmodifiableList(result.roots()))
+					.nextCursor(result.nextCursor()).build());
 		// @formatter:on
 	}
 
@@ -215,7 +224,7 @@ public class McpAsyncServerExchange {
 	public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification) {
 
 		if (loggingMessageNotification == null) {
-			return Mono.error(new McpError("Logging message must not be null"));
+			return Mono.error(new IllegalStateException("Logging message must not be null"));
 		}
 
 		return Mono.defer(() -> {
@@ -234,7 +243,7 @@ public class McpAsyncServerExchange {
 	 */
 	public Mono<Void> progressNotification(McpSchema.ProgressNotification progressNotification) {
 		if (progressNotification == null) {
-			return Mono.error(new McpError("Progress notification must not be null"));
+			return Mono.error(new IllegalStateException("Progress notification must not be null"));
 		}
 		return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_PROGRESS, progressNotification);
 	}

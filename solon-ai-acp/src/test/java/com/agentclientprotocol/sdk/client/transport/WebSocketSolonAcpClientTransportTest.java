@@ -26,7 +26,7 @@ class WebSocketSolonAcpClientTransportTest {
 
     @BeforeEach
     void setUp() {
-        jsonMapper = McpJsonMapper.getDefault();
+        jsonMapper = McpJsonDefaults.getMapper();
     }
 
     @Test

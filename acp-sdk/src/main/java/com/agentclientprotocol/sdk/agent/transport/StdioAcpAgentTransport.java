@@ -8,6 +8,7 @@ import com.agentclientprotocol.sdk.spec.AcpAgentTransport;
 import com.agentclientprotocol.sdk.spec.AcpSchema;
 import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCMessage;
 import com.agentclientprotocol.sdk.util.Assert;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import org.slf4j.Logger;
@@ -84,7 +85,7 @@ public class StdioAcpAgentTransport implements AcpAgentTransport {
 	 * System.in and System.out for communication.
 	 */
 	public StdioAcpAgentTransport() {
-		this(McpJsonMapper.getDefault());
+		this(McpJsonDefaults.getMapper());
 	}
 
 	/**

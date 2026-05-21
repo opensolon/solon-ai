@@ -47,7 +47,7 @@ class CliAcpClientTest {
         // 创建客户端
         WebSocketSolonAcpClientTransport transport = new WebSocketSolonAcpClientTransport(
                 URI.create(TEST_WS_URL),
-                McpJsonMapper.getDefault());
+                McpJsonDefaults.getMapper());
 
         client = AcpClient.sync(transport)
                 .requestTimeout(Duration.ofSeconds(60))
@@ -180,7 +180,7 @@ class CliAcpClientTest {
         // 重新创建客户端，带有自定义的更新处理器
         WebSocketSolonAcpClientTransport transport = new WebSocketSolonAcpClientTransport(
                 URI.create(TEST_WS_URL),
-                McpJsonMapper.getDefault());
+                McpJsonDefaults.getMapper());
 
         AcpSyncClient clientWithCallback = AcpClient.sync(transport)
                 .requestTimeout(Duration.ofSeconds(60))

@@ -6,12 +6,12 @@ package io.modelcontextprotocol.spec;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpNotificationHandler;
 import io.modelcontextprotocol.server.McpRequestHandler;
 import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.util.Assert;
-import lombok.var;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -20,7 +20,6 @@ import reactor.core.publisher.MonoSink;
 
 import java.time.Duration;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -62,6 +61,57 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	private volatile McpSchema.LoggingLevel minLoggingLevel = McpSchema.LoggingLevel.INFO;
 
+	private final Supplier<Mono<Void>> onClose;
+
+	private final JsonSchemaValidator jsonSchemaValidator;
+
+	/**
+	 * Create an instance of the streamable session.
+	 * @param id session ID
+	 * @param clientCapabilities client capabilities
+	 * @param clientInfo client info
+	 * @param requestTimeout timeout to use for requests
+	 * @param requestHandlers the map of MCP request handlers keyed by method name
+	 * @param notificationHandlers the map of MCP notification handlers keyed by method
+	 * name
+	 * @param onClose supplier of a reactive callback invoked when the session is closed
+	 * @param jsonSchemaValidator optional validator threaded to exchanges for elicitation
+	 * schema validation
+	 */
+	public McpStreamableServerSession(String id, McpSchema.ClientCapabilities clientCapabilities,
+			McpSchema.Implementation clientInfo, Duration requestTimeout,
+			Map<String, McpRequestHandler<?>> requestHandlers, Map<String, McpNotificationHandler> notificationHandlers,
+			Supplier<Mono<Void>> onClose, JsonSchemaValidator jsonSchemaValidator) {
+		this.id = id;
+		this.missingMcpTransportSession = new MissingMcpTransportSession(id);
+		this.listeningStreamRef = new AtomicReference<>(this.missingMcpTransportSession);
+		this.clientCapabilities.lazySet(clientCapabilities);
+		this.clientInfo.lazySet(clientInfo);
+		this.requestTimeout = requestTimeout;
+		this.requestHandlers = requestHandlers;
+		this.notificationHandlers = notificationHandlers;
+		this.onClose = onClose;
+		this.jsonSchemaValidator = jsonSchemaValidator;
+	}
+
+	/**
+	 * Create an instance of the streamable session.
+	 * @param id session ID
+	 * @param clientCapabilities client capabilities
+	 * @param clientInfo client info
+	 * @param requestTimeout timeout to use for requests
+	 * @param requestHandlers the map of MCP request handlers keyed by method name
+	 * @param notificationHandlers the map of MCP notification handlers keyed by method
+	 * name
+	 * @param onClose supplier of a reactive callback invoked when the session is closed
+	 */
+	public McpStreamableServerSession(String id, McpSchema.ClientCapabilities clientCapabilities,
+			McpSchema.Implementation clientInfo, Duration requestTimeout,
+			Map<String, McpRequestHandler<?>> requestHandlers, Map<String, McpNotificationHandler> notificationHandlers,
+			Supplier<Mono<Void>> onClose) {
+		this(id, clientCapabilities, clientInfo, requestTimeout, requestHandlers, notificationHandlers, onClose, null);
+	}
+
 	/**
 	 * Create an instance of the streamable session.
 	 * @param id session ID
@@ -73,17 +123,10 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	 * name
 	 */
 	public McpStreamableServerSession(String id, McpSchema.ClientCapabilities clientCapabilities,
-									  McpSchema.Implementation clientInfo, Duration requestTimeout,
-									  Map<String, McpRequestHandler<?>> requestHandlers,
-									  Map<String, McpNotificationHandler> notificationHandlers) {
-		this.id = id;
-		this.missingMcpTransportSession = new MissingMcpTransportSession(id);
-		this.listeningStreamRef = new AtomicReference<>(this.missingMcpTransportSession);
-		this.clientCapabilities.lazySet(clientCapabilities);
-		this.clientInfo.lazySet(clientInfo);
-		this.requestTimeout = requestTimeout;
-		this.requestHandlers = requestHandlers;
-		this.notificationHandlers = notificationHandlers;
+			McpSchema.Implementation clientInfo, Duration requestTimeout,
+			Map<String, McpRequestHandler<?>> requestHandlers,
+			Map<String, McpNotificationHandler> notificationHandlers) {
+		this(id, clientCapabilities, clientInfo, requestTimeout, requestHandlers, notificationHandlers, Mono::empty);
 	}
 
 	@Override
@@ -126,6 +169,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	}
 
 	public Mono<Void> delete() {
+		// onClose is invoked inside closeGracefully
 		return this.closeGracefully().then(Mono.fromRunnable(() -> {
 			// TODO: review in the context of history storage
 			// delete history, etc.
@@ -162,41 +206,30 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 			McpStreamableServerSessionStream stream = new McpStreamableServerSessionStream(transport);
 			McpRequestHandler<?> requestHandler = McpStreamableServerSession.this.requestHandlers
-					.get(jsonrpcRequest.method());
+				.get(jsonrpcRequest.method());
 			// TODO: delegate to stream, which upon successful response should close
 			// remove itself from the registry and also close the underlying transport
 			// (sink)
 			if (requestHandler == null) {
 				MethodNotFoundError error = getMethodNotFoundError(jsonrpcRequest.method());
-				return transport
-						.sendMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), null,
-								new McpSchema.JSONRPCResponse.JSONRPCError(ErrorCodes.METHOD_NOT_FOUND,
-										error.message(), error.data())));
+				return transport.sendMessage(
+						McpSchema.JSONRPCResponse.error(jsonrpcRequest.id(), new McpSchema.JSONRPCResponse.JSONRPCError(
+								ErrorCodes.METHOD_NOT_FOUND, error.message(), error.data())));
 			}
 			return requestHandler
-					.handle(new McpAsyncServerExchange(this.id, stream, clientCapabilities.get(), clientInfo.get(),
-							transportContext), jsonrpcRequest.params())
-					.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), result,
-							null))
-					.onErrorResume(e -> {
-						McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = Optional.of(e).map(t -> {
-							if(t instanceof McpError){
-								McpError mcpError = (McpError) t;
-								if(mcpError.getJsonRpcError() != null){
-									return mcpError.getJsonRpcError();
-								}
-							}
+				.handle(new McpAsyncServerExchange(this.id, stream, clientCapabilities.get(), clientInfo.get(),
+						transportContext, this.jsonSchemaValidator), jsonrpcRequest.params())
+				.map(result -> McpSchema.JSONRPCResponse.result(jsonrpcRequest.id(), result))
+				.onErrorResume(e -> {
+					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (e instanceof McpError && ((McpError) e).getJsonRpcError() != null) ? ((McpError) e).getJsonRpcError()
+						: new McpSchema.JSONRPCResponse.JSONRPCError(ErrorCodes.INTERNAL_ERROR,
+								e.getMessage(), McpError.aggregateExceptionMessages(e));
 
-							return new McpSchema.JSONRPCResponse.JSONRPCError(ErrorCodes.INTERNAL_ERROR,
-									t.getMessage(), McpError.aggregateExceptionMessages(t));
-						}).get();
-
-						var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(),
-								null, jsonRpcError);
-						return Mono.just(errorResponse);
-					})
-					.flatMap(transport::sendMessage)
-					.then(transport.closeGracefully());
+					McpSchema.JSONRPCResponse errorResponse = McpSchema.JSONRPCResponse.error(jsonrpcRequest.id(), jsonRpcError);
+					return Mono.just(errorResponse);
+				})
+				.flatMap(transport::sendMessage)
+				.then(transport.closeGracefully());
 		});
 	}
 
@@ -215,7 +248,8 @@ public class McpStreamableServerSession implements McpLoggableSession {
 			}
 			McpLoggableSession listeningStream = this.listeningStreamRef.get();
 			return notificationHandler.handle(new McpAsyncServerExchange(this.id, listeningStream,
-					this.clientCapabilities.get(), this.clientInfo.get(), transportContext), notification.params());
+					this.clientCapabilities.get(), this.clientInfo.get(), transportContext, this.jsonSchemaValidator),
+					notification.params());
 		});
 
 	}
@@ -230,18 +264,18 @@ public class McpStreamableServerSession implements McpLoggableSession {
 			logger.debug("Received response: {}", response);
 
 			if (response.id() != null) {
-				var stream = this.requestIdToStream.get(response.id());
+				McpStreamableServerSessionStream stream = this.requestIdToStream.get(response.id());
 				if (stream == null) {
 					return Mono.error(McpError.builder(ErrorCodes.INTERNAL_ERROR)
-							.message("Unexpected response for unknown id " + response.id())
-							.build());
+						.message("Unexpected response for unknown id " + response.id())
+						.build());
 				}
 				// TODO: encapsulate this inside the stream itself
-				var sink = stream.pendingResponses.remove(response.id());
+				MonoSink<McpSchema.JSONRPCResponse> sink = stream.pendingResponses.remove(response.id());
 				if (sink == null) {
 					return Mono.error(McpError.builder(ErrorCodes.INTERNAL_ERROR)
-							.message("Unexpected response for unknown id " + response.id())
-							.build());
+						.message("Unexpected response for unknown id " + response.id())
+						.build());
 				}
 				else {
 					sink.success(response);
@@ -256,26 +290,47 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		});
 	}
 
-	public static class MethodNotFoundError {
-		private String method;
-		private String message;
-		private Object data;
+	static final class MethodNotFoundError {
+
+		private final String method;
+
+		private final String message;
+
+		private final Object data;
+
 
 		public MethodNotFoundError(String method, String message, Object data) {
+
 			this.method = method;
+
 			this.message = message;
+
 			this.data = data;
+
 		}
 
+
 		public String method() {
-			return method;
+
+			return this.method;
+
 		}
+
+
 		public String message() {
-			return message;
+
+			return this.message;
+
 		}
+
+
 		public Object data() {
-			return data;
+
+			return this.data;
+
 		}
+
+
 	}
 
 	private MethodNotFoundError getMethodNotFoundError(String method) {
@@ -284,15 +339,16 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	@Override
 	public Mono<Void> closeGracefully() {
-		return Mono.defer(() -> {
+		return this.onClose.get().onErrorComplete().then(Mono.defer(() -> {
 			McpLoggableSession listeningStream = this.listeningStreamRef.getAndSet(missingMcpTransportSession);
 			return listeningStream.closeGracefully();
 			// TODO: Also close all the open streams
-		});
+		}));
 	}
 
 	@Override
 	public void close() {
+		this.onClose.get().onErrorComplete().subscribe();
 		McpLoggableSession listeningStream = this.listeningStreamRef.getAndSet(missingMcpTransportSession);
 		if (listeningStream != null) {
 			listeningStream.close();
@@ -328,30 +384,23 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	}
 
-	/**
-	 * Composite holding the {@link McpStreamableServerSession} and the initialization
-	 * result
-	 *
-	 */
-	public static class McpStreamableServerSessionInit {
-		private McpStreamableServerSession session;
-		private	Mono<McpSchema.InitializeResult> initResult;
+	public static final class McpStreamableServerSessionInit {
+		private final McpStreamableServerSession session;
+		private final Mono<McpSchema.InitializeResult> initResult;
 
-		/**
-		 * @param session the session instance
-		 * @param initResult the result to use to respond to the client
-		 * */
 		public McpStreamableServerSessionInit(McpStreamableServerSession session, Mono<McpSchema.InitializeResult> initResult) {
 			this.session = session;
 			this.initResult = initResult;
 		}
 
 		public McpStreamableServerSession session() {
-			return session;
+			return this.session;
 		}
+
 		public Mono<McpSchema.InitializeResult> initResult() {
-			return initResult;
+			return this.initResult;
 		}
+
 	}
 
 	/**
@@ -399,8 +448,8 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 			return Mono.<McpSchema.JSONRPCResponse>create(sink -> {
 				this.pendingResponses.put(requestId, sink);
-				McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-						method, requestId, requestParams);
+				McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(method, requestId,
+						requestParams);
 				String messageId = this.uuidGenerator.get();
 				// TODO: store message in history
 				this.transport.sendMessage(jsonrpcRequest, messageId).subscribe(v -> {
@@ -425,8 +474,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 		@Override
 		public Mono<Void> sendNotification(String method, Object params) {
-			McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(
-					McpSchema.JSONRPC_VERSION, method, params);
+			McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(method, params);
 			String messageId = this.uuidGenerator.get();
 			// TODO: store message in history
 			return this.transport.sendMessage(jsonrpcNotification, messageId);

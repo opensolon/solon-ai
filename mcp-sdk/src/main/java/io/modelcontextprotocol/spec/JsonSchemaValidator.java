@@ -11,24 +11,16 @@ import java.util.Map;
  * defines a method to validate structured content based on the provided output schema.
  *
  * @author Christian Tzolov
+ * @deprecated Use {@link io.modelcontextprotocol.json.schema.JsonSchemaValidator}
  */
+@Deprecated
 public interface JsonSchemaValidator {
 
-	/**
-	 * Represents the result of a validation operation.
-	 *
-	 * validation was successful, otherwise null.
-	 */
-	public static class ValidationResponse {
-		private boolean valid;
-		private String errorMessage;
-		private String jsonStructuredOutput;
+	public final class ValidationResponse {
+		private final boolean valid;
+		private final String errorMessage;
+		private final String jsonStructuredOutput;
 
-		/**
-		 * @param valid Indicates whether the validation was successful.
-		 * @param errorMessage An error message if the validation failed, otherwise null.
-		 * @param jsonStructuredOutput The text structured content in JSON format if the
-		 * */
 		public ValidationResponse(boolean valid, String errorMessage, String jsonStructuredOutput) {
 			this.valid = valid;
 			this.errorMessage = errorMessage;
@@ -36,24 +28,25 @@ public interface JsonSchemaValidator {
 		}
 
 		public boolean valid() {
-			return valid;
+			return this.valid;
 		}
 
 		public String errorMessage() {
-			return errorMessage;
+			return this.errorMessage;
 		}
 
 		public String jsonStructuredOutput() {
-			return jsonStructuredOutput;
+			return this.jsonStructuredOutput;
 		}
 
-		public static ValidationResponse asValid(String jsonStructuredOutput) {
+public static ValidationResponse asValid(String jsonStructuredOutput) {
 			return new ValidationResponse(true, null, jsonStructuredOutput);
 		}
 
 		public static ValidationResponse asInvalid(String message) {
 			return new ValidationResponse(false, message, null);
 		}
+
 	}
 
 	/**

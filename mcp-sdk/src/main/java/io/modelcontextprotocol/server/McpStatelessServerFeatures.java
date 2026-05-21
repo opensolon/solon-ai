@@ -9,7 +9,6 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
-import lombok.var;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -25,21 +24,50 @@ import java.util.function.BiFunction;
  */
 public class McpStatelessServerFeatures {
 
-	/**
-	 * Asynchronous server features specification.
-	 *
-	 */
-	public static class Async {
-		private McpSchema.Implementation serverInfo;
-		private McpSchema.ServerCapabilities serverCapabilities;
-		private List<AsyncToolSpecification> tools;
-		private Map<String, AsyncResourceSpecification> resources;
-		private Map<String, AsyncResourceTemplateSpecification> resourceTemplates;
-		private Map<String, AsyncPromptSpecification> prompts;
-		private Map<McpSchema.CompleteReference, AsyncCompletionSpecification> completions;
-		private String instructions;
+	static final class Async {
+		private final McpSchema.Implementation serverInfo;
+		private final McpSchema.ServerCapabilities serverCapabilities;
+		private final List<AsyncToolSpecification> tools;
+		private final Map<String, AsyncResourceSpecification> resources;
+		private final Map<String, AsyncResourceTemplateSpecification> resourceTemplates;
+		private final Map<String, AsyncPromptSpecification> prompts;
+		private final Map<McpSchema.CompleteReference, AsyncCompletionSpecification> completions;
+		private final String instructions;
 
-		/**
+
+		public McpSchema.Implementation serverInfo() {
+			return this.serverInfo;
+		}
+
+		public McpSchema.ServerCapabilities serverCapabilities() {
+			return this.serverCapabilities;
+		}
+
+		public List<AsyncToolSpecification> tools() {
+			return this.tools;
+		}
+
+		public Map<String, AsyncResourceSpecification> resources() {
+			return this.resources;
+		}
+
+		public Map<String, AsyncResourceTemplateSpecification> resourceTemplates() {
+			return this.resourceTemplates;
+		}
+
+		public Map<String, AsyncPromptSpecification> prompts() {
+			return this.prompts;
+		}
+
+		public Map<McpSchema.CompleteReference, AsyncCompletionSpecification> completions() {
+			return this.completions;
+		}
+
+		public String instructions() {
+			return this.instructions;
+		}
+
+/**
 		 * Create an instance and validate the arguments.
 		 * @param serverInfo The server implementation details
 		 * @param serverCapabilities The server capabilities
@@ -50,23 +78,26 @@ public class McpStatelessServerFeatures {
 		 * @param instructions The server instructions text
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-			  List<AsyncToolSpecification> tools,
-			  Map<String, AsyncResourceSpecification> resources,
-			  Map<String, AsyncResourceTemplateSpecification> resourceTemplates,
-			  Map<String, AsyncPromptSpecification> prompts,
-			  Map<McpSchema.CompleteReference, AsyncCompletionSpecification> completions,
-			  String instructions) {
+				List<AsyncToolSpecification> tools,
+				Map<String, AsyncResourceSpecification> resources,
+				Map<String, AsyncResourceTemplateSpecification> resourceTemplates,
+				Map<String, AsyncPromptSpecification> prompts,
+				Map<McpSchema.CompleteReference, AsyncCompletionSpecification> completions,
+				String instructions) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
 			this.serverInfo = serverInfo;
 			this.serverCapabilities = (serverCapabilities != null) ? serverCapabilities
 					: new McpSchema.ServerCapabilities(null, // completions
-					null, // experimental
-					null, // currently statless server doesn't support set logging
-					!Utils.isEmpty(prompts) ? new McpSchema.ServerCapabilities.PromptCapabilities(false) : null,
-					!Utils.isEmpty(resources) ? new McpSchema.ServerCapabilities.ResourceCapabilities(false, false) : null,
-					!Utils.isEmpty(tools) ? new McpSchema.ServerCapabilities.ToolCapabilities(false) : null);
+							null, // experimental
+							null, // currently statless server doesn't support set logging
+							!Utils.isEmpty(prompts) ? McpSchema.ServerCapabilities.PromptCapabilities.builder().build()
+									: null,
+							!Utils.isEmpty(resources)
+									? McpSchema.ServerCapabilities.ResourceCapabilities.builder().build() : null,
+							!Utils.isEmpty(tools) ? McpSchema.ServerCapabilities.ToolCapabilities.builder().build()
+									: null);
 
 			this.tools = (tools != null) ? tools : Collections.emptyList();
 			this.resources = (resources != null) ? resources : Collections.emptyMap();
@@ -74,38 +105,6 @@ public class McpStatelessServerFeatures {
 			this.prompts = (prompts != null) ? prompts : Collections.emptyMap();
 			this.completions = (completions != null) ? completions : Collections.emptyMap();
 			this.instructions = instructions;
-		}
-
-		public McpSchema.Implementation serverInfo() {
-			return serverInfo;
-		}
-
-		public McpSchema.ServerCapabilities serverCapabilities() {
-			return serverCapabilities;
-		}
-
-		public List<AsyncToolSpecification> tools() {
-			return tools;
-		}
-
-		public Map<String, AsyncResourceSpecification> resources() {
-			return resources;
-		}
-
-		public Map<String, AsyncResourceTemplateSpecification> resourceTemplates() {
-			return resourceTemplates;
-		}
-
-		public Map<String, AsyncPromptSpecification> prompts() {
-			return prompts;
-		}
-
-		public Map<McpSchema.CompleteReference, AsyncCompletionSpecification> completions() {
-			return completions;
-		}
-
-		public String instructions() {
-			return instructions;
 		}
 
 		/**
@@ -120,7 +119,7 @@ public class McpStatelessServerFeatures {
 		 */
 		static Async fromSync(Sync syncSpec, boolean immediateExecution) {
 			List<AsyncToolSpecification> tools = new ArrayList<>();
-			for (var tool : syncSpec.tools()) {
+			for (SyncToolSpecification tool : syncSpec.tools()) {
 				tools.add(AsyncToolSpecification.fromSync(tool, immediateExecution));
 			}
 
@@ -147,23 +146,52 @@ public class McpStatelessServerFeatures {
 			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources, resourceTemplates,
 					prompts, completions, syncSpec.instructions());
 		}
+
 	}
 
-	/**
-	 * Synchronous server features specification.
-	 *
-	 */
-	public static class Sync {
-		private McpSchema.Implementation serverInfo;
-		private McpSchema.ServerCapabilities serverCapabilities;
-		private List<SyncToolSpecification> tools;
-		private Map<String, SyncResourceSpecification> resources;
-		private Map<String, SyncResourceTemplateSpecification> resourceTemplates;
-		private Map<String, SyncPromptSpecification> prompts;
-		private Map<McpSchema.CompleteReference, SyncCompletionSpecification> completions;
-		private String instructions;
+	static final class Sync {
+		private final McpSchema.Implementation serverInfo;
+		private final McpSchema.ServerCapabilities serverCapabilities;
+		private final List<SyncToolSpecification> tools;
+		private final Map<String, SyncResourceSpecification> resources;
+		private final Map<String, SyncResourceTemplateSpecification> resourceTemplates;
+		private final Map<String, SyncPromptSpecification> prompts;
+		private final Map<McpSchema.CompleteReference, SyncCompletionSpecification> completions;
+		private final String instructions;
 
-		/**
+		public McpSchema.Implementation serverInfo() {
+			return this.serverInfo;
+		}
+
+		public McpSchema.ServerCapabilities serverCapabilities() {
+			return this.serverCapabilities;
+		}
+
+		public List<SyncToolSpecification> tools() {
+			return this.tools;
+		}
+
+		public Map<String, SyncResourceSpecification> resources() {
+			return this.resources;
+		}
+
+		public Map<String, SyncResourceTemplateSpecification> resourceTemplates() {
+			return this.resourceTemplates;
+		}
+
+		public Map<String, SyncPromptSpecification> prompts() {
+			return this.prompts;
+		}
+
+		public Map<McpSchema.CompleteReference, SyncCompletionSpecification> completions() {
+			return this.completions;
+		}
+
+		public String instructions() {
+			return this.instructions;
+		}
+
+/**
 		 * Create an instance and validate the arguments.
 		 * @param serverInfo The server implementation details
 		 * @param serverCapabilities The server capabilities
@@ -174,27 +202,29 @@ public class McpStatelessServerFeatures {
 		 * @param instructions The server instructions text
 		 */
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-			 List<SyncToolSpecification> tools,
-			 Map<String, SyncResourceSpecification> resources,
-			 Map<String, SyncResourceTemplateSpecification> resourceTemplates,
-			 Map<String, SyncPromptSpecification> prompts,
-			 Map<McpSchema.CompleteReference, SyncCompletionSpecification> completions,
-			 String instructions) {
+				List<SyncToolSpecification> tools,
+				Map<String, SyncResourceSpecification> resources,
+				Map<String, SyncResourceTemplateSpecification> resourceTemplates,
+				Map<String, SyncPromptSpecification> prompts,
+				Map<McpSchema.CompleteReference, SyncCompletionSpecification> completions,
+				String instructions) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
 			this.serverInfo = serverInfo;
 			this.serverCapabilities = (serverCapabilities != null) ? serverCapabilities
 					: new McpSchema.ServerCapabilities(null, // completions
-					null, // experimental
-					new McpSchema.ServerCapabilities.LoggingCapabilities(), // Enable
-					// logging
-					// by
-					// default
-					!Utils.isEmpty(prompts) ? new McpSchema.ServerCapabilities.PromptCapabilities(false) : null,
-					!Utils.isEmpty(resources)
-							? new McpSchema.ServerCapabilities.ResourceCapabilities(false, false) : null,
-					!Utils.isEmpty(tools) ? new McpSchema.ServerCapabilities.ToolCapabilities(false) : null);
+							null, // experimental
+							new McpSchema.ServerCapabilities.LoggingCapabilities(), // Enable
+																					// logging
+																					// by
+																					// default
+							!Utils.isEmpty(prompts) ? McpSchema.ServerCapabilities.PromptCapabilities.builder().build()
+									: null,
+							!Utils.isEmpty(resources)
+									? McpSchema.ServerCapabilities.ResourceCapabilities.builder().build() : null,
+							!Utils.isEmpty(tools) ? McpSchema.ServerCapabilities.ToolCapabilities.builder().build()
+									: null);
 
 			this.tools = (tools != null) ? tools : new ArrayList<>();
 			this.resources = (resources != null) ? resources : new HashMap<>();
@@ -204,70 +234,26 @@ public class McpStatelessServerFeatures {
 			this.instructions = instructions;
 		}
 
-
-		public McpSchema.Implementation serverInfo() {
-			return serverInfo;
-		}
-
-		public McpSchema.ServerCapabilities serverCapabilities() {
-			return serverCapabilities;
-		}
-
-		public List<SyncToolSpecification> tools() {
-			return tools;
-		}
-
-		public Map<String, SyncResourceSpecification> resources() {
-			return resources;
-		}
-
-		public Map<String, SyncResourceTemplateSpecification> resourceTemplates() {
-			return resourceTemplates;
-		}
-
-		public Map<String, SyncPromptSpecification> prompts() {
-			return prompts;
-		}
-
-		public Map<McpSchema.CompleteReference, SyncCompletionSpecification> completions() {
-			return completions;
-		}
-
-		public String instructions() {
-			return instructions;
-		}
 	}
 
-	/**
-	 * Specification of a tool with its asynchronous handler function. Tools are the
-	 * primary way for MCP servers to expose functionality to AI models. Each tool
-	 * represents a specific capability.
-	 *
-	 */
-	public static class AsyncToolSpecification {
-		private McpSchema.Tool tool;
-		private BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler;
+	public static final class AsyncToolSpecification {
+		private final McpSchema.Tool tool;
+		private final BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler;
 
-		/**
-		 * @param tool The tool definition including name, description, and parameter schema
-		 * @param callHandler The function that implements the tool's logic, receiving a
-		 * {@link CallToolRequest} and returning the result.
-		 * */
-		public AsyncToolSpecification(McpSchema.Tool tool,
-									  BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler) {
+		public AsyncToolSpecification(McpSchema.Tool tool, BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler) {
 			this.tool = tool;
 			this.callHandler = callHandler;
 		}
 
 		public McpSchema.Tool tool() {
-			return tool;
+			return this.tool;
 		}
 
 		public BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler() {
-			return callHandler;
+			return this.callHandler;
 		}
 
-		static AsyncToolSpecification fromSync(SyncToolSpecification syncToolSpec) {
+static AsyncToolSpecification fromSync(SyncToolSpecification syncToolSpec) {
 			return fromSync(syncToolSpec, false);
 		}
 
@@ -279,8 +265,8 @@ public class McpStatelessServerFeatures {
 			}
 
 			BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler = (ctx,
-																											req) -> {
-				var toolResult = Mono.fromCallable(() -> syncToolSpec.callHandler().apply(ctx, req));
+					req) -> {
+				Mono<McpSchema.CallToolResult> toolResult = Mono.fromCallable(() -> syncToolSpec.callHandler().apply(ctx, req));
 				return immediate ? toolResult : toolResult.subscribeOn(Schedulers.boundedElastic());
 			};
 
@@ -339,197 +325,118 @@ public class McpStatelessServerFeatures {
 		public static Builder builder() {
 			return new Builder();
 		}
+
 	}
 
-	/**
-	 * Specification of a resource with its asynchronous handler function. Resources
-	 * provide context to AI models by exposing data such as:
-	 * <ul>
-	 * <li>File contents
-	 * <li>Database records
-	 * <li>API responses
-	 * <li>System information
-	 * <li>Application state
-	 * </ul>
-	 *
-	 */
-	public static class AsyncResourceSpecification {
-		private McpSchema.Resource resource;
-		private BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler;
+	public static final class AsyncResourceSpecification {
+		private final McpSchema.Resource resource;
+		private final BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler;
 
-		/**
-		 * @param resource The resource definition including name, description, and MIME type
-		 * @param readHandler The function that handles resource read requests. The function's
-		 * argument is a {@link McpSchema.ReadResourceRequest}.
-		 * */
-		public AsyncResourceSpecification(McpSchema.Resource resource,
-										  BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
+		public AsyncResourceSpecification(McpSchema.Resource resource, BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
 			this.resource = resource;
 			this.readHandler = readHandler;
 		}
 
 		public McpSchema.Resource resource() {
-			return resource;
+			return this.resource;
 		}
 
 		public BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler() {
-			return readHandler;
+			return this.readHandler;
 		}
 
-		static AsyncResourceSpecification fromSync(SyncResourceSpecification resource, boolean immediateExecution) {
+static AsyncResourceSpecification fromSync(SyncResourceSpecification resource, boolean immediateExecution) {
 			// FIXME: This is temporary, proper validation should be implemented
 			if (resource == null) {
 				return null;
 			}
 			return new AsyncResourceSpecification(resource.resource(), (ctx, req) -> {
-				var resourceResult = Mono.fromCallable(() -> resource.readHandler().apply(ctx, req));
+				Mono<McpSchema.ReadResourceResult> resourceResult = Mono.fromCallable(() -> resource.readHandler().apply(ctx, req));
 				return immediateExecution ? resourceResult : resourceResult.subscribeOn(Schedulers.boundedElastic());
 			});
 		}
+
 	}
 
-	/**
-	 * Specification of a resource template with its synchronous handler function.
-	 * Resource templates allow servers to expose parameterized resources using URI
-	 * templates: <a href=https://datatracker.ietf.org/doc/html/rfc6570> URI
-	 * templates.</a>. Arguments may be auto-completed through <a href=
-	 * "https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/completion">the
-	 * completion API</a>.
-	 *
-	 * Templates support:
-	 * <ul>
-	 * <li>Parameterized resource definitions
-	 * <li>Dynamic content generation
-	 * <li>Consistent resource formatting
-	 * <li>Contextual data injection
-	 * </ul>
-	 *
-	 */
-	public static class AsyncResourceTemplateSpecification {
-		private McpSchema.ResourceTemplate resourceTemplate;
-		private BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler;
+	public static final class AsyncResourceTemplateSpecification {
+		private final McpSchema.ResourceTemplate resourceTemplate;
+		private final BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler;
 
-		/**
-		 * @param resourceTemplate The resource template definition including name,
-		 * description, and parameter schema
-		 * @param readHandler The function that handles resource read requests. The function's
-		 * first argument is an {@link McpTransportContext} upon which the server can interact
-		 * with the connected client. The second arguments is a
-		 * {@link McpSchema.ReadResourceRequest}. {@link McpSchema.ResourceTemplate}
-		 * {@link McpSchema.ReadResourceResult}
-		 * */
-		public AsyncResourceTemplateSpecification(McpSchema.ResourceTemplate resourceTemplate,
-												  BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
+		public AsyncResourceTemplateSpecification(McpSchema.ResourceTemplate resourceTemplate, BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
 			this.resourceTemplate = resourceTemplate;
 			this.readHandler = readHandler;
 		}
 
 		public McpSchema.ResourceTemplate resourceTemplate() {
-			return resourceTemplate;
+			return this.resourceTemplate;
 		}
 
 		public BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler() {
-			return readHandler;
+			return this.readHandler;
 		}
 
-		static AsyncResourceTemplateSpecification fromSync(SyncResourceTemplateSpecification resource,
-														   boolean immediateExecution) {
+static AsyncResourceTemplateSpecification fromSync(SyncResourceTemplateSpecification resource,
+				boolean immediateExecution) {
 			// FIXME: This is temporary, proper validation should be implemented
 			if (resource == null) {
 				return null;
 			}
 			return new AsyncResourceTemplateSpecification(resource.resourceTemplate(), (ctx, req) -> {
-				var resourceResult = Mono.fromCallable(() -> resource.readHandler().apply(ctx, req));
+				Mono<McpSchema.ReadResourceResult> resourceResult = Mono.fromCallable(() -> resource.readHandler().apply(ctx, req));
 				return immediateExecution ? resourceResult : resourceResult.subscribeOn(Schedulers.boundedElastic());
 			});
 		}
+
 	}
 
-	/**
-	 * Specification of a prompt template with its asynchronous handler function. Prompts
-	 * provide structured templates for AI model interactions, supporting:
-	 * <ul>
-	 * <li>Consistent message formatting
-	 * <li>Parameter substitution
-	 * <li>Context injection
-	 * <li>Response formatting
-	 * <li>Instruction templating
-	 * </ul>
-	 *
-	 */
-	public static class AsyncPromptSpecification {
-		private McpSchema.Prompt prompt;
-		private BiFunction<McpTransportContext, McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler;
+	public static final class AsyncPromptSpecification {
+		private final McpSchema.Prompt prompt;
+		private final BiFunction<McpTransportContext, McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler;
 
-		/**
-		 * @param prompt The prompt definition including name and description
-		 * @param promptHandler The function that processes prompt requests and returns
-		 * formatted templates. The function's argument is a
-		 * {@link McpSchema.GetPromptRequest}.
-		 * */
-		public AsyncPromptSpecification(McpSchema.Prompt prompt,
-										BiFunction<McpTransportContext, McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler) {
+		public AsyncPromptSpecification(McpSchema.Prompt prompt, BiFunction<McpTransportContext, McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler) {
 			this.prompt = prompt;
 			this.promptHandler = promptHandler;
 		}
 
 		public McpSchema.Prompt prompt() {
-			return prompt;
+			return this.prompt;
 		}
 
 		public BiFunction<McpTransportContext, McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler() {
-			return promptHandler;
+			return this.promptHandler;
 		}
 
-		static AsyncPromptSpecification fromSync(SyncPromptSpecification prompt, boolean immediateExecution) {
+static AsyncPromptSpecification fromSync(SyncPromptSpecification prompt, boolean immediateExecution) {
 			// FIXME: This is temporary, proper validation should be implemented
 			if (prompt == null) {
 				return null;
 			}
 			return new AsyncPromptSpecification(prompt.prompt(), (ctx, req) -> {
-				var promptResult = Mono.fromCallable(() -> prompt.promptHandler().apply(ctx, req));
+				Mono<McpSchema.GetPromptResult> promptResult = Mono.fromCallable(() -> prompt.promptHandler().apply(ctx, req));
 				return immediateExecution ? promptResult : promptResult.subscribeOn(Schedulers.boundedElastic());
 			});
 		}
+
 	}
 
-	/**
-	 * Specification of a completion handler function with asynchronous execution support.
-	 * Completions generate AI model outputs based on prompt or resource references and
-	 * user-provided arguments. This abstraction enables:
-	 * <ul>
-	 * <li>Customizable response generation logic
-	 * <li>Parameter-driven template expansion
-	 * <li>Dynamic interaction with connected clients
-	 * </ul>
-	 *
-	 */
-	public static class AsyncCompletionSpecification {
-		private McpSchema.CompleteReference referenceKey;
-		private BiFunction<McpTransportContext, McpSchema.CompleteRequest, Mono<McpSchema.CompleteResult>> completionHandler;
+	public static final class AsyncCompletionSpecification {
+		private final McpSchema.CompleteReference referenceKey;
+		private final BiFunction<McpTransportContext, McpSchema.CompleteRequest, Mono<McpSchema.CompleteResult>> completionHandler;
 
-		/**
-		 * @param referenceKey The unique key representing the completion reference.
-		 * @param completionHandler The asynchronous function that processes completion
-		 * requests and returns results. The function's argument is a
-		 * {@link McpSchema.CompleteRequest}.
-		 * */
-		public AsyncCompletionSpecification(McpSchema.CompleteReference referenceKey,
-											BiFunction<McpTransportContext, McpSchema.CompleteRequest, Mono<McpSchema.CompleteResult>> completionHandler) {
+		public AsyncCompletionSpecification(McpSchema.CompleteReference referenceKey, BiFunction<McpTransportContext, McpSchema.CompleteRequest, Mono<McpSchema.CompleteResult>> completionHandler) {
 			this.referenceKey = referenceKey;
 			this.completionHandler = completionHandler;
 		}
 
 		public McpSchema.CompleteReference referenceKey() {
-			return referenceKey;
+			return this.referenceKey;
 		}
 
 		public BiFunction<McpTransportContext, McpSchema.CompleteRequest, Mono<McpSchema.CompleteResult>> completionHandler() {
-			return completionHandler;
+			return this.completionHandler;
 		}
 
-
-		/**
+/**
 		 * Converts a synchronous {@link SyncCompletionSpecification} into an
 		 * {@link AsyncCompletionSpecification} by wrapping the handler in a bounded
 		 * elastic scheduler for safe non-blocking execution.
@@ -538,47 +445,37 @@ public class McpStatelessServerFeatures {
 		 * {@code null} if input is null
 		 */
 		static AsyncCompletionSpecification fromSync(SyncCompletionSpecification completion,
-													 boolean immediateExecution) {
+				boolean immediateExecution) {
 			if (completion == null) {
 				return null;
 			}
 			return new AsyncCompletionSpecification(completion.referenceKey(), (ctx, req) -> {
-				var completionResult = Mono.fromCallable(() -> completion.completionHandler().apply(ctx, req));
+				Mono<McpSchema.CompleteResult> completionResult = Mono.fromCallable(() -> completion.completionHandler().apply(ctx, req));
 				return immediateExecution ? completionResult
 						: completionResult.subscribeOn(Schedulers.boundedElastic());
 			});
 		}
+
 	}
 
-	/**
-	 * Specification of a tool with its synchronous handler function. Tools are the
-	 * primary way for MCP servers to expose functionality to AI models.
-	 *
-	 */
-	public static class SyncToolSpecification {
-		private McpSchema.Tool tool;
-		private BiFunction<McpTransportContext, CallToolRequest, McpSchema.CallToolResult> callHandler;
+	public static final class SyncToolSpecification {
+		private final McpSchema.Tool tool;
+		private final BiFunction<McpTransportContext, CallToolRequest, McpSchema.CallToolResult> callHandler;
 
-		/**
-		 * @param tool The tool definition including name, description, and parameter schema
-		 * @param callHandler The function that implements the tool's logic, receiving a
-		 * {@link CallToolRequest} and returning results.
-		 * */
-		public SyncToolSpecification(McpSchema.Tool tool,
-									 BiFunction<McpTransportContext, CallToolRequest, McpSchema.CallToolResult> callHandler) {
+		public SyncToolSpecification(McpSchema.Tool tool, BiFunction<McpTransportContext, CallToolRequest, McpSchema.CallToolResult> callHandler) {
 			this.tool = tool;
 			this.callHandler = callHandler;
 		}
 
 		public McpSchema.Tool tool() {
-			return tool;
+			return this.tool;
 		}
 
 		public BiFunction<McpTransportContext, CallToolRequest, McpSchema.CallToolResult> callHandler() {
-			return callHandler;
+			return this.callHandler;
 		}
 
-		public static Builder builder() {
+public static Builder builder() {
 			return new Builder();
 		}
 
@@ -626,151 +523,83 @@ public class McpStatelessServerFeatures {
 			}
 
 		}
+
 	}
 
-	/**
-	 * Specification of a resource with its synchronous handler function. Resources
-	 * provide context to AI models by exposing data such as:
-	 * <ul>
-	 * <li>File contents
-	 * <li>Database records
-	 * <li>API responses
-	 * <li>System information
-	 * <li>Application state
-	 * </ul>
-	 *
-	 */
-	public static class SyncResourceSpecification {
-		private McpSchema.Resource resource;
-		private BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler;
+	public static final class SyncResourceSpecification {
+		private final McpSchema.Resource resource;
+		private final BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler;
 
-		/**
-		 * @param resource The resource definition including name, description, and MIME type
-		 * @param readHandler The function that handles resource read requests. The function's
-		 * argument is a {@link McpSchema.ReadResourceRequest}.
-		 * */
-		public SyncResourceSpecification(McpSchema.Resource resource,
-										 BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
+		public SyncResourceSpecification(McpSchema.Resource resource, BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
 			this.resource = resource;
 			this.readHandler = readHandler;
 		}
 
 		public McpSchema.Resource resource() {
-			return resource;
+			return this.resource;
 		}
 
 		public BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler() {
-			return readHandler;
+			return this.readHandler;
 		}
+
 	}
 
-	/**
-	 * Specification of a resource template with its synchronous handler function.
-	 * Resource templates allow servers to expose parameterized resources using URI
-	 * templates: <a href=https://datatracker.ietf.org/doc/html/rfc6570> URI
-	 * templates.</a>. Arguments may be auto-completed through <a href=
-	 * "https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/completion">the
-	 * completion API</a>.
-	 *
-	 * Templates support:
-	 * <ul>
-	 * <li>Parameterized resource definitions
-	 * <li>Dynamic content generation
-	 * <li>Consistent resource formatting
-	 * <li>Contextual data injection
-	 * </ul>
-	 *
-	 */
-	public static class SyncResourceTemplateSpecification {
-		private McpSchema.ResourceTemplate resourceTemplate;
-		private BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler;
+	public static final class SyncResourceTemplateSpecification {
+		private final McpSchema.ResourceTemplate resourceTemplate;
+		private final BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler;
 
-		/**
-		 * @param resourceTemplate The resource template definition including name,
-		 * description, and parameter schema
-		 * @param readHandler The function that handles resource read requests. The function's
-		 * first argument is an {@link McpTransportContext} upon which the server can interact
-		 * with the connected client. The second arguments is a
-		 * {@link McpSchema.ReadResourceRequest}. {@link McpSchema.ResourceTemplate}
-		 * {@link McpSchema.ReadResourceResult}
-		 * */
-		public SyncResourceTemplateSpecification(McpSchema.ResourceTemplate resourceTemplate,
-												 BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
+		public SyncResourceTemplateSpecification(McpSchema.ResourceTemplate resourceTemplate, BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
 			this.resourceTemplate = resourceTemplate;
 			this.readHandler = readHandler;
 		}
 
 		public McpSchema.ResourceTemplate resourceTemplate() {
-			return resourceTemplate;
+			return this.resourceTemplate;
 		}
 
 		public BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler() {
-			return readHandler;
+			return this.readHandler;
 		}
+
 	}
 
-	/**
-	 * Specification of a prompt template with its synchronous handler function. Prompts
-	 * provide structured templates for AI model interactions, supporting:
-	 * <ul>
-	 * <li>Consistent message formatting
-	 * <li>Parameter substitution
-	 * <li>Context injection
-	 * <li>Response formatting
-	 * <li>Instruction templating
-	 * </ul>
-	 *
-	 */
-	public static class SyncPromptSpecification {
-		private McpSchema.Prompt prompt;
-		private BiFunction<McpTransportContext, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler;
+	public static final class SyncPromptSpecification {
+		private final McpSchema.Prompt prompt;
+		private final BiFunction<McpTransportContext, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler;
 
-		/**
-		 * @param prompt The prompt definition including name and description
-		 * @param promptHandler The function that processes prompt requests and returns
-		 * formatted templates. The function's argument is a
-		 * {@link McpSchema.GetPromptRequest}.
-		 * */
-		public SyncPromptSpecification(McpSchema.Prompt prompt,
-									   BiFunction<McpTransportContext, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler) {
+		public SyncPromptSpecification(McpSchema.Prompt prompt, BiFunction<McpTransportContext, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler) {
 			this.prompt = prompt;
 			this.promptHandler = promptHandler;
 		}
 
 		public McpSchema.Prompt prompt() {
-			return prompt;
+			return this.prompt;
 		}
 
 		public BiFunction<McpTransportContext, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler() {
-			return promptHandler;
+			return this.promptHandler;
 		}
+
 	}
 
-	/**
-	 * Specification of a completion handler function with synchronous execution support.
-	 *
-	 */
-	public static class SyncCompletionSpecification {
-		private McpSchema.CompleteReference referenceKey;
-		private BiFunction<McpTransportContext, McpSchema.CompleteRequest, McpSchema.CompleteResult> completionHandler;
+	public static final class SyncCompletionSpecification {
+		private final McpSchema.CompleteReference referenceKey;
+		private final BiFunction<McpTransportContext, McpSchema.CompleteRequest, McpSchema.CompleteResult> completionHandler;
 
-		/**
-		 * @param referenceKey The unique key representing the completion reference.
-		 * @param completionHandler The synchronous function that processes completion
-		 * requests and returns results. The argument is a {@link McpSchema.CompleteRequest}.
-		 * */
-		public SyncCompletionSpecification(McpSchema.CompleteReference referenceKey,
-										   BiFunction<McpTransportContext, McpSchema.CompleteRequest, McpSchema.CompleteResult> completionHandler) {
+		public SyncCompletionSpecification(McpSchema.CompleteReference referenceKey, BiFunction<McpTransportContext, McpSchema.CompleteRequest, McpSchema.CompleteResult> completionHandler) {
 			this.referenceKey = referenceKey;
 			this.completionHandler = completionHandler;
 		}
 
 		public McpSchema.CompleteReference referenceKey() {
-			return referenceKey;
+			return this.referenceKey;
 		}
 
 		public BiFunction<McpTransportContext, McpSchema.CompleteRequest, McpSchema.CompleteResult> completionHandler() {
-			return completionHandler;
+			return this.completionHandler;
 		}
+
 	}
+
 }

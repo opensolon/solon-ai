@@ -5,7 +5,6 @@
 package io.modelcontextprotocol.server;
 
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.util.Assert;
 
 import java.util.List;
@@ -228,21 +227,6 @@ public class McpSyncServer {
 	 */
 	public void notifyPromptsListChanged() {
 		this.asyncServer.notifyPromptsListChanged().block();
-	}
-
-	/**
-	 * This implementation would, incorrectly, broadcast the logging message to all
-	 * connected clients, using a single minLoggingLevel for all of them. Similar to the
-	 * sampling and roots, the logging level should be set per client session and use the
-	 * ServerExchange to send the logging message to the right client.
-	 * @param loggingMessageNotification The logging message to send
-	 * @deprecated Use
-	 * {@link McpSyncServerExchange#loggingNotification(LoggingMessageNotification)}
-	 * instead.
-	 */
-	@Deprecated
-	public void loggingNotification(LoggingMessageNotification loggingMessageNotification) {
-		this.asyncServer.loggingNotification(loggingMessageNotification).block();
 	}
 
 	/**

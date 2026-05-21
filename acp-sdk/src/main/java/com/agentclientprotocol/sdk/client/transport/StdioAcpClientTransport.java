@@ -8,6 +8,7 @@ import com.agentclientprotocol.sdk.spec.AcpClientTransport;
 import com.agentclientprotocol.sdk.spec.AcpSchema;
 import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCMessage;
 import com.agentclientprotocol.sdk.util.Assert;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import org.slf4j.Logger;
@@ -85,7 +86,7 @@ public class StdioAcpClientTransport implements AcpClientTransport {
 	 * @param params The parameters for configuring the agent process
 	 */
 	public StdioAcpClientTransport(AgentParameters params) {
-		this(params, McpJsonMapper.getDefault());
+		this(params, McpJsonDefaults.getMapper());
 	}
 
 	/**

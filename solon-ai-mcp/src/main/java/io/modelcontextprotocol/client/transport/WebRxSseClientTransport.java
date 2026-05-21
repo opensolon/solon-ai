@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.client.transport;
 
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.*;
@@ -397,7 +398,7 @@ public class WebRxSseClientTransport implements McpClientTransport {
 		 */
 		public WebRxSseClientTransport build() {
 			return new WebRxSseClientTransport(webClientBuilder,
-                    jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+                    jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
                     sseEndpoint);
 		}
 	}

@@ -218,7 +218,7 @@ public class WebRxStatelessServerTransport implements McpStatelessServerTranspor
 		 */
 		public WebRxStatelessServerTransport build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
-			return new WebRxStatelessServerTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+			return new WebRxStatelessServerTransport(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
 					mcpEndpoint, contextExtractor);
 		}
 	}

@@ -57,7 +57,7 @@ import java.util.function.Function;
  * AgentParameters params = AgentParameters.builder("gemini")
  *     .arg("--experimental-acp")
  *     .build();
- * StdioAcpClientTransport transport = new StdioAcpClientTransport(params, McpJsonMapper.getDefault());
+ * StdioAcpClientTransport transport = new StdioAcpClientTransport(params, McpJsonDefaults.getMapper());
  *
  * // Build client
  * AcpAsyncClient client = AcpClient.async(transport)

@@ -9,7 +9,6 @@ import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.*;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
-import lombok.var;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -20,7 +19,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -49,11 +48,9 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 
 	private final Sinks.One<Void> inboundReady = Sinks.one();
 
-
 	/**
 	 * Creates a new StdioServerTransportProvider with the specified ObjectMapper and
 	 * System streams.
-	 *
 	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
 	 */
 	public StdioServerTransportProvider(McpJsonMapper jsonMapper) {
@@ -63,9 +60,8 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	/**
 	 * Creates a new StdioServerTransportProvider with the specified ObjectMapper and
 	 * streams.
-	 *
-	 * @param jsonMapper   The JsonMapper to use for JSON serialization/deserialization
-	 * @param inputStream  The input stream to read from
+	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
+	 * @param inputStream The input stream to read from
 	 * @param outputStream The output stream to write to
 	 */
 	public StdioServerTransportProvider(McpJsonMapper jsonMapper, InputStream inputStream, OutputStream outputStream) {
@@ -80,13 +76,13 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 
 	@Override
 	public List<String> protocolVersions() {
-		return Arrays.asList(ProtocolVersions.MCP_2024_11_05);
+		return Collections.singletonList(ProtocolVersions.MCP_2024_11_05);
 	}
 
 	@Override
 	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
 		// Create a single session for the stdio connection
-		var transport = new StdioMcpSessionTransport();
+		StdioMcpSessionTransport transport = new StdioMcpSessionTransport();
 		this.session = sessionFactory.create(transport);
 		transport.initProcessing();
 	}
@@ -94,10 +90,24 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	@Override
 	public Mono<Void> notifyClients(String method, Object params) {
 		if (this.session == null) {
-			return Mono.error(new McpError("No session to close"));
+			return Mono.error(new IllegalStateException("No session to notify"));
 		}
 		return this.session.sendNotification(method, params)
-				.doOnError(e -> logger.error("Failed to send notification: {}", e.getMessage()));
+			.doOnError(e -> logger.error("Failed to send notification: {}", e.getMessage()));
+	}
+
+	@Override
+	public Mono<Void> notifyClient(String sessionId, String method, Object params) {
+		return Mono.defer(() -> {
+			if (this.session == null) {
+				return Mono.error(new IllegalStateException("No session to notify"));
+			}
+			if (!this.session.getId().equals(sessionId)) {
+				return Mono.error(new IllegalStateException("Existing session id " + this.session.getId()
+						+ " doesn't match the notification target: " + sessionId));
+			}
+			return this.session.sendNotification(method, params);
+		});
 	}
 
 	@Override
@@ -145,7 +155,8 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 			return Mono.zip(inboundReady.asMono(), outboundReady.asMono()).then(Mono.defer(() -> {
 				if (outboundSink.tryEmitNext(message).isSuccess()) {
 					return Mono.empty();
-				} else {
+				}
+				else {
 					return Mono.error(new RuntimeException("Failed to enqueue message"));
 				}
 			}));
@@ -195,7 +206,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 					inboundReady.tryEmitValue(null);
 					BufferedReader reader = null;
 					try {
-						reader = new BufferedReader(new InputStreamReader(inputStream));
+						reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
 						while (!isClosing.get()) {
 							try {
 								String line = reader.readLine();
@@ -213,18 +224,22 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 										break;
 									}
 
-								} catch (Exception e) {
+								}
+								catch (Exception e) {
 									logIfNotClosing("Error processing inbound message", e);
 									break;
 								}
-							} catch (IOException e) {
+							}
+							catch (IOException e) {
 								logIfNotClosing("Error reading from stdin", e);
 								break;
 							}
 						}
-					} catch (Exception e) {
+					}
+					catch (Exception e) {
 						logIfNotClosing("Error in inbound processing", e);
-					} finally {
+					}
+					finally {
 						isClosing.set(true);
 						if (session != null) {
 							session.close();
@@ -241,51 +256,51 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 		 */
 		private void startOutboundProcessing() {
 			Function<Flux<JSONRPCMessage>, Flux<JSONRPCMessage>> outboundConsumer = messages -> messages // @formatter:off
-					.doOnSubscribe(subscription -> outboundReady.tryEmitValue(null))
-					.publishOn(outboundScheduler)
-					.handle((message, sink) -> {
-						if (message != null && !isClosing.get()) {
-							try {
-								String jsonMessage = jsonMapper.writeValueAsString(message);
-								// Escape any embedded newlines in the JSON message as per spec
-								jsonMessage = jsonMessage.replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\n");
-
-								synchronized (outputStream) {
-									outputStream.write(jsonMessage.getBytes(StandardCharsets.UTF_8));
-									outputStream.write("\n".getBytes(StandardCharsets.UTF_8));
-									outputStream.flush();
-								}
-								sink.next(message);
-							}
-							catch (IOException e) {
-								if (!isClosing.get()) {
-									logger.error("Error writing message", e);
-									sink.error(new RuntimeException(e));
-								}
-								else {
-									logger.debug("Stream closed during shutdown", e);
-								}
-							}
-						}
-						else if (isClosing.get()) {
-							sink.complete();
-						}
-					})
-					.doOnComplete(() -> {
-						isClosing.set(true);
-						outboundScheduler.dispose();
-					})
-					.doOnError(e -> {
-						if (!isClosing.get()) {
-							logger.error("Error in outbound processing", e);
-							isClosing.set(true);
-							outboundScheduler.dispose();
-						}
-					})
-					.map(msg -> (JSONRPCMessage) msg);
-
-			outboundConsumer.apply(outboundSink.asFlux()).subscribe();
-		} // @formatter:on
+				 .doOnSubscribe(subscription -> outboundReady.tryEmitValue(null))
+				 .publishOn(outboundScheduler)
+				 .handle((message, sink) -> {
+					 if (message != null && !isClosing.get()) {
+						 try {
+							 String jsonMessage = jsonMapper.writeValueAsString(message);
+							 // Escape any embedded newlines in the JSON message as per spec
+							 jsonMessage = jsonMessage.replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\n");
+	
+							 synchronized (outputStream) {
+								 outputStream.write(jsonMessage.getBytes(StandardCharsets.UTF_8));
+								 outputStream.write("\n".getBytes(StandardCharsets.UTF_8));
+								 outputStream.flush();
+							 }
+							 sink.next(message);
+						 }
+						 catch (IOException e) {
+							 if (!isClosing.get()) {
+								 logger.error("Error writing message", e);
+								 sink.error(new RuntimeException(e));
+							 }
+							 else {
+								 logger.debug("Stream closed during shutdown", e);
+							 }
+						 }
+					 }
+					 else if (isClosing.get()) {
+						 sink.complete();
+					 }
+				 })
+				 .doOnComplete(() -> {
+					 isClosing.set(true);
+					 outboundScheduler.dispose();
+				 })
+				 .doOnError(e -> {
+					 if (!isClosing.get()) {
+						 logger.error("Error in outbound processing", e);
+						 isClosing.set(true);
+						 outboundScheduler.dispose();
+					 }
+				 })
+				 .map(msg -> (JSONRPCMessage) msg);
+	
+				 outboundConsumer.apply(outboundSink.asFlux()).subscribe();
+		 } // @formatter:on
 
 		private void logIfNotClosing(String message, Exception e) {
 			if (!isClosing.get()) {
@@ -294,4 +309,5 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 		}
 
 	}
+
 }

@@ -8,6 +8,7 @@ import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 public interface McpStatelessServerTransport {
@@ -30,7 +31,8 @@ public interface McpStatelessServerTransport {
 	Mono<Void> closeGracefully();
 
 	default List<String> protocolVersions() {
-		return Arrays.asList(ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18);
+		return Collections.unmodifiableList(Arrays.asList(ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18,
+				ProtocolVersions.MCP_2025_11_25));
 	}
 
 }

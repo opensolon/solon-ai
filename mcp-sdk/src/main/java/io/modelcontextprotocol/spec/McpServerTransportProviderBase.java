@@ -6,7 +6,7 @@ package io.modelcontextprotocol.spec;
 
 import reactor.core.publisher.Mono;
 
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -47,6 +47,23 @@ public interface McpServerTransportProviderBase {
 	Mono<Void> notifyClients(String method, Object params);
 
 	/**
+	 * Sends a notification to a specific client session. Transport providers that support
+	 * resource subscriptions must override this method to enable per-session
+	 * notifications. The default implementation returns an error indicating that this
+	 * operation is not supported.
+	 * @param sessionId the id of the session to notify
+	 * @param method the name of the notification method to be called on the client
+	 * @param params parameters to be sent with the notification
+	 * @return a Mono that completes when the notification has been sent, or empty if the
+	 * session is not found
+	 */
+	default Mono<Void> notifyClient(String sessionId, String method, Object params) {
+		return Mono.error(
+				new UnsupportedOperationException("This transport provider does not support per-session notifications. "
+						+ "Override notifyClient() to enable resource subscription support."));
+	}
+
+	/**
 	 * Immediately closes all the transports with connected clients and releases any
 	 * associated resources.
 	 */
@@ -66,7 +83,7 @@ public interface McpServerTransportProviderBase {
 	 * @return the protocol version as a string
 	 */
 	default List<String> protocolVersions() {
-		return Arrays.asList(ProtocolVersions.MCP_2024_11_05);
+		return Collections.singletonList(ProtocolVersions.MCP_2024_11_05);
 	}
 
 }

@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.agentclientprotocol.sdk.AcpTestFixtures;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import org.junit.jupiter.api.Test;
@@ -29,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class AcpSchemaSerializationTest {
 
-	private final McpJsonMapper jsonMapper = McpJsonMapper.getDefault();
+	private final McpJsonMapper jsonMapper = McpJsonDefaults.getMapper();
 
 	// ---------------------------
 	// Request/Response Serialization

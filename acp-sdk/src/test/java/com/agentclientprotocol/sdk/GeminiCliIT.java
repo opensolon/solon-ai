@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -58,7 +59,7 @@ class GeminiCliIT {
 		AgentParameters params = AgentParameters.builder("gemini").arg("--experimental-acp").build();
 
 		// Create JSON mapper - reuse MCP's default configured mapper
-		McpJsonMapper jsonMapper = McpJsonMapper.getDefault();
+		McpJsonMapper jsonMapper = McpJsonDefaults.getMapper();
 
 		// Create transport
 		StdioAcpClientTransport transport = new StdioAcpClientTransport(params, jsonMapper);
@@ -132,7 +133,7 @@ class GeminiCliIT {
 
 		// Create agent parameters for gemini
 		AgentParameters params = AgentParameters.builder("gemini").arg("--experimental-acp").build();
-		McpJsonMapper jsonMapper = McpJsonMapper.getDefault();
+		McpJsonMapper jsonMapper = McpJsonDefaults.getMapper();
 		StdioAcpClientTransport transport = new StdioAcpClientTransport(params, jsonMapper);
 
 		// Build client with handlers for session updates and permissions
@@ -259,7 +260,7 @@ class GeminiCliIT {
 		logger.info("Starting multiple prompts in same session test");
 
 		AgentParameters params = AgentParameters.builder("gemini").arg("--experimental-acp").build();
-		McpJsonMapper jsonMapper = McpJsonMapper.getDefault();
+		McpJsonMapper jsonMapper = McpJsonDefaults.getMapper();
 		StdioAcpClientTransport transport = new StdioAcpClientTransport(params, jsonMapper);
 
 		List<AcpSchema.SessionUpdate> allUpdates = Collections.synchronizedList(new ArrayList<>());
@@ -338,7 +339,7 @@ class GeminiCliIT {
 		logger.info("Starting cancel during prompt test");
 
 		AgentParameters params = AgentParameters.builder("gemini").arg("--experimental-acp").build();
-		McpJsonMapper jsonMapper = McpJsonMapper.getDefault();
+		McpJsonMapper jsonMapper = McpJsonDefaults.getMapper();
 		StdioAcpClientTransport transport = new StdioAcpClientTransport(params, jsonMapper);
 
 		AtomicInteger updateCount = new AtomicInteger(0);
@@ -417,7 +418,7 @@ class GeminiCliIT {
 		List<AcpSchema.WriteTextFileRequest> writeRequests = Collections.synchronizedList(new ArrayList<>());
 
 		AgentParameters params = AgentParameters.builder("gemini").arg("--experimental-acp").build();
-		McpJsonMapper jsonMapper = McpJsonMapper.getDefault();
+		McpJsonMapper jsonMapper = McpJsonDefaults.getMapper();
 		StdioAcpClientTransport transport = new StdioAcpClientTransport(params, jsonMapper);
 
 		// Create a temp directory for file operations

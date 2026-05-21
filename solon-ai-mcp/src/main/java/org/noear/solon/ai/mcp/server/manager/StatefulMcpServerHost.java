@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server.manager;
 
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpAsyncServer;
 import io.modelcontextprotocol.server.McpServer;
@@ -95,7 +96,7 @@ public class StatefulMcpServerHost implements McpServerHost {
 
         if (McpChannel.STDIO.equalsIgnoreCase(serverProps.getChannel())) {
             //stdio 通道
-            this.mcpTransportProvider = new StdioServerTransportProvider(McpJsonMapper.getDefault());
+            this.mcpTransportProvider = new StdioServerTransportProvider(McpJsonDefaults.getMapper());
 
             this.mcpServerSpec = McpServer.async((StdioServerTransportProvider) this.mcpTransportProvider)
                     .capabilities(serverCapabilities)

@@ -55,7 +55,7 @@ public class MockAcpAgentServer {
         this.host = host;
         this.port = port;
         this.path = path;
-        this.jsonMapper = McpJsonMapper.getDefault();
+        this.jsonMapper = McpJsonDefaults.getMapper();
     }
 
     /**

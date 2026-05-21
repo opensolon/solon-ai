@@ -55,7 +55,7 @@ class WebSocketSolonAcpAgentTransportTest {
 
     @BeforeEach
     void setUp() {
-        jsonMapper = McpJsonMapper.getDefault();
+        jsonMapper = McpJsonDefaults.getMapper();
         transport = new WebSocketSolonAcpAgentTransport(jsonMapper);
     }
 

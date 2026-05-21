@@ -24,7 +24,7 @@ package com.agentclientprotocol.sdk.client.transport; ///*
 //
 //	@BeforeEach
 //	void setUp() {
-//		jsonMapper = McpJsonMapper.getDefault();
+//		jsonMapper = McpJsonDefaults.getMapper();
 //	}
 //
 //	@Test

@@ -539,7 +539,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 		 */
 		public WebRxSseServerTransportProvider build() {
 			Assert.notNull(messageEndpoint, "Message endpoint must be set");
-			return new WebRxSseServerTransportProvider(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+			return new WebRxSseServerTransportProvider(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
 					baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor);
 		}
 	}

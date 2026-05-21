@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server.manager;
 
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.*;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -90,10 +91,10 @@ public class StatelessToolRegistry implements McpPrimitivesRegistry<FunctionTool
                     .name(functionTool.name()).title(functionTool.title()).description(functionTool.description())
                     .meta(functionTool.meta())
                     .annotations(toolAnnotations)
-                    .inputSchema(McpJsonMapper.getDefault(), inSchemaJson);
+                    .inputSchema(McpJsonDefaults.getMapper(), inSchemaJson);
 
             if (mcpServerProps.isEnableOutputSchema() && Utils.isNotEmpty(functionTool.outputSchema())) {
-                toolBuilder.outputSchema(McpJsonMapper.getDefault(), functionTool.outputSchema());
+                toolBuilder.outputSchema(McpJsonDefaults.getMapper(), functionTool.outputSchema());
             }
 
             // 注册实际调用逻辑

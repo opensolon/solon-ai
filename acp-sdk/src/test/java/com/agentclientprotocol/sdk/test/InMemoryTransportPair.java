@@ -11,6 +11,7 @@ import java.util.function.Function;
 import com.agentclientprotocol.sdk.spec.AcpAgentTransport;
 import com.agentclientprotocol.sdk.spec.AcpClientTransport;
 import com.agentclientprotocol.sdk.spec.AcpSchema;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import reactor.core.publisher.Mono;
@@ -158,7 +159,7 @@ public class InMemoryTransportPair {
 
 		@Override
 		public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
-			return McpJsonMapper.getDefault().convertValue(data, typeRef);
+			return McpJsonDefaults.getMapper().convertValue(data, typeRef);
 		}
 
 	}
@@ -243,7 +244,7 @@ public class InMemoryTransportPair {
 
 		@Override
 		public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
-			return McpJsonMapper.getDefault().convertValue(data, typeRef);
+			return McpJsonDefaults.getMapper().convertValue(data, typeRef);
 		}
 
 	}

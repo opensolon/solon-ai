@@ -12,6 +12,7 @@ import java.util.function.BiConsumer;
 import com.agentclientprotocol.sdk.agent.transport.StdioAcpAgentTransport;
 import com.agentclientprotocol.sdk.spec.AcpAgentTransport;
 import com.agentclientprotocol.sdk.spec.AcpClientTransport;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import reactor.core.publisher.Mono;
@@ -49,7 +50,7 @@ public class StdioProtocolDriver implements ProtocolDriver {
 			PipedOutputStream agentOut = new PipedOutputStream();
 			PipedInputStream clientIn = new PipedInputStream(agentOut, 65536);
 
-			McpJsonMapper jsonMapper = McpJsonMapper.getDefault();
+			McpJsonMapper jsonMapper = McpJsonDefaults.getMapper();
 
 			// Create transports
 			PipedClientTransport clientTransport = new PipedClientTransport(jsonMapper, clientIn, clientOut);

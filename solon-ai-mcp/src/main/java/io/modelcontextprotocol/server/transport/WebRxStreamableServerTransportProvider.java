@@ -548,7 +548,7 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 		public WebRxStreamableServerTransportProvider build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 			return new WebRxStreamableServerTransportProvider(
-					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, mcpEndpoint, contextExtractor,
+					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, mcpEndpoint, contextExtractor,
 					disallowDelete, keepAliveInterval);
 		}
 

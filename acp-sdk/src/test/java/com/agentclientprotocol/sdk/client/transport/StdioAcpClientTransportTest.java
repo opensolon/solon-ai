@@ -4,6 +4,7 @@
 
 package com.agentclientprotocol.sdk.client.transport;
 
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import com.agentclientprotocol.sdk.spec.AcpSchema;
@@ -30,7 +31,7 @@ class StdioAcpClientTransportTest {
 	@Test
 	void testConstructorWithValidParameters() {
 		AgentParameters params = AgentParameters.builder("gemini").arg("--experimental-acp").build();
-		McpJsonMapper mapper = McpJsonMapper.getDefault();
+		McpJsonMapper mapper = McpJsonDefaults.getMapper();
 
 		StdioAcpClientTransport transport = new StdioAcpClientTransport(params, mapper);
 
@@ -39,7 +40,7 @@ class StdioAcpClientTransportTest {
 
 	@Test
 	void testConstructorWithNullParams() {
-		McpJsonMapper mapper = McpJsonMapper.getDefault();
+		McpJsonMapper mapper = McpJsonDefaults.getMapper();
 
 		assertThatThrownBy(() -> new StdioAcpClientTransport(null, mapper))
 			.isInstanceOf(IllegalArgumentException.class)
@@ -58,7 +59,7 @@ class StdioAcpClientTransportTest {
 	@Test
 	void testProtocolVersions() {
 		AgentParameters params = AgentParameters.builder("gemini").build();
-		McpJsonMapper mapper = McpJsonMapper.getDefault();
+		McpJsonMapper mapper = McpJsonDefaults.getMapper();
 
 		StdioAcpClientTransport transport = new StdioAcpClientTransport(params, mapper);
 
@@ -70,7 +71,7 @@ class StdioAcpClientTransportTest {
 	@Test
 	void testUnmarshalFromWithSimpleObject() {
 		AgentParameters params = AgentParameters.builder("gemini").build();
-		McpJsonMapper mapper = McpJsonMapper.getDefault();
+		McpJsonMapper mapper = McpJsonDefaults.getMapper();
 
 		StdioAcpClientTransport transport = new StdioAcpClientTransport(params, mapper);
 
@@ -85,7 +86,7 @@ class StdioAcpClientTransportTest {
 	@Test
 	void testUnmarshalFromWithComplexObject() {
 		AgentParameters params = AgentParameters.builder("gemini").build();
-		McpJsonMapper mapper = McpJsonMapper.getDefault();
+		McpJsonMapper mapper = McpJsonDefaults.getMapper();
 
 		StdioAcpClientTransport transport = new StdioAcpClientTransport(params, mapper);
 
@@ -103,7 +104,7 @@ class StdioAcpClientTransportTest {
 	@Test
 	void testUnmarshalFromWithNull() {
 		AgentParameters params = AgentParameters.builder("gemini").build();
-		McpJsonMapper mapper = McpJsonMapper.getDefault();
+		McpJsonMapper mapper = McpJsonDefaults.getMapper();
 
 		StdioAcpClientTransport transport = new StdioAcpClientTransport(params, mapper);
 
@@ -116,7 +117,7 @@ class StdioAcpClientTransportTest {
 	@Test
 	void testUnmarshalFromWithTextContent() {
 		AgentParameters params = AgentParameters.builder("gemini").build();
-		McpJsonMapper mapper = McpJsonMapper.getDefault();
+		McpJsonMapper mapper = McpJsonDefaults.getMapper();
 
 		StdioAcpClientTransport transport = new StdioAcpClientTransport(params, mapper);
 
@@ -135,7 +136,7 @@ class StdioAcpClientTransportTest {
 		AgentParameters params1 = AgentParameters.builder("gemini").arg("--model=1.5-pro").build();
 		AgentParameters params2 = AgentParameters.builder("claude").arg("--model=opus").build();
 
-		McpJsonMapper mapper = McpJsonMapper.getDefault();
+		McpJsonMapper mapper = McpJsonDefaults.getMapper();
 
 		StdioAcpClientTransport transport1 = new StdioAcpClientTransport(params1, mapper);
 		StdioAcpClientTransport transport2 = new StdioAcpClientTransport(params2, mapper);
@@ -149,7 +150,7 @@ class StdioAcpClientTransportTest {
 		AgentParameters params = AgentParameters.builder("gemini").build();
 
 		// Use default mapper
-		McpJsonMapper mapper = McpJsonMapper.getDefault();
+		McpJsonMapper mapper = McpJsonDefaults.getMapper();
 		StdioAcpClientTransport transport = new StdioAcpClientTransport(params, mapper);
 
 		Map<String, Object> data = Collections.singletonMap("sessionId", "test-123");
@@ -165,7 +166,7 @@ class StdioAcpClientTransportTest {
 	@Test
 	void testTransportSupportsLatestProtocol() {
 		AgentParameters params = AgentParameters.builder("gemini").build();
-		McpJsonMapper mapper = McpJsonMapper.getDefault();
+		McpJsonMapper mapper = McpJsonDefaults.getMapper();
 
 		StdioAcpClientTransport transport = new StdioAcpClientTransport(params, mapper);
 
@@ -177,7 +178,7 @@ class StdioAcpClientTransportTest {
 	@Test
 	void testUnmarshalPreservesDataTypes() {
 		AgentParameters params = AgentParameters.builder("gemini").build();
-		McpJsonMapper mapper = McpJsonMapper.getDefault();
+		McpJsonMapper mapper = McpJsonDefaults.getMapper();
 
 		StdioAcpClientTransport transport = new StdioAcpClientTransport(params, mapper);
 

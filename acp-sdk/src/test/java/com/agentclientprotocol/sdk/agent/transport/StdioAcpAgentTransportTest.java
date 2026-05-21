@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.agentclientprotocol.sdk.AcpTestFixtures;
 import com.agentclientprotocol.sdk.spec.AcpSchema;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
@@ -29,7 +30,7 @@ class StdioAcpAgentTransportTest {
 
 	private static final Duration TIMEOUT = Duration.ofSeconds(5);
 
-	private final McpJsonMapper jsonMapper = McpJsonMapper.getDefault();
+	private final McpJsonMapper jsonMapper = McpJsonDefaults.getMapper();
 
 	@Test
 	void constructorValidatesArguments() {
