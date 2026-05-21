@@ -29,6 +29,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -40,7 +42,7 @@ import java.util.stream.Collectors;
 public class LLMSummarizationStrategy implements SummarizationStrategy {
     private static final Logger log = LoggerFactory.getLogger(LLMSummarizationStrategy.class);
 
-    private final ChatModel chatModel;
+    private final Supplier<ChatModel> chatModelSupplier;
     private int maxRetries = 3;
 
     // 1. 系统指令：定义总结逻辑和约束
@@ -59,7 +61,15 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
      * @param chatModel 用于生成摘要的模型（建议使用廉价、快速的模型）
      */
     public LLMSummarizationStrategy(ChatModel chatModel) {
-        this.chatModel = chatModel;
+        Objects.requireNonNull(chatModel, "chatModel");
+
+        this.chatModelSupplier = () -> chatModel;
+    }
+
+    public LLMSummarizationStrategy(Supplier<ChatModel> chatModelSupplier) {
+        Objects.requireNonNull(chatModelSupplier, "chatModelSupplier");
+
+        this.chatModelSupplier = chatModelSupplier;
     }
 
     /**
@@ -115,6 +125,7 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
                     "### 任务指令\n" +
                     "请根据系统指令对上述执行过程进行语义总结：";
 
+            final ChatModel chatModel = chatModelSupplier.get();
             String summary = RetryUtil.callWithRetry(maxRetries, () -> {
                 ChatResponse resp = chatModel.prompt(userData)
                         .options(o -> {

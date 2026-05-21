@@ -29,6 +29,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -41,7 +43,7 @@ import java.util.stream.Collectors;
 public class KeyInfoExtractionStrategy implements SummarizationStrategy {
     private static final Logger log = LoggerFactory.getLogger(KeyInfoExtractionStrategy.class);
 
-    private final ChatModel chatModel;
+    private final Supplier<ChatModel> chatModelSupplier;
     private int maxRetries = 3;
 
     // 1. 系统指令：定义提取协议和专家身份
@@ -60,7 +62,15 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
      * @param chatModel 用于执行提取任务的模型
      */
     public KeyInfoExtractionStrategy(ChatModel chatModel) {
-        this.chatModel = chatModel;
+        Objects.requireNonNull(chatModel, "chatModel");
+
+        this.chatModelSupplier = () -> chatModel;
+    }
+
+    public KeyInfoExtractionStrategy(Supplier<ChatModel> chatModelSupplier) {
+        Objects.requireNonNull(chatModelSupplier, "chatModelSupplier");
+
+        this.chatModelSupplier = chatModelSupplier;
     }
 
     /**
@@ -116,6 +126,7 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
                     "### 审计要求\n" +
                     "请根据系统指令，提取上述片段中的关键信息。";
 
+            final ChatModel chatModel = chatModelSupplier.get();
             String keyInfo = RetryUtil.callWithRetry(maxRetries, () -> {
                 ChatResponse resp = chatModel.prompt(userData)
                         .options(o -> {

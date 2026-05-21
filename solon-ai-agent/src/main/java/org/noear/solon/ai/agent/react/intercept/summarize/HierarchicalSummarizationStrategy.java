@@ -30,6 +30,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Objects;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -42,7 +44,7 @@ import java.util.stream.Collectors;
 public class HierarchicalSummarizationStrategy implements SummarizationStrategy {
     private static final Logger log = LoggerFactory.getLogger(HierarchicalSummarizationStrategy.class);
 
-    private final ChatModel chatModel;
+    private final Supplier<ChatModel> chatModelSupplier;
 
     private int maxRetries = 3;
 
@@ -65,7 +67,15 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
     private static final String STRATEGY_LASTSUMMARY_KEY = "agent:summary:hierarchical";
 
     public HierarchicalSummarizationStrategy(ChatModel chatModel) {
-        this.chatModel = chatModel;
+        Objects.requireNonNull(chatModel, "chatModel");
+
+        this.chatModelSupplier = () -> chatModel;
+    }
+
+    public HierarchicalSummarizationStrategy(Supplier<ChatModel> chatModelSupplier) {
+        Objects.requireNonNull(chatModelSupplier, "chatModelSupplier");
+
+        this.chatModelSupplier = chatModelSupplier;
     }
 
     /**
@@ -138,6 +148,8 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
                     "请根据 System Message（系统指令）中的逻辑，输出更新后的『进度摘要』：";
 
             // 3. 调用模型生成增量摘要
+            final ChatModel chatModel = chatModelSupplier.get();
+
             lastSummary = RetryUtil.callWithRetry(maxRetries, () -> {
                 ChatResponse resp = chatModel.prompt(userData)
                         .options(o -> {
