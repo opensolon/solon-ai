@@ -55,6 +55,7 @@ import org.noear.solon.lang.Preview;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 马具引擎
@@ -64,6 +65,8 @@ import java.util.*;
 @Preview("3.10")
 public class HarnessEngine {
     public final static String ATTR_CWD = "__cwd";
+
+    private final ReentrantLock locker = new ReentrantLock();
 
     private final AgentSessionProvider sessionProvider;
     private final HarnessProperties props;
@@ -116,8 +119,10 @@ public class HarnessEngine {
      * 获取模型或主模型
      */
     public ChatModel getModelOrMain(String name) {
-        if (Assert.isEmpty(name) || mainModel.getConfig().getNameOrModel().equals(name)) {
-            return mainModel;
+        ChatModel currentMain = this.mainModel;
+
+        if (Assert.isEmpty(name) || currentMain.getConfig().getNameOrModel().equals(name)) {
+            return currentMain;
         }
 
         return props.getModelOrDef(name).toChatModel();
@@ -192,13 +197,16 @@ public class HarnessEngine {
     }
 
     public void extensionAdd(HarnessExtension extension) {
-        Utils.locker().lock();
+        locker.lock();
         try {
             props.addExtension(extension);
 
-            this.mainAgent = createMainAgent();
+            // 如果主代理还没懒加载触发，这里无需提前创建
+            if (this.mainAgent != null) {
+                this.mainAgent = createMainAgent();
+            }
         } finally {
-            Utils.locker().unlock();
+            locker.unlock();
         }
     }
 
@@ -214,15 +222,19 @@ public class HarnessEngine {
         }
 
 
-        Utils.locker().lock();
+        locker.lock();
         try {
             ChatModel newModel = chatConfig.toChatModel();
 
-            // 核心演进：在锁保护下，将 Model 与 Agent 捆绑一次性更新，外界绝不会读到半初始化的夹生状态
+            // 联动更新：先换模型，再换代理
             this.mainModel = newModel;
-            this.mainAgent = createMainAgent();
+
+            // 如果 mainAgent 之前已经被懒加载初始化过了，则立刻刷新它
+            if (this.mainAgent != null) {
+                this.mainAgent = createMainAgent();
+            }
         } finally {
-            Utils.locker().unlock();
+            locker.unlock();
         }
     }
 
@@ -360,19 +372,20 @@ public class HarnessEngine {
     }
 
     public ReActAgent getMainAgent() {
-        if (mainAgent == null) {
-            Utils.locker().lock();
-
+        ReActAgent agent = this.mainAgent; // 引入局部变量，仅执行一次 volatile read
+        if (agent == null) {
+            locker.lock();
             try {
-                if (mainAgent == null) {
-                    mainAgent = createMainAgent();
+                if (this.mainAgent == null) {
+                    this.mainAgent = createMainAgent();
                 }
+                agent = this.mainAgent;
             } finally {
-                Utils.locker().unlock();
+                locker.unlock();
             }
         }
 
-        return mainAgent;
+        return agent;
     }
 
     public ReActAgent getAgentOrMain(String agentName) {
