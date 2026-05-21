@@ -183,6 +183,10 @@ public class HarnessProperties implements Serializable {
      * 添加模型配置
      */
     public void addModel(ChatConfig chatConfig) {
+        if (Assert.isEmpty(chatConfig.getUserAgent())) {
+            chatConfig.setUserAgent(this.getUserAgent());
+        }
+
         models.add(chatConfig);
     }
 
@@ -243,8 +247,22 @@ public class HarnessProperties implements Serializable {
         return isAutoRethink();
     }
 
+    /**
+     * @deprecated 3.10.5 {@link #setAutoRethink(boolean)}
+     */
+    @Deprecated
+    public void setMaxStepsAutoExtensible(boolean maxStepsAutoExtensible) {
+        this.maxStepsAutoExtensible = maxStepsAutoExtensible;
+        this.autoRethink = maxStepsAutoExtensible;
+    }
+
     public boolean isAutoRethink() {
         return autoRethink && maxStepsAutoExtensible;
+    }
+
+    public void setAutoRethink(boolean autoRethink) {
+        this.maxStepsAutoExtensible = autoRethink;
+        this.autoRethink = autoRethink;
     }
 
     //--------------------------
