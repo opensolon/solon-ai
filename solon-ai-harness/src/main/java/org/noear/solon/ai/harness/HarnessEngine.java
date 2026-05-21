@@ -55,7 +55,6 @@ import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Supplier;
 
 /**
  * 马具引擎
@@ -106,30 +105,6 @@ public class HarnessEngine {
 
     public HarnessProperties getProps() {
         return props;
-    }
-
-    /**
-     * 获取主模型
-     */
-    public ChatModel getMainModel() {
-        return mainModel;
-    }
-
-    /**
-     * 获取模型或主模型
-     */
-    public ChatModel getModelOrMain(String name) {
-        ChatModel currentMain = this.mainModel;
-
-        if (Assert.isEmpty(name) || currentMain.getConfig().getNameOrModel().equals(name)) {
-            return currentMain;
-        }
-
-        return props.getModelOrDef(name).toChatModel();
-    }
-
-    public ChatModel getModelForSummary() {
-        return getModelOrMain(props.getSummaryModel());
     }
 
     public CommandRegistry getCommandRegistry() {
@@ -214,37 +189,8 @@ public class HarnessEngine {
         }
     }
 
-    /**
-     * 切换默认主模型
-     */
-    public void switchMainModel(String name) {
-        Objects.requireNonNull(name, "name");
-
-        ChatConfig chatConfig = props.getModelOrNil(name);
-        if (chatConfig == null) {
-            throw new IllegalArgumentException("The model not found: " + name);
-        }
-
-
-        locker.lock();
-        try {
-            ChatModel newModel = chatConfig.toChatModel();
-
-            // 联动更新：先换模型，再换代理
-            this.mainModel = newModel;
-
-            // 如果 mainAgent 之前已经被懒加载初始化过了，则立刻刷新它
-            if (this.mainAgent != null) {
-                this.mainAgent = createMainAgent();
-            }
-        } finally {
-            locker.unlock();
-        }
-    }
-
     private HarnessEngine(HarnessProperties props, AgentSessionProvider sessionProvider, MemorySolution.Factory memorySolution, SummarizationInterceptor summarizationInterceptor, HITLInterceptor hitlInterceptor) {
         this.props = props;
-        this.mainModel = props.getModelOrDef(null).toChatModel();
 
         //上下文摘要拦截器默认处理
         if (summarizationInterceptor == null) {
@@ -373,12 +319,84 @@ public class HarnessEngine {
         return AgentFactory.create(this, definition, null);
     }
 
+    /**
+     * 获取主模型
+     */
+    public ChatModel getMainModel() {
+        ChatModel model = this.mainModel;
+        if (model == null) {
+            locker.lock();
+            try {
+                if (this.mainModel == null) {
+                    // 在真正用到模型时，才进行延迟校验
+                    if (Assert.isEmpty(props.getModels())) {
+                        throw new IllegalStateException("Missing models config. Please configure models before routing requests.");
+                    }
+                    this.mainModel = props.getModelOrDef(null).toChatModel();
+                }
+                model = this.mainModel;
+            } finally {
+                locker.unlock();
+            }
+        }
+
+        return model;
+    }
+
+    /**
+     * 获取模型或主模型
+     */
+    public ChatModel getModelOrMain(String name) {
+        ChatModel currentMain = this.getMainModel();
+
+        if (Assert.isEmpty(name) || currentMain.getConfig().getNameOrModel().equals(name)) {
+            return currentMain;
+        }
+
+        return props.getModelOrDef(name).toChatModel();
+    }
+
+    public ChatModel getModelForSummary() {
+        return getModelOrMain(props.getSummaryModel());
+    }
+
+
+
+    /**
+     * 切换默认主模型
+     */
+    public void switchMainModel(String name) {
+        Objects.requireNonNull(name, "name");
+
+        ChatConfig chatConfig = props.getModelOrNil(name);
+        if (chatConfig == null) {
+            throw new IllegalArgumentException("The model not found: " + name);
+        }
+
+
+        locker.lock();
+        try {
+            ChatModel newModel = chatConfig.toChatModel();
+
+            // 联动更新：先换模型，再换代理
+            this.mainModel = newModel;
+
+            // 如果 mainAgent 之前已经被懒加载初始化过了，则立刻刷新它
+            if (this.mainAgent != null) {
+                this.mainAgent = createMainAgent();
+            }
+        } finally {
+            locker.unlock();
+        }
+    }
+
     public ReActAgent getMainAgent() {
         ReActAgent agent = this.mainAgent; // 引入局部变量，仅执行一次 volatile read
         if (agent == null) {
             locker.lock();
             try {
                 if (this.mainAgent == null) {
+                    getMainModel();
                     this.mainAgent = createMainAgent();
                 }
                 agent = this.mainAgent;
@@ -474,20 +492,6 @@ public class HarnessEngine {
         public HarnessEngine build() {
             Objects.nonNull(properties);
             Objects.nonNull(sessionProvider);
-
-            //验证模型配置
-            if (Assert.isEmpty(properties.getModels())) {
-                throw new IllegalStateException("Missing models config");
-            }
-
-            //缺省 userAgent 补尝
-            if (Assert.isNotEmpty(properties.getUserAgent())) {
-                for (ChatConfig m1 : properties.getModels()) {
-                    if (Assert.isEmpty(m1.getUserAgent())) {
-                        m1.setUserAgent(properties.getUserAgent());
-                    }
-                }
-            }
 
             return new HarnessEngine(properties, sessionProvider, memorySolution, summarizationInterceptor, hitlInterceptor);
         }

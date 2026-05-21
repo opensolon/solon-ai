@@ -239,7 +239,7 @@ public class HarnessProperties implements Serializable {
      * @deprecated 3.10.5 {@link #isAutoRethink()}
      */
     @Deprecated
-    public boolean isMaxStepsAutoExtensible(){
+    public boolean isMaxStepsAutoExtensible() {
         return isAutoRethink();
     }
 
