@@ -216,8 +216,10 @@ public class HarnessEngine {
 
         Utils.locker().lock();
         try {
-            // chatModel 切换后，重新生成主代理
-            this.mainModel = chatConfig.toChatModel();
+            ChatModel newModel = chatConfig.toChatModel();
+
+            // 核心演进：在锁保护下，将 Model 与 Agent 捆绑一次性更新，外界绝不会读到半初始化的夹生状态
+            this.mainModel = newModel;
             this.mainAgent = createMainAgent();
         } finally {
             Utils.locker().unlock();
