@@ -274,8 +274,7 @@ class LifecycleInitializer {
 		return Mono.deferContextual(ctx -> {
 			DefaultInitialization newInit = new DefaultInitialization();
 			DefaultInitialization previous = this.initializationRef.get();
-			if (previous == null) {
-				this.initializationRef.compareAndSet(null, newInit);
+			if (previous != null || !this.initializationRef.compareAndSet(null, newInit)) {
 				previous = this.initializationRef.get();
 			}
 
@@ -306,9 +305,8 @@ class LifecycleInitializer {
 
 		String latestVersion = this.protocolVersions.get(this.protocolVersions.size() - 1);
 
-		McpSchema.InitializeRequest initializeRequest = McpSchema.InitializeRequest
-			.builder(latestVersion, this.clientCapabilities, this.clientInfo)
-			.build();
+		McpSchema.InitializeRequest initializeRequest = new McpSchema.InitializeRequest(latestVersion,
+				this.clientCapabilities, this.clientInfo);
 
 		Mono<McpSchema.InitializeResult> result = mcpClientSession.sendRequest(McpSchema.METHOD_INITIALIZE,
 				initializeRequest, McpAsyncClient.INITIALIZE_RESULT_TYPE_REF);

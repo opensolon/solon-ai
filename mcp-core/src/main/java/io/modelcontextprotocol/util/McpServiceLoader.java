@@ -3,6 +3,7 @@
  */
 package io.modelcontextprotocol.util;
 
+import java.util.Iterator;
 import java.util.Optional;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
@@ -45,7 +46,8 @@ public class McpServiceLoader<S extends Supplier<R>, R> {
 	}
 
 	protected Optional<S> serviceLoad(Class<S> type) {
-		return findFirstByIterator(ServiceLoader.load(type));
+		Iterator<S> iterator = ServiceLoader.load(type).iterator();
+		return iterator.hasNext() ? Optional.of(iterator.next()) : Optional.empty();
 	}
 
 	@SuppressWarnings("unchecked")
@@ -65,12 +67,4 @@ public class McpServiceLoader<S extends Supplier<R>, R> {
 		return supplierResult;
 	}
 
-
-	private <T> Optional<T> findFirstByIterator(ServiceLoader<T> loader) {
-		java.util.Iterator<T> it = loader.iterator();
-		if (it.hasNext()) {
-			return Optional.of(it.next());
-		}
-		return Optional.empty();
-	}
 }

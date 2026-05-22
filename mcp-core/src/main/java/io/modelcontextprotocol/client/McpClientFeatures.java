@@ -45,7 +45,12 @@ import java.util.function.Function;
  */
 class McpClientFeatures {
 
+	/**
+	 * Asynchronous client features specification providing the capabilities and request
+	 * and notification handlers.
+	 */
 	static final class Async {
+
 		private final McpSchema.Implementation clientInfo;
 		private final McpSchema.ClientCapabilities clientCapabilities;
 		private final Map<String, McpSchema.Root> roots;
@@ -107,7 +112,7 @@ class McpClientFeatures {
 			return this.enableCallToolSchemaCaching;
 		}
 
-/**
+		/**
 		 * Create an instance and validate the arguments.
 		 * @param clientCapabilities the client capabilities.
 		 * @param roots the roots.
@@ -138,8 +143,7 @@ class McpClientFeatures {
 					: new McpSchema.ClientCapabilities(null,
 							!Utils.isEmpty(roots) ? new McpSchema.ClientCapabilities.RootCapabilities(false) : null,
 							samplingHandler != null ? new McpSchema.ClientCapabilities.Sampling() : null,
-							elicitationHandler != null ? McpSchema.ClientCapabilities.Elicitation.builder().build()
-									: null);
+							elicitationHandler != null ? new McpSchema.ClientCapabilities.Elicitation() : null);
 			this.roots = roots != null ? new ConcurrentHashMap<>(roots) : new ConcurrentHashMap<>();
 
 			this.toolsChangeConsumers = toolsChangeConsumers != null ? toolsChangeConsumers : Collections.emptyList();
@@ -226,12 +230,56 @@ class McpClientFeatures {
 			return new Async(syncSpec.clientInfo(), syncSpec.clientCapabilities(), syncSpec.roots(),
 					toolsChangeConsumers, resourcesChangeConsumers, resourcesUpdateConsumers, promptsChangeConsumers,
 					loggingConsumers, progressConsumers, samplingHandler, elicitationHandler,
-					syncSpec.enableCallToolSchemaCaching);
+					syncSpec.enableCallToolSchemaCaching());
 		}
 
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof Async)) return false;
+			Async that = (Async) o;
+			return Objects.equals(clientInfo, that.clientInfo)
+				&& Objects.equals(clientCapabilities, that.clientCapabilities)
+				&& Objects.equals(roots, that.roots)
+				&& Objects.equals(toolsChangeConsumers, that.toolsChangeConsumers)
+				&& Objects.equals(resourcesChangeConsumers, that.resourcesChangeConsumers)
+				&& Objects.equals(resourcesUpdateConsumers, that.resourcesUpdateConsumers)
+				&& Objects.equals(promptsChangeConsumers, that.promptsChangeConsumers)
+				&& Objects.equals(loggingConsumers, that.loggingConsumers)
+				&& Objects.equals(progressConsumers, that.progressConsumers)
+				&& Objects.equals(samplingHandler, that.samplingHandler)
+				&& Objects.equals(elicitationHandler, that.elicitationHandler)
+				&& enableCallToolSchemaCaching == that.enableCallToolSchemaCaching;
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(clientInfo, clientCapabilities, roots, toolsChangeConsumers, resourcesChangeConsumers,
+					resourcesUpdateConsumers, promptsChangeConsumers, loggingConsumers, progressConsumers,
+					samplingHandler, elicitationHandler, enableCallToolSchemaCaching);
+		}
+
+		@Override
+		public String toString() {
+			return "Async[clientInfo=" + clientInfo + ", clientCapabilities=" + clientCapabilities
+				+ ", roots=" + roots + ", toolsChangeConsumers=" + toolsChangeConsumers
+				+ ", resourcesChangeConsumers=" + resourcesChangeConsumers
+				+ ", resourcesUpdateConsumers=" + resourcesUpdateConsumers
+				+ ", promptsChangeConsumers=" + promptsChangeConsumers
+				+ ", loggingConsumers=" + loggingConsumers
+				+ ", progressConsumers=" + progressConsumers
+				+ ", samplingHandler=" + samplingHandler
+				+ ", elicitationHandler=" + elicitationHandler
+				+ ", enableCallToolSchemaCaching=" + enableCallToolSchemaCaching + "]";
+		}
 	}
 
+	/**
+	 * Synchronous client features specification providing the capabilities and request
+	 * and notification handlers.
+	 */
 	public static final class Sync {
+
 		private final McpSchema.Implementation clientInfo;
 		private final McpSchema.ClientCapabilities clientCapabilities;
 		private final Map<String, McpSchema.Root> roots;
@@ -293,7 +341,7 @@ class McpClientFeatures {
 			return this.enableCallToolSchemaCaching;
 		}
 
-/**
+		/**
 		 * Create an instance and validate the arguments.
 		 * @param clientInfo the client implementation information.
 		 * @param clientCapabilities the client capabilities.
@@ -325,8 +373,7 @@ class McpClientFeatures {
 					: new McpSchema.ClientCapabilities(null,
 							!Utils.isEmpty(roots) ? new McpSchema.ClientCapabilities.RootCapabilities(false) : null,
 							samplingHandler != null ? new McpSchema.ClientCapabilities.Sampling() : null,
-							elicitationHandler != null ? McpSchema.ClientCapabilities.Elicitation.builder().build()
-									: null);
+							elicitationHandler != null ? new McpSchema.ClientCapabilities.Elicitation() : null);
 			this.roots = roots != null ? new HashMap<>(roots) : new HashMap<>();
 
 			this.toolsChangeConsumers = toolsChangeConsumers != null ? toolsChangeConsumers : Collections.emptyList();
@@ -356,6 +403,45 @@ class McpClientFeatures {
 					elicitationHandler, false);
 		}
 
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof Sync)) return false;
+			Sync that = (Sync) o;
+			return Objects.equals(clientInfo, that.clientInfo)
+				&& Objects.equals(clientCapabilities, that.clientCapabilities)
+				&& Objects.equals(roots, that.roots)
+				&& Objects.equals(toolsChangeConsumers, that.toolsChangeConsumers)
+				&& Objects.equals(resourcesChangeConsumers, that.resourcesChangeConsumers)
+				&& Objects.equals(resourcesUpdateConsumers, that.resourcesUpdateConsumers)
+				&& Objects.equals(promptsChangeConsumers, that.promptsChangeConsumers)
+				&& Objects.equals(loggingConsumers, that.loggingConsumers)
+				&& Objects.equals(progressConsumers, that.progressConsumers)
+				&& Objects.equals(samplingHandler, that.samplingHandler)
+				&& Objects.equals(elicitationHandler, that.elicitationHandler)
+				&& enableCallToolSchemaCaching == that.enableCallToolSchemaCaching;
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(clientInfo, clientCapabilities, roots, toolsChangeConsumers, resourcesChangeConsumers,
+					resourcesUpdateConsumers, promptsChangeConsumers, loggingConsumers, progressConsumers,
+					samplingHandler, elicitationHandler, enableCallToolSchemaCaching);
+		}
+
+		@Override
+		public String toString() {
+			return "Sync[clientInfo=" + clientInfo + ", clientCapabilities=" + clientCapabilities
+				+ ", roots=" + roots + ", toolsChangeConsumers=" + toolsChangeConsumers
+				+ ", resourcesChangeConsumers=" + resourcesChangeConsumers
+				+ ", resourcesUpdateConsumers=" + resourcesUpdateConsumers
+				+ ", promptsChangeConsumers=" + promptsChangeConsumers
+				+ ", loggingConsumers=" + loggingConsumers
+				+ ", progressConsumers=" + progressConsumers
+				+ ", samplingHandler=" + samplingHandler
+				+ ", elicitationHandler=" + elicitationHandler
+				+ ", enableCallToolSchemaCaching=" + enableCallToolSchemaCaching + "]";
+		}
 	}
 
 }

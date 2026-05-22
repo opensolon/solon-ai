@@ -1,21 +1,23 @@
 /*
- * Copyright 2024-2026 the original author or authors.
+ * Copyright 2024-2024 the original author or authors.
  */
 
 package io.modelcontextprotocol.client.transport;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.modelcontextprotocol.util.Assert;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Server parameters for stdio client. This is not a wire type; Jackson annotations are
- * intentionally omitted.
+ * Server parameters for stdio client.
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  */
+@JsonInclude(JsonInclude.Include.NON_ABSENT)
 public class ServerParameters {
 
 	// Environment variables to inherit by default
@@ -26,10 +28,13 @@ public class ServerParameters {
 						"SYSTEMDRIVE", "SYSTEMROOT", "TEMP", "USERNAME", "USERPROFILE")
 				: Arrays.asList("HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER");
 
+	@JsonProperty("command")
 	private String command;
 
+	@JsonProperty("args")
 	private List<String> args = new ArrayList<>();
 
+	@JsonProperty("env")
 	private Map<String, String> env;
 
 	private ServerParameters(String command, List<String> args, Map<String, String> env) {

@@ -163,7 +163,7 @@ public interface McpClient {
 
 		private ClientCapabilities capabilities;
 
-		private Implementation clientInfo = Implementation.builder("Java SDK MCP Client", "0.15.0").build();
+		private Implementation clientInfo = new Implementation("Java SDK MCP Client", "0.15.0");
 
 		private final Map<String, Root> roots = new HashMap<>();
 
@@ -519,7 +519,7 @@ public interface McpClient {
 
 		private ClientCapabilities capabilities;
 
-		private Implementation clientInfo = Implementation.builder("Java SDK MCP Client", "0.15.0").build();
+		private Implementation clientInfo = new Implementation("Java SDK MCP Client", "0.15.0");
 
 		private final Map<String, Root> roots = new HashMap<>();
 

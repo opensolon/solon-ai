@@ -6,7 +6,6 @@ package io.modelcontextprotocol.spec;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpInitRequestHandler;
 import io.modelcontextprotocol.server.McpNotificationHandler;
@@ -20,6 +19,7 @@ import reactor.core.publisher.Sinks;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -69,36 +69,6 @@ public class McpServerSession implements McpLoggableSession {
 
 	private final Supplier<Mono<Void>> onClose;
 
-	private final JsonSchemaValidator jsonSchemaValidator;
-
-	/**
-	 * Creates a new server session with the given parameters and the transport to use.
-	 * @param id session id
-	 * @param requestTimeout duration to wait for request responses before timing out
-	 * @param transport the transport to use
-	 * @param initHandler called when a
-	 * {@link McpSchema.InitializeRequest} is received by the
-	 * server
-	 * @param requestHandlers map of request handlers to use
-	 * @param notificationHandlers map of notification handlers to use
-	 * @param onClose supplier of a reactive callback invoked when the session is closed
-	 * @param jsonSchemaValidator optional validator threaded to exchanges for elicitation
-	 * schema validation
-	 */
-	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
-			McpInitRequestHandler initHandler, Map<String, McpRequestHandler<?>> requestHandlers,
-			Map<String, McpNotificationHandler> notificationHandlers, Supplier<Mono<Void>> onClose,
-			JsonSchemaValidator jsonSchemaValidator) {
-		this.id = id;
-		this.requestTimeout = requestTimeout;
-		this.transport = transport;
-		this.initRequestHandler = initHandler;
-		this.requestHandlers = requestHandlers;
-		this.notificationHandlers = notificationHandlers;
-		this.onClose = onClose;
-		this.jsonSchemaValidator = jsonSchemaValidator;
-	}
-
 	/**
 	 * Creates a new server session with the given parameters and the transport to use.
 	 * @param id session id
@@ -114,7 +84,13 @@ public class McpServerSession implements McpLoggableSession {
 	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
 			McpInitRequestHandler initHandler, Map<String, McpRequestHandler<?>> requestHandlers,
 			Map<String, McpNotificationHandler> notificationHandlers, Supplier<Mono<Void>> onClose) {
-		this(id, requestTimeout, transport, initHandler, requestHandlers, notificationHandlers, onClose, null);
+		this.id = id;
+		this.requestTimeout = requestTimeout;
+		this.transport = transport;
+		this.initRequestHandler = initHandler;
+		this.requestHandlers = requestHandlers;
+		this.notificationHandlers = notificationHandlers;
+		this.onClose = onClose;
 	}
 
 	/**
@@ -178,7 +154,8 @@ public class McpServerSession implements McpLoggableSession {
 
 		return Mono.<McpSchema.JSONRPCResponse>create(sink -> {
 			this.pendingResponses.put(requestId, sink);
-			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(method, requestId, requestParams);
+			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, method,
+					requestId, requestParams);
 			this.transport.sendMessage(jsonrpcRequest).subscribe(v -> {
 			}, error -> {
 				this.pendingResponses.remove(requestId);
@@ -201,7 +178,8 @@ public class McpServerSession implements McpLoggableSession {
 
 	@Override
 	public Mono<Void> sendNotification(String method, Object params) {
-		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(method, params);
+		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
+				method, params);
 		return this.transport.sendMessage(jsonrpcNotification);
 	}
 
@@ -244,10 +222,18 @@ public class McpServerSession implements McpLoggableSession {
 				McpSchema.JSONRPCRequest request = (McpSchema.JSONRPCRequest) message;
 				logger.debug("Received request: {}", request);
 				return handleIncomingRequest(request, transportContext).onErrorResume(error -> {
-					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (error instanceof McpError && ((McpError) error).getJsonRpcError() != null) ? ((McpError) error).getJsonRpcError()
-						: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError;
+					if (error instanceof McpError) {
+						McpError mcpError = (McpError) error;
+						jsonRpcError = mcpError.getJsonRpcError() != null ? mcpError.getJsonRpcError()
+								: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+										error.getMessage(), McpError.aggregateExceptionMessages(error));
+					} else {
+						jsonRpcError = new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 								error.getMessage(), McpError.aggregateExceptionMessages(error));
-					McpSchema.JSONRPCResponse errorResponse = McpSchema.JSONRPCResponse.error(request.id(), jsonRpcError);
+					}
+					McpSchema.JSONRPCResponse errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
+							jsonRpcError);
 					// TODO: Should the error go to SSE or back as POST return?
 					return this.transport.sendMessage(errorResponse).then(Mono.empty());
 				}).flatMap(this.transport::sendMessage);
@@ -294,20 +280,30 @@ public class McpServerSession implements McpLoggableSession {
 				McpRequestHandler<?> handler = this.requestHandlers.get(request.method());
 				if (handler == null) {
 					MethodNotFoundError error = getMethodNotFoundError(request.method());
-					return Mono
-						.just(McpSchema.JSONRPCResponse.error(request.id(), new McpSchema.JSONRPCResponse.JSONRPCError(
-								McpSchema.ErrorCodes.METHOD_NOT_FOUND, error.message(), error.data())));
+					return Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
+							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
+									error.message(), error.data())));
 				}
 
 				resultMono = this.exchangeSink.asMono()
 					.flatMap(exchange -> handler.handle(copyExchange(exchange, transportContext), request.params()));
 			}
-			return resultMono.map(result -> McpSchema.JSONRPCResponse.result(request.id(), result))
+			return resultMono
+				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
 				.onErrorResume(error -> {
-					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (error instanceof McpError && ((McpError) error).getJsonRpcError() != null) ? ((McpError) error).getJsonRpcError()
-						: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError;
+					if (error instanceof McpError) {
+						McpError mcpError = (McpError) error;
+						jsonRpcError = mcpError.getJsonRpcError() != null ? mcpError.getJsonRpcError()
+								// TODO: add error message through the data field
+								: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+										error.getMessage(), McpError.aggregateExceptionMessages(error));
+					} else {
+						jsonRpcError = new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 								error.getMessage(), McpError.aggregateExceptionMessages(error));
-					return Mono.just(McpSchema.JSONRPCResponse.error(request.id(), jsonRpcError));
+					}
+					return Mono.just(
+							new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null, jsonRpcError));
 				});
 		});
 	}
@@ -326,7 +322,7 @@ public class McpServerSession implements McpLoggableSession {
 				// FIXME: The session ID passed here is not the same as the one in the
 				// legacy SSE transport.
 				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this.id, this, clientCapabilities.get(),
-						clientInfo.get(), transportContext, this.jsonSchemaValidator));
+						clientInfo.get(), transportContext));
 			}
 
 			McpNotificationHandler handler = notificationHandlers.get(notification.method());
@@ -348,50 +344,32 @@ public class McpServerSession implements McpLoggableSession {
 	 */
 	private McpAsyncServerExchange copyExchange(McpAsyncServerExchange exchange, McpTransportContext transportContext) {
 		return new McpAsyncServerExchange(exchange.sessionId(), this, exchange.getClientCapabilities(),
-				exchange.getClientInfo(), transportContext, this.jsonSchemaValidator);
+				exchange.getClientInfo(), transportContext);
 	}
 
-	final class MethodNotFoundError {
-
+	static final class MethodNotFoundError {
 		private final String method;
-
 		private final String message;
-
 		private final Object data;
-
-
-		public MethodNotFoundError(String method, String message, Object data) {
-
+		MethodNotFoundError(String method, String message, Object data) {
 			this.method = method;
-
 			this.message = message;
-
 			this.data = data;
-
 		}
-
-
-		public String method() {
-
-			return this.method;
-
+		public String method() { return method; }
+		public String message() { return message; }
+		public Object data() { return data; }
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof MethodNotFoundError)) return false;
+			MethodNotFoundError that = (MethodNotFoundError) o;
+			return Objects.equals(method, that.method) && Objects.equals(message, that.message) && Objects.equals(data, that.data);
 		}
-
-
-		public String message() {
-
-			return this.message;
-
-		}
-
-
-		public Object data() {
-
-			return this.data;
-
-		}
-
-
+		@Override
+		public int hashCode() { return Objects.hash(method, message, data); }
+		@Override
+		public String toString() { return "MethodNotFoundError[method=" + method + ", message=" + message + ", data=" + data + "]"; }
 	}
 
 	private MethodNotFoundError getMethodNotFoundError(String method) {

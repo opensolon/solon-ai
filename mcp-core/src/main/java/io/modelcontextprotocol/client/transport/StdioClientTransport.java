@@ -10,7 +10,6 @@ import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
-import lombok.var;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -22,11 +21,12 @@ import reactor.core.scheduler.Schedulers;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Executor;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -61,8 +61,6 @@ public class StdioClientTransport implements McpClientTransport {
 	/** Scheduler for handling error messages from the server process */
 	private Scheduler errorScheduler;
 
-	private Executor processExitWaitExecutor = Executors.newSingleThreadExecutor();
-
 	/** Parameters for configuring and starting the server process */
 	private final ServerParameters params;
 
@@ -80,7 +78,7 @@ public class StdioClientTransport implements McpClientTransport {
 	 */
 	public StdioClientTransport(ServerParameters params, McpJsonMapper jsonMapper) {
 		Assert.notNull(params, "The params can not be null");
-		Assert.notNull(jsonMapper, "The jsonMapper can not be null");
+		Assert.notNull(jsonMapper, "The JsonMapper can not be null");
 
 		this.inboundSink = Sinks.many().unicast().onBackpressureBuffer();
 		this.outboundSink = Sinks.many().unicast().onBackpressureBuffer();
@@ -107,6 +105,7 @@ public class StdioClientTransport implements McpClientTransport {
 	@Override
 	public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
 		return Mono.<Void>fromRunnable(() -> {
+			logger.info("MCP server starting.");
 			handleIncomingMessages(handler);
 			handleIncomingErrors();
 
@@ -137,6 +136,7 @@ public class StdioClientTransport implements McpClientTransport {
 			startInboundProcessing();
 			startOutboundProcessing();
 			startErrorProcessing();
+			logger.info("MCP server started");
 		}).subscribeOn(Schedulers.boundedElastic());
 	}
 
@@ -262,7 +262,7 @@ public class StdioClientTransport implements McpClientTransport {
 					}
 					catch (Exception e) {
 						if (!isClosing) {
-							logger.error("Error processing inbound message for line: " + line, e);
+							logger.error("Error processing inbound message for line: {}", line, e);
 						}
 						break;
 					}
@@ -287,7 +287,7 @@ public class StdioClientTransport implements McpClientTransport {
 	 */
 	private void startOutboundProcessing() {
 		this.handleOutbound(messages -> messages
-			// this bit is important since writes come from user threads and we
+			// this bit is important since writes come from user threads, and we
 			// want to ensure that the actual writing happens on a dedicated thread
 			.publishOn(outboundScheduler)
 			.handle((message, s) -> {
@@ -300,7 +300,7 @@ public class StdioClientTransport implements McpClientTransport {
 						// embedded newlines.
 						jsonMessage = jsonMessage.replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\n");
 
-						var os = this.process.getOutputStream();
+						OutputStream os = this.process.getOutputStream();
 						synchronized (os) {
 							os.write(jsonMessage.getBytes(StandardCharsets.UTF_8));
 							os.write("\n".getBytes(StandardCharsets.UTF_8));
@@ -339,36 +339,38 @@ public class StdioClientTransport implements McpClientTransport {
 		return Mono.fromRunnable(() -> {
 			isClosing = true;
 			logger.debug("Initiating graceful shutdown");
-		}).then(Mono.defer(() -> {
+		}).then(Mono.<Void>defer(() -> {
 			// First complete all sinks to stop accepting new messages
 			inboundSink.tryEmitComplete();
 			outboundSink.tryEmitComplete();
 			errorSink.tryEmitComplete();
 
 			// Give a short time for any pending messages to be processed
-			return Mono.delay(Duration.ofMillis(100));
+			return Mono.delay(Duration.ofMillis(100)).then();
 		})).then(Mono.defer(() -> {
 			logger.debug("Sending TERM to process");
 			if (this.process != null) {
 				this.process.destroy();
-				return Mono.create(sink -> {
-					processExitWaitExecutor.execute(() -> {
-						try {
-							int exitCode = process.waitFor(); // 阻塞等待进程结束
-							sink.success(exitCode);          // 成功完成 Mono
-						} catch (InterruptedException e) {
-							sink.error(e);                   // 发生异常时完成 Mono
-						}
-					});
+				CompletableFuture<Process> onExitFuture = CompletableFuture.supplyAsync(() -> {
+					try {
+						process.waitFor();
+					} catch (InterruptedException e) {
+						Thread.currentThread().interrupt();
+					}
+					return process;
 				});
+				return Mono.fromFuture(onExitFuture);
 			}
 			else {
 				logger.warn("Process not started");
-				return Mono.empty();
+				return Mono.<Process>empty();
 			}
-		})).doOnNext(__ -> {
+		})).doOnNext(process -> {
 			if (process.exitValue() != 0) {
-				logger.warn("Process terminated with code " + process.exitValue());
+				logger.warn("Process terminated with code {}", process.exitValue());
+			}
+			else {
+				logger.info("MCP server process stopped");
 			}
 		}).then(Mono.fromRunnable(() -> {
 			try {
@@ -394,4 +396,5 @@ public class StdioClientTransport implements McpClientTransport {
 	public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
 		return this.jsonMapper.convertValue(data, typeRef);
 	}
+
 }

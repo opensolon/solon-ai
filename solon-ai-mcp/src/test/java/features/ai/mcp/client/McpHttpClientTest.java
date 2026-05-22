@@ -1,5 +1,6 @@
 package features.ai.mcp.client;
 
+import demo.ai.mcp.llm.LlmUtil;
 import demo.ai.mcp.server.McpServerApp;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
@@ -87,9 +88,7 @@ public class McpHttpClientTest {
                 .url("http://localhost:8081/demo4/sse")
                 .build();
 
-        ChatModel chatModel = ChatModel.of(apiUrl)
-                .provider(provider)
-                .model(model)
+        ChatModel chatModel = LlmUtil.getChatModel()
                 .defaultToolAdd(toolProvider)
                 .defaultToolAdd(toolProvider2)
                 .build();
@@ -117,9 +116,7 @@ public class McpHttpClientTest {
                 .url("http://localhost:8081/demo4/sse")
                 .build();
 
-        ChatModel chatModel = ChatModel.of(apiUrl)
-                .provider(provider)
-                .model(model)
+        ChatModel chatModel = LlmUtil.getChatModel()
                 .defaultToolAdd(toolProvider)
                 .defaultToolAdd(toolProvider2)
                 .build();
@@ -148,8 +145,4 @@ public class McpHttpClientTest {
         toolProvider.close();
         toolProvider2.close();
     }
-
-    private static final String apiUrl = "http://127.0.0.1:11434/api/chat";
-    private static final String provider = "ollama";
-    private static final String model = "qwen2.5:1.5b"; //"llama3.2";//deepseek-r1:1.5b;
 }

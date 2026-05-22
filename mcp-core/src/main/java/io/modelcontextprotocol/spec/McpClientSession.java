@@ -15,6 +15,7 @@ import reactor.core.publisher.MonoSink;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -155,11 +156,20 @@ public class McpClientSession implements McpSession {
 			logger.debug("Received request: {}", request);
 			handleIncomingRequest(request).onErrorResume(error -> {
 
-				McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (error instanceof McpError && ((McpError) error).getJsonRpcError() != null) ? ((McpError) error).getJsonRpcError()
-						: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-								error.getMessage(), McpError.aggregateExceptionMessages(error));
+				McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError;
+				if (error instanceof McpError) {
+					McpError mcpError = (McpError) error;
+					jsonRpcError = mcpError.getJsonRpcError() != null ? mcpError.getJsonRpcError()
+							// TODO: add error message through the data field
+							: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+									error.getMessage(), McpError.aggregateExceptionMessages(error));
+				} else {
+					jsonRpcError = new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+							error.getMessage(), McpError.aggregateExceptionMessages(error));
+				}
 
-				McpSchema.JSONRPCResponse errorResponse = McpSchema.JSONRPCResponse.error(request.id(), jsonRpcError);
+				McpSchema.JSONRPCResponse errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
+						jsonRpcError);
 				return Mono.just(errorResponse);
 			}).flatMap(this.transport::sendMessage).onErrorComplete(t -> {
 				logger.warn("Issue sending response to the client, ", t);
@@ -189,57 +199,39 @@ public class McpClientSession implements McpSession {
 			RequestHandler<?> handler = this.requestHandlers.get(request.method());
 			if (handler == null) {
 				MethodNotFoundError error = getMethodNotFoundError(request.method());
-				return Mono
-					.just(McpSchema.JSONRPCResponse.error(request.id(), new McpSchema.JSONRPCResponse.JSONRPCError(
-							McpSchema.ErrorCodes.METHOD_NOT_FOUND, error.message(), error.data())));
+				return Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
+						new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
+								error.message(), error.data())));
 			}
 
 			return handler.handle(request.params())
-				.map(result -> McpSchema.JSONRPCResponse.result(request.id(), result));
+				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null));
 		});
 	}
 
-	final class MethodNotFoundError {
-
+	static final class MethodNotFoundError {
 		private final String method;
-
 		private final String message;
-
 		private final Object data;
-
-
-		public MethodNotFoundError(String method, String message, Object data) {
-
+		MethodNotFoundError(String method, String message, Object data) {
 			this.method = method;
-
 			this.message = message;
-
 			this.data = data;
-
 		}
-
-
-		public String method() {
-
-			return this.method;
-
+		public String method() { return method; }
+		public String message() { return message; }
+		public Object data() { return data; }
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof MethodNotFoundError)) return false;
+			MethodNotFoundError that = (MethodNotFoundError) o;
+			return Objects.equals(method, that.method) && Objects.equals(message, that.message) && Objects.equals(data, that.data);
 		}
-
-
-		public String message() {
-
-			return this.message;
-
-		}
-
-
-		public Object data() {
-
-			return this.data;
-
-		}
-
-
+		@Override
+		public int hashCode() { return Objects.hash(method, message, data); }
+		@Override
+		public String toString() { return "MethodNotFoundError[method=" + method + ", message=" + message + ", data=" + data + "]"; }
 	}
 
 	private MethodNotFoundError getMethodNotFoundError(String method) {
@@ -292,7 +284,8 @@ public class McpClientSession implements McpSession {
 		return Mono.deferContextual(ctx -> Mono.<McpSchema.JSONRPCResponse>create(pendingResponseSink -> {
 			logger.debug("Sending message for method {}", method);
 			this.pendingResponses.put(requestId, pendingResponseSink);
-			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(method, requestId, requestParams);
+			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, method,
+					requestId, requestParams);
 			this.transport.sendMessage(jsonrpcRequest).contextWrite(ctx).subscribe(v -> {
 			}, error -> {
 				this.pendingResponses.remove(requestId);
@@ -322,7 +315,8 @@ public class McpClientSession implements McpSession {
 	 */
 	@Override
 	public Mono<Void> sendNotification(String method, Object params) {
-		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(method, params);
+		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
+				method, params);
 		return this.transport.sendMessage(jsonrpcNotification);
 	}
 

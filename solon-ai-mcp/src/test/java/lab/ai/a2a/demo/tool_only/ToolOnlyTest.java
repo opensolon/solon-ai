@@ -1,5 +1,6 @@
 package lab.ai.a2a.demo.tool_only;
 
+import demo.ai.mcp.llm.LlmUtil;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -18,9 +19,7 @@ import java.time.Duration;
 public class ToolOnlyTest {
     @Test
     public void hostAgent_call() throws Throwable {
-        ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
-                .model("qwen2.5:latest")
-                .provider("ollama")
+        ChatModel chatModel = LlmUtil.getChatModel()
                 .timeout(Duration.ofMinutes(10))
                 .defaultToolAdd(new Tools1())
                 .defaultToolAdd(new Tools2())

@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2026 the original author or authors.
+ * Copyright 2024-2024 the original author or authors.
  */
 
 package io.modelcontextprotocol.server;
@@ -67,12 +67,9 @@ public class McpStatelessAsyncServer {
 
 	private final JsonSchemaValidator jsonSchemaValidator;
 
-	private final boolean validateToolInputs;
-
 	McpStatelessAsyncServer(McpStatelessServerTransport mcpTransport, McpJsonMapper jsonMapper,
 			McpStatelessServerFeatures.Async features, Duration requestTimeout,
-			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
-			boolean validateToolInputs) {
+			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
 		this.mcpTransportProvider = mcpTransport;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
@@ -85,7 +82,6 @@ public class McpStatelessAsyncServer {
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
-		this.validateToolInputs = validateToolInputs;
 
 		Map<String, McpStatelessRequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -273,7 +269,7 @@ public class McpStatelessAsyncServer {
 					String content = "Response missing structured content which is expected when calling tool with non-empty outputSchema";
 					logger.warn(content);
 					return CallToolResult.builder()
-						.content(Collections.singletonList(McpSchema.TextContent.builder(content).build()))
+						.content(Arrays.asList(new McpSchema.TextContent(content)))
 						.isError(true)
 						.build();
 				}
@@ -284,7 +280,7 @@ public class McpStatelessAsyncServer {
 				if (!validation.valid()) {
 					logger.warn("Tool call result validation failed: {}", validation.errorMessage());
 					return CallToolResult.builder()
-						.content(Collections.singletonList(McpSchema.TextContent.builder(validation.errorMessage()).build()))
+						.content(Arrays.asList(new McpSchema.TextContent(validation.errorMessage())))
 						.isError(true)
 						.build();
 				}
@@ -297,7 +293,7 @@ public class McpStatelessAsyncServer {
 					// https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content
 
 					return CallToolResult.builder()
-						.content(Collections.singletonList(McpSchema.TextContent.builder(validation.jsonStructuredOutput()).build()))
+						.content(Arrays.asList(new McpSchema.TextContent(validation.jsonStructuredOutput())))
 						.isError(result.isError())
 						.structuredContent(result.structuredContent())
 						.build();
@@ -326,15 +322,6 @@ public class McpStatelessAsyncServer {
 		}
 		if (this.serverCapabilities.tools() == null) {
 			return Mono.error(new IllegalStateException("Server must be configured with tool capabilities"));
-		}
-
-		try {
-			Tool t = toolSpecification.tool();
-			this.jsonSchemaValidator.assertConforms("Tool '" + t.name() + "' inputSchema", t.inputSchema());
-			this.jsonSchemaValidator.assertConforms("Tool '" + t.name() + "' outputSchema", t.outputSchema());
-		}
-		catch (IllegalArgumentException e) {
-			return Mono.error(e);
 		}
 
 		McpStatelessServerFeatures.AsyncToolSpecification wrappedToolSpecification = withStructuredOutputHandling(this.jsonSchemaValidator, toolSpecification);
@@ -391,7 +378,7 @@ public class McpStatelessAsyncServer {
 			List<Tool> tools = this.tools.stream()
 				.map(McpStatelessServerFeatures.AsyncToolSpecification::tool)
 				.collect(Collectors.toList());
-			return Mono.just(McpSchema.ListToolsResult.builder(tools).build());
+			return Mono.just(new McpSchema.ListToolsResult(tools, null));
 		};
 	}
 
@@ -410,13 +397,6 @@ public class McpStatelessAsyncServer {
 					.message("Unknown tool: invalid_tool_name")
 					.data("Tool not found: " + callToolRequest.name())
 					.build());
-			}
-
-			Tool tool = toolSpecification.get().tool();
-			CallToolResult validationError = ToolInputValidator.validate(tool, callToolRequest.arguments(),
-					this.validateToolInputs, this.jsonSchemaValidator);
-			if (validationError != null) {
-				return Mono.just(validationError);
 			}
 
 			return toolSpecification.get().callHandler().apply(ctx, callToolRequest);
@@ -555,7 +535,7 @@ public class McpStatelessAsyncServer {
 				.stream()
 				.map(McpStatelessServerFeatures.AsyncResourceSpecification::resource)
 				.collect(Collectors.toList());
-			return Mono.just(McpSchema.ListResourcesResult.builder(resourceList).build());
+			return Mono.just(new McpSchema.ListResourcesResult(resourceList, null));
 		};
 	}
 
@@ -565,7 +545,7 @@ public class McpStatelessAsyncServer {
 				.stream()
 				.map(AsyncResourceTemplateSpecification::resourceTemplate)
 				.collect(Collectors.toList());
-			return Mono.just(McpSchema.ListResourceTemplatesResult.builder(resourceList).build());
+			return Mono.just(new McpSchema.ListResourceTemplatesResult(resourceList, null));
 		};
 	}
 
@@ -685,7 +665,7 @@ public class McpStatelessAsyncServer {
 				.map(McpStatelessServerFeatures.AsyncPromptSpecification::prompt)
 				.collect(Collectors.toList());
 
-			return Mono.just(McpSchema.ListPromptsResult.builder(promptList).build());
+			return Mono.just(new McpSchema.ListPromptsResult(promptList, null));
 		};
 	}
 
@@ -713,8 +693,7 @@ public class McpStatelessAsyncServer {
 
 	private McpStatelessRequestHandler<McpSchema.CompleteResult> completionCompleteRequestHandler() {
 		return (ctx, params) -> {
-			McpSchema.CompleteRequest request = jsonMapper.convertValue(params, new TypeRef<McpSchema.CompleteRequest>() {
-			});
+			McpSchema.CompleteRequest request = parseCompletionParams(params);
 
 			if (request.ref() == null) {
 				return Mono.error(
@@ -743,9 +722,12 @@ public class McpStatelessAsyncServer {
 						.message("Prompt not found: " + promptReference.name())
 						.build());
 				}
-				List<McpSchema.PromptArgument> arguments = promptSpec.prompt().arguments();
-				if (arguments == null
-						|| !arguments.stream().filter(arg -> arg.name().equals(argumentName)).findFirst().isPresent()) {
+				if (!promptSpec.prompt()
+					.arguments()
+					.stream()
+					.filter(arg -> arg.name().equals(argumentName))
+					.findFirst()
+					.isPresent()) {
 
 					logger.warn("Argument not found: {} in prompt: {}", argumentName, promptReference.name());
 
@@ -759,7 +741,7 @@ public class McpStatelessAsyncServer {
 					&& request.ref() instanceof ResourceReference) {
 				ResourceReference resourceReference = (ResourceReference) request.ref();
 
-				McpUriTemplateManager uriTemplateManager = this.uriTemplateManagerFactory.create(resourceReference.uri());
+				McpUriTemplateManager uriTemplateManager = uriTemplateManagerFactory.create(resourceReference.uri());
 
 				if (!uriTemplateManager.isUriTemplate(resourceReference.uri())) {
 					// Attempting to autocomplete a fixed resource URI is not an error in
@@ -811,6 +793,48 @@ public class McpStatelessAsyncServer {
 
 			return specification.completionHandler().apply(ctx, request);
 		};
+	}
+
+	/**
+	 * Parses the raw JSON-RPC request parameters into a {@link McpSchema.CompleteRequest}
+	 * object.
+	 * <p>
+	 * This method manually extracts the `ref` and `argument` fields from the input map,
+	 * determines the correct reference type (either prompt or resource), and constructs a
+	 * fully-typed {@code CompleteRequest} instance.
+	 * @param object the raw request parameters, expected to be a Map containing "ref" and
+	 * "argument" entries.
+	 * @return a {@link McpSchema.CompleteRequest} representing the structured completion
+	 * request.
+	 * @throws IllegalArgumentException if the "ref" type is not recognized.
+	 */
+	@SuppressWarnings("unchecked")
+	private McpSchema.CompleteRequest parseCompletionParams(Object object) {
+		Map<String, Object> params = (Map<String, Object>) object;
+		Map<String, Object> refMap = (Map<String, Object>) params.get("ref");
+		Map<String, Object> argMap = (Map<String, Object>) params.get("argument");
+
+		String refType = (String) refMap.get("type");
+
+		McpSchema.CompleteReference ref;
+		switch (refType) {
+			case PromptReference.TYPE:
+				ref = new PromptReference(refType, (String) refMap.get("name"),
+						refMap.get("title") != null ? (String) refMap.get("title") : null);
+				break;
+			case ResourceReference.TYPE:
+				ref = new ResourceReference(refType, (String) refMap.get("uri"));
+				break;
+			default:
+				throw new IllegalArgumentException("Invalid ref type: " + refType);
+		}
+
+		String argName = (String) argMap.get("name");
+		String argValue = (String) argMap.get("value");
+		McpSchema.CompleteRequest.CompleteArgument argument = new McpSchema.CompleteRequest.CompleteArgument(argName,
+				argValue);
+
+		return new McpSchema.CompleteRequest(ref, argument);
 	}
 
 	/**

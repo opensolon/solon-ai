@@ -1,5 +1,6 @@
 package lab.ai.a2a.demo.a2a_remote;
 
+import demo.ai.mcp.llm.LlmUtil;
 import lab.ai.a2a.AgentTaskHandler;
 import lab.ai.a2a.demo.a2a.Tools1;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -12,9 +13,7 @@ import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
  */
 @McpServerEndpoint(channel = McpChannel.STREAMABLE, mcpEndpoint = "mcp1")
 public class Server1 implements AgentTaskHandler {
-    ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
-            .model("qwen2.5:1.5b")
-            .provider("ollama")
+    ChatModel chatModel = LlmUtil.getChatModel()
             .defaultToolAdd(new Tools1())
             .build();
 

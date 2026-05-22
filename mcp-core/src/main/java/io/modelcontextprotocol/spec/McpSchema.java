@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2026 the original author or authors.
+ * Copyright 2024-2024 the original author or authors.
  */
 
 package io.modelcontextprotocol.spec;
@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.*;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
+import lombok.Builder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,7 +25,6 @@ import java.util.*;
  * @author Luca Chang
  * @author Surbhi Bansal
  * @author Anurag Pant
- * @author Dariusz Jędrzejczyk
  */
 public final class McpSchema {
 
@@ -36,12 +36,6 @@ public final class McpSchema {
 	public static final String JSONRPC_VERSION = "2.0";
 
 	public static final String FIRST_PAGE = null;
-
-	/**
-	 * The JSON Schema 2020-12 meta-schema URI (SEP-1613). This is the default dialect for
-	 * all schema objects in MCP when no explicit {@code $schema} field is present.
-	 */
-	public static final String JSON_SCHEMA_DIALECT_2020_12 = "https://json-schema.org/draft/2020-12/schema";
 
 	// ---------------------------
 	// Method Names
@@ -192,9 +186,10 @@ public final class McpSchema {
 	 */
 	public static JSONRPCMessage deserializeJsonRpcMessage(McpJsonMapper jsonMapper, String jsonText)
 			throws IOException {
+
 		logger.debug("Received JSON message: {}", jsonText);
 
-		Map<String, Object> map = jsonMapper.readValue(jsonText, MAP_TYPE_REF);
+		HashMap<String, Object> map = jsonMapper.readValue(jsonText, MAP_TYPE_REF);
 
 		// Determine message type based on specific JSON structure
 		if (map.containsKey("method") && map.containsKey("id")) {
@@ -229,38 +224,49 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class JSONRPCRequest  implements JSONRPCMessage {
-		private final @JsonProperty("jsonrpc") String jsonrpc;
-		private final @JsonProperty("method") String method;
-		private final @JsonProperty("id") Object id;
-		private final @JsonProperty("params") Object params;
+	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+	public static final class JSONRPCRequest implements JSONRPCMessage {
+		@JsonProperty("jsonrpc")
+		private final String jsonrpc;
+		@JsonProperty("method")
+		private final String method;
+		@JsonProperty("id")
+		private final Object id;
+		@JsonProperty("params")
+		private final Object params;
 
 		public JSONRPCRequest(@JsonProperty("jsonrpc") String jsonrpc, @JsonProperty("method") String method, @JsonProperty("id") Object id, @JsonProperty("params") Object params) {
-			Assert.hasText(jsonrpc, "jsonrpc must not be empty");
-			Assert.notNull(id, "MCP requests MUST include an ID - null IDs are not allowed");
-			Assert.isTrue(id instanceof String || id instanceof Integer || id instanceof Long,
-			"MCP requests MUST have an ID that is either a string or integer");
-			Assert.notNull(method, "MCP request method must not be null");
 			this.jsonrpc = jsonrpc;
 			this.method = method;
 			this.id = id;
 			this.params = params;
+			Assert.notNull(id, "MCP requests MUST include an ID - null IDs are not allowed");
+			Assert.isTrue(id instanceof String || id instanceof Integer || id instanceof Long,
+			"MCP requests MUST have an ID that is either a string or integer");
 		}
 
-		public String jsonrpc() {
-			return this.jsonrpc;
+		public String jsonrpc() { return this.jsonrpc; }
+
+		public String method() { return this.method; }
+
+		public Object id() { return this.id; }
+
+		public Object params() { return this.params; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof JSONRPCRequest)) return false;
+			JSONRPCRequest that = (JSONRPCRequest) o;
+			return Objects.equals(jsonrpc, that.jsonrpc()) && Objects.equals(method, that.method()) && Objects.equals(id, that.id()) && Objects.equals(params, that.params());
 		}
 
-		public String method() {
-			return this.method;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(jsonrpc, method, id, params); }
 
-		public Object id() {
-			return this.id;
-		}
-
-		public Object params() {
-			return this.params;
+		@Override
+		public String toString() {
+			return "JSONRPCRequest[jsonrpc=" + jsonrpc + ", method=" + method + ", id=" + id + ", params=" + params + "]";
 		}
 
 // @formatter:on
@@ -270,15 +276,6 @@ public final class McpSchema {
 		 * MCP requires that: (1) Requests MUST include a string or integer ID; (2) The ID
 		 * MUST NOT be null
 		 */
-
-		public JSONRPCRequest(String method, Object id, Object params) {
-			this(JSONRPC_VERSION, method, id, params);
-		}
-
-		public JSONRPCRequest(String method, Object id) {
-			this(JSONRPC_VERSION, method, id, null);
-		}
-
 	}
 
 	/**
@@ -290,41 +287,45 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class JSONRPCNotification  implements JSONRPCMessage {
-		private final @JsonProperty("jsonrpc") String jsonrpc;
-		private final @JsonProperty("method") String method;
-		private final @JsonProperty("params") Object params;
+	// TODO: batching support
+	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+	public static final class JSONRPCNotification implements JSONRPCMessage {
+		@JsonProperty("jsonrpc")
+		private final String jsonrpc;
+		@JsonProperty("method")
+		private final String method;
+		@JsonProperty("params")
+		private final Object params;
 
 		public JSONRPCNotification(@JsonProperty("jsonrpc") String jsonrpc, @JsonProperty("method") String method, @JsonProperty("params") Object params) {
-			Assert.hasText(jsonrpc, "jsonrpc must not be empty");
-			Assert.notNull(method, "MCP notification method must not be null");
 			this.jsonrpc = jsonrpc;
 			this.method = method;
 			this.params = params;
 		}
 
-		public String jsonrpc() {
-			return this.jsonrpc;
+		public String jsonrpc() { return this.jsonrpc; }
+
+		public String method() { return this.method; }
+
+		public Object params() { return this.params; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof JSONRPCNotification)) return false;
+			JSONRPCNotification that = (JSONRPCNotification) o;
+			return Objects.equals(jsonrpc, that.jsonrpc()) && Objects.equals(method, that.method()) && Objects.equals(params, that.params());
 		}
 
-		public String method() {
-			return this.method;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(jsonrpc, method, params); }
 
-		public Object params() {
-			return this.params;
+		@Override
+		public String toString() {
+			return "JSONRPCNotification[jsonrpc=" + jsonrpc + ", method=" + method + ", params=" + params + "]";
 		}
 
 // @formatter:on
-
-		public JSONRPCNotification(String method, Object params) {
-			this(JSONRPC_VERSION, method, params);
-		}
-
-		public JSONRPCNotification(String method) {
-			this(JSONRPC_VERSION, method, null);
-		}
-
 	}
 
 	/**
@@ -337,49 +338,50 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class JSONRPCResponse  implements JSONRPCMessage {
-		private final @JsonProperty("jsonrpc") String jsonrpc;
-		private final @JsonProperty("id") Object id;
-		private final @JsonProperty("result") Object result;
-		private final @JsonProperty("error") JSONRPCError error;
+	// TODO: batching support
+	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+	public static final class JSONRPCResponse implements JSONRPCMessage {
+		@JsonProperty("jsonrpc")
+		private final String jsonrpc;
+		@JsonProperty("id")
+		private final Object id;
+		@JsonProperty("result")
+		private final Object result;
+		@JsonProperty("error")
+		private final JSONRPCError error;
 
 		public JSONRPCResponse(@JsonProperty("jsonrpc") String jsonrpc, @JsonProperty("id") Object id, @JsonProperty("result") Object result, @JsonProperty("error") JSONRPCError error) {
-			Assert.hasText(jsonrpc, "jsonrpc must not be empty");
-			Assert.notNull(id, "MCP responses MUST include an ID - null IDs are not allowed");
-			Assert.isTrue(id instanceof String || id instanceof Integer || id instanceof Long,
-			"MCP responses MUST have an ID that is either a string or integer");
-			Assert.isTrue((result != null) ^ (error != null), "MCP responses MUST either have a result or error");
 			this.jsonrpc = jsonrpc;
 			this.id = id;
 			this.result = result;
 			this.error = error;
 		}
 
-		public String jsonrpc() {
-			return this.jsonrpc;
+		public String jsonrpc() { return this.jsonrpc; }
+
+		public Object id() { return this.id; }
+
+		public Object result() { return this.result; }
+
+		public JSONRPCError error() { return this.error; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof JSONRPCResponse)) return false;
+			JSONRPCResponse that = (JSONRPCResponse) o;
+			return Objects.equals(jsonrpc, that.jsonrpc()) && Objects.equals(id, that.id()) && Objects.equals(result, that.result()) && Objects.equals(error, that.error());
 		}
 
-		public Object id() {
-			return this.id;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(jsonrpc, id, result, error); }
 
-		public Object result() {
-			return this.result;
-		}
-
-		public JSONRPCError error() {
-			return this.error;
+		@Override
+		public String toString() {
+			return "JSONRPCResponse[jsonrpc=" + jsonrpc + ", id=" + id + ", result=" + result + ", error=" + error + "]";
 		}
 
 // @formatter:on
-
-		public static JSONRPCResponse result(Object id, Object result) {
-			return new JSONRPCResponse(JSONRPC_VERSION, id, result, null);
-		}
-
-		public static JSONRPCResponse error(Object id, JSONRPCError error) {
-			return new JSONRPCResponse(JSONRPC_VERSION, id, null, error);
-		}
 
 		/**
 		 * A response to a request that indicates an error occurred.
@@ -392,39 +394,44 @@ public final class McpSchema {
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
-		public static final class JSONRPCError {
-			private final @JsonProperty("code") Integer code;
-			private final @JsonProperty("message") String message;
-			private final @JsonProperty("data") Object data;
+	public static final class JSONRPCError {
+		@JsonProperty("code")
+		private final Integer code;
+		@JsonProperty("message")
+		private final String message;
+		@JsonProperty("data")
+		private final Object data;
 
-			public JSONRPCError(@JsonProperty("code") Integer code, @JsonProperty("message") String message, @JsonProperty("data") Object data) {
-				Assert.notNull(code, "code must not be null");
-				Assert.notNull(message, "message must not be null");
-				this.code = code;
-				this.message = message;
-				this.data = data;
-			}
-
-			public Integer code() {
-				return this.code;
-			}
-
-			public String message() {
-				return this.message;
-			}
-
-			public Object data() {
-				return this.data;
-			}
-
-// @formatter:on
-
-			public JSONRPCError(Integer code, String message) {
-				this(code, message, null);
-			}
-
+		public JSONRPCError(@JsonProperty("code") Integer code, @JsonProperty("message") String message, @JsonProperty("data") Object data) {
+			this.code = code;
+			this.message = message;
+			this.data = data;
 		}
 
+		public Integer code() { return this.code; }
+
+		public String message() { return this.message; }
+
+		public Object data() { return this.data; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof JSONRPCError)) return false;
+			JSONRPCError that = (JSONRPCError) o;
+			return Objects.equals(code, that.code()) && Objects.equals(message, that.message()) && Objects.equals(data, that.data());
+		}
+
+		@Override
+		public int hashCode() { return Objects.hash(code, message, data); }
+
+		@Override
+		public String toString() {
+			return "JSONRPCError[code=" + code + ", message=" + message + ", data=" + data + "]";
+		}
+
+// @formatter:on
+	}
 	}
 
 	// ---------------------------
@@ -442,109 +449,52 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class InitializeRequest {
-		private final @JsonProperty("protocolVersion") String protocolVersion;
-		private final @JsonProperty("capabilities") ClientCapabilities capabilities;
-		private final @JsonProperty("clientInfo") Implementation clientInfo;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class InitializeRequest implements Request {
+		@JsonProperty("protocolVersion")
+		private final String protocolVersion;
+		@JsonProperty("capabilities")
+		private final ClientCapabilities capabilities;
+		@JsonProperty("clientInfo")
+		private final Implementation clientInfo;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public InitializeRequest(@JsonProperty("protocolVersion") String protocolVersion, @JsonProperty("capabilities") ClientCapabilities capabilities, @JsonProperty("clientInfo") Implementation clientInfo, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(protocolVersion, "protocolVersion must not be null");
-			Assert.notNull(capabilities, "capabilities must not be null");
-			Assert.notNull(clientInfo, "clientInfo must not be null");
 			this.protocolVersion = protocolVersion;
 			this.capabilities = capabilities;
 			this.clientInfo = clientInfo;
 			this.meta = meta;
 		}
 
-		public String protocolVersion() {
-			return this.protocolVersion;
+		public String protocolVersion() { return this.protocolVersion; }
+
+		public ClientCapabilities capabilities() { return this.capabilities; }
+
+		public Implementation clientInfo() { return this.clientInfo; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof InitializeRequest)) return false;
+			InitializeRequest that = (InitializeRequest) o;
+			return Objects.equals(protocolVersion, that.protocolVersion()) && Objects.equals(capabilities, that.capabilities()) && Objects.equals(clientInfo, that.clientInfo()) && Objects.equals(meta, that.meta());
 		}
 
-		public ClientCapabilities capabilities() {
-			return this.capabilities;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(protocolVersion, capabilities, clientInfo, meta); }
 
-		public Implementation clientInfo() {
-			return this.clientInfo;
-		}
-
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "InitializeRequest[protocolVersion=" + protocolVersion + ", capabilities=" + capabilities + ", clientInfo=" + clientInfo + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static InitializeRequest fromJson(@JsonProperty("protocolVersion") String protocolVersion,
-				@JsonProperty("capabilities") ClientCapabilities capabilities,
-				@JsonProperty("clientInfo") Implementation clientInfo,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (protocolVersion == null || capabilities == null || clientInfo == null) {
-				List<String> missing = new ArrayList<>();
-				if (protocolVersion == null) {
-					missing.add("protocolVersion -> ''");
-					protocolVersion = "";
-				}
-				if (capabilities == null) {
-					missing.add("capabilities -> {}");
-					capabilities = new ClientCapabilities(null, null, null, null);
-				}
-				if (clientInfo == null) {
-					missing.add("clientInfo -> {name='', version=''}");
-					clientInfo = new Implementation("", "");
-				}
-				logger.warn("InitializeRequest: missing required fields during deserialization: {}",
-						String.join(", ", missing));
-			}
-			return new InitializeRequest(protocolVersion, capabilities, clientInfo, meta);
-		}
-
-		/**
-		 * @deprecated Use {@link #builder(String, ClientCapabilities, Implementation)}
-		 * instead.
-		 */
-		@Deprecated
 		public InitializeRequest(String protocolVersion, ClientCapabilities capabilities, Implementation clientInfo) {
 			this(protocolVersion, capabilities, clientInfo, null);
 		}
-
-		public static Builder builder(String protocolVersion, ClientCapabilities capabilities,
-				Implementation clientInfo) {
-			return new Builder(protocolVersion, capabilities, clientInfo);
-		}
-
-		public static class Builder {
-
-			private final String protocolVersion;
-
-			private final ClientCapabilities capabilities;
-
-			private final Implementation clientInfo;
-
-			private Map<String, Object> meta;
-
-			private Builder(String protocolVersion, ClientCapabilities capabilities, Implementation clientInfo) {
-				Assert.hasText(protocolVersion, "protocolVersion must not be empty");
-				Assert.notNull(capabilities, "capabilities must not be null");
-				Assert.notNull(clientInfo, "clientInfo must not be null");
-				this.protocolVersion = protocolVersion;
-				this.capabilities = capabilities;
-				this.clientInfo = clientInfo;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public InitializeRequest build() {
-				return new InitializeRequest(protocolVersion, capabilities, clientInfo, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -564,17 +514,19 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class InitializeResult {
-		private final @JsonProperty("protocolVersion") String protocolVersion;
-		private final @JsonProperty("capabilities") ServerCapabilities capabilities;
-		private final @JsonProperty("serverInfo") Implementation serverInfo;
-		private final @JsonProperty("instructions") String instructions;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class InitializeResult implements Result {
+		@JsonProperty("protocolVersion")
+		private final String protocolVersion;
+		@JsonProperty("capabilities")
+		private final ServerCapabilities capabilities;
+		@JsonProperty("serverInfo")
+		private final Implementation serverInfo;
+		@JsonProperty("instructions")
+		private final String instructions;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public InitializeResult(@JsonProperty("protocolVersion") String protocolVersion, @JsonProperty("capabilities") ServerCapabilities capabilities, @JsonProperty("serverInfo") Implementation serverInfo, @JsonProperty("instructions") String instructions, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(protocolVersion, "protocolVersion must not be null");
-			Assert.notNull(capabilities, "capabilities must not be null");
-			Assert.notNull(serverInfo, "serverInfo must not be null");
 			this.protocolVersion = protocolVersion;
 			this.capabilities = capabilities;
 			this.serverInfo = serverInfo;
@@ -582,105 +534,38 @@ public final class McpSchema {
 			this.meta = meta;
 		}
 
-		public String protocolVersion() {
-			return this.protocolVersion;
+		public String protocolVersion() { return this.protocolVersion; }
+
+		public ServerCapabilities capabilities() { return this.capabilities; }
+
+		public Implementation serverInfo() { return this.serverInfo; }
+
+		public String instructions() { return this.instructions; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof InitializeResult)) return false;
+			InitializeResult that = (InitializeResult) o;
+			return Objects.equals(protocolVersion, that.protocolVersion()) && Objects.equals(capabilities, that.capabilities()) && Objects.equals(serverInfo, that.serverInfo()) && Objects.equals(instructions, that.instructions()) && Objects.equals(meta, that.meta());
 		}
 
-		public ServerCapabilities capabilities() {
-			return this.capabilities;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(protocolVersion, capabilities, serverInfo, instructions, meta); }
 
-		public Implementation serverInfo() {
-			return this.serverInfo;
-		}
-
-		public String instructions() {
-			return this.instructions;
-		}
-
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "InitializeResult[protocolVersion=" + protocolVersion + ", capabilities=" + capabilities + ", serverInfo=" + serverInfo + ", instructions=" + instructions + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static InitializeResult fromJson(@JsonProperty("protocolVersion") String protocolVersion,
-				@JsonProperty("capabilities") ServerCapabilities capabilities,
-				@JsonProperty("serverInfo") Implementation serverInfo,
-				@JsonProperty("instructions") String instructions, @JsonProperty("_meta") Map<String, Object> meta) {
-			if (protocolVersion == null || capabilities == null || serverInfo == null) {
-				List<String> missing = new ArrayList<>();
-				if (protocolVersion == null) {
-					missing.add("protocolVersion -> ''");
-					protocolVersion = "";
-				}
-				if (capabilities == null) {
-					missing.add("capabilities -> {}");
-					capabilities = new ServerCapabilities(null, null, null, null, null, null);
-				}
-				if (serverInfo == null) {
-					missing.add("serverInfo -> {name='', version=''}");
-					serverInfo = new Implementation("", "");
-				}
-				logger.warn("InitializeResult: missing required fields during deserialization: {}",
-						String.join(", ", missing));
-			}
-			return new InitializeResult(protocolVersion, capabilities, serverInfo, instructions, meta);
-		}
-
-		/**
-		 * @deprecated Use {@link #builder(String, ServerCapabilities, Implementation)}
-		 * instead.
-		 */
-		@Deprecated
 		public InitializeResult(String protocolVersion, ServerCapabilities capabilities, Implementation serverInfo,
 				String instructions) {
 			this(protocolVersion, capabilities, serverInfo, instructions, null);
 		}
-
-		public static Builder builder(String protocolVersion, ServerCapabilities capabilities,
-				Implementation serverInfo) {
-			return new Builder(protocolVersion, capabilities, serverInfo);
-		}
-
-		public static class Builder {
-
-			private final String protocolVersion;
-
-			private final ServerCapabilities capabilities;
-
-			private final Implementation serverInfo;
-
-			private String instructions;
-
-			private Map<String, Object> meta;
-
-			private Builder(String protocolVersion, ServerCapabilities capabilities, Implementation serverInfo) {
-				Assert.hasText(protocolVersion, "protocolVersion must not be empty");
-				Assert.notNull(capabilities, "capabilities must not be null");
-				Assert.notNull(serverInfo, "serverInfo must not be null");
-				this.protocolVersion = protocolVersion;
-				this.capabilities = capabilities;
-				this.serverInfo = serverInfo;
-			}
-
-			public Builder instructions(String instructions) {
-				this.instructions = instructions;
-				return this;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public InitializeResult build() {
-				return new InitializeResult(protocolVersion, capabilities, serverInfo, instructions, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -697,10 +582,14 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class ClientCapabilities {
-		private final @JsonProperty("experimental") Map<String, Object> experimental;
-		private final @JsonProperty("roots") RootCapabilities roots;
-		private final @JsonProperty("sampling") Sampling sampling;
-		private final @JsonProperty("elicitation") Elicitation elicitation;
+		@JsonProperty("experimental")
+		private final Map<String, Object> experimental;
+		@JsonProperty("roots")
+		private final RootCapabilities roots;
+		@JsonProperty("sampling")
+		private final Sampling sampling;
+		@JsonProperty("elicitation")
+		private final Elicitation elicitation;
 
 		public ClientCapabilities(@JsonProperty("experimental") Map<String, Object> experimental, @JsonProperty("roots") RootCapabilities roots, @JsonProperty("sampling") Sampling sampling, @JsonProperty("elicitation") Elicitation elicitation) {
 			this.experimental = experimental;
@@ -709,20 +598,28 @@ public final class McpSchema {
 			this.elicitation = elicitation;
 		}
 
-		public Map<String, Object> experimental() {
-			return this.experimental;
+		public Map<String, Object> experimental() { return this.experimental; }
+
+		public RootCapabilities roots() { return this.roots; }
+
+		public Sampling sampling() { return this.sampling; }
+
+		public Elicitation elicitation() { return this.elicitation; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ClientCapabilities)) return false;
+			ClientCapabilities that = (ClientCapabilities) o;
+			return Objects.equals(experimental, that.experimental()) && Objects.equals(roots, that.roots()) && Objects.equals(sampling, that.sampling()) && Objects.equals(elicitation, that.elicitation());
 		}
 
-		public RootCapabilities roots() {
-			return this.roots;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(experimental, roots, sampling, elicitation); }
 
-		public Sampling sampling() {
-			return this.sampling;
-		}
-
-		public Elicitation elicitation() {
-			return this.elicitation;
+		@Override
+		public String toString() {
+			return "ClientCapabilities[experimental=" + experimental + ", roots=" + roots + ", sampling=" + sampling + ", elicitation=" + elicitation + "]";
 		}
 
 // @formatter:on
@@ -735,37 +632,32 @@ public final class McpSchema {
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
-		public static final class RootCapabilities {
-			private final @JsonProperty("listChanged") Boolean listChanged;
+	public static final class RootCapabilities {
+		@JsonProperty("listChanged")
+		private final Boolean listChanged;
 
-			public RootCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
-				this.listChanged = listChanged;
-			}
-
-			public Boolean listChanged() {
-				return this.listChanged;
-			}
-
-public static Builder builder() {
-				return new Builder();
-			}
-
-			public static class Builder {
-
-				private Boolean listChanged;
-
-				public Builder listChanged(Boolean listChanged) {
-					this.listChanged = listChanged;
-					return this;
-				}
-
-				public RootCapabilities build() {
-					return new RootCapabilities(listChanged);
-				}
-
-			}
-
+		public RootCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
+			this.listChanged = listChanged;
 		}
+
+		public Boolean listChanged() { return this.listChanged; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof RootCapabilities)) return false;
+			RootCapabilities that = (RootCapabilities) o;
+			return Objects.equals(listChanged, that.listChanged());
+		}
+
+		@Override
+		public int hashCode() { return Objects.hash(listChanged); }
+
+		@Override
+		public String toString() {
+			return "RootCapabilities[listChanged=" + listChanged + "]";
+		}
+	}
 
 		/**
 		 * Provides a standardized way for servers to request LLM sampling ("completions"
@@ -776,13 +668,21 @@ public static Builder builder() {
 		 * from MCP servers in their prompts.
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
-		@JsonIgnoreProperties(ignoreUnknown = true)
-		public static final class Sampling {
+	public static final class Sampling {
 
-			public Sampling() {
-			}
-
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof Sampling)) return false;
+			return true;
 		}
+
+		@Override
+		public int hashCode() { return 1; }
+
+		@Override
+		public String toString() { return "Sampling[]"; }
+	}
 
 		/**
 		 * Provides a standardized way for servers to request additional information from
@@ -808,85 +708,85 @@ public static Builder builder() {
 		 * @param url support for out-of-band URL-based elicitation
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
-		@JsonIgnoreProperties(ignoreUnknown = true)
-		public static final class Elicitation {
-			private final @JsonProperty("form") Form form;
-			private final @JsonProperty("url") Url url;
+	public static final class Elicitation {
+		@JsonProperty("form")
+		private final Form form;
+		@JsonProperty("url")
+		private final Url url;
 
-			public Elicitation(@JsonProperty("form") Form form, @JsonProperty("url") Url url) {
-				this.form = form;
-				this.url = url;
-			}
+		public Elicitation(@JsonProperty("form") Form form, @JsonProperty("url") Url url) {
+			this.form = form;
+			this.url = url;
+		}
 
-			public Form form() {
-				return this.form;
-			}
+		public Form form() { return this.form; }
 
-			public Url url() {
-				return this.url;
-			}
+		public Url url() { return this.url; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof Elicitation)) return false;
+			Elicitation that = (Elicitation) o;
+			return Objects.equals(form, that.form()) && Objects.equals(url, that.url());
+		}
+
+		@Override
+		public int hashCode() { return Objects.hash(form, url); }
+
+		@Override
+		public String toString() {
+			return "Elicitation[form=" + form + ", url=" + url + "]";
+		}
 
 /**
 			 * Marker record indicating support for form-based elicitation mode.
 			 */
 			@JsonInclude(JsonInclude.Include.NON_ABSENT)
-			@JsonIgnoreProperties(ignoreUnknown = true)
-			public static final class Form {
+	public static final class Form {
 
-				public Form() {
-				}
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof Form)) return false;
+			return true;
+		}
 
-			}
+		@Override
+		public int hashCode() { return 1; }
+
+		@Override
+		public String toString() { return "Form[]"; }
+	}
 
 			/**
 			 * Marker record indicating support for URL-based elicitation mode.
 			 */
 			@JsonInclude(JsonInclude.Include.NON_ABSENT)
-			@JsonIgnoreProperties(ignoreUnknown = true)
-			public static final class Url {
+	public static final class Url {
 
-				public Url() {
-				}
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof Url)) return false;
+			return true;
+		}
 
-			}
+		@Override
+		public int hashCode() { return 1; }
+
+		@Override
+		public String toString() { return "Url[]"; }
+	}
 
 			/**
 			 * Creates an Elicitation with default settings (backward compatible, produces
 			 * empty JSON object).
-			 * @deprecated Use {@link #builder()} instead.
 			 */
-			@Deprecated
 			public Elicitation() {
 				this(null, null);
 			}
-
-			public static Builder builder() {
-				return new Builder();
-			}
-
-			public static class Builder {
-
-				private Form form;
-
-				private Url url;
-
-				public Builder form(Form form) {
-					this.form = form;
-					return this;
-				}
-
-				public Builder url(Url url) {
-					this.url = url;
-					return this;
-				}
-
-				public Elicitation build() {
-					return new Elicitation(form, url);
-				}
-
-			}
-
-		}
+	}
 
 		public static Builder builder() {
 			return new Builder();
@@ -923,7 +823,7 @@ public static Builder builder() {
 			 * @return this builder
 			 */
 			public Builder elicitation() {
-				this.elicitation = Elicitation.builder().build();
+				this.elicitation = new Elicitation();
 				return this;
 			}
 
@@ -939,17 +839,11 @@ public static Builder builder() {
 				return this;
 			}
 
-			public Builder elicitation(Elicitation elicitation) {
-				this.elicitation = elicitation;
-				return this;
-			}
-
 			public ClientCapabilities build() {
 				return new ClientCapabilities(experimental, roots, sampling, elicitation);
 			}
 
 		}
-
 	}
 
 	/**
@@ -969,12 +863,18 @@ public static Builder builder() {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class ServerCapabilities {
-		private final @JsonProperty("completions") CompletionCapabilities completions;
-		private final @JsonProperty("experimental") Map<String, Object> experimental;
-		private final @JsonProperty("logging") LoggingCapabilities logging;
-		private final @JsonProperty("prompts") PromptCapabilities prompts;
-		private final @JsonProperty("resources") ResourceCapabilities resources;
-		private final @JsonProperty("tools") ToolCapabilities tools;
+		@JsonProperty("completions")
+		private final CompletionCapabilities completions;
+		@JsonProperty("experimental")
+		private final Map<String, Object> experimental;
+		@JsonProperty("logging")
+		private final LoggingCapabilities logging;
+		@JsonProperty("prompts")
+		private final PromptCapabilities prompts;
+		@JsonProperty("resources")
+		private final ResourceCapabilities resources;
+		@JsonProperty("tools")
+		private final ToolCapabilities tools;
 
 		public ServerCapabilities(@JsonProperty("completions") CompletionCapabilities completions, @JsonProperty("experimental") Map<String, Object> experimental, @JsonProperty("logging") LoggingCapabilities logging, @JsonProperty("prompts") PromptCapabilities prompts, @JsonProperty("resources") ResourceCapabilities resources, @JsonProperty("tools") ToolCapabilities tools) {
 			this.completions = completions;
@@ -985,28 +885,32 @@ public static Builder builder() {
 			this.tools = tools;
 		}
 
-		public CompletionCapabilities completions() {
-			return this.completions;
+		public CompletionCapabilities completions() { return this.completions; }
+
+		public Map<String, Object> experimental() { return this.experimental; }
+
+		public LoggingCapabilities logging() { return this.logging; }
+
+		public PromptCapabilities prompts() { return this.prompts; }
+
+		public ResourceCapabilities resources() { return this.resources; }
+
+		public ToolCapabilities tools() { return this.tools; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ServerCapabilities)) return false;
+			ServerCapabilities that = (ServerCapabilities) o;
+			return Objects.equals(completions, that.completions()) && Objects.equals(experimental, that.experimental()) && Objects.equals(logging, that.logging()) && Objects.equals(prompts, that.prompts()) && Objects.equals(resources, that.resources()) && Objects.equals(tools, that.tools());
 		}
 
-		public Map<String, Object> experimental() {
-			return this.experimental;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(completions, experimental, logging, prompts, resources, tools); }
 
-		public LoggingCapabilities logging() {
-			return this.logging;
-		}
-
-		public PromptCapabilities prompts() {
-			return this.prompts;
-		}
-
-		public ResourceCapabilities resources() {
-			return this.resources;
-		}
-
-		public ToolCapabilities tools() {
-			return this.tools;
+		@Override
+		public String toString() {
+			return "ServerCapabilities[completions=" + completions + ", experimental=" + experimental + ", logging=" + logging + ", prompts=" + prompts + ", resources=" + resources + ", tools=" + tools + "]";
 		}
 
 // @formatter:on
@@ -1015,25 +919,41 @@ public static Builder builder() {
 		 * Present if the server supports argument autocompletion suggestions.
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
-		@JsonIgnoreProperties(ignoreUnknown = true)
-		public static final class CompletionCapabilities {
+	public static final class CompletionCapabilities {
 
-			public CompletionCapabilities() {
-			}
-
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof CompletionCapabilities)) return false;
+			return true;
 		}
+
+		@Override
+		public int hashCode() { return 1; }
+
+		@Override
+		public String toString() { return "CompletionCapabilities[]"; }
+	}
 
 		/**
 		 * Present if the server supports sending log messages to the client.
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
-		@JsonIgnoreProperties(ignoreUnknown = true)
-		public static final class LoggingCapabilities {
+	public static final class LoggingCapabilities {
 
-			public LoggingCapabilities() {
-			}
-
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof LoggingCapabilities)) return false;
+			return true;
 		}
+
+		@Override
+		public int hashCode() { return 1; }
+
+		@Override
+		public String toString() { return "LoggingCapabilities[]"; }
+	}
 
 		/**
 		 * Present if the server offers any prompt templates.
@@ -1042,38 +962,32 @@ public static Builder builder() {
 		 * the prompt list
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
-		@JsonIgnoreProperties(ignoreUnknown = true)
-		public static final class PromptCapabilities {
-			private final @JsonProperty("listChanged") Boolean listChanged;
+	public static final class PromptCapabilities {
+		@JsonProperty("listChanged")
+		private final Boolean listChanged;
 
-			public PromptCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
-				this.listChanged = listChanged;
-			}
-
-			public Boolean listChanged() {
-				return this.listChanged;
-			}
-
-public static Builder builder() {
-				return new Builder();
-			}
-
-			public static class Builder {
-
-				private Boolean listChanged;
-
-				public Builder listChanged(Boolean listChanged) {
-					this.listChanged = listChanged;
-					return this;
-				}
-
-				public PromptCapabilities build() {
-					return new PromptCapabilities(listChanged);
-				}
-
-			}
-
+		public PromptCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
+			this.listChanged = listChanged;
 		}
+
+		public Boolean listChanged() { return this.listChanged; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof PromptCapabilities)) return false;
+			PromptCapabilities that = (PromptCapabilities) o;
+			return Objects.equals(listChanged, that.listChanged());
+		}
+
+		@Override
+		public int hashCode() { return Objects.hash(listChanged); }
+
+		@Override
+		public String toString() {
+			return "PromptCapabilities[listChanged=" + listChanged + "]";
+		}
+	}
 
 		/**
 		 * Present if the server offers any resources to read.
@@ -1083,51 +997,37 @@ public static Builder builder() {
 		 * the resource list
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
-		@JsonIgnoreProperties(ignoreUnknown = true)
-		public static final class ResourceCapabilities {
-			private final @JsonProperty("subscribe") Boolean subscribe;
-			private final @JsonProperty("listChanged") Boolean listChanged;
+	public static final class ResourceCapabilities {
+		@JsonProperty("subscribe")
+		private final Boolean subscribe;
+		@JsonProperty("listChanged")
+		private final Boolean listChanged;
 
-			public ResourceCapabilities(@JsonProperty("subscribe") Boolean subscribe, @JsonProperty("listChanged") Boolean listChanged) {
-				this.subscribe = subscribe;
-				this.listChanged = listChanged;
-			}
-
-			public Boolean subscribe() {
-				return this.subscribe;
-			}
-
-			public Boolean listChanged() {
-				return this.listChanged;
-			}
-
-public static Builder builder() {
-				return new Builder();
-			}
-
-			public static class Builder {
-
-				private Boolean subscribe;
-
-				private Boolean listChanged;
-
-				public Builder subscribe(Boolean subscribe) {
-					this.subscribe = subscribe;
-					return this;
-				}
-
-				public Builder listChanged(Boolean listChanged) {
-					this.listChanged = listChanged;
-					return this;
-				}
-
-				public ResourceCapabilities build() {
-					return new ResourceCapabilities(subscribe, listChanged);
-				}
-
-			}
-
+		public ResourceCapabilities(@JsonProperty("subscribe") Boolean subscribe, @JsonProperty("listChanged") Boolean listChanged) {
+			this.subscribe = subscribe;
+			this.listChanged = listChanged;
 		}
+
+		public Boolean subscribe() { return this.subscribe; }
+
+		public Boolean listChanged() { return this.listChanged; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ResourceCapabilities)) return false;
+			ResourceCapabilities that = (ResourceCapabilities) o;
+			return Objects.equals(subscribe, that.subscribe()) && Objects.equals(listChanged, that.listChanged());
+		}
+
+		@Override
+		public int hashCode() { return Objects.hash(subscribe, listChanged); }
+
+		@Override
+		public String toString() {
+			return "ResourceCapabilities[subscribe=" + subscribe + ", listChanged=" + listChanged + "]";
+		}
+	}
 
 		/**
 		 * Present if the server offers any tools to call.
@@ -1136,38 +1036,32 @@ public static Builder builder() {
 		 * the tool list
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
-		@JsonIgnoreProperties(ignoreUnknown = true)
-		public static final class ToolCapabilities {
-			private final @JsonProperty("listChanged") Boolean listChanged;
+	public static final class ToolCapabilities {
+		@JsonProperty("listChanged")
+		private final Boolean listChanged;
 
-			public ToolCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
-				this.listChanged = listChanged;
-			}
-
-			public Boolean listChanged() {
-				return this.listChanged;
-			}
-
-public static Builder builder() {
-				return new Builder();
-			}
-
-			public static class Builder {
-
-				private Boolean listChanged;
-
-				public Builder listChanged(Boolean listChanged) {
-					this.listChanged = listChanged;
-					return this;
-				}
-
-				public ToolCapabilities build() {
-					return new ToolCapabilities(listChanged);
-				}
-
-			}
-
+		public ToolCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
+			this.listChanged = listChanged;
 		}
+
+		public Boolean listChanged() { return this.listChanged; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ToolCapabilities)) return false;
+			ToolCapabilities that = (ToolCapabilities) o;
+			return Objects.equals(listChanged, that.listChanged());
+		}
+
+		@Override
+		public int hashCode() { return Objects.hash(listChanged); }
+
+		@Override
+		public String toString() {
+			return "ToolCapabilities[listChanged=" + listChanged + "]";
+		}
+	}
 
 		/**
 		 * Create a mutated copy of this object with the specified changes.
@@ -1237,7 +1131,6 @@ public static Builder builder() {
 			}
 
 		}
-
 	}
 
 	/**
@@ -1251,90 +1144,47 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class Implementation {
-		private final @JsonProperty("name") String name;
-		private final @JsonProperty("title") String title;
-		private final @JsonProperty("version") String version;
+	public static final class Implementation implements Identifier {
+		@JsonProperty("name")
+		private final String name;
+		@JsonProperty("title")
+		private final String title;
+		@JsonProperty("version")
+		private final String version;
 
 		public Implementation(@JsonProperty("name") String name, @JsonProperty("title") String title, @JsonProperty("version") String version) {
-			Assert.notNull(name, "name must not be null");
-			Assert.notNull(version, "version must not be null");
 			this.name = name;
 			this.title = title;
 			this.version = version;
 		}
 
-		public String name() {
-			return this.name;
+		public String name() { return this.name; }
+
+		public String title() { return this.title; }
+
+		public String version() { return this.version; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof Implementation)) return false;
+			Implementation that = (Implementation) o;
+			return Objects.equals(name, that.name()) && Objects.equals(title, that.title()) && Objects.equals(version, that.version());
 		}
 
-		public String title() {
-			return this.title;
+		@Override
+		public int hashCode() { return Objects.hash(name, title, version); }
+
+		@Override
+		public String toString() {
+			return "Implementation[name=" + name + ", title=" + title + ", version=" + version + "]";
 		}
 
-		public String version() {
-			return this.version;
-		}
+// @formatter:on			
 
-// @formatter:on
-
-		@JsonCreator
-		static Implementation fromJson(@JsonProperty("name") String name, @JsonProperty("title") String title,
-				@JsonProperty("version") String version) {
-			if (name == null || version == null) {
-				List<String> missing = new ArrayList<>();
-				if (name == null) {
-					missing.add("name -> ''");
-					name = "";
-				}
-				if (version == null) {
-					missing.add("version -> ''");
-					version = "";
-				}
-				logger.warn("Implementation: missing required fields during deserialization: {}",
-						String.join(", ", missing));
-			}
-			return new Implementation(name, title, version);
-		}
-
-		/**
-		 * @deprecated Use {@link #builder(String, String)}
-		 */
-		@Deprecated
 		public Implementation(String name, String version) {
 			this(name, null, version);
 		}
-
-		public static Builder builder(String name, String version) {
-			return new Builder(name, version);
-		}
-
-		public static class Builder {
-
-			private final String name;
-
-			private String title;
-
-			private final String version;
-
-			private Builder(String name, String version) {
-				Assert.hasText(name, "name must not be empty");
-				Assert.hasText(version, "version must not be empty");
-				this.name = name;
-				this.version = version;
-			}
-
-			public Builder title(String title) {
-				this.title = title;
-				return this;
-			}
-
-			public Implementation build() {
-				return new Implementation(name, title, version);
-			}
-
-		}
-
 	}
 
 	// Existing Enums and Base Types (from previous implementation)
@@ -1373,9 +1223,12 @@ public static Builder builder() {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class Annotations {
-		private final @JsonProperty("audience") List<Role> audience;
-		private final @JsonProperty("priority") Double priority;
-		private final @JsonProperty("lastModified") String lastModified;
+		@JsonProperty("audience")
+		private final List<Role> audience;
+		@JsonProperty("priority")
+		private final Double priority;
+		@JsonProperty("lastModified")
+		private final String lastModified;
 
 		public Annotations(@JsonProperty("audience") List<Role> audience, @JsonProperty("priority") Double priority, @JsonProperty("lastModified") String lastModified) {
 			this.audience = audience;
@@ -1383,61 +1236,33 @@ public static Builder builder() {
 			this.lastModified = lastModified;
 		}
 
-		public List<Role> audience() {
-			return this.audience;
+		public List<Role> audience() { return this.audience; }
+
+		public Double priority() { return this.priority; }
+
+		public String lastModified() { return this.lastModified; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof Annotations)) return false;
+			Annotations that = (Annotations) o;
+			return Objects.equals(audience, that.audience()) && Objects.equals(priority, that.priority()) && Objects.equals(lastModified, that.lastModified());
 		}
 
-		public Double priority() {
-			return this.priority;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(audience, priority, lastModified); }
 
-		public String lastModified() {
-			return this.lastModified;
+		@Override
+		public String toString() {
+			return "Annotations[audience=" + audience + ", priority=" + priority + ", lastModified=" + lastModified + "]";
 		}
 
 // @formatter:on
 
-		/**
-		 * @deprecated Use {@link #builder()} instead.
-		 */
-		@Deprecated
 		public Annotations(List<Role> audience, Double priority) {
 			this(audience, priority, null);
 		}
-
-		public static Builder builder() {
-			return new Builder();
-		}
-
-		public static class Builder {
-
-			private List<Role> audience;
-
-			private Double priority;
-
-			private String lastModified;
-
-			public Builder audience(List<Role> audience) {
-				this.audience = audience;
-				return this;
-			}
-
-			public Builder priority(Double priority) {
-				this.priority = priority;
-				return this;
-			}
-
-			public Builder lastModified(String lastModified) {
-				this.lastModified = lastModified;
-				return this;
-			}
-
-			public Annotations build() {
-				return new Annotations(audience, priority, lastModified);
-			}
-
-		}
-
 	}
 
 	/**
@@ -1504,19 +1329,25 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class Resource {
-		private final @JsonProperty("uri") String uri;
-		private final @JsonProperty("name") String name;
-		private final @JsonProperty("title") String title;
-		private final @JsonProperty("description") String description;
-		private final @JsonProperty("mimeType") String mimeType;
-		private final @JsonProperty("size") Long size;
-		private final @JsonProperty("annotations") Annotations annotations;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class Resource implements ResourceContent {
+		@JsonProperty("uri")
+		private final String uri;
+		@JsonProperty("name")
+		private final String name;
+		@JsonProperty("title")
+		private final String title;
+		@JsonProperty("description")
+		private final String description;
+		@JsonProperty("mimeType")
+		private final String mimeType;
+		@JsonProperty("size")
+		private final Long size;
+		@JsonProperty("annotations")
+		private final Annotations annotations;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public Resource(@JsonProperty("uri") String uri, @JsonProperty("name") String name, @JsonProperty("title") String title, @JsonProperty("description") String description, @JsonProperty("mimeType") String mimeType, @JsonProperty("size") Long size, @JsonProperty("annotations") Annotations annotations, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.hasText(uri, "uri must not be empty");
-			Assert.hasText(name, "name must not be empty");
 			this.uri = uri;
 			this.name = name;
 			this.title = title;
@@ -1527,54 +1358,49 @@ public static Builder builder() {
 			this.meta = meta;
 		}
 
-		public String uri() {
-			return this.uri;
+		public String uri() { return this.uri; }
+
+		public String name() { return this.name; }
+
+		public String title() { return this.title; }
+
+		public String description() { return this.description; }
+
+		public String mimeType() { return this.mimeType; }
+
+		public Long size() { return this.size; }
+
+		public Annotations annotations() { return this.annotations; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof Resource)) return false;
+			Resource that = (Resource) o;
+			return Objects.equals(uri, that.uri()) && Objects.equals(name, that.name()) && Objects.equals(title, that.title()) && Objects.equals(description, that.description()) && Objects.equals(mimeType, that.mimeType()) && Objects.equals(size, that.size()) && Objects.equals(annotations, that.annotations()) && Objects.equals(meta, that.meta());
 		}
 
-		public String name() {
-			return this.name;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(uri, name, title, description, mimeType, size, annotations, meta); }
 
-		public String title() {
-			return this.title;
-		}
-
-		public String description() {
-			return this.description;
-		}
-
-		public String mimeType() {
-			return this.mimeType;
-		}
-
-		public Long size() {
-			return this.size;
-		}
-
-		public Annotations annotations() {
-			return this.annotations;
-		}
-
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "Resource[uri=" + uri + ", name=" + name + ", title=" + title + ", description=" + description + ", mimeType=" + mimeType + ", size=" + size + ", annotations=" + annotations + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		public static Builder builder(String uri, String name) {
-			return new Builder(uri, name);
-		}
-
-		@Deprecated
 		public static Builder builder() {
 			return new Builder();
 		}
 
 		public static class Builder {
 
-			private /* final */ String uri;
+			private String uri;
 
-			private /* final */ String name;
+			private String name;
 
 			private String title;
 
@@ -1588,29 +1414,14 @@ public static Builder builder() {
 
 			private Map<String, Object> meta;
 
-			@Deprecated
-			public Builder() {
-			}
-
-			@Deprecated
 			public Builder uri(String uri) {
-				Assert.hasText(uri, "uri must not be empty");
 				this.uri = uri;
 				return this;
 			}
 
-			@Deprecated
 			public Builder name(String name) {
 				this.name = name;
-				Assert.hasText(name, "name must not be empty");
 				return this;
-			}
-
-			private Builder(String uri, String name) {
-				Assert.hasText(uri, "uri must not be empty");
-				Assert.hasText(name, "name must not be empty");
-				this.uri = uri;
-				this.name = name;
 			}
 
 			public Builder title(String title) {
@@ -1644,11 +1455,13 @@ public static Builder builder() {
 			}
 
 			public Resource build() {
+				Assert.hasText(uri, "uri must not be empty");
+				Assert.hasText(name, "name must not be empty");
+
 				return new Resource(uri, name, title, description, mimeType, size, annotations, meta);
 			}
 
 		}
-
 	}
 
 	/**
@@ -1671,18 +1484,23 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class ResourceTemplate {
-		private final @JsonProperty("uriTemplate") String uriTemplate;
-		private final @JsonProperty("name") String name;
-		private final @JsonProperty("title") String title;
-		private final @JsonProperty("description") String description;
-		private final @JsonProperty("mimeType") String mimeType;
-		private final @JsonProperty("annotations") Annotations annotations;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class ResourceTemplate implements Annotated {
+		@JsonProperty("uriTemplate")
+		private final String uriTemplate;
+		@JsonProperty("name")
+		private final String name;
+		@JsonProperty("title")
+		private final String title;
+		@JsonProperty("description")
+		private final String description;
+		@JsonProperty("mimeType")
+		private final String mimeType;
+		@JsonProperty("annotations")
+		private final Annotations annotations;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public ResourceTemplate(@JsonProperty("uriTemplate") String uriTemplate, @JsonProperty("name") String name, @JsonProperty("title") String title, @JsonProperty("description") String description, @JsonProperty("mimeType") String mimeType, @JsonProperty("annotations") Annotations annotations, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.hasText(uriTemplate, "uriTemplate must not be empty");
-			Assert.hasText(name, "name must not be empty");
 			this.uriTemplate = uriTemplate;
 			this.name = name;
 			this.title = title;
@@ -1692,68 +1510,57 @@ public static Builder builder() {
 			this.meta = meta;
 		}
 
-		public String uriTemplate() {
-			return this.uriTemplate;
+		public String uriTemplate() { return this.uriTemplate; }
+
+		public String name() { return this.name; }
+
+		public String title() { return this.title; }
+
+		public String description() { return this.description; }
+
+		public String mimeType() { return this.mimeType; }
+
+		public Annotations annotations() { return this.annotations; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ResourceTemplate)) return false;
+			ResourceTemplate that = (ResourceTemplate) o;
+			return Objects.equals(uriTemplate, that.uriTemplate()) && Objects.equals(name, that.name()) && Objects.equals(title, that.title()) && Objects.equals(description, that.description()) && Objects.equals(mimeType, that.mimeType()) && Objects.equals(annotations, that.annotations()) && Objects.equals(meta, that.meta());
 		}
 
-		public String name() {
-			return this.name;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(uriTemplate, name, title, description, mimeType, annotations, meta); }
 
-		public String title() {
-			return this.title;
-		}
-
-		public String description() {
-			return this.description;
-		}
-
-		public String mimeType() {
-			return this.mimeType;
-		}
-
-		public Annotations annotations() {
-			return this.annotations;
-		}
-
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "ResourceTemplate[uriTemplate=" + uriTemplate + ", name=" + name + ", title=" + title + ", description=" + description + ", mimeType=" + mimeType + ", annotations=" + annotations + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		/**
-		 * @deprecated Use {@link #builder(String, String)}.
-		 */
-		@Deprecated
 		public ResourceTemplate(String uriTemplate, String name, String title, String description, String mimeType,
 				Annotations annotations) {
 			this(uriTemplate, name, title, description, mimeType, annotations, null);
 		}
 
-		/**
-		 * @deprecated Use {@link #builder(String, String)}.
-		 */
-		@Deprecated
 		public ResourceTemplate(String uriTemplate, String name, String description, String mimeType,
 				Annotations annotations) {
 			this(uriTemplate, name, null, description, mimeType, annotations);
 		}
 
-		public static Builder builder(String uriTemplate, String name) {
-			return new Builder(uriTemplate, name);
-		}
-
-		@Deprecated
 		public static Builder builder() {
 			return new Builder();
 		}
 
 		public static class Builder {
 
-			private /* final */ String uriTemplate;
+			private String uriTemplate;
 
-			private /* final */ String name;
+			private String name;
 
 			private String title;
 
@@ -1765,28 +1572,12 @@ public static Builder builder() {
 
 			private Map<String, Object> meta;
 
-			@Deprecated
-			private Builder() {
-
-			}
-
-			private Builder(String uriTemplate, String name) {
-				Assert.hasText(uriTemplate, "uriTemplate must not be empty");
-				Assert.hasText(name, "name must not be empty");
-				this.uriTemplate = uriTemplate;
-				this.name = name;
-			}
-
-			@Deprecated
-			public Builder uriTemplate(String uriTemplate) {
-				Assert.hasText(uriTemplate, "uriTemplate must not be empty");
-				this.uriTemplate = uriTemplate;
+			public Builder uriTemplate(String uri) {
+				this.uriTemplate = uri;
 				return this;
 			}
 
-			@Deprecated
 			public Builder name(String name) {
-				Assert.hasText(name, "name must not be empty");
 				this.name = name;
 				return this;
 			}
@@ -1817,11 +1608,13 @@ public static Builder builder() {
 			}
 
 			public ResourceTemplate build() {
+				Assert.hasText(uriTemplate, "uri must not be empty");
+				Assert.hasText(name, "name must not be empty");
+
 				return new ResourceTemplate(uriTemplate, name, title, description, mimeType, annotations, meta);
 			}
 
 		}
-
 	}
 
 	/**
@@ -1834,81 +1627,47 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class ListResourcesResult {
-		private final @JsonProperty("resources") List<Resource> resources;
-		private final @JsonProperty("nextCursor") String nextCursor;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class ListResourcesResult implements Result {
+		@JsonProperty("resources")
+		private final List<Resource> resources;
+		@JsonProperty("nextCursor")
+		private final String nextCursor;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public ListResourcesResult(@JsonProperty("resources") List<Resource> resources, @JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(resources, "resources must not be null");
 			this.resources = resources;
 			this.nextCursor = nextCursor;
 			this.meta = meta;
 		}
 
-		public List<Resource> resources() {
-			return this.resources;
+		public List<Resource> resources() { return this.resources; }
+
+		public String nextCursor() { return this.nextCursor; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ListResourcesResult)) return false;
+			ListResourcesResult that = (ListResourcesResult) o;
+			return Objects.equals(resources, that.resources()) && Objects.equals(nextCursor, that.nextCursor()) && Objects.equals(meta, that.meta());
 		}
 
-		public String nextCursor() {
-			return this.nextCursor;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(resources, nextCursor, meta); }
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "ListResourcesResult[resources=" + resources + ", nextCursor=" + nextCursor + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static ListResourcesResult fromJson(@JsonProperty("resources") List<Resource> resources,
-				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
-			if (resources == null) {
-				logger.warn(
-						"ListResourcesResult: missing required field 'resources' during deserialization, using default []");
-				resources = Collections.emptyList();
-			}
-			return new ListResourcesResult(resources, nextCursor, meta);
-		}
-
-		@Deprecated
 		public ListResourcesResult(List<Resource> resources, String nextCursor) {
 			this(resources, nextCursor, null);
 		}
-
-		public static Builder builder(List<Resource> resources) {
-			return new Builder(resources);
-		}
-
-		public static class Builder {
-
-			private final List<Resource> resources;
-
-			private String nextCursor;
-
-			private Map<String, Object> meta;
-
-			private Builder(List<Resource> resources) {
-				Assert.notNull(resources, "resources must not be null");
-				this.resources = resources;
-			}
-
-			public Builder nextCursor(String nextCursor) {
-				this.nextCursor = nextCursor;
-				return this;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public ListResourcesResult build() {
-				return new ListResourcesResult(resources, nextCursor, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -1921,82 +1680,47 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class ListResourceTemplatesResult {
-		private final @JsonProperty("resourceTemplates") List<ResourceTemplate> resourceTemplates;
-		private final @JsonProperty("nextCursor") String nextCursor;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class ListResourceTemplatesResult implements Result {
+		@JsonProperty("resourceTemplates")
+		private final List<ResourceTemplate> resourceTemplates;
+		@JsonProperty("nextCursor")
+		private final String nextCursor;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public ListResourceTemplatesResult(@JsonProperty("resourceTemplates") List<ResourceTemplate> resourceTemplates, @JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(resourceTemplates, "resourceTemplates must not be null");
 			this.resourceTemplates = resourceTemplates;
 			this.nextCursor = nextCursor;
 			this.meta = meta;
 		}
 
-		public List<ResourceTemplate> resourceTemplates() {
-			return this.resourceTemplates;
+		public List<ResourceTemplate> resourceTemplates() { return this.resourceTemplates; }
+
+		public String nextCursor() { return this.nextCursor; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ListResourceTemplatesResult)) return false;
+			ListResourceTemplatesResult that = (ListResourceTemplatesResult) o;
+			return Objects.equals(resourceTemplates, that.resourceTemplates()) && Objects.equals(nextCursor, that.nextCursor()) && Objects.equals(meta, that.meta());
 		}
 
-		public String nextCursor() {
-			return this.nextCursor;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(resourceTemplates, nextCursor, meta); }
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "ListResourceTemplatesResult[resourceTemplates=" + resourceTemplates + ", nextCursor=" + nextCursor + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static ListResourceTemplatesResult fromJson(
-				@JsonProperty("resourceTemplates") List<ResourceTemplate> resourceTemplates,
-				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
-			if (resourceTemplates == null) {
-				logger.warn(
-						"ListResourceTemplatesResult: missing required field 'resourceTemplates' during deserialization, using default []");
-				resourceTemplates = Collections.emptyList();
-			}
-			return new ListResourceTemplatesResult(resourceTemplates, nextCursor, meta);
-		}
-
-		@Deprecated
 		public ListResourceTemplatesResult(List<ResourceTemplate> resourceTemplates, String nextCursor) {
 			this(resourceTemplates, nextCursor, null);
 		}
-
-		public static Builder builder(List<ResourceTemplate> resourceTemplates) {
-			return new Builder(resourceTemplates);
-		}
-
-		public static class Builder {
-
-			private final List<ResourceTemplate> resourceTemplates;
-
-			private String nextCursor;
-
-			private Map<String, Object> meta;
-
-			private Builder(List<ResourceTemplate> resourceTemplates) {
-				Assert.notNull(resourceTemplates, "resourceTemplates must not be null");
-				this.resourceTemplates = resourceTemplates;
-			}
-
-			public Builder nextCursor(String nextCursor) {
-				this.nextCursor = nextCursor;
-				return this;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public ListResourceTemplatesResult build() {
-				return new ListResourceTemplatesResult(resourceTemplates, nextCursor, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -2008,68 +1732,42 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class ReadResourceRequest {
-		private final @JsonProperty("uri") String uri;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class ReadResourceRequest implements Request {
+		@JsonProperty("uri")
+		private final String uri;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public ReadResourceRequest(@JsonProperty("uri") String uri, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(uri, "uri must not be null");
 			this.uri = uri;
 			this.meta = meta;
 		}
 
-		public String uri() {
-			return this.uri;
+		public String uri() { return this.uri; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ReadResourceRequest)) return false;
+			ReadResourceRequest that = (ReadResourceRequest) o;
+			return Objects.equals(uri, that.uri()) && Objects.equals(meta, that.meta());
 		}
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public int hashCode() { return Objects.hash(uri, meta); }
+
+		@Override
+		public String toString() {
+			return "ReadResourceRequest[uri=" + uri + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static ReadResourceRequest fromJson(@JsonProperty("uri") String uri,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (uri == null) {
-				logger
-					.warn("ReadResourceRequest: missing required field 'uri' during deserialization, using default ''");
-				uri = "";
-			}
-			return new ReadResourceRequest(uri, meta);
-		}
-
-		@Deprecated
 		public ReadResourceRequest(String uri) {
 			this(uri, null);
 		}
-
-		public static Builder builder(String uri) {
-			return new Builder(uri);
-		}
-
-		public static class Builder {
-
-			private final String uri;
-
-			private Map<String, Object> meta;
-
-			private Builder(String uri) {
-				Assert.hasText(uri, "uri must not be empty");
-				this.uri = uri;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public ReadResourceRequest build() {
-				return new ReadResourceRequest(uri, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -2080,68 +1778,42 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class ReadResourceResult {
-		private final @JsonProperty("contents") List<ResourceContents> contents;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class ReadResourceResult implements Result {
+		@JsonProperty("contents")
+		private final List<ResourceContents> contents;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public ReadResourceResult(@JsonProperty("contents") List<ResourceContents> contents, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(contents, "contents must not be null");
 			this.contents = contents;
 			this.meta = meta;
 		}
 
-		public List<ResourceContents> contents() {
-			return this.contents;
+		public List<ResourceContents> contents() { return this.contents; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ReadResourceResult)) return false;
+			ReadResourceResult that = (ReadResourceResult) o;
+			return Objects.equals(contents, that.contents()) && Objects.equals(meta, that.meta());
 		}
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public int hashCode() { return Objects.hash(contents, meta); }
+
+		@Override
+		public String toString() {
+			return "ReadResourceResult[contents=" + contents + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static ReadResourceResult fromJson(@JsonProperty("contents") List<ResourceContents> contents,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (contents == null) {
-				logger.warn(
-						"ReadResourceResult: missing required field 'contents' during deserialization, using default []");
-				contents = Collections.emptyList();
-			}
-			return new ReadResourceResult(contents, meta);
-		}
-
-		@Deprecated
 		public ReadResourceResult(List<ResourceContents> contents) {
 			this(contents, null);
 		}
-
-		public static Builder builder(List<ResourceContents> contents) {
-			return new Builder(contents);
-		}
-
-		public static class Builder {
-
-			private final List<ResourceContents> contents;
-
-			private Map<String, Object> meta;
-
-			private Builder(List<ResourceContents> contents) {
-				Assert.notNull(contents, "contents must not be null");
-				this.contents = contents;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public ReadResourceResult build() {
-				return new ReadResourceResult(contents, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -2154,67 +1826,42 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class SubscribeRequest {
-		private final @JsonProperty("uri") String uri;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class SubscribeRequest implements Request {
+		@JsonProperty("uri")
+		private final String uri;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public SubscribeRequest(@JsonProperty("uri") String uri, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(uri, "uri must not be null");
 			this.uri = uri;
 			this.meta = meta;
 		}
 
-		public String uri() {
-			return this.uri;
+		public String uri() { return this.uri; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof SubscribeRequest)) return false;
+			SubscribeRequest that = (SubscribeRequest) o;
+			return Objects.equals(uri, that.uri()) && Objects.equals(meta, that.meta());
 		}
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public int hashCode() { return Objects.hash(uri, meta); }
+
+		@Override
+		public String toString() {
+			return "SubscribeRequest[uri=" + uri + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static SubscribeRequest fromJson(@JsonProperty("uri") String uri,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (uri == null) {
-				logger.warn("SubscribeRequest: missing required field 'uri' during deserialization, using default ''");
-				uri = "";
-			}
-			return new SubscribeRequest(uri, meta);
-		}
-
-		@Deprecated
 		public SubscribeRequest(String uri) {
 			this(uri, null);
 		}
-
-		public static Builder builder(String uri) {
-			return new Builder(uri);
-		}
-
-		public static class Builder {
-
-			private final String uri;
-
-			private Map<String, Object> meta;
-
-			private Builder(String uri) {
-				Assert.hasText(uri, "uri must not be empty");
-				this.uri = uri;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public SubscribeRequest build() {
-				return new SubscribeRequest(uri, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -2226,68 +1873,42 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class UnsubscribeRequest {
-		private final @JsonProperty("uri") String uri;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class UnsubscribeRequest implements Request {
+		@JsonProperty("uri")
+		private final String uri;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public UnsubscribeRequest(@JsonProperty("uri") String uri, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(uri, "uri must not be null");
 			this.uri = uri;
 			this.meta = meta;
 		}
 
-		public String uri() {
-			return this.uri;
+		public String uri() { return this.uri; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof UnsubscribeRequest)) return false;
+			UnsubscribeRequest that = (UnsubscribeRequest) o;
+			return Objects.equals(uri, that.uri()) && Objects.equals(meta, that.meta());
 		}
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public int hashCode() { return Objects.hash(uri, meta); }
+
+		@Override
+		public String toString() {
+			return "UnsubscribeRequest[uri=" + uri + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static UnsubscribeRequest fromJson(@JsonProperty("uri") String uri,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (uri == null) {
-				logger
-					.warn("UnsubscribeRequest: missing required field 'uri' during deserialization, using default ''");
-				uri = "";
-			}
-			return new UnsubscribeRequest(uri, meta);
-		}
-
-		@Deprecated
 		public UnsubscribeRequest(String uri) {
 			this(uri, null);
 		}
-
-		public static Builder builder(String uri) {
-			return new Builder(uri);
-		}
-
-		public static class Builder {
-
-			private final String uri;
-
-			private Map<String, Object> meta;
-
-			private Builder(String uri) {
-				Assert.hasText(uri, "uri must not be empty");
-				this.uri = uri;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public UnsubscribeRequest build() {
-				return new UnsubscribeRequest(uri, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -2323,100 +1944,52 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class TextResourceContents  implements ResourceContents {
-		private final @JsonProperty("uri") String uri;
-		private final @JsonProperty("mimeType") String mimeType;
-		private final @JsonProperty("text") String text;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class TextResourceContents implements ResourceContents {
+		@JsonProperty("uri")
+		private final String uri;
+		@JsonProperty("mimeType")
+		private final String mimeType;
+		@JsonProperty("text")
+		private final String text;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public TextResourceContents(@JsonProperty("uri") String uri, @JsonProperty("mimeType") String mimeType, @JsonProperty("text") String text, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(uri, "uri must not be null");
-			Assert.notNull(text, "text must not be null");
 			this.uri = uri;
 			this.mimeType = mimeType;
 			this.text = text;
 			this.meta = meta;
 		}
 
-		public String uri() {
-			return this.uri;
+		public String uri() { return this.uri; }
+
+		public String mimeType() { return this.mimeType; }
+
+		public String text() { return this.text; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof TextResourceContents)) return false;
+			TextResourceContents that = (TextResourceContents) o;
+			return Objects.equals(uri, that.uri()) && Objects.equals(mimeType, that.mimeType()) && Objects.equals(text, that.text()) && Objects.equals(meta, that.meta());
 		}
 
-		public String mimeType() {
-			return this.mimeType;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(uri, mimeType, text, meta); }
 
-		public String text() {
-			return this.text;
-		}
-
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "TextResourceContents[uri=" + uri + ", mimeType=" + mimeType + ", text=" + text + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static TextResourceContents fromJson(@JsonProperty("uri") String uri, @JsonProperty("mimeType") String mimeType,
-				@JsonProperty("text") String text, @JsonProperty("_meta") Map<String, Object> meta) {
-			if (uri == null || text == null) {
-				List<String> missing = new ArrayList<>();
-				if (uri == null) {
-					missing.add("uri -> ''");
-					uri = "";
-				}
-				if (text == null) {
-					missing.add("text -> ''");
-					text = "";
-				}
-				logger.warn("TextResourceContents: missing required fields during deserialization: {}",
-						String.join(", ", missing));
-			}
-			return new TextResourceContents(uri, mimeType, text, meta);
-		}
-
-		@Deprecated
 		public TextResourceContents(String uri, String mimeType, String text) {
 			this(uri, mimeType, text, null);
 		}
-
-		public static Builder builder(String uri, String text) {
-			return new Builder(uri, text);
-		}
-
-		public static class Builder {
-
-			private final String uri;
-
-			private String mimeType;
-
-			private final String text;
-
-			private Map<String, Object> meta;
-
-			private Builder(String uri, String text) {
-				Assert.hasText(uri, "uri must not be empty");
-				Assert.notNull(text, "text must not be null");
-				this.uri = uri;
-				this.text = text;
-			}
-
-			public Builder mimeType(String mimeType) {
-				this.mimeType = mimeType;
-				return this;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public TextResourceContents build() {
-				return new TextResourceContents(uri, mimeType, text, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -2431,100 +2004,52 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class BlobResourceContents  implements ResourceContents {
-		private final @JsonProperty("uri") String uri;
-		private final @JsonProperty("mimeType") String mimeType;
-		private final @JsonProperty("blob") String blob;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class BlobResourceContents implements ResourceContents {
+		@JsonProperty("uri")
+		private final String uri;
+		@JsonProperty("mimeType")
+		private final String mimeType;
+		@JsonProperty("blob")
+		private final String blob;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public BlobResourceContents(@JsonProperty("uri") String uri, @JsonProperty("mimeType") String mimeType, @JsonProperty("blob") String blob, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(uri, "uri must not be null");
-			Assert.notNull(blob, "blob must not be null");
 			this.uri = uri;
 			this.mimeType = mimeType;
 			this.blob = blob;
 			this.meta = meta;
 		}
 
-		public String uri() {
-			return this.uri;
+		public String uri() { return this.uri; }
+
+		public String mimeType() { return this.mimeType; }
+
+		public String blob() { return this.blob; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof BlobResourceContents)) return false;
+			BlobResourceContents that = (BlobResourceContents) o;
+			return Objects.equals(uri, that.uri()) && Objects.equals(mimeType, that.mimeType()) && Objects.equals(blob, that.blob()) && Objects.equals(meta, that.meta());
 		}
 
-		public String mimeType() {
-			return this.mimeType;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(uri, mimeType, blob, meta); }
 
-		public String blob() {
-			return this.blob;
-		}
-
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "BlobResourceContents[uri=" + uri + ", mimeType=" + mimeType + ", blob=" + blob + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static BlobResourceContents fromJson(@JsonProperty("uri") String uri, @JsonProperty("mimeType") String mimeType,
-				@JsonProperty("blob") String blob, @JsonProperty("_meta") Map<String, Object> meta) {
-			if (uri == null || blob == null) {
-				List<String> missing = new ArrayList<>();
-				if (uri == null) {
-					missing.add("uri -> ''");
-					uri = "";
-				}
-				if (blob == null) {
-					missing.add("blob -> ''");
-					blob = "";
-				}
-				logger.warn("BlobResourceContents: missing required fields during deserialization: {}",
-						String.join(", ", missing));
-			}
-			return new BlobResourceContents(uri, mimeType, blob, meta);
-		}
-
-		@Deprecated
 		public BlobResourceContents(String uri, String mimeType, String blob) {
 			this(uri, mimeType, blob, null);
 		}
-
-		public static Builder builder(String uri, String blob) {
-			return new Builder(uri, blob);
-		}
-
-		public static class Builder {
-
-			private final String uri;
-
-			private String mimeType;
-
-			private final String blob;
-
-			private Map<String, Object> meta;
-
-			private Builder(String uri, String blob) {
-				Assert.hasText(uri, "uri must not be empty");
-				Assert.notNull(blob, "blob must not be null");
-				this.uri = uri;
-				this.blob = blob;
-			}
-
-			public Builder mimeType(String mimeType) {
-				this.mimeType = mimeType;
-				return this;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public BlobResourceContents build() {
-				return new BlobResourceContents(uri, mimeType, blob, meta);
-			}
-
-		}
-
 	}
 
 	// ---------------------------
@@ -2539,17 +2064,22 @@ public static Builder builder() {
 	 * @param arguments A list of arguments to use for templating the prompt.
 	 * @param meta See specification for notes on _meta usage
 	 */
+	@Builder
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class Prompt {
-		private final @JsonProperty("name") String name;
-		private final @JsonProperty("title") String title;
-		private final @JsonProperty("description") String description;
-		private final @JsonProperty("arguments") List<PromptArgument> arguments;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class Prompt implements Identifier {
+		@JsonProperty("name")
+		private final String name;
+		@JsonProperty("title")
+		private final String title;
+		@JsonProperty("description")
+		private final String description;
+		@JsonProperty("arguments")
+		private final List<PromptArgument> arguments;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public Prompt(@JsonProperty("name") String name, @JsonProperty("title") String title, @JsonProperty("description") String description, @JsonProperty("arguments") List<PromptArgument> arguments, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(name, "name must not be null");
 			this.name = name;
 			this.title = title;
 			this.description = description;
@@ -2557,97 +2087,41 @@ public static Builder builder() {
 			this.meta = meta;
 		}
 
-		public String name() {
-			return this.name;
+		public String name() { return this.name; }
+
+		public String title() { return this.title; }
+
+		public String description() { return this.description; }
+
+		public List<PromptArgument> arguments() { return this.arguments; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof Prompt)) return false;
+			Prompt that = (Prompt) o;
+			return Objects.equals(name, that.name()) && Objects.equals(title, that.title()) && Objects.equals(description, that.description()) && Objects.equals(arguments, that.arguments()) && Objects.equals(meta, that.meta());
 		}
 
-		public String title() {
-			return this.title;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(name, title, description, arguments, meta); }
 
-		public String description() {
-			return this.description;
-		}
-
-		public List<PromptArgument> arguments() {
-			return this.arguments;
-		}
-
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "Prompt[name=" + name + ", title=" + title + ", description=" + description + ", arguments=" + arguments + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static Prompt fromJson(@JsonProperty("name") String name, @JsonProperty("title") String title,
-				@JsonProperty("description") String description,
-				@JsonProperty("arguments") List<PromptArgument> arguments,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (name == null) {
-				logger.warn("Prompt: missing required field 'name' during deserialization, using default ''");
-				name = "";
-			}
-			return new Prompt(name, title, description, arguments, meta);
-		}
-
-		@Deprecated
 		public Prompt(String name, String description, List<PromptArgument> arguments) {
-			this(name, null, description, arguments, null);
+			this(name, null, description, arguments != null ? arguments : new ArrayList<>());
 		}
 
-		@Deprecated
 		public Prompt(String name, String title, String description, List<PromptArgument> arguments) {
-			this(name, title, description, arguments, null);
+			this(name, title, description, arguments != null ? arguments : new ArrayList<>(), null);
 		}
-
-		public static Builder builder(String name) {
-			return new Builder(name);
-		}
-
-		public static class Builder {
-
-			private final String name;
-
-			private String title;
-
-			private String description;
-
-			private List<PromptArgument> arguments;
-
-			private Map<String, Object> meta;
-
-			private Builder(String name) {
-				Assert.hasText(name, "name must not be empty");
-				this.name = name;
-			}
-
-			public Builder title(String title) {
-				this.title = title;
-				return this;
-			}
-
-			public Builder description(String description) {
-				this.description = description;
-				return this;
-			}
-
-			public Builder arguments(List<PromptArgument> arguments) {
-				this.arguments = arguments;
-				return this;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public Prompt build() {
-				return new Prompt(name, title, description, arguments, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -2660,83 +2134,52 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class PromptArgument {
-		private final @JsonProperty("name") String name;
-		private final @JsonProperty("title") String title;
-		private final @JsonProperty("description") String description;
-		private final @JsonProperty("required") Boolean required;
+	public static final class PromptArgument implements Identifier {
+		@JsonProperty("name")
+		private final String name;
+		@JsonProperty("title")
+		private final String title;
+		@JsonProperty("description")
+		private final String description;
+		@JsonProperty("required")
+		private final Boolean required;
 
 		public PromptArgument(@JsonProperty("name") String name, @JsonProperty("title") String title, @JsonProperty("description") String description, @JsonProperty("required") Boolean required) {
-			Assert.hasText(name, "name must not be empty");
 			this.name = name;
 			this.title = title;
 			this.description = description;
 			this.required = required;
 		}
 
-		public String name() {
-			return this.name;
+		public String name() { return this.name; }
+
+		public String title() { return this.title; }
+
+		public String description() { return this.description; }
+
+		public Boolean required() { return this.required; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof PromptArgument)) return false;
+			PromptArgument that = (PromptArgument) o;
+			return Objects.equals(name, that.name()) && Objects.equals(title, that.title()) && Objects.equals(description, that.description()) && Objects.equals(required, that.required());
 		}
 
-		public String title() {
-			return this.title;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(name, title, description, required); }
 
-		public String description() {
-			return this.description;
-		}
-
-		public Boolean required() {
-			return this.required;
+		@Override
+		public String toString() {
+			return "PromptArgument[name=" + name + ", title=" + title + ", description=" + description + ", required=" + required + "]";
 		}
 
 // @formatter:on
 
-		@Deprecated
 		public PromptArgument(String name, String description, Boolean required) {
 			this(name, null, description, required);
 		}
-
-		public static Builder builder(String name) {
-			return new Builder(name);
-		}
-
-		public static class Builder {
-
-			private final String name;
-
-			private String title;
-
-			private String description;
-
-			private Boolean required;
-
-			private Builder(String name) {
-				Assert.hasText(name, "name must not be empty");
-				this.name = name;
-			}
-
-			public Builder title(String title) {
-				this.title = title;
-				return this;
-			}
-
-			public Builder description(String description) {
-				this.description = description;
-				return this;
-			}
-
-			public Builder required(Boolean required) {
-				this.required = required;
-				return this;
-			}
-
-			public PromptArgument build() {
-				return new PromptArgument(name, title, description, required);
-			}
-
-		}
-
 	}
 
 	/**
@@ -2751,67 +2194,37 @@ public static Builder builder() {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class PromptMessage {
-		private final @JsonProperty("role") Role role;
-		private final @JsonProperty("content") Content content;
+		@JsonProperty("role")
+		private final Role role;
+		@JsonProperty("content")
+		private final Content content;
 
 		public PromptMessage(@JsonProperty("role") Role role, @JsonProperty("content") Content content) {
-			Assert.notNull(role, "role must not be null");
-			Assert.notNull(content, "content must not be null");
 			this.role = role;
 			this.content = content;
 		}
 
-		public Role role() {
-			return this.role;
+		public Role role() { return this.role; }
+
+		public Content content() { return this.content; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof PromptMessage)) return false;
+			PromptMessage that = (PromptMessage) o;
+			return Objects.equals(role, that.role()) && Objects.equals(content, that.content());
 		}
 
-		public Content content() {
-			return this.content;
+		@Override
+		public int hashCode() { return Objects.hash(role, content); }
+
+		@Override
+		public String toString() {
+			return "PromptMessage[role=" + role + ", content=" + content + "]";
 		}
 
 // @formatter:on
-
-		@JsonCreator
-		static PromptMessage fromJson(@JsonProperty("role") Role role, @JsonProperty("content") Content content) {
-			if (role == null || content == null) {
-				List<String> missing = new ArrayList<>();
-				if (role == null) {
-					missing.add("role -> 'user'");
-					role = Role.USER;
-				}
-				if (content == null) {
-					missing.add("content -> ''");
-					content = TextContent.builder("").build();
-				}
-				logger.warn("PromptMessage: missing required fields during deserialization: {}",
-						String.join(", ", missing));
-			}
-			return new PromptMessage(role, content);
-		}
-
-		public static Builder builder(Role role, Content content) {
-			return new Builder(role, content);
-		}
-
-		public static class Builder {
-
-			private final Role role;
-
-			private final Content content;
-
-			private Builder(Role role, Content content) {
-				Assert.notNull(role, "role must not be null");
-				Assert.notNull(content, "content must not be null");
-				this.role = role;
-				this.content = content;
-			}
-
-			public PromptMessage build() {
-				return new PromptMessage(role, content);
-			}
-
-		}
-
 	}
 
 	/**
@@ -2824,81 +2237,47 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class ListPromptsResult {
-		private final @JsonProperty("prompts") List<Prompt> prompts;
-		private final @JsonProperty("nextCursor") String nextCursor;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class ListPromptsResult implements Result {
+		@JsonProperty("prompts")
+		private final List<Prompt> prompts;
+		@JsonProperty("nextCursor")
+		private final String nextCursor;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public ListPromptsResult(@JsonProperty("prompts") List<Prompt> prompts, @JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(prompts, "prompts must not be null");
 			this.prompts = prompts;
 			this.nextCursor = nextCursor;
 			this.meta = meta;
 		}
 
-		public List<Prompt> prompts() {
-			return this.prompts;
+		public List<Prompt> prompts() { return this.prompts; }
+
+		public String nextCursor() { return this.nextCursor; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ListPromptsResult)) return false;
+			ListPromptsResult that = (ListPromptsResult) o;
+			return Objects.equals(prompts, that.prompts()) && Objects.equals(nextCursor, that.nextCursor()) && Objects.equals(meta, that.meta());
 		}
 
-		public String nextCursor() {
-			return this.nextCursor;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(prompts, nextCursor, meta); }
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "ListPromptsResult[prompts=" + prompts + ", nextCursor=" + nextCursor + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static ListPromptsResult fromJson(@JsonProperty("prompts") List<Prompt> prompts,
-				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
-			if (prompts == null) {
-				logger.warn(
-						"ListPromptsResult: missing required field 'prompts' during deserialization, using default []");
-				prompts = Collections.emptyList();
-			}
-			return new ListPromptsResult(prompts, nextCursor, meta);
-		}
-
-		@Deprecated
 		public ListPromptsResult(List<Prompt> prompts, String nextCursor) {
 			this(prompts, nextCursor, null);
 		}
-
-		public static Builder builder(List<Prompt> prompts) {
-			return new Builder(prompts);
-		}
-
-		public static class Builder {
-
-			private final List<Prompt> prompts;
-
-			private String nextCursor;
-
-			private Map<String, Object> meta;
-
-			private Builder(List<Prompt> prompts) {
-				Assert.notNull(prompts, "prompts must not be null");
-				this.prompts = prompts;
-			}
-
-			public Builder nextCursor(String nextCursor) {
-				this.nextCursor = nextCursor;
-				return this;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public ListPromptsResult build() {
-				return new ListPromptsResult(prompts, nextCursor, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -2910,81 +2289,47 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class GetPromptRequest {
-		private final @JsonProperty("name") String name;
-		private final @JsonProperty("arguments") Map<String, Object> arguments;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class GetPromptRequest implements Request {
+		@JsonProperty("name")
+		private final String name;
+		@JsonProperty("arguments")
+		private final Map<String, Object> arguments;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public GetPromptRequest(@JsonProperty("name") String name, @JsonProperty("arguments") Map<String, Object> arguments, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(name, "name must not be null");
 			this.name = name;
 			this.arguments = arguments;
 			this.meta = meta;
 		}
 
-		public String name() {
-			return this.name;
+		public String name() { return this.name; }
+
+		public Map<String, Object> arguments() { return this.arguments; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof GetPromptRequest)) return false;
+			GetPromptRequest that = (GetPromptRequest) o;
+			return Objects.equals(name, that.name()) && Objects.equals(arguments, that.arguments()) && Objects.equals(meta, that.meta());
 		}
 
-		public Map<String, Object> arguments() {
-			return this.arguments;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(name, arguments, meta); }
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "GetPromptRequest[name=" + name + ", arguments=" + arguments + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static GetPromptRequest fromJson(@JsonProperty("name") String name,
-				@JsonProperty("arguments") Map<String, Object> arguments,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (name == null) {
-				logger.warn("GetPromptRequest: missing required field 'name' during deserialization, using default ''");
-				name = "";
-			}
-			return new GetPromptRequest(name, arguments, meta);
-		}
-
-		@Deprecated
 		public GetPromptRequest(String name, Map<String, Object> arguments) {
 			this(name, arguments, null);
 		}
-
-		public static Builder builder(String name) {
-			return new Builder(name);
-		}
-
-		public static class Builder {
-
-			private final String name;
-
-			private Map<String, Object> arguments;
-
-			private Map<String, Object> meta;
-
-			private Builder(String name) {
-				Assert.hasText(name, "name must not be empty");
-				this.name = name;
-			}
-
-			public Builder arguments(Map<String, Object> arguments) {
-				this.arguments = arguments;
-				return this;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public GetPromptRequest build() {
-				return new GetPromptRequest(name, arguments, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -2996,82 +2341,47 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class GetPromptResult {
-		private final @JsonProperty("description") String description;
-		private final @JsonProperty("messages") List<PromptMessage> messages;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class GetPromptResult implements Result {
+		@JsonProperty("description")
+		private final String description;
+		@JsonProperty("messages")
+		private final List<PromptMessage> messages;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public GetPromptResult(@JsonProperty("description") String description, @JsonProperty("messages") List<PromptMessage> messages, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(messages, "messages must not be null");
 			this.description = description;
 			this.messages = messages;
 			this.meta = meta;
 		}
 
-		public String description() {
-			return this.description;
+		public String description() { return this.description; }
+
+		public List<PromptMessage> messages() { return this.messages; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof GetPromptResult)) return false;
+			GetPromptResult that = (GetPromptResult) o;
+			return Objects.equals(description, that.description()) && Objects.equals(messages, that.messages()) && Objects.equals(meta, that.meta());
 		}
 
-		public List<PromptMessage> messages() {
-			return this.messages;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(description, messages, meta); }
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "GetPromptResult[description=" + description + ", messages=" + messages + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static GetPromptResult fromJson(@JsonProperty("description") String description,
-				@JsonProperty("messages") List<PromptMessage> messages,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (messages == null) {
-				logger.warn(
-						"GetPromptResult: missing required field 'messages' during deserialization, using default []");
-				messages = Collections.emptyList();
-			}
-			return new GetPromptResult(description, messages, meta);
-		}
-
-		@Deprecated
 		public GetPromptResult(String description, List<PromptMessage> messages) {
 			this(description, messages, null);
 		}
-
-		public static Builder builder(List<PromptMessage> messages) {
-			return new Builder(messages);
-		}
-
-		public static class Builder {
-
-			private String description;
-
-			private final List<PromptMessage> messages;
-
-			private Map<String, Object> meta;
-
-			private Builder(List<PromptMessage> messages) {
-				Assert.notNull(messages, "messages must not be null");
-				this.messages = messages;
-			}
-
-			public Builder description(String description) {
-				this.description = description;
-				return this;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public GetPromptResult build() {
-				return new GetPromptResult(description, messages, meta);
-			}
-
-		}
-
 	}
 
 	// ---------------------------
@@ -3087,80 +2397,47 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class ListToolsResult {
-		private final @JsonProperty("tools") List<Tool> tools;
-		private final @JsonProperty("nextCursor") String nextCursor;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class ListToolsResult implements Result {
+		@JsonProperty("tools")
+		private final List<Tool> tools;
+		@JsonProperty("nextCursor")
+		private final String nextCursor;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public ListToolsResult(@JsonProperty("tools") List<Tool> tools, @JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(tools, "tools must not be null");
 			this.tools = tools;
 			this.nextCursor = nextCursor;
 			this.meta = meta;
 		}
 
-		public List<Tool> tools() {
-			return this.tools;
+		public List<Tool> tools() { return this.tools; }
+
+		public String nextCursor() { return this.nextCursor; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ListToolsResult)) return false;
+			ListToolsResult that = (ListToolsResult) o;
+			return Objects.equals(tools, that.tools()) && Objects.equals(nextCursor, that.nextCursor()) && Objects.equals(meta, that.meta());
 		}
 
-		public String nextCursor() {
-			return this.nextCursor;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(tools, nextCursor, meta); }
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "ListToolsResult[tools=" + tools + ", nextCursor=" + nextCursor + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static ListToolsResult fromJson(@JsonProperty("tools") List<Tool> tools,
-				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
-			if (tools == null) {
-				logger.warn("ListToolsResult: missing required field 'tools' during deserialization, using default []");
-				tools = Collections.emptyList();
-			}
-			return new ListToolsResult(tools, nextCursor, meta);
-		}
-
-		@Deprecated
 		public ListToolsResult(List<Tool> tools, String nextCursor) {
 			this(tools, nextCursor, null);
 		}
-
-		public static Builder builder(List<Tool> tools) {
-			return new Builder(tools);
-		}
-
-		public static class Builder {
-
-			private final List<Tool> tools;
-
-			private String nextCursor;
-
-			private Map<String, Object> meta;
-
-			private Builder(List<Tool> tools) {
-				Assert.notNull(tools, "tools must not be null");
-				this.tools = tools;
-			}
-
-			public Builder nextCursor(String nextCursor) {
-				this.nextCursor = nextCursor;
-				return this;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public ListToolsResult build() {
-				return new ListToolsResult(tools, nextCursor, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -3172,18 +2449,22 @@ public static Builder builder() {
 	 * @param additionalProperties Whether additional properties are allowed
 	 * @param defs Schema definitions using the newer $defs keyword
 	 * @param definitions Schema definitions using the legacy definitions keyword
-	 * @deprecated use {@link Map} instead.
 	 */
-	@Deprecated
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class JsonSchema {
-		private final @JsonProperty("type") String type;
-		private final @JsonProperty("properties") Map<String, Object> properties;
-		private final @JsonProperty("required") List<String> required;
-		private final @JsonProperty("additionalProperties") Boolean additionalProperties;
-		private final @JsonProperty("$defs") Map<String, Object> defs;
-		private final @JsonProperty("definitions") Map<String, Object> definitions;
+		@JsonProperty("type")
+		private final String type;
+		@JsonProperty("properties")
+		private final Map<String, Object> properties;
+		@JsonProperty("required")
+		private final List<String> required;
+		@JsonProperty("additionalProperties")
+		private final Boolean additionalProperties;
+		@JsonProperty("$defs")
+		private final Map<String, Object> defs;
+		@JsonProperty("definitions")
+		private final Map<String, Object> definitions;
 
 		public JsonSchema(@JsonProperty("type") String type, @JsonProperty("properties") Map<String, Object> properties, @JsonProperty("required") List<String> required, @JsonProperty("additionalProperties") Boolean additionalProperties, @JsonProperty("$defs") Map<String, Object> defs, @JsonProperty("definitions") Map<String, Object> definitions) {
 			this.type = type;
@@ -3194,86 +2475,35 @@ public static Builder builder() {
 			this.definitions = definitions;
 		}
 
-		public String type() {
-			return this.type;
+		public String type() { return this.type; }
+
+		public Map<String, Object> properties() { return this.properties; }
+
+		public List<String> required() { return this.required; }
+
+		public Boolean additionalProperties() { return this.additionalProperties; }
+
+		public Map<String, Object> defs() { return this.defs; }
+
+		public Map<String, Object> definitions() { return this.definitions; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof JsonSchema)) return false;
+			JsonSchema that = (JsonSchema) o;
+			return Objects.equals(type, that.type()) && Objects.equals(properties, that.properties()) && Objects.equals(required, that.required()) && Objects.equals(additionalProperties, that.additionalProperties()) && Objects.equals(defs, that.defs()) && Objects.equals(definitions, that.definitions());
 		}
 
-		public Map<String, Object> properties() {
-			return this.properties;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(type, properties, required, additionalProperties, defs, definitions); }
 
-		public List<String> required() {
-			return this.required;
-		}
-
-		public Boolean additionalProperties() {
-			return this.additionalProperties;
-		}
-
-		public Map<String, Object> defs() {
-			return this.defs;
-		}
-
-		public Map<String, Object> definitions() {
-			return this.definitions;
+		@Override
+		public String toString() {
+			return "JsonSchema[type=" + type + ", properties=" + properties + ", required=" + required + ", additionalProperties=" + additionalProperties + ", defs=" + defs + ", definitions=" + definitions + "]";
 		}
 
 // @formatter:on
-
-		public static Builder builder() {
-			return new Builder();
-		}
-
-		public static class Builder {
-
-			private String type;
-
-			private Map<String, Object> properties;
-
-			private List<String> required;
-
-			private Boolean additionalProperties;
-
-			private Map<String, Object> defs;
-
-			private Map<String, Object> definitions;
-
-			public Builder type(String type) {
-				this.type = type;
-				return this;
-			}
-
-			public Builder properties(Map<String, Object> properties) {
-				this.properties = properties;
-				return this;
-			}
-
-			public Builder required(List<String> required) {
-				this.required = required;
-				return this;
-			}
-
-			public Builder additionalProperties(Boolean additionalProperties) {
-				this.additionalProperties = additionalProperties;
-				return this;
-			}
-
-			public Builder defs(Map<String, Object> defs) {
-				this.defs = defs;
-				return this;
-			}
-
-			public Builder definitions(Map<String, Object> definitions) {
-				this.definitions = definitions;
-				return this;
-			}
-
-			public JsonSchema build() {
-				return new JsonSchema(type, properties, required, additionalProperties, defs, definitions);
-			}
-
-		}
-
 	}
 
 	/**
@@ -3286,15 +2516,22 @@ public static Builder builder() {
 	 * Clients should never make tool use decisions based on ToolAnnotations received from
 	 * untrusted servers.
 	 */
+	@Builder
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class ToolAnnotations {
-		private final @JsonProperty("title") String title;
-		private final @JsonProperty("readOnlyHint") Boolean readOnlyHint;
-		private final @JsonProperty("destructiveHint") Boolean destructiveHint;
-		private final @JsonProperty("idempotentHint") Boolean idempotentHint;
-		private final @JsonProperty("openWorldHint") Boolean openWorldHint;
-		private final @JsonProperty("returnDirect") Boolean returnDirect;
+		@JsonProperty("title")
+		private final String title;
+		@JsonProperty("readOnlyHint")
+		private final Boolean readOnlyHint;
+		@JsonProperty("destructiveHint")
+		private final Boolean destructiveHint;
+		@JsonProperty("idempotentHint")
+		private final Boolean idempotentHint;
+		@JsonProperty("openWorldHint")
+		private final Boolean openWorldHint;
+		@JsonProperty("returnDirect")
+		private final Boolean returnDirect;
 
 		public ToolAnnotations(@JsonProperty("title") String title, @JsonProperty("readOnlyHint") Boolean readOnlyHint, @JsonProperty("destructiveHint") Boolean destructiveHint, @JsonProperty("idempotentHint") Boolean idempotentHint, @JsonProperty("openWorldHint") Boolean openWorldHint, @JsonProperty("returnDirect") Boolean returnDirect) {
 			this.title = title;
@@ -3305,87 +2542,35 @@ public static Builder builder() {
 			this.returnDirect = returnDirect;
 		}
 
-		public String title() {
-			return this.title;
+		public String title() { return this.title; }
+
+		public Boolean readOnlyHint() { return this.readOnlyHint; }
+
+		public Boolean destructiveHint() { return this.destructiveHint; }
+
+		public Boolean idempotentHint() { return this.idempotentHint; }
+
+		public Boolean openWorldHint() { return this.openWorldHint; }
+
+		public Boolean returnDirect() { return this.returnDirect; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ToolAnnotations)) return false;
+			ToolAnnotations that = (ToolAnnotations) o;
+			return Objects.equals(title, that.title()) && Objects.equals(readOnlyHint, that.readOnlyHint()) && Objects.equals(destructiveHint, that.destructiveHint()) && Objects.equals(idempotentHint, that.idempotentHint()) && Objects.equals(openWorldHint, that.openWorldHint()) && Objects.equals(returnDirect, that.returnDirect());
 		}
 
-		public Boolean readOnlyHint() {
-			return this.readOnlyHint;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(title, readOnlyHint, destructiveHint, idempotentHint, openWorldHint, returnDirect); }
 
-		public Boolean destructiveHint() {
-			return this.destructiveHint;
-		}
-
-		public Boolean idempotentHint() {
-			return this.idempotentHint;
-		}
-
-		public Boolean openWorldHint() {
-			return this.openWorldHint;
-		}
-
-		public Boolean returnDirect() {
-			return this.returnDirect;
+		@Override
+		public String toString() {
+			return "ToolAnnotations[title=" + title + ", readOnlyHint=" + readOnlyHint + ", destructiveHint=" + destructiveHint + ", idempotentHint=" + idempotentHint + ", openWorldHint=" + openWorldHint + ", returnDirect=" + returnDirect + "]";
 		}
 
 // @formatter:on
-
-		public static Builder builder() {
-			return new Builder();
-		}
-
-		public static class Builder {
-
-			private String title;
-
-			private Boolean readOnlyHint;
-
-			private Boolean destructiveHint;
-
-			private Boolean idempotentHint;
-
-			private Boolean openWorldHint;
-
-			private Boolean returnDirect;
-
-			public Builder title(String title) {
-				this.title = title;
-				return this;
-			}
-
-			public Builder readOnlyHint(Boolean readOnlyHint) {
-				this.readOnlyHint = readOnlyHint;
-				return this;
-			}
-
-			public Builder destructiveHint(Boolean destructiveHint) {
-				this.destructiveHint = destructiveHint;
-				return this;
-			}
-
-			public Builder idempotentHint(Boolean idempotentHint) {
-				this.idempotentHint = idempotentHint;
-				return this;
-			}
-
-			public Builder openWorldHint(Boolean openWorldHint) {
-				this.openWorldHint = openWorldHint;
-				return this;
-			}
-
-			public Builder returnDirect(Boolean returnDirect) {
-				this.returnDirect = returnDirect;
-				return this;
-			}
-
-			public ToolAnnotations build() {
-				return new ToolAnnotations(title, readOnlyHint, destructiveHint, idempotentHint, openWorldHint,
-						returnDirect);
-			}
-
-		}
-
 	}
 
 	/**
@@ -3399,31 +2584,31 @@ public static Builder builder() {
 	 * @param description A human-readable description of what the tool does. This can be
 	 * used by clients to improve the LLM's understanding of available tools.
 	 * @param inputSchema A JSON Schema object that describes the expected structure of
-	 * the arguments when calling this tool. Per SEP-1613, the dialect defaults to JSON
-	 * Schema 2020-12 ({@link #JSON_SCHEMA_DIALECT_2020_12}) when no explicit
-	 * {@code $schema} entry is present. To declare a different dialect, include a
-	 * {@code "$schema"} key in the map. For tools with no parameters the spec recommends
-	 * {@code {"type":"object","additionalProperties":false}}.
+	 * the arguments when calling this tool. This allows clients to validate tool
 	 * @param outputSchema An optional JSON Schema object defining the structure of the
-	 * tool's output returned in the structuredContent field of a CallToolResult. Same
-	 * dialect rules as {@code inputSchema}.
+	 * tool's output returned in the structuredContent field of a CallToolResult.
 	 * @param annotations Optional additional tool information.
 	 * @param meta See specification for notes on _meta usage
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class Tool {
-		private final @JsonProperty("name") String name;
-		private final @JsonProperty("title") String title;
-		private final @JsonProperty("description") String description;
-		private final @JsonProperty("inputSchema") Map<String, Object> inputSchema;
-		private final @JsonProperty("outputSchema") Map<String, Object> outputSchema;
-		private final @JsonProperty("annotations") ToolAnnotations annotations;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+		@JsonProperty("name")
+		private final String name;
+		@JsonProperty("title")
+		private final String title;
+		@JsonProperty("description")
+		private final String description;
+		@JsonProperty("inputSchema")
+		private final JsonSchema inputSchema;
+		@JsonProperty("outputSchema")
+		private final Map<String, Object> outputSchema;
+		@JsonProperty("annotations")
+		private final ToolAnnotations annotations;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
-		public Tool(@JsonProperty("name") String name, @JsonProperty("title") String title, @JsonProperty("description") String description, @JsonProperty("inputSchema") Map<String, Object> inputSchema, @JsonProperty("outputSchema") Map<String, Object> outputSchema, @JsonProperty("annotations") ToolAnnotations annotations, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(name, "name must not be null");
-			Assert.notNull(inputSchema, "inputSchema must not be null");
+		public Tool(@JsonProperty("name") String name, @JsonProperty("title") String title, @JsonProperty("description") String description, @JsonProperty("inputSchema") JsonSchema inputSchema, @JsonProperty("outputSchema") Map<String, Object> outputSchema, @JsonProperty("annotations") ToolAnnotations annotations, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.name = name;
 			this.title = title;
 			this.description = description;
@@ -3433,82 +2618,40 @@ public static Builder builder() {
 			this.meta = meta;
 		}
 
-		public String name() {
-			return this.name;
+		public String name() { return this.name; }
+
+		public String title() { return this.title; }
+
+		public String description() { return this.description; }
+
+		public JsonSchema inputSchema() { return this.inputSchema; }
+
+		public Map<String, Object> outputSchema() { return this.outputSchema; }
+
+		public ToolAnnotations annotations() { return this.annotations; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof Tool)) return false;
+			Tool that = (Tool) o;
+			return Objects.equals(name, that.name()) && Objects.equals(title, that.title()) && Objects.equals(description, that.description()) && Objects.equals(inputSchema, that.inputSchema()) && Objects.equals(outputSchema, that.outputSchema()) && Objects.equals(annotations, that.annotations()) && Objects.equals(meta, that.meta());
 		}
 
-		public String title() {
-			return this.title;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(name, title, description, inputSchema, outputSchema, annotations, meta); }
 
-		public String description() {
-			return this.description;
-		}
-
-		public Map<String, Object> inputSchema() {
-			return this.inputSchema;
-		}
-
-		public Map<String, Object> outputSchema() {
-			return this.outputSchema;
-		}
-
-		public ToolAnnotations annotations() {
-			return this.annotations;
-		}
-
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "Tool[name=" + name + ", title=" + title + ", description=" + description + ", inputSchema=" + inputSchema + ", outputSchema=" + outputSchema + ", annotations=" + annotations + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static Tool fromJson(@JsonProperty("name") String name, @JsonProperty("title") String title,
-				@JsonProperty("description") String description,
-				@JsonProperty("inputSchema") Map<String, Object> inputSchema,
-				@JsonProperty("outputSchema") Map<String, Object> outputSchema,
-				@JsonProperty("annotations") ToolAnnotations annotations,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (name == null || inputSchema == null) {
-				List<String> missing = new ArrayList<>();
-				if (name == null) {
-					missing.add("name -> ''");
-					name = "";
-				}
-				if (inputSchema == null) {
-					missing.add("inputSchema -> {}");
-					inputSchema = Collections.emptyMap();
-				}
-				logger.warn("Tool: missing required fields during deserialization: {}", String.join(", ", missing));
-			}
-			return new Tool(name, title, description, inputSchema, outputSchema, annotations, meta);
-		}
-
-		/**
-		 * @deprecated Use {@link #builder(String, Map)} instead.
-		 */
-		@Deprecated
 		public static Builder builder() {
 			return new Builder();
-		}
-
-		/**
-		 * Uses empty input schema.
-		 * @param name
-		 * @return
-		 */
-		@Deprecated
-		public static Builder builder(String name) {
-			return new Builder(name);
-		}
-
-		public static Builder builder(String name, Map<String, Object> inputSchema) {
-			return new Builder(name, inputSchema);
-		}
-
-		public static Builder builder(String name, McpJsonMapper jsonMapper, String inputSchema) {
-			return new Builder(name, schemaToMap(jsonMapper, inputSchema));
 		}
 
 		public static class Builder {
@@ -3519,36 +2662,13 @@ public static Builder builder() {
 
 			private String description;
 
-			private Map<String, Object> inputSchema;
+			private JsonSchema inputSchema;
 
 			private Map<String, Object> outputSchema;
 
 			private ToolAnnotations annotations;
 
 			private Map<String, Object> meta;
-
-			/**
-			 * @deprecated Use {@link Tool#builder(String, Map)} instead.
-			 */
-			@Deprecated
-			public Builder() {
-			}
-
-			/**
-			 * @deprecated Use {@link Tool#builder(String, Map)} instead.
-			 */
-			@Deprecated
-			private Builder(String name) {
-				Assert.hasText(name, "name must not be empty");
-				this.name = name;
-			}
-
-			private Builder(String name, Map<String, Object> inputSchema) {
-				Assert.hasText(name, "name must not be empty");
-				Assert.notNull(inputSchema, "inputSchema must not be null");
-				this.name = name;
-				this.inputSchema = inputSchema;
-			}
 
 			public Builder name(String name) {
 				this.name = name;
@@ -3565,34 +2685,13 @@ public static Builder builder() {
 				return this;
 			}
 
-			/**
-			 * @deprecated use {@link #inputSchema(Map)} instead.
-			 */
-			@Deprecated
 			public Builder inputSchema(JsonSchema inputSchema) {
-				Map<String, Object> schema = new HashMap<>();
-				if (inputSchema.type() != null)
-					schema.put("type", inputSchema.type());
-				if (inputSchema.properties() != null)
-					schema.put("properties", inputSchema.properties());
-				if (inputSchema.required() != null)
-					schema.put("required", inputSchema.required());
-				if (inputSchema.additionalProperties() != null)
-					schema.put("additionalProperties", inputSchema.additionalProperties());
-				if (inputSchema.defs() != null)
-					schema.put("$defs", inputSchema.defs());
-				if (inputSchema.definitions() != null)
-					schema.put("definitions", inputSchema.definitions());
-				return inputSchema(schema);
-			}
-
-			public Builder inputSchema(Map<String, Object> inputSchema) {
 				this.inputSchema = inputSchema;
 				return this;
 			}
 
 			public Builder inputSchema(McpJsonMapper jsonMapper, String inputSchema) {
-				this.inputSchema = schemaToMap(jsonMapper, inputSchema);
+				this.inputSchema = parseSchema(jsonMapper, inputSchema);
 				return this;
 			}
 
@@ -3618,20 +2717,24 @@ public static Builder builder() {
 
 			public Tool build() {
 				Assert.hasText(name, "name must not be empty");
-				if (inputSchema == null) {
-					logger.warn("Input schema was not set, falling back to empty schema");
-					inputSchema = Collections.singletonMap("type", "object");
-				}
 				return new Tool(name, title, description, inputSchema, outputSchema, annotations, meta);
 			}
 
 		}
-
 	}
 
 	private static Map<String, Object> schemaToMap(McpJsonMapper jsonMapper, String schema) {
 		try {
 			return jsonMapper.readValue(schema, MAP_TYPE_REF);
+		}
+		catch (IOException e) {
+			throw new IllegalArgumentException("Invalid schema: " + schema, e);
+		}
+	}
+
+	private static JsonSchema parseSchema(McpJsonMapper jsonMapper, String schema) {
+		try {
+			return jsonMapper.readValue(schema, JsonSchema.class);
 		}
 		catch (IOException e) {
 			throw new IllegalArgumentException("Invalid schema: " + schema, e);
@@ -3650,49 +2753,48 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class CallToolRequest {
-		private final @JsonProperty("name") String name;
-		private final @JsonProperty("arguments") Map<String, Object> arguments;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class CallToolRequest implements Request {
+		@JsonProperty("name")
+		private final String name;
+		@JsonProperty("arguments")
+		private final Map<String, Object> arguments;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public CallToolRequest(@JsonProperty("name") String name, @JsonProperty("arguments") Map<String, Object> arguments, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(name, "name must not be null");
 			this.name = name;
 			this.arguments = arguments;
 			this.meta = meta;
 		}
 
-		public String name() {
-			return this.name;
+		public String name() { return this.name; }
+
+		public Map<String, Object> arguments() { return this.arguments; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof CallToolRequest)) return false;
+			CallToolRequest that = (CallToolRequest) o;
+			return Objects.equals(name, that.name()) && Objects.equals(arguments, that.arguments()) && Objects.equals(meta, that.meta());
 		}
 
-		public Map<String, Object> arguments() {
-			return this.arguments;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(name, arguments, meta); }
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "CallToolRequest[name=" + name + ", arguments=" + arguments + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static CallToolRequest fromJson(@JsonProperty("name") String name,
-				@JsonProperty("arguments") Map<String, Object> arguments,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (name == null) {
-				logger.warn("CallToolRequest: missing required field 'name' during deserialization, using default ''");
-				name = "";
-			}
-			return new CallToolRequest(name, arguments, meta);
-		}
-
-		@Deprecated
 		public CallToolRequest(McpJsonMapper jsonMapper, String name, String jsonArguments) {
 			this(name, parseJsonArguments(jsonMapper, jsonArguments), null);
 		}
 
-		@Deprecated
 		public CallToolRequest(String name, Map<String, Object> arguments) {
 			this(name, arguments, null);
 		}
@@ -3706,16 +2808,8 @@ public static Builder builder() {
 			}
 		}
 
-		/**
-		 * @deprecated Use {@link #builder(String)} instead.
-		 */
-		@Deprecated
 		public static Builder builder() {
 			return new Builder();
-		}
-
-		public static Builder builder(String name) {
-			return new Builder(name);
 		}
 
 		public static class Builder {
@@ -3725,18 +2819,6 @@ public static Builder builder() {
 			private Map<String, Object> arguments;
 
 			private Map<String, Object> meta;
-
-			/**
-			 * @deprecated Use {@link CallToolRequest#builder(String)} instead.
-			 */
-			@Deprecated
-			public Builder() {
-			}
-
-			private Builder(String name) {
-				Assert.hasText(name, "name must not be empty");
-				this.name = name;
-			}
 
 			public Builder name(String name) {
 				this.name = name;
@@ -3772,7 +2854,6 @@ public static Builder builder() {
 			}
 
 		}
-
 	}
 
 	/**
@@ -3785,71 +2866,58 @@ public static Builder builder() {
 	 * @param structuredContent An optional JSON object that represents the structured
 	 * result of the tool call.
 	 * @param meta See specification for notes on _meta usage
-	 * <p>
-	 * Note: {@code content} is required by the MCP specification. Deserialization accepts
-	 * a missing value and substitutes an empty list to avoid breaking existing
-	 * integrations that may omit the field.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class CallToolResult {
-		private final @JsonProperty("content") List<Content> content;
-		private final @JsonProperty("isError") Boolean isError;
-		private final @JsonProperty("structuredContent") Object structuredContent;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class CallToolResult implements Result {
+		@JsonProperty("content")
+		private final List<Content> content;
+		private final Boolean isError;
+		@JsonProperty("structuredContent")
+		private final Object structuredContent;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public CallToolResult(@JsonProperty("content") List<Content> content, @JsonProperty("isError") Boolean isError, @JsonProperty("structuredContent") Object structuredContent, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(content, "content must not be null");
 			this.content = content;
 			this.isError = isError;
 			this.structuredContent = structuredContent;
 			this.meta = meta;
 		}
 
-		public List<Content> content() {
-			return this.content;
+		public List<Content> content() { return this.content; }
+
+		@JsonProperty("isError")
+		public Boolean isError() { return this.isError; }
+
+		public Object structuredContent() { return this.structuredContent; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof CallToolResult)) return false;
+			CallToolResult that = (CallToolResult) o;
+			return Objects.equals(content, that.content()) && Objects.equals(isError, that.isError()) && Objects.equals(structuredContent, that.structuredContent()) && Objects.equals(meta, that.meta());
 		}
 
-		public Boolean isError() {
-			return this.isError;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(content, isError, structuredContent, meta); }
 
-		public Object structuredContent() {
-			return this.structuredContent;
-		}
-
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "CallToolResult[content=" + content + ", isError=" + isError + ", structuredContent=" + structuredContent + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
-
-		@JsonCreator
-		static CallToolResult fromJson(@JsonProperty("content") List<Content> content,
-				@JsonProperty("isError") Boolean isError, @JsonProperty("structuredContent") Object structuredContent,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (content == null) {
-				logger.warn("CallToolResult: missing required fields during deserialization: content -> []");
-				content = Collections.emptyList();
-			}
-			return new CallToolResult(content, isError, structuredContent, meta);
-		}
-
-		/**
-		 * Creates a builder for {@link CallToolResult} with the required content list.
-		 * @param content the content list
-		 * @return a new builder instance
-		 */
-		public static Builder builder(List<Content> content) {
-			return new Builder(content);
-		}
 
 		/**
 		 * Creates a builder for {@link CallToolResult}.
 		 * @return a new builder instance
 		 */
 		public static Builder builder() {
-			return new Builder(new ArrayList<>());
+			return new Builder();
 		}
 
 		/**
@@ -3860,18 +2928,6 @@ public static Builder builder() {
 			private List<Content> content = new ArrayList<>();
 
 			private Boolean isError = false;
-
-			/**
-			 * @deprecated Use {@link CallToolResult#builder()} factory method instead of
-			 * instantiating the builder directly.
-			 */
-			@Deprecated
-			public Builder() {
-			}
-
-			private Builder(List<Content> content) {
-				this.content.addAll(content);
-			}
 
 			private Object structuredContent;
 
@@ -3884,7 +2940,7 @@ public static Builder builder() {
 			 */
 			public Builder content(List<Content> content) {
 				Assert.notNull(content, "content must not be null");
-				this.content = new ArrayList<>(content);
+				this.content = content;
 				return this;
 			}
 
@@ -3912,7 +2968,7 @@ public static Builder builder() {
 			 */
 			public Builder textContent(List<String> textContent) {
 				Assert.notNull(textContent, "textContent must not be null");
-				textContent.stream().map(t -> TextContent.builder(t).build()).forEach(this.content::add);
+				textContent.stream().map(TextContent::new).forEach(this.content::add);
 				return this;
 			}
 
@@ -3923,6 +2979,9 @@ public static Builder builder() {
 			 */
 			public Builder addContent(Content contentItem) {
 				Assert.notNull(contentItem, "contentItem must not be null");
+				if (this.content == null) {
+					this.content = new ArrayList<>();
+				}
 				this.content.add(contentItem);
 				return this;
 			}
@@ -3934,7 +2993,7 @@ public static Builder builder() {
 			 */
 			public Builder addTextContent(String text) {
 				Assert.notNull(text, "text must not be null");
-				return addContent(TextContent.builder(text).build());
+				return addContent(new TextContent(text));
 			}
 
 			/**
@@ -3963,12 +3022,10 @@ public static Builder builder() {
 			 * @return a new CallToolResult instance
 			 */
 			public CallToolResult build() {
-				Assert.notNull(content, "content must not be null");
 				return new CallToolResult(content, isError, structuredContent, meta);
 			}
 
 		}
-
 	}
 
 	// ---------------------------
@@ -3995,10 +3052,14 @@ public static Builder builder() {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class ModelPreferences {
-		private final @JsonProperty("hints") List<ModelHint> hints;
-		private final @JsonProperty("costPriority") Double costPriority;
-		private final @JsonProperty("speedPriority") Double speedPriority;
-		private final @JsonProperty("intelligencePriority") Double intelligencePriority;
+		@JsonProperty("hints")
+		private final List<ModelHint> hints;
+		@JsonProperty("costPriority")
+		private final Double costPriority;
+		@JsonProperty("speedPriority")
+		private final Double speedPriority;
+		@JsonProperty("intelligencePriority")
+		private final Double intelligencePriority;
 
 		public ModelPreferences(@JsonProperty("hints") List<ModelHint> hints, @JsonProperty("costPriority") Double costPriority, @JsonProperty("speedPriority") Double speedPriority, @JsonProperty("intelligencePriority") Double intelligencePriority) {
 			this.hints = hints;
@@ -4007,20 +3068,28 @@ public static Builder builder() {
 			this.intelligencePriority = intelligencePriority;
 		}
 
-		public List<ModelHint> hints() {
-			return this.hints;
+		public List<ModelHint> hints() { return this.hints; }
+
+		public Double costPriority() { return this.costPriority; }
+
+		public Double speedPriority() { return this.speedPriority; }
+
+		public Double intelligencePriority() { return this.intelligencePriority; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ModelPreferences)) return false;
+			ModelPreferences that = (ModelPreferences) o;
+			return Objects.equals(hints, that.hints()) && Objects.equals(costPriority, that.costPriority()) && Objects.equals(speedPriority, that.speedPriority()) && Objects.equals(intelligencePriority, that.intelligencePriority());
 		}
 
-		public Double costPriority() {
-			return this.costPriority;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(hints, costPriority, speedPriority, intelligencePriority); }
 
-		public Double speedPriority() {
-			return this.speedPriority;
-		}
-
-		public Double intelligencePriority() {
-			return this.intelligencePriority;
+		@Override
+		public String toString() {
+			return "ModelPreferences[hints=" + hints + ", costPriority=" + costPriority + ", speedPriority=" + speedPriority + ", intelligencePriority=" + intelligencePriority + "]";
 		}
 
 // @formatter:on
@@ -4072,7 +3141,6 @@ public static Builder builder() {
 			}
 
 		}
-
 	}
 
 	/**
@@ -4088,24 +3156,34 @@ public static Builder builder() {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class ModelHint {
-		private final @JsonProperty("name") String name;
+		@JsonProperty("name")
+		private final String name;
 
 		public ModelHint(@JsonProperty("name") String name) {
 			this.name = name;
 		}
 
-		public String name() {
-			return this.name;
+		public String name() { return this.name; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ModelHint)) return false;
+			ModelHint that = (ModelHint) o;
+			return Objects.equals(name, that.name());
 		}
 
-/**
-		 * @deprecated Use {@link #ModelHint(String)}
-		 */
-		@Deprecated
-		public static ModelHint of(String name) {
+		@Override
+		public int hashCode() { return Objects.hash(name); }
+
+		@Override
+		public String toString() {
+			return "ModelHint[name=" + name + "]";
+		}
+
+public static ModelHint of(String name) {
 			return new ModelHint(name);
 		}
-
 	}
 
 	/**
@@ -4113,75 +3191,41 @@ public static Builder builder() {
 	 *
 	 * @param role The sender or recipient of messages and data in a conversation
 	 * @param content The content of the message
-	 * <p>
-	 * Note: {@code role} and {@code content} are required by the MCP specification.
-	 * Deserialization accepts missing values and substitutes defaults to avoid breaking
-	 * existing integrations that may omit these fields.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class SamplingMessage {
-		private final @JsonProperty("role") Role role;
-		private final @JsonProperty("content") Content content;
+		@JsonProperty("role")
+		private final Role role;
+		@JsonProperty("content")
+		private final Content content;
 
 		public SamplingMessage(@JsonProperty("role") Role role, @JsonProperty("content") Content content) {
-			Assert.notNull(role, "role must not be null");
-			Assert.notNull(content, "content must not be null");
 			this.role = role;
 			this.content = content;
 		}
 
-		public Role role() {
-			return this.role;
+		public Role role() { return this.role; }
+
+		public Content content() { return this.content; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof SamplingMessage)) return false;
+			SamplingMessage that = (SamplingMessage) o;
+			return Objects.equals(role, that.role()) && Objects.equals(content, that.content());
 		}
 
-		public Content content() {
-			return this.content;
+		@Override
+		public int hashCode() { return Objects.hash(role, content); }
+
+		@Override
+		public String toString() {
+			return "SamplingMessage[role=" + role + ", content=" + content + "]";
 		}
 
 // @formatter:on
-
-		@JsonCreator
-		static SamplingMessage fromJson(@JsonProperty("role") Role role, @JsonProperty("content") Content content) {
-			if (role == null || content == null) {
-				List<String> missing = new ArrayList<>();
-				if (role == null) {
-					missing.add("role -> 'user'");
-					role = Role.USER;
-				}
-				if (content == null) {
-					missing.add("content -> ''");
-					content = TextContent.builder("").build();
-				}
-				logger.warn("SamplingMessage: missing required fields during deserialization: {}",
-						String.join(", ", missing));
-			}
-			return new SamplingMessage(role, content);
-		}
-
-		public static Builder builder(Role role, Content content) {
-			return new Builder(role, content);
-		}
-
-		public static class Builder {
-
-			private final Role role;
-
-			private final Content content;
-
-			private Builder(Role role, Content content) {
-				Assert.notNull(role, "role must not be null");
-				Assert.notNull(content, "content must not be null");
-				this.role = role;
-				this.content = content;
-			}
-
-			public SamplingMessage build() {
-				return new SamplingMessage(role, content);
-			}
-
-		}
-
 	}
 
 	/**
@@ -4205,27 +3249,30 @@ public static Builder builder() {
 	 * @param metadata Optional metadata to pass through to the LLM provider. The format
 	 * of this metadata is provider-specific
 	 * @param meta See specification for notes on _meta usage
-	 * <p>
-	 * Note: {@code messages} and {@code maxTokens} are required by the MCP specification.
-	 * Deserialization accepts missing values and substitutes defaults to avoid breaking
-	 * existing integrations that may omit these fields.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class CreateMessageRequest {
-		private final @JsonProperty("messages") List<SamplingMessage> messages;
-		private final @JsonProperty("modelPreferences") ModelPreferences modelPreferences;
-		private final @JsonProperty("systemPrompt") String systemPrompt;
-		private final @JsonProperty("includeContext") ContextInclusionStrategy includeContext;
-		private final @JsonProperty("temperature") Double temperature;
-		private final @JsonProperty("maxTokens") Integer maxTokens;
-		private final @JsonProperty("stopSequences") List<String> stopSequences;
-		private final @JsonProperty("metadata") Map<String, Object> metadata;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class CreateMessageRequest implements Request {
+		@JsonProperty("messages")
+		private final List<SamplingMessage> messages;
+		@JsonProperty("modelPreferences")
+		private final ModelPreferences modelPreferences;
+		@JsonProperty("systemPrompt")
+		private final String systemPrompt;
+		@JsonProperty("includeContext")
+		private final ContextInclusionStrategy includeContext;
+		@JsonProperty("temperature")
+		private final Double temperature;
+		@JsonProperty("maxTokens")
+		private final Integer maxTokens;
+		@JsonProperty("stopSequences")
+		private final List<String> stopSequences;
+		@JsonProperty("metadata")
+		private final Map<String, Object> metadata;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public CreateMessageRequest(@JsonProperty("messages") List<SamplingMessage> messages, @JsonProperty("modelPreferences") ModelPreferences modelPreferences, @JsonProperty("systemPrompt") String systemPrompt, @JsonProperty("includeContext") ContextInclusionStrategy includeContext, @JsonProperty("temperature") Double temperature, @JsonProperty("maxTokens") Integer maxTokens, @JsonProperty("stopSequences") List<String> stopSequences, @JsonProperty("metadata") Map<String, Object> metadata, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(messages, "messages must not be null");
-			Assert.notNull(maxTokens, "maxTokens must not be null");
 			this.messages = messages;
 			this.modelPreferences = modelPreferences;
 			this.systemPrompt = systemPrompt;
@@ -4237,69 +3284,41 @@ public static Builder builder() {
 			this.meta = meta;
 		}
 
-		public List<SamplingMessage> messages() {
-			return this.messages;
+		public List<SamplingMessage> messages() { return this.messages; }
+
+		public ModelPreferences modelPreferences() { return this.modelPreferences; }
+
+		public String systemPrompt() { return this.systemPrompt; }
+
+		public ContextInclusionStrategy includeContext() { return this.includeContext; }
+
+		public Double temperature() { return this.temperature; }
+
+		public Integer maxTokens() { return this.maxTokens; }
+
+		public List<String> stopSequences() { return this.stopSequences; }
+
+		public Map<String, Object> metadata() { return this.metadata; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof CreateMessageRequest)) return false;
+			CreateMessageRequest that = (CreateMessageRequest) o;
+			return Objects.equals(messages, that.messages()) && Objects.equals(modelPreferences, that.modelPreferences()) && Objects.equals(systemPrompt, that.systemPrompt()) && Objects.equals(includeContext, that.includeContext()) && Objects.equals(temperature, that.temperature()) && Objects.equals(maxTokens, that.maxTokens()) && Objects.equals(stopSequences, that.stopSequences()) && Objects.equals(metadata, that.metadata()) && Objects.equals(meta, that.meta());
 		}
 
-		public ModelPreferences modelPreferences() {
-			return this.modelPreferences;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(messages, modelPreferences, systemPrompt, includeContext, temperature, maxTokens, stopSequences, metadata, meta); }
 
-		public String systemPrompt() {
-			return this.systemPrompt;
-		}
-
-		public ContextInclusionStrategy includeContext() {
-			return this.includeContext;
-		}
-
-		public Double temperature() {
-			return this.temperature;
-		}
-
-		public Integer maxTokens() {
-			return this.maxTokens;
-		}
-
-		public List<String> stopSequences() {
-			return this.stopSequences;
-		}
-
-		public Map<String, Object> metadata() {
-			return this.metadata;
-		}
-
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "CreateMessageRequest[messages=" + messages + ", modelPreferences=" + modelPreferences + ", systemPrompt=" + systemPrompt + ", includeContext=" + includeContext + ", temperature=" + temperature + ", maxTokens=" + maxTokens + ", stopSequences=" + stopSequences + ", metadata=" + metadata + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
-
-		@JsonCreator
-		static CreateMessageRequest fromJson(@JsonProperty("messages") List<SamplingMessage> messages,
-				@JsonProperty("modelPreferences") ModelPreferences modelPreferences,
-				@JsonProperty("systemPrompt") String systemPrompt,
-				@JsonProperty("includeContext") ContextInclusionStrategy includeContext,
-				@JsonProperty("temperature") Double temperature, @JsonProperty("maxTokens") Integer maxTokens,
-				@JsonProperty("stopSequences") List<String> stopSequences,
-				@JsonProperty("metadata") Map<String, Object> metadata,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (messages == null || maxTokens == null) {
-				List<String> missing = new ArrayList<>();
-				if (messages == null) {
-					missing.add("messages -> []");
-					messages = Collections.emptyList();
-				}
-				if (maxTokens == null) {
-					missing.add("maxTokens -> 0");
-					maxTokens = 0;
-				}
-				logger.warn("CreateMessageRequest: missing required fields during deserialization: {}",
-						String.join(", ", missing));
-			}
-			return new CreateMessageRequest(messages, modelPreferences, systemPrompt, includeContext, temperature,
-					maxTokens, stopSequences, metadata, meta);
-		}
 
 		// backwards compatibility constructor
 		public CreateMessageRequest(List<SamplingMessage> messages, ModelPreferences modelPreferences,
@@ -4314,19 +3333,11 @@ public static Builder builder() {
 		// @formatter:off
 			@JsonProperty("none") NONE,
 			@JsonProperty("thisServer") THIS_SERVER,
-			@JsonProperty("allServers") ALL_SERVERS
+			@JsonProperty("allServers")ALL_SERVERS
 		} // @formatter:on
 
-		/**
-		 * @deprecated Use {@link #builder(List, int)} instead.
-		 */
-		@Deprecated
 		public static Builder builder() {
 			return new Builder();
-		}
-
-		public static Builder builder(List<SamplingMessage> messages, int maxTokens) {
-			return new Builder(messages, maxTokens);
 		}
 
 		public static class Builder {
@@ -4349,22 +3360,7 @@ public static Builder builder() {
 
 			private Map<String, Object> meta;
 
-			/**
-			 * @deprecated Use {@link CreateMessageRequest#builder(List, int)} factory
-			 * method instead.
-			 */
-			@Deprecated
-			public Builder() {
-			}
-
-			private Builder(List<SamplingMessage> messages, int maxTokens) {
-				Assert.notNull(messages, "messages must not be null");
-				this.messages = messages;
-				this.maxTokens = maxTokens;
-			}
-
 			public Builder messages(List<SamplingMessage> messages) {
-				Assert.notNull(messages, "messages must not be null");
 				this.messages = messages;
 				return this;
 			}
@@ -4418,17 +3414,13 @@ public static Builder builder() {
 			}
 
 			public CreateMessageRequest build() {
-				Assert.notNull(messages, "messages must not be null");
-				Assert.notNull(maxTokens, "maxTokens must not be null");
 				return new CreateMessageRequest(messages, modelPreferences, systemPrompt, includeContext, temperature,
 						maxTokens, stopSequences, metadata, meta);
 			}
 
 		}
-
 	}
 
-	// TODO: role, content and model are required
 	/**
 	 * The client's response to a sampling/create_message request from the server. The
 	 * client should inform the user before returning the sampled message, to allow them
@@ -4443,17 +3435,19 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class CreateMessageResult {
-		private final @JsonProperty("role") Role role;
-		private final @JsonProperty("content") Content content;
-		private final @JsonProperty("model") String model;
-		private final @JsonProperty("stopReason") StopReason stopReason;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class CreateMessageResult implements Result {
+		@JsonProperty("role")
+		private final Role role;
+		@JsonProperty("content")
+		private final Content content;
+		@JsonProperty("model")
+		private final String model;
+		@JsonProperty("stopReason")
+		private final StopReason stopReason;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public CreateMessageResult(@JsonProperty("role") Role role, @JsonProperty("content") Content content, @JsonProperty("model") String model, @JsonProperty("stopReason") StopReason stopReason, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(role, "role must not be null");
-			Assert.notNull(content, "content must not be null");
-			Assert.notNull(model, "model must not be null");
 			this.role = role;
 			this.content = content;
 			this.model = model;
@@ -4461,105 +3455,70 @@ public static Builder builder() {
 			this.meta = meta;
 		}
 
-		public Role role() {
-			return this.role;
+		public Role role() { return this.role; }
+
+		public Content content() { return this.content; }
+
+		public String model() { return this.model; }
+
+		public StopReason stopReason() { return this.stopReason; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof CreateMessageResult)) return false;
+			CreateMessageResult that = (CreateMessageResult) o;
+			return Objects.equals(role, that.role()) && Objects.equals(content, that.content()) && Objects.equals(model, that.model()) && Objects.equals(stopReason, that.stopReason()) && Objects.equals(meta, that.meta());
 		}
 
-		public Content content() {
-			return this.content;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(role, content, model, stopReason, meta); }
 
-		public String model() {
-			return this.model;
-		}
-
-		public StopReason stopReason() {
-			return this.stopReason;
-		}
-
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "CreateMessageResult[role=" + role + ", content=" + content + ", model=" + model + ", stopReason=" + stopReason + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static CreateMessageResult fromJson(@JsonProperty("role") Role role, @JsonProperty("content") Content content,
-				@JsonProperty("model") String model, @JsonProperty("stopReason") StopReason stopReason,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (role == null || content == null || model == null) {
-				List<String> missing = new ArrayList<>();
-				if (role == null) {
-					missing.add("role -> 'assistant'");
-					role = Role.ASSISTANT;
-				}
-				if (content == null) {
-					missing.add("content -> ''");
-					content = TextContent.builder("").build();
-				}
-				if (model == null) {
-					missing.add("model -> ''");
-					model = "";
-				}
-				logger.warn("CreateMessageResult: missing required fields during deserialization: {}",
-						String.join(", ", missing));
-			}
-			return new CreateMessageResult(role, content, model, stopReason, meta);
-		}
-
 		public enum StopReason {
 
 		// @formatter:off
-
 			@JsonProperty("endTurn") END_TURN("endTurn"),
 			@JsonProperty("stopSequence") STOP_SEQUENCE("stopSequence"),
 			@JsonProperty("maxTokens") MAX_TOKENS("maxTokens"),
-			@JsonProperty("unknown") UNKNOWN("unknown"); // @formatter:on
+			@JsonProperty("unknown") UNKNOWN("unknown");
+			// @formatter:on
 
 			private final String value;
-
-			private static final Map<String, StopReason> BY_VALUE;
-
-			static {
-				Map<String, StopReason> m = new HashMap<>();
-				for (StopReason r : values()) {
-					m.put(r.value, r);
-				}
-				BY_VALUE = Collections.unmodifiableMap(new HashMap<>(m));
-			}
 
 			StopReason(String value) {
 				this.value = value;
 			}
 
 			@JsonCreator
-			public static StopReason of(String value) {
-				return BY_VALUE.getOrDefault(value, UNKNOWN);
+			private static StopReason of(String value) {
+				return Arrays.stream(StopReason.values())
+					.filter(stopReason -> stopReason.value.equals(value))
+					.findFirst()
+					.orElse(StopReason.UNKNOWN);
 			}
 
 		}
 
-		// backwards compatibility constructor
 		public CreateMessageResult(Role role, Content content, String model, StopReason stopReason) {
 			this(role, content, model, stopReason, null);
 		}
 
-		@Deprecated
 		public static Builder builder() {
-			return new Builder(Role.ASSISTANT);
-		}
-
-		public static Builder builder(Role role, String textContent, String model) {
-			return builder(role, TextContent.builder(textContent).build(), model);
-		}
-
-		public static Builder builder(Role role, Content content, String model) {
-			return new Builder(role, content, model);
+			return new Builder();
 		}
 
 		public static class Builder {
 
-			private Role role;
+			private Role role = Role.ASSISTANT;
 
 			private Content content;
 
@@ -4569,34 +3528,16 @@ public static Builder builder() {
 
 			private Map<String, Object> meta;
 
-			// temporary to keep deprecated use
-			private Builder(Role role) {
-				Assert.notNull(role, "role must not be null");
-				this.role = role;
-			}
-
-			Builder(Role role, Content content, String model) {
-				Assert.notNull(role, "role must not be null");
-				Assert.notNull(content, "content must not be null");
-				Assert.notNull(model, "model must not be null");
-				this.role = role;
-				this.content = content;
-				this.model = model;
-			}
-
-			@Deprecated
 			public Builder role(Role role) {
 				this.role = role;
 				return this;
 			}
 
-			@Deprecated
 			public Builder content(Content content) {
 				this.content = content;
 				return this;
 			}
 
-			@Deprecated
 			public Builder model(String model) {
 				this.model = model;
 				return this;
@@ -4607,9 +3548,8 @@ public static Builder builder() {
 				return this;
 			}
 
-			@Deprecated
 			public Builder message(String message) {
-				this.content = TextContent.builder(message).build();
+				this.content = new TextContent(message);
 				return this;
 			}
 
@@ -4623,7 +3563,6 @@ public static Builder builder() {
 			}
 
 		}
-
 	}
 
 	// Elicitation
@@ -4633,80 +3572,56 @@ public static Builder builder() {
 	 *
 	 * @param message The message to present to the user
 	 * @param requestedSchema A restricted subset of JSON Schema. Only top-level
-	 * properties are allowed, without nesting. Per SEP-1613, the dialect defaults to JSON
-	 * Schema 2020-12 ({@link #JSON_SCHEMA_DIALECT_2020_12}) when no explicit
-	 * {@code $schema} entry is present. To declare a different dialect, include a
-	 * {@code "$schema"} key in the map.
+	 * properties are allowed, without nesting
 	 * @param meta See specification for notes on _meta usage
-	 * <p>
-	 * Note: {@code message} and {@code requestedSchema} are required by the MCP
-	 * specification. Deserialization accepts missing values and substitutes defaults to
-	 * avoid breaking existing integrations that may omit these fields.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class ElicitRequest {
-		private final @JsonProperty("message") String message;
-		private final @JsonProperty("requestedSchema") Map<String, Object> requestedSchema;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class ElicitRequest implements Request {
+		@JsonProperty("message")
+		private final String message;
+		@JsonProperty("requestedSchema")
+		private final Map<String, Object> requestedSchema;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public ElicitRequest(@JsonProperty("message") String message, @JsonProperty("requestedSchema") Map<String, Object> requestedSchema, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(message, "message must not be null");
-			Assert.notNull(requestedSchema, "requestedSchema must not be null");
 			this.message = message;
 			this.requestedSchema = requestedSchema;
 			this.meta = meta;
 		}
 
-		public String message() {
-			return this.message;
+		public String message() { return this.message; }
+
+		public Map<String, Object> requestedSchema() { return this.requestedSchema; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ElicitRequest)) return false;
+			ElicitRequest that = (ElicitRequest) o;
+			return Objects.equals(message, that.message()) && Objects.equals(requestedSchema, that.requestedSchema()) && Objects.equals(meta, that.meta());
 		}
 
-		public Map<String, Object> requestedSchema() {
-			return this.requestedSchema;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(message, requestedSchema, meta); }
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "ElicitRequest[message=" + message + ", requestedSchema=" + requestedSchema + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
-
-		@JsonCreator
-		static ElicitRequest fromJson(@JsonProperty("message") String message,
-				@JsonProperty("requestedSchema") Map<String, Object> requestedSchema,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (message == null || requestedSchema == null) {
-				List<String> missing = new ArrayList<>();
-				if (message == null) {
-					missing.add("message -> ''");
-					message = "";
-				}
-				if (requestedSchema == null) {
-					missing.add("requestedSchema -> {}");
-					requestedSchema = Collections.emptyMap();
-				}
-				logger.warn("ElicitRequest: missing required fields during deserialization: {}",
-						String.join(", ", missing));
-			}
-			return new ElicitRequest(message, requestedSchema, meta);
-		}
 
 		// backwards compatibility constructor
 		public ElicitRequest(String message, Map<String, Object> requestedSchema) {
 			this(message, requestedSchema, null);
 		}
 
-		/**
-		 * @deprecated Use {@link #builder(String, Map)} instead.
-		 */
-		@Deprecated
 		public static Builder builder() {
 			return new Builder();
-		}
-
-		public static Builder builder(String message, Map<String, Object> requestedSchema) {
-			return new Builder(message, requestedSchema);
 		}
 
 		public static class Builder {
@@ -4717,29 +3632,12 @@ public static Builder builder() {
 
 			private Map<String, Object> meta;
 
-			/**
-			 * @deprecated Use {@link ElicitRequest#builder(String, Map)} factory method
-			 * instead.
-			 */
-			@Deprecated
-			public Builder() {
-			}
-
-			private Builder(String message, Map<String, Object> requestedSchema) {
-				Assert.notNull(message, "message must not be null");
-				Assert.notNull(requestedSchema, "requestedSchema must not be null");
-				this.message = message;
-				this.requestedSchema = requestedSchema;
-			}
-
 			public Builder message(String message) {
-				Assert.notNull(message, "message must not be null");
 				this.message = message;
 				return this;
 			}
 
 			public Builder requestedSchema(Map<String, Object> requestedSchema) {
-				Assert.notNull(requestedSchema, "requestedSchema must not be null");
 				this.requestedSchema = requestedSchema;
 				return this;
 			}
@@ -4758,13 +3656,10 @@ public static Builder builder() {
 			}
 
 			public ElicitRequest build() {
-				Assert.notNull(message, "message must not be null");
-				Assert.notNull(requestedSchema, "requestedSchema must not be null");
 				return new ElicitRequest(message, requestedSchema, meta);
 			}
 
 		}
-
 	}
 
 	/**
@@ -4779,51 +3674,50 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class ElicitResult {
-		private final @JsonProperty("action") Action action;
-		private final @JsonProperty("content") Map<String, Object> content;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class ElicitResult implements Result {
+		@JsonProperty("action")
+		private final Action action;
+		@JsonProperty("content")
+		private final Map<String, Object> content;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public ElicitResult(@JsonProperty("action") Action action, @JsonProperty("content") Map<String, Object> content, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(action, "action must not be null");
 			this.action = action;
 			this.content = content;
 			this.meta = meta;
 		}
 
-		public Action action() {
-			return this.action;
+		public Action action() { return this.action; }
+
+		public Map<String, Object> content() { return this.content; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ElicitResult)) return false;
+			ElicitResult that = (ElicitResult) o;
+			return Objects.equals(action, that.action()) && Objects.equals(content, that.content()) && Objects.equals(meta, that.meta());
 		}
 
-		public Map<String, Object> content() {
-			return this.content;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(action, content, meta); }
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "ElicitResult[action=" + action + ", content=" + content + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static ElicitResult fromJson(@JsonProperty("action") Action action,
-				@JsonProperty("content") Map<String, Object> content, @JsonProperty("_meta") Map<String, Object> meta) {
-			if (action == null) {
-				logger.warn(
-						"ElicitResult: missing required field 'action' during deserialization, using default 'cancel'");
-				action = Action.CANCEL;
-			}
-			return new ElicitResult(action, content, meta);
-		}
-
 		public enum Action {
 
 		// @formatter:off
-
 			@JsonProperty("accept") ACCEPT,
 			@JsonProperty("decline") DECLINE,
 			@JsonProperty("cancel") CANCEL
-
 		} // @formatter:on
 
 		// backwards compatibility constructor
@@ -4831,13 +3725,8 @@ public static Builder builder() {
 			this(action, content, null);
 		}
 
-		@Deprecated
 		public static Builder builder() {
 			return new Builder();
-		}
-
-		public static Builder builder(Action action) {
-			return new Builder(action);
 		}
 
 		public static class Builder {
@@ -4848,17 +3737,6 @@ public static Builder builder() {
 
 			private Map<String, Object> meta;
 
-			// tepmorary to support deprecated builder
-			private Builder() {
-
-			}
-
-			private Builder(Action action) {
-				Assert.notNull(action, "action must not be null");
-				this.action = action;
-			}
-
-			@Deprecated
 			public Builder message(Action action) {
 				this.action = action;
 				return this;
@@ -4875,12 +3753,10 @@ public static Builder builder() {
 			}
 
 			public ElicitResult build() {
-				Assert.notNull(action, "action must not be null");
 				return new ElicitResult(action, content, meta);
 			}
 
 		}
-
 	}
 
 	// ---------------------------
@@ -4895,21 +3771,35 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class PaginatedRequest {
-		private final @JsonProperty("cursor") String cursor;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class PaginatedRequest implements Request {
+		@JsonProperty("cursor")
+		private final String cursor;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public PaginatedRequest(@JsonProperty("cursor") String cursor, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.cursor = cursor;
 			this.meta = meta;
 		}
 
-		public String cursor() {
-			return this.cursor;
+		public String cursor() { return this.cursor; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof PaginatedRequest)) return false;
+			PaginatedRequest that = (PaginatedRequest) o;
+			return Objects.equals(cursor, that.cursor()) && Objects.equals(meta, that.meta());
 		}
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public int hashCode() { return Objects.hash(cursor, meta); }
+
+		@Override
+		public String toString() {
+			return "PaginatedRequest[cursor=" + cursor + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
@@ -4924,7 +3814,6 @@ public static Builder builder() {
 		public PaginatedRequest() {
 			this(null);
 		}
-
 	}
 
 	/**
@@ -4937,16 +3826,30 @@ public static Builder builder() {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class PaginatedResult {
-		private final @JsonProperty("nextCursor") String nextCursor;
+		@JsonProperty("nextCursor")
+		private final String nextCursor;
 
 		public PaginatedResult(@JsonProperty("nextCursor") String nextCursor) {
 			this.nextCursor = nextCursor;
 		}
 
-		public String nextCursor() {
-			return this.nextCursor;
+		public String nextCursor() { return this.nextCursor; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof PaginatedResult)) return false;
+			PaginatedResult that = (PaginatedResult) o;
+			return Objects.equals(nextCursor, that.nextCursor());
 		}
 
+		@Override
+		public int hashCode() { return Objects.hash(nextCursor); }
+
+		@Override
+		public String toString() {
+			return "PaginatedResult[nextCursor=" + nextCursor + "]";
+		}
 	}
 
 	// ---------------------------
@@ -4963,23 +3866,22 @@ public static Builder builder() {
 	 * @param total An optional total amount of work to be done, if known.
 	 * @param message An optional message providing additional context about the progress.
 	 * @param meta See specification for notes on _meta usage
-	 * <p>
-	 * Note: {@code progressToken} and {@code progress} are required by the MCP
-	 * specification. Deserialization accepts missing values and substitutes defaults to
-	 * avoid breaking existing integrations that may omit these fields.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class ProgressNotification {
-		private final @JsonProperty("progressToken") Object progressToken;
-		private final @JsonProperty("progress") Double progress;
-		private final @JsonProperty("total") Double total;
-		private final @JsonProperty("message") String message;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class ProgressNotification implements Notification {
+		@JsonProperty("progressToken")
+		private final Object progressToken;
+		@JsonProperty("progress")
+		private final Double progress;
+		@JsonProperty("total")
+		private final Double total;
+		@JsonProperty("message")
+		private final String message;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public ProgressNotification(@JsonProperty("progressToken") Object progressToken, @JsonProperty("progress") Double progress, @JsonProperty("total") Double total, @JsonProperty("message") String message, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(progressToken, "progressToken must not be null");
-			Assert.notNull(progress, "progress must not be null");
 			this.progressToken = progressToken;
 			this.progress = progress;
 			this.total = total;
@@ -4987,96 +3889,37 @@ public static Builder builder() {
 			this.meta = meta;
 		}
 
-		public Object progressToken() {
-			return this.progressToken;
+		public Object progressToken() { return this.progressToken; }
+
+		public Double progress() { return this.progress; }
+
+		public Double total() { return this.total; }
+
+		public String message() { return this.message; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ProgressNotification)) return false;
+			ProgressNotification that = (ProgressNotification) o;
+			return Objects.equals(progressToken, that.progressToken()) && Objects.equals(progress, that.progress()) && Objects.equals(total, that.total()) && Objects.equals(message, that.message()) && Objects.equals(meta, that.meta());
 		}
 
-		public Double progress() {
-			return this.progress;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(progressToken, progress, total, message, meta); }
 
-		public Double total() {
-			return this.total;
-		}
-
-		public String message() {
-			return this.message;
-		}
-
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "ProgressNotification[progressToken=" + progressToken + ", progress=" + progress + ", total=" + total + ", message=" + message + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static ProgressNotification fromJson(@JsonProperty("progressToken") Object progressToken,
-				@JsonProperty("progress") Double progress, @JsonProperty("total") Double total,
-				@JsonProperty("message") String message, @JsonProperty("_meta") Map<String, Object> meta) {
-			if (progressToken == null || progress == null) {
-				List<String> missing = new ArrayList<>();
-				if (progressToken == null) {
-					missing.add("progressToken -> ''");
-					progressToken = "";
-				}
-				if (progress == null) {
-					missing.add("progress -> 0.0");
-					progress = 0.0;
-				}
-				logger.warn("ProgressNotification: missing required fields during deserialization: {}",
-						String.join(", ", missing));
-			}
-			return new ProgressNotification(progressToken, progress, total, message, meta);
-		}
-
-		@Deprecated
 		public ProgressNotification(Object progressToken, double progress, Double total, String message) {
 			this(progressToken, progress, total, message, null);
 		}
-
-		public static Builder builder(Object progressToken, double progress) {
-			return new Builder(progressToken, progress);
-		}
-
-		public static class Builder {
-
-			private final Object progressToken;
-
-			private final Double progress;
-
-			private Double total;
-
-			private String message;
-
-			private Map<String, Object> meta;
-
-			private Builder(Object progressToken, double progress) {
-				Assert.notNull(progressToken, "progressToken must not be null");
-				this.progressToken = progressToken;
-				this.progress = progress;
-			}
-
-			public Builder total(Double total) {
-				this.total = total;
-				return this;
-			}
-
-			public Builder message(String message) {
-				this.message = message;
-				return this;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public ProgressNotification build() {
-				return new ProgressNotification(progressToken, progress, total, message, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -5088,22 +3931,35 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class ResourcesUpdatedNotification {
-		private final @JsonProperty("uri") String uri;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class ResourcesUpdatedNotification implements Notification {
+		@JsonProperty("uri")
+		private final String uri;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public ResourcesUpdatedNotification(@JsonProperty("uri") String uri, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(uri, "uri must not be null");
 			this.uri = uri;
 			this.meta = meta;
 		}
 
-		public String uri() {
-			return this.uri;
+		public String uri() { return this.uri; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ResourcesUpdatedNotification)) return false;
+			ResourcesUpdatedNotification that = (ResourcesUpdatedNotification) o;
+			return Objects.equals(uri, that.uri()) && Objects.equals(meta, that.meta());
 		}
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public int hashCode() { return Objects.hash(uri, meta); }
+
+		@Override
+		public String toString() {
+			return "ResourcesUpdatedNotification[uri=" + uri + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
@@ -5111,18 +3967,6 @@ public static Builder builder() {
 		public ResourcesUpdatedNotification(String uri) {
 			this(uri, null);
 		}
-
-		@JsonCreator
-		static ResourcesUpdatedNotification fromJson(@JsonProperty("uri") String uri,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (uri == null) {
-				logger.warn(
-						"ResourcesUpdatedNotification: missing required field 'uri' during deserialization, using default ''");
-				uri = "";
-			}
-			return new ResourcesUpdatedNotification(uri, meta);
-		}
-
 	}
 
 	/**
@@ -5135,86 +3979,64 @@ public static Builder builder() {
 	 * @param logger The logger that generated the message.
 	 * @param data JSON-serializable logging data.
 	 * @param meta See specification for notes on _meta usage
-	 * <p>
-	 * Note: {@code level} and {@code data} are required by the MCP specification.
-	 * Deserialization accepts missing values and substitutes defaults to avoid breaking
-	 * existing integrations that may omit these fields.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class LoggingMessageNotification {
-		private final @JsonProperty("level") LoggingLevel level;
-		private final @JsonProperty("logger") String logger;
-		private final @JsonProperty("data") String data;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class LoggingMessageNotification implements Notification {
+		@JsonProperty("level")
+		private final LoggingLevel level;
+		@JsonProperty("logger")
+		private final String logger;
+		@JsonProperty("data")
+		private final String data;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public LoggingMessageNotification(@JsonProperty("level") LoggingLevel level, @JsonProperty("logger") String logger, @JsonProperty("data") String data, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(level, "level must not be null");
-			Assert.notNull(data, "data must not be null");
 			this.level = level;
 			this.logger = logger;
 			this.data = data;
 			this.meta = meta;
 		}
 
-		public LoggingLevel level() {
-			return this.level;
+		public LoggingLevel level() { return this.level; }
+
+		public String logger() { return this.logger; }
+
+		public String data() { return this.data; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof LoggingMessageNotification)) return false;
+			LoggingMessageNotification that = (LoggingMessageNotification) o;
+			return Objects.equals(level, that.level()) && Objects.equals(logger, that.logger()) && Objects.equals(data, that.data()) && Objects.equals(meta, that.meta());
 		}
 
-		public String logger() {
-			return this.logger;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(level, logger, data, meta); }
 
-		public String data() {
-			return this.data;
-		}
-
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "LoggingMessageNotification[level=" + level + ", logger=" + logger + ", data=" + data + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
-
-		@JsonCreator
-		static LoggingMessageNotification fromJson(@JsonProperty("level") LoggingLevel level,
-				@JsonProperty("logger") String loggerName, @JsonProperty("data") String data,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (level == null || data == null) {
-				List<String> missing = new ArrayList<>();
-				if (level == null) {
-					missing.add("level -> INFO");
-					level = LoggingLevel.INFO;
-				}
-				if (data == null) {
-					missing.add("data -> ''");
-					data = "";
-				}
-				McpSchema.logger.warn("LoggingMessageNotification: missing required fields during deserialization: {}",
-						String.join(", ", missing));
-			}
-			return new LoggingMessageNotification(level, loggerName, data, meta);
-		}
 
 		// backwards compatibility constructor
 		public LoggingMessageNotification(LoggingLevel level, String logger, String data) {
 			this(level, logger, data, null);
 		}
 
-		/**
-		 * @deprecated Use {@link #builder(LoggingLevel, String)} instead.
-		 */
-		@Deprecated
 		public static Builder builder() {
-			return new Builder().level(LoggingLevel.INFO);
-		}
-
-		public static Builder builder(LoggingLevel level, String data) {
-			return new Builder(level, data);
+			return new Builder();
 		}
 
 		public static class Builder {
 
-			private LoggingLevel level;
+			private LoggingLevel level = LoggingLevel.INFO;
 
 			private String logger = "server";
 
@@ -5222,25 +4044,7 @@ public static Builder builder() {
 
 			private Map<String, Object> meta;
 
-			/**
-			 * @deprecated Use
-			 * {@link LoggingMessageNotification#builder(LoggingLevel, String)} factory
-			 * method instead.
-			 */
-			@Deprecated
-			public Builder() {
-			}
-
-			private Builder(LoggingLevel level, String data) {
-				Assert.notNull(level, "level must not be null");
-				Assert.notNull(data, "data must not be null");
-				this.level = level;
-				this.data = data;
-			}
-
-			@Deprecated
 			public Builder level(LoggingLevel level) {
-				Assert.notNull(level, "level must not be null");
 				this.level = level;
 				return this;
 			}
@@ -5250,9 +4054,7 @@ public static Builder builder() {
 				return this;
 			}
 
-			@Deprecated
 			public Builder data(String data) {
-				Assert.notNull(data, "data must not be null");
 				this.data = data;
 				return this;
 			}
@@ -5263,24 +4065,15 @@ public static Builder builder() {
 			}
 
 			public LoggingMessageNotification build() {
-				Assert.notNull(level, "level must not be null");
-				Assert.notNull(data, "data must not be null");
 				return new LoggingMessageNotification(level, logger, data, meta);
 			}
 
 		}
-
 	}
 
-	/**
-	 * Severity levels for MCP log messages, ordered from least to most severe. The
-	 * numeric {@link #level()} can be used to compare severities. Deserialization is
-	 * case-insensitive and returns {@code null} for unrecognized values.
-	 */
 	public enum LoggingLevel {
 
 	// @formatter:off
-
 		@JsonProperty("debug") DEBUG(0),
 		@JsonProperty("info") INFO(1),
 		@JsonProperty("notice") NOTICE(2),
@@ -5293,27 +4086,12 @@ public static Builder builder() {
 
 		private final int level;
 
-		private static final Map<String, LoggingLevel> BY_NAME;
-
-		static {
-			Map<String, LoggingLevel> m = new HashMap<>();
-			for (LoggingLevel l : values()) {
-				m.put(l.name().toLowerCase(), l);
-			}
-			BY_NAME = Collections.unmodifiableMap(new HashMap<>(m));
-		}
-
 		LoggingLevel(int level) {
 			this.level = level;
 		}
 
 		public int level() {
 			return level;
-		}
-
-		@JsonCreator
-		public static LoggingLevel fromValue(String value) {
-			return value == null ? null : BY_NAME.get(value.toLowerCase());
 		}
 
 	}
@@ -5328,116 +4106,92 @@ public static Builder builder() {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class SetLevelRequest {
-		private final @JsonProperty("level") LoggingLevel level;
+		@JsonProperty("level")
+		private final LoggingLevel level;
 
 		public SetLevelRequest(@JsonProperty("level") LoggingLevel level) {
-			Assert.notNull(level, "level must not be null");
 			this.level = level;
 		}
 
-		public LoggingLevel level() {
-			return this.level;
+		public LoggingLevel level() { return this.level; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof SetLevelRequest)) return false;
+			SetLevelRequest that = (SetLevelRequest) o;
+			return Objects.equals(level, that.level());
 		}
 
-@JsonCreator
-		static SetLevelRequest fromJson(@JsonProperty("level") LoggingLevel level) {
-			if (level == null) {
-				logger.warn(
-						"SetLevelRequest: missing required field 'level' during deserialization, using default 'info'");
-				level = LoggingLevel.INFO;
-			}
-			return new SetLevelRequest(level);
-		}
+		@Override
+		public int hashCode() { return Objects.hash(level); }
 
+		@Override
+		public String toString() {
+			return "SetLevelRequest[level=" + level + "]";
+		}
 	}
 
 	// ---------------------------
 	// Autocomplete
 	// ---------------------------
-
-	/**
-	 * A reference to a prompt or resource that can be used as input for completion
-	 * requests. Implementations are identified by a {@code "type"} discriminator field
-	 * whose value maps to a concrete subtype via {@code @JsonSubTypes}.
-	 */
-	@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type",
-			visible = true)
-	@JsonSubTypes({ @JsonSubTypes.Type(value = PromptReference.class, name = PromptReference.TYPE),
-			@JsonSubTypes.Type(value = ResourceReference.class, name = ResourceReference.TYPE) })
 	public interface CompleteReference {
 
-		default String type() {
-			if (this instanceof PromptReference) {
-				return PromptReference.TYPE;
-			}
-			else if (this instanceof ResourceReference) {
-				return ResourceReference.TYPE;
-			}
-			throw new IllegalArgumentException("Unknown CompleteReference type: " + this);
-		}
+		String type();
 
-		@Deprecated
-		default String identifier() {
-			return null;
-		}
+		String identifier();
 
 	}
 
 	/**
 	 * Identifies a prompt for completion requests.
 	 *
-	 * @param type Always {@value #TYPE}; present as the polymorphic discriminator. Any
-	 * non-null value other than {@value #TYPE} is replaced with {@value #TYPE} and a WARN
-	 * is logged.
+	 * @param type The reference type identifier (typically "ref/prompt")
 	 * @param name The name of the prompt
 	 * @param title An optional title for the prompt
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class PromptReference  implements CompleteReference {
-		private final @JsonProperty("type") String type;
-		private final @JsonProperty("name") String name;
-		private final @JsonProperty("title") String title;
+	public static final class PromptReference implements CompleteReference {
+		@JsonProperty("type")
+		private final String type;
+		@JsonProperty("name")
+		private final String name;
+		@JsonProperty("title")
+		private final String title;
 
 		public PromptReference(@JsonProperty("type") String type, @JsonProperty("name") String name, @JsonProperty("title") String title) {
-			Assert.hasText(name, "name must not be null or empty");
-			if (type != null && !TYPE.equals(type)) {
-			logger.warn("PromptReference: 'type' argument '{}' is ignored, type is always '{}'", type, TYPE);
-			}
-			type = TYPE;
 			this.type = type;
 			this.name = name;
 			this.title = title;
 		}
 
-		public String type() {
-			return this.type;
+		public String type() { return this.type; }
+
+		public String name() { return this.name; }
+
+		public String title() { return this.title; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof PromptReference)) return false;
+			PromptReference that = (PromptReference) o;
+			return Objects.equals(type, that.type()) && Objects.equals(name, that.name());
 		}
 
-		public String name() {
-			return this.name;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(type, name); }
 
-		public String title() {
-			return this.title;
+		@Override
+		public String toString() {
+			return "PromptReference[type=" + type + ", name=" + name + ", title=" + title + "]";
 		}
 
 // @formatter:on
 
 		public static final String TYPE = "ref/prompt";
 
-		@JsonCreator
-		static PromptReference fromJson(@JsonProperty("type") String type, @JsonProperty("name") String name,
-				@JsonProperty("title") String title) {
-			return new PromptReference(type, name, title);
-		}
-
-		/**
-		 * @deprecated The {@code type} argument is ignored — the type discriminator is
-		 * always {@value #TYPE}. Use {@link #PromptReference(String)} or the
-		 * {@link #builder(String)} instead.
-		 */
-		@Deprecated
 		public PromptReference(String type, String name) {
 			this(type, name, null);
 		}
@@ -5451,94 +4205,60 @@ public static Builder builder() {
 			return name();
 		}
 
-		@Override
-		public boolean equals(Object obj) {
-			if (this == obj)
-				return true;
-			if (obj == null || getClass() != obj.getClass())
-				return false;
-			PromptReference that = (PromptReference) obj;
-			return java.util.Objects.equals(name, that.name);
-		}
-
-		@Override
-		public int hashCode() {
-			return java.util.Objects.hash(name);
-		}
-
-		public static Builder builder(String name) {
-			return new Builder(name);
-		}
-
-		public static final class Builder {
-
-			private final String name;
-
-			private String title;
-
-			private Builder(String name) {
-				this.name = name;
-			}
-
-			public Builder title(String title) {
-				this.title = title;
-				return this;
-			}
-
-			public PromptReference build() {
-				return new PromptReference(TYPE, name, title);
-			}
-
-		}
 
 	}
 
-	// TODO: this should actually be a ResourceTemplateReference
 	/**
 	 * A reference to a resource or resource template definition for completion requests.
 	 *
+	 * @param type The reference type identifier (typically "ref/resource")
 	 * @param uri The URI or URI template of the resource
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class ResourceReference  implements CompleteReference {
-		private final @JsonProperty("uri") String uri;
+	public static final class ResourceReference implements CompleteReference {
+		@JsonProperty("type")
+		private final String type;
+		@JsonProperty("uri")
+		private final String uri;
 
-		public ResourceReference(@JsonProperty("uri") String uri) {
-			Assert.notNull(uri, "uri must not be null");
+		public ResourceReference(@JsonProperty("type") String type, @JsonProperty("uri") String uri) {
+			this.type = type;
 			this.uri = uri;
 		}
 
-		public String uri() {
-			return this.uri;
+		public String type() { return this.type; }
+
+		public String uri() { return this.uri; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ResourceReference)) return false;
+			ResourceReference that = (ResourceReference) o;
+			return Objects.equals(type, that.type()) && Objects.equals(uri, that.uri());
+		}
+
+		@Override
+		public int hashCode() { return Objects.hash(type, uri); }
+
+		@Override
+		public String toString() {
+			return "ResourceReference[type=" + type + ", uri=" + uri + "]";
 		}
 
 // @formatter:on
 
 		public static final String TYPE = "ref/resource";
 
-		@JsonProperty("type")
-		@Override
-		public String type() {
-			return CompleteReference.super.type();
-		}
-
-		@JsonCreator
-		static ResourceReference fromJson(@JsonProperty("uri") String uri, @JsonProperty("type") String type) {
-			return new ResourceReference(uri);
-		}
-
-		@Deprecated
-		public ResourceReference(String type, String uri) {
-			this(uri);
-			logger.warn("ResourceReference: type argument '{}' is ignored, type is always '{}'", type, TYPE);
+		public ResourceReference(String uri) {
+			this(TYPE, uri);
 		}
 
 		@Override
 		public String identifier() {
 			return uri();
 		}
-
 	}
 
 	/**
@@ -5551,96 +4271,59 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class CompleteRequest {
-		private final @JsonProperty("ref") CompleteReference ref;
-		private final @JsonProperty("argument") CompleteArgument argument;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
-		private final @JsonProperty("context") CompleteContext context;
+	public static final class CompleteRequest implements Request {
+		@JsonProperty("ref")
+		private final CompleteReference ref;
+		@JsonProperty("argument")
+		private final CompleteArgument argument;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
+		@JsonProperty("context")
+		private final CompleteContext context;
 
 		public CompleteRequest(@JsonProperty("ref") CompleteReference ref, @JsonProperty("argument") CompleteArgument argument, @JsonProperty("_meta") Map<String, Object> meta, @JsonProperty("context") CompleteContext context) {
-			Assert.notNull(ref, "ref must not be null");
-			Assert.notNull(argument, "argument must not be null");
 			this.ref = ref;
 			this.argument = argument;
 			this.meta = meta;
 			this.context = context;
 		}
 
-		public CompleteReference ref() {
-			return this.ref;
+		public CompleteReference ref() { return this.ref; }
+
+		public CompleteArgument argument() { return this.argument; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		public CompleteContext context() { return this.context; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof CompleteRequest)) return false;
+			CompleteRequest that = (CompleteRequest) o;
+			return Objects.equals(ref, that.ref()) && Objects.equals(argument, that.argument()) && Objects.equals(meta, that.meta()) && Objects.equals(context, that.context());
 		}
 
-		public CompleteArgument argument() {
-			return this.argument;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(ref, argument, meta, context); }
 
-		public Map<String, Object> meta() {
-			return this.meta;
-		}
-
-		public CompleteContext context() {
-			return this.context;
+		@Override
+		public String toString() {
+			return "CompleteRequest[ref=" + ref + ", argument=" + argument + ", meta=" + meta + ", context=" + context + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static CompleteRequest fromJson(@JsonProperty("ref") CompleteReference ref,
-				@JsonProperty("argument") CompleteArgument argument, @JsonProperty("_meta") Map<String, Object> meta,
-				@JsonProperty("context") CompleteContext context) {
-			return new CompleteRequest(ref, argument, meta, context);
-		}
-
-		@Deprecated
 		public CompleteRequest(CompleteReference ref, CompleteArgument argument, Map<String, Object> meta) {
 			this(ref, argument, meta, null);
 		}
 
-		@Deprecated
 		public CompleteRequest(CompleteReference ref, CompleteArgument argument, CompleteContext context) {
 			this(ref, argument, null, context);
 		}
 
-		@Deprecated
 		public CompleteRequest(CompleteReference ref, CompleteArgument argument) {
 			this(ref, argument, null, null);
-		}
-
-		public static Builder builder(CompleteReference ref, CompleteArgument argument) {
-			return new Builder(ref, argument);
-		}
-
-		public static class Builder {
-
-			private final CompleteReference ref;
-
-			private final CompleteArgument argument;
-
-			private Map<String, Object> meta;
-
-			private CompleteContext context;
-
-			private Builder(CompleteReference ref, CompleteArgument argument) {
-				Assert.notNull(ref, "ref must not be null");
-				Assert.notNull(argument, "argument must not be null");
-				this.ref = ref;
-				this.argument = argument;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public Builder context(CompleteContext context) {
-				this.context = context;
-				return this;
-			}
-
-			public CompleteRequest build() {
-				return new CompleteRequest(ref, argument, meta, context);
-			}
-
 		}
 
 		/**
@@ -5648,69 +4331,68 @@ public static Builder builder() {
 		 *
 		 * @param name The name of the argument
 		 * @param value The value of the argument to use for completion matching
-		 */
-		@JsonInclude(JsonInclude.Include.NON_ABSENT)
-		@JsonIgnoreProperties(ignoreUnknown = true)
-		public static final class CompleteArgument {
-			private final @JsonProperty("name") String name;
-			private final @JsonProperty("value") String value;
+		 */public static final class CompleteArgument {
+		@JsonProperty("name")
+		private final String name;
+		@JsonProperty("value")
+		private final String value;
 
-			public CompleteArgument(@JsonProperty("name") String name, @JsonProperty("value") String value) {
-				Assert.hasText(name, "name must not be empty");
-				Assert.notNull(value, "value must not be null");
-				this.name = name;
-				this.value = value;
-			}
-
-			public String name() {
-				return this.name;
-			}
-
-			public String value() {
-				return this.value;
-			}
-
+		public CompleteArgument(@JsonProperty("name") String name, @JsonProperty("value") String value) {
+			this.name = name;
+			this.value = value;
 		}
+
+		public String name() { return this.name; }
+
+		public String value() { return this.value; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof CompleteArgument)) return false;
+			CompleteArgument that = (CompleteArgument) o;
+			return Objects.equals(name, that.name()) && Objects.equals(value, that.value());
+		}
+
+		@Override
+		public int hashCode() { return Objects.hash(name, value); }
+
+		@Override
+		public String toString() {
+			return "CompleteArgument[name=" + name + ", value=" + value + "]";
+		}
+	}
 
 		/**
 		 * Additional, optional context for completions.
 		 *
 		 * @param arguments Previously-resolved variables in a URI template or prompt
-		 */
-		@JsonInclude(JsonInclude.Include.NON_ABSENT)
-		@JsonIgnoreProperties(ignoreUnknown = true)
-		public static final class CompleteContext {
-			private final @JsonProperty("arguments") Map<String, String> arguments;
+		 */public static final class CompleteContext {
+		@JsonProperty("arguments")
+		private final Map<String, String> arguments;
 
-			public CompleteContext(@JsonProperty("arguments") Map<String, String> arguments) {
-				this.arguments = arguments;
-			}
-
-			public Map<String, String> arguments() {
-				return this.arguments;
-			}
-
-public static Builder builder() {
-				return new Builder();
-			}
-
-			public static class Builder {
-
-				private Map<String, String> arguments;
-
-				public Builder arguments(Map<String, String> arguments) {
-					this.arguments = arguments;
-					return this;
-				}
-
-				public CompleteContext build() {
-					return new CompleteContext(arguments);
-				}
-
-			}
-
+		public CompleteContext(@JsonProperty("arguments") Map<String, String> arguments) {
+			this.arguments = arguments;
 		}
 
+		public Map<String, String> arguments() { return this.arguments; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof CompleteContext)) return false;
+			CompleteContext that = (CompleteContext) o;
+			return Objects.equals(arguments, that.arguments());
+		}
+
+		@Override
+		public int hashCode() { return Objects.hash(arguments); }
+
+		@Override
+		public String toString() {
+			return "CompleteContext[arguments=" + arguments + "]";
+		}
+	}
 	}
 
 	/**
@@ -5721,37 +4403,40 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class CompleteResult {
-		private final @JsonProperty("completion") CompleteCompletion completion;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class CompleteResult implements Result {
+		@JsonProperty("completion")
+		private final CompleteCompletion completion;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public CompleteResult(@JsonProperty("completion") CompleteCompletion completion, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(completion, "completion must not be null");
 			this.completion = completion;
 			this.meta = meta;
 		}
 
-		public CompleteCompletion completion() {
-			return this.completion;
+		public CompleteCompletion completion() { return this.completion; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof CompleteResult)) return false;
+			CompleteResult that = (CompleteResult) o;
+			return Objects.equals(completion, that.completion()) && Objects.equals(meta, that.meta());
 		}
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public int hashCode() { return Objects.hash(completion, meta); }
+
+		@Override
+		public String toString() {
+			return "CompleteResult[completion=" + completion + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static CompleteResult fromJson(@JsonProperty("completion") CompleteCompletion completion,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (completion == null) {
-				logger.warn(
-						"CompleteResult: missing required field 'completion' during deserialization, using default {values=[]}");
-				completion = new CompleteCompletion(Collections.emptyList(), null, null);
-			}
-			return new CompleteResult(completion, meta);
-		}
-
+		// backwards compatibility constructor
 		public CompleteResult(CompleteCompletion completion) {
 			this(completion, null);
 		}
@@ -5765,50 +4450,50 @@ public static Builder builder() {
 		 * @param hasMore Indicates whether there are additional completion options beyond
 		 * those provided in the current response, even if the exact total is unknown
 		 */
-		@JsonInclude(JsonInclude.Include.NON_ABSENT)
-		@JsonIgnoreProperties(ignoreUnknown = true)
+		@JsonInclude(JsonInclude.Include.ALWAYS)
 		public static final class CompleteCompletion {
-			private final @JsonProperty("values") List<String> values;
-			private final @JsonProperty("total") Integer total;
-			private final @JsonProperty("hasMore") Boolean hasMore;
+		@JsonProperty("values")
+		private final List<String> values;
+		@JsonProperty("total")
+		private final Integer total;
+		@JsonProperty("hasMore")
+		private final Boolean hasMore;
 
-			public CompleteCompletion(@JsonProperty("values") List<String> values, @JsonProperty("total") Integer total, @JsonProperty("hasMore") Boolean hasMore) {
-				Assert.notNull(values, "values must not be null");
-				this.values = values;
-				this.total = total;
-				this.hasMore = hasMore;
-			}
-
-			public List<String> values() {
-				return this.values;
-			}
-
-			public Integer total() {
-				return this.total;
-			}
-
-			public Boolean hasMore() {
-				return this.hasMore;
-			}
-
-// @formatter:on
-
-			public CompleteCompletion(List<String> values) {
-				this(values, null, null);
-			}
-
+		public CompleteCompletion(@JsonProperty("values") List<String> values, @JsonProperty("total") Integer total, @JsonProperty("hasMore") Boolean hasMore) {
+			this.values = values;
+			this.total = total;
+			this.hasMore = hasMore;
 		}
 
+		public List<String> values() { return this.values; }
+
+		public Integer total() { return this.total; }
+
+		public Boolean hasMore() { return this.hasMore; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof CompleteCompletion)) return false;
+			CompleteCompletion that = (CompleteCompletion) o;
+			return Objects.equals(values, that.values()) && Objects.equals(total, that.total()) && Objects.equals(hasMore, that.hasMore());
+		}
+
+		@Override
+		public int hashCode() { return Objects.hash(values, total, hasMore); }
+
+		@Override
+		public String toString() {
+			return "CompleteCompletion[values=" + values + ", total=" + total + ", hasMore=" + hasMore + "]";
+		}
+
+// @formatter:on
+	}
 	}
 
 	// ---------------------------
 	// Content Types
 	// ---------------------------
-
-	/**
-	 * A polymorphic content value that can appear in messages and tool results. The
-	 * concrete type is determined by the {@code "type"} JSON property.
-	 */
 	@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
 	@JsonSubTypes({ @JsonSubTypes.Type(value = TextContent.class, name = "text"),
 			@JsonSubTypes.Type(value = ImageContent.class, name = "image"),
@@ -5817,7 +4502,6 @@ public static Builder builder() {
 			@JsonSubTypes.Type(value = ResourceLink.class, name = "resource_link") })
 	public interface Content extends Meta {
 
-		@JsonIgnore
 		default String type() {
 			if (this instanceof TextContent) {
 				return "text";
@@ -5848,85 +4532,51 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class TextContent  implements Content {
-		private final @JsonProperty("annotations") Annotations annotations;
-		private final @JsonProperty("text") String text;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class TextContent implements Annotated, Content {
+		@JsonProperty("annotations")
+		private final Annotations annotations;
+		@JsonProperty("text")
+		private final String text;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public TextContent(@JsonProperty("annotations") Annotations annotations, @JsonProperty("text") String text, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(text, "text must not be null");
 			this.annotations = annotations;
 			this.text = text;
 			this.meta = meta;
 		}
 
-		public Annotations annotations() {
-			return this.annotations;
+		public Annotations annotations() { return this.annotations; }
+
+		public String text() { return this.text; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof TextContent)) return false;
+			TextContent that = (TextContent) o;
+			return Objects.equals(annotations, that.annotations()) && Objects.equals(text, that.text()) && Objects.equals(meta, that.meta());
 		}
 
-		public String text() {
-			return this.text;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(annotations, text, meta); }
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "TextContent[annotations=" + annotations + ", text=" + text + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static TextContent fromJson(@JsonProperty("annotations") Annotations annotations,
-				@JsonProperty("text") String text, @JsonProperty("_meta") Map<String, Object> meta) {
-			if (text == null) {
-				logger.warn("TextContent: missing required field 'text' during deserialization, using default ''");
-				text = "";
-			}
-			return new TextContent(annotations, text, meta);
-		}
-
-		@Deprecated
 		public TextContent(Annotations annotations, String text) {
 			this(annotations, text, null);
 		}
 
-		@Deprecated
 		public TextContent(String content) {
 			this(null, content, null);
 		}
-
-		public static Builder builder(String text) {
-			return new Builder(text);
-		}
-
-		public static class Builder {
-
-			private Annotations annotations;
-
-			private final String text;
-
-			private Map<String, Object> meta;
-
-			private Builder(String text) {
-				Assert.notNull(text, "text must not be null");
-				this.text = text;
-			}
-
-			public Builder annotations(Annotations annotations) {
-				this.annotations = annotations;
-				return this;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public TextContent build() {
-				return new TextContent(annotations, text, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -5940,101 +4590,52 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class ImageContent  implements Content {
-		private final @JsonProperty("annotations") Annotations annotations;
-		private final @JsonProperty("data") String data;
-		private final @JsonProperty("mimeType") String mimeType;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class ImageContent implements Annotated, Content {
+		@JsonProperty("annotations")
+		private final Annotations annotations;
+		@JsonProperty("data")
+		private final String data;
+		@JsonProperty("mimeType")
+		private final String mimeType;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public ImageContent(@JsonProperty("annotations") Annotations annotations, @JsonProperty("data") String data, @JsonProperty("mimeType") String mimeType, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(data, "data must not be null");
-			Assert.notNull(mimeType, "mimeType must not be null");
 			this.annotations = annotations;
 			this.data = data;
 			this.mimeType = mimeType;
 			this.meta = meta;
 		}
 
-		public Annotations annotations() {
-			return this.annotations;
+		public Annotations annotations() { return this.annotations; }
+
+		public String data() { return this.data; }
+
+		public String mimeType() { return this.mimeType; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ImageContent)) return false;
+			ImageContent that = (ImageContent) o;
+			return Objects.equals(annotations, that.annotations()) && Objects.equals(data, that.data()) && Objects.equals(mimeType, that.mimeType()) && Objects.equals(meta, that.meta());
 		}
 
-		public String data() {
-			return this.data;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(annotations, data, mimeType, meta); }
 
-		public String mimeType() {
-			return this.mimeType;
-		}
-
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "ImageContent[annotations=" + annotations + ", data=" + data + ", mimeType=" + mimeType + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static ImageContent fromJson(@JsonProperty("annotations") Annotations annotations,
-				@JsonProperty("data") String data, @JsonProperty("mimeType") String mimeType,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (data == null || mimeType == null) {
-				List<String> missing = new ArrayList<>();
-				if (data == null) {
-					missing.add("data -> ''");
-					data = "";
-				}
-				if (mimeType == null) {
-					missing.add("mimeType -> ''");
-					mimeType = "";
-				}
-				logger.warn("ImageContent: missing required fields during deserialization: {}",
-						String.join(", ", missing));
-			}
-			return new ImageContent(annotations, data, mimeType, meta);
-		}
-
-		@Deprecated
 		public ImageContent(Annotations annotations, String data, String mimeType) {
 			this(annotations, data, mimeType, null);
 		}
-
-		public static Builder builder(String data, String mimeType) {
-			return new Builder(data, mimeType);
-		}
-
-		public static class Builder {
-
-			private Annotations annotations;
-
-			private final String data;
-
-			private final String mimeType;
-
-			private Map<String, Object> meta;
-
-			private Builder(String data, String mimeType) {
-				Assert.notNull(data, "data must not be null");
-				Assert.notNull(mimeType, "mimeType must not be null");
-				this.data = data;
-				this.mimeType = mimeType;
-			}
-
-			public Builder annotations(Annotations annotations) {
-				this.annotations = annotations;
-				return this;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public ImageContent build() {
-				return new ImageContent(annotations, data, mimeType, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -6048,102 +4649,53 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class AudioContent  implements Content {
-		private final @JsonProperty("annotations") Annotations annotations;
-		private final @JsonProperty("data") String data;
-		private final @JsonProperty("mimeType") String mimeType;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class AudioContent implements Annotated, Content {
+		@JsonProperty("annotations")
+		private final Annotations annotations;
+		@JsonProperty("data")
+		private final String data;
+		@JsonProperty("mimeType")
+		private final String mimeType;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public AudioContent(@JsonProperty("annotations") Annotations annotations, @JsonProperty("data") String data, @JsonProperty("mimeType") String mimeType, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(data, "data must not be null");
-			Assert.notNull(mimeType, "mimeType must not be null");
 			this.annotations = annotations;
 			this.data = data;
 			this.mimeType = mimeType;
 			this.meta = meta;
 		}
 
-		public Annotations annotations() {
-			return this.annotations;
+		public Annotations annotations() { return this.annotations; }
+
+		public String data() { return this.data; }
+
+		public String mimeType() { return this.mimeType; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof AudioContent)) return false;
+			AudioContent that = (AudioContent) o;
+			return Objects.equals(annotations, that.annotations()) && Objects.equals(data, that.data()) && Objects.equals(mimeType, that.mimeType()) && Objects.equals(meta, that.meta());
 		}
 
-		public String data() {
-			return this.data;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(annotations, data, mimeType, meta); }
 
-		public String mimeType() {
-			return this.mimeType;
-		}
-
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "AudioContent[annotations=" + annotations + ", data=" + data + ", mimeType=" + mimeType + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static AudioContent fromJson(@JsonProperty("annotations") Annotations annotations,
-				@JsonProperty("data") String data, @JsonProperty("mimeType") String mimeType,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (data == null || mimeType == null) {
-				List<String> missing = new ArrayList<>();
-				if (data == null) {
-					missing.add("data -> ''");
-					data = "";
-				}
-				if (mimeType == null) {
-					missing.add("mimeType -> ''");
-					mimeType = "";
-				}
-				logger.warn("AudioContent: missing required fields during deserialization: {}",
-						String.join(", ", missing));
-			}
-			return new AudioContent(annotations, data, mimeType, meta);
-		}
-
 		// backwards compatibility constructor
-		@Deprecated
 		public AudioContent(Annotations annotations, String data, String mimeType) {
 			this(annotations, data, mimeType, null);
 		}
-
-		public static Builder builder(String data, String mimeType) {
-			return new Builder(data, mimeType);
-		}
-
-		public static class Builder {
-
-			private Annotations annotations;
-
-			private final String data;
-
-			private final String mimeType;
-
-			private Map<String, Object> meta;
-
-			private Builder(String data, String mimeType) {
-				Assert.notNull(data, "data must not be null");
-				Assert.notNull(mimeType, "mimeType must not be null");
-				this.data = data;
-				this.mimeType = mimeType;
-			}
-
-			public Builder annotations(Annotations annotations) {
-				this.annotations = annotations;
-				return this;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public AudioContent build() {
-				return new AudioContent(annotations, data, mimeType, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -6158,82 +4710,48 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class EmbeddedResource  implements Content {
-		private final @JsonProperty("annotations") Annotations annotations;
-		private final @JsonProperty("resource") ResourceContents resource;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class EmbeddedResource implements Annotated, Content {
+		@JsonProperty("annotations")
+		private final Annotations annotations;
+		@JsonProperty("resource")
+		private final ResourceContents resource;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public EmbeddedResource(@JsonProperty("annotations") Annotations annotations, @JsonProperty("resource") ResourceContents resource, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(resource, "resource must not be null");
 			this.annotations = annotations;
 			this.resource = resource;
 			this.meta = meta;
 		}
 
-		public Annotations annotations() {
-			return this.annotations;
+		public Annotations annotations() { return this.annotations; }
+
+		public ResourceContents resource() { return this.resource; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof EmbeddedResource)) return false;
+			EmbeddedResource that = (EmbeddedResource) o;
+			return Objects.equals(annotations, that.annotations()) && Objects.equals(resource, that.resource()) && Objects.equals(meta, that.meta());
 		}
 
-		public ResourceContents resource() {
-			return this.resource;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(annotations, resource, meta); }
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "EmbeddedResource[annotations=" + annotations + ", resource=" + resource + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static EmbeddedResource fromJson(@JsonProperty("annotations") Annotations annotations,
-				@JsonProperty("resource") ResourceContents resource, @JsonProperty("_meta") Map<String, Object> meta) {
-			if (resource == null) {
-				logger.warn(
-						"EmbeddedResource: missing required field 'resource' during deserialization, using empty text resource");
-				resource = new TextResourceContents("", null, "", null);
-			}
-			return new EmbeddedResource(annotations, resource, meta);
-		}
-
 		// backwards compatibility constructor
-		@Deprecated
 		public EmbeddedResource(Annotations annotations, ResourceContents resource) {
 			this(annotations, resource, null);
 		}
-
-		public static Builder builder(ResourceContents resource) {
-			return new Builder(resource);
-		}
-
-		public static class Builder {
-
-			private Annotations annotations;
-
-			private final ResourceContents resource;
-
-			private Map<String, Object> meta;
-
-			private Builder(ResourceContents resource) {
-				Assert.notNull(resource, "resource must not be null");
-				this.resource = resource;
-			}
-
-			public Builder annotations(Annotations annotations) {
-				this.annotations = annotations;
-				return this;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public EmbeddedResource build() {
-				return new EmbeddedResource(annotations, resource, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -6256,15 +4774,23 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class ResourceLink  implements Content {
-		private final @JsonProperty("name") String name;
-		private final @JsonProperty("title") String title;
-		private final @JsonProperty("uri") String uri;
-		private final @JsonProperty("description") String description;
-		private final @JsonProperty("mimeType") String mimeType;
-		private final @JsonProperty("size") Long size;
-		private final @JsonProperty("annotations") Annotations annotations;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class ResourceLink implements Content {
+		@JsonProperty("name")
+		private final String name;
+		@JsonProperty("title")
+		private final String title;
+		@JsonProperty("uri")
+		private final String uri;
+		@JsonProperty("description")
+		private final String description;
+		@JsonProperty("mimeType")
+		private final String mimeType;
+		@JsonProperty("size")
+		private final Long size;
+		@JsonProperty("annotations")
+		private final Annotations annotations;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public ResourceLink(@JsonProperty("name") String name, @JsonProperty("title") String title, @JsonProperty("uri") String uri, @JsonProperty("description") String description, @JsonProperty("mimeType") String mimeType, @JsonProperty("size") Long size, @JsonProperty("annotations") Annotations annotations, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.name = name;
@@ -6277,36 +4803,36 @@ public static Builder builder() {
 			this.meta = meta;
 		}
 
-		public String name() {
-			return this.name;
+		public String name() { return this.name; }
+
+		public String title() { return this.title; }
+
+		public String uri() { return this.uri; }
+
+		public String description() { return this.description; }
+
+		public String mimeType() { return this.mimeType; }
+
+		public Long size() { return this.size; }
+
+		public Annotations annotations() { return this.annotations; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ResourceLink)) return false;
+			ResourceLink that = (ResourceLink) o;
+			return Objects.equals(name, that.name()) && Objects.equals(title, that.title()) && Objects.equals(uri, that.uri()) && Objects.equals(description, that.description()) && Objects.equals(mimeType, that.mimeType()) && Objects.equals(size, that.size()) && Objects.equals(annotations, that.annotations()) && Objects.equals(meta, that.meta());
 		}
 
-		public String title() {
-			return this.title;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(name, title, uri, description, mimeType, size, annotations, meta); }
 
-		public String uri() {
-			return this.uri;
-		}
-
-		public String description() {
-			return this.description;
-		}
-
-		public String mimeType() {
-			return this.mimeType;
-		}
-
-		public Long size() {
-			return this.size;
-		}
-
-		public Annotations annotations() {
-			return this.annotations;
-		}
-
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "ResourceLink[name=" + name + ", title=" + title + ", uri=" + uri + ", description=" + description + ", mimeType=" + mimeType + ", size=" + size + ", annotations=" + annotations + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
@@ -6381,7 +4907,6 @@ public static Builder builder() {
 			}
 
 		}
-
 	}
 
 	// ---------------------------
@@ -6401,78 +4926,46 @@ public static Builder builder() {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class Root {
-		private final @JsonProperty("uri") String uri;
-		private final @JsonProperty("name") String name;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+		@JsonProperty("uri")
+		private final String uri;
+		@JsonProperty("name")
+		private final String name;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public Root(@JsonProperty("uri") String uri, @JsonProperty("name") String name, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(uri, "uri must not be null");
 			this.uri = uri;
 			this.name = name;
 			this.meta = meta;
 		}
 
-		public String uri() {
-			return this.uri;
+		public String uri() { return this.uri; }
+
+		public String name() { return this.name; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof Root)) return false;
+			Root that = (Root) o;
+			return Objects.equals(uri, that.uri()) && Objects.equals(name, that.name()) && Objects.equals(meta, that.meta());
 		}
 
-		public String name() {
-			return this.name;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(uri, name, meta); }
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "Root[uri=" + uri + ", name=" + name + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static Root fromJson(@JsonProperty("uri") String uri, @JsonProperty("name") String name,
-				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (uri == null) {
-				logger.warn("Root: missing required field 'uri' during deserialization, using default ''");
-				uri = "";
-			}
-			return new Root(uri, name, meta);
-		}
-
 		public Root(String uri, String name) {
 			this(uri, name, null);
 		}
-
-		public static Builder builder(String uri) {
-			return new Builder(uri);
-		}
-
-		public static class Builder {
-
-			private final String uri;
-
-			private String name;
-
-			private Map<String, Object> meta;
-
-			private Builder(String uri) {
-				Assert.hasText(uri, "uri must not be empty");
-				this.uri = uri;
-			}
-
-			public Builder name(String name) {
-				this.name = name;
-				return this;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public Root build() {
-				return new Root(uri, name, meta);
-			}
-
-		}
-
 	}
 
 	/**
@@ -6489,90 +4982,51 @@ public static Builder builder() {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public static final class ListRootsResult {
-		private final @JsonProperty("roots") List<Root> roots;
-		private final @JsonProperty("nextCursor") String nextCursor;
-		private final @JsonProperty("_meta") Map<String, Object> meta;
+	public static final class ListRootsResult implements Result {
+		@JsonProperty("roots")
+		private final List<Root> roots;
+		@JsonProperty("nextCursor")
+		private final String nextCursor;
+		@JsonProperty("_meta")
+		private final Map<String, Object> meta;
 
 		public ListRootsResult(@JsonProperty("roots") List<Root> roots, @JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
-			Assert.notNull(roots, "roots must not be null");
 			this.roots = roots;
 			this.nextCursor = nextCursor;
 			this.meta = meta;
 		}
 
-		public List<Root> roots() {
-			return this.roots;
+		public List<Root> roots() { return this.roots; }
+
+		public String nextCursor() { return this.nextCursor; }
+
+		public Map<String, Object> meta() { return this.meta; }
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ListRootsResult)) return false;
+			ListRootsResult that = (ListRootsResult) o;
+			return Objects.equals(roots, that.roots()) && Objects.equals(nextCursor, that.nextCursor()) && Objects.equals(meta, that.meta());
 		}
 
-		public String nextCursor() {
-			return this.nextCursor;
-		}
+		@Override
+		public int hashCode() { return Objects.hash(roots, nextCursor, meta); }
 
-		public Map<String, Object> meta() {
-			return this.meta;
+		@Override
+		public String toString() {
+			return "ListRootsResult[roots=" + roots + ", nextCursor=" + nextCursor + ", meta=" + meta + "]";
 		}
 
 // @formatter:on
 
-		@JsonCreator
-		static ListRootsResult fromJson(@JsonProperty("roots") List<Root> roots,
-				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
-			if (roots == null) {
-				logger.warn("ListRootsResult: missing required field 'roots' during deserialization, using default []");
-				roots = Collections.emptyList();
-			}
-			return new ListRootsResult(roots, nextCursor, meta);
-		}
-
-		@Deprecated
 		public ListRootsResult(List<Root> roots) {
-			this(roots, null, null);
+			this(roots, null);
 		}
 
-		@Deprecated
 		public ListRootsResult(List<Root> roots, String nextCursor) {
 			this(roots, nextCursor, null);
 		}
-
-		public static Builder builder(List<Root> roots) {
-			return new Builder(roots);
-		}
-
-		public static class Builder {
-
-			private final List<Root> roots;
-
-			private String nextCursor;
-
-			private Map<String, Object> meta;
-
-			private Builder(List<Root> roots) {
-				Assert.notNull(roots, "roots must not be null");
-				this.roots = roots;
-			}
-
-			public Builder nextCursor(String nextCursor) {
-				this.nextCursor = nextCursor;
-				return this;
-			}
-
-			public Builder meta(Map<String, Object> meta) {
-				this.meta = meta;
-				return this;
-			}
-
-			public ListRootsResult build() {
-				return new ListRootsResult(roots, nextCursor, meta);
-			}
-
-		}
-
 	}
-
-	private static <K, V> Map<K, V> copyOfMap(Map<K, V> map) {
-		return Collections.unmodifiableMap(new HashMap<>(map));
-	}
-
 
 }
