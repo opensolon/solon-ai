@@ -193,7 +193,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
                 if (parentTeamTrace == null) {
                     Collection<ChatMessage> history = session.getLatestMessages(options.getSessionWindowSize());
                     for (ChatMessage message : history) {
-                        message.addMetadata(AgentTrace.META_FIRST, 1);
+                        message.addMetadata(AgentTrace.META_FIRST, 1); //初心
                         trace.getWorkingMemory().addMessage(message);
                     }
                 }

@@ -15,10 +15,7 @@
  */
 package org.noear.solon.ai.agent.team;
 
-import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.AgentProfile;
-import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.AgentSystemPrompt;
+import org.noear.solon.ai.agent.*;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -203,15 +200,20 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
                 // 如果没有父团队（即当前是顶层团队），则从 Session 加载历史
                 if (parentTeamTrace == null) {
                     Collection<ChatMessage> history = session.getLatestMessages(options.getSessionWindowSize());
-                    trace.getWorkingMemory().addMessage(history);
+                    for (ChatMessage message : history) {
+                        message.addMetadata(AgentTrace.META_FIRST, 1); //初心
+                        trace.getWorkingMemory().addMessage(message);
+                    }
                 }
             }
 
-            //加载源提示词
+            //新的问题
             for (ChatMessage message : prompt.getMessages()) {
                 if (parentTeamTrace == null) {
                     session.addMessage(message);
                 }
+
+                message.addMetadata(AgentTrace.META_FIRST, 1); //初心
                 trace.getWorkingMemory().addMessage(message);
             }
         }
