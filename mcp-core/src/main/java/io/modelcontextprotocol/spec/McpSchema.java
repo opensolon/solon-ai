@@ -915,10 +915,11 @@ public final class McpSchema {
 
 // @formatter:on
 
-		/**
-		 * Present if the server supports argument autocompletion suggestions.
-		 */
-		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	/**
+	 * Present if the server supports argument autocompletion suggestions.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class CompletionCapabilities {
 
 		@Override
@@ -935,10 +936,11 @@ public final class McpSchema {
 		public String toString() { return "CompletionCapabilities[]"; }
 	}
 
-		/**
-		 * Present if the server supports sending log messages to the client.
-		 */
-		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	/**
+	 * Present if the server supports sending log messages to the client.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class LoggingCapabilities {
 
 		@Override
@@ -955,13 +957,14 @@ public final class McpSchema {
 		public String toString() { return "LoggingCapabilities[]"; }
 	}
 
-		/**
-		 * Present if the server offers any prompt templates.
-		 *
-		 * @param listChanged Whether this server supports notifications for changes to
-		 * the prompt list
-		 */
-		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	/**
+	 * Present if the server offers any prompt templates.
+	 *
+	 * @param listChanged Whether this server supports notifications for changes to
+	 * the prompt list
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class PromptCapabilities {
 		@JsonProperty("listChanged")
 		private final Boolean listChanged;
@@ -989,14 +992,15 @@ public final class McpSchema {
 		}
 	}
 
-		/**
-		 * Present if the server offers any resources to read.
-		 *
-		 * @param subscribe Whether this server supports subscribing to resource updates
-		 * @param listChanged Whether this server supports notifications for changes to
-		 * the resource list
-		 */
-		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	/**
+	 * Present if the server offers any resources to read.
+	 *
+	 * @param subscribe Whether this server supports subscribing to resource updates
+	 * @param listChanged Whether this server supports notifications for changes to
+	 * the resource list
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class ResourceCapabilities {
 		@JsonProperty("subscribe")
 		private final Boolean subscribe;
@@ -1029,13 +1033,14 @@ public final class McpSchema {
 		}
 	}
 
-		/**
-		 * Present if the server offers any tools to call.
-		 *
-		 * @param listChanged Whether this server supports notifications for changes to
-		 * the tool list
-		 */
-		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	/**
+	 * Present if the server offers any tools to call.
+	 *
+	 * @param listChanged Whether this server supports notifications for changes to
+	 * the tool list
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class ToolCapabilities {
 		@JsonProperty("listChanged")
 		private final Boolean listChanged;
