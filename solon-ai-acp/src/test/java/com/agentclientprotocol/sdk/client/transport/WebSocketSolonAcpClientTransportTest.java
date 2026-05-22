@@ -5,6 +5,7 @@
 package com.agentclientprotocol.sdk.client.transport;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

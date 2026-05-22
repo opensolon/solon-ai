@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.server.transport;
 
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
@@ -12,6 +13,7 @@ import io.modelcontextprotocol.spec.*;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
 import lombok.var;
+import org.jspecify.annotations.Nullable;
 import org.noear.solon.SolonApp;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.Entity;
@@ -56,16 +58,7 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 	 */
 	public static final String MESSAGE_EVENT_TYPE = "message";
 
-	/**
-	 * Event type for sending the message endpoint URI to clients.
-	 */
-	public static final String ENDPOINT_EVENT_TYPE = "endpoint";
-
-	/**
-	 * Default base URL for the message endpoint.
-	 */
-	public static final String DEFAULT_BASE_URL = "";
-
+	private final McpJsonMapper jsonMapper;
 
 	/**
 	 * The endpoint URI where clients should send their JSON-RPC messages. Defaults to
@@ -78,9 +71,7 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 	 */
 	private final boolean disallowDelete;
 
-	private final McpJsonMapper jsonMapper;
-
-	private McpStreamableServerSession.Factory sessionFactory;
+	private McpStreamableServerSession.@Nullable Factory sessionFactory;
 
 	/**
 	 * Map of active client sessions, keyed by mcp-session-id.
@@ -95,7 +86,12 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 	 */
 	private volatile boolean isClosing = false;
 
-	private KeepAliveScheduler keepAliveScheduler;
+	private @Nullable KeepAliveScheduler keepAliveScheduler;
+
+	/**
+	 * Security validator for validating HTTP requests.
+	 */
+	private final ServerTransportSecurityValidator securityValidator;
 
 	/**
 	 * Constructs a new WebMvcStreamableServerTransportProvider instance.
@@ -110,15 +106,18 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 												   String mcpEndpoint,
 												   McpTransportContextExtractor<Context> contextExtractor,
 												   boolean disallowDelete,
-												   Duration keepAliveInterval) {
+												   @Nullable Duration keepAliveInterval,
+												   ServerTransportSecurityValidator securityValidator) {
 		Assert.notNull(jsonMapper, "McpJsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "MCP endpoint must not be null");
 		Assert.notNull(contextExtractor, "McpTransportContextExtractor must not be null");
+		Assert.notNull(securityValidator, "Security validator must not be null");
 
 		this.jsonMapper = jsonMapper;
 		this.mcpEndpoint = mcpEndpoint;
 		this.contextExtractor = contextExtractor;
 		this.disallowDelete = disallowDelete;
+		this.securityValidator = securityValidator;
 
 		if (keepAliveInterval != null) {
 			this.keepAliveScheduler = KeepAliveScheduler
@@ -147,8 +146,10 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 
 	@Override
 	public List<String> protocolVersions() {
-		return Arrays.asList(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26,
-				ProtocolVersions.MCP_2025_06_18);
+		return Arrays.asList(ProtocolVersions.MCP_2024_11_05,
+				ProtocolVersions.MCP_2025_03_26,
+				ProtocolVersions.MCP_2025_06_18,
+				ProtocolVersions.MCP_2025_11_25);
 	}
 
 	@Override
@@ -171,6 +172,18 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 								e -> logger.error("Failed to send message to session {}: {}", session.getId(), e.getMessage()))
 						.onErrorComplete())
 				.then();
+	}
+
+	@Override
+	public Mono<Void> notifyClient(String sessionId, String method, Object params) {
+		return Mono.defer(() -> {
+			McpStreamableServerSession session = this.sessions.get(sessionId);
+			if (session == null) {
+				logger.debug("Session {} not found", sessionId);
+				return Mono.empty();
+			}
+			return session.sendNotification(method, params);
+		});
 	}
 
 	@Override
@@ -207,6 +220,15 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 	private Mono<Entity> doHandleGet(Context request) {
 		if (isClosing) {
 			return RxEntity.status(StatusCodes.CODE_SERVICE_UNAVAILABLE).body("Server is shutting down");
+		}
+
+		try {
+			Map<String, List<String>> headers = request.headerMap().toValuesMap();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			String errorMessage = e.getMessage();
+			return RxEntity.status(e.getStatusCode()).body(errorMessage != null ? errorMessage : "");
 		}
 
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
@@ -274,6 +296,15 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 			return RxEntity.status(StatusCodes.CODE_SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
+		try {
+			Map<String, List<String>> headers = request.headerMap().toValuesMap();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			String errorMessage = e.getMessage();
+			return RxEntity.status(e.getStatusCode()).body(errorMessage != null ? errorMessage : "");
+		}
+
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		String acceptHeaders = request.accept();
@@ -288,6 +319,13 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 						if (message instanceof McpSchema.JSONRPCRequest) {
 							McpSchema.JSONRPCRequest jsonrpcRequest = (McpSchema.JSONRPCRequest) message;
 							if (jsonrpcRequest.method().equals(McpSchema.METHOD_INITIALIZE)) {
+								if (this.sessionFactory == null) {
+									return RxEntity.status(StatusCodes.CODE_INTERNAL_SERVER_ERROR)
+											.body(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+													.message("Session factory not initialized")
+													.build());
+								}
+
 								var typeReference = new TypeRef<McpSchema.InitializeRequest>() {};
 								McpSchema.InitializeRequest initializeRequest = jsonMapper.convertValue(jsonrpcRequest.params(),
 										typeReference);
@@ -312,7 +350,9 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 						}
 
 						if (request.headerMap().containsKey(HttpHeaders.MCP_SESSION_ID) == false) {
-							return RxEntity.badRequest().body(new McpError("Session ID missing"));
+							return RxEntity.badRequest().body(McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND)
+									.message("Session ID missing")
+									.build());
 						}
 
 						String sessionId = request.header(HttpHeaders.MCP_SESSION_ID);
@@ -320,7 +360,9 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 
 						if (session == null) {
 							return RxEntity.status(StatusCodes.CODE_NOT_FOUND)
-									.body(new McpError("Session not found: " + sessionId));
+									.body(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+											.message("Session not found: " + sessionId)
+											.build());
 						}
 
 						if (message instanceof McpSchema.JSONRPCResponse) {
@@ -348,12 +390,16 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 											}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext)));
 						}
 						else {
-							return RxEntity.badRequest().body(new McpError("Unknown message type"));
+							return RxEntity.badRequest().body(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+									.message("Unknown message type")
+									.build());
 						}
 					}
 					catch (IllegalArgumentException | IOException e) {
 						logger.error("Failed to deserialize message: {}", e.getMessage());
-						return RxEntity.badRequest().body(new McpError("Invalid message format"));
+						return RxEntity.badRequest().body(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+								.message("Invalid message format")
+								.build());
 					}
 				})
 				.switchIfEmpty(RxEntity.badRequest().build())
@@ -368,6 +414,15 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 	private Mono<Entity> doHandleDelete(Context request) {
 		if (isClosing) {
 			return RxEntity.status(StatusCodes.CODE_SERVICE_UNAVAILABLE).body("Server is shutting down");
+		}
+
+		try {
+			Map<String, List<String>> headers = request.headerMap().toValuesMap();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			String errorMessage = e.getMessage();
+			return RxEntity.status(e.getStatusCode()).body(errorMessage != null ? errorMessage : "");
 		}
 
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
@@ -472,6 +527,8 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 
 		private Duration keepAliveInterval;
 
+		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
+
 		private Builder() {
 			// used by a static method
 		}
@@ -540,6 +597,18 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 		}
 
 		/**
+		 * Sets the security validator for validating HTTP requests.
+		 * @param securityValidator The security validator to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if securityValidator is null
+		 */
+		public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
+			Assert.notNull(securityValidator, "Security validator must not be null");
+			this.securityValidator = securityValidator;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link WebRxStreamableServerTransportProvider} with
 		 * the configured settings.
 		 * @return A new WebFluxStreamableServerTransportProvider instance
@@ -548,8 +617,12 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 		public WebRxStreamableServerTransportProvider build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 			return new WebRxStreamableServerTransportProvider(
-					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, mcpEndpoint, contextExtractor,
-					disallowDelete, keepAliveInterval);
+					this.jsonMapper == null ? McpJsonDefaults.getMapper() : this.jsonMapper,
+					this.mcpEndpoint,
+					this.contextExtractor,
+					this.disallowDelete,
+					this.keepAliveInterval,
+					this.securityValidator);
 		}
 
 	}

@@ -2,14 +2,15 @@
  * Copyright 2026 - 2026 the original author or authors.
  */
 
-package io.modelcontextprotocol.json.jackson;
+package io.modelcontextprotocol.json.jackson2;
+
+import java.io.IOException;
 
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
-
-import java.io.IOException;
 
 /**
  * Jackson-based implementation of JsonMapper. Wraps a Jackson ObjectMapper but keeps the

@@ -11,6 +11,7 @@ import io.modelcontextprotocol.spec.*;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
 import lombok.var;
+import org.jspecify.annotations.Nullable;
 import org.noear.solon.core.handle.StatusCodes;
 import org.noear.solon.core.util.MimeType;
 import org.noear.solon.net.http.HttpResponse;
@@ -282,6 +283,14 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
 
     @Override
     public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+        String jsonText;
+        try {
+            jsonText = this.jsonMapper.writeValueAsString(message);
+        }
+        catch (IOException e) {
+            return Mono.error(new RuntimeException("Failed to serialize message", e));
+        }
+
         return Mono.create(sink -> {
             logger.debug("Sending message {}", message);
             // Here we attempt to initialize the client.
@@ -292,17 +301,6 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
             final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
             final McpTransportSession<Disposable> transportSession = this.activeSession.get();
 
-            String messageJsonStr0 = null;
-
-            try {
-                messageJsonStr0 = jsonMapper.writeValueAsString(message);
-            } catch (Exception e) {
-                sink.error(e);
-                return;
-            }
-
-            String messageJsonStr = messageJsonStr0;
-
             Disposable connection = Mono.deferContextual(ctx -> Mono.fromFuture(webClientBuilder.build(this.endpoint)
                             .accept(MimeType.APPLICATION_JSON_VALUE + ", " + MimeType.TEXT_EVENT_STREAM_VALUE)
                             .header(HttpHeaders.PROTOCOL_VERSION,
@@ -311,13 +309,13 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
                             .fill(http -> {
                                 transportSession.sessionId().ifPresent(id -> http.header(HttpHeaders.MCP_SESSION_ID, id));
                             })
-                            .bodyOfJson(messageJsonStr).execAsync("POST")))
+                            .bodyOfJson(jsonText).execAsync("POST")))
                     .flatMapMany(response -> {
                         if (transportSession
                                 .markInitialized(response.header(HttpHeaders.MCP_SESSION_ID))) {
                             // Once we have a session, we try to open an async stream for
                             // the server to send notifications and requests out-of-band.
-                            reconnect(null).contextWrite(sink.contextView()).subscribe();
+                            reconnect((McpTransportStream<Disposable>)null).contextWrite(sink.contextView()).subscribe();
                         }
 
                         String sessionRepresentation = sessionIdOrPlaceholder(transportSession);
@@ -370,7 +368,7 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
                         return true;
                     })
                     .doFinally(s -> {
-                        Disposable ref = disposableRef.getAndSet(null);
+                        @Nullable Disposable ref = disposableRef.getAndSet(null);
                         if (ref != null) {
                             transportSession.removeConnection(ref);
                         }
@@ -498,7 +496,10 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
                 // We don't support batching ATM and probably won't since the next version
                 // considers removing it.
                 McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.jsonMapper, event.data());
-                return Tuples.of(Optional.ofNullable(event.id()), Arrays.asList(message));
+                String eventId = event.id();
+                Optional<String> idOpt = (eventId != null) ? Optional.of(eventId) : Optional.empty();
+                return Tuples.of(idOpt, Arrays.asList(message));
+
             } catch (IOException ioException) {
                 throw new McpTransportException("Error parsing JSON-RPC message: " + event.data(), ioException);
             }
@@ -513,7 +514,7 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
      */
     public static class Builder {
 
-        private McpJsonMapper jsonMapper;
+        private @Nullable McpJsonMapper jsonMapper;
 
         private HttpUtilsBuilder webClientBuilder;
 
@@ -524,7 +525,7 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
         private boolean openConnectionOnStartup = false;
 
         private List<String> supportedProtocolVersions = Arrays.asList(ProtocolVersions.MCP_2024_11_05,
-                ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18);
+                ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18, ProtocolVersions.MCP_2025_11_25);
 
         private Builder(HttpUtilsBuilder webClientBuilder) {
             Assert.notNull(webClientBuilder, "webClientBuilder must not be null");

@@ -10,6 +10,7 @@ import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCMessage;
 import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCNotification;
 import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCRequest;
 import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCResponse;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import org.noear.solon.Solon;
 import org.slf4j.Logger;

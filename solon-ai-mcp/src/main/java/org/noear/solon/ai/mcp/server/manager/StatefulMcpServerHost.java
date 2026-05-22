@@ -58,7 +58,7 @@ public class StatefulMcpServerHost implements McpServerHost {
     private final McpServer.AsyncSpecification mcpServerSpec;
     private McpAsyncServer server;
 
-    public StatefulMcpServerHost(McpSchema.ServerCapabilities serverCapabilities, McpServerProperties serverProps) {
+    public StatefulMcpServerHost(McpSchema.ServerCapabilities serverCapabilities, McpServerProperties serverProps, ServerTransportSecurityValidator securityValidator) {
         this.serverProperties = serverProps;
 
         if (McpChannel.SSE.equals(serverProps.getChannel())) {
@@ -109,6 +109,7 @@ public class StatefulMcpServerHost implements McpServerHost {
                         .messageEndpoint(this.messageEndpoint)
                         .basePath(serverProps.getContextPath())
                         .keepAliveInterval(serverProps.getHeartbeatInterval())
+                        .securityValidator(securityValidator == null ? ServerTransportSecurityValidator.NOOP : securityValidator)
                         .build();
 
                 this.mcpServerSpec = McpServer.async((WebRxSseServerTransportProvider) this.mcpTransportProvider)
@@ -118,6 +119,7 @@ public class StatefulMcpServerHost implements McpServerHost {
                 this.mcpTransportProvider = WebRxStreamableServerTransportProvider.builder()
                         .messageEndpoint(this.mcpEndpoint)
                         .keepAliveInterval(serverProps.getHeartbeatInterval())
+                        .securityValidator(securityValidator == null ? ServerTransportSecurityValidator.NOOP: securityValidator)
                         .build();
 
                 this.mcpServerSpec = McpServer.async((WebRxStreamableServerTransportProvider) this.mcpTransportProvider)
@@ -131,6 +133,7 @@ public class StatefulMcpServerHost implements McpServerHost {
         this.toolManager = new StatefulToolRegistry(this::getServer, mcpServerSpec);
     }
 
+    @Override
     public void setLoggingLevel(McpSchema.LoggingLevel loggingLevel) {
         this.loggingLevel = loggingLevel;
     }
@@ -162,7 +165,7 @@ public class StatefulMcpServerHost implements McpServerHost {
     public Object build() {
         if (server == null) {
             server = mcpServerSpec.build();
-            server.loggingNotification(McpSchema.LoggingMessageNotification.builder().level(loggingLevel).build());
+            //server.loggingNotification(McpSchema.LoggingMessageNotification.builder().level(loggingLevel).build());
 
             if (McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
                 log.info("Mcp-Server started, name={}, version={}, channel={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",

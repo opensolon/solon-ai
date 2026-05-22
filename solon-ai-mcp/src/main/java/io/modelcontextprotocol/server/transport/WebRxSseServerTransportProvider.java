@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.server.transport;
 
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
@@ -16,8 +17,10 @@ import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.Entity;
 import org.noear.solon.core.handle.StatusCodes;
 import org.noear.solon.core.util.MimeType;
+import org.noear.solon.core.util.MultiMap;
 import org.noear.solon.rx.handle.RxEntity;
 import org.noear.solon.web.sse.SseEvent;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
@@ -27,10 +30,7 @@ import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -70,6 +70,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @see McpServerTransportProvider
  * @see org.noear.solon.core.handle.Handler
  */
+@Deprecated
 public class WebRxSseServerTransportProvider implements McpServerTransportProvider, IMcpHttpServerTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebRxSseServerTransportProvider.class);
@@ -88,6 +89,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	 * Default SSE endpoint path as specified by the MCP transport specification.
 	 */
 	public static final String DEFAULT_SSE_ENDPOINT = "/sse";
+	public static final String DEFAULT_MESSAGE_ENDPOINT = "/mcp/message";
 
 	public static final String SESSION_ID = "sessionId";
 
@@ -106,7 +108,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 
 	private final String sseEndpoint;
 
-	private McpServerSession.Factory sessionFactory;
+	private  McpServerSession.@Nullable Factory sessionFactory;
 
 	/**
 	 * Map of active client sessions, keyed by session ID.
@@ -125,7 +127,12 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	 * Keep-alive scheduler for managing session pings. Activated if keepAliveInterval is
 	 * set. Disabled by default.
 	 */
-	private KeepAliveScheduler keepAliveScheduler;
+	private @Nullable KeepAliveScheduler keepAliveScheduler;
+
+	/**
+	 * Security validator for validating HTTP requests.
+	 */
+	private final ServerTransportSecurityValidator securityValidator;
 
 	/**
 	 * Constructs a new WebMvcSseServerTransportProvider instance.
@@ -148,18 +155,21 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 										   String messageEndpoint,
 										   String sseEndpoint,
 										   Duration keepAliveInterval,
-										   McpTransportContextExtractor<Context> contextExtractor) {
+										   McpTransportContextExtractor<Context> contextExtractor,
+										   ServerTransportSecurityValidator securityValidator) {
 		Assert.notNull(jsonMapper, "McpJsonMapper must not be null");
 		Assert.notNull(baseUrl, "Message base path must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
+		Assert.notNull(securityValidator, "Security validator must not be null");
 
 		this.jsonMapper = jsonMapper;
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 		this.contextExtractor = contextExtractor;
+		this.securityValidator = securityValidator;
 
 		if (keepAliveInterval != null) {
 			this.keepAliveScheduler = KeepAliveScheduler
@@ -235,6 +245,35 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	}
 
 	/**
+	 * Sends a JSON-RPC notification to a specific client session through its SSE
+	 * connection.
+	 *
+	 * <p>
+	 * The method:
+	 * <ul>
+	 * <li>Looks up the session by the given session ID</li>
+	 * <li>Returns an empty Mono if the session is not found</li>
+	 * <li>Sends the notification to the specific session if found</li>
+	 * </ul>
+	 * @param sessionId The ID of the target client session
+	 * @param method The JSON-RPC method to send to the client
+	 * @param params The method parameters to send to the client
+	 * @return A Mono that completes when the notification has been sent, or empty if the
+	 * session is not found
+	 */
+	@Override
+	public Mono<Void> notifyClient(String sessionId, String method, Object params) {
+		return Mono.defer(() -> {
+			McpServerSession session = this.sessions.get(sessionId);
+			if (session == null) {
+				logger.debug("Session {} not found", sessionId);
+				return Mono.empty();
+			}
+			return session.sendNotification(method, params);
+		});
+	}
+
+	/**
 	 * Initiates a graceful shutdown of all the sessions. This method ensures all active
 	 * sessions are properly closed and cleaned up.
 	 * @return A Mono that completes when all sessions have been closed
@@ -270,6 +309,15 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 			return RxEntity.status(StatusCodes.CODE_SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
+		try {
+			Map<String, List<String>> headers = request.headerMap().toValuesMap();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			String errorMessage = e.getMessage();
+			return RxEntity.status(e.getStatusCode()).body(errorMessage != null ? errorMessage : "");
+		}
+
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		return RxEntity.ok()
@@ -277,8 +325,12 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 				.body(Flux.<SseEvent>create(sink -> {
 					WebRxSseMcpSessionTransport sessionTransport = new WebRxSseMcpSessionTransport(sink);
 
-					McpServerSession session = sessionFactory.create(sessionTransport);
+					McpServerSession session = Objects
+							.requireNonNull(this.sessionFactory, "sessionFactory must be set before handling connections")
+							.create(sessionTransport);
 					String sessionId = session.getId();
+
+					sessionTransport.setSessionId(sessionId);
 
 					logger.debug("Created new SSE connection for session: {}", sessionId);
 					sessions.put(sessionId, session);
@@ -345,8 +397,20 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 			return RxEntity.status(StatusCodes.CODE_SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
+		try {
+			Map<String, List<String>> headers = request.headerMap().toValuesMap();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			String errorMessage = e.getMessage();
+			return RxEntity.status(e.getStatusCode()).body(errorMessage != null ? errorMessage : "");
+		}
+
 		if (request.paramMap().containsKey("sessionId") == false) {
-			return RxEntity.badRequest().body(new McpError("Session ID missing in message endpoint"));
+			return RxEntity.badRequest()
+					.body(McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND)
+					.message("Session ID missing in message endpoint")
+					.build());
 		}
 
 		String sessionId = request.param("sessionId");
@@ -355,11 +419,12 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 
 		if (session == null) {
 			return RxEntity.status(StatusCodes.CODE_NOT_FOUND)
-					.body(new McpError("Session not found: " + sessionId));
+					.body(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+							.message("Session not found: " + sessionId)
+							.build());
 		}
 
 		McpTransportContext transportContext = this.contextExtractor.extract(sessionRequest);
-
 
 		return Mono.just(request.body()).flatMap(body -> {
 			try {
@@ -370,12 +435,16 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 					// - the error is signalled on the SSE connection
 					// return ServerResponse.ok().build();
 					return RxEntity.status(StatusCodes.CODE_INTERNAL_SERVER_ERROR)
-							.body(new McpError(error.getMessage()));
+							.body(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+									.message(error.getMessage())
+									.build());
 				});
 			}
 			catch (IllegalArgumentException | IOException e) {
 				logger.error("Failed to deserialize message: {}", e.getMessage());
-				return RxEntity.badRequest().body(new McpError("Invalid message format"));
+				return RxEntity.badRequest().body(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+						.message("Invalid message format")
+						.build());
 			}
 		}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));
 	}
@@ -383,9 +452,14 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	private class WebRxSseMcpSessionTransport implements McpServerTransport {
 
 		private final FluxSink<SseEvent> sink;
+		private volatile @Nullable String sessionId;
 
 		public WebRxSseMcpSessionTransport(FluxSink<SseEvent> sink) {
 			this.sink = sink;
+		}
+
+		void setSessionId(@Nullable String sessionId) {
+			this.sessionId = sessionId;
 		}
 
 		@Override
@@ -403,7 +477,8 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 						.data(jsonText);
 				sink.next(event);
 			}).doOnError(e -> {
-				// TODO log with sessionid
+				logger.error("Error sending message for session {}: {}", this.sessionId, e.getMessage());
+
 				Throwable exception = Exceptions.unwrap(e);
 				sink.error(exception);
 			}).then();
@@ -438,21 +513,23 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	 */
 	public static class Builder {
 
-		private McpJsonMapper jsonMapper;
+		private @Nullable McpJsonMapper jsonMapper;
 
 		private String baseUrl = DEFAULT_BASE_URL;
 
-		private String messageEndpoint;
+		private String messageEndpoint = DEFAULT_MESSAGE_ENDPOINT;
 
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
 
-		private Duration keepAliveInterval;
+		private @Nullable Duration keepAliveInterval;
 
 		private McpTransportContextExtractor<Context> contextExtractor = (serverRequest) -> {
 			Map<String,Object> context = new HashMap<>();
 			context.put(Context.class.getName(), serverRequest);
 			return McpTransportContext.create(context);
 		};
+
+		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
 
 		/**
 		 * Sets the McpJsonMapper to use for JSON serialization/deserialization of MCP
@@ -532,6 +609,18 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 		}
 
 		/**
+		 * Sets the security validator for validating HTTP requests.
+		 * @param securityValidator The security validator to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if securityValidator is null
+		 */
+		public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
+			Assert.notNull(securityValidator, "Security validator must not be null");
+			this.securityValidator = securityValidator;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link WebRxSseServerTransportProvider} with the
 		 * configured settings.
 		 * @return A new WebFluxSseServerTransportProvider instance
@@ -539,8 +628,15 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 		 */
 		public WebRxSseServerTransportProvider build() {
 			Assert.notNull(messageEndpoint, "Message endpoint must be set");
-			return new WebRxSseServerTransportProvider(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor);
+
+			return new WebRxSseServerTransportProvider(
+					this.jsonMapper == null ? McpJsonDefaults.getMapper() : this.jsonMapper,
+					this.baseUrl,
+					this.messageEndpoint,
+					this.sseEndpoint,
+					this.keepAliveInterval,
+					this.contextExtractor,
+					this.securityValidator);
 		}
 	}
 }

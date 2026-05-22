@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server;
 
+import io.modelcontextprotocol.server.transport.ServerTransportSecurityValidator;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
@@ -45,10 +46,10 @@ public class McpServerEndpointProvider implements LifecycleBean {
     private final McpServerHost serverHost;
 
     public McpServerEndpointProvider(Properties properties) {
-        this(Props.from(properties).bindTo(new McpServerProperties()));
+        this(Props.from(properties).bindTo(new McpServerProperties()), ServerTransportSecurityValidator.NOOP);
     }
 
-    public McpServerEndpointProvider(McpServerProperties serverProps) {
+    private McpServerEndpointProvider(McpServerProperties serverProps, ServerTransportSecurityValidator securityValidator) {
         if (Utils.isEmpty(serverProps.getChannel())) {
             throw new IllegalArgumentException("The channel is required");
         }
@@ -70,10 +71,10 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
         if (McpChannel.STREAMABLE_STATELESS.equals(serverProps.getChannel())) {
             //无状态
-            this.serverHost = new StatelessMcpServerHost(serverCapabilities, serverProps);
+            this.serverHost = new StatelessMcpServerHost(serverCapabilities, serverProps, securityValidator);
         } else {
             //有状态
-            this.serverHost = new StatefulMcpServerHost(serverCapabilities, serverProps);
+            this.serverHost = new StatefulMcpServerHost(serverCapabilities, serverProps, securityValidator);
         }
     }
 
@@ -305,6 +306,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
     public static class Builder {
         private McpServerProperties props = new McpServerProperties();
+        private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
 
         public Builder from(Class<?> endpointClz, McpServerEndpoint endpointAnno) {
             //支持${配置}
@@ -422,11 +424,16 @@ public class McpServerEndpointProvider implements LifecycleBean {
             return this;
         }
 
+        public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
+            this.securityValidator = securityValidator;
+            return this;
+        }
+
         /**
          * 构建
          */
         public McpServerEndpointProvider build() {
-            return new McpServerEndpointProvider(props);
+            return new McpServerEndpointProvider(props, securityValidator);
         }
     }
 }

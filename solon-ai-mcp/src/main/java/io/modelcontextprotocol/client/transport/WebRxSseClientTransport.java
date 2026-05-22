@@ -59,6 +59,7 @@ import java.util.function.Function;
  * "https://spec.modelcontextprotocol.io/specification/basic/transports/#http-with-sse">MCP
  * HTTP with SSE Transport Specification</a>
  */
+@Deprecated
 public class WebRxSseClientTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebRxSseClientTransport.class);

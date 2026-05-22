@@ -53,7 +53,7 @@ public class StatelessMcpServerHost implements McpServerHost {
     private final McpServer.StatelessAsyncSpecification mcpServerSpec;
     private McpStatelessAsyncServer server;
 
-    public StatelessMcpServerHost(McpSchema.ServerCapabilities serverCapabilities, McpServerProperties serverProps) {
+    public StatelessMcpServerHost(McpSchema.ServerCapabilities serverCapabilities, McpServerProperties serverProps, ServerTransportSecurityValidator securityValidator) {
         this.serverProperties = serverProps;
 
         //streamable
@@ -68,6 +68,7 @@ public class StatelessMcpServerHost implements McpServerHost {
 
         this.mcpTransportProvider = WebRxStatelessServerTransport.builder()
                 .messageEndpoint(this.mcpEndpoint)
+                .securityValidator(securityValidator == null ? ServerTransportSecurityValidator.NOOP : securityValidator)
                 .build();
 
         this.mcpServerSpec = McpServer.async(this.mcpTransportProvider)
@@ -79,6 +80,7 @@ public class StatelessMcpServerHost implements McpServerHost {
         this.toolManager = new StatelessToolRegistry(this::getServer, mcpServerSpec);
     }
 
+    @Override
     public void setLoggingLevel(McpSchema.LoggingLevel loggingLevel) {
         this.loggingLevel = loggingLevel;
     }

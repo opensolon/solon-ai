@@ -2,7 +2,7 @@
  * Copyright 2026 - 2026 the original author or authors.
  */
 
-package io.modelcontextprotocol.json.schema.jackson;
+package io.modelcontextprotocol.json.schema.jackson2;
 
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidatorSupplier;

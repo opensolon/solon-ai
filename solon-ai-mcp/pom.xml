@@ -27,7 +27,12 @@
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>mcp-sdk</artifactId>
+            <artifactId>mcp-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>mcp-json-jackson2</artifactId>
         </dependency>
 
         <dependency>

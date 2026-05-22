@@ -2,7 +2,7 @@
  * Copyright 2026 - 2026 the original author or authors.
  */
 
-package io.modelcontextprotocol.json.jackson;
+package io.modelcontextprotocol.json.jackson2;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.McpJsonMapperSupplier;

@@ -50,12 +50,24 @@ public class McpResultResponder {
 
         if (err != null) {
             err = Utils.throwableUnwrap(err);
-            result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(err.getMessage())), true, fun.meta());
+            result = McpSchema.CallToolResult.builder()
+                    .addTextContent(err.getMessage())
+                    .isError(true)
+                    .meta(fun.meta())
+                    .build();
+
+            //result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(err.getMessage())), true, fun.meta());
         } else {
             if (rst instanceof McpSchema.CallToolResult) {
                 result = (McpSchema.CallToolResult) rst;
             } else if (rst instanceof McpSchema.Content) {
-                result = new McpSchema.CallToolResult(Arrays.asList((McpSchema.Content) rst), false, fun.meta());
+                result = McpSchema.CallToolResult.builder()
+                        .addContent((McpSchema.Content) rst)
+                        .isError(false)
+                        .meta(fun.meta())
+                        .build();
+
+                //result = new McpSchema.CallToolResult(Arrays.asList((McpSchema.Content) rst), false, fun.meta());
             } else if (rst instanceof ToolResult) {
                 ToolResult toolResult = (ToolResult) rst;
 
@@ -78,15 +90,34 @@ public class McpResultResponder {
                     }
                 }
 
-                result = new McpSchema.CallToolResult(contentList, false, fun.meta());
+                result = McpSchema.CallToolResult.builder()
+                        .content(contentList)
+                        .isError(false)
+                        .meta(fun.meta())
+                        .build();
+
+                //result = new McpSchema.CallToolResult(contentList, false, fun.meta());
             } else {
                 String rstStr = ToolSchemaUtil.resultConvert(fun, rst);
 
                 if (serverProps.isEnableOutputSchema() && Utils.isNotEmpty(fun.outputSchema())) {
                     Map<String, Object> map = ONode.ofBean(rst).toBean(Map.class);
-                    result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rstStr)), false, map, fun.meta());
+                    result = McpSchema.CallToolResult.builder()
+                            .addTextContent(rstStr)
+                            .isError(false)
+                            .structuredContent(map)
+                            .meta(fun.meta())
+                            .build();
+
+                    //result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rstStr)), false, map, fun.meta());
                 } else {
-                    result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rstStr)), false, fun.meta());
+                    result = McpSchema.CallToolResult.builder()
+                            .addTextContent(rstStr)
+                            .isError(false)
+                            .meta(fun.meta())
+                            .build();
+
+                    //result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rstStr)), false, fun.meta());
                 }
             }
         }
