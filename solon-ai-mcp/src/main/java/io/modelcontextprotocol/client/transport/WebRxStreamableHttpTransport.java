@@ -491,7 +491,7 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
     }
 
     private Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> parse(ServerSentEvent event) {
-        if (MESSAGE_EVENT_TYPE.equals(event.event())) {
+        if (MESSAGE_EVENT_TYPE.equals(event.event()) || isObjectJsonString(event.data())) {
             try {
                 // We don't support batching ATM and probably won't since the next version
                 // considers removing it.
@@ -506,6 +506,15 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
         } else {
             logger.debug("Received SSE event with type: {}", event);
             return Tuples.of(Optional.empty(), Collections.emptyList());
+        }
+    }
+
+    public static boolean isObjectJsonString(String str) {
+        //{}
+        if (str != null && str.length() > 1 && str.charAt(0) == '{' && str.charAt(str.length() - 1) == '}') {
+            return true;
+        } else {
+            return false;
         }
     }
 
