@@ -25,6 +25,7 @@ import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.skill.SkillProvider;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -260,12 +261,15 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                     ONode.serialize(finalPrompt.getMessages(), Feature.Write_PrettyFormat, Feature.Write_EnumUsingName));
         }
 
+        final ChatSession chatSession;
         final ChatRequestDesc chatReq;
 
         if (config.getChatModel() != null) {
             //构建 chatModel 请求
+            chatSession = InMemoryChatSession.builder().build();
             chatReq = config.getChatModel()
                     .prompt(finalPrompt)
+                    .session(chatSession)
                     .options(o -> {
                         o.agentName(trace.getAgentName());
 
@@ -291,11 +295,12 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                         o.optionSet(options.options());
                     });
         } else {
+            chatSession = null;
             chatReq = null;
         }
 
         try {
-            return new RetryTask()
+            AssistantMessage rst = new RetryTask()
                     .maxRetries(config.getMaxRetries())
                     .initialDelayMs(config.getRetryDelayMs())
                     .onRetry((attempt, e) -> {
@@ -314,6 +319,12 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
                         return doCall(trace, session, finalPrompt, chatReq);
                     });
+
+            if (chatSession != null) {
+                trace.getWorkingMemory().addMessage(chatSession.getMessages());
+            }
+
+            return rst;
         } catch (Throwable e) {
             if (e instanceof InterruptedException || e.getCause() instanceof InterruptedException) {
                 LOG.debug("InterruptedException");
