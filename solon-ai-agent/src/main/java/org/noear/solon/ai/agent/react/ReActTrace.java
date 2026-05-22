@@ -327,6 +327,7 @@ public class ReActTrace implements AgentTrace {
         return protocolToolMap.values();
     }
 
+    @Override
     public Prompt getOriginalPrompt() {
         return originalPrompt;
     }
@@ -337,6 +338,7 @@ public class ReActTrace implements AgentTrace {
         this.originalPrompt = originalPrompt;
     }
 
+    @Override
     public Prompt getWorkingMemory() {
         return workingMemory;
     }

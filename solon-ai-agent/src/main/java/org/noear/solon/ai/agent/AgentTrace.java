@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent;
 
 import org.noear.solon.ai.agent.trace.Metrics;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -35,6 +36,8 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.8.1")
 public interface AgentTrace {
+    public final static String META_FIRST = "_first";
+
     /**
      * 获取代理名称
      */
@@ -44,6 +47,16 @@ public interface AgentTrace {
      * 获取任务开始时间
      */
     long getBeginTimeMs();
+
+    /**
+     * 获取原始提示词
+     */
+    Prompt getOriginalPrompt();
+
+    /**
+     * 获取工作记忆
+     */
+    Prompt getWorkingMemory();
 
     /**
      * 监控指标

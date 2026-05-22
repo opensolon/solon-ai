@@ -21,6 +21,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -139,6 +140,9 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
 
                 sink.next(new ReActChunk(resp));
                 sink.complete();
+
+                //通知会话
+                session.onComplete(prompt, trace);
             } catch (Throwable e) {
                 if (!sink.isCancelled()) {
                     sink.error(e);

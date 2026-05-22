@@ -19,6 +19,7 @@ import com.knuddels.jtokkit.Encodings;
 import com.knuddels.jtokkit.api.Encoding;
 import com.knuddels.jtokkit.api.EncodingRegistry;
 import com.knuddels.jtokkit.api.ModelType;
+import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
@@ -42,6 +43,8 @@ import java.util.stream.Collectors;
 @Preview("3.8.2")
 public class SummarizationInterceptor implements ReActInterceptor {
     private static final Logger log = LoggerFactory.getLogger(SummarizationInterceptor.class);
+
+    public final static String META_SUMMARY = "_summary";
 
     // 在类中预加载注册表
     private static final EncodingRegistry registry = Encodings.newDefaultEncodingRegistry();
@@ -93,7 +96,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
         List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
 
         long messageSize = messages.stream()
-                .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
+                .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
                 .count();
 
         int currentTokens = estimateTokens(messages, systemPrompt);
@@ -108,7 +111,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
         int lastFirstIdx = -1;
         for (int i = 0; i < messages.size(); i++) {
             ChatMessage msg = messages.get(i);
-            if (msg.hasMetadata(ReActAgent.META_FIRST)) {
+            if (msg.hasMetadata(AgentTrace.META_FIRST)) {
                 firstList.add(msg);
                 lastFirstIdx = i;
             }
@@ -219,7 +222,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
         if (targetIdx > (lastFirstIdx + 1) && targetIdx <= messages.size()) {
             List<ChatMessage> expired = new ArrayList<>(messages.subList(lastFirstIdx + 1, targetIdx));
             List<ChatMessage> pureHistory = expired.stream()
-                    .filter(m -> !m.hasMetadata(ReActAgent.META_SUMMARY))
+                    .filter(m -> !m.hasMetadata(META_SUMMARY))
                     .collect(Collectors.toList());
 
             if (!pureHistory.isEmpty()) {

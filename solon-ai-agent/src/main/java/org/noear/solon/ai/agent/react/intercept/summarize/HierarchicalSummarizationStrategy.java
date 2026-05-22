@@ -15,8 +15,10 @@
  */
 package org.noear.solon.ai.agent.react.intercept.summarize;
 
+import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.ai.chat.ChatModel;
@@ -112,7 +114,7 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
         // 过滤初心，只总结“中间增量”
         List<ChatMessage> pureExpired = (messagesToSummarize == null) ? new ArrayList<>() :
                 messagesToSummarize.stream()
-                .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
+                .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
                 .collect(Collectors.toList());
 
         if (pureExpired.isEmpty()) {
@@ -185,6 +187,6 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
             return null;
         }
         return ChatMessage.ofUser(SUMMARY_PREFIX + "\n" + content)
-                .addMetadata(ReActAgent.META_SUMMARY, 1);
+                .addMetadata(SummarizationInterceptor.META_SUMMARY, 1);
     }
 }

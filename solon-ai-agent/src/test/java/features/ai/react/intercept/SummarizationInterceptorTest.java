@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
@@ -52,11 +53,11 @@ public class SummarizationInterceptorTest {
     public void testFirstChainPreservationAndMetadata() {
         // 模拟 ReActAgent 行为：为 System 和第一个 User 注入 META_FIRST
         ChatMessage systemMsg = ChatMessage.ofSystem("Base System");
-        systemMsg.addMetadata(ReActAgent.META_FIRST, 1);
+        systemMsg.addMetadata(AgentTrace.META_FIRST, 1);
         workingMemory.addMessage(systemMsg);
 
         ChatMessage userGoal = ChatMessage.ofUser("Initial Goal");
-        userGoal.addMetadata(ReActAgent.META_FIRST, 1); // 手动模拟框架注入标记
+        userGoal.addMetadata(AgentTrace.META_FIRST, 1); // 手动模拟框架注入标记
         workingMemory.addMessage(userGoal);
 
         // 注入大量中间历史 (Total: 2 + 15 = 17 > 6)
@@ -77,7 +78,7 @@ public class SummarizationInterceptorTest {
                 .orElse(null);
 
         assertNotNull(firstUser, "First User goal should be preserved");
-        assertTrue(firstUser.hasMetadata(ReActAgent.META_FIRST), "Should carry _first metadata");
+        assertTrue(firstUser.hasMetadata(AgentTrace.META_FIRST), "Should carry _first metadata");
         assertEquals("Initial Goal", firstUser.getContent());
     }
 
@@ -87,11 +88,11 @@ public class SummarizationInterceptorTest {
     @Test
     public void testAtomicAlignment_RespectsFirstChain() {
         ChatMessage sys = ChatMessage.ofSystem("System");
-        sys.addMetadata(ReActAgent.META_FIRST, 1);
+        sys.addMetadata(AgentTrace.META_FIRST, 1);
         workingMemory.addMessage(sys);
 
         ChatMessage goal = ChatMessage.ofUser("Target Goal");
-        goal.addMetadata(ReActAgent.META_FIRST, 1); // 加上标记
+        goal.addMetadata(AgentTrace.META_FIRST, 1); // 加上标记
         workingMemory.addMessage(goal);
 
         // 噪音消息
@@ -116,7 +117,7 @@ public class SummarizationInterceptorTest {
 
         // 验证初心完好
         boolean hasFirstGoal = result.stream()
-                .anyMatch(m -> m instanceof UserMessage && m.hasMetadata(ReActAgent.META_FIRST));
+                .anyMatch(m -> m instanceof UserMessage && m.hasMetadata(AgentTrace.META_FIRST));
         assertTrue(hasFirstGoal, "First chain must be protected even with atomic alignment");
 
         // 验证 Tool 消息由于对齐机制也被保留了
@@ -136,7 +137,7 @@ public class SummarizationInterceptorTest {
         VectorStoreSummarizationStrategy strategy = new VectorStoreSummarizationStrategy(vectorRepository);
 
         ChatMessage m1 = ChatMessage.ofUser("初心内容");
-        m1.addMetadata(ReActAgent.META_FIRST, 1); // 标记为初心
+        m1.addMetadata(AgentTrace.META_FIRST, 1); // 标记为初心
         ChatMessage m2 = ChatMessage.ofAssistant("执行过程内容");
 
         strategy.summarize(trace, Arrays.asList(m1, m2));
@@ -158,7 +159,7 @@ public class SummarizationInterceptorTest {
         LLMSummarizationStrategy strategy = new LLMSummarizationStrategy(chatModel);
 
         ChatMessage m1 = ChatMessage.ofUser("我是初心任务");
-        m1.addMetadata(ReActAgent.META_FIRST, 1);
+        m1.addMetadata(AgentTrace.META_FIRST, 1);
         ChatMessage m2 = ChatMessage.ofAssistant("我是需要被总结的执行细节。");
 
         ChatMessage result = strategy.summarize(trace, Arrays.asList(m1, m2));
@@ -171,7 +172,7 @@ public class SummarizationInterceptorTest {
     @Test
     public void testSemanticCompletion_IncludesThought() {
         // 1. 初心
-        workingMemory.addMessage(ChatMessage.ofUser("Goal").addMetadata(ReActAgent.META_FIRST, 1));
+        workingMemory.addMessage(ChatMessage.ofUser("Goal").addMetadata(AgentTrace.META_FIRST, 1));
 
         // 2. 构造一个 Thought (Assistant 消息且无 ToolCalls)
         AssistantMessage thought = new AssistantMessage("I should check the weather first.");
@@ -222,7 +223,7 @@ public class SummarizationInterceptorTest {
     public void testGlobalSystemMessagePreservation() {
         // 构造全局 System 指令（框架会为其注入 META_FIRST 标记，以在压缩时保护）
         ChatMessage globalSystem = ChatMessage.ofSystem("You are a helpful assistant.");
-        globalSystem.addMetadata(ReActAgent.META_FIRST, 1);
+        globalSystem.addMetadata(AgentTrace.META_FIRST, 1);
         workingMemory.addMessage(globalSystem);
 
         for (int i = 0; i < 20; i++) {

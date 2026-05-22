@@ -15,8 +15,10 @@
  */
 package org.noear.solon.ai.agent.react.intercept.summarize;
 
+import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.ai.chat.ChatModel;
@@ -101,7 +103,7 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
         try {
             // 1. 过滤初心，仅对中间过程进行“提纯”
             String newHistoryText = messagesToSummarize.stream()
-                    .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
+                    .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
                     .map(m -> {
                         if (m instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) m).getToolCalls())) {
                             return "[Action]: 调用工具 " + ((AssistantMessage) m).getToolCalls().get(0).getName();
@@ -149,7 +151,7 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
 
             // 3. 将提取到的“干货”作为系统信息注入
             return ChatMessage.ofUser("--- [已确认的关键信息] ---\n" + keyInfo)
-                    .addMetadata(ReActAgent.META_SUMMARY, 1);
+                    .addMetadata(SummarizationInterceptor.META_SUMMARY, 1);
 
         } catch (Throwable e) {
             log.error("Failed to extract key info", e);

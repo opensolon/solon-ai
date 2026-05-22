@@ -15,8 +15,10 @@
  */
 package org.noear.solon.ai.agent.react.intercept.summarize;
 
+import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -104,7 +106,7 @@ public class VectorStoreSummarizationStrategy extends AbsSkill implements Summar
 
         // 优化点 1: 预处理消息，进行“结构化降噪”，节省向量库空间并提升检索质量
         String archivedContent = messagesToSummarize.stream()
-                .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
+                .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
                 .map(m -> {
                     if (m instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) m).getToolCalls())) {
                         return "[Action]: 调用工具 " + ((AssistantMessage) m).getToolCalls().get(0).getName();
@@ -134,7 +136,7 @@ public class VectorStoreSummarizationStrategy extends AbsSkill implements Summar
 
             // 返回一个紧凑的系统通知
             return ChatMessage.ofUser("--- [历史细节已归档，必要时请使用 recall_history 工具回溯] ---")
-                    .addMetadata(ReActAgent.META_SUMMARY, 1);
+                    .addMetadata(SummarizationInterceptor.META_SUMMARY, 1);
 
         } catch (Throwable e) {
             log.error("Failed to archive to vector store", e);

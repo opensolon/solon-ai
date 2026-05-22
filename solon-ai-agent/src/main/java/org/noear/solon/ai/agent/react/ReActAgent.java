@@ -15,10 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.AgentProfile;
-import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.AgentSystemPrompt;
+import org.noear.solon.ai.agent.*;
 import org.noear.solon.ai.agent.react.task.*;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
@@ -68,19 +65,11 @@ import java.util.function.Function;
 @Preview("3.8.1")
 public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
     public final static String ID_REASON = "reason";
-    public final static String ID_REASON_BEF = "reason_bef";
-    public final static String ID_REASON_AFT = "reason_aft";
     public final static String ID_ACTION = "action";
-    public final static String ID_ACTION_BEF = "action_bef";
-    public final static String ID_ACTION_AFT = "action_aft";
-
-    public final static String META_FIRST = "_first";
-    public final static String META_SUMMARY = "_summary";
 
     private static final Logger LOG = LoggerFactory.getLogger(ReActAgent.class);
 
     private final ReActAgentConfig config;
-    private final FlowEngine flowEngine;
 
     private final ReasonTask reasonTask;
     private final ActionTask actionTask;
@@ -88,7 +77,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
     public ReActAgent(ReActAgentConfig config) {
         Objects.requireNonNull(config, "Missing config!");
         this.config = config;
-        this.flowEngine = FlowEngine.newInstance(true);
 
         reasonTask = new ReasonTask(config, this);
         actionTask = new ActionTask(config);
@@ -205,7 +193,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
                 if (parentTeamTrace == null) {
                     Collection<ChatMessage> history = session.getLatestMessages(options.getSessionWindowSize());
                     for (ChatMessage message : history) {
-                        message.addMetadata(META_FIRST, 1);
+                        message.addMetadata(AgentTrace.META_FIRST, 1);
                         trace.getWorkingMemory().addMessage(message);
                     }
                 }
@@ -217,7 +205,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
                     session.addMessage(message);
                 }
 
-                message.addMetadata(META_FIRST, 1); //初心
+                message.addMetadata(AgentTrace.META_FIRST, 1); //初心
                 trace.getWorkingMemory().addMessage(message);
             }
         }

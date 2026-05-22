@@ -319,6 +319,7 @@ public class TeamTrace implements AgentTrace {
         return config.getProtocol();
     }
 
+    @Override
     public Prompt getOriginalPrompt() {
         return originalPrompt;
     }
@@ -328,6 +329,7 @@ public class TeamTrace implements AgentTrace {
         this.originalPrompt = originalPrompt;
     }
 
+    @Override
     public Prompt getWorkingMemory() {
         return workingMemory;
     }

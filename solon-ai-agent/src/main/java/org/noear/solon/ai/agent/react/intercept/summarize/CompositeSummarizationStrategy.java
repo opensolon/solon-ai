@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.react.intercept.summarize;
 
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
@@ -88,6 +89,6 @@ public class CompositeSummarizationStrategy implements SummarizationStrategy {
         }
 
         return ChatMessage.ofUser(buf.toString())
-                .addMetadata(ReActAgent.META_SUMMARY, 1);
+                .addMetadata(SummarizationInterceptor.META_SUMMARY, 1);
     }
 }

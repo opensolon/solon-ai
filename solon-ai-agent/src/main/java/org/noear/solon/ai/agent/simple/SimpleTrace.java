@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.prompt.PromptImpl;
 import org.noear.solon.flow.FlowContext;
 
 /**
@@ -35,7 +36,15 @@ public class SimpleTrace implements AgentTrace {
     private transient AgentSession session;
     private transient TeamProtocol protocol;
 
+    /**
+     * 任务提示词
+     */
     private Prompt originalPrompt;
+    /**
+     * 工作记忆
+     */
+    private final Prompt workingMemory = new PromptImpl();
+
     private final Metrics metrics = new Metrics();
 
     /**
@@ -64,6 +73,10 @@ public class SimpleTrace implements AgentTrace {
         return config.getName();
     }
 
+    @Override
+    public Prompt getWorkingMemory() {
+        return workingMemory;
+    }
 
     @Override
     public Metrics getMetrics() {
@@ -103,6 +116,7 @@ public class SimpleTrace implements AgentTrace {
         this.originalPrompt = prompt;
     }
 
+    @Override
     public Prompt getOriginalPrompt() {
         return originalPrompt;
     }
