@@ -234,11 +234,17 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         if (parentTeamTrace == null && config.getSessionWindowSize() > 0) {
             Collection<ChatMessage> history = session.getLatestMessages(config.getSessionWindowSize());
             if (Assert.isNotEmpty(history)) {
-                messages.addAll(history);
+                for (ChatMessage message : history) {
+                    message.addMetadata(AgentTrace.META_FIRST, 1); //初心
+                    messages.add(message);
+                }
             }
         }
 
-        messages.addAll(originalPrompt.getMessages());
+        for(ChatMessage message : originalPrompt.getMessages()) {
+            message.addMetadata(AgentTrace.META_FIRST, 1); //初心
+            messages.add(message);
+        }
 
 
         // 消息归档：同步当前用户请求到 Session 历史
