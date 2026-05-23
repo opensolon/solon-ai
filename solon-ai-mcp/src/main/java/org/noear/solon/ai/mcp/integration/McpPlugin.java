@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.integration;
 
+import io.modelcontextprotocol.server.transport.ServerTransportSecurityValidator;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.mcp.server.McpServerEndpointProvider;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
@@ -36,9 +37,11 @@ public class McpPlugin implements Plugin {
             //添加代理和提取支持
             bw.context().beanExtractOrProxy(bw, true, true);
 
+
             //构建端点提供者
             McpServerEndpointProvider serverEndpointProvider = McpServerEndpointProvider.builder()
                     .from(clz, anno)
+                    .securityValidator(bw.raw() instanceof ServerTransportSecurityValidator ? bw.raw() : null)
                     .build();
 
             //添加工具

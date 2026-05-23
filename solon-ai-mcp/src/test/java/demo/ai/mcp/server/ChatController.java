@@ -1,5 +1,6 @@
 package demo.ai.mcp.server;
 
+import demo.ai.mcp.llm.LlmUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.annotation.Controller;
@@ -15,12 +16,12 @@ import reactor.core.publisher.Flux;
 @Slf4j
 @Controller
 public class ChatController {
-    @Inject
-    ChatModel chatModel;
 
     @Produces(MimeType.TEXT_EVENT_STREAM_VALUE)
     @Mapping("/test/stream")
     public Flux<String> stream(String prompt) throws Exception {
+        ChatModel chatModel = LlmUtil.getChatModel().build();
+
         return Flux.from(chatModel.prompt(prompt).stream())
                 //.subscribeOn(Schedulers.boundedElastic()) //加这个打印效果更好
                 .filter(resp -> resp.hasContent())
