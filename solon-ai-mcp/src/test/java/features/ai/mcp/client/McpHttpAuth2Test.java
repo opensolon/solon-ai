@@ -1,7 +1,9 @@
 package features.ai.mcp.client;
 
 import demo.ai.mcp.server.McpServerApp;
+import io.modelcontextprotocol.spec.McpTransportException;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.mcp.McpChannel;
@@ -36,10 +38,18 @@ public class McpHttpAuth2Test {
                 .cacheSeconds(30)
                 .build();
 
-        String rst = mcpClient.callTool("getWeather", Utils.asMap("location", "杭州"))
-                .getContent();
+        Assertions.assertThrows(McpTransportException.class, () -> {
+            try {
+                mcpClient.callTool("getWeather", Utils.asMap("location", "杭州"))
+                        .getContent();
+            } catch (Throwable e) {
+                if (e instanceof RuntimeException) {
+                    throw e.getCause();
+                }
 
-        assert rst.startsWith("Error:");
+                throw e;
+            }
+        }, "Sending request failed, 401 Unauthorized from POST http://localhost:8081/auth2/sse");
     }
 
     @Test
@@ -50,10 +60,18 @@ public class McpHttpAuth2Test {
                 .cacheSeconds(30)
                 .build();
 
-        String rst = mcpClient.callTool("getWeather", Utils.asMap("location", "杭州"))
-                .getContent();
+        Assertions.assertThrows(McpTransportException.class, () -> {
+            try {
+                mcpClient.callTool("getWeather", Utils.asMap("location", "杭州"))
+                        .getContent();
+            } catch (Throwable e) {
+                if (e instanceof RuntimeException) {
+                    throw e.getCause();
+                }
 
-        assert rst.startsWith("Error:");
+                throw e;
+            }
+        });
     }
 
     @Test

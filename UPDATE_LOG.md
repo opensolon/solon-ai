@@ -13,7 +13,10 @@
 
 ### 3.11.0
 
+* 新增 solon-ai-mcp MCP_2025_11_25 协议支持（支持 ServerTransportSecurityValidator 签权）
 * 添加 solon-ai-agent ReActInterceptor.onReasonStart 事件方法
+* 添加 solon-ai-agent AgentTrace.getOriginalPrompt, getWorkingMemory 方法
+* 添加 solon-ai-agent TeamAgent 添加初心标记
 * 添加 solon-ai-harness bashAsyncEnabled 开关
 * 优化 solon-ai-harness AgentFactory `edit` 权限添加 `read`、`write` 控制
 * 优化 solon-ai-agent SummarizationInterceptor 压缩时机（从 onObservation 改为 onReasonStart），并增加系统词大小
