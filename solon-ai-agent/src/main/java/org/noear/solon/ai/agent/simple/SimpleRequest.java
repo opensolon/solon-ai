@@ -115,9 +115,6 @@ public class SimpleRequest implements AgentRequest<SimpleRequest, SimpleResponse
 
                 sink.next(new SimpleChunk(resp));
                 sink.complete();
-
-                //通知会话
-                session.onComplete(prompt, trace);
             } catch (Throwable e) {
                 if (!sink.isCancelled()) {
                     sink.error(e);

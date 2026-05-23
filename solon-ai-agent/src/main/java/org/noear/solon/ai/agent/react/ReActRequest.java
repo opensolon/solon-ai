@@ -140,9 +140,6 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
 
                 sink.next(new ReActChunk(resp));
                 sink.complete();
-
-                //通知会话
-                session.onComplete(prompt, trace);
             } catch (Throwable e) {
                 if (!sink.isCancelled()) {
                     sink.error(e);
