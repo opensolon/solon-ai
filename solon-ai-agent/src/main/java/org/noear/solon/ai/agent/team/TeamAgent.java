@@ -209,12 +209,12 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
 
             //新的问题
             for (ChatMessage message : prompt.getMessages()) {
+                message.addMetadata(AgentTrace.META_RUN_ID, trace.getRunId());
                 if (parentTeamTrace == null) {
                     session.addMessage(message);
                 }
 
                 message.addMetadata(AgentTrace.META_FIRST, 1); //初心
-                message.addMetadata(AgentTrace.META_RUN_ID, trace.getRunId());
                 trace.getWorkingMemory().addMessage(message);
             }
         }

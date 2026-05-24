@@ -243,7 +243,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         }
 
         //新问题
-        for(ChatMessage message : originalPrompt.getMessages()) {
+        for (ChatMessage message : originalPrompt.getMessages()) {
             message.addMetadata(AgentTrace.META_FIRST, 1); //初心
             message.addMetadata(AgentTrace.META_RUN_ID, trace.getRunId());
             messages.add(message);
@@ -253,7 +253,10 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         // 消息归档：同步当前用户请求到 Session 历史
         if (parentTeamTrace == null && Prompt.isEmpty(originalPrompt) == false) {
             for (ChatMessage message : originalPrompt.getMessages()) {
-                session.addMessage(message);
+                message.addMetadata(AgentTrace.META_RUN_ID, trace.getRunId());
+                if (parentTeamTrace == null) {
+                    session.addMessage(message);
+                }
             }
         }
 
