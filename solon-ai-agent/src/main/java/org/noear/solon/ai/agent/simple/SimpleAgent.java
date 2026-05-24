@@ -103,10 +103,10 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         return call(prompt, session, null);
     }
 
-    protected SimpleTrace getTrace(FlowContext context, Prompt prompt) {
+    protected SimpleTrace getTrace(FlowContext context) {
         SimpleTrace trace = context.getAs(config.getTraceKey());
         if (trace == null) {
-            trace = new SimpleTrace(prompt);
+            trace = new SimpleTrace();
             context.put(config.getTraceKey(), trace);
         }
 
@@ -119,7 +119,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         final TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
 
         // 初始化或恢复推理痕迹 (Trace)
-        SimpleTrace trace = getTrace(context, prompt);
+        SimpleTrace trace = getTrace(context);
 
         if (options == null) {
             options = config.getDefaultOptions().copy();

@@ -61,12 +61,6 @@ public class SimpleTrace implements AgentTrace {
         //反序列化用
     }
 
-    public SimpleTrace(Prompt originalPrompt) {
-        this.originalPrompt = originalPrompt;
-        this.beginTimeMs = System.currentTimeMillis();
-        this.runId = Utils.uuid();
-    }
-
     protected void prepare(SimpleAgentConfig config, SimpleOptions options, AgentSession session, TeamProtocol protocol) {
         this.config = config;
         this.options = options;

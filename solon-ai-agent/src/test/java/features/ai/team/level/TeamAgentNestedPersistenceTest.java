@@ -74,7 +74,7 @@ public class TeamAgentNestedPersistenceTest {
         devTrace.setRoute(Agent.ID_END); // 子团队标记为已结束
 
         // 模拟父团队 (quality_project) 的执行轨迹：已调用过子团队
-        TeamTrace projectTrace = new TeamTrace(Prompt.of("开发登录功能"));
+        TeamTrace projectTrace = new TeamTrace(); //Prompt.of("开发登录功能")
         projectTrace.addRecord(ChatRole.ASSISTANT,"dev_team", "开发环节已交付成果", 200);
         projectTrace.setRoute(TeamAgent.ID_SUPERVISOR); // 断点设在父团队的决策中心
 

@@ -158,13 +158,6 @@ public class ReActTrace implements AgentTrace {
         this.route = ReActAgent.ID_REASON;
     }
 
-    public ReActTrace(Prompt originalPrompt) {
-        this();
-        this.originalPrompt = originalPrompt;
-        this.beginTimeMs = System.currentTimeMillis();
-        this.runId = Utils.uuid();
-    }
-
     public static ReActTrace getCurrent(FlowContext context) {
         String traceKey = context.getAs(Agent.KEY_CURRENT_UNIT_TRACE_KEY);
         if (traceKey != null) {

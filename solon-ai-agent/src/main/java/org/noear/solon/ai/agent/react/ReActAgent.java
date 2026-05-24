@@ -136,10 +136,10 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         return this.call(prompt, session, null);
     }
 
-    protected ReActTrace getTrace(FlowContext context, Prompt prompt) {
+    protected ReActTrace getTrace(FlowContext context) {
         ReActTrace trace = context.getAs(config.getTraceKey());
         if (trace == null) {
-            trace = new ReActTrace(prompt);
+            trace = new ReActTrace();
             context.put(config.getTraceKey(), trace);
         }
         return trace;
@@ -154,7 +154,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         final TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
 
         // 初始化或恢复推理痕迹 (Trace)
-        final ReActTrace trace = getTrace(context, prompt);
+        final ReActTrace trace = getTrace(context);
 
         if (options == null) {
             options = config.getDefaultOptions().copy();

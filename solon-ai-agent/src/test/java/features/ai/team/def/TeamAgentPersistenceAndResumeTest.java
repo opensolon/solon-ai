@@ -44,7 +44,7 @@ public class TeamAgentPersistenceAndResumeTest {
         InMemoryAgentSession session = InMemoryAgentSession.of("order_sn_998");
 
         // 手动模拟 Trace 状态：已经完成了天气搜索
-        TeamTrace trace = new TeamTrace(Prompt.of("帮我规划上海行程并给穿衣建议"));
+        TeamTrace trace = new TeamTrace(); //Prompt.of("帮我规划上海行程并给穿衣建议")
         trace.addRecord(ChatRole.ASSISTANT, "searcher", "上海明日天气：大雨转雷阵雨，气温 12 度。", 800L);
         // 设置当前路由断点为 Supervisor，准备让它恢复后进行决策
         trace.setRoute(TeamAgent.ID_SUPERVISOR);

@@ -147,10 +147,10 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
         return call(prompt, session, null);
     }
 
-    protected TeamTrace getTrace(FlowContext context, Prompt prompt) {
+    protected TeamTrace getTrace(FlowContext context) {
         TeamTrace trace = context.getAs(config.getTraceKey());
         if (trace == null) {
-            trace = new TeamTrace(prompt);
+            trace = new TeamTrace();
             context.put(config.getTraceKey(), trace);
         }
 
@@ -166,7 +166,7 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
         final TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
 
         // 初始化或获取本次协作的轨迹快照
-        final TeamTrace trace = getTrace(context, prompt);
+        final TeamTrace trace = getTrace(context);
 
         if (options == null) {
             options = config.getDefaultOptions();
