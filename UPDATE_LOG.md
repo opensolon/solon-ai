@@ -20,6 +20,7 @@
 * 添加 solon-ai-agent AgentChunk.getRunId 方法
 * 添加 solon-ai-agent TeamAgent 添加初心标记
 * 添加 solon-ai-harness bashAsyncEnabled 开关
+* 优化 solon-ai-agent 初始化时（rest）添加快照持久化
 * 优化 solon-ai-harness AgentFactory `edit` 权限添加 `read`、`write` 控制
 * 优化 solon-ai-agent SummarizationInterceptor 压缩时机（从 onObservation 改为 onReasonStart），并增加系统词大小
 * 调整 solon skill “概念”初步改为 solon toolkit（避免与 agent skill 的冲突）

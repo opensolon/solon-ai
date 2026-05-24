@@ -217,6 +217,9 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
                 message.addMetadata(AgentTrace.META_FIRST, 1); //初心
                 trace.getWorkingMemory().addMessage(message);
             }
+
+            //更新下快照（记录上面的数据）
+            session.updateSnapshot();
         }
 
         //如果提示词没问题，开始部署工具包

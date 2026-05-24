@@ -145,6 +145,9 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             }
         } else {
             trace.reset(prompt);
+
+            //更新下快照（记录上面的数据）
+            session.updateSnapshot();
         }
 
         // 1. 构建请求消息

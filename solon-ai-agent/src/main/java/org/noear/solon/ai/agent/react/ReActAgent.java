@@ -209,6 +209,9 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
                 message.addMetadata(AgentTrace.META_FIRST, 1); //初心
                 trace.getWorkingMemory().addMessage(message);
             }
+
+            //更新下快照（记录上面的数据）
+            session.updateSnapshot();
         }
 
         //添加计划模式（要在激活工具包之前）
@@ -312,6 +315,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         if (Assert.isEmpty(trace.getRoute())) {
             trace.setRoute(ReActAgent.ID_REASON);
         }
+
 
         while (true) {
             if (trace.getSession().isPending()) {
