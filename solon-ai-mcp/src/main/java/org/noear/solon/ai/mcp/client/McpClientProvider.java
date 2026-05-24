@@ -631,8 +631,8 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * @param uri 资源地址
      */
     public McpSchema.ReadResourceResult readResourceRequest(String uri) {
-        McpSchema.ReadResourceRequest callToolRequest = new McpSchema.ReadResourceRequest(uri);
-        McpSchema.ReadResourceResult result = executeWithRetry(c -> c.readResource(callToolRequest));
+        McpSchema.ReadResourceRequest readResourceRequest = new McpSchema.ReadResourceRequest(uri);
+        McpSchema.ReadResourceResult result = executeWithRetry(c -> c.readResource(readResourceRequest));
 
         //方便调试看变量
         return result;
@@ -686,8 +686,8 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * @param args 参数
      */
     public McpSchema.GetPromptResult getPromptRequest(String name, Map<String, Object> args) {
-        McpSchema.GetPromptRequest callToolRequest = new McpSchema.GetPromptRequest(name, args);
-        McpSchema.GetPromptResult result = executeWithRetry(c -> c.getPrompt(callToolRequest));
+        McpSchema.GetPromptRequest getPromptRequest = new McpSchema.GetPromptRequest(name, args);
+        McpSchema.GetPromptResult result = executeWithRetry(c -> c.getPrompt(getPromptRequest));
 
         //方便调试看变量
         return result;
