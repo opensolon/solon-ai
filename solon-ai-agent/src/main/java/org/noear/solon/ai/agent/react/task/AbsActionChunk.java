@@ -37,7 +37,7 @@ public class AbsActionChunk extends AbsAgentChunk {
     private final transient Map<String, Object> args;
 
     public AbsActionChunk(ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage message) {
-        super(trace.getAgentName(), trace.getSession(), message);
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
 
         this.trace = trace;
         this.toolName = toolName;

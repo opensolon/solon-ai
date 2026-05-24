@@ -34,7 +34,7 @@ public class PlanChunk extends AbsAgentChunk {
     private final transient PlanEvent event;
 
     public PlanChunk(ReActTrace trace, PlanEvent event, AssistantMessage message) {
-        super(trace.getAgentName(), trace.getSession(), message);
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
 
         this.trace = trace;
         this.event = event;

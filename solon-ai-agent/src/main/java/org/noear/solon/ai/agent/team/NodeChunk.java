@@ -31,7 +31,7 @@ public class NodeChunk extends AbsAgentChunk {
     private final transient Node node;
 
     public NodeChunk(Node node, TeamTrace trace, ChatMessage message) {
-        super(trace.getAgentName(), trace.getSession(), message);
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
         this.trace = trace;
         this.node = node;
     }

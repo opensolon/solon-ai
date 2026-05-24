@@ -38,7 +38,7 @@ public class ReasonChunk extends AbsAgentChunk {
     private final transient AssistantMessage assistantMessage;
 
     public ReasonChunk(ReActTrace trace, ChatResponse response, AssistantMessage assistantMessage) {
-        super(trace.getAgentName(), trace.getSession(), assistantMessage);
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), assistantMessage);
         this.trace = trace;
         this.response = response;
         this.assistantMessage = assistantMessage;

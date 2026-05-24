@@ -32,7 +32,7 @@ public class ChatChunk extends AbsAgentChunk {
     private final transient ChatResponse response;
 
     public ChatChunk(SimpleTrace trace, ChatResponse response) {
-        super(trace.getAgentName(), trace.getSession(), response.getMessage());
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), response.getMessage());
         this.trace = trace;
         this.response = response;
     }

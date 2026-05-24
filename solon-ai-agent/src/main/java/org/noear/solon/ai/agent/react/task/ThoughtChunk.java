@@ -35,7 +35,7 @@ public class ThoughtChunk extends AbsAgentChunk {
     private final transient AssistantMessage assistantMessage;
 
     public ThoughtChunk( ReActTrace trace, AssistantMessage message) {
-        super(trace.getAgentName(), trace.getSession(), message);
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
         this.trace = trace;
         this.assistantMessage = message;
     }

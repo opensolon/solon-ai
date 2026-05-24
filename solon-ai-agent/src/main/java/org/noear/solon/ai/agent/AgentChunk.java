@@ -31,6 +31,11 @@ import java.util.Map;
 @Preview("3.9.1")
 public interface AgentChunk extends NonSerializable {
     /**
+     * 获取运行 Id
+     */
+    String getRunId();
+
+    /**
      * 获取当前产生块的智能体名字
      */
     String getAgentName();
