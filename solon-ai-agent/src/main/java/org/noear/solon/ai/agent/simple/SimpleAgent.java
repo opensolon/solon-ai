@@ -143,6 +143,8 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                 LOG.warn("Prompt is empty!");
                 return ChatMessage.ofAssistant("");
             }
+        } else {
+            trace.reset(prompt);
         }
 
         // 1. 构建请求消息

@@ -207,6 +207,8 @@ public class TeamTrace implements AgentTrace {
 
         // 5. 任务绑定
         setOriginalPrompt(originalPrompt);
+        this.beginTimeMs = System.currentTimeMillis();
+        this.runId = Utils.uuid();
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("TeamAgent [{}] trace reset. Ready for new collaboration.", agentName);

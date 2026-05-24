@@ -17,7 +17,7 @@
 * 添加 solon-ai-agent ReActInterceptor.onReasonStart 事件方法
 * 添加 solon-ai-agent AgentTrace.getOriginalPrompt, getWorkingMemory 方法
 * 添加 solon-ai-agent AgentTrace.getRunId 方法
-* 添加 solon-ai-agent AgentChunk.AgentChunk 方法
+* 添加 solon-ai-agent AgentChunk.getRunId 方法
 * 添加 solon-ai-agent TeamAgent 添加初心标记
 * 添加 solon-ai-harness bashAsyncEnabled 开关
 * 优化 solon-ai-harness AgentFactory `edit` 权限添加 `read`、`write` 控制

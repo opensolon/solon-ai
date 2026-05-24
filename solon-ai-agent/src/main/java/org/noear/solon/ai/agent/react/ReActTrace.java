@@ -204,6 +204,8 @@ public class ReActTrace implements AgentTrace {
     }
 
     protected void reset(Prompt originalPrompt) {
+        Objects.requireNonNull(originalPrompt, "OriginalPrompt cannot be null");
+
         // 1. 基础计数器重置
         stepCounter.set(0);
         toolCounter.set(0);
@@ -225,7 +227,9 @@ public class ReActTrace implements AgentTrace {
         metrics.reset();
 
         // 5. 更新原始提示词
-        setOriginalPrompt(originalPrompt);
+        this.originalPrompt = originalPrompt;
+        this.beginTimeMs = System.currentTimeMillis();
+        this.runId = Utils.uuid();
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("Agent [{}] trace reset for a new task.", getAgentName());
@@ -346,12 +350,6 @@ public class ReActTrace implements AgentTrace {
     @Override
     public Prompt getOriginalPrompt() {
         return originalPrompt;
-    }
-
-    protected void setOriginalPrompt(Prompt originalPrompt) {
-        Objects.requireNonNull(originalPrompt, "OriginalPrompt cannot be null");
-
-        this.originalPrompt = originalPrompt;
     }
 
     @Override

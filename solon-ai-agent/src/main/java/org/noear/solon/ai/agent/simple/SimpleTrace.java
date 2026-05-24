@@ -58,7 +58,7 @@ public class SimpleTrace implements AgentTrace {
     private long beginTimeMs;
 
     public SimpleTrace() {
-        this.originalPrompt = null;
+        //反序列化用
     }
 
     public SimpleTrace(Prompt originalPrompt) {
@@ -72,6 +72,12 @@ public class SimpleTrace implements AgentTrace {
         this.options = options;
         this.session = session;
         this.protocol = protocol;
+    }
+
+    protected void reset(Prompt originalPrompt) {
+        this.originalPrompt = originalPrompt;
+        this.beginTimeMs = System.currentTimeMillis();
+        this.runId = Utils.uuid();
     }
 
     @Override
@@ -125,10 +131,6 @@ public class SimpleTrace implements AgentTrace {
         } else {
             return null;
         }
-    }
-
-    protected void setOriginalPrompt(Prompt prompt) {
-        this.originalPrompt = prompt;
     }
 
     @Override
