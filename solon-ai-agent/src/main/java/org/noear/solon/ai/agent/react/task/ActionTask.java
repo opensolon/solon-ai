@@ -36,16 +36,12 @@ import org.noear.solon.core.exception.StatusException;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
-import org.noear.solon.flow.NamedTaskComponent;
-import org.noear.solon.flow.Node;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.StringReader;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.*;
 
 /**
  * ReAct 动作执行任务 (Action/Acting)
@@ -72,8 +68,6 @@ public class ActionTask {
         //重置默认路由
         trace.setRoute(ReActAgent.ID_REASON);
 
-        final TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
-
         if (LOG.isDebugEnabled()) {
             if (trace.getOptions().isPlanningMode()) {
                 LOG.debug("ReActAgent [{}] action starting... Step: {}, Plan: {}",
@@ -83,23 +77,20 @@ public class ActionTask {
             }
         }
 
-        AssistantMessage lastAssistant = trace.getLastReasonMessage();
-        AtomicBoolean lastAssistantAdded = new AtomicBoolean(false);
+        final TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
+        AssistantMessage lastReason = trace.getLastReasonMessage();
+        if (lastReason == null) {
+            return;
+        }
 
         try {
-            // 1. 优先处理原生工具调用（Native Tool Calls）
-            if (lastAssistant != null && Assert.isNotEmpty(lastAssistant.getToolCalls())) {
-                for (ToolCall call : lastAssistant.getToolCalls()) {
-                    processNativeToolCall(call, trace, parentTeamTrace, lastAssistantAdded);
-                    if (Agent.ID_END.equals(trace.getRoute())) {
-                        break;
-                    }
-                }
-                return;
+            if (Assert.isNotEmpty(lastReason.getToolCalls())) {
+                // 1. 优先处理原生工具调用（Native Tool Calls）
+                processNativeToolCall(lastReason, trace, parentTeamTrace);
+            } else {
+                // 2. 文本模式：解析模型输出中的 Action 块
+                processTextModeAction(lastReason, trace, parentTeamTrace);
             }
-
-            // 2. 文本模式：解析模型输出中的 Action 块
-            processTextModeAction(trace, parentTeamTrace, lastAssistantAdded);
         } finally {
             //刷新快照
             trace.getSession().updateSnapshot();
@@ -168,26 +159,36 @@ public class ActionTask {
     /**
      * 处理标准 ToolCall 协议调用
      */
-    private void processNativeToolCall(ToolCall call, ReActTrace trace, TeamTrace parentTeamTrace, AtomicBoolean lastAssistantAdded) throws Throwable {
-        Map<String, Object> args = (call.getArguments() == null) ? new HashMap<>() : call.getArguments();
+    private void processNativeToolCall(AssistantMessage lastReason, ReActTrace trace, TeamTrace parentTeamTrace) throws Throwable {
+        List<ChatMessage> toolResults = new ArrayList<>();
 
-        // 触发 Action 生命周期拦截
-        String result = doAction(trace, call.getName(), args);
-        if (result == null) {
-            return;
+        for (ToolCall call : lastReason.getToolCalls()) {
+            Map<String, Object> args = (call.getArguments() == null) ? new HashMap<>() : call.getArguments();
+
+            // 触发 Action 生命周期拦截
+            String result = doAction(trace, call.getName(), args);
+            if (result == null) {
+                return;
+            }
+
+            // 协议闭环：回填 ToolMessage
+            ToolMessage toolMessage = ChatMessage.ofTool(result, call.getName(), call.getId());
+            toolResults.add(toolMessage);
+
+            if (trace.getOptions().getStreamSink() != null) {
+                trace.getOptions().getStreamSink().next(
+                        new ActionEndChunk(trace, call.getName(), args, toolMessage));
+            }
+
+            if (Agent.ID_END.equals(trace.getRoute())) {
+                return;
+            }
         }
 
-        // 协议闭环：回填 ToolMessage
-        ToolMessage toolMessage = ChatMessage.ofTool(result, call.getName(), call.getId());
-        if (lastAssistantAdded.compareAndSet(false, true)) {
-            trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
-        }
-
-        trace.getWorkingMemory().addMessage(toolMessage);
-
-        if (trace.getOptions().getStreamSink() != null) {
-            trace.getOptions().getStreamSink().next(
-                    new ActionEndChunk(trace, call.getName(), args, toolMessage));
+        if (toolResults.size() > 0) {
+            //确保“成套”出现，避免错位
+            trace.getWorkingMemory().addMessage(lastReason);
+            trace.getWorkingMemory().addMessage(toolResults);
         }
     }
 
@@ -198,12 +199,7 @@ public class ActionTask {
      * 解析并执行文本模式下的 Action 指令
      * 核心逻辑优化：从“全执行后拼接”改为“逐个执行并即时回填与反馈”
      */
-    private void processTextModeAction(ReActTrace trace, TeamTrace parentTeamTrace, AtomicBoolean lastAssistantAdded) throws Throwable {
-        AssistantMessage lastReason = trace.getLastReasonMessage();
-        if (lastReason == null) {
-            return;
-        }
-
+    private void processTextModeAction(AssistantMessage lastReason, ReActTrace trace, TeamTrace parentTeamTrace) throws Throwable {
         String lastContent = lastReason.getResultContent();
         if (Assert.isEmpty(lastContent)) {
             return;
@@ -213,6 +209,7 @@ public class ActionTask {
             LOG.debug("Processing text mode action for agent [{}].", config.getName());
         }
 
+        List<ChatMessage> toolResults = new ArrayList<>();
         int actionLabelIndex = lastContent.indexOf("Action:");
         boolean foundAny = false;
 
@@ -238,11 +235,11 @@ public class ActionTask {
                         Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : new HashMap<>();
 
                         // 执行并即时处理 (优化点 1)
-                        handleSingleAction(trace, toolName, args, lastAssistantAdded);
+                        handleSingleAction(trace, toolName, args, toolResults);
 
                     } catch (Throwable e) {
                         // 解析异常回传 (优化点 2)
-                        handleSingleObservation(trace, null, null, "Observation: Error parsing Action JSON: " + e.getMessage(), lastAssistantAdded);
+                        handleSingleObservation(trace, null, null, "Observation: Error parsing Action JSON: " + e.getMessage(), toolResults);
                         foundAny = true;
                         break;
                     }
@@ -252,24 +249,30 @@ public class ActionTask {
                 String toolName = lastContent.substring(actionLabelIndex + 7).trim();
                 if (trace.getOptions().getTool(toolName) != null || FeedbackTool.TOOL_NAME.equals(toolName)) {
                     foundAny = true;
-                    handleSingleAction(trace, toolName, new HashMap<>(), lastAssistantAdded);
+                    handleSingleAction(trace, toolName, new HashMap<>(), toolResults);
                 }
             }
         }
 
         // 容错处理：如果声明了 Action 但没解析成功，或模型说话不规整 (优化点 3)
         if (!foundAny && actionLabelIndex >= 0) {
-            handleSingleObservation(trace, null, null, "Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}", lastAssistantAdded);
+            handleSingleObservation(trace, null, null, "Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}", toolResults);
+        }
+
+        if (toolResults.size() > 0) {
+            //确保“成套”出现，避免错位
+            trace.getWorkingMemory().addMessage(lastReason);
+            trace.getWorkingMemory().addMessage(toolResults);
         }
     }
 
     /**
      * 优化点 1：提取独立执行方法，确保 Observation 即时生成
      */
-    private void handleSingleAction(ReActTrace trace, String toolName, Map<String, Object> args, AtomicBoolean lastAssistantAdded) throws Throwable {
+    private void handleSingleAction(ReActTrace trace, String toolName, Map<String, Object> args, List<ChatMessage> toolResults) throws Throwable {
         String result = doAction(trace, toolName, args);
         if (result != null) {
-            handleSingleObservation(trace, toolName, args, "Observation: " + result, lastAssistantAdded);
+            handleSingleObservation(trace, toolName, args, "Observation: " + result, toolResults);
         }
     }
 
@@ -277,18 +280,13 @@ public class ActionTask {
      * 优化点 4：统一 Observation 落地逻辑。
      * 改变了原有 StringBuilder 拼接逻辑，直接进行 WorkingMemory 入库并触发流
      */
-    private void handleSingleObservation(ReActTrace trace, String toolName, Map<String, Object> args, String observationContent, AtomicBoolean lastAssistantAdded) {
+    private void handleSingleObservation(ReActTrace trace, String toolName, Map<String, Object> args, String observationContent,  List<ChatMessage> toolResults) {
         ChatMessage chatMessage = ChatMessage.ofUser(observationContent);
 
-        // 回填 Reason 和本次 Observation
-        // 这样做能保证上下文的 Thought-Action-Observation 结构始终稳固
-        if (lastAssistantAdded.compareAndSet(false, true)) {
-            trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
-        }
-        trace.getWorkingMemory().addMessage(chatMessage);
+        // 回填 Reason 和本次 Observation。这样做能保证上下文的 Thought-Action-Observation 结构始终稳固
+        toolResults.add(chatMessage);
 
-        // 优化点 5：即时触发 StreamSink。
-        // 在旧逻辑中，多工具并发时用户只能看到最后的结果，现在可以逐个看到每个工具的输出
+        // 即时触发 StreamSink。
         if (trace.getOptions().getStreamSink() != null) {
             trace.getOptions().getStreamSink().next(
                     new ActionEndChunk(trace, toolName, args, chatMessage));
