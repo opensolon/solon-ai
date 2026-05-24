@@ -276,6 +276,8 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
+        assistantMessage.addMetadata(AgentTrace.META_RUN_ID, trace.getRunId());
+
         if (Assert.isNotEmpty(result)) {
             if (parentTeamTrace == null) {
                 session.addMessage(assistantMessage);

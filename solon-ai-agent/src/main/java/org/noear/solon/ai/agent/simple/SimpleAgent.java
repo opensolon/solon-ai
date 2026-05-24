@@ -176,6 +176,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         }
 
         // 4. 更新会话状态与快照
+        assistantMessage.addMetadata(AgentTrace.META_RUN_ID, trace.getRunId());
         if (Assert.isNotEmpty(assistantMessage.getContent()) && Assert.isEmpty(assistantMessage.getToolCalls())) {
             if (parentTeamTrace == null) {
                 session.addMessage(assistantMessage);
