@@ -234,9 +234,12 @@ public class ActionTask {
                         ONode argsNode = actionNode.get("arguments");
                         Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : new HashMap<>();
 
-                        // 执行并即时处理 (优化点 1)
-                        handleSingleAction(trace, toolName, args, toolResults);
+                        String result = doAction(trace, toolName, args);
+                        if (result == null) {
+                            return;
+                        }
 
+                        handleSingleObservation(trace, toolName, args, "Observation: " + result, toolResults);
                     } catch (Throwable e) {
                         // 解析异常回传 (优化点 2)
                         handleSingleObservation(trace, null, null, "Observation: Error parsing Action JSON: " + e.getMessage(), toolResults);
@@ -249,7 +252,14 @@ public class ActionTask {
                 String toolName = lastContent.substring(actionLabelIndex + 7).trim();
                 if (trace.getOptions().getTool(toolName) != null || FeedbackTool.TOOL_NAME.equals(toolName)) {
                     foundAny = true;
-                    handleSingleAction(trace, toolName, new HashMap<>(), toolResults);
+                    Map<String, Object> args = new HashMap<>();
+
+                    String result = doAction(trace, toolName, args);
+                    if (result == null) {
+                        return;
+                    }
+
+                    handleSingleObservation(trace, toolName, args, "Observation: " + result, toolResults);
                 }
             }
         }
@@ -263,16 +273,6 @@ public class ActionTask {
             //确保“成套”出现，避免错位
             trace.getWorkingMemory().addMessage(lastReason);
             trace.getWorkingMemory().addMessage(toolResults);
-        }
-    }
-
-    /**
-     * 优化点 1：提取独立执行方法，确保 Observation 即时生成
-     */
-    private void handleSingleAction(ReActTrace trace, String toolName, Map<String, Object> args, List<ChatMessage> toolResults) throws Throwable {
-        String result = doAction(trace, toolName, args);
-        if (result != null) {
-            handleSingleObservation(trace, toolName, args, "Observation: " + result, toolResults);
         }
     }
 
@@ -345,6 +345,7 @@ public class ActionTask {
         if (LOG.isWarnEnabled()) {
             LOG.warn("Agent [{}] tool [{}] not found", config.getName(), name);
         }
+
         return "Tool [" + name + "] not found.";
     }
 }
