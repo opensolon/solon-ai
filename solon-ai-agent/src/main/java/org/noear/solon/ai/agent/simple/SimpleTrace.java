@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.simple;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.team.TeamProtocol;
@@ -36,6 +37,10 @@ public class SimpleTrace implements AgentTrace {
     private transient AgentSession session;
     private transient TeamProtocol protocol;
 
+    /**
+     * 运行ID
+     */
+    private String runId;
     /**
      * 任务提示词
      */
@@ -59,6 +64,7 @@ public class SimpleTrace implements AgentTrace {
     public SimpleTrace(Prompt originalPrompt) {
         this.originalPrompt = originalPrompt;
         this.beginTimeMs = System.currentTimeMillis();
+        this.runId = Utils.uuid();
     }
 
     protected void prepare(SimpleAgentConfig config, SimpleOptions options, AgentSession session, TeamProtocol protocol) {
@@ -66,6 +72,15 @@ public class SimpleTrace implements AgentTrace {
         this.options = options;
         this.session = session;
         this.protocol = protocol;
+    }
+
+    @Override
+    public String getRunId() {
+        if (runId == null) {
+            runId = Utils.uuid();
+        }
+
+        return runId;
     }
 
     @Override

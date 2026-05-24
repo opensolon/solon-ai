@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
@@ -72,6 +73,11 @@ public class ReActTrace implements AgentTrace {
      * 协议注入的专用工具映射表
      */
     private transient final Map<String, FunctionTool> protocolToolMap = new LinkedHashMap<>();
+
+    /**
+     * 运行ID
+     */
+    private String runId;
 
     /**
      * 度量指标
@@ -156,6 +162,7 @@ public class ReActTrace implements AgentTrace {
         this();
         this.originalPrompt = originalPrompt;
         this.beginTimeMs = System.currentTimeMillis();
+        this.runId = Utils.uuid();
     }
 
     public static ReActTrace getCurrent(FlowContext context) {
@@ -267,6 +274,15 @@ public class ReActTrace implements AgentTrace {
         } else {
             return session.getPendingReason();
         }
+    }
+
+    @Override
+    public String getRunId() {
+        if (runId == null) {
+            runId = Utils.uuid();
+        }
+
+        return runId;
     }
 
     @Override

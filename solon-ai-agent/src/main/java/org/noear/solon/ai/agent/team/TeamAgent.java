@@ -214,6 +214,7 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
                 }
 
                 message.addMetadata(AgentTrace.META_FIRST, 1); //初心
+                message.addMetadata(AgentTrace.META_RUN_ID, trace.getRunId());
                 trace.getWorkingMemory().addMessage(message);
             }
         }

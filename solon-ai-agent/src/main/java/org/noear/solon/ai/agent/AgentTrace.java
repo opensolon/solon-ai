@@ -36,7 +36,13 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.8.1")
 public interface AgentTrace {
-    public final static String META_FIRST = "_first";
+    public final static String META_RUN_ID = "_runId"; //跟踪ID
+    public final static String META_FIRST = "_first"; //初心标记
+
+    /**
+     * 获取运行 Id
+     */
+    String getRunId();
 
     /**
      * 获取代理名称

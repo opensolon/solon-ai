@@ -241,8 +241,10 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             }
         }
 
+        //新问题
         for(ChatMessage message : originalPrompt.getMessages()) {
             message.addMetadata(AgentTrace.META_FIRST, 1); //初心
+            message.addMetadata(AgentTrace.META_RUN_ID, trace.getRunId());
             messages.add(message);
         }
 

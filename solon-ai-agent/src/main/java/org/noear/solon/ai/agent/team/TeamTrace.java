@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.snack4.ONode;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
@@ -63,6 +64,10 @@ public class TeamTrace implements AgentTrace {
      */
     private transient AgentSession session;
 
+    /**
+     * 运行ID
+     */
+    private String runId;
     /**
      * 当前 Agent 标识
      */
@@ -143,6 +148,7 @@ public class TeamTrace implements AgentTrace {
         this();
         this.originalPrompt = originalPrompt;
         this.beginTimeMs = System.currentTimeMillis();
+        this.runId = Utils.uuid();
     }
 
     public static TeamTrace getCurrent(FlowContext context) {
@@ -279,6 +285,15 @@ public class TeamTrace implements AgentTrace {
     }
 
     // --- 属性访问 ---
+
+    @Override
+    public String getRunId() {
+        if (runId == null) {
+            runId = Utils.uuid();
+        }
+
+        return runId;
+    }
 
     @Override
     public String getAgentName() {
