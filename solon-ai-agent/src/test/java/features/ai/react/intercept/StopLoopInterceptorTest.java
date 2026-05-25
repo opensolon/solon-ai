@@ -61,13 +61,13 @@ public class StopLoopInterceptorTest {
         assertNotNull(msg.getToolCalls(), "ToolCalls should not be null after fromJson");
         assertFalse(msg.getToolCalls().isEmpty(), "ToolCalls should not be empty");
 
-        interceptor.onReason(trace, msg); // 1
-        interceptor.onReason(trace, msg); // 2
+        interceptor.onReasonEnd(trace, msg); // 1
+        interceptor.onReasonEnd(trace, msg); // 2
 
         // 验证 extras 存储是否生效
         assertNotNull(extras.get("stoploop_history"), "History should be initialized in trace extras");
 
-        interceptor.onReason(trace, msg); // 3 -> 此处应该触发 interrupt
+        interceptor.onReasonEnd(trace, msg); // 3 -> 此处应该触发 interrupt
 
         verify(trace, times(1)).setFinalAnswer(anyString());
     }
@@ -78,9 +78,9 @@ public class StopLoopInterceptorTest {
         AssistantMessage msg1 = createAssistantMessage("search", "{\"q\":\"solon\"}");
         AssistantMessage msg2 = createAssistantMessage("search", "{\"q\":\"noear\"}");
 
-        interceptor.onReason(trace, msg1);
-        interceptor.onReason(trace, msg2);
-        interceptor.onReason(trace, msg1);
+        interceptor.onReasonEnd(trace, msg1);
+        interceptor.onReasonEnd(trace, msg2);
+        interceptor.onReasonEnd(trace, msg1);
 
         verify(trace, never()).setFinalAnswer(anyString());
     }
@@ -112,9 +112,9 @@ public class StopLoopInterceptorTest {
 
         AssistantMessage msg = (AssistantMessage) ChatMessage.fromJson(json);
 
-        interceptor.onReason(trace, msg);
-        interceptor.onReason(trace, msg);
-        interceptor.onReason(trace, msg);
+        interceptor.onReasonEnd(trace, msg);
+        interceptor.onReasonEnd(trace, msg);
+        interceptor.onReasonEnd(trace, msg);
 
         verify(trace, times(1)).setFinalAnswer(anyString());
     }

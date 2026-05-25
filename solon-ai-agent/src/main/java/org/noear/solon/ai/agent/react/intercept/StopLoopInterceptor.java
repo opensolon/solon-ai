@@ -50,7 +50,7 @@ public class StopLoopInterceptor implements ReActInterceptor {
     }
 
     @Override
-    public void onReason(ReActTrace trace, AssistantMessage message) {
+    public void onReasonEnd(ReActTrace trace, AssistantMessage message) {
         if (message == null) return;
 
         String fingerprint = generateNormalizedFingerprint(message);

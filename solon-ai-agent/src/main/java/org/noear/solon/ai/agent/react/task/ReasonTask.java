@@ -231,7 +231,7 @@ public class ReasonTask {
 
         // 触发推理审计事件（传递原始消息对象）
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onReason(trace, responseMessage);
+            item.target.onReasonEnd(trace, responseMessage);
         }
 
         if(trace.getSession().isPending()){

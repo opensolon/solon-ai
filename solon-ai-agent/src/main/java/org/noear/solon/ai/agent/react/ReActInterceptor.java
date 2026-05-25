@@ -25,8 +25,6 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
-import java.util.Map;
-
 /**
  * ReAct 智能体拦截器
  * <p>提供对智能体起止、模型推理、工具执行等全生命周期的监控与干预能力</p>
@@ -74,7 +72,7 @@ public interface ReActInterceptor extends AgentInterceptor, ChatInterceptor {
     /**
      * 推理节点：接收 LLM 返回的原始推理消息
      */
-    default void onReason(ReActTrace trace, AssistantMessage message) {
+    default void onReasonEnd(ReActTrace trace, AssistantMessage message) {
     }
 
     /**
