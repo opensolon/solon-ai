@@ -98,72 +98,72 @@ public class ActionTask {
     }
 
     private ToolResult doAction(ReActTrace trace, String toolName, Map<String, Object> args, List<ChatMessage> toolResults, ToolCall call) {
-        ToolResult result = doAction0(trace, toolName, args);
-
-        if (result == null) {
-            handleSingleObservation(trace, toolName, args, null, null);
-        } else {
-            if (call == null) {
-                ChatMessage observationMessage = ChatMessage.ofUser("Observation: " + result.getContent());
-                handleSingleObservation(trace, toolName, args, observationMessage, toolResults);
-            } else {
-                // 协议闭环：回填 ToolMessage
-                ToolMessage toolMessage = ChatMessage.ofTool(result, call.getName(), call.getId(), false);
-                handleSingleObservation(trace, call.getName(), args, toolMessage, toolResults);
-            }
-        }
-
-        return result;
-    }
-
-
-    private ToolResult doAction0(ReActTrace trace, String toolName, Map<String, Object> args) {
         if (LOG.isDebugEnabled()) {
             LOG.debug("Action for agent [{}], toolName:{}, args:{}", config.getName(), toolName, args);
         }
 
         trace.setLastObservation(null);
+
+        // 1. 触发前置生命周期
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onActionStart(trace, toolName, args);
         }
 
+        // 2. 如果前置拦截器直接挂起或截断了路由，立刻退出（交给 finally 闭环）
         if (trace.getSession().isPending() || Agent.ID_END.equals(trace.getRoute())) {
             return null;
         }
 
+        // 3. 推送流式起始片
         if (trace.getOptions().getStreamSink() != null) {
-            trace.getOptions().getStreamSink().next(
-                    new ActionStartChunk(trace, toolName, args));
+            trace.getOptions().getStreamSink().next(new ActionStartChunk(trace, toolName, args));
         }
 
-        // 4. 执行工具
-        final ToolResult result;
-        long start = System.currentTimeMillis();
-        if (Assert.isEmpty(trace.getLastObservation())) {
-            result = executeTool(trace, toolName, args);
-        } else {
-            //可能会在 onAction 里产生 Observation
-            result = ToolResult.success(trace.getLastObservation());
+        long startMs = System.currentTimeMillis();
+        ToolResult result = null;
+        Throwable thrownError = null;
+
+        try {
+            // 4. 执行工具调用
+            if (Assert.isEmpty(trace.getLastObservation())) {
+                result = executeTool(trace, toolName, args);
+            } else {
+                result = ToolResult.success(trace.getLastObservation());
+            }
+
+            // 5. 触发后置观测拦截器（只有工具真正执行有结果时才进入观察）
+            if (result != null && !trace.getSession().isPending() && !Agent.ID_END.equals(trace.getRoute())) {
+                long durationMs = System.currentTimeMillis() - startMs;
+                trace.setLastObservation(result.getContent());
+
+                for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
+                    item.target.onObservation(trace, toolName, result.getContent(), durationMs);
+                }
+            }
+
+            // 最终返回当前轮次处理后的最新观测值
+            return trace.getLastObservation() != null ? ToolResult.success(trace.getLastObservation()) : null;
+
+        } catch (Throwable e) {
+            thrownError = e;
+            throw e;
+        } finally {
+            // ================== 【100% 强物理闭环】 ==================
+            ChatMessage observationMessage = null;
+
+            if (thrownError != null) {
+                observationMessage = ChatMessage.ofUser("Observation: Execution critical error: " + thrownError.getMessage());
+            } else if (trace.getLastObservation() != null) {
+                if (call == null) {
+                    observationMessage = ChatMessage.ofUser("Observation: " + trace.getLastObservation());
+                } else {
+                    observationMessage = ChatMessage.ofTool(ToolResult.success(trace.getLastObservation()), call.getName(), call.getId(), false);
+                }
+            }
+
+            // 无论正常结束、挂起退出、还是中途抛出 critical error，100% 走统一清理与下发逻辑
+            handleSingleObservation(trace, toolName, args, observationMessage, thrownError, toolResults);
         }
-
-        if (trace.getSession().isPending() || Agent.ID_END.equals(trace.getRoute())) {
-            return null;
-        }
-
-        final long durationMs = System.currentTimeMillis() - start;
-
-        trace.setLastObservation(result.getContent());
-
-        // 5. 触发 Observation 拦截 (内容是纯的)
-        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onObservation(trace, toolName, result.getContent(), durationMs);
-        }
-
-        if (trace.getSession().isPending() || Agent.ID_END.equals(trace.getRoute())) {
-            return null;
-        }
-
-        return ToolResult.success(trace.getLastObservation());
     }
 
     /**
@@ -238,7 +238,7 @@ public class ActionTask {
                     } catch (Throwable e) {
                         // 解析异常回传 (优化点 2)
                         ChatMessage observationMessage = ChatMessage.ofUser("Observation: Error parsing Action JSON: " + e.getMessage());
-                        handleSingleObservation(trace, null, null, observationMessage, toolResults);
+                        handleSingleObservation(trace, null, null, observationMessage, e, toolResults);
                         foundAny = true;
                         break;
                     }
@@ -261,7 +261,7 @@ public class ActionTask {
         // 容错处理：如果声明了 Action 但没解析成功，或模型说话不规整 (优化点 3)
         if (!foundAny && actionLabelIndex >= 0) {
             ChatMessage chatMessage = ChatMessage.ofUser("Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}");
-            handleSingleObservation(trace, null, null,chatMessage , toolResults);
+            handleSingleObservation(trace, null, null, chatMessage, null, toolResults);
         }
 
         if (toolResults.size() > 0) {
@@ -275,23 +275,35 @@ public class ActionTask {
      * 优化点 4：统一 Observation 落地逻辑。
      * 改变了原有 StringBuilder 拼接逻辑，直接进行 WorkingMemory 入库并触发流
      */
-    private void handleSingleObservation(ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage observationMessage, List<ChatMessage> toolResults) {
-        Throwable error = null;
+    private void handleSingleObservation(ReActTrace trace, String toolName, Map<String, Object> args,
+                                         ChatMessage observationMessage, Throwable error, List<ChatMessage> toolResults) {
 
         if (observationMessage == null) {
-            error = new RuntimeException("The tool has been interrupted.");
+            if (error == null) {
+                error = new RuntimeException("The tool task has been interrupted or pending.");
+            }
             observationMessage = ChatMessage.ofAssistant("");
-        } else {
+        } else if (toolResults != null) {
             toolResults.add(observationMessage);
         }
 
+        // 1. 流式客户端通知闭环
         if (trace.getOptions().getStreamSink() != null) {
-            trace.getOptions().getStreamSink().next(
-                    new ActionEndChunk(trace, toolName, args, observationMessage, error));
+            try {
+                trace.getOptions().getStreamSink().next(
+                        new ActionEndChunk(trace, toolName, args, observationMessage, error));
+            } catch (Throwable e) {
+                LOG.error("Push ActionEndChunk failed", e);
+            }
         }
 
+        // 2. 拦截器现场清理闭环
         for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
-            entity.target.onActionEnd(trace, toolName, args, observationMessage, error);
+            try {
+                entity.target.onActionEnd(trace, toolName, args, observationMessage, error);
+            } catch (Throwable e) {
+                LOG.error("Interceptor onActionEnd execution failed", e);
+            }
         }
     }
 
