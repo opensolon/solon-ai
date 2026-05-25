@@ -28,7 +28,7 @@ import java.util.Map;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class ActionEndChunk extends ActionChunk {
+public class ActionEndChunk extends AbsActionChunk {
     private final ChatMessage result;
     private final Throwable error;
 

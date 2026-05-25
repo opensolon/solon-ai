@@ -25,7 +25,8 @@
 * 优化 solon-ai-harness AgentFactory `edit` 权限添加 `read`、`write` 控制
 * 优化 solon-ai-agent SummarizationInterceptor 压缩时机（从 onObservation 改为 onReasonStart），并增加系统词大小
 * 调整 solon skill “概念”初步改为 solon toolkit（避免与 agent skill 的冲突）
-* 调整 solon-ai-agent ReasonChunk 更名为 ReasonDeltaChunk 
+* 调整 solon-ai-agent ActionChunk 更名为 ActionEndChunk （和 ActionStartChunk 凑成一对）
+* 调整 solon-ai-agent ReasonChunk 更名为 ReasonDeltaChunk
 * 调整 solon-ai-agent ThoughtChunk 更名为 ReasonCompleteChunk（和 ReasonDeltaChunk 凑成一对）
 * 调整 solon-ai-agent ReActInterceptor.onAction 更名为 onActionStart，并添加 onActionEnd
 * 调整 solon-ai-agent ReActInterceptor.onActionStart,onObservation: toolName,args,result 合并为 toolExchanger（并允许修改）
@@ -45,8 +46,9 @@
 |                                                   |                                                   |   |
 | `(toolName, args)` + `trace.lastObservation`      | `ToolExchanger` (thread-safe)                     |   |
 |                                                   |                                                   |   |
-| ReasonChunk                                       | ReasonDeltaChunk                            |   |
-| ThoughtChunk                                      | ReasonCompleteChunk                            |   |
+| ReasonChunk                                       | ReasonDeltaChunk                                  |   |
+| ThoughtChunk                                      | ReasonCompleteChunk                               |   |
+| ActionChunk                                       | ActionEndChunk                                    |   |
 
 
 
