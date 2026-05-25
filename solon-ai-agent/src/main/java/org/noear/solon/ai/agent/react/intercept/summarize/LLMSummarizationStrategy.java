@@ -57,7 +57,7 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
             "## 输出规范\n" +
             "- 要求：精炼、准确，不超过 300 字。\n" +
             "- 严禁包含：无关的客套话或自我介绍。\n" +
-            "- 若无可总结内容，请回复：(无显著进度)。";
+            "- 若无可总结内容，请回复：(无显著进度)"; // 统一为英文括号，去掉句号结尾
 
     /**
      * @param chatModel 用于生成摘要的模型（建议使用廉价、快速的模型）
@@ -144,7 +144,8 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
                 }
             });
 
-            if (Assert.isEmpty(summary) || summary.contains("(无显著进度)")) {
+            // 模糊匹配“无显著进度”，防大模型胡乱加标点或 Markdown 样式
+            if (Assert.isEmpty(summary) || summary.contains("无显著进度")) {
                 return null;
             }
 
