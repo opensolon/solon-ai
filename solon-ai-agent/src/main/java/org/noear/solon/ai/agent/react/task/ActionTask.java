@@ -152,7 +152,16 @@ public class ActionTask {
             ChatMessage observationMessage = null;
 
             if (thrownError != null) {
-                observationMessage = ChatMessage.ofUser("Observation: Execution critical error: " + thrownError.getMessage());
+                if (call == null) {
+                    observationMessage = ChatMessage.ofUser("Observation: Execution critical error: " + thrownError.getMessage());
+                } else {
+                    observationMessage = ChatMessage.ofTool(
+                            ToolResult.error("Execution critical error: " + thrownError.getMessage()),
+                            call.getName(),
+                            call.getId(),
+                            false
+                    );
+                }
             } else if (trace.getLastObservation() != null) {
                 if (call == null) {
                     observationMessage = ChatMessage.ofUser("Observation: " + trace.getLastObservation());
