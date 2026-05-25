@@ -23,7 +23,7 @@ import org.noear.solon.ai.agent.react.ReActChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.task.ActionEndChunk;
 import org.noear.solon.ai.agent.react.task.ReasonChunk;
-import org.noear.solon.ai.agent.react.task.ThoughtChunk;
+import org.noear.solon.ai.agent.react.task.ReasonAggregationChunk;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatSession;
@@ -222,7 +222,7 @@ public class TaskSkill extends AbsSkill {
                                 sink.next(chunk);
                             } else {
                                 if (isMultitask) {
-                                    if (chunk instanceof ThoughtChunk) {
+                                    if (chunk instanceof ReasonAggregationChunk) {
                                         chunk.getMeta().put(TOOL_MULTITASK, 1);
                                         sink.next(chunk);
                                     }
