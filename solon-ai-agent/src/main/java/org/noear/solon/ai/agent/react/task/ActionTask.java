@@ -98,7 +98,7 @@ public class ActionTask {
     }
 
 
-    private String doAction(ReActTrace trace, String toolName, Map<String, Object> args) {
+    private ToolResult doAction(ReActTrace trace, String toolName, Map<String, Object> args) {
         if (LOG.isDebugEnabled()) {
             LOG.debug("Action for agent [{}], toolName:{}, args:{}", config.getName(), toolName, args);
         }
@@ -108,15 +108,9 @@ public class ActionTask {
             item.target.onAction(trace, toolName, args);
         }
 
-        if (trace.getSession().isPending()) {
+        if (trace.getSession().isPending() || Agent.ID_END.equals(trace.getRoute())) {
             return null;
         }
-
-        if (Agent.ID_END.equals(trace.getRoute())) {
-            return null;
-        }
-
-
 
         if (trace.getOptions().getStreamSink() != null) {
             trace.getOptions().getStreamSink().next(
@@ -124,13 +118,13 @@ public class ActionTask {
         }
 
         // 4. 执行工具
-        final String result;
+        final ToolResult result;
         long start = System.currentTimeMillis();
         if (Assert.isEmpty(trace.getLastObservation())) {
             result = executeTool(trace, toolName, args);
         } else {
             //可能会在 onAction 里产生 Observation
-            result = trace.getLastObservation();
+            result = ToolResult.success(trace.getLastObservation());
         }
 
         if (Agent.ID_END.equals(trace.getRoute())) {
@@ -138,22 +132,18 @@ public class ActionTask {
         }
         final long durationMs = System.currentTimeMillis() - start;
 
-        trace.setLastObservation(result);
+        trace.setLastObservation(result.getContent());
 
         // 5. 触发 Observation 拦截 (内容是纯的)
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onObservation(trace, toolName, result, durationMs);
+            item.target.onObservation(trace, toolName, result.getContent(), durationMs);
         }
 
-        if (trace.getSession().isPending()) {
+        if (trace.getSession().isPending() || Agent.ID_END.equals(trace.getRoute())) {
             return null;
         }
 
-        if (Agent.ID_END.equals(trace.getRoute())) {
-            return null;
-        }
-
-        return trace.getLastObservation();
+        return ToolResult.success(trace.getLastObservation());
     }
 
     /**
@@ -166,13 +156,13 @@ public class ActionTask {
             Map<String, Object> args = (call.getArguments() == null) ? new HashMap<>() : call.getArguments();
 
             // 触发 Action 生命周期拦截
-            String result = doAction(trace, call.getName(), args);
+            ToolResult result = doAction(trace, call.getName(), args);
             if (result == null) {
                 return;
             }
 
             // 协议闭环：回填 ToolMessage
-            ToolMessage toolMessage = ChatMessage.ofTool(result, call.getName(), call.getId());
+            ToolMessage toolMessage = ChatMessage.ofTool(result, call.getName(), call.getId(), false);
             toolResults.add(toolMessage);
 
             if (trace.getOptions().getStreamSink() != null) {
@@ -234,12 +224,12 @@ public class ActionTask {
                         ONode argsNode = actionNode.get("arguments");
                         Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : new HashMap<>();
 
-                        String result = doAction(trace, toolName, args);
+                        ToolResult result = doAction(trace, toolName, args);
                         if (result == null) {
                             return;
                         }
 
-                        handleSingleObservation(trace, toolName, args, "Observation: " + result, toolResults);
+                        handleSingleObservation(trace, toolName, args, "Observation: " + result.getContent(), toolResults);
                     } catch (Throwable e) {
                         // 解析异常回传 (优化点 2)
                         handleSingleObservation(trace, null, null, "Observation: Error parsing Action JSON: " + e.getMessage(), toolResults);
@@ -254,12 +244,12 @@ public class ActionTask {
                     foundAny = true;
                     Map<String, Object> args = new HashMap<>();
 
-                    String result = doAction(trace, toolName, args);
+                    ToolResult result = doAction(trace, toolName, args);
                     if (result == null) {
                         return;
                     }
 
-                    handleSingleObservation(trace, toolName, args, "Observation: " + result, toolResults);
+                    handleSingleObservation(trace, toolName, args, "Observation: " + result.getContent(), toolResults);
                 }
             }
         }
@@ -280,7 +270,7 @@ public class ActionTask {
      * 优化点 4：统一 Observation 落地逻辑。
      * 改变了原有 StringBuilder 拼接逻辑，直接进行 WorkingMemory 入库并触发流
      */
-    private void handleSingleObservation(ReActTrace trace, String toolName, Map<String, Object> args, String observationContent,  List<ChatMessage> toolResults) {
+    private void handleSingleObservation(ReActTrace trace, String toolName, Map<String, Object> args, String observationContent, List<ChatMessage> toolResults) {
         ChatMessage chatMessage = ChatMessage.ofUser(observationContent);
 
         // 回填 Reason 和本次 Observation。这样做能保证上下文的 Thought-Action-Observation 结构始终稳固
@@ -298,13 +288,13 @@ public class ActionTask {
      *
      * @return 工具输出的字符串结果
      */
-    private String executeTool(ReActTrace trace, String name, Map<String, Object> args) {
+    private ToolResult executeTool(ReActTrace trace, String name, Map<String, Object> args) {
         if (FeedbackTool.TOOL_NAME.equals(name)) {
             String reason = (String) args.get("reason");
             trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer(reason);
             trace.getContext().interrupt();
-            return reason;
+            return ToolResult.success(reason);
         }
 
         FunctionTool tool = trace.getOptions().getTool(name);
@@ -332,13 +322,13 @@ public class ActionTask {
                     LOG.debug("Agent [{}] invoking tool end [{}], args: {}", config.getName(), name, args);
                 }
 
-                return result.getContent();
+                return result;
             } catch (IllegalArgumentException | StatusException e) {
                 // 引导模型自愈：返回 Schema 错误提示
-                return "Invalid arguments for [" + name + "]. Expected Schema: " + tool.inputSchema() + ". Error: " + e.getMessage();
+                return ToolResult.success("Invalid arguments for [" + name + "]. Expected Schema: " + tool.inputSchema() + ". Error: " + e.getMessage());
             } catch (Throwable e) {
                 LOG.error("Agent [" + config.getName() + "] tool [" + name + "] execution failed", e);
-                return "Execution error in tool [" + name + "]: " + e.getMessage();
+                return ToolResult.success("Execution error in tool [" + name + "]: " + e.getMessage());
             }
         }
 
@@ -346,6 +336,6 @@ public class ActionTask {
             LOG.warn("Agent [{}] tool [{}] not found", config.getName(), name);
         }
 
-        return "Tool [" + name + "] not found.";
+        return ToolResult.success("Tool [" + name + "] not found.");
     }
 }

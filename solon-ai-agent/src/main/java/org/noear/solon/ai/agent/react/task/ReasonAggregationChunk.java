@@ -20,21 +20,20 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.flow.Node;
 
 import java.util.List;
 
 /**
- * ReAct 想法块
+ * ReAct 思考聚合块
  *
  * @author noear
  * @since 3.9.7
  */
-public class ThoughtChunk extends AbsAgentChunk {
+public class ReasonAggregationChunk extends AbsAgentChunk {
     private final transient ReActTrace trace;
     private final transient AssistantMessage assistantMessage;
 
-    public ThoughtChunk( ReActTrace trace, AssistantMessage message) {
+    public ReasonAggregationChunk(ReActTrace trace, AssistantMessage message) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
         this.trace = trace;
         this.assistantMessage = message;

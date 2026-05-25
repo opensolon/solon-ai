@@ -26,7 +26,7 @@ import org.noear.solon.lang.Preview;
 import java.util.List;
 
 /**
- * ReAct 思考块（Reasoning）：包含智能体对当前问题的逻辑分析流
+ * ReAct 思考流块
  *
  * @author noear
  * @since 3.9.1

@@ -279,7 +279,7 @@ public class ReasonTask {
         }
 
         if(trace.getOptions().getStreamSink() != null){
-            trace.getOptions().getStreamSink().next(new ThoughtChunk(trace, responseMessage));
+            trace.getOptions().getStreamSink().next(new ReasonAggregationChunk(trace, responseMessage));
         }
 
         trace.setLastReasonMessage(responseMessage);
