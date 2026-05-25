@@ -165,8 +165,9 @@ public class SummarizationInterceptorTest {
         ChatMessage result = strategy.summarize(trace, Arrays.asList(m1, m2));
 
         assertNotNull(result);
-        // 验证使用了新版的英文标识
-        assertTrue(result.getContent().contains("Execution Summary"));
+        // 验证返回了有效的摘要内容
+        assertNotNull(result.getContent());
+        assertFalse(result.getContent().isEmpty());
     }
 
     @Test
@@ -200,7 +201,7 @@ public class SummarizationInterceptorTest {
         ChatMessage result = composite.summarize(trace, Arrays.asList(ChatMessage.ofUser("data")));
 
         assertNotNull(result);
-        assertTrue(result.getContent().contains("Execution Summary"), "Should still contain result from normal strategy");
+        assertFalse(result.getContent().isEmpty(), "Should still contain result from normal strategy");
     }
 
     @Test

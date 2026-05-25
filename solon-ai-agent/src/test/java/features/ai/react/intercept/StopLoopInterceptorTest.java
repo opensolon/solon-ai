@@ -69,7 +69,7 @@ public class StopLoopInterceptorTest {
 
         interceptor.onReason(trace, msg); // 3 -> 此处应该触发 interrupt
 
-        verify(trace, times(1)).pending(anyString());
+        verify(trace, times(1)).setFinalAnswer(anyString());
     }
 
     @Test
@@ -82,7 +82,7 @@ public class StopLoopInterceptorTest {
         interceptor.onReason(trace, msg2);
         interceptor.onReason(trace, msg1);
 
-        verify(trace, never()).pending(anyString());
+        verify(trace, never()).setFinalAnswer(anyString());
     }
 
     /**
@@ -116,6 +116,6 @@ public class StopLoopInterceptorTest {
         interceptor.onReason(trace, msg);
         interceptor.onReason(trace, msg);
 
-        verify(trace, times(1)).pending(anyString());
+        verify(trace, times(1)).setFinalAnswer(anyString());
     }
 }

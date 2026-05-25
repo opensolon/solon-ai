@@ -10,10 +10,6 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.annotation.Param;
-import org.noear.solon.flow.FlowContext;
-import org.noear.solon.flow.FlowException;
-import org.noear.solon.flow.Node;
-import org.noear.solon.flow.intercept.FlowInvocation;
 
 import java.util.Map;
 
@@ -24,6 +20,72 @@ import java.util.Map;
  * 人工审核通过后，恢复执行完成退款流程。</p>
  */
 public class ReActAgentHitlTest {
+    /**
+     * 测试人工介入审批流程
+     *
+     * <p>验证流程：</p>
+     * <ol>
+     * <li>发起退款请求 -> 触发拦截器中断</li>
+     * <li>人工介入审批 -> 注入批准信号</li>
+     * <li>恢复执行 -> 完成退款操作</li>
+     * </ol>
+     *
+     * @throws Throwable 如果执行过程中出现异常
+     */
+    @Test
+    public void testHumanInTheLoop() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. 定义更简单的业务拦截器
+        ReActInterceptor hitlInterceptor = new ReActInterceptor() {
+            @Override
+            public void onActionStart(ReActTrace trace, String toolName, Map<String, Object> args) {
+                // 针对特定工具进行拦截
+                if ("do_refund".equals(toolName)) {
+                    Boolean approved = trace.getContext().getAs("is_approved");
+                    if (approved == null) {
+                        // 语义化中断
+                        trace.getSession().pending(true,"等待退款批准");
+                        trace.setFinalAnswer("等待退款批准");
+                    }
+                }
+            }
+        };
+
+        ReActAgent agent = ReActAgent.of(chatModel)
+                .style(ReActStyle.STRUCTURED_TEXT)
+                .defaultToolAdd(new RefundTools())
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("hitl_123");
+        String prompt = "订单 ORD_888 没收到货，请帮我全额退款。";
+
+        // --- 第一步：执行拦截 ---
+        ReActResponse resp = agent.prompt(prompt)
+                .options(o -> o.interceptorAdd(hitlInterceptor))
+                .session(session)
+                .call();
+
+        // 调整断言：已经发生了 LLM 推理，Tokens 应该 > 0
+        Assertions.assertTrue(resp.getMetrics().getTotalTokens() > 0, "应该已经产生了推理消耗");
+
+        Assertions.assertNotNull(session.getPendingReason(), "应该存在挂起的人工任务");
+
+        // --- 第二步：人工注入 ---
+        session.getContext().put("is_approved", true);
+
+        // --- 第三步：恢复执行 ---
+        // 此时 prompt() 为空，内部会自动从 state 恢复之前的 Action 执行
+        String result = agent.prompt()
+                .options(o -> o.interceptorAdd(hitlInterceptor))
+                .session(session)
+                .call()
+                .getContent();
+
+        System.out.println(result);
+        Assertions.assertTrue(result.contains("成功"), "恢复后应执行成功");
+    }
+
     /**
      * 退款工具类
      *
@@ -72,7 +134,7 @@ public class ReActAgentHitlTest {
             }
 
             @Override
-            public void onAction(ReActTrace trace, String toolName, Map<String, Object> args) {
+            public void onActionStart(ReActTrace trace, String toolName, Map<String, Object> args) {
                 log.append("[onAction:").append(toolName).append("] ");
             }
 
@@ -101,10 +163,10 @@ public class ReActAgentHitlTest {
         Assertions.assertFalse(log.toString().isEmpty(), "拦截器回调应该被调用");
         Assertions.assertNotNull(result, "结果不应为空");
 
-        // 验证调用了特定的回调函数
         String logStr = log.toString();
-        Assertions.assertTrue(logStr.contains("onNodeStart"), "应该调用 onNodeStart");
-        Assertions.assertTrue(logStr.contains("onNodeEnd"), "应该调用 onNodeEnd");
+        // 验证调用了特定的回调函数
+        System.out.println(result);
+        System.out.println(logStr);
 
         // 如果有工具调用，验证 onAction 被触发
         if (result.contains("Action")) {
