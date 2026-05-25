@@ -279,7 +279,7 @@ public class ReasonTask {
         }
 
         if(trace.getOptions().getStreamSink() != null){
-            trace.getOptions().getStreamSink().next(new ReasonAggregationChunk(trace, responseMessage));
+            trace.getOptions().getStreamSink().next(new ReasonCompleteChunk(trace, responseMessage));
         }
 
         trace.setLastReasonMessage(responseMessage);
@@ -378,7 +378,7 @@ public class ReasonTask {
                                             .takeUntil(r -> sink.isCancelled())
                                             .doOnNext(resp -> {
                                                 if (!sink.isCancelled()) {
-                                                    sink.next(new ReasonChunk(trace, resp, resp.getMessage()));
+                                                    sink.next(new ReasonDeltaChunk(trace, resp, resp.getMessage()));
                                                 }
                                             }).blockLast();
                                 } else {

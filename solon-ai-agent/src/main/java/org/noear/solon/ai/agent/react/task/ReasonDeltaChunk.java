@@ -32,12 +32,12 @@ import java.util.List;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class ReasonChunk extends AbsAgentChunk {
+public class ReasonDeltaChunk extends AbsAgentChunk {
     private final transient ReActTrace trace;
     private final transient ChatResponse response;
     private final transient AssistantMessage assistantMessage;
 
-    public ReasonChunk(ReActTrace trace, ChatResponse response, AssistantMessage assistantMessage) {
+    public ReasonDeltaChunk(ReActTrace trace, ChatResponse response, AssistantMessage assistantMessage) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession(), assistantMessage);
         this.trace = trace;
         this.response = response;

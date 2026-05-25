@@ -29,11 +29,11 @@ import java.util.List;
  * @author noear
  * @since 3.9.7
  */
-public class ReasonAggregationChunk extends AbsAgentChunk {
+public class ReasonCompleteChunk extends AbsAgentChunk {
     private final transient ReActTrace trace;
     private final transient AssistantMessage assistantMessage;
 
-    public ReasonAggregationChunk(ReActTrace trace, AssistantMessage message) {
+    public ReasonCompleteChunk(ReActTrace trace, AssistantMessage message) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
         this.trace = trace;
         this.assistantMessage = message;

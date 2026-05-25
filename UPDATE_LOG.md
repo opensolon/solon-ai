@@ -25,11 +25,31 @@
 * 优化 solon-ai-harness AgentFactory `edit` 权限添加 `read`、`write` 控制
 * 优化 solon-ai-agent SummarizationInterceptor 压缩时机（从 onObservation 改为 onReasonStart），并增加系统词大小
 * 调整 solon skill “概念”初步改为 solon toolkit（避免与 agent skill 的冲突）
+* 调整 solon-ai-agent ReasonChunk 更名为 ReasonDeltaChunk 
+* 调整 solon-ai-agent ThoughtChunk 更名为 ReasonCompleteChunk（和 ReasonDeltaChunk 凑成一对）
 * 调整 solon-ai-agent ReActInterceptor.onAction 更名为 onActionStart，并添加 onActionEnd
 * 调整 solon-ai-agent ReActInterceptor.onActionStart,onObservation: toolName,args,result 合并为 toolExchanger（并允许修改）
 * 调整 solon-ai-agent ReActInterceptor.onReason 更名为 onReasonEnd（和 onReasonStart 凑成一对） 
 * 修复 solon-ai-mcp WebRxStreamableHttpTransport 没有 event 的消息会出错的问题（优化非规范兼容）
 * mcp-sdk 升为 1.1.3
+
+
+变更对照表：
+
+| 旧方法或参数                                            | 新方法或参数                                            |   |
+|---------------------------------------------------|---------------------------------------------------|---|
+| `ReActInterceptor.onAction(,toolName,args,)`      | `ReActInterceptor.onActionStart(,toolExchanger,)` |   |
+| /                                                 | `ReActInterceptor.onActionEnd(,toolExchanger,)`   |   |
+| `ReActInterceptor.onObservation(,toolName,args,)` | `ReActInterceptor.onObservation(,toolExchanger,)` |   |
+| `ReActInterceptor.onReason`                       | `ReActInterceptor.onReasonEnd`                    |   |
+|                                                   |                                                   |   |
+| `(toolName, args)` + `trace.lastObservation`      | `ToolExchanger` (thread-safe)                     |   |
+|                                                   |                                                   |   |
+| ReasonChunk                                       | ReasonDeltaChunk                            |   |
+| ThoughtChunk                                      | ReasonCompleteChunk                            |   |
+
+
+
 
 ### 3.10.7
 
