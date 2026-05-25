@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.react.intercept;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
@@ -58,7 +59,7 @@ public class HITLInterceptor implements ReActInterceptor {
     }
 
     @Override
-    public void onAction(ReActTrace trace, String toolName, Map<String, Object> args) {
+    public void onActionStart(ReActTrace trace, String toolName, Map<String, Object> args) {
         InterventionStrategy strategy = strategyMap.get(toolName);
         if (strategy == null) {
             return;
@@ -108,20 +109,21 @@ public class HITLInterceptor implements ReActInterceptor {
 
     @Override
     public void onObservation(ReActTrace trace, String toolName, String result, long durationMs) {
-        try {
-            HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + toolName);
-            if (decision != null && decision.isApproved()) {
-                if (Assert.isNotEmpty(decision.getComment())) {
-                    trace.setLastObservation(result + " (Note: " + decision.getComment() + ")");
-                }
+        HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + toolName);
+
+        if (decision != null && decision.isApproved()) {
+            if (Assert.isNotEmpty(decision.getComment())) {
+                trace.setLastObservation(result + " (Note: " + decision.getComment() + ")");
             }
-        } finally {
-            // 审批闭环后的现场清理，确保 Session 状态幂等
-            trace.getContext().remove(HITL.LAST_INTERVENED);
-            trace.getContext().remove(HITL.DECISION_PREFIX + toolName);
         }
     }
 
+    @Override
+    public void onActionEnd(ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage result, Throwable error) {
+        // 审批闭环后的现场清理，确保 Session 状态幂等
+        trace.getContext().remove(HITL.LAST_INTERVENED);
+        trace.getContext().remove(HITL.DECISION_PREFIX + toolName);
+    }
 
     /**
      * 介入判定策略接口
@@ -139,7 +141,9 @@ public class HITLInterceptor implements ReActInterceptor {
     public static class HITLSensitiveStrategy implements InterventionStrategy {
         private String comment;
 
-        /** 设置拦截理由文案 */
+        /**
+         * 设置拦截理由文案
+         */
         public HITLSensitiveStrategy comment(String comment) {
             this.comment = comment;
             return this;

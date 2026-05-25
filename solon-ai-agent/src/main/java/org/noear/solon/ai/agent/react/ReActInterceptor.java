@@ -20,10 +20,9 @@ import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.message.AssistantMessage;
-import org.noear.solon.flow.intercept.FlowInterceptor;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
-import java.time.Duration;
 import java.util.Map;
 
 /**
@@ -83,16 +82,23 @@ public interface ReActInterceptor extends AgentInterceptor, ChatInterceptor {
     }
 
     /**
-     * 动作节点：调用功能工具 (Action) 前触发
+     * 动作开始节点：调用功能工具 (Action) 前触发
      * <p>可用于权限控制、参数合法性预检</p>
      */
-    default void onAction(ReActTrace trace, String toolName, Map<String, Object> args) {
+    default void onActionStart(ReActTrace trace, String toolName, Map<String, Object> args) {
     }
 
     /**
      * 观察节点：工具执行返回结果 (Observation) 后触发
      */
     default void onObservation(ReActTrace trace, String toolName, String result, long durationMs) {
+    }
+
+    /**
+     * 动作结束节点：调用功能工具 (Action) 后触发
+     * <p>可用于权限控制、参数合法性预检</p>
+     */
+    default void onActionEnd(ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage result, Throwable error) {
     }
 
     /**

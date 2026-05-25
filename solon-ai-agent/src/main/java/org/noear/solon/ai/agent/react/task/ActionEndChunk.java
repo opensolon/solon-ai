@@ -29,7 +29,21 @@ import java.util.Map;
  */
 @Preview("3.9.1")
 public class ActionEndChunk extends ActionChunk {
-    public ActionEndChunk(ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage message) {
-        super(trace, toolName, args, message);
+    private final ChatMessage result;
+    private final Throwable error;
+
+    public ActionEndChunk(ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage result, Throwable error) {
+        super(trace, toolName, args, result);
+
+        this.result = result;
+        this.error = error;
+    }
+
+    public ChatMessage getResult() {
+        return result;
+    }
+
+    public Throwable getError() {
+        return error;
     }
 }

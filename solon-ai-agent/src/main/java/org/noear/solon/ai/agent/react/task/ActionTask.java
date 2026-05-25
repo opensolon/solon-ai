@@ -97,15 +97,34 @@ public class ActionTask {
         }
     }
 
+    private ToolResult doAction(ReActTrace trace, String toolName, Map<String, Object> args, List<ChatMessage> toolResults, ToolCall call) {
+        ToolResult result = doAction0(trace, toolName, args);
 
-    private ToolResult doAction(ReActTrace trace, String toolName, Map<String, Object> args) {
+        if (result == null) {
+            handleSingleObservation(trace, toolName, args, null, null);
+        } else {
+            if (call == null) {
+                ChatMessage observationMessage = ChatMessage.ofUser("Observation: " + result.getContent());
+                handleSingleObservation(trace, toolName, args, observationMessage, toolResults);
+            } else {
+                // 协议闭环：回填 ToolMessage
+                ToolMessage toolMessage = ChatMessage.ofTool(result, call.getName(), call.getId(), false);
+                handleSingleObservation(trace, call.getName(), args, toolMessage, toolResults);
+            }
+        }
+
+        return result;
+    }
+
+
+    private ToolResult doAction0(ReActTrace trace, String toolName, Map<String, Object> args) {
         if (LOG.isDebugEnabled()) {
             LOG.debug("Action for agent [{}], toolName:{}, args:{}", config.getName(), toolName, args);
         }
 
         trace.setLastObservation(null);
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onAction(trace, toolName, args);
+            item.target.onActionStart(trace, toolName, args);
         }
 
         if (trace.getSession().isPending() || Agent.ID_END.equals(trace.getRoute())) {
@@ -114,7 +133,7 @@ public class ActionTask {
 
         if (trace.getOptions().getStreamSink() != null) {
             trace.getOptions().getStreamSink().next(
-                    new ActionStartChunk(trace, toolName, args, ChatMessage.ofAssistant("")));
+                    new ActionStartChunk(trace, toolName, args));
         }
 
         // 4. 执行工具
@@ -127,9 +146,10 @@ public class ActionTask {
             result = ToolResult.success(trace.getLastObservation());
         }
 
-        if (Agent.ID_END.equals(trace.getRoute())) {
+        if (trace.getSession().isPending() || Agent.ID_END.equals(trace.getRoute())) {
             return null;
         }
+
         final long durationMs = System.currentTimeMillis() - start;
 
         trace.setLastObservation(result.getContent());
@@ -156,21 +176,8 @@ public class ActionTask {
             Map<String, Object> args = (call.getArguments() == null) ? new HashMap<>() : call.getArguments();
 
             // 触发 Action 生命周期拦截
-            ToolResult result = doAction(trace, call.getName(), args);
+            ToolResult result = doAction(trace, call.getName(), args, toolResults, call);
             if (result == null) {
-                return;
-            }
-
-            // 协议闭环：回填 ToolMessage
-            ToolMessage toolMessage = ChatMessage.ofTool(result, call.getName(), call.getId(), false);
-            toolResults.add(toolMessage);
-
-            if (trace.getOptions().getStreamSink() != null) {
-                trace.getOptions().getStreamSink().next(
-                        new ActionEndChunk(trace, call.getName(), args, toolMessage));
-            }
-
-            if (Agent.ID_END.equals(trace.getRoute())) {
                 return;
             }
         }
@@ -224,15 +231,14 @@ public class ActionTask {
                         ONode argsNode = actionNode.get("arguments");
                         Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : new HashMap<>();
 
-                        ToolResult result = doAction(trace, toolName, args);
+                        ToolResult result = doAction(trace, toolName, args, toolResults, null);
                         if (result == null) {
                             return;
                         }
-
-                        handleSingleObservation(trace, toolName, args, "Observation: " + result.getContent(), toolResults);
                     } catch (Throwable e) {
                         // 解析异常回传 (优化点 2)
-                        handleSingleObservation(trace, null, null, "Observation: Error parsing Action JSON: " + e.getMessage(), toolResults);
+                        ChatMessage observationMessage = ChatMessage.ofUser("Observation: Error parsing Action JSON: " + e.getMessage());
+                        handleSingleObservation(trace, null, null, observationMessage, toolResults);
                         foundAny = true;
                         break;
                     }
@@ -244,19 +250,18 @@ public class ActionTask {
                     foundAny = true;
                     Map<String, Object> args = new HashMap<>();
 
-                    ToolResult result = doAction(trace, toolName, args);
+                    ToolResult result = doAction(trace, toolName, args, toolResults, null);
                     if (result == null) {
                         return;
                     }
-
-                    handleSingleObservation(trace, toolName, args, "Observation: " + result.getContent(), toolResults);
                 }
             }
         }
 
         // 容错处理：如果声明了 Action 但没解析成功，或模型说话不规整 (优化点 3)
         if (!foundAny && actionLabelIndex >= 0) {
-            handleSingleObservation(trace, null, null, "Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}", toolResults);
+            ChatMessage chatMessage = ChatMessage.ofUser("Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}");
+            handleSingleObservation(trace, null, null,chatMessage , toolResults);
         }
 
         if (toolResults.size() > 0) {
@@ -270,16 +275,23 @@ public class ActionTask {
      * 优化点 4：统一 Observation 落地逻辑。
      * 改变了原有 StringBuilder 拼接逻辑，直接进行 WorkingMemory 入库并触发流
      */
-    private void handleSingleObservation(ReActTrace trace, String toolName, Map<String, Object> args, String observationContent, List<ChatMessage> toolResults) {
-        ChatMessage chatMessage = ChatMessage.ofUser(observationContent);
+    private void handleSingleObservation(ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage observationMessage, List<ChatMessage> toolResults) {
+        Throwable error = null;
 
-        // 回填 Reason 和本次 Observation。这样做能保证上下文的 Thought-Action-Observation 结构始终稳固
-        toolResults.add(chatMessage);
+        if (observationMessage == null) {
+            error = new RuntimeException("The tool has been interrupted.");
+            observationMessage = ChatMessage.ofAssistant("");
+        } else {
+            toolResults.add(observationMessage);
+        }
 
-        // 即时触发 StreamSink。
         if (trace.getOptions().getStreamSink() != null) {
             trace.getOptions().getStreamSink().next(
-                    new ActionEndChunk(trace, toolName, args, chatMessage));
+                    new ActionEndChunk(trace, toolName, args, observationMessage, error));
+        }
+
+        for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
+            entity.target.onActionEnd(trace, toolName, args, observationMessage, error);
         }
     }
 
