@@ -127,7 +127,6 @@ public class ReActTrace implements AgentTrace {
      * 模型最近一次原始思考内容
      */
     private AssistantMessage lastReasonMessage;
-    private String lastObservation;
 
     /**
      * 计划
@@ -208,7 +207,6 @@ public class ReActTrace implements AgentTrace {
         this.route = ReActAgent.ID_REASON;
         this.finalAnswer = null;
         this.lastReasonMessage = null;
-        this.lastObservation = null;
 
         // 3. 结构化数据重置
         plans.clear();
@@ -409,15 +407,6 @@ public class ReActTrace implements AgentTrace {
     public void setLastReasonMessage(AssistantMessage lastReasonMessage) {
         this.lastReasonMessage = lastReasonMessage;
     }
-
-    public String getLastObservation() {
-        return lastObservation;
-    }
-
-    public void setLastObservation(String lastObservation) {
-        this.lastObservation = lastObservation;
-    }
-
     /**
      * 获取人性化历史记录格式
      */

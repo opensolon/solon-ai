@@ -19,12 +19,14 @@
 * 添加 solon-ai-agent AgentTrace.getRunId 方法
 * 添加 solon-ai-agent AgentChunk.getRunId 方法
 * 添加 solon-ai-agent TeamAgent 添加初心标记
+* 添加 solon-ai-agent ToolExchanger 类
 * 添加 solon-ai-harness bashAsyncEnabled 开关
 * 优化 solon-ai-agent 初始化时（rest）添加快照持久化
 * 优化 solon-ai-harness AgentFactory `edit` 权限添加 `read`、`write` 控制
 * 优化 solon-ai-agent SummarizationInterceptor 压缩时机（从 onObservation 改为 onReasonStart），并增加系统词大小
 * 调整 solon skill “概念”初步改为 solon toolkit（避免与 agent skill 的冲突）
 * 调整 solon-ai-agent ReActInterceptor.onAction 更名为 onActionStart，并添加 onActionEnd
+* 调整 solon-ai-agent ReActInterceptor.onActionStart,onObservation: toolName,args,result 合并为 toolExchanger（并允许修改）
 * 修复 solon-ai-mcp WebRxStreamableHttpTransport 没有 event 的消息会出错的问题（优化非规范兼容）
 * mcp-sdk 升为 1.1.3
 

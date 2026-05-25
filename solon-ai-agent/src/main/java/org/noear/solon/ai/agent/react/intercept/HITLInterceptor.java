@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.react.intercept;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.react.task.ToolExchanger;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
@@ -59,24 +60,24 @@ public class HITLInterceptor implements ReActInterceptor {
     }
 
     @Override
-    public void onActionStart(ReActTrace trace, String toolName, Map<String, Object> args) {
-        InterventionStrategy strategy = strategyMap.get(toolName);
+    public void onActionStart(ReActTrace trace, ToolExchanger toolExchanger) {
+        InterventionStrategy strategy = strategyMap.get(toolExchanger.getToolName());
         if (strategy == null) {
             return;
         }
 
         // 评估当前环境与参数是否触发拦截（返回 null 表示放行，返回文案表示拦截理由）
-        String comment = strategy.evaluate(trace, args);
+        String comment = strategy.evaluate(trace, toolExchanger.getArgs());
         if (comment == null) {
             return;
         }
 
         // 获取会话上下文中的决策实体
-        HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + toolName);
+        HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + toolExchanger.getToolName());
 
         // 1. 阶段：暂无决策 —— 挂起任务
         if (decision == null) {
-            trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(toolName, new LinkedHashMap<>(args), comment));
+            trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(toolExchanger.getToolName(), new LinkedHashMap<>(toolExchanger.getArgs()), comment));
             trace.getSession().pending(true, comment);
             trace.setFinalAnswer(comment);
 
@@ -92,11 +93,11 @@ public class HITLInterceptor implements ReActInterceptor {
         if (decision.isApproved()) {
             // 情况：批准执行 —— 处理参数修正
             if (decision.getModifiedArgs() != null) {
-                args.putAll(decision.getModifiedArgs());
+                toolExchanger.getArgs().putAll(decision.getModifiedArgs());
             }
         } else if (decision.isSkipped()) {
             String msg = decision.getCommentOrDefault("操作跳过：请继续下一步。");
-            trace.setLastObservation(msg);
+            toolExchanger.setResult(msg);
         } else {
             // 拒绝：直接结束或给 Observation
             String msg = decision.getCommentOrDefault("操作拒绝：人工审批未通过。");
@@ -108,21 +109,21 @@ public class HITLInterceptor implements ReActInterceptor {
     }
 
     @Override
-    public void onObservation(ReActTrace trace, String toolName, String result, long durationMs) {
-        HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + toolName);
+    public void onObservation(ReActTrace trace, ToolExchanger toolExchanger, long durationMs) {
+        HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + toolExchanger.getToolName());
 
         if (decision != null && decision.isApproved()) {
             if (Assert.isNotEmpty(decision.getComment())) {
-                trace.setLastObservation(result + " (Note: " + decision.getComment() + ")");
+                toolExchanger.setResult(toolExchanger.getResult() + " (Note: " + decision.getComment() + ")");
             }
         }
     }
 
     @Override
-    public void onActionEnd(ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage result, Throwable error) {
+    public void onActionEnd(ReActTrace trace, ToolExchanger toolExchanger, ChatMessage result, Throwable error) {
         // 审批闭环后的现场清理，确保 Session 状态幂等
         trace.getContext().remove(HITL.LAST_INTERVENED);
-        trace.getContext().remove(HITL.DECISION_PREFIX + toolName);
+        trace.getContext().remove(HITL.DECISION_PREFIX + toolExchanger.getToolName());
     }
 
     /**

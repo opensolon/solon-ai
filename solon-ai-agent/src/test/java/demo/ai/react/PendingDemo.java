@@ -5,6 +5,7 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.react.task.ToolExchanger;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.core.util.RunUtil;
@@ -21,7 +22,7 @@ public class PendingDemo {
         ReActAgent agent = ReActAgent.of(null)
                 .defaultInterceptorAdd(new ReActInterceptor() {
                     @Override
-                    public void onActionStart(ReActTrace trace, String toolName, Map<String, Object> args) {
+                    public void onActionStart(ReActTrace trace, ToolExchanger toolExchanger) {
                         trace.getSession().pending(true, "不让你查");
                     }
                 })

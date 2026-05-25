@@ -28,7 +28,6 @@ import org.noear.solon.ai.chat.interceptor.ToolChain;
 import org.noear.solon.ai.chat.interceptor.ToolRequest;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolResult;
@@ -102,11 +101,11 @@ public class ActionTask {
             LOG.debug("Action for agent [{}], toolName:{}, args:{}", config.getName(), toolName, args);
         }
 
-        trace.setLastObservation(null);
+        ToolExchanger toolExchanger = new ToolExchanger(toolName, args);
 
         // 1. 触发前置生命周期
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onActionStart(trace, toolName, args);
+            item.target.onActionStart(trace, toolExchanger);
         }
 
         // 2. 如果前置拦截器直接挂起或截断了路由，立刻退出（交给 finally 闭环）
@@ -125,24 +124,24 @@ public class ActionTask {
 
         try {
             // 4. 执行工具调用
-            if (Assert.isEmpty(trace.getLastObservation())) {
+            if (Assert.isEmpty(toolExchanger.getResult())) {
                 result = executeTool(trace, toolName, args);
             } else {
-                result = ToolResult.success(trace.getLastObservation());
+                result = ToolResult.success(toolExchanger.getResult());
             }
 
             // 5. 触发后置观测拦截器（只有工具真正执行有结果时才进入观察）
             if (result != null && !trace.getSession().isPending() && !Agent.ID_END.equals(trace.getRoute())) {
                 long durationMs = System.currentTimeMillis() - startMs;
-                trace.setLastObservation(result.getContent());
+                toolExchanger.setResult(result.getContent());
 
                 for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-                    item.target.onObservation(trace, toolName, result.getContent(), durationMs);
+                    item.target.onObservation(trace, toolExchanger, durationMs);
                 }
             }
 
             // 最终返回当前轮次处理后的最新观测值
-            return trace.getLastObservation() != null ? ToolResult.success(trace.getLastObservation()) : null;
+            return toolExchanger.getResult() != null ? ToolResult.success(toolExchanger.getResult()) : null;
 
         } catch (Throwable e) {
             thrownError = e;
@@ -162,16 +161,16 @@ public class ActionTask {
                             false
                     );
                 }
-            } else if (trace.getLastObservation() != null) {
+            } else if (toolExchanger.getResult() != null) {
                 if (call == null) {
-                    observationMessage = ChatMessage.ofUser("Observation: " + trace.getLastObservation());
+                    observationMessage = ChatMessage.ofUser("Observation: " + toolExchanger.getResult());
                 } else {
-                    observationMessage = ChatMessage.ofTool(ToolResult.success(trace.getLastObservation()), call.getName(), call.getId(), false);
+                    observationMessage = ChatMessage.ofTool(ToolResult.success(toolExchanger.getResult()), call.getName(), call.getId(), false);
                 }
             }
 
             // 无论正常结束、挂起退出、还是中途抛出 critical error，100% 走统一清理与下发逻辑
-            handleSingleObservation(trace, toolName, args, observationMessage, thrownError, toolResults);
+            handleSingleObservation(trace, toolExchanger, observationMessage, thrownError, toolResults);
         }
     }
 
@@ -247,7 +246,7 @@ public class ActionTask {
                     } catch (Throwable e) {
                         // 解析异常回传 (优化点 2)
                         ChatMessage observationMessage = ChatMessage.ofUser("Observation: Error parsing Action JSON: " + e.getMessage());
-                        handleSingleObservation(trace, null, null, observationMessage, e, toolResults);
+                        toolResults.add(observationMessage);
                         foundAny = true;
                         break;
                     }
@@ -270,7 +269,7 @@ public class ActionTask {
         // 容错处理：如果声明了 Action 但没解析成功，或模型说话不规整 (优化点 3)
         if (!foundAny && actionLabelIndex >= 0) {
             ChatMessage chatMessage = ChatMessage.ofUser("Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}");
-            handleSingleObservation(trace, null, null, chatMessage, null, toolResults);
+            toolResults.add(chatMessage);
         }
 
         if (toolResults.size() > 0) {
@@ -284,7 +283,7 @@ public class ActionTask {
      * 优化点 4：统一 Observation 落地逻辑。
      * 改变了原有 StringBuilder 拼接逻辑，直接进行 WorkingMemory 入库并触发流
      */
-    private void handleSingleObservation(ReActTrace trace, String toolName, Map<String, Object> args,
+    private void handleSingleObservation(ReActTrace trace, ToolExchanger toolExchanger,
                                          ChatMessage observationMessage, Throwable error, List<ChatMessage> toolResults) {
 
         if (observationMessage == null) {
@@ -300,7 +299,7 @@ public class ActionTask {
         if (trace.getOptions().getStreamSink() != null) {
             try {
                 trace.getOptions().getStreamSink().next(
-                        new ActionEndChunk(trace, toolName, args, observationMessage, error));
+                        new ActionEndChunk(trace, toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error));
             } catch (Throwable e) {
                 LOG.error("Push ActionEndChunk failed", e);
             }
@@ -309,7 +308,7 @@ public class ActionTask {
         // 2. 拦截器现场清理闭环
         for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
             try {
-                entity.target.onActionEnd(trace, toolName, args, observationMessage, error);
+                entity.target.onActionEnd(trace, toolExchanger, observationMessage, error);
             } catch (Throwable e) {
                 LOG.error("Interceptor onActionEnd execution failed", e);
             }
