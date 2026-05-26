@@ -185,8 +185,8 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	@Override
 	public void toHttpHandler(SolonApp app) {
 		if (app != null) {
-			app.get(this.sseEndpoint, this::handleSseConnection);
-			app.post(this.messageEndpoint, this::handleMessage);
+			app.router().get(this.sseEndpoint, this::handleSseConnection);
+			app.router().post(this.messageEndpoint, this::handleMessage);
 		}
 	}
 

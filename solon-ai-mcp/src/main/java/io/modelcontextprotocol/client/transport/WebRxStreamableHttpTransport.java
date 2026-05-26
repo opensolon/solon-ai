@@ -491,17 +491,17 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
     }
 
     private Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> parse(ServerSentEvent event) {
-        if (MESSAGE_EVENT_TYPE.equals(event.event()) || isObjectJsonString(event.data())) {
+        if (MESSAGE_EVENT_TYPE.equals(event.getEvent()) || isObjectJsonString(event.getData())) {
             try {
                 // We don't support batching ATM and probably won't since the next version
                 // considers removing it.
-                McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.jsonMapper, event.data());
-                String eventId = event.id();
+                McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.jsonMapper, event.getData());
+                String eventId = event.getId();
                 Optional<String> idOpt = (eventId != null) ? Optional.of(eventId) : Optional.empty();
                 return Tuples.of(idOpt, Arrays.asList(message));
 
             } catch (IOException ioException) {
-                throw new McpTransportException("Error parsing JSON-RPC message: " + event.data(), ioException);
+                throw new McpTransportException("Error parsing JSON-RPC message: " + event.getData(), ioException);
             }
         } else {
             logger.debug("Received SSE event with type: {}", event);

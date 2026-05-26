@@ -363,17 +363,17 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      */
     private boolean onEventStream(ChatResponseDefault resp, ServerSentEvent event, FluxSink<? super ChatResponse> sink) {
         if (log.isDebugEnabled()) {
-            log.debug("llm-response[{}]: {}", resp.getRequest().getAgentAndModel(), event.data());
+            log.debug("llm-response[{}]: {}", resp.getRequest().getAgentAndModel(), event.getData());
         }
 
-        resp.setResponseData(event.data());
+        resp.setResponseData(event.getData());
 
-        if (Assert.isEmpty(event.data())) {
+        if (Assert.isEmpty(event.getData())) {
             return true;
         }
 
         resp.reset();
-        if (dialect.parseResponseJson(config, resp, event.data())) {
+        if (dialect.parseResponseJson(config, resp, event.getData())) {
             if (resp.getError() != null) {
                 sink.error(resp.getError());
                 return false;

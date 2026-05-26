@@ -56,7 +56,7 @@ public class ToolCallResultConverterDefault implements ToolCallResultConverter {
 
     protected String serializeToJson(Object obj) throws ConvertException {
         if (Solon.app() != null) {
-            Serializer<String> serializer = Solon.app().serializerManager().get("@json");
+            Serializer<String> serializer = Solon.app().serializers().jsonOf();
             if (serializer != null) {
                 try {
                     return serializer.serialize(obj);

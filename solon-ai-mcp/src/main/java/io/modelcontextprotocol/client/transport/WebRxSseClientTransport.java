@@ -185,8 +185,8 @@ public class WebRxSseClientTransport implements McpClientTransport {
 		// -> allow optimizing for eager connection start using a constructor flag
 		Flux<ServerSentEvent> events = eventStream();
 		this.inboundSubscription = events.concatMap(event -> Mono.just(event).<JSONRPCMessage>handle((e, s) -> {
-					if (ENDPOINT_EVENT_TYPE.equals(event.event())) {
-						String messageEndpointUri = event.data();
+					if (ENDPOINT_EVENT_TYPE.equals(event.getEvent())) {
+						String messageEndpointUri = event.getData();
 						if (messageEndpointSink.tryEmitValue(messageEndpointUri).isSuccess()) {
 							s.complete();
 						} else {
@@ -194,9 +194,9 @@ public class WebRxSseClientTransport implements McpClientTransport {
 							// received
 							s.error(new RuntimeException("Failed to handle SSE endpoint event"));
 						}
-					} else if (MESSAGE_EVENT_TYPE.equals(event.event())) {
+					} else if (MESSAGE_EVENT_TYPE.equals(event.getEvent())) {
 						try {
-							JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.jsonMapper, event.data());
+							JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.jsonMapper, event.getData());
 							s.next(message);
 						} catch (IOException ioException) {
 							s.error(ioException);

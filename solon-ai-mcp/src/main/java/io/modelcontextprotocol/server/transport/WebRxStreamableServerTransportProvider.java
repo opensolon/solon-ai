@@ -133,9 +133,9 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 	@Override
 	public void toHttpHandler(SolonApp app) {
 		if (app != null) {
-			app.get(this.mcpEndpoint, this::handleGet);
-			app.post(this.mcpEndpoint, this::handlePost);
-			app.delete(this.mcpEndpoint, this::handleDelete);
+			app.router().get(this.mcpEndpoint, this::handleGet);
+			app.router().post(this.mcpEndpoint, this::handlePost);
+			app.router().delete(this.mcpEndpoint, this::handleDelete);
 		}
 	}
 

@@ -115,11 +115,7 @@ public class MethodExecuteHandler extends AbstractEntityReader {
                 }
 
                 //支持泛型的转换 如：Map<T>
-                if (p.spec().isGenericType()) {
-                    return tmp.toBean(p.getGenericType());
-                } else {
-                    return tmp.toBean(pt);
-                }
+                return tmp.toBean(p.getGenericType());
             }
         }
 
@@ -130,13 +126,7 @@ public class MethodExecuteHandler extends AbstractEntityReader {
             }
 
             //集合类型转换
-            if (p.spec().isGenericType()) {
-                //转换带泛型的集合
-                return tmp.toBean(p.getGenericType());
-            } else {
-                //不仅可以转换为List 还可以转换成Set
-                return tmp.toBean(pt);
-            }
+            return tmp.toBean(p.getGenericType());
         }
 
         return tmp.getValue();

@@ -227,7 +227,7 @@ public class StatefulMcpServerHost implements McpServerHost {
             IMcpHttpServerTransport tmp = (IMcpHttpServerTransport) mcpTransportProvider;
 
             //如果有注册
-            if (Utils.isNotEmpty(Solon.app().router().getBy(tmp.getMcpEndpoint()))) {
+            if (Utils.isNotEmpty(Solon.app().router().findBy(tmp.getMcpEndpoint()))) {
                 Solon.app().router().remove(tmp.getMcpEndpoint());
                 return true;
             }
@@ -245,7 +245,7 @@ public class StatefulMcpServerHost implements McpServerHost {
             IMcpHttpServerTransport tmp = (IMcpHttpServerTransport) mcpTransportProvider;
 
             //如果没有注册
-            if (Utils.isEmpty(Solon.app().router().getBy(tmp.getMcpEndpoint()))) {
+            if (Utils.isEmpty(Solon.app().router().findBy(tmp.getMcpEndpoint()))) {
                 tmp.toHttpHandler(Solon.app());
                 return true;
             }
