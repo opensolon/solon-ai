@@ -117,7 +117,7 @@ public class PdfSkill extends AbsSkill {
 
             try (OutputStream os = new FileOutputStream(target.toFile())) {
                 PdfRendererBuilder builder = new PdfRendererBuilder();
-                builder.useFastMode();
+                //builder.useFastMode(); //todo: 可能会造成中文乱码，2026.5.26
 
                 // 核心改动：不再寻找具体路径，而是通过流加载
                 if (fontSupplier != null) {
