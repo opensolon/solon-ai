@@ -11,7 +11,7 @@
 *  mcp channel 概念改为 transport （并保持兼容）???
 
 
-### 3.11.0
+### 4.0.0
 
 * 新增 solon-ai-mcp MCP_2025_11_25 协议支持（支持 ServerTransportSecurityValidator 签权）
 * 添加 solon-ai-agent ReActInterceptor.onReasonStart 事件方法
