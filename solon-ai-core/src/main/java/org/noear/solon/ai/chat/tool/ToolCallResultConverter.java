@@ -30,16 +30,6 @@ import java.lang.reflect.Type;
 @FunctionalInterface
 public interface ToolCallResultConverter {
     /**
-     * 匹配
-     *
-     * @deprecated 3.4
-     */
-    @Deprecated
-    default boolean matched(String mimeType) {
-        return true;
-    }
-
-    /**
      * 转换
      *
      * @param result     结果

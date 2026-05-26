@@ -17,7 +17,7 @@ public class AuthDemo {
         //通过 baisc auth 传递
         McpClientProvider toolProvider = McpClientProvider.builder()
                 .url("http://xxx.xxx.xxx/sse")
-                .apiKey("yyy")
+                .header("Authorization", "Bearer xxx")
                 .build();
     }
 
@@ -25,7 +25,7 @@ public class AuthDemo {
         //通过 baisc auth 传递
         McpClientProvider toolProvider = McpClientProvider.builder()
                 .url("http://xxx.xxx.xxx/sse")
-                .headerSet("tokey", "yyy")
+                .header("tokey", "yyy")
                 .build();
     }
 }

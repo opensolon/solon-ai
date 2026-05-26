@@ -55,17 +55,6 @@ public class RerankingOptions {
     }
 
     /**
-     * 选项添加
-     *
-     * @deprecated 3.9.0 {@link #optionSet(String, Object)}
-     */
-    @Deprecated
-    public RerankingOptions optionAdd(String key, Object val){
-        return optionSet(key, val);
-    }
-
-
-    /**
      * 重新排序的数量
      *
      * @param top_n [1024、768、512]

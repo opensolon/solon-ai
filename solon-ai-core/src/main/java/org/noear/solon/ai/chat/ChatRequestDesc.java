@@ -16,7 +16,6 @@
 package org.noear.solon.ai.chat;
 
 import org.noear.solon.lang.Preview;
-import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
 
 import java.io.IOException;

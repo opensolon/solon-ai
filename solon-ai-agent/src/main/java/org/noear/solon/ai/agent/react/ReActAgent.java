@@ -365,15 +365,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
-        /**
-         * @deprecated 3.9.1 {@link #role(String)}
-         *
-         */
-        @Deprecated
-        public Builder description(String val) {
-            return role(val);
-        }
-
         public Builder profile(AgentProfile profile) {
             config.setProfile(profile);
             return this;
@@ -423,14 +414,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         public Builder maxSteps(int val) {
             config.getDefaultOptions().setMaxSteps(val);
             return this;
-        }
-
-        /**
-         * @deprecated 3.10.5 {{@link #autoRethink(boolean)}}
-         */
-        @Deprecated
-        public Builder maxStepsExtensible(boolean val) {
-            return autoRethink(val);
         }
 
         public Builder autoRethink(boolean val) {
@@ -563,27 +546,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         public Builder feedbackReasonDescription(Function<ReActTrace, String> provider) {
             config.getDefaultOptions().setFeedbackReasonDescriptionProvider(provider);
             return this;
-        }
-
-
-        /**
-         * 启用规划模式（推理前先制定计划）
-         *
-         * @deprecated 3.9.0 {@link #planningMode(boolean)}
-         */
-        @Deprecated
-        public Builder enablePlanning(boolean val) {
-            return planningMode(val);
-        }
-
-        /**
-         * 启用反馈模式（允许主动寻求外部帮助/反馈）
-         *
-         * @deprecated 3.9.0 {@link #feedbackMode(boolean)}
-         */
-        @Deprecated
-        public Builder planInstruction(Function<ReActTrace, String> provider) {
-            return planningInstruction(provider);
         }
 
         public ReActAgent build() {

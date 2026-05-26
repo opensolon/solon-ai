@@ -265,7 +265,7 @@ public abstract class AbsChatTest {
 
         System.out.println("-----------------------------------");
 
-        System.out.println(chatSession.toNdjson());
+        System.out.println(ChatMessage.toNdjson(chatSession.getMessages()));
 
         System.out.println("-----------------------------------");
 
@@ -336,7 +336,7 @@ public abstract class AbsChatTest {
 
         System.out.println("-----------------------------------");
 
-        System.out.println(chatSession.toNdjson());
+        System.out.println(ChatMessage.toNdjson(chatSession.getMessages()));
 
         System.out.println("-----------------------------------");
 
@@ -401,7 +401,7 @@ public abstract class AbsChatTest {
         latch.await();
 
         //打印消息
-        log.info("{}", chatSession.toNdjson());
+        log.info("{}", ChatMessage.toNdjson(chatSession.getMessages()));
         log.info("{}", respHolder.get().getAggregationMessage());
 
         assert chatSession.getMessages().size() == 4;
@@ -435,7 +435,7 @@ public abstract class AbsChatTest {
         latch.await();
 
         //打印消息
-        log.info("{}", chatSession.toNdjson());
+        log.info("{}", ChatMessage.toNdjson(chatSession.getMessages()));
         log.info("{}", respHolder.get().getAggregationMessage());
 
         assert chatSession.getMessages().size() == 5;

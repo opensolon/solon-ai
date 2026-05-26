@@ -32,10 +32,11 @@ public abstract class AbsThinkTest {
         ChatModel chatModel = getChatModelBuilder().build();
 
         ChatSession chatSession = InMemoryChatSession.builder().build();
-        chatSession.addMessage(ChatMessage.ofUser("hello"));
 
         //流返回
-        Publisher<ChatResponse> publisher = chatModel.prompt(chatSession).stream();
+        Publisher<ChatResponse> publisher = chatModel.prompt("hello")
+                .session(chatSession)
+                .stream();
         List<AssistantMessage> assistantMessageList = new ArrayList<>();
 
         CountDownLatch doneLatch = new CountDownLatch(1);
@@ -58,12 +59,12 @@ public abstract class AbsThinkTest {
 
 
         //序列化测试
-        String ndjson1 = chatSession.toNdjson();
+        String ndjson1 = ChatMessage.toNdjson(chatSession.getMessages());
         System.out.println(ndjson1);
 
         chatSession.clear();
-        chatSession.loadNdjson(ndjson1);
-        String ndjson2 = chatSession.toNdjson();
+        chatSession.addMessage(ChatMessage.fromNdjson(ndjson1));
+        String ndjson2 = ChatMessage.toNdjson(chatSession.getMessages());
         System.out.println(ndjson2);
         assert ndjson1.equals(ndjson2);
 
@@ -78,10 +79,11 @@ public abstract class AbsThinkTest {
                 .build();
 
         ChatSession chatSession = InMemoryChatSession.builder().build();
-        chatSession.addMessage("如何保证睡眠质量？");
 
         //流返回
-        Publisher<ChatResponse> publisher = chatModel.prompt(chatSession).stream();
+        Publisher<ChatResponse> publisher = chatModel.prompt("如何保证睡眠质量？")
+                .session(chatSession)
+                .stream();
 
         List<String> list = new ArrayList<>();
         CountDownLatch doneLatch = new CountDownLatch(1);
@@ -101,7 +103,7 @@ public abstract class AbsThinkTest {
 
         doneLatch.await();
 
-        log.warn(chatSession.toNdjson());
+        log.warn(ChatMessage.toNdjson(chatSession.getMessages()));
 
         Assertions.assertEquals(1, list.stream().filter(s -> s.equals("<think>")).count(), "<think> 数量");
         Assertions.assertEquals(1, list.stream().filter(s -> s.equals("</think>")).count(), "</think> 数量");

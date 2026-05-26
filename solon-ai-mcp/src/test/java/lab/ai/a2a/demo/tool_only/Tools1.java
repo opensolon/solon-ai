@@ -1,12 +1,13 @@
 package lab.ai.a2a.demo.tool_only;
 
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 
 /**
  * @author haiTao.Wang on 2025/8/21.
  */
-public class Tools1 {
+public class Tools1 extends AbsToolProvider {
 
     @ToolMapping(description = "查询天气预报")
     public String getWeather(@Param(description = "城市位置") String location) {

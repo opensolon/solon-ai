@@ -44,9 +44,9 @@ public class InMemoryChatSessionTest {
     public void maxSize1() {
         InMemoryChatSession session = InMemoryChatSession.builder()
                 .maxMessages(3)
-                .systemMessages(ChatMessage.ofSystem("system"))
                 .build();
 
+        session.addMessage(ChatMessage.ofSystem("system"));
         session.addMessage(ChatMessage.ofUser("1"));
         session.addMessage(ChatMessage.ofUser("2"));
         session.addMessage(ChatMessage.ofUser("3"));

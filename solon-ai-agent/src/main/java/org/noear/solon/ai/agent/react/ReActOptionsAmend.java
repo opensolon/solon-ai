@@ -76,15 +76,6 @@ public class ReActOptionsAmend extends ModelOptionsAmend<ReActOptionsAmend, ReAc
         return this;
     }
 
-
-    /**
-     * @deprecated 3.10.5 {{@link #autoRethink(boolean)}}
-     */
-    @Deprecated
-    public ReActOptionsAmend maxStepsExtensible(boolean val) {
-        return autoRethink(val);
-    }
-
     public ReActOptionsAmend autoRethink(boolean val) {
         options.setAutoRethink(val);
         return this;

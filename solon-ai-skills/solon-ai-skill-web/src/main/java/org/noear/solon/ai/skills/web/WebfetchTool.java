@@ -51,10 +51,6 @@ public class WebfetchTool extends AbsToolProvider {
     private int maxRetries = 3;
     private String userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36";
 
-    /**
-     * @deprecated 3.10.5
-     */
-    @Deprecated
     public WebfetchTool retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         return this;

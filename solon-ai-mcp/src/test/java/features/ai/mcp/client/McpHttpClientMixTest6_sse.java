@@ -27,7 +27,7 @@ public class McpHttpClientMixTest6_sse {
     static McpClientProvider mcpClient = McpClientProvider.builder()
             .channel(McpChannel.SSE)
             .url("http://localhost:8081/demo6/sse?token=3")
-            .headerSet("user", "2")
+            .header("user", "2")
             .cacheSeconds(30)
             .build();
 

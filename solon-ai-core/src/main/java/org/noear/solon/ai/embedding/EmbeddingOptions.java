@@ -79,16 +79,6 @@ public class EmbeddingOptions {
     }
 
     /**
-     * 选项添加
-     *
-     * @deprecated 3.9.0 {@link #optionSet(String, Object)}
-     */
-    @Deprecated
-    public EmbeddingOptions optionAdd(String key, Object val) {
-        return optionSet(key, val);
-    }
-
-    /**
      * 维度
      *
      * @param dimensions [1024、768、512]

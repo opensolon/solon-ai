@@ -194,29 +194,6 @@ public interface ChatMessage extends Serializable {
         return new UserMessageTemplate(tmpl);
     }
 
-
-    /**
-     * 创建用户消息模板
-     *
-     * @deprecated 3.3 {@link #ofUserTmpl(String)}
-     */
-    @Deprecated
-    static UserMessageTemplate template(String tmpl) {
-        return ofUserTmpl(tmpl);
-    }
-
-
-    /**
-     * 用户消息增强
-     *
-     * @deprecated 3.3 {@link #ofUserAugment(String, Object)}
-     */
-    @Deprecated
-    static ChatMessage augment(String message, Object context) {
-        return ofUserAugment(message, context);
-    }
-
-
     /// /////////////////////////////////
 
     /**

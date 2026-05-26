@@ -75,10 +75,6 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
         this.chatModelSupplier = chatModelSupplier;
     }
 
-    /**
-     * @deprecated 3.10.5
-     */
-    @Deprecated
     public KeyInfoExtractionStrategy retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         return this;

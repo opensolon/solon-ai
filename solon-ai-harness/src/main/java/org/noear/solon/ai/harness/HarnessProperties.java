@@ -60,11 +60,6 @@ public class HarnessProperties implements Serializable {
     //最大步数
     private int maxSteps = 30;
 
-    /**
-     * @deprecated 3.10.5 {@link #autoRethink}
-     */
-    @Deprecated
-    private boolean maxStepsAutoExtensible = true;
     //自我反思
     private boolean autoRethink = true;
 
@@ -239,29 +234,11 @@ public class HarnessProperties implements Serializable {
         return models.get(0);
     }
 
-    /**
-     * @deprecated 3.10.5 {@link #isAutoRethink()}
-     */
-    @Deprecated
-    public boolean isMaxStepsAutoExtensible() {
-        return isAutoRethink();
-    }
-
-    /**
-     * @deprecated 3.10.5 {@link #setAutoRethink(boolean)}
-     */
-    @Deprecated
-    public void setMaxStepsAutoExtensible(boolean maxStepsAutoExtensible) {
-        this.maxStepsAutoExtensible = maxStepsAutoExtensible;
-        this.autoRethink = maxStepsAutoExtensible;
-    }
-
     public boolean isAutoRethink() {
-        return autoRethink && maxStepsAutoExtensible;
+        return autoRethink;
     }
 
     public void setAutoRethink(boolean autoRethink) {
-        this.maxStepsAutoExtensible = autoRethink;
         this.autoRethink = autoRethink;
     }
 

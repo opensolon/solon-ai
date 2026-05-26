@@ -21,7 +21,6 @@ import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.dialect.ChatDialectManager;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.skill.SkillProvider;
 import org.noear.solon.ai.chat.tool.*;
@@ -85,16 +84,6 @@ public class ChatModel implements AiModel {
 
     public String getProvider(){
         return config.getProvider();
-    }
-
-    /**
-     * 提示语
-     *
-     * @deprecated 3.8.4 {@link ChatRequestDesc#session(ChatSession)}
-     */
-    @Deprecated
-    public ChatRequestDesc prompt(ChatSession session) {
-        return new ChatRequestDescDefault(config, dialect, session, null);
     }
 
     /**
@@ -249,11 +238,17 @@ public class ChatModel implements AiModel {
             return this;
         }
 
+        /**
+         * 输出架构
+         */
         public Builder outputSchema(String outputSchema) {
             config.getModelOptions().outputSchema(outputSchema);
             return this;
         }
 
+        /**
+         * 输出架构
+         */
         public Builder outputSchema(Type type) {
             config.getModelOptions().outputSchema(type);
             return this;
@@ -304,17 +299,6 @@ public class ChatModel implements AiModel {
             return defaultToolAdd(toolProvider.getTools());
         }
 
-        /**
-         * 默认工具添加（即每次请求都会带上）
-         *
-         * @param toolObj 工具对象
-         * @deprecated 3.10.1
-         */
-        @Deprecated
-        public Builder defaultToolAdd(Object toolObj) {
-            config.getModelOptions().toolAdd(toolObj);
-            return this;
-        }
 
         /**
          * 默认工具添加（即每次请求都会带上）
@@ -414,99 +398,6 @@ public class ChatModel implements AiModel {
          */
         public ChatModel build() {
             return new ChatModel(config);
-        }
-
-        //----------------
-
-        /**
-         * 添加默认选项
-         *
-         * @deprecated 3.8.4 {@link #modelOptions(Consumer)}
-         */
-        @Deprecated
-        public Builder defaultOptionAdd(String key, Object val) {
-            config.addDefaultOption(key, val);
-            return this;
-        }
-
-
-        /**
-         * 默认工具添加（即每次请求都会带上）
-         *
-         * @param tool 工具对象
-         * @deprecated 3.8.4 {@link #defaultToolAdd(FunctionTool)}
-         */
-        @Deprecated
-        public Builder defaultToolsAdd(FunctionTool tool) {
-            return defaultToolAdd(tool);
-        }
-
-        /**
-         * 默认工具添加（即每次请求都会带上）
-         *
-         * @param toolColl 工具集合
-         * @deprecated 3.8.4 {@link #defaultToolAdd(Iterable)}
-         */
-        @Deprecated
-        public Builder defaultToolsAdd(Iterable<FunctionTool> toolColl) {
-            return defaultToolAdd(toolColl);
-        }
-
-        /**
-         * 默认工具添加（即每次请求都会带上）
-         *
-         * @param toolProvider 工具提供者
-         * @deprecated 3.8.4 {@link #defaultToolAdd(ToolProvider)}
-         */
-        @Deprecated
-        public Builder defaultToolsAdd(ToolProvider toolProvider) {
-            return defaultToolAdd(toolProvider.getTools());
-        }
-
-        /**
-         * 默认工具添加（即每次请求都会带上）
-         *
-         * @param toolObj 工具对象
-         * @deprecated 3.8.4 {@link #defaultToolAdd(Object)}
-         */
-        @Deprecated
-        public Builder defaultToolsAdd(Object toolObj) {
-            return defaultToolAdd(toolObj);
-        }
-
-        /**
-         * 默认工具添加（即每次请求都会带上）
-         *
-         * @param name        名字
-         * @param toolBuilder 工具构建器
-         * @deprecated 3.8.4 {@link #defaultToolAdd(String, Consumer)}
-         */
-        @Deprecated
-        public Builder defaultToolsAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
-            return defaultToolAdd(name, toolBuilder);
-        }
-
-
-        /**
-         * 默认工具上下文添加
-         *
-         * @deprecated 3.8.4 {@link #modelOptions(Consumer)}
-         */
-        @Deprecated
-        public Builder defaultToolsContextAdd(String key, Object value) {
-            config.getModelOptions().toolContextPut(key, value);
-            return this;
-        }
-
-        /**
-         * 默认工具上下文添加
-         *
-         * @deprecated 3.8.4 {@link #modelOptions(Consumer)}
-         */
-        @Deprecated
-        public Builder defaultToolsContextAdd(Map<String, Object> map) {
-            config.getModelOptions().toolContextPut(map);
-            return this;
         }
     }
 }

@@ -25,7 +25,7 @@ public class McpHttpClientMixTest4 {
     static McpClientProvider mcpClient = McpClientProvider.builder()
             .channel(McpChannel.STREAMABLE)
             .url("http://localhost:8081/demo4/sse?token=3")
-            .headerSet("user", "2")
+            .header("user", "2")
             .cacheSeconds(30)
             .build();
 

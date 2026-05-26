@@ -1,6 +1,7 @@
 package features.ai.chat.tool;
 
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 
 import java.util.HashMap;
@@ -8,7 +9,7 @@ import java.util.HashMap;
 /**
  * @author noear 2025/5/7 created
  */
-public class Case8Tools {
+public class Case8Tools extends AbsToolProvider {
     @ToolMapping(description = "查询设备所有参数信息、日用电量、日产液量、生产时间等")
     public HashMap<Object, Object> getOilWellData(
             @Param(description = "设备名称") String name,

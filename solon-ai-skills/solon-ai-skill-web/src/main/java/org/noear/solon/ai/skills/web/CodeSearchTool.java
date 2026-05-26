@@ -70,10 +70,6 @@ public class CodeSearchTool extends AbsToolProvider {
         getMcpClient();
     }
 
-    /**
-     * @deprecated 3.10.5
-     */
-    @Deprecated
     public CodeSearchTool retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         return this;

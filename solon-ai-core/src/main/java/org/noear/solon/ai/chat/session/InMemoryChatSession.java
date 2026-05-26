@@ -52,23 +52,6 @@ public class InMemoryChatSession implements ChatSession {
         this.maxMessages = maxMessages;
     }
 
-    /**
-     * @deprecated 3.9.1 不建议在会话里放系统消息
-     *
-     */
-    @Deprecated
-    public InMemoryChatSession(String sessionId, List<SystemMessage> systemMessages, List<ChatMessage> messages, int maxMessages) {
-        this(sessionId, maxMessages);
-
-        if (systemMessages != null) {
-            this.messages.addAll(systemMessages);
-        }
-
-        if (messages != null) {
-            this.messages.addAll(messages);
-        }
-    }
-
 
     /**
      * 获取会话id
@@ -291,7 +274,6 @@ public class InMemoryChatSession implements ChatSession {
     public static class Builder {
         private String sessionId;
         private List<ChatMessage> messages;
-        private List<SystemMessage> systemMessages;
         private int maxMessages;
 
         /**
@@ -299,17 +281,6 @@ public class InMemoryChatSession implements ChatSession {
          */
         public Builder sessionId(String sessionId) {
             this.sessionId = sessionId;
-            return this;
-        }
-
-        /**
-         * 系统消息
-         *
-         * @deprecated 3.9.1 不建议在会话里放系统消息
-         */
-        @Deprecated
-        public Builder systemMessages(SystemMessage... systemMessages) {
-            this.systemMessages = Arrays.asList(systemMessages);
             return this;
         }
 
@@ -335,7 +306,6 @@ public class InMemoryChatSession implements ChatSession {
          */
         public InMemoryChatSession build() {
             InMemoryChatSession session = new InMemoryChatSession(sessionId, maxMessages);
-            session.addMessage(systemMessages);
             session.addMessage(messages);
             return session;
         }

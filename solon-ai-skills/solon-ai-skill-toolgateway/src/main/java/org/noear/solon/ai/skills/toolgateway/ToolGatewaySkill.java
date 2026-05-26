@@ -50,10 +50,6 @@ public class ToolGatewaySkill extends AbsSkill {
         internalAddTool(callTool);
     }
 
-    /**
-     * @deprecated 3.10.5
-     */
-    @Deprecated
     public ToolGatewaySkill retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         return this;

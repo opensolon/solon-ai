@@ -25,14 +25,9 @@ public class ToolOnlyTest {
                 .defaultToolAdd(new Tools2())
                 .build();
 
-        InMemoryChatSession chatSession = InMemoryChatSession.builder()
-                .maxMessages(10)
-                .build();
-
-        chatSession.addMessage(ChatMessage.ofUser("杭州今天的天气适合去哪里玩？"));
 
         ChatResponse chatResponse = chatModel
-                .prompt(chatSession)
+                .prompt("杭州今天的天气适合去哪里玩？")
                 .call();
 
         System.err.println(chatResponse.getContent());

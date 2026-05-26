@@ -33,15 +33,12 @@ public class A2ALocalTest {
                 .defaultToolAdd(agentAssistant)
                 .build();
 
-        InMemoryChatSession chatSession = InMemoryChatSession.builder()
-                .systemMessages(agentAssistant.systemMessage())
-                .maxMessages(10)
-                .build();
-
-        chatSession.addMessage(ChatMessage.ofUser("杭州今天的天气适合去哪里玩？"));
 
         ChatResponse chatResponse = chatModel
-                .prompt(chatSession)
+                .prompt("杭州今天的天气适合去哪里玩？")
+                .options(o -> {
+                    o.systemPrompt(agentAssistant.systemMessage().getContent());
+                })
                 .call();
 
         System.err.println(chatResponse.getContent());

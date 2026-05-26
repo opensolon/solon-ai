@@ -465,17 +465,6 @@ public class HarnessEngine {
             return this;
         }
 
-        /**
-         * 添加扩展
-         *
-         * @deprecated 3.10.4
-         */
-        @Deprecated
-        public Builder extensionAdd(HarnessExtension extension) {
-            this.properties.addExtension(extension);
-            return this;
-        }
-
         public HarnessEngine build() {
             Objects.nonNull(properties);
             Objects.nonNull(sessionProvider);

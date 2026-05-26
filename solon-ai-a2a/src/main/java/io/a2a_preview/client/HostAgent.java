@@ -73,36 +73,25 @@ public class HostAgent {
     }
 
     public ChatResponse chatCall(String prompt) throws IOException {
-        return chatModel.prompt(buildSystemMessage(),
-                        ChatMessage.ofUser(prompt))
-                .options(o -> o.toolAdd(agentTools))
+        return chatModel.prompt(prompt)
+                .options(o -> {
+                    o.systemPrompt(buildSystemMessage());
+                    o.toolAdd(agentTools);
+                })
                 .call();
     }
 
-    public ChatResponse chatCall(ChatSession session) throws IOException {
-        session.addMessage(buildSystemMessage());
-
-        return chatModel.prompt(session)
-                .options(o -> o.toolAdd(agentTools))
-                .call();
-    }
 
     public Publisher<ChatResponse> chatStream(String prompt) {
-        return chatModel.prompt(buildSystemMessage(),
-                        ChatMessage.ofUser(prompt))
-                .options(o -> o.toolAdd(agentTools))
+        return chatModel.prompt(prompt)
+                .options(o -> {
+                    o.systemPrompt(buildSystemMessage());
+                    o.toolAdd(agentTools);
+                })
                 .stream();
     }
 
-    public Publisher<ChatResponse> chatStream(ChatSession session) {
-        session.addMessage(buildSystemMessage());
-
-        return chatModel.prompt(session)
-                .options(o -> o.toolAdd(agentTools))
-                .stream();
-    }
-
-    private SystemMessage buildSystemMessage() {
+    private String buildSystemMessage() {
         StringBuilder systemPrompt = new StringBuilder(
                 "您是一位擅长分配任务的专家，负责将用户请求分解为子代理可以执行的任务。能够将用户请求分配给合适的远程代理。\n" +
                         "\n" +
@@ -123,6 +112,6 @@ public class HostAgent {
             systemPrompt.append(item).append("\n");
         }
 
-        return ChatMessage.ofSystem(systemPrompt.toString());
+        return systemPrompt.toString();
     }
 }

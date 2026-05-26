@@ -46,16 +46,6 @@ public class UserMessageTemplate {
 
     /**
      * 配置参数
-     *
-     * @deprecated 3.3 {@link #paramAdd(String, Object)}
-     */
-    @Deprecated
-    public UserMessageTemplate param(String name, Object value) {
-        return paramAdd(name, value);
-    }
-
-    /**
-     * 配置参数
      */
     public UserMessageTemplate paramAdd(String name, Object value) {
         params.put(name, value);
@@ -71,16 +61,6 @@ public class UserMessageTemplate {
         }
 
         return this;
-    }
-
-    /**
-     * 配置感知媒体
-     *
-     * @deprecated 3.9.2
-     */
-    @Deprecated
-    public UserMessageTemplate mediaAdd(ContentBlock block) {
-        return blockAdd(block);
     }
 
     /**

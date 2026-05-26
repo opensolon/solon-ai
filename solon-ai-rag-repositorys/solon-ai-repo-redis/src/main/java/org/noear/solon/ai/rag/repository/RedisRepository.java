@@ -355,14 +355,6 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
         }
 
         /**
-         * @deprecated 3.2 {@link #metadataFields(List)}
-         * */
-        @Deprecated
-        public Builder metadataIndexFields(List<MetadataField> metadataFields) {
-            return metadataFields(metadataFields);
-        }
-
-        /**
          * 设置元数据索引字段
          *
          * @param metadataFields 元数据索引字段

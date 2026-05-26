@@ -215,50 +215,6 @@ public class TeamTrace implements AgentTrace {
         }
     }
 
-    /**
-     * 触发协作流挂起
-     *
-     * @param reason 挂起原因或需要人工确认的提示词
-     * @deprecated 3.9.6 {@link AgentSession#pending(boolean, String)}
-     */
-    @Deprecated
-    public void pending(String reason) {
-        this.finalAnswer = reason;
-
-        // 自动同步中断底层流程引擎
-        if (session != null) {
-            session.pending(true, reason);
-        }
-    }
-
-    /**
-     * 判定当前任务是否正在挂起等待
-     *
-     * @deprecated 3.9.6 {@link AgentSession#isPending()}
-     */
-    @Deprecated
-    public boolean isPending() {
-        if (session == null) {
-            return false;
-        } else {
-            return session.isPending();
-        }
-    }
-
-    /**
-     * 获取挂起的原因或提示信息
-     *
-     * @deprecated 3.9.6 {@link AgentSession#getPendingReason()}
-     */
-    @Deprecated
-    public @Nullable String getPendingReason() {
-        if (session == null) {
-            return null;
-        } else {
-            return session.getPendingReason();
-        }
-    }
-
 
     /**
      * 是否为初始状态

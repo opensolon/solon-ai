@@ -18,6 +18,7 @@ package org.noear.solon.ai.mcp.client;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.ai.util.ProxyDesc;
+import org.noear.solon.annotation.Alias;
 import org.noear.solon.net.http.HttpSslSupplier;
 import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtilsFactory;
@@ -51,28 +52,15 @@ public class McpClientProperties {
     /**
      * 通道（传输方式）
      */
+    @Alias("type")
     private String channel;
-
-    /**
-     * http 接口完整地址
-     *
-     * @deprecated 3.5 {@link #url}
-     */
-    @Deprecated
-    private String apiUrl;
+    @Alias("channel")
+    private String type;
 
     /**
      * http 接口完整地址
      */
     private String url;
-
-    /**
-     * http 接口密钥
-     *
-     * @deprecated 3.7 {@link #headers}
-     */
-    @Deprecated
-    private String apiKey;
 
     /**
      * http 请求头信息
@@ -168,11 +156,9 @@ public class McpClientProperties {
         //用于序列化
     }
 
-    /**
-     * @param apiUrl 接口地址
-     */
-    public McpClientProperties(String apiUrl) {
-        this.apiUrl = apiUrl;
+    public McpClientProperties then(Consumer<McpClientProperties> consumer){
+        consumer.accept(this);
+        return this;
     }
 
     /// ///////////////////
@@ -194,57 +180,24 @@ public class McpClientProperties {
     }
 
     public String getChannel() {
+        if (type != null) {
+            return type;
+        }
+
         return channel;
     }
 
     public void setChannel(String channel) {
+        this.type = channel;
         this.channel = channel;
     }
 
-    /**
-     * @deprecated 3.5 {@link #getUrl()}
-     */
-    @Deprecated
-    public String getApiUrl() {
-        return apiUrl;
-    }
-
-    /**
-     * @deprecated 3.5 {@link #setUrl(String)}
-     */
-    @Deprecated
-    public void setApiUrl(String apiUrl) {
-        this.apiUrl = apiUrl;
-    }
-
     public String getUrl() {
-        if (apiUrl != null) {
-            return apiUrl;
-        }
-
         return url;
     }
 
     public void setUrl(String url) {
-        this.apiUrl = null;
         this.url = url;
-    }
-
-
-    /**
-     * @deprecated 3.5 {@link #getHeaders()}
-     */
-    @Deprecated
-    public String getApiKey() {
-        return apiKey;
-    }
-
-    /**
-     * @deprecated 3.5 {@link #setHeaders(Map)}
-     */
-    @Deprecated
-    public void setApiKey(String apiKey) {
-        this.apiKey = apiKey;
     }
 
     public Map<String, String> getHeaders() {
@@ -466,8 +419,7 @@ public class McpClientProperties {
                 "name='" + name + '\'' +
                 ", version='" + version + '\'' +
                 ", channel='" + channel + '\'' +
-                ", apiUrl='" + apiUrl + '\'' +
-                ", apiKey='" + apiKey + '\'' +
+                ", url='" + url + '\'' +
                 ", headers=" + headers +
                 ", timeout=" + timeout +
                 ", httpTimeout=" + httpTimeout + //默认随 timeout

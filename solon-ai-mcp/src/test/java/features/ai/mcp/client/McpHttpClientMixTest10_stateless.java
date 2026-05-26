@@ -25,7 +25,7 @@ public class McpHttpClientMixTest10_stateless {
     static McpClientProvider mcpClient = McpClientProvider.builder()
             .channel(McpChannel.STREAMABLE)
             .url("http://localhost:8081/demo10/mcp?token=3")
-            .headerSet("user", "2")
+            .header("user", "2")
             .cacheSeconds(30)
             .build();
 

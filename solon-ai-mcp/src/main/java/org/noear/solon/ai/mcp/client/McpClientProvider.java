@@ -128,8 +128,8 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     /**
      * 用于简单构建
      */
-    public McpClientProvider(String apiUrl) {
-        this(new McpClientProperties(apiUrl));
+    public McpClientProvider(String url) {
+        this(new McpClientProperties().then(p -> p.setUrl(url)));
     }
 
     public McpClientProvider(McpClientProperties clientProps) {
@@ -200,9 +200,6 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             webBuilder.baseUri(baseUri);
             webBuilder.factory(clientProps.getHttpFactory());
 
-            if (Utils.isNotEmpty(clientProps.getApiKey())) {
-                webBuilder.headerSet("Authorization", "Bearer " + clientProps.getApiKey());
-            }
 
             clientProps.getHeaders().forEach((k, v) -> {
                 webBuilder.headerSet(k, v);
@@ -968,7 +965,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         // for http
 
         public Builder url(String url) {
-            props.setApiUrl(url);
+            props.setUrl(url);
             return this;
         }
 
@@ -1056,59 +1053,6 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         /// ////////////
 
-        /**
-         * @deprecated 3.5 {@link #url(String)}
-         *
-         */
-        @Deprecated
-        public Builder apiUrl(String apiUrl) {
-            props.setApiUrl(apiUrl);
-            return this;
-        }
-
-        /**
-         * @deprecated 3.5 {@link #header(String, String)}
-         */
-        @Deprecated
-        public Builder apiKey(String apiKey) {
-            props.setApiKey(apiKey);
-            return this;
-        }
-
-        /***
-         * @deprecated 3.5 {@link #header(String, String)}
-         * */
-        @Deprecated
-        public Builder headerSet(String name, String value) {
-            props.getHeaders().put(name, value);
-            return this;
-        }
-
-        /***
-         * @deprecated 3.5 {@link #headers(Map)}
-         * */
-        @Deprecated
-        public Builder headerSet(Map<String, String> headers) {
-            if (Utils.isNotEmpty(headers)) {
-                props.getHeaders().putAll(headers);
-            }
-            return this;
-        }
-
-        /**
-         * 服务端参数（用于 stdio）
-         *
-         * @deprecated 3.5 {@link #command(String)}
-         */
-        @Deprecated
-        public Builder serverParameters(McpServerParameters serverParameters) {
-            Assert.notNull(serverParameters, "The serverParameters can not be null");
-
-            props.setCommand(serverParameters.getCommand());
-            props.setArgs(serverParameters.getArgs());
-            props.setEnv(serverParameters.getEnv());
-            return this;
-        }
 
         /**
          * 工具变更消费者

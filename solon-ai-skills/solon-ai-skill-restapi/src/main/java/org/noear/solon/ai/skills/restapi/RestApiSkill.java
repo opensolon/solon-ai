@@ -69,10 +69,6 @@ public class RestApiSkill extends AbsSkill {
 
     private int maxRetries = 3;
 
-    /**
-     * @deprecated 3.10.5
-     */
-    @Deprecated
     public RestApiSkill retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         return this;
@@ -108,15 +104,6 @@ public class RestApiSkill extends AbsSkill {
     public RestApiSkill defaultAuthenticator(ApiAuthenticator defaultAuthenticator) {
         this.defaultAuthenticator = defaultAuthenticator;
         return this;
-    }
-
-    /**
-     * @deprecated 3.9.6 {@link #defaultAuthenticator(ApiAuthenticator)}
-     *
-     */
-    @Deprecated
-    public RestApiSkill authenticator(ApiAuthenticator authenticator) {
-        return defaultAuthenticator(authenticator);
     }
 
     public RestApiSkill resolver(ApiResolver resolver) {

@@ -2,7 +2,6 @@ package features.ai.rag;
 
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.embedding.EmbeddingModel;
-import org.noear.solon.ai.rag.repository.WebSearchRepository;
 import org.noear.solon.ai.reranking.RerankingModel;
 
 /**
@@ -17,12 +16,12 @@ public class TestUtils {
         return ChatModel.of(apiUrl).provider(provider).model(model).build(); //4.初始化语言模型
     }
 
-    public static WebSearchRepository getWebSearchRepository() {
-        String apiUrl = "https://api.bochaai.com/v1/web-search";
-        String apiKey = "sk-5d36eae2c4a54e2596c7625d9888a9d8";
-
-        return WebSearchRepository.of(apiUrl).apiKey(apiKey).build();
-    }
+//    public static WebSearchRepository getWebSearchRepository() {
+//        String apiUrl = "https://api.bochaai.com/v1/web-search";
+//        String apiKey = "sk-5d36eae2c4a54e2596c7625d9888a9d8";
+//
+//        return WebSearchRepository.of(apiUrl).apiKey(apiKey).build();
+//    }
 
     public static EmbeddingModel getEmbeddingModel() {
         String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding";

@@ -75,10 +75,6 @@ public class WebsearchTool extends AbsToolProvider {
         getMcpClient();
     }
 
-    /**
-     * @deprecated 3.10.5
-     */
-    @Deprecated
     public WebsearchTool retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         return this;

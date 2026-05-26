@@ -58,16 +58,6 @@ public class GenerateOptions {
     }
 
     /**
-     * 选项添加
-     *
-     * @deprecated 3.9.0 {@link #optionSet(String, Object)}
-     */
-    @Deprecated
-    public GenerateOptions optionAdd(String key, Object val) {
-        return optionSet(key, val);
-    }
-
-    /**
      * 模型
      */
     public GenerateOptions model(String model) {

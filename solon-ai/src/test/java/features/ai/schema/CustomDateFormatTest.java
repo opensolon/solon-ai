@@ -3,6 +3,7 @@ package features.ai.schema;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +45,7 @@ public class CustomDateFormatTest {
     /**
      * 工具类
      */
-    public static class WeatherTools {
+    public static class WeatherTools extends AbsToolProvider {
 
         /**
          * 获取当前时间 - 返回中文格式的时间字符串（不在 Snack4 默认 PATTERNS 中）

@@ -80,10 +80,6 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
         this.chatModelSupplier = chatModelSupplier;
     }
 
-    /**
-     * @deprecated 3.10.5
-     */
-    @Deprecated
     public HierarchicalSummarizationStrategy retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         return this;

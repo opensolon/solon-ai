@@ -100,35 +100,37 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
             //构建会话（可在发起流程时传递）
             String chatSessionKey = node.getMetaOrDefault(META_CHAT_SESSION, Attrs.CTX_CHAT_SESSION);
             ChatSession chatSession = context.computeIfAbsent(chatSessionKey, k -> InMemoryChatSession.builder().build());
-
-            if (Utils.isEmpty(chatSession.getMessages())) {
-                String systemPrompt = node.getMetaAsString(META_SYSTEM_PROMPT);
-                if (Utils.isNotEmpty(systemPrompt)) {
-                    String systemPromptStr = SnEL.evalTmpl(systemPrompt, context.vars());
-                    chatSession.addMessage(ChatMessage.ofSystem(systemPromptStr));
-                }
-            }
-
             boolean isStream = "true".equals(node.getMetaAsString(META_STREAM));
+            String systemPrompt = node.getMetaAsString(META_SYSTEM_PROMPT);
+            if (Utils.isNotEmpty(systemPrompt)) {
+                systemPrompt = SnEL.evalTmpl(systemPrompt, context.vars());
+            }
+            String systemPromptStr = systemPrompt;
 
+
+            Prompt prompt;
             if (data instanceof String) {
                 //字符串
-                chatSession.addMessage(ChatMessage.ofUser((String) data));
+                prompt = Prompt.of((String) data);
             } else if (data instanceof ChatMessage) {
                 //消息
-                chatSession.addMessage((ChatMessage) data);
+                prompt = Prompt.of((ChatMessage) data);
             } else if (data instanceof Prompt) {
                 //提示语
-                chatSession.addMessage(((Prompt) data).getMessages());
+                prompt = (Prompt) data;
             } else {
                 throw new IllegalArgumentException("Unsupported data type: " + data.getClass());
             }
 
             //替换数据
             if (isStream) {
-                data = chatModel.prompt(chatSession).stream();
+                data = chatModel.prompt(prompt).session(chatSession).options(o->{
+                    o.systemPrompt(systemPromptStr);
+                }).stream();
             } else {
-                data = chatModel.prompt(chatSession).call();
+                data = chatModel.prompt(prompt).session(chatSession).options(o->{
+                    o.systemPrompt(systemPromptStr);
+                }).call();
             }
 
             setOutput(context, node, data);

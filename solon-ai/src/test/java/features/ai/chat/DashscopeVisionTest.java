@@ -122,15 +122,18 @@ public class DashscopeVisionTest {
         chatSession.addMessage(ChatMessage.ofUser("可以把这一段话翻译成中文吗？"));
         chatSession.addMessage(resp.getMessage());
 
-        chatSession.addMessage(ChatMessage.ofUser("请再回答一次"));
-        resp = chatModel.prompt(chatSession).call();
-        chatSession.addMessage(resp.getMessage());
+        resp = chatModel.prompt("请再回答一次")
+                .session(chatSession)
+                .call();
+
         // 打印消息
         log.info("{}", resp.getMessage());
 
         // 验证连续对话
-        chatSession.addMessage(ChatMessage.ofUser("请把我们的问答都告诉我"));
-        resp = chatModel.prompt(chatSession).call();
+        resp = chatModel.prompt("请把我们的问答都告诉我")
+                .session(chatSession)
+                .call();
+
         // 打印消息
         log.info("{}", resp.getMessage());
     }

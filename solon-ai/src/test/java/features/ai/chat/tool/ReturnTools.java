@@ -1,6 +1,7 @@
 package features.ai.chat.tool;
 
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 
 import java.io.Serializable;
@@ -8,7 +9,7 @@ import java.io.Serializable;
 /**
  * @author noear 2025/4/25 created
  */
-public class ReturnTools {
+public class ReturnTools extends AbsToolProvider {
     @ToolMapping(description = "获取指定城市的天气情况", returnDirect = true)
     public String get_weather(@Param(name = "location", description = "根据用户提到的地点推测城市") String location) {
         if (location == null) {
