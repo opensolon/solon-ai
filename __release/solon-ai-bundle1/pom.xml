@@ -40,7 +40,6 @@
 
 
         <module>../../solon-ai-skills/solon-ai-skills</module>
-        <module>../../solon-ai-skills/solon-ai-skill-browser</module>
         <module>../../solon-ai-skills/solon-ai-skill-cli</module>
         <module>../../solon-ai-skills/solon-ai-skill-data</module>
         <module>../../solon-ai-skills/solon-ai-skill-diff</module>
