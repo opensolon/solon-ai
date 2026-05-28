@@ -176,6 +176,12 @@ public class RestApiSkill extends AbsSkill {
         return "业务 API 专家：能够整合并精准调用多个微服务的 REST 接口。";
     }
 
+
+    @Override
+    public boolean isSupported(Prompt prompt) {
+        return allTools.size() > 0;
+    }
+
     @Override
     public String getInstruction(Prompt prompt) {
         if (allTools.isEmpty()) {

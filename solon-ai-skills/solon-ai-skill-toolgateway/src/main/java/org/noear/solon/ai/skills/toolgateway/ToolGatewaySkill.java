@@ -127,11 +127,17 @@ public class ToolGatewaySkill extends AbsSkill {
     }
 
     @Override
-    public String getInstruction(Prompt prompt) {
-        if (allTools.isEmpty()) {
-            return "## 业务工具网关\n当前系统未配置任何业务工具。";
-        }
+    public String description() {
+        return "业务工具网关";
+    }
 
+    @Override
+    public boolean isSupported(Prompt prompt) {
+        return allTools.size() > 0;
+    }
+
+    @Override
+    public String getInstruction(Prompt prompt) {
         final int size = allTools.size();
         StringBuilder sb = new StringBuilder();
         sb.append("## 业务工具发现规范 (共 ").append(size).append(" 个工具)\n");

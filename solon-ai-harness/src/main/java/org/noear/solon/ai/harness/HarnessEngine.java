@@ -236,29 +236,23 @@ public class HarnessEngine {
             this.memorySkill = null;
         }
 
+        restApiSkill = new RestApiSkill().retryConfig(props.getApiRetries());
         if (Assert.isNotEmpty(props.getApiServers())) {
-            restApiSkill = new RestApiSkill().retryConfig(props.getApiRetries());
             for (Map.Entry<String, ApiSource> entry : props.getApiServers().entrySet()) {
                 restApiSkill.addApi(entry.getValue());
             }
-        } else {
-            restApiSkill = null;
         }
 
+        mcpGatewaySkill = new ToolGatewaySkill().retryConfig(props.getMcpRetries());
         try {
             if (Assert.isNotEmpty(props.getMcpServers())) {
                 McpProviders mcpProviders = McpProviders.fromMcpServers(props.getMcpServers());
 
                 if (mcpProviders.getProviders().size() > 0) {
-                    mcpGatewaySkill = new ToolGatewaySkill().retryConfig(props.getMcpRetries());
                     for (Map.Entry<String, McpClientProvider> entry : mcpProviders.getProviders().entrySet()) {
                         mcpGatewaySkill.addTool(entry.getKey(), entry.getValue());
                     }
-                } else {
-                    mcpGatewaySkill = null;
                 }
-            } else {
-                mcpGatewaySkill = null;
             }
         } catch (IOException e) {
             throw new RuntimeException("Mcp servers load failure", e);
@@ -355,7 +349,6 @@ public class HarnessEngine {
     public ChatModel getModelForSummary() {
         return getModelOrMain(props.getSummaryModel());
     }
-
 
 
     /**
