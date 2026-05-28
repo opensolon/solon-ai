@@ -25,9 +25,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -43,18 +41,18 @@ public class PoolManager {
     private final Map<String, Path> poolMap = new ConcurrentHashMap<>();
 
     // 逻辑全路径 -> 技能目录信息 (如 "@shared/video-creator" -> SkillDir)
-    private final Map<String, SkillDir> skillMap = new ConcurrentHashMap<>();
+    private volatile Map<String, SkillDir> skillMap = new ConcurrentHashMap<>();
 
     /**
      * 注册池（并扫描）
      */
-    public PoolManager register(String alias, Path dir) {
+    public synchronized PoolManager register(String alias, Path dir) {
         Path rootPath = dir.toAbsolutePath().normalize();
         String key = alias.startsWith("@") ? alias : "@" + alias;
 
         if (Files.exists(rootPath) && Files.isDirectory(rootPath)) {
             poolMap.put(key, rootPath);
-            scanAndCache(key, rootPath);
+            scanAndCache(key, rootPath, skillMap);
             LOG.debug("Skill pool has been loaded.: {} -> {}", key, rootPath);
         } else {
             String reason = !Files.exists(rootPath) ? "The path does not exist." : "Not an effective directory";
@@ -74,9 +72,13 @@ public class PoolManager {
     /**
      * 刷新池（重新扫描所有池）
      */
-    public void refresh() {
-        skillMap.clear();
-        poolMap.forEach(this::scanAndCache);
+    public synchronized void refresh() {
+        Map<String, SkillDir> tmp = new ConcurrentHashMap<>();
+        for (Map.Entry<String, Path> entry : poolMap.entrySet()) {
+            scanAndCache(entry.getKey(), entry.getValue(), tmp);
+        }
+
+        skillMap = tmp;
     }
 
     /**
@@ -110,12 +112,7 @@ public class PoolManager {
         return poolMap;
     }
 
-    private boolean isSkillDir(Path p) {
-        return Files.exists(p.resolve("SKILL.md")) || Files.exists(p.resolve("skill.md"));
-    }
-
-
-    private void scanAndCache(String alias, Path root) {
+    private static void scanAndCache(String alias, Path root, Map<String, SkillDir> map) {
         try {
             Files.walkFileTree(root, EnumSet.noneOf(FileVisitOption.class), 3, new SimpleFileVisitor<Path>() {
                 @Override
@@ -123,7 +120,7 @@ public class PoolManager {
                     if (isSkillDir(dir)) {
                         String name = root.relativize(dir).toString().replace("\\", "/");
                         String aliasPath = alias + (name.isEmpty() ? "" : "/" + name);
-                        skillMap.put(aliasPath, new SkillDir(name, aliasPath, dir, parseDescription(dir)));
+                        map.put(aliasPath, new SkillDir(name, aliasPath, dir, parseDescription(dir)));
                         return FileVisitResult.SKIP_SUBTREE;
                     }
                     if (dir.getFileName().toString().startsWith(".")) return FileVisitResult.SKIP_SUBTREE;
@@ -135,7 +132,12 @@ public class PoolManager {
         }
     }
 
-    private String parseDescription(Path dir) {
+
+    private static boolean isSkillDir(Path p) {
+        return Files.exists(p.resolve("SKILL.md")) || Files.exists(p.resolve("skill.md"));
+    }
+
+    private static String parseDescription(Path dir) {
         Path md = dir.resolve("SKILL.md");
         if (!Files.exists(md)) {
             md = dir.resolve("skill.md");
