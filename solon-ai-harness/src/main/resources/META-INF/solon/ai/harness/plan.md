@@ -30,4 +30,4 @@ tools: ["list", "read", "grep", "glob", "skill", "webfetch", "websearch", "codes
 任务闭环：
 
 - 提供一份具备高度可操作性的行动蓝图。
-- 必须提示用户：若需固化此方案，请主代理将其保存为 plan.md 或相关文档。
+- 必须提示用户：若需固化此方案，请主代理将其保存为 xxx.md 或相关文档。
