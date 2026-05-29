@@ -177,43 +177,54 @@ public class HarnessEngine {
         return openApiSkill;
     }
 
+
+    public void addModel(ChatConfig config) {
+        if (Assert.isEmpty(config.getUserAgent())) {
+            config.setUserAgent(props.getUserAgent());
+        }
+
+        props.removeModel(config.getNameOrModel());
+        props.addModel(config);
+    }
+
+    public void removeModel(String name){
+        props.removeModel(name);
+    }
+
+
     /**
      * 动态添加 API 源
      */
-    public OpenApiSkill addApi(ApiSource apiSource) {
+    public void addApi(ApiSource apiSource) {
         openApiSkill.addApi(apiSource);
         props.addApiSource(apiSource.getDocUrl(), apiSource);
-        return openApiSkill;
     }
 
     /**
      * 动态移除 API 源
      */
-    public OpenApiSkill removeApi(String docUrl) {
+    public void removeApi(String docUrl) {
         openApiSkill.removeApi(docUrl);
         props.getApiServers().remove(docUrl);
-        return openApiSkill;
     }
 
     /**
      * 动态添加 MCP 服务
      */
-    public McpGatewaySkill addMcpServer(String name, McpServerParameters parameters) {
+    public void addMcpServer(String name, McpServerParameters parameters) {
         mcpGatewaySkill.addMcpServer(name, parameters);
         props.addMcpServer(name, parameters);
-        return mcpGatewaySkill;
     }
 
     /**
      * 动态移除 MCP 服务（并关闭连接）
      */
-    public McpGatewaySkill removeMcpServer(String name) {
+    public void removeMcpServer(String name) {
         mcpGatewaySkill.removeMcpServer(name);
         props.getMcpServers().remove(name);
-        return mcpGatewaySkill;
     }
 
-    public void extensionAdd(HarnessExtension extension) {
+    public void addExtension(HarnessExtension extension) {
         props.addExtension(extension);
 
         // 如果主代理还没懒加载触发，这里无需提前创建
