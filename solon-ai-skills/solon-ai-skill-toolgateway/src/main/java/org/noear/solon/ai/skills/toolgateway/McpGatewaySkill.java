@@ -125,6 +125,11 @@ public class McpGatewaySkill extends AbsSkill {
             return this;
         }
 
+        if (mcpParameters.isEnabled() == false) {
+            LOG.info("MCP server '{}' is disabled, skipping registration", name);
+            return this;
+        }
+
         try {
             McpClientProvider provider = McpProviders.fromMcpServer(mcpParameters);
             addMcpServer(name, provider);

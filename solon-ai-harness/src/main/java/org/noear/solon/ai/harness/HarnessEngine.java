@@ -187,7 +187,7 @@ public class HarnessEngine {
         props.addModel(config);
     }
 
-    public void removeModel(String name){
+    public void removeModel(String name) {
         props.removeModel(name);
     }
 
@@ -211,9 +211,9 @@ public class HarnessEngine {
     /**
      * 动态添加 MCP 服务
      */
-    public void addMcpServer(String name, McpServerParameters parameters) {
-        mcpGatewaySkill.addMcpServer(name, parameters);
-        props.addMcpServer(name, parameters);
+    public void addMcpServer(String name, McpServerParameters mcpServer) {
+        mcpGatewaySkill.addMcpServer(name, mcpServer);
+        props.addMcpServer(name, mcpServer);
     }
 
     /**
@@ -292,19 +292,15 @@ public class HarnessEngine {
         }
 
         mcpGatewaySkill = new McpGatewaySkill().retryConfig(props.getMcpRetries());
-        try {
-            if (Assert.isNotEmpty(props.getMcpServers())) {
-                McpProviders mcpProviders = McpProviders.fromMcpServers(props.getMcpServers());
 
-                if (mcpProviders.getProviders().size() > 0) {
-                    for (Map.Entry<String, McpClientProvider> entry : mcpProviders.getProviders().entrySet()) {
-                        mcpGatewaySkill.addMcpServer(entry.getKey(), entry.getValue());
-                    }
+        if (Assert.isNotEmpty(props.getMcpServers())) {
+            for (Map.Entry<String, McpServerParameters> entry : props.getMcpServers().entrySet()) {
+                if (entry.getValue().isEnabled()) {
+                    mcpGatewaySkill.addMcpServer(entry.getKey(), entry.getValue());
                 }
             }
-        } catch (IOException e) {
-            throw new RuntimeException("Mcp servers load failure", e);
         }
+
 
         cliSkills.bashAsyncEnabled(props.isBashAsyncEnabled());
         cliSkills.getTerminalSkill().setSandboxMode(props.isSandboxMode());
