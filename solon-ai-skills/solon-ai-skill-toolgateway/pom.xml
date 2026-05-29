@@ -23,6 +23,11 @@
 
         <dependency>
             <groupId>org.noear</groupId>
+            <artifactId>solon-ai-mcp</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
             <artifactId>solon-logging-simple</artifactId>
             <scope>test</scope>
         </dependency>
