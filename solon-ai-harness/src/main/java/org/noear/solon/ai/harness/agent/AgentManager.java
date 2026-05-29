@@ -46,6 +46,7 @@ public class AgentManager {
         loadAgentFile("explore", ResourceUtil.getResource(AGENT_MD_BASE + "explore.md"));
         loadAgentFile("plan", ResourceUtil.getResource(AGENT_MD_BASE + "plan.md"));
         loadAgentFile("general", ResourceUtil.getResource(AGENT_MD_BASE + "general.md"));
+        loadAgentFile("git-summary", ResourceUtil.getResource(AGENT_MD_BASE + "git-summary.md"));
     }
 
     public void addAgent(AgentDefinition agentDefinition) {
