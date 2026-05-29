@@ -224,7 +224,7 @@ public class OpenApiSkill extends AbsSkill {
 
     @Override
     public String description() {
-        return "业务 OpenAPI 专家：能够整合并精准调用多个微服务的 REST 接口。";
+        return "OpenAPI 接口调用专家：自动解析 OpenAPI(Swagger) 文档，智能发现并精准调用 REST 接口。";
     }
 
 
@@ -311,7 +311,7 @@ public class OpenApiSkill extends AbsSkill {
 
     // --- 内置工具映射 ---
 
-    @ToolMapping(name = "search_apis", description = "在海量 OpenAPI 库中通过关键词模糊搜索。支持多个关键词用空格隔开（如：'订单 查询'）")
+    @ToolMapping(name = "search_apis", description = "通过关键词在 API 库中搜索匹配的接口。支持多关键词空格分隔（如：'订单 查询'），按 AND 逻辑匹配")
     public Object searchApis(@Param("keyword") String keyword) {
         if (Utils.isEmpty(keyword)) return "错误：搜索关键词不能为空。";
 
@@ -346,7 +346,7 @@ public class OpenApiSkill extends AbsSkill {
         return results;
     }
 
-    @ToolMapping(name = "get_api_detail", description = "获取特定 OpenAPI 的参数 Schema 和返回值定义")
+    @ToolMapping(name = "get_api_detail", description = "根据接口名称获取完整的参数定义（Header/Path/Query/Body Schema）及返回值结构")
     public String getApiDetail(@Param("api_name") String apiName) {
         if (Utils.isEmpty(apiName)) return "错误：api_name 不能为空";
 
@@ -359,7 +359,7 @@ public class OpenApiSkill extends AbsSkill {
         }
     }
 
-    @ToolMapping(name = "call_api", description = "代理执行特定的 REST 业务接口")
+    @ToolMapping(name = "call_api", description = "根据接口名称执行 REST API 调用。需提供 api_name 及对应参数（path_params、query_params、body_params）")
     public String callApi(
             @Param("api_name") String apiName,
             @Param("header_params") Map<String, Object> headerParams,
@@ -445,7 +445,7 @@ public class OpenApiSkill extends AbsSkill {
 
         // 6. 执行并处理响应
         try {
-            LOG.debug("RestApiSkill calling: {} {} (OpenAPI: {})", tool.getMethod(), baseUrl + finalPath, apiName);
+            LOG.debug("OpenApiSkill calling: {} {} (api: {})", tool.getMethod(), baseUrl + finalPath, apiName);
 
             String result = RetryUtil.callWithRetry(maxRetries, () -> http.exec(tool.getMethod()).bodyAsString());
 
@@ -488,7 +488,7 @@ public class OpenApiSkill extends AbsSkill {
         }
 
         if (Utils.isEmpty(json)) {
-            LOG.warn("RestApiSkill: Source empty for {}", source.getDocUrl());
+            LOG.warn("OpenApiSkill: Source empty for {}", source.getDocUrl());
             return;
         }
 
@@ -507,7 +507,7 @@ public class OpenApiSkill extends AbsSkill {
             }
         }
 
-        LOG.info("RestApiSkill: Loaded {} tools from {}", tools.size(), source.getDocUrl());
+        LOG.info("OpenApiSkill: Loaded {} tools from {}", tools.size(), source.getDocUrl());
     }
 
     private String formatApiDocs(Collection<ApiTool> tools) {
