@@ -50,6 +50,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         return config.getApiUrl();
     }
 
+    @Override
     public HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
         HttpUtils httpUtils = HttpUtils.http(getApiUrl(config))
                 .ssl(HttpSslSupplierAny.getInstance())

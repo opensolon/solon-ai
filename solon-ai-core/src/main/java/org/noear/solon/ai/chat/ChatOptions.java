@@ -18,8 +18,10 @@ package org.noear.solon.ai.chat;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.lang.Preview;
+import org.noear.solon.net.http.HttpUtils;
 
 import java.lang.reflect.Type;
+import java.util.function.Consumer;
 
 /**
  * 聊天选项
@@ -41,6 +43,7 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
     private String instruction;
     private String systemPrompt;
     private String outputSchema;
+    private Consumer<HttpUtils> httpCustomize;
 
     /**
      * 代理名字（用于打印或管理）
@@ -113,6 +116,20 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
 
     public ChatOptions outputSchema(Type type) {
         this.outputSchema = ToolSchemaUtil.buildOutputSchema(type);
+        return this;
+    }
+
+    public Consumer<HttpUtils> httpCustomize() {
+        return httpCustomize;
+    }
+
+    public ChatOptions httpCustomize(Consumer<HttpUtils> httpCustomize) {
+        if (this.httpCustomize == null) {
+            this.httpCustomize = httpCustomize;
+        } else {
+            this.httpCustomize.andThen(httpCustomize);
+        }
+
         return this;
     }
 }

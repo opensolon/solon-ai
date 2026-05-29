@@ -198,6 +198,9 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      */
     private ChatResponse doCall(ChatRequest req) throws IOException {
         HttpUtils httpUtils = dialect.createHttpUtils(config, req.isStream());
+        if(req.getOptions().httpCustomize() != null){
+            req.getOptions().httpCustomize().accept(httpUtils);
+        }
 
         String reqJson = req.toRequestData();
 
@@ -272,6 +275,9 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      */
     private Flux<ChatResponse> doStream(ChatRequest req) {
         HttpUtils httpUtils = dialect.createHttpUtils(config, req.isStream());
+        if(req.getOptions().httpCustomize() != null){
+            req.getOptions().httpCustomize().accept(httpUtils);
+        }
 
         String reqJson = req.toRequestData();
 
