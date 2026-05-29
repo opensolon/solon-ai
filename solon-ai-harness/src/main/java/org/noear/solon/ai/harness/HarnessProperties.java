@@ -20,8 +20,8 @@ import lombok.Setter;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
-import org.noear.solon.ai.skills.restapi.ApiSource;
 import org.noear.solon.ai.skills.lsp.LspServerParameters;
+import org.noear.solon.ai.skills.openapi.ApiSource;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 

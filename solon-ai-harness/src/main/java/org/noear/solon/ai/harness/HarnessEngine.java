@@ -42,8 +42,8 @@ import org.noear.solon.ai.skills.cli.CliSkillProvider;
 import org.noear.solon.ai.skills.cli.TodoSkill;
 import org.noear.solon.ai.skills.memory.MemorySkill;
 import org.noear.solon.ai.skills.memory.MemorySolution;
-import org.noear.solon.ai.skills.restapi.ApiSource;
-import org.noear.solon.ai.skills.restapi.RestApiSkill;
+import org.noear.solon.ai.skills.openapi.ApiSource;
+import org.noear.solon.ai.skills.openapi.OpenApiSkill;
 import org.noear.solon.ai.skills.toolgateway.ToolGatewaySkill;
 import org.noear.solon.ai.skills.web.CodeSearchTool;
 import org.noear.solon.ai.skills.web.WebfetchTool;
@@ -84,7 +84,7 @@ public class HarnessEngine {
     private final LspSkill lspSkill;
 
     private final ToolGatewaySkill mcpGatewaySkill;
-    private final RestApiSkill restApiSkill;
+    private final OpenApiSkill openApiSkill;
 
     private final MemorySkill memorySkill;
 
@@ -172,8 +172,8 @@ public class HarnessEngine {
         return mcpGatewaySkill;
     }
 
-    public RestApiSkill getRestApiSkill() {
-        return restApiSkill;
+    public OpenApiSkill getOpenApiSkill() {
+        return openApiSkill;
     }
 
     public void extensionAdd(HarnessExtension extension) {
@@ -236,10 +236,10 @@ public class HarnessEngine {
             this.memorySkill = null;
         }
 
-        restApiSkill = new RestApiSkill().retryConfig(props.getApiRetries());
+        openApiSkill = new OpenApiSkill().retryConfig(props.getApiRetries());
         if (Assert.isNotEmpty(props.getApiServers())) {
             for (Map.Entry<String, ApiSource> entry : props.getApiServers().entrySet()) {
-                restApiSkill.addApi(entry.getValue());
+                openApiSkill.addApi(entry.getValue());
             }
         }
 

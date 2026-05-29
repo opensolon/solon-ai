@@ -80,6 +80,7 @@ public class GeminiChatDialect extends AbstractChatDialect {
                 (Assert.isEmpty(config.getProvider()) && config.getApiUrl().contains("/v1beta/models/") && config.getApiUrl().endsWith("generateContent"));
     }
 
+    @Override
     public HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
         String apiUrl = buildApiUrl(config.getApiUrl().toString(), config.getModel(), isStream);
 
