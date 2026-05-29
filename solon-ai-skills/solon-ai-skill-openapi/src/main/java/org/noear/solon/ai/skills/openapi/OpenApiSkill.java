@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -55,8 +56,8 @@ import java.util.stream.Collectors;
 public class OpenApiSkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(OpenApiSkill.class);
 
-    private final Map<String, Map<String, ApiTool>> categoryTools = new LinkedHashMap<>();
-    private final Map<String, ApiTool> allTools = new LinkedHashMap<>();
+    private final Map<String, Map<String, ApiTool>> categoryTools = new ConcurrentHashMap<>();
+    private final Map<String, ApiTool> allTools = new ConcurrentHashMap<>();
 
     private ApiResolver resolver = OpenApiResolver.getInstance();
     private ApiAuthenticator defaultAuthenticator;
@@ -182,23 +183,24 @@ public class OpenApiSkill extends AbsSkill {
 
         // 找出所有属于该 docUrl 的工具名称
         List<String> removedNames = new ArrayList<>();
-        Iterator<Map.Entry<String, ApiTool>> it = allTools.entrySet().iterator();
-        while (it.hasNext()) {
-            Map.Entry<String, ApiTool> entry = it.next();
+        for (Map.Entry<String, ApiTool> entry : allTools.entrySet()) {
             ApiTool tool = entry.getValue();
             if (tool.getSource() != null && docUrl.equals(tool.getSource().getDocUrl())) {
                 removedNames.add(entry.getKey());
-                it.remove();
             }
         }
 
+        // 从 allTools 中批量移除
+        for (String name : removedNames) {
+            allTools.remove(name);
+        }
+
         // 从 categoryTools 中移除
-        Iterator<Map.Entry<String, Map<String, ApiTool>>> catIt = categoryTools.entrySet().iterator();
-        while (catIt.hasNext()) {
-            Map<String, ApiTool> catTools = catIt.next().getValue();
+        for (Map.Entry<String, Map<String, ApiTool>> catEntry : categoryTools.entrySet()) {
+            Map<String, ApiTool> catTools = catEntry.getValue();
             catTools.keySet().removeAll(removedNames);
             if (catTools.isEmpty()) {
-                catIt.remove();
+                categoryTools.remove(catEntry.getKey());
             }
         }
 
@@ -489,7 +491,7 @@ public class OpenApiSkill extends AbsSkill {
                 this.allTools.put(nameLower, tool);
 
                 String cat = tool.getCategory();
-                this.categoryTools.computeIfAbsent(cat, k -> new LinkedHashMap<>()).put(nameLower, tool);
+                this.categoryTools.computeIfAbsent(cat, k -> new ConcurrentHashMap<>()).put(nameLower, tool);
             }
         }
 

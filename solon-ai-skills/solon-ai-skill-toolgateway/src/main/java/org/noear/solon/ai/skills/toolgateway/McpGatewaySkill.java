@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * MCP 网关工具包：按配置名管理 MCP 服务，支持动态添加与移除。
@@ -26,13 +27,13 @@ public class McpGatewaySkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(McpGatewaySkill.class);
 
     // 工具索引（自建，完全由本类管理）
-    private final Map<String, Map<String, FunctionTool>> categoryTools = new LinkedHashMap<>();
-    private final Map<String, FunctionTool> allTools = new LinkedHashMap<>();
+    private final Map<String, Map<String, FunctionTool>> categoryTools = new ConcurrentHashMap<>();
+    private final Map<String, FunctionTool> allTools = new ConcurrentHashMap<>();
 
     // MCP 连接管理
-    private final Map<String, McpClientProvider> providerMap = new LinkedHashMap<>();
+    private final Map<String, McpClientProvider> providerMap = new ConcurrentHashMap<>();
     // name -> 该 provider 注册的 toolNames（小写），加速移除
-    private final Map<String, Set<String>> serverToolIndex = new LinkedHashMap<>();
+    private final Map<String, Set<String>> serverToolIndex = new ConcurrentHashMap<>();
 
     // 四阶段阈值
     private int dynamicThreshold = 8;
@@ -81,17 +82,15 @@ public class McpGatewaySkill extends AbsSkill {
             return this;
         }
 
-        // 同名已存在则先移除
-        if (providerMap.containsKey(name)) {
-            removeMcpServer(name);
-        }
+        // 同名已存在则先移除（幂等，不存在的 name 是空操作）
+        removeMcpServer(name);
 
         providerMap.put(name, mcpProvider);
 
         Set<String> toolNames = new LinkedHashSet<>();
         for (FunctionTool tool : mcpProvider.getTools()) {
             String key = tool.name().toLowerCase();
-            categoryTools.computeIfAbsent(name, k -> new LinkedHashMap<>())
+            categoryTools.computeIfAbsent(name, k -> new ConcurrentHashMap<>())
                     .put(key, tool);
             allTools.put(key, tool);
             toolNames.add(key);
