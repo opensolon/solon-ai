@@ -25,7 +25,9 @@ import java.util.List;
  *
  * @author noear
  * @since 3.9.1
+ * @deprecated 4.0 {solon-ai-skill-openapi}
  */
+@Deprecated
 public class ApiTool {
     private ApiSource source;
     private String baseUrl;

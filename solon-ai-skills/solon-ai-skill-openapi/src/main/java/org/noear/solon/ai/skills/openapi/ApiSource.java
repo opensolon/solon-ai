@@ -17,6 +17,7 @@ package org.noear.solon.ai.skills.openapi;
 
 import org.noear.solon.core.util.Assert;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -31,6 +32,7 @@ public class ApiSource {
     private String docUrl;
     private String apiBaseUrl;
     private Map<String, String> headers = new HashMap<>();
+    private Duration timeout;
     private ApiAuthenticator authenticator;
     private boolean enabled = true;
 
@@ -73,6 +75,14 @@ public class ApiSource {
         Assert.notNull(value, "The value can not be null");
 
         headers.put(key, value);
+    }
+
+    public Duration getTimeout() {
+        return timeout;
+    }
+
+    public void setTimeout(Duration timeout) {
+        this.timeout = timeout;
     }
 
     public ApiAuthenticator getAuthenticator() {

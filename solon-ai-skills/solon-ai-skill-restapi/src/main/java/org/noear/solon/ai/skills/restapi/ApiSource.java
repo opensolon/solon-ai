@@ -26,7 +26,9 @@ import java.util.function.Consumer;
  *
  * @author noear 2026/3/9 created
  * @since 3.9.6
+ * @deprecated 4.0 {solon-ai-skill-openapi}
  */
+@Deprecated
 public class ApiSource {
     private String docUrl;
     private String apiBaseUrl;

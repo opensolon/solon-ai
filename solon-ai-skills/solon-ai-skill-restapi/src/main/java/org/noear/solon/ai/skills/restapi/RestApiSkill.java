@@ -50,7 +50,7 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.9.1
  * @since 3.9.5
- * @deprecated 4.0 {solon-ai-openapi}
+ * @deprecated 4.0 {solon-ai-skill-openapi}
  */
 @Deprecated
 @Preview("3.9.1")

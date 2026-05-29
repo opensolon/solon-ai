@@ -24,7 +24,9 @@ import org.noear.solon.net.http.HttpUtils;
  *
  * @author noear
  * @since 3.9.1
+ * @deprecated 4.0 {solon-ai-skill-openapi}
  */
+@Deprecated
 @Preview("3.9.1")
 @FunctionalInterface
 public interface ApiAuthenticator {

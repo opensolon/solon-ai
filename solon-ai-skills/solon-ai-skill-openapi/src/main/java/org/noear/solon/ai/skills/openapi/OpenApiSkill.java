@@ -27,12 +27,14 @@ import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.ResourceUtil;
 import org.noear.solon.lang.Preview;
+import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URLEncoder;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -61,6 +63,7 @@ public class OpenApiSkill extends AbsSkill {
 
     private ApiResolver resolver = OpenApiResolver.getInstance();
     private ApiAuthenticator defaultAuthenticator;
+    private Duration defaultTimeout = Duration.ofSeconds(30);
 
     private int dynamicThreshold = 8;
     private int listThreshold = 30;
@@ -104,6 +107,13 @@ public class OpenApiSkill extends AbsSkill {
 
     public OpenApiSkill defaultAuthenticator(ApiAuthenticator defaultAuthenticator) {
         this.defaultAuthenticator = defaultAuthenticator;
+        return this;
+    }
+
+    public OpenApiSkill defaultTimeout(Duration defaultTimeout) {
+        if (defaultTimeout != null) {
+            this.defaultTimeout = defaultTimeout;
+        }
         return this;
     }
 
@@ -395,6 +405,12 @@ public class OpenApiSkill extends AbsSkill {
 
         // 构建请求对象
         HttpUtils http = HttpUtils.http(baseUrl + finalPath);
+
+        if (tool.getSource() != null && tool.getSource().getTimeout() != null) {
+            http.timeout(HttpTimeout.of(tool.getSource().getTimeout()));
+        } else {
+            http.timeout(HttpTimeout.of(defaultTimeout));
+        }
 
         // 2. Header 参数设置
         if (Assert.isNotEmpty(headerParams)) {
