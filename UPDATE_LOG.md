@@ -30,6 +30,7 @@
 * 优化 solon-ai-harness AgentFactory `edit` 权限添加 `read`、`write` 控制
 * 优化 solon-ai-agent SummarizationInterceptor 压缩时机（从 onObservation 改为 onReasonStart），并增加系统词大小
 * 调整 solon skill “概念”初步改为 solon toolkit（避免与 agent skill 的冲突）
+* 调整 solon-ai-core 取消 ChatConfig.reasoningFieldName 配置（这个配置不合理）
 * 调整 solon-ai-mcp McpClientProperties 默认不启用心跳（之前默认为 30 心跳一次）
 * 调整 solon-ai-agent ActionChunk 更名为 ActionEndChunk （和 ActionStartChunk 凑成一对）
 * 调整 solon-ai-agent ReasonChunk 更名为 ReasonDeltaChunk

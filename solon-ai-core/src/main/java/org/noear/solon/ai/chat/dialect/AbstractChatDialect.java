@@ -96,8 +96,6 @@ public abstract class AbstractChatDialect implements ChatDialect {
         //兼容 r1 的 tool-call(可以再优化，只在最后一条加)
         if (Utils.isNotEmpty(msg.getReasoningFieldName())) {
             oNode.set(msg.getReasoningFieldName(), msg.getReasoning());
-        } else if (Utils.isNotEmpty(config.getReasoningFieldName())) {
-            oNode.set(config.getReasoningFieldName(), "");
         }
 
         if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
