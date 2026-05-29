@@ -15,6 +15,7 @@
 
 * 新增 solon-ai-mcp MCP_2025_11_25 协议支持（支持 ServerTransportSecurityValidator 签权）
 * 新增 solon-ai-skill-openapi （solon-ai-skill-restapi 标为弃用）
+* 添加 solon-ai-skill-openapi OpenApiSkill.removeApi 方法
 * 添加 solon-ai-core ChatOptions:httpCustomize 方法
 * 添加 solon-ai-agent ReActInterceptor.onReasonStart 事件方法
 * 添加 solon-ai-agent AgentTrace.getOriginalPrompt, getWorkingMemory 方法
@@ -23,6 +24,7 @@
 * 添加 solon-ai-agent TeamAgent 添加初心标记
 * 添加 solon-ai-agent ToolExchanger 类
 * 添加 solon-ai-harness bashAsyncEnabled 开关
+* 添加 solon-ai-harness HarnessEngine.removeApi 方法
 * 优化 solon-ai-agent 初始化时（rest）添加快照持久化
 * 优化 solon-ai-harness AgentFactory `edit` 权限添加 `read`、`write` 控制
 * 优化 solon-ai-agent SummarizationInterceptor 压缩时机（从 onObservation 改为 onReasonStart），并增加系统词大小

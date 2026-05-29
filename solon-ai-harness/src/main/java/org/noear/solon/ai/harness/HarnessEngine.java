@@ -176,6 +176,24 @@ public class HarnessEngine {
         return openApiSkill;
     }
 
+    /**
+     * 动态添加 API 源
+     */
+    public OpenApiSkill addApi(ApiSource apiSource) {
+        openApiSkill.addApi(apiSource);
+        props.addApiSource(apiSource.getDocUrl(), apiSource);
+        return openApiSkill;
+    }
+
+    /**
+     * 动态移除 API 源
+     */
+    public OpenApiSkill removeApi(String docUrl) {
+        openApiSkill.removeApi(docUrl);
+        props.getApiServers().remove(docUrl);
+        return openApiSkill;
+    }
+
     public void extensionAdd(HarnessExtension extension) {
         props.addExtension(extension);
 
