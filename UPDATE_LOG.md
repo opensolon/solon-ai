@@ -16,6 +16,7 @@
 * 新增 solon-ai-mcp MCP_2025_11_25 协议支持（支持 ServerTransportSecurityValidator 签权）
 * 新增 solon-ai-skill-openapi （solon-ai-skill-restapi 标为弃用）
 * 添加 solon-ai-skill-openapi OpenApiSkill.removeApi 方法
+* 添加 solon-ai-skill-toolgateway McpGatewaySkill 专门处理 mcp（ToolGatewaySkill 可以处理所有工具）
 * 添加 solon-ai-core ChatOptions:httpCustomize 方法
 * 添加 solon-ai-agent ReActInterceptor.onReasonStart 事件方法
 * 添加 solon-ai-agent AgentTrace.getOriginalPrompt, getWorkingMemory 方法
@@ -36,6 +37,7 @@
 * 调整 solon-ai-agent ReActInterceptor.onAction 更名为 onActionStart，并添加 onActionEnd
 * 调整 solon-ai-agent ReActInterceptor.onActionStart,onObservation: toolName,args,result 合并为 toolExchanger（并允许修改）
 * 调整 solon-ai-agent ReActInterceptor.onReason 更名为 onReasonEnd（和 onReasonStart 凑成一对）
+* 添加 solon-ai-harness 用 McpGatewaySkill 替换 ToolGatewaySkill（更有争对性）
 * 移除 solon-ai-skill-browser（包太大了，没必要）
 * 修复 solon-ai-mcp WebRxStreamableHttpTransport 没有 event 的消息会出错的问题（优化非规范兼容）
 * mcp-sdk 升为 1.1.3
