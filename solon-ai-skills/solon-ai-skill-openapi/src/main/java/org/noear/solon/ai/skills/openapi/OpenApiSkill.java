@@ -170,6 +170,45 @@ public class OpenApiSkill extends AbsSkill {
         }
     }
 
+    /**
+     * 移除 API 组
+     *
+     * @param docUrl OpenAPI 定义地址 (http://... 或 classpath:...)
+     */
+    public OpenApiSkill removeApi(String docUrl) {
+        if (Utils.isEmpty(docUrl)) {
+            return this;
+        }
+
+        // 找出所有属于该 docUrl 的工具名称
+        List<String> removedNames = new ArrayList<>();
+        Iterator<Map.Entry<String, ApiTool>> it = allTools.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<String, ApiTool> entry = it.next();
+            ApiTool tool = entry.getValue();
+            if (tool.getSource() != null && docUrl.equals(tool.getSource().getDocUrl())) {
+                removedNames.add(entry.getKey());
+                it.remove();
+            }
+        }
+
+        // 从 categoryTools 中移除
+        Iterator<Map.Entry<String, Map<String, ApiTool>>> catIt = categoryTools.entrySet().iterator();
+        while (catIt.hasNext()) {
+            Map<String, ApiTool> catTools = catIt.next().getValue();
+            catTools.keySet().removeAll(removedNames);
+            if (catTools.isEmpty()) {
+                catIt.remove();
+            }
+        }
+
+        if (!removedNames.isEmpty()) {
+            LOG.info("OpenApiSkill: Removed {} tools from {}", removedNames.size(), docUrl);
+        }
+
+        return this;
+    }
+
 
     @Override
     public String description() {
