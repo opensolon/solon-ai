@@ -40,10 +40,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
- * 智能 REST API 接入工具包：支持分组与四阶段自动发现模式。
+ * 智能 OpenAPI 接入工具包：支持分组与四阶段自动发现模式。
  *
  * 逻辑档位：
- * 1. FULL: 数量 <= dynamicThreshold。平铺所有 API 的完整定义。
+ * 1. FULL: 数量 <= dynamicThreshold。平铺所有 OpenAPI 的完整定义。
  * 2. SUMMARY: 数量 <= listThreshold。展示分组、名称、描述及 Endpoint。
  * 3. LIST: 数量 <= searchThreshold。仅展示分组及接口名列表。
  * 4. SEARCH: 数量 > searchThreshold。强制搜索。
@@ -125,7 +125,7 @@ public class OpenApiSkill extends AbsSkill {
     }
 
     /**
-     * 添加 API 组
+     * 添加 OpenAPI 组
      *
      * @param docUrl     OpenAPI 定义地址 (http://... 或 classpath:...)
      * @param apiBaseUrl 实际接口执行基地址
@@ -135,7 +135,7 @@ public class OpenApiSkill extends AbsSkill {
     }
 
     /**
-     * 添加 API 组
+     * 添加 OpenAPI 组
      *
      * @param docUrl     OpenAPI 定义地址 (http://... 或 classpath:...)
      * @param apiBaseUrl 实际接口执行基地址
@@ -145,7 +145,7 @@ public class OpenApiSkill extends AbsSkill {
     }
 
     /**
-     * 添加 API 组
+     * 添加 OpenAPI 组
      *
      * @param docUrl     OpenAPI 定义地址 (http://... 或 classpath:...)
      * @param apiBaseUrl 实际接口执行基地址
@@ -169,7 +169,7 @@ public class OpenApiSkill extends AbsSkill {
      */
     public OpenApiSkill addApi(ApiSource apiSource) {
         if (apiSource.isEnabled() == false) {
-            LOG.info("API server '{}' is disabled, skipping registration", apiSource.getDocUrl());
+            LOG.info("OpenAPI server '{}' is disabled, skipping registration", apiSource.getDocUrl());
             return this;
         }
 
@@ -177,12 +177,12 @@ public class OpenApiSkill extends AbsSkill {
             loadApiFromDefinition(apiSource);
             return this;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to load API from: " + apiSource.getDocUrl(), e);
+            throw new RuntimeException("Failed to load OpenAPI from: " + apiSource.getDocUrl(), e);
         }
     }
 
     /**
-     * 移除 API 组
+     * 移除 OpenAPI 组
      *
      * @param docUrl OpenAPI 定义地址 (http://... 或 classpath:...)
      */
@@ -224,7 +224,7 @@ public class OpenApiSkill extends AbsSkill {
 
     @Override
     public String description() {
-        return "业务 API 专家：能够整合并精准调用多个微服务的 REST 接口。";
+        return "业务 OpenAPI 专家：能够整合并精准调用多个微服务的 REST 接口。";
     }
 
 
@@ -235,19 +235,15 @@ public class OpenApiSkill extends AbsSkill {
 
     @Override
     public String getInstruction(Prompt prompt) {
-        if (allTools.isEmpty()) {
-            return "## API 专家\n当前未配置任何业务接口。若用户提问涉及业务数据，请告知无法查询。";
-        }
-
         final int size = allTools.size();
         StringBuilder sb = new StringBuilder();
-        sb.append("## 业务 API 发现规范 (共 ").append(size).append(" 个接口)\n");
+        sb.append("## 业务 OpenAPI 发现规范 (共 ").append(size).append(" 个接口)\n");
 
         if (size <= dynamicThreshold) {
             // --- 模式 1: FULL ---
             sb.append("### 运行模式: 直接调用\n");
             sb.append("当前已加载全量接口定义。请分析需求并直接调用 `call_api`。\n\n");
-            sb.append("#### 接口详细定义 (API Specs):\n");
+            sb.append("#### 接口详细定义 (OpenAPI Specs):\n");
             sb.append(formatApiDocs(allTools.values()));
 
         } else if (size <= listThreshold) {
@@ -315,7 +311,7 @@ public class OpenApiSkill extends AbsSkill {
 
     // --- 内置工具映射 ---
 
-    @ToolMapping(name = "search_apis", description = "在海量 API 库中通过关键词模糊搜索。支持多个关键词用空格隔开（如：'订单 查询'）")
+    @ToolMapping(name = "search_apis", description = "在海量 OpenAPI 库中通过关键词模糊搜索。支持多个关键词用空格隔开（如：'订单 查询'）")
     public Object searchApis(@Param("keyword") String keyword) {
         if (Utils.isEmpty(keyword)) return "错误：搜索关键词不能为空。";
 
@@ -350,7 +346,7 @@ public class OpenApiSkill extends AbsSkill {
         return results;
     }
 
-    @ToolMapping(name = "get_api_detail", description = "获取特定 API 的参数 Schema 和返回值定义")
+    @ToolMapping(name = "get_api_detail", description = "获取特定 OpenAPI 的参数 Schema 和返回值定义")
     public String getApiDetail(@Param("api_name") String apiName) {
         if (Utils.isEmpty(apiName)) return "错误：api_name 不能为空";
 
@@ -359,7 +355,7 @@ public class OpenApiSkill extends AbsSkill {
         if (tool != null) {
             return formatApiDocs(Collections.singletonList(tool));
         } else {
-            return "错误: 未找到 API '" + apiName + "'。请先通过 search_apis 确认名称。";
+            return "错误: 未找到 OpenAPI '" + apiName + "'。请先通过 search_apis 确认名称。";
         }
     }
 
@@ -374,7 +370,7 @@ public class OpenApiSkill extends AbsSkill {
         ApiTool tool = allTools.get(apiName.trim().toLowerCase());
 
         if (tool == null) {
-            return "错误: 未找到名为 [" + apiName + "] 的 API。请先通过 'search_apis' 确认正确的名称。";
+            return "错误: 未找到名为 [" + apiName + "] 的 OpenAPI。请先通过 'search_apis' 确认正确的名称。";
         }
 
         String baseUrl = tool.getBaseUrl();
@@ -449,7 +445,7 @@ public class OpenApiSkill extends AbsSkill {
 
         // 6. 执行并处理响应
         try {
-            LOG.debug("RestApiSkill calling: {} {} (API: {})", tool.getMethod(), baseUrl + finalPath, apiName);
+            LOG.debug("RestApiSkill calling: {} {} (OpenAPI: {})", tool.getMethod(), baseUrl + finalPath, apiName);
 
             String result = RetryUtil.callWithRetry(maxRetries, () -> http.exec(tool.getMethod()).bodyAsString());
 
@@ -458,9 +454,9 @@ public class OpenApiSkill extends AbsSkill {
                 return result.substring(0, maxContextLength) + "... [Data truncated]";
             }
 
-            return Utils.isEmpty(result) ? "Success: API executed, but returned an empty response." : result;
+            return Utils.isEmpty(result) ? "Success: OpenAPI executed, but returned an empty response." : result;
         } catch (Exception e) {
-            LOG.warn("API Call Failed: {} - {}", tool.getName(), e.getMessage());
+            LOG.warn("OpenAPI Call Failed: {} - {}", tool.getName(), e.getMessage());
             String errorMsg = e.getMessage() != null ? e.getMessage() : "远程服务未响应";
             return "接口执行异常: " + errorMsg + " (请检查服务可用性或参数正确性)";
         }
@@ -517,7 +513,7 @@ public class OpenApiSkill extends AbsSkill {
     private String formatApiDocs(Collection<ApiTool> tools) {
         StringBuilder sb = new StringBuilder();
         for (ApiTool tool : tools) {
-            sb.append("---\n").append("* **API: ").append(tool.getName()).append("**\n")
+            sb.append("---\n").append("* **OpenAPI: ").append(tool.getName()).append("**\n")
                     .append("  - 业务分组: ").append(String.join(", ", tool.getTags())).append("\n")
                     .append("  - 功能: ").append(tool.getDescription()).append("\n")
                     .append("  - 路径: ").append(tool.getMethod()).append(" ").append(tool.getPath()).append("\n");
