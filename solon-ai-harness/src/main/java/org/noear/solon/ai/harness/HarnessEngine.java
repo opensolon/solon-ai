@@ -37,6 +37,7 @@ import org.noear.solon.ai.skills.lsp.LspServerParameters;
 import org.noear.solon.ai.skills.lsp.LspSkill;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.client.McpProviders;
+import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.skills.cli.PoolManager;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
 import org.noear.solon.ai.skills.cli.TodoSkill;
@@ -44,7 +45,7 @@ import org.noear.solon.ai.skills.memory.MemorySkill;
 import org.noear.solon.ai.skills.memory.MemorySolution;
 import org.noear.solon.ai.skills.openapi.ApiSource;
 import org.noear.solon.ai.skills.openapi.OpenApiSkill;
-import org.noear.solon.ai.skills.toolgateway.ToolGatewaySkill;
+import org.noear.solon.ai.skills.toolgateway.McpGatewaySkill;
 import org.noear.solon.ai.skills.web.CodeSearchTool;
 import org.noear.solon.ai.skills.web.WebfetchTool;
 import org.noear.solon.ai.skills.web.WebsearchTool;
@@ -83,7 +84,7 @@ public class HarnessEngine {
     private final LspManager lspManager;
     private final LspSkill lspSkill;
 
-    private final ToolGatewaySkill mcpGatewaySkill;
+    private final McpGatewaySkill mcpGatewaySkill;
     private final OpenApiSkill openApiSkill;
 
     private final MemorySkill memorySkill;
@@ -168,7 +169,7 @@ public class HarnessEngine {
         return webfetchTool;
     }
 
-    public ToolGatewaySkill getMcpGatewaySkill() {
+    public McpGatewaySkill getMcpGatewaySkill() {
         return mcpGatewaySkill;
     }
 
@@ -192,6 +193,24 @@ public class HarnessEngine {
         openApiSkill.removeApi(docUrl);
         props.getApiServers().remove(docUrl);
         return openApiSkill;
+    }
+
+    /**
+     * 动态添加 MCP 服务
+     */
+    public McpGatewaySkill addMcpServer(String name, McpServerParameters parameters) {
+        mcpGatewaySkill.addMcpServer(name, parameters);
+        props.addMcpServer(name, parameters);
+        return mcpGatewaySkill;
+    }
+
+    /**
+     * 动态移除 MCP 服务（并关闭连接）
+     */
+    public McpGatewaySkill removeMcpServer(String name) {
+        mcpGatewaySkill.removeMcpServer(name);
+        props.getMcpServers().remove(name);
+        return mcpGatewaySkill;
     }
 
     public void extensionAdd(HarnessExtension extension) {
@@ -261,14 +280,14 @@ public class HarnessEngine {
             }
         }
 
-        mcpGatewaySkill = new ToolGatewaySkill().retryConfig(props.getMcpRetries());
+        mcpGatewaySkill = new McpGatewaySkill().retryConfig(props.getMcpRetries());
         try {
             if (Assert.isNotEmpty(props.getMcpServers())) {
                 McpProviders mcpProviders = McpProviders.fromMcpServers(props.getMcpServers());
 
                 if (mcpProviders.getProviders().size() > 0) {
                     for (Map.Entry<String, McpClientProvider> entry : mcpProviders.getProviders().entrySet()) {
-                        mcpGatewaySkill.addTool(entry.getKey(), entry.getValue());
+                        mcpGatewaySkill.addMcpServer(entry.getKey(), entry.getValue());
                     }
                 }
             }
