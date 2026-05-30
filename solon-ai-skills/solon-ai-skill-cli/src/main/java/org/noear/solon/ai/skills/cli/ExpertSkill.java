@@ -80,7 +80,7 @@ public class ExpertSkill extends AbsSkill {
 
             sb.append("<skill_list>\n");
             for (SkillDir s : skillMap.values()) {
-                sb.append("  <skill aliasPath=\"").append(s.aliasPath).append("\">").append(s.description).append("</skill>\n");
+                sb.append("  <skill aliasPath=\"").append(s.getAliasPath()).append("\">").append(s.getDescription()).append("</skill>\n");
             }
             sb.append("</skill_list>");
         } else if (total <= searchThreshold) {
@@ -90,7 +90,7 @@ public class ExpertSkill extends AbsSkill {
 
             sb.append("<skill_list>\n");
             for (SkillDir s : skillMap.values()) {
-                sb.append("  <skill aliasPath=\"").append(s.aliasPath).append("\" />\n");
+                sb.append("  <skill aliasPath=\"").append(s.getAliasPath()).append("\" />\n");
             }
             sb.append("</skill_list>");
         } else {
@@ -139,7 +139,7 @@ public class ExpertSkill extends AbsSkill {
 
         sb.append("<skill_list>\n");
         for (SkillDir s : skillMap.values()) {
-            sb.append("  <skill aliasPath=\"").append(s.aliasPath).append("\">").append(s.description).append("</skill>\n");
+            sb.append("  <skill aliasPath=\"").append(s.getAliasPath()).append("\">").append(s.getDescription()).append("</skill>\n");
         }
         sb.append("</skill_list>");
 
@@ -153,8 +153,8 @@ public class ExpertSkill extends AbsSkill {
 
         List<SkillDir> matches = skillMap.values().stream()
                 .filter(s -> Arrays.stream(keys).anyMatch(k ->
-                        s.aliasPath.toLowerCase().contains(k) ||
-                                s.description.toLowerCase().contains(k)))
+                        s.getAliasPath().toLowerCase().contains(k) ||
+                                s.getDescription().toLowerCase().contains(k)))
                 .limit(15)
                 .collect(Collectors.toList());
 
@@ -162,7 +162,7 @@ public class ExpertSkill extends AbsSkill {
 
         StringBuilder sb = new StringBuilder("<skill_list>\n");
         for (SkillDir s : matches) {
-            sb.append("  <skill aliasPath=\"").append(s.aliasPath).append("\">").append(s.description).append("</skill>\n");
+            sb.append("  <skill aliasPath=\"").append(s.getAliasPath()).append("\">").append(s.getDescription()).append("</skill>\n");
         }
         sb.append("</skill_list>");
 
@@ -171,17 +171,13 @@ public class ExpertSkill extends AbsSkill {
 
     @ToolMapping(name = "skillread", description = "读取本地技能详细说明书。在选定技能后、开始执行具体任务前，必须调用此工具以获取具体的环境要求、参数规约及可用文件别名。")
     public String skillread(@Param(value = "aliasPath", description = "技能的唯一路径标识（例如：'@skills/deep-research'）") String aliasPath, String __cwd) throws IOException {
-        // 1. 优先从内存 Map 查找逻辑路径
+        // 从内存 Map 查找逻辑路径
         SkillDir cachedSkill = poolManager.getSkill(aliasPath);
         if (cachedSkill != null) {
             return renderSkillXml(cachedSkill, true);
         }
 
-        // 2. 回退到物理路径解析
-        Path target = resolvePathExtended(__cwd, aliasPath);
-        if (!isSkillDir(target)) return "Error: 路径 " + aliasPath + " 不是有效的技能目录 (缺少 SKILL.md)";
-
-        return renderSkillXml(new SkillDir(null, aliasPath, target, null), true);
+        return "Error: 路径 " + aliasPath + " 不是有效的技能目录 (缺少 SKILL.md)";
     }
 
     @ToolMapping(name = "skillrefresh", description = "重新扫描所有挂载池，更新技能列表。")
@@ -193,13 +189,13 @@ public class ExpertSkill extends AbsSkill {
     // --- 核心渲染与辅助逻辑 ---
 
     private String renderSkillXml(SkillDir skill, boolean includeFiles) {
-        Path md = skill.realPath.resolve("SKILL.md");
-        if (!Files.exists(md)) md = skill.realPath.resolve("skill.md");
+        Path md = skill.getRealPath().resolve("SKILL.md");
+        if (!Files.exists(md)) md = skill.getRealPath().resolve("skill.md");
 
         try {
             String content = Files.exists(md) ? new String(Files.readAllBytes(md), StandardCharsets.UTF_8) : "";
 
-            StringBuilder sb = new StringBuilder("\n<skill_content name=\"" + skill.aliasPath + "\">\n");
+            StringBuilder sb = new StringBuilder("\n<skill_content name=\"" + skill.getAliasPath() + "\">\n");
             sb.append("[SYSTEM NOTE: Access granted. Use the <alias> paths in 'bash' tool for execution.]\n");
             sb.append("[If this task takes many steps, remember to re-read this skill if you feel uncertain about details.]\n");
 
@@ -211,13 +207,13 @@ public class ExpertSkill extends AbsSkill {
             sb.append("</skill_content>\n");
             return sb.toString();
         } catch (IOException e) {
-            return "Load skill " + skill.aliasPath + " failed.";
+            return "Load skill " + skill.getAliasPath() + " failed.";
         }
     }
 
     private String sampleFiles(SkillDir skill) throws IOException {
-        Path dir = skill.realPath;
-        String aliasBase = skill.aliasPath;
+        Path dir = skill.getRealPath();
+        String aliasBase = skill.getAliasPath();
 
         // 定义忽略列表，过滤掉干扰项
         Set<String> ignorePatterns = new HashSet<>(Arrays.asList(

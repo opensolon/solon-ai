@@ -48,7 +48,7 @@ public class PoolManager {
      * 注册池（并扫描）
      */
     public synchronized PoolManager register(String alias, String path) {
-       return register(new PoolDir(alias, path));
+        return register(new PoolDir(alias, path));
     }
 
     /**
@@ -84,15 +84,31 @@ public class PoolManager {
         String key = alias.startsWith("@") ? alias : "@" + alias;
         PoolDir removed = poolMap.remove(key);
         if (removed != null) {
-            skillMap.entrySet().removeIf(e ->
-                    e.getKey().startsWith(key + "/") || e.getKey().equals(key));
+            skillMap.entrySet().removeIf(e -> key.equals(e.getValue().getPoolAlias()));
             LOG.debug("Mount pool has been removed.: {}", key);
         }
         return removed;
     }
 
     /**
-     * 刷新池（重新扫描所有池）
+     * 刷新指定挂载池（增量更新）
+     */
+    public synchronized void refresh(String alias) {
+        String key = alias.startsWith("@") ? alias : "@" + alias;
+        PoolDir poolDir = poolMap.get(key);
+        if (poolDir == null) return;
+
+        // 1. 扫描该池
+        Map<String, SkillDir> tmp = new LinkedHashMap<>();
+        scanSkillAndCache(poolDir, tmp);
+
+        // 2. 移除该池下的旧技能
+        skillMap.entrySet().removeIf(e -> key.equals(e.getValue().getPoolAlias()));
+        skillMap.putAll(tmp);
+    }
+
+    /**
+     * 刷新所有挂载池（重新扫描）
      */
     public synchronized void refresh() {
         Map<String, SkillDir> tmp = new ConcurrentHashMap<>();
@@ -142,7 +158,7 @@ public class PoolManager {
         return Collections.unmodifiableCollection(poolMap.values());
     }
 
-    public Set<String> getPoolKeySet(){
+    public Set<String> getPoolKeySet() {
         return poolMap.keySet();
     }
 
@@ -165,7 +181,6 @@ public class PoolManager {
     }
 
 
-
     private static void scanSkillAndCache(PoolDir poolDir, Map<String, SkillDir> map) {
         try {
             Files.walkFileTree(poolDir.getRealPath(), EnumSet.noneOf(FileVisitOption.class), 3, new SimpleFileVisitor<Path>() {
@@ -174,7 +189,7 @@ public class PoolManager {
                     if (isSkillDir(dir)) {
                         String name = poolDir.getRealPath().relativize(dir).toString().replace("\\", "/");
                         String aliasPath = poolDir.getAlias() + (name.isEmpty() ? "" : "/" + name);
-                        map.put(aliasPath, new SkillDir(name, aliasPath, dir, parseDescription(dir)));
+                        map.put(aliasPath, new SkillDir(name, poolDir.getAlias(), aliasPath, dir, parseDescription(dir)));
                         return FileVisitResult.SKIP_SUBTREE;
                     }
                     if (dir.getFileName().toString().startsWith(".")) return FileVisitResult.SKIP_SUBTREE;
