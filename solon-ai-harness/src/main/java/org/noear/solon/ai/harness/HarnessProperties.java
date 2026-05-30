@@ -117,6 +117,22 @@ public class HarnessProperties implements Serializable {
     }
 
     /**
+     * @deprecated 4.0.0 {@link #getMountPools()}
+     * */
+    @Deprecated
+    protected Map<String, String> getSkillPools() {
+        return skillPools;
+    }
+
+    /**
+     * @deprecated 4.0.0 {@link #setMountPools(Map)}
+     * */
+    @Deprecated
+    protected void setSkillPools(Map<String, String> skillPools) {
+        this.skillPools = skillPools;
+    }
+
+    /**
      * 添加扩展
      */
     public void addExtension(HarnessExtension extension) {
