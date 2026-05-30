@@ -188,7 +188,7 @@ public class TerminalSkill extends AbsSkill {
 
         sb.append("- **路径规则**: \n");
         sb.append("  - **工作区(Workspace)**: 你的主目录，支持读写。使用相对路径访问（如 `src/app.java`）。\n");
-        sb.append("  - **挂载池(Pools)**: 以 `@` 开头的逻辑路径（如 ").append(poolManager.getPoolMap().keySet()).append("）为**只读**资源，严禁写入。\n");
+        sb.append("  - **挂载池(Pools)**: 以 `@` 开头的逻辑路径（如 ").append(poolManager.getPoolKeySet()).append("）为**只读**资源，严禁写入。\n");
         if (sandboxMode) {
             sb.append("  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`) 或逻辑路径 (@pool)。\n");
         } else {
@@ -782,7 +782,7 @@ public class TerminalSkill extends AbsSkill {
         if (pStr.startsWith("@")) {
             Path target = poolManager.resolve(workPath, pStr);
             String alias = pStr.split("[/\\\\]")[0];
-            boolean inPool = poolManager.getPoolMap().containsKey(alias);
+            boolean inPool = poolManager.hasPool(alias);
 
             if (!inPool) {
                 throw new SecurityException("权限拒绝：未知的挂载池路径 " + pStr);
@@ -840,12 +840,12 @@ public class TerminalSkill extends AbsSkill {
 
     private String translateCommandToEnv(String command, Map<String, String> envs) {
         String result = command;
-        for (Map.Entry<String, Path> entry : poolManager.getPoolMap().entrySet()) {
-            String alias = entry.getKey(); // 例如 @pool1
+        for (PoolDir poolDir : poolManager.getPools()) {
+            String alias = poolDir.getAlias(); // 例如 @pool1
             String envKey = alias.substring(1).toUpperCase(); // POOL1
 
             // 将物理路径存入 envs，底层 ProcessBuilder 会将其注入系统环境
-            envs.put(envKey, entry.getValue().toString());
+            envs.put(envKey, poolDir.getRealPath().toString());
 
             // 替换指令中的逻辑路径为环境变量引用
             String placeholder = getEnvPlaceholder(envKey);

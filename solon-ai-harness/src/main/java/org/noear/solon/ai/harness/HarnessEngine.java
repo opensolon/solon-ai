@@ -305,8 +305,8 @@ public class HarnessEngine {
         cliSkills.bashAsyncEnabled(props.isBashAsyncEnabled());
         cliSkills.getTerminalSkill().setSandboxMode(props.isSandboxMode());
         if (Assert.isNotEmpty(props.getSkillPools())) {
-            props.getSkillPools().forEach((alias, dir) -> {
-                cliSkills.skillPool(alias, dir);
+            props.getSkillPools().forEach((alias, path) -> {
+                cliSkills.getPoolManager().register(alias, path);
             });
         }
 

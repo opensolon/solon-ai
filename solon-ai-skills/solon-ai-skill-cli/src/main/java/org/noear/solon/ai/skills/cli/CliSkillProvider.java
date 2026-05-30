@@ -4,6 +4,7 @@ import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.skill.SkillProvider;
 
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collection;
 
@@ -35,22 +36,6 @@ public class CliSkillProvider implements SkillProvider {
 
         terminalSkill = new TerminalSkill(workDir, this.poolManager);
         expertSkill = new ExpertSkill(this.poolManager);
-    }
-
-    /**
-     * 添加技能池
-     */
-    public CliSkillProvider skillPool(String alias, Path dir) {
-        poolManager.register(alias, dir);
-        return this;
-    }
-
-    /**
-     * 添加技能池
-     */
-    public CliSkillProvider skillPool(String alias, String dir) {
-        poolManager.register(alias, dir);
-        return this;
     }
 
     /**

@@ -27,6 +27,7 @@ import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * 资源池管理（主要是技能池）
@@ -37,8 +38,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class PoolManager {
     private static final Logger LOG = LoggerFactory.getLogger(PoolManager.class);
 
-    // 逻辑路径前缀 -> 物理根路径 (如 "@shared" -> "/path/to/shared")
-    private final Map<String, Path> poolMap = new ConcurrentHashMap<>();
+    // 逻辑路径前缀 -> 池目录信息 (如 "@shared" -> PoolDir)
+    private final Map<String, PoolDir> poolMap = new ConcurrentHashMap<>();
 
     // 逻辑全路径 -> 技能目录信息 (如 "@shared/video-creator" -> SkillDir)
     private volatile Map<String, SkillDir> skillMap = new ConcurrentHashMap<>();
@@ -46,27 +47,48 @@ public class PoolManager {
     /**
      * 注册池（并扫描）
      */
-    public synchronized PoolManager register(String alias, Path dir) {
-        Path rootPath = dir.toAbsolutePath().normalize();
-        String key = alias.startsWith("@") ? alias : "@" + alias;
+    public synchronized PoolManager register(String alias, String path) {
+       return register(new PoolDir(alias, path));
+    }
 
-        if (Files.exists(rootPath) && Files.isDirectory(rootPath)) {
-            poolMap.put(key, rootPath);
-            scanAndCache(key, rootPath, skillMap);
-            LOG.debug("Skill pool has been loaded.: {} -> {}", key, rootPath);
+    /**
+     * 注册池（并扫描）
+     */
+    public synchronized PoolManager register(String alias, String path, Path realPath) {
+        return register(new PoolDir(alias, path, realPath));
+    }
+
+    /**
+     * 注册池（并扫描）
+     */
+    public synchronized PoolManager register(PoolDir poolDir) {
+        String key = poolDir.getAlias();
+        Path realPath = poolDir.getRealPath();
+
+        if (Files.exists(realPath) && Files.isDirectory(realPath)) {
+            poolMap.put(key, poolDir);
+            scanAndCache(poolDir, skillMap);
+            LOG.debug("Skill pool has been loaded.: {} -> {}", key, realPath);
         } else {
-            String reason = !Files.exists(rootPath) ? "The path does not exist." : "Not an effective directory";
-            LOG.debug("Skill pool loading skip：{} (alias: {}, path: {})", reason, key, rootPath);
+            String reason = !Files.exists(realPath) ? "The path does not exist." : "Not an effective directory";
+            LOG.debug("Skill pool loading skip：{} (alias: {}, path: {})", reason, key, poolDir.getPath());
         }
 
         return this;
     }
 
     /**
-     * 注册池（并扫描）
+     * 移除池（及其关联技能）
      */
-    public PoolManager register(String alias, String dir) {
-        return register(alias, Paths.get(dir));
+    public synchronized PoolDir remove(String alias) {
+        String key = alias.startsWith("@") ? alias : "@" + alias;
+        PoolDir removed = poolMap.remove(key);
+        if (removed != null) {
+            skillMap.entrySet().removeIf(e ->
+                    e.getKey().startsWith(key + "/") || e.getKey().equals(key));
+            LOG.debug("Skill pool has been removed.: {}", key);
+        }
+        return removed;
     }
 
     /**
@@ -74,8 +96,8 @@ public class PoolManager {
      */
     public synchronized void refresh() {
         Map<String, SkillDir> tmp = new ConcurrentHashMap<>();
-        for (Map.Entry<String, Path> entry : poolMap.entrySet()) {
-            scanAndCache(entry.getKey(), entry.getValue(), tmp);
+        for (Map.Entry<String, PoolDir> entry : poolMap.entrySet()) {
+            scanAndCache(entry.getValue(), tmp);
         }
 
         skillMap = tmp;
@@ -88,16 +110,50 @@ public class PoolManager {
         if (pStr == null || pStr.isEmpty() || ".".equals(pStr)) return workDir;
 
         if (pStr.startsWith("@")) {
-            for (Map.Entry<String, Path> e : poolMap.entrySet()) {
+            for (Map.Entry<String, PoolDir> e : poolMap.entrySet()) {
                 if (pStr.startsWith(e.getKey())) {
                     String sub = pStr.substring(e.getKey().length()).replaceFirst("^[/\\\\]", "");
-                    return e.getValue().resolve(sub).normalize();
+                    return e.getValue().getRealPath().resolve(sub).normalize();
                 }
             }
         }
 
         String cleanPath = pStr.startsWith("./") ? pStr.substring(2) : pStr;
         return workDir.resolve(cleanPath).normalize();
+    }
+
+    /**
+     * 获取单个池
+     */
+    public PoolDir getPool(String alias) {
+        String key = alias.startsWith("@") ? alias : "@" + alias;
+        return poolMap.get(key);
+    }
+
+    public boolean hasPool(String alias) {
+        String key = alias.startsWith("@") ? alias : "@" + alias;
+        return poolMap.containsKey(key);
+    }
+
+    /**
+     * 获取所有池
+     */
+    public Collection<PoolDir> getPools() {
+        return Collections.unmodifiableCollection(poolMap.values());
+    }
+
+    public Set<String> getPoolKeySet(){
+        return poolMap.keySet();
+    }
+
+    /**
+     * 获取某池下的所有技能
+     */
+    public List<SkillDir> getSkillsByPool(String alias) {
+        String key = alias.startsWith("@") ? alias : "@" + alias;
+        return skillMap.values().stream()
+                .filter(s -> s.getAliasPath().startsWith(key + "/") || s.getAliasPath().equals(key))
+                .collect(Collectors.toList());
     }
 
     public Map<String, SkillDir> getSkillMap() {
@@ -108,18 +164,16 @@ public class PoolManager {
         return skillMap.get(aliasPath);
     }
 
-    public Map<String, Path> getPoolMap() {
-        return poolMap;
-    }
 
-    private static void scanAndCache(String alias, Path root, Map<String, SkillDir> map) {
+
+    private static void scanAndCache(PoolDir poolDir, Map<String, SkillDir> map) {
         try {
-            Files.walkFileTree(root, EnumSet.noneOf(FileVisitOption.class), 3, new SimpleFileVisitor<Path>() {
+            Files.walkFileTree(poolDir.getRealPath(), EnumSet.noneOf(FileVisitOption.class), 3, new SimpleFileVisitor<Path>() {
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
                     if (isSkillDir(dir)) {
-                        String name = root.relativize(dir).toString().replace("\\", "/");
-                        String aliasPath = alias + (name.isEmpty() ? "" : "/" + name);
+                        String name = poolDir.getRealPath().relativize(dir).toString().replace("\\", "/");
+                        String aliasPath = poolDir.getAlias() + (name.isEmpty() ? "" : "/" + name);
                         map.put(aliasPath, new SkillDir(name, aliasPath, dir, parseDescription(dir)));
                         return FileVisitResult.SKIP_SUBTREE;
                     }
@@ -128,7 +182,7 @@ public class PoolManager {
                 }
             });
         } catch (IOException e) {
-            LOG.error("Scan skill pool failed: {}", root, e);
+            LOG.error("Scan skill pool failed: {}", poolDir.getRealPath(), e);
         }
     }
 
