@@ -67,7 +67,7 @@ public class PoolManager {
 
         if (Files.exists(realPath) && Files.isDirectory(realPath)) {
             poolMap.put(key, poolDir);
-            scanAndCache(poolDir, skillMap);
+            scanSkillAndCache(poolDir, skillMap);
             LOG.debug("Skill pool has been loaded.: {} -> {}", key, realPath);
         } else {
             String reason = !Files.exists(realPath) ? "The path does not exist." : "Not an effective directory";
@@ -97,7 +97,7 @@ public class PoolManager {
     public synchronized void refresh() {
         Map<String, SkillDir> tmp = new ConcurrentHashMap<>();
         for (Map.Entry<String, PoolDir> entry : poolMap.entrySet()) {
-            scanAndCache(entry.getValue(), tmp);
+            scanSkillAndCache(entry.getValue(), tmp);
         }
 
         skillMap = tmp;
@@ -166,7 +166,7 @@ public class PoolManager {
 
 
 
-    private static void scanAndCache(PoolDir poolDir, Map<String, SkillDir> map) {
+    private static void scanSkillAndCache(PoolDir poolDir, Map<String, SkillDir> map) {
         try {
             Files.walkFileTree(poolDir.getRealPath(), EnumSet.noneOf(FileVisitOption.class), 3, new SimpleFileVisitor<Path>() {
                 @Override
