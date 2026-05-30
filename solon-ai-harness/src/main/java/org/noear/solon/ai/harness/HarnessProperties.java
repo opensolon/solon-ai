@@ -90,7 +90,7 @@ public class HarnessProperties implements Serializable {
 
     //大模型
     private List<ChatConfig> models = new CopyOnWriteArrayList<>();
-    //技能池
+    //挂载池（技能）
     private Map<String, String> skillPools = new ConcurrentHashMap<>();
     //代理池
     private List<String> agentPools = new CopyOnWriteArrayList<>();
@@ -140,7 +140,7 @@ public class HarnessProperties implements Serializable {
     }
 
     /**
-     * 添加技能池
+     * 添加技能挂载池
      *
      * @param alias 必须 @ 开头
      */

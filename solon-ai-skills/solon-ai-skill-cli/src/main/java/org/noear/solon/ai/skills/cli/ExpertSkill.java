@@ -58,7 +58,7 @@ public class ExpertSkill extends AbsSkill {
 
     @Override
     public String description() {
-        return "技能管理器。支持从本地或资源池发现并加载技能 (SKILL.md)。";
+        return "技能管理器。支持从本地或挂载池发现并加载技能 (SKILL.md)。";
     }
 
     @Override
@@ -124,7 +124,7 @@ public class ExpertSkill extends AbsSkill {
         return getToolAry();
     }
 
-    @ToolMapping(name = "skilllist", description = "列出本地所有已挂载技能池中的可用清单。")
+    @ToolMapping(name = "skilllist", description = "列出本地所有挂载池中的可用技能清单。")
     public String skilllist() {
         Map<String, SkillDir> skillMap = poolManager.getSkillMap();
         if (skillMap.isEmpty()) {
@@ -146,7 +146,7 @@ public class ExpertSkill extends AbsSkill {
         return sb.toString();
     }
 
-    @ToolMapping(name = "skillsearch", description = "在所有本地技能池中搜索关键字。支持空格分隔多个词。")
+    @ToolMapping(name = "skillsearch", description = "在所有挂载池中搜索技能关键字。支持空格分隔多个词。")
     public String skillsearch(@Param("query") String query) {
         Map<String, SkillDir> skillMap = poolManager.getSkillMap();
         String[] keys = query.toLowerCase().split("\\s+");
@@ -184,7 +184,7 @@ public class ExpertSkill extends AbsSkill {
         return renderSkillXml(new SkillDir(null, aliasPath, target, null), true);
     }
 
-    @ToolMapping(name = "skillrefresh", description = "重新扫描本地所有技能池，更新技能列表。")
+    @ToolMapping(name = "skillrefresh", description = "重新扫描所有挂载池，更新技能列表。")
     public String skillrefresh() {
         poolManager.refresh();
         return "技能库已刷新，当前可用技能数：" + poolManager.getSkillMap().size();

@@ -19,7 +19,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 /**
- * 资源池目录
+ * 挂载池目录
  *
  * @author noear
  * @since 4.0.0

@@ -40,7 +40,7 @@ public class NoneProtocol implements TeamProtocol {
     }
 
     /**
-     * 不定义内部流转逻辑，使 TeamAgent 仅作为 Agent 资源池使用
+     * 不定义内部流转逻辑，使 TeamAgent 仅作为 Agent 挂载池使用
      */
     @Override
     public void buildGraph(GraphSpec spec) {

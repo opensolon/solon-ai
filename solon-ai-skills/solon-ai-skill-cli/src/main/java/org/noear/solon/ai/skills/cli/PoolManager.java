@@ -30,7 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
- * 资源池管理（主要是技能池）
+ * 挂载池管理
  *
  * @author noear
  * @since 3.9.5
@@ -68,10 +68,10 @@ public class PoolManager {
         if (Files.exists(realPath) && Files.isDirectory(realPath)) {
             poolMap.put(key, poolDir);
             scanSkillAndCache(poolDir, skillMap);
-            LOG.debug("Skill pool has been loaded.: {} -> {}", key, realPath);
+            LOG.debug("Mount pool has been loaded.: {} -> {}", key, realPath);
         } else {
             String reason = !Files.exists(realPath) ? "The path does not exist." : "Not an effective directory";
-            LOG.debug("Skill pool loading skip：{} (alias: {}, path: {})", reason, key, poolDir.getPath());
+            LOG.debug("Mount pool loading skip：{} (alias: {}, path: {})", reason, key, poolDir.getPath());
         }
 
         return this;
@@ -86,7 +86,7 @@ public class PoolManager {
         if (removed != null) {
             skillMap.entrySet().removeIf(e ->
                     e.getKey().startsWith(key + "/") || e.getKey().equals(key));
-            LOG.debug("Skill pool has been removed.: {}", key);
+            LOG.debug("Mount pool has been removed.: {}", key);
         }
         return removed;
     }

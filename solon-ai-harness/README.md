@@ -4,13 +4,13 @@
 
 ## 概述
 
-`solon-ai-harness` 是一个功能完整的 AI Agent 编排框架，提供主代理（Main Agent）与子代理（Subagent）的多智能体协作能力。它支持动态工具权限管理、技能池加载、MCP 服务集成、REST API 集成、人工介入（HITL）安全审计等高级特性。
+`solon-ai-harness` 是一个功能完整的 AI Agent 编排框架，提供主代理（Main Agent）与子代理（Subagent）的多智能体协作能力。它支持动态工具权限管理、挂载池加载、MCP 服务集成、REST API 集成、人工介入（HITL）安全审计等高级特性。
 
 ## 核心特性
 
 - **多智能体架构**: 主代理 + 子代理（task/multitask）协作模式，支持上下文隔离与并行任务执行
 - **动态工具权限**: 细粒度的工具权限控制（read/write/edit/bash/grep/glob 等）
-- **技能池管理**: 支持全局/本地/自定义技能池，兼容 CLI Skill 规范
+- **挂载池管理**: 支持全局/本地/自定义挂载池，兼容 CLI Skill 规范
 - **MCP 服务集成**: 动态加载 MCP Server 工具
 - **REST API 集成**: 将 REST API 作为 Agent 工具调用
 - **人工介入（HITL）**: 对 bash 等高危命令进行安全审计与拦截
@@ -24,7 +24,7 @@
 solon-ai-harness/
 ├── src/main/java/org/noear/solon/ai/harness/
 │   ├── HarnessEngine.java          # 马具引擎核心（Builder 模式）
-│   ├── HarnessProperties.java      # 配置属性（工作区、工具、MCP、技能池等）
+│   ├── HarnessProperties.java      # 配置属性（工作区、工具、MCP、挂载池等）
 │   ├── agent/
 │   │   ├── AgentDefinition.java    # 代理定义（支持 Markdown YAML Frontmatter 解析）
 │   │   ├── AgentFactory.java       # 代理工厂（根据定义构建 ReActAgent）
