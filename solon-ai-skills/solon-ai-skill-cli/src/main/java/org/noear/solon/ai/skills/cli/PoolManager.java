@@ -48,14 +48,14 @@ public class PoolManager {
      * 注册池（并扫描）
      */
     public synchronized PoolManager register(String alias, String path) {
-        return register(new PoolDir(alias, path));
+        return register(new PoolDir(alias, false, path));
     }
 
     /**
      * 注册池（并扫描）
      */
     public synchronized PoolManager register(String alias, String path, Path realPath) {
-        return register(new PoolDir(alias, path, realPath));
+        return register(new PoolDir(alias, false, path, realPath));
     }
 
     /**
@@ -94,7 +94,7 @@ public class PoolManager {
      * 刷新指定挂载池（增量更新）
      */
     public synchronized void refresh(String alias) {
-        if(Assert.isEmpty(alias)){
+        if (Assert.isEmpty(alias)) {
             refresh();
         } else {
             String key = alias.startsWith("@") ? alias : "@" + alias;

@@ -26,22 +26,29 @@ import java.nio.file.Paths;
  */
 public class PoolDir {
     private final String alias;
+    //是否原生性的
+    private final boolean primary;
     //支持 "~/"（用户目录相对位置） 和 "./"（工作区相对位置）
     private final String path;
     private transient final Path realPath;
 
-    public PoolDir(String alias, String path) {
-        this(alias, path, Paths.get(path));
+    public PoolDir(String alias, boolean primary, String path) {
+        this(alias, primary, path, Paths.get(path));
     }
 
-    public PoolDir(String alias, String path, Path realPath) {
+    public PoolDir(String alias, boolean primary, String path, Path realPath) {
         this.alias = alias.startsWith("@") ? alias : "@" + alias;
+        this.primary = primary;
         this.path = path;
         this.realPath = realPath.toAbsolutePath().normalize();
     }
 
     public String getAlias() {
         return alias;
+    }
+
+    public boolean isPrimary() {
+        return primary;
     }
 
     /**
