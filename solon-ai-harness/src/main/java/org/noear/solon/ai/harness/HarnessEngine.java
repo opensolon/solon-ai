@@ -35,8 +35,6 @@ import org.noear.solon.ai.harness.hitl.HitlStrategy;
 import org.noear.solon.ai.skills.lsp.LspManager;
 import org.noear.solon.ai.skills.lsp.LspServerParameters;
 import org.noear.solon.ai.skills.lsp.LspSkill;
-import org.noear.solon.ai.mcp.client.McpClientProvider;
-import org.noear.solon.ai.mcp.client.McpProviders;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.skills.cli.PoolManager;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
@@ -52,7 +50,6 @@ import org.noear.solon.ai.skills.web.WebsearchTool;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
-import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
@@ -306,6 +303,11 @@ public class HarnessEngine {
         cliSkills.getTerminalSkill().setSandboxMode(props.isSandboxMode());
         if (Assert.isNotEmpty(props.getSkillPools())) {
             props.getSkillPools().forEach((alias, path) -> {
+                cliSkills.getPoolManager().register(alias, path);
+            });
+        }
+        if (Assert.isNotEmpty(props.getMountPools())) {
+            props.getMountPools().forEach((alias, path) -> {
                 cliSkills.getPoolManager().register(alias, path);
             });
         }

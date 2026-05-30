@@ -29,7 +29,6 @@ import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.stream.Collectors;
 
 /**
  * 马具配置属性
@@ -90,8 +89,14 @@ public class HarnessProperties implements Serializable {
 
     //大模型
     private List<ChatConfig> models = new CopyOnWriteArrayList<>();
-    //挂载池（技能）
+    /**
+     * @deprecated 4.0.0
+     */
+    @Deprecated
     private Map<String, String> skillPools = new ConcurrentHashMap<>();
+    //挂载池
+    private Map<String, String> mountPools = new ConcurrentHashMap<>();
+
     //代理池
     private List<String> agentPools = new CopyOnWriteArrayList<>();
     //mcp集
@@ -140,12 +145,12 @@ public class HarnessProperties implements Serializable {
     }
 
     /**
-     * 添加技能挂载池
+     * 添加挂载池（主要是技能持载池）
      *
      * @param alias 必须 @ 开头
      */
-    public void addSkillPool(String alias, String path) {
-        getSkillPools().put(alias, path);
+    public void addMountPool(String alias, String path) {
+        getMountPools().put(alias, path);
     }
 
     /**
