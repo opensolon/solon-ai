@@ -27,6 +27,8 @@
 * 添加 solon-ai-agent ToolExchanger 类
 * 添加 solon-ai-harness bashAsyncEnabled 开关
 * 添加 solon-ai-harness HarnessEngine.removeApi 方法
+* 添加 solon-ai-harness HarnessProperties.mountPools 属性（替代 skillPools，后者标为弃用）
+* 添加 solon-ai-harness 用 McpGatewaySkill 替换 ToolGatewaySkill（更有争对性）
 * 优化 solon-ai-agent 初始化时（rest）添加快照持久化
 * 优化 solon-ai-harness AgentFactory `edit` 权限添加 `read`、`write` 控制
 * 优化 solon-ai-agent SummarizationInterceptor 压缩时机（从 onObservation 改为 onReasonStart），并增加系统词大小
@@ -39,7 +41,7 @@
 * 调整 solon-ai-agent ReActInterceptor.onAction 更名为 onActionStart，并添加 onActionEnd
 * 调整 solon-ai-agent ReActInterceptor.onActionStart,onObservation: toolName,args,result 合并为 toolExchanger（并允许修改）
 * 调整 solon-ai-agent ReActInterceptor.onReason 更名为 onReasonEnd（和 onReasonStart 凑成一对）
-* 添加 solon-ai-harness 用 McpGatewaySkill 替换 ToolGatewaySkill（更有争对性）
+* 调整 solon-ai-skill-cli PoolManager 实现细节，并添加 refresh(alias)
 * 移除 solon-ai-skill-browser（包太大了，没必要）
 * 修复 solon-ai-mcp WebRxStreamableHttpTransport 没有 event 的消息会出错的问题（优化非规范兼容）
 * mcp-sdk 升为 1.1.3
