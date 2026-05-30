@@ -94,17 +94,21 @@ public class PoolManager {
      * 刷新指定挂载池（增量更新）
      */
     public synchronized void refresh(String alias) {
-        String key = alias.startsWith("@") ? alias : "@" + alias;
-        PoolDir poolDir = poolMap.get(key);
-        if (poolDir == null) return;
+        if(Assert.isEmpty(alias)){
+            refresh();
+        } else {
+            String key = alias.startsWith("@") ? alias : "@" + alias;
+            PoolDir poolDir = poolMap.get(key);
+            if (poolDir == null) return;
 
-        // 1. 扫描该池
-        Map<String, SkillDir> tmp = new LinkedHashMap<>();
-        scanSkillAndCache(poolDir, tmp);
+            // 1. 扫描该池
+            Map<String, SkillDir> tmp = new LinkedHashMap<>();
+            scanSkillAndCache(poolDir, tmp);
 
-        // 2. 移除该池下的旧技能
-        skillMap.entrySet().removeIf(e -> key.equals(e.getValue().getPoolAlias()));
-        skillMap.putAll(tmp);
+            // 2. 移除该池下的旧技能
+            skillMap.entrySet().removeIf(e -> key.equals(e.getValue().getPoolAlias()));
+            skillMap.putAll(tmp);
+        }
     }
 
     /**
