@@ -64,9 +64,9 @@ public class PoolManager {
     public synchronized PoolManager register(PoolDir poolDir) {
         String key = poolDir.getAlias();
         Path realPath = poolDir.getRealPath();
+        poolMap.put(key, poolDir);
 
         if (Files.exists(realPath) && Files.isDirectory(realPath)) {
-            poolMap.put(key, poolDir);
             scanSkillAndCache(poolDir, skillMap);
             LOG.debug("Mount pool has been loaded.: {} -> {}", key, realPath);
         } else {
