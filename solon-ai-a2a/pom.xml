@@ -15,10 +15,6 @@
     <name>${project.artifactId}</name>
     <packaging>jar</packaging>
 
-    <properties>
-        <json-schema-validator.version>1.5.7</json-schema-validator.version>
-    </properties>
-
     <dependencies>
         <dependency>
             <groupId>org.noear</groupId>
