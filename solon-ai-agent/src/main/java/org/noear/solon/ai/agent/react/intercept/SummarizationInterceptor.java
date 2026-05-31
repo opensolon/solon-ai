@@ -73,15 +73,23 @@ public class SummarizationInterceptor implements ReActInterceptor {
     private static final Encoding encoding = registry.getEncodingForModel(ModelType.GPT_4O);
     private static final String META_TOKEN_SIZE = "token_size";
 
-    // 保留窗口的最大消息数（默认 15），根据不同场景：轻量级 10，均衡型 13，代码专家型 16
-    private final int maxMessages;
-    // 保留窗口的最大 Token 数（默认 12000），根据不同场景：轻量级 8000，均衡型 12000，代码专家型 20000+
-    private final int maxTokens;
+    // 保留窗口的最大消息数（默认 15）
+    private  int maxMessages;
+    // 保留窗口的最大 Token 数（默认 15_000）
+    private  int maxTokens;
     private final SummarizationStrategy summarizationStrategy;
 
+    public void setMaxMessages(int maxMessages) {
+        this.maxMessages = Math.max(15, maxMessages);
+    }
+
+    public void setMaxTokens(int maxTokens) {
+        this.maxTokens = Math.max(15_000, maxTokens);
+    }
+
     public SummarizationInterceptor(int maxMessages, int maxTokens, SummarizationStrategy summarizationStrategy) {
-        this.maxMessages = Math.max(10, maxMessages); // 10
-        this.maxTokens = Math.max(8000, maxTokens); // 12000
+        this.maxMessages = Math.max(15, maxMessages);
+        this.maxTokens = Math.max(15_000, maxTokens);
         this.summarizationStrategy = summarizationStrategy;
     }
 
@@ -101,7 +109,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
          * </ul>
          */
 
-        this(15, 12000, null);
+        this(15, 15_000, null);
     }
 
     /**
