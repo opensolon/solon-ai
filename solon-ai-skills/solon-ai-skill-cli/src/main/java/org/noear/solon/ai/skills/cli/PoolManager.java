@@ -21,6 +21,7 @@ import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -44,18 +45,23 @@ public class PoolManager {
     // 逻辑全路径 -> 技能目录信息 (如 "@shared/video-creator" -> SkillDir)
     private volatile Map<String, SkillDir> skillMap = new ConcurrentHashMap<>();
 
+    private static final String userDir = System.getProperty("user.dir"); //对应 ./
+    private static final String userHome = System.getProperty("user.home"); //对应 ～/
+
     /**
      * 注册池（并扫描）
      */
     public synchronized PoolManager register(String alias, String path) {
-        return register(new PoolDir(alias, false, path));
+        return register(new PoolDir(alias, false, path, parseRealPath(path)));
     }
 
     /**
      * 注册池（并扫描）
      */
     public synchronized PoolManager register(String alias, String path, Path realPath) {
-        return register(new PoolDir(alias, false, path, realPath));
+        // 修正：如果外部传入了 realPath 字符串形式或手动构建的 Path，通过 parseRealPath 确保其被正确展开
+        Path finalPath = (realPath != null) ? parseRealPath(realPath.toString()) : parseRealPath(path);
+        return register(new PoolDir(alias, false, path, finalPath));
     }
 
     /**
@@ -127,8 +133,9 @@ public class PoolManager {
      * 将逻辑路径解析为物理路径
      */
     public Path resolve(Path workDir, String pStr) {
-        if (pStr == null || pStr.isEmpty() || ".".equals(pStr)) return workDir;
+        if (pStr == null || pStr.isEmpty()) return workDir;
 
+        // 1. 优先处理逻辑前缀挂载池 (如 "@shared/video-creator")
         if (pStr.startsWith("@")) {
             for (Map.Entry<String, PoolDir> e : poolMap.entrySet()) {
                 if (pStr.startsWith(e.getKey())) {
@@ -138,7 +145,20 @@ public class PoolManager {
             }
         }
 
-        String cleanPath = pStr.startsWith("./") ? pStr.substring(2) : pStr;
+        // 2. 如果包含环境无关的用户目录 `~`，直接交给静态解析器，完全摆脱 workDir 上下文约束
+        if (pStr.startsWith("~")) {
+            return parseRealPath(pStr);
+        }
+
+        // 3. 处理以当前工作目录相对路径开头的路径（全面兼容带 ./ 或 .\\ 符号的情况）
+        String cleanPath = pStr;
+        if (pStr.startsWith("./") || pStr.startsWith(".\\")) {
+            cleanPath = pStr.substring(2);
+        } else if (".".equals(pStr)) {
+            return workDir.normalize();
+        }
+
+        // 4. 最终结合上下文 workDir 进行解析
         return workDir.resolve(cleanPath).normalize();
     }
 
@@ -231,5 +251,30 @@ public class PoolManager {
         } catch (Throwable e) {
             return "技能规约。";
         }
+    }
+
+    /**
+     * 内部辅助方法：解析配置路径并支持 "~/" 和 "./" 语法
+     */
+    private static Path parseRealPath(String rawPath) {
+        if (Assert.isEmpty(rawPath)) {
+            return Paths.get(userDir);
+        }
+
+        String processedPath = rawPath;
+        // 1. 处理 Unix 式或 Windows 兼容的家目录路径 (例如 ~/skills 或 ~)
+        if (rawPath.startsWith("~" + File.separator) || rawPath.equals("~")) {
+            processedPath = rawPath.replaceFirst("^~", userHome);
+        } else if (rawPath.startsWith("~/") || rawPath.startsWith("~\\")) {
+            processedPath = userHome + rawPath.substring(1);
+        }
+        // 2. 处理工作区相对路径 (例如 ./my-pool)
+        else if (rawPath.startsWith("." + File.separator) || rawPath.equals(".")) {
+            processedPath = rawPath.replaceFirst("^\\.", userDir);
+        } else if (rawPath.startsWith("./") || rawPath.startsWith(".\\")) {
+            processedPath = userDir + rawPath.substring(1);
+        }
+
+        return Paths.get(processedPath).toAbsolutePath().normalize();
     }
 }

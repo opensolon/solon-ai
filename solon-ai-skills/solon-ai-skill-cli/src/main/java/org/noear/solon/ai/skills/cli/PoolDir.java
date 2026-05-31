@@ -25,16 +25,16 @@ import java.nio.file.Paths;
  * @since 4.0.0
  */
 public class PoolDir {
-    private final String alias;
+    private String alias;
     //是否原生性的
-    private final boolean primary;
-    //支持 "~/"（用户目录相对位置） 和 "./"（工作区相对位置）
-    private final String path;
-    private transient final Path realPath;
+    private boolean primary;
+    //是否启用
+    private boolean enabled = true;
 
-    public PoolDir(String alias, boolean primary, String path) {
-        this(alias, primary, path, Paths.get(path));
-    }
+    //配置地址支持 "~/"（用户目录相对位置） 和 "./"（工作区相对位置）
+    private String path;
+    //真实地址
+    private Path realPath;
 
     public PoolDir(String alias, boolean primary, String path, Path realPath) {
         this.alias = alias.startsWith("@") ? alias : "@" + alias;
@@ -49,6 +49,10 @@ public class PoolDir {
 
     public boolean isPrimary() {
         return primary;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
     }
 
     /**

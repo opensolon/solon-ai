@@ -175,10 +175,11 @@ public class OpenApiSkill extends AbsSkill {
 
         try {
             loadApiFromDefinition(apiSource);
-            return this;
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to load OpenAPI from: " + apiSource.getDocUrl(), e);
+        } catch (Throwable e) {
+            LOG.error("Failed to load OpenAPI from: {}", apiSource.getDocUrl() , e);
         }
+
+        return this;
     }
 
     /**

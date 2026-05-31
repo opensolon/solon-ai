@@ -134,7 +134,7 @@ public class McpGatewaySkill extends AbsSkill {
             McpClientProvider provider = McpProviders.fromMcpServer(mcpParameters);
             addMcpServer(name, provider);
         } catch (IOException e) {
-            throw new RuntimeException("Mcp server '" + name + "' create failed", e);
+            LOG.error("Mcp server '{}' create failed", name, e);
         }
         return this;
     }
