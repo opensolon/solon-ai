@@ -80,16 +80,16 @@ public class SummarizationInterceptor implements ReActInterceptor {
     private final SummarizationStrategy summarizationStrategy;
 
     public void setMaxMessages(int maxMessages) {
-        this.maxMessages = Math.max(15, maxMessages);
+        this.maxMessages = Math.max(10, maxMessages);
     }
 
     public void setMaxTokens(int maxTokens) {
-        this.maxTokens = Math.max(15_000, maxTokens);
+        this.maxTokens = Math.max(10_000, maxTokens);
     }
 
     public SummarizationInterceptor(int maxMessages, int maxTokens, SummarizationStrategy summarizationStrategy) {
-        this.maxMessages = Math.max(15, maxMessages);
-        this.maxTokens = Math.max(15_000, maxTokens);
+        this.maxMessages = Math.max(10, maxMessages);
+        this.maxTokens = Math.max(10_000, maxTokens);
         this.summarizationStrategy = summarizationStrategy;
     }
 
