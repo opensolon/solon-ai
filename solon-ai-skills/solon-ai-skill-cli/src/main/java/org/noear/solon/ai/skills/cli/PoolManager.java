@@ -41,7 +41,7 @@ public class PoolManager {
     // 逻辑路径前缀 -> 池目录信息 (如 "@shared" -> PoolDir)
     private final Map<String, PoolDir> poolMap = new ConcurrentHashMap<>();
 
-    // 逻辑全路径 -> 技能目录信息 (如 "@shared/video-creator" -> SkillDir)
+    // 逻辑全路径 -> 技能目录信息 (如 "video-creator" -> SkillDir)
     private volatile Map<String, SkillDir> skillMap = new ConcurrentHashMap<>();
 
     /**
@@ -66,12 +66,14 @@ public class PoolManager {
         Path realPath = poolDir.getRealPath();
         poolMap.put(key, poolDir);
 
-        if (Files.exists(realPath) && Files.isDirectory(realPath)) {
-            scanSkillAndCache(poolDir, skillMap);
-            LOG.debug("Mount pool has been loaded.: {} -> {}", key, realPath);
-        } else {
-            String reason = !Files.exists(realPath) ? "The path does not exist." : "Not an effective directory";
-            LOG.debug("Mount pool loading skip：{} (alias: {}, path: {})", reason, key, poolDir.getPath());
+        if (poolDir.isEnabled()) {
+            if (Files.exists(realPath) && Files.isDirectory(realPath)) {
+                scanSkillAndCache(poolDir, skillMap);
+                LOG.debug("Mount pool has been loaded.: {} -> {}", key, realPath);
+            } else {
+                String reason = !Files.exists(realPath) ? "The path does not exist." : "Not an effective directory";
+                LOG.debug("Mount pool loading skip：{} (alias: {}, path: {})", reason, key, poolDir.getPath());
+            }
         }
 
         return this;
@@ -176,12 +178,16 @@ public class PoolManager {
                 .collect(Collectors.toList());
     }
 
-    public Map<String, SkillDir> getSkillMap() {
-        return skillMap;
+    public Collection<SkillDir> getSkills() {
+        return skillMap.values();
     }
 
-    public SkillDir getSkill(String aliasPath) {
-        return skillMap.get(aliasPath);
+    public int getSkillCount() {
+        return skillMap.size();
+    }
+
+    public SkillDir getSkill(String name) {
+        return skillMap.get(name);
     }
 
 
@@ -193,7 +199,8 @@ public class PoolManager {
                     if (isSkillDir(dir)) {
                         String name = poolDir.getRealPath().relativize(dir).toString().replace("\\", "/");
                         String aliasPath = poolDir.getAlias() + (name.isEmpty() ? "" : "/" + name);
-                        map.put(aliasPath, new SkillDir(name, poolDir.getAlias(), aliasPath, dir, parseDescription(dir)));
+
+                        map.put(name, new SkillDir(name, poolDir.getAlias(), aliasPath, dir, parseDescription(dir)));
                         return FileVisitResult.SKIP_SUBTREE;
                     }
                     if (dir.getFileName().toString().startsWith(".")) return FileVisitResult.SKIP_SUBTREE;

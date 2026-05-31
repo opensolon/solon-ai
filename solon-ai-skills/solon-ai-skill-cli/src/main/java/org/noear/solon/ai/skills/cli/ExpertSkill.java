@@ -52,9 +52,15 @@ public class ExpertSkill extends AbsSkill {
         return poolManager;
     }
 
-    public ExpertSkill listThreshold(int val) { this.listThreshold = val; return this; }
+    public ExpertSkill listThreshold(int val) {
+        this.listThreshold = val;
+        return this;
+    }
 
-    public ExpertSkill searchThreshold(int val) { this.searchThreshold = val; return this; }
+    public ExpertSkill searchThreshold(int val) {
+        this.searchThreshold = val;
+        return this;
+    }
 
     @Override
     public String description() {
@@ -63,10 +69,10 @@ public class ExpertSkill extends AbsSkill {
 
     @Override
     public String getInstruction(Prompt prompt) {
-        Map<String, SkillDir> skillMap = poolManager.getSkillMap();
-        if (skillMap.isEmpty()) return null;
+        Collection<SkillDir> skillList = poolManager.getSkills();
+        if (skillList.isEmpty()) return null;
 
-        int total = skillMap.size();
+        int total = skillList.size();
         StringBuilder sb = new StringBuilder();
 
         sb.append("优先使用合适的技能解决问题（不确定用什么技能时，可通过 skillsearch 搜索）。**注意：在执行任务中，请务必通过 `skillread` 读取或回顾规约。**\n\n");
@@ -79,8 +85,8 @@ public class ExpertSkill extends AbsSkill {
             sb.append("请审阅下方技能清单。若某个技能匹配当前需求，请调用 `skillread` 获取具体执行规约与工具参数：\n");
 
             sb.append("<skill_list>\n");
-            for (SkillDir s : skillMap.values()) {
-                sb.append("  <skill aliasPath=\"").append(s.getAliasPath()).append("\">").append(s.getDescription()).append("</skill>\n");
+            for (SkillDir s : skillList) {
+                sb.append("  <skill name=\"").append(s.getName()).append("\">").append(s.getDescription()).append("</skill>\n");
             }
             sb.append("</skill_list>");
         } else if (total <= searchThreshold) {
@@ -89,14 +95,14 @@ public class ExpertSkill extends AbsSkill {
             sb.append("当前技能较多，仅展示路径索引（没有描述）。请推断功能并调用 `skillread`。如果不确定，请使用 `skillsearch` 检索：\n");
 
             sb.append("<skill_list>\n");
-            for (SkillDir s : skillMap.values()) {
-                sb.append("  <skill aliasPath=\"").append(s.getAliasPath()).append("\" />\n");
+            for (SkillDir s : skillList) {
+                sb.append("  <skill name=\"").append(s.getName()).append("\" />\n");
             }
             sb.append("</skill_list>");
         } else {
             // --- 模式 3: SEARCH ---
             sb.append("### 运行模式: 动态发现\n");
-            sb.append("由于技能库规模较大。**禁止猜测路径**。你必须先通过 `skillsearch` 检索关键字，确认 aliasPath 后再调用 `skillread` 读取。\n");
+            sb.append("由于技能库规模较大。**禁止猜测路径**。你必须先通过 `skillsearch` 检索关键字，确认 name 后再调用 `skillread` 读取。\n");
         }
 
         return sb.toString();
@@ -104,10 +110,10 @@ public class ExpertSkill extends AbsSkill {
 
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
-        Map<String, SkillDir> skillMap = poolManager.getSkillMap();
-        if (skillMap.isEmpty()) return null;
+        Collection<SkillDir> skillList = poolManager.getSkills();
+        if (skillList.isEmpty()) return null;
 
-        int total = poolManager.getSkillMap().size();
+        int total = skillList.size();
 
         if (total <= listThreshold) {
             // 少量时，直接 read 即可，不需要 search 和 list 干扰
@@ -126,20 +132,20 @@ public class ExpertSkill extends AbsSkill {
 
     @ToolMapping(name = "skilllist", description = "列出本地所有挂载池中的可用技能清单。")
     public String skilllist() {
-        Map<String, SkillDir> skillMap = poolManager.getSkillMap();
-        if (skillMap.isEmpty()) {
+        Collection<SkillDir> skillList = poolManager.getSkills();
+        if (skillList.isEmpty()) {
             return "当前没有可用的技能。";
         }
 
-        if (skillMap.size() > searchThreshold) {
-            return String.format("Error: 当前技能库规模较大 (%d)，禁止全量列出。请使用 `skillsearch` 配合关键字定位。", skillMap.size());
+        if (skillList.size() > searchThreshold) {
+            return String.format("Error: 当前技能库规模较大 (%d)，禁止全量列出。请使用 `skillsearch` 配合关键字定位。", skillList.size());
         }
 
         StringBuilder sb = new StringBuilder("可用技能列表：\n");
 
         sb.append("<skill_list>\n");
-        for (SkillDir s : skillMap.values()) {
-            sb.append("  <skill aliasPath=\"").append(s.getAliasPath()).append("\">").append(s.getDescription()).append("</skill>\n");
+        for (SkillDir s : skillList) {
+            sb.append("  <skill name=\"").append(s.getName()).append("\">").append(s.getDescription()).append("</skill>\n");
         }
         sb.append("</skill_list>");
 
@@ -148,12 +154,12 @@ public class ExpertSkill extends AbsSkill {
 
     @ToolMapping(name = "skillsearch", description = "在所有挂载池中搜索技能关键字。支持空格分隔多个词。")
     public String skillsearch(@Param("query") String query) {
-        Map<String, SkillDir> skillMap = poolManager.getSkillMap();
+        Collection<SkillDir> skillList = poolManager.getSkills();
         String[] keys = query.toLowerCase().split("\\s+");
 
-        List<SkillDir> matches = skillMap.values().stream()
+        List<SkillDir> matches = skillList.stream()
                 .filter(s -> Arrays.stream(keys).anyMatch(k ->
-                        s.getAliasPath().toLowerCase().contains(k) ||
+                        s.getName().toLowerCase().contains(k) ||
                                 s.getDescription().toLowerCase().contains(k)))
                 .limit(15)
                 .collect(Collectors.toList());
@@ -162,7 +168,7 @@ public class ExpertSkill extends AbsSkill {
 
         StringBuilder sb = new StringBuilder("<skill_list>\n");
         for (SkillDir s : matches) {
-            sb.append("  <skill aliasPath=\"").append(s.getAliasPath()).append("\">").append(s.getDescription()).append("</skill>\n");
+            sb.append("  <skill name=\"").append(s.getName()).append("\">").append(s.getDescription()).append("</skill>\n");
         }
         sb.append("</skill_list>");
 
@@ -170,20 +176,20 @@ public class ExpertSkill extends AbsSkill {
     }
 
     @ToolMapping(name = "skillread", description = "读取本地技能详细说明书。在选定技能后、开始执行具体任务前，必须调用此工具以获取具体的环境要求、参数规约及可用文件别名。")
-    public String skillread(@Param(value = "aliasPath", description = "技能的唯一路径标识（例如：'@skills/deep-research'）") String aliasPath, String __cwd) throws IOException {
+    public String skillread(@Param(value = "name", description = "技能的唯一路径标识（例如：'deep-research'）") String name, String __cwd) throws IOException {
         // 从内存 Map 查找逻辑路径
-        SkillDir cachedSkill = poolManager.getSkill(aliasPath);
+        SkillDir cachedSkill = poolManager.getSkill(name);
         if (cachedSkill != null) {
             return renderSkillXml(cachedSkill, true);
         }
 
-        return "Error: 路径 " + aliasPath + " 不是有效的技能目录 (缺少 SKILL.md)";
+        return "Error: 路径 " + name + " 不是有效的技能目录 (缺少 SKILL.md)";
     }
 
     @ToolMapping(name = "skillrefresh", description = "重新扫描所有挂载池，更新技能列表。")
     public String skillrefresh() {
         poolManager.refresh();
-        return "技能库已刷新，当前可用技能数：" + poolManager.getSkillMap().size();
+        return "技能库已刷新，当前可用技能数：" + poolManager.getSkillCount();
     }
 
     // --- 核心渲染与辅助逻辑 ---
@@ -195,7 +201,7 @@ public class ExpertSkill extends AbsSkill {
         try {
             String content = Files.exists(md) ? new String(Files.readAllBytes(md), StandardCharsets.UTF_8) : "";
 
-            StringBuilder sb = new StringBuilder("\n<skill_content name=\"" + skill.getAliasPath() + "\">\n");
+            StringBuilder sb = new StringBuilder("\n<skill_content name=\"" + skill.getName() + "\">\n");
             sb.append("[SYSTEM NOTE: Access granted. Use the <alias> paths in 'bash' tool for execution.]\n");
             sb.append("[If this task takes many steps, remember to re-read this skill if you feel uncertain about details.]\n");
 
@@ -207,7 +213,7 @@ public class ExpertSkill extends AbsSkill {
             sb.append("</skill_content>\n");
             return sb.toString();
         } catch (IOException e) {
-            return "Load skill " + skill.getAliasPath() + " failed.";
+            return "Load skill " + skill.getName() + " failed.";
         }
     }
 
@@ -231,26 +237,18 @@ public class ExpertSkill extends AbsSkill {
                     })
                     .map(p -> {
                         String relative = dir.relativize(p).toString().replace("\\", "/");
-                        String logical = (aliasBase + "/" + relative).replace("//", "/");
+                        String logicalPath = (aliasBase + "/" + relative).replace("//", "/");
 
                         // 返回结构化标签
                         return String.format(
                                 "  <file>\n" +
                                         "    <rel>%s</rel>\n" +
-                                        "    <alias>%s</alias>\n" +
+                                        "    <logicalPath>%s</logicalPath>\n" +
                                         "  </file>",
-                                relative, logical
+                                relative, logicalPath
                         );
                     })
                     .collect(Collectors.joining("\n"));
         }
-    }
-
-    private boolean isSkillDir(Path p) {
-        return Files.exists(p.resolve("SKILL.md")) || Files.exists(p.resolve("skill.md"));
-    }
-
-    private Path resolvePathExtended(String workDir, String pStr) {
-        return poolManager.resolve(Paths.get(workDir), pStr);
     }
 }
