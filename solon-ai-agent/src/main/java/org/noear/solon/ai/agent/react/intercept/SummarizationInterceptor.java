@@ -35,7 +35,28 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * 语义保护型上下文压缩拦截器 (Atomic & Semantic Context Compressor)
+ * 语义保护型上下文压缩拦截器
+ *
+ * <p>在 Agent 推理开始前（{@code onReasonStart}），当消息数量或 Token 数超过阈值时，
+ * 自动对工作记忆区进行无损（或近无损）压缩。核心目标：
+ * <ul>
+ *   <li><b>初心链保护</b>：标记为 {@code META_FIRST} 的消息（如 system prompt、用户原始问题）永不压缩</li>
+ *   <li><b>Tool-use 原子对保护</b>：{@code Assistant(with tool_calls)} ↔ {@code ToolMessage} 的调用-结果配对不会被拆散</li>
+ *   <li><b>多轮追溯保留</b>：当最后一条是 ToolMessage 时，向前追溯至完整的源头 Assistant(with tool_calls)，
+ *       确保工具调用链的完整性</li>
+ *   <li><b>Token 预算控制</b>：通过 {@link #estimateTokens} 精确计算消息 Token 开销，
+ *       预留摘要空间后按双维度（数量+Token）确定保留窗口</li>
+ * </ul>
+ *
+ * <p>支持四种压缩策略（通过 {@link SummarizationStrategy} 注入）：
+ * <ul>
+ *   <li>{@code null}（默认）—— 不调用 LLM，仅执行原子对齐的纯裁剪（fallback 零成本路径）</li>
+ *   <li>{@link org.noear.solon.ai.agent.react.intercept.summarize.LLMSummarizationStrategy} —— LLM 生成摘要</li>
+ *   <li>{@link org.noear.solon.ai.agent.react.intercept.summarize.KeyInfoExtractionStrategy} —— 关键信息提取</li>
+ *   <li>{@link org.noear.solon.ai.agent.react.intercept.summarize.HierarchicalSummarizationStrategy} —— 分层摘要</li>
+ *   <li>{@link org.noear.solon.ai.agent.react.intercept.summarize.VectorStoreSummarizationStrategy} —— 向量存储检索</li>
+ *   <li>{@link org.noear.solon.ai.agent.react.intercept.summarize.CompositeSummarizationStrategy} —— 组合策略</li>
+ * </ul>
  *
  * @author noear
  * @since 3.9.4
@@ -52,9 +73,9 @@ public class SummarizationInterceptor implements ReActInterceptor {
     private static final Encoding encoding = registry.getEncodingForModel(ModelType.GPT_4O);
     private static final String META_TOKEN_SIZE = "token_size";
 
-    //轻量级 10，均衡型 13， 代码专家型 16
+    // 保留窗口的最大消息数（默认 15），根据不同场景：轻量级 10，均衡型 13，代码专家型 16
     private final int maxMessages;
-    //轻量级 8000，均衡型 12000，代码专家型 20000+
+    // 保留窗口的最大 Token 数（默认 12000），根据不同场景：轻量级 8000，均衡型 12000，代码专家型 20000+
     private final int maxTokens;
     private final SummarizationStrategy summarizationStrategy;
 
@@ -70,11 +91,15 @@ public class SummarizationInterceptor implements ReActInterceptor {
 
     public SummarizationInterceptor() {
         /**
-         * 仅使用 LLMSummarization / HierarchicalSummarization：maxMessages: 10 - 14
-         * 仅使用 KeyInfoExtraction：maxMessages: 15 - 20
-         * 仅使用 VectorStoreSummarization：maxMessages: 18 - 25
-         * 推荐 maxMessages: 10 - 12
-         * */
+         * 默认构造参数（maxMessages: 15, maxTokens: 12000）
+         *
+         * <ul>
+         *   <li>LLMSummarization / HierarchicalSummarization 策略推荐 maxMessages: 10 - 14</li>
+         *   <li>KeyInfoExtraction 策略推荐 maxMessages: 15 - 20</li>
+         *   <li>VectorStoreSummarization 策略推荐 maxMessages: 18 - 25</li>
+         *   <li>通用推荐 maxMessages: 10 - 12</li>
+         * </ul>
+         */
 
         this(15, 12000, null);
     }
@@ -161,7 +186,9 @@ public class SummarizationInterceptor implements ReActInterceptor {
         int summaryReserve = Math.max(200, (int) (availableTokens * 0.1));
         int windowBudget = availableTokens - summaryReserve;
 
-        // 4. 双维度确定截断点
+        // 4. 双维度确定截断点（取更靠前的保留边界，确保信息不丢失）
+        //    - targetByCount ：按消息数量维度的截断位置
+        //    - targetByTokens：按 Token 预算维度的截断位置（从尾向前累加）
         int targetByCount = Math.max(lastFirstIdx + 1, messages.size() - maxMessages);
 
         int targetByTokens = lastFirstIdx + 1;
@@ -178,19 +205,23 @@ public class SummarizationInterceptor implements ReActInterceptor {
 
         int targetIdx = Math.max(targetByCount, targetByTokens);
 
-        // 5. 增强版原子对齐
+        // 5. ⭐ 原子对对齐（防止 tool-use 原子对被截断为两段）
+        //    若 targetIdx 落在 ToolMessage 或 Observation 上，向前回退至配套的 Assistant(with tool_calls)
+        //    若落在 Assistant(with tool_calls) 上，保留（这是原子对的正确起点）
+        //    若落在普通消息上（User / Assistant thought），保留（不存在配对问题）
         while (targetIdx > (lastFirstIdx + 1) && targetIdx < messages.size()) {
             ChatMessage msg = messages.get(targetIdx);
             if (msg instanceof ToolMessage || isObservation(msg)) {
-                targetIdx--;
+                targetIdx--; // 向前追溯匹配的源头 Assistant(with tool_calls)
             } else if (msg instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls())) {
-                break;
+                break; // 已定位到源头，停止回退
             } else {
-                break;
+                break; // 无关消息，无需处理
             }
         }
 
-        // 6. 语义连贯补齐
+        // 6. 语义连贯补齐：若截断点前一条为空想的 Assistant thought，一并纳入保留区
+        //    使 LLM 获得完整的推理上下文
         if (targetIdx > (lastFirstIdx + 1)) {
             ChatMessage prev = messages.get(targetIdx - 1);
             if (prev instanceof AssistantMessage && Assert.isEmpty(((AssistantMessage) prev).getToolCalls())) {
@@ -198,7 +229,10 @@ public class SummarizationInterceptor implements ReActInterceptor {
             }
         }
 
-        // 6.1 Token 补偿校验
+        // 6.1 Token 预算补偿校验
+        //    语义补齐（步骤 5-6）可能导致保留范围扩大而超预算。
+        //    此时放弃语义优化，回归 Token 预算截断位置，并跳过 ToolMessage 头部，
+        //    确保不会因原子对尾部截断而送入孤立 ToolMessage 给 LLM。
         if (targetIdx < targetByTokens) {
             int actualWindowTokens = 0;
             for (int i = targetIdx; i < messages.size(); i++) {
@@ -206,7 +240,8 @@ public class SummarizationInterceptor implements ReActInterceptor {
                 actualWindowTokens += (cachedSize != null ? cachedSize : 0) + 4;
             }
             if (actualWindowTokens > windowBudget) {
-                targetIdx = targetByTokens;
+                targetIdx = targetByTokens; // 回退到预算截断点
+                // 跳过头部 ToolMessage（避免孤立 ToolMessage 传入 LLM）
                 while (targetIdx < messages.size() - 1
                         && (messages.get(targetIdx) instanceof ToolMessage
                         || isObservation(messages.get(targetIdx)))) {
@@ -232,7 +267,39 @@ public class SummarizationInterceptor implements ReActInterceptor {
                         compressed.add(summaryMsg);
                     }
                 } else {
-                    compressed.add(pureHistory.get(pureHistory.size() - 1));
+                    // ⭐ fallback 原子序列追溯（零成本裁剪路径，不调用 LLM 生成摘要）
+                    //
+                    // 问题背景：过期区（expired）可能包含不完整的 tool-use 原子对。
+                    // 例如 [Assistant(tc=[search]), Tool(res)] 被整体移入过期区，
+                    // 若直接丢弃、仅保留保留窗口内的后续轮次，恢复后的上下文会变成：
+                    //   [摘要] → [Tool(res)] → [下一个 Assistant(tc=...)]
+                    // 此时 Tool(res) 找不到配对的 tool_calls → LLM 感知异常。
+                    //
+                    // 追溯策略：从过期区末尾向前查找，找到最后一个完整的 tool-use 序列。
+                    // 一条 Assistant(with tool_calls) 可能触发多个 ToolMessage，
+                    // 甚至多轮交错调用如 [Assistant(tc=A), Tool(A1), Assistant(tc=B), Tool(B)]。
+                    // 需要保留从最后一个源头 Assistant(with tc) 到末尾的全部消息。
+                    int captureStart = pureHistory.size() - 1;
+                    while (captureStart > 0) {
+                        ChatMessage msg = pureHistory.get(captureStart);
+                        if (msg instanceof ToolMessage || isObservation(msg)) {
+                            captureStart--; // ToolMessage → 继续向前追溯源头
+                        } else if (msg instanceof AssistantMessage
+                                && Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls())) {
+                            break; // 找到源头 Assistant(with tc)，保留[captureStart..末尾]序列
+                        } else {
+                            // 遇到无关消息（User、普通 Assistant thought），
+                            // 回退一步，至少保留一个 ToolMessage（宁可保留畸形的，不送孤立 ToolMessage）
+                            if (captureStart < pureHistory.size() - 1) {
+                                captureStart++;
+                            }
+                            break;
+                        }
+                    }
+
+                    for (int i = captureStart; i < pureHistory.size(); i++) {
+                        compressed.add(pureHistory.get(i));
+                    }
                 }
             }
         }

@@ -32,6 +32,7 @@
 * 优化 solon-ai-agent 初始化时（rest）添加快照持久化
 * 优化 solon-ai-harness AgentFactory `edit` 权限添加 `read`、`write` 控制
 * 优化 solon-ai-agent SummarizationInterceptor 压缩时机（从 onObservation 改为 onReasonStart），并增加系统词大小
+* 优化 solon-ai-agent SummarizationInterceptor 增强上下文压缩拦截器中过期区 tool-use 原子序列的追溯保护，并完善文档注释
 * 调整 solon skill “概念”初步改为 solon toolkit（避免与 agent skill 的冲突）
 * 调整 solon-ai-core 取消 ChatConfig.reasoningFieldName 配置（这个配置不合理）
 * 调整 solon-ai-mcp McpClientProperties 默认不启用心跳（之前默认为 30 心跳一次）
