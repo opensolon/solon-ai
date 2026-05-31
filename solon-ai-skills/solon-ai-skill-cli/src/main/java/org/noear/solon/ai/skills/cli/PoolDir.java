@@ -15,6 +15,9 @@
  */
 package org.noear.solon.ai.skills.cli;
 
+import org.noear.solon.core.util.Assert;
+
+import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -35,6 +38,10 @@ public class PoolDir {
     private String path;
     //真实地址
     private Path realPath;
+
+    public PoolDir(String alias, boolean primary, String path) {
+        this(alias, primary, path, parseRealPath(path));
+    }
 
     public PoolDir(String alias, boolean primary, String path, Path realPath) {
         this.alias = alias.startsWith("@") ? alias : "@" + alias;
@@ -67,5 +74,36 @@ public class PoolDir {
      */
     public Path getRealPath() {
         return realPath;
+    }
+
+    //---------
+
+    private static final String USER_DIR = System.getProperty("user.dir"); //对应 ./
+    private static final String USER_HOME = System.getProperty("user.home"); //对应 ～/
+
+
+    /**
+     * 内部辅助方法：解析配置路径并支持 "~/" 和 "./" 语法
+     */
+    private static Path parseRealPath(String rawPath) {
+        if (Assert.isEmpty(rawPath)) {
+            return Paths.get(USER_DIR);
+        }
+
+        String processedPath = rawPath;
+        // 1. 处理 Unix 式或 Windows 兼容的家目录路径 (例如 ~/skills 或 ~)
+        if (rawPath.startsWith("~" + File.separator) || rawPath.equals("~")) {
+            processedPath = rawPath.replaceFirst("^~", USER_HOME);
+        } else if (rawPath.startsWith("~/") || rawPath.startsWith("~\\")) {
+            processedPath = USER_HOME + rawPath.substring(1);
+        }
+        // 2. 处理工作区相对路径 (例如 ./my-pool)
+        else if (rawPath.startsWith("." + File.separator) || rawPath.equals(".")) {
+            processedPath = rawPath.replaceFirst("^\\.", USER_DIR);
+        } else if (rawPath.startsWith("./") || rawPath.startsWith(".\\")) {
+            processedPath = USER_DIR + rawPath.substring(1);
+        }
+
+        return Paths.get(processedPath).toAbsolutePath().normalize();
     }
 }
