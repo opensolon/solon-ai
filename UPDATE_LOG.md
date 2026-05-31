@@ -45,6 +45,7 @@
 * 调整 solon-ai-skill-cli PoolManager 实现细节，并添加 refresh(alias)
 * 移除 solon-ai-skill-browser（包太大了，没必要）
 * 修复 solon-ai-mcp WebRxStreamableHttpTransport 没有 event 的消息会出错的问题（优化非规范兼容）
+* 修复 solon-ai-agent SummarizationInterceptor 压缩后可能会引起 ToolMessage 无法对齐的问题
 * mcp-sdk 升为 1.1.3
 
 
