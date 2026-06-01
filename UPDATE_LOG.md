@@ -35,6 +35,7 @@
 * 优化 solon-ai-agent SummarizationInterceptor 增强上下文压缩拦截器中过期区 tool-use 原子序列的追溯保护，并完善文档注释
 * //调整 solon skill “概念”初步改为 solon toolkit（避免与 agent skill 的冲突）
 * 调整 solon-ai-core 取消 ChatConfig.reasoningFieldName 配置（这个配置不合理）
+* 调整 solon-ai-core 移除 SkillProvider 类
 * 调整 solon-ai-mcp McpClientProperties 默认不启用心跳（之前默认为 30 心跳一次）
 * 调整 solon-ai-agent ActionChunk：ActionChunk 更名为 ObservationChunk；ActionStartChunk 更名为 ActionChunk
 * 调整 solon-ai-agent ReActInterceptor.onAction,onObservation: toolName,args,result 合并为 toolExchanger（并允许修改）
