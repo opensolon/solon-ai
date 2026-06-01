@@ -30,13 +30,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
-import java.util.Objects;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
  * 基于 LLM 的关键信息提取策略实现
- * 相比于全文总结，该策略更侧重于提取“事实、参数、结论”，过滤掉无用的思考过程。
+ * 相比于全文压缩，该策略更侧重于提取“事实、参数、结论”，过滤掉无用的思考过程。
  *
  * @author noear
  * @since 3.9.4
@@ -62,14 +60,14 @@ public class KeyInfoExtractionStrategy implements CompressionStrategy {
     }
 
     @Override
-    public ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToSummarize) {
-        if (messagesToSummarize == null || messagesToSummarize.isEmpty()) {
+    public ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToCompress) {
+        if (messagesToCompress == null || messagesToCompress.isEmpty()) {
             return null;
         }
 
         try {
             // 1. 过滤初心，仅对中间过程进行“提纯”
-            String newHistoryText = messagesToSummarize.stream()
+            String newHistoryText = messagesToCompress.stream()
                     .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
                     .map(m -> {
                         if (m instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) m).getToolCalls())) {

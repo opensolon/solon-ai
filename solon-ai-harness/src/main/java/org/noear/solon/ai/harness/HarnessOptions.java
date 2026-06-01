@@ -61,7 +61,7 @@ class HarnessOptions implements Serializable {
     private int maxTurns = 30;
     private boolean autoRethink = true;
 
-    // ========== 会话与摘要 ==========
+    // ========== 会话与压缩 ==========
     private int sessionWindowSize = 8;
     private int summaryWindowSize = 30;
     private int summaryWindowToken = 30000;
@@ -92,7 +92,7 @@ class HarnessOptions implements Serializable {
 
     // ========== 服务注入 ==========
     private AgentSessionProvider sessionProvider;
-    private ContextCompressionInterceptor summarizationInterceptor;
+    private ContextCompressionInterceptor compressionInterceptor;
     private HITLInterceptor hitlInterceptor;
     private MemorySolution.Factory memorySolution;
 
@@ -416,12 +416,12 @@ class HarnessOptions implements Serializable {
         this.sessionProvider = sessionProvider;
     }
 
-    ContextCompressionInterceptor getSummarizationInterceptor() {
-        return summarizationInterceptor;
+    ContextCompressionInterceptor getCompressionInterceptor() {
+        return compressionInterceptor;
     }
 
-    void setSummarizationInterceptor(ContextCompressionInterceptor summarizationInterceptor) {
-        this.summarizationInterceptor = summarizationInterceptor;
+    void setCompressionInterceptor(ContextCompressionInterceptor compressionInterceptor) {
+        this.compressionInterceptor = compressionInterceptor;
     }
 
     HITLInterceptor getHitlInterceptor() {

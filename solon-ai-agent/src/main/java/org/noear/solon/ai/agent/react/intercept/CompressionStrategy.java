@@ -21,7 +21,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import java.util.List;
 
 /**
- * 语义总结策略接口
+ * 语义压缩策略接口
  *
  * @author noear
  * @since 3.9.4
@@ -29,10 +29,10 @@ import java.util.List;
 @FunctionalInterface
 public interface CompressionStrategy {
     /**
-     * 对即将移出滑动窗口的消息进行总结
+     * 对即将移出滑动窗口的消息进行压缩
      *
-     * @param messagesToSummarize 判定为“过期”的消息段
-     * @return 返回一条包含摘要的消息（通常是 SystemMessage），若返回 null 则仅执行物理截断
+     * @param messagesToCompress 判定为“过期”的消息段
+     * @return 返回一条包含压缩结果的消息（通常是 UserMessage），若返回 null 则仅执行物理截断
      */
-    ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToSummarize);
+    ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToCompress);
 }

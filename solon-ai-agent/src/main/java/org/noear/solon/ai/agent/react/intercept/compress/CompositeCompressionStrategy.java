@@ -28,18 +28,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 多策略级联总结策略 (Composite Summarization Strategy)
+ * 多策略级联压缩策略 (Composite Compression Strategy)
  * 核心逻辑：按顺序执行多个子策略，并决定如何合并它们的输出。
  *
  * <pre>{@code
  * // 1. 构建级联策略
- * SummarizationStrategy composite = new CompositeSummarizationStrategy()
- *     .addStrategy(new VectorStoreSummarizationStrategy(myRepo)) // 先存档
+ * CompressionStrategy composite = new CompositeCompressionStrategy()
+ *     .addStrategy(new VectorStoreCompressionStrategy(myRepo)) // 先存档
  *     .addStrategy(new KeyInfoExtractionStrategy(chatModel))     // 再提纯
- *     .addStrategy(new HierarchicalSummarizationStrategy(chatModel)); // 后压缩
+ *     .addStrategy(new HierarchicalCompressionStrategy(chatModel)); // 后压缩
  *
  * // 2. 注入拦截器
- * SummarizationInterceptor interceptor = new SummarizationInterceptor(12, composite);
+ * ContextCompressionInterceptor interceptor = new ContextCompressionInterceptor(12, 15000, composite);
  * }</pre>
  *
  * @author noear
@@ -64,14 +64,14 @@ public class CompositeCompressionStrategy implements CompressionStrategy {
     }
 
     @Override
-    public ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToSummarize) {
-        if (messagesToSummarize == null || messagesToSummarize.isEmpty()) return null;
+    public ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToCompress) {
+        if (messagesToCompress == null || messagesToCompress.isEmpty()) return null;
 
         // 使用初始容量，减少扩容开销
         StringBuilder buf = new StringBuilder(1024);
         for (CompressionStrategy strategy : strategies) {
             try {
-                ChatMessage result = strategy.compress(chatModel, maxRetries, trace, messagesToSummarize);
+                ChatMessage result = strategy.compress(chatModel, maxRetries, trace, messagesToCompress);
                 if (result != null && Assert.isNotEmpty(result.getContent())) {
                     if (buf.length() > 0) {
                         buf.append("\n\n---\n\n"); // 使用明显的 Markdown 分割线

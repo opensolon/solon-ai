@@ -86,7 +86,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     // 重试次数
     private int maxRetries = 3;
     // 压缩策略
-    private final CompressionStrategy summarizationStrategy;
+    private final CompressionStrategy compressionStrategy;
+    // llm 动态提供者
     private final Supplier<ChatModel> chatModelSupplier;
 
     public void setMaxMessages(int maxMessages) {
@@ -101,19 +102,19 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         this.maxRetries = maxRetries;
     }
 
-    public ContextCompressionInterceptor(int maxMessages, int maxTokens, Supplier<ChatModel> chatModelSupplier, CompressionStrategy summarizationStrategy) {
+    public ContextCompressionInterceptor(int maxMessages, int maxTokens, Supplier<ChatModel> chatModelSupplier, CompressionStrategy compressionStrategy) {
         this.maxMessages = Math.max(10, maxMessages);
         this.maxTokens = Math.max(10_000, maxTokens);
         this.chatModelSupplier = chatModelSupplier;
-        this.summarizationStrategy = summarizationStrategy;
+        this.compressionStrategy = compressionStrategy;
     }
 
-    public ContextCompressionInterceptor(int maxMessages, int maxTokens, int maxRetries, Supplier<ChatModel> chatModelSupplier, CompressionStrategy summarizationStrategy) {
+    public ContextCompressionInterceptor(int maxMessages, int maxTokens, int maxRetries, Supplier<ChatModel> chatModelSupplier, CompressionStrategy compressionStrategy) {
         this.maxMessages = Math.max(10, maxMessages);
         this.maxTokens = Math.max(10_000, maxTokens);
         this.maxRetries = maxRetries;
         this.chatModelSupplier = chatModelSupplier;
-        this.summarizationStrategy = summarizationStrategy;
+        this.compressionStrategy = compressionStrategy;
     }
 
     public ContextCompressionInterceptor(){
@@ -128,7 +129,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 maxMessages,
                 maxTokens,
                 this.chatModelSupplier,
-                this.summarizationStrategy);
+                this.compressionStrategy);
 
         return tmp;
     }
@@ -198,7 +199,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             return;
         }
 
-        // 3. 为摘要消息预留空间
+        // 3. 为压缩消息预留空间
         int availableTokens = maxTokens - fixedTokens;
         int summaryReserve = Math.max(200, (int) (availableTokens * 0.1));
         int windowBudget = availableTokens - summaryReserve;
@@ -278,10 +279,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                     .collect(Collectors.toList());
 
             if (!pureHistory.isEmpty()) {
-                if (summarizationStrategy != null) {
+                if (compressionStrategy != null) {
                     ChatModel chatModel = chatModelSupplier.get();
 
-                    ChatMessage summaryMsg = summarizationStrategy.compress(chatModel, maxRetries, trace, pureHistory);
+                    ChatMessage summaryMsg = compressionStrategy.compress(chatModel, maxRetries, trace, pureHistory);
                     if (summaryMsg != null) {
                         compressed.add(summaryMsg);
                     }
@@ -330,7 +331,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             trace.getWorkingMemory().replaceMessages(compressed);
 
             if (log.isDebugEnabled()) {
-                log.debug("ReActAgent [{}] summarized: {} -> {} messages (FirstChain size: {})",
+                log.debug("ReActAgent [{}] compressed: {} -> {} messages (FirstChain size: {})",
                         trace.getAgentName(), messages.size(), compressed.size(), firstList.size());
             }
         }

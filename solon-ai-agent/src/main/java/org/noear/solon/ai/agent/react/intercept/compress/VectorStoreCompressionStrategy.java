@@ -38,8 +38,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * 向量检索增强总结策略 (RAG-based Memory Strategy)
- * 核心逻辑：将裁减的消息持久化到向量库，并提取关键词或最新摘要作为上下文索引。
+ * 向量检索增强压缩策略 (RAG-based Memory Strategy)
+ * 核心逻辑：将裁减的消息持久化到向量库，并提取关键词或最新压缩结果作为上下文索引。
  *
  * @author noear
  * @since 3.9.4
@@ -99,13 +99,13 @@ public class VectorStoreCompressionStrategy extends AbsSkill implements Compress
     }
 
     @Override
-    public ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToSummarize) {
-        if (messagesToSummarize == null || messagesToSummarize.isEmpty()) {
+    public ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToCompress) {
+        if (messagesToCompress == null || messagesToCompress.isEmpty()) {
             return null;
         }
 
         // 优化点 1: 预处理消息，进行“结构化降噪”，节省向量库空间并提升检索质量
-        String archivedContent = messagesToSummarize.stream()
+        String archivedContent = messagesToCompress.stream()
                 .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
                 .map(m -> {
                     if (m instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) m).getToolCalls())) {

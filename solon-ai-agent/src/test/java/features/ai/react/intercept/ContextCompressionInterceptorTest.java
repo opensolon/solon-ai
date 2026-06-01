@@ -24,7 +24,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-public class SummarizationInterceptorTest {
+public class ContextCompressionInterceptorTest {
 
     private ReActTrace trace;
     private Prompt workingMemory;
@@ -127,7 +127,7 @@ public class SummarizationInterceptorTest {
      * 验证 VectorStore 策略过滤逻辑
      */
     @Test
-    public void testVectorStoreSummarizationStrategy_FiltersFirst() throws Exception {
+    public void testVectorStoreCompressionStrategy_FiltersFirst() throws Exception {
         RepositoryStorable vectorRepository = mock(RepositoryStorable.class);
         AgentSession session = mock(AgentSession.class);
         when(trace.getSession()).thenReturn(session);
@@ -151,10 +151,10 @@ public class SummarizationInterceptorTest {
     }
 
     /**
-     * 验证 LLMSummarizationStrategy 真实集成
+     * 验证 LLMCompressionStrategy 真实集成
      */
     @Test
-    public void testLLMSummarizationStrategy_Real() throws Exception {
+    public void testLLMCompressionStrategy_Real() throws Exception {
         LLMCompressionStrategy strategy = new LLMCompressionStrategy();
 
         ChatMessage m1 = ChatMessage.ofUser("我是初心任务");
@@ -164,7 +164,7 @@ public class SummarizationInterceptorTest {
         ChatMessage result = strategy.compress(chatModel, 3, trace, Arrays.asList(m1, m2));
 
         assertNotNull(result);
-        // 验证返回了有效的摘要内容
+        // 验证返回了有效的压缩结果
         assertNotNull(result.getContent());
         assertFalse(result.getContent().isEmpty());
     }

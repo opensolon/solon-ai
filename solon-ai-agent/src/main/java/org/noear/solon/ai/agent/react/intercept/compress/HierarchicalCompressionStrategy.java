@@ -31,13 +31,11 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.ArrayList;
-import java.util.Objects;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
- * 层级摘要策略实现（支持无限续航）
- * 核心逻辑：将“旧摘要”与“新过期的消息”进行递归合并，确保记忆链条永不断裂。
+ * 层级压缩策略实现（支持无限续航）
+ * 核心逻辑：将“旧压缩结果”与“新过期的消息”进行递归合并，确保记忆链条永不断裂。
  *
  * @author noear
  * @since 3.9.4
@@ -49,7 +47,7 @@ public class HierarchicalCompressionStrategy implements CompressionStrategy {
     private String systemInstruction = "## 角色定义\n" +
             "你是一个专业的记忆管理专家，负责对 Agent 的执行历史进行层级化压缩。\n\n" +
             "## 处理逻辑\n" +
-            "请将『旧的摘要内容』与『新增的过期历史记录』合并，生成精炼的『当前进度摘要』。\n\n" +
+            "请将『旧的压缩内容』与『新增的过期历史记录』合并，生成精炼的『当前进度摘要』。\n\n" +
             "## 核心要求\n" +
             "1. **信息提取**：重点保留已确认的关键数据、当前的逻辑位置、以及已达成的阶段性结论。\n" +
             "2. **去重降噪**：移除重复的思考过程、已失效的尝试方案、以及无意义的中间状态。\n" +
@@ -58,7 +56,7 @@ public class HierarchicalCompressionStrategy implements CompressionStrategy {
             "直接输出摘要正文，不要包含“好的”、“明白”或“根据您的要求”等废话。";
 
 
-    private int maxSummaryLength = 800;    // 增加长度硬性保护
+    private int maxSummaryLength = 800;    // 压缩结果长度硬性保护
 
     private static final String SUMMARY_PREFIX = "--- [全局进度滚动摘要 (层级压缩)] ---";
     private static final String STRATEGY_LASTSUMMARY_KEY = "agent:summary:hierarchical";
@@ -75,15 +73,15 @@ public class HierarchicalCompressionStrategy implements CompressionStrategy {
     }
 
     @Override
-    public ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToSummarize) {
+    public ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToCompress) {
         String lastSummary = trace.getExtraAs(STRATEGY_LASTSUMMARY_KEY);
         if (lastSummary == null) {
             lastSummary = "";
         }
 
         // 过滤初心，只总结“中间增量”
-        List<ChatMessage> pureExpired = (messagesToSummarize == null) ? new ArrayList<>() :
-                messagesToSummarize.stream()
+        List<ChatMessage> pureExpired = (messagesToCompress == null) ? new ArrayList<>() :
+                messagesToCompress.stream()
                 .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
                 .collect(Collectors.toList());
 
@@ -145,7 +143,7 @@ public class HierarchicalCompressionStrategy implements CompressionStrategy {
 
             return buildMessage(lastSummary);
         } catch (Throwable e) {
-            log.error("Hierarchical summarization failed", e);
+            log.error("Hierarchical compression failed", e);
             return buildMessage(lastSummary);
         }
     }

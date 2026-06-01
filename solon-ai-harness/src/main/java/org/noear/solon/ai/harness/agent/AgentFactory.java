@@ -77,7 +77,7 @@ public class AgentFactory {
         builder.maxTurns(engine.getMaxTurns());
         builder.autoRethink(engine.isAutoRethink());
         builder.sessionWindowSize(engine.getSessionWindowSize());
-        builder.defaultInterceptorAdd(engine.getSummarizationInterceptor());
+        builder.defaultInterceptorAdd(engine.getCompressionInterceptor());
 
         if (Assert.isNotEmpty(metadata.getTools())) {
             //目前参考了： https://opencode.ai/docs/zh-cn/permissions/

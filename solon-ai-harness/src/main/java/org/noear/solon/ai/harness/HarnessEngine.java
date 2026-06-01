@@ -109,8 +109,8 @@ public class HarnessEngine {
         return agentManager;
     }
 
-    public ContextCompressionInterceptor getSummarizationInterceptor() {
-        return options.getSummarizationInterceptor();
+    public ContextCompressionInterceptor getCompressionInterceptor() {
+        return options.getCompressionInterceptor();
     }
 
     public HITLInterceptor getHitlInterceptor() {
@@ -369,13 +369,13 @@ public class HarnessEngine {
     private HarnessEngine(HarnessOptions options) {
         this.options = options;
 
-        //上下文摘要拦截器默认处理
-        if (options.getSummarizationInterceptor() == null) {
+        //上下文压缩拦截器默认处理
+        if (options.getCompressionInterceptor() == null) {
             CompressionStrategy strategy = new CompositeCompressionStrategy()
                     .addStrategy(new KeyInfoExtractionStrategy())      // 提取干货（去水）
                     .addStrategy(new HierarchicalCompressionStrategy()); // 滚动更新摘要
 
-            options.setSummarizationInterceptor(new ContextCompressionInterceptor(
+            options.setCompressionInterceptor(new ContextCompressionInterceptor(
                     options.getSummaryWindowSize(),
                     options.getSummaryWindowToken(),
                     options.getModelRetries(),
@@ -599,10 +599,10 @@ public class HarnessEngine {
         }
 
         /**
-         * 摘要拦截器
+         * 压缩拦截器
          */
-        public Builder summarizationInterceptor(ContextCompressionInterceptor summarizationInterceptor) {
-            options.setSummarizationInterceptor(summarizationInterceptor);
+        public Builder compressionInterceptor(ContextCompressionInterceptor compressionInterceptor) {
+            options.setCompressionInterceptor(compressionInterceptor);
             return this;
         }
 

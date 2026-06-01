@@ -30,12 +30,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
-import java.util.Objects;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
- * 基于 LLM 的语义总结策略实现
+ * 基于 LLM 的语义压缩策略实现
  *
  * @author noear
  * @since 3.9.4
@@ -43,7 +41,7 @@ import java.util.stream.Collectors;
 public class LLMCompressionStrategy implements CompressionStrategy {
     private static final Logger log = LoggerFactory.getLogger(LLMCompressionStrategy.class);
 
-    // 1. 系统指令：定义总结逻辑和约束
+    // 1. 系统指令：定义压缩逻辑和约束
     private String systemInstruction = "## 角色定义\n" +
             "你是一个高效的任务进度分析员。请简要总结 AI Agent 的执行历史片段。\n\n" +
             "## 总结要点\n" +
@@ -61,14 +59,14 @@ public class LLMCompressionStrategy implements CompressionStrategy {
     }
 
     @Override
-    public ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToSummarize) {
-        if (messagesToSummarize == null || messagesToSummarize.isEmpty()) {
+    public ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToCompress) {
+        if (messagesToCompress == null || messagesToCompress.isEmpty()) {
             return null;
         }
 
         try {
             // 1. 过滤初心，只看发生了什么
-            String newHistoryText = messagesToSummarize.stream()
+            String newHistoryText = messagesToCompress.stream()
                     .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
                     .map(m -> {
                         if (m instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) m).getToolCalls())) {
@@ -88,7 +86,7 @@ public class LLMCompressionStrategy implements CompressionStrategy {
             if (Assert.isEmpty(newHistoryText)) return null;
 
             // 2. 构建提示词
-            String userData = "### 待总结历史片段\n" +
+            String userData = "### 待压缩历史片段\n" +
                     newHistoryText +
                     "\n\n" +
                     "### 任务指令\n" +
@@ -120,7 +118,7 @@ public class LLMCompressionStrategy implements CompressionStrategy {
                     .addMetadata(ContextCompressionInterceptor.META_SUMMARY, 1);
 
         } catch (Throwable e) {
-            log.error("Failed to generate LLM summary", e);
+            log.error("Failed to generate LLM compression", e);
             return null;
         }
     }
