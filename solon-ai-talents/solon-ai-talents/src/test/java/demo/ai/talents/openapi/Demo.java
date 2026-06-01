@@ -2,7 +2,7 @@ package demo.ai.talents.openapi;
 
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.talents.restapi.RestApiTalent;
+import org.noear.solon.ai.talents.openapi.OpenApiTalent;
 
 public class Demo {
     public void test(ChatModel chatModel) throws Throwable {
@@ -11,7 +11,7 @@ public class Demo {
         String baseUrl = "http://api.example.com";
 
         // 2. 创建工具包
-        RestApiTalent apiTalent = new RestApiTalent().addApi(docUrl, baseUrl);
+        OpenApiTalent apiTalent = new OpenApiTalent().addApi(docUrl, baseUrl);
 
         // 3. 构建 Agent 或 ChatModel
         SimpleAgent agent = SimpleAgent.of(chatModel)

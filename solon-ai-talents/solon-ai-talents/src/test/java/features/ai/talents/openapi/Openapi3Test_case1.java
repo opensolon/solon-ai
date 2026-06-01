@@ -1,10 +1,10 @@
-package features.ai.talents.restapi;
+package features.ai.talents.openapi;
 
 import demo.ai.talents.LlmUtil;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.talents.restapi.RestApiTalent;
+import org.noear.solon.ai.talents.openapi.OpenApiTalent;
 import org.noear.solon.core.util.ResourceUtil;
 
 /**
@@ -19,7 +19,7 @@ public class Openapi3Test_case1 {
         String apiBaseUrl = "http://localhost:9081";
 
         // 实例化 Talent 并指定模式（自适应 v2/v3 及解引用）
-        RestApiTalent apiTalent = new RestApiTalent()
+        OpenApiTalent apiTalent = new OpenApiTalent()
                 .addApi(mockApiDocsUrl, apiBaseUrl)
                 .dynamicThreshold(dynamicThreshold);
 

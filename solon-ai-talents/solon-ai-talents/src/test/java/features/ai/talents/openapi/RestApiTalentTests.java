@@ -1,4 +1,4 @@
-package features.ai.talents.restapi;
+package features.ai.talents.openapi;
 
 import demo.ai.talents.LlmUtil;
 import org.junit.jupiter.api.Assertions;
@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.simple.SimpleResponse;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.talents.restapi.RestApiTalent;
+import org.noear.solon.ai.talents.openapi.OpenApiTalent;
 import org.noear.solon.test.HttpTester;
 import org.noear.solon.test.SolonTest;
 
@@ -24,7 +24,7 @@ public class RestApiTalentTests extends HttpTester {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 实例化 Talent 并指定模式（自适应 v2/v3 及解引用）
-        RestApiTalent apiTalent = new RestApiTalent()
+        OpenApiTalent apiTalent = new OpenApiTalent()
                 .addApi(mockApiDocsUrl, apiBaseUrl)
                 .dynamicThreshold(dynamicThreshold);
 
@@ -92,7 +92,7 @@ public class RestApiTalentTests extends HttpTester {
     public void testModeSwitch_DynamicTools() throws Throwable {
         // 验证在 DYNAMIC 模式下，Tool 列表是否包含探测工具
         String mockApiDocsUrl = "http://localhost:8080/swagger/v3/api-docs";
-        RestApiTalent apiTalent = new RestApiTalent()
+        OpenApiTalent apiTalent = new OpenApiTalent()
                 .addApi(mockApiDocsUrl, "http://localhost:8080")
                 .dynamicThreshold(1);
 
@@ -118,7 +118,7 @@ public class RestApiTalentTests extends HttpTester {
     @Test
     public void testInitFailure_Resilience() throws Throwable {
         // 给一个错误的文档地址
-        RestApiTalent errorTalent = new RestApiTalent()
+        OpenApiTalent errorTalent = new OpenApiTalent()
                 .addApi("http://localhost:8080/404-json", "http://localhost:8080");
         SimpleAgent agent = SimpleAgent.of(LlmUtil.getChatModel()).defaultTalentAdd(errorTalent).build();
 
@@ -146,7 +146,7 @@ public class RestApiTalentTests extends HttpTester {
         String apiBaseUrl = "http://localhost:8080";
 
         // 1. 配置 Bearer 认证
-        RestApiTalent authTalent = new RestApiTalent()
+        OpenApiTalent authTalent = new OpenApiTalent()
                 .addApi(mockApiDocsUrl, apiBaseUrl)
                 .defaultAuthenticator((http, tool) -> http.header("Authorization", "Bearer mock-token"));
 

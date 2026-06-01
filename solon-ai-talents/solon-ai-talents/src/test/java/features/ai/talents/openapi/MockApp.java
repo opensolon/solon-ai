@@ -1,4 +1,4 @@
-package features.ai.talents.restapi;
+package features.ai.talents.openapi;
 
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
