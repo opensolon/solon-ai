@@ -60,14 +60,18 @@ public class DemoApp {
         //engine.getMcpGatewaySkill().addTool(new AbsToolProvider(){});
 
         //--- 用主代理执行
-        csae1(engine, "hello");
+        useCsae1(engine, "hello");
 
         //--- 动态创建子代理执行（好处理可以动态创建不同的工具权限）
-        case2(engine, "hello");
+        useCase2(engine, "hello");
 
     }
 
-    private static void csae1(HarnessEngine engine, String prompt) throws Throwable {
+    private static void dynamicUpdate1(HarnessEngine engine){
+        //动态更新示例
+    }
+
+    private static void useCsae1(HarnessEngine engine, String prompt) throws Throwable {
         AgentSession session = engine.getSession("default");
 
         //--- 用主代理模式
@@ -84,7 +88,7 @@ public class DemoApp {
                 .call();
     }
 
-    private static void case2(HarnessEngine engine, String prompt) throws Throwable {
+    private static void useCase2(HarnessEngine engine, String prompt) throws Throwable {
         AgentSession session = engine.getSession("default");
 
         //动态定义智能体
