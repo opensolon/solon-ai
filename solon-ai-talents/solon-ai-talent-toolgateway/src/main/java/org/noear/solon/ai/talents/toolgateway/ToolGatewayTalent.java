@@ -267,10 +267,10 @@ public class ToolGatewayTalent extends AbsTalent {
     }
 
     public static class ToolCallTool extends AbsTool {
-        private final ToolGatewayTalent gatewaySkill;
+        private final ToolGatewayTalent gatewayTalent;
 
-        public ToolCallTool(ToolGatewayTalent gatewaySkill) {
-            this.gatewaySkill = gatewaySkill;
+        public ToolCallTool(ToolGatewayTalent gatewayTalent) {
+            this.gatewayTalent = gatewayTalent;
 
             addParam("tool_name", String.class, "");
             addParam("tool_args", TypeRef.mapOf(String.class, Object.class).getType(), "");
@@ -304,14 +304,14 @@ public class ToolGatewayTalent extends AbsTalent {
                 return ToolResult.success("错误：tool_name 不能为空");
             }
 
-            FunctionTool tool = gatewaySkill.allTools.get(tool_name.trim().toLowerCase());
+            FunctionTool tool = gatewayTalent.allTools.get(tool_name.trim().toLowerCase());
 
             if (tool == null) {
                 return ToolResult.success("错误：未找到业务工具 '" + tool_name + "'");
             }
 
             try {
-                return RetryUtil.callWithRetry(gatewaySkill.maxRetries,  () -> tool.call(tool_args));
+                return RetryUtil.callWithRetry(gatewayTalent.maxRetries,  () -> tool.call(tool_args));
             } catch (Throwable e) {
                 LOG.error("Tool gateway execution failed: {}", tool_name, e);
                 return ToolResult.success("执行异常: " +

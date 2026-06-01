@@ -20,7 +20,7 @@ import org.noear.solon.net.http.HttpUtils;
 
 /**
  * API 认证策略接口
- * <p>用于在 RestApiSkill 执行调用前，动态为 HttpUtils 注入认证信息（如 Header, Cookie 等）</p>
+ * <p>用于在 OpenApiTalent 执行调用前，动态为 HttpUtils 注入认证信息（如 Header, Cookie 等）</p>
  *
  * @author noear
  * @since 3.9.1

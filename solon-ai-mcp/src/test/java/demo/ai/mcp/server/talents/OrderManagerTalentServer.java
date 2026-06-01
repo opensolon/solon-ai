@@ -37,7 +37,7 @@ public class OrderManagerTalentServer extends McpTalentServer {
 
     @Override
     public void onAttach(Prompt prompt) {
-        System.out.println("OrderManagerSkill onAttach: " + ONode.serialize(prompt));
+        System.out.println("OrderManagerTalent onAttach: " + ONode.serialize(prompt));
     }
 
     @Override

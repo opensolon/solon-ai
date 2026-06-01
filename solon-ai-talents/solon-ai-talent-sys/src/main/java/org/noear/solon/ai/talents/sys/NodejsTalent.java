@@ -31,7 +31,7 @@ import java.util.Collections;
  * <ul>
  * <li><b>复杂逻辑沙箱</b>：处理大模型难以胜任的循环嵌套、递归算法或高度复杂的 JSON 结构重组。</li>
  * <li><b>Web 生态互通</b>：利用 Node.js 对 Web 标准的天然支持，进行数据抓取结果的清洗或加密算法模拟。</li>
- * <li><b>非对称任务执行</b>：支持通过底层 {@code AbsProcessSkill} 在指定的 WorkDir 中生成、执行并清理临时脚本。</li>
+ * <li><b>非对称任务执行</b>：支持通过底层 {@code AbsProcessTalent} 在指定的 WorkDir 中生成、执行并清理临时脚本。</li>
  * </ul>
  * </p>
  *

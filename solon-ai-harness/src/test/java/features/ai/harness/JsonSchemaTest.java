@@ -13,23 +13,23 @@ import java.util.Map;
 public class JsonSchemaTest {
     @Test
     public void case1() {
-        TaskTalent taskSkill = new TaskTalent(null);
+        TaskTalent taskTalent = new TaskTalent(null);
 
-        FunctionTool functionTool = ((List<FunctionTool>) taskSkill.getToolAry("multitask")).get(0);
+        FunctionTool functionTool = ((List<FunctionTool>) taskTalent.getToolAry("multitask")).get(0);
         System.out.println(functionTool.inputSchema());
         assert "{\"type\":\"object\",\"properties\":{\"tasks\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"agent_name\":{\"type\":\"string\",\"description\":\"子代理名称\"},\"description\":{\"type\":\"string\",\"description\":\"任务内容的极简摘要（如：'重构用户认证逻辑'）。该描述将作为标签出现在执行日志和结果摘要中，用于快速识别任务意图。\"},\"index\":{\"type\":\"integer\",\"description\":\"任务唯一序号，每个任务分配唯一的递增整数（从1开始），以便匹配返回结果\",\"default\":1},\"prompt\":{\"type\":\"string\",\"description\":\"发给子代理的详细指令。由于子代理是无状态的（上下文隔离），必须在此提供任务所需的所有背景信息、具体要求及预期输出格式。\"}},\"required\":[\"index\",\"agent_name\",\"prompt\",\"description\"]},\"description\":\"任务列表\"}},\"required\":[\"tasks\"]}".equals(functionTool.inputSchema());
 
 
-        functionTool = ((List<FunctionTool>) taskSkill.getToolAry("task")).get(0);
+        functionTool = ((List<FunctionTool>) taskTalent.getToolAry("task")).get(0);
         System.out.println(functionTool.inputSchema());
         assert "{\"type\":\"object\",\"properties\":{\"agent_name\":{\"type\":\"string\",\"description\":\"子代理名称\"},\"description\":{\"type\":\"string\",\"description\":\"任务内容的极简摘要（如：'重构用户认证逻辑'）。该描述将作为标签出现在执行日志和结果摘要中，用于快速识别任务意图。\"},\"prompt\":{\"type\":\"string\",\"description\":\"发给子代理的详细指令。由于子代理是无状态的（上下文隔离），必须在此提供任务所需的所有背景信息、具体要求及预期输出格式。\"}},\"required\":[\"agent_name\",\"prompt\",\"description\"]}".equals(functionTool.inputSchema());
     }
 
     @Test
     public void case2() throws Throwable {
-        TaskTalent taskSkill = new TaskTalent(null);
+        TaskTalent taskTalent = new TaskTalent(null);
 
-        FunctionTool functionTool = ((List<FunctionTool>) taskSkill.getToolAry("multitask")).get(0);
+        FunctionTool functionTool = ((List<FunctionTool>) taskTalent.getToolAry("multitask")).get(0);
 
 
         ONode oNode = ONode.ofJson(json, Feature.Read_AllowUnescapedControlCharacters);

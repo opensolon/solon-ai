@@ -15,7 +15,7 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.talents.cli.PoolManager;
 import org.noear.solon.ai.talents.cli.TerminalTalent;
 
-public class TerminalSkillCommandSessionTest {
+public class TerminalTalentCommandSessionTest {
 
     @Test
     public void exposesCommandSessionTools() throws Exception {

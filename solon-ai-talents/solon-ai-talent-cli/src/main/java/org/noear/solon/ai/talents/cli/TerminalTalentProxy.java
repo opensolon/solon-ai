@@ -10,16 +10,16 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * TerminalSkill 代理
+ * TerminalTalent 代理
  *
  * @author noear 2026/3/20 created
  */
 public class TerminalTalentProxy implements Talent {
-    private final TerminalTalent terminalSkill;
+    private final TerminalTalent terminalTalent;
     private final List<FunctionTool> toolList = new ArrayList<>();
 
-    public TerminalTalentProxy(TerminalTalent terminalSkill) {
-        this.terminalSkill = terminalSkill;
+    public TerminalTalentProxy(TerminalTalent terminalTalent) {
+        this.terminalTalent = terminalTalent;
     }
 
     public boolean isEmpty() {
@@ -27,37 +27,37 @@ public class TerminalTalentProxy implements Talent {
     }
 
     public void addTools(String... names) {
-        toolList.addAll(terminalSkill.getToolAry(names));
+        toolList.addAll(terminalTalent.getToolAry(names));
     }
 
     @Override
     public String name() {
-        return terminalSkill.name();
+        return terminalTalent.name();
     }
 
     @Override
     public String description() {
-        return terminalSkill.description();
+        return terminalTalent.description();
     }
 
     @Override
     public TalentMetadata metadata() {
-        return terminalSkill.metadata();
+        return terminalTalent.metadata();
     }
 
     @Override
     public boolean isSupported(Prompt prompt) {
-        return terminalSkill.isSupported(prompt);
+        return terminalTalent.isSupported(prompt);
     }
 
     @Override
     public void onAttach(Prompt prompt) {
-        terminalSkill.onAttach(prompt);
+        terminalTalent.onAttach(prompt);
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
-        return terminalSkill.getInstruction(prompt);
+        return terminalTalent.getInstruction(prompt);
     }
 
     @Override

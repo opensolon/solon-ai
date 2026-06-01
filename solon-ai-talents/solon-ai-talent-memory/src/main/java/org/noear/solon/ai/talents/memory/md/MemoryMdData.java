@@ -98,7 +98,7 @@ public class MemoryMdData implements AutoCloseable {
     /**
      * 存入记忆条目：写 MD 文件 + 更新内存缓存
      *
-     * <p>注意：搜索索引的更新由 MemorySkill 统一调用 updateIndex() 完成，
+     * <p>注意：搜索索引的更新由 MemoryTalent 统一调用 updateIndex() 完成，
      * 保持与其他方案（Lucene/Repository/Rogue）的调用约定一致，避免双写冗余。
      */
     public void put(String userId, String key, String val, int ttl) {
@@ -244,7 +244,7 @@ public class MemoryMdData implements AutoCloseable {
     }
 
     /**
-     * 手动更新搜索索引（由 MemorySkill 统一调用，兼容 MemorySearchProvider.updateIndex 接口）
+     * 手动更新搜索索引（由 MemoryTalent 统一调用，兼容 MemorySearchProvider.updateIndex 接口）
      */
     public void updateIndex(String userId, String key, String fact, int importance, String time) {
         Map<String, IndexEntry> userIndex = indexByUser.computeIfAbsent(userId, k -> new ConcurrentHashMap<>());
@@ -252,7 +252,7 @@ public class MemoryMdData implements AutoCloseable {
     }
 
     /**
-     * 手动移除搜索索引（由 MemorySkill 统一调用，兼容 MemorySearchProvider.removeIndex 接口）
+     * 手动移除搜索索引（由 MemoryTalent 统一调用，兼容 MemorySearchProvider.removeIndex 接口）
      */
     public void removeIndex(String userId, String key) {
         Map<String, IndexEntry> userIndex = indexByUser.get(userId);

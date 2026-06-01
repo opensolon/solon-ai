@@ -550,7 +550,7 @@ public abstract class AbsChatTest {
 
         log.info("case11 response: {}", resp.getMessage().getContent());
 
-        // 验证：1. 属性是否成功注入 2. 系统消息是否自动添加（1个User + 1个Skill生成的System + 1个Assistant）
+        // 验证：1. 属性是否成功注入 2. 系统消息是否自动添加（1个User + 1个Talent生成的System + 1个Assistant）
         Assertions.assertEquals("time_v1", prompt.attr("talent_attached"));
         Assertions.assertTrue(resp.getMessage().getContent().contains("2026"));
     }
@@ -559,7 +559,7 @@ public abstract class AbsChatTest {
     public void case12_talent_stream() throws Exception {
         // 1. 定义一个带工具的才能
         ToolProvider toolProvider = new MethodToolProvider(new Tools());
-        Talent weatherSkill = TalentDesc.builder("weather")
+        Talent weatherTalent = TalentDesc.builder("weather")
                 .instruction("你是一个气象专家。")
                 .toolAdd(toolProvider)
                 .build();
@@ -573,7 +573,7 @@ public abstract class AbsChatTest {
         // 流式调用
         chatModel.prompt("杭州天气？")
                 .session(chatSession)
-                .options(o -> o.talentAdd(weatherSkill))
+                .options(o -> o.talentAdd(weatherTalent))
                 .stream()
                 .subscribe(new SimpleSubscriber<ChatResponse>()
                         .doOnNext(resp -> {

@@ -162,7 +162,7 @@ public class VideoGenerationTalent extends AbsTalent {
     public static final VideoDriver SORA = (prompt, seconds, ratio, savePath, key) -> {
         LOG.info("Sora driver processing... (Mock)");
         // 模拟下载动作（实际需调用驱动工具类下载 URL）
-        // ImageGenerationSkill.downloadImage("https://example.com/video.mp4", savePath);
+        // ImageGenerationTalent.downloadImage("https://example.com/video.mp4", savePath);
         return "视频生成任务已圆满完成";
     };
 }

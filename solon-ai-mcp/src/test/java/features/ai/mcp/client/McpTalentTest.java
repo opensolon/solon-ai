@@ -19,7 +19,7 @@ import java.util.Collection;
  */
 @Slf4j
 @SolonTest(McpServerApp.class)
-public class McpSkillsTest {
+public class McpTalentTest {
     @Test
     public void case1() {
         McpClientProvider mcpClient = McpClientProvider.builder()

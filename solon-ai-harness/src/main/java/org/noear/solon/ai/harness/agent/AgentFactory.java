@@ -81,28 +81,28 @@ public class AgentFactory {
 
         if (Assert.isNotEmpty(metadata.getTools())) {
             //目前参考了： https://opencode.ai/docs/zh-cn/permissions/
-            TerminalTalentProxy terminalSkillWrap = new TerminalTalentProxy(engine.getTerminalTalent());
+            TerminalTalentProxy terminalTalentProxy = new TerminalTalentProxy(engine.getTerminalTalent());
 
             for (String toolName : metadata.getTools()) {
                 if ("**".equals(toolName)) {
                     for (String t1 : TOOL_ALL_FULL) {
-                        toolAddDo(engine, builder, terminalSkillWrap, metadata, t1);
+                        toolAddDo(engine, builder, terminalTalentProxy, metadata, t1);
                     }
                 } else if ("*".equals(toolName)) {
                     for (String t1 : TOOL_ALL_PUBLIC) {
-                        toolAddDo(engine, builder, terminalSkillWrap, metadata, t1);
+                        toolAddDo(engine, builder, terminalTalentProxy, metadata, t1);
                     }
                 } else if ("pi".equals(toolName)) {
                     for (String t1 : TOOL_PI) {
-                        toolAddDo(engine, builder, terminalSkillWrap, metadata, t1);
+                        toolAddDo(engine, builder, terminalTalentProxy, metadata, t1);
                     }
                 } else {
-                    toolAddDo(engine, builder, terminalSkillWrap, metadata, toolName);
+                    toolAddDo(engine, builder, terminalTalentProxy, metadata, toolName);
                 }
             }
 
-            if (terminalSkillWrap.isEmpty() == false) {
-                builder.defaultTalentAdd(terminalSkillWrap);
+            if (terminalTalentProxy.isEmpty() == false) {
+                builder.defaultTalentAdd(terminalTalentProxy);
             }
         }
 
@@ -113,7 +113,7 @@ public class AgentFactory {
         return builder;
     }
 
-    private static void toolAddDo(HarnessEngine engine, ReActAgent.Builder builder, TerminalTalentProxy terminalSkillWrap, AgentDefinition.Metadata metadata, String toolName) {
+    private static void toolAddDo(HarnessEngine engine, ReActAgent.Builder builder, TerminalTalentProxy terminalTalentProxy, AgentDefinition.Metadata metadata, String toolName) {
         //当前禁止
         if (metadata.getDisallowedTools().contains(toolName)) {
             return;
@@ -126,51 +126,51 @@ public class AgentFactory {
 
         switch (toolName) {
             case "read": {
-                terminalSkillWrap.addTools("read");
+                terminalTalentProxy.addTools("read");
                 break;
             }
             case "write": {
-                terminalSkillWrap.addTools("write");
+                terminalTalentProxy.addTools("write");
                 break;
             }
             case "edit": {
-                terminalSkillWrap.addTools("edit");
+                terminalTalentProxy.addTools("edit");
 
-                toolAddDo(engine, builder, terminalSkillWrap, metadata, "read");
-                toolAddDo(engine, builder, terminalSkillWrap, metadata, "write");
+                toolAddDo(engine, builder, terminalTalentProxy, metadata, "read");
+                toolAddDo(engine, builder, terminalTalentProxy, metadata, "write");
                 break;
             }
             case "glob": {
-                terminalSkillWrap.addTools("glob");
+                terminalTalentProxy.addTools("glob");
                 break;
             }
             case "grep": {
-                terminalSkillWrap.addTools("grep");
+                terminalTalentProxy.addTools("grep");
                 break;
             }
             case "ls":
             case "list": {
-                terminalSkillWrap.addTools("ls");
+                terminalTalentProxy.addTools("ls");
                 break;
             }
             case "bash": {
-                terminalSkillWrap.addTools("bash");
+                terminalTalentProxy.addTools("bash");
                 break;
             }
             case "bash_start": {
-                terminalSkillWrap.addTools("bash_start");
+                terminalTalentProxy.addTools("bash_start");
                 break;
             }
             case "bash_wait": {
-                terminalSkillWrap.addTools("bash_wait");
+                terminalTalentProxy.addTools("bash_wait");
                 break;
             }
             case "bash_stdin": {
-                terminalSkillWrap.addTools("bash_stdin");
+                terminalTalentProxy.addTools("bash_stdin");
                 break;
             }
             case "bash_stop": {
-                terminalSkillWrap.addTools("bash_stop");
+                terminalTalentProxy.addTools("bash_stop");
                 break;
             }
             case "subagent":
