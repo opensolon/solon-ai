@@ -27,6 +27,7 @@ import org.noear.solon.ai.skills.lsp.LspServerParameters;
 import org.noear.solon.ai.skills.memory.MemorySolution;
 import org.noear.solon.ai.skills.openapi.ApiSource;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Preview;
 
 import java.io.Serializable;
 import java.util.*;
@@ -39,6 +40,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * @author noear
  * @since 4.0.0
  */
+@Preview("4.0")
 class HarnessOptions implements Serializable {
 
     // ========== 基础路径 ==========
