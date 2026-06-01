@@ -211,16 +211,16 @@ public class HarnessEngine {
         return options.getSessionWindowSize();
     }
 
-    public int getSummaryWindowSize() {
-        return options.getSummaryWindowSize();
+    public int getCompressionMaxMessages() {
+        return options.getCompressionMaxMessages();
     }
 
-    public int getSummaryWindowToken() {
-        return options.getSummaryWindowToken();
+    public int getCompressionMaxTokens() {
+        return options.getCompressionMaxTokens();
     }
 
-    public String getSummaryModel() {
-        return options.getSummaryModel();
+    public String getCompressionModel() {
+        return options.getCompressionModel();
     }
 
     public boolean isMemoryEnabled() {
@@ -376,10 +376,10 @@ public class HarnessEngine {
                     .addStrategy(new HierarchicalCompressionStrategy()); // 滚动更新摘要
 
             options.setCompressionInterceptor(new ContextCompressionInterceptor(
-                    options.getSummaryWindowSize(),
-                    options.getSummaryWindowToken(),
+                    options.getCompressionMaxMessages(),
+                    options.getCompressionMaxTokens(),
                     options.getModelRetries(),
-                    this::getModelForSummary,
+                    this::getModelForCompression,
                     strategy));
         }
 
@@ -512,8 +512,8 @@ public class HarnessEngine {
         return options.getModelOrDef(name).toChatModel();
     }
 
-    public ChatModel getModelForSummary() {
-        return getModelOrMain(options.getSummaryModel());
+    public ChatModel getModelForCompression() {
+        return getModelOrMain(options.getCompressionModel());
     }
 
 
@@ -654,18 +654,18 @@ public class HarnessEngine {
             return this;
         }
 
-        public Builder summaryWindowSize(int val) {
-            options.setSummaryWindowSize(val);
+        public Builder compressionMaxMessages(int val) {
+            options.setCompressionMaxMessages(val);
             return this;
         }
 
-        public Builder summaryWindowToken(int val) {
-            options.setSummaryWindowToken(val);
+        public Builder compressionMaxTokens(int val) {
+            options.setCompressionMaxTokens(val);
             return this;
         }
 
-        public Builder summaryModel(String val) {
-            options.setSummaryModel(val);
+        public Builder compressionModel(String val) {
+            options.setCompressionModel(val);
             return this;
         }
 

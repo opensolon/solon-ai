@@ -63,9 +63,9 @@ class HarnessOptions implements Serializable {
 
     // ========== 会话与压缩 ==========
     private int sessionWindowSize = 8;
-    private int summaryWindowSize = 30;
-    private int summaryWindowToken = 30000;
-    private String summaryModel; //摘要大模型
+    private int compressionMaxMessages = 30;
+    private int compressionMaxTokens = 30_000;
+    private String compressionModel; //压缩大模型
 
     // ========== 记忆 ==========
     private boolean memoryIsolation = false;
@@ -198,28 +198,28 @@ class HarnessOptions implements Serializable {
         this.sessionWindowSize = sessionWindowSize;
     }
 
-    int getSummaryWindowSize() {
-        return summaryWindowSize;
+    int getCompressionMaxMessages() {
+        return compressionMaxMessages;
     }
 
-    void setSummaryWindowSize(int summaryWindowSize) {
-        this.summaryWindowSize = summaryWindowSize;
+    void setCompressionMaxMessages(int compressionMaxMessages) {
+        this.compressionMaxMessages = compressionMaxMessages;
     }
 
-    int getSummaryWindowToken() {
-        return summaryWindowToken;
+    int getCompressionMaxTokens() {
+        return compressionMaxTokens;
     }
 
-    void setSummaryWindowToken(int summaryWindowToken) {
-        this.summaryWindowToken = summaryWindowToken;
+    void setCompressionMaxTokens(int compressionMaxTokens) {
+        this.compressionMaxTokens = compressionMaxTokens;
     }
 
-    String getSummaryModel() {
-        return summaryModel;
+    String getCompressionModel() {
+        return compressionModel;
     }
 
-    void setSummaryModel(String summaryModel) {
-        this.summaryModel = summaryModel;
+    void setCompressionModel(String compressionModel) {
+        this.compressionModel = compressionModel;
     }
 
     boolean isMemoryIsolation() {

@@ -14,7 +14,7 @@
 - **MCP 服务集成**: 动态加载 MCP Server 工具
 - **REST API 集成**: 将 REST API 作为 Agent 工具调用
 - **人工介入（HITL）**: 对 bash 等高危命令进行安全审计与拦截
-- **上下文摘要**: 自动滚动摘要，避免上下文窗口溢出
+- **上下文压缩**: 自动滚动压缩，避免上下文窗口溢出
 - **代码工程规约**: 自动识别技术栈（Maven/Node），生成构建与测试指令
 - **动态代理生成**: 运行时动态创建子代理并持久化到文件
 
@@ -132,10 +132,10 @@ HarnessEngine engine = HarnessEngine.of(".solon/")
         .tools(ToolPermission.TOOL_BASH, ToolPermission.TOOL_READ)
         // 最大回合数
         .maxTurns(30)
-        // 会话窗口与摘要
+        // 会话窗口与压缩
         .sessionWindowSize(8)
-        .summaryWindowSize(15)
-        .summaryWindowToken(15000)
+        .compressionMaxMessages(15)
+        .compressionMaxTokens(15000)
         // 沙箱模式
         .sandboxMode(true)
         // 启用人工介入
