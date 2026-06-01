@@ -52,10 +52,10 @@ public class GenerateTool extends AbsToolProvider {
     private static Map<String, Object> createBinding(HarnessEngine engine) {
         Map<String, Object> binding = new LinkedHashMap<>();
 
-        if (Assert.isNotEmpty(engine.getProps().getModels())) {
+        if (Assert.isNotEmpty(engine.getModels())) {
             //有模型配置
             StringBuilder buf = new StringBuilder("从给定列表中选择：\n");
-            for (ChatConfig entry : engine.getProps().getModels()) {
+            for (ChatConfig entry : engine.getModels()) {
                 if (entry.isEnabled()) {
                     buf.append("- `").append(entry.getNameOrModel()).append("`，").append(entry.getDescriptionOrModel()).append("\n");
                 }
@@ -99,7 +99,6 @@ public class GenerateTool extends AbsToolProvider {
                     "- `task`，允许其进一步开启下级代理(递归分发)\n" +
                     "- `*`，全量授权") List<String> tools,
             @Param(name = "skills", description = "子代理具备的特定专家能力标识列表", required = false) List<String> skills,
-            @Param(name = "maxTurns", description = "单次任务的最大思考/对话轮数，通常建议 10-30", required = false) Integer maxTurns,
             @Param(name = "saveToFile", description = "是否持久化。如果是通用的、可复用的专家角色，建议设为 true；如果是临时任务助手，设为 false。", defaultValue = "false", required = false) Boolean saveToFile,
             String __cwd
     ) {
@@ -121,7 +120,6 @@ public class GenerateTool extends AbsToolProvider {
             definition.getMetadata().setModel(model);
             definition.getMetadata().setTools(tools);
             definition.getMetadata().setSkills(skills);
-            definition.getMetadata().setMaxTurns(maxTurns);
 
             boolean shouldSave = saveToFile != null && saveToFile;
 

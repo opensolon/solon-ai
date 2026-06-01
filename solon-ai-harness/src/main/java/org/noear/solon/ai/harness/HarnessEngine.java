@@ -32,6 +32,7 @@ import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.code.CodeSkill;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
+import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.skills.cli.PoolType;
 import org.noear.solon.ai.skills.lsp.LspManager;
 import org.noear.solon.ai.skills.lsp.LspServerParameters;
@@ -68,7 +69,7 @@ public class HarnessEngine {
     private final ReentrantLock agentLock = new ReentrantLock();
 
     private final AgentSessionProvider sessionProvider;
-    private final HarnessProperties props;
+    private final HarnessOptions options;
 
     private final CodeSkill codeSkill;
     private final TodoSkill todoSkill;
@@ -101,10 +102,6 @@ public class HarnessEngine {
 
     public String getName() {
         return getMainAgent().name();
-    }
-
-    public HarnessProperties getProps() {
-        return props;
     }
 
     public CommandRegistry getCommandRegistry() {
@@ -175,18 +172,155 @@ public class HarnessEngine {
         return openApiSkill;
     }
 
+    // ========== 配置读取（代理到 options） ==========
+
+    public String getHarnessHome() {
+        return options.getHarnessHome();
+    }
+
+    public String getHarnessSessions() {
+        return options.getHarnessSessions();
+    }
+
+    public String getWorkspace() {
+        return options.getWorkspace();
+    }
+
+    public String getSystemPrompt() {
+        return options.getSystemPrompt();
+    }
+
+    public String getUserAgent() {
+        return options.getUserAgent();
+    }
+
+    public int getMaxTurns() {
+        return options.getMaxTurns();
+    }
+
+    public boolean isAutoRethink() {
+        return options.isAutoRethink();
+    }
+
+    public int getSessionWindowSize() {
+        return options.getSessionWindowSize();
+    }
+
+    public int getSummaryWindowSize() {
+        return options.getSummaryWindowSize();
+    }
+
+    public int getSummaryWindowToken() {
+        return options.getSummaryWindowToken();
+    }
+
+    public String getSummaryModel() {
+        return options.getSummaryModel();
+    }
+
+    public boolean isMemoryEnabled() {
+        return options.isMemoryEnabled();
+    }
+
+    public boolean isSandboxMode() {
+        return options.isSandboxMode();
+    }
+
+    public boolean isHitlEnabled() {
+        return options.isHitlEnabled();
+    }
+
+    public boolean isSubagentEnabled() {
+        return options.isSubagentEnabled();
+    }
+
+    public boolean isBashAsyncEnabled() {
+        return options.isBashAsyncEnabled();
+    }
+
+    public int getApiRetries() {
+        return options.getApiRetries();
+    }
+
+    public int getMcpRetries() {
+        return options.getMcpRetries();
+    }
+
+    public int getModelRetries() {
+        return options.getModelRetries();
+    }
+
+    public List<String> getTools() {
+        return options.getTools();
+    }
+
+    public List<String> getDisallowedTools() {
+        return options.getDisallowedTools();
+    }
+
+    public List<HarnessExtension> getExtensions() {
+        return options.getExtensions();
+    }
+
+    public List<ChatConfig> getModels() {
+        return options.getModels();
+    }
+
+    public Map<String, String> getMountPools() {
+        return options.getMountPools();
+    }
+
+    public List<String> getAgentPools() {
+        return options.getAgentPools();
+    }
+
+    public Map<String, McpServerParameters> getMcpServers() {
+        return options.getMcpServers();
+    }
+
+    public Map<String, ApiSource> getApiServers() {
+        return options.getApiServers();
+    }
+
+    public Map<String, LspServerParameters> getLspServers() {
+        return options.getLspServers();
+    }
+
+    public ChatConfig getModelOrNil(String name) {
+        return options.getModelOrNil(name);
+    }
+
+    public ChatConfig getModelOrDef(String name) {
+        return options.getModelOrDef(name);
+    }
+
+    // ========== 运行时动态修改 ==========
+
+    public void setMaxTurns(int val) {
+        options.setMaxTurns(val);
+    }
+
+    public void setHitlEnabled(boolean val) {
+        options.setHitlEnabled(val);
+    }
+
+    public void setSubagentEnabled(boolean val) {
+        options.setSubagentEnabled(val);
+    }
+
+    // ========== 动态模型管理 ==========
 
     public void addModel(ChatConfig config) {
         if (Assert.isEmpty(config.getUserAgent())) {
-            config.setUserAgent(props.getUserAgent());
+            config.setUserAgent(options.getUserAgent());
         }
 
-        props.removeModel(config.getNameOrModel());
-        props.addModel(config);
+        options.removeModel(config.getNameOrModel());
+        options.addModel(config);
     }
 
     public void removeModel(String name) {
-        props.removeModel(name);
+        options.removeModel(name);
     }
 
 
@@ -195,7 +329,7 @@ public class HarnessEngine {
      */
     public void addApi(ApiSource apiSource) {
         openApiSkill.addApi(apiSource);
-        props.addApiSource(apiSource.getDocUrl(), apiSource);
+        options.addApiSource(apiSource.getDocUrl(), apiSource);
     }
 
     /**
@@ -203,7 +337,7 @@ public class HarnessEngine {
      */
     public void removeApi(String docUrl) {
         openApiSkill.removeApi(docUrl);
-        props.getApiServers().remove(docUrl);
+        options.getApiServers().remove(docUrl);
     }
 
     /**
@@ -211,7 +345,7 @@ public class HarnessEngine {
      */
     public void addMcpServer(String name, McpServerParameters mcpServer) {
         mcpGatewaySkill.addMcpServer(name, mcpServer);
-        props.addMcpServer(name, mcpServer);
+        options.addMcpServer(name, mcpServer);
     }
 
     /**
@@ -219,11 +353,11 @@ public class HarnessEngine {
      */
     public void removeMcpServer(String name) {
         mcpGatewaySkill.removeMcpServer(name);
-        props.getMcpServers().remove(name);
+        options.getMcpServers().remove(name);
     }
 
     public void addExtension(HarnessExtension extension) {
-        props.addExtension(extension);
+        options.addExtension(extension);
 
         // 如果主代理还没懒加载触发，这里无需提前创建
         if (this.mainAgent != null) {
@@ -231,18 +365,18 @@ public class HarnessEngine {
         }
     }
 
-    private HarnessEngine(HarnessProperties props, AgentSessionProvider sessionProvider, MemorySolution.Factory memorySolution, SummarizationInterceptor summarizationInterceptor, HITLInterceptor hitlInterceptor) {
-        this.props = props;
+    private HarnessEngine(HarnessOptions options, AgentSessionProvider sessionProvider, MemorySolution.Factory memorySolution, SummarizationInterceptor summarizationInterceptor, HITLInterceptor hitlInterceptor) {
+        this.options = options;
 
         //上下文摘要拦截器默认处理
         if (summarizationInterceptor == null) {
             SummarizationStrategy strategy = new CompositeSummarizationStrategy()
-                    .addStrategy(new KeyInfoExtractionStrategy(this::getModelForSummary).retryConfig(props.getModelRetries()))      // 提取干货（去水）
-                    .addStrategy(new HierarchicalSummarizationStrategy(this::getModelForSummary).retryConfig(props.getModelRetries())); // 滚动更新摘要
+                    .addStrategy(new KeyInfoExtractionStrategy(this::getModelForSummary).retryConfig(options.getModelRetries()))      // 提取干货（去水）
+                    .addStrategy(new HierarchicalSummarizationStrategy(this::getModelForSummary).retryConfig(options.getModelRetries())); // 滚动更新摘要
 
             summarizationInterceptor = new SummarizationInterceptor(
-                    props.getSummaryWindowSize(),
-                    props.getSummaryWindowToken(),
+                    options.getSummaryWindowSize(),
+                    options.getSummaryWindowToken(),
                     strategy);
         }
 
@@ -255,44 +389,44 @@ public class HarnessEngine {
         this.summarizationInterceptor = summarizationInterceptor;
         this.hitlInterceptor = hitlInterceptor;
 
-        this.todoSkill = new TodoSkill(props.getHarnessSessions());
+        this.todoSkill = new TodoSkill(options.getHarnessSessions());
         this.codeSkill = new CodeSkill(this);
         this.taskSkill = new TaskSkill(this);
         this.generateTool = new GenerateTool(this);
 
-        this.codeSearchTool = new CodeSearchTool().retryConfig(props.getMcpRetries());
-        this.websearchTool = new WebsearchTool().retryConfig(props.getMcpRetries());
-        this.webfetchTool = new WebfetchTool().retryConfig(props.getApiRetries());
+        this.codeSearchTool = new CodeSearchTool().retryConfig(options.getMcpRetries());
+        this.websearchTool = new WebsearchTool().retryConfig(options.getMcpRetries());
+        this.webfetchTool = new WebfetchTool().retryConfig(options.getApiRetries());
 
         //lsp
-        this.lspManager = new LspManager(props.getWorkspace());
-        if (Assert.isNotEmpty(props.getLspServers())) {
-            for (Map.Entry<String, LspServerParameters> entry : props.getLspServers().entrySet()) {
+        this.lspManager = new LspManager(options.getWorkspace());
+        if (Assert.isNotEmpty(options.getLspServers())) {
+            for (Map.Entry<String, LspServerParameters> entry : options.getLspServers().entrySet()) {
                 lspManager.registerServer(entry.getKey(), entry.getValue());
             }
         }
-        this.lspSkill = lspManager.hasServers() ? new LspSkill(lspManager, props.getWorkspace()) : null;
+        this.lspSkill = lspManager.hasServers() ? new LspSkill(lspManager, options.getWorkspace()) : null;
         if (this.lspSkill != null) {
             lspManager.setDiagnosticsCallback(lspSkill::updateDiagnostics);
         }
 
-        if (props.isMemoryEnabled() && memorySolution != null) {
+        if (options.isMemoryEnabled() && memorySolution != null) {
             this.memorySkill = new MemorySkill(memorySolution).sessionIsolation(false);
         } else {
             this.memorySkill = null;
         }
 
-        openApiSkill = new OpenApiSkill().retryConfig(props.getApiRetries());
-        if (Assert.isNotEmpty(props.getApiServers())) {
-            for (Map.Entry<String, ApiSource> entry : props.getApiServers().entrySet()) {
+        openApiSkill = new OpenApiSkill().retryConfig(options.getApiRetries());
+        if (Assert.isNotEmpty(options.getApiServers())) {
+            for (Map.Entry<String, ApiSource> entry : options.getApiServers().entrySet()) {
                 openApiSkill.addApi(entry.getValue());
             }
         }
 
-        mcpGatewaySkill = new McpGatewaySkill().retryConfig(props.getMcpRetries());
+        mcpGatewaySkill = new McpGatewaySkill().retryConfig(options.getMcpRetries());
 
-        if (Assert.isNotEmpty(props.getMcpServers())) {
-            for (Map.Entry<String, McpServerParameters> entry : props.getMcpServers().entrySet()) {
+        if (Assert.isNotEmpty(options.getMcpServers())) {
+            for (Map.Entry<String, McpServerParameters> entry : options.getMcpServers().entrySet()) {
                 if (entry.getValue().isEnabled()) {
                     mcpGatewaySkill.addMcpServer(entry.getKey(), entry.getValue());
                 }
@@ -300,22 +434,17 @@ public class HarnessEngine {
         }
 
 
-        cliSkills.bashAsyncEnabled(props.isBashAsyncEnabled());
-        cliSkills.getTerminalSkill().setSandboxMode(props.isSandboxMode());
-        if (Assert.isNotEmpty(props.getSkillPools())) {
-            props.getSkillPools().forEach((alias, path) -> {
-                cliSkills.getPoolManager().register(alias, PoolType.SKILLS, path);
-            });
-        }
-        if (Assert.isNotEmpty(props.getMountPools())) {
-            props.getMountPools().forEach((alias, path) -> {
+        cliSkills.bashAsyncEnabled(options.isBashAsyncEnabled());
+        cliSkills.getTerminalSkill().setSandboxMode(options.isSandboxMode());
+        if (Assert.isNotEmpty(options.getMountPools())) {
+            options.getMountPools().forEach((alias, path) -> {
                 cliSkills.getPoolManager().register(alias, PoolType.SKILLS, path);
             });
         }
 
         agentManager = new AgentManager();
-        if (Assert.isNotEmpty(props.getAgentPools())) {
-            props.getAgentPools().forEach(dir -> {
+        if (Assert.isNotEmpty(options.getAgentPools())) {
+            options.getAgentPools().forEach(dir -> {
                 agentManager.agentPool(Paths.get(dir));
             });
         }
@@ -327,20 +456,13 @@ public class HarnessEngine {
         AgentDefinition agentDefinition = new AgentDefinition();
 
         // 系统提示词
-        agentDefinition.setSystemPrompt(props.getSystemPrompt());
+        agentDefinition.setSystemPrompt(options.getSystemPrompt());
         // 名字
         agentDefinition.getMetadata().setName(AgentDefinition.AGENT_MAIN);
         // 主代理
         agentDefinition.getMetadata().setPrimary(true);
         // 工具权限
-        agentDefinition.getMetadata().getTools().addAll(props.getTools()); //允许
-
-        // 添加步数
-        agentDefinition.getMetadata().setMaxSteps(props.getMaxSteps());
-        // 添加自我反思
-        agentDefinition.getMetadata().setAutoRethink(props.isAutoRethink());
-        // 添加会话窗口大小
-        agentDefinition.getMetadata().setSessionWindowSize(props.getSessionWindowSize());
+        agentDefinition.getMetadata().getTools().addAll(options.getTools()); //允许
 
         ReActAgent.Builder agentBuilder = AgentFactory.create(this, agentDefinition, null);
 
@@ -366,10 +488,10 @@ public class HarnessEngine {
             try {
                 if (this.mainModel == null) {
                     // 在真正用到模型时，才进行延迟校验
-                    if (Assert.isEmpty(props.getModels())) {
+                    if (Assert.isEmpty(options.getModels())) {
                         throw new IllegalStateException("Missing models config. Please configure models before routing requests.");
                     }
-                    this.mainModel = props.getModelOrDef(null).toChatModel();
+                    this.mainModel = options.getModelOrDef(null).toChatModel();
                 }
                 model = this.mainModel;
             } finally {
@@ -390,11 +512,11 @@ public class HarnessEngine {
             return currentMain;
         }
 
-        return props.getModelOrDef(name).toChatModel();
+        return options.getModelOrDef(name).toChatModel();
     }
 
     public ChatModel getModelForSummary() {
-        return getModelOrMain(props.getSummaryModel());
+        return getModelOrMain(options.getSummaryModel());
     }
 
 
@@ -404,7 +526,7 @@ public class HarnessEngine {
     public void switchMainModel(String name) {
         Objects.requireNonNull(name, "name");
 
-        ChatConfig chatConfig = props.getModelOrNil(name);
+        ChatConfig chatConfig = options.getModelOrNil(name);
         if (chatConfig == null) {
             throw new IllegalArgumentException("The model not found: " + name);
         }
@@ -461,20 +583,22 @@ public class HarnessEngine {
     }
 
 
-    public static Builder of(HarnessProperties props) {
-        return new Builder(props);
+    public static Builder of(String harnessHome) {
+        return new Builder(harnessHome);
     }
 
     public static class Builder {
-        private HarnessProperties properties;
+        private final HarnessOptions options;
         private AgentSessionProvider sessionProvider;
         private SummarizationInterceptor summarizationInterceptor;
         private HITLInterceptor hitlInterceptor;
         private MemorySolution.Factory memorySolution;
 
-        public Builder(HarnessProperties properties) {
-            this.properties = properties;
+        public Builder(String harnessHome) {
+            this.options = new HarnessOptions(harnessHome);
         }
+
+        // ========== 服务注入 ==========
 
         public Builder sessionProvider(AgentSessionProvider sessionProvider) {
             this.sessionProvider = sessionProvider;
@@ -505,20 +629,158 @@ public class HarnessEngine {
             return this;
         }
 
+        // ========== 简单属性配置（代理到 options） ==========
+
+        public Builder workspace(String val) {
+            options.setWorkspace(val);
+            return this;
+        }
+
+        public Builder systemPrompt(String val) {
+            options.setSystemPrompt(val);
+            return this;
+        }
+
+        public Builder userAgent(String val) {
+            options.setUserAgent(val);
+            return this;
+        }
+
+        public Builder maxTurns(int val) {
+            options.setMaxTurns(val);
+            return this;
+        }
+
+        public Builder autoRethink(boolean val) {
+            options.setAutoRethink(val);
+            return this;
+        }
+
+        public Builder sessionWindowSize(int val) {
+            options.setSessionWindowSize(val);
+            return this;
+        }
+
+        public Builder summaryWindowSize(int val) {
+            options.setSummaryWindowSize(val);
+            return this;
+        }
+
+        public Builder summaryWindowToken(int val) {
+            options.setSummaryWindowToken(val);
+            return this;
+        }
+
+        public Builder summaryModel(String val) {
+            options.setSummaryModel(val);
+            return this;
+        }
+
+        public Builder memoryEnabled(boolean val) {
+            options.setMemoryEnabled(val);
+            return this;
+        }
+
+        public Builder memoryIsolation(boolean val) {
+            options.setMemoryIsolation(val);
+            return this;
+        }
+
+        public Builder sandboxMode(boolean val) {
+            options.setSandboxMode(val);
+            return this;
+        }
+
+        public Builder hitlEnabled(boolean val) {
+            options.setHitlEnabled(val);
+            return this;
+        }
+
+        public Builder subagentEnabled(boolean val) {
+            options.setSubagentEnabled(val);
+            return this;
+        }
+
+        public Builder bashAsyncEnabled(boolean val) {
+            options.setBashAsyncEnabled(val);
+            return this;
+        }
+
+        public Builder apiRetries(int val) {
+            options.setApiRetries(val);
+            return this;
+        }
+
+        public Builder mcpRetries(int val) {
+            options.setMcpRetries(val);
+            return this;
+        }
+
+        public Builder modelRetries(int val) {
+            options.setModelRetries(val);
+            return this;
+        }
+
+        // ========== 集合类配置（代理到 options） ==========
+
+        public Builder tools(ToolPermission... val) {
+            options.addTools(val);
+            return this;
+        }
+
+        public Builder disallowedTools(ToolPermission... val) {
+            options.addDisallowedTools(val);
+            return this;
+        }
+
+        public Builder extension(HarnessExtension val) {
+            options.addExtension(val);
+            return this;
+        }
+
+        public Builder model(ChatConfig val) {
+            options.addModel(val);
+            return this;
+        }
+
+        public Builder mountPool(String alias, String path) {
+            options.addMountPool(alias, path);
+            return this;
+        }
+
+        public Builder agentPool(String path) {
+            options.addAgentPool(path);
+            return this;
+        }
+
+        public Builder mcpServer(String name, McpServerParameters params) {
+            options.addMcpServer(name, params);
+            return this;
+        }
+
+        public Builder apiSource(String name, ApiSource source) {
+            options.addApiSource(name, source);
+            return this;
+        }
+
+        public Builder lspServer(String name, LspServerParameters params) {
+            options.addLspServer(name, params);
+            return this;
+        }
+
         public HarnessEngine build() {
-            Objects.nonNull(properties);
             Objects.nonNull(sessionProvider);
 
             //缺省 userAgent 补尝
-            if (Assert.isNotEmpty(properties.getUserAgent())) {
-                for (ChatConfig m1 : properties.getModels()) {
+            if (Assert.isNotEmpty(options.getUserAgent())) {
+                for (ChatConfig m1 : options.getModels()) {
                     if (Assert.isEmpty(m1.getUserAgent())) {
-                        m1.setUserAgent(properties.getUserAgent());
+                        m1.setUserAgent(options.getUserAgent());
                     }
                 }
             }
 
-            return new HarnessEngine(properties, sessionProvider, memorySolution, summarizationInterceptor, hitlInterceptor);
+            return new HarnessEngine(options, sessionProvider, memorySolution, summarizationInterceptor, hitlInterceptor);
         }
     }
 }

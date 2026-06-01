@@ -259,15 +259,12 @@ public class AgentMetadataTest {
     public void testParseMaxTurns() {
         String prompt = "---\n" +
                 "name: test\n" +
-                "maxTurns: 50\n" +
                 "---\n\n" +
                 "## 测试代理";
 
         AgentDefinition.Metadata metadata = AgentDefinition.fromMarkdown(prompt).getMetadata();
 
         assertEquals("test", metadata.getName());
-        assertEquals(Integer.valueOf(50), metadata.getMaxTurns());
-        assertTrue(metadata.hasMaxTurns());
     }
 
     @Test
@@ -358,7 +355,6 @@ public class AgentMetadataTest {
                 "disallowedTools: Bash, Write\n" +
                 "model: glm-4.7\n" +
                 "permissionMode: plan\n" +
-                "maxTurns: 100\n" +
                 "skills: commit, review\n" +
                 "mcpServers: slack\n" +
                 "memory: user\n" +
@@ -373,13 +369,11 @@ public class AgentMetadataTest {
         assertEquals("A comprehensive test with all metadata fields", metadata.getDescription());
         assertEquals("glm-4.7", metadata.getModel());
         assertEquals("plan", metadata.getPermissionMode());
-        assertEquals(Integer.valueOf(100), metadata.getMaxTurns());
         assertEquals("user", metadata.getMemory());
         assertEquals("worktree", metadata.getIsolation());
 
         assertTrue(metadata.hasModel());
         assertTrue(metadata.hasPermissionMode());
-        assertTrue(metadata.hasMaxTurns());
         assertTrue(metadata.hasSkills());
         assertTrue(metadata.hasMcpServers());
         assertTrue(metadata.hasDisallowedTools());
@@ -397,15 +391,12 @@ public class AgentMetadataTest {
     public void testInvalidMaxTurnsIgnored() {
         String prompt = "---\n" +
                 "name: test\n" +
-                "maxTurns: invalid\n" +
                 "---\n\n" +
                 "## 测试代理";
 
         AgentDefinition.Metadata metadata = AgentDefinition.fromMarkdown(prompt).getMetadata();
 
         assertEquals("test", metadata.getName());
-        assertNull(metadata.getMaxTurns());
-        assertFalse(metadata.hasMaxTurns());
     }
 
     @Test

@@ -60,47 +60,24 @@ public class AgentFactory {
         ChatModel chatModel = engine.getModelOrMain(selectedModel);
 
         ReActAgent.Builder builder = ReActAgent.of(chatModel)
-                .retryConfig(engine.getProps().getModelRetries(), 1000L);
+                .retryConfig(engine.getModelRetries(), 1000L);
 
         AgentDefinition.Metadata metadata = agentDefinition.getMetadata();
 
         builder.name(agentDefinition.getName());
 
-        if (Assert.isNotEmpty(engine.getProps().getWorkspace())) {
-            builder.defaultToolContextPut(HarnessEngine.ATTR_CWD, engine.getProps().getWorkspace());
+        if (Assert.isNotEmpty(engine.getWorkspace())) {
+            builder.defaultToolContextPut(HarnessEngine.ATTR_CWD, engine.getWorkspace());
         }
 
         if (Assert.isNotEmpty(agentDefinition.getSystemPrompt())) {
             builder.systemPrompt(r -> agentDefinition.getSystemPrompt());
         }
 
-        if (metadata.getMaxSteps() != null && metadata.getMaxSteps() > 0) {
-            builder.maxSteps(metadata.getMaxSteps());
-        } else if (metadata.getMaxTurns() != null && metadata.getMaxTurns() > 0) {
-            builder.maxSteps(metadata.getMaxTurns());
-        } else {
-            builder.maxSteps(engine.getProps().getMaxSteps());
-        }
-
-        if (metadata.getAutoRethink() != null) {
-            builder.autoRethink(metadata.getAutoRethink());
-        } else {
-            builder.autoRethink(engine.getProps().isAutoRethink());
-        }
-
-        if (metadata.getSessionWindowSize() != null) {
-            builder.sessionWindowSize(metadata.getSessionWindowSize());
-        } else {
-            builder.sessionWindowSize(engine.getProps().getSessionWindowSize());
-        }
-
-        if (metadata.getSummaryWindowSize() == null && metadata.getSummaryWindowToken() == null) {
-            builder.defaultInterceptorAdd(engine.getSummarizationInterceptor());
-        } else {
-            int summaryWindowSize = metadata.getSummaryWindowSize() == null ? engine.getProps().getSummaryWindowSize() : metadata.getSummaryWindowSize();
-            int summaryWindowToken = metadata.getSummaryWindowToken() == null ? engine.getProps().getSummaryWindowToken() : metadata.getSummaryWindowToken();
-            builder.defaultInterceptorAdd(engine.getSummarizationInterceptor().copyWith(summaryWindowSize, summaryWindowToken));
-        }
+        builder.maxTurns(engine.getMaxTurns());
+        builder.autoRethink(engine.isAutoRethink());
+        builder.sessionWindowSize(engine.getSessionWindowSize());
+        builder.defaultInterceptorAdd(engine.getSummarizationInterceptor());
 
         if (Assert.isNotEmpty(metadata.getTools())) {
             //目前参考了： https://opencode.ai/docs/zh-cn/permissions/
@@ -130,7 +107,7 @@ public class AgentFactory {
             }
         }
 
-        for (HarnessExtension extension : engine.getProps().getExtensions()) {
+        for (HarnessExtension extension : engine.getExtensions()) {
             extension.configure(agentDefinition.getName(), builder);
         }
 
@@ -144,7 +121,7 @@ public class AgentFactory {
         }
 
         //全局禁止
-        if (engine.getProps().getDisallowedTools().contains(toolName)) {
+        if (engine.getDisallowedTools().contains(toolName)) {
             return;
         }
 
@@ -229,7 +206,7 @@ public class AgentFactory {
 
 
             case "generate": {
-                if (engine.getProps().isSubagentEnabled()) {
+                if (engine.isSubagentEnabled()) {
                     builder.defaultToolAdd(engine.getGenerateTool());
                 }
                 break;
@@ -261,7 +238,7 @@ public class AgentFactory {
                 break;
             }
             case "hitl": {
-                if (engine.getProps().isHitlEnabled()) {
+                if (engine.isHitlEnabled()) {
                     builder.defaultInterceptorAdd(engine.getHitlInterceptor());
                 }
                 break;

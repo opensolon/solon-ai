@@ -24,7 +24,7 @@
 solon-ai-harness/
 ├── src/main/java/org/noear/solon/ai/harness/
 │   ├── HarnessEngine.java          # 马具引擎核心（Builder 模式）
-│   ├── HarnessProperties.java      # 配置属性（工作区、工具、MCP、挂载池等）
+│   ├── HarnessOptions.java        # 运行时配置（内部使用）
 │   ├── agent/
 │   │   ├── AgentDefinition.java    # 代理定义（支持 Markdown YAML Frontmatter 解析）
 │   │   ├── AgentFactory.java       # 代理工厂（根据定义构建 ReActAgent）
@@ -56,27 +56,15 @@ solon-ai-harness/
 ### 2. 初始化引擎
 
 ```java
-// 配置属性
-HarnessProperties harnessProps = new HarnessProperties(".solon/");
-harnessProps.addTools(ToolPermission.TOOL_ALL_FULL); // 设定工具权限
-
-// 构建 ChatModel
-ChatModel chatModel = ChatModel.of(harnessProps.getChatModel()).build();
-
-// 会话提供者
-AgentSessionProvider sessionProvider = new AgentSessionProvider() {
-    private Map<String, AgentSession> sessionMap = new ConcurrentHashMap<>();
-    @Override
-    public AgentSession getSession(String instanceId) {
-        return sessionMap.computeIfAbsent(instanceId, k -> InMemoryAgentSession.of(k));
-    }
-};
-
-// 构建引擎
-HarnessEngine engine = HarnessEngine.builder()
-        .properties(harnessProps)
-        .chatModel(chatModel)
-        .sessionProvider(sessionProvider)
+// 构建引擎（Builder 链式配置）
+HarnessEngine engine = HarnessEngine.of(".solon/")
+        .tools(ToolPermission.TOOL_ALL_FULL) // 设定工具权限
+        .model(new ChatConfig().then(slf -> {
+            slf.setApiUrl("https://api.deepseek.com");
+            slf.setApiKey("sk-***");
+            slf.setModel("deepseek-v4-flash");
+        }))
+        .sessionProvider(InMemoryAgentSession::of)
         .build();
 ```
 
@@ -85,7 +73,7 @@ HarnessEngine engine = HarnessEngine.builder()
 ```java
 AgentSession session = engine.getSession("default");
 
-engine.getMainAgent().prompt("分析当前项目的技术栈")
+engine.prompt("分析当前项目的技术栈")
         .session(session)
         .options(o -> {
             o.toolContextPut(HarnessEngine.ATTR_CWD, "/path/to/project");
@@ -134,34 +122,33 @@ subagent.prompt("审查 src/main/java 目录下的代码")
 
 ## 配置说明
 
-### HarnessProperties
+### Builder 配置
 
 ```java
-HarnessProperties props = new HarnessProperties(".solon/");
+HarnessEngine engine = HarnessEngine.of(".solon/")
+        // 工作区
+        .workspace("/path/to/workspace")
+        // 工具权限
+        .tools(ToolPermission.TOOL_BASH, ToolPermission.TOOL_READ)
+        // 最大回合数
+        .maxTurns(30)
+        // 会话窗口与摘要
+        .sessionWindowSize(8)
+        .summaryWindowSize(15)
+        .summaryWindowToken(15000)
+        // 沙箱模式
+        .sandboxMode(true)
+        // 启用人工介入
+        .hitlEnabled(true)
+        // 启用子代理
+        .subagentEnabled(true)
+        // 构建引擎
+        .sessionProvider(InMemoryAgentSession::of)
+        .build();
 
-// 工作区
-props.setWorkspace("/path/to/workspace");
-
-// 工具权限
-props.addTools(ToolPermission.TOOL_BASH, ToolPermission.TOOL_READ);
-
-// 最大步数
-props.setMaxSteps(30);
-props.setMaxStepsAutoExtensible(true);
-
-// 会话窗口与摘要
-props.setSessionWindowSize(8);
-props.setSummaryWindowSize(15);
-props.setSummaryWindowToken(15000);
-
-// 沙箱模式
-props.setSandboxMode(true);
-
-// 启用人工介入
-props.setHitlEnabled(true);
-
-// 启用子代理
-props.setSubagentEnabled(true);
+// 运行时动态修改（支持）
+engine.setMaxTurns(50);
+engine.setHitlEnabled(false);
 ```
 
 ### 配置加载优先级
@@ -196,7 +183,6 @@ tools:
   - read
   - grep
   - bash
-maxTurns: 10
 ---
 
 你是一个资深的代码审查专家，负责检查代码质量、发现潜在问题并提供改进建议。

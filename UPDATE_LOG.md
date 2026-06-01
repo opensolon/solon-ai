@@ -45,6 +45,7 @@
 * 调整 solon-ai-agent ReActAgent.maxSteps 更名为 maxTurns（保持行业习惯）
 * 调整 solon-ai-skill-cli PoolManager 实现细节，并添加 refresh(alias)
 * 调整 solon-ai-skill-cli 技能标识由 aliasPath 统一改为 name，并优化技能池加载逻辑及代码格式
+* 调整 solon-ai-harness HarnessEngine 打断与 HarnessProperties 关联（后者删除），避免耦合影响未来的调整
 * 移除 solon-ai-skill-browser（包太大了，没必要）
 * 修复 solon-ai-mcp WebRxStreamableHttpTransport 没有 event 的消息会出错的问题（优化非规范兼容）
 * 修复 solon-ai-agent SummarizationInterceptor 压缩后可能会引起 ToolMessage 无法对齐的问题

@@ -8,66 +8,54 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.HarnessProperties;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.skills.lsp.LspServerParameters;
 
 import java.util.Arrays;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class DemoApp {
     public static void main(String[] arg) throws Throwable {
         //--- 1. 初始化
-        HarnessProperties harnessProps = new HarnessProperties(".tmp/");
-        harnessProps.addTools(ToolPermission.TOOL_ALL_FULL); //设定工具权限
-        harnessProps.addDisallowedTools(ToolPermission.TOOL_ALL_FULL);
-
-        harnessProps.addAgentPool("~/.soloncode/agents/");
-
-        harnessProps.addModel(new ChatConfig().then(slf->{
-            slf.setApiUrl("https://api.deepseek.com");
-            slf.setApiKey("sk-***");
-            slf.setModel("deepseek-v4-flash");
-        })); //设定大模型配置
-        harnessProps.addExtension((name, builder) -> {
-            //...
-        });
-
-        harnessProps.addMcpServer("xxx", null);
-
-
-        harnessProps.setSystemPrompt("xxx");
-
-        //--- 配置 LSP 服务器（按需启用，提供代码智能补全、跳转定义、诊断等能力）
-        harnessProps.addLspServer("java", new LspServerParameters(
-                Arrays.asList("jdtls", "-data", ".solon/lsp/java-workspace"),
-                Arrays.asList(".java")
-        ));
-        harnessProps.addLspServer("typescript", new LspServerParameters(
-                Arrays.asList("typescript-language-server", "--stdio"),
-                Arrays.asList(".ts", ".tsx", ".js", ".jsx")
-        ));
-        harnessProps.addLspServer("go", new LspServerParameters(
-                Arrays.asList("gopls"),
-                Arrays.asList(".go")
-        ));
-        harnessProps.addLspServer("python", new LspServerParameters(
-                Arrays.asList("pylsp"),
-                Arrays.asList(".py", ".pyi")
-        ));
-        harnessProps.addLspServer("rust", new LspServerParameters(
-                Arrays.asList("rust-analyzer"),
-                Arrays.asList(".rs")
-        ));
-        harnessProps.addLspServer("clangd", new LspServerParameters(
-                Arrays.asList("clangd", "--background-index"),
-                Arrays.asList(".c", ".cpp", ".cc", ".h", ".hpp")
-        ));
-
-
-        HarnessEngine engine = HarnessEngine.of(harnessProps)
+        HarnessEngine engine = HarnessEngine.of(".tmp/")
+                .tools(ToolPermission.TOOL_ALL_FULL) //设定工具权限
+                .disallowedTools(ToolPermission.TOOL_ALL_FULL)
+                .agentPool("~/.soloncode/agents/")
+                .model(new ChatConfig().then(slf -> {
+                    slf.setApiUrl("https://api.deepseek.com");
+                    slf.setApiKey("sk-***");
+                    slf.setModel("deepseek-v4-flash");
+                })) //设定大模型配置
+                .extension((name, builder) -> {
+                    //...
+                })
+                .mcpServer("xxx", null)
+                .systemPrompt("xxx")
+                //--- 配置 LSP 服务器（按需启用，提供代码智能补全、跳转定义、诊断等能力）
+                .lspServer("java", new LspServerParameters(
+                        Arrays.asList("jdtls", "-data", ".solon/lsp/java-workspace"),
+                        Arrays.asList(".java")
+                ))
+                .lspServer("typescript", new LspServerParameters(
+                        Arrays.asList("typescript-language-server", "--stdio"),
+                        Arrays.asList(".ts", ".tsx", ".js", ".jsx")
+                ))
+                .lspServer("go", new LspServerParameters(
+                        Arrays.asList("gopls"),
+                        Arrays.asList(".go")
+                ))
+                .lspServer("python", new LspServerParameters(
+                        Arrays.asList("pylsp"),
+                        Arrays.asList(".py", ".pyi")
+                ))
+                .lspServer("rust", new LspServerParameters(
+                        Arrays.asList("rust-analyzer"),
+                        Arrays.asList(".rs")
+                ))
+                .lspServer("clangd", new LspServerParameters(
+                        Arrays.asList("clangd", "--background-index"),
+                        Arrays.asList(".c", ".cpp", ".cc", ".h", ".hpp")
+                ))
                 .sessionProvider(InMemoryAgentSession::of)
                 .build();
 

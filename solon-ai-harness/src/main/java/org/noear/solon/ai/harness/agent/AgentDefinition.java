@@ -180,19 +180,6 @@ public class AgentDefinition {
         // 模型配置
         private String model;
 
-        // 最大步数（执行限制）
-        private Integer maxSteps;
-
-        // 执行限制（最大回合），同 maxSteps
-        private Integer maxTurns;
-
-        // 自我反思
-        private Boolean autoRethink;
-
-        private Integer sessionWindowSize;
-        private Integer summaryWindowSize;
-        private Integer summaryWindowToken;
-
         // 工具配置
         private List<String> tools = new ArrayList<>();
 
@@ -251,10 +238,6 @@ public class AgentDefinition {
 
         public boolean hasPermissionMode() {
             return permissionMode != null && !permissionMode.isEmpty();
-        }
-
-        public boolean hasMaxTurns() {
-            return maxTurns != null && maxTurns > 0;
         }
 
         public boolean hasSkills() {

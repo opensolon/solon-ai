@@ -61,7 +61,7 @@ public class CodeSkill extends AbsSkill {
     }
 
     public String HOME_CODE_MD() {
-        return engine.getProps().getHarnessHome() + NAME_CODE_MD;
+        return engine.getHarnessHome() + NAME_CODE_MD;
     }
 
 
@@ -115,7 +115,7 @@ public class CodeSkill extends AbsSkill {
     }
 
     private Path getRootPath(String __cwd) {
-        String path = (__cwd != null) ? __cwd : engine.getProps().getWorkspace();
+        String path = (__cwd != null) ? __cwd : engine.getWorkspace();
         if (path == null) throw new IllegalStateException("Working directory is not set.");
         return Paths.get(path).toAbsolutePath().normalize();
     }
