@@ -290,24 +290,24 @@ public class HarnessEngine {
         return options.getModelRetries();
     }
 
-    public List<String> getTools() {
+    public Collection<String> getTools() {
         return Collections.unmodifiableList(options.getTools());
     }
 
-    public List<String> getDisallowedTools() {
+    public Collection<String> getDisallowedTools() {
         return Collections.unmodifiableList(options.getDisallowedTools());
     }
 
-    public List<HarnessExtension> getExtensions() {
+    public Collection<HarnessExtension> getExtensions() {
         return Collections.unmodifiableList(options.getExtensions());
     }
 
-    public List<ChatConfig> getModels() {
+    public Collection<ChatConfig> getModels() {
         return Collections.unmodifiableList(options.getModels());
     }
 
-    public Map<String, Mount> getMountPools() {
-        return Collections.unmodifiableMap(options.getMountPools());
+    public Map<String, Mount> getMounts() {
+        return Collections.unmodifiableMap(options.getMounts());
     }
 
     public Map<String, McpServerParameters> getMcpServers() {
@@ -384,8 +384,12 @@ public class HarnessEngine {
         options.removeModel(name);
     }
 
+    public void hasModel(String name) {
+        options.hasModel(name);
+    }
+
     public void addMount(String alias, Mount mount) {
-        options.getMountPools().put(alias, mount);
+        options.getMounts().put(alias, mount);
 
         if(mount.getType() == PoolType.SUBAGENTS){
             agentManager.agentPool(Paths.get(mount.getPath()));
@@ -395,8 +399,12 @@ public class HarnessEngine {
     }
 
     public void removeMount(String alias) {
-        options.getMountPools().remove(alias);
+        options.getMounts().remove(alias);
         poolManager.remove(alias);
+    }
+
+    public boolean hasMount(String alias) {
+        return options.getMounts().containsKey(alias);
     }
 
 
@@ -515,8 +523,8 @@ public class HarnessEngine {
         terminalTalent.setBashAsyncEnabled(options.isBashAsyncEnabled());
         terminalTalent.setSandboxMode(options.isSandboxMode());
 
-        if (Assert.isNotEmpty(options.getMountPools())) {
-            options.getMountPools().forEach((alias, mount) -> {
+        if (Assert.isNotEmpty(options.getMounts())) {
+            options.getMounts().forEach((alias, mount) -> {
                 if (mount.getType() == PoolType.SUBAGENTS) {
                     agentManager.agentPool(Paths.get(mount.getPath()));
                 }
@@ -816,7 +824,7 @@ public class HarnessEngine {
         }
 
         public Builder mountAdd(String alias, Mount mount) {
-            options.getMountPools().put(alias, mount);
+            options.getMounts().put(alias, mount);
             return this;
         }
 

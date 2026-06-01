@@ -84,7 +84,7 @@ class HarnessOptions implements Serializable {
     // ========== 集合类配置 ==========
     private List<HarnessExtension> extensions = new CopyOnWriteArrayList<>();
     private List<ChatConfig> models = new CopyOnWriteArrayList<>();
-    private Map<String, Mount> mountPools = new ConcurrentHashMap<>();
+    private Map<String, Mount> mounts = new ConcurrentHashMap<>();
     private Map<String, McpServerParameters> mcpServers = new ConcurrentHashMap<>();
     private Map<String, ApiSource> apiServers = new ConcurrentHashMap<>();
     private Map<String, LspServerParameters> lspServers = new ConcurrentHashMap<>();
@@ -301,8 +301,8 @@ class HarnessOptions implements Serializable {
         return models;
     }
 
-    Map<String, Mount> getMountPools() {
-        return mountPools;
+    Map<String, Mount> getMounts() {
+        return mounts;
     }
 
     Map<String, McpServerParameters> getMcpServers() {
@@ -357,6 +357,13 @@ class HarnessOptions implements Serializable {
 
     void removeModel(String modelName) {
         models.removeIf(m -> m.getNameOrModel().equals(modelName));
+    }
+
+    boolean hasModel(String modelName) {
+        return models.stream()
+                .filter(m -> m.getNameOrModel().equals(modelName))
+                .findAny()
+                .isPresent();
     }
 
     ChatConfig getModelOrNil(String modelName) {
