@@ -254,8 +254,8 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
                 trace.getMetrics().setTotalDuration(duration);
 
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("ReActAgent [{}] finished. Duration: {}ms, Steps: {}, Tools: {}",
-                            config.getName(), duration, trace.getStepCount(), trace.getToolCallCount());
+                    LOG.debug("ReActAgent [{}] finished. Duration: {}ms, Turns: {}, Tools: {}",
+                            config.getName(), duration, trace.getTurnCount(), trace.getToolCallCount());
                 }
 
                 // 父一级团队轨迹
@@ -409,11 +409,19 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         /**
-         * 单次任务允许的最大推理步数（防止死循环）
+         * 单次任务允许的最大推理回合数（防止死循环）
          */
-        public Builder maxSteps(int val) {
-            config.getDefaultOptions().setMaxSteps(val);
+        public Builder maxTurns(int val) {
+            config.getDefaultOptions().setMaxTurns(val);
             return this;
+        }
+
+        /**
+         * @deprecated 4.0 Use {@link #maxTurns(int)} instead.
+         */
+        @Deprecated
+        public Builder maxSteps(int val) {
+            return maxTurns(val);
         }
 
         public Builder autoRethink(boolean val) {

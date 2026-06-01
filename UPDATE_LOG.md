@@ -42,6 +42,7 @@
 * 调整 solon-ai-agent ReActInterceptor.onAction 更名为 onActionStart，并添加 onActionEnd
 * 调整 solon-ai-agent ReActInterceptor.onActionStart,onObservation: toolName,args,result 合并为 toolExchanger（并允许修改）
 * 调整 solon-ai-agent ReActInterceptor.onReason 更名为 onReasonEnd（和 onReasonStart 凑成一对）
+* 调整 solon-ai-agent ReActAgent.maxSteps 更名为 maxTurns（保持行业习惯）
 * 调整 solon-ai-skill-cli PoolManager 实现细节，并添加 refresh(alias)
 * 调整 solon-ai-skill-cli 技能标识由 aliasPath 统一改为 name，并优化技能池加载逻辑及代码格式
 * 移除 solon-ai-skill-browser（包太大了，没必要）

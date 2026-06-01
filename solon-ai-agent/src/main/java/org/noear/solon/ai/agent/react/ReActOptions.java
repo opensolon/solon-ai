@@ -53,10 +53,10 @@ public class ReActOptions implements NonSerializable {
     private String skillInstruction;
 
     /**
-     * 最大推理步数（防止死循环）
+     * 最大推理回合数（防止死循环）
      */
-    private int maxSteps = 8; //初始 maxSteps
-    private int maxStepsNew = 0; //被改过后的 maxSteps
+    private int maxTurns = 8; //初始 maxTurns
+    private int maxTurnsNew = 0; //被改过后的 maxTurns
 
     /**
      * 自动反思
@@ -109,7 +109,7 @@ public class ReActOptions implements NonSerializable {
         tmp.chatModel = chatModel;
         tmp.modelOptions.putAll(modelOptions);
 
-        tmp.maxSteps = maxSteps;
+        tmp.maxTurns = maxTurns;
         tmp.autoRethink = autoRethink;
         tmp.maxRetries = maxRetries;
         tmp.retryDelayMs = retryDelayMs;
@@ -163,16 +163,32 @@ public class ReActOptions implements NonSerializable {
         this.sessionWindowSize = Math.max(0, sessionWindowSize);
     }
 
-    protected void setMaxSteps(int val) {
-        this.maxSteps = val;
+    protected void setMaxTurns(int val) {
+        this.maxTurns = val;
     }
 
-    public void addMaxSteps(int val) {
-        if (maxStepsNew > 0) {
-            this.maxStepsNew += val;
+    public void addMaxTurns(int val) {
+        if (maxTurnsNew > 0) {
+            this.maxTurnsNew += val;
         } else {
-            this.maxStepsNew = maxSteps + val;
+            this.maxTurnsNew = maxTurns + val;
         }
+    }
+
+    /**
+     * @deprecated 4.0 Use {@link #setMaxTurns(int)} instead.
+     */
+    @Deprecated
+    protected void setMaxSteps(int val) {
+        setMaxTurns(val);
+    }
+
+    /**
+     * @deprecated 4.0 Use {@link #addMaxTurns(int)} instead.
+     */
+    @Deprecated
+    public void addMaxSteps(int val) {
+        addMaxTurns(val);
     }
 
     /**
@@ -242,18 +258,34 @@ public class ReActOptions implements NonSerializable {
     }
 
     /**
-     * 初始 maxSteps 值
+     * 初始 maxTurns 值
      */
-    public int getInitialMaxSteps(){
-        return maxSteps;
+    public int getInitialMaxTurns(){
+        return maxTurns;
     }
 
-    public int getMaxSteps() {
-        if (maxStepsNew > 0) {
-            return maxStepsNew;
+    public int getMaxTurns() {
+        if (maxTurnsNew > 0) {
+            return maxTurnsNew;
         } else {
-            return maxSteps;
+            return maxTurns;
         }
+    }
+
+    /**
+     * @deprecated 4.0 Use {@link #getInitialMaxTurns()} instead.
+     */
+    @Deprecated
+    public int getInitialMaxSteps(){
+        return getInitialMaxTurns();
+    }
+
+    /**
+     * @deprecated 4.0 Use {@link #getMaxTurns()} instead.
+     */
+    @Deprecated
+    public int getMaxSteps() {
+        return getMaxTurns();
     }
 
     public boolean isAutoRethink() {

@@ -98,9 +98,9 @@ public class ReActTrace implements AgentTrace {
     private final Prompt workingMemory = new PromptImpl();
 
     /**
-     * 迭代步数计数器
+     * 迭代回合计数器
      */
-    private AtomicInteger stepCounter = new AtomicInteger(0);
+    private AtomicInteger turnCounter = new AtomicInteger(0);
     /**
      * 工具调用计数器
      */
@@ -199,7 +199,7 @@ public class ReActTrace implements AgentTrace {
         Objects.requireNonNull(originalPrompt, "OriginalPrompt cannot be null");
 
         // 1. 基础计数器重置
-        stepCounter.set(0);
+        turnCounter.set(0);
         toolCounter.set(0);
         emptyRetryCounter.set(0);
 
@@ -304,19 +304,35 @@ public class ReActTrace implements AgentTrace {
         return workingMemory;
     }
 
-    public int getStepCount() {
-        return stepCounter.get();
+    public int getTurnCount() {
+        return turnCounter.get();
     }
 
     /**
-     * 递增步数
+     * 递增回合数
      */
-    public int nextStep() {
-        int step = stepCounter.incrementAndGet();
+    public int nextTurn() {
+        int turn = turnCounter.incrementAndGet();
         if (LOG.isDebugEnabled()) {
-            LOG.debug("Agent [{}] proceed to step: {}", getAgentName(), step);
+            LOG.debug("Agent [{}] proceed to turn: {}", getAgentName(), turn);
         }
-        return step;
+        return turn;
+    }
+
+    /**
+     * @deprecated 4.0 Use {@link #getTurnCount()} instead.
+     */
+    @Deprecated
+    public int getStepCount() {
+        return getTurnCount();
+    }
+
+    /**
+     * @deprecated 4.0 Use {@link #nextTurn()} instead.
+     */
+    @Deprecated
+    public int nextStep() {
+        return nextTurn();
     }
 
     public String getRoute() {
@@ -441,7 +457,7 @@ public class ReActTrace implements AgentTrace {
             }
 
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Agent [{}] plans updated, total steps: {}", getAgentName(), plans.size());
+                LOG.debug("Agent [{}] plans updated, total plans: {}", getAgentName(), plans.size());
             }
         }
     }
@@ -484,7 +500,7 @@ public class ReActTrace implements AgentTrace {
         if (plans.isEmpty()) {
             return "";
         }
-        // 基于当前已执行的步数（stepCount）推测进度（仅作为模型参考）
-        return String.format("Total Steps: %d, Current Logic Step: %d", plans.size(), getStepCount());
+        // 基于当前已执行的回合数推测进度（仅作为模型参考）
+        return String.format("Total Plans: %d, Current Turn: %d", plans.size(), getTurnCount());
     }
 }

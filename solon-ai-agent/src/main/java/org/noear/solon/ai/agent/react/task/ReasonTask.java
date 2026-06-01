@@ -72,51 +72,51 @@ public class ReasonTask {
                 if (trace.hasPlans() && trace.getPlanIndex() < trace.getPlans().size()) {
                     planDesc = " | Plan[" + (trace.getPlanIndex() + 1) + "]: " + trace.getPlans().get(trace.getPlanIndex());
                 }
-                LOG.debug("ReActAgent [{}] reasoning... Step: {}/{}{}",
-                        config.getName(), trace.getStepCount() + 1, trace.getOptions().getMaxSteps(), planDesc);
+                LOG.debug("ReActAgent [{}] reasoning... Turn: {}/{}{}",
+                        config.getName(), trace.getTurnCount() + 1, trace.getOptions().getMaxTurns(), planDesc);
             } else {
-                LOG.debug("ReActAgent [{}] reasoning... Step: {}/{}",
-                        config.getName(), trace.getStepCount() + 1, trace.getOptions().getMaxSteps());
+                LOG.debug("ReActAgent [{}] reasoning... Turn: {}/{}",
+                        config.getName(), trace.getTurnCount() + 1, trace.getOptions().getMaxTurns());
             }
         }
 
-        // --- 优化点 1: 步数计数逻辑简化 ---
-        int currentStep = trace.nextStep();
-        int maxSteps = trace.getOptions().getMaxSteps();
+        // --- 优化点 1: 回合计数逻辑简化 ---
+        int currentTurn = trace.nextTurn();
+        int maxTurns = trace.getOptions().getMaxTurns();
 
-        // --- 优化点 2: 统一流控逻辑，移除 maxStepsLimit 硬熔断 ---
-        // 逻辑更加扁平化：要么进入 AutoRethink 机制，要么直接达到 maxSteps 熔断
+        // --- 优化点 2: 统一流控逻辑，移除硬熔断 ---
+        // 逻辑更加扁平化：要么进入 AutoRethink 机制，要么直接达到 maxTurns 熔断
         if (trace.getOptions().isAutoRethink()) {
             // [AutoRethink 模式]
-            // 达到 80% 步数时提前介入，留出 20% 的 buffer 让模型执行自审和策略调整
-            int thresholdStep = Math.max(maxSteps - 1, (int) (maxSteps * 0.8));
+            // 达到 80% 回合数时提前介入，留出 20% 的 buffer 让模型执行自审和策略调整
+            int thresholdTurn = Math.max(maxTurns - 1, (int) (maxTurns * 0.8));
 
-            if (currentStep >= thresholdStep) {
-                // 自动扩展步数上限（续航）
-                int addSteps = Math.max(10, trace.getOptions().getInitialMaxSteps() / 2);
-                trace.getOptions().addMaxSteps(addSteps);
-                LOG.info("ReActAgent [{}] auto-rethink triggered. New maxSteps: {}", config.getName(), trace.getOptions().getMaxSteps());
+            if (currentTurn >= thresholdTurn) {
+                // 自动扩展回合数上限（续航）
+                int addTurns = Math.max(10, trace.getOptions().getInitialMaxTurns() / 2);
+                trace.getOptions().addMaxTurns(addTurns);
+                LOG.info("ReActAgent [{}] auto-rethink triggered. New maxTurns: {}", config.getName(), trace.getOptions().getMaxTurns());
 
                 String rethinkPrompt = String.format(
-                        "【自动重审 (Auto-Rethink)】任务执行已达第 %d 步（上限 %d）。\n" +
+                        "【自动重审 (Auto-Rethink)】任务执行已达第 %d 回合（上限 %d）。\n" +
                                 "请停止当前的常规推理循环，立即进行自审：\n" +
                                 "1. **核心目标检查**：你距离解决最初提出的问题还有多远？\n" +
                                 "2. **有效性评估**：如果最近的尝试没有带来新线索，说明策略已失效，请更换思路。\n" +
                                 "3. **强制收敛**：若确定无法达成，请总结已知线索并在 Final Answer 中申请用户协助。\n" +
                                 "请在下一轮 Thought 中陈述新策略后继续。",
-                        currentStep, maxSteps
+                        currentTurn, maxTurns
                 );
 
                 trace.getWorkingMemory().addMessage(ChatMessage.ofUser(rethinkPrompt));
-                LOG.info("ReActAgent [{}] auto-rethink triggered at step {}", config.getName(), currentStep);
+                LOG.info("ReActAgent [{}] auto-rethink triggered at turn {}", config.getName(), currentTurn);
             }
         } else {
             // [标准模式]
             // --- 优化点 3: 严格边界判定 ---
-            if (currentStep > maxSteps) {
-                LOG.warn("ReActAgent [{}] reached max steps: {}", config.getName(), maxSteps);
+            if (currentTurn > maxTurns) {
+                LOG.warn("ReActAgent [{}] reached max turns: {}", config.getName(), maxTurns);
                 trace.setRoute(Agent.ID_END);
-                trace.setFinalAnswer("Agent error: Maximum steps reached (" + maxSteps + ").");
+                trace.setFinalAnswer("Agent error: Maximum turns reached (" + maxTurns + ").");
                 return;
             }
         }

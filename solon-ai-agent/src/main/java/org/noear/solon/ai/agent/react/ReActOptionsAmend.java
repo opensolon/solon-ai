@@ -66,14 +66,22 @@ public class ReActOptionsAmend extends ModelOptionsAmend<ReActOptionsAmend, ReAc
     }
 
     /**
-     * 设置单次任务最大推理步数
+     * 设置单次任务最大推理回合数
      */
-    public ReActOptionsAmend maxSteps(int val) {
+    public ReActOptionsAmend maxTurns(int val) {
         if (LOG.isDebugEnabled()) {
-            LOG.debug("ReAct maxSteps amended to: {}", val);
+            LOG.debug("ReAct maxTurns amended to: {}", val);
         }
-        options.setMaxSteps(val);
+        options.setMaxTurns(val);
         return this;
+    }
+
+    /**
+     * @deprecated 4.0 Use {@link #maxTurns(int)} instead.
+     */
+    @Deprecated
+    public ReActOptionsAmend maxSteps(int val) {
+        return maxTurns(val);
     }
 
     public ReActOptionsAmend autoRethink(boolean val) {
