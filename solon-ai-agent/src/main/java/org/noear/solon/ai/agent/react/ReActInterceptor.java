@@ -45,22 +45,15 @@ public interface ReActInterceptor extends AgentInterceptor, ChatInterceptor {
      * 推理节点：Reason 阶段开始前（在 systemPrompt 构建和消息组装之前触发）
      * <p>适合做上下文压缩、工作记忆窗口管理等预处理操作</p>
      */
-    default void onReasonStart(ReActTrace trace, String systemPrompt) {
+    default void onReasonStart(ReActTrace trace, StringBuilder systemPromptBuf) {
     }
 
     /**
-     * 模型推理周期：发起 LLM 请求前
-     * <p>可用于动态修改请求参数、Stop 词或注入 Context</p>
+     * 推理节点：接收 LLM 返回的原始推理消息
      */
-    default void onModelStart(ReActTrace trace, ChatRequestDesc req) {
+    default void onReasonEnd(ReActTrace trace, ChatResponse resp, AssistantMessage message) {
     }
 
-    /**
-     * 模型推理周期：LLM 响应后
-     * <p>常用于死循环（复读）检测或原始响应审计</p>
-     */
-    default void onModelEnd(ReActTrace trace, ChatResponse resp) {
-    }
 
     /**
      * 计划节点：接收 LLM 返回的原始推理消息
@@ -70,15 +63,14 @@ public interface ReActInterceptor extends AgentInterceptor, ChatInterceptor {
     }
 
     /**
-     * 推理节点：接收 LLM 返回的原始推理消息
+     * 思考节点：Reason 阶段完成后触发
+     * <p>无论是否解析出有效的 thoughtContent，此方法都会被调用</p>
+     *
+     * @param trace            ReAct 追踪上下文
+     * @param thoughtContent   提取后的思考内容（可能为空字符串）
+     * @param assistantMessage 原始 LLM 响应消息（含 toolCalls、content、reasoning 等完整信息）
      */
-    default void onReasonEnd(ReActTrace trace, AssistantMessage message) {
-    }
-
-    /**
-     * 推理节点：解析出思考内容 (Thought) 时触发
-     */
-    default void onThought(ReActTrace trace, String thought) {
+    default void onThought(ReActTrace trace, String thoughtContent, AssistantMessage assistantMessage) {
     }
 
     /**

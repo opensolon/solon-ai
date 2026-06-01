@@ -9,6 +9,7 @@ import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.task.ToolExchanger;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -138,7 +139,7 @@ public class ReActAgentHitlTest {
         // 实现完整拦截器，覆盖所有回调方法以验证调用顺序
         ReActInterceptor fullInterceptor = new ReActInterceptor() {
             @Override
-            public void onThought(ReActTrace trace, String thought) {
+            public void onThought(ReActTrace trace, String thoughtContent, AssistantMessage assistantMessage) {
                 log.append("[onThought] ");
             }
 

@@ -301,7 +301,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
         if (trace.isAbnormal()) {
             if (trace.getOptions().getStreamSink() != null) {
-                trace.getOptions().getStreamSink().next(new ReasonDeltaChunk(trace, null, assistantMessage));
+                trace.getOptions().getStreamSink().next(new ReasonChunk(trace, null, assistantMessage));
             }
         }
 

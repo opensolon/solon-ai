@@ -50,10 +50,10 @@ public class StopLoopInterceptor implements ReActInterceptor {
     }
 
     @Override
-    public void onReasonEnd(ReActTrace trace, AssistantMessage message) {
-        if (message == null) return;
+    public void onThought(ReActTrace trace, String thoughtContent, AssistantMessage assistantMessage) {
+        if (assistantMessage == null) return;
 
-        String fingerprint = generateNormalizedFingerprint(message);
+        String fingerprint = generateNormalizedFingerprint(assistantMessage);
         if (fingerprint == null) return;
 
         LinkedList<String> history = trace.getExtraAs(EXTRAS_HISTORY_KEY);

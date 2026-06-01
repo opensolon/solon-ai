@@ -183,16 +183,17 @@ public class ReasonTask {
             LOG.debug("ReActAgent SystemPrompt rendered for trace [{}]: {}", trace.getAgentName(), systemPromptBuf);
         }
 
-        String systemPromptStr = systemPromptBuf.toString();
 
         // [逻辑 2.1: 上下文预处理] 在消息组装前触发，允许拦截器压缩 WorkingMemory
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onReasonStart(trace, systemPromptStr);
+            item.target.onReasonStart(trace, systemPromptBuf);
         }
 
         if (Agent.ID_END.equals(trace.getRoute())) {
             return;
         }
+
+        String systemPromptStr = systemPromptBuf.toString();
 
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.ofSystem(systemPromptStr));
@@ -221,17 +222,9 @@ public class ReasonTask {
             trace.getMetrics().addUsage(response.getUsage());
         }
 
-        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onModelEnd(trace, response);
-        }
-
-        if(trace.getSession().isPending()){
-            return;
-        }
-
         // 触发推理审计事件（传递原始消息对象）
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onReasonEnd(trace, responseMessage);
+            item.target.onReasonEnd(trace, response, responseMessage);
         }
 
         if(trace.getSession().isPending()){
@@ -254,7 +247,7 @@ public class ReasonTask {
             trace.getEmptyRetryCounter().set(0);
         }
 
-        // [逻辑 3.5: 思考事件] 无论是否有 tool_calls，都先提取思考内容并触发 onThought 事件
+        // [逻辑 3.5: 思考事件] 提取思考内容并触发 onThought 事件
         final String clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : "";
         final String thoughtContent;
 
@@ -268,10 +261,9 @@ public class ReasonTask {
             thoughtContent = extractThought(trace, clearContent);
         }
 
-        if (Assert.isNotEmpty(thoughtContent)) {
-            for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-                item.target.onThought(trace, thoughtContent);
-            }
+        // 触发思考事件（合并原 onReasonEnd + onThought）
+        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
+            item.target.onThought(trace, thoughtContent, responseMessage);
         }
 
         if(trace.getSession().isPending()){
@@ -279,7 +271,7 @@ public class ReasonTask {
         }
 
         if(trace.getOptions().getStreamSink() != null){
-            trace.getOptions().getStreamSink().next(new ReasonCompleteChunk(trace, responseMessage));
+            trace.getOptions().getStreamSink().next(new ThoughtChunk(trace, thoughtContent, responseMessage));
         }
 
         trace.setLastReasonMessage(responseMessage);
@@ -347,14 +339,6 @@ public class ReasonTask {
                     o.optionSet(trace.getOptions().getModelOptions().options());
                 });
 
-        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onModelStart(trace, req);
-        }
-
-        if (trace.getSession().isPending()) {
-            return null;
-        }
-
         int maxRetries = trace.getOptions().getMaxRetries();
 
         try {
@@ -378,7 +362,7 @@ public class ReasonTask {
                                             .takeUntil(r -> sink.isCancelled())
                                             .doOnNext(resp -> {
                                                 if (!sink.isCancelled()) {
-                                                    sink.next(new ReasonDeltaChunk(trace, resp, resp.getMessage()));
+                                                    sink.next(new ReasonChunk(trace, resp, resp.getMessage()));
                                                 }
                                             }).blockLast();
                                 } else {

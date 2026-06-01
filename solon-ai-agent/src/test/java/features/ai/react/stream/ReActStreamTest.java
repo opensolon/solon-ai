@@ -8,7 +8,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActChunk;
 import org.noear.solon.ai.agent.react.task.ActionChunk;
-import org.noear.solon.ai.agent.react.task.ReasonDeltaChunk;
+import org.noear.solon.ai.agent.react.task.ReasonChunk;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
@@ -43,7 +43,7 @@ public class ReActStreamTest {
                 .thenConsumeWhile(chunk -> true) // 消费所有 chunk
                 .consumeRecordedWith(chunks -> {
                     // 1. 验证是否产生了 ReasonChunk (思考流)
-                    boolean hasReason = chunks.stream().anyMatch(c -> c instanceof ReasonDeltaChunk);
+                    boolean hasReason = chunks.stream().anyMatch(c -> c instanceof ReasonChunk);
                     // 2. 验证是否产生了最后的汇总 ReActChunk
                     boolean hasFinal = chunks.stream().anyMatch(c -> c instanceof ReActChunk);
 
@@ -75,7 +75,7 @@ public class ReActStreamTest {
                 .session(session)
                 .stream()
                 .doOnNext(chunk -> {
-                    if (chunk instanceof ReasonDeltaChunk) {
+                    if (chunk instanceof ReasonChunk) {
                         System.out.println("[思考]: " + chunk.getContent());
                     } else if (chunk instanceof ActionChunk) {
                         actionFound.set(true);

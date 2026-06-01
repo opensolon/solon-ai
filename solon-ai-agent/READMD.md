@@ -312,10 +312,11 @@ System.out.println("Token Usage: " + trace.getMetrics().getTotalTokens());
 
 ```java
 // 自定义监控拦截器
+// import org.noear.solon.ai.chat.message.AssistantMessage;
 public class MonitoringInterceptor implements ReActInterceptor {
     @Override
-    public void onThought(ReActTrace trace, String thought) {
-        logger.info("Agent {} 思考: {}", trace.getAgentName(), thought);
+    public void onThought(ReActTrace trace, String thoughtContent, AssistantMessage assistantMessage) {
+        logger.info("Agent {} 思考: {}", trace.getAgentName(), thoughtContent);
     }
     
     @Override
