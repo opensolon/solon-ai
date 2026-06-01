@@ -89,6 +89,6 @@ public class CompositeCompressionStrategy implements CompressionStrategy {
         }
 
         return ChatMessage.ofUser(buf.toString())
-                .addMetadata(ContextCompressionInterceptor.META_SUMMARY, 1);
+                .addMetadata(ContextCompressionInterceptor.META_COMPRESSED, 1);
     }
 }

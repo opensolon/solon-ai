@@ -115,7 +115,7 @@ public class KeyInfoExtractionStrategy implements CompressionStrategy {
 
             // 3. 将提取到的“干货”作为系统信息注入
             return ChatMessage.ofUser("--- [已确认的关键信息] ---\n" + keyInfo)
-                    .addMetadata(ContextCompressionInterceptor.META_SUMMARY, 1);
+                    .addMetadata(ContextCompressionInterceptor.META_COMPRESSED, 1);
 
         } catch (Throwable e) {
             log.error("Failed to extract key info", e);

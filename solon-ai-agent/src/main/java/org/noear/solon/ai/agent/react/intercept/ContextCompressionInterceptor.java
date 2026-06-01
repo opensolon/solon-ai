@@ -71,7 +71,7 @@ import java.util.stream.Collectors;
 public class ContextCompressionInterceptor implements ReActInterceptor {
     private static final Logger log = LoggerFactory.getLogger(ContextCompressionInterceptor.class);
 
-    public final static String META_SUMMARY = "_summary";
+    public final static String META_COMPRESSED = "_compressed";
 
     // 在类中预加载注册表
     private static final EncodingRegistry registry = Encodings.newDefaultEncodingRegistry();
@@ -275,7 +275,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         if (targetIdx > (lastFirstIdx + 1) && targetIdx <= messages.size()) {
             List<ChatMessage> expired = new ArrayList<>(messages.subList(lastFirstIdx + 1, targetIdx));
             List<ChatMessage> pureHistory = expired.stream()
-                    .filter(m -> !m.hasMetadata(META_SUMMARY))
+                    .filter(m -> !m.hasMetadata(META_COMPRESSED))
                     .collect(Collectors.toList());
 
             if (!pureHistory.isEmpty()) {

@@ -115,7 +115,7 @@ public class LLMCompressionStrategy implements CompressionStrategy {
 
             // 3. 返回包含标记的消息
             return ChatMessage.ofUser("--- [执行进度总结] ---\n" + summary)
-                    .addMetadata(ContextCompressionInterceptor.META_SUMMARY, 1);
+                    .addMetadata(ContextCompressionInterceptor.META_COMPRESSED, 1);
 
         } catch (Throwable e) {
             log.error("Failed to generate LLM compression", e);

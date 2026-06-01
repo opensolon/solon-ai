@@ -136,7 +136,7 @@ public class VectorStoreCompressionStrategy extends AbsSkill implements Compress
 
             // 返回一个紧凑的系统通知
             return ChatMessage.ofUser("--- [历史细节已归档，必要时请使用 recall_history 工具回溯] ---")
-                    .addMetadata(ContextCompressionInterceptor.META_SUMMARY, 1);
+                    .addMetadata(ContextCompressionInterceptor.META_COMPRESSED, 1);
 
         } catch (Throwable e) {
             log.error("Failed to archive to vector store", e);

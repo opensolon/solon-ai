@@ -153,6 +153,6 @@ public class HierarchicalCompressionStrategy implements CompressionStrategy {
             return null;
         }
         return ChatMessage.ofUser(SUMMARY_PREFIX + "\n" + content)
-                .addMetadata(ContextCompressionInterceptor.META_SUMMARY, 1);
+                .addMetadata(ContextCompressionInterceptor.META_COMPRESSED, 1);
     }
 }
