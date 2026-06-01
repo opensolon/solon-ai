@@ -47,15 +47,15 @@ public class PoolManager {
     /**
      * 注册池（并扫描）
      */
-    public synchronized PoolManager register(String alias, String path) {
-        return register(new PoolDir(alias, false, path));
+    public synchronized PoolManager register(String alias, PoolType type, String path) {
+        return register(new PoolDir(alias, type, false, path));
     }
 
     /**
      * 注册池（并扫描）
      */
-    public synchronized PoolManager register(String alias, String path, Path realPath) {
-        return register(new PoolDir(alias, false, path, realPath));
+    public synchronized PoolManager register(String alias, PoolType type, String path, Path realPath) {
+        return register(new PoolDir(alias, type, false, path, realPath));
     }
 
     /**
@@ -66,7 +66,7 @@ public class PoolManager {
         Path realPath = poolDir.getRealPath();
         poolMap.put(key, poolDir);
 
-        if (poolDir.isEnabled()) {
+        if (poolDir.isEnabled() && poolDir.getType() == PoolType.SKILLS) {
             if (Files.exists(realPath) && Files.isDirectory(realPath)) {
                 scanSkillAndCache(poolDir, skillMap);
                 LOG.debug("Mount pool has been loaded.: {} -> {}", key, realPath);
@@ -101,7 +101,10 @@ public class PoolManager {
         } else {
             String key = alias.startsWith("@") ? alias : "@" + alias;
             PoolDir poolDir = poolMap.get(key);
-            if (poolDir == null) return;
+
+            if (poolDir == null || poolDir.getType() != PoolType.SKILLS){
+                return;
+            }
 
             // 1. 扫描该池
             Map<String, SkillDir> tmp = new LinkedHashMap<>();
@@ -192,6 +195,10 @@ public class PoolManager {
 
 
     private static void scanSkillAndCache(PoolDir poolDir, Map<String, SkillDir> map) {
+        if (poolDir.isEnabled() == false || poolDir.getType() != PoolType.SKILLS) {
+            return;
+        }
+
         try {
             Files.walkFileTree(poolDir.getRealPath(), EnumSet.noneOf(FileVisitOption.class), 3, new SimpleFileVisitor<Path>() {
                 @Override

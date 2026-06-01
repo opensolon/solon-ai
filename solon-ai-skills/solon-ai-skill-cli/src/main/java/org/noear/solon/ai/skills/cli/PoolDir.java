@@ -28,7 +28,10 @@ import java.nio.file.Paths;
  * @since 4.0.0
  */
 public class PoolDir {
+    //虚拟别名
     private String alias;
+    //池类型
+    private PoolType type;
     //是否原生性的
     private boolean primary;
     //是否启用
@@ -39,12 +42,13 @@ public class PoolDir {
     //真实地址
     private Path realPath;
 
-    public PoolDir(String alias, boolean primary, String path) {
-        this(alias, primary, path, parseRealPath(path));
+    public PoolDir(String alias, PoolType type, boolean primary, String path) {
+        this(alias, type, primary, path, parseRealPath(path));
     }
 
-    public PoolDir(String alias, boolean primary, String path, Path realPath) {
+    public PoolDir(String alias, PoolType type, boolean primary, String path, Path realPath) {
         this.alias = alias.startsWith("@") ? alias : "@" + alias;
+        this.type = type;
         this.primary = primary;
         this.path = path;
         this.realPath = realPath.toAbsolutePath().normalize();
@@ -52,6 +56,10 @@ public class PoolDir {
 
     public String getAlias() {
         return alias;
+    }
+
+    public PoolType getType() {
+        return type;
     }
 
     public boolean isPrimary() {
