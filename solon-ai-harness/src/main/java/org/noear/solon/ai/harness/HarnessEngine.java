@@ -259,35 +259,35 @@ public class HarnessEngine {
     }
 
     public List<String> getTools() {
-        return options.getTools();
+        return Collections.unmodifiableList(options.getTools());
     }
 
     public List<String> getDisallowedTools() {
-        return options.getDisallowedTools();
+        return Collections.unmodifiableList(options.getDisallowedTools());
     }
 
     public List<HarnessExtension> getExtensions() {
-        return options.getExtensions();
+        return Collections.unmodifiableList(options.getExtensions());
     }
 
     public List<ChatConfig> getModels() {
-        return options.getModels();
+        return Collections.unmodifiableList(options.getModels());
     }
 
     public Map<String, MountDo> getMountPools() {
-        return options.getMountPools();
+        return Collections.unmodifiableMap(options.getMountPools());
     }
 
     public Map<String, McpServerParameters> getMcpServers() {
-        return options.getMcpServers();
+        return Collections.unmodifiableMap(options.getMcpServers());
     }
 
     public Map<String, ApiSource> getApiServers() {
-        return options.getApiServers();
+        return Collections.unmodifiableMap(options.getApiServers());
     }
 
     public Map<String, LspServerParameters> getLspServers() {
-        return options.getLspServers();
+        return Collections.unmodifiableMap(options.getLspServers());
     }
 
     public ChatConfig getModelOrNil(String name) {
@@ -310,6 +310,14 @@ public class HarnessEngine {
 
     public void setSubagentEnabled(boolean val) {
         options.setSubagentEnabled(val);
+    }
+
+    public void setCompressionThreshold(int maxMessages, int maxTokens){
+        options.setCompressionMaxMessages(maxMessages);
+        options.setCompressionMaxTokens(maxTokens);
+
+        options.getCompressionInterceptor().setMaxMessages(maxMessages);
+        options.getCompressionInterceptor().setMaxTokens(maxTokens);
     }
 
     // ========== 动态模型管理 ==========
@@ -606,14 +614,6 @@ public class HarnessEngine {
         }
 
         /**
-         * 压缩拦截器
-         */
-        public Builder compressionInterceptor(ContextCompressionInterceptor compressionInterceptor) {
-            options.setCompressionInterceptor(compressionInterceptor);
-            return this;
-        }
-
-        /**
          * 人工介入拦截器
          */
         public Builder hitlInterceptor(HITLInterceptor hitlInterceptor) {
@@ -661,18 +661,19 @@ public class HarnessEngine {
             return this;
         }
 
-        public Builder compressionMaxMessages(int val) {
-            options.setCompressionMaxMessages(val);
-            return this;
-        }
-
-        public Builder compressionMaxTokens(int val) {
-            options.setCompressionMaxTokens(val);
+        public Builder compressionThreshold(int maxMessages, int maxTokens) {
+            options.setCompressionMaxMessages(maxMessages);
+            options.setCompressionMaxTokens(maxTokens);
             return this;
         }
 
         public Builder compressionModel(String val) {
             options.setCompressionModel(val);
+            return this;
+        }
+
+        public Builder compressionInterceptor(ContextCompressionInterceptor compressionInterceptor) {
+            options.setCompressionInterceptor(compressionInterceptor);
             return this;
         }
 
