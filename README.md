@@ -100,7 +100,7 @@ Support for synchronous and Reactive calls, built-in dialect adaptation, Tool, S
 ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
                 .provider("ollama") //Need to specify vendor, used to identify interface style (also called dialect)
                 .model("qwen2.5:1.5b")
-                .defaultTalentAdd(new ToolGatewaySkill())
+                .defaultTalentAdd(new McpGatewayTalent())
                 .build();
 
 // Synchronize the call and print the response message
@@ -114,11 +114,11 @@ System.out.println(result);
 chatModel.prompt("hello").stream(); //Publisher<ChatResponse>
 ```
 
-* Skills（Solon AI Skills）
+* Talents（Solon AI Talents）
 
 
 ```java
-Skill skill = new SkillDesc("order_expert")
+Talent talent = new TalentDesc("order_expert")
         .description("Order Assistant")
         // Dynamic admission: Activated only when "order" is mentioned
         .isSupported(prompt -> prompt.getUserMessageContent().contains("order"))
@@ -132,7 +132,7 @@ Skill skill = new SkillDesc("order_expert")
         .toolAdd(new OrderTools());
 
 chatModel.prompt("Where is my order from yesterday？")
-         .options(o->o.talentAdd(skill))
+         .options(o->o.talentAdd(talent))
          .call();
 ```
 
