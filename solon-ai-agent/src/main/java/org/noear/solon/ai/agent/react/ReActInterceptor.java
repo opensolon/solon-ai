@@ -51,7 +51,7 @@ public interface ReActInterceptor extends AgentInterceptor, ChatInterceptor {
     /**
      * 推理节点：接收 LLM 返回的原始推理消息
      */
-    default void onReasonEnd(ReActTrace trace, ChatResponse resp, AssistantMessage message) {
+    default void onReasonEnd(ReActTrace trace, ChatResponse resp, AssistantMessage message, long durationMs) {
     }
 
 

@@ -36,11 +36,8 @@
 * //调整 solon skill “概念”初步改为 solon toolkit（避免与 agent skill 的冲突）
 * 调整 solon-ai-core 取消 ChatConfig.reasoningFieldName 配置（这个配置不合理）
 * 调整 solon-ai-mcp McpClientProperties 默认不启用心跳（之前默认为 30 心跳一次）
-* 调整 solon-ai-agent ActionChunk：ActionChunk 更名为 ObservationChunk；ActionStartChunk 更名为 ActionChunk。
-* 调整 solon-ai-agent ReasonChunk 更名为 ReasonDeltaChunk
-* 调整 solon-ai-agent ThoughtChunk 更名为 ReasonCompleteChunk（和 ReasonDeltaChunk 凑成一对）
-* 调整 solon-ai-agent ReActInterceptor.onAction 更名为 onActionStart，并添加 onActionEnd
-* 调整 solon-ai-agent ReActInterceptor.onActionStart,onObservation: toolName,args,result 合并为 toolExchanger（并允许修改）
+* 调整 solon-ai-agent ActionChunk：ActionChunk 更名为 ObservationChunk；ActionStartChunk 更名为 ActionChunk
+* 调整 solon-ai-agent ReActInterceptor.onAction,onObservation: toolName,args,result 合并为 toolExchanger（并允许修改）
 * 调整 solon-ai-agent ReActInterceptor.onReason 更名为 onReasonEnd（和 onReasonStart 凑成一对）
 * 调整 solon-ai-agent ReActAgent.maxSteps 更名为 maxTurns（保持行业习惯）
 * 调整 solon-ai-agent SummarizationInterceptor 更名为 ContextCompressionInterceptor（更符合语义）

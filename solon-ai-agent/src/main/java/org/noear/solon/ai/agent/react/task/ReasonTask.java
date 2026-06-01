@@ -200,6 +200,7 @@ public class ReasonTask {
         messages.addAll(trace.getWorkingMemory().getMessages());
 
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
+        long startMs = System.currentTimeMillis();
         ChatResponse response = callWithRetry(trace, messages);
         if(response == null || trace.getSession().isPending()){
             trace.setRoute(Agent.ID_END);
@@ -223,8 +224,9 @@ public class ReasonTask {
         }
 
         // 触发推理审计事件（传递原始消息对象）
+        long durationMs = System.currentTimeMillis() - startMs;
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onReasonEnd(trace, response, responseMessage);
+            item.target.onReasonEnd(trace, response, responseMessage, durationMs);
         }
 
         if(trace.getSession().isPending()){
