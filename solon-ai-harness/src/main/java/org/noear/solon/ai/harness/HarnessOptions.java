@@ -19,10 +19,9 @@ import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.chat.ChatConfig;
-import org.noear.solon.ai.harness.mount.MountDo;
+import org.noear.solon.ai.harness.mount.Mount;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
-import org.noear.solon.ai.talents.cli.PoolType;
 import org.noear.solon.ai.talents.lsp.LspServerParameters;
 import org.noear.solon.ai.talents.memory.MemorySolution;
 import org.noear.solon.ai.talents.openapi.ApiSource;
@@ -85,7 +84,7 @@ class HarnessOptions implements Serializable {
     // ========== 集合类配置 ==========
     private List<HarnessExtension> extensions = new CopyOnWriteArrayList<>();
     private List<ChatConfig> models = new CopyOnWriteArrayList<>();
-    private Map<String, MountDo> mountPools = new ConcurrentHashMap<>();
+    private Map<String, Mount> mountPools = new ConcurrentHashMap<>();
     private Map<String, McpServerParameters> mcpServers = new ConcurrentHashMap<>();
     private Map<String, ApiSource> apiServers = new ConcurrentHashMap<>();
     private Map<String, LspServerParameters> lspServers = new ConcurrentHashMap<>();
@@ -302,7 +301,7 @@ class HarnessOptions implements Serializable {
         return models;
     }
 
-    Map<String, MountDo> getMountPools() {
+    Map<String, Mount> getMountPools() {
         return mountPools;
     }
 
@@ -346,14 +345,6 @@ class HarnessOptions implements Serializable {
 
     void addLspServer(String name, LspServerParameters lspParameters) {
         lspServers.put(name, lspParameters);
-    }
-
-    void addMountPool(String alias, PoolType type, String path) {
-        mountPools.put(alias, new MountDo(type, path, true));
-    }
-
-    void removeMountPool(String alias){
-        mountPools.remove(alias);
     }
 
     void addModel(ChatConfig chatConfig) {

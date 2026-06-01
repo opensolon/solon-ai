@@ -17,12 +17,15 @@ import java.io.Serializable;
 @AllArgsConstructor
 @Setter
 @Getter
-public class MountDo implements Serializable {
+public class Mount implements Serializable {
     //类型
     private PoolType type = PoolType.SKILLS;
 
     //配置地址支持 "~/"（用户目录相对位置） 和 "./"（工作区相对位置）
     private String path;
+
+    //是否原生性的
+    private boolean primary;
 
     //是否启用
     private boolean enabled = true;

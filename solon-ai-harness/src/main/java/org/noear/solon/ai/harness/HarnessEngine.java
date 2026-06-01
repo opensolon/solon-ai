@@ -32,7 +32,7 @@ import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.code.CodeTalent;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
-import org.noear.solon.ai.harness.mount.MountDo;
+import org.noear.solon.ai.harness.mount.Mount;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.talents.cli.*;
 import org.noear.solon.ai.talents.lsp.LspManager;
@@ -189,6 +189,42 @@ public class HarnessEngine {
     public String getHarnessSessions() {
         return options.getHarnessSessions();
     }
+    public String getHarnessSkills() {
+        return options.getHarnessSkills();
+    }
+    public String getHarnessAgents() {
+        return options.getHarnessAgents();
+    }
+    public String getHarnessCommands() {
+        return options.getHarnessCommands();
+    }
+    public String getHarnessMemory() {
+        return options.getHarnessMemory();
+    }
+    public String getHarnessDownload() {
+        return options.getHarnessDownload();
+    }
+    public String getHarnessChannels() {
+        return options.getHarnessChannels();
+    }
+
+    /**
+     * 当前目录
+     */
+    public String getUserDir() {
+        return System.getProperty("user.dir");
+    }
+
+    /**
+     * 用户主目录
+     */
+    public String getUserHome() {
+        return System.getProperty("user.home");
+    }
+
+    public String getUserAgent() {
+        return options.getUserAgent();
+    }
 
     public String getWorkspace() {
         return options.getWorkspace();
@@ -196,10 +232,6 @@ public class HarnessEngine {
 
     public String getSystemPrompt() {
         return options.getSystemPrompt();
-    }
-
-    public String getUserAgent() {
-        return options.getUserAgent();
     }
 
     public int getMaxTurns() {
@@ -274,7 +306,7 @@ public class HarnessEngine {
         return Collections.unmodifiableList(options.getModels());
     }
 
-    public Map<String, MountDo> getMountPools() {
+    public Map<String, Mount> getMountPools() {
         return Collections.unmodifiableMap(options.getMountPools());
     }
 
@@ -352,13 +384,18 @@ public class HarnessEngine {
         options.removeModel(name);
     }
 
-    public void addMountPool(String alias, PoolType type, String path) {
-        options.addMountPool(alias, type, path);
-        poolManager.register(alias, type, path);
+    public void addMount(String alias, Mount mount) {
+        options.getMountPools().put(alias, mount);
+
+        if(mount.getType() == PoolType.SUBAGENTS){
+            agentManager.agentPool(Paths.get(mount.getPath()));
+        }
+
+        poolManager.register(new PoolDir(alias, mount.getType(), mount.isPrimary(), mount.getPath()));
     }
 
-    public void removeMountPool(String alias) {
-        options.removeMountPool(alias);
+    public void removeMount(String alias) {
+        options.getMountPools().remove(alias);
         poolManager.remove(alias);
     }
 
@@ -771,8 +808,15 @@ public class HarnessEngine {
             return this;
         }
 
-        public Builder mountPoolAdd(String alias, PoolType type, String path) {
-            options.addMountPool(alias, type, path);
+        public Builder modelAdd(Iterable<ChatConfig> models) {
+            for (ChatConfig val : models) {
+                options.getModels().add(val); //build 时再加 ua
+            }
+            return this;
+        }
+
+        public Builder mountAdd(String alias, Mount mount) {
+            options.getMountPools().put(alias, mount);
             return this;
         }
 

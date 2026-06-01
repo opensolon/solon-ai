@@ -6,6 +6,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
+import org.noear.solon.ai.harness.mount.Mount;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.talents.cli.PoolType;
 import org.noear.solon.ai.talents.lsp.LspServerParameters;
@@ -20,7 +21,7 @@ public class DemoApp {
                 .sessionProvider(InMemoryAgentSession::of)
                 .toolsAdd(ToolPermission.TOOL_ALL_FULL) //设定工具权限
                 .disallowedToolsAdd(ToolPermission.TOOL_ALL_FULL)
-                .mountPoolAdd("@global-agents", PoolType.SUBAGENTS,"~/.soloncode/agents/")
+                .mountAdd("@global-agents", new Mount(PoolType.SUBAGENTS, "~/.soloncode/agents/", false, true))
                 .modelAdd(new ChatConfig().then(slf -> {
                     slf.setApiUrl("https://api.deepseek.com");
                     slf.setApiKey("sk-***");
