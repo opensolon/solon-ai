@@ -139,7 +139,7 @@ SimpleAgent blogger = SimpleAgent.of(chatModel)
     .name("blogger")
     .description("负责 [#{platform}] 平台的文案创作") // 动态占位符
     .profile(p -> p
-        .skillAdd("爆款标题制作", "小红书风写作")
+        .talentAdd("爆款标题制作", "小红书风写作")
         .constraintAdd("必须包含 Emoji", "严禁使用感叹号")
         .style("活泼亲切")
         .metaPut("version", "1.0.2"))

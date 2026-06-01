@@ -19,7 +19,7 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.skills.cli.TerminalSkillProxy;
+import org.noear.solon.ai.talents.cli.TerminalTalentProxy;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Nullable;
 
@@ -81,7 +81,7 @@ public class AgentFactory {
 
         if (Assert.isNotEmpty(metadata.getTools())) {
             //目前参考了： https://opencode.ai/docs/zh-cn/permissions/
-            TerminalSkillProxy terminalSkillWrap = new TerminalSkillProxy(engine.getTerminalSkill());
+            TerminalTalentProxy terminalSkillWrap = new TerminalTalentProxy(engine.getTerminalSkill());
 
             for (String toolName : metadata.getTools()) {
                 if ("**".equals(toolName)) {
@@ -103,7 +103,7 @@ public class AgentFactory {
 
             if (terminalSkillWrap.isEmpty() == false) {
                 // terminalSkill / tools 需要通过以 skill 形态加载（getInstruction 里有 SOP）
-                builder.defaultSkillAdd(terminalSkillWrap);
+                builder.defaultTalentAdd(terminalSkillWrap);
             }
         }
 
@@ -114,7 +114,7 @@ public class AgentFactory {
         return builder;
     }
 
-    private static void toolAddDo(HarnessEngine engine, ReActAgent.Builder builder, TerminalSkillProxy terminalSkillWrap, AgentDefinition.Metadata metadata, String toolName) {
+    private static void toolAddDo(HarnessEngine engine, ReActAgent.Builder builder, TerminalTalentProxy terminalSkillWrap, AgentDefinition.Metadata metadata, String toolName) {
         //当前禁止
         if (metadata.getDisallowedTools().contains(toolName)) {
             return;
@@ -176,7 +176,7 @@ public class AgentFactory {
             }
             case "subagent":
             case "task": {
-                builder.defaultSkillAdd(engine.getTaskSkill());
+                builder.defaultTalentAdd(engine.getTaskSkill());
                 break;
             }
             case "todoread":
@@ -198,7 +198,7 @@ public class AgentFactory {
                 break;
             }
             case "skill": {
-                builder.defaultSkillAdd(engine.getExpertSkill());
+                builder.defaultTalentAdd(engine.getExpertSkill());
                 break;
             }
 
@@ -212,28 +212,28 @@ public class AgentFactory {
                 break;
             }
             case "memory": {
-                builder.defaultSkillAdd(engine.getMemorySkill());
+                builder.defaultTalentAdd(engine.getMemorySkill());
                 break;
             }
             case "code": {
-                builder.defaultSkillAdd(engine.getCodeSkill());
+                builder.defaultTalentAdd(engine.getCodeSkill());
                 break;
             }
             case "mcp": {
                 if (engine.getMcpGatewaySkill() != null) {
-                    builder.defaultSkillAdd(engine.getMcpGatewaySkill());
+                    builder.defaultTalentAdd(engine.getMcpGatewaySkill());
                 }
                 break;
             }
             case "openapi": {
                 if (engine.getOpenApiSkill() != null) {
-                    builder.defaultSkillAdd(engine.getOpenApiSkill());
+                    builder.defaultTalentAdd(engine.getOpenApiSkill());
                 }
                 break;
             }
             case "lsp": {
                 if (engine.getLspSkill() != null) {
-                    builder.defaultSkillAdd(engine.getLspSkill());
+                    builder.defaultTalentAdd(engine.getLspSkill());
                 }
                 break;
             }
@@ -249,7 +249,7 @@ public class AgentFactory {
     private static void todoToolAddDo(AgentDefinition.Metadata metadata, ReActAgent.Builder builder, HarnessEngine agentRuntime) {
         if (metadata.isPrimary()) {
             //主代理，用文件模式
-            builder.defaultSkillAdd(agentRuntime.getTodoSkill());
+            builder.defaultTalentAdd(agentRuntime.getTodoSkill());
         } else {
             //次代理，用内存模式
             builder.planningMode(true);

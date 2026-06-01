@@ -28,7 +28,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.skill.AbsSkill;
+import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessFlags;
 import org.noear.solon.annotation.Body;
@@ -52,7 +52,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * @author bai
  * @since 3.9.5
  */
-public class TaskSkill extends AbsSkill {
+public class TaskSkill extends AbsTalent {
     private static final Logger LOG = LoggerFactory.getLogger(TaskSkill.class);
 
     public static final String TOOL_TASK = "task";

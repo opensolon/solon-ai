@@ -1,8 +1,8 @@
 package demo.ai.core;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.skill.Skill;
-import org.noear.solon.ai.chat.skill.SkillDesc;
+import org.noear.solon.ai.chat.talent.Talent;
+import org.noear.solon.ai.chat.talent.TalentDesc;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 
 import java.io.File;
@@ -20,8 +20,8 @@ public class ClaudeSkillLoader {
     /**
      * 1. 扫描入口：输入 skills 根目录，输出 Skill 列表
      */
-    public List<Skill> loadSkills(File rootDir) {
-        List<Skill> skills = new ArrayList<>();
+    public List<Talent> loadSkills(File rootDir) {
+        List<Talent> skills = new ArrayList<>();
         if (rootDir == null || !rootDir.exists() || !rootDir.isDirectory()) {
             return skills;
         }
@@ -31,7 +31,7 @@ public class ClaudeSkillLoader {
             for (File file : subFiles) {
                 if (file.isDirectory()) {
                     // 每个子目录尝试转为一个 Skill
-                    Skill skill = convertToSkill(file);
+                    Talent skill = convertToSkill(file);
                     if (skill != null) {
                         skills.add(skill);
                     }
@@ -44,7 +44,7 @@ public class ClaudeSkillLoader {
     /**
      * 2. 核心转换：将具体的目录转为 Solon AI Skill
      */
-    public Skill convertToSkill(File skillDir) {
+    public Talent convertToSkill(File skillDir) {
         File skillFile = new File(skillDir, "SKILL.md");
         if (!skillFile.exists()) {
             return null; // 必须包含 SKILL.md
@@ -64,7 +64,7 @@ public class ClaudeSkillLoader {
             String instruction = content.replaceFirst("(?s)^---.*?---", "").trim();
 
             // 构建 SkillDesc
-            SkillDesc.Builder builder = SkillDesc.builder(name)
+            TalentDesc.Builder builder = TalentDesc.builder(name)
                     .description(description)
                     .instruction(instruction);
 
@@ -78,7 +78,7 @@ public class ClaudeSkillLoader {
         }
     }
 
-    private void scanScriptsToTools(File skillDir, SkillDesc.Builder builder) {
+    private void scanScriptsToTools(File skillDir, TalentDesc.Builder builder) {
         File[] files = skillDir.listFiles();
         if (files == null) return;
 

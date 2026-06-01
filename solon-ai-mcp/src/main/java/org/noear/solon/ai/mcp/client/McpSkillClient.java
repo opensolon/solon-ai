@@ -19,8 +19,8 @@ import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.skill.Skill;
-import org.noear.solon.ai.chat.skill.SkillMetadata;
+import org.noear.solon.ai.chat.talent.Talent;
+import org.noear.solon.ai.chat.talent.TalentMetadata;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.lang.Preview;
 
@@ -33,14 +33,14 @@ import java.util.stream.Stream;
 /**
  * MCP 客户端工具包代理
  * <p>
- * 职责：作为 MCP 客户端，将远程 MCP 服务的能力（工具、资源、指令）封装为本地 {@link Skill} 接口。
+ * 职责：作为 MCP 客户端，将远程 MCP 服务的能力（工具、资源、指令）封装为本地 {@link Talent} 接口。
  * 特点：支持跨进程的能力调用，并通过 {@link Prompt} 上下文实现远程准入检查与动态指令获取。
  *
  * @author noear
  * @since 3.9.0
  */
 @Preview("3.9.0")
-public class McpSkillClient implements Skill {
+public class McpSkillClient implements Talent {
     /**
      * MCP 客户端提供者，负责底层的通信协议（如 Stdio, SSE）
      */
@@ -48,7 +48,7 @@ public class McpSkillClient implements Skill {
     /**
      * 缓存的工具包元信息
      */
-    protected SkillMetadata metadata;
+    protected TalentMetadata metadata;
 
     public McpSkillClient(McpClientProvider clientProvider) {
         this.clientProvider = clientProvider;
@@ -57,7 +57,7 @@ public class McpSkillClient implements Skill {
         String metadataJson = clientProvider.readResource("skill://metadataMcp")
                 .getContent();
 
-        metadata = ONode.deserialize(metadataJson, SkillMetadata.class);
+        metadata = ONode.deserialize(metadataJson, TalentMetadata.class);
     }
 
     @Override
@@ -71,7 +71,7 @@ public class McpSkillClient implements Skill {
     }
 
     @Override
-    public SkillMetadata metadata() {
+    public TalentMetadata metadata() {
         return metadata;
     }
 

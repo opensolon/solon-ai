@@ -7,8 +7,8 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.permission.ToolPermission;
-import org.noear.solon.ai.skills.cli.PoolType;
-import org.noear.solon.ai.skills.lsp.LspServerParameters;
+import org.noear.solon.ai.talents.cli.PoolType;
+import org.noear.solon.ai.talents.lsp.LspServerParameters;
 
 import java.util.Arrays;
 

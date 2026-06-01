@@ -10,7 +10,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
@@ -33,7 +33,7 @@ public class ReActSkillBindingTest {
         // 场景：OrderSkill 提供了查询和删除工具，但指令要求删除前必须说明原因
         ReActAgent agent = ReActAgent.of(chatModel)
                 .style(ReActStyle.STRUCTURED_TEXT)
-                .defaultSkillAdd(new OrderSkill())
+                .defaultTalentAdd(new OrderSkill())
                 .modelOptions(o -> o.temperature(0.0F))
                 .build();
 
@@ -62,7 +62,7 @@ public class ReActSkillBindingTest {
     /**
      * 自定义业务工具包：订单管理
      */
-    public static class OrderSkill implements Skill {
+    public static class OrderSkill implements Talent {
         private ToolProvider toolProvider = new MethodToolProvider(new OrderTools()).then(slf->{
             // 手动染色：确保 [Destructive] 标签进入 descriptionAndMeta()
             for (FunctionTool tool : slf.getTools()) {

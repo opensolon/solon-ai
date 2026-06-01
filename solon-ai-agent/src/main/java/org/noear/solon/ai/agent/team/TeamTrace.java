@@ -24,11 +24,9 @@ import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.prompt.PromptImpl;
-import org.noear.solon.ai.chat.skill.SkillUtil;
+import org.noear.solon.ai.chat.talent.TalentUtil;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
-import org.noear.solon.flow.FlowContextInternal;
-import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -180,7 +178,7 @@ public class TeamTrace implements AgentTrace {
         }
 
         //设置指令
-        StringBuilder skillsInstruction = SkillUtil.activeSkills(options.getModelOptions(), originalPrompt, new StringBuilder());
+        StringBuilder skillsInstruction = TalentUtil.activeSkills(options.getModelOptions(), originalPrompt, new StringBuilder());
         if (skillsInstruction.length() > 0) {
             options.setSkillInstruction(skillsInstruction.toString());
         }

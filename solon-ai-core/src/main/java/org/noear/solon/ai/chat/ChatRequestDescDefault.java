@@ -22,7 +22,7 @@ import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
-import org.noear.solon.ai.chat.skill.SkillUtil;
+import org.noear.solon.ai.chat.talent.TalentUtil;
 import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -159,7 +159,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 item.target.onPrepare(session, options, originalPrompt, instructionBuilder);
             }
 
-            StringBuilder skillsInstruction = SkillUtil.activeSkills(options, originalPrompt, new StringBuilder());
+            StringBuilder skillsInstruction = TalentUtil.activeSkills(options, originalPrompt, new StringBuilder());
             if (skillsInstruction.length() > 0) {
                 instructionBuilder.append("\n");
                 instructionBuilder.append(skillsInstruction);

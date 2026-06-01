@@ -21,7 +21,7 @@ import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.dialect.ChatDialectManager;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.Props;
@@ -313,9 +313,9 @@ public class ChatModel implements AiModel {
          *
          * @since 3.8.4
          */
-        public Builder defaultSkillAdd(Skill... skill) {
-            for (Skill s : skill) {
-                defaultSkillAdd(0, s);
+        public Builder defaultTalentAdd(Talent... skill) {
+            for (Talent s : skill) {
+                defaultTalentAdd(0, s);
             }
             return this;
         }
@@ -325,8 +325,8 @@ public class ChatModel implements AiModel {
          *
          * @since 3.8.4
          */
-        public Builder defaultSkillAdd(int index, Skill skill) {
-            config.addDefaultSkill(index, skill);
+        public Builder defaultTalentAdd(int index, Talent skill) {
+            config.addDefaultTalent(index, skill);
             return this;
         }
 

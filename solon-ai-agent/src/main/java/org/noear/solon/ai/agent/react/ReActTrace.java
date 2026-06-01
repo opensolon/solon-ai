@@ -27,12 +27,11 @@ import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.prompt.PromptImpl;
-import org.noear.solon.ai.chat.skill.SkillUtil;
+import org.noear.solon.ai.chat.talent.TalentUtil;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
-import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -189,7 +188,7 @@ public class ReActTrace implements AgentTrace {
         }
 
         //设置指令
-        StringBuilder skillsInstruction = SkillUtil.activeSkills(options.getModelOptions(), originalPrompt, new StringBuilder());
+        StringBuilder skillsInstruction = TalentUtil.activeSkills(options.getModelOptions(), originalPrompt, new StringBuilder());
         if (skillsInstruction.length() > 0) {
             options.setSkillInstruction(skillsInstruction.toString());
         }

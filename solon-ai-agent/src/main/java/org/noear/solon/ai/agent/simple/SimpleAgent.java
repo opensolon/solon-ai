@@ -26,7 +26,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
-import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
@@ -298,7 +298,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                         }
 
                         o.toolContextPut(options.toolContext());
-                        o.skillAdd(options.skills());
+                        o.talentAdd(options.skills());
 
                         options.interceptors().forEach(item -> o.interceptorAdd(item.index, item.target));
 
@@ -488,13 +488,13 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             return this;
         }
 
-        public Builder defaultSkillAdd(Skill... skills) {
-            config.getDefaultOptions().skillAdd(skills);
+        public Builder defaultTalentAdd(Talent... skills) {
+            config.getDefaultOptions().talentAdd(skills);
             return this;
         }
 
-        public Builder defaultSkillAdd(Skill skill, int index) {
-            config.getDefaultOptions().skillAdd(index, skill);
+        public Builder defaultTalentAdd(Talent skill, int index) {
+            config.getDefaultOptions().talentAdd(index, skill);
             return this;
         }
 

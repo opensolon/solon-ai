@@ -100,7 +100,7 @@ Support for synchronous and Reactive calls, built-in dialect adaptation, Tool, S
 ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
                 .provider("ollama") //Need to specify vendor, used to identify interface style (also called dialect)
                 .model("qwen2.5:1.5b")
-                .defaultSkillAdd(new ToolGatewaySkill())
+                .defaultTalentAdd(new ToolGatewaySkill())
                 .build();
 
 // Synchronize the call and print the response message
@@ -132,7 +132,7 @@ Skill skill = new SkillDesc("order_expert")
         .toolAdd(new OrderTools());
 
 chatModel.prompt("Where is my order from yesterday？")
-         .options(o->o.skillAdd(skill))
+         .options(o->o.talentAdd(skill))
          .call();
 ```
 

@@ -25,7 +25,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.skill.AbsSkill;
+import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.util.QueryCondition;
@@ -44,7 +44,7 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.9.4
  */
-public class VectorStoreCompressionStrategy extends AbsSkill implements CompressionStrategy {
+public class VectorStoreCompressionStrategy extends AbsTalent implements CompressionStrategy {
     private static final Logger log = LoggerFactory.getLogger(VectorStoreCompressionStrategy.class);
 
     private final RepositoryStorable vectorRepository;

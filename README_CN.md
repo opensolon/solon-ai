@@ -99,7 +99,7 @@ Solon AI 是 Solon 项目核心子项目之一。它是一个全场景的 Java A
 ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
                 .provider("ollama") //需要指定供应商，用于识别接口风格（也称为方言）
                 .model("qwen2.5:1.5b")
-                .defaultSkillAdd(new ToolGatewaySkill())
+                .defaultTalentAdd(new ToolGatewaySkill())
                 .build();
 
 //同步调用，并打印响应消息
@@ -131,7 +131,7 @@ Skill skill = new SkillDesc("order_expert")
         .toolAdd(new OrderTools());
 
 chatModel.prompt("我昨天的订单到哪了？")
-         .options(o->o.skillAdd(skill))
+         .options(o->o.talentAdd(skill))
          .call();
 ```
 

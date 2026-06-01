@@ -21,7 +21,7 @@ import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.Assert;
@@ -463,13 +463,13 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return this;
         }
 
-        public Builder defaultSkillAdd(Skill... skills) {
-            config.getDefaultOptions().getModelOptions().skillAdd(skills);
+        public Builder defaultTalentAdd(Talent... skills) {
+            config.getDefaultOptions().getModelOptions().talentAdd(skills);
             return this;
         }
 
-        public Builder defaultSkillAdd(Skill skill, int index) {
-            config.getDefaultOptions().getModelOptions().skillAdd(index, skill);
+        public Builder defaultTalentAdd(Talent skill, int index) {
+            config.getDefaultOptions().getModelOptions().talentAdd(index, skill);
             return this;
         }
 

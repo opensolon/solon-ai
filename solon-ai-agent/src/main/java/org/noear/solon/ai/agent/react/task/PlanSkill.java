@@ -19,7 +19,7 @@ import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.skill.AbsSkill;
+import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.Preview;
@@ -36,7 +36,7 @@ import java.util.regex.Pattern;
  * @since 3.9.3
  */
 @Preview("3.9.3")
-public class PlanSkill extends AbsSkill {
+public class PlanSkill extends AbsTalent {
     private static final Pattern PLAN_LINE_PREFIX_PATTERN = Pattern.compile("^[\\d\\.\\-\\s*]+");
 
     private final ReActTrace trace;

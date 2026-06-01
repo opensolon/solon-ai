@@ -34,19 +34,19 @@ import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
 import org.noear.solon.ai.harness.mount.MountDo;
 import org.noear.solon.ai.harness.permission.ToolPermission;
-import org.noear.solon.ai.skills.cli.*;
-import org.noear.solon.ai.skills.lsp.LspManager;
-import org.noear.solon.ai.skills.lsp.LspServerParameters;
-import org.noear.solon.ai.skills.lsp.LspSkill;
+import org.noear.solon.ai.talents.cli.*;
+import org.noear.solon.ai.talents.lsp.LspManager;
+import org.noear.solon.ai.talents.lsp.LspServerParameters;
+import org.noear.solon.ai.talents.lsp.LspTalent;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
-import org.noear.solon.ai.skills.memory.MemorySkill;
-import org.noear.solon.ai.skills.memory.MemorySolution;
-import org.noear.solon.ai.skills.openapi.ApiSource;
-import org.noear.solon.ai.skills.openapi.OpenApiSkill;
-import org.noear.solon.ai.skills.toolgateway.McpGatewaySkill;
-import org.noear.solon.ai.skills.web.CodeSearchTool;
-import org.noear.solon.ai.skills.web.WebfetchTool;
-import org.noear.solon.ai.skills.web.WebsearchTool;
+import org.noear.solon.ai.talents.memory.MemoryTalent;
+import org.noear.solon.ai.talents.memory.MemorySolution;
+import org.noear.solon.ai.talents.openapi.ApiSource;
+import org.noear.solon.ai.talents.openapi.OpenApiTalent;
+import org.noear.solon.ai.talents.toolgateway.McpGatewayTalent;
+import org.noear.solon.ai.talents.web.CodeSearchTool;
+import org.noear.solon.ai.talents.web.WebfetchTool;
+import org.noear.solon.ai.talents.web.WebsearchTool;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
@@ -69,7 +69,7 @@ public class HarnessEngine {
     private final HarnessOptions options;
 
     private final CodeSkill codeSkill;
-    private final TodoSkill todoSkill;
+    private final TodoTalent todoSkill;
     private final TaskSkill taskSkill;
     private final GenerateTool generateTool;
 
@@ -78,16 +78,16 @@ public class HarnessEngine {
     private final CodeSearchTool codeSearchTool;
 
     private final LspManager lspManager;
-    private final LspSkill lspSkill;
+    private final LspTalent lspSkill;
 
-    private final McpGatewaySkill mcpGatewaySkill;
-    private final OpenApiSkill openApiSkill;
+    private final McpGatewayTalent mcpGatewaySkill;
+    private final OpenApiTalent openApiSkill;
 
-    private final MemorySkill memorySkill;
+    private final MemoryTalent memorySkill;
 
     private final PoolManager poolManager;
-    private final TerminalSkill terminalSkill;
-    private final ExpertSkill expertSkill;
+    private final TerminalTalent terminalSkill;
+    private final ExpertTalent expertSkill;
 
     private final CommandRegistry commandRegistry = new CommandRegistry();
 
@@ -120,15 +120,15 @@ public class HarnessEngine {
         return poolManager;
     }
 
-    public TerminalSkill getTerminalSkill() {
+    public TerminalTalent getTerminalSkill() {
         return terminalSkill;
     }
 
-    public ExpertSkill getExpertSkill() {
+    public ExpertTalent getExpertSkill() {
         return expertSkill;
     }
 
-    public TodoSkill getTodoSkill() {
+    public TodoTalent getTodoSkill() {
         return todoSkill;
     }
 
@@ -140,7 +140,7 @@ public class HarnessEngine {
         return codeSkill;
     }
 
-    public MemorySkill getMemorySkill() {
+    public MemoryTalent getMemorySkill() {
         return memorySkill;
     }
 
@@ -152,7 +152,7 @@ public class HarnessEngine {
         return codeSearchTool;
     }
 
-    public LspSkill getLspSkill() {
+    public LspTalent getLspSkill() {
         return lspSkill;
     }
 
@@ -164,11 +164,11 @@ public class HarnessEngine {
         return webfetchTool;
     }
 
-    public McpGatewaySkill getMcpGatewaySkill() {
+    public McpGatewayTalent getMcpGatewaySkill() {
         return mcpGatewaySkill;
     }
 
-    public OpenApiSkill getOpenApiSkill() {
+    public OpenApiTalent getOpenApiSkill() {
         return openApiSkill;
     }
 
@@ -391,7 +391,7 @@ public class HarnessEngine {
             options.setHitlInterceptor(new HITLInterceptor().onTool("bash", new HitlStrategy()));
         }
 
-        this.todoSkill = new TodoSkill(options.getHarnessSessions());
+        this.todoSkill = new TodoTalent(options.getHarnessSessions());
         this.codeSkill = new CodeSkill(this);
         this.taskSkill = new TaskSkill(this);
         this.generateTool = new GenerateTool(this);
@@ -407,25 +407,25 @@ public class HarnessEngine {
                 lspManager.registerServer(entry.getKey(), entry.getValue());
             }
         }
-        this.lspSkill = lspManager.hasServers() ? new LspSkill(lspManager, options.getWorkspace()) : null;
+        this.lspSkill = lspManager.hasServers() ? new LspTalent(lspManager, options.getWorkspace()) : null;
         if (this.lspSkill != null) {
             lspManager.setDiagnosticsCallback(lspSkill::updateDiagnostics);
         }
 
         if (options.isMemoryEnabled() && options.getMemorySolution() != null) {
-            this.memorySkill = new MemorySkill(options.getMemorySolution()).sessionIsolation(false);
+            this.memorySkill = new MemoryTalent(options.getMemorySolution()).sessionIsolation(false);
         } else {
             this.memorySkill = null;
         }
 
-        openApiSkill = new OpenApiSkill().retryConfig(options.getApiRetries());
+        openApiSkill = new OpenApiTalent().retryConfig(options.getApiRetries());
         if (Assert.isNotEmpty(options.getApiServers())) {
             for (Map.Entry<String, ApiSource> entry : options.getApiServers().entrySet()) {
                 openApiSkill.addApi(entry.getValue());
             }
         }
 
-        mcpGatewaySkill = new McpGatewaySkill().retryConfig(options.getMcpRetries());
+        mcpGatewaySkill = new McpGatewayTalent().retryConfig(options.getMcpRetries());
 
         if (Assert.isNotEmpty(options.getMcpServers())) {
             for (Map.Entry<String, McpServerParameters> entry : options.getMcpServers().entrySet()) {
@@ -437,8 +437,8 @@ public class HarnessEngine {
 
         poolManager = new PoolManager(options.getWorkspace());
 
-        terminalSkill = new TerminalSkill(poolManager);
-        expertSkill = new ExpertSkill(poolManager);
+        terminalSkill = new TerminalTalent(poolManager);
+        expertSkill = new ExpertTalent(poolManager);
 
         terminalSkill.setBashAsyncEnabled(options.isBashAsyncEnabled());
         terminalSkill.setSandboxMode(options.isSandboxMode());

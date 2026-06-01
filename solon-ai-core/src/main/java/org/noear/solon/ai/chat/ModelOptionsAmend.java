@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.chat;
 
-import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
@@ -51,7 +51,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     protected final Map<String, Object> options;
 
     protected final Map<String, FunctionTool> tools;
-    protected final Map<String, RankEntity<Skill>> skills;
+    protected final Map<String, RankEntity<Talent>> skills;
     protected final Map<Class<?>, RankEntity<X>> interceptors;
 
     public ModelOptionsAmend() {
@@ -211,9 +211,9 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      *
      * @since 3.8.4
      */
-    public T skillAdd(Collection<RankEntity<Skill>> items) {
+    public T talentAdd(Collection<RankEntity<Talent>> items) {
         if (Assert.isNotEmpty(items)) {
-            for (RankEntity<Skill> item : items) {
+            for (RankEntity<Talent> item : items) {
                 skills.put(item.target.name(), item);
             }
         }
@@ -226,8 +226,8 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      *
      * @since 3.8.4
      */
-    public T skillAdd(Skill... skills) {
-        for (Skill s : skills) {
+    public T talentAdd(Talent... skills) {
+        for (Talent s : skills) {
             this.skills.put(s.name(), new RankEntity<>(s, 0));
         }
 
@@ -239,7 +239,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      *
      * @since 3.8.4
      */
-    public T skillAdd(int index, Skill skill) {
+    public T talentAdd(int index, Talent skill) {
         skills.put(skill.name(), new RankEntity<>(skill, index));
 
         return (T) this;
@@ -248,7 +248,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     /**
      * 获取所有工具包
      */
-    public Collection<RankEntity<Skill>> skills() {
+    public Collection<RankEntity<Talent>> skills() {
         return skills.values();
     }
 

@@ -10,13 +10,12 @@ import org.noear.solon.ai.chat.ChatRequest;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.interceptor.*;
-import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.skill.Skill;
-import org.noear.solon.ai.chat.skill.SkillDesc;
+import org.noear.solon.ai.chat.talent.Talent;
+import org.noear.solon.ai.chat.talent.TalentDesc;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolResult;
@@ -524,7 +523,7 @@ public abstract class AbsChatTest {
     @Test
     public void case11_skill_call() throws IOException {
         // 1. 定义一个简单的工具包
-        Skill timeSkill = SkillDesc.builder("time")
+        Talent timeSkill = TalentDesc.builder("time")
                 .instruction("当前时间是 2026-01-19，请基于此日期回答。")
                 .isSupported(prompt -> {
                     // 只有 prompt 中有 "use_time_skill" 属性时才支持
@@ -546,7 +545,7 @@ public abstract class AbsChatTest {
         // 执行调用
         ChatResponse resp = chatModel.prompt(prompt)
                 .session(chatSession)
-                .options(o -> o.skillAdd(timeSkill))
+                .options(o -> o.talentAdd(timeSkill))
                 .call();
 
         log.info("case11 response: {}", resp.getMessage().getContent());
@@ -560,7 +559,7 @@ public abstract class AbsChatTest {
     public void case12_skill_stream() throws Exception {
         // 1. 定义一个带工具的工具包
         ToolProvider toolProvider = new MethodToolProvider(new Tools());
-        Skill weatherSkill = SkillDesc.builder("weather")
+        Talent weatherSkill = TalentDesc.builder("weather")
                 .instruction("你是一个气象专家。")
                 .toolAdd(toolProvider)
                 .build();
@@ -574,7 +573,7 @@ public abstract class AbsChatTest {
         // 流式调用
         chatModel.prompt("杭州天气？")
                 .session(chatSession)
-                .options(o -> o.skillAdd(weatherSkill))
+                .options(o -> o.talentAdd(weatherSkill))
                 .stream()
                 .subscribe(new SimpleSubscriber<ChatResponse>()
                         .doOnNext(resp -> {

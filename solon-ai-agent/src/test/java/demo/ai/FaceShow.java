@@ -8,7 +8,7 @@ import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
-import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 
 import java.lang.reflect.Type;
@@ -25,12 +25,12 @@ public class FaceShow {
 
                     o.toolAdd(new Tool1());
                     o.toolContextPut("x","y");
-                    o.skillAdd(new Skill1());
+                    o.talentAdd(new Skill1());
                     o.interceptorAdd(new ChatInterceptor() {
                     });
                 })
                 .defaultToolAdd(new Tool1())
-                .defaultSkillAdd(new Skill1())
+                .defaultTalentAdd(new Skill1())
                 .defaultInterceptorAdd(new ChatInterceptor() {
                 })
                 .build();
@@ -43,7 +43,7 @@ public class FaceShow {
 
                     o.toolAdd(new Tool1());
                     o.toolContextPut("x","y");
-                    o.skillAdd(new Skill1());
+                    o.talentAdd(new Skill1());
                     o.interceptorAdd(new ChatInterceptor() {
                     });
                 })
@@ -56,11 +56,11 @@ public class FaceShow {
 
                     o.toolAdd(new Tool1());
                     o.toolContextPut("x","y");
-                    o.skillAdd(new Skill1());
+                    o.talentAdd(new Skill1());
                 })
                 .defaultToolAdd(new Tool1())
                 .defaultToolContextPut("x","y")
-                .defaultSkillAdd(new Skill1())
+                .defaultTalentAdd(new Skill1())
                 .defaultInterceptorAdd(new ReActInterceptor(){})
                 .build();
 
@@ -72,7 +72,7 @@ public class FaceShow {
 
                     o.toolAdd(new Tool1());
                     o.toolContextPut("x","y");
-                    o.skillAdd(new Skill1());
+                    o.talentAdd(new Skill1());
                     o.interceptorAdd(new ReActInterceptor(){});
                 })
                 .call();
@@ -84,12 +84,12 @@ public class FaceShow {
 
                     o.toolAdd(new Tool1());
                     o.toolContextPut("x","y");
-                    o.skillAdd(new Skill1());
+                    o.talentAdd(new Skill1());
                     o.interceptorAdd(new SimpleInterceptor(){});
                 })
                 .defaultToolAdd(new Tool1())
                 .defaultToolContextPut("x","y")
-                .defaultSkillAdd(new Skill1())
+                .defaultTalentAdd(new Skill1())
                 .defaultInterceptorAdd(new SimpleInterceptor(){})
                 .build();
 
@@ -101,7 +101,7 @@ public class FaceShow {
 
                     o.toolAdd(new Tool1());
                     o.toolContextPut("x","y");
-                    o.skillAdd(new Skill1());
+                    o.talentAdd(new Skill1());
                     o.interceptorAdd(new SimpleInterceptor(){});
                 })
                 .call();
@@ -113,7 +113,7 @@ public class FaceShow {
 
                     o.toolAdd(new Tool1());
                     o.toolContextPut("x","y");
-                    o.skillAdd(new Skill1());
+                    o.talentAdd(new Skill1());
                     o.interceptorAdd(new TeamInterceptor(){});
                 })
                 .defaultToolAdd(new Tool1())
@@ -129,12 +129,12 @@ public class FaceShow {
 
                     o.toolAdd(new Tool1());
                     o.toolContextPut("x","y");
-                    o.skillAdd(new Skill1());
+                    o.talentAdd(new Skill1());
                     o.interceptorAdd(new TeamInterceptor(){});
                 }).call();
     }
 
-    public static class Skill1 implements Skill {
+    public static class Skill1 implements Talent {
 
     }
 

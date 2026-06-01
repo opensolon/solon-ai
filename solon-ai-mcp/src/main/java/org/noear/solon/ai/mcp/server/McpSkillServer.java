@@ -21,7 +21,7 @@ import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.prompt.PromptImpl;
-import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.lang.Preview;
 
@@ -31,7 +31,7 @@ import java.util.List;
 /**
  * MCP 服务端工具包适配器
  * <p>
- * 职责：将本地定义的 {@link Skill} 逻辑通过 MCP 协议导出。
+ * 职责：将本地定义的 {@link Talent} 逻辑通过 MCP 协议导出。
  * 机制：利用注解将工具包的生命周期方法（isSupported, getInstruction）映射为 MCP 的 Tool 或 Resource，
  * 供远程 {@link org.noear.solon.ai.mcp.client.McpSkillClient} 发现并调用。
  *
@@ -39,7 +39,7 @@ import java.util.List;
  * @since 3.9.0
  */
 @Preview("3.9.0")
-public abstract class McpSkillServer implements Skill {
+public abstract class McpSkillServer implements Talent {
 
     /**
      * 导出工具包元数据作为 MCP 资源

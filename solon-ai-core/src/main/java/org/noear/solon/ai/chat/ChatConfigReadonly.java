@@ -16,7 +16,7 @@
 package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
-import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
@@ -113,7 +113,7 @@ public class ChatConfigReadonly {
     /**
      * 获取所有默认工具包
      */
-    public Collection<Skill> getDefaultSkills() {
+    public Collection<Talent> getDefaultSkills() {
         return config.getModelOptions().skills()
                 .stream().map(e -> e.target)
                 .collect(Collectors.toList());

@@ -16,7 +16,7 @@
 package org.noear.solon.ai.harness.code;
 
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.skill.AbsSkill;
+import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.code.impl.*;
 import org.slf4j.Logger;
@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.9.4
  */
-public class CodeSkill extends AbsSkill {
+public class CodeSkill extends AbsTalent {
     private static final Logger LOG = LoggerFactory.getLogger(CodeSkill.class);
 
     public final static String NAME_CODE_MD = "CODE.md";

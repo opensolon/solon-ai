@@ -1,8 +1,8 @@
 package demo.ai.core;
 
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.skill.AbsSkill;
-import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.annotation.Param;
 
@@ -12,7 +12,7 @@ import java.util.List;
 /**
  * 意图感知的订单工具包
  */
-public class OrderIntentSkill extends AbsSkill implements Skill {
+public class OrderIntentSkill extends AbsTalent implements Talent {
     // 定义该工具包关心的意图关键词
     private static final List<String> INTENT_KEYWORDS = Arrays.asList("订单", "买过", "物流", "发货", "退款");
 

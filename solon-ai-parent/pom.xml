@@ -259,97 +259,103 @@
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-skill-cli</artifactId>
+                <artifactId>solon-ai-talent-cli</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-skill-restapi</artifactId>
+                <artifactId>solon-ai-talent-restapi</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-skill-text2sql</artifactId>
+                <artifactId>solon-ai-talent-openapi</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-skill-toolgateway</artifactId>
+                <artifactId>solon-ai-talent-text2sql</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-skill-generation</artifactId>
+                <artifactId>solon-ai-talent-toolgateway</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-skill-lsp</artifactId>
+                <artifactId>solon-ai-talent-generation</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-skill-lucene</artifactId>
+                <artifactId>solon-ai-talent-lsp</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-skill-mail</artifactId>
+                <artifactId>solon-ai-talent-lucene</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-skill-memory</artifactId>
+                <artifactId>solon-ai-talent-mail</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-skill-pdf</artifactId>
+                <artifactId>solon-ai-talent-memory</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-skill-data</artifactId>
+                <artifactId>solon-ai-talent-pdf</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-skill-diff</artifactId>
+                <artifactId>solon-ai-talent-data</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-skill-web</artifactId>
+                <artifactId>solon-ai-talent-diff</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-skill-file</artifactId>
+                <artifactId>solon-ai-talent-web</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-skill-social</artifactId>
+                <artifactId>solon-ai-talent-file</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-skill-sys</artifactId>
+                <artifactId>solon-ai-talent-social</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
+                <artifactId>solon-ai-talent-sys</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

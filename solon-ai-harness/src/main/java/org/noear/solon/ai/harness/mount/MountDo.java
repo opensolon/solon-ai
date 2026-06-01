@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.noear.solon.ai.skills.cli.PoolType;
+import org.noear.solon.ai.talents.cli.PoolType;
 
 import java.io.Serializable;
 
