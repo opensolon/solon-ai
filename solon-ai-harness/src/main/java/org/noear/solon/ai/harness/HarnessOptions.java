@@ -352,6 +352,10 @@ class HarnessOptions implements Serializable {
         mountPools.put(alias, new MountDo(type, path, true));
     }
 
+    void removeMountPool(String alias){
+        mountPools.remove(alias);
+    }
+
     void addModel(ChatConfig chatConfig) {
         if (Assert.isEmpty(chatConfig.getUserAgent())) {
             chatConfig.setUserAgent(this.userAgent);

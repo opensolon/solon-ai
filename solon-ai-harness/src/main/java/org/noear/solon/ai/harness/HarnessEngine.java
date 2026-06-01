@@ -300,24 +300,41 @@ public class HarnessEngine {
 
     // ========== 运行时动态修改 ==========
 
-    public void setMaxTurns(int val) {
-        options.setMaxTurns(val);
+    public void setMaxTurns(Integer maxTurns) {
+        if (maxTurns != null) {
+            options.setMaxTurns(maxTurns);
+        }
     }
 
-    public void setHitlEnabled(boolean val) {
-        options.setHitlEnabled(val);
+    public void setHitlEnabled(Boolean hitlEnabled) {
+        if (hitlEnabled != null) {
+            options.setHitlEnabled(hitlEnabled);
+        }
     }
 
-    public void setSubagentEnabled(boolean val) {
-        options.setSubagentEnabled(val);
+    public void setSubagentEnabled(Boolean subagentEnabled) {
+        if (subagentEnabled != null) {
+            options.setSubagentEnabled(subagentEnabled);
+        }
     }
 
-    public void setCompressionThreshold(int maxMessages, int maxTokens){
-        options.setCompressionMaxMessages(maxMessages);
-        options.setCompressionMaxTokens(maxTokens);
+    public void setCompressionThreshold(Integer maxMessages, Integer maxTokens) {
+        if (maxMessages != null) {
+            options.setCompressionMaxMessages(maxMessages);
+            options.getCompressionInterceptor().setMaxMessages(maxMessages);
+        }
 
-        options.getCompressionInterceptor().setMaxMessages(maxMessages);
-        options.getCompressionInterceptor().setMaxTokens(maxTokens);
+        if (maxTokens != null) {
+            options.setCompressionMaxTokens(maxTokens);
+            options.getCompressionInterceptor().setMaxTokens(maxTokens);
+        }
+    }
+
+    public void setSandboxMode(Boolean sandboxMode) {
+        if (sandboxMode != null) {
+            options.setSandboxMode(sandboxMode);
+            terminalTalent.setSandboxMode(sandboxMode);
+        }
     }
 
     // ========== 动态模型管理 ==========
@@ -333,6 +350,16 @@ public class HarnessEngine {
 
     public void removeModel(String name) {
         options.removeModel(name);
+    }
+
+    public void addMountPool(String alias, PoolType type, String path) {
+        options.addMountPool(alias, type, path);
+        poolManager.register(alias, type, path);
+    }
+
+    public void removeMountPool(String alias) {
+        options.removeMountPool(alias);
+        poolManager.remove(alias);
     }
 
 
