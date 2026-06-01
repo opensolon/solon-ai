@@ -13,14 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.react.intercept.summarize;
+package org.noear.solon.ai.agent.react.intercept.compress;
 
 import org.noear.solon.ai.agent.AgentTrace;
-import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
-import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
+import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
+import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
@@ -44,12 +44,12 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.9.4
  */
-public class VectorStoreSummarizationStrategy extends AbsSkill implements SummarizationStrategy {
-    private static final Logger log = LoggerFactory.getLogger(VectorStoreSummarizationStrategy.class);
+public class VectorStoreCompressionStrategy extends AbsSkill implements CompressionStrategy {
+    private static final Logger log = LoggerFactory.getLogger(VectorStoreCompressionStrategy.class);
 
     private final RepositoryStorable vectorRepository;
 
-    public VectorStoreSummarizationStrategy(RepositoryStorable vectorRepository) {
+    public VectorStoreCompressionStrategy(RepositoryStorable vectorRepository) {
         this.vectorRepository = vectorRepository;
     }
 
@@ -99,7 +99,7 @@ public class VectorStoreSummarizationStrategy extends AbsSkill implements Summar
     }
 
     @Override
-    public ChatMessage summarize(ReActTrace trace, List<ChatMessage> messagesToSummarize) {
+    public ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToSummarize) {
         if (messagesToSummarize == null || messagesToSummarize.isEmpty()) {
             return null;
         }
@@ -136,7 +136,7 @@ public class VectorStoreSummarizationStrategy extends AbsSkill implements Summar
 
             // 返回一个紧凑的系统通知
             return ChatMessage.ofUser("--- [历史细节已归档，必要时请使用 recall_history 工具回溯] ---")
-                    .addMetadata(SummarizationInterceptor.META_SUMMARY, 1);
+                    .addMetadata(ContextCompressionInterceptor.META_SUMMARY, 1);
 
         } catch (Throwable e) {
             log.error("Failed to archive to vector store", e);

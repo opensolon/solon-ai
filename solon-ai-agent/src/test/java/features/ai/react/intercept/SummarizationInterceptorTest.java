@@ -7,11 +7,10 @@ import org.mockito.ArgumentCaptor;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
-import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
-import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
-import org.noear.solon.ai.agent.react.intercept.summarize.*;
+import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
+import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
+import org.noear.solon.ai.agent.react.intercept.compress.*;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -29,7 +28,7 @@ public class SummarizationInterceptorTest {
 
     private ReActTrace trace;
     private Prompt workingMemory;
-    private SummarizationInterceptor interceptor;
+    private ContextCompressionInterceptor interceptor;
     private ChatModel chatModel;
 
     @BeforeEach
@@ -43,7 +42,7 @@ public class SummarizationInterceptorTest {
         chatModel = LlmUtil.getChatModel();
 
         // 阈值设为 6，消息超过 6 条时触发压缩
-        interceptor = new SummarizationInterceptor(6,8000);
+        interceptor = new ContextCompressionInterceptor(6,8000, LlmUtil::getChatModel, null);
     }
 
     /**
@@ -134,13 +133,13 @@ public class SummarizationInterceptorTest {
         when(trace.getSession()).thenReturn(session);
         when(session.getSessionId()).thenReturn("sess_001");
 
-        VectorStoreSummarizationStrategy strategy = new VectorStoreSummarizationStrategy(vectorRepository);
+        VectorStoreCompressionStrategy strategy = new VectorStoreCompressionStrategy(vectorRepository);
 
         ChatMessage m1 = ChatMessage.ofUser("初心内容");
         m1.addMetadata(AgentTrace.META_FIRST, 1); // 标记为初心
         ChatMessage m2 = ChatMessage.ofAssistant("执行过程内容");
 
-        strategy.summarize(trace, Arrays.asList(m1, m2));
+        strategy.compress(chatModel, 3, trace, Arrays.asList(m1, m2));
 
         ArgumentCaptor<Document> docCaptor = ArgumentCaptor.forClass(Document.class);
         verify(vectorRepository).save(docCaptor.capture());
@@ -156,13 +155,13 @@ public class SummarizationInterceptorTest {
      */
     @Test
     public void testLLMSummarizationStrategy_Real() throws Exception {
-        LLMSummarizationStrategy strategy = new LLMSummarizationStrategy(chatModel);
+        LLMCompressionStrategy strategy = new LLMCompressionStrategy();
 
         ChatMessage m1 = ChatMessage.ofUser("我是初心任务");
         m1.addMetadata(AgentTrace.META_FIRST, 1);
         ChatMessage m2 = ChatMessage.ofAssistant("我是需要被总结的执行细节。");
 
-        ChatMessage result = strategy.summarize(trace, Arrays.asList(m1, m2));
+        ChatMessage result = strategy.compress(chatModel, 3, trace, Arrays.asList(m1, m2));
 
         assertNotNull(result);
         // 验证返回了有效的摘要内容
@@ -192,13 +191,13 @@ public class SummarizationInterceptorTest {
 
     @Test
     public void testCompositeStrategy_Isolation() {
-        SummarizationStrategy mockErrorStrategy = mock(SummarizationStrategy.class);
-        when(mockErrorStrategy.summarize(any(), any())).thenThrow(new RuntimeException("LLM Timeout"));
+        CompressionStrategy mockErrorStrategy = mock(CompressionStrategy.class);
+        when(mockErrorStrategy.compress(chatModel, 3, any(), any())).thenThrow(new RuntimeException("LLM Timeout"));
 
-        SummarizationStrategy normalStrategy = new LLMSummarizationStrategy(chatModel);
-        CompositeSummarizationStrategy composite = new CompositeSummarizationStrategy(mockErrorStrategy, normalStrategy);
+        CompressionStrategy normalStrategy = new LLMCompressionStrategy();
+        CompositeCompressionStrategy composite = new CompositeCompressionStrategy(mockErrorStrategy, normalStrategy);
 
-        ChatMessage result = composite.summarize(trace, Arrays.asList(ChatMessage.ofUser("data")));
+        ChatMessage result = composite.compress(chatModel, 3,trace, Arrays.asList(ChatMessage.ofUser("data")));
 
         assertNotNull(result);
         assertFalse(result.getContent().isEmpty(), "Should still contain result from normal strategy");
@@ -206,7 +205,7 @@ public class SummarizationInterceptorTest {
 
     @Test
     public void testHierarchicalStrategy_StateRolling() {
-        HierarchicalSummarizationStrategy strategy = new HierarchicalSummarizationStrategy(chatModel);
+        HierarchicalCompressionStrategy strategy = new HierarchicalCompressionStrategy();
         String lastSummaryKey = "agent:summary:hierarchical";
 
         // 模拟之前已经存在的旧摘要
@@ -214,7 +213,7 @@ public class SummarizationInterceptorTest {
         when(trace.getExtraAs(lastSummaryKey)).thenReturn(oldSummary);
 
         // 触发新的总结
-        strategy.summarize(trace, Arrays.asList(ChatMessage.ofAssistant("New event.")));
+        strategy.compress(chatModel,3, trace, Arrays.asList(ChatMessage.ofAssistant("New event.")));
 
         // 验证：trace.setExtra 被调用了，且存入了新的摘要（由于 mock 模型，这里主要看调用）
         verify(trace).setExtra(eq(lastSummaryKey), anyString());

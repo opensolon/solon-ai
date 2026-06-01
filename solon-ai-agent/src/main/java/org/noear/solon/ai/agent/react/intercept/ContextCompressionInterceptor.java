@@ -20,9 +20,13 @@ import com.knuddels.jtokkit.api.Encoding;
 import com.knuddels.jtokkit.api.EncodingRegistry;
 import com.knuddels.jtokkit.api.ModelType;
 import org.noear.solon.ai.agent.AgentTrace;
-import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.react.intercept.compress.CompositeCompressionStrategy;
+import org.noear.solon.ai.agent.react.intercept.compress.HierarchicalCompressionStrategy;
+import org.noear.solon.ai.agent.react.intercept.compress.LLMCompressionStrategy;
+import org.noear.solon.ai.agent.react.intercept.compress.VectorStoreCompressionStrategy;
+import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
@@ -32,6 +36,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -48,22 +53,23 @@ import java.util.stream.Collectors;
  *       预留摘要空间后按双维度（数量+Token）确定保留窗口</li>
  * </ul>
  *
- * <p>支持四种压缩策略（通过 {@link SummarizationStrategy} 注入）：
+ * <p>支持四种压缩策略（通过 {@link CompressionStrategy} 注入）：
  * <ul>
  *   <li>{@code null}（默认）—— 不调用 LLM，仅执行原子对齐的纯裁剪（fallback 零成本路径）</li>
- *   <li>{@link org.noear.solon.ai.agent.react.intercept.summarize.LLMSummarizationStrategy} —— LLM 生成摘要</li>
- *   <li>{@link org.noear.solon.ai.agent.react.intercept.summarize.KeyInfoExtractionStrategy} —— 关键信息提取</li>
- *   <li>{@link org.noear.solon.ai.agent.react.intercept.summarize.HierarchicalSummarizationStrategy} —— 分层摘要</li>
- *   <li>{@link org.noear.solon.ai.agent.react.intercept.summarize.VectorStoreSummarizationStrategy} —— 向量存储检索</li>
- *   <li>{@link org.noear.solon.ai.agent.react.intercept.summarize.CompositeSummarizationStrategy} —— 组合策略</li>
+ *   <li>{@link LLMCompressionStrategy} —— LLM 生成摘要</li>
+ *   <li>{@link org.noear.solon.ai.agent.react.intercept.compress.KeyInfoExtractionStrategy} —— 关键信息提取</li>
+ *   <li>{@link HierarchicalCompressionStrategy} —— 分层摘要</li>
+ *   <li>{@link VectorStoreCompressionStrategy} —— 向量存储检索</li>
+ *   <li>{@link CompositeCompressionStrategy} —— 组合策略</li>
  * </ul>
  *
  * @author noear
  * @since 3.9.4
+ * @since 4.0.0
  */
 @Preview("3.8.2")
-public class SummarizationInterceptor implements ReActInterceptor {
-    private static final Logger log = LoggerFactory.getLogger(SummarizationInterceptor.class);
+public class ContextCompressionInterceptor implements ReActInterceptor {
+    private static final Logger log = LoggerFactory.getLogger(ContextCompressionInterceptor.class);
 
     public final static String META_SUMMARY = "_summary";
 
@@ -74,10 +80,14 @@ public class SummarizationInterceptor implements ReActInterceptor {
     private static final String META_TOKEN_SIZE = "token_size";
 
     // 保留窗口的最大消息数（默认 15）
-    private  int maxMessages;
+    private int maxMessages;
     // 保留窗口的最大 Token 数（默认 15_000）
-    private  int maxTokens;
-    private final SummarizationStrategy summarizationStrategy;
+    private int maxTokens;
+    // 重试次数
+    private int maxRetries = 3;
+    // 压缩策略
+    private final CompressionStrategy summarizationStrategy;
+    private final Supplier<ChatModel> chatModelSupplier;
 
     public void setMaxMessages(int maxMessages) {
         this.maxMessages = Math.max(10, maxMessages);
@@ -87,38 +97,37 @@ public class SummarizationInterceptor implements ReActInterceptor {
         this.maxTokens = Math.max(10_000, maxTokens);
     }
 
-    public SummarizationInterceptor(int maxMessages, int maxTokens, SummarizationStrategy summarizationStrategy) {
+    public void setMaxRetries(int maxRetries) {
+        this.maxRetries = maxRetries;
+    }
+
+    public ContextCompressionInterceptor(int maxMessages, int maxTokens, Supplier<ChatModel> chatModelSupplier, CompressionStrategy summarizationStrategy) {
         this.maxMessages = Math.max(10, maxMessages);
         this.maxTokens = Math.max(10_000, maxTokens);
+        this.chatModelSupplier = chatModelSupplier;
         this.summarizationStrategy = summarizationStrategy;
     }
 
-    public SummarizationInterceptor(int maxMessages, int maxTokens) {
-        this(maxMessages, maxTokens, null);
+    public ContextCompressionInterceptor(int maxMessages, int maxTokens, int maxRetries, Supplier<ChatModel> chatModelSupplier, CompressionStrategy summarizationStrategy) {
+        this.maxMessages = Math.max(10, maxMessages);
+        this.maxTokens = Math.max(10_000, maxTokens);
+        this.maxRetries = maxRetries;
+        this.chatModelSupplier = chatModelSupplier;
+        this.summarizationStrategy = summarizationStrategy;
     }
 
-    public SummarizationInterceptor() {
-        /**
-         * 默认构造参数（maxMessages: 15, maxTokens: 12000）
-         *
-         * <ul>
-         *   <li>LLMSummarization / HierarchicalSummarization 策略推荐 maxMessages: 10 - 14</li>
-         *   <li>KeyInfoExtraction 策略推荐 maxMessages: 15 - 20</li>
-         *   <li>VectorStoreSummarization 策略推荐 maxMessages: 18 - 25</li>
-         *   <li>通用推荐 maxMessages: 10 - 12</li>
-         * </ul>
-         */
-
-        this(15, 15_000, null);
+    public ContextCompressionInterceptor(){
+        this(15, 15_000, null, null);
     }
 
     /**
      * 复制实例，并使用新的限制
      */
-    public SummarizationInterceptor copyWith(int maxMessages, int maxTokens) {
-        SummarizationInterceptor tmp = new SummarizationInterceptor(
+    public ContextCompressionInterceptor copyWith(int maxMessages, int maxTokens) {
+        ContextCompressionInterceptor tmp = new ContextCompressionInterceptor(
                 maxMessages,
                 maxTokens,
+                this.chatModelSupplier,
                 this.summarizationStrategy);
 
         return tmp;
@@ -270,7 +279,9 @@ public class SummarizationInterceptor implements ReActInterceptor {
 
             if (!pureHistory.isEmpty()) {
                 if (summarizationStrategy != null) {
-                    ChatMessage summaryMsg = summarizationStrategy.summarize(trace, pureHistory);
+                    ChatModel chatModel = chatModelSupplier.get();
+
+                    ChatMessage summaryMsg = summarizationStrategy.compress(chatModel, maxRetries, trace, pureHistory);
                     if (summaryMsg != null) {
                         compressed.add(summaryMsg);
                     }

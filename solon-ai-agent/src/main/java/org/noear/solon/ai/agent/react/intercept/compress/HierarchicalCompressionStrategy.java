@@ -13,13 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.react.intercept.summarize;
+package org.noear.solon.ai.agent.react.intercept.compress;
 
 import org.noear.solon.ai.agent.AgentTrace;
-import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
-import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
+import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
+import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -43,12 +42,8 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.9.4
  */
-public class HierarchicalSummarizationStrategy implements SummarizationStrategy {
-    private static final Logger log = LoggerFactory.getLogger(HierarchicalSummarizationStrategy.class);
-
-    private final Supplier<ChatModel> chatModelSupplier;
-
-    private int maxRetries = 3;
+public class HierarchicalCompressionStrategy implements CompressionStrategy {
+    private static final Logger log = LoggerFactory.getLogger(HierarchicalCompressionStrategy.class);
 
     // 1. 定义系统指令（静态部分）
     private String systemInstruction = "## 角色定义\n" +
@@ -68,40 +63,19 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
     private static final String SUMMARY_PREFIX = "--- [全局进度滚动摘要 (层级压缩)] ---";
     private static final String STRATEGY_LASTSUMMARY_KEY = "agent:summary:hierarchical";
 
-    public HierarchicalSummarizationStrategy(ChatModel chatModel) {
-        Objects.requireNonNull(chatModel, "chatModel");
 
-        this.chatModelSupplier = () -> chatModel;
-    }
-
-    public HierarchicalSummarizationStrategy(Supplier<ChatModel> chatModelSupplier) {
-        Objects.requireNonNull(chatModelSupplier, "chatModelSupplier");
-
-        this.chatModelSupplier = chatModelSupplier;
-    }
-
-    public HierarchicalSummarizationStrategy retryConfig(int maxRetries, long retryDelayMs) {
-        this.maxRetries = Math.max(1, maxRetries);
-        return this;
-    }
-
-    public HierarchicalSummarizationStrategy retryConfig(int maxRetries) {
-        this.maxRetries = Math.max(1, maxRetries);
-        return this;
-    }
-
-    public HierarchicalSummarizationStrategy systemInstruction(String systemInstruction) {
+    public HierarchicalCompressionStrategy systemInstruction(String systemInstruction) {
         this.systemInstruction = systemInstruction;
         return this;
     }
 
-    public HierarchicalSummarizationStrategy maxSummaryLength(int maxSummaryLength) {
+    public HierarchicalCompressionStrategy maxSummaryLength(int maxSummaryLength) {
         this.maxSummaryLength = maxSummaryLength;
         return this;
     }
 
     @Override
-    public ChatMessage summarize(ReActTrace trace, List<ChatMessage> messagesToSummarize) {
+    public ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToSummarize) {
         String lastSummary = trace.getExtraAs(STRATEGY_LASTSUMMARY_KEY);
         if (lastSummary == null) {
             lastSummary = "";
@@ -146,12 +120,10 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
                     "请根据 System Message（系统指令）中的逻辑，输出更新后的『进度摘要』：";
 
             // 3. 调用模型生成增量摘要
-            final ChatModel chatModel = chatModelSupplier.get();
-
             lastSummary = RetryUtil.callWithRetry(maxRetries, () -> {
                 ChatResponse resp = chatModel.prompt(userData)
                         .options(o -> {
-                            o.agentName(HierarchicalSummarizationStrategy.class.getSimpleName());
+                            o.agentName(HierarchicalCompressionStrategy.class.getSimpleName());
                             o.systemPrompt(systemInstruction);
                         })
                         .call();
@@ -183,6 +155,6 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
             return null;
         }
         return ChatMessage.ofUser(SUMMARY_PREFIX + "\n" + content)
-                .addMetadata(SummarizationInterceptor.META_SUMMARY, 1);
+                .addMetadata(ContextCompressionInterceptor.META_SUMMARY, 1);
     }
 }

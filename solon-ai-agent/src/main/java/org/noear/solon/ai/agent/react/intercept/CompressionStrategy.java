@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.react.intercept;
 
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import java.util.List;
 
@@ -26,12 +27,12 @@ import java.util.List;
  * @since 3.9.4
  */
 @FunctionalInterface
-public interface SummarizationStrategy {
+public interface CompressionStrategy {
     /**
      * 对即将移出滑动窗口的消息进行总结
      *
      * @param messagesToSummarize 判定为“过期”的消息段
      * @return 返回一条包含摘要的消息（通常是 SystemMessage），若返回 null 则仅执行物理截断
      */
-    ChatMessage summarize(ReActTrace trace, List<ChatMessage> messagesToSummarize);
+    ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToSummarize);
 }

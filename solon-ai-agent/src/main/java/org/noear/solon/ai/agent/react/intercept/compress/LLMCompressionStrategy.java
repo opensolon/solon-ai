@@ -13,13 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.react.intercept.summarize;
+package org.noear.solon.ai.agent.react.intercept.compress;
 
 import org.noear.solon.ai.agent.AgentTrace;
-import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
-import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
+import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
+import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -41,11 +40,8 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.9.4
  */
-public class LLMSummarizationStrategy implements SummarizationStrategy {
-    private static final Logger log = LoggerFactory.getLogger(LLMSummarizationStrategy.class);
-
-    private final Supplier<ChatModel> chatModelSupplier;
-    private int maxRetries = 3;
+public class LLMCompressionStrategy implements CompressionStrategy {
+    private static final Logger log = LoggerFactory.getLogger(LLMCompressionStrategy.class);
 
     // 1. 系统指令：定义总结逻辑和约束
     private String systemInstruction = "## 角色定义\n" +
@@ -59,38 +55,13 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
             "- 严禁包含：无关的客套话或自我介绍。\n" +
             "- 若无可总结内容，请回复：(无显著进度)"; // 统一为英文括号，去掉句号结尾
 
-    /**
-     * @param chatModel 用于生成摘要的模型（建议使用廉价、快速的模型）
-     */
-    public LLMSummarizationStrategy(ChatModel chatModel) {
-        Objects.requireNonNull(chatModel, "chatModel");
-
-        this.chatModelSupplier = () -> chatModel;
-    }
-
-    public LLMSummarizationStrategy(Supplier<ChatModel> chatModelSupplier) {
-        Objects.requireNonNull(chatModelSupplier, "chatModelSupplier");
-
-        this.chatModelSupplier = chatModelSupplier;
-    }
-
-    public LLMSummarizationStrategy retryConfig(int maxRetries, long retryDelayMs) {
-        this.maxRetries = Math.max(1, maxRetries);
-        return this;
-    }
-
-    public LLMSummarizationStrategy retryConfig(int maxRetries) {
-        this.maxRetries = Math.max(1, maxRetries);
-        return this;
-    }
-
-    public LLMSummarizationStrategy systemInstruction(String systemInstruction) {
+    public LLMCompressionStrategy systemInstruction(String systemInstruction) {
         this.systemInstruction = systemInstruction;
         return this;
     }
 
     @Override
-    public ChatMessage summarize(ReActTrace trace, List<ChatMessage> messagesToSummarize) {
+    public ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToSummarize) {
         if (messagesToSummarize == null || messagesToSummarize.isEmpty()) {
             return null;
         }
@@ -123,11 +94,10 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
                     "### 任务指令\n" +
                     "请根据系统指令对上述执行过程进行语义总结：";
 
-            final ChatModel chatModel = chatModelSupplier.get();
             String summary = RetryUtil.callWithRetry(maxRetries, () -> {
                 ChatResponse resp = chatModel.prompt(userData)
                         .options(o -> {
-                            o.agentName(LLMSummarizationStrategy.class.getSimpleName());
+                            o.agentName(LLMCompressionStrategy.class.getSimpleName());
                             o.systemPrompt(systemInstruction);
                         })
                         .call();
@@ -147,7 +117,7 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
 
             // 3. 返回包含标记的消息
             return ChatMessage.ofUser("--- [执行进度总结] ---\n" + summary)
-                    .addMetadata(SummarizationInterceptor.META_SUMMARY, 1);
+                    .addMetadata(ContextCompressionInterceptor.META_SUMMARY, 1);
 
         } catch (Throwable e) {
             log.error("Failed to generate LLM summary", e);

@@ -20,11 +20,11 @@ import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
-import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
-import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
-import org.noear.solon.ai.agent.react.intercept.summarize.CompositeSummarizationStrategy;
-import org.noear.solon.ai.agent.react.intercept.summarize.HierarchicalSummarizationStrategy;
-import org.noear.solon.ai.agent.react.intercept.summarize.KeyInfoExtractionStrategy;
+import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
+import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
+import org.noear.solon.ai.agent.react.intercept.compress.CompositeCompressionStrategy;
+import org.noear.solon.ai.agent.react.intercept.compress.HierarchicalCompressionStrategy;
+import org.noear.solon.ai.agent.react.intercept.compress.KeyInfoExtractionStrategy;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -109,7 +109,7 @@ public class HarnessEngine {
         return agentManager;
     }
 
-    public SummarizationInterceptor getSummarizationInterceptor() {
+    public ContextCompressionInterceptor getSummarizationInterceptor() {
         return options.getSummarizationInterceptor();
     }
 
@@ -371,13 +371,15 @@ public class HarnessEngine {
 
         //上下文摘要拦截器默认处理
         if (options.getSummarizationInterceptor() == null) {
-            SummarizationStrategy strategy = new CompositeSummarizationStrategy()
-                    .addStrategy(new KeyInfoExtractionStrategy(this::getModelForSummary).retryConfig(options.getModelRetries()))      // 提取干货（去水）
-                    .addStrategy(new HierarchicalSummarizationStrategy(this::getModelForSummary).retryConfig(options.getModelRetries())); // 滚动更新摘要
+            CompressionStrategy strategy = new CompositeCompressionStrategy()
+                    .addStrategy(new KeyInfoExtractionStrategy())      // 提取干货（去水）
+                    .addStrategy(new HierarchicalCompressionStrategy()); // 滚动更新摘要
 
-            options.setSummarizationInterceptor(new SummarizationInterceptor(
+            options.setSummarizationInterceptor(new ContextCompressionInterceptor(
                     options.getSummaryWindowSize(),
                     options.getSummaryWindowToken(),
+                    options.getModelRetries(),
+                    this::getModelForSummary,
                     strategy));
         }
 
@@ -599,7 +601,7 @@ public class HarnessEngine {
         /**
          * 摘要拦截器
          */
-        public Builder summarizationInterceptor(SummarizationInterceptor summarizationInterceptor) {
+        public Builder summarizationInterceptor(ContextCompressionInterceptor summarizationInterceptor) {
             options.setSummarizationInterceptor(summarizationInterceptor);
             return this;
         }

@@ -13,13 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.react.intercept.summarize;
+package org.noear.solon.ai.agent.react.intercept.compress;
 
 import org.noear.solon.ai.agent.AgentTrace;
-import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
-import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
+import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
+import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -42,11 +41,8 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.9.4
  */
-public class KeyInfoExtractionStrategy implements SummarizationStrategy {
+public class KeyInfoExtractionStrategy implements CompressionStrategy {
     private static final Logger log = LoggerFactory.getLogger(KeyInfoExtractionStrategy.class);
-
-    private final Supplier<ChatModel> chatModelSupplier;
-    private int maxRetries = 3;
 
     // 1. 系统指令：定义提取协议和专家身份
     private String systemInstruction = "## 角色定义\n" +
@@ -60,38 +56,13 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
             "- 严禁包含任何推测、解释或修饰性语句。\n" +
             "- 如果没有发现关键信息，请直接回复：(无关键增量)。";
 
-    /**
-     * @param chatModel 用于执行提取任务的模型
-     */
-    public KeyInfoExtractionStrategy(ChatModel chatModel) {
-        Objects.requireNonNull(chatModel, "chatModel");
-
-        this.chatModelSupplier = () -> chatModel;
-    }
-
-    public KeyInfoExtractionStrategy(Supplier<ChatModel> chatModelSupplier) {
-        Objects.requireNonNull(chatModelSupplier, "chatModelSupplier");
-
-        this.chatModelSupplier = chatModelSupplier;
-    }
-
-    public KeyInfoExtractionStrategy retryConfig(int maxRetries, long retryDelayMs) {
-        this.maxRetries = Math.max(1, maxRetries);
-        return this;
-    }
-
-    public KeyInfoExtractionStrategy retryConfig(int maxRetries) {
-        this.maxRetries = Math.max(1, maxRetries);
-        return this;
-    }
-
     public KeyInfoExtractionStrategy systemInstruction(String systemInstruction) {
         this.systemInstruction = systemInstruction;
         return this;
     }
 
     @Override
-    public ChatMessage summarize(ReActTrace trace, List<ChatMessage> messagesToSummarize) {
+    public ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToSummarize) {
         if (messagesToSummarize == null || messagesToSummarize.isEmpty()) {
             return null;
         }
@@ -124,7 +95,6 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
                     "### 审计要求\n" +
                     "请根据系统指令，提取上述片段中的关键信息。";
 
-            final ChatModel chatModel = chatModelSupplier.get();
             String keyInfo = RetryUtil.callWithRetry(maxRetries, () -> {
                 ChatResponse resp = chatModel.prompt(userData)
                         .options(o -> {
@@ -147,7 +117,7 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
 
             // 3. 将提取到的“干货”作为系统信息注入
             return ChatMessage.ofUser("--- [已确认的关键信息] ---\n" + keyInfo)
-                    .addMetadata(SummarizationInterceptor.META_SUMMARY, 1);
+                    .addMetadata(ContextCompressionInterceptor.META_SUMMARY, 1);
 
         } catch (Throwable e) {
             log.error("Failed to extract key info", e);

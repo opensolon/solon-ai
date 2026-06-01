@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
+import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamTrace;
@@ -34,7 +34,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
  * 验证：
  * 1. <b>跨轮次记忆</b>：Agent 能通过 {@link AgentSession} 继承上一轮对话产生的关键变量和推理结论。
  * 2. <b>动态上下文注入</b>：后续 Agent 能感知并利用前序 Agent 在历史中留下的 Trace。
- * 3. <b>自动摘要缩容</b>：验证 {@link SummarizationInterceptor} 在不丢失关键信息的前提下精简历史。
+ * 3. <b>自动摘要缩容</b>：验证 {@link ContextCompressionInterceptor} 在不丢失关键信息的前提下精简历史。
  * </p>
  */
 public class TeamAgentMultiTurnTest {
@@ -48,7 +48,7 @@ public class TeamAgentMultiTurnTest {
                 .name("searcher")
                 .role("专业的目的地常识专家")
                 .instruction("只需提供目的地的核心特色、人文地理等基础信息。不要发散，直接给出结构化文本。")
-                .defaultInterceptorAdd(new SummarizationInterceptor())
+                .defaultInterceptorAdd(new ContextCompressionInterceptor())
                 .build();
 
         Agent planner = ReActAgent.of(chatModel)
@@ -57,7 +57,7 @@ public class TeamAgentMultiTurnTest {
                 .instruction("### 核心准则\n" +
                         "1. 必须优先检索历史记录中的目的地信息。\n" +
                         "2. 严格遵循用户在当前轮次提出的预算、偏好等新约束。")
-                .defaultInterceptorAdd(new SummarizationInterceptor())
+                .defaultInterceptorAdd(new ContextCompressionInterceptor())
                 .build();
 
         // 2. 构建协作团队

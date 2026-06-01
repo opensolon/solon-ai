@@ -17,7 +17,7 @@ package org.noear.solon.ai.harness;
 
 import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
-import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
+import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.mount.MountDo;
 import org.noear.solon.ai.harness.permission.ToolPermission;
@@ -92,7 +92,7 @@ class HarnessOptions implements Serializable {
 
     // ========== 服务注入 ==========
     private AgentSessionProvider sessionProvider;
-    private SummarizationInterceptor summarizationInterceptor;
+    private ContextCompressionInterceptor summarizationInterceptor;
     private HITLInterceptor hitlInterceptor;
     private MemorySolution.Factory memorySolution;
 
@@ -416,11 +416,11 @@ class HarnessOptions implements Serializable {
         this.sessionProvider = sessionProvider;
     }
 
-    SummarizationInterceptor getSummarizationInterceptor() {
+    ContextCompressionInterceptor getSummarizationInterceptor() {
         return summarizationInterceptor;
     }
 
-    void setSummarizationInterceptor(SummarizationInterceptor summarizationInterceptor) {
+    void setSummarizationInterceptor(ContextCompressionInterceptor summarizationInterceptor) {
         this.summarizationInterceptor = summarizationInterceptor;
     }
 

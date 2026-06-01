@@ -13,12 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.react.intercept.summarize;
+package org.noear.solon.ai.agent.react.intercept.compress;
 
-import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
-import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
+import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
+import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
+import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
@@ -45,18 +45,18 @@ import java.util.List;
  * @author noear
  * @since 3.9.4
  */
-public class CompositeSummarizationStrategy implements SummarizationStrategy {
-    private final static Logger LOG = LoggerFactory.getLogger(CompositeSummarizationStrategy.class);
-    private final List<SummarizationStrategy> strategies = new ArrayList<>();
+public class CompositeCompressionStrategy implements CompressionStrategy {
+    private final static Logger LOG = LoggerFactory.getLogger(CompositeCompressionStrategy.class);
+    private final List<CompressionStrategy> strategies = new ArrayList<>();
 
     // 允许通过构造函数快速组合
-    public CompositeSummarizationStrategy(SummarizationStrategy... strategies) {
-        for (SummarizationStrategy s : strategies) {
+    public CompositeCompressionStrategy(CompressionStrategy... strategies) {
+        for (CompressionStrategy s : strategies) {
             addStrategy(s);
         }
     }
 
-    public CompositeSummarizationStrategy addStrategy(SummarizationStrategy strategy) {
+    public CompositeCompressionStrategy addStrategy(CompressionStrategy strategy) {
         if (strategy != null && strategy != this) { // 防环
             strategies.add(strategy);
         }
@@ -64,14 +64,14 @@ public class CompositeSummarizationStrategy implements SummarizationStrategy {
     }
 
     @Override
-    public ChatMessage summarize(ReActTrace trace, List<ChatMessage> messagesToSummarize) {
+    public ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToSummarize) {
         if (messagesToSummarize == null || messagesToSummarize.isEmpty()) return null;
 
         // 使用初始容量，减少扩容开销
         StringBuilder buf = new StringBuilder(1024);
-        for (SummarizationStrategy strategy : strategies) {
+        for (CompressionStrategy strategy : strategies) {
             try {
-                ChatMessage result = strategy.summarize(trace, messagesToSummarize);
+                ChatMessage result = strategy.compress(chatModel, maxRetries, trace, messagesToSummarize);
                 if (result != null && Assert.isNotEmpty(result.getContent())) {
                     if (buf.length() > 0) {
                         buf.append("\n\n---\n\n"); // 使用明显的 Markdown 分割线
@@ -89,6 +89,6 @@ public class CompositeSummarizationStrategy implements SummarizationStrategy {
         }
 
         return ChatMessage.ofUser(buf.toString())
-                .addMetadata(SummarizationInterceptor.META_SUMMARY, 1);
+                .addMetadata(ContextCompressionInterceptor.META_SUMMARY, 1);
     }
 }
