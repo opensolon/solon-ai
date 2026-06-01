@@ -57,7 +57,7 @@ public class DemoApp {
                 ))
                 .build();
 
-        //engine.getMcpGatewaySkill().addTool(new AbsToolProvider(){});
+        //engine.getMcpGatewayTalent().addMcpServer(...);
 
         //--- 用主代理执行
         useCsae1(engine, "hello");

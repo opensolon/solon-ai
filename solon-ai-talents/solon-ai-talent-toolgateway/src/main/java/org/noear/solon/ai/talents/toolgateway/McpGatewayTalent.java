@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 /**
  * MCP 网关工具包：按配置名管理 MCP 服务，支持动态添加与移除。
  *
- * <p>通过工具数量自动切换四阶段模式，平衡模型推理精度与 Token 消耗（与 ToolGatewaySkill 相同机制）：
+ * <p>通过工具数量自动切换四阶段模式，平衡模型推理精度与 Token 消耗（与 ToolGatewayTalent 相同机制）：
  * 1. FULL (全量): 数量 &lt;= dynamicThreshold。平铺所有工具的完整 Schema。
  * 2. SUMMARY (摘要): 数量 &lt;= listThreshold。在指令内展示"工具名 + 描述"清单。
  * 3. LIST (名字): 数量 &lt;= searchThreshold。仅展示"工具名"清单。
@@ -113,7 +113,7 @@ public class McpGatewayTalent extends AbsTalent {
         }
         serverToolIndex.put(name, toolNames);
 
-        LOG.info("McpGatewaySkill: Added '{}' ({} tools)", name, toolNames.size());
+        LOG.info("McpGatewayTalent: Added '{}' ({} tools)", name, toolNames.size());
         return this;
     }
 
@@ -166,12 +166,12 @@ public class McpGatewayTalent extends AbsTalent {
             try {
                 provider.close();
             } catch (Exception e) {
-                LOG.warn("McpGatewaySkill: Provider '{}' close failed", name, e);
+                LOG.warn("McpGatewayTalent: Provider '{}' close failed", name, e);
             }
         }
 
         if (toolNames != null && !toolNames.isEmpty()) {
-            LOG.info("McpGatewaySkill: Removed '{}' ({} tools)", name, toolNames.size());
+            LOG.info("McpGatewayTalent: Removed '{}' ({} tools)", name, toolNames.size());
         }
         return this;
     }
@@ -199,7 +199,7 @@ public class McpGatewayTalent extends AbsTalent {
         return providerMap.containsKey(name);
     }
 
-    // ========== Skill 接口实现（四阶段路由） ==========
+    // ========== Talent 接口实现（四阶段路由） ==========
 
     @Override
     public String description() {
@@ -284,7 +284,7 @@ public class McpGatewayTalent extends AbsTalent {
         return this.getToolAry();
     }
 
-    // ========== 中转工具方法（由 AbsSkill 的 MethodToolProvider 自动扫描） ==========
+    // ========== 中转工具方法（由 AbsTalent 的 MethodToolProvider 自动扫描） ==========
 
     @ToolMapping(name = "search_tools", description = "搜索MCP工具。支持多个关键词用空隔隔开（如：'杭州 旅游'）")
     public Object searchTools(@Param("keyword") String keyword) {
@@ -346,10 +346,10 @@ public class McpGatewayTalent extends AbsTalent {
     // ========== 内部中转代理工具 ==========
 
     public static class McpToolCallTool extends AbsTool {
-        private final McpGatewayTalent gatewaySkill;
+        private final McpGatewayTalent gatewayTalent;
 
-        public McpToolCallTool(McpGatewayTalent gatewaySkill) {
-            this.gatewaySkill = gatewaySkill;
+        public McpToolCallTool(McpGatewayTalent gatewayTalent) {
+            this.gatewayTalent = gatewayTalent;
 
             addParam("tool_name", String.class, "");
             addParam("tool_args", TypeRef.mapOf(String.class, Object.class).getType(), "");
@@ -383,14 +383,14 @@ public class McpGatewayTalent extends AbsTalent {
                 return ToolResult.success("错误：tool_name 不能为空");
             }
 
-            FunctionTool tool = gatewaySkill.allTools.get(tool_name.trim().toLowerCase());
+            FunctionTool tool = gatewayTalent.allTools.get(tool_name.trim().toLowerCase());
 
             if (tool == null) {
                 return ToolResult.success("错误：未找到MCP工具 '" + tool_name + "'");
             }
 
             try {
-                return RetryUtil.callWithRetry(gatewaySkill.maxRetries, () -> tool.call(tool_args));
+                return RetryUtil.callWithRetry(gatewayTalent.maxRetries, () -> tool.call(tool_args));
             } catch (Throwable e) {
                 LOG.error("McpTool gateway execution failed: {}", tool_name, e);
                 return ToolResult.success("执行异常: " +

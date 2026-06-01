@@ -216,7 +216,7 @@ public class OpenApiTalent extends AbsTalent {
         }
 
         if (!removedNames.isEmpty()) {
-            LOG.info("OpenApiSkill: Removed {} tools from {}", removedNames.size(), docUrl);
+            LOG.info("OpenApiTalent: Removed {} tools from {}", removedNames.size(), docUrl);
         }
 
         return this;
@@ -446,7 +446,7 @@ public class OpenApiTalent extends AbsTalent {
 
         // 6. 执行并处理响应
         try {
-            LOG.debug("OpenApiSkill calling: {} {} (api: {})", tool.getMethod(), baseUrl + finalPath, apiName);
+            LOG.debug("OpenApiTalent calling: {} {} (api: {})", tool.getMethod(), baseUrl + finalPath, apiName);
 
             String result = RetryUtil.callWithRetry(maxRetries, () -> http.exec(tool.getMethod()).bodyAsString());
 
@@ -489,7 +489,7 @@ public class OpenApiTalent extends AbsTalent {
         }
 
         if (Utils.isEmpty(json)) {
-            LOG.warn("OpenApiSkill: Source empty for {}", source.getDocUrl());
+            LOG.warn("OpenApiTalent: Source empty for {}", source.getDocUrl());
             return;
         }
 
@@ -508,7 +508,7 @@ public class OpenApiTalent extends AbsTalent {
             }
         }
 
-        LOG.info("OpenApiSkill: Loaded {} tools from {}", tools.size(), source.getDocUrl());
+        LOG.info("OpenApiTalent: Loaded {} tools from {}", tools.size(), source.getDocUrl());
     }
 
     private String formatApiDocs(Collection<ApiTool> tools) {

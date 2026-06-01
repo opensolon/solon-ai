@@ -164,11 +164,11 @@ public class HarnessEngine {
         return webfetchTool;
     }
 
-    public McpGatewayTalent getMcpGatewaySkill() {
+    public McpGatewayTalent getMcpGatewayTalent() {
         return mcpGatewayTalent;
     }
 
-    public OpenApiTalent getOpenApiSkill() {
+    public OpenApiTalent getOpenApiTalent() {
         return openApiTalent;
     }
 

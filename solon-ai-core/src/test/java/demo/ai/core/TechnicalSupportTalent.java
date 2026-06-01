@@ -9,8 +9,8 @@ import org.noear.solon.annotation.Param;
 /**
  * 技术支持才能：展示多级决策与 RAG 结合
  */
-public class TechnicalSupportSkill extends AbsTalent implements Talent {
-    public TechnicalSupportSkill() {
+public class TechnicalSupportTalent extends AbsTalent implements Talent {
+    public TechnicalSupportTalent() {
         super();
         this.metadata().category("support").tags("rag", "helpdesk").sensitive(false);
     }
@@ -52,7 +52,7 @@ public class TechnicalSupportSkill extends AbsTalent implements Talent {
     @ToolMapping(description = "检索实时在线开发文档 (最新 API 变更和社区讨论)")
     public String searchOnlineDocs(@Param("url_path") String path) {
         // 模拟爬虫或文档 API
-        return "在线文档显示：3.8.4 版本后，Skill 接口新增了 injectInstruction 方法。";
+        return "在线文档显示：3.8.4 版本后，Talent 接口新增了 injectInstruction 方法。";
     }
 
     @ToolMapping(

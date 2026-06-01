@@ -63,11 +63,6 @@
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-talent-restapi</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
             <artifactId>solon-ai-talent-openapi</artifactId>
         </dependency>
 

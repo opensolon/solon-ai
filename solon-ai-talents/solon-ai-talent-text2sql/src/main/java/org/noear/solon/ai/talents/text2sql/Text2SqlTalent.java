@@ -145,7 +145,7 @@ public class Text2SqlTalent extends AbsTalent {
                 }
             }
         } catch (Exception e) {
-            LOG.error("Text2SqlSkill meta load error", e);
+            LOG.error("Text2SqlTalent meta load error", e);
 
             if (dialect == null) {
                 dialect = new GenericDialect();

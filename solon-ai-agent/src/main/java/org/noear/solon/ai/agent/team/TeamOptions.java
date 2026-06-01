@@ -187,7 +187,7 @@ public class TeamOptions implements NonSerializable {
         return recordWindowSize;
     }
 
-    public String getSkillInstruction() {
+    public String getTalentInstruction() {
         return talentInstruction;
     }
 

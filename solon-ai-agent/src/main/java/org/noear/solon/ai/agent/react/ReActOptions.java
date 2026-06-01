@@ -249,7 +249,7 @@ public class ReActOptions implements NonSerializable {
         return modelOptions;
     }
 
-    public String getSkillInstruction() {
+    public String getTalentInstruction() {
         return talentInstruction;
     }
 

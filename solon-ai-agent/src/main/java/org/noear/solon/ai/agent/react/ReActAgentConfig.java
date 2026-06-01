@@ -20,11 +20,9 @@ import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.core.util.SnelUtil;
 import org.noear.solon.flow.FlowContext;
-import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
-import java.util.function.Consumer;
 
 /**
  * ReAct 智能体配置
@@ -126,10 +124,10 @@ public class ReActAgentConfig {
             prompt = SnelUtil.render(prompt, context.vars());
         }
 
-        // Skill 级指令（增加一个子标题，强化感知）
-        if (trace.getOptions().getSkillInstruction() != null) {
+        // Talent 级指令（增加一个子标题，强化感知）
+        if (trace.getOptions().getTalentInstruction() != null) {
             //sb.append("\n## 补充业务准则\n");
-            prompt = prompt + "\n" + trace.getOptions().getSkillInstruction() + "\n";
+            prompt = prompt + "\n" + trace.getOptions().getTalentInstruction() + "\n";
         }
 
         return prompt;

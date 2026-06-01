@@ -32,9 +32,9 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
- * MemSkill：基于自演进心智模型的长期记忆工具包
+ * MemoryTalent：基于自演进心智模型的长期记忆才能
  *
- * 遵从 MemSkill 论文核心：Extract (提取), Consolidate (整合), Prune (修剪), Search (检索)
+ * 遵从 MemoryTalent 论文核心：Extract (提取), Consolidate (整合), Prune (修剪), Search (检索)
  *
  * @author noear
  * @since 3.9.4
@@ -169,7 +169,7 @@ public class MemoryTalent extends AbsTalent {
 
             return feedback.toString();
         } catch (Exception e) {
-            LOG.error("MemSkill extract error", e);
+            LOG.error("MemoryTalent extract error", e);
             return "存储异常。";
         }
     }
@@ -229,7 +229,7 @@ public class MemoryTalent extends AbsTalent {
 
     /**
      * CONSOLIDATE: 知识整合
-     * 对齐 MemSkill 的“压缩”思想，将事实进化为经验
+     * 对齐 MemoryTalent 的“压缩”思想，将事实进化为经验
      */
     @ToolMapping(name = "memory_consolidate",
             description = "认知升维：将多个低层事实碎片整合为高层偏好模型，并清理冗余碎片。")
@@ -246,7 +246,7 @@ public class MemoryTalent extends AbsTalent {
         try {
             extract(newKey, fact, 10, __cwd, __sessionId); // 核心洞察赋予最高重要度
         } catch (Exception e) {
-            LOG.error("MemSkill consolidate extract error, newKey={}", newKey, e);
+            LOG.error("MemoryTalent consolidate extract error, newKey={}", newKey, e);
             return "【合并异常】新洞察写入失败，旧碎片保留：" + e.getMessage();
         }
 
@@ -255,9 +255,9 @@ public class MemoryTalent extends AbsTalent {
         for (String k : oldKeys) {
             try {
                 prune(k, __cwd, __sessionId); // 彻底清理旧碎片，防止语义干扰
-                LOG.info("MemSkill consolidate prune ok, userId={}, key={}", userId, k);
+                LOG.info("MemoryTalent consolidate prune ok, userId={}, key={}", userId, k);
             } catch (Exception e) {
-                LOG.error("MemSkill consolidate prune error, userId={}, key={}", userId, k, e);
+                LOG.error("MemoryTalent consolidate prune error, userId={}, key={}", userId, k, e);
                 failedKeys.add(k);
             }
         }
@@ -283,7 +283,7 @@ public class MemoryTalent extends AbsTalent {
         try {
             storeProvider.remove(userId, key);
         } catch (Exception e) {
-            LOG.error("MemSkill prune remove error, userId={}, key={}", userId, key, e);
+            LOG.error("MemoryTalent prune remove error, userId={}, key={}", userId, key, e);
             return "清理失败 Key: " + key + "，原因：" + e.getMessage();
         }
 
@@ -291,7 +291,7 @@ public class MemoryTalent extends AbsTalent {
             try {
                 searchProvider.removeIndex(userId, key);
             } catch (Exception e) {
-                LOG.error("MemSkill prune removeIndex error, userId={}, key={}", userId, key, e);
+                LOG.error("MemoryTalent prune removeIndex error, userId={}, key={}", userId, key, e);
             }
         }
 

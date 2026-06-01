@@ -49,7 +49,6 @@
         <module>../../solon-ai-talents/solon-ai-talent-memory</module>
         <module>../../solon-ai-talents/solon-ai-talent-pdf</module>
         <module>../../solon-ai-talents/solon-ai-talent-openapi</module>
-        <module>../../solon-ai-talents/solon-ai-talent-restapi</module>
         <module>../../solon-ai-talents/solon-ai-talent-social</module>
         <module>../../solon-ai-talents/solon-ai-talent-sys</module>
         <module>../../solon-ai-talents/solon-ai-talent-text2sql</module>

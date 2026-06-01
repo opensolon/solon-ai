@@ -18,27 +18,27 @@ import org.noear.solon.annotation.Param;
 import java.util.Collection;
 
 /**
- * ReAct 智能体 Skill 绑定测试
- * <p>验证点：Skill 注入的指令能否约束工具的使用，以及工具的 Meta 信息是否生效。</p>
+ * ReAct 智能体 Talent 绑定测试
+ * <p>验证点：Talent 注入的指令能否约束工具的使用，以及工具的 Meta 信息是否生效。</p>
  */
 public class ReActTalentBindingTest {
 
     @Test
-    public void testSkillAndToolConstraint() throws Throwable {
+    public void testTalentAndToolConstraint() throws Throwable {
         // 1. 环境准备
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 2. 构建 Agent 并注入 Skill
-        // 场景：OrderSkill 提供了查询和删除工具，但指令要求删除前必须说明原因
+        // 2. 构建 Agent 并注入 Talent
+        // 场景：OrderTalent 提供了查询和删除工具，但指令要求删除前必须说明原因
         ReActAgent agent = ReActAgent.of(chatModel)
-                .defaultTalentAdd(new OrderSkill())
+                .defaultTalentAdd(new OrderTalent())
                 .modelOptions(o -> o.temperature(0.0F))
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("order_job_001");
 
         // 3. 测试场景：尝试删除订单
-        // 我们在 Prompt 中不提供原因，看 Agent 是否会因为 Skill 的指令而拒绝或询问
+        // 我们在 Prompt 中不提供原因，看 Agent 是否会因为 Talent 的指令而拒绝或询问
         String question = "帮我删除订单编号为 1001 的订单。";
 
         // 执行调用
@@ -47,20 +47,20 @@ public class ReActTalentBindingTest {
         // 4. 断言验证
         Assertions.assertNotNull(result);
 
-        // 验证 Agent 是否识别到了 Skill 注入的“安全性规则”
-        // 预期：由于删除是 destructive 操作且 Skill 要求必须有原因，Agent 应该拒绝直接执行或要求原因
+        // 验证 Agent 是否识别到了 Talent 注入的“安全性规则”
+        // 预期：由于删除是 destructive 操作且 Talent 要求必须有原因，Agent 应该拒绝直接执行或要求原因
         boolean checkSecurity = result.contains("原因") || result.contains("理由") || result.contains("不能直接删除");
 
-        Assertions.assertTrue(checkSecurity, "Agent 未能识别 Skill 注入的删除约束指令。回复内容: " + result);
+        Assertions.assertTrue(checkSecurity, "Agent 未能识别 Talent 注入的删除约束指令。回复内容: " + result);
 
-        System.out.println("--- Skill 约束测试通过 ---");
+        System.out.println("--- Talent 约束测试通过 ---");
         System.out.println("Agent 回复: " + result);
     }
 
     /**
      * 自定义业务工具包：订单管理
      */
-    public static class OrderSkill implements Talent {
+    public static class OrderTalent implements Talent {
         private ToolProvider toolProvider = new MethodToolProvider(new OrderTools()).then(slf->{
             // 手动染色：确保 [Destructive] 标签进入 descriptionAndMeta()
             for (FunctionTool tool : slf.getTools()) {
@@ -72,7 +72,7 @@ public class ReActTalentBindingTest {
         });
         @Override
         public String name() {
-            return "OrderManagementSkill";
+            return "OrderManagementTalent";
         }
 
         @Override
@@ -103,6 +103,6 @@ public class ReActTalentBindingTest {
         }
 
         // 特殊处理：手动为工具注入 Meta
-        // 在 Solon AI 3.8.x 中，可以通过在 Provider 加载后处理，或在 Skill.getTools 中进行染色
+        // 在 Solon AI 3.8.x 中，可以通过在 Provider 加载后处理，或在 Talent.getTools 中进行染色
     }
 }

@@ -219,14 +219,14 @@ public class AgentFactory {
                 break;
             }
             case "mcp": {
-                if (engine.getMcpGatewaySkill() != null) {
-                    builder.defaultTalentAdd(engine.getMcpGatewaySkill());
+                if (engine.getMcpGatewayTalent() != null) {
+                    builder.defaultTalentAdd(engine.getMcpGatewayTalent());
                 }
                 break;
             }
             case "openapi": {
-                if (engine.getOpenApiSkill() != null) {
-                    builder.defaultTalentAdd(engine.getOpenApiSkill());
+                if (engine.getOpenApiTalent() != null) {
+                    builder.defaultTalentAdd(engine.getOpenApiTalent());
                 }
                 break;
             }

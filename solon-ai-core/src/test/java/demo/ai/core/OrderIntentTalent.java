@@ -12,7 +12,7 @@ import java.util.List;
 /**
  * 意图感知的订单才能
  */
-public class OrderIntentSkill extends AbsTalent implements Talent {
+public class OrderIntentTalent extends AbsTalent implements Talent {
     // 定义该才能关心的意图关键词
     private static final List<String> INTENT_KEYWORDS = Arrays.asList("订单", "买过", "物流", "发货", "退款");
 

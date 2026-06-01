@@ -165,9 +165,9 @@ public class TeamAgentConfig implements NonSerializable {
         }
 
         // Skill 级指令（增加一个子标题，强化感知）
-        if (trace.getOptions().getSkillInstruction() != null) {
+        if (trace.getOptions().getTalentInstruction() != null) {
             //sb.append("\n## 补充业务准则\n");
-            prompt = prompt + "\n" + trace.getOptions().getSkillInstruction() + "\n";
+            prompt = prompt + "\n" + trace.getOptions().getTalentInstruction() + "\n";
         }
 
         return prompt;
