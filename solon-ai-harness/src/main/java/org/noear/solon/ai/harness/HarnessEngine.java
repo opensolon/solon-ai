@@ -32,6 +32,7 @@ import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.code.CodeSkill;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
+import org.noear.solon.ai.skills.cli.PoolType;
 import org.noear.solon.ai.skills.lsp.LspManager;
 import org.noear.solon.ai.skills.lsp.LspServerParameters;
 import org.noear.solon.ai.skills.lsp.LspSkill;
@@ -303,12 +304,12 @@ public class HarnessEngine {
         cliSkills.getTerminalSkill().setSandboxMode(props.isSandboxMode());
         if (Assert.isNotEmpty(props.getSkillPools())) {
             props.getSkillPools().forEach((alias, path) -> {
-                cliSkills.getPoolManager().register(alias, path);
+                cliSkills.getPoolManager().register(alias, PoolType.SKILLS, path);
             });
         }
         if (Assert.isNotEmpty(props.getMountPools())) {
             props.getMountPools().forEach((alias, path) -> {
-                cliSkills.getPoolManager().register(alias, path);
+                cliSkills.getPoolManager().register(alias, PoolType.SKILLS, path);
             });
         }
 
