@@ -13,14 +13,14 @@
 // * See the License for the specific language governing permissions and
 // * limitations under the License.
 // */
-//package org.noear.solon.ai.skills.memory.search;
+//package org.noear.solon.ai.talents.memory.search;
 //
 //import com.yomahub.roguemap.memory.MemoryResult;
 //import com.yomahub.roguemap.memory.RogueMemory;
 //import com.yomahub.roguemap.memory.SearchMode;
 //import com.yomahub.roguemap.memory.SearchOptions;
-//import org.noear.solon.ai.skills.memory.MemorySearchProvider;
-//import org.noear.solon.ai.skills.memory.MemorySearchResult;
+//import org.noear.solon.ai.talents.memory.MemorySearchProvider;
+//import org.noear.solon.ai.talents.memory.MemorySearchResult;
 //import org.slf4j.Logger;
 //import org.slf4j.LoggerFactory;
 //

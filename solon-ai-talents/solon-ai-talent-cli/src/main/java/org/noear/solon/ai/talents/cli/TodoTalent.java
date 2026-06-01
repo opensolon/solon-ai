@@ -27,7 +27,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 /**
- * 任务进度追踪工具包
+ * 任务进度追踪才能
  *
  * @author noear
  * @since 3.9.5

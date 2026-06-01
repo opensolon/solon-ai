@@ -1,14 +1,13 @@
 package features.ai.mcp.client;
 
 import demo.ai.mcp.server.McpServerApp;
-import demo.ai.mcp.server.skills.OrderManagerSkillClient;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
-import org.noear.solon.ai.mcp.client.McpSkillClient;
+import org.noear.solon.ai.mcp.client.McpTalentClient;
 import org.noear.solon.test.SolonTest;
 
 import java.util.Collection;
@@ -32,7 +31,7 @@ public class McpSkillsTest {
                 .attrPut("tenant_id", "1")
                 .attrPut("user_role", "user");
 
-        McpSkillClient skillClient = new McpSkillClient(mcpClient);
+        McpTalentClient skillClient = new McpTalentClient(mcpClient);
 
         String description = skillClient.description();
         boolean isSupported = skillClient.isSupported(prompt);

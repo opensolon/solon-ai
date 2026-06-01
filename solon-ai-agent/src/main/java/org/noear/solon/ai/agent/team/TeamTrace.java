@@ -172,15 +172,15 @@ public class TeamTrace implements AgentTrace {
         session.pending(false, null);
     }
 
-    protected void activeSkills() {
+    protected void activeTalents() {
         if (originalPrompt != null && Assert.isNotEmpty(getOptions().getToolContext())) {
             originalPrompt.attrs().putAll(getOptions().getToolContext());
         }
 
         //设置指令
-        StringBuilder skillsInstruction = TalentUtil.activeSkills(options.getModelOptions(), originalPrompt, new StringBuilder());
-        if (skillsInstruction.length() > 0) {
-            options.setSkillInstruction(skillsInstruction.toString());
+        StringBuilder talentsInstruction = TalentUtil.activeTalents(options.getModelOptions(), originalPrompt, new StringBuilder());
+        if (talentsInstruction.length() > 0) {
+            options.setTalentInstruction(talentsInstruction.toString());
         }
     }
 

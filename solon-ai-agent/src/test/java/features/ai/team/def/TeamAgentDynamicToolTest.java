@@ -14,7 +14,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 
 /**
  * 【业务场景测试】：基于权限的动态工具加载
- * <p>场景描述：根据用户身份（如 VIP 或 普通用户）动态注入不同的工具包。
+ * <p>场景描述：根据用户身份（如 VIP 或 普通用户）动态注入不同的工具。
  * 验证智能体在拥有不同“超能力”的情况下，对敏感信息的处理能力。</p>
  */
 public class TeamAgentDynamicToolTest {
@@ -78,7 +78,7 @@ public class TeamAgentDynamicToolTest {
         }
     }
 
-    // --- 业务工具包定义 ---
+    // --- 业务工具定义 ---
 
     /**
      * 基础业务工具：提供公共数据

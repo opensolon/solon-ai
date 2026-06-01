@@ -221,8 +221,8 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             session.updateSnapshot();
         }
 
-        //如果提示词没问题，开始部署工具包
-        trace.activeSkills();
+        //如果提示词没问题，开始部署才能
+        trace.activeTalents();
 
         // 触发团队启动拦截
         for (RankEntity<TeamInterceptor> item : options.getInterceptors()) {
@@ -463,13 +463,13 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return this;
         }
 
-        public Builder defaultTalentAdd(Talent... skills) {
-            config.getDefaultOptions().getModelOptions().talentAdd(skills);
+        public Builder defaultTalentAdd(Talent... talents) {
+            config.getDefaultOptions().getModelOptions().talentAdd(talents);
             return this;
         }
 
-        public Builder defaultTalentAdd(Talent skill, int index) {
-            config.getDefaultOptions().getModelOptions().talentAdd(index, skill);
+        public Builder defaultTalentAdd(Talent talent, int index) {
+            config.getDefaultOptions().getModelOptions().talentAdd(index, talent);
             return this;
         }
 

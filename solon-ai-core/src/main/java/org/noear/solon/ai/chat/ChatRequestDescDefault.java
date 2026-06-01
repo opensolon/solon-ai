@@ -159,7 +159,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 item.target.onPrepare(session, options, originalPrompt, instructionBuilder);
             }
 
-            StringBuilder skillsInstruction = TalentUtil.activeSkills(options, originalPrompt, new StringBuilder());
+            StringBuilder skillsInstruction = TalentUtil.activeTalents(options, originalPrompt, new StringBuilder());
             if (skillsInstruction.length() > 0) {
                 instructionBuilder.append("\n");
                 instructionBuilder.append(skillsInstruction);

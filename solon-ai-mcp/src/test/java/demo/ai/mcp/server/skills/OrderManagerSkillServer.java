@@ -4,7 +4,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.mcp.McpChannel;
-import org.noear.solon.ai.mcp.server.McpSkillServer;
+import org.noear.solon.ai.mcp.server.McpTalentServer;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 
 import java.util.ArrayList;
@@ -12,7 +12,7 @@ import java.util.List;
 
 
 @McpServerEndpoint(channel = McpChannel.STREAMABLE_STATELESS, mcpEndpoint = "/skill/order")
-public class OrderManagerSkillServer extends McpSkillServer {
+public class OrderManagerSkillServer extends McpTalentServer {
     @Override
     public String description() {
         return "订单处理专家";

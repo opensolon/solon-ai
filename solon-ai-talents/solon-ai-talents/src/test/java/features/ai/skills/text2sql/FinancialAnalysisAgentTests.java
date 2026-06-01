@@ -8,7 +8,7 @@ import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
-import org.noear.solon.ai.skills.text2sql.Text2SqlSkill;
+import org.noear.solon.ai.talents.text2sql.Text2SqlTalent;
 import org.noear.solon.annotation.Inject;
 import org.noear.solon.data.sql.SqlUtils;
 import org.noear.solon.test.SolonTest;
@@ -35,14 +35,14 @@ public class FinancialAnalysisAgentTests {
 
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // [检测点 2]: Skill 实例化与元数据抓取
-        Text2SqlSkill sqlSkill = new Text2SqlSkill(sqlUtils, "users", "orders", "order_refunds")
+        // [检测点 2]: Talent 实例化与元数据抓取
+        Text2SqlTalent sqlTalent = new Text2SqlTalent(sqlUtils, "users", "orders", "order_refunds")
                 .maxRows(20);
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .role("财务分析专家")
                 .instruction("你负责分析订单与退款数据。金额单位均为元。")
-                .defaultTalentAdd(sqlSkill)
+                .defaultTalentAdd(sqlTalent)
                 .build();
 
         System.out.println("=== 开始执行 AI 决策链检测 ===");
@@ -84,11 +84,11 @@ public class FinancialAnalysisAgentTests {
     public void testRobustnessAndSafety() throws Throwable {
         sqlUtils.initDatabase("classpath:db.sql");
         ChatModel chatModel = LlmUtil.getChatModel();
-        Text2SqlSkill sqlSkill = new Text2SqlSkill(sqlUtils, "users", "orders", "order_refunds");
+        Text2SqlTalent sqlTalent = new Text2SqlTalent(sqlUtils, "users", "orders", "order_refunds");
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .role("财务分析专家")
-                .defaultTalentAdd(sqlSkill)
+                .defaultTalentAdd(sqlTalent)
                 .feedbackMode(true)
                 .build();
 
@@ -107,19 +107,19 @@ public class FinancialAnalysisAgentTests {
     }
 
     /**
-     * 检测多 Skill 场景下的指令隔离性
+     * 检测多 Talent 场景下的指令隔离性
      */
     @Test
-    public void testMultiSkillIsolation() throws Throwable {
+    public void testMultiTalentIsolation() throws Throwable {
         sqlUtils.initDatabase("classpath:db.sql");
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 模拟一个干扰工具包
-        Text2SqlSkill sqlSkill = new Text2SqlSkill(sqlUtils, "users", "orders");
+        Text2SqlTalent sqlTalent = new Text2SqlTalent(sqlUtils, "users", "orders");
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .role("全能助手")
-                .defaultTalentAdd(sqlSkill)
+                .defaultTalentAdd(sqlTalent)
                 .defaultTalentAdd(new AbsTalent() { // 模拟一个容易混淆的工具包
                     @Override public String name() { return "file_expert"; }
                     @Override public String description() { return "文件专家，严禁读写数据库"; }

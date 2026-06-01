@@ -1,7 +1,7 @@
 package demo.ai.skills.text2sql;
 
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.skills.text2sql.Text2SqlSkill;
+import org.noear.solon.ai.talents.text2sql.Text2SqlTalent;
 import org.noear.solon.annotation.Inject;
 
 import javax.sql.DataSource;
@@ -15,7 +15,7 @@ import javax.sql.DataSource;
 public class DataAnalystAgent {
     public DataAnalystAgent(@Inject("db1") DataSource dataSource) {
         ChatModel chatModel = ChatModel.of("")
-                .defaultTalentAdd(new Text2SqlSkill(dataSource, "user", "orders"))
+                .defaultTalentAdd(new Text2SqlTalent(dataSource, "user", "orders"))
                 .build();
 
 

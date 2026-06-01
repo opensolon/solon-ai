@@ -60,7 +60,7 @@ public class TeamOptions implements NonSerializable {
     /** 记录回溯窗口大小 */
     private int recordWindowSize = 8;
 
-    private String skillInstruction;
+    private String talentInstruction;
 
     /** 反馈模式（允许主动寻求外部帮助/反馈） */
     private boolean feedbackMode = false;
@@ -80,7 +80,7 @@ public class TeamOptions implements NonSerializable {
         tmp.maxRetries = this.maxRetries;
         tmp.retryDelayMs = this.retryDelayMs;
         tmp.recordWindowSize = this.recordWindowSize;
-        tmp.skillInstruction = this.skillInstruction;
+        tmp.talentInstruction = this.talentInstruction;
 
         tmp.feedbackMode = this.feedbackMode;
 
@@ -131,8 +131,8 @@ public class TeamOptions implements NonSerializable {
         this.maxTurns = Math.max(1, maxTurns);
     }
 
-    protected void setSkillInstruction(String skillInstruction) {
-        this.skillInstruction = skillInstruction;
+    protected void setTalentInstruction(String talentInstruction) {
+        this.talentInstruction = talentInstruction;
     }
 
     protected void setFeedbackMode(boolean feedbackMode) {
@@ -188,7 +188,7 @@ public class TeamOptions implements NonSerializable {
     }
 
     public String getSkillInstruction() {
-        return skillInstruction;
+        return talentInstruction;
     }
 
     public boolean isFeedbackMode() {

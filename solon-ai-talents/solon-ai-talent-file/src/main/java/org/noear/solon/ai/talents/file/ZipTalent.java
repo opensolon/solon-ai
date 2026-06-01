@@ -16,8 +16,8 @@
 package org.noear.solon.ai.talents.file;
 
 import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -33,9 +33,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 压缩归档工具包：支持文件与目录的混合打包。
+ * 压缩归档工具：支持文件与目录的混合打包。
  *
- * <p>该工具包基于 NIO FileSystem 提供 ZIP 归档能力，支持递归处理深层目录。
+ * <p>该工具基于 NIO FileSystem 提供 ZIP 归档能力，支持递归处理深层目录。
  * 核心特性包括：
  * <ul>
  * <li><b>沙箱安全</b>：严格限制在 WorkDir 根路径下操作，防止路径穿越攻击。</li>
@@ -62,16 +62,6 @@ public class ZipTalent extends AbsTalent {
         this.charset = (charset == null ? StandardCharsets.UTF_8 : charset);
     }
 
-    @Override
-    public String name() { return "zip_tool"; }
-
-    @Override
-    public String description() {
-        return "压缩专家：可以将指定的一个或多个路径（文件或目录）打包为 ZIP。";
-    }
-
-    @Override
-    public boolean isSupported(Prompt prompt) { return true; }
 
     @ToolMapping(name = "zip", description = "将指定的路径列表（支持文件和目录混合）打包到 ZIP 文件中。")
     public String zip(@Param("zipFileName") String zipFileName, @Param("paths") String[] paths) {

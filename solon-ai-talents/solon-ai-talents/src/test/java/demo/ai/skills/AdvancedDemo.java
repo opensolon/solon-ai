@@ -1,13 +1,13 @@
 package demo.ai.skills;
 
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.skills.file.ZipSkill;
-import org.noear.solon.ai.skills.pdf.PdfSkill;
-import org.noear.solon.ai.skills.mail.MailSkill;
-import org.noear.solon.ai.skills.sys.*;
-import org.noear.solon.ai.skills.crawler.WebCrawlerDriverSkill;
-import org.noear.solon.ai.skills.search.WebSearchDriverSkill;
-import org.noear.solon.ai.skills.generation.ImageGenerationSkill;
+import org.noear.solon.ai.talents.file.ZipTalent;
+import org.noear.solon.ai.talents.pdf.PdfTalent;
+import org.noear.solon.ai.talents.mail.MailTalent;
+import org.noear.solon.ai.talents.sys.*;
+import org.noear.solon.ai.talents.crawler.WebCrawlerDriverTalent;
+import org.noear.solon.ai.talents.search.WebSearchDriverTalent;
+import org.noear.solon.ai.talents.generation.ImageGenerationTalent;
 
 /**
  * 高级 AI 工具包联动示例（2026 增强版）
@@ -18,15 +18,15 @@ public class AdvancedDemo {
     public void financeReportTask() throws Exception {
         String workDir = "./finance_work";
 
-        SystemClockSkill clock = new SystemClockSkill();
-        WebSearchDriverSkill search = new WebSearchDriverSkill(WebSearchDriverSkill.SERPER, "serper_key");
-        PythonSkill python = new PythonSkill(workDir);
+        SystemClockTalent clock = new SystemClockTalent();
+        WebSearchDriverTalent search = new WebSearchDriverTalent(WebSearchDriverTalent.SERPER, "serper_key");
+        PythonTalent python = new PythonTalent(workDir);
 
-        // 1. 引入 PdfSkill，支持中文报告
-        PdfSkill pdf = new PdfSkill(workDir);
+        // 1. 引入 PdfTalent，支持中文报告
+        PdfTalent pdf = new PdfTalent(workDir);
 
-        // 2. 使用重构后的 MailSkill (SMTP 模式)
-        MailSkill mail = new MailSkill(workDir, "smtp.exmail.qq.com", 465, "ai@company.com", "pass");
+        // 2. 使用重构后的 MailTalent (SMTP 模式)
+        MailTalent mail = new MailTalent(workDir, "smtp.exmail.qq.com", 465, "ai@company.com", "pass");
 
         ChatModel agent = ChatModel.of("...")
                 .defaultTalentAdd(clock, search, python, pdf, mail)
@@ -43,10 +43,10 @@ public class AdvancedDemo {
     public void techResearchTask() throws Exception {
         String workDir = "./research_docs";
 
-        WebSearchDriverSkill search = new WebSearchDriverSkill(WebSearchDriverSkill.BING, "bing_key");
-        WebCrawlerDriverSkill crawler = new WebCrawlerDriverSkill(WebCrawlerDriverSkill.JINA, "jina_key");
-        PdfSkill pdf = new PdfSkill(workDir); // 默认字体模式
-        ZipSkill zip = new ZipSkill(workDir);
+        WebSearchDriverTalent search = new WebSearchDriverTalent(WebSearchDriverTalent.BING, "bing_key");
+        WebCrawlerDriverTalent crawler = new WebCrawlerDriverTalent(WebCrawlerDriverTalent.JINA, "jina_key");
+        PdfTalent pdf = new PdfTalent(workDir); // 默认字体模式
+        ZipTalent zip = new ZipTalent(workDir);
 
         ChatModel agent = ChatModel.of("...")
                 .defaultTalentAdd(search, crawler, pdf, zip)
@@ -62,10 +62,10 @@ public class AdvancedDemo {
     public void devOpsTask() throws Exception {
         String logDir = "./server_logs";
 
-        ShellSkill shell = new ShellSkill(logDir);
-        NodejsSkill nodejs = new NodejsSkill(logDir);
+        ShellTalent shell = new ShellTalent(logDir);
+        NodejsTalent nodejs = new NodejsTalent(logDir);
         // 使用 SMTP 邮件告警
-        MailSkill mail = new MailSkill(logDir, "smtp.office365.com", 587, "admin@corp.com", "key");
+        MailTalent mail = new MailTalent(logDir, "smtp.office365.com", 587, "admin@corp.com", "key");
 
         ChatModel agent = ChatModel.of("...")
                 .defaultTalentAdd(shell, nodejs, mail)
@@ -81,11 +81,11 @@ public class AdvancedDemo {
     public void runComplexTask() throws Exception {
         String workDir = "./ai_workspace";
 
-        SystemClockSkill clock = new SystemClockSkill();
-        WebSearchDriverSkill search = new WebSearchDriverSkill(WebSearchDriverSkill.SERPER, "key");
-        ImageGenerationSkill image = new ImageGenerationSkill(ImageGenerationSkill.DALL_E, "key", workDir);
-        PdfSkill pdf = new PdfSkill(workDir);
-        MailSkill mail = new MailSkill(workDir, "smtp.gmail.com", 587, "ai@gmail.com", "app_password");
+        SystemClockTalent clock = new SystemClockTalent();
+        WebSearchDriverTalent search = new WebSearchDriverTalent(WebSearchDriverTalent.SERPER, "key");
+        ImageGenerationTalent image = new ImageGenerationTalent(ImageGenerationTalent.DALL_E, "key", workDir);
+        PdfTalent pdf = new PdfTalent(workDir);
+        MailTalent mail = new MailTalent(workDir, "smtp.gmail.com", 587, "ai@gmail.com", "app_password");
 
         ChatModel agent = ChatModel.of("...")
                 .defaultTalentAdd(clock, search, image, pdf, mail)

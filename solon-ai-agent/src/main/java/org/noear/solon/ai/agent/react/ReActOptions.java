@@ -50,7 +50,7 @@ public class ReActOptions implements NonSerializable {
      */
     private final ModelOptionsAmend<?, ReActInterceptor> modelOptions = new ModelOptionsAmend<>();
 
-    private String skillInstruction;
+    private String talentInstruction;
 
     /**
      * 最大推理回合数（防止死循环）
@@ -203,8 +203,8 @@ public class ReActOptions implements NonSerializable {
     }
 
 
-    protected void setSkillInstruction(String skillInstruction) {
-        this.skillInstruction = skillInstruction;
+    protected void setTalentInstruction(String talentInstruction) {
+        this.talentInstruction = talentInstruction;
     }
 
     protected void setPlanningMode(boolean planningMode) {
@@ -250,7 +250,7 @@ public class ReActOptions implements NonSerializable {
     }
 
     public String getSkillInstruction() {
-        return skillInstruction;
+        return talentInstruction;
     }
 
     public Collection<RankEntity<ReActInterceptor>> getInterceptors() {

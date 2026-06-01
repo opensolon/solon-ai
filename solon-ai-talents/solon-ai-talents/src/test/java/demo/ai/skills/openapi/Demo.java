@@ -2,7 +2,7 @@ package demo.ai.skills.openapi;
 
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.skills.restapi.RestApiSkill;
+import org.noear.solon.ai.talents.restapi.RestApiTalent;
 
 public class Demo {
     public void test(ChatModel chatModel) throws Throwable {
@@ -11,11 +11,11 @@ public class Demo {
         String baseUrl = "http://api.example.com";
 
         // 2. 创建工具包
-        RestApiSkill apiSkill = new RestApiSkill().addApi(docUrl, baseUrl);
+        RestApiTalent apiTalent = new RestApiTalent().addApi(docUrl, baseUrl);
 
         // 3. 构建 Agent 或 ChatModel
         SimpleAgent agent = SimpleAgent.of(chatModel)
-                .defaultTalentAdd(apiSkill)
+                .defaultTalentAdd(apiTalent)
                 .build();
 
         // 4. 直接对话，AI 会自动选择合适的接口调用

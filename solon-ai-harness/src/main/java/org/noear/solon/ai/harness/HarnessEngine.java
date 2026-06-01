@@ -29,7 +29,7 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.agent.*;
-import org.noear.solon.ai.harness.code.CodeSkill;
+import org.noear.solon.ai.harness.code.CodeTalent;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
 import org.noear.solon.ai.harness.mount.MountDo;
@@ -68,7 +68,7 @@ public class HarnessEngine {
 
     private final HarnessOptions options;
 
-    private final CodeSkill codeSkill;
+    private final CodeTalent codeSkill;
     private final TodoTalent todoSkill;
     private final TaskSkill taskSkill;
     private final GenerateTool generateTool;
@@ -136,7 +136,7 @@ public class HarnessEngine {
         return taskSkill;
     }
 
-    public CodeSkill getCodeSkill() {
+    public CodeTalent getCodeSkill() {
         return codeSkill;
     }
 
@@ -392,7 +392,7 @@ public class HarnessEngine {
         }
 
         this.todoSkill = new TodoTalent(options.getHarnessSessions());
-        this.codeSkill = new CodeSkill(this);
+        this.codeSkill = new CodeTalent(this);
         this.taskSkill = new TaskSkill(this);
         this.generateTool = new GenerateTool(this);
 

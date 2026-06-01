@@ -10,10 +10,10 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * 意图感知的订单工具包
+ * 意图感知的订单才能
  */
 public class OrderIntentSkill extends AbsTalent implements Talent {
-    // 定义该工具包关心的意图关键词
+    // 定义该才能关心的意图关键词
     private static final List<String> INTENT_KEYWORDS = Arrays.asList("订单", "买过", "物流", "发货", "退款");
 
     @Override
@@ -28,7 +28,7 @@ public class OrderIntentSkill extends AbsTalent implements Talent {
 
     /**
      * 核心：准入检查
-     * 只有当用户提问包含相关关键词时，此工具包才会被激活
+     * 只有当用户提问包含相关关键词时，此才能才会被激活
      */
     @Override
     public boolean isSupported(Prompt prompt) {

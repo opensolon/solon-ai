@@ -1,18 +1,18 @@
 package demo.ai.skills;
 
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.skills.file.FileReadWriteSkill;
-import org.noear.solon.ai.skills.sys.SystemClockSkill;
-import org.noear.solon.ai.skills.crawler.WebCrawlerDriverSkill;
-import org.noear.solon.ai.skills.search.WebSearchDriverSkill;
+import org.noear.solon.ai.talents.file.FileReadWriteTalent;
+import org.noear.solon.ai.talents.sys.SystemClockTalent;
+import org.noear.solon.ai.talents.crawler.WebCrawlerDriverTalent;
+import org.noear.solon.ai.talents.search.WebSearchDriverTalent;
 
 
 public class Demo {
     public void test() throws Exception {
-        WebSearchDriverSkill search = new WebSearchDriverSkill(WebSearchDriverSkill.BAIDU, "serper_key");
-        WebCrawlerDriverSkill crawler = new WebCrawlerDriverSkill(WebCrawlerDriverSkill.FIRECRAWL, "jina_key");
-        FileReadWriteSkill disk = new FileReadWriteSkill("./ai_workspace");
-        SystemClockSkill clock = new SystemClockSkill();
+        WebSearchDriverTalent search = new WebSearchDriverTalent(WebSearchDriverTalent.BAIDU, "serper_key");
+        WebCrawlerDriverTalent crawler = new WebCrawlerDriverTalent(WebCrawlerDriverTalent.FIRECRAWL, "jina_key");
+        FileReadWriteTalent disk = new FileReadWriteTalent("./ai_workspace");
+        SystemClockTalent clock = new SystemClockTalent();
 
         // 构建 Agent 或 ChatModel
         ChatModel agent = ChatModel.of("url..")

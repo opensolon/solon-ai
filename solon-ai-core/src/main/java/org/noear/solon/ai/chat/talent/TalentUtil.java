@@ -38,34 +38,34 @@ public class TalentUtil {
     /**
      * 激活工具包
      */
-    public static StringBuilder activeSkills(ModelOptionsAmend<?, ?> modelOptions, Prompt prompt, StringBuilder builder) {
-        for (RankEntity<Talent> item : modelOptions.skills()) {
-            Talent skill = item.target;
+    public static StringBuilder activeTalents(ModelOptionsAmend<?, ?> modelOptions, Prompt prompt, StringBuilder builder) {
+        for (RankEntity<Talent> item : modelOptions.talents()) {
+            Talent talent = item.target;
 
             try {
-                if (skill.isSupported(prompt) == false) {
+                if (talent.isSupported(prompt) == false) {
                     //不支持？跳过
                     continue;
                 }
             } catch (Throwable e) {
                 //出错？跳过
-                LOG.error("Toolkit support check failed: {}", skill.getClass().getName(), e);
+                LOG.error("Talent support check failed: {}", talent.getClass().getName(), e);
                 continue;
             }
 
             try {
                 // 开始挂载（可以做些初始化）
-                skill.onAttach(prompt);
+                talent.onAttach(prompt);
             } catch (Throwable e) {
-                LOG.error("Toolkit active failed: {}", skill.getClass().getName(), e);
+                LOG.error("Talent active failed: {}", talent.getClass().getName(), e);
                 throw e;
             }
 
             //聚合提示词
-            injectSkillInstruction(skill, prompt, builder);
+            injectTalentInstruction(talent, prompt, builder);
 
             //部署工具
-            modelOptions.toolAdd(skill.getTools(prompt));
+            modelOptions.toolAdd(talent.getTools(prompt));
         }
 
         return builder;
@@ -75,21 +75,21 @@ public class TalentUtil {
     /**
      * 注入指令并对工具进行“染色”
      */
-    private static void injectSkillInstruction(Talent skill, Prompt prompt, StringBuilder combinedInstruction) {
-        String ins = skill.getInstruction(prompt);
+    private static void injectTalentInstruction(Talent talent, Prompt prompt, StringBuilder combinedInstruction) {
+        String ins = talent.getInstruction(prompt);
 
         if (Assert.isEmpty(ins)) {
             //如果指令为 null，不展示（只作工具集用）
             return;
         }
 
-        Collection<FunctionTool> tools = skill.getTools(prompt);
+        Collection<FunctionTool> tools = talent.getTools(prompt);
 
         // 1. 如果有工具，进行元信息染色（借鉴 MCP 思想）
         if (Assert.isNotEmpty(tools)) {
             for (FunctionTool tool : tools) {
-                // 将所属 Skill 的名字注入工具的 meta
-                tool.metaPut("toolkit", skill.name());
+                // 将所属 Talent 的名字注入工具的 meta
+                tool.metaPut("talent", talent.name());
             }
         }
 
@@ -97,12 +97,12 @@ public class TalentUtil {
         if (Assert.isNotEmpty(ins) || Assert.isNotEmpty(tools)) {
             combinedInstruction.append("\n---\n"); // 使用分割线开启独立空间
 
-            // 工具包标题行：# [Toolkit: Name] Description
-            combinedInstruction.append("# [Toolkit: ").append(skill.name()).append("]");
-            if (Utils.isNotEmpty(skill.description())) {
-                combinedInstruction.append(" - ").append(skill.description());
+            // 工具包标题行：# [Talent: Name] Description
+            combinedInstruction.append("# [Talent: ").append(talent.name()).append("]");
+            if (Utils.isNotEmpty(talent.description())) {
+                combinedInstruction.append(" - ").append(talent.description());
             }
-            combinedInstruction.append("\n<Toolkit:").append(skill.name()).append(">\n\n");
+            combinedInstruction.append("\n<Talent:").append(talent.name()).append(">\n\n");
 
             // 注入工具包特有的指令（如数据库结构、API 限制等）
             if (Assert.isNotEmpty(ins)) {
@@ -117,7 +117,7 @@ public class TalentUtil {
                 combinedInstruction.append("\n> **工具作用域**: 此工具包指令适用于以下工具的调用: ").append(toolNames).append("\n");
             }
 
-            combinedInstruction.append("\n\n</Toolkit:").append(skill.name()).append(">\n");
+            combinedInstruction.append("\n\n</Talent:").append(talent.name()).append(">\n");
             combinedInstruction.append("---\n"); // 闭合分割线
         }
     }

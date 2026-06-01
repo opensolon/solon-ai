@@ -522,8 +522,8 @@ public abstract class AbsChatTest {
 
     @Test
     public void case11_skill_call() throws IOException {
-        // 1. 定义一个简单的工具包
-        Talent timeSkill = TalentDesc.builder("time")
+        // 1. 定义一个简单的才能
+        Talent timeTalent = TalentDesc.builder("time")
                 .instruction("当前时间是 2026-01-19，请基于此日期回答。")
                 .isSupported(prompt -> {
                     // 只有 prompt 中有 "use_time_skill" 属性时才支持
@@ -545,7 +545,7 @@ public abstract class AbsChatTest {
         // 执行调用
         ChatResponse resp = chatModel.prompt(prompt)
                 .session(chatSession)
-                .options(o -> o.talentAdd(timeSkill))
+                .options(o -> o.talentAdd(timeTalent))
                 .call();
 
         log.info("case11 response: {}", resp.getMessage().getContent());
@@ -557,7 +557,7 @@ public abstract class AbsChatTest {
 
     @Test
     public void case12_skill_stream() throws Exception {
-        // 1. 定义一个带工具的工具包
+        // 1. 定义一个带工具的才能
         ToolProvider toolProvider = new MethodToolProvider(new Tools());
         Talent weatherSkill = TalentDesc.builder("weather")
                 .instruction("你是一个气象专家。")

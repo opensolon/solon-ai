@@ -51,7 +51,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     protected final Map<String, Object> options;
 
     protected final Map<String, FunctionTool> tools;
-    protected final Map<String, RankEntity<Talent>> skills;
+    protected final Map<String, RankEntity<Talent>> talents;
     protected final Map<Class<?>, RankEntity<X>> interceptors;
 
     public ModelOptionsAmend() {
@@ -61,7 +61,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
         this.options = new LinkedHashMap<>();
 
         this.tools = new LinkedHashMap<>();
-        this.skills = new LinkedHashMap<>();
+        this.talents = new LinkedHashMap<>();
         this.interceptors = new LinkedHashMap<>();
     }
 
@@ -71,7 +71,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
         this.options = real.options;
 
         this.tools = real.tools;
-        this.skills = real.skills;
+        this.talents = real.talents;
 
         this.interceptors = real.interceptors;
     }
@@ -106,7 +106,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
             }
 
             tools.putAll(from.tools);
-            skills.putAll(from.skills);
+            talents.putAll(from.talents);
             interceptors.putAll(from.interceptors);
         }
     }
@@ -207,14 +207,14 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     //===================
 
     /**
-     * 添加工具包
+     * 添加才能
      *
      * @since 3.8.4
      */
     public T talentAdd(Collection<RankEntity<Talent>> items) {
         if (Assert.isNotEmpty(items)) {
             for (RankEntity<Talent> item : items) {
-                skills.put(item.target.name(), item);
+                talents.put(item.target.name(), item);
             }
         }
 
@@ -222,34 +222,34 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     }
 
     /**
-     * 添加工具包
+     * 添加才能
      *
      * @since 3.8.4
      */
-    public T talentAdd(Talent... skills) {
-        for (Talent s : skills) {
-            this.skills.put(s.name(), new RankEntity<>(s, 0));
+    public T talentAdd(Talent... talents) {
+        for (Talent t : talents) {
+            this.talents.put(t.name(), new RankEntity<>(t, 0));
         }
 
         return (T) this;
     }
 
     /**
-     * 添加工具包
+     * 添加才能
      *
      * @since 3.8.4
      */
-    public T talentAdd(int index, Talent skill) {
-        skills.put(skill.name(), new RankEntity<>(skill, index));
+    public T talentAdd(int index, Talent talent) {
+        talents.put(talent.name(), new RankEntity<>(talent, index));
 
         return (T) this;
     }
 
     /**
-     * 获取所有工具包
+     * 获取所有才能
      */
-    public Collection<RankEntity<Talent>> skills() {
-        return skills.values();
+    public Collection<RankEntity<Talent>> talents() {
+        return talents.values();
     }
 
 

@@ -111,10 +111,10 @@ public class ChatConfigReadonly {
     }
 
     /**
-     * 获取所有默认工具包
+     * 获取所有默认才能
      */
-    public Collection<Talent> getDefaultSkills() {
-        return config.getModelOptions().skills()
+    public Collection<Talent> getDefaultTalents() {
+        return config.getModelOptions().talents()
                 .stream().map(e -> e.target)
                 .collect(Collectors.toList());
     }

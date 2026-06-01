@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.simple.SimpleResponse;
-import org.noear.solon.ai.skills.crawler.WebCrawlerDriverSkill;
-import org.noear.solon.ai.skills.search.WebSearchDriverSkill;
+import org.noear.solon.ai.talents.crawler.WebCrawlerDriverTalent;
+import org.noear.solon.ai.talents.search.WebSearchDriverTalent;
 
 /**
  * 联网搜索与网页抓取集成测试
@@ -20,9 +20,9 @@ public class WebSearchAndCrawlerTests {
     @Test
     public void testSearchLogic() {
         // 1. 基础搜索功能测试 (使用 Serper 驱动)
-        WebSearchDriverSkill searchSkill = new WebSearchDriverSkill(WebSearchDriverSkill.SERPER, serperKey);
+        WebSearchDriverTalent searchTalent = new WebSearchDriverTalent(WebSearchDriverTalent.SERPER, serperKey);
 
-        String result = searchSkill.search("Solon AI 框架最新进展");
+        String result = searchTalent.web_search("Solon AI 框架最新进展");
 
         System.out.println("[搜索结果]:\n" + result);
         Assertions.assertNotNull(result);
@@ -32,9 +32,9 @@ public class WebSearchAndCrawlerTests {
     @Test
     public void testCrawlerLogic() {
         // 2. 基础抓取功能测试 (使用 Jina 驱动)
-        WebCrawlerDriverSkill crawlerSkill = new WebCrawlerDriverSkill(WebCrawlerDriverSkill.JINA, jinaKey);
+        WebCrawlerDriverTalent crawlerTalent = new WebCrawlerDriverTalent(WebCrawlerDriverTalent.JINA, jinaKey);
 
-        String result = crawlerSkill.crawl("https://solon.noear.org/article/about");
+        String result = crawlerTalent.crawl_url("https://solon.noear.org/article/about");
 
         System.out.println("[抓取内容]:\n" + (result.length() > 500 ? result.substring(0, 500) + "..." : result));
         Assertions.assertNotNull(result);
@@ -49,13 +49,13 @@ public class WebSearchAndCrawlerTests {
         if (serperKey == null) return; // 没 Key 跳过集成测试
 
         // 1. 组合工具包
-        WebSearchDriverSkill searchSkill = new WebSearchDriverSkill(WebSearchDriverSkill.SERPER, serperKey);
-        WebCrawlerDriverSkill crawlerSkill = new WebCrawlerDriverSkill(WebCrawlerDriverSkill.JINA, jinaKey);
+        WebSearchDriverTalent searchTalent = new WebSearchDriverTalent(WebSearchDriverTalent.SERPER, serperKey);
+        WebCrawlerDriverTalent crawlerTalent = new WebCrawlerDriverTalent(WebCrawlerDriverTalent.JINA, jinaKey);
 
         SimpleAgent agent = SimpleAgent.of(LlmUtil.getChatModel())
                 .role("研究助理")
-                .defaultTalentAdd(searchSkill)
-                .defaultTalentAdd(crawlerSkill)
+                .defaultTalentAdd(searchTalent)
+                .defaultTalentAdd(crawlerTalent)
                 .build();
 
         // 2. 复杂 query

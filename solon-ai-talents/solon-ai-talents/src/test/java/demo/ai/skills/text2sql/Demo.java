@@ -3,14 +3,14 @@ package demo.ai.skills.text2sql;
 
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
-import org.noear.solon.ai.skills.text2sql.Text2SqlSkill;
+import org.noear.solon.ai.talents.text2sql.Text2SqlTalent;
 
 import javax.sql.DataSource;
 
 public class Demo {
     public void test(DataSource dataSource) throws Throwable {
         // 实例化工具包：指定受控的数据源和表名
-        Text2SqlSkill sqlSkill = new Text2SqlSkill(dataSource, "users", "orders", "order_refunds")
+        Text2SqlTalent sqlTalent = new Text2SqlTalent(dataSource, "users", "orders", "order_refunds")
                 .maxRows(50); // 限制返回行数，保护内存
 
         // 构建 Agent 或 ChatModel
@@ -19,7 +19,7 @@ public class Demo {
                 .model("Qwen3-32B")
                 .role("财务数据分析师")
                 .instruction("你负责分析订单与退款数据。金额单位均为元。")
-                .defaultTalentAdd(sqlSkill) // 注入 SQL 工具包
+                .defaultTalentAdd(sqlTalent) // 注入 SQL 工具包
                 .build();
 
         // 发起自然语言查询

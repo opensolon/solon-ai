@@ -108,8 +108,8 @@ public class ChatConfig extends AiConfig {
     }
 
 
-    public void addDefaultTalent(int index, Talent skill) {
-        getModelOptions().talentAdd(index, skill);
+    public void addDefaultTalent(int index, Talent talent) {
+        getModelOptions().talentAdd(index, talent);
     }
 
 

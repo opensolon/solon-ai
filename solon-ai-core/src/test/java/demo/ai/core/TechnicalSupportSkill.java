@@ -7,7 +7,7 @@ import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.annotation.Param;
 
 /**
- * 技术支持工具包：展示多级决策与 RAG 结合
+ * 技术支持才能：展示多级决策与 RAG 结合
  */
 public class TechnicalSupportSkill extends AbsTalent implements Talent {
     public TechnicalSupportSkill() {

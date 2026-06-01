@@ -298,7 +298,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                         }
 
                         o.toolContextPut(options.toolContext());
-                        o.talentAdd(options.skills());
+                        o.talentAdd(options.talents());
 
                         options.interceptors().forEach(item -> o.interceptorAdd(item.index, item.target));
 

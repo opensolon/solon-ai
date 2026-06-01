@@ -30,7 +30,7 @@ import java.util.function.Function;
  * <p>查询示例：</p>
  *
  * <pre>{@code
- * Skill weatherSkill = SkillDesc.builder("weather")
+ * Talent weatherTalent = TalentDesc.builder("weather")
  *     .description("查询实时天气和预报")
  *     .isSupported("天气", "气温") // 关键词匹配
  *     .instruction("查询天气时，如果用户没说城市，默认查杭州。") // 静态指令

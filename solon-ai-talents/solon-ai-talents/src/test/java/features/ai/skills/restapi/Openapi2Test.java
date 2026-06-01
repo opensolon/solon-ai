@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.skills.restapi.RestApiSkill;
+import org.noear.solon.ai.talents.restapi.RestApiTalent;
 
 /**
  *
@@ -20,15 +20,15 @@ public class Openapi2Test {
 
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 实例化 Skill 并指定模式（自适应 v2/v3 及解引用）
-        RestApiSkill apiSkill = new RestApiSkill()
+        // 实例化 Talent 并指定模式（自适应 v2/v3 及解引用）
+        RestApiTalent apiTalent = new RestApiTalent()
                 .addApi(mockApiDocsUrl, apiBaseUrl)
                 .dynamicThreshold(dynamicThreshold);
 
         return ReActAgent.of(chatModel)
                 .role("业务助手")
                 .instruction("最后答复时，必须直接返回工具结果，禁止加工！")
-                .defaultTalentAdd(apiSkill)
+                .defaultTalentAdd(apiTalent)
                 .build();
     }
 

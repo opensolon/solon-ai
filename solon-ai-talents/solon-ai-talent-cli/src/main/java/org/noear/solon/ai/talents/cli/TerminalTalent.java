@@ -37,7 +37,7 @@ import java.util.stream.Stream;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 
 /**
- * Claude Code 规范对齐的 CLI 基础执行工具包
+ * Claude Code 规范对齐的 CLI 基础执行才能
  *
  * @author noear
  * @since 3.9.1

@@ -1,8 +1,8 @@
 package org.noear.solon.ai.talents.file;
 
 import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -17,9 +17,9 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * 文件管理工具包：为 AI 提供受限的本地文件系统访问能力。
+ * 文件管理工具：为 AI 提供受限的本地文件系统访问能力。
  *
- * <p>该工具包通过“工作空间（WorkDir）”机制实现沙箱隔离，确保 AI 仅能在指定目录下进行活动。
+ * <p>该工具通过“工作空间（WorkDir）”机制实现沙箱隔离，确保 AI 仅能在指定目录下进行活动。
  * 支持文本读写、目录遍历及文件生命周期管理。针对大文件提供了自动截断保护，防止超出大模型上下文限制。</p>
  *
  * @author noear
@@ -41,17 +41,6 @@ public class FileReadWriteTalent extends AbsTalent {
         this.charset = (charset == null ? StandardCharsets.UTF_8 : charset);
         ensureDir(this.rootPath);
     }
-
-    @Override
-    public String name() { return "file_manager"; }
-
-    @Override
-    public String description() {
-        return "文件专家：支持本地文件的读写、列表查看（识别目录/文件）、检索及删除。支持深度目录访问。";
-    }
-
-    @Override
-    public boolean isSupported(Prompt prompt) { return true; }
 
     @ToolMapping(name = "file_write", description = "写入文本到文件。会自动创建不存在的目录。")
     public String write(@Param("fileName") String fileName, @Param("content") String content) {
