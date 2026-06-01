@@ -49,7 +49,6 @@ public class TerminalSkill extends AbsSkill {
 
     private static final int MAX_CHARACTER_LIMIT = 128 * 1024;
 
-    private final String workDir;
     private final String shellCmd;
     private final String extension;
     private final ShellMode shellMode;
@@ -99,11 +98,6 @@ public class TerminalSkill extends AbsSkill {
     }
 
     public TerminalSkill(PoolManager poolManager) {
-        this(null, poolManager);
-    }
-
-    public TerminalSkill(String workDir, PoolManager poolManager) {
-        this.workDir = workDir;
         this.poolManager = poolManager;
 
         boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
@@ -673,7 +667,7 @@ public class TerminalSkill extends AbsSkill {
     }
 
     private Path getWorkPath(String __cwd) {
-        String path = (__cwd != null) ? __cwd : workDir;
+        String path = (__cwd != null) ? __cwd : poolManager.getUserDir();
         if (path == null) throw new IllegalStateException("Working directory is not set.");
         return Paths.get(path).toAbsolutePath().normalize();
     }

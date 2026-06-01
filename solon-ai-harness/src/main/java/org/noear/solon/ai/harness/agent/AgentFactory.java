@@ -81,7 +81,7 @@ public class AgentFactory {
 
         if (Assert.isNotEmpty(metadata.getTools())) {
             //目前参考了： https://opencode.ai/docs/zh-cn/permissions/
-            TerminalSkillProxy terminalSkillWrap = new TerminalSkillProxy(engine.getCliSkills().getTerminalSkill());
+            TerminalSkillProxy terminalSkillWrap = new TerminalSkillProxy(engine.getTerminalSkill());
 
             for (String toolName : metadata.getTools()) {
                 if ("**".equals(toolName)) {
@@ -198,7 +198,7 @@ public class AgentFactory {
                 break;
             }
             case "skill": {
-                builder.defaultSkillAdd(engine.getCliSkills().getExpertSkill());
+                builder.defaultSkillAdd(engine.getExpertSkill());
                 break;
             }
 

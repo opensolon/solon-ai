@@ -38,11 +38,21 @@ import java.util.stream.Collectors;
 public class PoolManager {
     private static final Logger LOG = LoggerFactory.getLogger(PoolManager.class);
 
+    private final String userDir;
+
     // 逻辑路径前缀 -> 池目录信息 (如 "@shared" -> PoolDir)
     private final Map<String, PoolDir> poolMap = new ConcurrentHashMap<>();
 
     // 逻辑全路径 -> 技能目录信息 (如 "video-creator" -> SkillDir)
     private volatile Map<String, SkillDir> skillMap = new ConcurrentHashMap<>();
+
+    public String getUserDir() {
+        return userDir;
+    }
+
+    public PoolManager(String userDir){
+        this.userDir = userDir;
+    }
 
     /**
      * 注册池（并扫描）

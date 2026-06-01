@@ -34,14 +34,11 @@ import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
 import org.noear.solon.ai.harness.mount.MountDo;
 import org.noear.solon.ai.harness.permission.ToolPermission;
-import org.noear.solon.ai.skills.cli.PoolType;
+import org.noear.solon.ai.skills.cli.*;
 import org.noear.solon.ai.skills.lsp.LspManager;
 import org.noear.solon.ai.skills.lsp.LspServerParameters;
 import org.noear.solon.ai.skills.lsp.LspSkill;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
-import org.noear.solon.ai.skills.cli.PoolManager;
-import org.noear.solon.ai.skills.cli.CliSkillProvider;
-import org.noear.solon.ai.skills.cli.TodoSkill;
 import org.noear.solon.ai.skills.memory.MemorySkill;
 import org.noear.solon.ai.skills.memory.MemorySolution;
 import org.noear.solon.ai.skills.openapi.ApiSource;
@@ -88,7 +85,9 @@ public class HarnessEngine {
 
     private final MemorySkill memorySkill;
 
-    private final CliSkillProvider cliSkills = new CliSkillProvider();
+    private final PoolManager poolManager;
+    private final TerminalSkill terminalSkill;
+    private final ExpertSkill expertSkill;
 
     private final CommandRegistry commandRegistry = new CommandRegistry();
 
@@ -117,12 +116,16 @@ public class HarnessEngine {
         return options.getHitlInterceptor();
     }
 
-    public CliSkillProvider getCliSkills() {
-        return cliSkills;
+    public PoolManager getPoolManager() {
+        return poolManager;
     }
 
-    public PoolManager getPoolManager() {
-        return cliSkills.getPoolManager();
+    public TerminalSkill getTerminalSkill() {
+        return terminalSkill;
+    }
+
+    public ExpertSkill getExpertSkill() {
+        return expertSkill;
     }
 
     public TodoSkill getTodoSkill() {
@@ -432,9 +435,13 @@ public class HarnessEngine {
             }
         }
 
+        poolManager = new PoolManager(options.getWorkspace());
 
-        cliSkills.bashAsyncEnabled(options.isBashAsyncEnabled());
-        cliSkills.getTerminalSkill().setSandboxMode(options.isSandboxMode());
+        terminalSkill = new TerminalSkill(poolManager);
+        expertSkill = new ExpertSkill(poolManager);
+
+        terminalSkill.setBashAsyncEnabled(options.isBashAsyncEnabled());
+        terminalSkill.setSandboxMode(options.isSandboxMode());
 
         if (Assert.isNotEmpty(options.getMountPools())) {
             options.getMountPools().forEach((alias, mount) -> {
@@ -442,7 +449,7 @@ public class HarnessEngine {
                     agentManager.agentPool(Paths.get(mount.getPath()));
                 }
 
-                cliSkills.getPoolManager().register(alias, mount.getType(), mount.getPath());
+                poolManager.register(alias, mount.getType(), mount.getPath());
             });
         }
 

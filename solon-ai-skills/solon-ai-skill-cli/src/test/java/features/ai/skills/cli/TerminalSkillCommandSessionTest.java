@@ -21,7 +21,7 @@ public class TerminalSkillCommandSessionTest {
     public void exposesCommandSessionTools() throws Exception {
         Path workDir = Files.createTempDirectory("solon-ai-terminal-tools-");
         try {
-            TerminalSkill skill = new TerminalSkill(workDir.toString(), new PoolManager());
+            TerminalSkill skill = new TerminalSkill(new PoolManager(workDir.toString()));
             List<String> toolNames =
                     skill.getToolAry("bash_start", "bash_wait", "bash_stdin", "bash_stop").stream()
                             .map(FunctionTool::name)
@@ -41,7 +41,7 @@ public class TerminalSkillCommandSessionTest {
         }
         Path workDir = Files.createTempDirectory("solon-ai-terminal-session-");
         try {
-            TerminalSkill skill = new TerminalSkill(workDir.toString(), new PoolManager());
+            TerminalSkill skill = new TerminalSkill(new PoolManager(workDir.toString()));
             String first =
                     skill.bashStart(
                             "printf start; sleep 0.4; printf end",

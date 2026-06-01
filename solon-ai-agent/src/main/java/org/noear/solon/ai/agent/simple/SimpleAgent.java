@@ -27,7 +27,6 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.skill.Skill;
-import org.noear.solon.ai.chat.skill.SkillProvider;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
@@ -491,11 +490,6 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
         public Builder defaultSkillAdd(Skill... skills) {
             config.getDefaultOptions().skillAdd(skills);
-            return this;
-        }
-
-        public Builder defaultSkillAdd(SkillProvider skillProvider) {
-            config.getDefaultOptions().skillAdd(skillProvider);
             return this;
         }
 
