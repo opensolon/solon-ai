@@ -102,7 +102,6 @@ public class AgentFactory {
             }
 
             if (terminalSkillWrap.isEmpty() == false) {
-                // terminalSkill / tools 需要通过以 skill 形态加载（getInstruction 里有 SOP）
                 builder.defaultTalentAdd(terminalSkillWrap);
             }
         }
@@ -198,7 +197,7 @@ public class AgentFactory {
                 break;
             }
             case "skill": {
-                builder.defaultTalentAdd(engine.getExpertTalent());
+                builder.defaultTalentAdd(engine.getSkillTalent());
                 break;
             }
 

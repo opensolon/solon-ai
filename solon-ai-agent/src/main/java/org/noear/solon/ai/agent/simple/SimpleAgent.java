@@ -488,13 +488,13 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             return this;
         }
 
-        public Builder defaultTalentAdd(Talent... skills) {
-            config.getDefaultOptions().talentAdd(skills);
+        public Builder defaultTalentAdd(Talent... talents) {
+            config.getDefaultOptions().talentAdd(talents);
             return this;
         }
 
-        public Builder defaultTalentAdd(Talent skill, int index) {
-            config.getDefaultOptions().talentAdd(index, skill);
+        public Builder defaultTalentAdd(Talent talent, int index) {
+            config.getDefaultOptions().talentAdd(index, talent);
             return this;
         }
 

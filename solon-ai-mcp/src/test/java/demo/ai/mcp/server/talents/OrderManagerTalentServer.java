@@ -1,0 +1,71 @@
+package demo.ai.mcp.server.talents;
+
+import org.noear.snack4.ONode;
+import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.mcp.McpChannel;
+import org.noear.solon.ai.mcp.server.McpTalentServer;
+import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
+
+import java.util.ArrayList;
+import java.util.List;
+
+
+@McpServerEndpoint(channel = McpChannel.STREAMABLE_STATELESS, mcpEndpoint = "/skill/order")
+public class OrderManagerTalentServer extends McpTalentServer {
+    @Override
+    public String description() {
+        return "订单处理专家";
+    }
+
+    @Override
+    public boolean isSupported(Prompt prompt) {
+        // 1. 语义检查：用户当前意图是否与“订单”相关（逆序获取最新意图）
+        boolean isOrderTask = prompt.getUserContent().contains("订单");
+
+        // 2. 环境检查：必须持有合法的租户 ID 属性才能激活
+        boolean hasTenant = prompt.attr("tenant_id") != null;
+
+        return isOrderTask && hasTenant;
+    }
+
+    @Override
+    public String getInstruction(Prompt prompt) {
+        String tenantName = prompt.attrOrDefault("tenant_name", "未知租户");
+        return "你现在是[" + tenantName + "]的订单主管。请只处理该租户下的订单数据，禁止跨租户查询。";
+    }
+
+    @Override
+    public void onAttach(Prompt prompt) {
+        System.out.println("OrderManagerSkill onAttach: " + ONode.serialize(prompt));
+    }
+
+    @Override
+    public List<String> getToolsName(Prompt prompt) {
+        if ("all".equals(prompt.attr("tool"))) {
+            return null;
+        }
+
+        List<String> tools = new ArrayList<>();
+
+        // 基础查询工具（所有用户都有）
+        tools.add("OrderQueryTool");
+
+        // 4. 权限隔离：只有属性中标记为 ADMIN 的用户，才动态挂载“取消订单”工具
+        if ("ADMIN".equals(prompt.attr("user_role"))) {
+            tools.add("OrderCancelTool");
+        }
+
+        return tools;
+    }
+
+    @ToolMapping(description = "订单查询", meta = "{user_role:'ALL'}")
+    public String OrderQueryTool() {
+        return null;
+    }
+
+    @ToolMapping(description = "订单取消", meta = "{user_role:'ADMIN'}")
+    public String OrderCancelTool() {
+        return null;
+    }
+}

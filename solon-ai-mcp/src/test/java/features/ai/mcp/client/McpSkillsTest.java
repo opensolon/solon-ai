@@ -24,20 +24,20 @@ public class McpSkillsTest {
     public void case1() {
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .url("http://localhost:8081/skill/order")
+                .url("http://localhost:8081/talent/order")
                 .build();
 
         Prompt prompt = Prompt.of("这个订单：A001，请查询订单详情。")
                 .attrPut("tenant_id", "1")
                 .attrPut("user_role", "user");
 
-        McpTalentClient skillClient = new McpTalentClient(mcpClient);
+        McpTalentClient talentClient = new McpTalentClient(mcpClient);
 
-        String description = skillClient.description();
-        boolean isSupported = skillClient.isSupported(prompt);
-        skillClient.onAttach(prompt);
-        String instruction = skillClient.getInstruction(prompt);
-        Collection<FunctionTool> tools = skillClient.getTools(prompt);
+        String description = talentClient.description();
+        boolean isSupported = talentClient.isSupported(prompt);
+        talentClient.onAttach(prompt);
+        String instruction = talentClient.getInstruction(prompt);
+        Collection<FunctionTool> tools = talentClient.getTools(prompt);
 
         log.info("description: {}", description);
         log.info("isSupported: {}", isSupported);
@@ -54,7 +54,7 @@ public class McpSkillsTest {
                 .attrPut("tenant_id", "1")
                 .attrPut("user_role", "user");
 
-        tools = skillClient.getTools(prompt);
+        tools = talentClient.getTools(prompt);
         assert tools.size() == 2;
     }
 }

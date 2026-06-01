@@ -313,9 +313,9 @@ public class ChatModel implements AiModel {
          *
          * @since 3.8.4
          */
-        public Builder defaultTalentAdd(Talent... skill) {
-            for (Talent s : skill) {
-                defaultTalentAdd(0, s);
+        public Builder defaultTalentAdd(Talent... talents) {
+            for (Talent t : talents) {
+                defaultTalentAdd(0, t);
             }
             return this;
         }
@@ -325,8 +325,8 @@ public class ChatModel implements AiModel {
          *
          * @since 3.8.4
          */
-        public Builder defaultTalentAdd(int index, Talent skill) {
-            config.addDefaultTalent(index, skill);
+        public Builder defaultTalentAdd(int index, Talent talent) {
+            config.addDefaultTalent(index, talent);
             return this;
         }
 

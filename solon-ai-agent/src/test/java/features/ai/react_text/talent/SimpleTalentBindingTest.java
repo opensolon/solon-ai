@@ -66,7 +66,7 @@ public class SimpleTalentBindingTest {
             for (FunctionTool tool : slf.getTools()) {
                 if (tool.name().equals("deleteOrder")) {
                     tool.metaPut("destructive", true);
-                    tool.metaPut("skill", name());
+                    tool.metaPut("talent", name());
                 }
             }
         });

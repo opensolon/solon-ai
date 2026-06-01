@@ -354,8 +354,8 @@ public class ContractNetProtocol extends TeamProtocolBase {
         int score = (agent.profile() != null && !agent.profile().getCapabilities().isEmpty()) ? 60 : 30;
 
         if (agent.profile() != null) {
-            for (String skill : agent.profile().getCapabilities()) {
-                if (taskDesc.contains(skill.toLowerCase())) {
+            for (String caps : agent.profile().getCapabilities()) {
+                if (taskDesc.contains(caps.toLowerCase())) {
                     score += 15;
                     break;
                 }

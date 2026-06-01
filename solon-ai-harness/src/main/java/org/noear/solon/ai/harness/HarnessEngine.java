@@ -87,7 +87,7 @@ public class HarnessEngine {
 
     private final PoolManager poolManager;
     private final TerminalTalent terminalTalent;
-    private final ExpertTalent expertTalent;
+    private final SkillTalent skillTalent;
 
     private final CommandRegistry commandRegistry = new CommandRegistry();
 
@@ -124,8 +124,8 @@ public class HarnessEngine {
         return terminalTalent;
     }
 
-    public ExpertTalent getExpertTalent() {
-        return expertTalent;
+    public SkillTalent getSkillTalent() {
+        return skillTalent;
     }
 
     public TodoTalent getTodoTalent() {
@@ -438,7 +438,7 @@ public class HarnessEngine {
         poolManager = new PoolManager(options.getWorkspace());
 
         terminalTalent = new TerminalTalent(poolManager);
-        expertTalent = new ExpertTalent(poolManager);
+        skillTalent = new SkillTalent(poolManager);
 
         terminalTalent.setBashAsyncEnabled(options.isBashAsyncEnabled());
         terminalTalent.setSandboxMode(options.isSandboxMode());

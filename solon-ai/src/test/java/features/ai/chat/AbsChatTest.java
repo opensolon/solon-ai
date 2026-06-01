@@ -521,17 +521,17 @@ public abstract class AbsChatTest {
     }
 
     @Test
-    public void case11_skill_call() throws IOException {
+    public void case11_talent_call() throws IOException {
         // 1. 定义一个简单的才能
         Talent timeTalent = TalentDesc.builder("time")
                 .instruction("当前时间是 2026-01-19，请基于此日期回答。")
                 .isSupported(prompt -> {
-                    // 只有 prompt 中有 "use_time_skill" 属性时才支持
-                    return "true".equals(prompt.attr("use_time_skill"));
+                    // 只有 prompt 中有 "use_time_talent" 属性时才支持
+                    return "true".equals(prompt.attr("use_time_talent"));
                 })
                 .onAttach(prompt -> {
                     // 挂载时注入一个标识
-                    prompt.attrs().put("skill_attached", "time_v1");
+                    prompt.attrs().put("talent_attached", "time_v1");
                 })
                 .build();
 
@@ -540,7 +540,7 @@ public abstract class AbsChatTest {
 
         // 设置支持条件
         Prompt prompt = Prompt.of("今天几号？")
-                .attrPut("use_time_skill", "true");
+                .attrPut("use_time_talent", "true");
 
         // 执行调用
         ChatResponse resp = chatModel.prompt(prompt)
@@ -551,12 +551,12 @@ public abstract class AbsChatTest {
         log.info("case11 response: {}", resp.getMessage().getContent());
 
         // 验证：1. 属性是否成功注入 2. 系统消息是否自动添加（1个User + 1个Skill生成的System + 1个Assistant）
-        Assertions.assertEquals("time_v1", prompt.attr("skill_attached"));
+        Assertions.assertEquals("time_v1", prompt.attr("talent_attached"));
         Assertions.assertTrue(resp.getMessage().getContent().contains("2026"));
     }
 
     @Test
-    public void case12_skill_stream() throws Exception {
+    public void case12_talent_stream() throws Exception {
         // 1. 定义一个带工具的才能
         ToolProvider toolProvider = new MethodToolProvider(new Tools());
         Talent weatherSkill = TalentDesc.builder("weather")
