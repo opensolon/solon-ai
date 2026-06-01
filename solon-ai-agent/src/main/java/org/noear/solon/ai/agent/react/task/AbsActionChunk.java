@@ -31,7 +31,7 @@ import java.util.Map;
  * @since 3.9.6
  */
 @Preview("3.9.6")
-public class AbsActionChunk extends AbsAgentChunk {
+public abstract class AbsActionChunk extends AbsAgentChunk {
     private final transient ReActTrace trace;
     private final transient String toolName;
     private final transient Map<String, Object> args;
