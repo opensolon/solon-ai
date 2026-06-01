@@ -68,9 +68,9 @@ public class HarnessEngine {
 
     private final HarnessOptions options;
 
-    private final CodeTalent codeSkill;
-    private final TodoTalent todoSkill;
-    private final TaskSkill taskSkill;
+    private final CodeTalent codeTalent;
+    private final TodoTalent todoTalent;
+    private final TaskTalent taskTalent;
     private final GenerateTool generateTool;
 
     private final WebfetchTool webfetchTool;
@@ -78,16 +78,16 @@ public class HarnessEngine {
     private final CodeSearchTool codeSearchTool;
 
     private final LspManager lspManager;
-    private final LspTalent lspSkill;
+    private final LspTalent lspTalent;
 
-    private final McpGatewayTalent mcpGatewaySkill;
-    private final OpenApiTalent openApiSkill;
+    private final McpGatewayTalent mcpGatewayTalent;
+    private final OpenApiTalent openApiTalent;
 
-    private final MemoryTalent memorySkill;
+    private final MemoryTalent memoryTalent;
 
     private final PoolManager poolManager;
-    private final TerminalTalent terminalSkill;
-    private final ExpertTalent expertSkill;
+    private final TerminalTalent terminalTalent;
+    private final ExpertTalent expertTalent;
 
     private final CommandRegistry commandRegistry = new CommandRegistry();
 
@@ -120,28 +120,28 @@ public class HarnessEngine {
         return poolManager;
     }
 
-    public TerminalTalent getTerminalSkill() {
-        return terminalSkill;
+    public TerminalTalent getTerminalTalent() {
+        return terminalTalent;
     }
 
-    public ExpertTalent getExpertSkill() {
-        return expertSkill;
+    public ExpertTalent getExpertTalent() {
+        return expertTalent;
     }
 
-    public TodoTalent getTodoSkill() {
-        return todoSkill;
+    public TodoTalent getTodoTalent() {
+        return todoTalent;
     }
 
-    public TaskSkill getTaskSkill() {
-        return taskSkill;
+    public TaskTalent getTaskTalent() {
+        return taskTalent;
     }
 
-    public CodeTalent getCodeSkill() {
-        return codeSkill;
+    public CodeTalent getCodeTalent() {
+        return codeTalent;
     }
 
-    public MemoryTalent getMemorySkill() {
-        return memorySkill;
+    public MemoryTalent getMemoryTalent() {
+        return memoryTalent;
     }
 
     public GenerateTool getGenerateTool() {
@@ -152,8 +152,8 @@ public class HarnessEngine {
         return codeSearchTool;
     }
 
-    public LspTalent getLspSkill() {
-        return lspSkill;
+    public LspTalent getLspTalent() {
+        return lspTalent;
     }
 
     public WebsearchTool getWebsearchTool() {
@@ -165,11 +165,11 @@ public class HarnessEngine {
     }
 
     public McpGatewayTalent getMcpGatewaySkill() {
-        return mcpGatewaySkill;
+        return mcpGatewayTalent;
     }
 
     public OpenApiTalent getOpenApiSkill() {
-        return openApiSkill;
+        return openApiTalent;
     }
 
     public AgentSessionProvider getSessionProvider() {
@@ -332,7 +332,7 @@ public class HarnessEngine {
      * 动态添加 API 源
      */
     public void addApi(ApiSource apiSource) {
-        openApiSkill.addApi(apiSource);
+        openApiTalent.addApi(apiSource);
         options.addApiSource(apiSource.getDocUrl(), apiSource);
     }
 
@@ -340,7 +340,7 @@ public class HarnessEngine {
      * 动态移除 API 源
      */
     public void removeApi(String docUrl) {
-        openApiSkill.removeApi(docUrl);
+        openApiTalent.removeApi(docUrl);
         options.getApiServers().remove(docUrl);
     }
 
@@ -348,7 +348,7 @@ public class HarnessEngine {
      * 动态添加 MCP 服务
      */
     public void addMcpServer(String name, McpServerParameters mcpServer) {
-        mcpGatewaySkill.addMcpServer(name, mcpServer);
+        mcpGatewayTalent.addMcpServer(name, mcpServer);
         options.addMcpServer(name, mcpServer);
     }
 
@@ -356,7 +356,7 @@ public class HarnessEngine {
      * 动态移除 MCP 服务（并关闭连接）
      */
     public void removeMcpServer(String name) {
-        mcpGatewaySkill.removeMcpServer(name);
+        mcpGatewayTalent.removeMcpServer(name);
         options.getMcpServers().remove(name);
     }
 
@@ -391,9 +391,9 @@ public class HarnessEngine {
             options.setHitlInterceptor(new HITLInterceptor().onTool("bash", new HitlStrategy()));
         }
 
-        this.todoSkill = new TodoTalent(options.getHarnessSessions());
-        this.codeSkill = new CodeTalent(this);
-        this.taskSkill = new TaskSkill(this);
+        this.todoTalent = new TodoTalent(options.getHarnessSessions());
+        this.codeTalent = new CodeTalent(this);
+        this.taskTalent = new TaskTalent(this);
         this.generateTool = new GenerateTool(this);
 
         this.codeSearchTool = new CodeSearchTool().retryConfig(options.getMcpRetries());
@@ -407,41 +407,41 @@ public class HarnessEngine {
                 lspManager.registerServer(entry.getKey(), entry.getValue());
             }
         }
-        this.lspSkill = lspManager.hasServers() ? new LspTalent(lspManager, options.getWorkspace()) : null;
-        if (this.lspSkill != null) {
-            lspManager.setDiagnosticsCallback(lspSkill::updateDiagnostics);
+        this.lspTalent = lspManager.hasServers() ? new LspTalent(lspManager, options.getWorkspace()) : null;
+        if (this.lspTalent != null) {
+            lspManager.setDiagnosticsCallback(lspTalent::updateDiagnostics);
         }
 
         if (options.isMemoryEnabled() && options.getMemorySolution() != null) {
-            this.memorySkill = new MemoryTalent(options.getMemorySolution()).sessionIsolation(false);
+            this.memoryTalent = new MemoryTalent(options.getMemorySolution()).sessionIsolation(false);
         } else {
-            this.memorySkill = null;
+            this.memoryTalent = null;
         }
 
-        openApiSkill = new OpenApiTalent().retryConfig(options.getApiRetries());
+        openApiTalent = new OpenApiTalent().retryConfig(options.getApiRetries());
         if (Assert.isNotEmpty(options.getApiServers())) {
             for (Map.Entry<String, ApiSource> entry : options.getApiServers().entrySet()) {
-                openApiSkill.addApi(entry.getValue());
+                openApiTalent.addApi(entry.getValue());
             }
         }
 
-        mcpGatewaySkill = new McpGatewayTalent().retryConfig(options.getMcpRetries());
+        mcpGatewayTalent = new McpGatewayTalent().retryConfig(options.getMcpRetries());
 
         if (Assert.isNotEmpty(options.getMcpServers())) {
             for (Map.Entry<String, McpServerParameters> entry : options.getMcpServers().entrySet()) {
                 if (entry.getValue().isEnabled()) {
-                    mcpGatewaySkill.addMcpServer(entry.getKey(), entry.getValue());
+                    mcpGatewayTalent.addMcpServer(entry.getKey(), entry.getValue());
                 }
             }
         }
 
         poolManager = new PoolManager(options.getWorkspace());
 
-        terminalSkill = new TerminalTalent(poolManager);
-        expertSkill = new ExpertTalent(poolManager);
+        terminalTalent = new TerminalTalent(poolManager);
+        expertTalent = new ExpertTalent(poolManager);
 
-        terminalSkill.setBashAsyncEnabled(options.isBashAsyncEnabled());
-        terminalSkill.setSandboxMode(options.isSandboxMode());
+        terminalTalent.setBashAsyncEnabled(options.isBashAsyncEnabled());
+        terminalTalent.setSandboxMode(options.isSandboxMode());
 
         if (Assert.isNotEmpty(options.getMountPools())) {
             options.getMountPools().forEach((alias, mount) -> {

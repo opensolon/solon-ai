@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.harness.agent.TaskSkill;
+import org.noear.solon.ai.harness.agent.TaskTalent;
 
 import java.util.List;
 import java.util.Map;
@@ -13,7 +13,7 @@ import java.util.Map;
 public class JsonSchemaTest {
     @Test
     public void case1() {
-        TaskSkill taskSkill = new TaskSkill(null);
+        TaskTalent taskSkill = new TaskTalent(null);
 
         FunctionTool functionTool = ((List<FunctionTool>) taskSkill.getToolAry("multitask")).get(0);
         System.out.println(functionTool.inputSchema());
@@ -27,7 +27,7 @@ public class JsonSchemaTest {
 
     @Test
     public void case2() throws Throwable {
-        TaskSkill taskSkill = new TaskSkill(null);
+        TaskTalent taskSkill = new TaskTalent(null);
 
         FunctionTool functionTool = ((List<FunctionTool>) taskSkill.getToolAry("multitask")).get(0);
 

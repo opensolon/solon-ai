@@ -81,7 +81,7 @@ public class AgentFactory {
 
         if (Assert.isNotEmpty(metadata.getTools())) {
             //目前参考了： https://opencode.ai/docs/zh-cn/permissions/
-            TerminalTalentProxy terminalSkillWrap = new TerminalTalentProxy(engine.getTerminalSkill());
+            TerminalTalentProxy terminalSkillWrap = new TerminalTalentProxy(engine.getTerminalTalent());
 
             for (String toolName : metadata.getTools()) {
                 if ("**".equals(toolName)) {
@@ -176,7 +176,7 @@ public class AgentFactory {
             }
             case "subagent":
             case "task": {
-                builder.defaultTalentAdd(engine.getTaskSkill());
+                builder.defaultTalentAdd(engine.getTaskTalent());
                 break;
             }
             case "todoread":
@@ -198,7 +198,7 @@ public class AgentFactory {
                 break;
             }
             case "skill": {
-                builder.defaultTalentAdd(engine.getExpertSkill());
+                builder.defaultTalentAdd(engine.getExpertTalent());
                 break;
             }
 
@@ -212,11 +212,11 @@ public class AgentFactory {
                 break;
             }
             case "memory": {
-                builder.defaultTalentAdd(engine.getMemorySkill());
+                builder.defaultTalentAdd(engine.getMemoryTalent());
                 break;
             }
             case "code": {
-                builder.defaultTalentAdd(engine.getCodeSkill());
+                builder.defaultTalentAdd(engine.getCodeTalent());
                 break;
             }
             case "mcp": {
@@ -232,8 +232,8 @@ public class AgentFactory {
                 break;
             }
             case "lsp": {
-                if (engine.getLspSkill() != null) {
-                    builder.defaultTalentAdd(engine.getLspSkill());
+                if (engine.getLspTalent() != null) {
+                    builder.defaultTalentAdd(engine.getLspTalent());
                 }
                 break;
             }
@@ -249,7 +249,7 @@ public class AgentFactory {
     private static void todoToolAddDo(AgentDefinition.Metadata metadata, ReActAgent.Builder builder, HarnessEngine agentRuntime) {
         if (metadata.isPrimary()) {
             //主代理，用文件模式
-            builder.defaultTalentAdd(agentRuntime.getTodoSkill());
+            builder.defaultTalentAdd(agentRuntime.getTodoTalent());
         } else {
             //次代理，用内存模式
             builder.planningMode(true);
