@@ -15,10 +15,14 @@
  */
 package org.noear.solon.ai.harness;
 
+import org.noear.solon.ai.agent.AgentSessionProvider;
+import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
+import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.skills.lsp.LspServerParameters;
+import org.noear.solon.ai.skills.memory.MemorySolution;
 import org.noear.solon.ai.skills.openapi.ApiSource;
 import org.noear.solon.core.util.Assert;
 
@@ -82,6 +86,12 @@ class HarnessOptions implements Serializable {
     private Map<String, McpServerParameters> mcpServers = new ConcurrentHashMap<>();
     private Map<String, ApiSource> apiServers = new ConcurrentHashMap<>();
     private Map<String, LspServerParameters> lspServers = new ConcurrentHashMap<>();
+
+    // ========== 服务注入 ==========
+    private AgentSessionProvider sessionProvider;
+    private SummarizationInterceptor summarizationInterceptor;
+    private HITLInterceptor hitlInterceptor;
+    private MemorySolution.Factory memorySolution;
 
     HarnessOptions(String harnessHome) {
         if (Assert.isEmpty(harnessHome)) {
@@ -399,5 +409,39 @@ class HarnessOptions implements Serializable {
         }
 
         return models.get(0);
+    }
+
+    // ========== 服务注入 getter / setter ==========
+
+    AgentSessionProvider getSessionProvider() {
+        return sessionProvider;
+    }
+
+    void setSessionProvider(AgentSessionProvider sessionProvider) {
+        this.sessionProvider = sessionProvider;
+    }
+
+    SummarizationInterceptor getSummarizationInterceptor() {
+        return summarizationInterceptor;
+    }
+
+    void setSummarizationInterceptor(SummarizationInterceptor summarizationInterceptor) {
+        this.summarizationInterceptor = summarizationInterceptor;
+    }
+
+    HITLInterceptor getHitlInterceptor() {
+        return hitlInterceptor;
+    }
+
+    void setHitlInterceptor(HITLInterceptor hitlInterceptor) {
+        this.hitlInterceptor = hitlInterceptor;
+    }
+
+    MemorySolution.Factory getMemorySolution() {
+        return memorySolution;
+    }
+
+    void setMemorySolution(MemorySolution.Factory memorySolution) {
+        this.memorySolution = memorySolution;
     }
 }

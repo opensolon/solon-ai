@@ -68,7 +68,6 @@ public class HarnessEngine {
     private final ReentrantLock modelLock = new ReentrantLock();
     private final ReentrantLock agentLock = new ReentrantLock();
 
-    private final AgentSessionProvider sessionProvider;
     private final HarnessOptions options;
 
     private final CodeSkill codeSkill;
@@ -90,9 +89,6 @@ public class HarnessEngine {
 
     private final CliSkillProvider cliSkills = new CliSkillProvider();
 
-    private final SummarizationInterceptor summarizationInterceptor;
-    private final HITLInterceptor hitlInterceptor;
-
     private final CommandRegistry commandRegistry = new CommandRegistry();
 
     private final AgentManager agentManager;
@@ -113,11 +109,11 @@ public class HarnessEngine {
     }
 
     public SummarizationInterceptor getSummarizationInterceptor() {
-        return summarizationInterceptor;
+        return options.getSummarizationInterceptor();
     }
 
     public HITLInterceptor getHitlInterceptor() {
-        return hitlInterceptor;
+        return options.getHitlInterceptor();
     }
 
     public CliSkillProvider getCliSkills() {
@@ -170,6 +166,14 @@ public class HarnessEngine {
 
     public OpenApiSkill getOpenApiSkill() {
         return openApiSkill;
+    }
+
+    public AgentSessionProvider getSessionProvider() {
+        return options.getSessionProvider();
+    }
+
+    public MemorySolution.Factory getMemorySolution() {
+        return options.getMemorySolution();
     }
 
     // ========== 配置读取（代理到 options） ==========
@@ -365,29 +369,25 @@ public class HarnessEngine {
         }
     }
 
-    private HarnessEngine(HarnessOptions options, AgentSessionProvider sessionProvider, MemorySolution.Factory memorySolution, SummarizationInterceptor summarizationInterceptor, HITLInterceptor hitlInterceptor) {
+    private HarnessEngine(HarnessOptions options) {
         this.options = options;
 
         //上下文摘要拦截器默认处理
-        if (summarizationInterceptor == null) {
+        if (options.getSummarizationInterceptor() == null) {
             SummarizationStrategy strategy = new CompositeSummarizationStrategy()
                     .addStrategy(new KeyInfoExtractionStrategy(this::getModelForSummary).retryConfig(options.getModelRetries()))      // 提取干货（去水）
                     .addStrategy(new HierarchicalSummarizationStrategy(this::getModelForSummary).retryConfig(options.getModelRetries())); // 滚动更新摘要
 
-            summarizationInterceptor = new SummarizationInterceptor(
+            options.setSummarizationInterceptor(new SummarizationInterceptor(
                     options.getSummaryWindowSize(),
                     options.getSummaryWindowToken(),
-                    strategy);
+                    strategy));
         }
 
         //人工介入拉截器默认处理
-        if (hitlInterceptor == null) {
-            hitlInterceptor = new HITLInterceptor().onTool("bash", new HitlStrategy());
+        if (options.getHitlInterceptor() == null) {
+            options.setHitlInterceptor(new HITLInterceptor().onTool("bash", new HitlStrategy()));
         }
-
-        this.sessionProvider = sessionProvider;
-        this.summarizationInterceptor = summarizationInterceptor;
-        this.hitlInterceptor = hitlInterceptor;
 
         this.todoSkill = new TodoSkill(options.getHarnessSessions());
         this.codeSkill = new CodeSkill(this);
@@ -410,8 +410,8 @@ public class HarnessEngine {
             lspManager.setDiagnosticsCallback(lspSkill::updateDiagnostics);
         }
 
-        if (options.isMemoryEnabled() && memorySolution != null) {
-            this.memorySkill = new MemorySkill(memorySolution).sessionIsolation(false);
+        if (options.isMemoryEnabled() && options.getMemorySolution() != null) {
+            this.memorySkill = new MemorySkill(options.getMemorySolution()).sessionIsolation(false);
         } else {
             this.memorySkill = null;
         }
@@ -471,7 +471,7 @@ public class HarnessEngine {
 
 
     public AgentSession getSession(String instanceId) {
-        return sessionProvider.getSession(instanceId);
+        return options.getSessionProvider().getSession(instanceId);
     }
 
     public ReActAgent.Builder createSubagent(AgentDefinition definition) {
@@ -589,19 +589,15 @@ public class HarnessEngine {
 
     public static class Builder {
         private final HarnessOptions options;
-        private AgentSessionProvider sessionProvider;
-        private SummarizationInterceptor summarizationInterceptor;
-        private HITLInterceptor hitlInterceptor;
-        private MemorySolution.Factory memorySolution;
 
         public Builder(String harnessHome) {
             this.options = new HarnessOptions(harnessHome);
         }
 
-        // ========== 服务注入 ==========
+        // ========== 服务注入（代理到 options） ==========
 
         public Builder sessionProvider(AgentSessionProvider sessionProvider) {
-            this.sessionProvider = sessionProvider;
+            options.setSessionProvider(sessionProvider);
             return this;
         }
 
@@ -609,7 +605,7 @@ public class HarnessEngine {
          * 摘要拦截器
          */
         public Builder summarizationInterceptor(SummarizationInterceptor summarizationInterceptor) {
-            this.summarizationInterceptor = summarizationInterceptor;
+            options.setSummarizationInterceptor(summarizationInterceptor);
             return this;
         }
 
@@ -617,7 +613,7 @@ public class HarnessEngine {
          * 人工介入拦截器
          */
         public Builder hitlInterceptor(HITLInterceptor hitlInterceptor) {
-            this.hitlInterceptor = hitlInterceptor;
+            options.setHitlInterceptor(hitlInterceptor);
             return this;
         }
 
@@ -625,7 +621,7 @@ public class HarnessEngine {
          * 心智记忆存储方案
          */
         public Builder memorySolution(MemorySolution.Factory memorySolution) {
-            this.memorySolution = memorySolution;
+            options.setMemorySolution(memorySolution);
             return this;
         }
 
@@ -769,7 +765,7 @@ public class HarnessEngine {
         }
 
         public HarnessEngine build() {
-            Objects.nonNull(sessionProvider);
+            Objects.nonNull(options.getSessionProvider());
 
             //缺省 userAgent 补尝
             if (Assert.isNotEmpty(options.getUserAgent())) {
@@ -780,7 +776,7 @@ public class HarnessEngine {
                 }
             }
 
-            return new HarnessEngine(options, sessionProvider, memorySolution, summarizationInterceptor, hitlInterceptor);
+            return new HarnessEngine(options);
         }
     }
 }
