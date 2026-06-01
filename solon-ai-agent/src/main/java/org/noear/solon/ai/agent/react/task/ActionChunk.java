@@ -22,14 +22,14 @@ import org.noear.solon.lang.Preview;
 import java.util.Map;
 
 /**
- * ReAct 动作开始块（Acting）：标识智能体正在调用外部工具或执行特定指令开始
+ * ReAct 动作块（Action）：标识智能体正在调用外部工具或执行特定指令
  *
  * @author noear
  * @since 3.9.6
  */
 @Preview("3.9.6")
-public class ActionStartChunk extends AbsActionChunk {
-    public ActionStartChunk(ReActTrace trace, String toolName, Map<String, Object> args) {
+public class ActionChunk extends AbsActionChunk {
+    public ActionChunk(ReActTrace trace, String toolName, Map<String, Object> args) {
         super(trace, toolName, args, ChatMessage.ofAssistant(""));
     }
 }

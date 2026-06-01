@@ -105,7 +105,7 @@ public class ActionTask {
 
         // 1. 触发前置生命周期
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onActionStart(trace, toolExchanger);
+            item.target.onAction(trace, toolExchanger);
         }
 
         // 2. 如果前置拦截器直接挂起或截断了路由，立刻退出（交给 finally 闭环）
@@ -113,9 +113,9 @@ public class ActionTask {
             return null;
         }
 
-        // 3. 推送流式起始片
+        // 3. 推送流式动作片
         if (trace.getOptions().getStreamSink() != null) {
-            trace.getOptions().getStreamSink().next(new ActionStartChunk(trace, toolName, args));
+            trace.getOptions().getStreamSink().next(new ActionChunk(trace, toolName, args));
         }
 
         long startMs = System.currentTimeMillis();
@@ -130,14 +130,8 @@ public class ActionTask {
                 result = ToolResult.success(toolExchanger.getResult());
             }
 
-            // 5. 触发后置观测拦截器（只有工具真正执行有结果时才进入观察）
             if (result != null && !trace.getSession().isPending() && !Agent.ID_END.equals(trace.getRoute())) {
-                long durationMs = System.currentTimeMillis() - startMs;
                 toolExchanger.setResult(result.getContent());
-
-                for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-                    item.target.onObservation(trace, toolExchanger, durationMs);
-                }
             }
 
             // 最终返回当前轮次处理后的最新观测值
@@ -148,6 +142,7 @@ public class ActionTask {
             throw e;
         } finally {
             // ================== 【100% 强物理闭环】 ==================
+            long durationMs = System.currentTimeMillis() - startMs;
             ChatMessage observationMessage = null;
 
             if (thrownError != null) {
@@ -170,7 +165,7 @@ public class ActionTask {
             }
 
             // 无论正常结束、挂起退出、还是中途抛出 critical error，100% 走统一清理与下发逻辑
-            handleSingleObservation(trace, toolExchanger, observationMessage, thrownError, toolResults);
+            handleSingleObservation(trace, toolExchanger, observationMessage, durationMs, thrownError, toolResults);
         }
     }
 
@@ -284,7 +279,8 @@ public class ActionTask {
      * 改变了原有 StringBuilder 拼接逻辑，直接进行 WorkingMemory 入库并触发流
      */
     private void handleSingleObservation(ReActTrace trace, ToolExchanger toolExchanger,
-                                         ChatMessage observationMessage, Throwable error, List<ChatMessage> toolResults) {
+                                         ChatMessage observationMessage, long durationMs,
+                                         Throwable error, List<ChatMessage> toolResults) {
 
         if (observationMessage == null) {
             if (error == null) {
@@ -299,18 +295,18 @@ public class ActionTask {
         if (trace.getOptions().getStreamSink() != null) {
             try {
                 trace.getOptions().getStreamSink().next(
-                        new ActionEndChunk(trace, toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error));
+                        new ObservationChunk(trace, toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
             } catch (Throwable e) {
-                LOG.error("Push ActionEndChunk failed", e);
+                LOG.error("Push ObservationChunk failed", e);
             }
         }
 
         // 2. 拦截器现场清理闭环
         for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
             try {
-                entity.target.onActionEnd(trace, toolExchanger, observationMessage, error);
+                entity.target.onObservation(trace, toolExchanger, observationMessage, error, durationMs);
             } catch (Throwable e) {
-                LOG.error("Interceptor onActionEnd execution failed", e);
+                LOG.error("Interceptor onObservation execution failed", e);
             }
         }
     }

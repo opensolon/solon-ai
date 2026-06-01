@@ -17,33 +17,41 @@ package org.noear.solon.ai.agent.react.task;
 
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 import java.util.Map;
 
 /**
- * ReAct 动作结束块（Acting）：标识智能体正在调用外部工具或执行特定指令结束
+ * ReAct 观察块（Observation）：标识智能体调用外部工具后的观察结果（含成功和异常）
  *
  * @author noear
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class ActionEndChunk extends AbsActionChunk {
-    private final ChatMessage result;
+public class ObservationChunk extends AbsActionChunk {
     private final Throwable error;
+    private final long durationMs;
 
-    public ActionEndChunk(ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage result, Throwable error) {
-        super(trace, toolName, args, result);
+    public ObservationChunk(ReActTrace trace, String toolName, Map<String, Object> args, @Nullable ChatMessage observation, @Nullable Throwable error, long durationMs) {
+        super(trace, toolName, args, observation);
 
-        this.result = result;
         this.error = error;
+        this.durationMs = durationMs;
     }
 
-    public ChatMessage getResult() {
-        return result;
+    /**
+     * 获取观察结果（成功时为工具输出，失败时为错误描述）
+     */
+    public @Nullable ChatMessage getObservation() {
+        return getMessage();
     }
 
-    public Throwable getError() {
+    public @Nullable Throwable getError() {
         return error;
+    }
+
+    public long getDurationMs() {
+        return durationMs;
     }
 }

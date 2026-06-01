@@ -22,7 +22,7 @@ public class PendingDemo {
         ReActAgent agent = ReActAgent.of(null)
                 .defaultInterceptorAdd(new ReActInterceptor() {
                     @Override
-                    public void onActionStart(ReActTrace trace, ToolExchanger toolExchanger) {
+                    public void onAction(ReActTrace trace, ToolExchanger toolExchanger) {
                         trace.getSession().pending(true, "不让你查");
                     }
                 })

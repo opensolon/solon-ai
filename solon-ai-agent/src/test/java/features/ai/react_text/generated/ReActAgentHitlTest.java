@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.*;
 import org.noear.solon.ai.agent.react.task.ToolExchanger;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
@@ -40,7 +41,7 @@ public class ReActAgentHitlTest {
         // 1. 定义更简单的业务拦截器
         ReActInterceptor hitlInterceptor = new ReActInterceptor() {
             @Override
-            public void onActionStart(ReActTrace trace, ToolExchanger toolExchanger) {
+            public void onAction(ReActTrace trace, ToolExchanger toolExchanger) {
                 // 针对特定工具进行拦截
                 if ("do_refund".equals(toolExchanger.getToolName())) {
                     Boolean approved = trace.getContext().getAs("is_approved");
@@ -135,12 +136,13 @@ public class ReActAgentHitlTest {
             }
 
             @Override
-            public void onActionStart(ReActTrace trace, ToolExchanger toolExchanger) {
+            public void onAction(ReActTrace trace, ToolExchanger toolExchanger) {
                 log.append("[onAction:").append(toolExchanger.getToolName()).append("] ");
             }
 
             @Override
-            public void onObservation(ReActTrace trace, ToolExchanger toolExchanger, long durationMs) {
+            public void onObservation(ReActTrace trace, ToolExchanger toolExchanger,
+                                     ChatMessage observation, Throwable error, long durationMs) {
                 log.append("[onObservation] ");
             }
         };

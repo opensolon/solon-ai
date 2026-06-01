@@ -82,23 +82,26 @@ public interface ReActInterceptor extends AgentInterceptor, ChatInterceptor {
     }
 
     /**
-     * 动作开始节点：调用功能工具 (Action) 前触发
+     * 动作节点：调用功能工具 (Action) 前触发
      * <p>可用于权限控制、参数合法性预检</p>
      */
-    default void onActionStart(ReActTrace trace, ToolExchanger toolExchanger) {
+    default void onAction(ReActTrace trace, ToolExchanger toolExchanger) {
     }
 
     /**
-     * 观察节点：工具执行返回结果 (Observation) 后触发
+     * 观察节点：工具执行完成后触发（100% 强闭环，放在 finally 块中）
+     * <p>无论成功、失败、挂起、中断，此方法保证被调用</p>
+     *
+     * @param trace         ReAct 追踪上下文
+     * @param toolExchanger 工具交换器（含 toolName、args、result）
+     * @param observation   观察结果消息（成功时为工具输出，失败时为错误描述；挂起/中断时为空消息）
+     * @param durationMs    工具执行耗时（毫秒）
+     * @param error         执行异常（成功时为 null）
      */
-    default void onObservation(ReActTrace trace, ToolExchanger toolExchanger, long durationMs) {
-    }
-
-    /**
-     * 动作结束节点：调用功能工具 (Action) 后触发
-     * <p>可用于权限控制、参数合法性预检</p>
-     */
-    default void onActionEnd(ReActTrace trace, ToolExchanger toolExchanger, @Nullable ChatMessage observation, @Nullable Throwable error) {
+    default void onObservation(ReActTrace trace, ToolExchanger toolExchanger,
+                               @Nullable ChatMessage observation,
+                               @Nullable Throwable error,
+                               long durationMs) {
     }
 
     /**

@@ -21,6 +21,7 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.task.ToolExchanger;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
@@ -60,7 +61,7 @@ public class HITLInterceptor implements ReActInterceptor {
     }
 
     @Override
-    public void onActionStart(ReActTrace trace, ToolExchanger toolExchanger) {
+    public void onAction(ReActTrace trace, ToolExchanger toolExchanger) {
         InterventionStrategy strategy = strategyMap.get(toolExchanger.getToolName());
         if (strategy == null) {
             return;
@@ -109,19 +110,19 @@ public class HITLInterceptor implements ReActInterceptor {
     }
 
     @Override
-    public void onObservation(ReActTrace trace, ToolExchanger toolExchanger, long durationMs) {
+    public void onObservation(ReActTrace trace, ToolExchanger toolExchanger,
+                              @Nullable ChatMessage observation,
+                              @Nullable Throwable error, long durationMs) {
         HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + toolExchanger.getToolName());
 
-        if (decision != null && decision.isApproved()) {
+        // 成功时：注入人工备注
+        if (error == null && decision != null && decision.isApproved()) {
             if (Assert.isNotEmpty(decision.getComment())) {
                 toolExchanger.setResult(toolExchanger.getResult() + " (Note: " + decision.getComment() + ")");
             }
         }
-    }
 
-    @Override
-    public void onActionEnd(ReActTrace trace, ToolExchanger toolExchanger, ChatMessage result, Throwable error) {
-        // 审批闭环后的现场清理，确保 Session 状态幂等
+        // 100% 闭环：现场清理，确保 Session 状态幂等
         trace.getContext().remove(HITL.LAST_INTERVENED);
         trace.getContext().remove(HITL.DECISION_PREFIX + toolExchanger.getToolName());
     }

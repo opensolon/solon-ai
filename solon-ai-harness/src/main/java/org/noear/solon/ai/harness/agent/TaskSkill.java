@@ -21,7 +21,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.agent.react.task.ActionEndChunk;
+import org.noear.solon.ai.agent.react.task.ObservationChunk;
 import org.noear.solon.ai.agent.react.task.ReasonDeltaChunk;
 import org.noear.solon.ai.agent.react.task.ReasonCompleteChunk;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
@@ -218,7 +218,7 @@ public class TaskSkill extends AbsSkill {
                         .stream()
                         .takeUntil(r -> sink.isCancelled())
                         .doOnNext(chunk -> {
-                            if (chunk instanceof ActionEndChunk) {
+                            if (chunk instanceof ObservationChunk) {
                                 sink.next(chunk);
                             } else {
                                 if (isMultitask) {
