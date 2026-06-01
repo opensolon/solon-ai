@@ -32,6 +32,7 @@ import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.code.CodeSkill;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
+import org.noear.solon.ai.harness.mount.MountDo;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.skills.cli.PoolType;
 import org.noear.solon.ai.skills.lsp.LspManager;
@@ -91,7 +92,7 @@ public class HarnessEngine {
 
     private final CommandRegistry commandRegistry = new CommandRegistry();
 
-    private final AgentManager agentManager;
+    private final AgentManager agentManager = new AgentManager();
 
     private volatile ChatModel mainModel; //允许运行时切换
     private volatile ReActAgent mainAgent; //允许运行时切换
@@ -270,12 +271,8 @@ public class HarnessEngine {
         return options.getModels();
     }
 
-    public Map<String, String> getMountPools() {
+    public Map<String, MountDo> getMountPools() {
         return options.getMountPools();
-    }
-
-    public List<String> getAgentPools() {
-        return options.getAgentPools();
     }
 
     public Map<String, McpServerParameters> getMcpServers() {
@@ -436,16 +433,14 @@ public class HarnessEngine {
 
         cliSkills.bashAsyncEnabled(options.isBashAsyncEnabled());
         cliSkills.getTerminalSkill().setSandboxMode(options.isSandboxMode());
-        if (Assert.isNotEmpty(options.getMountPools())) {
-            options.getMountPools().forEach((alias, path) -> {
-                cliSkills.getPoolManager().register(alias, PoolType.SKILLS, path);
-            });
-        }
 
-        agentManager = new AgentManager();
-        if (Assert.isNotEmpty(options.getAgentPools())) {
-            options.getAgentPools().forEach(dir -> {
-                agentManager.agentPool(Paths.get(dir));
+        if (Assert.isNotEmpty(options.getMountPools())) {
+            options.getMountPools().forEach((alias, mount) -> {
+                if (mount.getType() == PoolType.SUBAGENTS) {
+                    agentManager.agentPool(Paths.get(mount.getPath()));
+                }
+
+                cliSkills.getPoolManager().register(alias, mount.getType(), mount.getPath());
             });
         }
 
@@ -719,47 +714,42 @@ public class HarnessEngine {
 
         // ========== 集合类配置（代理到 options） ==========
 
-        public Builder tools(ToolPermission... val) {
+        public Builder toolsAdd(ToolPermission... val) {
             options.addTools(val);
             return this;
         }
 
-        public Builder disallowedTools(ToolPermission... val) {
+        public Builder disallowedToolsAdd(ToolPermission... val) {
             options.addDisallowedTools(val);
             return this;
         }
 
-        public Builder extension(HarnessExtension val) {
+        public Builder extensionAdd(HarnessExtension val) {
             options.addExtension(val);
             return this;
         }
 
-        public Builder model(ChatConfig val) {
+        public Builder modelAdd(ChatConfig val) {
             options.addModel(val);
             return this;
         }
 
-        public Builder mountPool(String alias, String path) {
-            options.addMountPool(alias, path);
+        public Builder mountPoolAdd(String alias, PoolType type, String path) {
+            options.addMountPool(alias, type, path);
             return this;
         }
 
-        public Builder agentPool(String path) {
-            options.addAgentPool(path);
-            return this;
-        }
-
-        public Builder mcpServer(String name, McpServerParameters params) {
+        public Builder mcpServerAdd(String name, McpServerParameters params) {
             options.addMcpServer(name, params);
             return this;
         }
 
-        public Builder apiSource(String name, ApiSource source) {
+        public Builder apiSourceAdd(String name, ApiSource source) {
             options.addApiSource(name, source);
             return this;
         }
 
-        public Builder lspServer(String name, LspServerParameters params) {
+        public Builder lspServerAdd(String name, LspServerParameters params) {
             options.addLspServer(name, params);
             return this;
         }

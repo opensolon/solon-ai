@@ -19,8 +19,10 @@ import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
 import org.noear.solon.ai.chat.ChatConfig;
+import org.noear.solon.ai.harness.mount.MountDo;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
+import org.noear.solon.ai.skills.cli.PoolType;
 import org.noear.solon.ai.skills.lsp.LspServerParameters;
 import org.noear.solon.ai.skills.memory.MemorySolution;
 import org.noear.solon.ai.skills.openapi.ApiSource;
@@ -81,8 +83,7 @@ class HarnessOptions implements Serializable {
     // ========== 集合类配置 ==========
     private List<HarnessExtension> extensions = new CopyOnWriteArrayList<>();
     private List<ChatConfig> models = new CopyOnWriteArrayList<>();
-    private Map<String, String> mountPools = new ConcurrentHashMap<>();
-    private List<String> agentPools = new CopyOnWriteArrayList<>();
+    private Map<String, MountDo> mountPools = new ConcurrentHashMap<>();
     private Map<String, McpServerParameters> mcpServers = new ConcurrentHashMap<>();
     private Map<String, ApiSource> apiServers = new ConcurrentHashMap<>();
     private Map<String, LspServerParameters> lspServers = new ConcurrentHashMap<>();
@@ -299,12 +300,8 @@ class HarnessOptions implements Serializable {
         return models;
     }
 
-    Map<String, String> getMountPools() {
+    Map<String, MountDo> getMountPools() {
         return mountPools;
-    }
-
-    List<String> getAgentPools() {
-        return agentPools;
     }
 
     Map<String, McpServerParameters> getMcpServers() {
@@ -349,12 +346,8 @@ class HarnessOptions implements Serializable {
         lspServers.put(name, lspParameters);
     }
 
-    void addMountPool(String alias, String path) {
-        mountPools.put(alias, path);
-    }
-
-    void addAgentPool(String path) {
-        agentPools.add(path);
+    void addMountPool(String alias, PoolType type, String path) {
+        mountPools.put(alias, new MountDo(type, path, true));
     }
 
     void addModel(ChatConfig chatConfig) {
