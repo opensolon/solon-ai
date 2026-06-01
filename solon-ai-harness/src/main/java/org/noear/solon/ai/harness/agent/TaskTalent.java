@@ -52,15 +52,15 @@ import java.util.concurrent.atomic.AtomicReference;
  * @author bai
  * @since 3.9.5
  */
-public class TaskSkill extends AbsTalent {
-    private static final Logger LOG = LoggerFactory.getLogger(TaskSkill.class);
+public class TaskTalent extends AbsTalent {
+    private static final Logger LOG = LoggerFactory.getLogger(TaskTalent.class);
 
     public static final String TOOL_TASK = "task";
     public static final String TOOL_MULTITASK = "multitask";
 
     private final HarnessEngine engine;
 
-    public TaskSkill(HarnessEngine engine) {
+    public TaskTalent(HarnessEngine engine) {
         this.engine = engine;
     }
 
