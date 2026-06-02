@@ -31,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
- * 挂载池管理
+ * 挂载管理器
  *
  * @author noear
  * @since 3.9.5
@@ -42,7 +42,7 @@ public class MountManager {
     private static final String USER_HOME = System.getProperty("user.home"); //对应 `～/`
     private final String workDir; //对应 `./`
 
-    // 逻辑路径前缀 -> 池目录信息 (如 "@shared" -> MountDir)
+    // 逻辑路径前缀 -> 挂载目录信息 (如 "@shared" -> MountDir)
     private final Map<String, MountDir> mountMap = new ConcurrentHashMap<>();
 
     // 逻辑全路径 -> 技能目录信息 (如 "video-creator" -> SkillDir)
@@ -57,7 +57,7 @@ public class MountManager {
     }
 
     /**
-     * 注册池（并扫描）
+     * 注册挂载（并扫描）
      */
     public synchronized MountDir register(String alias, MountType type, String path) {
         return register(new MountDir(alias, type,  path, false));
@@ -68,7 +68,7 @@ public class MountManager {
     }
 
     /**
-     * 注册池（并扫描）
+     * 注册挂载（并扫描）
      */
     public synchronized MountDir register(MountDir mountDir) {
         String key = mountDir.getAlias();
@@ -91,7 +91,7 @@ public class MountManager {
     }
 
     /**
-     * 移除池（及其关联技能）
+     * 移除挂载（及其关联技能）
      */
     public synchronized MountDir remove(String alias) {
         String key = alias.startsWith("@") ? alias : "@" + alias;
@@ -104,7 +104,7 @@ public class MountManager {
     }
 
     /**
-     * 刷新指定挂载池（增量更新）
+     * 刷新指定挂载（增量更新）
      */
     public synchronized void refresh(String alias) {
         if (Assert.isEmpty(alias)) {
@@ -117,18 +117,18 @@ public class MountManager {
                 return;
             }
 
-            // 1. 扫描该池
+            // 1. 扫描该挂载
             Map<String, SkillDir> tmp = new LinkedHashMap<>();
             scanSkillAndCache(mountDir, tmp);
 
-            // 2. 移除该池下的旧技能
+            // 2. 移除该挂载下的旧技能
             skillMap.entrySet().removeIf(e -> key.equals(e.getValue().getMountAlias()));
             skillMap.putAll(tmp);
         }
     }
 
     /**
-     * 刷新所有挂载池（重新扫描）
+     * 刷新所有挂载（重新扫描）
      */
     public synchronized void refresh() {
         Map<String, SkillDir> tmp = new ConcurrentHashMap<>();
@@ -159,7 +159,7 @@ public class MountManager {
     }
 
     /**
-     * 获取单个池
+     * 获取单个挂载
      */
     public MountDir getMount(String alias) {
         String key = alias.startsWith("@") ? alias : "@" + alias;
@@ -172,7 +172,7 @@ public class MountManager {
     }
 
     /**
-     * 获取所有池
+     * 获取所有挂载
      */
     public Collection<MountDir> getMounts() {
         return Collections.unmodifiableCollection(mountMap.values());
@@ -183,7 +183,7 @@ public class MountManager {
     }
 
     /**
-     * 获取某池下的所有技能
+     * 获取某挂载下的所有技能
      */
     public List<SkillDir> getSkillsByMount(String alias) {
         String key = alias.startsWith("@") ? alias : "@" + alias;

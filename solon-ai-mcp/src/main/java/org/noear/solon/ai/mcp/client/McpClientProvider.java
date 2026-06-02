@@ -73,6 +73,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * Mcp 客户端提供者
@@ -117,6 +118,19 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     private LocalCacheService cacheService = new LocalCacheService();
     private final StringMutexLock cacheLocker = new StringMutexLock();
 
+    // 允许工具（空表示全部）
+    private final List<String> allowedTools = new ArrayList<>();
+
+    // 禁用工具（空表示不禁）
+    private final List<String> disallowedTools = new ArrayList<>();
+
+    public List<String> allowedTools() {
+        return allowedTools;
+    }
+
+    public List<String> disallowedTools() {
+        return disallowedTools;
+    }
 
     /**
      * 用于支持注入
@@ -713,7 +727,14 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      */
     @Override
     public Collection<FunctionTool> getTools() {
-        return getTools(null);
+        Collection<FunctionTool> toolList = getTools(null);
+
+        return toolList.stream()
+                // 1. 如果开启了白名单，则只保留在白名单中的工具
+                .filter(t -> allowedTools.isEmpty() || allowedTools.contains(t.name()))
+                // 2. 如果开启了黑名单，则剔除在黑名单中的工具
+                .filter(t -> disallowedTools.isEmpty() || !disallowedTools.contains(t.name()))
+                .collect(Collectors.toList());
     }
 
 

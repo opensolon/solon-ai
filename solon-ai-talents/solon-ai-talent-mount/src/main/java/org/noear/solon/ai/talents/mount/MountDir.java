@@ -31,7 +31,7 @@ import java.nio.file.Paths;
 public class MountDir implements Serializable {
     //虚拟别名
     private String alias;
-    //池类型
+    //挂载类型
     private MountType type;
     //配置地址支持 "~/"（用户目录相对位置） 和 "./"（工作区相对位置）
     private String path;

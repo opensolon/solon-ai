@@ -34,6 +34,11 @@ public class McpServerParameters implements Serializable {
 
     private String url;
     private Map<String, String> headers = new HashMap<>();
+    // 允许工具（空表示全部）
+    private List<String> allowedTools = new ArrayList<>();
+
+    // 禁用工具（空表示不禁）
+    private List<String> disallowedTools = new ArrayList<>();
     private Duration timeout;
 
     private String command;
@@ -91,6 +96,34 @@ public class McpServerParameters implements Serializable {
         Assert.notNull(value, "The value can not be null");
 
         headers.put(key, value);
+    }
+
+    public void setAllowedTools(List<String> allowedTools) {
+        this.allowedTools = allowedTools;
+    }
+
+    public void addAllowedTool(String toolName){
+        Assert.notNull(toolName, "The toolName can not be null");
+
+        allowedTools.add(toolName);
+    }
+
+    public List<String> getAllowedTools() {
+        return allowedTools;
+    }
+
+    public void setDisallowedTools(List<String> disallowedTools) {
+        this.disallowedTools = disallowedTools;
+    }
+
+    public void addDisallowedTool(String toolName){
+        Assert.notNull(toolName, "The toolName can not be null");
+
+        disallowedTools.add(toolName);
+    }
+
+    public List<String> getDisallowedTools() {
+        return disallowedTools;
     }
 
     public Duration getTimeout() {

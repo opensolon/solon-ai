@@ -18,7 +18,9 @@ package org.noear.solon.ai.talents.openapi;
 import org.noear.solon.core.util.Assert;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -32,8 +34,13 @@ public class ApiSource {
     private String docUrl;
     private String apiBaseUrl;
     private Map<String, String> headers = new HashMap<>();
+    // 允许工具（空表示全部）
+    private List<String> allowedTools = new ArrayList<>();
+    // 禁用工具（空表示不禁）
+    private List<String> disallowedTools = new ArrayList<>();
     private Duration timeout;
     private ApiAuthenticator authenticator;
+
     private boolean enabled = true;
 
     public ApiSource() {
@@ -76,6 +83,35 @@ public class ApiSource {
 
         headers.put(key, value);
     }
+
+    public void setAllowedTools(List<String> allowedTools) {
+        this.allowedTools = allowedTools;
+    }
+
+    public void addAllowedTool(String toolName){
+        Assert.notNull(toolName, "The toolName can not be null");
+
+        allowedTools.add(toolName);
+    }
+
+    public List<String> getAllowedTools() {
+        return allowedTools;
+    }
+
+    public void setDisallowedTools(List<String> disallowedTools) {
+        this.disallowedTools = disallowedTools;
+    }
+
+    public void addDisallowedTool(String toolName){
+        Assert.notNull(toolName, "The toolName can not be null");
+
+        disallowedTools.add(toolName);
+    }
+
+    public List<String> getDisallowedTools() {
+        return disallowedTools;
+    }
+
 
     public Duration getTimeout() {
         return timeout;

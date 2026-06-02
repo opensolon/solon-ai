@@ -180,7 +180,7 @@ public class AgentDefinition {
         // 模型配置
         private String model;
 
-        // 工具配置
+        // 允许工具
         private List<String> tools = new ArrayList<>();
 
         // 禁用工具
