@@ -15,7 +15,7 @@ import org.noear.solon.test.SolonTest;
 public class AgentDefaultTest {
     @Test
     public void case1() {
-        AgentManager agentManager = new AgentManager();
+        AgentManager agentManager = new AgentManager(null);
 
         AgentDefinition bash = agentManager.getAgent("bash");
         AgentDefinition explore = agentManager.getAgent("explore");
