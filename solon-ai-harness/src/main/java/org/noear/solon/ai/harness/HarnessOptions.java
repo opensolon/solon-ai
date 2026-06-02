@@ -32,6 +32,7 @@ import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 /**
  * 马具运行时配置（内部使用）
@@ -51,10 +52,10 @@ class HarnessOptions implements Serializable {
     private volatile String userAgent;
 
     // ========== 主代理工具权限 ==========
-    private List<String> tools = new CopyOnWriteArrayList<>();
+    private Set<String> tools = new CopyOnWriteArraySet<>();
 
     // 禁用工具（全局）
-    private List<String> disallowedTools = new CopyOnWriteArrayList<>();
+    private Set<String> disallowedTools = new CopyOnWriteArraySet<>();
 
     // ========== 执行控制 ==========
     private volatile int maxTurns = 30;
@@ -163,11 +164,11 @@ class HarnessOptions implements Serializable {
         this.userAgent = userAgent;
     }
 
-    List<String> getTools() {
+    Set<String> getTools() {
         return tools;
     }
 
-    List<String> getDisallowedTools() {
+    Set<String> getDisallowedTools() {
         return disallowedTools;
     }
 
@@ -327,22 +328,6 @@ class HarnessOptions implements Serializable {
         for (ToolPermission p1 : toolPermissions) {
             disallowedTools.add(p1.getName());
         }
-    }
-
-    void addExtension(HarnessExtension extension) {
-        this.extensions.add(extension);
-    }
-
-    void addApiSource(String name, ApiSource apiSource) {
-        apiServers.put(name, apiSource);
-    }
-
-    void addMcpServer(String name, McpServerParameters mcpParameters) {
-        mcpServers.put(name, mcpParameters);
-    }
-
-    void addLspServer(String name, LspServerParameters lspParameters) {
-        lspServers.put(name, lspParameters);
     }
 
     void addModel(ChatConfig chatConfig) {

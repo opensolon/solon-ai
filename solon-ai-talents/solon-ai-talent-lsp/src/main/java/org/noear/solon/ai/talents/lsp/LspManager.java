@@ -173,6 +173,25 @@ public class LspManager {
     }
 
     /**
+     * 注销并关闭一个 LSP 服务器
+     */
+    public void unregisterServer(String name) {
+        Objects.requireNonNull(name, "Server name cannot be null");
+
+        serverConfigs.remove(name);
+
+        LspClient client = activeClients.remove(name);
+        if (client != null) {
+            try {
+                client.shutdown();
+                LOG.info("LSP server '{}' shut down", name);
+            } catch (Exception e) {
+                LOG.warn("Error shutting down LSP server '{}': {}", name, e.getMessage());
+            }
+        }
+    }
+
+    /**
      * 关闭所有 LSP 服务器
      */
     public void shutdownAll() {

@@ -296,15 +296,15 @@ public class HarnessEngine {
     }
 
     public Collection<String> getTools() {
-        return Collections.unmodifiableList(options.getTools());
+        return Collections.unmodifiableCollection(options.getTools());
     }
 
     public Collection<String> getDisallowedTools() {
-        return Collections.unmodifiableList(options.getDisallowedTools());
+        return Collections.unmodifiableCollection(options.getDisallowedTools());
     }
 
     public Collection<HarnessExtension> getExtensions() {
-        return Collections.unmodifiableList(options.getExtensions());
+        return Collections.unmodifiableCollection(options.getExtensions());
     }
 
     public Collection<MountDir> getMounts() {
@@ -419,6 +419,47 @@ public class HarnessEngine {
         return options.hasModel(name);
     }
 
+    /**
+     * 动态授权一个工具（允许使用）
+     */
+    public void allowTool(String toolName) {
+        if (toolName == null || toolName.trim().isEmpty()) return;
+
+        options.getDisallowedTools().remove(toolName);
+        options.getTools().add(toolName);
+
+        // 权限变更需要重建 Agent 以重新生成工具集
+        agentLock.lock();
+        try {
+            if (this.mainAgent != null) {
+                this.mainAgent = createMainAgent();
+            }
+        } finally {
+            agentLock.unlock();
+        }
+    }
+
+    /**
+     * 动态撤销一个工具的权限（禁用）
+     */
+    public void disallowTool(String toolName) {
+        if (toolName == null || toolName.trim().isEmpty()) return;
+
+        options.getTools().remove(toolName);
+        options.getDisallowedTools().add(toolName);
+
+        agentLock.lock();
+        try {
+            if (this.mainAgent != null) {
+                this.mainAgent = createMainAgent();
+            }
+        } finally {
+            agentLock.unlock();
+        }
+    }
+
+
+
     public void addMount(MountDir mount) {
         options.getMountManager().register(mount);
     }
@@ -453,7 +494,7 @@ public class HarnessEngine {
      */
     public void addApi(ApiSource apiSource) {
         openApiTalent.addApi(apiSource);
-        options.addApiSource(apiSource.getDocUrl(), apiSource);
+        options.getApiServers().put(apiSource.getDocUrl(), apiSource);
     }
 
     /**
@@ -469,7 +510,7 @@ public class HarnessEngine {
      */
     public void addMcpServer(String name, McpServerParameters mcpServer) {
         mcpGatewayTalent.addMcpServer(name, mcpServer);
-        options.addMcpServer(name, mcpServer);
+        options.getMcpServers().put(name, mcpServer);
     }
 
     /**
@@ -480,14 +521,88 @@ public class HarnessEngine {
         options.getMcpServers().remove(name);
     }
 
-    public void addExtension(HarnessExtension extension) {
-        options.addExtension(extension);
+    /**
+     * 动态添加一个 LSP 服务器
+     */
+    public void addLspServer(String name, LspServerParameters lspServer) {
+        if (lspServer == null) {
+            return;
+        }
 
-        // 如果主代理还没懒加载触发，这里无需提前创建
-        if (this.mainAgent != null) {
-            this.mainAgent = createMainAgent();
+        // 将配置同步到 options 中，以便后续快照使用
+        options.getLspServers().put(name, lspServer);
+        // 让 LspManager 运行时加载该服务器
+        lspManager.registerServer(name, lspServer);
+
+        // LSP 工具的增减会影响 Agent 的可用工具集，需重建 Agent
+        agentLock.lock();
+        try {
+            if (this.mainAgent != null) {
+                this.mainAgent = createMainAgent();
+            }
+        } finally {
+            agentLock.unlock();
         }
     }
+
+    /**
+     * 动态移除一个 LSP 服务器
+     */
+    public void removeLspServer(String name) {
+        if (name == null) {
+            return;
+        }
+        
+        options.getLspServers().remove(name);
+        lspManager.unregisterServer(name);
+
+        agentLock.lock();
+        try {
+            if (this.mainAgent != null) {
+                this.mainAgent = createMainAgent();
+            }
+        } finally {
+            agentLock.unlock();
+        }
+    }
+
+
+    public void addExtension(HarnessExtension extension) {
+        if (extension == null) {
+            return;
+        }
+        options.getExtensions().add(extension);
+
+        agentLock.lock();
+        try {
+            if (this.mainAgent != null) {
+                this.mainAgent = createMainAgent();
+            }
+        } finally {
+            agentLock.unlock();
+        }
+    }
+
+    /**
+     * 动态移除一个扩展
+     */
+    public void removeExtension(HarnessExtension extension) {
+        if (extension == null) {
+            return;
+        }
+        options.getExtensions().remove(extension);
+
+        // 重建 mainAgent 以应用变更，使用 agentLock 保证线程安全
+        agentLock.lock();
+        try {
+            if (this.mainAgent != null) {
+                this.mainAgent = createMainAgent();
+            }
+        } finally {
+            agentLock.unlock();
+        }
+    }
+
 
     private HarnessEngine(HarnessOptions options) {
         this.options = options;
@@ -579,11 +694,6 @@ public class HarnessEngine {
 
         ReActAgent.Builder agentBuilder = AgentFactory.create(this, agentDefinition, null);
 
-        // 改为动态系统提示词
-        agentBuilder.systemPrompt(r->{
-            return options.getSystemPrompt();
-        });
-
         return agentBuilder.build();
     }
 
@@ -651,9 +761,13 @@ public class HarnessEngine {
 
         this.mainModel = chatConfig.toChatModel();
 
-        // 如果 mainAgent 之前已经被懒加载初始化过了，则立刻刷新它
-        if (this.mainAgent != null) {
-            this.mainAgent = createMainAgent();
+        agentLock.lock();
+        try {
+            if (this.mainAgent != null) {
+                this.mainAgent = createMainAgent();
+            }
+        } finally {
+            agentLock.unlock();
         }
     }
 
@@ -830,13 +944,23 @@ public class HarnessEngine {
             return this;
         }
 
+        public Builder toolsAdd(Collection<String> tools){
+            options.getTools().addAll(tools);
+            return this;
+        }
+
         public Builder disallowedToolsAdd(ToolPermission... val) {
             options.addDisallowedTools(val);
             return this;
         }
 
+        public Builder disallowedToolsAdd(Collection<String> tools) {
+            options.getDisallowedTools().addAll(tools);
+            return this;
+        }
+
         public Builder extensionAdd(HarnessExtension val) {
-            options.addExtension(val);
+            options.getExtensions().add(val);
             return this;
         }
 
@@ -858,17 +982,17 @@ public class HarnessEngine {
         }
 
         public Builder mcpServerAdd(String name, McpServerParameters params) {
-            options.addMcpServer(name, params);
+            options.getMcpServers().put(name, params);
             return this;
         }
 
         public Builder apiSourceAdd(String name, ApiSource source) {
-            options.addApiSource(name, source);
+            options.getApiServers().put(name, source);
             return this;
         }
 
-        public Builder lspServerAdd(String name, LspServerParameters params) {
-            options.addLspServer(name, params);
+        public Builder lspServerAdd(String name, LspServerParameters lspServer) {
+            options.getLspServers().put(name, lspServer);
             return this;
         }
 
