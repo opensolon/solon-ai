@@ -95,13 +95,14 @@ class HarnessOptions implements Serializable {
     private HITLInterceptor hitlInterceptor;
     private MemorySolution.Factory memorySolution;
 
-    HarnessOptions(String harnessHome) {
+    HarnessOptions(String workspace, String harnessHome) {
         if (Assert.isEmpty(harnessHome)) {
             harnessHome = ".solon/";
         } else if (!harnessHome.endsWith("/")) {
             harnessHome = harnessHome + "/";
         }
 
+        this.workspace = workspace;
         this.harnessHome = harnessHome;
     }
 
@@ -143,10 +144,6 @@ class HarnessOptions implements Serializable {
 
     String getWorkspace() {
         return workspace;
-    }
-
-    void setWorkspace(String workspace) {
-        this.workspace = workspace;
     }
 
     String getSystemPrompt() {

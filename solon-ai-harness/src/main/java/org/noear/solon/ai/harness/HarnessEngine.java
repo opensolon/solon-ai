@@ -119,10 +119,6 @@ public class HarnessEngine {
         return options.getHitlInterceptor();
     }
 
-//    public PoolManager getPoolManager() {
-//        return poolManager;
-//    }
-
     public TerminalTalent getTerminalTalent() {
         return terminalTalent;
     }
@@ -192,21 +188,27 @@ public class HarnessEngine {
     public String getHarnessSessions() {
         return options.getHarnessSessions();
     }
+
     public String getHarnessSkills() {
         return options.getHarnessSkills();
     }
+
     public String getHarnessAgents() {
         return options.getHarnessAgents();
     }
+
     public String getHarnessCommands() {
         return options.getHarnessCommands();
     }
+
     public String getHarnessMemory() {
         return options.getHarnessMemory();
     }
+
     public String getHarnessDownload() {
         return options.getHarnessDownload();
     }
+
     public String getHarnessChannels() {
         return options.getHarnessChannels();
     }
@@ -395,7 +397,7 @@ public class HarnessEngine {
         options.getMounts().put(mount.getAlias(), mount);
         poolManager.register(mount);
 
-        if(mount.getType() == MountType.SUBAGENTS){
+        if (mount.getType() == MountType.SUBAGENTS) {
             agentManager.agentPool(mount.getRealPath());
         }
 
@@ -410,7 +412,7 @@ public class HarnessEngine {
         return options.getMounts().containsKey(alias);
     }
 
-    public void refreshMount(@Nullable String alias){
+    public void refreshMount(@Nullable String alias) {
         poolManager.refresh(alias);
     }
 
@@ -674,15 +676,15 @@ public class HarnessEngine {
     }
 
 
-    public static Builder of(String harnessHome) {
-        return new Builder(harnessHome);
+    public static Builder of(String workspace, String harnessHome) {
+        return new Builder(workspace, harnessHome);
     }
 
     public static class Builder {
         private final HarnessOptions options;
 
-        public Builder(String harnessHome) {
-            this.options = new HarnessOptions(harnessHome);
+        public Builder(String workspace, String harnessHome) {
+            this.options = new HarnessOptions(workspace, harnessHome);
         }
 
         // ========== 服务注入（代理到 options） ==========
@@ -709,11 +711,6 @@ public class HarnessEngine {
         }
 
         // ========== 简单属性配置（代理到 options） ==========
-
-        public Builder workspace(String val) {
-            options.setWorkspace(val);
-            return this;
-        }
 
         public Builder systemPrompt(String val) {
             options.setSystemPrompt(val);

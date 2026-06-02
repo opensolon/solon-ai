@@ -16,7 +16,7 @@ import java.util.Arrays;
 public class DemoApp {
     public static void main(String[] arg) throws Throwable {
         //--- 1. 初始化
-        HarnessEngine engine = HarnessEngine.of(".tmp/")
+        HarnessEngine engine = HarnessEngine.of(".tmp/", "/work")
                 .systemPrompt("xxx")
                 .sessionProvider(InMemoryAgentSession::of)
                 .toolsAdd(ToolPermission.TOOL_ALL_FULL) //设定工具权限
