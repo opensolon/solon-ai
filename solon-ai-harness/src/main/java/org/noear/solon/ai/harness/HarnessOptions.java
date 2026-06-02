@@ -19,11 +19,11 @@ import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.chat.ChatConfig;
-import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.talents.lsp.LspServerParameters;
 import org.noear.solon.ai.talents.memory.MemorySolution;
+import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.ai.talents.openapi.ApiSource;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
@@ -82,12 +82,12 @@ class HarnessOptions implements Serializable {
     private int modelRetries = 3;
 
     // ========== 集合类配置 ==========
-    private List<HarnessExtension> extensions = new CopyOnWriteArrayList<>();
-    private List<ChatConfig> models = new CopyOnWriteArrayList<>();
-    private Map<String, MountDir> mounts = new ConcurrentHashMap<>();
-    private Map<String, McpServerParameters> mcpServers = new ConcurrentHashMap<>();
-    private Map<String, ApiSource> apiServers = new ConcurrentHashMap<>();
-    private Map<String, LspServerParameters> lspServers = new ConcurrentHashMap<>();
+    private final List<HarnessExtension> extensions = new CopyOnWriteArrayList<>();
+    private final List<ChatConfig> models = new CopyOnWriteArrayList<>();
+    private final MountManager mountManager;
+    private final Map<String, McpServerParameters> mcpServers = new ConcurrentHashMap<>();
+    private final Map<String, ApiSource> apiServers = new ConcurrentHashMap<>();
+    private final Map<String, LspServerParameters> lspServers = new ConcurrentHashMap<>();
 
     // ========== 服务注入 ==========
     private AgentSessionProvider sessionProvider;
@@ -104,6 +104,7 @@ class HarnessOptions implements Serializable {
 
         this.workspace = workspace;
         this.harnessHome = harnessHome;
+        this.mountManager = new MountManager(workspace);
     }
 
     // ========== 派生路径属性 ==========
@@ -298,8 +299,8 @@ class HarnessOptions implements Serializable {
         return models;
     }
 
-    Map<String, MountDir> getMounts() {
-        return mounts;
+    public MountManager getMountManager() {
+        return mountManager;
     }
 
     Map<String, McpServerParameters> getMcpServers() {

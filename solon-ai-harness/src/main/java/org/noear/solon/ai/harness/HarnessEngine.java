@@ -88,7 +88,6 @@ public class HarnessEngine {
 
     private final MemoryTalent memoryTalent;
 
-    private final MountManager poolManager;
     private final TerminalTalent terminalTalent;
     private final SkillTalent skillTalent;
 
@@ -311,8 +310,8 @@ public class HarnessEngine {
         return Collections.unmodifiableList(options.getModels());
     }
 
-    public Map<String, MountDir> getMounts() {
-        return Collections.unmodifiableMap(options.getMounts());
+    public Collection<MountDir> getMounts() {
+        return options.getMountManager().getMounts();
     }
 
     public Map<String, McpServerParameters> getMcpServers() {
@@ -394,8 +393,7 @@ public class HarnessEngine {
     }
 
     public void addMount(MountDir mount) {
-        options.getMounts().put(mount.getAlias(), mount);
-        poolManager.register(mount);
+        options.getMountManager().register(mount);
 
         if (mount.getType() == MountType.SUBAGENTS) {
             agentManager.agentPool(mount.getRealPath());
@@ -404,16 +402,15 @@ public class HarnessEngine {
     }
 
     public void removeMount(String alias) {
-        options.getMounts().remove(alias);
-        poolManager.remove(alias);
+        options.getMountManager().remove(alias);
     }
 
     public boolean hasMount(String alias) {
-        return options.getMounts().containsKey(alias);
+        return options.getMountManager().hasMount(alias);
     }
 
     public void refreshMount(@Nullable String alias) {
-        poolManager.refresh(alias);
+        options.getMountManager().refresh(alias);
     }
 
 
@@ -524,21 +521,17 @@ public class HarnessEngine {
             }
         }
 
-        poolManager = new MountManager(options.getWorkspace());
-
-        terminalTalent = new TerminalTalent(poolManager);
-        skillTalent = new SkillTalent(poolManager);
+        terminalTalent = new TerminalTalent(options.getMountManager());
+        skillTalent = new SkillTalent(options.getMountManager());
 
         terminalTalent.setBashAsyncEnabled(options.isBashAsyncEnabled());
         terminalTalent.setSandboxMode(options.isSandboxMode());
 
-        if (Assert.isNotEmpty(options.getMounts())) {
-            options.getMounts().forEach((alias, mount) -> {
+        if (Assert.isNotEmpty(options.getMountManager().getMounts())) {
+            options.getMountManager().getMounts().forEach(mount -> {
                 if (mount.getType() == MountType.SUBAGENTS) {
                     agentManager.agentPool(Paths.get(mount.getPath()));
                 }
-
-                poolManager.register(alias, mount.getType(), mount.getPath());
             });
         }
 
@@ -828,7 +821,7 @@ public class HarnessEngine {
         }
 
         public Builder mountAdd(MountDir mount) {
-            options.getMounts().put(mount.getAlias(), mount);
+            options.getMountManager().register(mount);
             return this;
         }
 

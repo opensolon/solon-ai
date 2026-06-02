@@ -42,8 +42,8 @@ public class MountManager {
     private static final String USER_HOME = System.getProperty("user.home"); //对应 `～/`
     private final String workDir; //对应 `./`
 
-    // 逻辑路径前缀 -> 池目录信息 (如 "@shared" -> PoolDir)
-    private final Map<String, MountDir> poolMap = new ConcurrentHashMap<>();
+    // 逻辑路径前缀 -> 池目录信息 (如 "@shared" -> MountDir)
+    private final Map<String, MountDir> mountMap = new ConcurrentHashMap<>();
 
     // 逻辑全路径 -> 技能目录信息 (如 "video-creator" -> SkillDir)
     private volatile Map<String, SkillDir> skillMap = new ConcurrentHashMap<>();
@@ -70,24 +70,24 @@ public class MountManager {
     /**
      * 注册池（并扫描）
      */
-    public synchronized MountDir register(MountDir poolDir) {
-        String key = poolDir.getAlias();
-        Path realPath = parseRealPath(poolDir.getPath()).toAbsolutePath().normalize();
-        poolDir.setRealPath(realPath);
+    public synchronized MountDir register(MountDir mountDir) {
+        String key = mountDir.getAlias();
+        Path realPath = parseRealPath(mountDir.getPath()).toAbsolutePath().normalize();
+        mountDir.setRealPath(realPath);
 
-        poolMap.put(key, poolDir);
+        mountMap.put(key, mountDir);
 
-        if (poolDir.isEnabled() && poolDir.getType() == MountType.SKILLS) {
+        if (mountDir.isEnabled() && mountDir.getType() == MountType.SKILLS) {
             if (Files.exists(realPath) && Files.isDirectory(realPath)) {
-                scanSkillAndCache(poolDir, skillMap);
-                LOG.debug("Mount pool has been loaded.: {} -> {}", key, realPath);
+                scanSkillAndCache(mountDir, skillMap);
+                LOG.debug("Mount has been loaded.: {} -> {}", key, realPath);
             } else {
                 String reason = !Files.exists(realPath) ? "The path does not exist." : "Not an effective directory";
-                LOG.debug("Mount pool loading skip：{} (alias: {}, path: {})", reason, key, poolDir.getPath());
+                LOG.debug("Mount loading skip：{} (alias: {}, path: {})", reason, key, mountDir.getPath());
             }
         }
 
-        return poolDir;
+        return mountDir;
     }
 
     /**
@@ -95,10 +95,10 @@ public class MountManager {
      */
     public synchronized MountDir remove(String alias) {
         String key = alias.startsWith("@") ? alias : "@" + alias;
-        MountDir removed = poolMap.remove(key);
+        MountDir removed = mountMap.remove(key);
         if (removed != null) {
-            skillMap.entrySet().removeIf(e -> key.equals(e.getValue().getPoolAlias()));
-            LOG.debug("Mount pool has been removed.: {}", key);
+            skillMap.entrySet().removeIf(e -> key.equals(e.getValue().getMountAlias()));
+            LOG.debug("Mount has been removed.: {}", key);
         }
         return removed;
     }
@@ -111,18 +111,18 @@ public class MountManager {
             refresh();
         } else {
             String key = alias.startsWith("@") ? alias : "@" + alias;
-            MountDir poolDir = poolMap.get(key);
+            MountDir mountDir = mountMap.get(key);
 
-            if (poolDir == null || poolDir.getType() != MountType.SKILLS){
+            if (mountDir == null || mountDir.getType() != MountType.SKILLS){
                 return;
             }
 
             // 1. 扫描该池
             Map<String, SkillDir> tmp = new LinkedHashMap<>();
-            scanSkillAndCache(poolDir, tmp);
+            scanSkillAndCache(mountDir, tmp);
 
             // 2. 移除该池下的旧技能
-            skillMap.entrySet().removeIf(e -> key.equals(e.getValue().getPoolAlias()));
+            skillMap.entrySet().removeIf(e -> key.equals(e.getValue().getMountAlias()));
             skillMap.putAll(tmp);
         }
     }
@@ -132,7 +132,7 @@ public class MountManager {
      */
     public synchronized void refresh() {
         Map<String, SkillDir> tmp = new ConcurrentHashMap<>();
-        for (Map.Entry<String, MountDir> entry : poolMap.entrySet()) {
+        for (Map.Entry<String, MountDir> entry : mountMap.entrySet()) {
             scanSkillAndCache(entry.getValue(), tmp);
         }
 
@@ -146,7 +146,7 @@ public class MountManager {
         if (pStr == null || pStr.isEmpty() || ".".equals(pStr)) return workDir;
 
         if (pStr.startsWith("@")) {
-            for (Map.Entry<String, MountDir> e : poolMap.entrySet()) {
+            for (Map.Entry<String, MountDir> e : mountMap.entrySet()) {
                 if (pStr.startsWith(e.getKey())) {
                     String sub = pStr.substring(e.getKey().length()).replaceFirst("^[/\\\\]", "");
                     return e.getValue().getRealPath().resolve(sub).normalize();
@@ -161,31 +161,31 @@ public class MountManager {
     /**
      * 获取单个池
      */
-    public MountDir getPool(String alias) {
+    public MountDir getMount(String alias) {
         String key = alias.startsWith("@") ? alias : "@" + alias;
-        return poolMap.get(key);
+        return mountMap.get(key);
     }
 
-    public boolean hasPool(String alias) {
+    public boolean hasMount(String alias) {
         String key = alias.startsWith("@") ? alias : "@" + alias;
-        return poolMap.containsKey(key);
+        return mountMap.containsKey(key);
     }
 
     /**
      * 获取所有池
      */
-    public Collection<MountDir> getPools() {
-        return Collections.unmodifiableCollection(poolMap.values());
+    public Collection<MountDir> getMounts() {
+        return Collections.unmodifiableCollection(mountMap.values());
     }
 
-    public Set<String> getPoolKeySet() {
-        return poolMap.keySet();
+    public Set<String> getMountKeySet() {
+        return mountMap.keySet();
     }
 
     /**
      * 获取某池下的所有技能
      */
-    public List<SkillDir> getSkillsByPool(String alias) {
+    public List<SkillDir> getSkillsByMount(String alias) {
         String key = alias.startsWith("@") ? alias : "@" + alias;
         return skillMap.values().stream()
                 .filter(s -> s.getAliasPath().startsWith(key + "/") || s.getAliasPath().equals(key))
@@ -205,20 +205,20 @@ public class MountManager {
     }
 
 
-    private static void scanSkillAndCache(MountDir poolDir, Map<String, SkillDir> map) {
-        if (poolDir.isEnabled() == false || poolDir.getType() != MountType.SKILLS) {
+    private static void scanSkillAndCache(MountDir mountDir, Map<String, SkillDir> map) {
+        if (mountDir.isEnabled() == false || mountDir.getType() != MountType.SKILLS) {
             return;
         }
 
         try {
-            Files.walkFileTree(poolDir.getRealPath(), EnumSet.noneOf(FileVisitOption.class), 3, new SimpleFileVisitor<Path>() {
+            Files.walkFileTree(mountDir.getRealPath(), EnumSet.noneOf(FileVisitOption.class), 3, new SimpleFileVisitor<Path>() {
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
                     if (isSkillDir(dir)) {
-                        String name = poolDir.getRealPath().relativize(dir).toString().replace("\\", "/");
-                        String aliasPath = poolDir.getAlias() + (name.isEmpty() ? "" : "/" + name);
+                        String name = mountDir.getRealPath().relativize(dir).toString().replace("\\", "/");
+                        String aliasPath = mountDir.getAlias() + (name.isEmpty() ? "" : "/" + name);
 
-                        map.put(name, new SkillDir(name, poolDir.getAlias(), aliasPath, dir, parseDescription(dir)));
+                        map.put(name, new SkillDir(name, mountDir.getAlias(), aliasPath, dir, parseDescription(dir)));
                         return FileVisitResult.SKIP_SUBTREE;
                     }
                     if (dir.getFileName().toString().startsWith(".")) return FileVisitResult.SKIP_SUBTREE;
@@ -226,7 +226,7 @@ public class MountManager {
                 }
             });
         } catch (IOException e) {
-            LOG.error("Scan skill pool failed: {}", poolDir.getRealPath(), e);
+            LOG.error("Scan skill mount failed: {}", mountDir.getRealPath(), e);
         }
     }
 
@@ -274,7 +274,7 @@ public class MountManager {
         } else if (rawPath.startsWith("~/") || rawPath.startsWith("~\\")) {
             processedPath = USER_HOME + rawPath.substring(1);
         }
-        // 2. 处理工作区相对路径 (例如 ./my-pool)
+        // 2. 处理工作区相对路径 (例如 ./my-work)
         else if (rawPath.startsWith("." + File.separator) || rawPath.equals(".")) {
             processedPath = rawPath.replaceFirst("^\\.", workDir);
         } else if (rawPath.startsWith("./") || rawPath.startsWith(".\\")) {

@@ -25,14 +25,14 @@ import java.nio.file.Path;
  */
 public class SkillDir {
     private final String name;
-    private final String poolAlias;
+    private final String mountAlias;
     private final String aliasPath;
     private final Path realPath;
     private final String description;
 
-    SkillDir(String name, String poolAlias, String aliasPath, Path realPath, String description) {
+    SkillDir(String name, String mountAlias, String aliasPath, Path realPath, String description) {
         this.name = name;
-        this.poolAlias = poolAlias;
+        this.mountAlias = mountAlias;
         this.aliasPath = aliasPath;
         this.realPath = realPath;
         this.description = description;
@@ -42,8 +42,11 @@ public class SkillDir {
         return name;
     }
 
-    public String getPoolAlias() {
-        return poolAlias;
+    /**
+     * 持载别名
+     */
+    public String getMountAlias() {
+        return mountAlias;
     }
 
     public String getAliasPath() {

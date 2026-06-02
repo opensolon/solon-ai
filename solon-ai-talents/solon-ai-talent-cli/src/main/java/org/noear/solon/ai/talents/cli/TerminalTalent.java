@@ -184,7 +184,7 @@ public class TerminalTalent extends AbsTalent {
 
         sb.append("- **路径规则**: \n");
         sb.append("  - **工作区**: 你的主目录，支持读写。使用相对路径访问（如 `src/app.java`）。\n");
-        sb.append("  - **挂载池**: 以 `@` 开头的逻辑路径（如 ").append(mountManager.getPoolKeySet()).append("）为**只读**资源，严禁写入。\n");
+        sb.append("  - **挂载池**: 以 `@` 开头的逻辑路径（如 ").append(mountManager.getMountKeySet()).append("）为**只读**资源，严禁写入。\n");
         if (sandboxMode) {
             sb.append("  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`) 或逻辑路径 (@pool)。\n");
         } else {
@@ -778,7 +778,7 @@ public class TerminalTalent extends AbsTalent {
         if (pStr.startsWith("@")) {
             Path target = mountManager.resolve(workPath, pStr);
             String alias = pStr.split("[/\\\\]")[0];
-            boolean inPool = mountManager.hasPool(alias);
+            boolean inPool = mountManager.hasMount(alias);
 
             if (!inPool) {
                 throw new SecurityException("权限拒绝：未知的挂载池路径 " + pStr);
@@ -836,7 +836,7 @@ public class TerminalTalent extends AbsTalent {
 
     private String translateCommandToEnv(String command, Map<String, String> envs) {
         String result = command;
-        for (MountDir poolDir : mountManager.getPools()) {
+        for (MountDir poolDir : mountManager.getMounts()) {
             String alias = poolDir.getAlias(); // 例如 @pool1
             String envKey = alias.substring(1).toUpperCase(); // POOL1
 
