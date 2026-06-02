@@ -9,9 +9,9 @@ import org.noear.solon.ai.chat.ChatModel;
  */
 public class LlmUtil {
     public static ChatModel getChatModelReasoner() {
-        return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
-                .apiKey("sk-251740c893994c57a6536ecdbc33c189")
-                .model("deepseek-reasoner") //deepseek-reasoner//deepseek-chat
+        return ChatModel.of("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions")
+                .apiKey("2d28cb312d3c433fa08c0bfd0810050f.W4xBjtPcjGK9hg7u")
+                .model("GLM-5.1")
                 .build();
     }
     public static ChatModel getChatModel() {
@@ -20,9 +20,9 @@ public class LlmUtil {
 //                .model("deepseek-chat") //deepseek-reasoner//deepseek-chat
 //                .build();
 
-        return ChatModel.of("https://apis.iflow.cn/v1/chat/completions")
-                .apiKey("sk-af71cac1da33bfd40e7c26a6dcc1969a")
-                .model("qwen3-32b")
+        return ChatModel.of("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions")
+                .apiKey("2d28cb312d3c433fa08c0bfd0810050f.W4xBjtPcjGK9hg7u")
+                .model("GLM-5.1")
                 .build();
 
 //        return ChatModel.of("https://ai.gitee.com/v1/chat/completions")

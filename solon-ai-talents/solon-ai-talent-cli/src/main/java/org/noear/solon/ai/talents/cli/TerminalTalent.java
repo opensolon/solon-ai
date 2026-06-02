@@ -19,6 +19,8 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.talents.mount.MountDir;
+import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 
@@ -56,7 +58,7 @@ public class TerminalTalent extends AbsTalent {
 
     //沙盒模式：只能访问相对路径或逻辑路径；（否则为）开放模式：可以访问绝对路径
     private boolean sandboxMode = true;
-    private final PoolManager poolManager; // 引入池管理器
+    private final MountManager mountManager; // 引入池管理器
 
     private final String pythonCmd;
     private final String nodeCmd;
@@ -97,8 +99,8 @@ public class TerminalTalent extends AbsTalent {
         return bashAsyncEnabled;
     }
 
-    public TerminalTalent(PoolManager poolManager) {
-        this.poolManager = poolManager;
+    public TerminalTalent(MountManager mountManager) {
+        this.mountManager = mountManager;
 
         boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
 
@@ -181,8 +183,8 @@ public class TerminalTalent extends AbsTalent {
         sb.append("- **环境变量**: 挂载池已注入变量（如 @pool1 映射为 ").append(envExample).append("）。\n");
 
         sb.append("- **路径规则**: \n");
-        sb.append("  - **工作区(Workspace)**: 你的主目录，支持读写。使用相对路径访问（如 `src/app.java`）。\n");
-        sb.append("  - **挂载池(Pools)**: 以 `@` 开头的逻辑路径（如 ").append(poolManager.getPoolKeySet()).append("）为**只读**资源，严禁写入。\n");
+        sb.append("  - **工作区**: 你的主目录，支持读写。使用相对路径访问（如 `src/app.java`）。\n");
+        sb.append("  - **挂载池**: 以 `@` 开头的逻辑路径（如 ").append(mountManager.getPoolKeySet()).append("）为**只读**资源，严禁写入。\n");
         if (sandboxMode) {
             sb.append("  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`) 或逻辑路径 (@pool)。\n");
         } else {
@@ -280,7 +282,7 @@ public class TerminalTalent extends AbsTalent {
             name = "bash_start",
             description = "启动 shell 命令会话。命令超过 yield_time_ms 仍未结束时不会失败，而是返回 session_id，后续可用 bash_wait 继续等待、bash_stdin 输入或 bash_stop 终止。")
     public String bashStart(@Param(value = "command", description = "要执行的 shell 命令。") String command,
-                            @Param(value = "workdir", required = false, description = "工作目录。默认使用当前 workspace。") String workdir,
+                            @Param(value = "workdir", required = false, description = "工作目录。默认使用当前工作区。") String workdir,
                             @Param(value = "yield_time_ms", required = false, defaultValue = "1000", description = "先等待多久再把控制权交还给模型，单位毫秒。") Integer yieldTimeMs,
                             @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符输出，超出保留最新部分。") Integer maxOutputChars,
                             @Param(value = "hard_timeout_ms", required = false, defaultValue = "120000", description = "硬超时兜底，超过后终止进程树，单位毫秒。") Integer hardTimeoutMs,
@@ -667,7 +669,7 @@ public class TerminalTalent extends AbsTalent {
     }
 
     private Path getWorkPath(String __cwd) {
-        String path = (__cwd != null) ? __cwd : poolManager.getUserDir();
+        String path = (__cwd != null) ? __cwd : mountManager.getWorkDir();
         if (path == null) throw new IllegalStateException("Working directory is not set.");
         return Paths.get(path).toAbsolutePath().normalize();
     }
@@ -774,9 +776,9 @@ public class TerminalTalent extends AbsTalent {
 
         // 1. 如果是逻辑路径（@开头），走 poolManager 逻辑
         if (pStr.startsWith("@")) {
-            Path target = poolManager.resolve(workPath, pStr);
+            Path target = mountManager.resolve(workPath, pStr);
             String alias = pStr.split("[/\\\\]")[0];
-            boolean inPool = poolManager.hasPool(alias);
+            boolean inPool = mountManager.hasPool(alias);
 
             if (!inPool) {
                 throw new SecurityException("权限拒绝：未知的挂载池路径 " + pStr);
@@ -834,7 +836,7 @@ public class TerminalTalent extends AbsTalent {
 
     private String translateCommandToEnv(String command, Map<String, String> envs) {
         String result = command;
-        for (PoolDir poolDir : poolManager.getPools()) {
+        for (MountDir poolDir : mountManager.getPools()) {
             String alias = poolDir.getAlias(); // 例如 @pool1
             String envKey = alias.substring(1).toUpperCase(); // POOL1
 

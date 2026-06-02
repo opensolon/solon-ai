@@ -19,7 +19,7 @@ import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.chat.ChatConfig;
-import org.noear.solon.ai.harness.mount.Mount;
+import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.talents.lsp.LspServerParameters;
@@ -84,7 +84,7 @@ class HarnessOptions implements Serializable {
     // ========== 集合类配置 ==========
     private List<HarnessExtension> extensions = new CopyOnWriteArrayList<>();
     private List<ChatConfig> models = new CopyOnWriteArrayList<>();
-    private Map<String, Mount> mounts = new ConcurrentHashMap<>();
+    private Map<String, MountDir> mounts = new ConcurrentHashMap<>();
     private Map<String, McpServerParameters> mcpServers = new ConcurrentHashMap<>();
     private Map<String, ApiSource> apiServers = new ConcurrentHashMap<>();
     private Map<String, LspServerParameters> lspServers = new ConcurrentHashMap<>();
@@ -301,7 +301,7 @@ class HarnessOptions implements Serializable {
         return models;
     }
 
-    Map<String, Mount> getMounts() {
+    Map<String, MountDir> getMounts() {
         return mounts;
     }
 

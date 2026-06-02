@@ -313,6 +313,12 @@
 
             <dependency>
                 <groupId>org.noear</groupId>
+                <artifactId>solon-ai-talent-mount</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
                 <artifactId>solon-ai-talent-pdf</artifactId>
                 <version>${project.version}</version>
             </dependency>

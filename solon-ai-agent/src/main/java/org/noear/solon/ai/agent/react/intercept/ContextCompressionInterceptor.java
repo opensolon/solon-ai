@@ -137,7 +137,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     @Override
     public void onReasonStart(ReActTrace trace, StringBuilder systemPromptBuf) {
         List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
-        String systemPrompt = systemPromptBuf.toString();
+        String systemPrompt = (systemPromptBuf == null ? null : systemPromptBuf.toString());
 
         long messageSize = messages.stream()
                 .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))

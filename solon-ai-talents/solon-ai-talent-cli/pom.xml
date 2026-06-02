@@ -23,6 +23,11 @@
 
         <dependency>
             <groupId>org.noear</groupId>
+            <artifactId>solon-ai-talent-mount</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
             <artifactId>solon-ai-agent</artifactId>
             <optional>true</optional>
         </dependency>

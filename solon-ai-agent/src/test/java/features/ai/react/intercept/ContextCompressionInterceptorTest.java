@@ -230,7 +230,7 @@ public class ContextCompressionInterceptorTest {
             workingMemory.addMessage(ChatMessage.ofUser("msg " + i));
         }
 
-        interceptor.onReasonStart(trace, null);
+        interceptor.onReasonStart(trace, new StringBuilder());
 
         // 验证：第一条消息依然是原生的 System 消息
         assertEquals(globalSystem.getContent(), workingMemory.getMessages().get(0).getContent());

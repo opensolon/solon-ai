@@ -15,6 +15,7 @@
 
 * 新增 solon-ai-mcp MCP_2025_11_25 协议支持（支持 ServerTransportSecurityValidator 签权）
 * 新增 solon-ai-skill-openapi （solon-ai-skill-restapi 标为弃用）
+* 新增 solon-ai-talent-mount 才能插件（原 PoolManager 独立出来）
 * 添加 solon-ai-skill-openapi OpenApiSkill.removeApi 方法
 * 添加 solon-ai-skill-openapi ApiSource 超时配置支持
 * 添加 solon-ai-skill-toolgateway McpGatewaySkill 专门处理 mcp（ToolGatewaySkill 可以处理所有工具）

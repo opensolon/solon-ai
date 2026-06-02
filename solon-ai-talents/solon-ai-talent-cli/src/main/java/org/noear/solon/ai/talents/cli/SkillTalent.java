@@ -19,6 +19,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.annotation.Param;
 
 import java.io.IOException;
@@ -38,17 +39,17 @@ import java.util.stream.Stream;
  * 3. SEARCH: 数量 > searchThreshold。强制搜索模式。
  */
 public class SkillTalent extends AbsTalent {
-    private final PoolManager poolManager;
+    private final MountManager mountManager;
 
     private int listThreshold = 30;
     private int searchThreshold = 100;
 
-    public SkillTalent(PoolManager poolManager) {
-        this.poolManager = poolManager;
+    public SkillTalent(MountManager mountManager) {
+        this.mountManager = mountManager;
     }
 
-    public PoolManager getPoolManager() {
-        return poolManager;
+    public MountManager getPoolManager() {
+        return mountManager;
     }
 
     public SkillTalent listThreshold(int val) {
@@ -68,7 +69,7 @@ public class SkillTalent extends AbsTalent {
 
     @Override
     public String getInstruction(Prompt prompt) {
-        Collection<SkillDir> skillList = poolManager.getSkills();
+        Collection<org.noear.solon.ai.talents.mount.SkillDir> skillList = mountManager.getSkills();
         if (skillList.isEmpty()) return null;
 
         int total = skillList.size();
@@ -84,7 +85,7 @@ public class SkillTalent extends AbsTalent {
             sb.append("请审阅下方技能清单。若某个技能匹配当前需求，请调用 `skillread` 获取具体执行规约与工具参数：\n");
 
             sb.append("<skill_list>\n");
-            for (SkillDir s : skillList) {
+            for (org.noear.solon.ai.talents.mount.SkillDir s : skillList) {
                 sb.append("  <skill name=\"").append(s.getName()).append("\">").append(s.getDescription()).append("</skill>\n");
             }
             sb.append("</skill_list>");
@@ -94,7 +95,7 @@ public class SkillTalent extends AbsTalent {
             sb.append("当前技能较多，仅展示路径索引（没有描述）。请推断功能并调用 `skillread`。如果不确定，请使用 `skillsearch` 检索：\n");
 
             sb.append("<skill_list>\n");
-            for (SkillDir s : skillList) {
+            for (org.noear.solon.ai.talents.mount.SkillDir s : skillList) {
                 sb.append("  <skill name=\"").append(s.getName()).append("\" />\n");
             }
             sb.append("</skill_list>");
@@ -109,7 +110,7 @@ public class SkillTalent extends AbsTalent {
 
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
-        Collection<SkillDir> skillList = poolManager.getSkills();
+        Collection<org.noear.solon.ai.talents.mount.SkillDir> skillList = mountManager.getSkills();
         if (skillList.isEmpty()) return null;
 
         int total = skillList.size();
@@ -131,7 +132,7 @@ public class SkillTalent extends AbsTalent {
 
     @ToolMapping(name = "skilllist", description = "列出本地所有挂载池中的可用技能清单。")
     public String skilllist() {
-        Collection<SkillDir> skillList = poolManager.getSkills();
+        Collection<org.noear.solon.ai.talents.mount.SkillDir> skillList = mountManager.getSkills();
         if (skillList.isEmpty()) {
             return "当前没有可用的技能。";
         }
@@ -143,7 +144,7 @@ public class SkillTalent extends AbsTalent {
         StringBuilder sb = new StringBuilder("可用技能列表：\n");
 
         sb.append("<skill_list>\n");
-        for (SkillDir s : skillList) {
+        for (org.noear.solon.ai.talents.mount.SkillDir s : skillList) {
             sb.append("  <skill name=\"").append(s.getName()).append("\">").append(s.getDescription()).append("</skill>\n");
         }
         sb.append("</skill_list>");
@@ -153,10 +154,10 @@ public class SkillTalent extends AbsTalent {
 
     @ToolMapping(name = "skillsearch", description = "在所有挂载池中搜索技能关键字。支持空格分隔多个词。")
     public String skillsearch(@Param("query") String query) {
-        Collection<SkillDir> skillList = poolManager.getSkills();
+        Collection<org.noear.solon.ai.talents.mount.SkillDir> skillList = mountManager.getSkills();
         String[] keys = query.toLowerCase().split("\\s+");
 
-        List<SkillDir> matches = skillList.stream()
+        List<org.noear.solon.ai.talents.mount.SkillDir> matches = skillList.stream()
                 .filter(s -> Arrays.stream(keys).anyMatch(k ->
                         s.getName().toLowerCase().contains(k) ||
                                 s.getDescription().toLowerCase().contains(k)))
@@ -166,7 +167,7 @@ public class SkillTalent extends AbsTalent {
         if (matches.isEmpty()) return "未找到匹配技能。";
 
         StringBuilder sb = new StringBuilder("<skill_list>\n");
-        for (SkillDir s : matches) {
+        for (org.noear.solon.ai.talents.mount.SkillDir s : matches) {
             sb.append("  <skill name=\"").append(s.getName()).append("\">").append(s.getDescription()).append("</skill>\n");
         }
         sb.append("</skill_list>");
@@ -177,7 +178,7 @@ public class SkillTalent extends AbsTalent {
     @ToolMapping(name = "skillread", description = "读取本地技能详细说明书。在选定技能后、开始执行具体任务前，必须调用此工具以获取具体的环境要求、参数规约及可用文件别名。")
     public String skillread(@Param(value = "name", description = "技能的唯一路径标识（例如：'deep-research'）") String name, String __cwd) throws IOException {
         // 从内存 Map 查找逻辑路径
-        SkillDir cachedSkill = poolManager.getSkill(name);
+        org.noear.solon.ai.talents.mount.SkillDir cachedSkill = mountManager.getSkill(name);
         if (cachedSkill != null) {
             return renderSkillXml(cachedSkill, true);
         }
@@ -187,13 +188,13 @@ public class SkillTalent extends AbsTalent {
 
     @ToolMapping(name = "skillrefresh", description = "重新扫描所有挂载池，更新技能列表。")
     public String skillrefresh() {
-        poolManager.refresh();
-        return "技能库已刷新，当前可用技能数：" + poolManager.getSkillCount();
+        mountManager.refresh();
+        return "技能库已刷新，当前可用技能数：" + mountManager.getSkillCount();
     }
 
     // --- 核心渲染与辅助逻辑 ---
 
-    private String renderSkillXml(SkillDir skill, boolean includeFiles) {
+    private String renderSkillXml(org.noear.solon.ai.talents.mount.SkillDir skill, boolean includeFiles) {
         Path md = skill.getRealPath().resolve("SKILL.md");
         if (!Files.exists(md)) md = skill.getRealPath().resolve("skill.md");
 
@@ -216,7 +217,7 @@ public class SkillTalent extends AbsTalent {
         }
     }
 
-    private String sampleFiles(SkillDir skill) throws IOException {
+    private String sampleFiles(org.noear.solon.ai.talents.mount.SkillDir skill) throws IOException {
         Path dir = skill.getRealPath();
         String aliasBase = skill.getAliasPath();
 

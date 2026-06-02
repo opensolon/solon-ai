@@ -32,7 +32,7 @@ import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.code.CodeTalent;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
-import org.noear.solon.ai.harness.mount.Mount;
+import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.talents.cli.*;
 import org.noear.solon.ai.talents.lsp.LspManager;
@@ -41,6 +41,8 @@ import org.noear.solon.ai.talents.lsp.LspTalent;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.talents.memory.MemoryTalent;
 import org.noear.solon.ai.talents.memory.MemorySolution;
+import org.noear.solon.ai.talents.mount.MountManager;
+import org.noear.solon.ai.talents.mount.MountType;
 import org.noear.solon.ai.talents.openapi.ApiSource;
 import org.noear.solon.ai.talents.openapi.OpenApiTalent;
 import org.noear.solon.ai.talents.toolgateway.McpGatewayTalent;
@@ -48,6 +50,7 @@ import org.noear.solon.ai.talents.web.CodeSearchTool;
 import org.noear.solon.ai.talents.web.WebfetchTool;
 import org.noear.solon.ai.talents.web.WebsearchTool;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 import java.nio.file.Paths;
@@ -85,7 +88,7 @@ public class HarnessEngine {
 
     private final MemoryTalent memoryTalent;
 
-    private final PoolManager poolManager;
+    private final MountManager poolManager;
     private final TerminalTalent terminalTalent;
     private final SkillTalent skillTalent;
 
@@ -116,9 +119,9 @@ public class HarnessEngine {
         return options.getHitlInterceptor();
     }
 
-    public PoolManager getPoolManager() {
-        return poolManager;
-    }
+//    public PoolManager getPoolManager() {
+//        return poolManager;
+//    }
 
     public TerminalTalent getTerminalTalent() {
         return terminalTalent;
@@ -306,7 +309,7 @@ public class HarnessEngine {
         return Collections.unmodifiableList(options.getModels());
     }
 
-    public Map<String, Mount> getMounts() {
+    public Map<String, MountDir> getMounts() {
         return Collections.unmodifiableMap(options.getMounts());
     }
 
@@ -388,14 +391,14 @@ public class HarnessEngine {
         options.hasModel(name);
     }
 
-    public void addMount(String alias, Mount mount) {
-        options.getMounts().put(alias, mount);
+    public void addMount(MountDir mount) {
+        options.getMounts().put(mount.getAlias(), mount);
+        poolManager.register(mount);
 
-        if(mount.getType() == PoolType.SUBAGENTS){
-            agentManager.agentPool(Paths.get(mount.getPath()));
+        if(mount.getType() == MountType.SUBAGENTS){
+            agentManager.agentPool(mount.getRealPath());
         }
 
-        poolManager.register(new PoolDir(alias, mount.getType(), mount.isPrimary(), mount.getPath()));
     }
 
     public void removeMount(String alias) {
@@ -405,6 +408,10 @@ public class HarnessEngine {
 
     public boolean hasMount(String alias) {
         return options.getMounts().containsKey(alias);
+    }
+
+    public void refreshMount(@Nullable String alias){
+        poolManager.refresh(alias);
     }
 
 
@@ -515,7 +522,7 @@ public class HarnessEngine {
             }
         }
 
-        poolManager = new PoolManager(options.getWorkspace());
+        poolManager = new MountManager(options.getWorkspace());
 
         terminalTalent = new TerminalTalent(poolManager);
         skillTalent = new SkillTalent(poolManager);
@@ -525,7 +532,7 @@ public class HarnessEngine {
 
         if (Assert.isNotEmpty(options.getMounts())) {
             options.getMounts().forEach((alias, mount) -> {
-                if (mount.getType() == PoolType.SUBAGENTS) {
+                if (mount.getType() == MountType.SUBAGENTS) {
                     agentManager.agentPool(Paths.get(mount.getPath()));
                 }
 
@@ -823,8 +830,8 @@ public class HarnessEngine {
             return this;
         }
 
-        public Builder mountAdd(String alias, Mount mount) {
-            options.getMounts().put(alias, mount);
+        public Builder mountAdd(MountDir mount) {
+            options.getMounts().put(mount.getAlias(), mount);
             return this;
         }
 

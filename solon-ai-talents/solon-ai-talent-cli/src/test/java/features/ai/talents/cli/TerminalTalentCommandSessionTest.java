@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.talents.cli.PoolManager;
+import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.ai.talents.cli.TerminalTalent;
 
 public class TerminalTalentCommandSessionTest {
@@ -21,7 +21,7 @@ public class TerminalTalentCommandSessionTest {
     public void exposesCommandSessionTools() throws Exception {
         Path workDir = Files.createTempDirectory("solon-ai-terminal-tools-");
         try {
-            TerminalTalent skill = new TerminalTalent(new PoolManager(workDir.toString()));
+            TerminalTalent skill = new TerminalTalent(new MountManager(workDir.toString()));
             List<String> toolNames =
                     skill.getToolAry("bash_start", "bash_wait", "bash_stdin", "bash_stop").stream()
                             .map(FunctionTool::name)
@@ -41,7 +41,7 @@ public class TerminalTalentCommandSessionTest {
         }
         Path workDir = Files.createTempDirectory("solon-ai-terminal-session-");
         try {
-            TerminalTalent skill = new TerminalTalent(new PoolManager(workDir.toString()));
+            TerminalTalent skill = new TerminalTalent(new MountManager(workDir.toString()));
             String first =
                     skill.bashStart(
                             "printf start; sleep 0.4; printf end",
