@@ -44,11 +44,11 @@ class HarnessOptions implements Serializable {
 
     // ========== 基础路径 ==========
     private final String harnessHome;
-    private String workspace = "work";
+    private volatile String workspace = "work";
 
     // ========== 提示词 ==========
-    private String systemPrompt;
-    private String userAgent;
+    private volatile String systemPrompt;
+    private volatile String userAgent;
 
     // ========== 主代理工具权限 ==========
     private List<String> tools = new CopyOnWriteArrayList<>();
@@ -57,29 +57,29 @@ class HarnessOptions implements Serializable {
     private List<String> disallowedTools = new CopyOnWriteArrayList<>();
 
     // ========== 执行控制 ==========
-    private int maxTurns = 30;
-    private boolean autoRethink = true;
+    private volatile int maxTurns = 30;
+    private volatile boolean autoRethink = true;
 
     // ========== 会话与压缩 ==========
-    private int sessionWindowSize = 8;
-    private int compressionMaxMessages = 30;
-    private int compressionMaxTokens = 30_000;
-    private String compressionModel; //压缩大模型
+    private volatile int sessionWindowSize = 8;
+    private volatile int compressionMaxMessages = 30;
+    private volatile int compressionMaxTokens = 30_000;
+    private volatile String compressionModel; //压缩大模型
 
     // ========== 记忆 ==========
-    private boolean memoryIsolation = false;
-    private boolean memoryEnabled = true;
+    private volatile boolean memoryIsolation = false;
+    private volatile boolean memoryEnabled = true;
 
     // ========== 安全与模式 ==========
-    private boolean sandboxMode = true;
-    private boolean hitlEnabled = false;
-    private boolean subagentEnabled = true;
-    private boolean bashAsyncEnabled = false;
+    private volatile boolean sandboxMode = true;
+    private volatile boolean hitlEnabled = false;
+    private volatile boolean subagentEnabled = true;
+    private volatile boolean bashAsyncEnabled = false;
 
     // ========== 重试配置 ==========
-    private int apiRetries = 3;
-    private int mcpRetries = 3;
-    private int modelRetries = 3;
+    private volatile int apiRetries = 3;
+    private volatile int mcpRetries = 3;
+    private volatile int modelRetries = 3;
 
     // ========== 集合类配置 ==========
     private final List<HarnessExtension> extensions = new CopyOnWriteArrayList<>();

@@ -61,6 +61,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * 马具引擎
  *
  * @author noear
+ * @since 4.0
  */
 @Preview("3.10")
 public class HarnessEngine {
@@ -414,8 +415,8 @@ public class HarnessEngine {
         options.removeModel(name);
     }
 
-    public void hasModel(String name) {
-        options.hasModel(name);
+    public boolean hasModel(String name) {
+        return options.hasModel(name);
     }
 
     public void addMount(MountDir mount) {
