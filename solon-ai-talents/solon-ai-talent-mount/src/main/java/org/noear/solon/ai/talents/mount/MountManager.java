@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.talents.cli;
+package org.noear.solon.ai.talents.mount;
 
 import org.noear.solon.ai.util.Markdown;
 import org.noear.solon.ai.util.MarkdownUtil;
@@ -21,6 +21,7 @@ import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -35,48 +36,48 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.9.5
  */
-public class PoolManager {
-    private static final Logger LOG = LoggerFactory.getLogger(PoolManager.class);
+public class MountManager {
+    private static final Logger LOG = LoggerFactory.getLogger(MountManager.class);
 
-    private final String userDir;
+    private static final String USER_HOME = System.getProperty("user.home"); //对应 `～/`
+    private final String workDir; //对应 `./`
 
     // 逻辑路径前缀 -> 池目录信息 (如 "@shared" -> PoolDir)
-    private final Map<String, PoolDir> poolMap = new ConcurrentHashMap<>();
+    private final Map<String, MountDir> poolMap = new ConcurrentHashMap<>();
 
     // 逻辑全路径 -> 技能目录信息 (如 "video-creator" -> SkillDir)
     private volatile Map<String, SkillDir> skillMap = new ConcurrentHashMap<>();
 
-    public String getUserDir() {
-        return userDir;
+    public MountManager(String workDir){
+        this.workDir = workDir;
     }
 
-    public PoolManager(String userDir){
-        this.userDir = userDir;
-    }
-
-    /**
-     * 注册池（并扫描）
-     */
-    public synchronized PoolManager register(String alias, PoolType type, String path) {
-        return register(new PoolDir(alias, type, false, path));
+    public String getWorkDir() {
+        return workDir;
     }
 
     /**
      * 注册池（并扫描）
      */
-    public synchronized PoolManager register(String alias, PoolType type, String path, Path realPath) {
-        return register(new PoolDir(alias, type, false, path, realPath));
+    public synchronized MountDir register(String alias, MountType type, String path) {
+        return register(new MountDir(alias, type,  path, false));
+    }
+
+    public synchronized MountDir register(String alias, MountType type, String path, boolean primary) {
+        return register(new MountDir(alias, type,  path, primary));
     }
 
     /**
      * 注册池（并扫描）
      */
-    public synchronized PoolManager register(PoolDir poolDir) {
+    public synchronized MountDir register(MountDir poolDir) {
         String key = poolDir.getAlias();
-        Path realPath = poolDir.getRealPath();
+        Path realPath = parseRealPath(poolDir.getPath()).toAbsolutePath().normalize();
+        poolDir.setRealPath(realPath);
+
         poolMap.put(key, poolDir);
 
-        if (poolDir.isEnabled() && poolDir.getType() == PoolType.SKILLS) {
+        if (poolDir.isEnabled() && poolDir.getType() == MountType.SKILLS) {
             if (Files.exists(realPath) && Files.isDirectory(realPath)) {
                 scanSkillAndCache(poolDir, skillMap);
                 LOG.debug("Mount pool has been loaded.: {} -> {}", key, realPath);
@@ -86,15 +87,15 @@ public class PoolManager {
             }
         }
 
-        return this;
+        return poolDir;
     }
 
     /**
      * 移除池（及其关联技能）
      */
-    public synchronized PoolDir remove(String alias) {
+    public synchronized MountDir remove(String alias) {
         String key = alias.startsWith("@") ? alias : "@" + alias;
-        PoolDir removed = poolMap.remove(key);
+        MountDir removed = poolMap.remove(key);
         if (removed != null) {
             skillMap.entrySet().removeIf(e -> key.equals(e.getValue().getPoolAlias()));
             LOG.debug("Mount pool has been removed.: {}", key);
@@ -110,9 +111,9 @@ public class PoolManager {
             refresh();
         } else {
             String key = alias.startsWith("@") ? alias : "@" + alias;
-            PoolDir poolDir = poolMap.get(key);
+            MountDir poolDir = poolMap.get(key);
 
-            if (poolDir == null || poolDir.getType() != PoolType.SKILLS){
+            if (poolDir == null || poolDir.getType() != MountType.SKILLS){
                 return;
             }
 
@@ -131,7 +132,7 @@ public class PoolManager {
      */
     public synchronized void refresh() {
         Map<String, SkillDir> tmp = new ConcurrentHashMap<>();
-        for (Map.Entry<String, PoolDir> entry : poolMap.entrySet()) {
+        for (Map.Entry<String, MountDir> entry : poolMap.entrySet()) {
             scanSkillAndCache(entry.getValue(), tmp);
         }
 
@@ -145,7 +146,7 @@ public class PoolManager {
         if (pStr == null || pStr.isEmpty() || ".".equals(pStr)) return workDir;
 
         if (pStr.startsWith("@")) {
-            for (Map.Entry<String, PoolDir> e : poolMap.entrySet()) {
+            for (Map.Entry<String, MountDir> e : poolMap.entrySet()) {
                 if (pStr.startsWith(e.getKey())) {
                     String sub = pStr.substring(e.getKey().length()).replaceFirst("^[/\\\\]", "");
                     return e.getValue().getRealPath().resolve(sub).normalize();
@@ -160,7 +161,7 @@ public class PoolManager {
     /**
      * 获取单个池
      */
-    public PoolDir getPool(String alias) {
+    public MountDir getPool(String alias) {
         String key = alias.startsWith("@") ? alias : "@" + alias;
         return poolMap.get(key);
     }
@@ -173,7 +174,7 @@ public class PoolManager {
     /**
      * 获取所有池
      */
-    public Collection<PoolDir> getPools() {
+    public Collection<MountDir> getPools() {
         return Collections.unmodifiableCollection(poolMap.values());
     }
 
@@ -204,8 +205,8 @@ public class PoolManager {
     }
 
 
-    private static void scanSkillAndCache(PoolDir poolDir, Map<String, SkillDir> map) {
-        if (poolDir.isEnabled() == false || poolDir.getType() != PoolType.SKILLS) {
+    private static void scanSkillAndCache(MountDir poolDir, Map<String, SkillDir> map) {
+        if (poolDir.isEnabled() == false || poolDir.getType() != MountType.SKILLS) {
             return;
         }
 
@@ -255,5 +256,31 @@ public class PoolManager {
         } catch (Throwable e) {
             return "技能规约。";
         }
+    }
+
+
+    /**
+     * 内部辅助方法：解析配置路径并支持 "~/" 和 "./" 语法
+     */
+    public Path parseRealPath(String rawPath) {
+        if (Assert.isEmpty(rawPath)) {
+            return Paths.get(workDir);
+        }
+
+        String processedPath = rawPath;
+        // 1. 处理 Unix 式或 Windows 兼容的家目录路径 (例如 ~/skills 或 ~)
+        if (rawPath.startsWith("~" + File.separator) || rawPath.equals("~")) {
+            processedPath = rawPath.replaceFirst("^~", USER_HOME);
+        } else if (rawPath.startsWith("~/") || rawPath.startsWith("~\\")) {
+            processedPath = USER_HOME + rawPath.substring(1);
+        }
+        // 2. 处理工作区相对路径 (例如 ./my-pool)
+        else if (rawPath.startsWith("." + File.separator) || rawPath.equals(".")) {
+            processedPath = rawPath.replaceFirst("^\\.", workDir);
+        } else if (rawPath.startsWith("./") || rawPath.startsWith(".\\")) {
+            processedPath = workDir + rawPath.substring(1);
+        }
+
+        return Paths.get(processedPath).toAbsolutePath().normalize();
     }
 }
