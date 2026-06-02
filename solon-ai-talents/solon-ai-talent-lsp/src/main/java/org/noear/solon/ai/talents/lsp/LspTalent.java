@@ -64,7 +64,7 @@ public class LspTalent extends AbsTalent {
 
     @Override
     public boolean isSupported(Prompt prompt) {
-        return lspManager.isEmpty() == false;
+        return lspManager.hasServers();
     }
 
     @ToolMapping(

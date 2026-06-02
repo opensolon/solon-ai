@@ -662,7 +662,7 @@ public class HarnessEngine {
                 lspManager.registerServer(entry.getKey(), entry.getValue());
             }
         }
-        this.lspTalent = lspManager.hasServers() ? new LspTalent(lspManager, options.getWorkspace()) : null;
+        this.lspTalent = new LspTalent(lspManager, options.getWorkspace());
         if (this.lspTalent != null) {
             lspManager.setDiagnosticsCallback(lspTalent::updateDiagnostics);
         }
@@ -922,48 +922,48 @@ public class HarnessEngine {
             return this;
         }
 
-        public Builder memoryEnabled(boolean val) {
-            options.setMemoryEnabled(val);
+        public Builder memoryEnabled(Boolean memoryEnabled) {
+            options.setMemoryEnabled(memoryEnabled);
             return this;
         }
 
-        public Builder memoryIsolation(boolean val) {
-            options.setMemoryIsolation(val);
+        public Builder memoryIsolation(Boolean memoryIsolation) {
+            options.setMemoryIsolation(memoryIsolation);
             return this;
         }
 
-        public Builder sandboxMode(boolean val) {
-            options.setSandboxMode(val);
+        public Builder sandboxMode(Boolean sandboxMode) {
+            options.setSandboxMode(sandboxMode);
             return this;
         }
 
-        public Builder hitlEnabled(boolean val) {
-            options.setHitlEnabled(val);
+        public Builder hitlEnabled(Boolean hitlEnabled) {
+            options.setHitlEnabled(hitlEnabled);
             return this;
         }
 
-        public Builder subagentEnabled(boolean val) {
-            options.setSubagentEnabled(val);
+        public Builder subagentEnabled(Boolean subagentEnabled) {
+            options.setSubagentEnabled(subagentEnabled);
             return this;
         }
 
-        public Builder bashAsyncEnabled(boolean val) {
-            options.setBashAsyncEnabled(val);
+        public Builder bashAsyncEnabled(Boolean bashAsyncEnabled) {
+            options.setBashAsyncEnabled(bashAsyncEnabled);
             return this;
         }
 
-        public Builder apiRetries(int val) {
-            options.setApiRetries(val);
+        public Builder apiRetries(Integer apiRetries) {
+            options.setApiRetries(apiRetries);
             return this;
         }
 
-        public Builder mcpRetries(int val) {
-            options.setMcpRetries(val);
+        public Builder mcpRetries(Integer mcpRetries) {
+            options.setMcpRetries(mcpRetries);
             return this;
         }
 
-        public Builder modelRetries(int val) {
-            options.setModelRetries(val);
+        public Builder modelRetries(Integer modelRetries) {
+            options.setModelRetries(modelRetries);
             return this;
         }
 

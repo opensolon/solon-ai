@@ -224,72 +224,90 @@ class HarnessOptions implements Serializable {
         return memoryIsolation;
     }
 
-    void setMemoryIsolation(boolean memoryIsolation) {
-        this.memoryIsolation = memoryIsolation;
+    void setMemoryIsolation(Boolean memoryIsolation) {
+        if (memoryIsolation != null) {
+            this.memoryIsolation = memoryIsolation;
+        }
     }
 
     boolean isMemoryEnabled() {
         return memoryEnabled;
     }
 
-    void setMemoryEnabled(boolean memoryEnabled) {
-        this.memoryEnabled = memoryEnabled;
+    void setMemoryEnabled(Boolean memoryEnabled) {
+        if (memoryEnabled != null) {
+            this.memoryEnabled = memoryEnabled;
+        }
     }
 
     boolean isSandboxMode() {
         return sandboxMode;
     }
 
-    void setSandboxMode(boolean sandboxMode) {
-        this.sandboxMode = sandboxMode;
+    void setSandboxMode(Boolean sandboxMode) {
+        if (sandboxMode != null) {
+            this.sandboxMode = sandboxMode;
+        }
     }
 
     boolean isHitlEnabled() {
         return hitlEnabled;
     }
 
-    void setHitlEnabled(boolean hitlEnabled) {
-        this.hitlEnabled = hitlEnabled;
+    void setHitlEnabled(Boolean hitlEnabled) {
+        if (hitlEnabled != null) {
+            this.hitlEnabled = hitlEnabled;
+        }
     }
 
     boolean isSubagentEnabled() {
         return subagentEnabled;
     }
 
-    void setSubagentEnabled(boolean subagentEnabled) {
-        this.subagentEnabled = subagentEnabled;
+    void setSubagentEnabled(Boolean subagentEnabled) {
+        if (subagentEnabled != null) {
+            this.subagentEnabled = subagentEnabled;
+        }
     }
 
     boolean isBashAsyncEnabled() {
         return bashAsyncEnabled;
     }
 
-    void setBashAsyncEnabled(boolean bashAsyncEnabled) {
-        this.bashAsyncEnabled = bashAsyncEnabled;
+    void setBashAsyncEnabled(Boolean bashAsyncEnabled) {
+        if (bashAsyncEnabled != null) {
+            this.bashAsyncEnabled = bashAsyncEnabled;
+        }
     }
 
     int getApiRetries() {
         return apiRetries;
     }
 
-    void setApiRetries(int apiRetries) {
-        this.apiRetries = apiRetries;
+    void setApiRetries(Integer apiRetries) {
+        if (apiRetries != null) {
+            this.apiRetries = apiRetries;
+        }
     }
 
     int getMcpRetries() {
         return mcpRetries;
     }
 
-    void setMcpRetries(int mcpRetries) {
-        this.mcpRetries = mcpRetries;
+    void setMcpRetries(Integer mcpRetries) {
+        if (mcpRetries != null) {
+            this.mcpRetries = mcpRetries;
+        }
     }
 
     int getModelRetries() {
         return modelRetries;
     }
 
-    void setModelRetries(int modelRetries) {
-        this.modelRetries = modelRetries;
+    void setModelRetries(Integer modelRetries) {
+        if (modelRetries != null) {
+            this.modelRetries = modelRetries;
+        }
     }
 
     List<HarnessExtension> getExtensions() {

@@ -217,21 +217,15 @@ public class AgentFactory {
                 break;
             }
             case "mcp": {
-                if (engine.getMcpGatewayTalent() != null) {
-                    builder.defaultTalentAdd(engine.getMcpGatewayTalent());
-                }
+                builder.defaultTalentAdd(engine.getMcpGatewayTalent());
                 break;
             }
             case "openapi": {
-                if (engine.getOpenApiTalent() != null) {
-                    builder.defaultTalentAdd(engine.getOpenApiTalent());
-                }
+                builder.defaultTalentAdd(engine.getOpenApiTalent());
                 break;
             }
             case "lsp": {
-                if (engine.getLspTalent() != null) {
-                    builder.defaultTalentAdd(engine.getLspTalent());
-                }
+                builder.defaultTalentAdd(engine.getLspTalent());
                 break;
             }
             case "hitl": {

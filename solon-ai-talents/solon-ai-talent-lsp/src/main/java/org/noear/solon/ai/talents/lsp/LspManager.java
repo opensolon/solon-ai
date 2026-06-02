@@ -39,7 +39,7 @@ import java.util.function.BiConsumer;
 public class LspManager {
     private static final Logger LOG = LoggerFactory.getLogger(LspManager.class);
 
-    private final Map<String, LspServerParameters> serverConfigs = new LinkedHashMap<>();
+    private final Map<String, LspServerParameters> serverConfigs = new ConcurrentHashMap<>();
     private final Map<String, LspClient> activeClients = new ConcurrentHashMap<>();
     private final String workspace;
     private BiConsumer<String, String> diagnosticsCallback;
