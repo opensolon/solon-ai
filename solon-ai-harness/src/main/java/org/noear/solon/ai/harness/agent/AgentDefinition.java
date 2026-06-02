@@ -46,6 +46,11 @@ public class AgentDefinition {
     protected String systemPrompt;
 
     /**
+     * 所属挂载别名（用于按挂载批量移除），null 表示内置代理
+     */
+    private String mountAlias;
+
+    /**
      * 复制
      */
     public AgentDefinition copy() {
@@ -91,6 +96,14 @@ public class AgentDefinition {
 
     public void setSystemPrompt(String systemPrompt) {
         this.systemPrompt = systemPrompt;
+    }
+
+    public String getMountAlias() {
+        return mountAlias;
+    }
+
+    public void setMountAlias(String mountAlias) {
+        this.mountAlias = mountAlias;
     }
 
     /**

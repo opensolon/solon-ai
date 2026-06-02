@@ -20,6 +20,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.talents.mount.MountManager;
+import org.noear.solon.ai.talents.mount.SkillDir;
 import org.noear.solon.annotation.Param;
 
 import java.io.IOException;
@@ -69,7 +70,7 @@ public class SkillTalent extends AbsTalent {
 
     @Override
     public String getInstruction(Prompt prompt) {
-        Collection<org.noear.solon.ai.talents.mount.SkillDir> skillList = mountManager.getSkills();
+        Collection<SkillDir> skillList = mountManager.getSkills();
         if (skillList.isEmpty()) return null;
 
         int total = skillList.size();

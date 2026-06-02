@@ -41,8 +41,6 @@ import org.noear.solon.ai.talents.lsp.LspTalent;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.talents.memory.MemoryTalent;
 import org.noear.solon.ai.talents.memory.MemorySolution;
-import org.noear.solon.ai.talents.mount.MountManager;
-import org.noear.solon.ai.talents.mount.MountType;
 import org.noear.solon.ai.talents.openapi.ApiSource;
 import org.noear.solon.ai.talents.openapi.OpenApiTalent;
 import org.noear.solon.ai.talents.toolgateway.McpGatewayTalent;
@@ -53,7 +51,6 @@ import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -93,7 +90,7 @@ public class HarnessEngine {
 
     private final CommandRegistry commandRegistry = new CommandRegistry();
 
-    private final AgentManager agentManager = new AgentManager();
+    private final AgentManager agentManager;
 
     private volatile ChatModel mainModel; //允许运行时切换
     private volatile ReActAgent mainAgent; //允许运行时切换
@@ -394,14 +391,11 @@ public class HarnessEngine {
 
     public void addMount(MountDir mount) {
         options.getMountManager().register(mount);
-
-        if (mount.getType() == MountType.SUBAGENTS) {
-            agentManager.agentPool(mount.getRealPath());
-        }
-
     }
 
     public void removeMount(String alias) {
+        String key = alias.startsWith("@") ? alias : "@" + alias;
+        agentManager.removeByMountAlias(key);
         options.getMountManager().remove(alias);
     }
 
@@ -410,6 +404,12 @@ public class HarnessEngine {
     }
 
     public void refreshMount(@Nullable String alias) {
+        if (alias != null) {
+            String key = alias.startsWith("@") ? alias : "@" + alias;
+            agentManager.removeByMountAlias(key);
+        } else {
+            agentManager.clearCustomAgents();
+        }
         options.getMountManager().refresh(alias);
     }
 
@@ -523,17 +523,10 @@ public class HarnessEngine {
 
         terminalTalent = new TerminalTalent(options.getMountManager());
         skillTalent = new SkillTalent(options.getMountManager());
+        agentManager = new AgentManager(options.getMountManager());
 
         terminalTalent.setBashAsyncEnabled(options.isBashAsyncEnabled());
         terminalTalent.setSandboxMode(options.isSandboxMode());
-
-        if (Assert.isNotEmpty(options.getMountManager().getMounts())) {
-            options.getMountManager().getMounts().forEach(mount -> {
-                if (mount.getType() == MountType.SUBAGENTS) {
-                    agentManager.agentPool(Paths.get(mount.getPath()));
-                }
-            });
-        }
 
         //mainAgent = createMainAgent(); //改为懒加载
     }

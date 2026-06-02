@@ -48,6 +48,9 @@ public class MountManager {
     // 逻辑全路径 -> 技能目录信息 (如 "video-creator" -> SkillDir)
     private volatile Map<String, SkillDir> skillMap = new ConcurrentHashMap<>();
 
+    // 代理名 -> 代理文件信息 (如 "code-review" -> AgentMd)
+    private volatile Map<String, AgentMd> agentMap = new ConcurrentHashMap<>();
+
     public MountManager(String workDir){
         this.workDir = workDir;
     }
@@ -77,9 +80,15 @@ public class MountManager {
 
         mountMap.put(key, mountDir);
 
-        if (mountDir.isEnabled() && mountDir.getType() == MountType.SKILLS) {
+        if (mountDir.isEnabled()) {
             if (Files.exists(realPath) && Files.isDirectory(realPath)) {
-                scanSkillAndCache(mountDir, skillMap);
+                if (mountDir.getType() == MountType.SKILLS) {
+                    //skill
+                    scanSkillAndCache(mountDir, skillMap);
+                } else if (mountDir.getType() == MountType.SUBAGENTS) {
+                    //agent
+                    scanAgentAndCache(mountDir, agentMap);
+                }
                 LOG.debug("Mount has been loaded.: {} -> {}", key, realPath);
             } else {
                 String reason = !Files.exists(realPath) ? "The path does not exist." : "Not an effective directory";
@@ -96,8 +105,10 @@ public class MountManager {
     public synchronized MountDir remove(String alias) {
         String key = alias.startsWith("@") ? alias : "@" + alias;
         MountDir removed = mountMap.remove(key);
+
         if (removed != null) {
             skillMap.entrySet().removeIf(e -> key.equals(e.getValue().getMountAlias()));
+            agentMap.entrySet().removeIf(e -> key.equals(e.getValue().getMountAlias()));
             LOG.debug("Mount has been removed.: {}", key);
         }
         return removed;
@@ -113,17 +124,23 @@ public class MountManager {
             String key = alias.startsWith("@") ? alias : "@" + alias;
             MountDir mountDir = mountMap.get(key);
 
-            if (mountDir == null || mountDir.getType() != MountType.SKILLS){
+            if (mountDir == null) {
                 return;
             }
 
-            // 1. 扫描该挂载
-            Map<String, SkillDir> tmp = new LinkedHashMap<>();
-            scanSkillAndCache(mountDir, tmp);
-
-            // 2. 移除该挂载下的旧技能
-            skillMap.entrySet().removeIf(e -> key.equals(e.getValue().getMountAlias()));
-            skillMap.putAll(tmp);
+            if (mountDir.getType() == MountType.SKILLS) {
+                //skill
+                Map<String, SkillDir> tmp = new LinkedHashMap<>();
+                scanSkillAndCache(mountDir, tmp);
+                skillMap.entrySet().removeIf(e -> key.equals(e.getValue().getMountAlias()));
+                skillMap.putAll(tmp);
+            } else if (mountDir.getType() == MountType.SUBAGENTS) {
+                //agent
+                Map<String, AgentMd> tmp = new LinkedHashMap<>();
+                scanAgentAndCache(mountDir, tmp);
+                agentMap.entrySet().removeIf(e -> key.equals(e.getValue().getMountAlias()));
+                agentMap.putAll(tmp);
+            }
         }
     }
 
@@ -131,12 +148,15 @@ public class MountManager {
      * 刷新所有挂载（重新扫描）
      */
     public synchronized void refresh() {
-        Map<String, SkillDir> tmp = new ConcurrentHashMap<>();
+        Map<String, SkillDir> tmpSkills = new ConcurrentHashMap<>();
+        Map<String, AgentMd> tmpAgents = new ConcurrentHashMap<>();
         for (Map.Entry<String, MountDir> entry : mountMap.entrySet()) {
-            scanSkillAndCache(entry.getValue(), tmp);
+            scanSkillAndCache(entry.getValue(), tmpSkills);
+            scanAgentAndCache(entry.getValue(), tmpAgents);
         }
 
-        skillMap = tmp;
+        skillMap = tmpSkills;
+        agentMap = tmpAgents;
     }
 
     /**
@@ -188,20 +208,35 @@ public class MountManager {
     public List<SkillDir> getSkillsByMount(String alias) {
         String key = alias.startsWith("@") ? alias : "@" + alias;
         return skillMap.values().stream()
-                .filter(s -> s.getAliasPath().startsWith(key + "/") || s.getAliasPath().equals(key))
+                .filter(s -> key.equals(s.getMountAlias()))
+                .collect(Collectors.toList());
+    }
+
+    public List<AgentMd> getAgentsByMount(String alias) {
+        String key = alias.startsWith("@") ? alias : "@" + alias;
+        return agentMap.values().stream()
+                .filter(s -> key.equals(s.getMountAlias()))
                 .collect(Collectors.toList());
     }
 
     public Collection<SkillDir> getSkills() {
         return skillMap.values();
     }
-
     public int getSkillCount() {
         return skillMap.size();
     }
-
     public SkillDir getSkill(String name) {
         return skillMap.get(name);
+    }
+
+    public Collection<AgentMd> getAgents() {
+        return agentMap.values();
+    }
+    public int getAgentCount() {
+        return agentMap.size();
+    }
+    public AgentMd getAgent(String name) {
+        return agentMap.get(name);
     }
 
 
@@ -233,6 +268,39 @@ public class MountManager {
 
     private static boolean isSkillDir(Path p) {
         return Files.exists(p.resolve("SKILL.md")) || Files.exists(p.resolve("skill.md"));
+    }
+
+    private static void scanAgentAndCache(MountDir mountDir, Map<String, AgentMd> map) {
+        if (mountDir.isEnabled() == false || mountDir.getType() != MountType.SUBAGENTS) {
+            return;
+        }
+
+        Path realPath = mountDir.getRealPath();
+        if (!Files.exists(realPath) || !Files.isDirectory(realPath)) {
+            return;
+        }
+
+        try {
+            Files.walkFileTree(realPath, EnumSet.noneOf(FileVisitOption.class), 3, new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    String fileName = file.getFileName().toString();
+                    if (fileName.endsWith(".md") && !fileName.startsWith(".")) {
+                        String name = fileName.substring(0, fileName.length() - 3);
+                        map.put(name, new AgentMd(name, mountDir.getAlias(), file));
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                    if (dir.getFileName().toString().startsWith(".")) return FileVisitResult.SKIP_SUBTREE;
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException e) {
+            LOG.error("Scan agent mount failed: {}", mountDir.getRealPath(), e);
+        }
     }
 
     private static String parseDescription(Path dir) {

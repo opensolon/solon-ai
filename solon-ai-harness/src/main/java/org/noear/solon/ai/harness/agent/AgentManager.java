@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.harness.agent;
 
+import org.noear.solon.ai.talents.mount.AgentMd;
+import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.core.util.ResourceUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,11 +25,9 @@ import java.io.IOException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * 代理定义管理器
@@ -39,14 +39,25 @@ import java.util.stream.Stream;
 public class AgentManager {
     private static final Logger LOG = LoggerFactory.getLogger(AgentManager.class);
     private static final String AGENT_MD_BASE = "META-INF/solon/ai/harness/";
+
+    private final MountManager mountManager;
     private final Map<String, AgentDefinition> agentMap = new ConcurrentHashMap<>();
 
-    public AgentManager() {
-        loadAgentFile("bash", ResourceUtil.getResource(AGENT_MD_BASE + "bash.md"));
-        loadAgentFile("explore", ResourceUtil.getResource(AGENT_MD_BASE + "explore.md"));
-        loadAgentFile("plan", ResourceUtil.getResource(AGENT_MD_BASE + "plan.md"));
-        loadAgentFile("general", ResourceUtil.getResource(AGENT_MD_BASE + "general.md"));
-        loadAgentFile("git-summary", ResourceUtil.getResource(AGENT_MD_BASE + "git-summary.md"));
+
+    /**
+     * 完整构造（支持从 MountManager 加载自定义代理）
+     */
+    public AgentManager(MountManager mountManager) {
+        this.mountManager = mountManager;
+        loadBuiltinAgents();
+    }
+
+    private void loadBuiltinAgents() {
+        loadAgentFile("bash", ResourceUtil.getResource(AGENT_MD_BASE + "bash.md"), null);
+        loadAgentFile("explore", ResourceUtil.getResource(AGENT_MD_BASE + "explore.md"), null);
+        loadAgentFile("plan", ResourceUtil.getResource(AGENT_MD_BASE + "plan.md"), null);
+        loadAgentFile("general", ResourceUtil.getResource(AGENT_MD_BASE + "general.md"), null);
+        loadAgentFile("git-summary", ResourceUtil.getResource(AGENT_MD_BASE + "git-summary.md"), null);
     }
 
     public void addAgent(AgentDefinition agentDefinition) {
@@ -57,30 +68,57 @@ public class AgentManager {
      * 获取指定名称的代理（支持自定义代理）
      */
     public AgentDefinition getAgent(String agentName) {
-        // 1. 首先尝试作为预定义类型
-        AgentDefinition agentDefinition = agentMap.get(agentName);
-
-        if (agentDefinition == null) {
-            throw new IllegalArgumentException("Agent not found:" + agentName);
-        } else {
-            return agentDefinition;
+        // 1. 优先从缓存取（含内置 + 已解析的挂载代理）
+        AgentDefinition cached = agentMap.get(agentName);
+        if (cached != null) {
+            return cached;
         }
-    }
 
+        // 2. 从 MountManager 的 AgentMd 按需解析
+        if (mountManager != null) {
+            AgentMd agentMd = mountManager.getAgent(agentName);
+            if (agentMd != null) {
+                AgentDefinition definition = loadFromAgentMd(agentMd);
+                agentMap.put(agentName, definition);
+                return definition;
+            }
+        }
+
+        throw new IllegalArgumentException("Agent not found: " + agentName);
+    }
 
     /**
      * 检查代理是否已注册
      */
     public boolean hasAgent(String agentName) {
-        return agentMap.containsKey(agentName);
+        if (agentMap.containsKey(agentName)) {
+            return true;
+        }
+        if (mountManager != null) {
+            return mountManager.getAgent(agentName) != null;
+        }
+        return false;
     }
 
     /**
      * 获取所有已注册的代理
      */
     public Collection<AgentDefinition> getAgents() {
-        return agentMap.values().stream()
-                .filter(a -> a.getMetadata().isHidden() == false)
+        Map<String, AgentDefinition> all = new LinkedHashMap<>(agentMap);
+
+        // 补充挂载代理（未被缓存的）
+        if (mountManager != null) {
+            for (AgentMd agentMd : mountManager.getAgents()) {
+                if (!all.containsKey(agentMd.getName())) {
+                    AgentDefinition def = loadFromAgentMd(agentMd);
+                    all.put(agentMd.getName(), def);
+                    agentMap.put(agentMd.getName(), def); // 顺带缓存
+                }
+            }
+        }
+
+        return all.values().stream()
+                .filter(a -> !a.getMetadata().isHidden())
                 .collect(Collectors.toList());
     }
 
@@ -89,74 +127,50 @@ public class AgentManager {
      */
     public void clear() {
         agentMap.clear();
-        pathCached.clear();
     }
 
-    private final Set<Path> pathCached = new HashSet<>();
+    /**
+     * 仅清除自定义代理（保留内置代理）
+     */
+    public void clearCustomAgents() {
+        agentMap.entrySet().removeIf(e -> e.getValue().getMountAlias() != null);
+    }
 
     /**
-     * 注册自定义 agents 池
-     *
-     * @param dir       agents 目录路径，可以是绝对路径或相对路径
-     * @param recursive 是否递归扫描子目录（用于团队成员目录）
+     * 按挂载别名清理已缓存的代理定义
      */
-    public void agentPool(Path dir, boolean recursive) {
-        if (dir == null) {
+    public synchronized void removeByMountAlias(String mountAlias) {
+        if (mountAlias == null) {
             return;
         }
+        agentMap.entrySet().removeIf(e -> mountAlias.equals(e.getValue().getMountAlias()));
+    }
 
-        Path path = dir.toAbsolutePath().normalize();
-        if (!Files.exists(path)) {
-            LOG.debug("Agent pool directory does not exist: {}", dir);
-            return;
-        }
-
-        if (!Files.isDirectory(path)) {
-            LOG.debug("Agent pool path is not a directory: {}", dir);
-            return;
-        }
-
-        if (pathCached.contains(path)) {
-            return;
-        } else {
-            pathCached.add(path);
-        }
-
+    /**
+     * 从 AgentMd 解析完整定义
+     */
+    private AgentDefinition loadFromAgentMd(AgentMd agentMd) {
         try {
-            if (recursive) {
-                // 递归扫描子目录（用于团队成员）
-                Files.walk(path)
-                        .filter(p -> p.toString().endsWith(".md"))
-                        .forEach(file -> loadAgentFile(file));
-            } else {
-                // 只扫描当前目录
-                try (Stream<Path> stream = Files.list(path)) {
-                    List<Path> files = stream.filter(p -> p.toString().endsWith(".md"))
-                            .collect(Collectors.toList());
+            List<String> lines = Files.readAllLines(agentMd.getFilePath(), StandardCharsets.UTF_8);
+            AgentDefinition definition = AgentDefinition.fromMarkdown(lines);
 
-                    for (Path file : files) {
-                        loadAgentFile(file);
-                    }
-                }
+            String name = definition.getName();
+            if (name == null || name.isEmpty()) {
+                name = agentMd.getName();
             }
+
+            definition.setMountAlias(agentMd.getMountAlias());
+            return definition;
         } catch (IOException e) {
-            LOG.error("Failed to scan agent pool directory: {}", dir, e);
+            LOG.error("Load agent failed from AgentMd: {}", agentMd.getFilePath(), e);
+            throw new RuntimeException("Failed to load agent: " + agentMd.getName(), e);
         }
     }
 
     /**
-     * 注册自定义 agents 池（不递归）
-     *
-     * @param dir agents 目录路径，可以是绝对路径或相对路径
+     * 从 URL 加载代理定义（内置代理用）
      */
-    public void agentPool(Path dir) {
-        agentPool(dir, false);
-    }
-
-    /**
-     * 从文件加载代理定义
-     */
-    public void loadAgentFile(String fileName, URL url) {
+    public void loadAgentFile(String fileName, URL url, String mountAlias) {
         if (url == null) {
             return;
         }
@@ -164,37 +178,23 @@ public class AgentManager {
         try {
             String[] fullContent = ResourceUtil.getResourceAsString(url).split("\n");
 
-            loadAgentFile(fileName, Arrays.asList(fullContent));
+            loadAgentFile(fileName, Arrays.asList(fullContent), mountAlias);
         } catch (IOException e) {
             LOG.error("Load agent failed, file: {}", url, e);
         }
     }
 
-    /**
-     * 从文件加载代理定义
-     */
-    public void loadAgentFile(Path file) {
-        if (file == null) {
-            return;
-        }
-
-        try {
-            String fileName = file.getFileName().toString();
-            List<String> fullContent = Files.readAllLines(file, StandardCharsets.UTF_8);
-
-            loadAgentFile(fileName, fullContent);
-        } catch (IOException e) {
-            LOG.error("Load agent failed, file: {}", file, e);
-        }
-    }
-
-    public void loadAgentFile(String fileName, List<String> fullContent) {
+    public void loadAgentFile(String fileName, List<String> fullContent, String mountAlias) {
         AgentDefinition definition = AgentDefinition.fromMarkdown(fullContent);
 
         String agentTypeName = definition.getName();
 
         if (agentTypeName == null || agentTypeName.isEmpty()) {
             agentTypeName = fileName.substring(0, fileName.length() - 3);
+        }
+
+        if (mountAlias != null) {
+            definition.setMountAlias(mountAlias);
         }
 
         agentMap.put(agentTypeName, definition);
