@@ -247,6 +247,10 @@ public class TerminalTalent extends AbsTalent {
             "bash_start", "bash_wait", "bash_stdin", "bash_stop"
     ));
 
+    protected boolean isNotAsyncBash(String toolName){
+        return !ASYNC_BASH_TOOLS.contains(toolName);
+    }
+
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
         if (bashAsyncEnabled) {
@@ -254,7 +258,7 @@ public class TerminalTalent extends AbsTalent {
         }
 
         return super.getTools(prompt).stream()
-                .filter(t -> !ASYNC_BASH_TOOLS.contains(t.name()))
+                .filter(t -> isNotAsyncBash(t.name()))
                 .collect(Collectors.toList());
     }
 

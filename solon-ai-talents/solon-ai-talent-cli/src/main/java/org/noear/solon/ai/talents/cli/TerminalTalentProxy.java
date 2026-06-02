@@ -8,6 +8,7 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * TerminalTalent 代理
@@ -62,6 +63,12 @@ public class TerminalTalentProxy implements Talent {
 
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
-        return toolList;
+        if (terminalTalent.isBashAsyncEnabled()) {
+            return toolList;
+        } else {
+            return toolList.stream()
+                    .filter(t -> terminalTalent.isNotAsyncBash(t.name()))
+                    .collect(Collectors.toList());
+        }
     }
 }
