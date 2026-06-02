@@ -393,6 +393,12 @@ public class HarnessEngine {
         }
     }
 
+    public void setSystemPrompt(String systemPrompt) {
+        if (Assert.isNotEmpty(systemPrompt)) {
+            options.setSystemPrompt(systemPrompt);
+        }
+    }
+
     // ========== 动态模型管理 ==========
 
     public void addModel(ChatConfig config) {
@@ -571,6 +577,11 @@ public class HarnessEngine {
         agentDefinition.getMetadata().getTools().addAll(options.getTools()); //允许
 
         ReActAgent.Builder agentBuilder = AgentFactory.create(this, agentDefinition, null);
+
+        // 改为动态系统提示词
+        agentBuilder.systemPrompt(r->{
+            return options.getSystemPrompt();
+        });
 
         return agentBuilder.build();
     }
