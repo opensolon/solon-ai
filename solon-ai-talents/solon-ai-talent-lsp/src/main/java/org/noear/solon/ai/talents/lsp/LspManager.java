@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 
 /**
@@ -42,6 +43,7 @@ public class LspManager {
     private final Map<String, LspServerParameters> serverConfigs = new ConcurrentHashMap<>();
     private final Map<String, LspClient> activeClients = new ConcurrentHashMap<>();
     private final String workspace;
+    private final ReentrantLock clientLock = new ReentrantLock();
     private BiConsumer<String, String> diagnosticsCallback;
 
     /**
@@ -51,7 +53,7 @@ public class LspManager {
         this.workspace = workspace;
     }
 
-    public boolean isEmpty(){
+    public boolean isEmpty() {
         return serverConfigs.isEmpty();
     }
 
@@ -149,7 +151,14 @@ public class LspManager {
             return existing;
         }
 
+        clientLock.lock();
         try {
+            // double-check
+            existing = activeClients.get(name);
+            if (existing != null) {
+                return existing;
+            }
+
             LOG.info("Starting LSP server '{}': {}", name, params.getCommand());
             LspClientImpl client = new LspClientImpl(
                     params.getCommandArray(),
@@ -169,6 +178,8 @@ public class LspManager {
         } catch (Exception e) {
             LOG.error("Failed to start LSP server '{}': {}", name, e.getMessage(), e);
             return null;
+        } finally {
+            clientLock.unlock();
         }
     }
 
