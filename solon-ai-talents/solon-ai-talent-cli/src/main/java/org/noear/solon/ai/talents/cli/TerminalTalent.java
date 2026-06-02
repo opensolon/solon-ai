@@ -58,7 +58,7 @@ public class TerminalTalent extends AbsTalent {
 
     //沙盒模式：只能访问相对路径或逻辑路径；（否则为）开放模式：可以访问绝对路径
     private boolean sandboxMode = true;
-    private final MountManager mountManager; // 引入池管理器
+    private final MountManager mountManager; // 引入挂载管理器
 
     private final String pythonCmd;
     private final String nodeCmd;
@@ -180,11 +180,31 @@ public class TerminalTalent extends AbsTalent {
             sb.append("  - Node.js 命令: `").append(nodeCmd).append("` (系统已预置变量 `$NODE`)\n");
         }
 
-        sb.append("- **环境变量**: 挂载池已注入变量（如 @pool1 映射为 ").append(envExample).append("）。\n");
-
         sb.append("- **路径规则**: \n");
         sb.append("  - **工作区**: 你的主目录，支持读写。使用相对路径访问（如 `src/app.java`）。\n");
-        sb.append("  - **挂载池**: 以 `@` 开头的逻辑路径（如 ").append(mountManager.getMountKeySet()).append("）为**只读**资源，严禁写入。\n");
+        sb.append("  - **挂载点**: 以 `@` 开头的逻辑路径（别名），对应一个真实的物理目录（通过环境变量引用）。见下方挂载点清单。\n");
+
+        // 动态判断是否有可写挂载点
+        boolean hasWriteableMount = mountManager.getMounts().stream()
+                .anyMatch(m->m.isEnabled() && m.isWriteable());
+
+        // 挂载点清单表格
+        sb.append("\n<mount_list>\n");
+        for (MountDir mount : mountManager.getMounts()) {
+            if(mount.isEnabled()) {
+                String envKey = mount.getAlias().substring(1).toUpperCase();
+                String envRef = getEnvPlaceholder(envKey);
+                sb.append("  <mount alias=\"").append(mount.getAlias()).append("\"");
+                sb.append(" type=\"").append(mount.getType()).append("\"");
+                sb.append(" writeable=\"").append(mount.isWriteable()).append("\"");
+                sb.append(" env=\"").append(envRef).append("\"");
+                if (mount.isPrimary()) {
+                    sb.append(" primary=\"true\"");
+                }
+                sb.append(" />\n");
+            }
+        }
+        sb.append("</mount_list>\n");
         if (sandboxMode) {
             sb.append("  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`) 或逻辑路径 (@pool)。\n");
         } else {
@@ -192,7 +212,11 @@ public class TerminalTalent extends AbsTalent {
         }
 
         sb.append("## 执行规约\n");
-        sb.append("- **只读隔离**: 逻辑路径（以 @ 开头）仅支持读取和命令执行，所有写入操作使用相对路径。\n");
+        if (hasWriteableMount) {
+            sb.append("- **挂载隔离**: 逻辑路径（以 @ 开头）默认只读。仅当挂载点清单中 `writeable=\"true\"` 时，才允许写入操作。\n");
+        } else {
+            sb.append("- **挂载隔离**: 逻辑路径（以 @ 开头）均为只读，所有写入操作使用相对路径。\n");
+        }
         if (sandboxMode) {
             sb.append("- **命令执行**: 在 `bash` 中，优先使用环境变量访问工具，例如使用 `" + envExample + "/bin/tool`。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。\n");
         } else {
@@ -774,18 +798,19 @@ public class TerminalTalent extends AbsTalent {
             pStr = pStr.substring(2);
         }
 
-        // 1. 如果是逻辑路径（@开头），走 poolManager 逻辑
+        // 1. 如果是逻辑路径（@开头），走 mountManager 逻辑
         if (pStr.startsWith("@")) {
             Path target = mountManager.resolve(workPath, pStr);
             String alias = pStr.split("[/\\\\]")[0];
-            boolean inPool = mountManager.hasMount(alias);
+            MountDir mount = mountManager.getMount(alias);
 
-            if (!inPool) {
-                throw new SecurityException("权限拒绝：未知的挂载池路径 " + pStr);
+            if (mount == null) {
+                throw new SecurityException("权限拒绝：未知的挂载点 " + pStr);
             }
 
-            if (writeMode) {
-                throw new SecurityException("权限拒绝：路径 " + pStr + " 属于只读挂载池，禁止写入。请将结果写入工作区的相对路径。");
+            if (writeMode && !mount.isWriteable()) {
+                throw new SecurityException(
+                        "权限拒绝：路径 " + pStr + " 属于只读挂载点，禁止写入。请将结果写入工作区的相对路径。");
             }
 
             return target;
@@ -836,17 +861,19 @@ public class TerminalTalent extends AbsTalent {
 
     private String translateCommandToEnv(String command, Map<String, String> envs) {
         String result = command;
-        for (MountDir poolDir : mountManager.getMounts()) {
-            String alias = poolDir.getAlias(); // 例如 @pool1
-            String envKey = alias.substring(1).toUpperCase(); // POOL1
+        for (MountDir mount : mountManager.getMounts()) {
+            if (mount.isEnabled()) {
+                String alias = mount.getAlias(); // 例如 @pool1
+                String envKey = alias.substring(1).toUpperCase(); // POOL1
 
-            // 将物理路径存入 envs，底层 ProcessBuilder 会将其注入系统环境
-            envs.put(envKey, poolDir.getRealPath().toString());
+                // 将物理路径存入 envs，底层 ProcessBuilder 会将其注入系统环境
+                envs.put(envKey, mount.getRealPath().toString());
 
-            // 替换指令中的逻辑路径为环境变量引用
-            String placeholder = getEnvPlaceholder(envKey);
-            if (result.contains(alias)) {
-                result = result.replace(alias, placeholder);
+                // 替换指令中的逻辑路径为环境变量引用
+                String placeholder = getEnvPlaceholder(envKey);
+                if (result.contains(alias)) {
+                    result = result.replace(alias, placeholder);
+                }
             }
         }
 
