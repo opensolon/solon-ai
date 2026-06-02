@@ -32,6 +32,7 @@ import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.code.CodeTalent;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
+import org.noear.solon.ai.talents.mount.AgentMd;
 import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.talents.cli.*;
@@ -41,6 +42,8 @@ import org.noear.solon.ai.talents.lsp.LspTalent;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.talents.memory.MemoryTalent;
 import org.noear.solon.ai.talents.memory.MemorySolution;
+import org.noear.solon.ai.talents.mount.MountType;
+import org.noear.solon.ai.talents.mount.SkillDir;
 import org.noear.solon.ai.talents.openapi.ApiSource;
 import org.noear.solon.ai.talents.openapi.OpenApiTalent;
 import org.noear.solon.ai.talents.toolgateway.McpGatewayTalent;
@@ -303,12 +306,28 @@ public class HarnessEngine {
         return Collections.unmodifiableList(options.getExtensions());
     }
 
-    public Collection<ChatConfig> getModels() {
-        return Collections.unmodifiableList(options.getModels());
-    }
-
     public Collection<MountDir> getMounts() {
         return options.getMountManager().getMounts();
+    }
+
+    public MountDir getMount(String alias) {
+        return options.getMountManager().getMount(alias);
+    }
+
+    public Collection<SkillDir> getSkills() {
+        return options.getMountManager().getSkills();
+    }
+
+    public Collection<SkillDir> getSkillsByMount(String alias) {
+        return options.getMountManager().getSkillsByMount(alias);
+    }
+
+    public Collection<AgentMd> getAgents() {
+        return options.getMountManager().getAgents();
+    }
+
+    public Collection<AgentMd> getAgentsByMount(String alias) {
+        return options.getMountManager().getAgentsByMount(alias);
     }
 
     public Map<String, McpServerParameters> getMcpServers() {
@@ -321,6 +340,10 @@ public class HarnessEngine {
 
     public Map<String, LspServerParameters> getLspServers() {
         return Collections.unmodifiableMap(options.getLspServers());
+    }
+
+    public Collection<ChatConfig> getModels() {
+        return Collections.unmodifiableList(options.getModels());
     }
 
     public ChatConfig getModelOrNil(String name) {
@@ -391,6 +414,10 @@ public class HarnessEngine {
 
     public void addMount(MountDir mount) {
         options.getMountManager().register(mount);
+    }
+
+    public void addMount(String alias, MountType type, String path, boolean primary, boolean enabled, boolean writeable) {
+        addMount(new MountDir(alias, type, path, primary, enabled, writeable));
     }
 
     public void removeMount(String alias) {

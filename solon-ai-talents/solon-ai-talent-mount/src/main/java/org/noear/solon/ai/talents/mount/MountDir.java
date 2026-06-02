@@ -15,12 +15,8 @@
  */
 package org.noear.solon.ai.talents.mount;
 
-import org.noear.solon.core.util.Assert;
-
-import java.io.File;
 import java.io.Serializable;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 /**
  * 挂载目录
