@@ -30,7 +30,7 @@ public class ReActAgentBoundaryTest {
                 .defaultToolAdd(new LoopTools())
                 .feedbackMode(false)
                 .modelOptions(o -> o.temperature(0.0))
-                .maxSteps(3) // 限制最多 3 步迭代
+                .maxTurns(3) // 限制最多 3 步迭代
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_max_steps");
@@ -60,7 +60,7 @@ public class ReActAgentBoundaryTest {
                 .defaultToolAdd(new LoopTools())
                 .feedbackMode(true)
                 .modelOptions(o -> o.temperature(0.0))
-                .maxSteps(3) // 限制最多 3 步迭代
+                .maxTurns(3) // 限制最多 3 步迭代
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_max_steps");

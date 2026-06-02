@@ -50,12 +50,23 @@ public class ReActOptionsAmend extends ModelOptionsAmend<ReActOptionsAmend, ReAc
      * 配置容错策略
      *
      * @param maxRetries   最大重试次数
+     */
+    public ReActOptionsAmend retryConfig(int maxRetries) {
+        options.setRetryConfig(maxRetries);
+        return this;
+    }
+
+    /**
+     * 配置容错策略
+     *
+     * @param maxRetries   最大重试次数
      * @param retryDelayMs 重试延迟（毫秒）
      */
     public ReActOptionsAmend retryConfig(int maxRetries, long retryDelayMs) {
         options.setRetryConfig(maxRetries, retryDelayMs);
         return this;
     }
+
 
     /**
      * 设置会话回溯窗口大小（控制短期记忆深度）
@@ -74,14 +85,6 @@ public class ReActOptionsAmend extends ModelOptionsAmend<ReActOptionsAmend, ReAc
         }
         options.setMaxTurns(val);
         return this;
-    }
-
-    /**
-     * @deprecated 4.0 Use {@link #maxTurns(int)} instead.
-     */
-    @Deprecated
-    public ReActOptionsAmend maxSteps(int val) {
-        return maxTurns(val);
     }
 
     public ReActOptionsAmend autoRethink(boolean val) {

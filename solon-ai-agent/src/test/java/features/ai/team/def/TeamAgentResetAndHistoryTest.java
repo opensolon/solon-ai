@@ -30,7 +30,7 @@ public class TeamAgentResetAndHistoryTest {
                 .role("天气专家")
                 .instruction("负责查询各地的实时天气信息，提供准确的天气数据")
                 .defaultToolAdd(new WeatherTools())
-                .maxSteps(4)
+                .maxTurns(4)
                 .build();
 
         // 2. 定义子 Agent B: 美食专家 (ReAct)
@@ -40,7 +40,7 @@ public class TeamAgentResetAndHistoryTest {
                 .role("美食专家")
                 .instruction("负责根据天气和地点推荐当地特色美食")
                 .defaultToolAdd(new FoodTools())
-                .maxSteps(4)
+                .maxTurns(4)
                 .build();
 
 

@@ -402,6 +402,11 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
+        public Builder retryConfig(int maxRetries) {
+            config.getDefaultOptions().setRetryConfig(maxRetries);
+            return this;
+        }
+
         public Builder retryConfig(int maxRetries, long retryDelayMs) {
             config.getDefaultOptions().setRetryConfig(maxRetries, retryDelayMs);
             return this;
@@ -413,14 +418,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         public Builder maxTurns(int val) {
             config.getDefaultOptions().setMaxTurns(val);
             return this;
-        }
-
-        /**
-         * @deprecated 4.0 Use {@link #maxTurns(int)} instead.
-         */
-        @Deprecated
-        public Builder maxSteps(int val) {
-            return maxTurns(val);
         }
 
         public Builder autoRethink(boolean val) {

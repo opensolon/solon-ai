@@ -363,6 +363,26 @@ public class HarnessEngine {
         }
     }
 
+    public void setModelRetries(Integer modelRetries) {
+        if (modelRetries != null) {
+            options.setModelRetries(modelRetries);
+        }
+    }
+
+    public void setMcpRetries(Integer mcpRetries) {
+        if (mcpRetries != null) {
+            options.setMcpRetries(mcpRetries);
+            mcpGatewayTalent.retryConfig(mcpRetries);
+        }
+    }
+
+    public void setApiRetries(Integer apiRetries) {
+        if (apiRetries != null) {
+            options.setApiRetries(apiRetries);
+            openApiTalent.retryConfig(apiRetries);
+        }
+    }
+
     public void setHitlEnabled(Boolean hitlEnabled) {
         if (hitlEnabled != null) {
             options.setHitlEnabled(hitlEnabled);
@@ -801,7 +821,12 @@ public class HarnessEngine {
     }
 
     public ReActRequest prompt(Prompt prompt) {
-        return getMainAgent().prompt(prompt);
+        return getMainAgent()
+                .prompt(prompt)
+                .options(o -> {
+                    o.retryConfig(options.getModelRetries());
+                    o.maxTurns(options.getMaxTurns());
+                });
     }
 
 
@@ -811,7 +836,12 @@ public class HarnessEngine {
 
 
     public ReActRequest prompt() {
-        return getMainAgent().prompt();
+        return getMainAgent()
+                .prompt()
+                .options(o -> {
+                    o.retryConfig(options.getModelRetries());
+                    o.maxTurns(options.getMaxTurns());
+                });
     }
 
 

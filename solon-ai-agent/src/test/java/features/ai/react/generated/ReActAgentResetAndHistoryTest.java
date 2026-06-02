@@ -28,7 +28,7 @@ public class ReActAgentResetAndHistoryTest {
         ReActAgent agent = ReActAgent.of(chatModel)
                 .defaultToolAdd(new LifeTools())
                 .modelOptions(o -> o.temperature(0.0))
-                .maxSteps(maxSteps)
+                .maxTurns(maxSteps)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("user_session_007");

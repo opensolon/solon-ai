@@ -58,26 +58,24 @@ public class AgentFactory {
         }
 
         ChatModel chatModel = engine.getModelOrMain(selectedModel);
-
-        ReActAgent.Builder builder = ReActAgent.of(chatModel)
-                .retryConfig(engine.getModelRetries(), 1000L);
-
         AgentDefinition.Metadata metadata = agentDefinition.getMetadata();
 
-        builder.name(agentDefinition.getName());
+        ReActAgent.Builder builder = ReActAgent.of(chatModel);
 
-        if (Assert.isNotEmpty(engine.getWorkspace())) {
-            builder.defaultToolContextPut(HarnessEngine.ATTR_CWD, engine.getWorkspace());
-        }
+        builder.name(agentDefinition.getName());
+        builder.retryConfig(engine.getModelRetries(), 1000L);
+        builder.maxTurns(engine.getMaxTurns());
+        builder.autoRethink(engine.isAutoRethink());
+        builder.sessionWindowSize(engine.getSessionWindowSize());
+        builder.defaultInterceptorAdd(engine.getCompressionInterceptor());
 
         if (Assert.isNotEmpty(agentDefinition.getSystemPrompt())) {
             builder.systemPrompt(r -> agentDefinition.getSystemPrompt());
         }
 
-        builder.maxTurns(engine.getMaxTurns());
-        builder.autoRethink(engine.isAutoRethink());
-        builder.sessionWindowSize(engine.getSessionWindowSize());
-        builder.defaultInterceptorAdd(engine.getCompressionInterceptor());
+        if (Assert.isNotEmpty(engine.getWorkspace())) {
+            builder.defaultToolContextPut(HarnessEngine.ATTR_CWD, engine.getWorkspace());
+        }
 
         if (Assert.isNotEmpty(metadata.getTools())) {
             //目前参考了： https://opencode.ai/docs/zh-cn/permissions/

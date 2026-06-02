@@ -34,7 +34,7 @@ public class ReActAgentComplexTest {
                 .defaultToolAdd(new LogisticTools())
                 .defaultToolAdd(new MarketingTools())
                 .modelOptions(o -> o.temperature(0.0)) // 设置 0 温度以确保逻辑推导的确定性
-                .maxSteps(10) // 给予充足的思考步数以支持复杂的链式调用
+                .maxTurns(10) // 给予充足的思考步数以支持复杂的链式调用
                 .build();
 
         // 2. 初始化 AgentSession（替换原有的 FlowContext）

@@ -176,22 +176,6 @@ public class ReActOptions implements NonSerializable {
     }
 
     /**
-     * @deprecated 4.0 Use {@link #setMaxTurns(int)} instead.
-     */
-    @Deprecated
-    protected void setMaxSteps(int val) {
-        setMaxTurns(val);
-    }
-
-    /**
-     * @deprecated 4.0 Use {@link #addMaxTurns(int)} instead.
-     */
-    @Deprecated
-    public void addMaxSteps(int val) {
-        addMaxTurns(val);
-    }
-
-    /**
      * 自动反思
      */
     protected void setAutoRethink(boolean autoRethink) {

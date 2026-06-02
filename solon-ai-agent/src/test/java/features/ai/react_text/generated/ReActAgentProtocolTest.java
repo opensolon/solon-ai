@@ -39,7 +39,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
                 .style(ReActStyle.STRUCTURED_TEXT)
                 .defaultToolAdd(new TestTools())
                 .modelOptions(o -> o.temperature(0.0))
-                .maxSteps(10)
+                .maxTurns(10)
                 .build();
 
         // 使用 AgentSession 替代 FlowContext
@@ -126,7 +126,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
                 .style(ReActStyle.STRUCTURED_TEXT)
                 .defaultToolAdd(new SequentialTools())
                 .modelOptions(o -> o.temperature(0.0))
-                .maxSteps(8)
+                .maxTurns(8)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("multi_tool_job");

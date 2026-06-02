@@ -29,7 +29,7 @@ public class ReActAgentResetAndHistoryTest {
                 .style(ReActStyle.STRUCTURED_TEXT)
                 .defaultToolAdd(new LifeTools())
                 .modelOptions(o -> o.temperature(0.0))
-                .maxSteps(maxSteps)
+                .maxTurns(maxSteps)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("user_session_007");
