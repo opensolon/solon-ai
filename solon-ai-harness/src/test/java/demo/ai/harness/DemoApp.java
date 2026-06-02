@@ -16,12 +16,12 @@ import java.util.Arrays;
 public class DemoApp {
     public static void main(String[] arg) throws Throwable {
         //--- 1. 初始化
-        HarnessEngine engine = HarnessEngine.of(".tmp/", "/work")
+        HarnessEngine engine = HarnessEngine.of("/data/work/", ".tmp")
                 .systemPrompt("xxx")
                 .sessionProvider(InMemoryAgentSession::of)
                 .toolsAdd(ToolPermission.TOOL_ALL_FULL) //设定工具权限
                 .disallowedToolsAdd(ToolPermission.TOOL_ALL_FULL)
-                .mountAdd(new MountDir("@global-agents", MountType.SUBAGENTS, "~/.soloncode/agents/",  true))
+                .mountAdd(new MountDir("@global-agents", MountType.SUBAGENTS, "~/.soloncode/agents/", true))
                 .modelAdd(new ChatConfig().then(slf -> {
                     slf.setApiUrl("https://api.deepseek.com");
                     slf.setApiKey("sk-***");
@@ -68,7 +68,7 @@ public class DemoApp {
 
     }
 
-    private static void dynamicUpdate1(HarnessEngine engine){
+    private static void dynamicUpdate1(HarnessEngine engine) {
         //动态更新示例
     }
 
