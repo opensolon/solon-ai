@@ -85,7 +85,7 @@ public class MountManager {
                 if (mountDir.getType() == MountType.SKILLS) {
                     //skill
                     scanSkillAndCache(mountDir, skillMap);
-                } else if (mountDir.getType() == MountType.SUBAGENTS) {
+                } else if (mountDir.getType() == MountType.AGENTS) {
                     //agent
                     scanAgentAndCache(mountDir, agentMap);
                 }
@@ -134,7 +134,7 @@ public class MountManager {
                 scanSkillAndCache(mountDir, tmp);
                 skillMap.entrySet().removeIf(e -> key.equals(e.getValue().getMountAlias()));
                 skillMap.putAll(tmp);
-            } else if (mountDir.getType() == MountType.SUBAGENTS) {
+            } else if (mountDir.getType() == MountType.AGENTS) {
                 //agent
                 Map<String, AgentMd> tmp = new LinkedHashMap<>();
                 scanAgentAndCache(mountDir, tmp);
@@ -271,7 +271,7 @@ public class MountManager {
     }
 
     private static void scanAgentAndCache(MountDir mountDir, Map<String, AgentMd> map) {
-        if (mountDir.isEnabled() == false || mountDir.getType() != MountType.SUBAGENTS) {
+        if (mountDir.isEnabled() == false || mountDir.getType() != MountType.AGENTS) {
             return;
         }
 

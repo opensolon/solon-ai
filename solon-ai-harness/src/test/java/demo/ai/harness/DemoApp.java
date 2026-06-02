@@ -21,7 +21,7 @@ public class DemoApp {
                 .sessionProvider(InMemoryAgentSession::of)
                 .toolsAdd(ToolPermission.TOOL_ALL_FULL) //设定工具权限
                 .disallowedToolsAdd(ToolPermission.TOOL_ALL_FULL)
-                .mountAdd(new MountDir("@global-agents", MountType.SUBAGENTS, "~/.soloncode/agents/", true))
+                .mountAdd(new MountDir("@global-agents", MountType.AGENTS, "~/.soloncode/agents/", true))
                 .modelAdd(new ChatConfig().then(slf -> {
                     slf.setApiUrl("https://api.deepseek.com");
                     slf.setApiKey("sk-***");
