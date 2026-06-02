@@ -58,7 +58,7 @@ class HarnessOptions implements Serializable {
     private Set<String> disallowedTools = new CopyOnWriteArraySet<>();
 
     // ========== 执行控制 ==========
-    private volatile int maxTurns = 30;
+    private volatile int maxTurns = 20;
     private volatile boolean autoRethink = true;
 
     // ========== 会话与压缩 ==========
