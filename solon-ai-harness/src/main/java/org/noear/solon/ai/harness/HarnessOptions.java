@@ -176,40 +176,50 @@ class HarnessOptions implements Serializable {
         return maxTurns;
     }
 
-    void setMaxTurns(int maxTurns) {
-        this.maxTurns = maxTurns;
+    void setMaxTurns(Integer maxTurns) {
+        if (maxTurns != null) {
+            this.maxTurns = maxTurns;
+        }
     }
 
     boolean isAutoRethink() {
         return autoRethink;
     }
 
-    void setAutoRethink(boolean autoRethink) {
-        this.autoRethink = autoRethink;
+    void setAutoRethink(Boolean autoRethink) {
+        if (autoRethink != null) {
+            this.autoRethink = autoRethink;
+        }
     }
 
     int getSessionWindowSize() {
         return sessionWindowSize;
     }
 
-    void setSessionWindowSize(int sessionWindowSize) {
-        this.sessionWindowSize = sessionWindowSize;
+    void setSessionWindowSize(Integer sessionWindowSize) {
+        if (sessionWindowSize != null) {
+            this.sessionWindowSize = sessionWindowSize;
+        }
     }
 
     int getCompressionMaxMessages() {
         return compressionMaxMessages;
     }
 
-    void setCompressionMaxMessages(int compressionMaxMessages) {
-        this.compressionMaxMessages = compressionMaxMessages;
+    void setCompressionMaxMessages(Integer compressionMaxMessages) {
+        if (compressionMaxMessages != null) {
+            this.compressionMaxMessages = compressionMaxMessages;
+        }
     }
 
     int getCompressionMaxTokens() {
         return compressionMaxTokens;
     }
 
-    void setCompressionMaxTokens(int compressionMaxTokens) {
-        this.compressionMaxTokens = compressionMaxTokens;
+    void setCompressionMaxTokens(Integer compressionMaxTokens) {
+        if (compressionMaxTokens != null) {
+            this.compressionMaxTokens = compressionMaxTokens;
+        }
     }
 
     String getCompressionModel() {

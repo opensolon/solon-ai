@@ -881,39 +881,39 @@ public class HarnessEngine {
 
         // ========== 简单属性配置（代理到 options） ==========
 
-        public Builder systemPrompt(String val) {
-            options.setSystemPrompt(val);
+        public Builder systemPrompt(String systemPrompt) {
+            options.setSystemPrompt(systemPrompt);
             return this;
         }
 
-        public Builder userAgent(String val) {
-            options.setUserAgent(val);
+        public Builder userAgent(String userAgent) {
+            options.setUserAgent(userAgent);
             return this;
         }
 
-        public Builder maxTurns(int val) {
-            options.setMaxTurns(val);
+        public Builder maxTurns(Integer maxTurns) {
+            options.setMaxTurns(maxTurns);
             return this;
         }
 
-        public Builder autoRethink(boolean val) {
-            options.setAutoRethink(val);
+        public Builder autoRethink(Boolean autoRethink) {
+            options.setAutoRethink(autoRethink);
             return this;
         }
 
-        public Builder sessionWindowSize(int val) {
-            options.setSessionWindowSize(val);
+        public Builder sessionWindowSize(Integer sessionWindowSize) {
+            options.setSessionWindowSize(sessionWindowSize);
             return this;
         }
 
-        public Builder compressionThreshold(int maxMessages, int maxTokens) {
+        public Builder compressionThreshold(Integer maxMessages, Integer maxTokens) {
             options.setCompressionMaxMessages(maxMessages);
             options.setCompressionMaxTokens(maxTokens);
             return this;
         }
 
-        public Builder compressionModel(String val) {
-            options.setCompressionModel(val);
+        public Builder compressionModel(String compressionModel) {
+            options.setCompressionModel(compressionModel);
             return this;
         }
 
