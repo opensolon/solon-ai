@@ -173,6 +173,9 @@ public class OpenApiTalent extends AbsTalent {
             return this;
         }
 
+        // 同名已存在则先移除（幂等，不存在的 name 是空操作）
+        removeApi(apiSource.getDocUrl());
+
         try {
             loadApiFromDefinition(apiSource);
         } catch (Throwable e) {

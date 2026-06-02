@@ -512,6 +512,12 @@ public class HarnessEngine {
         options.getApiServers().put(apiSource.getDocUrl(), apiSource);
     }
 
+    public void updateApi(ApiSource apiSource){
+        //内部会自动移除
+        openApiTalent.addApi(apiSource);
+        options.getApiServers().put(apiSource.getDocUrl(), apiSource);
+    }
+
     /**
      * 动态移除 API 源
      */
@@ -524,6 +530,12 @@ public class HarnessEngine {
      * 动态添加 MCP 服务
      */
     public void addMcpServer(String name, McpServerParameters mcpServer) {
+        mcpGatewayTalent.addMcpServer(name, mcpServer);
+        options.getMcpServers().put(name, mcpServer);
+    }
+
+    public void updateMcpServer(String name, McpServerParameters mcpServer){
+        //内部会自动移除
         mcpGatewayTalent.addMcpServer(name, mcpServer);
         options.getMcpServers().put(name, mcpServer);
     }
