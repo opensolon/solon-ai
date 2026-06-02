@@ -191,16 +191,16 @@ public class TerminalTalent extends AbsTalent {
         // 挂载点清单表格
         sb.append("\n<mount_list>\n");
         for (MountDir mount : mountManager.getMounts()) {
-            if(mount.isEnabled()) {
+            if (mount.isEnabled()) {
                 String envKey = mount.getAlias().substring(1).toUpperCase();
                 String envRef = getEnvPlaceholder(envKey);
                 sb.append("  <mount alias=\"").append(mount.getAlias()).append("\"");
+                if (Assert.isNotEmpty(mount.getDescription())) {
+                    sb.append(" description=\"").append(mount.getDescription()).append("\"");
+                }
                 sb.append(" type=\"").append(mount.getType()).append("\"");
                 sb.append(" writeable=\"").append(mount.isWriteable()).append("\"");
                 sb.append(" env=\"").append(envRef).append("\"");
-                if (mount.isPrimary()) {
-                    sb.append(" primary=\"true\"");
-                }
                 sb.append(" />\n");
             }
         }

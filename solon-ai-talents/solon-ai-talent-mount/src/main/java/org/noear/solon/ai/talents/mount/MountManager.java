@@ -51,23 +51,12 @@ public class MountManager {
     // 代理名 -> 代理文件信息 (如 "code-review" -> AgentMd)
     private volatile Map<String, AgentMd> agentMap = new ConcurrentHashMap<>();
 
-    public MountManager(String workDir){
+    public MountManager(String workDir) {
         this.workDir = workDir;
     }
 
     public String getWorkDir() {
         return workDir;
-    }
-
-    /**
-     * 注册挂载（并扫描）
-     */
-    public synchronized MountDir register(String alias, MountType type, String path) {
-        return register(new MountDir(alias, type,  path, false));
-    }
-
-    public synchronized MountDir register(String alias, MountType type, String path, boolean primary) {
-        return register(new MountDir(alias, type,  path, primary));
     }
 
     /**
@@ -222,9 +211,11 @@ public class MountManager {
     public Collection<SkillDir> getSkills() {
         return skillMap.values();
     }
+
     public int getSkillCount() {
         return skillMap.size();
     }
+
     public SkillDir getSkill(String name) {
         return skillMap.get(name);
     }
@@ -232,9 +223,11 @@ public class MountManager {
     public Collection<AgentMd> getAgents() {
         return agentMap.values();
     }
+
     public int getAgentCount() {
         return agentMap.size();
     }
+
     public AgentMd getAgent(String name) {
         return agentMap.get(name);
     }

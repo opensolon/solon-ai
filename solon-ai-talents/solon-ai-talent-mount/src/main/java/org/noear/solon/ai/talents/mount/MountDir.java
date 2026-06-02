@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.talents.mount;
 
+import lombok.Builder;
+
 import java.io.Serializable;
 import java.nio.file.Path;
 
@@ -24,16 +26,19 @@ import java.nio.file.Path;
  * @author noear
  * @since 4.0.0
  */
+@Builder
 public class MountDir implements Serializable {
     //虚拟别名
     private String alias;
+    //描述
+    private String description;
     //挂载类型
     private MountType type;
     //配置地址支持 "~/"（用户目录相对位置） 和 "./"（工作区相对位置）
     private String path;
 
     //是否原始（不可删除）
-    private boolean primary;
+    private boolean primary = false;
     //是否启用
     private boolean enabled = true;
     //是否可写
@@ -42,25 +47,13 @@ public class MountDir implements Serializable {
     //真实地址
     private transient Path realPath;
 
-    public MountDir(String alias, MountType type, String path, boolean primary) {
-        this(alias, type, path, primary, true);
-    }
-
-    public MountDir(String alias, MountType type, String path, boolean primary, boolean enabled) {
-        this(alias, type, path, primary, enabled, false);
-    }
-
-    public MountDir(String alias, MountType type, String path, boolean primary, boolean enabled, boolean writeable) {
-        this.alias = alias.startsWith("@") ? alias : "@" + alias;
-        this.type = type;
-        this.path = path;
-        this.primary = primary;
-        this.enabled = enabled;
-        this.writeable = writeable;
-    }
 
     public String getAlias() {
         return alias;
+    }
+
+    public String getDescription() {
+        return description;
     }
 
     public MountType getType() {

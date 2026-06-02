@@ -479,13 +479,8 @@ public class HarnessEngine {
     }
 
 
-
     public void addMount(MountDir mount) {
         options.getMountManager().register(mount);
-    }
-
-    public void addMount(String alias, MountType type, String path, boolean primary, boolean enabled, boolean writeable) {
-        addMount(new MountDir(alias, type, path, primary, enabled, writeable));
     }
 
     public void removeMount(String alias) {
@@ -572,7 +567,7 @@ public class HarnessEngine {
         if (name == null) {
             return;
         }
-        
+
         options.getLspServers().remove(name);
         lspManager.unregisterServer(name);
 
@@ -974,7 +969,7 @@ public class HarnessEngine {
             return this;
         }
 
-        public Builder toolsAdd(Collection<String> tools){
+        public Builder toolsAdd(Collection<String> tools) {
             options.getTools().addAll(tools);
             return this;
         }
