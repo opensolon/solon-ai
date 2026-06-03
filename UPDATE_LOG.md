@@ -20,6 +20,7 @@
 * 添加 solon-ai-skill-openapi ApiSource 超时配置支持
 * 添加 solon-ai-skill-toolgateway McpGatewaySkill 专门处理 mcp（ToolGatewaySkill 可以处理所有工具）
 * 添加 solon-ai-core ChatOptions:httpCustomize 方法
+* 添加 solon-ai-core Talent::isEnabled 方法
 * 添加 solon-ai-agent ReActInterceptor.onReasonStart 事件方法
 * 添加 solon-ai-agent AgentTrace.getOriginalPrompt, getWorkingMemory 方法
 * 添加 solon-ai-agent AgentTrace.getRunId 方法

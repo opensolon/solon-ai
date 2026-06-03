@@ -50,6 +50,8 @@ public class McpTalentClient implements Talent {
      */
     protected TalentMetadata metadata;
 
+    protected volatile boolean enabled = true;
+
     public McpTalentClient(McpClientProvider clientProvider) {
         this.clientProvider = clientProvider;
 
@@ -73,6 +75,15 @@ public class McpTalentClient implements Talent {
     @Override
     public TalentMetadata metadata() {
         return metadata;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return enabled;
     }
 
     /**

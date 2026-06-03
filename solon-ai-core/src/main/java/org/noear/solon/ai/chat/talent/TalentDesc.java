@@ -49,10 +49,12 @@ public class TalentDesc implements Talent {
     private final Function<Prompt, Boolean> isSupportedHandler;
     private final Function<Prompt, String> getInstructionHandler;
     private final Consumer<Prompt> onAttachHandler;
-    Function<Prompt, Collection<FunctionTool>> getToolsHandler;
+    private final Function<Prompt, Collection<FunctionTool>> getToolsHandler;
+    private volatile boolean enabled;
 
-    public TalentDesc(TalentMetadata metadata, Function<Prompt, Boolean> isSupportedHandler, Function<Prompt, String> getInstructionHandler, Consumer<Prompt> onAttachHandler, Function<Prompt, Collection<FunctionTool>> getToolsHandler) {
+    public TalentDesc(TalentMetadata metadata, boolean enabled, Function<Prompt, Boolean> isSupportedHandler, Function<Prompt, String> getInstructionHandler, Consumer<Prompt> onAttachHandler, Function<Prompt, Collection<FunctionTool>> getToolsHandler) {
         this.metadata = metadata;
+        this.enabled = enabled;
         this.getToolsHandler = getToolsHandler;
         this.isSupportedHandler = isSupportedHandler;
         this.getInstructionHandler = getInstructionHandler;
@@ -72,6 +74,15 @@ public class TalentDesc implements Talent {
     @Override
     public TalentMetadata metadata() {
         return metadata;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
     }
 
     @Override
@@ -116,6 +127,7 @@ public class TalentDesc implements Talent {
         private Function<Prompt, String> getInstructionHandler;
         private Function<Prompt, Collection<FunctionTool>> getToolsHandler;
         private Consumer<Prompt> onAttachHandler;
+        private boolean enabled = true;
 
         public Builder(String name) {
             metadata = new TalentMetadata(name, null);
@@ -128,6 +140,11 @@ public class TalentDesc implements Talent {
 
         public Builder metadata(Consumer<TalentMetadata> metadata) {
             metadata.accept(this.metadata);
+            return this;
+        }
+
+        public Builder enabled(boolean enabled) {
+            this.enabled = enabled;
             return this;
         }
 
@@ -201,7 +218,7 @@ public class TalentDesc implements Talent {
                 getToolsHandler = (prompt) -> tools.values();
             }
 
-            return new TalentDesc(metadata, isSupportedHandler, getInstructionHandler, onAttachHandler, getToolsHandler);
+            return new TalentDesc(metadata, enabled, isSupportedHandler, getInstructionHandler, onAttachHandler, getToolsHandler);
         }
     }
 }

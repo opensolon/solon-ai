@@ -47,6 +47,11 @@ public class TerminalTalentProxy implements Talent {
     }
 
     @Override
+    public boolean isEnabled() {
+        return terminalTalent.isEnabled();
+    }
+
+    @Override
     public boolean isSupported(Prompt prompt) {
         return terminalTalent.isSupported(prompt);
     }

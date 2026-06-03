@@ -34,6 +34,13 @@ import java.util.Collection;
 @Preview("3.8.4")
 public interface Talent {
     /**
+     * 是否启用
+     */
+    default boolean isEnabled() {
+        return true;
+    }
+
+    /**
      * 获取才能名称（默认类名）
      */
     default String name() {
@@ -43,7 +50,7 @@ public interface Talent {
     /**
      * 获取才能描述
      */
-    default String description(){
+    default String description() {
         return null;
     }
 

@@ -43,7 +43,7 @@ public class TalentUtil {
             Talent talent = item.target;
 
             try {
-                if (talent.isSupported(prompt) == false) {
+                if (talent.isEnabled() == false || talent.isSupported(prompt) == false) {
                     //不支持？跳过
                     continue;
                 }

@@ -31,6 +31,7 @@ import java.util.*;
 @Preview("3.8.4")
 public abstract class AbsTalent implements Talent {
     private volatile TalentMetadata metadata;
+    private volatile boolean enabled = true;
 
     private final Map<String, FunctionTool> toolMap0;
     private final List<FunctionTool> tools0;
@@ -86,6 +87,15 @@ public abstract class AbsTalent implements Talent {
             }
         }
         return list;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return enabled;
     }
 
     @Override
