@@ -38,10 +38,13 @@ public class MountDir implements Serializable {
     private String path;
 
     //是否原始（不可删除）
+    @Builder.Default
     private boolean primary = false;
     //是否启用
+    @Builder.Default
     private boolean enabled = true;
     //是否可写
+    @Builder.Default
     private boolean writeable = false;
 
     //真实地址
