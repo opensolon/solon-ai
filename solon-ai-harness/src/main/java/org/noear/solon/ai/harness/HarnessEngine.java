@@ -438,10 +438,52 @@ public class HarnessEngine {
 
         options.removeModel(config.getNameOrModel());
         options.addModel(config);
+
+        if (mainModel != null) {
+            if (mainModel.getNameOrModel().equals(config.getNameOrModel()) == false) {
+                //如果不是同一个模型，不需要更新
+                return;
+            }
+
+            modelLock.lock();
+            try {
+                this.mainModel = null;
+            } finally {
+                modelLock.unlock();
+            }
+
+            agentLock.lock();
+            try {
+                this.mainAgent = null;
+            } finally {
+                agentLock.unlock();
+            }
+        }
     }
 
     public void removeModel(String name) {
         options.removeModel(name);
+
+        if (mainModel != null) {
+            if (mainModel.getNameOrModel().equals(name) == false) {
+                //如果不是同一个模型，不需要更新
+                return;
+            }
+
+            modelLock.lock();
+            try {
+                this.mainModel = null;
+            } finally {
+                modelLock.unlock();
+            }
+
+            agentLock.lock();
+            try {
+                this.mainAgent = null;
+            } finally {
+                agentLock.unlock();
+            }
+        }
     }
 
     public boolean hasModel(String name) {
