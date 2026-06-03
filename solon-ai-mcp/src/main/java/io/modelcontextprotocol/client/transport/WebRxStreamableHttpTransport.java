@@ -347,9 +347,10 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
                                     sink.success();
                                     return directResponseFlux(message, response);
                                 } else {
-                                    logger.warn("Unknown media type {} returned for POST in session {}", contentType,
-                                            sessionRepresentation);
-                                    return Flux.error(new RuntimeException("Unknown media type returned: " + contentType));
+                                    logger.warn("Unknown media type {} returned for POST in session {}, attempting to parse as JSON response",
+                                            contentType, sessionRepresentation);
+                                    sink.success();
+                                    return directResponseFlux(message, response);
                                 }
                             }
                         } else {
