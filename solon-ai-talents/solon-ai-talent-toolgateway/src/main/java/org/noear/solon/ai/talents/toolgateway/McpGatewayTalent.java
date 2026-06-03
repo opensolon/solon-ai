@@ -106,7 +106,7 @@ public class McpGatewayTalent extends AbsTalent {
         providerMap.put(name, mcpProvider);
 
         Set<String> toolNames = new LinkedHashSet<>();
-        for (FunctionTool tool : mcpProvider.getTools()) {
+        for (FunctionTool tool : mcpProvider.getToolsActivated()) {
             String key = tool.name().toLowerCase();
             categoryTools.computeIfAbsent(name, k -> new ConcurrentHashMap<>())
                     .put(key, tool);
@@ -200,7 +200,7 @@ public class McpGatewayTalent extends AbsTalent {
         Set<String> newToolNames = new LinkedHashSet<>();
         Map<String, FunctionTool> newCategoryMap = new ConcurrentHashMap<>();
 
-        for (FunctionTool tool : provider.getTools()) {
+        for (FunctionTool tool : provider.getToolsActivated()) {
             String key = tool.name().toLowerCase();
             newCategoryMap.put(key, tool);
             newToolNames.add(key);

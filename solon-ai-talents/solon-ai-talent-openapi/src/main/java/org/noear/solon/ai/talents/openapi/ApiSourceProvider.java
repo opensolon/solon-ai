@@ -18,7 +18,6 @@ package org.noear.solon.ai.talents.openapi;
 import org.noear.solon.Utils;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.ResourceUtil;
-import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,7 +99,7 @@ public class ApiSourceProvider {
     /**
      * 获取经过 allowed/disallowed 过滤后的工具列表
      */
-    public Collection<ApiTool> getTools() {
+    public Collection<ApiTool> getToolsActivated() {
         return rawTools.values().stream()
                 .filter(this::isToolAllowed)
                 .collect(Collectors.toList());
@@ -109,39 +108,10 @@ public class ApiSourceProvider {
     /**
      * 获取全量工具（不过滤，供前端展示完整列表用）
      */
-    public Collection<ApiTool> getAllTools() {
+    public Collection<ApiTool> getTools() {
         return Collections.unmodifiableCollection(rawTools.values());
     }
 
-    /**
-     * 获取过滤后的工具名集合
-     */
-    public Set<String> getToolNames() {
-        return getTools().stream()
-                .map(ApiTool::getName)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-    }
-
-    /**
-     * 获取全量工具名集合（不过滤）
-     */
-    public Set<String> getAllToolNames() {
-        return Collections.unmodifiableSet(rawTools.keySet());
-    }
-
-    /**
-     * 工具数量（过滤后）
-     */
-    public int getToolCount() {
-        return getTools().size();
-    }
-
-    /**
-     * 工具数量（全量）
-     */
-    public int getAllToolCount() {
-        return rawTools.size();
-    }
 
     // ===== 加载能力 =====
 
@@ -154,7 +124,7 @@ public class ApiSourceProvider {
      * - 补充 baseUrl 和 source 引用
      * - 全量注册到 rawTools
      *
-     * <p>调用方可随后通过 {@link #getTools()} 获取过滤后的工具集
+     * <p>调用方可随后通过 {@link #getToolsActivated()} 获取过滤后的工具集
      *
      * @throws IOException 获取或解析失败时抛出
      */
@@ -201,7 +171,7 @@ public class ApiSourceProvider {
         }
 
         LOG.info("ApiSourceProvider: Loaded {} tools from {} (filtered: {})",
-                rawTools.size(), source.getDocUrl(), getToolCount());
+                rawTools.size(), source.getDocUrl(), getToolsActivated().size());
     }
 
     // ===== 内部方法 =====

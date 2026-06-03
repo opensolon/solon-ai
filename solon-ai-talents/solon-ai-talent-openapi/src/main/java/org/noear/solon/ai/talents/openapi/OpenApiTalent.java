@@ -485,7 +485,7 @@ public class OpenApiTalent extends AbsTalent {
         sourceProviderMap.put(source.getDocUrl(), provider);
 
         // 3. 将过滤后的工具同步到全局索引
-        for (ApiTool tool : provider.getTools()) {
+        for (ApiTool tool : provider.getToolsActivated()) {
             String nameLower = tool.getName().toLowerCase();
             this.allTools.put(nameLower, tool);
             String cat = tool.getCategory();
@@ -610,7 +610,7 @@ public class OpenApiTalent extends AbsTalent {
      * 将 provider 过滤后的工具同步到全局索引
      */
     private void syncToolsToGlobalIndex(ApiSourceProvider provider) {
-        for (ApiTool tool : provider.getTools()) {
+        for (ApiTool tool : provider.getToolsActivated()) {
             String nameLower = tool.getName().toLowerCase();
             this.allTools.put(nameLower, tool);
             String cat = tool.getCategory();

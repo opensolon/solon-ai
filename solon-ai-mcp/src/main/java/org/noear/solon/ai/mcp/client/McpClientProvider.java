@@ -734,10 +734,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     }
 
     /**
-     * 获取函数工具（可用于模型绑定）
+     * 获取可用的函数工具（可用于模型绑定）
      */
-    @Override
-    public Collection<FunctionTool> getTools() {
+    public Collection<FunctionTool> getToolsActivated() {
         Collection<FunctionTool> toolList = getTools(null);
 
         return toolList.stream()
@@ -746,6 +745,14 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                 // 2. 如果开启了黑名单，则剔除在黑名单中的工具
                 .filter(t -> disallowedTools.isEmpty() || !disallowedTools.contains(t.name()))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 获取函数工具（可用于模型绑定）
+     */
+    @Override
+    public Collection<FunctionTool> getTools() {
+        return getTools(null);
     }
 
 
