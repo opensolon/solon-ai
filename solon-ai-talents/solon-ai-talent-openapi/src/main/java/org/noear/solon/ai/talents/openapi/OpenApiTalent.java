@@ -496,7 +496,7 @@ public class OpenApiTalent extends AbsTalent {
     // ========== 查询（供 HarnessEngine 及前端使用） ==========
 
     /**
-     * 按 docUrl 获取 ApiSourceProvider
+     * 按 docUrl 获取 ApiSourceClient
      */
     public ApiSourceClient getApiSource(String docUrl) {
         return sourceProviderMap.get(docUrl);

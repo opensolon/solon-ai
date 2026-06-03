@@ -118,28 +118,28 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     private final StringMutexLock cacheLocker = new StringMutexLock();
 
     // 允许工具（空表示全部）
-    private List<String> allowedTools = new ArrayList<>();
+    private Set<String> allowedTools = new HashSet<>();
 
     // 禁用工具（空表示不禁）
-    private List<String> disallowedTools = new ArrayList<>();
+    private Set<String> disallowedTools = new HashSet<>();
 
-    public List<String> getAllowedTools() {
+    public Set<String> getAllowedTools() {
         return allowedTools;
     }
 
     public void setAllowedTools(List<String> allowedTools) {
         if (allowedTools != null) {
-            this.allowedTools = allowedTools;
+            this.allowedTools = new HashSet<>(allowedTools);
         }
     }
 
-    public List<String> getDisallowedTools() {
+    public Set<String> getDisallowedTools() {
         return disallowedTools;
     }
 
     public void setDisallowedTools(List<String> disallowedTools) {
         if (disallowedTools != null) {
-            this.disallowedTools = disallowedTools;
+            this.disallowedTools = new HashSet<>(disallowedTools);
         }
     }
 

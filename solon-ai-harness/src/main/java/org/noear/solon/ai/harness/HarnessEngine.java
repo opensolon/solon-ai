@@ -514,10 +514,10 @@ public class HarnessEngine {
     }
 
     /**
-     * 获取指定 docUrl 的 ApiSourceProvider
+     * 获取指定 docUrl 的 ApiSourceClient
      */
     public ApiSourceClient getApiServer(String docUrl) {
-        return openApiTalent.getApiSourceProvider(docUrl);
+        return openApiTalent.getApiSource(docUrl);
     }
 
     /**

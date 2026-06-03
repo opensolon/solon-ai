@@ -29,14 +29,10 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * API 源提供者（单个 ApiSource 的运行时代理）
+ * API 源客户端（单个 ApiSource 的运行时代理）
  *
- * <p>对标 McpClientProvider 的角色：
- * - 持有 ApiSource 配置
- * - 持有解析后的 ApiTool 集合
- * - 自主加载（从 docUrl 获取定义文档并解析）
- * - 提供 allowed/disallowed 工具过滤
- * - 支持刷新（重新解析 + 过滤）
+ * <p>持有独立的 allowedTools / disallowedTools 副本，初始化时从 ApiSource 复制，
+ * 后续操作均在副本上进行，不会修改 ApiSource 原始配置。
  *
  * @author noear
  * @since 3.10
@@ -52,11 +48,23 @@ public class ApiSourceClient {
     // 该源解析出的全量工具（不过滤，用于前端查阅全量列表）
     private final Map<String, ApiTool> rawTools = new LinkedHashMap<>();
 
+    // 运行时权限副本（从 source 初始化，之后独立维护）
+    private Set<String> allowedTools = new HashSet<>();
+    private Set<String> disallowedTools = new HashSet<>();
+
     public ApiSourceClient(ApiSource source, ApiResolver resolver, ApiAuthenticator defaultAuthenticator, Duration defaultTimeout) {
         this.source = source;
         this.resolver = resolver;
         this.defaultAuthenticator = defaultAuthenticator;
         this.defaultTimeout = defaultTimeout;
+
+        // 从 source 复制初始权限配置
+        if (source.getAllowedTools() != null) {
+            this.allowedTools = new HashSet<>(source.getAllowedTools());
+        }
+        if (source.getDisallowedTools() != null) {
+            this.disallowedTools = new HashSet<>(source.getDisallowedTools());
+        }
     }
 
     // ===== 配置访问 =====
@@ -69,30 +77,26 @@ public class ApiSourceClient {
         return source.getDocUrl();
     }
 
-    // ===== 权限控制 =====
+    // ===== 权限控制（操作自身副本） =====
 
-    public List<String> getAllowedTools() {
-        return source.getAllowedTools();
+    public Set<String> getAllowedTools() {
+        return allowedTools;
     }
 
     public void setAllowedTools(List<String> allowedTools) {
-        source.setAllowedTools(allowedTools);
+        if(allowedTools != null) {
+            this.allowedTools = new HashSet<>(allowedTools);
+        }
     }
 
-    public void addAllowedTool(String toolName) {
-        source.addAllowedTool(toolName);
-    }
-
-    public List<String> getDisallowedTools() {
-        return source.getDisallowedTools();
+    public Set<String> getDisallowedTools() {
+        return disallowedTools;
     }
 
     public void setDisallowedTools(List<String> disallowedTools) {
-        source.setDisallowedTools(disallowedTools);
-    }
-
-    public void addDisallowedTool(String toolName) {
-        source.addDisallowedTool(toolName);
+        if(disallowedTools != null) {
+            this.disallowedTools = new HashSet<>(disallowedTools);
+        }
     }
 
     // ===== 工具查询 =====
@@ -158,7 +162,7 @@ public class ApiSourceClient {
         }
 
         if (Utils.isEmpty(json)) {
-            LOG.warn("ApiSourceProvider: Source empty for {}", source.getDocUrl());
+            LOG.warn("ApiSourceClient: Source empty for {}", source.getDocUrl());
             return;
         }
 
@@ -177,27 +181,27 @@ public class ApiSourceClient {
             }
         }
 
-        LOG.info("ApiSourceProvider: Loaded {} tools from {} (filtered: {})",
+        LOG.info("ApiSourceClient: Loaded {} tools from {} (filtered: {})",
                 rawTools.size(), source.getDocUrl(), getToolsActivated().size());
     }
 
     // ===== 内部方法 =====
 
     /**
-     * 过滤判断
+     * 过滤判断（基于自身副本）
      */
     private boolean isToolAllowed(ApiTool tool) {
         String name = tool.getName();
 
         // 白名单非空时，仅保留白名单中的工具
-        if (!source.getAllowedTools().isEmpty()
-                && !source.getAllowedTools().contains(name)) {
+        if (!allowedTools.isEmpty()
+                && !allowedTools.contains(name)) {
             return false;
         }
 
         // 黑名单非空时，剔除黑名单中的工具
-        if (!source.getDisallowedTools().isEmpty()
-                && !source.getDisallowedTools().contains(name)) {
+        if (!disallowedTools.isEmpty()
+                && disallowedTools.contains(name)) {
             return false;
         }
 
