@@ -56,6 +56,10 @@ public class MountDir implements Serializable {
         return description;
     }
 
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
     public MountType getType() {
         return type;
     }

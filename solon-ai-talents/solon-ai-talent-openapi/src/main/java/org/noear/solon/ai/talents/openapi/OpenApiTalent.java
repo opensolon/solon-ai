@@ -547,14 +547,9 @@ public class OpenApiTalent extends AbsTalent {
                 LOG.error("OpenApiTalent: Failed to refresh API from {}", docUrl, e);
             }
         } else {
-            // 权限刷新：从全局索引移除旧工具，provider 重新 loadApi 后同步回全局索引
+            // 权限刷新：rawTools 未变，只需从全局索引移除旧工具，再用新的权限过滤重新同步
             removeToolsFromGlobalIndex(docUrl);
-            try {
-                provider.loadApi();
-            } catch (IOException e) {
-                LOG.error("OpenApiTalent: Failed to reload tools from {}", docUrl, e);
-            }
-            // 重新同步过滤后的工具到全局索引
+            // 注意：不再调用 provider.loadApi()，因为 rawTools 未变，仅需 getToolsActivated() 用新权限重新过滤
             syncToolsToGlobalIndex(provider);
         }
 
