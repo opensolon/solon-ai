@@ -235,4 +235,113 @@ public class ContextCompressionInterceptorTest {
         // 验证：第一条消息依然是原生的 System 消息
         assertEquals(globalSystem.getContent(), workingMemory.getMessages().get(0).getContent());
     }
+
+    /**
+     * 验证 minReservedMessages 下限保护：
+     * 即使 Token 预算很小，保留窗口也不会被压缩到少于 minReservedMessages 条。
+     * interceptor 的 maxMessages=6（实际被修正为 10），minReservedMessages = max(3, 10/3) = 3
+     */
+    @Test
+    public void testMinReservedMessagesProtection() {
+        // 构造初心
+        ChatMessage sys = ChatMessage.ofSystem("System");
+        sys.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(sys);
+
+        ChatMessage goal = ChatMessage.ofUser("Goal");
+        goal.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(goal);
+
+        // 构造 25 条普通消息
+        for (int i = 0; i < 25; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("Step " + i));
+        }
+
+        int sizeBefore = workingMemory.getMessages().size(); // 27
+
+        interceptor.onReasonStart(trace, null);
+
+        List<ChatMessage> result = workingMemory.getMessages();
+
+        // 压缩应该发生了
+        assertTrue(result.size() < sizeBefore, "Compression should have occurred");
+
+        // 保留窗口至少 minReservedMessages（3）条
+        // result = [初心链(2)] + [过期区处理] + [保留窗口]
+        // 保留窗口 = result 中排除初心链和过期区后的消息数
+        // 简化验证：总消息数 > 初心链 + minReservedMessages（至少保留了 3 条非初心消息）
+        assertTrue(result.size() > 2 + 2, // 2 初心 + 至少 3 条保留（宽松验证）
+                "Should keep at least minReservedMessages in the reserved window");
+    }
+
+    /**
+     * 验证极端 Token 场景：大量大消息，但保留窗口仍受 minReservedMessages 保护。
+     * 使用很小的 maxTokens（8000）和包含超长内容的消息，模拟代码 Agent 读大文件。
+     */
+    @Test
+    public void testTokenOverloadKeepsMinReserved() {
+        // interceptor: maxMessages=6(实际10), maxTokens=8000, minReservedMessages=3
+        ChatMessage sys = ChatMessage.ofSystem("System");
+        sys.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(sys);
+
+        ChatMessage goal = ChatMessage.ofUser("Refactor this codebase");
+        goal.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(goal);
+
+        // 模拟代码 Agent 场景：读了很多文件（每次文件内容都很大）
+        for (int i = 0; i < 15; i++) {
+            // 构造大内容消息（模拟文件读取结果）
+            StringBuilder bigContent = new StringBuilder();
+            for (int j = 0; j < 200; j++) {
+                bigContent.append("This is line ").append(j).append(" of file content for step ").append(i).append(" ");
+            }
+            workingMemory.addMessage(ChatMessage.ofAssistant(bigContent.toString()));
+        }
+
+        interceptor.onReasonStart(trace, null);
+
+        List<ChatMessage> result = workingMemory.getMessages();
+
+        // 验证：压缩后保留窗口至少有 minReservedMessages 条非初心消息
+        long nonFirstCount = result.stream()
+                .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
+                .count();
+
+        assertTrue(nonFirstCount >= 3,
+                "Reserved window should have at least minReservedMessages (3) non-FIRST messages, got: " + nonFirstCount);
+    }
+
+    /**
+     * 验证 minReservedMessages 的 setter 正常工作
+     */
+    @Test
+    public void testSetMinReservedMessages() {
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 8000, LlmUtil::getChatModel, null);
+        custom.setMinReservedMessages(5);
+
+        // 构造初心
+        ChatMessage sys = ChatMessage.ofSystem("System");
+        sys.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(sys);
+
+        // 构造大量消息
+        for (int i = 0; i < 30; i++) {
+            StringBuilder bigContent = new StringBuilder();
+            for (int j = 0; j < 200; j++) {
+                bigContent.append("Big message content line ").append(j).append(" ");
+            }
+            workingMemory.addMessage(ChatMessage.ofAssistant(bigContent.toString()));
+        }
+
+        custom.onReasonStart(trace, null);
+
+        List<ChatMessage> result = workingMemory.getMessages();
+        long nonFirstCount = result.stream()
+                .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
+                .count();
+
+        assertTrue(nonFirstCount >= 5,
+                "With minReservedMessages=5, should keep at least 5 non-FIRST messages, got: " + nonFirstCount);
+    }
 }

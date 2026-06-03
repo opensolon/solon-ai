@@ -83,6 +83,9 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     private int maxMessages;
     // 保留窗口的最大 Token 数（默认 15_000）
     private int maxTokens;
+    // 保留窗口的最小消息数下限（默认 maxMessages / 3，最低 3）
+    // 防止 Token 维度截断导致保留窗口被压缩到只剩 1~2 条消息
+    private int minReservedMessages;
     // 重试次数
     private int maxRetries = 3;
     // 压缩策略
@@ -98,6 +101,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         this.maxTokens = Math.max(10_000, maxTokens);
     }
 
+    public void setMinReservedMessages(int minReservedMessages) {
+        this.minReservedMessages = Math.max(3, minReservedMessages);
+    }
+
     public void setMaxRetries(int maxRetries) {
         this.maxRetries = maxRetries;
     }
@@ -105,6 +112,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     public ContextCompressionInterceptor(int maxMessages, int maxTokens, Supplier<ChatModel> chatModelSupplier, CompressionStrategy compressionStrategy) {
         this.maxMessages = Math.max(10, maxMessages);
         this.maxTokens = Math.max(10_000, maxTokens);
+        this.minReservedMessages = Math.max(3, this.maxMessages / 3);
         this.chatModelSupplier = chatModelSupplier;
         this.compressionStrategy = compressionStrategy;
     }
@@ -112,6 +120,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     public ContextCompressionInterceptor(int maxMessages, int maxTokens, int maxRetries, Supplier<ChatModel> chatModelSupplier, CompressionStrategy compressionStrategy) {
         this.maxMessages = Math.max(10, maxMessages);
         this.maxTokens = Math.max(10_000, maxTokens);
+        this.minReservedMessages = Math.max(3, this.maxMessages / 3);
         this.maxRetries = maxRetries;
         this.chatModelSupplier = chatModelSupplier;
         this.compressionStrategy = compressionStrategy;
@@ -205,9 +214,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         int summaryReserve = Math.max(200, (int) (availableTokens * 0.1));
         int windowBudget = availableTokens - summaryReserve;
 
-        // 4. 双维度确定截断点（取更靠前的保留边界，确保信息不丢失）
+        // 4. 双维度确定截断点
         //    - targetByCount ：按消息数量维度的截断位置
         //    - targetByTokens：按 Token 预算维度的截断位置（从尾向前累加）
+        //    - minReservedIdx：保留窗口的绝对下限，防止 Token 维度过度截断
         int targetByCount = Math.max(lastFirstIdx + 1, messages.size() - maxMessages);
 
         int targetByTokens = lastFirstIdx + 1;
@@ -222,7 +232,14 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             }
         }
 
-        int targetIdx = Math.max(targetByCount, targetByTokens);
+        // ⭐ 保留窗口绝对下限保护
+        //    无论 Token 预算多紧张，保留窗口至少保留 minReservedMessages 条消息。
+        //    这样可以避免单条大消息（如文件读取结果）占满预算后，
+        //    Agent 的历史上下文被压缩到只剩 1~2 条消息，导致之前的工作白费。
+        int minReservedIdx = Math.max(lastFirstIdx + 1, messages.size() - minReservedMessages);
+
+        int rawTargetByTokens = targetByTokens;  // 保存原始Token截断位置，供步骤6.1使用
+        int targetIdx = Math.max(targetByCount, Math.min(targetByTokens, minReservedIdx));
 
         // 5. ⭐ 原子对对齐（防止 tool-use 原子对被截断为两段）
         //    若 targetIdx 落在 ToolMessage 或 Observation 上，向前回退至配套的 Assistant(with tool_calls)
@@ -248,18 +265,26 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             }
         }
 
-        // 6.1 Token 预算补偿校验
-        //    语义补齐（步骤 5-6）可能导致保留范围扩大而超预算。
-        //    此时放弃语义优化，回归 Token 预算截断位置，并跳过 ToolMessage 头部，
-        //    确保不会因原子对尾部截断而送入孤立 ToolMessage 给 LLM。
-        if (targetIdx < targetByTokens) {
-            int actualWindowTokens = 0;
-            for (int i = targetIdx; i < messages.size(); i++) {
-                Integer cachedSize = messages.get(i).getMetadataAs(META_TOKEN_SIZE);
-                actualWindowTokens += (cachedSize != null ? cachedSize : 0) + 4;
-            }
-            if (actualWindowTokens > windowBudget) {
-                targetIdx = targetByTokens; // 回退到预算截断点
+        // 6.1 Token 预算补偿校验 + 保护段摘要标记
+        //    语义补齐（步骤 5-6）或 minReserved 保护可能导致保留窗口超出 Token 预算。
+        //    需要区分两种场景：
+        //    - 保护起效了（rawTargetByTokens > minReservedIdx）
+        //      对保护段 [targetIdx..rawTargetByTokens) 做摘要压缩，不调整 targetIdx
+        //    - 保护没起效
+        //      回归 Token 预算截断位置，跳过 ToolMessage 头部
+        boolean protectedSummaryApplied = false;
+        int actualWindowTokens = 0;
+        for (int i = targetIdx; i < messages.size(); i++) {
+            Integer cachedSize = messages.get(i).getMetadataAs(META_TOKEN_SIZE);
+            actualWindowTokens += (cachedSize != null ? cachedSize : 0) + 4;
+        }
+        if (actualWindowTokens > windowBudget) {
+            if (rawTargetByTokens > minReservedIdx) {
+                // 保护起效但预算超了 → 标记后续对保护段做摘要压缩，不调整 targetIdx
+                protectedSummaryApplied = true;
+            } else {
+                // 保护没起效 → 回退到预算截断点
+                targetIdx = Math.max(lastFirstIdx + 1, targetByTokens);
                 // 跳过头部 ToolMessage（避免孤立 ToolMessage 传入 LLM）
                 while (targetIdx < messages.size() - 1
                         && (messages.get(targetIdx) instanceof ToolMessage
@@ -325,7 +350,51 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             }
         }
 
-        compressed.addAll(messages.subList(targetIdx, messages.size()));
+        // 7.1 ⭐ 保护段摘要压缩（minReserved 保护起效且预算超限时触发）
+        //    当 minReserved 保护将本应被 Token 截断的消息保留下来，
+        //    但保留窗口实际 Token 超预算时，需要对保护段 [targetIdx..rawTargetByTokens)
+        //    做摘要压缩，而非简单丢弃。这样代码 Agent 之前读取的文件内容可以通过摘要保留关键信息。
+        if (protectedSummaryApplied) {
+            List<ChatMessage> protectedSegment = new ArrayList<>(messages.subList(targetIdx, rawTargetByTokens));
+            List<ChatMessage> pureProtected = protectedSegment.stream()
+                    .filter(m -> !m.hasMetadata(META_COMPRESSED))
+                    .collect(Collectors.toList());
+
+            if (!pureProtected.isEmpty()) {
+                if (compressionStrategy != null) {
+                    ChatModel chatModel = chatModelSupplier.get();
+                    ChatMessage summaryMsg = compressionStrategy.compress(chatModel, maxRetries, trace, pureProtected);
+                    if (summaryMsg != null) {
+                        compressed.add(summaryMsg);
+                    }
+                } else {
+                    // fallback：原子序列追溯（零成本裁剪路径，不调用 LLM）
+                    int captureStart = pureProtected.size() - 1;
+                    while (captureStart > 0) {
+                        ChatMessage msg = pureProtected.get(captureStart);
+                        if (msg instanceof ToolMessage || isObservation(msg)) {
+                            captureStart--;
+                        } else if (msg instanceof AssistantMessage
+                                && Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls())) {
+                            break;
+                        } else {
+                            if (captureStart < pureProtected.size() - 1) {
+                                captureStart++;
+                            }
+                            break;
+                        }
+                    }
+                    for (int i = captureStart; i < pureProtected.size(); i++) {
+                        compressed.add(pureProtected.get(i));
+                    }
+                }
+            }
+
+            // 保留窗口尾部（rawTargetByTokens..end）
+            compressed.addAll(messages.subList(rawTargetByTokens, messages.size()));
+        } else {
+            compressed.addAll(messages.subList(targetIdx, messages.size()));
+        }
 
         // 8. 更新工作区
         if (compressed.size() < messages.size()) {

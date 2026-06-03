@@ -20,15 +20,10 @@ public class LlmUtil {
 //                .model("deepseek-chat") //deepseek-reasoner//deepseek-chat
 //                .build();
 
-        return ChatModel.of("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions")
-                .apiKey("2d28cb312d3c433fa08c0bfd0810050f.W4xBjtPcjGK9hg7u")
-                .model("GLM-5.1")
+        return ChatModel.of("https://ai.gitee.com/v1/chat/completions")
+                .apiKey("PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18")
+                .model("Qwen3-32B") //Qwen3-32B, GLM-4.6
                 .build();
-
-//        return ChatModel.of("https://ai.gitee.com/v1/chat/completions")
-//                .apiKey("PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18")
-//                .model("Qwen3-32B") //Qwen3-32B, GLM-4.6
-//                .build();
 
 //        return ChatModel.of("https://ai.gitee.com/v1/chat/completions")
 //                .apiKey("THTNIFWBERJYNJJMLLAZ5B05FNAAXWBZALVAIA17")
