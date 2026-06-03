@@ -53,6 +53,7 @@ public class McpGatewayTalent extends AbsTalent {
     private int searchThreshold = 100;
 
     private int maxRetries = 3;
+    private long retryDelayMs = 1000L; // 默认初始延迟
 
     private final McpToolCallTool callTool;
 
@@ -63,6 +64,7 @@ public class McpGatewayTalent extends AbsTalent {
 
     public McpGatewayTalent retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
+        this.retryDelayMs = Math.max(100, retryDelayMs);
         return this;
     }
 
@@ -180,6 +182,9 @@ public class McpGatewayTalent extends AbsTalent {
 
     /**
      * 刷新指定 MCP 服务的工具列表（当 McpClientProvider 的 allowedTools / disallowedTools 变更后调用）
+     *
+     * <p>采用影子交换策略：先在局部变量中构建新索引，再一次性替换，
+     * 缩小中间状态窗口，避免调用中的线程因工具短暂丢失而失败。
      */
     public McpGatewayTalent refreshMcpServer(String name) {
         if (Utils.isEmpty(name)) {
@@ -191,28 +196,36 @@ public class McpGatewayTalent extends AbsTalent {
             return this;
         }
 
-        // 1. 移除旧的工具索引
-        Set<String> oldToolNames = serverToolIndex.get(name);
-        if (oldToolNames != null) {
-            for (String key : oldToolNames) {
-                allTools.remove(key);
-            }
-        }
-        categoryTools.remove(name);
-
-        // 2. 重新从 provider 获取过滤后的工具列表
+        // 1. 在局部变量中构建新的工具索引
         Set<String> newToolNames = new LinkedHashSet<>();
         Map<String, FunctionTool> newCategoryMap = new ConcurrentHashMap<>();
 
         for (FunctionTool tool : provider.getTools()) {
             String key = tool.name().toLowerCase();
             newCategoryMap.put(key, tool);
-            allTools.put(key, tool);
             newToolNames.add(key);
         }
 
+        // 2. 收集旧工具名（仅属于当前 server 且不属于新工具集的）
+        Set<String> oldToolNames = serverToolIndex.get(name);
+        Set<String> toRemove = new LinkedHashSet<>();
+        if (oldToolNames != null) {
+            for (String key : oldToolNames) {
+                if (!newToolNames.contains(key)) {
+                    toRemove.add(key);
+                }
+            }
+        }
+
+        // 3. 原子性替换：先加新，再删旧（保证 add-before-remove）
         categoryTools.put(name, newCategoryMap);
         serverToolIndex.put(name, newToolNames);
+        for (String key : newToolNames) {
+            allTools.put(key, newCategoryMap.get(key));
+        }
+        for (String key : toRemove) {
+            allTools.remove(key);
+        }
 
         LOG.info("McpGatewayTalent: Refreshed '{}' ({} tools)", name, newToolNames.size());
         return this;
@@ -222,7 +235,8 @@ public class McpGatewayTalent extends AbsTalent {
      * 刷新所有 MCP 服务的工具列表
      */
     public McpGatewayTalent refreshMcpServerAll() {
-        for (String name : providerMap.keySet()) {
+        // 拷贝快照再遍历，避免 refreshMcpServer 期间并发修改 providerMap
+        for (String name : new ArrayList<>(providerMap.keySet())) {
             refreshMcpServer(name);
         }
         return this;
@@ -423,11 +437,17 @@ public class McpGatewayTalent extends AbsTalent {
             Map<String, Object> tool_args = (Map) args.get("tool_args");
 
             //传导工具上下文
+            if (tool_args == null) {
+                tool_args = new HashMap<>();
+            } else {
+                tool_args = new HashMap<>(tool_args); // 复制一份，避免修改原始参数
+            }
             for (Map.Entry<String, Object> entry : args.entrySet()) {
                 if (!"tool_name".equals(entry.getKey()) && !"tool_args".equals(entry.getKey())) {
                     tool_args.put(entry.getKey(), entry.getValue());
                 }
             }
+            final Map<String, Object> finalToolArgs = tool_args;
 
             //-------
 
@@ -442,7 +462,7 @@ public class McpGatewayTalent extends AbsTalent {
             }
 
             try {
-                return RetryUtil.callWithRetry(gatewayTalent.maxRetries, () -> tool.call(tool_args));
+                return RetryUtil.callWithRetry(gatewayTalent.maxRetries, gatewayTalent.retryDelayMs, gatewayTalent.retryDelayMs * 4, () -> tool.call(finalToolArgs));
             } catch (Throwable e) {
                 LOG.error("McpTool gateway execution failed: {}", tool_name, e);
                 return ToolResult.success("执行异常: " +
