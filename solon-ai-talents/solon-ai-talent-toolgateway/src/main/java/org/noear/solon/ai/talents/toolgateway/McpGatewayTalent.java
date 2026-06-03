@@ -176,6 +176,58 @@ public class McpGatewayTalent extends AbsTalent {
         return this;
     }
 
+    // ========== 刷新 ==========
+
+    /**
+     * 刷新指定 MCP 服务的工具列表（当 McpClientProvider 的 allowedTools / disallowedTools 变更后调用）
+     */
+    public McpGatewayTalent refreshMcpServer(String name) {
+        if (Utils.isEmpty(name)) {
+            return this;
+        }
+
+        McpClientProvider provider = providerMap.get(name);
+        if (provider == null) {
+            return this;
+        }
+
+        // 1. 移除旧的工具索引
+        Set<String> oldToolNames = serverToolIndex.get(name);
+        if (oldToolNames != null) {
+            for (String key : oldToolNames) {
+                allTools.remove(key);
+            }
+        }
+        categoryTools.remove(name);
+
+        // 2. 重新从 provider 获取过滤后的工具列表
+        Set<String> newToolNames = new LinkedHashSet<>();
+        Map<String, FunctionTool> newCategoryMap = new ConcurrentHashMap<>();
+
+        for (FunctionTool tool : provider.getTools()) {
+            String key = tool.name().toLowerCase();
+            newCategoryMap.put(key, tool);
+            allTools.put(key, tool);
+            newToolNames.add(key);
+        }
+
+        categoryTools.put(name, newCategoryMap);
+        serverToolIndex.put(name, newToolNames);
+
+        LOG.info("McpGatewayTalent: Refreshed '{}' ({} tools)", name, newToolNames.size());
+        return this;
+    }
+
+    /**
+     * 刷新所有 MCP 服务的工具列表
+     */
+    public McpGatewayTalent refreshMcpServerAll() {
+        for (String name : providerMap.keySet()) {
+            refreshMcpServer(name);
+        }
+        return this;
+    }
+
     // ========== 查询 ==========
 
     /**
