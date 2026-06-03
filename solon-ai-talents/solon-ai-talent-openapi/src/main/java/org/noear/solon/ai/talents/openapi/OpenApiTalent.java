@@ -61,7 +61,7 @@ public class OpenApiTalent extends AbsTalent {
     private final Map<String, ApiTool> allTools = new ConcurrentHashMap<>();
 
     // ApiSource 的运行时注册表
-    private final Map<String, ApiSourceProvider> sourceProviderMap = new ConcurrentHashMap<>();
+    private final Map<String, ApiSourceClient> sourceProviderMap = new ConcurrentHashMap<>();
 
     private ApiResolver resolver = OpenApiResolver.getInstance();
     private ApiAuthenticator defaultAuthenticator;
@@ -478,7 +478,7 @@ public class OpenApiTalent extends AbsTalent {
      */
     private void loadApiFromDefinition(ApiSource source) throws IOException {
         // 1. 创建 Provider（自主加载能力）
-        ApiSourceProvider provider = new ApiSourceProvider(source, resolver, defaultAuthenticator, defaultTimeout);
+        ApiSourceClient provider = new ApiSourceClient(source, resolver, defaultAuthenticator, defaultTimeout);
         provider.loadApi();
 
         // 2. 注册 provider
@@ -496,16 +496,9 @@ public class OpenApiTalent extends AbsTalent {
     // ========== 查询（供 HarnessEngine 及前端使用） ==========
 
     /**
-     * 获取所有已注册的 docUrl 集合
-     */
-    public Set<String> getApiSourceUrls() {
-        return Collections.unmodifiableSet(sourceProviderMap.keySet());
-    }
-
-    /**
      * 按 docUrl 获取 ApiSourceProvider
      */
-    public ApiSourceProvider getApiSourceProvider(String docUrl) {
+    public ApiSourceClient getApiSource(String docUrl) {
         return sourceProviderMap.get(docUrl);
     }
 
@@ -540,7 +533,7 @@ public class OpenApiTalent extends AbsTalent {
             return this;
         }
 
-        ApiSourceProvider provider = sourceProviderMap.get(docUrl);
+        ApiSourceClient provider = sourceProviderMap.get(docUrl);
         if (provider == null) {
             return this;
         }
@@ -609,7 +602,7 @@ public class OpenApiTalent extends AbsTalent {
     /**
      * 将 provider 过滤后的工具同步到全局索引
      */
-    private void syncToolsToGlobalIndex(ApiSourceProvider provider) {
+    private void syncToolsToGlobalIndex(ApiSourceClient provider) {
         for (ApiTool tool : provider.getToolsActivated()) {
             String nameLower = tool.getName().toLowerCase();
             this.allTools.put(nameLower, tool);

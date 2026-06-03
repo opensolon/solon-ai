@@ -45,7 +45,7 @@ import org.noear.solon.ai.talents.memory.MemoryTalent;
 import org.noear.solon.ai.talents.memory.MemorySolution;
 import org.noear.solon.ai.talents.mount.SkillDir;
 import org.noear.solon.ai.talents.openapi.ApiSource;
-import org.noear.solon.ai.talents.openapi.ApiSourceProvider;
+import org.noear.solon.ai.talents.openapi.ApiSourceClient;
 import org.noear.solon.ai.talents.openapi.OpenApiTalent;
 import org.noear.solon.ai.talents.toolgateway.McpGatewayTalent;
 import org.noear.solon.ai.talents.web.CodeSearchTool;
@@ -516,7 +516,7 @@ public class HarnessEngine {
     /**
      * 获取指定 docUrl 的 ApiSourceProvider
      */
-    public ApiSourceProvider getApiServer(String docUrl) {
+    public ApiSourceClient getApiServer(String docUrl) {
         return openApiTalent.getApiSourceProvider(docUrl);
     }
 

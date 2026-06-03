@@ -18,6 +18,7 @@ package org.noear.solon.ai.talents.openapi;
 import org.noear.solon.Utils;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.ResourceUtil;
+import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,8 +41,8 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.10
  */
-public class ApiSourceProvider {
-    private static final Logger LOG = LoggerFactory.getLogger(ApiSourceProvider.class);
+public class ApiSourceClient {
+    private static final Logger LOG = LoggerFactory.getLogger(ApiSourceClient.class);
 
     private final ApiSource source;
     private final ApiResolver resolver;
@@ -51,7 +52,7 @@ public class ApiSourceProvider {
     // 该源解析出的全量工具（不过滤，用于前端查阅全量列表）
     private final Map<String, ApiTool> rawTools = new LinkedHashMap<>();
 
-    public ApiSourceProvider(ApiSource source, ApiResolver resolver, ApiAuthenticator defaultAuthenticator, Duration defaultTimeout) {
+    public ApiSourceClient(ApiSource source, ApiResolver resolver, ApiAuthenticator defaultAuthenticator, Duration defaultTimeout) {
         this.source = source;
         this.resolver = resolver;
         this.defaultAuthenticator = defaultAuthenticator;
@@ -137,6 +138,12 @@ public class ApiSourceProvider {
 
             if (Assert.isNotEmpty(source.getHeaders())) {
                 http.headers(source.getHeaders());
+            }
+
+            if(source.getTimeout() != null){
+                http.timeout(HttpTimeout.of(source.getTimeout()));
+            } else {
+                http.timeout(HttpTimeout.of(defaultTimeout));
             }
 
             if (source.getAuthenticator() != null) {
