@@ -87,12 +87,16 @@ public class TerminalTalent extends AbsTalent {
         return ignoreDirs;
     }
 
-    public void setSandboxMode(boolean sandboxMode) {
-        this.sandboxMode = sandboxMode;
+    public void setSandboxMode(Boolean sandboxMode) {
+        if (sandboxMode != null) {
+            this.sandboxMode = sandboxMode;
+        }
     }
 
-    public void setBashAsyncEnabled(boolean bashAsyncEnabled) {
-        this.bashAsyncEnabled = bashAsyncEnabled;
+    public void setBashAsyncEnabled(Boolean bashAsyncEnabled) {
+        if (bashAsyncEnabled != null) {
+            this.bashAsyncEnabled = bashAsyncEnabled;
+        }
     }
 
     public boolean isBashAsyncEnabled() {

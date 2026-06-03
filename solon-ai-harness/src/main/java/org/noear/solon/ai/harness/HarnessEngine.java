@@ -384,6 +384,21 @@ public class HarnessEngine {
         }
     }
 
+    public void setMemoryEnabled(Boolean memoryEnabled) {
+        options.setMemoryEnabled(memoryEnabled);
+        memoryTalent.setEnabled(memoryEnabled);
+    }
+
+    public void setSandboxMode(Boolean sandboxMode) {
+        options.setSandboxMode(sandboxMode);
+        terminalTalent.setSandboxMode(sandboxMode);
+    }
+
+    public void setBashAsyncEnabled(Boolean bashAsyncEnabled){
+        options.setBashAsyncEnabled(bashAsyncEnabled);
+        terminalTalent.setBashAsyncEnabled(bashAsyncEnabled);
+    }
+
     public void setHitlEnabled(Boolean hitlEnabled) {
         options.setHitlEnabled(hitlEnabled);
     }
@@ -405,13 +420,6 @@ public class HarnessEngine {
         if (maxTokens != null) {
             options.setCompressionMaxTokens(maxTokens);
             options.getCompressionInterceptor().setMaxTokens(maxTokens);
-        }
-    }
-
-    public void setSandboxMode(Boolean sandboxMode) {
-        if (sandboxMode != null) {
-            options.setSandboxMode(sandboxMode);
-            terminalTalent.setSandboxMode(sandboxMode);
         }
     }
 
@@ -685,8 +693,9 @@ public class HarnessEngine {
             lspManager.setDiagnosticsCallback(lspTalent::updateDiagnostics);
         }
 
-        if (options.isMemoryEnabled() && options.getMemorySolution() != null) {
+        if (options.getMemorySolution() != null) {
             this.memoryTalent = new MemoryTalent(options.getMemorySolution()).sessionIsolation(false);
+            this.memoryTalent.setEnabled(options.isMemoryEnabled());
         } else {
             this.memoryTalent = null;
         }
