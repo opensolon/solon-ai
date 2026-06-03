@@ -385,15 +385,15 @@ public class HarnessEngine {
     }
 
     public void setHitlEnabled(Boolean hitlEnabled) {
-        if (hitlEnabled != null) {
-            options.setHitlEnabled(hitlEnabled);
-        }
+        options.setHitlEnabled(hitlEnabled);
     }
 
     public void setSubagentEnabled(Boolean subagentEnabled) {
-        if (subagentEnabled != null) {
-            options.setSubagentEnabled(subagentEnabled);
-        }
+        options.setSubagentEnabled(subagentEnabled);
+    }
+
+    public void setSessionWindowSize(Integer sessionWindowSize) {
+        options.setSessionWindowSize(sessionWindowSize);
     }
 
     public void setCompressionThreshold(Integer maxMessages, Integer maxTokens) {
@@ -838,28 +838,28 @@ public class HarnessEngine {
         }
     }
 
-    public ReActRequest prompt(Prompt prompt) {
+    private ReActRequest promptDo(Prompt prompt) {
         return getMainAgent()
                 .prompt(prompt)
                 .options(o -> {
                     o.retryConfig(options.getModelRetries());
                     o.maxTurns(options.getMaxTurns());
+                    o.sessionWindowSize(options.getSessionWindowSize());
                 });
+    }
+
+    public ReActRequest prompt(Prompt prompt) {
+        return promptDo(prompt);
     }
 
 
     public ReActRequest prompt(String prompt) {
-        return prompt(Prompt.of(prompt));
+        return promptDo(Prompt.of(prompt));
     }
 
 
     public ReActRequest prompt() {
-        return getMainAgent()
-                .prompt()
-                .options(o -> {
-                    o.retryConfig(options.getModelRetries());
-                    o.maxTurns(options.getMaxTurns());
-                });
+        return promptDo(null);
     }
 
 
