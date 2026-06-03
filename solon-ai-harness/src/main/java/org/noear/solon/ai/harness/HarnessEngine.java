@@ -32,6 +32,7 @@ import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.code.CodeTalent;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
+import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.talents.mount.AgentMd;
 import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.harness.permission.ToolPermission;
@@ -507,21 +508,19 @@ public class HarnessEngine {
     /**
      * 动态添加 API 源
      */
-    public void addApi(ApiSource apiSource) {
+    public void addApiServer(ApiSource apiSource) {
         openApiTalent.addApi(apiSource);
         options.getApiServers().put(apiSource.getDocUrl(), apiSource);
     }
 
-    public void updateApi(ApiSource apiSource){
-        //内部会自动移除
-        openApiTalent.addApi(apiSource);
-        options.getApiServers().put(apiSource.getDocUrl(), apiSource);
+    public Object getApiServer(ApiSource apiSource){
+        return null;
     }
 
     /**
      * 动态移除 API 源
      */
-    public void removeApi(String docUrl) {
+    public void removeApiServer(String docUrl) {
         openApiTalent.removeApi(docUrl);
         options.getApiServers().remove(docUrl);
     }
@@ -534,10 +533,8 @@ public class HarnessEngine {
         options.getMcpServers().put(name, mcpServer);
     }
 
-    public void updateMcpServer(String name, McpServerParameters mcpServer){
-        //内部会自动移除
-        mcpGatewayTalent.addMcpServer(name, mcpServer);
-        options.getMcpServers().put(name, mcpServer);
+    public McpClientProvider getMcpServer(String name){
+        return mcpGatewayTalent.getMcpServer(name);
     }
 
     /**
@@ -1023,7 +1020,7 @@ public class HarnessEngine {
             return this;
         }
 
-        public Builder apiSourceAdd(String name, ApiSource source) {
+        public Builder apiServerAdd(String name, ApiSource source) {
             options.getApiServers().put(name, source);
             return this;
         }
