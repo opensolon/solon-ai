@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 /**
@@ -46,6 +47,7 @@ public class ApiSourceClient {
 
     // 该源解析出的全量工具（不过滤，用于前端查阅全量列表；首次访问或刷新时加载）
     private volatile Map<String, ApiTool> rawTools;
+    private final ReentrantLock lock = new ReentrantLock();
 
     // 运行时权限副本（从 source 初始化，之后独立维护）
     private Set<String> allowedTools = new HashSet<>();
@@ -124,7 +126,8 @@ public class ApiSourceClient {
      */
     private Map<String, ApiTool> getOrLoadApi() {
         if (rawTools == null) {
-            synchronized (this) {
+            lock.lock();
+            try {
                 if (rawTools == null) {
                     try {
                         rawTools = doLoadApi();
@@ -133,6 +136,8 @@ public class ApiSourceClient {
                         rawTools = Collections.emptyMap();
                     }
                 }
+            } finally {
+                lock.unlock();
             }
         }
         return rawTools;
@@ -148,8 +153,11 @@ public class ApiSourceClient {
      * - 替换 rawTools 缓存
      */
     public void reloadApi() throws IOException {
-        synchronized (this) {
+        lock.lock();
+        try {
             rawTools = doLoadApi();
+        } finally {
+            lock.unlock();
         }
     }
 
