@@ -133,8 +133,14 @@ public class McpGatewayTalent extends AbsTalent {
         }
 
         try {
-            McpClientProvider provider = McpClientProviders.fromMcpServer(mcpParameters);
-            addMcpServer(name, provider);
+            McpClientProvider mcpProvider = McpClientProviders.fromMcpServer(mcpParameters);
+            mcpProvider.setEnabled(mcpProvider.isEnabled());
+
+            if(mcpParameters.isEnabled()) {
+                addMcpServer(name, mcpProvider);
+            } else {
+                providerMap.put(name, mcpProvider);
+            }
         } catch (IOException e) {
             LOG.error("Mcp server '{}' create failed", name, e);
         }
@@ -194,6 +200,11 @@ public class McpGatewayTalent extends AbsTalent {
         McpClientProvider provider = providerMap.get(name);
         if (provider == null) {
             return this;
+        }
+
+        if(provider.isEnabled() == false){
+            removeMcpServer(name);
+            providerMap.put(name, provider);
         }
 
         // 1. 在局部变量中构建新的工具索引

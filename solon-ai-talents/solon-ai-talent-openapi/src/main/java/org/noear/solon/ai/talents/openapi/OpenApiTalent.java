@@ -482,7 +482,10 @@ public class OpenApiTalent extends AbsTalent {
         provider.loadApi();
 
         // 2. 注册 provider
-        sourceProviderMap.put(source.getDocUrl(), provider);
+        if(source.isEnabled() == false) {
+            sourceProviderMap.put(source.getDocUrl(), provider);
+            return;
+        }
 
         // 3. 将过滤后的工具同步到全局索引
         for (ApiTool tool : provider.getToolsActivated()) {

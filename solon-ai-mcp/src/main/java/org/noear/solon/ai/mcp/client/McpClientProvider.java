@@ -103,6 +103,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     private final AtomicBoolean isClosed = new AtomicBoolean(false);
     private final AtomicBoolean isStarted = new AtomicBoolean(false);
 
+    //管理需要
+    private final AtomicBoolean isEnabled = new AtomicBoolean(true);
+
     private final McpClientProperties clientProps;
 
     private ScheduledExecutorService heartbeatExecutor;
@@ -141,6 +144,14 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         if (disallowedTools != null) {
             this.disallowedTools = new HashSet<>(disallowedTools);
         }
+    }
+
+    public boolean isEnabled(){
+        return isEnabled.get();
+    }
+
+    public void setEnabled(boolean enabled){
+        isEnabled.set(enabled);
     }
 
     /**
