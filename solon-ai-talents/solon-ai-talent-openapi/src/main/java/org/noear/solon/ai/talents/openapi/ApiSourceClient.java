@@ -17,13 +17,11 @@ package org.noear.solon.ai.talents.openapi;
 
 import org.noear.solon.Utils;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.core.util.ResourceUtil;
 import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -45,8 +43,8 @@ public class ApiSourceClient {
     private final ApiAuthenticator defaultAuthenticator;
     private final Duration defaultTimeout;
 
-    // 该源解析出的全量工具（不过滤，用于前端查阅全量列表）
-    private final Map<String, ApiTool> rawTools = new LinkedHashMap<>();
+    // 该源解析出的全量工具（不过滤，用于前端查阅全量列表；首次访问或刷新时加载）
+    private volatile Map<String, ApiTool> rawTools;
 
     // 运行时权限副本（从 source 初始化，之后独立维护）
     private Set<String> allowedTools = new HashSet<>();
@@ -105,7 +103,7 @@ public class ApiSourceClient {
      * 获取经过 allowed/disallowed 过滤后的工具列表
      */
     public Collection<ApiTool> getToolsActivated() {
-        return rawTools.values().stream()
+        return getOrLoadApi().values().stream()
                 .filter(this::isToolAllowed)
                 .collect(Collectors.toList());
     }
@@ -114,11 +112,40 @@ public class ApiSourceClient {
      * 获取全量工具（不过滤，供前端展示完整列表用）
      */
     public Collection<ApiTool> getTools() {
-        return Collections.unmodifiableCollection(rawTools.values());
+        return Collections.unmodifiableCollection(getOrLoadApi().values());
     }
 
 
     // ===== 加载能力 =====
+
+    /**
+     * 获取已缓存的工具，如果尚未加载则首次触发加载
+     */
+    private Map<String, ApiTool> getOrLoadApi() {
+        if (rawTools == null) {
+            synchronized (this) {
+                if (rawTools == null) {
+                    rawTools = doLoadApi();
+                }
+            }
+        }
+        return rawTools;
+    }
+
+    /**
+     * 强制重新从 docUrl 加载 API 定义文档（刷新场景使用）
+     *
+     * <p>对标 McpClientProvider 的刷新流程：
+     * - 重新获取远程/本地 JSON 定义
+     * - 通过 resolver 解析为 ApiTool 列表
+     * - 补充 baseUrl 和 source 引用
+     * - 替换 rawTools 缓存
+     */
+    public void reloadApi() {
+        synchronized (this) {
+            rawTools = doLoadApi();
+        }
+    }
 
     /**
      * 从 docUrl 加载 API 定义文档，解析并注册工具
@@ -128,61 +155,54 @@ public class ApiSourceClient {
      * - 通过 resolver 解析为 ApiTool 列表
      * - 补充 baseUrl 和 source 引用
      * - 全量注册到 rawTools
-     *
-     * <p>调用方可随后通过 {@link #getToolsActivated()} 获取过滤后的工具集
-     *
-     * @throws IOException 获取或解析失败时抛出
      */
-    public void loadApi() throws IOException {
+    private Map<String, ApiTool> doLoadApi() {
+        Map<String, ApiTool> newTools = new LinkedHashMap<>();
+
         final String json;
 
         // 1. 获取定义文档
-        if (source.getDocUrl().startsWith("http://") || source.getDocUrl().startsWith("https://")) {
-            HttpUtils http = HttpUtils.http(source.getDocUrl());
+        HttpUtils http = HttpUtils.http(source.getDocUrl());
 
-            if (Assert.isNotEmpty(source.getHeaders())) {
-                http.headers(source.getHeaders());
-            }
-
-            if(source.getTimeout() != null){
-                http.timeout(HttpTimeout.of(source.getTimeout()));
-            } else {
-                http.timeout(HttpTimeout.of(defaultTimeout));
-            }
-
-            if (source.getAuthenticator() != null) {
-                source.getAuthenticator().apply(http, null);
-            } else if (defaultAuthenticator != null) {
-                defaultAuthenticator.apply(http, null);
-            }
-
-            json = http.get();
-        } else {
-            json = ResourceUtil.findResourceAsString(source.getDocUrl());
+        if (Assert.isNotEmpty(source.getHeaders())) {
+            http.headers(source.getHeaders());
         }
+
+        if(source.getTimeout() != null){
+            http.timeout(HttpTimeout.of(source.getTimeout()));
+        } else {
+            http.timeout(HttpTimeout.of(defaultTimeout));
+        }
+
+        if (source.getAuthenticator() != null) {
+            source.getAuthenticator().apply(http, null);
+        } else if (defaultAuthenticator != null) {
+            defaultAuthenticator.apply(http, null);
+        }
+
+        json = http.get();
 
         if (Utils.isEmpty(json)) {
             LOG.warn("ApiSourceClient: Source empty for {}", source.getDocUrl());
-            return;
+            return rawTools;
         }
 
         // 2. 解析
         List<ApiTool> tools = resolver.resolve(source.getDocUrl(), json);
 
-        // 3. 清空旧工具（刷新场景）
-        rawTools.clear();
-
-        // 4. 注册到 rawTools（全量，不过滤）
+        // 3. 注册到 newTools（全量，不过滤）
         for (ApiTool tool : tools) {
             if (!tool.isDeprecated()) {
                 tool.setBaseUrl(source.getApiBaseUrl());
                 tool.setSource(source);
-                rawTools.put(tool.getName().toLowerCase(), tool);
+                newTools.put(tool.getName().toLowerCase(), tool);
             }
         }
 
-        LOG.info("ApiSourceClient: Loaded {} tools from {} (filtered: {})",
-                rawTools.size(), source.getDocUrl(), getToolsActivated().size());
+        LOG.info("ApiSourceClient: Loaded {} tools from {}",
+                newTools.size(), source.getDocUrl());
+
+        return newTools;
     }
 
     // ===== 内部方法 =====

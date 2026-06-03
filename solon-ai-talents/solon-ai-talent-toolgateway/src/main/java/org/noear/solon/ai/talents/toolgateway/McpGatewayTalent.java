@@ -105,6 +105,12 @@ public class McpGatewayTalent extends AbsTalent {
 
         providerMap.put(name, mcpProvider);
 
+        // disabled: 仅注册到管理表，不加入 categoryTools 和 allTools
+        if (mcpProvider.isEnabled() == false) {
+            LOG.info("McpGatewayTalent: '{}' is disabled, registered to management only", name);
+            return this;
+        }
+
         Set<String> toolNames = new LinkedHashSet<>();
         for (FunctionTool tool : mcpProvider.getToolsActivated()) {
             String key = tool.name().toLowerCase();
@@ -127,20 +133,14 @@ public class McpGatewayTalent extends AbsTalent {
             return this;
         }
 
-        if (mcpParameters.isEnabled() == false) {
-            LOG.info("MCP server '{}' is disabled, skipping registration", name);
-            return this;
-        }
+        // 同名已存在则先移除（幂等，不存在的 name 是空操作）
+        removeMcpServer(name);
 
         try {
             McpClientProvider mcpProvider = McpClientProviders.fromMcpServer(mcpParameters);
-            mcpProvider.setEnabled(mcpProvider.isEnabled());
+            mcpProvider.setEnabled(mcpParameters.isEnabled());
 
-            if(mcpParameters.isEnabled()) {
-                addMcpServer(name, mcpProvider);
-            } else {
-                providerMap.put(name, mcpProvider);
-            }
+            addMcpServer(name, mcpProvider);
         } catch (IOException e) {
             LOG.error("Mcp server '{}' create failed", name, e);
         }
@@ -202,9 +202,18 @@ public class McpGatewayTalent extends AbsTalent {
             return this;
         }
 
-        if(provider.isEnabled() == false){
-            removeMcpServer(name);
-            providerMap.put(name, provider);
+        // disabled: 只从工具索引移除，保留 provider（不关闭连接）
+        if (provider.isEnabled() == false) {
+            Set<String> toolNames = serverToolIndex.remove(name);
+            if (toolNames != null) {
+                for (String key : toolNames) {
+                    allTools.remove(key);
+                }
+            }
+            categoryTools.remove(name);
+            LOG.info("McpGatewayTalent: '{}' is disabled, removed {} tools from index", name,
+                    toolNames != null ? toolNames.size() : 0);
+            return this;
         }
 
         // 1. 在局部变量中构建新的工具索引

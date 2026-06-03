@@ -170,11 +170,6 @@ public class OpenApiTalent extends AbsTalent {
      * @param apiSource 接口源
      */
     public OpenApiTalent addApi(ApiSource apiSource) {
-        if (apiSource.isEnabled() == false) {
-            LOG.info("OpenAPI server '{}' is disabled, skipping registration", apiSource.getDocUrl());
-            return this;
-        }
-
         // 同名已存在则先移除（幂等，不存在的 name 是空操作）
         removeApi(apiSource.getDocUrl());
 
@@ -479,15 +474,17 @@ public class OpenApiTalent extends AbsTalent {
     private void loadApiFromDefinition(ApiSource source) throws IOException {
         // 1. 创建 Provider（自主加载能力）
         ApiSourceClient provider = new ApiSourceClient(source, resolver, defaultAuthenticator, defaultTimeout);
-        provider.loadApi();
 
-        // 2. 注册 provider
-        if(source.isEnabled() == false) {
-            sourceProviderMap.put(source.getDocUrl(), provider);
+        // 2. 注册 provider（无论 enabled 与否都注册到管理表）
+        sourceProviderMap.put(source.getDocUrl(), provider);
+
+        // 3. disabled 时仅注册管理，不加入 categoryTools 和 allTools
+        if (source.isEnabled() == false) {
+            LOG.info("OpenAPI server '{}' is disabled, registered to management only", source.getDocUrl());
             return;
         }
 
-        // 3. 将过滤后的工具同步到全局索引
+        // 4. 将过滤后的工具同步到全局索引
         for (ApiTool tool : provider.getToolsActivated()) {
             String nameLower = tool.getName().toLowerCase();
             this.allTools.put(nameLower, tool);
@@ -541,18 +538,24 @@ public class OpenApiTalent extends AbsTalent {
             return this;
         }
 
+        // disabled: 只从工具索引移除，保留 provider（不关闭连接）
+        if (provider.getSource().isEnabled() == false) {
+            removeToolsFromGlobalIndex(docUrl);
+            return this;
+        }
+
         if (reloadDefinition) {
-            // 完全刷新：先从全局索引移除旧工具，再重新加载
-            removeApi(docUrl);
+            // 完全刷新：强制重新加载远程文档，再同步到全局索引
+            removeToolsFromGlobalIndex(docUrl);
             try {
-                loadApiFromDefinition(provider.getSource());
-            } catch (IOException e) {
+                provider.reloadApi();
+                syncToolsToGlobalIndex(provider);
+            } catch (Exception e) {
                 LOG.error("OpenApiTalent: Failed to refresh API from {}", docUrl, e);
             }
         } else {
-            // 权限刷新：rawTools 未变，只需从全局索引移除旧工具，再用新的权限过滤重新同步
+            // 权限刷新：rawTools 缓存未变，只需从全局索引移除旧工具，再用新的权限过滤重新同步
             removeToolsFromGlobalIndex(docUrl);
-            // 注意：不再调用 provider.loadApi()，因为 rawTools 未变，仅需 getToolsActivated() 用新权限重新过滤
             syncToolsToGlobalIndex(provider);
         }
 
