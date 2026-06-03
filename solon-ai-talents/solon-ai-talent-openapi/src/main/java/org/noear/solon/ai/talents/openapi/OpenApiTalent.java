@@ -25,7 +25,6 @@ import org.noear.solon.ai.talents.openapi.resolver.OpenApiResolver;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.core.util.ResourceUtil;
 import org.noear.solon.lang.Preview;
 import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtils;
@@ -60,6 +59,9 @@ public class OpenApiTalent extends AbsTalent {
 
     private final Map<String, Map<String, ApiTool>> categoryTools = new ConcurrentHashMap<>();
     private final Map<String, ApiTool> allTools = new ConcurrentHashMap<>();
+
+    // ApiSource 的运行时注册表
+    private final Map<String, ApiSourceProvider> sourceProviderMap = new ConcurrentHashMap<>();
 
     private ApiResolver resolver = OpenApiResolver.getInstance();
     private ApiAuthenticator defaultAuthenticator;
@@ -217,6 +219,9 @@ public class OpenApiTalent extends AbsTalent {
                 categoryTools.remove(catEntry.getKey());
             }
         }
+
+        // 从 sourceProviderMap 中移除
+        sourceProviderMap.remove(docUrl);
 
         if (!removedNames.isEmpty()) {
             LOG.info("OpenApiTalent: Removed {} tools from {}", removedNames.size(), docUrl);
@@ -468,50 +473,149 @@ public class OpenApiTalent extends AbsTalent {
 
     // --- 私有辅助 ---
 
+    /**
+     * 从 ApiSource 创建 Provider 并加载 API 定义，然后同步到全局索引
+     */
     private void loadApiFromDefinition(ApiSource source) throws IOException {
-        final String json;
+        // 1. 创建 Provider（自主加载能力）
+        ApiSourceProvider provider = new ApiSourceProvider(source, resolver, defaultAuthenticator, defaultTimeout);
+        provider.loadApi();
 
-        if (source.getDocUrl().startsWith("http://") || source.getDocUrl().startsWith("https://")) {
-            HttpUtils http = HttpUtils.http(source.getDocUrl());
+        // 2. 注册 provider
+        sourceProviderMap.put(source.getDocUrl(), provider);
 
-            if (Assert.isNotEmpty(source.getHeaders())) {
-                http.headers(source.getHeaders());
+        // 3. 将过滤后的工具同步到全局索引
+        for (ApiTool tool : provider.getTools()) {
+            String nameLower = tool.getName().toLowerCase();
+            this.allTools.put(nameLower, tool);
+            String cat = tool.getCategory();
+            this.categoryTools.computeIfAbsent(cat, k -> new ConcurrentHashMap<>()).put(nameLower, tool);
+        }
+    }
+
+    // ========== 查询（供 HarnessEngine 及前端使用） ==========
+
+    /**
+     * 获取所有已注册的 docUrl 集合
+     */
+    public Set<String> getApiSourceUrls() {
+        return Collections.unmodifiableSet(sourceProviderMap.keySet());
+    }
+
+    /**
+     * 按 docUrl 获取 ApiSourceProvider
+     */
+    public ApiSourceProvider getApiSourceProvider(String docUrl) {
+        return sourceProviderMap.get(docUrl);
+    }
+
+    /**
+     * 是否包含指定 docUrl 的 API 源
+     */
+    public boolean hasApiSource(String docUrl) {
+        return sourceProviderMap.containsKey(docUrl);
+    }
+
+    // ========== 刷新（权限变更后重新加载） ==========
+
+    /**
+     * 刷新指定 API 源（allowedTools/disallowedTools 变更后调用）
+     *
+     * <p>采用影子交换策略（参照 McpGatewayTalent.refreshMcpServer）
+     * <p>如果是权限变更场景，可传 reloadDefinition=false，仅重新过滤即可；
+     * <p>如果需要重新拉取远程文档，可传 reloadDefinition=true
+     */
+    public OpenApiTalent refreshApi(String docUrl) {
+        return refreshApi(docUrl, false);
+    }
+
+    /**
+     * 刷新指定 API 源
+     *
+     * @param docUrl            API 定义地址
+     * @param reloadDefinition  是否重新从远程拉取定义文档（false=仅重新过滤权限）
+     */
+    public OpenApiTalent refreshApi(String docUrl, boolean reloadDefinition) {
+        if (Utils.isEmpty(docUrl)) {
+            return this;
+        }
+
+        ApiSourceProvider provider = sourceProviderMap.get(docUrl);
+        if (provider == null) {
+            return this;
+        }
+
+        if (reloadDefinition) {
+            // 完全刷新：先从全局索引移除旧工具，再重新加载
+            removeApi(docUrl);
+            try {
+                loadApiFromDefinition(provider.getSource());
+            } catch (IOException e) {
+                LOG.error("OpenApiTalent: Failed to refresh API from {}", docUrl, e);
             }
-
-            if (source.getAuthenticator() != null) {
-                source.getAuthenticator().apply(http, null);
-            } else {
-                if (defaultAuthenticator != null) {
-                    defaultAuthenticator.apply(http, null);
-                }
-            }
-
-            json = http.get();
         } else {
-            json = ResourceUtil.findResourceAsString(source.getDocUrl());
+            // 权限刷新：从全局索引移除旧工具，provider 重新 loadApi 后同步回全局索引
+            removeToolsFromGlobalIndex(docUrl);
+            try {
+                provider.loadApi();
+            } catch (IOException e) {
+                LOG.error("OpenApiTalent: Failed to reload tools from {}", docUrl, e);
+            }
+            // 重新同步过滤后的工具到全局索引
+            syncToolsToGlobalIndex(provider);
         }
 
-        if (Utils.isEmpty(json)) {
-            LOG.warn("OpenApiTalent: Source empty for {}", source.getDocUrl());
-            return;
+        return this;
+    }
+
+    /**
+     * 刷新所有 API 源
+     */
+    public OpenApiTalent refreshApiAll() {
+        for (String docUrl : new ArrayList<>(sourceProviderMap.keySet())) {
+            refreshApi(docUrl);
         }
+        return this;
+    }
 
-        List<ApiTool> tools = resolver.resolve(source.getDocUrl(), json);
-        for (ApiTool tool : tools) {
-            if (!tool.isDeprecated()) {
-                tool.setBaseUrl(source.getApiBaseUrl());
-                tool.setSource(source);
+    // ========== 私有辅助 ==========
 
-                String nameLower = tool.getName().toLowerCase();
-
-                this.allTools.put(nameLower, tool);
-
-                String cat = tool.getCategory();
-                this.categoryTools.computeIfAbsent(cat, k -> new ConcurrentHashMap<>()).put(nameLower, tool);
+    /**
+     * 从全局索引中移除指定 docUrl 的工具（不移除 provider）
+     */
+    private void removeToolsFromGlobalIndex(String docUrl) {
+        List<String> removedNames = new ArrayList<>();
+        for (Map.Entry<String, ApiTool> entry : allTools.entrySet()) {
+            ApiTool tool = entry.getValue();
+            if (tool.getSource() != null && docUrl.equals(tool.getSource().getDocUrl())) {
+                removedNames.add(entry.getKey());
             }
         }
+        for (String name : removedNames) {
+            allTools.remove(name);
+        }
+        for (Map.Entry<String, Map<String, ApiTool>> catEntry : categoryTools.entrySet()) {
+            Map<String, ApiTool> catTools = catEntry.getValue();
+            catTools.keySet().removeAll(removedNames);
+            if (catTools.isEmpty()) {
+                categoryTools.remove(catEntry.getKey());
+            }
+        }
+        if (!removedNames.isEmpty()) {
+            LOG.info("OpenApiTalent: Removed {} tools from global index for {}", removedNames.size(), docUrl);
+        }
+    }
 
-        LOG.info("OpenApiTalent: Loaded {} tools from {}", tools.size(), source.getDocUrl());
+    /**
+     * 将 provider 过滤后的工具同步到全局索引
+     */
+    private void syncToolsToGlobalIndex(ApiSourceProvider provider) {
+        for (ApiTool tool : provider.getTools()) {
+            String nameLower = tool.getName().toLowerCase();
+            this.allTools.put(nameLower, tool);
+            String cat = tool.getCategory();
+            this.categoryTools.computeIfAbsent(cat, k -> new ConcurrentHashMap<>()).put(nameLower, tool);
+        }
     }
 
     private String formatApiDocs(Collection<ApiTool> tools) {

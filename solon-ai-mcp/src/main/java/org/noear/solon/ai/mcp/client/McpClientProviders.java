@@ -237,6 +237,12 @@ public class McpClientProviders implements ToolProvider, ResourceProvider, Promp
             }
         }
 
-        return builder.build();
+        McpClientProvider provider = builder.build();
+
+        // 传递 allowedTools / disallowedTools 到 provider
+        provider.setAllowedTools(serverParameters.getAllowedTools());
+        provider.setDisallowedTools(serverParameters.getDisallowedTools());
+
+        return provider;
     }
 }

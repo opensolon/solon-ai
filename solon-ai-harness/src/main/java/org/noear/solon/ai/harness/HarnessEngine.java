@@ -43,9 +43,9 @@ import org.noear.solon.ai.talents.lsp.LspTalent;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.talents.memory.MemoryTalent;
 import org.noear.solon.ai.talents.memory.MemorySolution;
-import org.noear.solon.ai.talents.mount.MountType;
 import org.noear.solon.ai.talents.mount.SkillDir;
 import org.noear.solon.ai.talents.openapi.ApiSource;
+import org.noear.solon.ai.talents.openapi.ApiSourceProvider;
 import org.noear.solon.ai.talents.openapi.OpenApiTalent;
 import org.noear.solon.ai.talents.toolgateway.McpGatewayTalent;
 import org.noear.solon.ai.talents.web.CodeSearchTool;
@@ -513,8 +513,18 @@ public class HarnessEngine {
         options.getApiServers().put(apiSource.getDocUrl(), apiSource);
     }
 
-    public Object getApiServer(ApiSource apiSource){
-        return null;
+    /**
+     * 获取指定 docUrl 的 ApiSourceProvider
+     */
+    public ApiSourceProvider getApiServer(String docUrl) {
+        return openApiTalent.getApiSourceProvider(docUrl);
+    }
+
+    /**
+     * 刷新指定 API 源（权限变更后）
+     */
+    public void refreshApiServer(String docUrl) {
+        openApiTalent.refreshApi(docUrl);
     }
 
     /**
@@ -533,8 +543,12 @@ public class HarnessEngine {
         options.getMcpServers().put(name, mcpServer);
     }
 
-    public McpClientProvider getMcpServer(String name){
+    public McpClientProvider getMcpServer(String name) {
         return mcpGatewayTalent.getMcpServer(name);
+    }
+
+    public void refreshMcpServer(String name) {
+        mcpGatewayTalent.refreshMcpServer(name);
     }
 
     /**
