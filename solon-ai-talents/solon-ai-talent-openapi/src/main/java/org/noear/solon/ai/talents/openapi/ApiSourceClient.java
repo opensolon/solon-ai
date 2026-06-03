@@ -22,6 +22,7 @@ import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -125,7 +126,12 @@ public class ApiSourceClient {
         if (rawTools == null) {
             synchronized (this) {
                 if (rawTools == null) {
-                    rawTools = doLoadApi();
+                    try {
+                        rawTools = doLoadApi();
+                    } catch (IOException e) {
+                        LOG.error("ApiSourceClient: Failed to load API from {}", source.getDocUrl(), e);
+                        rawTools = Collections.emptyMap();
+                    }
                 }
             }
         }
@@ -141,7 +147,7 @@ public class ApiSourceClient {
      * - 补充 baseUrl 和 source 引用
      * - 替换 rawTools 缓存
      */
-    public void reloadApi() {
+    public void reloadApi() throws IOException {
         synchronized (this) {
             rawTools = doLoadApi();
         }
@@ -156,7 +162,7 @@ public class ApiSourceClient {
      * - 补充 baseUrl 和 source 引用
      * - 全量注册到 rawTools
      */
-    private Map<String, ApiTool> doLoadApi() {
+    private Map<String, ApiTool> doLoadApi() throws IOException {
         Map<String, ApiTool> newTools = new LinkedHashMap<>();
 
         final String json;
@@ -184,7 +190,7 @@ public class ApiSourceClient {
 
         if (Utils.isEmpty(json)) {
             LOG.warn("ApiSourceClient: Source empty for {}", source.getDocUrl());
-            return rawTools;
+            return newTools;
         }
 
         // 2. 解析
