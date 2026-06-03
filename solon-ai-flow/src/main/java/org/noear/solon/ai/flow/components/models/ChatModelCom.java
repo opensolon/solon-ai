@@ -28,7 +28,7 @@ import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.ai.flow.components.AiPropertyComponent;
 import org.noear.solon.ai.flow.components.Attrs;
-import org.noear.solon.ai.mcp.client.McpProviders;
+import org.noear.solon.ai.mcp.client.McpClientProviders;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.ClassUtil;
@@ -79,7 +79,7 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
             Object mcpServers = node.getMeta(META_MCP_SERVERS);
             if (mcpServers != null) {
                 ONode mcpServersNode = ONode.ofBean(mcpServers);
-                McpProviders mcpProviders = McpProviders.fromMcpServers(mcpServersNode);
+                McpClientProviders mcpProviders = McpClientProviders.fromMcpServers(mcpServersNode);
                 if (mcpProviders != null) {
                     chatModelBuilder.defaultToolAdd(mcpProviders);
                 }

@@ -26,6 +26,7 @@
 * 添加 solon-ai-agent AgentChunk.getRunId 方法
 * 添加 solon-ai-agent TeamAgent 添加初心标记
 * 添加 solon-ai-agent ToolExchanger 类
+* 添加 solon-ai-mcp McpClientProvider allowedTools, disallowedTools 工具控制机制
 * 添加 solon-ai-harness bashAsyncEnabled 开关
 * 添加 solon-ai-harness HarnessEngine.removeApi 方法
 * 添加 solon-ai-harness HarnessProperties.mountPools 属性（替代 skillPools，后者标为弃用）
@@ -38,6 +39,7 @@
 * 调整 solon-ai-core 取消 ChatConfig.reasoningFieldName 配置（这个配置不合理）
 * 调整 solon-ai-core 移除 SkillProvider 类
 * 调整 solon-ai-mcp McpClientProperties 默认不启用心跳（之前默认为 30 心跳一次）
+* 调整 solon-ai-mcp McpProviders 更名为 McpClientProviders
 * 调整 solon-ai-agent ActionChunk：ActionChunk 更名为 ObservationChunk；ActionStartChunk 更名为 ActionChunk
 * 调整 solon-ai-agent ReActInterceptor.onAction,onObservation: toolName,args,result 合并为 toolExchanger（并允许修改）
 * 调整 solon-ai-agent ReActInterceptor.onReason 更名为 onReasonEnd（和 onReasonStart 凑成一对）

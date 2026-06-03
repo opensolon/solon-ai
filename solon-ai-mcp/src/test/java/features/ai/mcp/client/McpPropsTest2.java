@@ -3,7 +3,7 @@ package features.ai.mcp.client;
 import demo.ai.mcp.server.McpServerApp;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.mcp.client.McpProviders;
+import org.noear.solon.ai.mcp.client.McpClientProviders;
 import org.noear.solon.test.SolonTest;
 
 /**
@@ -13,7 +13,7 @@ import org.noear.solon.test.SolonTest;
 public class McpPropsTest2 {
     @Test
     public void case101() throws Exception {
-        McpProviders tmp = McpProviders.fromMcpServers("classpath:mcpServers.json");
+        McpClientProviders tmp = McpClientProviders.fromMcpServers("classpath:mcpServers.json");
 
         assert tmp.size() == 2;
         tmp.close();
@@ -21,7 +21,7 @@ public class McpPropsTest2 {
 
     @Test
     public void case101b() throws Exception {
-        McpProviders tmp = McpProviders.fromMcpServers("classpath:mcpServers.json");
+        McpClientProviders tmp = McpClientProviders.fromMcpServers("classpath:mcpServers.json");
 
         try {
             String str = tmp.getProvider("server1")
@@ -37,7 +37,7 @@ public class McpPropsTest2 {
 
     @Test
     public void case102() throws Exception {
-        McpProviders tmp = McpProviders.fromMcpServers("classpath:mcpServers2.json");
+        McpClientProviders tmp = McpClientProviders.fromMcpServers("classpath:mcpServers2.json");
 
         assert tmp.size() == 2;
         tmp.close();
@@ -45,7 +45,7 @@ public class McpPropsTest2 {
 
     @Test
     public void case102b() throws Exception {
-        McpProviders tmp = McpProviders.fromMcpServers("classpath:mcpServers2.json");
+        McpClientProviders tmp = McpClientProviders.fromMcpServers("classpath:mcpServers2.json");
 
         try {
             String str = tmp.getProvider("server1")

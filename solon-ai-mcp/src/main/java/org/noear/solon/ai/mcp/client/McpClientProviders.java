@@ -39,10 +39,10 @@ import java.util.*;
  * @author noear
  * @since 3.3
  */
-public class McpProviders implements ToolProvider, ResourceProvider, PromptProvider, Closeable {
+public class McpClientProviders implements ToolProvider, ResourceProvider, PromptProvider, Closeable {
     private final Map<String, McpClientProvider> providers;
 
-    public McpProviders(Map<String, McpClientProvider> providers) {
+    public McpClientProviders(Map<String, McpClientProvider> providers) {
         this.providers = providers;
     }
 
@@ -159,7 +159,7 @@ public class McpProviders implements ToolProvider, ResourceProvider, PromptProvi
      *
      * @param uri 配置资源地址
      */
-    public static McpProviders fromMcpServers(String uri) throws IOException {
+    public static McpClientProviders fromMcpServers(String uri) throws IOException {
         Map<String, McpServerParameters> mcpServers = parseMcpServers(uri);
 
         return fromMcpServers(mcpServers);
@@ -170,7 +170,7 @@ public class McpProviders implements ToolProvider, ResourceProvider, PromptProvi
      *
      * @param configDom 配置文档
      */
-    public static McpProviders fromMcpServers(ONode configDom) throws IOException {
+    public static McpClientProviders fromMcpServers(ONode configDom) throws IOException {
         Map<String, McpServerParameters> mcpServers = parseMcpServers(configDom);
 
         return fromMcpServers(mcpServers);
@@ -181,7 +181,7 @@ public class McpProviders implements ToolProvider, ResourceProvider, PromptProvi
      *
      * @param mcpServers 配置集合
      */
-    public static McpProviders fromMcpServers(Map<String, McpServerParameters> mcpServers) throws IOException {
+    public static McpClientProviders fromMcpServers(Map<String, McpServerParameters> mcpServers) throws IOException {
         Map<String, McpClientProvider> mcpClients = new HashMap<>();
 
         if (Utils.isNotEmpty(mcpServers)) {
@@ -194,7 +194,7 @@ public class McpProviders implements ToolProvider, ResourceProvider, PromptProvi
             }
         }
 
-        return new McpProviders(mcpClients);
+        return new McpClientProviders(mcpClients);
     }
 
     /**

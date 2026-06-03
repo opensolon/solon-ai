@@ -8,7 +8,7 @@ import org.noear.solon.ai.chat.tool.AbsTool;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
-import org.noear.solon.ai.mcp.client.McpProviders;
+import org.noear.solon.ai.mcp.client.McpClientProviders;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.annotation.Param;
@@ -131,7 +131,7 @@ public class McpGatewayTalent extends AbsTalent {
         }
 
         try {
-            McpClientProvider provider = McpProviders.fromMcpServer(mcpParameters);
+            McpClientProvider provider = McpClientProviders.fromMcpServer(mcpParameters);
             addMcpServer(name, provider);
         } catch (IOException e) {
             LOG.error("Mcp server '{}' create failed", name, e);

@@ -22,7 +22,6 @@ import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.client.transport.WebRxSseClientTransport;
 import io.modelcontextprotocol.client.transport.WebRxStreamableHttpTransport;
 import io.modelcontextprotocol.json.McpJsonDefaults;
-import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack4.ONode;
@@ -119,17 +118,29 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     private final StringMutexLock cacheLocker = new StringMutexLock();
 
     // 允许工具（空表示全部）
-    private final List<String> allowedTools = new ArrayList<>();
+    private List<String> allowedTools = new ArrayList<>();
 
     // 禁用工具（空表示不禁）
-    private final List<String> disallowedTools = new ArrayList<>();
+    private List<String> disallowedTools = new ArrayList<>();
 
-    public List<String> allowedTools() {
+    public List<String> getAllowedTools() {
         return allowedTools;
     }
 
-    public List<String> disallowedTools() {
+    public void setAllowedTools(List<String> allowedTools) {
+        if (allowedTools != null) {
+            this.allowedTools = allowedTools;
+        }
+    }
+
+    public List<String> getDisallowedTools() {
         return disallowedTools;
+    }
+
+    public void setDisallowedTools(List<String> disallowedTools) {
+        if (disallowedTools != null) {
+            this.disallowedTools = disallowedTools;
+        }
     }
 
     /**
@@ -927,11 +938,11 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * 根据 mcpServers 配置加载客户端
      *
      * @param uri 配置资源地址
-     * @deprecated 3.3 {@link McpProviders#fromMcpServers(String)}
+     * @deprecated 3.3 {@link McpClientProviders#fromMcpServers(String)}
      */
     @Deprecated
     public static Map<String, McpClientProvider> fromMcpServers(String uri) throws IOException {
-        return McpProviders.fromMcpServers(uri).getProviders();
+        return McpClientProviders.fromMcpServers(uri).getProviders();
     }
 
     public static Builder builder() {
