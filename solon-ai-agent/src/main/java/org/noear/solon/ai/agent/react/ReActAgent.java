@@ -85,6 +85,10 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         return config;
     }
 
+    public ChatModel getModel() {
+        return config.getDefaultOptions().getChatModel();
+    }
+
     /**
      * 获取会话中的执行轨迹
      */
