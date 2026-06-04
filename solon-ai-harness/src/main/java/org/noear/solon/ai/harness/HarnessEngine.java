@@ -769,6 +769,10 @@ public class HarnessEngine {
         return AgentFactory.create(this, definition, null);
     }
 
+    public ChatModel getMainModel(){
+        return getMainAgent().getModel();
+    }
+
     public ReActAgent getMainAgent() {
         ReActAgent agent = this.mainAgent; // 引入局部变量，仅执行一次 volatile read
         if (agent == null) {
