@@ -392,17 +392,22 @@ public class HarnessEngine {
         terminalTalent.setSandboxMode(sandboxMode);
     }
 
-    public void setBashAsyncEnabled(Boolean bashAsyncEnabled){
-        options.setBashAsyncEnabled(bashAsyncEnabled);
-        terminalTalent.setBashAsyncEnabled(bashAsyncEnabled);
-    }
-
     public void setHitlEnabled(Boolean hitlEnabled) {
         options.setHitlEnabled(hitlEnabled);
     }
 
     public void setSubagentEnabled(Boolean subagentEnabled) {
         options.setSubagentEnabled(subagentEnabled);
+    }
+
+    public void setLspEnabled(Boolean lspEnabled){
+        options.setLspEnabled(lspEnabled);
+        lspTalent.setEnabled(lspEnabled);
+    }
+
+    public void setBashAsyncEnabled(Boolean bashAsyncEnabled){
+        options.setBashAsyncEnabled(bashAsyncEnabled);
+        terminalTalent.setBashAsyncEnabled(bashAsyncEnabled);
     }
 
     public void setSessionWindowSize(Integer sessionWindowSize) {
@@ -695,9 +700,8 @@ public class HarnessEngine {
             }
         }
         this.lspTalent = new LspTalent(lspManager, options.getWorkspace());
-        if (this.lspTalent != null) {
-            lspManager.setDiagnosticsCallback(lspTalent::updateDiagnostics);
-        }
+        this.lspManager.setDiagnosticsCallback(lspTalent::updateDiagnostics);
+        this.lspTalent.setEnabled(options.isLspEnabled());
 
         if (options.getMemorySolution() != null) {
             this.memoryTalent = new MemoryTalent(options.getMemorySolution()).sessionIsolation(false);
@@ -931,6 +935,11 @@ public class HarnessEngine {
 
         public Builder hitlEnabled(Boolean hitlEnabled) {
             options.setHitlEnabled(hitlEnabled);
+            return this;
+        }
+
+        public Builder lspEnabled(Boolean lspEnabled) {
+            options.setLspEnabled(lspEnabled);
             return this;
         }
 
