@@ -923,11 +923,6 @@ public class HarnessEngine {
             return this;
         }
 
-        public Builder memoryIsolation(Boolean memoryIsolation) {
-            options.setMemoryIsolation(memoryIsolation);
-            return this;
-        }
-
         public Builder sandboxMode(Boolean sandboxMode) {
             options.setSandboxMode(sandboxMode);
             return this;

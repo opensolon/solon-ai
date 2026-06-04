@@ -68,7 +68,6 @@ class HarnessOptions implements Serializable {
     private volatile String compressionModel; //压缩大模型
 
     // ========== 记忆 ==========
-    private volatile boolean memoryIsolation = false;
     private volatile boolean memoryEnabled = true;
 
     // ========== 安全与模式 ==========
@@ -229,16 +228,6 @@ class HarnessOptions implements Serializable {
 
     void setCompressionModel(String compressionModel) {
         this.compressionModel = compressionModel;
-    }
-
-    boolean isMemoryIsolation() {
-        return memoryIsolation;
-    }
-
-    void setMemoryIsolation(Boolean memoryIsolation) {
-        if (memoryIsolation != null) {
-            this.memoryIsolation = memoryIsolation;
-        }
     }
 
     boolean isMemoryEnabled() {
