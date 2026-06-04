@@ -786,6 +786,15 @@ public class HarnessEngine {
         return agent;
     }
 
+    public ChatModel getModelOrMain(String modelName) {
+        ChatConfig config = getModelOrDef(modelName);
+        if (config == null) {
+            return null;
+        } else {
+            return config.toChatModel();
+        }
+    }
+
     public ReActAgent getAgentOrMain(String agentName) {
         if (Assert.isEmpty(agentName)) {
             return getMainAgent();
