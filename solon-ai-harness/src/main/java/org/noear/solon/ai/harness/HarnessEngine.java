@@ -438,12 +438,7 @@ public class HarnessEngine {
         options.addModel(config);
 
         if (mainAgent != null && mainAgent.getModel().getNameOrModel().equals(config.getNameOrModel())) {
-            agentLock.lock();
-            try {
-                this.mainAgent = null;
-            } finally {
-                agentLock.unlock();
-            }
+            refreshMainAgent();
         }
     }
 
@@ -451,12 +446,7 @@ public class HarnessEngine {
         options.removeModel(name);
 
         if (mainAgent != null && mainAgent.getModel().getNameOrModel().equals(name)) {
-            agentLock.lock();
-            try {
-                this.mainAgent = null;
-            } finally {
-                agentLock.unlock();
-            }
+            refreshMainAgent();
         }
     }
 
@@ -788,6 +778,18 @@ public class HarnessEngine {
         }
 
         return agent;
+    }
+
+    /**
+     * 刷新主代理
+     */
+    public void refreshMainAgent(){
+        agentLock.lock();
+        try {
+            this.mainAgent = null;
+        } finally {
+            agentLock.unlock();
+        }
     }
 
     public ChatModel getModelOrMain(String modelName) {
