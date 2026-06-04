@@ -40,6 +40,10 @@
 * 调整 solon skill “概念”改为 solon talent（避免与 agent skill 的冲突）
 * 调整 solon-ai-core 取消 ChatConfig.reasoningFieldName 配置（这个配置不合理）
 * 调整 solon-ai-core 移除 SkillProvider 类
+* 调整 solon-ai-core 移除 toolAdd(Object) 方法（指向不明，容易出错）
+* 调整 solon-ai-core 移除 defaultToolAdd(Object) 方法（指向不明，容易出错）
+* 调整 solon-ai-agent 移除 toolAdd(Object) 方法（指向不明，容易出错）
+* 调整 solon-ai-agent 移除 defaultToolAdd(Object) 方法（指向不明，容易出错）
 * 调整 solon-ai-mcp McpClientProperties 默认不启用心跳（之前默认为 30 心跳一次）
 * 调整 solon-ai-mcp McpProviders 更名为 McpClientProviders
 * 调整 solon-ai-agent ActionChunk：ActionChunk 更名为 ObservationChunk；ActionStartChunk 更名为 ActionChunk
@@ -49,6 +53,8 @@
 * 调整 solon-ai-agent SummarizationInterceptor 更名为 ContextCompressionInterceptor（更符合语义）
 * 调整 solon-ai-skill-cli PoolManager 实现细节，并添加 refresh(alias)
 * 调整 solon-ai-skill-cli 技能标识由 aliasPath 统一改为 name，并优化技能池加载逻辑及代码格式
+* 调整 solon-ai-talent-web WebfetchTool 更名为 WebfetchTalent; WebsearchTool 更名为 WebsearchTalent; CodeSearchTool 更名为 CodeSearchTalent
+* 调整 solon-ai-talent-diff ApplyDiffTool 更名为 ApplyDiffTalent；ApplyPatchTool 更名为 ApplyPatchTalent
 * 调整 solon-ai-harness HarnessEngine 打断与 HarnessProperties 关联（后者删除），避免耦合影响未来的调整
 * 调整 solon-ai-harness HarnessEngine 移除 mainModel 字段（减兴缓存麻烦）
 * 移除 solon-ai-skill-browser（包太大了，没必要）
