@@ -223,6 +223,9 @@ public class LspManager {
     public static Map<String, LspServerParameters> buildLspServers() {
         Map<String, LspServerParameters> lspServers = new LinkedHashMap<>();
 
+        //检测，有没有 ava
+
+        //lspServers.put("java", new LspServerParameters(Arrays.asList("jdtls", "--java-executable", "/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home/bin/java"), Arrays.asList(".java")));
         lspServers.put("java", new LspServerParameters(Arrays.asList("jdtls"), Arrays.asList(".java")));
         lspServers.put("typescript", new LspServerParameters(Arrays.asList("typescript-language-server", "--stdio"), Arrays.asList(".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts")));
         lspServers.put("go", new LspServerParameters(Arrays.asList("gopls"), Arrays.asList(".go")));

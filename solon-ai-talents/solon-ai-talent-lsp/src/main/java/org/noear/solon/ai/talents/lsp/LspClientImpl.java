@@ -102,7 +102,21 @@ public class LspClientImpl implements LspClient {
         if (initializationOptions != null && !initializationOptions.isEmpty()) {
             initParams.setInitializationOptions(initializationOptions);
         }
-        remoteServer.initialize(initParams).get();
+
+        // 带超时的 initialize，防止子进程启动失败时无限阻塞
+        long initTimeout = Long.parseLong(System.getProperty("lsp.initTimeout", "30"));
+        try {
+            remoteServer.initialize(initParams).get(initTimeout, TimeUnit.SECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            // 超时时检查进程是否已经死亡，给出更精确的错误信息
+            String processInfo = "";
+            if (!process.isAlive()) {
+                processInfo = " (process exited with code: " + process.exitValue() + ")";
+            }
+            throw new RuntimeException("LSP initialize timed out after " + initTimeout + "s for command: "
+                    + String.join(" ", command) + processInfo
+                    + ". Check if the LSP server binary exists and its runtime requirements are met.", e);
+        }
         remoteServer.initialized(new InitializedParams());
     }
 

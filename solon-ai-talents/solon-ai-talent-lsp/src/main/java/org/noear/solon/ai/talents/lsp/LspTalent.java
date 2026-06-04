@@ -27,7 +27,7 @@ import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
 
 /**
  * LSP 工具包 - 对齐 OpenCode 的 LSP 工具模型
@@ -151,30 +151,47 @@ public class LspTalent extends AbsTalent {
                 .metadata("uri", uri);
     }
 
+    private static final long OPERATION_TIMEOUT = Long.getLong("lsp.operationTimeout", 15L);
+
     private Object executeOperation(LspClient client, String op,
                                     TextDocumentIdentifier docId, Position pos,
                                     String uri, int line, int offset) throws Exception {
-        switch (op) {
-            case "goToDefinition":
-                return client.definition(new DefinitionParams(docId, pos)).get();
-            case "findReferences":
-                return client.references(new ReferenceParams(docId, pos, new ReferenceContext(true))).get();
-            case "hover":
-                return client.hover(new HoverParams(docId, pos)).get();
-            case "documentSymbol":
-                return client.documentSymbol(new DocumentSymbolParams(docId)).get();
-            case "workspaceSymbol":
-                return client.workspaceSymbol(new WorkspaceSymbolParams("")).get();
-            case "goToImplementation":
-                return client.implementation(new ImplementationParams(docId, pos)).get();
-            case "prepareCallHierarchy":
-                return client.prepareCallHierarchy(new CallHierarchyPrepareParams(docId, pos)).get();
-            case "incomingCalls":
-                return client.incomingCalls(uri, line, offset).get();
-            case "outgoingCalls":
-                return client.outgoingCalls(uri, line, offset).get();
-            default:
-                throw new IllegalArgumentException("Unknown LSP operation: " + op);
+        try {
+            CompletableFuture<?> future;
+            switch (op) {
+                case "goToDefinition":
+                    future = client.definition(new DefinitionParams(docId, pos));
+                    break;
+                case "findReferences":
+                    future = client.references(new ReferenceParams(docId, pos, new ReferenceContext(true)));
+                    break;
+                case "hover":
+                    future = client.hover(new HoverParams(docId, pos));
+                    break;
+                case "documentSymbol":
+                    future = client.documentSymbol(new DocumentSymbolParams(docId));
+                    break;
+                case "workspaceSymbol":
+                    future = client.workspaceSymbol(new WorkspaceSymbolParams(""));
+                    break;
+                case "goToImplementation":
+                    future = client.implementation(new ImplementationParams(docId, pos));
+                    break;
+                case "prepareCallHierarchy":
+                    future = client.prepareCallHierarchy(new CallHierarchyPrepareParams(docId, pos));
+                    break;
+                case "incomingCalls":
+                    future = client.incomingCalls(uri, line, offset);
+                    break;
+                case "outgoingCalls":
+                    future = client.outgoingCalls(uri, line, offset);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown LSP operation: " + op);
+            }
+            return future.get(OPERATION_TIMEOUT, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            throw new RuntimeException("LSP operation '" + op + "' timed out after " + OPERATION_TIMEOUT + "s", e);
         }
     }
 
