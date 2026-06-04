@@ -219,4 +219,26 @@ public class LspManager {
         }
         activeClients.clear();
     }
+
+    public static Map<String, LspServerParameters> buildLspServers() {
+        Map<String, LspServerParameters> lspServers = new LinkedHashMap<>();
+
+        lspServers.put("java", new LspServerParameters(Arrays.asList("jdtls"), Arrays.asList(".java")));
+        lspServers.put("typescript", new LspServerParameters(Arrays.asList("typescript-language-server", "--stdio"), Arrays.asList(".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts")));
+        lspServers.put("go", new LspServerParameters(Arrays.asList("gopls"), Arrays.asList(".go")));
+        lspServers.put("python", new LspServerParameters(Arrays.asList("pyright-langserver", "--stdio"), Arrays.asList(".py", ".pyi")));
+        lspServers.put("rust", new LspServerParameters(Arrays.asList("rust-analyzer"), Arrays.asList(".rs")));
+        lspServers.put("c-cpp", new LspServerParameters(Arrays.asList("clangd", "--background-index", "--clang-tidy"), Arrays.asList(".c", ".h", ".cpp", ".hpp", ".cc", ".cxx", ".hxx", ".c++", ".h++", ".hh")));
+        lspServers.put("csharp", new LspServerParameters(Arrays.asList("roslyn-language-server", "--stdio", "--autoLoadProjects"), Arrays.asList(".cs", ".csx")));
+        lspServers.put("ruby", new LspServerParameters(Arrays.asList("solargraph", "stdio"), Arrays.asList(".rb", ".rake", ".gemspec", ".ru")));
+        lspServers.put("php", new LspServerParameters(Arrays.asList("intelephense", "--stdio"), Arrays.asList(".php")));
+        lspServers.put("bash", new LspServerParameters(Arrays.asList("bash-language-server", "start"), Arrays.asList(".sh", ".bash", ".zsh", ".ksh")));
+        lspServers.put("lua", new LspServerParameters(Arrays.asList("lua-language-server"), Arrays.asList(".lua")));
+        lspServers.put("dart", new LspServerParameters(Arrays.asList("dart", "language-server", "--lsp"), Arrays.asList(".dart")));
+        lspServers.put("swift", new LspServerParameters(Arrays.asList("sourcekit-lsp"), Arrays.asList(".swift", ".objc", ".objcpp")));
+        lspServers.put("kotlin", new LspServerParameters(Arrays.asList("kotlin-language-server"), Arrays.asList(".kt", ".kts")));
+        lspServers.put("yaml", new LspServerParameters(Arrays.asList("yaml-language-server", "--stdio"), Arrays.asList(".yaml", ".yml")));
+
+        return lspServers;
+    }
 }

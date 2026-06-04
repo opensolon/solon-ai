@@ -81,17 +81,17 @@ public class LspTalent extends AbsTalent {
             String __cwd,
             String __sessionId
     ) throws Exception {
-        Path worktree = getWorkPath(__cwd);
+        Path workPath = getWorkPath(__cwd);
 
         // 1. 路径与安全校验
-        Path path = worktree.resolve(filePath).toAbsolutePath().normalize();
-        if (!path.startsWith(worktree)) {
-            throw new SecurityException("Access denied: path is outside worktree");
+        Path path = workPath.resolve(filePath).toAbsolutePath().normalize();
+        if (!path.startsWith(workPath)) {
+            throw new SecurityException("权限拒绝：路径越界。");
         }
 
         File file = path.toFile();
         if (!file.exists()) {
-            throw new RuntimeException("File not found: " + filePath);
+            throw new RuntimeException("文件不存在：" + filePath);
         }
 
         String uri = path.toUri().toString();
@@ -100,7 +100,7 @@ public class LspTalent extends AbsTalent {
         if ("diagnostics".equals(operation)) {
             String diagnostics = diagnosticsCache.getOrDefault(uri, "No diagnostics available for " + filePath);
             return new Document()
-                    .title(String.format("diagnostics %s", worktree.relativize(path)))
+                    .title(String.format("diagnostics %s", workPath.relativize(path)))
                     .content(diagnostics)
                     .metadata("operation", "diagnostics")
                     .metadata("uri", uri);
@@ -142,7 +142,7 @@ public class LspTalent extends AbsTalent {
             output = ONode.serialize(result);
         }
 
-        String title = String.format("%s %s:%d:%d", operation, worktree.relativize(path), line, character);
+        String title = String.format("%s %s:%d:%d", operation, workPath.relativize(path), line, character);
 
         return new Document()
                 .title(title)
