@@ -58,10 +58,10 @@ public class AgentFactory {
             selectedModel = agentDefinition.getModel();
         }
 
-        ChatConfig modelConfig = engine.getModelOrDef(selectedModel);
+        ChatModel chatModel = engine.getModelOrMain(selectedModel);
         AgentDefinition.Metadata metadata = agentDefinition.getMetadata();
 
-        ReActAgent.Builder builder = ReActAgent.of(modelConfig.toChatModel());
+        ReActAgent.Builder builder = ReActAgent.of(chatModel);
 
         builder.name(agentDefinition.getName());
         builder.retryConfig(engine.getModelRetries(), 1000L);

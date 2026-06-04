@@ -679,7 +679,7 @@ public class HarnessEngine {
                     options.getCompressionMaxMessages(),
                     options.getCompressionMaxTokens(),
                     options.getModelRetries(),
-                    ()-> getModelOrDef(options.getCompressionModel()).toChatModel(),
+                    ()-> getModelOrMain(options.getCompressionModel()),
                     strategy));
         }
 
