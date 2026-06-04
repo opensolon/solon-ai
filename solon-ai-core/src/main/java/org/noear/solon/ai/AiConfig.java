@@ -22,6 +22,7 @@ import org.noear.solon.lang.Nullable;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 
+import java.io.Serializable;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.time.Duration;
@@ -34,7 +35,7 @@ import java.util.Map;
  * @author noear
  * @since 3.1
  */
-public class AiConfig {
+public class AiConfig implements Serializable {
     //用于管理显示
     protected @Nullable String name;
     protected @Nullable String description;

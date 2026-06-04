@@ -17,6 +17,7 @@ package org.noear.solon.ai.talents.openapi;
 
 import org.noear.solon.core.util.Assert;
 
+import java.io.Serializable;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,7 +31,7 @@ import java.util.function.Consumer;
  * @author noear 2026/3/9 created
  * @since 3.9.6
  */
-public class ApiSource {
+public class ApiSource implements Serializable {
     private String docUrl;
     private String apiBaseUrl;
     private Map<String, String> headers = new HashMap<>();
