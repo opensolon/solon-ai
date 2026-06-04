@@ -169,7 +169,7 @@ public class TaskTalent extends AbsTalent {
             LOG.debug("任务开始[{}/{} - {}]: {}", task.index, count, task.agent_name, ONode.serialize(task));
         }
 
-        String modelSelected = __parentSession.getContext().getAs(HarnessEngine.VAR_MODEL_SELECTED);
+        String modelSelected = __parentSession.getContext().getAs(HarnessEngine.CTX_MODEL_SELECTED);
 
 
         ReActAgent agent = agentDefinition.builder(engine, modelSelected).build();
