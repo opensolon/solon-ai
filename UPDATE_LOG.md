@@ -21,6 +21,7 @@
 * 添加 solon-ai-skill-toolgateway McpGatewaySkill 专门处理 mcp（ToolGatewaySkill 可以处理所有工具）
 * 添加 solon-ai-core ChatOptions:httpCustomize 方法
 * 添加 solon-ai-core Talent::isEnabled 方法
+* 添加 solon-ai-core ReActAgent::getModel 方法
 * 添加 solon-ai-agent ReActInterceptor.onReasonStart 事件方法
 * 添加 solon-ai-agent AgentTrace.getOriginalPrompt, getWorkingMemory 方法
 * 添加 solon-ai-agent AgentTrace.getRunId 方法
@@ -49,6 +50,7 @@
 * 调整 solon-ai-skill-cli PoolManager 实现细节，并添加 refresh(alias)
 * 调整 solon-ai-skill-cli 技能标识由 aliasPath 统一改为 name，并优化技能池加载逻辑及代码格式
 * 调整 solon-ai-harness HarnessEngine 打断与 HarnessProperties 关联（后者删除），避免耦合影响未来的调整
+* 调整 solon-ai-harness HarnessEngine 移除 mainModel 字段（减兴缓存麻烦）
 * 移除 solon-ai-skill-browser（包太大了，没必要）
 * 修复 solon-ai-mcp WebRxStreamableHttpTransport 没有 event 的消息会出错的问题（优化非规范兼容）
 * 修复 solon-ai-mcp WebRxStreamableHttpTransport 没有 contentType 的消息会出错的问题（优化非规范兼容）

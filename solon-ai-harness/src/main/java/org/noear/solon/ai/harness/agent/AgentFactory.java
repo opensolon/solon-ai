@@ -16,6 +16,7 @@
 package org.noear.solon.ai.harness.agent;
 
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.HarnessEngine;
@@ -57,10 +58,10 @@ public class AgentFactory {
             selectedModel = agentDefinition.getModel();
         }
 
-        ChatModel chatModel = engine.getModelOrMain(selectedModel);
+        ChatConfig modelConfig = engine.getModelOrDef(selectedModel);
         AgentDefinition.Metadata metadata = agentDefinition.getMetadata();
 
-        ReActAgent.Builder builder = ReActAgent.of(chatModel);
+        ReActAgent.Builder builder = ReActAgent.of(modelConfig.toChatModel());
 
         builder.name(agentDefinition.getName());
         builder.retryConfig(engine.getModelRetries(), 1000L);

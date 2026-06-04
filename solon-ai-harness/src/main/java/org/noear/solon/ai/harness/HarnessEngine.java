@@ -68,7 +68,6 @@ import java.util.concurrent.locks.ReentrantLock;
 public class HarnessEngine {
     public final static String ATTR_CWD = "__cwd";
 
-    private final ReentrantLock modelLock = new ReentrantLock();
     private final ReentrantLock agentLock = new ReentrantLock();
 
     private final HarnessOptions options;
@@ -97,7 +96,6 @@ public class HarnessEngine {
 
     private final AgentManager agentManager;
 
-    private volatile ChatModel mainModel; //允许运行时切换
     private volatile ReActAgent mainAgent; //允许运行时切换
 
     public String getName() {
@@ -439,19 +437,7 @@ public class HarnessEngine {
         options.removeModel(config.getNameOrModel());
         options.addModel(config);
 
-        if (mainModel != null) {
-            if (mainModel.getNameOrModel().equals(config.getNameOrModel()) == false) {
-                //如果不是同一个模型，不需要更新
-                return;
-            }
-
-            modelLock.lock();
-            try {
-                this.mainModel = null;
-            } finally {
-                modelLock.unlock();
-            }
-
+        if (mainAgent != null && mainAgent.getModel().getNameOrModel().equals(config.getNameOrModel())) {
             agentLock.lock();
             try {
                 this.mainAgent = null;
@@ -464,19 +450,7 @@ public class HarnessEngine {
     public void removeModel(String name) {
         options.removeModel(name);
 
-        if (mainModel != null) {
-            if (mainModel.getNameOrModel().equals(name) == false) {
-                //如果不是同一个模型，不需要更新
-                return;
-            }
-
-            modelLock.lock();
-            try {
-                this.mainModel = null;
-            } finally {
-                modelLock.unlock();
-            }
-
+        if (mainAgent != null && mainAgent.getModel().getNameOrModel().equals(name)) {
             agentLock.lock();
             try {
                 this.mainAgent = null;
@@ -705,7 +679,7 @@ public class HarnessEngine {
                     options.getCompressionMaxMessages(),
                     options.getCompressionMaxTokens(),
                     options.getModelRetries(),
-                    this::getModelForCompression,
+                    ()-> getModelOrDef(options.getCompressionModel()).toChatModel(),
                     strategy));
         }
 
@@ -795,78 +769,12 @@ public class HarnessEngine {
         return AgentFactory.create(this, definition, null);
     }
 
-    /**
-     * 获取主模型
-     */
-    public ChatModel getMainModel() {
-        ChatModel model = this.mainModel;
-        if (model == null) {
-            modelLock.lock();
-            try {
-                if (this.mainModel == null) {
-                    // 在真正用到模型时，才进行延迟校验
-                    if (Assert.isEmpty(options.getModels())) {
-                        throw new IllegalStateException("Missing models config. Please configure models before routing requests.");
-                    }
-                    this.mainModel = options.getModelOrDef(null).toChatModel();
-                }
-                model = this.mainModel;
-            } finally {
-                modelLock.unlock();
-            }
-        }
-
-        return model;
-    }
-
-    /**
-     * 获取模型或主模型
-     */
-    public ChatModel getModelOrMain(String name) {
-        ChatModel currentMain = this.getMainModel();
-
-        if (Assert.isEmpty(name) || currentMain.getConfig().getNameOrModel().equals(name)) {
-            return currentMain;
-        }
-
-        return options.getModelOrDef(name).toChatModel();
-    }
-
-    public ChatModel getModelForCompression() {
-        return getModelOrMain(options.getCompressionModel());
-    }
-
-
-    /**
-     * 切换默认主模型
-     */
-    public void switchMainModel(String name) {
-        Objects.requireNonNull(name, "name");
-
-        ChatConfig chatConfig = options.getModelOrNil(name);
-        if (chatConfig == null) {
-            throw new IllegalArgumentException("The model not found: " + name);
-        }
-
-        this.mainModel = chatConfig.toChatModel();
-
-        agentLock.lock();
-        try {
-            if (this.mainAgent != null) {
-                this.mainAgent = createMainAgent();
-            }
-        } finally {
-            agentLock.unlock();
-        }
-    }
-
     public ReActAgent getMainAgent() {
         ReActAgent agent = this.mainAgent; // 引入局部变量，仅执行一次 volatile read
         if (agent == null) {
             agentLock.lock();
             try {
                 if (this.mainAgent == null) {
-                    getMainModel();
                     this.mainAgent = createMainAgent();
                 }
                 agent = this.mainAgent;

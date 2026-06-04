@@ -86,7 +86,7 @@ public class DemoApp {
                 .options(o -> {
 
                     //切换大模型
-                    o.chatModel(engine.getMainModel());
+                    //o.chatModel(engine.getMainModel());
 
                     //按需，动态指定工作区（没有，则为默认工作区）
                     o.toolContextPut(HarnessEngine.ATTR_CWD, "xxx");
