@@ -4,7 +4,7 @@ import demo.ai.talents.LlmUtil;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.tool.AbsToolProvider;
-import org.noear.solon.ai.talents.toolgateway.ToolGatewayTalent;
+import org.noear.solon.ai.talents.gateway.ToolGatewayTalent;
 import org.noear.solon.annotation.Param;
 
 public class ToolGatewayTalentTest {

@@ -221,7 +221,7 @@ public class AgentFactory {
                 break;
             }
             case "openapi": {
-                builder.defaultTalentAdd(engine.getOpenApiTalent());
+                builder.defaultTalentAdd(engine.getOpenApiGatewayTalent());
                 break;
             }
             case "lsp": {

@@ -265,19 +265,13 @@
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-talent-openapi</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.noear</groupId>
                 <artifactId>solon-ai-talent-text2sql</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-talent-toolgateway</artifactId>
+                <artifactId>solon-ai-talent-gateway</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

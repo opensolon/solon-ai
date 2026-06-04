@@ -44,10 +44,10 @@ import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.talents.memory.MemoryTalent;
 import org.noear.solon.ai.talents.memory.MemorySolution;
 import org.noear.solon.ai.talents.mount.SkillDir;
-import org.noear.solon.ai.talents.openapi.ApiSource;
-import org.noear.solon.ai.talents.openapi.ApiSourceClient;
-import org.noear.solon.ai.talents.openapi.OpenApiTalent;
-import org.noear.solon.ai.talents.toolgateway.McpGatewayTalent;
+import org.noear.solon.ai.talents.gateway.openapi.ApiSource;
+import org.noear.solon.ai.talents.gateway.openapi.ApiSourceClient;
+import org.noear.solon.ai.talents.gateway.OpenApiGatewayTalent;
+import org.noear.solon.ai.talents.gateway.McpGatewayTalent;
 import org.noear.solon.ai.talents.web.CodeSearchTalent;
 import org.noear.solon.ai.talents.web.WebfetchTalent;
 import org.noear.solon.ai.talents.web.WebsearchTalent;
@@ -85,7 +85,7 @@ public class HarnessEngine {
     private final LspTalent lspTalent;
 
     private final McpGatewayTalent mcpGatewayTalent;
-    private final OpenApiTalent openApiTalent;
+    private final OpenApiGatewayTalent openApiGatewayTalent;
 
     private final MemoryTalent memoryTalent;
 
@@ -166,8 +166,8 @@ public class HarnessEngine {
         return mcpGatewayTalent;
     }
 
-    public OpenApiTalent getOpenApiTalent() {
-        return openApiTalent;
+    public OpenApiGatewayTalent getOpenApiGatewayTalent() {
+        return openApiGatewayTalent;
     }
 
     public AgentSessionProvider getSessionProvider() {
@@ -378,7 +378,7 @@ public class HarnessEngine {
     public void setApiRetries(Integer apiRetries) {
         if (apiRetries != null) {
             options.setApiRetries(apiRetries);
-            openApiTalent.retryConfig(apiRetries);
+            openApiGatewayTalent.retryConfig(apiRetries);
         }
     }
 
@@ -523,7 +523,7 @@ public class HarnessEngine {
      * 动态添加 API 源
      */
     public void addApiServer(ApiSource apiSource) {
-        openApiTalent.addApi(apiSource);
+        openApiGatewayTalent.addApi(apiSource);
         options.getApiServers().put(apiSource.getDocUrl(), apiSource);
     }
 
@@ -531,21 +531,21 @@ public class HarnessEngine {
      * 获取指定 docUrl 的 ApiSourceClient
      */
     public ApiSourceClient getApiServer(String docUrl) {
-        return openApiTalent.getApiSource(docUrl);
+        return openApiGatewayTalent.getApiSource(docUrl);
     }
 
     /**
      * 刷新指定 API 源（权限变更后）
      */
     public void refreshApiServer(String docUrl) {
-        openApiTalent.refreshApi(docUrl);
+        openApiGatewayTalent.refreshApi(docUrl);
     }
 
     /**
      * 动态移除 API 源
      */
     public void removeApiServer(String docUrl) {
-        openApiTalent.removeApi(docUrl);
+        openApiGatewayTalent.removeApi(docUrl);
         options.getApiServers().remove(docUrl);
     }
 
@@ -706,10 +706,10 @@ public class HarnessEngine {
             this.memoryTalent = null;
         }
 
-        openApiTalent = new OpenApiTalent().retryConfig(options.getApiRetries());
+        openApiGatewayTalent = new OpenApiGatewayTalent().retryConfig(options.getApiRetries());
         if (Assert.isNotEmpty(options.getApiServers())) {
             for (Map.Entry<String, ApiSource> entry : options.getApiServers().entrySet()) {
-                openApiTalent.addApi(entry.getValue());
+                openApiGatewayTalent.addApi(entry.getValue());
             }
         }
 

@@ -24,7 +24,7 @@ import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.talents.lsp.LspServerParameters;
 import org.noear.solon.ai.talents.memory.MemorySolution;
 import org.noear.solon.ai.talents.mount.MountManager;
-import org.noear.solon.ai.talents.openapi.ApiSource;
+import org.noear.solon.ai.talents.gateway.openapi.ApiSource;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
