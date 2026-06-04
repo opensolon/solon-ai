@@ -30,7 +30,6 @@ import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.HarnessFlags;
 import org.noear.solon.annotation.Body;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
