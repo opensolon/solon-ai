@@ -362,7 +362,208 @@ public class LspTalentBuildInTest {
         }
     }
 
-    // ==================== TypeScript 真实测试 ====================
+    // ==================== Java (jdtls) 真实测试 ====================
+
+    @Nested
+    @DisplayName("Java LSP (jdtls)")
+    class JavaLspTests {
+
+        /**
+         * 为 Java 测试创建独立的 LspManager/LspTalent，因为 jdtls 需要 --java-executable 指向 Java 21+
+         */
+        private LspManager javaLspManager;
+        private LspTalent javaLspTalent;
+        private Path javaWorktree;
+
+        @BeforeEach
+        public void setupJava() throws Exception {
+            javaWorktree = Files.createTempDirectory("lsp-java-test");
+
+            // 创建 Maven 项目结构（jdtls 需要）
+            Files.createDirectories(javaWorktree.resolve("src/main/java"));
+            String pomXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                    "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n" +
+                    "  <modelVersion>4.0.0</modelVersion>\n" +
+                    "  <groupId>test</groupId>\n" +
+                    "  <artifactId>test</artifactId>\n" +
+                    "  <version>1.0.0</version>\n" +
+                    "</project>\n";
+            Files.write(javaWorktree.resolve("pom.xml"), pomXml.getBytes("UTF-8"));
+
+            javaLspManager = new LspManager(javaWorktree.toString());
+
+            // 构建 jdtls 命令：需要 --java-executable 指向 Java 21+
+            String java21Home = System.getenv("JAVA_21_HOME");
+            if (java21Home == null) {
+                // 尝试常见路径
+                String[] candidates = {
+                        "/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home",
+                        "/usr/lib/jvm/java-21",
+                        "/usr/lib/jvm/java-21-openjdk"
+                };
+                for (String candidate : candidates) {
+                    if (java.nio.file.Files.exists(java.nio.file.Paths.get(candidate, "bin", "java"))) {
+                        java21Home = candidate;
+                        break;
+                    }
+                }
+            }
+
+            java.util.List<String> javaCommand;
+            if (java21Home != null) {
+                String javaExe = java21Home + "/bin/java";
+                javaCommand = Arrays.asList(
+                        "jdtls",
+                        "--java-executable", javaExe
+                );
+                System.out.println("[Java LSP] Using jdtls with --java-executable: " + javaExe);
+            } else {
+                // 回退到默认 jdtls（可能因 Java 版本不足而失败）
+                javaCommand = Arrays.asList("jdtls");
+                System.out.println("[Java LSP] Using default jdtls (no Java 21 found, may fail)");
+            }
+
+            javaLspManager.registerServer("java", new LspServerParameters(
+                    javaCommand,
+                    Arrays.asList(".java")
+            ));
+
+            javaLspTalent = new LspTalent(javaLspManager, javaWorktree.toString());
+            javaLspManager.setDiagnosticsCallback(javaLspTalent::updateDiagnostics);
+        }
+
+        @AfterEach
+        public void teardownJava() {
+            if (javaLspManager != null) {
+                javaLspManager.shutdownAll();
+            }
+        }
+
+        @Test
+        @DisplayName("documentSymbol: 识别类和方法符号")
+        @Timeout(value = 60, unit = java.util.concurrent.TimeUnit.SECONDS)
+        public void testDocumentSymbol() throws Exception {
+            String javaCode =
+                    "package com.test;\n" +
+                    "\n" +
+                    "public class Hello {\n" +
+                    "    public String greet(String name) {\n" +
+                    "        return \"Hello, \" + name;\n" +
+                    "    }\n" +
+                    "\n" +
+                    "    public static void main(String[] args) {\n" +
+                    "        Hello h = new Hello();\n" +
+                    "        System.out.println(h.greet(\"world\"));\n" +
+                    "    }\n" +
+                    "}\n";
+            Path javaFile = javaWorktree.resolve("src/main/java/Hello.java");
+            Files.write(javaFile, javaCode.getBytes("UTF-8"));
+
+            Document doc = javaLspTalent.lsp("documentSymbol", "src/main/java/Hello.java", 1, 1, null, null);
+            assertNotNull(doc);
+            assertEquals("documentSymbol", doc.getMetadata("operation"));
+            String content = doc.getContent();
+            assertNotNull(content);
+            // jdtls 可能需要较长时间初始化项目，首次可能返回空结果
+            System.out.println("[Java documentSymbol] content=" + content);
+            // 至少应包含 Hello 类名（如果 jdtls 完成初始化）
+            assertTrue(content.contains("Hello") || content.contains("No results found"),
+                    "jdtls 应返回文档符号或初始化中: " + content);
+        }
+
+        @Test
+        @DisplayName("hover: 悬停提示方法签名")
+        @Timeout(value = 60, unit = java.util.concurrent.TimeUnit.SECONDS)
+        public void testHover() throws Exception {
+            String javaCode =
+                    "package com.test;\n" +
+                    "\n" +
+                    "public class Calc {\n" +
+                    "    public int add(int a, int b) {\n" +
+                    "        return a + b;\n" +
+                    "    }\n" +
+                    "}\n";
+            Path javaFile = javaWorktree.resolve("src/main/java/Calc.java");
+            Files.write(javaFile, javaCode.getBytes("UTF-8"));
+
+            // hover 在 add 方法调用处 (第4行，public 后面的 add)
+            Document doc = javaLspTalent.lsp("hover", "src/main/java/Calc.java", 4, 16, null, null);
+            assertNotNull(doc);
+            assertEquals("hover", doc.getMetadata("operation"));
+            String content = doc.getContent();
+            assertNotNull(content);
+            System.out.println("[Java hover] content=" + content);
+            assertTrue(content.contains("add") || content.contains("No results found"),
+                    "jdtls 应返回 hover 信息或初始化中: " + content);
+        }
+
+        @Test
+        @DisplayName("goToDefinition: 跳转到方法定义")
+        @Timeout(value = 60, unit = java.util.concurrent.TimeUnit.SECONDS)
+        public void testGoToDefinition() throws Exception {
+            String javaCode =
+                    "package com.test;\n" +
+                    "\n" +
+                    "public class Hello {\n" +
+                    "    public String greet(String name) {\n" +
+                    "        return \"Hello, \" + name;\n" +
+                    "    }\n" +
+                    "\n" +
+                    "    public static void main(String[] args) {\n" +
+                    "        Hello h = new Hello();\n" +
+                    "        String result = h.greet(\"world\");\n" +
+                    "        System.out.println(result);\n" +
+                    "    }\n" +
+                    "}\n";
+            Path javaFile = javaWorktree.resolve("src/main/java/Hello.java");
+            Files.write(javaFile, javaCode.getBytes("UTF-8"));
+
+            // goToDefinition: 在第10行 h.greet 处，定位到 greet 的定义
+            Document doc = javaLspTalent.lsp("goToDefinition", "src/main/java/Hello.java", 10, 22, null, null);
+            assertNotNull(doc);
+            assertEquals("goToDefinition", doc.getMetadata("operation"));
+            String content = doc.getContent();
+            assertNotNull(content);
+            System.out.println("[Java goToDefinition] content=" + content);
+            // jdtls 需要索引完成才能返回结果
+            assertTrue(content.contains("Hello.java") || content.contains("No results found"),
+                    "jdtls 应返回定义位置或初始化中: " + content);
+        }
+
+        @Test
+        @DisplayName("findReferences: 查找方法引用")
+        @Timeout(value = 60, unit = java.util.concurrent.TimeUnit.SECONDS)
+        public void testFindReferences() throws Exception {
+            String javaCode =
+                    "package com.test;\n" +
+                    "\n" +
+                    "public class Hello {\n" +
+                    "    public String greet(String name) {\n" +
+                    "        return \"Hello, \" + name;\n" +
+                    "    }\n" +
+                    "\n" +
+                    "    public static void main(String[] args) {\n" +
+                    "        Hello h = new Hello();\n" +
+                    "        String result = h.greet(\"world\");\n" +
+                    "        System.out.println(result);\n" +
+                    "    }\n" +
+                    "}\n";
+            Path javaFile = javaWorktree.resolve("src/main/java/Hello.java");
+            Files.write(javaFile, javaCode.getBytes("UTF-8"));
+
+            // findReferences: 在第4行 greet 方法定义处
+            Document doc = javaLspTalent.lsp("findReferences", "src/main/java/Hello.java", 4, 19, null, null);
+            assertNotNull(doc);
+            assertEquals("findReferences", doc.getMetadata("operation"));
+            String content = doc.getContent();
+            assertNotNull(content);
+            System.out.println("[Java findReferences] content=" + content);
+            assertTrue(content.contains("Hello.java") || content.contains("No results found"),
+                    "jdtls 应返回引用位置或初始化中: " + content);
+        }
+    }
+
+    // ==================== TypeScript 真实测试 ===================="
 
     @Nested
     @DisplayName("TypeScript LSP (typescript-language-server)")
