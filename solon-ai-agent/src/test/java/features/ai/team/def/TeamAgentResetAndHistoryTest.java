@@ -10,6 +10,7 @@ import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamResponse;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 
 /**
@@ -113,7 +114,7 @@ public class TeamAgentResetAndHistoryTest {
 
     // --- 工具类定义 ---
 
-    public static class WeatherTools {
+    public static class WeatherTools extends AbsToolProvider {
         @ToolMapping(description = "查询实时天气")
         public String query_weather(@Param(description = "城市名称") String city) {
             System.out.println("[WeatherTool] 正在查询: " + city);
@@ -123,7 +124,7 @@ public class TeamAgentResetAndHistoryTest {
         }
     }
 
-    public static class FoodTools {
+    public static class FoodTools extends AbsToolProvider{
         @ToolMapping(description = "推荐特色美食")
         public String recommend_food(@Param(description = "城市") String city,
                                      @Param(description = "天气") String weather,

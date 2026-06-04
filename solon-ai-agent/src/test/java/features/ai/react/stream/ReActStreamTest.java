@@ -12,6 +12,7 @@ import org.noear.solon.ai.agent.react.task.ReasonChunk;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
@@ -108,7 +109,7 @@ public class ReActStreamTest {
     }
 
     // --- 模拟工具类 ---
-    public static class OrderTools {
+    public static class OrderTools extends AbsToolProvider {
         @ToolMapping(description = "查询订单状态")
         public String getOrderStatus(@Param(description = "订单ID") String orderId) {
             return "订单 " + orderId + " 状态：已发货";

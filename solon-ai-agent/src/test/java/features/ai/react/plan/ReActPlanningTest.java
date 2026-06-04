@@ -11,6 +11,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 
 import java.util.List;
@@ -119,14 +120,14 @@ public class ReActPlanningTest {
 
     // --- 模拟工具类 ---
 
-    public static class InfoTools {
+    public static class InfoTools extends AbsToolProvider {
         @ToolMapping(description = "查询指定城市的天气")
         public String getWeather(@Param(name = "city", description = "城市名称") String city) {
             return city + "当前天气：晴，25度，适宜户外活动。";
         }
     }
 
-    public static class OrderTools {
+    public static class OrderTools extends AbsToolProvider{
         @ToolMapping(description = "查询订单状态")
         public String getOrderStatus(@Param(name = "orderId", description = "订单ID") String orderId) {
             return "订单 " + orderId + " 状态为：已支付";
@@ -172,7 +173,7 @@ public class ReActPlanningTest {
     }
 
     // --- 专门用于测试修订的工具类 ---
-    public static class RevisionTools {
+    public static class RevisionTools extends AbsToolProvider {
         @ToolMapping(description = "查询天气状况")
         public String getWeather(@Param(name = "day", description = "日期") String day) {
             // 模拟一个突发状况：暴雨

@@ -10,6 +10,7 @@ import org.noear.solon.ai.agent.team.TeamResponse;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 
 /**
@@ -74,7 +75,7 @@ public class TeamAgentTravelTest {
     /**
      * 模拟天气服务：返回极端天气以测试 Agent 的反应。
      */
-    public static class WeatherService {
+    public static class WeatherService extends AbsToolProvider  {
         @ToolMapping(description = "获取指定城市的实时天气预报")
         public String query(@Param(description = "城市名称，例如：东京") String city) {
             return "【气象警报】" + city + "目前遭遇特大暴雨，风力 8 级，所有户外景点（如公园、塔顶观景台）暂时关闭。";

@@ -71,14 +71,6 @@ public class ChatConfig extends AiConfig {
         getModelOptions().autoToolCall(defaultAutoToolCall);
     }
 
-
-    /**
-     * 设置默认工具（用于属性提示）
-     */
-    public void setDefaultTools(Map<String, FunctionTool> items) {
-        getModelOptions().toolAdd(items);
-    }
-
     /**
      * 添加默认工具（即每次请求都会带上）
      */

@@ -469,18 +469,13 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
-        public Builder defaultToolAdd(Iterable<FunctionTool> tools) {
+        public Builder defaultToolAdd(Collection<FunctionTool> tools) {
             config.getDefaultOptions().getModelOptions().toolAdd(tools);
             return this;
         }
 
         public Builder defaultToolAdd(ToolProvider toolProvider) {
             config.getDefaultOptions().getModelOptions().toolAdd(toolProvider);
-            return this;
-        }
-
-        public Builder defaultToolAdd(Object toolObj) {
-            config.getDefaultOptions().getModelOptions().toolAdd(toolObj);
             return this;
         }
 

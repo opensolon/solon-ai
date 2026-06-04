@@ -14,6 +14,7 @@ import org.noear.solon.ai.agent.react.intercept.HITLTask;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 
 public class HITLIndustrialTest {
@@ -215,7 +216,7 @@ public class HITLIndustrialTest {
         Assertions.assertNull(HITL.getPendingTask(session), "执行完后状态应清理");
     }
 
-    public static class BankTools {
+    public static class BankTools extends AbsToolProvider {
         @ToolMapping(description = "执行银行转账操作")
         public String transfer(@Param(description = "收款人姓名") String to,
                                @Param(description = "转账金额") double amount) {

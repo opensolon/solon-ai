@@ -175,23 +175,6 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     }
 
     /**
-     * 添加函数工具
-     *
-     * @param toolObj 工具对象
-     * @deprecated 3.10.1
-     */
-    @Deprecated
-    public T toolAdd(Object toolObj) {
-        if (toolObj instanceof FunctionTool) {
-            FunctionTool tool = (FunctionTool) toolObj;
-            this.tools.put(tool.name(), tool);
-            return (T) this;
-        } else {
-            return toolAdd(new MethodToolProvider(toolObj));
-        }
-    }
-
-    /**
      * 添加函数工具（构建形式）
      *
      * @param name        名字

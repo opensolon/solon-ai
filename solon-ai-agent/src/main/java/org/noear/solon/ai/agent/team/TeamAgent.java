@@ -478,23 +478,13 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return this;
         }
 
-        public Builder defaultToolAdd(Iterable<FunctionTool> tools) {
+        public Builder defaultToolAdd(Collection<FunctionTool> tools) {
             config.getDefaultOptions().getModelOptions().toolAdd(tools);
             return this;
         }
 
         public Builder defaultToolAdd(ToolProvider toolProvider) {
             config.getDefaultOptions().getModelOptions().toolAdd(toolProvider);
-            return this;
-        }
-
-        /**
-         * 默认工具添加（即每次请求都会带上）
-         *
-         * @param toolObj 工具对象
-         */
-        public Builder defaultToolAdd(Object toolObj) {
-            config.getDefaultOptions().getModelOptions().toolAdd(toolObj);
             return this;
         }
 

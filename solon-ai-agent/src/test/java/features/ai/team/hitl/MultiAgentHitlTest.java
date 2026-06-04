@@ -15,6 +15,7 @@ import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.TeamResponse;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 
 import java.util.HashMap;
@@ -100,7 +101,7 @@ public class MultiAgentHitlTest {
     }
 
     // 会计工具
-    public static class AccountTools {
+    public static class AccountTools extends AbsToolProvider {
         @ToolMapping(description = "查询指定账户的余额")
         public String checkBalance() {
             return "当前账户余额为：￥50000.00";
@@ -108,7 +109,7 @@ public class MultiAgentHitlTest {
     }
 
     // 出纳工具
-    public static class BankTools {
+    public static class BankTools extends AbsToolProvider{
         @ToolMapping(description = "执行银行转账操作")
         public String transfer(@Param(description = "收款人") String to,
                                @Param(description = "金额") double amount) {

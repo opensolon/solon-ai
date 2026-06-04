@@ -12,6 +12,7 @@ import org.noear.solon.ai.chat.content.Contents;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 
 import java.io.ByteArrayOutputStream;
@@ -87,7 +88,7 @@ public class GeminiThoughtSignatureReactTest {
      * 图册信息识别工具集
      * <p>提供多个工具强制触发多轮工具调用，充分测试 thoughtSignature 传递链路。</p>
      */
-    public static class ProductCatalogTools {
+    public static class ProductCatalogTools extends AbsToolProvider {
 
         @ToolMapping(
                 name = "identify_products_in_image",

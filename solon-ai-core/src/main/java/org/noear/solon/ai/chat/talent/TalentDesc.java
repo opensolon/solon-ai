@@ -204,16 +204,6 @@ public class TalentDesc implements Talent {
             return this;
         }
 
-        public Builder toolAdd(Object toolObj) {
-            if (toolObj instanceof FunctionTool) {
-                FunctionTool tool = (FunctionTool) toolObj;
-                this.tools.put(tool.name(), tool);
-                return this;
-            } else {
-                return toolAdd(new MethodToolProvider(toolObj));
-            }
-        }
-
         public TalentDesc build() {
             if (getToolsHandler == null) {
                 //如果没有，返回静态的工具集

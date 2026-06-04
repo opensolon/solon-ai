@@ -10,6 +10,7 @@ import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamResponse;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 
 /**
@@ -67,7 +68,7 @@ public class TeamExpertMemoryTest {
         System.out.println("\n>>> [测试通过] 专家成功读取了 Session 中的用户偏好历史。");
     }
 
-    public static class SecureFoodTools {
+    public static class SecureFoodTools extends AbsToolProvider {
         @ToolMapping(description = "获取城市特色美食列表")
         public String get_city_foods(@Param(description = "城市") String city) {
             System.out.println("[Tool] 获取 " + city + " 的原始菜单...");

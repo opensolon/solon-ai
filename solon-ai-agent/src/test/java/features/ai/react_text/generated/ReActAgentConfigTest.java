@@ -10,6 +10,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 
 import java.util.Random;
 
@@ -150,7 +151,7 @@ public class ReActAgentConfigTest {
 
     // --- 工具类定义 ---
 
-    public static class CreativeTools {
+    public static class CreativeTools extends AbsToolProvider {
         @ToolMapping(description = "生成产品创意口号")
         public String generate_idea() {
             String[] ideas = {
@@ -164,14 +165,14 @@ public class ReActAgentConfigTest {
         }
     }
 
-    public static class StoryTools {
+    public static class StoryTools extends AbsToolProvider{
         @ToolMapping(description = "生成中长篇叙事内容")
         public String generate_story() {
             return "在遥远的塞恩大陆，有一位年轻的冒险者正准备踏入幽暗森林...";
         }
     }
 
-    public static class BasicTools {
+    public static class BasicTools extends AbsToolProvider {
         @ToolMapping(description = "执行基础通用任务")
         public String basic_tool() {
             return "执行成功";

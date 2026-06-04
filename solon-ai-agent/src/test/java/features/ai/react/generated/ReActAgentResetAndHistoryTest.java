@@ -10,6 +10,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 
 /**
@@ -78,7 +79,7 @@ public class ReActAgentResetAndHistoryTest {
         System.out.println("\n>>> [测试通过] 完美验证：重置确保生命力，记忆确保连续性。");
     }
 
-    public static class LifeTools {
+    public static class LifeTools extends AbsToolProvider {
         @ToolMapping(description = "根据城市名查询实时天气")
         public String get_weather(@Param(description = "城市名称") String city) {
             if (city.contains("上海")) {

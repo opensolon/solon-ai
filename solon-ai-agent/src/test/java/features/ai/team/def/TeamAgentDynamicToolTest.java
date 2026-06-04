@@ -11,6 +11,7 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 
 /**
  * 【业务场景测试】：基于权限的动态工具加载
@@ -83,7 +84,7 @@ public class TeamAgentDynamicToolTest {
     /**
      * 基础业务工具：提供公共数据
      */
-    public static class BasicTravelTool {
+    public static class BasicTravelTool extends AbsToolProvider {
         @ToolMapping(description = "查询机场公共信息")
         public String getPublicInfo() {
             return "虹桥机场 T2 航站楼正常运行。";
@@ -93,7 +94,7 @@ public class TeamAgentDynamicToolTest {
     /**
      * VIP 权限专用工具：涉及敏感或增值数据
      */
-    public static class VipPrivilegeTool {
+    public static class VipPrivilegeTool extends AbsToolProvider{
         @ToolMapping(description = "查询 VIP 专属私密休息室信息")
         public String getVipLounge() {
             return "上海虹桥：V1 尊享黑金休息室，提供定制餐饮。";

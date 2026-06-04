@@ -5,6 +5,7 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 
 import java.time.LocalDateTime;
@@ -37,7 +38,7 @@ public class DemoApp {
         System.out.println("Robot 答复: " + answer);
     }
 
-    public static class TimeTool {
+    public static class TimeTool extends AbsToolProvider {
         @ToolMapping(description = "获取当前系统时间")
         public String getTime() {
             return LocalDateTime.now().toString();

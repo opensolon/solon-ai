@@ -8,6 +8,7 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 
 /**
@@ -60,7 +61,7 @@ public class ReActAgentTest {
     /**
      * 计算领域工具类
      */
-    public static class MathTools {
+    public static class MathTools extends AbsToolProvider {
         /**
          * 加法工具
          */

@@ -503,23 +503,13 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             return this;
         }
 
-        public Builder defaultToolAdd(Iterable<FunctionTool> tools) {
+        public Builder defaultToolAdd(Collection<FunctionTool> tools) {
             config.getDefaultOptions().toolAdd(tools);
             return this;
         }
 
         public Builder defaultToolAdd(ToolProvider toolProvider) {
             config.getDefaultOptions().toolAdd(toolProvider);
-            return this;
-        }
-
-        /**
-         * 默认工具添加（即每次请求都会带上）
-         *
-         * @param toolObj 工具对象
-         */
-        public Builder defaultToolAdd(Object toolObj) {
-            config.getDefaultOptions().toolAdd(toolObj);
             return this;
         }
 

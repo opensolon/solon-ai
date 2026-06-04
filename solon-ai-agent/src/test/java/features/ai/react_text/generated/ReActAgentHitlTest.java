@@ -12,6 +12,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 
 import java.util.Map;
@@ -94,7 +95,7 @@ public class ReActAgentHitlTest {
      *
      * <p>提供退款相关功能工具，用于测试敏感操作拦截场景</p>
      */
-    public static class RefundTools {
+    public static class RefundTools extends AbsToolProvider {
         /**
          * 执行退款操作
          *
@@ -183,7 +184,7 @@ public class ReActAgentHitlTest {
      *
      * <p>提供基础功能工具，用于测试拦截器回调功能</p>
      */
-    public static class BasicTools {
+    public static class BasicTools extends AbsToolProvider {
         /**
          * 基础工具调用
          *

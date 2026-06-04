@@ -11,6 +11,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -153,21 +154,21 @@ public class ReActAgentBoundaryTest {
 
     // --- 辅助工具类 ---
 
-    public static class LoopTools {
+    public static class LoopTools extends AbsToolProvider {
         @ToolMapping(description = "返回一个模糊结果，迫使 AI 继续思考")
         public String think_more() {
             return "分析尚不完整，请基于现有信息进行下一步推理。";
         }
     }
 
-    public static class BasicTools {
+    public static class BasicTools extends AbsToolProvider {
         @ToolMapping(description = "基础回复工具")
         public String basic_tool() {
             return "OK";
         }
     }
 
-    public static class ErrorTools {
+    public static class ErrorTools extends AbsToolProvider {
         @ToolMapping(description = "必败工具：直接抛出异常")
         public String failing_tool() {
             throw new RuntimeException("CRITICAL_ERROR: 模拟硬件故障或数据库连接断开");

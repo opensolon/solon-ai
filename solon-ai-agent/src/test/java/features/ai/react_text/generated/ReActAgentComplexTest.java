@@ -10,6 +10,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 
 /**
@@ -70,7 +71,7 @@ public class ReActAgentComplexTest {
     /**
      * 订单领域工具
      */
-    public static class OrderTools {
+    public static class OrderTools extends AbsToolProvider {
         @ToolMapping(description = "根据订单号查询订单详情，获取商品名、金额、物流单号")
         public String get_order(@Param(description = "订单号") String orderId) {
             if ("ORD_20251229".equals(orderId)) {
@@ -83,7 +84,7 @@ public class ReActAgentComplexTest {
     /**
      * 物流领域工具
      */
-    public static class LogisticTools {
+    public static class LogisticTools extends AbsToolProvider {
         @ToolMapping(description = "根据物流单号查询当前运输状态")
         public String get_logistic_status(@Param(description = "物流单号") String trackNo) {
             if ("track_123".equals(trackNo)) {
@@ -96,7 +97,7 @@ public class ReActAgentComplexTest {
     /**
      * 营销/补偿领域工具
      */
-    public static class MarketingTools {
+    public static class MarketingTools extends AbsToolProvider {
         @ToolMapping(description = "根据赔付策略发放补偿。规则：小额订单(<=100)发优惠券(coupon)；大额订单(>100)申请全额退款(refund)")
         public String apply_compensation(@Param(description = "赔付策略：coupon 或 refund") String strategy,
                                          @Param(description = "订单金额") double amount) {

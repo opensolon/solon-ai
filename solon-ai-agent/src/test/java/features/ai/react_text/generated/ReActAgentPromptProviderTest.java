@@ -27,6 +27,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 
 /**
@@ -104,7 +105,7 @@ public class ReActAgentPromptProviderTest {
 
     // --- 模拟业务工具集 ---
 
-    public static class MathTools {
+    public static class MathTools extends AbsToolProvider {
         @ToolMapping(description = "执行加法运算")
         public double add(@Param(description = "加数 a") double a,
                           @Param(description = "加数 b") double b) {
@@ -112,7 +113,7 @@ public class ReActAgentPromptProviderTest {
         }
     }
 
-    public static class ChineseTools {
+    public static class ChineseTools extends AbsToolProvider {
         @ToolMapping(description = "查询指定城市的天气状况")
         public String get_weather(@Param(description = "城市名称，如：北京") String city) {
             return city + " 今天气温 20°C，多云转晴。";

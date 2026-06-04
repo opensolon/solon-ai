@@ -14,6 +14,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 
@@ -208,7 +209,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
 
     // --- 业务工具类 ---
 
-    public static class TestTools {
+    public static class TestTools extends AbsToolProvider {
         @ToolMapping(description = "实时查询指定城市的天气预报")
         public String get_weather(@Param(description = "城市名称，如：北京") String city) {
             if ("北京".equals(city)) {
@@ -218,7 +219,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
         }
     }
 
-    public static class SequentialTools {
+    public static class SequentialTools extends AbsToolProvider {
         @ToolMapping(description = "获取当前登录用户的核心资料")
         public String get_user_info() {
             return "{\"uid\": 123456, \"name\": \"张三\", \"level\": \"VIP\"}";

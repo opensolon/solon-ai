@@ -12,6 +12,7 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
 
@@ -80,7 +81,7 @@ public class ReActAgentLoopTest {
     /**
      * 模拟银行工具类
      */
-    public static class BankTools {
+    public static class BankTools extends AbsToolProvider {
         @ToolMapping(description = "执行银行转账操作")
         public String do_transfer(@Param(description = "金额") double amount,
                                   @Param(description = "收款人姓名") String payee,

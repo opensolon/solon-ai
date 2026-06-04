@@ -10,6 +10,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
 
@@ -76,7 +77,7 @@ public class ReActAgentDemo {
     /**
      * 天气工具类
      */
-    public static class WeatherTools {
+    public static class WeatherTools extends AbsToolProvider {
         @ToolMapping(name = "get_weather", description = "查询指定城市的天气状况")
         public String get_weather(@Param(description = "城市名称") String city) {
             if (city.contains("北京")) {

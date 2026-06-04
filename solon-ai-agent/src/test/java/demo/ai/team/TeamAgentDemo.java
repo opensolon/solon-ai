@@ -11,6 +11,7 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.AbsToolProvider;
 import org.noear.solon.annotation.Param;
 
 import java.io.ByteArrayOutputStream;
@@ -69,7 +70,7 @@ public class TeamAgentDemo {
     /**
      * 代码执行工具类
      */
-    public static class CodeExecutorTool {
+    public static class CodeExecutorTool extends AbsToolProvider {
         @ToolMapping(description = "执行一段 Java 风格的代码并获取控制台输出结果")
         public String execute(@Param(description = "要执行的代码字符串") String code) {
             // 1. 重定向系统输出，用于捕获 print 结果
