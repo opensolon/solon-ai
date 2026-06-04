@@ -150,10 +150,6 @@ public class HarnessEngine {
         return codeSearchTalent;
     }
 
-    public LspTalent getLspTalent() {
-        return lspTalent;
-    }
-
     public WebsearchTalent getWebsearchTalent() {
         return websearchTalent;
     }
@@ -168,6 +164,10 @@ public class HarnessEngine {
 
     public OpenApiGatewayTalent getOpenApiGatewayTalent() {
         return openApiGatewayTalent;
+    }
+
+    public LspTalent getLspTalent() {
+        return lspTalent;
     }
 
     public AgentSessionProvider getSessionProvider() {
@@ -398,11 +398,6 @@ public class HarnessEngine {
 
     public void setSubagentEnabled(Boolean subagentEnabled) {
         options.setSubagentEnabled(subagentEnabled);
-    }
-
-    public void setLspEnabled(Boolean lspEnabled){
-        options.setLspEnabled(lspEnabled);
-        lspTalent.setEnabled(lspEnabled);
     }
 
     public void setBashAsyncEnabled(Boolean bashAsyncEnabled){
@@ -701,7 +696,6 @@ public class HarnessEngine {
         }
         this.lspTalent = new LspTalent(lspManager, options.getWorkspace());
         this.lspManager.setDiagnosticsCallback(lspTalent::updateDiagnostics);
-        this.lspTalent.setEnabled(options.isLspEnabled());
 
         if (options.getMemorySolution() != null) {
             this.memoryTalent = new MemoryTalent(options.getMemorySolution()).sessionIsolation(false);
@@ -930,11 +924,6 @@ public class HarnessEngine {
 
         public Builder hitlEnabled(Boolean hitlEnabled) {
             options.setHitlEnabled(hitlEnabled);
-            return this;
-        }
-
-        public Builder lspEnabled(Boolean lspEnabled) {
-            options.setLspEnabled(lspEnabled);
             return this;
         }
 

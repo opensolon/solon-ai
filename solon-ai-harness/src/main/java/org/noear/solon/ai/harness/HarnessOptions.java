@@ -73,7 +73,6 @@ class HarnessOptions implements Serializable {
     // ========== 安全与模式 ==========
     private volatile boolean sandboxMode = true;
     private volatile boolean hitlEnabled = false;
-    private volatile boolean lspEnabled = false;
     private volatile boolean subagentEnabled = true;
     private volatile boolean bashAsyncEnabled = false;
 
@@ -257,16 +256,6 @@ class HarnessOptions implements Serializable {
     void setHitlEnabled(Boolean hitlEnabled) {
         if (hitlEnabled != null) {
             this.hitlEnabled = hitlEnabled;
-        }
-    }
-
-    public boolean isLspEnabled() {
-        return lspEnabled;
-    }
-
-    public void setLspEnabled(Boolean lspEnabled) {
-        if (lspEnabled != null) {
-            this.lspEnabled = lspEnabled;
         }
     }
 
