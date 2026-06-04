@@ -67,6 +67,7 @@ import java.util.concurrent.locks.ReentrantLock;
 @Preview("3.10")
 public class HarnessEngine {
     public final static String ATTR_CWD = "__cwd";
+    public final static String VAR_MODEL_SELECTED = "_model_selected";
 
     private final ReentrantLock agentLock = new ReentrantLock();
 
