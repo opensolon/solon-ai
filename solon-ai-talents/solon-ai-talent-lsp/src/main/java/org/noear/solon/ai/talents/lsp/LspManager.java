@@ -162,7 +162,9 @@ public class LspManager {
             LOG.info("Starting LSP server '{}': {}", name, params.getCommand());
             LspClientImpl client = new LspClientImpl(
                     params.getCommandArray(),
-                    workspace
+                    workspace,
+                    params.getInitialization(),
+                    params.getEnv()
             );
 
             // 设置诊断信息回调

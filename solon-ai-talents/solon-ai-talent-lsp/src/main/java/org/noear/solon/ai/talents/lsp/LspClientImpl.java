@@ -29,9 +29,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 /**
@@ -62,12 +64,22 @@ public class LspClientImpl implements LspClient {
     private BiConsumer<String, String> diagnosticsConsumer;
 
     public LspClientImpl(String[] command, String rootDir) throws Exception {
+        this(command, rootDir, null, null);
+    }
+
+    public LspClientImpl(String[] command, String rootDir,
+                         Map<String, Object> initializationOptions,
+                         Map<String, String> env) throws Exception {
         this.rootDir = rootDir;
         this.rootUri = new File(rootDir).toURI().toString();
 
-        // 1. 启动语言服务器进程
+        // 1. 启动语言服务器进程（对齐 OpenCode：必须继承父进程环境变量）
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(new File(rootDir));
+        // 合并父进程环境变量 + 用户自定义环境变量
+        if (env != null && !env.isEmpty()) {
+            builder.environment().putAll(env);
+        }
         this.process = builder.start();
 
         InputStream in = process.getInputStream();
@@ -81,10 +93,15 @@ public class LspClientImpl implements LspClient {
         launcher.startListening();
         this.remoteServer = launcher.getRemoteProxy();
 
-        // 3. 协议握手流程 (必须执行)
+        // 3. 协议握手流程 (必须执行，对齐 OpenCode 的初始化模式)
         InitializeParams initParams = new InitializeParams();
         initParams.setRootUri(this.rootUri);
+        initParams.setRootPath(this.rootDir);
         initParams.setCapabilities(new ClientCapabilities());
+        // 传递 initializationOptions（如 Python 的 pythonPath、PHP 的 telemetry 等）
+        if (initializationOptions != null && !initializationOptions.isEmpty()) {
+            initParams.setInitializationOptions(initializationOptions);
+        }
         remoteServer.initialize(initParams).get();
         remoteServer.initialized(new InitializedParams());
     }
@@ -234,7 +251,7 @@ public class LspClientImpl implements LspClient {
     public void shutdown() {
         try {
             if (remoteServer != null) {
-                remoteServer.shutdown().get();
+                remoteServer.shutdown().get(5, TimeUnit.SECONDS);
                 remoteServer.exit();
             }
         } catch (Exception e) {
@@ -242,6 +259,13 @@ public class LspClientImpl implements LspClient {
         } finally {
             if (process != null && process.isAlive()) {
                 process.destroy();
+                try {
+                    process.waitFor(3, TimeUnit.SECONDS);
+                } catch (InterruptedException ignored) {
+                }
+                if (process.isAlive()) {
+                    process.destroyForcibly();
+                }
             }
         }
     }
@@ -255,16 +279,23 @@ public class LspClientImpl implements LspClient {
         if (lower.endsWith(".kt") || lower.endsWith(".kts")) return "kotlin";
         if (lower.endsWith(".ts")) return "typescript";
         if (lower.endsWith(".tsx")) return "typescriptreact";
+        if (lower.endsWith(".mts")) return "typescript";
+        if (lower.endsWith(".cts")) return "typescript";
         if (lower.endsWith(".js")) return "javascript";
         if (lower.endsWith(".jsx")) return "javascriptreact";
-        if (lower.endsWith(".py")) return "python";
+        if (lower.endsWith(".mjs")) return "javascript";
+        if (lower.endsWith(".cjs")) return "javascript";
+        if (lower.endsWith(".py") || lower.endsWith(".pyi")) return "python";
         if (lower.endsWith(".go")) return "go";
         if (lower.endsWith(".rs")) return "rust";
         if (lower.endsWith(".c") || lower.endsWith(".h")) return "c";
-        if (lower.endsWith(".cpp") || lower.endsWith(".cc") || lower.endsWith(".cxx") || lower.endsWith(".hpp")) return "cpp";
-        if (lower.endsWith(".cs")) return "csharp";
-        if (lower.endsWith(".rb")) return "ruby";
+        if (lower.endsWith(".cpp") || lower.endsWith(".cc") || lower.endsWith(".cxx") || lower.endsWith(".c++") || lower.endsWith(".hpp") || lower.endsWith(".h++") || lower.endsWith(".hh") || lower.endsWith(".hxx")) return "cpp";
+        if (lower.endsWith(".cs") || lower.endsWith(".csx")) return "csharp";
+        if (lower.endsWith(".rb") || lower.endsWith(".rake") || lower.endsWith(".gemspec")) return "ruby";
         if (lower.endsWith(".php")) return "php";
+        if (lower.endsWith(".dart")) return "dart";
+        if (lower.endsWith(".lua")) return "lua";
+        if (lower.endsWith(".swift")) return "swift";
         if (lower.endsWith(".scala")) return "scala";
         if (lower.endsWith(".xml") || lower.endsWith(".xhtml") || lower.endsWith(".fxml")) return "xml";
         if (lower.endsWith(".html") || lower.endsWith(".htm")) return "html";
@@ -273,7 +304,7 @@ public class LspClientImpl implements LspClient {
         if (lower.endsWith(".yaml") || lower.endsWith(".yml")) return "yaml";
         if (lower.endsWith(".md")) return "markdown";
         if (lower.endsWith(".sql")) return "sql";
-        if (lower.endsWith(".sh")) return "shellscript";
+        if (lower.endsWith(".sh") || lower.endsWith(".bash") || lower.endsWith(".zsh") || lower.endsWith(".ksh")) return "shellscript";
         return "plaintext";
     }
 
