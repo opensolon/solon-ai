@@ -44,16 +44,6 @@ public class VideoGenerationTalent extends AbsTalent {
     }
 
     @Override
-    public String name() {
-        return "video_generator";
-    }
-
-    @Override
-    public String description() {
-        return "视频专家：能够根据文字描述生成短视频。支持指定时长（seconds）和横竖屏比例（aspectRatio）。";
-    }
-
-    @Override
     public boolean isSupported(Prompt prompt) {
         String content = prompt.getUserContent().toLowerCase();
         // 意图识别优化：确保只有在涉及媒体创作场景时才触发昂贵的视频 API
@@ -69,7 +59,7 @@ public class VideoGenerationTalent extends AbsTalent {
      * @param aspectRatio 视频比例（如 16:9, 9:16），可选，默认 16:9
      * @param fileName    建议的文件名（如 promo.mp4）
      */
-    @ToolMapping(name = "generate_video", description = "根据文字提示词生成一段短视频并保存。建议指定比例：横屏 16:9，竖屏 9:16。")
+    @ToolMapping(name = "generate_video", description = "根据文字提示词生成一段短视频并保存。建议指定比例：横屏 16:9，竖屏 9:16。支持指定时长（seconds）和横竖屏比例（aspectRatio）。")
     public String generate(@Param("prompt") String prompt,
                            @Param("seconds") Integer seconds,
                            @Param("aspectRatio") String aspectRatio,

@@ -18,7 +18,7 @@ package org.noear.solon.ai.talents.web;
 import com.vladsch.flexmark.html2md.converter.FlexmarkHtmlConverter;
 import org.jsoup.Jsoup;
 import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.ai.chat.tool.AbsToolProvider;
+import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.annotation.Param;
@@ -37,31 +37,25 @@ import java.util.Base64;
  * @author noear
  * @since 3.9.6
  * */
-public class WebfetchTool extends AbsToolProvider {
+public class WebfetchTalent extends AbsTalent {
     private static final int DEFAULT_TIMEOUT_MS = 30000;
     private static final int MAX_TIMEOUT_MS = 120000;
     private static final long MAX_RESPONSE_SIZE = 5 * 1024 * 1024; // 5MB 硬限制
 
-    private static final WebfetchTool instance = new WebfetchTool();
-
-    public static WebfetchTool getInstance() {
-        return instance;
-    }
-
     private int maxRetries = 3;
     private String userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36";
 
-    public WebfetchTool retryConfig(int maxRetries, long retryDelayMs) {
+    public WebfetchTalent retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         return this;
     }
 
-    public WebfetchTool retryConfig(int maxRetries) {
+    public WebfetchTalent retryConfig(int maxRetries) {
         this.maxRetries = Math.max(1, maxRetries);
         return this;
     }
 
-    public WebfetchTool userAgent(String userAgent) {
+    public WebfetchTalent userAgent(String userAgent) {
         if (Assert.isNotEmpty(userAgent)) {
             this.userAgent = userAgent;
         }

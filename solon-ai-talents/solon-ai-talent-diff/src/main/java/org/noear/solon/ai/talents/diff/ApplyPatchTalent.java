@@ -19,9 +19,9 @@ import com.github.difflib.DiffUtils;
 import com.github.difflib.UnifiedDiffUtils;
 import com.github.difflib.patch.AbstractDelta;
 import com.github.difflib.patch.Patch;
-import org.noear.solon.ai.chat.tool.AbsTool;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.annotation.Param;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -32,18 +32,15 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class ApplyPatchTool extends AbsTool {
-    private static final Logger LOG = LoggerFactory.getLogger(ApplyPatchTool.class);
+public class ApplyPatchTalent extends AbsTalent {
     private final String workDir;
 
-    public ApplyPatchTool() {
+    public ApplyPatchTalent() {
         this(null);
     }
 
-    public ApplyPatchTool(String workDir) {
+    public ApplyPatchTalent(String workDir) {
         this.workDir = workDir;
-
-        addParam("patchText", String.class, true, "The full patch text that describes all changes to be made");
     }
 
     protected Path getWorkPath(String __cwd) {
@@ -52,53 +49,41 @@ public class ApplyPatchTool extends AbsTool {
         return Paths.get(path).toAbsolutePath().normalize();
     }
 
-    @Override
-    public String name() {
-        return "apply_patch";
-    }
-
-    @Override
-    public String description() {
-        return "使用 `apply_patch` 工具来编辑文件。补丁语言是一种简化的、面向文件的 diff 格式，设计目的是易于解析且安全。你可以将其视为一个高级封装：\n" +
-                "\n" +
-                "*** Begin Patch\n" +
-                "[ 一个或多个文件区块 ]\n" +
-                "*** End Patch\n" +
-                "\n" +
-                "在此封装内，是一系列文件操作序列。\n" +
-                "你必须包含一个头部（Header）来指定你要执行的操作。\n" +
-                "每个操作以以下三种头部之一开始：\n" +
-                "\n" +
-                "*** Add File: <path> - 创建新文件。后续每一行都必须是以 + 开头的行（初始内容）。\n" +
-                "*** Delete File: <path> - 删除现有文件。下方无需跟任何内容。\n" +
-                "*** Update File: <path> - 就地修补现有文件（可选重命名操作）。\n" +
-                "\n" +
-                "补丁示例：\n" +
-                "\n" +
-                "```\n" +
-                "*** Begin Patch\n" +
-                "*** Add File: hello.txt\n" +
-                "+Hello world\n" +
-                "*** Update File: src/app.py\n" +
-                "*** Move to: src/main.py\n" +
-                "@@ def greet():\n" +
-                "-print(\"Hi\")\n" +
-                "+print(\"Hello, world!\")\n" +
-                "*** Delete File: obsolete.txt\n" +
-                "*** End Patch\n" +
-                "```\n" +
-                "\n" +
-                "请务必记住：\n" +
-                "\n" +
-                "- 你必须包含一个指明意图的操作头部（Add/Delete/Update）。\n" +
-                "- 即使在创建新文件时，新行也必须以 `+` 为前缀。";
-    }
-
-    @Override
-    public Object handle(Map<String, Object> args) throws Throwable {
-        String patchText = (String) args.get("patchText");
-        String __cwd = (String) args.get("__cwd"); //由 toolContext 传递
-
+    @ToolMapping(name = "apply_patch",
+            description = "使用 `apply_patch` 工具来编辑文件。补丁语言是一种简化的、面向文件的 diff 格式，设计目的是易于解析且安全。你可以将其视为一个高级封装：\n" +
+                    "\n" +
+                    "*** Begin Patch\n" +
+                    "[ 一个或多个文件区块 ]\n" +
+                    "*** End Patch\n" +
+                    "\n" +
+                    "在此封装内，是一系列文件操作序列。\n" +
+                    "你必须包含一个头部（Header）来指定你要执行的操作。\n" +
+                    "每个操作以以下三种头部之一开始：\n" +
+                    "\n" +
+                    "*** Add File: <path> - 创建新文件。后续每一行都必须是以 + 开头的行（初始内容）。\n" +
+                    "*** Delete File: <path> - 删除现有文件。下方无需跟任何内容。\n" +
+                    "*** Update File: <path> - 就地修补现有文件（可选重命名操作）。\n" +
+                    "\n" +
+                    "补丁示例：\n" +
+                    "\n" +
+                    "```\n" +
+                    "*** Begin Patch\n" +
+                    "*** Add File: hello.txt\n" +
+                    "+Hello world\n" +
+                    "*** Update File: src/app.py\n" +
+                    "*** Move to: src/main.py\n" +
+                    "@@ def greet():\n" +
+                    "-print(\"Hi\")\n" +
+                    "+print(\"Hello, world!\")\n" +
+                    "*** Delete File: obsolete.txt\n" +
+                    "*** End Patch\n" +
+                    "```\n" +
+                    "\n" +
+                    "请务必记住：\n" +
+                    "\n" +
+                    "- 你必须包含一个指明意图的操作头部（Add/Delete/Update）。\n" +
+                    "- 即使在创建新文件时，新行也必须以 `+` 为前缀。")
+    public Object apply_patch(@Param(name = "patchText", description = "The full patch text that describes all changes to be made") String patchText, String __cwd) throws Throwable {
         // 严格对齐: if (!params.patchText) throw new Error("patchText is required")
         if (patchText == null || patchText.trim().length() == 0) {
             throw new RuntimeException("patchText is required");
@@ -221,8 +206,12 @@ public class ApplyPatchTool extends AbsTool {
         if (!change.type.equals("delete")) {
             for (AbstractDelta<String> delta : patch.getDeltas()) {
                 switch (delta.getType()) {
-                    case INSERT: change.additions += delta.getTarget().size(); break;
-                    case DELETE: change.deletions += delta.getSource().size(); break;
+                    case INSERT:
+                        change.additions += delta.getTarget().size();
+                        break;
+                    case DELETE:
+                        change.deletions += delta.getSource().size();
+                        break;
                     case CHANGE:
                         change.additions += delta.getTarget().size();
                         change.deletions += delta.getSource().size();
@@ -337,7 +326,11 @@ public class ApplyPatchTool extends AbsTool {
     private static class PatchHunk {
         String type, path, move_path, contents = "";
         List<String> lines = new ArrayList<>();
-        PatchHunk(String t, String p) { this.type = t; this.path = p; }
+
+        PatchHunk(String t, String p) {
+            this.type = t;
+            this.path = p;
+        }
     }
 
     private static class FileChange {

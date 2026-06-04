@@ -2,7 +2,7 @@ package features.skill.web;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.noear.solon.ai.talents.web.WebfetchTool;
+import org.noear.solon.ai.talents.web.WebfetchTalent;
 
 /**
  *
@@ -10,7 +10,7 @@ import org.noear.solon.ai.talents.web.WebfetchTool;
  *
  */
 public class WebfetchToolTimeoutTest {
-    WebfetchTool tool = new WebfetchTool().retryConfig(1);
+    WebfetchTalent tool = new WebfetchTalent().retryConfig(1);
 
     @Test
     public void http_timeout() throws Exception {

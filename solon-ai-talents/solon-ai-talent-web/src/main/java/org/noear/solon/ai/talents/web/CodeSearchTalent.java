@@ -17,7 +17,7 @@ package org.noear.solon.ai.talents.web;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.ai.chat.tool.AbsToolProvider;
+import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
@@ -35,7 +35,7 @@ import java.util.Map;
  * @author noear
  * @since 3.9.6
  */
-public class CodeSearchTool extends AbsToolProvider {
+public class CodeSearchTalent extends AbsTalent {
     private static final String BASE_URL = "https://mcp.exa.ai/mcp?tools=get_code_context_exa";
     private static final int TIMEOUT_MS = 30_000;
     private static final int DEFAULT_TOKENS = 5000;
@@ -57,25 +57,19 @@ public class CodeSearchTool extends AbsToolProvider {
 
     //---------
 
-    private static CodeSearchTool instance = new CodeSearchTool();
-
-    public static CodeSearchTool getInstance() {
-        return instance;
-    }
-
     private int maxRetries = 3;
 
-    public CodeSearchTool() {
+    public CodeSearchTalent() {
         super();
         getMcpClient();
     }
 
-    public CodeSearchTool retryConfig(int maxRetries, long retryDelayMs) {
+    public CodeSearchTalent retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         return this;
     }
 
-    public CodeSearchTool retryConfig(int maxRetries) {
+    public CodeSearchTalent retryConfig(int maxRetries) {
         this.maxRetries = Math.max(1, maxRetries);
         return this;
     }
@@ -91,11 +85,11 @@ public class CodeSearchTool extends AbsToolProvider {
                     "- 默认 5000 Token 为大多数查询提供均衡的上下文\n" +
                     "- 支持关于框架、库、API 以及编程概念的查询\n" +
                     "- 示例：'React 状态管理'、'Spring Boot 响应式编程'、'Solon 插件开发'")
-    public Object handle(@Param(name = "query", description = "搜索查询词，用于查找 API、库和 SDK 的相关上下文。 " +
+    public Map<String, Object> codesearch(@Param(name = "query", description = "搜索查询词，用于查找 API、库和 SDK 的相关上下文。 " +
                                  "例如：'React useState 钩子示例'、'Python pandas 数据框过滤'、" +
                                  "'Express.js 中间件'、'Next.js 局部预渲染配置'")
                          String query,
-                         @Param(name = "tokensNum", required = false, defaultValue = "5000", description = "返回的 Token 数量 (1000-50000)。默认为 5000。 " +
+                                          @Param(name = "tokensNum", required = false, defaultValue = "5000", description = "返回的 Token 数量 (1000-50000)。默认为 5000。 " +
                                  "根据需要的上下文量进行调整：针对特定问题使用较低值，针对全面文档使用较高值。")
                          Integer tokensNumObj) throws Throwable {
         Integer tokensNum = null;

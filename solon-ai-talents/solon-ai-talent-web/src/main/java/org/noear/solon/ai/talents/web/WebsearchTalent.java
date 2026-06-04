@@ -17,7 +17,7 @@ package org.noear.solon.ai.talents.web;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.ai.chat.tool.AbsToolProvider;
+import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
@@ -35,7 +35,7 @@ import java.util.Map;
  * @author noear
  * @since 3.9.6
  */
-public class WebsearchTool extends AbsToolProvider {
+public class WebsearchTalent extends AbsTalent {
     private static final String BASE_URL = "https://mcp.exa.ai/mcp";
     private static final int TIMEOUT_MS = 30_000;
 
@@ -60,27 +60,20 @@ public class WebsearchTool extends AbsToolProvider {
     }
 
     //---------
-
-    private static final WebsearchTool instance = new WebsearchTool();
-
-    public static WebsearchTool getInstance() {
-        return instance;
-    }
-
     private int maxRetries = 3;
 
-    public WebsearchTool() {
+    public WebsearchTalent() {
         super();
 
         getMcpClient();
     }
 
-    public WebsearchTool retryConfig(int maxRetries, long retryDelayMs) {
+    public WebsearchTalent retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         return this;
     }
 
-    public WebsearchTool retryConfig(int maxRetries) {
+    public WebsearchTalent retryConfig(int maxRetries) {
         this.maxRetries = Math.max(1, maxRetries);
         return this;
     }

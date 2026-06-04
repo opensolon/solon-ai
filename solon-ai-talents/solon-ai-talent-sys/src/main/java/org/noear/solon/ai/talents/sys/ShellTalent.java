@@ -89,11 +89,6 @@ public class ShellTalent extends AbsProcessTalent {
     }
 
     @Override
-    public String name() {
-        return "shell_executor";
-    }
-
-    @Override
     public String description() {
         return "Shell 专家：执行系统命令";
     }

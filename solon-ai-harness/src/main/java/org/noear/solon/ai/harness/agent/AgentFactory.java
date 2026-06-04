@@ -16,7 +16,6 @@
 package org.noear.solon.ai.harness.agent;
 
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.HarnessEngine;
@@ -184,15 +183,15 @@ public class AgentFactory {
                 break;
             }
             case "webfetch": {
-                builder.defaultToolAdd(engine.getWebfetchTool());
+                builder.defaultTalentAdd(engine.getWebfetchTalent());
                 break;
             }
             case "websearch": {
-                builder.defaultToolAdd(engine.getWebsearchTool());
+                builder.defaultTalentAdd(engine.getWebsearchTalent());
                 break;
             }
             case "codesearch": {
-                builder.defaultToolAdd(engine.getCodeSearchTool());
+                builder.defaultTalentAdd(engine.getCodeSearchTalent());
                 break;
             }
             case "skill": {

@@ -39,8 +39,6 @@ import org.noear.solon.lang.Preview;
 public class WeComTalent extends AbsWebhookTalent {
     public WeComTalent(String webhookUrl) { super(webhookUrl); }
 
-    @Override public String name() { return "wecom_sender"; }
-
     @Override
     public boolean isSupported(Prompt prompt) {
         String content = prompt.getUserContent().toLowerCase();

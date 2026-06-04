@@ -164,9 +164,6 @@ public class Text2SqlTalent extends AbsTalent {
     }
 
     @Override
-    public String name() { return "sql_expert"; }
-
-    @Override
     public String description() { return "数据库专家：具备深厚的 " + dialect.getName() + " 方言知识，擅长多表分析。"; }
 
     @Override

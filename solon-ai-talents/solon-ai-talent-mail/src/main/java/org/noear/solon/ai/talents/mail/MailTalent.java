@@ -51,16 +51,6 @@ public class MailTalent extends AbsTalent {
                 .buildMailer();
     }
 
-    @Override
-    public String name() { return "mail_tool"; }
-
-    @Override
-    public String description() {
-        return "邮件专家：发送带有格式的正式邮件，支持 HTML 正文及本地附件挂载。";
-    }
-
-    @Override
-    public boolean isSupported(Prompt prompt) { return true; }
 
     @ToolMapping(name = "send_email", description = "发送邮件。body 支持文本或 HTML。")
     public String sendEmail(@Param("to") String to,

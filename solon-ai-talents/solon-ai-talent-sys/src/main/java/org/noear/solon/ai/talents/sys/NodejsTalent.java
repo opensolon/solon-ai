@@ -46,21 +46,6 @@ public class NodejsTalent extends AbsProcessTalent {
         super(workDir);
     }
 
-    @Override
-    public String name() {
-        return "nodejs_executor";
-    }
-
-    @Override
-    public String description() {
-        return "Node.js 专家：执行 JS 代码，处理 JSON 或 Web 逻辑。";
-    }
-
-    @Override
-    public boolean isSupported(Prompt prompt) {
-       return true;
-    }
-
     @ToolMapping(name = "execute_js", description = "执行 Node.js 代码")
     public String execute(@Param("code") String code,
                           @Param(name = "timeout", required = false, defaultValue = "120000", description = "可选超时时间，单位为毫秒") Integer timeout) {

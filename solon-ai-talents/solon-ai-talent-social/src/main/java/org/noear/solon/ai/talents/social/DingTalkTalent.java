@@ -56,14 +56,6 @@ public class DingTalkTalent extends AbsWebhookTalent {
     }
 
     @Override
-    public String name() { return "dingtalk_tool"; }
-
-    @Override
-    public String description() {
-        return "钉钉助手：支持向指定群聊发送文本消息或 Markdown 格式的报告。";
-    }
-
-    @Override
     public boolean isSupported(Prompt prompt) {
         String content = prompt.getUserContent().toLowerCase();
         return content.contains("钉钉") || content.contains("ding");

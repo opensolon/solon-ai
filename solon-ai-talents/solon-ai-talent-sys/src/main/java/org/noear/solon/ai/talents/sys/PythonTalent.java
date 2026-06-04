@@ -71,22 +71,7 @@ public class PythonTalent extends AbsProcessTalent {
         }
     }
 
-    @Override
-    public String name() {
-        return "python_executor";
-    }
-
-    @Override
-    public String description() {
-        return "Python 专家：支持数学计算、数据分析。";
-    }
-
-    @Override
-    public boolean isSupported(Prompt prompt) {
-        return true;
-    }
-
-    @ToolMapping(name = "execute_python", description = "执行 Python 代码并获取输出")
+    @ToolMapping(name = "execute_python", description = "执行 Python 代码并获取输出。支持数学计算、数据分析等。")
     public String execute(@Param("code") String code,
                           @Param(name = "timeout", required = false, defaultValue = "120000",description = "可选超时时间，单位为毫秒") Integer timeout) {
         if (LOG.isTraceEnabled()) {

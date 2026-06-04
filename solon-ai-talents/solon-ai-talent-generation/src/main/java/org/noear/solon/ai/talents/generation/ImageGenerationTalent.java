@@ -47,14 +47,6 @@ public class ImageGenerationTalent extends AbsTalent {
     }
 
     @Override
-    public String name() { return "image_generator"; }
-
-    @Override
-    public String description() {
-        return "绘图专家：能够根据文字描述生成精美的图片。尺寸建议：头像 512x512，标准 1024x1024，海报 1024x1792。";
-    }
-
-    @Override
     public boolean isSupported(Prompt prompt) {
         String content = prompt.getUserContent().toLowerCase();
         // 意图识别：捕获绘画相关的动词和名词
@@ -69,7 +61,7 @@ public class ImageGenerationTalent extends AbsTalent {
      * @param size     尺寸（如 1024x1024）
      * @param fileName 建议的文件名（可选，如 design.png）
      */
-    @ToolMapping(name = "generate_image", description = "根据提示词生成图片并保存到本地。你可以指定图片尺寸，完成后请告知用户文件名。")
+    @ToolMapping(name = "generate_image", description = "根据提示词生成图片并保存到本地。你可以指定图片尺寸，完成后请告知用户文件名。尺寸建议：头像 512x512，标准 1024x1024，海报 1024x1792。")
     public String generate(@Param("prompt") String prompt,
                            @Param("size") String size,
                            @Param("fileName") String fileName) {

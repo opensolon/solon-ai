@@ -101,16 +101,6 @@ public class LuceneTalent extends AbsTalent {
         return Paths.get(path).toAbsolutePath().normalize();
     }
 
-    @Override
-    public String name() {
-        return "local_full_text_search_manager";
-    }
-
-    @Override
-    public String description() {
-        return "高性能本地全文检索工具。支持后缀: " + searchableExtensions;
-    }
-
 
     @ToolMapping(name = "full_text_search", description = "在工作区内中进行本地全文检索（支持代码、配置、文档等文本文件）。")
     public String full_text_search(@Param(value = "query", description = "搜索关键字或短语") String query,

@@ -18,7 +18,9 @@ package org.noear.solon.ai.talents.diff;
 import com.github.difflib.UnifiedDiffUtils;
 import com.github.difflib.patch.Patch;
 import com.github.difflib.patch.PatchFailedException;
-import org.noear.solon.ai.chat.tool.AbsTool;
+import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.annotation.Param;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,7 +31,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 基于 Unified Diff 的代码编辑工具 (Precise Code Editing)
@@ -38,19 +39,17 @@ import java.util.Map;
  * @author noear
  * @since 3.9.1
  */
-public class ApplyDiffTool extends AbsTool {
-    private static final Logger LOG = LoggerFactory.getLogger(ApplyDiffTool.class);
+public class ApplyDiffTalent extends AbsTalent {
+    private static final Logger LOG = LoggerFactory.getLogger(ApplyDiffTalent.class);
+
     private final String workDir;
 
-    public ApplyDiffTool() {
+    public ApplyDiffTalent() {
         this(null);
     }
 
-    public ApplyDiffTool(String workDir) {
+    public ApplyDiffTalent(String workDir) {
         this.workDir = workDir;
-
-        addParam("path", String.class, true, "相对于工作目录的文件路径");
-        addParam("diff", String.class, true, "Unified Diff 格式的补丁内容 (包含 @@ 块和上下文)");
     }
 
     protected Path getWorkPath(String __cwd) {
@@ -59,24 +58,16 @@ public class ApplyDiffTool extends AbsTool {
         return Paths.get(path).toAbsolutePath().normalize();
     }
 
-    @Override
-    public String name() {
-        return "apply_diff";
-    }
 
-    @Override
-    public String description() {
-        return "使用标准的 Unified Diff 补丁精准修改现有文件。当你需要对已有代码进行局部微调时，这是首选工具。\n" +
-                "它具有以下特性：\n" +
-                "1. 上下文感知：通过 @@ 块周围的行进行定位，即使行号微调也能成功。\n" +
-                "2. 冲突检测：如果文件已被他人修改导致上下文不匹配，会报错提醒。\n" +
-                "3. 节省 Token：无需发送整个文件，仅发送变化的部分。";
-    }
-    @Override
-    public Object handle(Map<String, Object> args) throws Throwable {
-        String path = (String) args.get("path");
-        String diff = (String) args.get("diff");
-        String __cwd = (String) args.get("__cwd"); //由 toolContext 传递
+    @ToolMapping(name = "apply_diff",
+            description = "使用标准的 Unified Diff 补丁精准修改现有文件。当你需要对已有代码进行局部微调时，这是首选工具。\n" +
+                    "它具有以下特性：\n" +
+                    "1. 上下文感知：通过 @@ 块周围的行进行定位，即使行号微调也能成功。\n" +
+                    "2. 冲突检测：如果文件已被他人修改导致上下文不匹配，会报错提醒。\n" +
+                    "3. 节省 Token：无需发送整个文件，仅发送变化的部分。")
+    public String apply_diff(@Param(name = "path", description = "相对于工作目录的文件路径") String path,
+                             @Param(name = "diff", description = "Unified Diff 格式的补丁内容 (包含 @@ 块和上下文)") String diff,
+                             String __cwd) throws Throwable {
 
         if (__cwd == null) {
             return "错误: 未找到工作目录上下文。";

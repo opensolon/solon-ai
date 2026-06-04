@@ -48,9 +48,9 @@ import org.noear.solon.ai.talents.openapi.ApiSource;
 import org.noear.solon.ai.talents.openapi.ApiSourceClient;
 import org.noear.solon.ai.talents.openapi.OpenApiTalent;
 import org.noear.solon.ai.talents.toolgateway.McpGatewayTalent;
-import org.noear.solon.ai.talents.web.CodeSearchTool;
-import org.noear.solon.ai.talents.web.WebfetchTool;
-import org.noear.solon.ai.talents.web.WebsearchTool;
+import org.noear.solon.ai.talents.web.CodeSearchTalent;
+import org.noear.solon.ai.talents.web.WebfetchTalent;
+import org.noear.solon.ai.talents.web.WebsearchTalent;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
@@ -77,9 +77,9 @@ public class HarnessEngine {
     private final TaskTalent taskTalent;
     private final GenerateTool generateTool;
 
-    private final WebfetchTool webfetchTool;
-    private final WebsearchTool websearchTool;
-    private final CodeSearchTool codeSearchTool;
+    private final WebfetchTalent webfetchTalent;
+    private final WebsearchTalent websearchTalent;
+    private final CodeSearchTalent codeSearchTalent;
 
     private final LspManager lspManager;
     private final LspTalent lspTalent;
@@ -146,20 +146,20 @@ public class HarnessEngine {
         return generateTool;
     }
 
-    public CodeSearchTool getCodeSearchTool() {
-        return codeSearchTool;
+    public CodeSearchTalent getCodeSearchTalent() {
+        return codeSearchTalent;
     }
 
     public LspTalent getLspTalent() {
         return lspTalent;
     }
 
-    public WebsearchTool getWebsearchTool() {
-        return websearchTool;
+    public WebsearchTalent getWebsearchTalent() {
+        return websearchTalent;
     }
 
-    public WebfetchTool getWebfetchTool() {
-        return webfetchTool;
+    public WebfetchTalent getWebfetchTalent() {
+        return webfetchTalent;
     }
 
     public McpGatewayTalent getMcpGatewayTalent() {
@@ -683,9 +683,9 @@ public class HarnessEngine {
         this.taskTalent = new TaskTalent(this);
         this.generateTool = new GenerateTool(this);
 
-        this.codeSearchTool = new CodeSearchTool().retryConfig(options.getMcpRetries());
-        this.websearchTool = new WebsearchTool().retryConfig(options.getMcpRetries());
-        this.webfetchTool = new WebfetchTool().retryConfig(options.getApiRetries());
+        this.codeSearchTalent = new CodeSearchTalent().retryConfig(options.getMcpRetries());
+        this.websearchTalent = new WebsearchTalent().retryConfig(options.getMcpRetries());
+        this.webfetchTalent = new WebfetchTalent().retryConfig(options.getApiRetries());
 
         //lsp
         this.lspManager = new LspManager(options.getWorkspace());

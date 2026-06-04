@@ -56,14 +56,6 @@ public class FeishuTalent extends AbsWebhookTalent {
     }
 
     @Override
-    public String name() { return "lark_tool"; }
-
-    @Override
-    public String description() {
-        return "飞书助手：支持向飞书群聊发送文本消息或交互式卡片报告。";
-    }
-
-    @Override
     public boolean isSupported(Prompt prompt) {
         String content = prompt.getUserContent().toLowerCase();
         return content.contains("飞书") || content.contains("lark") || content.contains("feishu");
