@@ -22,13 +22,19 @@ package org.noear.solon.ai.talents.lsp.exception;
  * @since 3.10.0
  */
 public class LspStartException extends RuntimeException {
+    private final String serverName;
     private final String commandName;
     private final String[] fullCommand;
 
-    public LspStartException(String[] command, Throwable cause) {
-        super("LSP server '" + command[0] + "' failed to start: " + cause.getMessage(), cause);
+    public LspStartException(String serverName, String[] command, Throwable cause) {
+        super("LSP server '" + serverName + "' failed to start: " + cause.getMessage(), cause);
+        this.serverName = serverName;
         this.commandName = command[0];
         this.fullCommand = command;
+    }
+
+    public String getServerName() {
+        return serverName;
     }
 
     public String getCommandName() {

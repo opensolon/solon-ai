@@ -67,11 +67,11 @@ public class LspClientImpl implements LspClient {
      */
     private BiConsumer<String, String> diagnosticsConsumer;
 
-    public LspClientImpl(String[] command, String rootDir) throws Exception {
-        this(command, rootDir, null, null);
+    public LspClientImpl(String serverName, String[] command, String rootDir) throws Exception {
+        this(serverName, command, rootDir, null, null);
     }
 
-    public LspClientImpl(String[] command, String rootDir,
+    public LspClientImpl(String serverName, String[] command, String rootDir,
                          Map<String, Object> initializationOptions,
                          Map<String, String> env) throws Exception {
         this.rootDir = rootDir;
@@ -89,18 +89,19 @@ public class LspClientImpl implements LspClient {
             this.process = builder.start();
         } catch (java.io.IOException e) {
             // 进程完全启动不了 -> 命令不存在
-            throw new LspCommandNotFoundException(command, e);
+            throw new LspCommandNotFoundException(serverName, command, e);
         }
 
         // 启动后立即检查：如果进程瞬间退出，说明命令存在但环境有问题
         try {
             Thread.sleep(100); // 短暂等待，让可能的启动错误暴露出来
-        } catch (InterruptedException ignored) {}
+        } catch (InterruptedException ignored) {
+        }
 
         if (!process.isAlive()) {
             int exitCode = process.exitValue();
             String stderr = readStderr();
-            throw new LspEnvironmentException(command,
+            throw new LspEnvironmentException(serverName, command,
                     "Process exited immediately with code " + exitCode
                             + (stderr.isEmpty() ? "" : ". Error output: " + truncate(stderr, 500)),
                     null
@@ -138,20 +139,20 @@ public class LspClientImpl implements LspClient {
                 // 进程在握手期间死亡 -> 环境不满足（如 Java 版本过低）
                 int exitCode = process.exitValue();
                 String stderr = readStderr();
-                throw new LspEnvironmentException(command,
+                throw new LspEnvironmentException(serverName, command,
                         "Process died during initialization (exit code " + exitCode + ")"
                                 + (stderr.isEmpty() ? "" : ". Error output: " + truncate(stderr, 500)),
                         e
                 );
             }
             // 进程还活着但超时 -> 初始化超时（可能是项目太大或服务器响应慢）
-            throw new LspStartException(command,
+            throw new LspStartException(serverName, command,
                     new RuntimeException("LSP initialize timed out after " + initTimeout + "s"));
         } catch (Exception e) {
             // 握手期间的其他异常（如 JSON-RPC 解析错误）
             if (!process.isAlive()) {
                 String stderr = readStderr();
-                throw new LspEnvironmentException(command,
+                throw new LspEnvironmentException(serverName, command,
                         "Initialization failed, process exited"
                                 + (stderr.isEmpty() ? "" : ". Error output: " + truncate(stderr, 500)),
                         e
@@ -213,7 +214,7 @@ public class LspClientImpl implements LspClient {
 
     @Override
     public CompletableFuture<Either<List<? extends SymbolInformation>, List<? extends WorkspaceSymbol>>> workspaceSymbol(WorkspaceSymbolParams params) {
-       return remoteServer.getWorkspaceService().symbol(params);
+        return remoteServer.getWorkspaceService().symbol(params);
     }
 
     @Override
@@ -251,7 +252,8 @@ public class LspClientImpl implements LspClient {
     // --- LanguageClient 接口实现 ---
 
     @Override
-    public void telemetryEvent(Object object) {}
+    public void telemetryEvent(Object object) {
+    }
 
     @Override
     public void publishDiagnostics(PublishDiagnosticsParams diagnostics) {
@@ -281,7 +283,8 @@ public class LspClientImpl implements LspClient {
     }
 
     @Override
-    public void showMessage(MessageParams messageParams) {}
+    public void showMessage(MessageParams messageParams) {
+    }
 
     @Override
     public CompletableFuture<MessageActionItem> showMessageRequest(ShowMessageRequestParams params) {
@@ -345,7 +348,8 @@ public class LspClientImpl implements LspClient {
         if (lower.endsWith(".go")) return "go";
         if (lower.endsWith(".rs")) return "rust";
         if (lower.endsWith(".c") || lower.endsWith(".h")) return "c";
-        if (lower.endsWith(".cpp") || lower.endsWith(".cc") || lower.endsWith(".cxx") || lower.endsWith(".c++") || lower.endsWith(".hpp") || lower.endsWith(".h++") || lower.endsWith(".hh") || lower.endsWith(".hxx")) return "cpp";
+        if (lower.endsWith(".cpp") || lower.endsWith(".cc") || lower.endsWith(".cxx") || lower.endsWith(".c++") || lower.endsWith(".hpp") || lower.endsWith(".h++") || lower.endsWith(".hh") || lower.endsWith(".hxx"))
+            return "cpp";
         if (lower.endsWith(".cs") || lower.endsWith(".csx")) return "csharp";
         if (lower.endsWith(".rb") || lower.endsWith(".rake") || lower.endsWith(".gemspec")) return "ruby";
         if (lower.endsWith(".php")) return "php";
@@ -360,32 +364,24 @@ public class LspClientImpl implements LspClient {
         if (lower.endsWith(".yaml") || lower.endsWith(".yml")) return "yaml";
         if (lower.endsWith(".md")) return "markdown";
         if (lower.endsWith(".sql")) return "sql";
-        if (lower.endsWith(".sh") || lower.endsWith(".bash") || lower.endsWith(".zsh") || lower.endsWith(".ksh")) return "shellscript";
+        if (lower.endsWith(".sh") || lower.endsWith(".bash") || lower.endsWith(".zsh") || lower.endsWith(".ksh"))
+            return "shellscript";
         return "plaintext";
     }
 
     private static String severityToString(DiagnosticSeverity severity) {
         switch (severity) {
-            case Error: return "ERROR";
-            case Warning: return "WARN";
-            case Information: return "INFO";
-            case Hint: return "HINT";
-            default: return "?";
+            case Error:
+                return "ERROR";
+            case Warning:
+                return "WARN";
+            case Information:
+                return "INFO";
+            case Hint:
+                return "HINT";
+            default:
+                return "?";
         }
-    }
-
-    /**
-     * 从命令数组提取命令名（第一个元素）
-     */
-    private static String getCommandName(String[] command) {
-        return (command != null && command.length > 0) ? command[0] : "unknown";
-    }
-
-    /**
-     * 命令数组转 List
-     */
-    private static List<String> toList(String[] command) {
-        return Arrays.asList(command);
     }
 
     /**
@@ -402,7 +398,8 @@ public class LspClientImpl implements LspClient {
                     return new String(bytes, 0, read, java.nio.charset.StandardCharsets.UTF_8).trim();
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         return "";
     }
 

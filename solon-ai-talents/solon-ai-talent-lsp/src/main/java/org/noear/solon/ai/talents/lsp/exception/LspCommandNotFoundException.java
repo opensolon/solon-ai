@@ -25,13 +25,19 @@ package org.noear.solon.ai.talents.lsp.exception;
  * @since 3.10.0
  */
 public class LspCommandNotFoundException extends RuntimeException {
+    private final String serverName;
     private final String commandName;
     private final String[] fullCommand;
 
-    public LspCommandNotFoundException(String[] command, Throwable cause) {
-        super("LSP server '" +  command[0] + "' command not found. Please install it before using LSP features for this language.", cause);
+    public LspCommandNotFoundException(String serverName, String[] command, Throwable cause) {
+        super("LSP server '" + serverName + "' command not found: " + command[0] + ". Please install it before using LSP features for this language.", cause);
+        this.serverName = serverName;
         this.commandName = command[0];
         this.fullCommand = command;
+    }
+
+    public String getServerName() {
+        return serverName;
     }
 
     public String getCommandName() {

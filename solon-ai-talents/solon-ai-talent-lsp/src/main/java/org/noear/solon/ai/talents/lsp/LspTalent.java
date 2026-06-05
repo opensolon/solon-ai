@@ -78,7 +78,7 @@ public class LspTalent extends AbsTalent {
                     "支持操作：goToDefinition, findReferences, hover, documentSymbol, workspaceSymbol, " +
                     "goToImplementation, prepareCallHierarchy, incomingCalls, outgoingCalls, diagnostics"
     )
-    public Object lsp(
+    public Document lsp(
             @Param(name = "operation") String operation,
             @Param(name = "filePath") String filePath,
             @Param(name = "line") int line,
@@ -129,7 +129,7 @@ public class LspTalent extends AbsTalent {
             // LSP 服务器命令未安装
             return new Document()
                     .title(String.format("%s %s", operation, filePath))
-                    .content("LSP server '" + e.getCommandName() + "' is not installed. " +
+                    .content("LSP server '" + e.getServerName() + "' is not installed. " +
                             "The command '" + e.getCommandName() + "' was not found in PATH. " +
                             "Please install it first. " +
                             "Common install commands: " +
@@ -145,7 +145,7 @@ public class LspTalent extends AbsTalent {
             // 运行环境不满足（如 Java 版本过低、缺少运行时依赖）
             return new Document()
                     .title(String.format("%s %s", operation, filePath))
-                    .content("LSP server '" + e.getCommandName() + "' environment requirement not met. " +
+                    .content("LSP server '" + e.getServerName() + "' environment requirement not met. " +
                             "Detail: " + e.getDetail() + ". " +
                             "Command: " + String.join(" ", e.getFullCommand()) + ". " +
                             "This usually means the runtime version is too old or a dependency is missing. " +
@@ -159,7 +159,7 @@ public class LspTalent extends AbsTalent {
             // LSP 服务器启动失败（初始化超时等通用场景）
             return new Document()
                     .title(String.format("%s %s", operation, filePath))
-                    .content("LSP server '" + e.getCommandName() + "' failed to start. " +
+                    .content("LSP server '" + e.getServerName() + "' failed to start. " +
                             "Command: " + String.join(" ", e.getFullCommand()) + ". " +
                             "Reason: " + e.getCause().getMessage() + ". " +
                             "Please check if the LSP server binary is installed and accessible in PATH.")

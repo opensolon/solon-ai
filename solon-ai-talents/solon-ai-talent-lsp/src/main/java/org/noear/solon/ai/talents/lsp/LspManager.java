@@ -182,6 +182,7 @@ public class LspManager {
 
             LOG.info("Starting LSP server '{}': {}", name, params.getCommand());
             LspClientImpl client = new LspClientImpl(
+                    name,
                     params.getCommandArray(),
                     workspace,
                     params.getInitialization(),
@@ -203,7 +204,7 @@ public class LspManager {
             throw e; // 透传具体异常类型
         } catch (Exception e) {
             LOG.error("Failed to start LSP server '{}': {}", name, e.getMessage(), e);
-            throw new LspStartException(name, params.getCommand(), e);
+            throw new LspStartException(name, params.getCommandArray(), e);
         } finally {
             clientLock.unlock();
         }

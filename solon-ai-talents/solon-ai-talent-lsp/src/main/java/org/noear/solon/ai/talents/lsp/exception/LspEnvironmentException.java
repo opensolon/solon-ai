@@ -29,20 +29,22 @@ package org.noear.solon.ai.talents.lsp.exception;
  * @since 3.10.0
  */
 public class LspEnvironmentException extends RuntimeException {
-    private final String detail;
+    private final String serverName;
     private final String commandName;
     private final String[] fullCommand;
+    private final String detail;
 
-    public LspEnvironmentException(String[] command, String detail, Throwable cause) {
-        super("LSP server '" + command[0] + "' environment requirement not met: " + detail
+    public LspEnvironmentException(String serverName, String[] command, String detail, Throwable cause) {
+        super("LSP server '" + serverName + "' environment requirement not met: " + detail
                 + ". Command: " + String.join(" ", command), cause);
-        this.detail = detail;
+        this.serverName = serverName;
         this.commandName = command[0];
         this.fullCommand = command;
+        this.detail = detail;
     }
 
-    public String getDetail() {
-        return detail;
+    public String getServerName() {
+        return serverName;
     }
 
     public String getCommandName() {
@@ -51,5 +53,8 @@ public class LspEnvironmentException extends RuntimeException {
 
     public String[] getFullCommand() {
         return fullCommand;
+    }
+    public String getDetail() {
+        return detail;
     }
 }
