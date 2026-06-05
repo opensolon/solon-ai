@@ -53,6 +53,27 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
         this.requestBuilder = new OpenaiResponsesRequestBuilder();
     }
 
+    @Override
+    protected String getApiUrl(ChatConfig config) {
+
+        //处理后缀#
+        int index = config.getApiUrl().indexOf('#');
+        if (index > 0) {
+            return config.getApiUrl().substring(0, index);
+        }
+
+        //自动补全地址
+        if (config.getApiUrl().endsWith("/v1/responses")) {
+            return config.getApiUrl();
+        } else {
+            if (config.getApiUrl().endsWith("/")) {
+                return config.getApiUrl() + "v1/responses";
+            } else {
+                return config.getApiUrl() + "/v1/responses";
+            }
+        }
+    }
+
     /**
      * 匹配检测
      *
