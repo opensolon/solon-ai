@@ -21,6 +21,10 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.rag.Document;
+import org.noear.solon.ai.talents.lsp.exception.LspCommandNotFoundException;
+import org.noear.solon.ai.talents.lsp.exception.LspEnvironmentException;
+import org.noear.solon.ai.talents.lsp.exception.LspNoMatchException;
+import org.noear.solon.ai.talents.lsp.exception.LspStartException;
 import org.noear.solon.annotation.Param;
 
 import java.io.File;
@@ -108,16 +112,66 @@ public class LspTalent extends AbsTalent {
         }
 
         // 3. 路由到对应的 LSP 服务器
-        LspClient client = lspManager.getClientForFile(filePath);
-        if (client == null) {
+        LspClient client;
+        try {
+            client = lspManager.getClientForFile(filePath);
+        } catch (LspNoMatchException e) {
+            // 文件扩展名没有匹配的 LSP 服务器
             return new Document()
                     .title(String.format("%s %s", operation, filePath))
-                    .content("No LSP server configured for file: " + filePath +
-                            ". Supported extensions: " + lspManager.getServerConfigs().values()
-                            .stream()
-                            .flatMap(p -> p.getExtensions().stream())
-                            .reduce((a, b) -> a + ", " + b)
-                            .orElse("none"))
+                    .content("The file type is not supported by any LSP server. " +
+                            "File: " + filePath + ". " +
+                            "Supported types: [" + e.getSupportedExtensions() + "]. " +
+                            "You can use other tools (read, grep) to inspect this file.")
+                    .metadata("operation", operation)
+                    .metadata("uri", uri);
+        } catch (LspCommandNotFoundException e) {
+            // LSP 服务器命令未安装
+            return new Document()
+                    .title(String.format("%s %s", operation, filePath))
+                    .content("LSP server '" + e.getCommandName() + "' is not installed. " +
+                            "The command '" + e.getCommandName() + "' was not found in PATH. " +
+                            "Please install it first. " +
+                            "Common install commands: " +
+                            "pip install python-lsp-server (Python), " +
+                            "npm install -g typescript-language-server typescript (TypeScript), " +
+                            "go install golang.org/x/tools/gopls@latest (Go), " +
+                            "rustup component add rust-analyzer (Rust), " +
+                            "brew install llvm (C/C++ clangd). " +
+                            "You can use other tools (read, grep) to inspect this file.")
+                    .metadata("operation", operation)
+                    .metadata("uri", uri);
+        } catch (LspEnvironmentException e) {
+            // 运行环境不满足（如 Java 版本过低、缺少运行时依赖）
+            return new Document()
+                    .title(String.format("%s %s", operation, filePath))
+                    .content("LSP server '" + e.getCommandName() + "' environment requirement not met. " +
+                            "Detail: " + e.getDetail() + ". " +
+                            "Command: " + String.join(" ", e.getFullCommand()) + ". " +
+                            "This usually means the runtime version is too old or a dependency is missing. " +
+                            "For jdtls: requires Java 21+. " +
+                            "For rust-analyzer: requires Rust toolchain. " +
+                            "For sourcekit-lsp: requires Xcode/Swift toolchain. " +
+                            "You can use other tools (read, grep) to inspect this file.")
+                    .metadata("operation", operation)
+                    .metadata("uri", uri);
+        } catch (LspStartException e) {
+            // LSP 服务器启动失败（初始化超时等通用场景）
+            return new Document()
+                    .title(String.format("%s %s", operation, filePath))
+                    .content("LSP server '" + e.getCommandName() + "' failed to start. " +
+                            "Command: " + String.join(" ", e.getFullCommand()) + ". " +
+                            "Reason: " + e.getCause().getMessage() + ". " +
+                            "Please check if the LSP server binary is installed and accessible in PATH.")
+                    .metadata("operation", operation)
+                    .metadata("uri", uri);
+        }
+
+        if (client == null) {
+            // 兜底（理论上不会走到这里，但保留防御性检查）
+            return new Document()
+                    .title(String.format("%s %s", operation, filePath))
+                    .content("Unexpected error: LSP client is null for file: " + filePath)
                     .metadata("operation", operation)
                     .metadata("uri", uri);
         }

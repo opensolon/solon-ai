@@ -19,6 +19,9 @@ import org.eclipse.lsp4j.*;
 import org.eclipse.lsp4j.jsonrpc.Launcher;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageServer;
+import org.noear.solon.ai.talents.lsp.exception.LspCommandNotFoundException;
+import org.noear.solon.ai.talents.lsp.exception.LspEnvironmentException;
+import org.noear.solon.ai.talents.lsp.exception.LspStartException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +31,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -80,7 +84,28 @@ public class LspClientImpl implements LspClient {
         if (env != null && !env.isEmpty()) {
             builder.environment().putAll(env);
         }
-        this.process = builder.start();
+
+        try {
+            this.process = builder.start();
+        } catch (java.io.IOException e) {
+            // 进程完全启动不了 -> 命令不存在
+            throw new LspCommandNotFoundException(command, e);
+        }
+
+        // 启动后立即检查：如果进程瞬间退出，说明命令存在但环境有问题
+        try {
+            Thread.sleep(100); // 短暂等待，让可能的启动错误暴露出来
+        } catch (InterruptedException ignored) {}
+
+        if (!process.isAlive()) {
+            int exitCode = process.exitValue();
+            String stderr = readStderr();
+            throw new LspEnvironmentException(command,
+                    "Process exited immediately with code " + exitCode
+                            + (stderr.isEmpty() ? "" : ". Error output: " + truncate(stderr, 500)),
+                    null
+            );
+        }
 
         InputStream in = process.getInputStream();
         OutputStream out = process.getOutputStream();
@@ -108,14 +133,31 @@ public class LspClientImpl implements LspClient {
         try {
             remoteServer.initialize(initParams).get(initTimeout, TimeUnit.SECONDS);
         } catch (java.util.concurrent.TimeoutException e) {
-            // 超时时检查进程是否已经死亡，给出更精确的错误信息
-            String processInfo = "";
+            // 超时时检查进程是否已经死亡
             if (!process.isAlive()) {
-                processInfo = " (process exited with code: " + process.exitValue() + ")";
+                // 进程在握手期间死亡 -> 环境不满足（如 Java 版本过低）
+                int exitCode = process.exitValue();
+                String stderr = readStderr();
+                throw new LspEnvironmentException(command,
+                        "Process died during initialization (exit code " + exitCode + ")"
+                                + (stderr.isEmpty() ? "" : ". Error output: " + truncate(stderr, 500)),
+                        e
+                );
             }
-            throw new RuntimeException("LSP initialize timed out after " + initTimeout + "s for command: "
-                    + String.join(" ", command) + processInfo
-                    + ". Check if the LSP server binary exists and its runtime requirements are met.", e);
+            // 进程还活着但超时 -> 初始化超时（可能是项目太大或服务器响应慢）
+            throw new LspStartException(command,
+                    new RuntimeException("LSP initialize timed out after " + initTimeout + "s"));
+        } catch (Exception e) {
+            // 握手期间的其他异常（如 JSON-RPC 解析错误）
+            if (!process.isAlive()) {
+                String stderr = readStderr();
+                throw new LspEnvironmentException(command,
+                        "Initialization failed, process exited"
+                                + (stderr.isEmpty() ? "" : ". Error output: " + truncate(stderr, 500)),
+                        e
+                );
+            }
+            throw e;
         }
         remoteServer.initialized(new InitializedParams());
     }
@@ -330,5 +372,46 @@ public class LspClientImpl implements LspClient {
             case Hint: return "HINT";
             default: return "?";
         }
+    }
+
+    /**
+     * 从命令数组提取命令名（第一个元素）
+     */
+    private static String getCommandName(String[] command) {
+        return (command != null && command.length > 0) ? command[0] : "unknown";
+    }
+
+    /**
+     * 命令数组转 List
+     */
+    private static List<String> toList(String[] command) {
+        return Arrays.asList(command);
+    }
+
+    /**
+     * 读取进程的 stderr 输出（用于错误诊断）
+     */
+    private String readStderr() {
+        if (process == null) return "";
+        try {
+            InputStream errStream = process.getErrorStream();
+            if (errStream.available() > 0) {
+                byte[] bytes = new byte[Math.min(errStream.available(), 4096)];
+                int read = errStream.read(bytes);
+                if (read > 0) {
+                    return new String(bytes, 0, read, java.nio.charset.StandardCharsets.UTF_8).trim();
+                }
+            }
+        } catch (Exception ignored) {}
+        return "";
+    }
+
+    /**
+     * 截断字符串，避免异常信息过长
+     */
+    private static String truncate(String s, int maxLen) {
+        if (s == null) return "";
+        if (s.length() <= maxLen) return s;
+        return s.substring(0, maxLen) + "...";
     }
 }

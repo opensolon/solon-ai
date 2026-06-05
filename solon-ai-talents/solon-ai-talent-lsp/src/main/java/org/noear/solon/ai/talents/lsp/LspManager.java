@@ -15,6 +15,10 @@
  */
 package org.noear.solon.ai.talents.lsp;
 
+import org.noear.solon.ai.talents.lsp.exception.LspCommandNotFoundException;
+import org.noear.solon.ai.talents.lsp.exception.LspEnvironmentException;
+import org.noear.solon.ai.talents.lsp.exception.LspNoMatchException;
+import org.noear.solon.ai.talents.lsp.exception.LspStartException;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -109,15 +113,19 @@ public class LspManager {
      * 根据文件路径获取对应的 LSP 客户端（延迟启动）
      *
      * @param filePath 文件相对路径或绝对路径
-     * @return 匹配的 LspClientImpl，如果无匹配则返回 null
+     * @return 匹配的 LspClient
+     * @throws LspNoMatchException 文件扩展名没有匹配的 LSP 服务器配置
+     * @throws LspCommandNotFoundException 命令不存在或不可执行
+     * @throws LspEnvironmentException 运行环境不满足（如 Java 版本过低）
+     * @throws LspStartException  匹配到服务器但启动失败（初始化超时等其他原因）
      */
-    public LspClient getClientForFile(String filePath) {
+    public LspClient getClientForFile(String filePath) throws LspNoMatchException, LspCommandNotFoundException, LspEnvironmentException, LspStartException {
         for (Map.Entry<String, LspServerParameters> entry : serverConfigs.entrySet()) {
             if (entry.getValue().matchesExtension(filePath)) {
                 return getOrCreateClient(entry.getKey(), entry.getValue());
             }
         }
-        return null;
+        throw new LspNoMatchException(filePath, getSupportedExtensionsSummary());
     }
 
     /**
@@ -145,7 +153,20 @@ public class LspManager {
         return !serverConfigs.isEmpty();
     }
 
-    private LspClient getOrCreateClient(String name, LspServerParameters params) {
+    /**
+     * 获取已注册服务器支持的扩展名摘要（用于异常提示）
+     */
+    private String getSupportedExtensionsSummary() {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, LspServerParameters> entry : serverConfigs.entrySet()) {
+            if (sb.length() > 0) sb.append("; ");
+            sb.append(entry.getKey()).append(": ");
+            sb.append(String.join(", ", entry.getValue().getExtensions()));
+        }
+        return sb.toString();
+    }
+
+    private LspClient getOrCreateClient(String name, LspServerParameters params) throws LspStartException {
         LspClient existing = activeClients.get(name);
         if (existing != null) {
             return existing;
@@ -177,9 +198,12 @@ public class LspManager {
             activeClients.put(name, client);
             LOG.info("LSP server '{}' started successfully", name);
             return client;
+        } catch (LspCommandNotFoundException | LspEnvironmentException | LspStartException e) {
+            LOG.error("Failed to start LSP server '{}': {}", name, e.getMessage(), e);
+            throw e; // 透传具体异常类型
         } catch (Exception e) {
             LOG.error("Failed to start LSP server '{}': {}", name, e.getMessage(), e);
-            return null;
+            throw new LspStartException(name, params.getCommand(), e);
         } finally {
             clientLock.unlock();
         }
