@@ -56,7 +56,7 @@ public class LspClientImplTest {
         tempDir = Files.createTempDirectory("lsp-client-impl-test");
 
         // 使用 "true" 命令（Unix 下立即退出），进程启动后马上结束
-        client = new LspClientImpl(new String[]{"true"}, tempDir.toString());
+        client = new LspClientImpl("test", new String[]{"true"}, tempDir.toString());
 
         // 通过反射注入 MockLanguageServer，覆盖真实连接
         mockServer = new MockLanguageServer();
