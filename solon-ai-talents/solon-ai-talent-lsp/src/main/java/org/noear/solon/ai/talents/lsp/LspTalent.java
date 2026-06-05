@@ -67,13 +67,14 @@ public class LspTalent extends AbsTalent {
         return lspManager.hasServers();
     }
 
+    //可以返回 Document（结果结构数据） 或 String（给 llm 的提示）
     @ToolMapping(
             name = "lsp",
             description = "执行 LSP 操作（跳转定义、找引用、悬停提示、文档符号等）。" +
                     "支持操作：goToDefinition, findReferences, hover, documentSymbol, workspaceSymbol, " +
                     "goToImplementation, prepareCallHierarchy, incomingCalls, outgoingCalls, diagnostics"
     )
-    public Document lsp(
+    public Object lsp(
             @Param(name = "operation") String operation,
             @Param(name = "filePath") String filePath,
             @Param(name = "line") int line,
