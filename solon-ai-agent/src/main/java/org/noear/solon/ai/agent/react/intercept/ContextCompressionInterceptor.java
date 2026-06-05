@@ -240,6 +240,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         int rawTargetByTokens = targetByTokens;  // 保存原始Token截断位置，供步骤6.1使用
         int targetIdx = Math.max(targetByCount, Math.min(targetByTokens, minReservedIdx));
+        targetIdx = alignStartToToolCallGroup(messages, targetIdx, lastFirstIdx + 1);
 
         // 5. ⭐ 原子对对齐（防止 tool-use 原子对被截断为两段）
         //    若 targetIdx 落在 ToolMessage 或 Observation 上，向前回退至配套的 Assistant(with tool_calls)
@@ -282,15 +283,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             if (rawTargetByTokens > minReservedIdx) {
                 // 保护起效但预算超了 → 标记后续对保护段做摘要压缩，不调整 targetIdx
                 protectedSummaryApplied = true;
+                rawTargetByTokens = alignStartToToolCallGroup(messages, rawTargetByTokens, targetIdx);
             } else {
-                // 保护没起效 → 回退到预算截断点
-                targetIdx = Math.max(lastFirstIdx + 1, targetByTokens);
-                // 跳过头部 ToolMessage（避免孤立 ToolMessage 传入 LLM）
-                while (targetIdx < messages.size() - 1
-                        && (messages.get(targetIdx) instanceof ToolMessage
-                        || isObservation(messages.get(targetIdx)))) {
-                    targetIdx++;
-                }
+                // 保护没起效 → 回退到预算截断点，并按 tool-use 原子组向前补齐
+                targetIdx = alignStartToToolCallGroup(messages, Math.max(lastFirstIdx + 1, targetByTokens), lastFirstIdx + 1);
             }
         }
 
@@ -397,6 +393,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         }
 
         // 8. 更新工作区
+        compressed = removeDanglingToolOutputs(compressed);
         if (compressed.size() < messages.size()) {
             trace.getWorkingMemory().replaceMessages(compressed);
 
@@ -405,6 +402,123 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                         trace.getAgentName(), messages.size(), compressed.size(), firstList.size());
             }
         }
+    }
+
+    private int alignStartToToolCallGroup(List<ChatMessage> messages, int startIdx, int minIdx) {
+        if (startIdx <= minIdx || startIdx >= messages.size()) {
+            return startIdx;
+        }
+
+        ChatMessage msg = messages.get(startIdx);
+        if (msg instanceof ToolMessage) {
+            String toolCallId = ((ToolMessage) msg).getToolCallId();
+            for (int i = startIdx - 1; i >= minIdx; i--) {
+                ChatMessage prev = messages.get(i);
+                if (prev instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) prev).getToolCalls())) {
+                    if (toolCallId == null || hasToolCallId((AssistantMessage) prev, toolCallId)) {
+                        return i;
+                    }
+                }
+
+                if (!(prev instanceof ToolMessage) && !isObservation(prev)) {
+                    break;
+                }
+            }
+        } else if (isObservation(msg)) {
+            for (int i = startIdx - 1; i >= minIdx; i--) {
+                ChatMessage prev = messages.get(i);
+                if (prev instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) prev).getToolCalls())) {
+                    return i;
+                }
+
+                if (!(prev instanceof ToolMessage) && !isObservation(prev)) {
+                    break;
+                }
+            }
+        }
+
+        return startIdx;
+    }
+
+    private List<ChatMessage> removeDanglingToolOutputs(List<ChatMessage> messages) {
+        List<ChatMessage> result = new ArrayList<>(messages.size());
+
+        for (int i = 0; i < messages.size(); i++) {
+            ChatMessage msg = messages.get(i);
+
+            if (msg instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls())) {
+                AssistantMessage assistant = (AssistantMessage) msg;
+                List<ChatMessage> toolOutputs = new ArrayList<>();
+                List<String> requiredCallIds = new ArrayList<>();
+
+                for (ToolCall tc : assistant.getToolCalls()) {
+                    if (tc.getId() != null) {
+                        requiredCallIds.add(tc.getId());
+                    }
+                }
+
+                int j = i + 1;
+                for (; j < messages.size(); j++) {
+                    ChatMessage next = messages.get(j);
+                    if (next instanceof ToolMessage || isObservation(next)) {
+                        toolOutputs.add(next);
+                    } else {
+                        break;
+                    }
+                }
+
+                boolean completed = false;
+                if (Assert.isNotEmpty(requiredCallIds)) {
+                    List<String> remainingCallIds = new ArrayList<>(requiredCallIds);
+                    for (ChatMessage toolOutput : toolOutputs) {
+                        if (toolOutput instanceof ToolMessage) {
+                            String toolCallId = ((ToolMessage) toolOutput).getToolCallId();
+                            if (toolCallId != null) {
+                                remainingCallIds.remove(toolCallId);
+                            }
+                        }
+                    }
+                    completed = remainingCallIds.isEmpty();
+                } else {
+                    completed = Assert.isNotEmpty(toolOutputs);
+                }
+
+                if (completed) {
+                    result.add(msg);
+                    for (ChatMessage toolOutput : toolOutputs) {
+                        if (toolOutput instanceof ToolMessage) {
+                            String toolCallId = ((ToolMessage) toolOutput).getToolCallId();
+                            if (toolCallId == null || requiredCallIds.isEmpty() || requiredCallIds.contains(toolCallId)) {
+                                result.add(toolOutput);
+                            }
+                        } else {
+                            result.add(toolOutput);
+                        }
+                    }
+                }
+
+                i = j - 1;
+                continue;
+            }
+
+            if (msg instanceof ToolMessage || isObservation(msg)) {
+                continue;
+            }
+
+            result.add(msg);
+        }
+
+        return result;
+    }
+
+    private boolean hasToolCallId(AssistantMessage assistantMessage, String toolCallId) {
+        for (ToolCall tc : assistantMessage.getToolCalls()) {
+            if (toolCallId.equals(tc.getId())) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private int estimateTokens(List<ChatMessage> messages, String systemPrompt) {

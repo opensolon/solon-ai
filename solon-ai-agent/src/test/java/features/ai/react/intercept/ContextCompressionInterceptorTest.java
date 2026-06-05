@@ -124,8 +124,159 @@ public class ContextCompressionInterceptorTest {
     }
 
     /**
-     * 验证 VectorStore 策略过滤逻辑
+     * 验证压缩后不会留下孤立的 ToolMessage。
      */
+    @Test
+    public void testRemoveDanglingToolMessageAfterCompression() {
+        ChatMessage goal = ChatMessage.ofUser("Goal");
+        goal.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(goal);
+
+        for (int i = 0; i < 12; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("History " + i));
+        }
+
+        ToolMessage danglingTool = ChatMessage.ofTool("dangling result", "t1", "call_1");
+        workingMemory.addMessage(danglingTool);
+        workingMemory.addMessage(ChatMessage.ofUser("continue"));
+
+        interceptor.onReasonStart(trace, null);
+
+        assertFalse(workingMemory.getMessages().contains(danglingTool),
+                "Dangling ToolMessage should be removed after compression");
+    }
+
+    /**
+     * 验证保留窗口从 ToolMessage 开始时，会向前补齐匹配的 Assistant(tool_calls)。
+     */
+    @Test
+    public void testToolMessageWindowHeadKeepsAssistantToolCall() {
+        ChatMessage goal = ChatMessage.ofUser("Goal");
+        goal.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(goal);
+
+        for (int i = 0; i < 5; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("Noise " + i));
+        }
+
+        List<ToolCall> toolCalls = Arrays.asList(new ToolCall("0", "call_1", "t1", "{}", Utils.asMap()));
+        AssistantMessage action = new AssistantMessage("call", false, null, null, toolCalls, null);
+        ToolMessage toolResult = ChatMessage.ofTool("result", "t1", "call_1");
+        workingMemory.addMessage(action);
+        workingMemory.addMessage(toolResult);
+
+        for (int i = 0; i < 7; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("Active " + i));
+        }
+
+        interceptor.onReasonStart(trace, null);
+
+        List<ChatMessage> result = workingMemory.getMessages();
+        int actionIdx = result.indexOf(action);
+        int toolIdx = result.indexOf(toolResult);
+
+        assertTrue(actionIdx > -1, "Assistant tool call should be kept");
+        assertTrue(toolIdx > -1, "Tool result should be kept");
+        assertTrue(actionIdx < toolIdx, "Assistant tool call should appear before tool result");
+    }
+
+    /**
+     * 验证压缩结果中不能留下没有工具结果的 Assistant(tool_calls)。
+     * 这类半截工具调用在 Responses API 中同样不是完整续接上下文。
+     */
+    @Test
+    public void testRemoveDanglingAssistantToolCallWithoutOutput() {
+        ChatMessage goal = ChatMessage.ofUser("Goal");
+        goal.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(goal);
+
+        for (int i = 0; i < 12; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("History " + i));
+        }
+
+        List<ToolCall> toolCalls = Arrays.asList(new ToolCall("0", "call_1", "t1", "{}", Utils.asMap()));
+        AssistantMessage danglingAction = new AssistantMessage("call", false, null, null, toolCalls, null);
+        workingMemory.addMessage(danglingAction);
+        workingMemory.addMessage(ChatMessage.ofUser("continue"));
+
+        interceptor.onReasonStart(trace, null);
+
+        assertFalse(workingMemory.getMessages().contains(danglingAction),
+                "Dangling Assistant(tool_calls) without matching ToolMessage should be removed after compression");
+    }
+
+    /**
+     * 验证一个 Assistant 同时发起多个 tool_calls 时，必须保留全部对应结果；少一个就整体移除。
+     */
+    @Test
+    public void testRemoveIncompleteMultiToolCallGroup() {
+        ChatMessage goal = ChatMessage.ofUser("Goal");
+        goal.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(goal);
+
+        for (int i = 0; i < 12; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("History " + i));
+        }
+
+        List<ToolCall> toolCalls = Arrays.asList(
+                new ToolCall("0", "call_1", "t1", "{}", Utils.asMap()),
+                new ToolCall("1", "call_2", "t2", "{}", Utils.asMap())
+        );
+        AssistantMessage action = new AssistantMessage("call", false, null, null, toolCalls, null);
+        ToolMessage toolResult = ChatMessage.ofTool("result1", "t1", "call_1");
+        workingMemory.addMessage(action);
+        workingMemory.addMessage(toolResult);
+        workingMemory.addMessage(ChatMessage.ofUser("continue"));
+
+        interceptor.onReasonStart(trace, null);
+
+        assertFalse(workingMemory.getMessages().contains(action),
+                "Incomplete multi tool call Assistant should be removed after compression");
+        assertFalse(workingMemory.getMessages().contains(toolResult),
+                "Tool result of incomplete group should be removed with its Assistant");
+    }
+
+    /**
+     * 验证完整的多工具调用组会被保留，且无关的 ToolMessage 会被清掉。
+     */
+    @Test
+    public void testKeepCompleteMultiToolCallGroupAndRemoveUnrelatedToolOutput() {
+        ChatMessage goal = ChatMessage.ofUser("Goal");
+        goal.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(goal);
+
+        for (int i = 0; i < 5; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("Noise " + i));
+        }
+
+        List<ToolCall> toolCalls = Arrays.asList(
+                new ToolCall("0", "call_1", "t1", "{}", Utils.asMap()),
+                new ToolCall("1", "call_2", "t2", "{}", Utils.asMap())
+        );
+        AssistantMessage action = new AssistantMessage("call", false, null, null, toolCalls, null);
+        ToolMessage toolResult1 = ChatMessage.ofTool("result1", "t1", "call_1");
+        ToolMessage unrelatedToolResult = ChatMessage.ofTool("bad", "bad", "call_bad");
+        ToolMessage toolResult2 = ChatMessage.ofTool("result2", "t2", "call_2");
+        workingMemory.addMessage(action);
+        workingMemory.addMessage(toolResult1);
+        workingMemory.addMessage(unrelatedToolResult);
+        workingMemory.addMessage(toolResult2);
+
+        for (int i = 0; i < 6; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("Active " + i));
+        }
+
+        interceptor.onReasonStart(trace, null);
+
+        List<ChatMessage> result = workingMemory.getMessages();
+        assertTrue(result.contains(action), "Complete multi tool call Assistant should be kept");
+        assertTrue(result.contains(toolResult1), "Matching tool result should be kept");
+        assertTrue(result.contains(toolResult2), "Matching tool result should be kept");
+        assertFalse(result.contains(unrelatedToolResult), "Unrelated tool result should be removed");
+        assertTrue(result.indexOf(action) < result.indexOf(toolResult1));
+        assertTrue(result.indexOf(toolResult1) < result.indexOf(toolResult2));
+    }
+
     @Test
     public void testVectorStoreCompressionStrategy_FiltersFirst() throws Exception {
         RepositoryStorable vectorRepository = mock(RepositoryStorable.class);
@@ -192,7 +343,7 @@ public class ContextCompressionInterceptorTest {
     @Test
     public void testCompositeStrategy_Isolation() {
         CompressionStrategy mockErrorStrategy = mock(CompressionStrategy.class);
-        when(mockErrorStrategy.compress(chatModel, 3, any(), any())).thenThrow(new RuntimeException("LLM Timeout"));
+        when(mockErrorStrategy.compress(eq(chatModel), eq(3), any(), any())).thenThrow(new RuntimeException("LLM Timeout"));
 
         CompressionStrategy normalStrategy = new LLMCompressionStrategy();
         CompositeCompressionStrategy composite = new CompositeCompressionStrategy(mockErrorStrategy, normalStrategy);
