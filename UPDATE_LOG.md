@@ -39,6 +39,7 @@
 * 优化 solon-ai-harness AgentFactory `edit` 权限添加 `read`、`write` 控制
 * 优化 solon-ai-agent SummarizationInterceptor 压缩时机（从 onObservation 改为 onReasonStart），并增加系统词大小
 * 优化 solon-ai-agent SummarizationInterceptor 增强上下文压缩拦截器中过期区 tool-use 原子序列的追溯保护，并完善文档注释
+* 优化 solon-ai-dialect-openai OpenaiResponses 协议兼容性
 * 调整 solon-ai-core 取消 ChatConfig.reasoningFieldName 配置（这个配置不合理）
 * 调整 solon-ai-core 移除 SkillProvider 类
 * 调整 solon-ai-core 移除 toolAdd(Object) 方法（指向不明，容易出错）

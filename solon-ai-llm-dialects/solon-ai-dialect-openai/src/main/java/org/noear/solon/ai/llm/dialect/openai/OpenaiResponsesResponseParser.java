@@ -274,8 +274,8 @@ public class OpenaiResponsesResponseParser {
                     }
                 }
 
-                // 添加一个空的结束标记 choice，让框架能够将 isFinished=true 进行传递
-                if(resp.isEmpty()) { //完成时。如果为空，则补位
+                // 添加结束标记 choice，让框架能够将 isFinished=true 进行传递
+                if (resp.hasChoices() == false) {
                     resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 }
 

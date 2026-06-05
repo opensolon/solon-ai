@@ -1,11 +1,12 @@
 package features.ai.chat.interceptor;
 
-import lombok.extern.slf4j.Slf4j;
 import org.noear.solon.ai.chat.ChatRequest;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.interceptor.*;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 
 import java.io.IOException;
@@ -13,8 +14,8 @@ import java.io.IOException;
 /**
  * @author noear 2025/5/30 created
  */
-@Slf4j
 public class ChatInterceptorTest implements ChatInterceptor {
+    private static final Logger log = LoggerFactory.getLogger(ChatInterceptorTest.class);
     @Override
     public ChatResponse interceptCall(ChatRequest req, CallChain chain) throws IOException {
         log.warn("ChatInterceptor-interceptCall: " + req.getConfig().getModel());
