@@ -394,7 +394,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         // 8. 更新工作区
         compressed = removeDanglingToolOutputs(compressed);
-        if (compressed.size() < messages.size()) {
+        if (!compressed.equals(messages)) {
             trace.getWorkingMemory().replaceMessages(compressed);
 
             if (log.isDebugEnabled()) {
