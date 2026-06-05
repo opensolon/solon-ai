@@ -13,12 +13,14 @@
 
 ### 4.0.0
 
+* 变更 solon skill “概念”改为 solon talent（避免与 agent skill 的冲突）
+* 新增 mcp-core（替换之前的 mcp-sdk，保持与官方相同命名）
+* 新增 mcp-json-jackson2
 * 新增 solon-ai-mcp MCP_2025_11_25 协议支持（支持 ServerTransportSecurityValidator 签权）
-* 新增 solon-ai-skill-openapi （solon-ai-skill-restapi 标为弃用）
 * 新增 solon-ai-talent-mount 才能插件（原 PoolManager 独立出来）
-* 添加 solon-ai-skill-openapi OpenApiSkill.removeApi 方法
-* 添加 solon-ai-skill-openapi ApiSource 超时配置支持
-* 添加 solon-ai-skill-toolgateway McpGatewaySkill 专门处理 mcp（ToolGatewaySkill 可以处理所有工具）
+* 添加 solon-ai-talent-openapi OpenApiSkill.removeApi 方法
+* 添加 solon-ai-talent-openapi ApiSource 超时配置支持
+* 添加 solon-ai-talent-gateway McpGatewaySkill 专门处理 mcp（ToolGatewaySkill 可以处理所有工具）
 * 添加 solon-ai-core ChatOptions:httpCustomize 方法
 * 添加 solon-ai-core Talent::isEnabled 方法
 * 添加 solon-ai-core ReActAgent::getModel 方法
@@ -37,7 +39,6 @@
 * 优化 solon-ai-harness AgentFactory `edit` 权限添加 `read`、`write` 控制
 * 优化 solon-ai-agent SummarizationInterceptor 压缩时机（从 onObservation 改为 onReasonStart），并增加系统词大小
 * 优化 solon-ai-agent SummarizationInterceptor 增强上下文压缩拦截器中过期区 tool-use 原子序列的追溯保护，并完善文档注释
-* 调整 solon skill “概念”改为 solon talent（避免与 agent skill 的冲突）
 * 调整 solon-ai-core 取消 ChatConfig.reasoningFieldName 配置（这个配置不合理）
 * 调整 solon-ai-core 移除 SkillProvider 类
 * 调整 solon-ai-core 移除 toolAdd(Object) 方法（指向不明，容易出错）
@@ -60,6 +61,7 @@
 * 移除 solon-ai-skill-browser（包太大了，没必要）
 * 移除 solon-ai-skill-restapi （由 solon-ai-talent-gateway 替代）
 * 移除 solon-ai-skill-toolgateway （由 solon-ai-talent-gateway 替代）
+* 移除 mcp-sdk（由 mcp-core 替代）
 * 修复 solon-ai-mcp WebRxStreamableHttpTransport 没有 event 的消息会出错的问题（优化非规范兼容）
 * 修复 solon-ai-mcp WebRxStreamableHttpTransport 没有 contentType 的消息会出错的问题（优化非规范兼容）
 * 修复 solon-ai-agent SummarizationInterceptor 压缩后可能会引起 ToolMessage 无法对齐的问题
@@ -70,16 +72,10 @@
 
 | 旧方法或参数                                            | 新方法或参数                                            |   |
 |---------------------------------------------------|---------------------------------------------------|---|
-| `ReActInterceptor.onAction(,toolName,args,)`      | `ReActInterceptor.onActionStart(,toolExchanger,)` |   |
-| /                                                 | `ReActInterceptor.onActionEnd(,toolExchanger,)`   |   |
+| `ReActInterceptor.onAction(,toolName,args,)`      | `ReActInterceptor.onAction(,toolExchanger,)` |   |
 | `ReActInterceptor.onObservation(,toolName,args,)` | `ReActInterceptor.onObservation(,toolExchanger,)` |   |
-| `ReActInterceptor.onReason`                       | `ReActInterceptor.onReasonEnd`                    |   |
 |                                                   |                                                   |   |
 | `(toolName, args)` + `trace.lastObservation`      | `ToolExchanger` (thread-safe)                     |   |
-|                                                   |                                                   |   |
-| ReasonChunk                                       | ReasonDeltaChunk                                  |   |
-| ThoughtChunk                                      | ReasonCompleteChunk                               |   |
-| ActionChunk                                       | ActionEndChunk                                    |   |
 
 
 
