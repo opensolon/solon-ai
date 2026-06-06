@@ -45,8 +45,6 @@ public class OpenaiChatDialect extends AbstractChatDialect {
 
     @Override
     protected String getApiUrl(ChatConfig config) {
-
-
         //处理后缀#
         int index = config.getApiUrl().indexOf('#');
         if (index > 0) {
