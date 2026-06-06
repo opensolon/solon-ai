@@ -81,7 +81,7 @@ public class MethodFunctionTool implements FunctionTool {
         //断言
         //Assert.notEmpty(mapping.description(), "ToolMapping description cannot be empty");
 
-        this.name = Utils.annoAlias(mapping.name(), methodEggg.getName());
+        this.name = Utils.valueOr(mapping.name(), methodEggg.getName());
         this.title = mapping.title();
         if (Assert.isNotEmpty(binding)) {
             this.description = SnEL.evalTmpl(mapping.description(), binding);

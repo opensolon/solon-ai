@@ -67,7 +67,7 @@ public class MethodFunctionResource implements FunctionResource {
         this.methodWrap = new MethodWrap(beanWrap.context(), beanWrap.clz(), methodEggg);
 
         this.mapping = methodEggg.getMethod().getAnnotation(ResourceMapping.class);
-        this.name = Utils.annoAlias(mapping.name(), methodEggg.getName());
+        this.name = Utils.valueOr(mapping.name(), methodEggg.getName());
 
 
         //断言

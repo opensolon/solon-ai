@@ -59,7 +59,7 @@ public class MethodFunctionPrompt implements FunctionPrompt {
         this.beanWrap = beanWrap;
         this.methodWrap = new MethodWrap(beanWrap.context(), beanWrap.clz(), methodEggg);
         this.mapping = methodEggg.getMethod().getAnnotation(PromptMapping.class);
-        this.name = Utils.annoAlias(mapping.name(), methodEggg.getName());
+        this.name = Utils.valueOr(mapping.name(), methodEggg.getName());
 
         //断言
         Assert.notNull(mapping, "@PromptMapping annotation is missing");

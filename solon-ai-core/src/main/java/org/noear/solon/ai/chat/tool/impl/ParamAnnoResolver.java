@@ -21,15 +21,15 @@ public class ParamAnnoResolver implements BiFunction<AnnotatedElement, TypeEggg,
         Param p1Anno = element.getAnnotation(Param.class);
 
         if (p1Anno != null) {
-            String name = Utils.annoAlias(p1Anno.value(), p1Anno.name());
+            String name = Utils.valueOr(p1Anno.value(), p1Anno.name());
 
             if (element instanceof Parameter) {
                 Parameter p1 = (Parameter) element;
-                name = Utils.annoAlias(name, p1.getName());
+                name = Utils.valueOr(name, p1.getName());
                 return new ParamDesc(name, typeEggg.getGenericType(), p1Anno.required(), p1Anno.description(), p1Anno.defaultValue(), p1Anno.format());
             } else {
                 Field p1 = (Field) element;
-                name = Utils.annoAlias(name, p1.getName());
+                name = Utils.valueOr(name, p1.getName());
                 return new ParamDesc(name, typeEggg.getGenericType(), p1Anno.required(), p1Anno.description(), p1Anno.defaultValue(), p1Anno.format());
             }
         }
