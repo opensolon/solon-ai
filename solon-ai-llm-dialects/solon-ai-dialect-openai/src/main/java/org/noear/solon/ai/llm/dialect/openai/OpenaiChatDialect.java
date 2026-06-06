@@ -24,6 +24,8 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 
 import java.util.Date;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Openai 聊天模型方言
@@ -39,8 +41,11 @@ public class OpenaiChatDialect extends AbstractChatDialect {
         return instance;
     }
 
+    private static final Pattern pattern =  Pattern.compile("/v\\d+/?$");
+
     @Override
     protected String getApiUrl(ChatConfig config) {
+
 
         //处理后缀#
         int index = config.getApiUrl().indexOf('#');
@@ -49,13 +54,23 @@ public class OpenaiChatDialect extends AbstractChatDialect {
         }
 
         //自动补全地址
-        if (config.getApiUrl().endsWith("/chat/completions")) {
+        if(config.getApiUrl().endsWith("/chat/completions")){
             return config.getApiUrl();
         } else {
-            if (config.getApiUrl().endsWith("/")) {
-                return config.getApiUrl() + "chat/completions";
+            if (pattern.matcher(config.getApiUrl()).matches()) { //匹配 /v1,/v4/ 等
+                //已带版本
+                if (config.getApiUrl().endsWith("/")) {
+                    return config.getApiUrl() + "chat/completions";
+                } else {
+                    return config.getApiUrl() + "/chat/completions";
+                }
             } else {
-                return config.getApiUrl() + "/chat/completions";
+                //未带版本
+                if (config.getApiUrl().endsWith("/")) {
+                    return config.getApiUrl() + "v1/chat/completions";
+                } else {
+                    return config.getApiUrl() + "/v1/chat/completions";
+                }
             }
         }
     }
