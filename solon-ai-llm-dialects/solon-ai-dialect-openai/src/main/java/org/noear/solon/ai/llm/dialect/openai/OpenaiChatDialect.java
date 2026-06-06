@@ -55,7 +55,7 @@ public class OpenaiChatDialect extends AbstractChatDialect {
         if(config.getApiUrl().endsWith("/chat/completions")){
             return config.getApiUrl();
         } else {
-            if (pattern.matcher(config.getApiUrl()).matches()) { //匹配 /v1,/v4/ 等
+            if (pattern.matcher(config.getApiUrl()).find()) { //匹配 /v1,/v4/ 等
                 //已带版本
                 if (config.getApiUrl().endsWith("/")) {
                     return config.getApiUrl() + "chat/completions";
