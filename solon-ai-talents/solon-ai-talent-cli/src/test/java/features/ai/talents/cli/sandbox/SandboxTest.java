@@ -841,17 +841,17 @@ public class SandboxTest {
         List<String> args = linuxArgs(executor, Paths.get("/tmp/test-workspace"));
         assertContainsSequence(args, "--ro-bind", "/", "/");
         assertFalse(containsDenyMount(args, System.getProperty("user.home")),
-                "allowUserHome=true should not add a deny mount for user.home: " + args);
+                "sandboxAllowUserHome=true should not add a deny mount for user.home: " + args);
     }
 
     @Test
     public void terminal_validateCommandBlocksUserHomePathWhenDisabled() throws Exception {
         TerminalTalent terminalTalent = new TerminalTalent(new MountManager("."));
-        terminalTalent.setAllowUserHome(false);
+        terminalTalent.setSandboxAllowUserHome(false);
 
         String blocked = terminalValidateCommand(terminalTalent, "ls ~");
-        assertNotNull(blocked, "Path syntax ~ should be blocked when allowUserHome=false");
-        assertTrue(blocked.contains("allowUserHome"), blocked);
+        assertNotNull(blocked, "Path syntax ~ should be blocked when sandboxAllowUserHome=false");
+        assertTrue(blocked.contains("sandboxAllowUserHome"), blocked);
 
         assertNull(terminalValidateCommand(terminalTalent, "echo \"~\""),
                 "Quoted standalone ~ is treated as text and should not be blocked by home-path policy");
@@ -860,12 +860,12 @@ public class SandboxTest {
     @Test
     public void terminal_translateCommandExpandsOrBlocksUserHomePath() throws Exception {
         TerminalTalent allowed = new TerminalTalent(new MountManager("."));
-        allowed.setAllowUserHome(true);
+        allowed.setSandboxAllowUserHome(true);
         String expanded = terminalTranslateCommand(allowed, "cat ~/.m2/settings.xml");
         assertTrue(expanded.contains(System.getProperty("user.home").replace("\\", "/") + "/.m2/settings.xml"), expanded);
 
         TerminalTalent blocked = new TerminalTalent(new MountManager("."));
-        blocked.setAllowUserHome(false);
+        blocked.setSandboxAllowUserHome(false);
         assertThrows(SecurityException.class, () -> terminalTranslateCommand(blocked, "cat ~/.m2/settings.xml"));
     }
 
@@ -877,11 +877,11 @@ public class SandboxTest {
         field.setAccessible(true);
         field.set(terminalTalent, executor);
 
-        terminalTalent.setAllowUserHome(false);
-        assertEquals(Boolean.FALSE, executor.allowUserHome);
+        terminalTalent.setSandboxAllowUserHome(false);
+        assertEquals(Boolean.FALSE, executor.sandboxAllowUserHome);
 
-        terminalTalent.setAllowUserHome(true);
-        assertEquals(Boolean.TRUE, executor.allowUserHome);
+        terminalTalent.setSandboxAllowUserHome(true);
+        assertEquals(Boolean.TRUE, executor.sandboxAllowUserHome);
     }
 
     private static boolean terminalContainsUserHomePath(String command) throws Exception {
@@ -981,7 +981,7 @@ public class SandboxTest {
     // ==================== Helper class for validateCommand testing ====================
 
     private static class RecordingSandboxExecutor implements SandboxExecutor {
-        private Boolean allowUserHome;
+        private Boolean sandboxAllowUserHome;
 
         @Override
         public String wrapCommand(String command, Path workPath, Map<String, String> envs) {
@@ -994,8 +994,8 @@ public class SandboxTest {
         }
 
         @Override
-        public void setAllowUserHome(boolean allowUserHome) {
-            this.allowUserHome = allowUserHome;
+        public void setAllowUserHome(boolean sandboxAllowUserHome) {
+            this.sandboxAllowUserHome = sandboxAllowUserHome;
         }
     }
 

@@ -71,8 +71,9 @@ class HarnessOptions implements Serializable {
     private volatile boolean memoryEnabled = true;
 
     // ========== 安全与模式 ==========
-    private volatile boolean sandboxMode = true;
-    private volatile boolean allowUserHome = true;
+    private volatile boolean sandboxEnabled = true;
+    private volatile boolean sandboxAllowUserHome = true;
+
     private volatile boolean hitlEnabled = false;
     private volatile boolean subagentEnabled = true;
     private volatile boolean bashAsyncEnabled = false;
@@ -240,23 +241,23 @@ class HarnessOptions implements Serializable {
         }
     }
 
-    boolean isSandboxMode() {
-        return sandboxMode;
+    boolean isSandboxEnabled() {
+        return sandboxEnabled;
     }
 
-    void setSandboxMode(Boolean sandboxMode) {
-        if (sandboxMode != null) {
-            this.sandboxMode = sandboxMode;
+    void setSandboxEnabled(Boolean sandboxEnabled) {
+        if (sandboxEnabled != null) {
+            this.sandboxEnabled = sandboxEnabled;
         }
     }
 
-    boolean isAllowUserHome() {
-        return allowUserHome;
+    boolean isSandboxAllowUserHome() {
+        return sandboxAllowUserHome;
     }
 
-    void setAllowUserHome(Boolean allowUserHome) {
-        if (allowUserHome != null) {
-            this.allowUserHome = allowUserHome;
+    void setSandboxAllowUserHome(Boolean sandboxAllowUserHome) {
+        if (sandboxAllowUserHome != null) {
+            this.sandboxAllowUserHome = sandboxAllowUserHome;
         }
     }
 

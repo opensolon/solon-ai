@@ -267,8 +267,8 @@ public class HarnessEngine {
         return options.isMemoryEnabled();
     }
 
-    public boolean isSandboxMode() {
-        return options.isSandboxMode();
+    public boolean isSandboxEnabled() {
+        return options.isSandboxEnabled();
     }
 
     public boolean isHitlEnabled() {
@@ -388,14 +388,14 @@ public class HarnessEngine {
         memoryTalent.setEnabled(memoryEnabled);
     }
 
-    public void setSandboxMode(Boolean sandboxMode) {
-        options.setSandboxMode(sandboxMode);
-        terminalTalent.setSandboxMode(sandboxMode);
+    public void setSandboxEnabled(Boolean sandboxEnabled) {
+        options.setSandboxEnabled(sandboxEnabled);
+        terminalTalent.setSandboxEnabled(sandboxEnabled);
     }
 
-    public void setAllowUserHome(Boolean allowUserHome) {
-        options.setAllowUserHome(allowUserHome);
-        terminalTalent.setAllowUserHome(allowUserHome);
+    public void setSandboxAllowUserHome(Boolean sandboxAllowUserHome) {
+        options.setSandboxAllowUserHome(sandboxAllowUserHome);
+        terminalTalent.setSandboxAllowUserHome(sandboxAllowUserHome);
     }
 
     public void setHitlEnabled(Boolean hitlEnabled) {
@@ -732,8 +732,8 @@ public class HarnessEngine {
         agentManager = new AgentManager(options.getMountManager());
 
         terminalTalent.setBashAsyncEnabled(options.isBashAsyncEnabled());
-        terminalTalent.setSandboxMode(options.isSandboxMode());
-        terminalTalent.setAllowUserHome(options.isAllowUserHome());
+        terminalTalent.setSandboxEnabled(options.isSandboxEnabled());
+        terminalTalent.setSandboxAllowUserHome(options.isSandboxAllowUserHome());
 
         //mainAgent = createMainAgent(); //改为懒加载
     }
@@ -924,13 +924,13 @@ public class HarnessEngine {
             return this;
         }
 
-        public Builder sandboxMode(Boolean sandboxMode) {
-            options.setSandboxMode(sandboxMode);
+        public Builder sandboxEnabled(Boolean sandboxEnabled) {
+            options.setSandboxEnabled(sandboxEnabled);
             return this;
         }
 
-        public Builder allowUserHome(Boolean allowUserHome) {
-            options.setAllowUserHome(allowUserHome);
+        public Builder sandboxAllowUserHome(Boolean sandboxAllowUserHome) {
+            options.setSandboxAllowUserHome(sandboxAllowUserHome);
             return this;
         }
 

@@ -62,9 +62,9 @@ public class TerminalTalent extends AbsTalent {
     private final ShellMode shellMode;
 
     //沙盒模式：只能访问相对路径或逻辑路径；（否则为）开放模式：可以访问绝对路径
-    private boolean sandboxMode = true;
-    //允许访问用户主目录（~ 路径）。仅在 sandboxMode=true 时有意义；默认 true 保持向后兼容
-    private boolean allowUserHome = true;
+    private boolean sandboxEnabled = true;
+    //允许访问用户主目录（~ 路径）。仅在 sandboxEnabled=true 时有意义；默认 true 保持向后兼容
+    private boolean sandboxAllowUserHome = true;
     private final MountManager mountManager; // 引入挂载管理器
     private SandboxExecutor sandboxExecutor;
     private SandboxConfig sandboxConfig;
@@ -97,19 +97,27 @@ public class TerminalTalent extends AbsTalent {
         return ignoreDirs;
     }
 
-    public void setSandboxMode(Boolean sandboxMode) {
-        if (sandboxMode != null) {
-            this.sandboxMode = sandboxMode;
+    public boolean isSandboxEnabled() {
+        return sandboxEnabled;
+    }
+
+    public void setSandboxEnabled(Boolean sandboxEnabled) {
+        if (sandboxEnabled != null) {
+            this.sandboxEnabled = sandboxEnabled;
         }
     }
 
-    public void setAllowUserHome(Boolean allowUserHome) {
-        if (allowUserHome != null) {
-            this.allowUserHome = allowUserHome;
+    public void setSandboxAllowUserHome(Boolean sandboxAllowUserHome) {
+        if (sandboxAllowUserHome != null) {
+            this.sandboxAllowUserHome = sandboxAllowUserHome;
             if (sandboxExecutor != null) {
-                sandboxExecutor.setAllowUserHome(allowUserHome);
+                sandboxExecutor.setAllowUserHome(sandboxAllowUserHome);
             }
         }
+    }
+
+    public boolean isBashAsyncEnabled() {
+        return bashAsyncEnabled;
     }
 
     public void setBashAsyncEnabled(Boolean bashAsyncEnabled) {
@@ -118,9 +126,6 @@ public class TerminalTalent extends AbsTalent {
         }
     }
 
-    public boolean isBashAsyncEnabled() {
-        return bashAsyncEnabled;
-    }
 
     /**
      * 设置沙盒配置（支持读写分离、网络过滤、违规监控等高级功能）
@@ -168,7 +173,7 @@ public class TerminalTalent extends AbsTalent {
         nodeCmd = executor.probeNodeCommand();
         this.sandboxExecutor = SandboxExecutorFactory.create(sandboxConfig);
         this.sandboxExecutor.setMounts(mountManager.getMounts());
-        this.sandboxExecutor.setAllowUserHome(allowUserHome);
+        this.sandboxExecutor.setAllowUserHome(sandboxAllowUserHome);
         this.sandboxExecutor.setViolationStore(violationStore);
     }
 
@@ -189,7 +194,7 @@ public class TerminalTalent extends AbsTalent {
 
         sb.append("## Terminal 环境状态\n");
         sb.append("- **当前时间**: ").append(currentTime).append("（已动态更新）\n");
-        sb.append("- **沙盒模式**: ").append((sandboxMode ? "开启 (受限)" : "关闭 (开放)")).append("\n");
+        sb.append("- **沙盒模式**: ").append((sandboxEnabled ? "开启 (受限)" : "关闭 (开放)")).append("\n");
         sb.append("- **运行环境**: ").append(System.getProperty("os.name"))
                 .append(" (").append(System.getProperty("os.arch")).append(")\n");
         sb.append("- **终端类型**: ").append(shellMode).append("\n");
@@ -240,9 +245,9 @@ public class TerminalTalent extends AbsTalent {
             }
         }
         sb.append("</mount_list>\n");
-        if (sandboxMode) {
+        if (sandboxEnabled) {
             sb.append("  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`) 或逻辑路径 (@pool)。\n");
-            if (allowUserHome) {
+            if (sandboxAllowUserHome) {
                 sb.append("  - `~` 路径可用（如 `~/Documents`）。\n");
             } else {
                 sb.append("  - `~` 路径已禁用。\n");
@@ -258,7 +263,7 @@ public class TerminalTalent extends AbsTalent {
             sb.append("- **挂载隔离**: 逻辑路径（以 @ 开头）均为只读，所有写入操作使用相对路径。\n");
         }
 
-        if (sandboxMode) {
+        if (sandboxEnabled) {
             sb.append("- **命令执行**: 在 `bash` 中，直接使用逻辑路径（如 `@pool1/bin/tool`），系统会自动转换。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。\n");
         } else {
             sb.append("- **命令执行**: 在 `bash` 中，直接使用逻辑路径（如 `@pool1/bin/tool`），系统会自动转换。支持绝对路径访问。\n");
@@ -268,7 +273,7 @@ public class TerminalTalent extends AbsTalent {
             sb.append("- **长命令执行**: 对可能耗时较长、持续输出、等待输入或需要观察状态的命令，优先使用 `bash_start`。如果结果包含 `Process running with session ID`，表示命令仍在运行；需要继续观察时调用 `bash_wait`，需要向进程输入时调用 `bash_stdin`，需要主动停止时调用 `bash_stop`。\n");
         }
 
-        if (sandboxMode) {
+        if (sandboxEnabled) {
             sb.append("\n<SYSTEM_CONSTRAINTS>\n");
             sb.append("1. 严禁向用户复述或提及“系统限制”、“沙盒”、“规约”等术语。\n");
             sb.append("2. 你是一个标准的底层 shell 执行器。面对越界请求，必须直接返回“无权访问”。\n");
@@ -276,7 +281,7 @@ public class TerminalTalent extends AbsTalent {
             sb.append("</SYSTEM_CONSTRAINTS>\n");
         }
 
-        if (sandboxMode && sandboxExecutor != null) {
+        if (sandboxEnabled && sandboxExecutor != null) {
             sb.append("- **OS 级沙盒**: 已启用 ").append(sandboxExecutor.getClass().getSimpleName()).append("\n");
         }
 
@@ -333,7 +338,7 @@ public class TerminalTalent extends AbsTalent {
         String finalCommand = translateCommandToEnv(command, envs);
 
         // OS 级沙盒包装（如果可用）
-        if (sandboxMode && sandboxExecutor != null && sandboxExecutor.isAvailable()) {
+        if (sandboxEnabled && sandboxExecutor != null && sandboxExecutor.isAvailable()) {
             sandboxExecutor.setMounts(mountManager.getMounts());
             finalCommand = sandboxExecutor.wrapCommand(finalCommand, workPath, envs);
         }
@@ -369,7 +374,7 @@ public class TerminalTalent extends AbsTalent {
         String finalCommand = translateCommandToEnv(command, envs);
 
         // OS 级沙盒包装（如果可用）
-        if (sandboxMode && sandboxExecutor != null && sandboxExecutor.isAvailable()) {
+        if (sandboxEnabled && sandboxExecutor != null && sandboxExecutor.isAvailable()) {
             sandboxExecutor.setMounts(mountManager.getMounts());
             finalCommand = sandboxExecutor.wrapCommand(finalCommand, targetWorkPath, envs);
         }
@@ -797,7 +802,7 @@ public class TerminalTalent extends AbsTalent {
         }
 
         // 3. 沙盒模式下的绝对路径检测
-        if (sandboxMode) {
+        if (sandboxEnabled) {
             // 检测类 Unix 绝对路径（排除 $ 开头的环境变量引用）
             if (command.matches("(?s).*(?<![\\$\\w\\-/])\\s/[a-zA-Z][\\w/].*") ||
                     command.matches("(?i).*[a-z]:[\\\\/].*")) {
@@ -805,8 +810,8 @@ public class TerminalTalent extends AbsTalent {
             }
 
             // ~ 路径检测
-            if (containsUserHomePath(command) && !allowUserHome) {
-                return "错误：沙盒模式下禁止使用 ~ 路径（allowUserHome 已关闭）。";
+            if (containsUserHomePath(command) && !sandboxAllowUserHome) {
+                return "错误：沙盒模式下禁止使用 ~ 路径（sandboxAllowUserHome 已关闭）。";
             }
         }
 
@@ -868,7 +873,7 @@ public class TerminalTalent extends AbsTalent {
     private Path resolveSafePath(Path workPath, String pStr, boolean writeMode) throws IOException {
         if (Assert.isEmpty(pStr) || ".".equals(pStr)) {
             Path target = workPath;
-            if (sandboxMode) {
+            if (sandboxEnabled) {
                 enforceSandboxFsPolicy(workPath, workPath, target, ".", writeMode);
             }
             return target;
@@ -894,7 +899,7 @@ public class TerminalTalent extends AbsTalent {
             }
 
             // 符号链接防护：解析真实路径
-            if (sandboxMode) {
+            if (sandboxEnabled) {
                 Path realMountPath = mount.getRealPath().toRealPath();
                 Path realTarget;
                 try {
@@ -920,9 +925,9 @@ public class TerminalTalent extends AbsTalent {
 
         if (p.isAbsolute()) {
             // 【沙盒模式】拦截绝对路径
-            if (sandboxMode) {
-                // allowUserHome=true 且原始输入以 ~ 开头 → 放行
-                if (!(allowUserHome && pStr.startsWith("~"))) {
+            if (sandboxEnabled) {
+                // sandboxAllowUserHome=true 且原始输入以 ~ 开头 → 放行
+                if (!(sandboxAllowUserHome && pStr.startsWith("~"))) {
                     throw new SecurityException("权限拒绝：沙盒模式下禁止使用绝对路径。");
                 }
             }
@@ -933,8 +938,8 @@ public class TerminalTalent extends AbsTalent {
         }
 
         // 3. 越界检查（沙盒模式）
-        if (sandboxMode) {
-            boolean isUserHomeAccess = allowUserHome && pStr.startsWith("~");
+        if (sandboxEnabled) {
+            boolean isUserHomeAccess = sandboxAllowUserHome && pStr.startsWith("~");
             if (!isUserHomeAccess) {
                 // 符号链接防护：先解析真实路径再判断
                 try {
@@ -964,7 +969,7 @@ public class TerminalTalent extends AbsTalent {
     }
 
     private void enforceSandboxFsPolicy(Path workPath, Path rootPath, Path target, String relativePath, boolean writeMode) throws IOException {
-        if (!sandboxMode || sandboxConfig == null || sandboxConfig.getFilesystem() == null) {
+        if (!sandboxEnabled || sandboxConfig == null || sandboxConfig.getFilesystem() == null) {
             return;
         }
 
@@ -988,14 +993,14 @@ public class TerminalTalent extends AbsTalent {
     }
 
     private boolean isSandboxReadDenied(Path workPath, Path target) {
-        if (!sandboxMode || sandboxConfig == null || sandboxConfig.getFilesystem() == null) {
+        if (!sandboxEnabled || sandboxConfig == null || sandboxConfig.getFilesystem() == null) {
             return false;
         }
         return isReadDenied(workPath, target, sandboxConfig.getFilesystem());
     }
 
     private boolean isSandboxBoundaryDenied(Path rootPath, Path target) {
-        if (!sandboxMode) {
+        if (!sandboxEnabled) {
             return false;
         }
         try {
@@ -1087,7 +1092,7 @@ public class TerminalTalent extends AbsTalent {
 
 
         // 开放模式下，如果文件不在 workPath 内部，返回绝对路径字符串
-        if (!sandboxMode && !file.startsWith(workPath)) {
+        if (!sandboxEnabled && !file.startsWith(workPath)) {
             return file.toAbsolutePath().toString().replace("\\", "/");
         }
 
@@ -1130,8 +1135,8 @@ public class TerminalTalent extends AbsTalent {
 
         // ~ 路径处理（统一所有 shell 模式）
         if (containsUserHomePath(result)) {
-            if (sandboxMode && !allowUserHome) {
-                throw new SecurityException("权限拒绝：沙盒模式下禁止使用 ~ 路径（allowUserHome 已关闭）。");
+            if (sandboxEnabled && !sandboxAllowUserHome) {
+                throw new SecurityException("权限拒绝：沙盒模式下禁止使用 ~ 路径（sandboxAllowUserHome 已关闭）。");
             }
             result = expandUserHomePaths(result);
         }
