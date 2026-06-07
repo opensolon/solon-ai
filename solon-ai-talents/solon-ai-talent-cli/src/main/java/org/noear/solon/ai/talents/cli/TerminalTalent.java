@@ -19,8 +19,8 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
-import org.noear.solon.ai.talents.cli.sandbox.OsSandboxExecutor;
-import org.noear.solon.ai.talents.cli.sandbox.OsSandboxExecutorFactory;
+import org.noear.solon.ai.talents.cli.sandbox.SandboxExecutor;
+import org.noear.solon.ai.talents.cli.sandbox.SandboxExecutorFactory;
 import org.noear.solon.ai.talents.cli.sandbox.SandboxConfig;
 import org.noear.solon.ai.talents.cli.sandbox.SandboxFsConfig;
 import org.noear.solon.ai.talents.cli.sandbox.SandboxViolationStore;
@@ -66,7 +66,7 @@ public class TerminalTalent extends AbsTalent {
     //允许访问用户主目录（~ 路径）。仅在 sandboxMode=true 时有意义；默认 true 保持向后兼容
     private boolean allowUserHome = true;
     private final MountManager mountManager; // 引入挂载管理器
-    private OsSandboxExecutor osSandboxExecutor;
+    private SandboxExecutor sandboxExecutor;
     private SandboxConfig sandboxConfig;
     private final SandboxViolationStore violationStore = new SandboxViolationStore();
 
@@ -106,6 +106,9 @@ public class TerminalTalent extends AbsTalent {
     public void setAllowUserHome(Boolean allowUserHome) {
         if (allowUserHome != null) {
             this.allowUserHome = allowUserHome;
+            if (sandboxExecutor != null) {
+                sandboxExecutor.setAllowUserHome(allowUserHome);
+            }
         }
     }
 
@@ -124,10 +127,10 @@ public class TerminalTalent extends AbsTalent {
      */
     public void setSandboxConfig(SandboxConfig sandboxConfig) {
         this.sandboxConfig = sandboxConfig;
-        if (osSandboxExecutor != null) {
-            osSandboxExecutor.setMounts(mountManager.getMounts());
+        if (sandboxExecutor != null) {
+            sandboxExecutor.setMounts(mountManager.getMounts());
             if (sandboxConfig != null) {
-                osSandboxExecutor.setConfig(sandboxConfig);
+                sandboxExecutor.setConfig(sandboxConfig);
             }
         }
     }
@@ -163,9 +166,10 @@ public class TerminalTalent extends AbsTalent {
 
         pythonCmd = executor.probePythonCommand();
         nodeCmd = executor.probeNodeCommand();
-        this.osSandboxExecutor = OsSandboxExecutorFactory.create(sandboxConfig);
-        this.osSandboxExecutor.setMounts(mountManager.getMounts());
-        this.osSandboxExecutor.setViolationStore(violationStore);
+        this.sandboxExecutor = SandboxExecutorFactory.create(sandboxConfig);
+        this.sandboxExecutor.setMounts(mountManager.getMounts());
+        this.sandboxExecutor.setAllowUserHome(allowUserHome);
+        this.sandboxExecutor.setViolationStore(violationStore);
     }
 
     public ProcessExecutor getExecutor() {
@@ -272,8 +276,8 @@ public class TerminalTalent extends AbsTalent {
             sb.append("</SYSTEM_CONSTRAINTS>\n");
         }
 
-        if (sandboxMode && osSandboxExecutor != null) {
-            sb.append("- **OS 级沙盒**: 已启用 ").append(osSandboxExecutor.getClass().getSimpleName()).append("\n");
+        if (sandboxMode && sandboxExecutor != null) {
+            sb.append("- **OS 级沙盒**: 已启用 ").append(sandboxExecutor.getClass().getSimpleName()).append("\n");
         }
 
         return sb.toString();
@@ -329,9 +333,9 @@ public class TerminalTalent extends AbsTalent {
         String finalCommand = translateCommandToEnv(command, envs);
 
         // OS 级沙盒包装（如果可用）
-        if (sandboxMode && osSandboxExecutor != null && osSandboxExecutor.isAvailable()) {
-            osSandboxExecutor.setMounts(mountManager.getMounts());
-            finalCommand = osSandboxExecutor.wrapCommand(finalCommand, workPath, envs);
+        if (sandboxMode && sandboxExecutor != null && sandboxExecutor.isAvailable()) {
+            sandboxExecutor.setMounts(mountManager.getMounts());
+            finalCommand = sandboxExecutor.wrapCommand(finalCommand, workPath, envs);
         }
 
         return executor.executeCode(workPath, finalCommand, shellCmd, extension, envs, timeout, null);
@@ -365,9 +369,9 @@ public class TerminalTalent extends AbsTalent {
         String finalCommand = translateCommandToEnv(command, envs);
 
         // OS 级沙盒包装（如果可用）
-        if (sandboxMode && osSandboxExecutor != null && osSandboxExecutor.isAvailable()) {
-            osSandboxExecutor.setMounts(mountManager.getMounts());
-            finalCommand = osSandboxExecutor.wrapCommand(finalCommand, targetWorkPath, envs);
+        if (sandboxMode && sandboxExecutor != null && sandboxExecutor.isAvailable()) {
+            sandboxExecutor.setMounts(mountManager.getMounts());
+            finalCommand = sandboxExecutor.wrapCommand(finalCommand, targetWorkPath, envs);
         }
 
         TerminalSessionManager.CommandSnapshot snapshot =
@@ -801,7 +805,7 @@ public class TerminalTalent extends AbsTalent {
             }
 
             // ~ 路径检测
-            if (command.contains("~") && !allowUserHome) {
+            if (containsUserHomePath(command) && !allowUserHome) {
                 return "错误：沙盒模式下禁止使用 ~ 路径（allowUserHome 已关闭）。";
             }
         }
@@ -1125,19 +1129,30 @@ public class TerminalTalent extends AbsTalent {
         }
 
         // ~ 路径处理（统一所有 shell 模式）
-        if (result.contains("~")) {
+        if (containsUserHomePath(result)) {
             if (sandboxMode && !allowUserHome) {
                 throw new SecurityException("权限拒绝：沙盒模式下禁止使用 ~ 路径（allowUserHome 已关闭）。");
             }
-            String userHome = System.getProperty("user.home").replace("\\", "/");
-            result = result.replace("~/", userHome + "/")
-                           .replace("~\\", userHome + "/");
-            if (result.trim().equals("~")) {
-                result = result.replace("~", userHome);
-            }
+            result = expandUserHomePaths(result);
         }
 
         return result;
+    }
+
+    private boolean containsUserHomePath(String command) {
+        return command != null && command.matches("(?s).*(^|[\\s=:\\(\\[\\{;|&<>])~(?=$|[/\\\\\\s'\"`)\\]\\};|&<>]).*");
+    }
+
+    private String expandUserHomePaths(String command) {
+        String userHome = System.getProperty("user.home").replace("\\", "/");
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(^|[\\s=:\\(\\[\\{;|&<>])~(?=$|[/\\\\\\s'\"`)\\]\\};|&<>])");
+        java.util.regex.Matcher matcher = pattern.matcher(command);
+        StringBuffer sb = new StringBuffer();
+        while (matcher.find()) {
+            matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(matcher.group(1) + userHome));
+        }
+        matcher.appendTail(sb);
+        return sb.toString();
     }
 
     private String getEnvPlaceholder(String envKey) {

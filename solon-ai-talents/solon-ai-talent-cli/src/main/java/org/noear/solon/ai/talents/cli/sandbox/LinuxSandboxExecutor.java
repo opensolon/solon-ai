@@ -39,10 +39,11 @@ import java.util.Map;
  * @author noear
  * @since 3.9.1
  */
-public class LinuxSandboxExecutor implements OsSandboxExecutor {
+public class LinuxSandboxExecutor implements SandboxExecutor {
 
     private volatile SandboxConfig config;
     private volatile Collection<MountDir> mounts = Collections.emptyList();
+    private volatile boolean allowUserHome = true;
 
     @Override
     public void setMounts(Collection<MountDir> mounts) {
@@ -52,6 +53,11 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
     @Override
     public void setConfig(SandboxConfig config) {
         this.config = config;
+    }
+
+    @Override
+    public void setAllowUserHome(boolean allowUserHome) {
+        this.allowUserHome = allowUserHome;
     }
 
     @Override
@@ -66,7 +72,7 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
 
     @Override
     public boolean isAvailable() {
-        return OsSandboxExecutorFactory.isCommandAvailable("bwrap");
+        return SandboxExecutorFactory.isCommandAvailable("bwrap");
     }
 
     /**
@@ -85,6 +91,9 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
         if (fineGrained) {
             // 精细模式：根只读；只对白名单路径重新 bind 为可写。
             args.add("--ro-bind"); args.add("/"); args.add("/");
+            if (!allowUserHome) {
+                addDenyMount(args, System.getProperty("user.home"));
+            }
 
             for (MountDir mount : mounts) {
                 addMountBinding(args, mount, mount != null && mount.isWriteable() && mountWriteAllowed(mount, fsConfig, workPath));
@@ -122,6 +131,9 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
 
             addBindIfPossible(args, workPath.toString(), workPath.toString(), false);
             addBindIfPossible(args, "/tmp", "/tmp", false);
+            if (allowUserHome) {
+                addBindIfPossible(args, System.getProperty("user.home"), System.getProperty("user.home"), true);
+            }
             addMountBindings(args);
 
             for (String denyPath : fsConfig.getEffectiveDenyWrite(workPath.toString())) {

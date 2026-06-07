@@ -6,8 +6,6 @@ import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.talents.mount.MountType;
 
 import java.lang.reflect.Method;
-import java.io.File;
-import java.io.FileWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -210,7 +208,7 @@ public class SandboxTest {
 
     @Test
     public void factory_createsNonNull() {
-        OsSandboxExecutor executor = OsSandboxExecutorFactory.create();
+        SandboxExecutor executor = SandboxExecutorFactory.create();
         assertNotNull(executor);
         assertTrue(executor.isAvailable());
     }
@@ -304,7 +302,7 @@ public class SandboxTest {
 
     @Test
     public void executorFactory_withNullConfig_works() {
-        OsSandboxExecutor executor = OsSandboxExecutorFactory.create(null);
+        SandboxExecutor executor = SandboxExecutorFactory.create(null);
         assertNotNull(executor);
         String result = executor.wrapCommand("echo test", Paths.get("/tmp/test"), new HashMap<>());
         assertTrue(result.contains("echo test"));
@@ -316,7 +314,7 @@ public class SandboxTest {
         config.getFilesystem().setAllowWrite(Arrays.asList(".", "/tmp"));
         config.getFilesystem().setDenyRead(Arrays.asList("/etc/shadow"));
         config.getNetwork().setAllowedDomains(Arrays.asList("github.com"));
-        OsSandboxExecutor executor = OsSandboxExecutorFactory.create(config);
+        SandboxExecutor executor = SandboxExecutorFactory.create(config);
         assertNotNull(executor);
         String result = executor.wrapCommand("echo test", Paths.get("/tmp/test"), new HashMap<>());
         assertTrue(result.contains("echo test"));
@@ -771,6 +769,33 @@ public class SandboxTest {
         assertTrue(profile.contains(".vscode"), profile);
         assertTrue(profile.contains(".git/hooks"), profile);
         assertTrue(profile.contains("file-write-create"), profile);
+    }
+
+    @Test
+    public void macOs_profileDeniesUserHomeWhenDisabled() throws Exception {
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        executor.setAllowUserHome(false);
+
+        String profile = macProfile(executor, Paths.get("/tmp/test-workspace"));
+        assertTrue(profile.contains("deny file-read* (subpath \"" + System.getProperty("user.home") + "\")"), profile);
+    }
+
+    @Test
+    public void linux_defaultModeBindsUserHomeWhenEnabled() throws Exception {
+        LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
+        executor.setAllowUserHome(true);
+
+        List<String> args = linuxArgs(executor, Paths.get("/tmp/test-workspace"));
+        assertContainsSequence(args, "--ro-bind", System.getProperty("user.home"), System.getProperty("user.home"));
+    }
+
+    @Test
+    public void linux_defaultModeDoesNotBindUserHomeWhenDisabled() throws Exception {
+        LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
+        executor.setAllowUserHome(false);
+
+        List<String> args = linuxArgs(executor, Paths.get("/tmp/test-workspace"));
+        assertFalse(containsSequence(args, "--ro-bind", System.getProperty("user.home"), System.getProperty("user.home")));
     }
 
     private static MountDir mount(String alias, Path realPath, boolean writeable) throws Exception {

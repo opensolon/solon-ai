@@ -27,7 +27,7 @@ import java.util.Map;
  * @author noear
  * @since 3.9.1
  */
-public class UlimitFallbackExecutor implements OsSandboxExecutor {
+public class UlimitFallbackExecutor implements SandboxExecutor {
     // 最大子进程数
     private static final int MAX_PROCESSES = 64;
     // 最大单文件大小（KB），100MB

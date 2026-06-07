@@ -37,11 +37,12 @@ import java.util.Set;
  * @author noear
  * @since 3.9.1
  */
-public class MacOsSandboxExecutor implements OsSandboxExecutor {
+public class MacOsSandboxExecutor implements SandboxExecutor {
     private static final Logger LOG = LoggerFactory.getLogger(MacOsSandboxExecutor.class);
 
     private volatile SandboxConfig config;
     private volatile Collection<MountDir> mounts = Collections.emptyList();
+    private volatile boolean allowUserHome = true;
     private SandboxViolationStore violationStore;
 
     @Override
@@ -52,6 +53,11 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
     @Override
     public void setConfig(SandboxConfig config) {
         this.config = config;
+    }
+
+    @Override
+    public void setAllowUserHome(boolean allowUserHome) {
+        this.allowUserHome = allowUserHome;
     }
 
     @Override
@@ -67,7 +73,7 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
 
     @Override
     public boolean isAvailable() {
-        return OsSandboxExecutorFactory.isCommandAvailable("sandbox-exec");
+        return SandboxExecutorFactory.isCommandAvailable("sandbox-exec");
     }
 
     /**
@@ -157,6 +163,9 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
 
         // ========== 文件系统规则（读写分离） ==========
         sb.append("(allow file-read*)\n");
+        if (!allowUserHome) {
+            appendPathRule(sb, "deny", "file-read*", System.getProperty("user.home"), logTag);
+        }
         for (MountDir mount : mounts) {
             if (mount != null && mount.isEnabled() && mount.getRealPath() != null) {
                 appendPathRule(sb, "allow", "file-read*", mount.getRealPath().toString(), null);

@@ -29,7 +29,7 @@ import org.noear.solon.ai.talents.mount.MountDir;
  * @author noear
  * @since 3.9.1
  */
-public interface OsSandboxExecutor {
+public interface SandboxExecutor {
     /**
      * 包装命令，使其在 OS 级沙盒中执行
      *
@@ -54,6 +54,11 @@ public interface OsSandboxExecutor {
      * 设置沙盒配置（可选，用于支持读写分离等高级功能）
      */
     default void setConfig(SandboxConfig config) {}
+
+    /**
+     * 设置是否允许访问用户主目录（~ 路径）。
+     */
+    default void setAllowUserHome(boolean allowUserHome) {}
 
     /**
      * 设置违规存储（可选，用于支持违规监控）
