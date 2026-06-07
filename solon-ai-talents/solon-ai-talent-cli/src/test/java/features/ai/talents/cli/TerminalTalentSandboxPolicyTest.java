@@ -92,6 +92,67 @@ public class TerminalTalentSandboxPolicyTest {
         }
     }
 
+    @Test
+    public void rootPathHonorsDenyReadPolicy() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
+        try {
+            Files.write(workDir.resolve("visible.txt"), Collections.singletonList("visible"));
+
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            SandboxConfig config = new SandboxConfig();
+            config.getFilesystem().setDenyRead(Collections.singletonList("."));
+            talent.setSandboxConfig(config);
+
+            SecurityException ex = assertThrows(SecurityException.class,
+                    () -> talent.ls(".", false, true, workDir.toString()));
+            assertTrue(ex.getMessage().contains("读取拒绝"), ex.getMessage());
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
+    @Test
+    public void rootPathHonorsAllowWritePolicy() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
+        try {
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            SandboxConfig config = new SandboxConfig();
+            config.getFilesystem().setAllowWrite(Collections.emptyList());
+            talent.setSandboxConfig(config);
+
+            SecurityException ex = assertThrows(SecurityException.class,
+                    () -> talent.write(".", "blocked", workDir.toString()));
+            assertTrue(ex.getMessage().contains("可写白名单"), ex.getMessage());
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
+    @Test
+    public void editRequiresReadAndWritePermission() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
+        try {
+            Files.createDirectories(workDir.resolve("secret"));
+            Files.write(workDir.resolve("secret/private.txt"), Collections.singletonList("old"));
+
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            SandboxConfig config = new SandboxConfig();
+            config.getFilesystem().setAllowWrite(Collections.singletonList("secret"));
+            config.getFilesystem().setDenyRead(Collections.singletonList("secret"));
+            talent.setSandboxConfig(config);
+
+            TerminalTalent.EditOp op = new TerminalTalent.EditOp();
+            op.oldStr = "old";
+            op.newStr = "new";
+
+            SecurityException ex = assertThrows(SecurityException.class,
+                    () -> talent.edit("secret/private.txt", Collections.singletonList(op), workDir.toString()));
+            assertTrue(ex.getMessage().contains("读取拒绝"), ex.getMessage());
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
     private static void deleteRecursively(Path root) throws Exception {
         if (!Files.exists(root)) {
             return;

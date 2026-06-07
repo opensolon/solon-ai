@@ -548,7 +548,8 @@ public class TerminalTalent extends AbsTalent {
                        @Param(value = "edits", description = "编辑操作列表") List<EditOp> edits,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
-        Path target = resolveSafePath(workPath, filePath, true);
+        Path target = resolveSafePath(workPath, filePath, false);
+        resolveSafePath(workPath, filePath, true);
 
         if (!Files.exists(target)) {
             return "错误：文件不存在，无法进行编辑。";
@@ -867,7 +868,11 @@ public class TerminalTalent extends AbsTalent {
 
     private Path resolveSafePath(Path workPath, String pStr, boolean writeMode) throws IOException {
         if (Assert.isEmpty(pStr) || ".".equals(pStr)) {
-            return workPath;
+            Path target = workPath;
+            if (sandboxMode) {
+                enforceSandboxFsPolicy(workPath, workPath, target, ".", writeMode);
+            }
+            return target;
         }
 
         if (pStr.startsWith("./")) {
