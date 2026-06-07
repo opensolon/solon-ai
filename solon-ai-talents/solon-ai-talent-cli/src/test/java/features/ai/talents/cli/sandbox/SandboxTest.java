@@ -1,10 +1,13 @@
 package features.ai.talents.cli.sandbox;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.talents.cli.TerminalTalent;
 import org.noear.solon.ai.talents.cli.sandbox.*;
 import org.noear.solon.ai.talents.mount.MountDir;
+import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.ai.talents.mount.MountType;
 
+import java.io.File;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -796,6 +799,44 @@ public class SandboxTest {
 
         List<String> args = linuxArgs(executor, Paths.get("/tmp/test-workspace"));
         assertFalse(containsSequence(args, "--ro-bind", System.getProperty("user.home"), System.getProperty("user.home")));
+    }
+
+    @Test
+    public void terminal_containsUserHomePathOnlyMatchesPathSyntax() throws Exception {
+        assertTrue(terminalContainsUserHomePath("ls ~"));
+        assertTrue(terminalContainsUserHomePath("cat ~/.m2/settings.xml"));
+        assertTrue(terminalContainsUserHomePath("TARGET=~/tmp echo ok"));
+
+        assertFalse(terminalContainsUserHomePath("echo \"~\""));
+        assertFalse(terminalContainsUserHomePath("echo 'abc~def'"));
+        assertFalse(terminalContainsUserHomePath("printf hello~world"));
+    }
+
+    @Test
+    public void linux_fineGrainedModeDeniesUserHomeWhenDisabled() throws Exception {
+        LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
+        executor.setConfig(new SandboxConfig());
+        executor.setAllowUserHome(false);
+
+        List<String> args = linuxArgs(executor, Paths.get("/tmp/test-workspace"));
+        assertContainsSequence(args, "--ro-bind", "/", "/");
+        assertContainsDenyMount(args, System.getProperty("user.home"));
+    }
+
+    private static boolean terminalContainsUserHomePath(String command) throws Exception {
+        TerminalTalent terminalTalent = new TerminalTalent(new MountManager("."));
+        Method method = TerminalTalent.class.getDeclaredMethod("containsUserHomePath", String.class);
+        method.setAccessible(true);
+        return (Boolean) method.invoke(terminalTalent, command);
+    }
+
+    private static void assertContainsDenyMount(List<String> args, String path) {
+        File file = new File(path);
+        if (file.exists() && file.isDirectory()) {
+            assertContainsSequence(args, "--tmpfs", path);
+        } else {
+            assertContainsSequence(args, "--ro-bind", "/dev/null", path);
+        }
     }
 
     private static MountDir mount(String alias, Path realPath, boolean writeable) throws Exception {
