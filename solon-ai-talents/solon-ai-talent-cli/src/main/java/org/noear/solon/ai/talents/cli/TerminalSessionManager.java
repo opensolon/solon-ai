@@ -65,7 +65,7 @@ public final class TerminalSessionManager {
             Integer hardTimeoutMs)
             throws IOException {
         cleanupCompletedSessions();
-        validateCommand(command);
+        requireNonEmptyCommand(command);
         Path normalizedWorkdir = normalizeWorkdir(workdir);
         ProcessBuilder builder = new ProcessBuilder(shellCommand(command));
         builder.directory(normalizedWorkdir.toFile());
@@ -147,7 +147,7 @@ public final class TerminalSessionManager {
                         });
     }
 
-    private static void validateCommand(String command) {
+    private static void requireNonEmptyCommand(String command) {
         if (command == null || command.trim().isEmpty()) {
             throw new IllegalArgumentException("command is required");
         }

@@ -372,6 +372,11 @@ public class TerminalTalent extends AbsTalent {
 
         String finalCommand = translateCommandToEnv(command, envs);
 
+        // OS 级沙盒包装（如果可用）
+        if (sandboxMode && osSandboxExecutor != null && osSandboxExecutor.isAvailable()) {
+            finalCommand = osSandboxExecutor.wrapCommand(finalCommand, targetWorkPath, envs);
+        }
+
         TerminalSessionManager.CommandSnapshot snapshot =
                 bashSessionManager.exec(finalCommand, targetWorkPath, envs, yieldTimeMs, maxOutputChars, hardTimeoutMs);
         return formatCommandSnapshot(snapshot, "bash_start");
@@ -776,12 +781,18 @@ public class TerminalTalent extends AbsTalent {
         }
 
         // 2. 系统破坏/自毁命令
-        if (lowerCmd.matches("(?i).*\\bexit\\b.*") ||
+        // exit: 仅拦截作为独立命令出现的 exit（行首/分号/管道/&&/|| 后），不拦截 echo 等参数中的 exit
+        if (lowerCmd.matches("(?i)^exit\\b.*") ||
+                lowerCmd.matches("(?i).*(?:;|\\|\\|?|&&)\\s*exit\\b.*") ||
                 lowerCmd.matches("(?i).*rm\\s+.*-[rR].*f\\s+/.*") ||
                 lowerCmd.matches("(?i).*(?:shutdown|reboot|init\\s+0|telinit).*") ||
                 lowerCmd.matches("(?i).*(?:dd\\s+if=|mkfs|format\\s+[a-z]:).*") ||
-                lowerCmd.matches("(?i).*:(\\(\\)\\s*\\{|:.*\\|.*&.*\\}.*") ||  // fork bomb
-                lowerCmd.matches("(?i).*(?:sysctl\\s+-w|modprobe|crontab).*")) {
+                lowerCmd.matches("(?i).*:\\(\\)\\s*\\{|:.*\\|.*&.*\\}.*") ||  // fork bomb
+                lowerCmd.matches("(?i).*(?:sysctl\\s+-w|modprobe|crontab).*") ||
+                lowerCmd.matches("(?i).*(?:systemctl\\s+(?:stop|disable|mask|kill|reset-failed)).*") ||
+                lowerCmd.matches("(?i).*\\b(?:nc|ncat|socat)\\b.*(?:-(?:e|c|l|p)\\s|/bin/|\\|\\s*sh).*") ||
+                lowerCmd.matches("(?i).*(?:iptables|ufw|firewall-cmd).*") ||
+                lowerCmd.matches("(?i).*(?:pip\\s+install|npm\\s+install|gem\\s+install).*\\s-[gG]\\b.*")) {
             return "错误：检测到高危指令，已拦截。";
         }
 
@@ -925,9 +936,26 @@ public class TerminalTalent extends AbsTalent {
                         throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
                     }
                 } catch (NoSuchFileException e) {
-                    // 目标不存在，回退到原有逻辑
-                    if (!target.startsWith(workPath)) {
-                        throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
+                    // 目标不存在：解析其父目录（通常存在）的真实路径来判断
+                    Path parent = target.getParent();
+                    if (parent != null) {
+                        try {
+                            Path realParent = parent.toRealPath();
+                            Path realWorkPath = workPath.toRealPath();
+                            if (!realParent.startsWith(realWorkPath)) {
+                                throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
+                            }
+                        } catch (NoSuchFileException e2) {
+                            // 父目录也不存在，回退到字符串检查
+                            if (!target.startsWith(workPath)) {
+                                throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
+                            }
+                        }
+                    } else {
+                        // 无父目录的极端情况，回退到字符串检查
+                        if (!target.startsWith(workPath)) {
+                            throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
+                        }
                     }
                 }
             }
