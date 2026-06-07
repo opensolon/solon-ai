@@ -823,6 +823,67 @@ public class SandboxTest {
         assertContainsDenyMount(args, System.getProperty("user.home"));
     }
 
+    @Test
+    public void macOs_profileDoesNotDenyUserHomeWhenEnabled() throws Exception {
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        executor.setAllowUserHome(true);
+
+        String profile = macProfile(executor, Paths.get("/tmp/test-workspace"));
+        assertFalse(profile.contains("deny file-read* (subpath \"" + System.getProperty("user.home") + "\")"), profile);
+    }
+
+    @Test
+    public void linux_fineGrainedModeDoesNotDenyUserHomeWhenEnabled() throws Exception {
+        LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
+        executor.setConfig(new SandboxConfig());
+        executor.setAllowUserHome(true);
+
+        List<String> args = linuxArgs(executor, Paths.get("/tmp/test-workspace"));
+        assertContainsSequence(args, "--ro-bind", "/", "/");
+        assertFalse(containsDenyMount(args, System.getProperty("user.home")),
+                "allowUserHome=true should not add a deny mount for user.home: " + args);
+    }
+
+    @Test
+    public void terminal_validateCommandBlocksUserHomePathWhenDisabled() throws Exception {
+        TerminalTalent terminalTalent = new TerminalTalent(new MountManager("."));
+        terminalTalent.setAllowUserHome(false);
+
+        String blocked = terminalValidateCommand(terminalTalent, "ls ~");
+        assertNotNull(blocked, "Path syntax ~ should be blocked when allowUserHome=false");
+        assertTrue(blocked.contains("allowUserHome"), blocked);
+
+        assertNull(terminalValidateCommand(terminalTalent, "echo \"~\""),
+                "Quoted standalone ~ is treated as text and should not be blocked by home-path policy");
+    }
+
+    @Test
+    public void terminal_translateCommandExpandsOrBlocksUserHomePath() throws Exception {
+        TerminalTalent allowed = new TerminalTalent(new MountManager("."));
+        allowed.setAllowUserHome(true);
+        String expanded = terminalTranslateCommand(allowed, "cat ~/.m2/settings.xml");
+        assertTrue(expanded.contains(System.getProperty("user.home").replace("\\", "/") + "/.m2/settings.xml"), expanded);
+
+        TerminalTalent blocked = new TerminalTalent(new MountManager("."));
+        blocked.setAllowUserHome(false);
+        assertThrows(SecurityException.class, () -> terminalTranslateCommand(blocked, "cat ~/.m2/settings.xml"));
+    }
+
+    @Test
+    public void terminal_setAllowUserHomePropagatesToSandboxExecutor() throws Exception {
+        TerminalTalent terminalTalent = new TerminalTalent(new MountManager("."));
+        RecordingSandboxExecutor executor = new RecordingSandboxExecutor();
+        java.lang.reflect.Field field = TerminalTalent.class.getDeclaredField("sandboxExecutor");
+        field.setAccessible(true);
+        field.set(terminalTalent, executor);
+
+        terminalTalent.setAllowUserHome(false);
+        assertEquals(Boolean.FALSE, executor.allowUserHome);
+
+        terminalTalent.setAllowUserHome(true);
+        assertEquals(Boolean.TRUE, executor.allowUserHome);
+    }
+
     private static boolean terminalContainsUserHomePath(String command) throws Exception {
         TerminalTalent terminalTalent = new TerminalTalent(new MountManager("."));
         Method method = TerminalTalent.class.getDeclaredMethod("containsUserHomePath", String.class);
@@ -830,13 +891,36 @@ public class SandboxTest {
         return (Boolean) method.invoke(terminalTalent, command);
     }
 
-    private static void assertContainsDenyMount(List<String> args, String path) {
+    private static String terminalValidateCommand(TerminalTalent terminalTalent, String command) throws Exception {
+        Method method = TerminalTalent.class.getDeclaredMethod("validateCommand", String.class);
+        method.setAccessible(true);
+        return (String) method.invoke(terminalTalent, command);
+    }
+
+    private static String terminalTranslateCommand(TerminalTalent terminalTalent, String command) throws Exception {
+        Method method = TerminalTalent.class.getDeclaredMethod("translateCommandToEnv", String.class, Map.class);
+        method.setAccessible(true);
+        try {
+            return (String) method.invoke(terminalTalent, command, new HashMap<String, String>());
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            if (e.getCause() instanceof SecurityException) {
+                throw (SecurityException) e.getCause();
+            }
+            throw e;
+        }
+    }
+
+    private static boolean containsDenyMount(List<String> args, String path) {
         File file = new File(path);
         if (file.exists() && file.isDirectory()) {
-            assertContainsSequence(args, "--tmpfs", path);
+            return containsSequence(args, "--tmpfs", path);
         } else {
-            assertContainsSequence(args, "--ro-bind", "/dev/null", path);
+            return containsSequence(args, "--ro-bind", "/dev/null", path);
         }
+    }
+
+    private static void assertContainsDenyMount(List<String> args, String path) {
+        assertTrue(containsDenyMount(args, path), "Expected deny mount for " + path + " in " + args);
     }
 
     private static MountDir mount(String alias, Path realPath, boolean writeable) throws Exception {
@@ -895,6 +979,25 @@ public class SandboxTest {
     }
 
     // ==================== Helper class for validateCommand testing ====================
+
+    private static class RecordingSandboxExecutor implements SandboxExecutor {
+        private Boolean allowUserHome;
+
+        @Override
+        public String wrapCommand(String command, Path workPath, Map<String, String> envs) {
+            return command;
+        }
+
+        @Override
+        public boolean isAvailable() {
+            return true;
+        }
+
+        @Override
+        public void setAllowUserHome(boolean allowUserHome) {
+            this.allowUserHome = allowUserHome;
+        }
+    }
 
     /**
      * 辅助类：直接调用 TerminalTalent 的 validateCommand 逻辑进行测试。
