@@ -60,7 +60,6 @@ public class TerminalTalent extends AbsTalent {
     private final String shellCmd;
     private final String extension;
     private final ShellMode shellMode;
-    private final String envExample; // 增加范例字段
 
     //沙盒模式：只能访问相对路径或逻辑路径；（否则为）开放模式：可以访问绝对路径
     private boolean sandboxMode = true;
@@ -160,18 +159,6 @@ public class TerminalTalent extends AbsTalent {
             this.shellCmd = probeUnixShell();
             this.extension = ".sh";
             this.shellMode = ShellMode.UNIX_SHELL;
-        }
-
-        switch (this.shellMode) {
-            case CMD:
-                envExample = "%POOL1%";
-                break;
-            case POWERSHELL:
-                envExample = "$env:POOL1";
-                break;
-            default:
-                envExample = "$POOL1";
-                break;
         }
 
         pythonCmd = executor.probePythonCommand();
