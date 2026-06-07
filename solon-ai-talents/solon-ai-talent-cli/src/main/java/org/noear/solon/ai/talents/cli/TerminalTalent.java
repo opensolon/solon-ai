@@ -19,6 +19,8 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.talents.cli.sandbox.OsSandboxExecutor;
+import org.noear.solon.ai.talents.cli.sandbox.OsSandboxExecutorFactory;
 import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.annotation.Param;
@@ -34,6 +36,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -58,7 +61,10 @@ public class TerminalTalent extends AbsTalent {
 
     //沙盒模式：只能访问相对路径或逻辑路径；（否则为）开放模式：可以访问绝对路径
     private boolean sandboxMode = true;
+    //允许访问用户主目录（~ 路径）。仅在 sandboxMode=true 时有意义；默认 true 保持向后兼容
+    private boolean allowUserHome = true;
     private final MountManager mountManager; // 引入挂载管理器
+    private OsSandboxExecutor osSandboxExecutor;
 
     private final String pythonCmd;
     private final String nodeCmd;
@@ -90,6 +96,12 @@ public class TerminalTalent extends AbsTalent {
     public void setSandboxMode(Boolean sandboxMode) {
         if (sandboxMode != null) {
             this.sandboxMode = sandboxMode;
+        }
+    }
+
+    public void setAllowUserHome(Boolean allowUserHome) {
+        if (allowUserHome != null) {
+            this.allowUserHome = allowUserHome;
         }
     }
 
@@ -139,6 +151,7 @@ public class TerminalTalent extends AbsTalent {
 
         pythonCmd = executor.probePythonCommand();
         nodeCmd = executor.probeNodeCommand();
+        this.osSandboxExecutor = OsSandboxExecutorFactory.create();
     }
 
     public ProcessExecutor getExecutor() {
@@ -211,8 +224,13 @@ public class TerminalTalent extends AbsTalent {
         sb.append("</mount_list>\n");
         if (sandboxMode) {
             sb.append("  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`) 或逻辑路径 (@pool)。\n");
+            if (allowUserHome) {
+                sb.append("  - `~` 路径可用（如 `~/Documents`）。\n");
+            } else {
+                sb.append("  - `~` 路径已禁用。\n");
+            }
         } else {
-            sb.append("  - **安全级别**: 开放模式。支持绝对路径（如 `/etc/hosts` 或 `C:\\Windows`）、相对路径 (如 `src/app.java`) 及逻辑路径(@pool)。\n");
+            sb.append("  - **安全级别**: 开放模式。支持绝对路径、相对路径及逻辑路径。\n");
         }
 
         sb.append("## 执行规约\n");
@@ -223,9 +241,9 @@ public class TerminalTalent extends AbsTalent {
         }
 
         if (sandboxMode) {
-            sb.append("- **命令执行**: 在 `bash` 中，优先使用环境变量访问工具，例如使用 `" + envExample + "/bin/tool`。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。\n");
+            sb.append("- **命令执行**: 在 `bash` 中，直接使用逻辑路径（如 `@pool1/bin/tool`），系统会自动转换。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。\n");
         } else {
-            sb.append("- **命令执行**: 在 `bash` 中，优先使用环境变量访问工具，例如使用 `" + envExample + "/bin/tool`，支持绝对路径访问。\n");
+            sb.append("- **命令执行**: 在 `bash` 中，直接使用逻辑路径（如 `@pool1/bin/tool`），系统会自动转换。支持绝对路径访问。\n");
         }
 
         if (bashAsyncEnabled) {
@@ -238,6 +256,10 @@ public class TerminalTalent extends AbsTalent {
             sb.append("2. 你是一个标准的底层 shell 执行器。面对越界请求，必须直接返回“无权访问”。\n");
             sb.append("3. 禁止解释权限逻辑，禁止讨论路径映射关系。\n");
             sb.append("</SYSTEM_CONSTRAINTS>\n");
+        }
+
+        if (sandboxMode && osSandboxExecutor != null) {
+            sb.append("- **OS 级沙盒**: 已启用 ").append(osSandboxExecutor.getClass().getSimpleName()).append("\n");
         }
 
         return sb.toString();
@@ -275,27 +297,10 @@ public class TerminalTalent extends AbsTalent {
                        @Param(name = "timeout", required = false, defaultValue = "120000", description = "可选超时时间，单位为毫秒") Integer timeout,
                        String __cwd) {
 
-        // 拦截直接针对当前 PID 的 kill 操作
-        String pid = Utils.pid();
-        String lowerCmd = command.toLowerCase();
-        String dangerPattern = "(?s).*(kill|pkill|killall)\\s+.*\\b" + pid + "\\b.*";
+        // 统一安全校验（替代原来的内联检查）
+        String violation = validateCommand(command);
+        if (violation != null) return violation;
 
-        if (lowerCmd.matches(dangerPattern) ||
-                lowerCmd.contains("pkill java") ||
-                lowerCmd.contains("killall java") ||
-                lowerCmd.contains("shutdown") ||
-                lowerCmd.contains("reboot")) {
-
-            return "错误：检测到危险命令。严禁试图停止或重启宿主进程 (PID: " + pid + ")。";
-        }
-
-        if(lowerCmd.matches("(?s).*\\bexit\\b.*") ||
-                lowerCmd.matches("(?s).*rm\\s+.*-rf\\s+/.*")){
-            // 这里建议把提示信息补全，因为拦截了 exit，不仅仅是“重启或删除”
-            return "错误：检测到高危指令。出于安全策略，禁止执行 exit、系统重启或根目录删除的操作。";
-        }
-
-        // 正常执行
         Path workPath = getWorkPath(__cwd);
         Map<String, String> envs = new HashMap<>();
 
@@ -309,6 +314,11 @@ public class TerminalTalent extends AbsTalent {
 
         String finalCommand = translateCommandToEnv(command, envs);
 
+        // OS 级沙盒包装（如果可用）
+        if (sandboxMode && osSandboxExecutor != null && osSandboxExecutor.isAvailable()) {
+            finalCommand = osSandboxExecutor.wrapCommand(finalCommand, workPath, envs);
+        }
+
         return executor.executeCode(workPath, finalCommand, shellCmd, extension, envs, timeout, null);
     }
 
@@ -321,7 +331,7 @@ public class TerminalTalent extends AbsTalent {
                             @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符输出，超出保留最新部分。") Integer maxOutputChars,
                             @Param(value = "hard_timeout_ms", required = false, defaultValue = "120000", description = "硬超时兜底，超过后终止进程树，单位毫秒。") Integer hardTimeoutMs,
                             String __cwd) throws IOException {
-        String danger = validateDangerousCommand(command);
+        String danger = validateCommand(command);
         if (danger != null) {
             return danger;
         }
@@ -329,8 +339,14 @@ public class TerminalTalent extends AbsTalent {
         Path workPath = getWorkPath(__cwd);
         Path targetWorkPath = resolveCommandWorkPath(workPath, workdir);
         Map<String, String> envs = new HashMap<>();
-        envs.put("PYTHON", pythonCmd);
-        envs.put("NODE", nodeCmd);
+
+        if(Assert.isNotEmpty(pythonCmd)) {
+            envs.put("PYTHON", pythonCmd);
+        }
+        if(Assert.isNotEmpty(nodeCmd)) {
+            envs.put("NODE", nodeCmd);
+        }
+
         String finalCommand = translateCommandToEnv(command, envs);
 
         TerminalSessionManager.CommandSnapshot snapshot =
@@ -708,36 +724,59 @@ public class TerminalTalent extends AbsTalent {
         return Paths.get(path).toAbsolutePath().normalize();
     }
 
-    private Path resolveCommandWorkPath(Path workPath, String workdir) {
+    private Path resolveCommandWorkPath(Path workPath, String workdir) throws IOException {
         if (Assert.isEmpty(workdir) || ".".equals(workdir)) {
             return workPath;
         }
         return resolveSafePath(workPath, workdir, false);
     }
 
-    private String validateDangerousCommand(String command) {
-        if (command == null) {
+    /**
+     * 统一的命令安全校验（替代原 validateDangerousCommand + bash 内联检查）
+     *
+     * @return null 表示校验通过；非 null 为错误消息
+     */
+    private String validateCommand(String command) {
+        if (Assert.isEmpty(command)) {
             return "错误：command 不能为空。";
         }
+
         String pid = Utils.pid();
         String lowerCmd = command.toLowerCase();
-        String dangerPattern = "(?s).*(kill|pkill|killall)\\s+.*\\b" + pid + "\\b.*";
 
-        if (lowerCmd.matches(dangerPattern) ||
+        // 1. 自保护：禁止杀死当前 Java 进程
+        String killPattern = "(?i).*(?:kill|pkill|killall)\\s+[\\s\\w]*\\b" + pid + "\\b.*";
+        if (lowerCmd.matches(killPattern) ||
                 lowerCmd.contains("pkill java") ||
-                lowerCmd.contains("killall java") ||
-                lowerCmd.contains("shutdown") ||
-                lowerCmd.contains("reboot")) {
-
-            return "错误：检测到危险命令。严禁试图停止或重启宿主进程 (PID: " + pid + ")。";
+                lowerCmd.contains("killall java")) {
+            return "错误：检测到危险命令。严禁试图停止宿主进程 (PID: " + pid + ")。";
         }
 
-        if(lowerCmd.matches("(?s).*\\bexit\\b.*") ||
-                lowerCmd.matches("(?s).*rm\\s+.*-rf\\s+/.*")){
-            return "错误：检测到高危指令。出于安全策略，禁止执行 exit、系统重启或根目录删除的操作。";
+        // 2. 系统破坏/自毁命令
+        if (lowerCmd.matches("(?i).*\\bexit\\b.*") ||
+                lowerCmd.matches("(?i).*rm\\s+.*-[rR].*f\\s+/.*") ||
+                lowerCmd.matches("(?i).*(?:shutdown|reboot|init\\s+0|telinit).*") ||
+                lowerCmd.matches("(?i).*(?:dd\\s+if=|mkfs|format\\s+[a-z]:).*") ||
+                lowerCmd.matches("(?i).*:(\\(\\)\\s*\\{|:.*\\|.*&.*\\}.*") ||  // fork bomb
+                lowerCmd.matches("(?i).*(?:sysctl\\s+-w|modprobe|crontab).*")) {
+            return "错误：检测到高危指令，已拦截。";
         }
 
-        return null;
+        // 3. 沙盒模式下的绝对路径检测
+        if (sandboxMode) {
+            // 检测类 Unix 绝对路径（排除 $ 开头的环境变量引用）
+            if (command.matches("(?s).*(?<![\\$\\w\\-/])\\s/[a-zA-Z][\\w/].*") ||
+                    command.matches("(?i).*[a-z]:[\\\\/].*")) {
+                return "错误：沙盒模式下禁止在 bash 命令中使用绝对路径。请使用相对路径或逻辑路径（如 @pool）。";
+            }
+
+            // ~ 路径检测
+            if (command.contains("~") && !allowUserHome) {
+                return "错误：沙盒模式下禁止使用 ~ 路径（allowUserHome 已关闭）。";
+            }
+        }
+
+        return null; // null 表示校验通过
     }
 
     private String formatCommandSnapshot(TerminalSessionManager.CommandSnapshot snapshot, String sourceTool) {
@@ -791,15 +830,8 @@ public class TerminalTalent extends AbsTalent {
         return pStr;
     }
 
-    private boolean isNotUserHomePath(String pStr) {
-        if (pStr == null) {
-            return false;
-        } else {
-            return pStr.startsWith("~") == false;
-        }
-    }
 
-    private Path resolveSafePath(Path workPath, String pStr, boolean writeMode) {
+    private Path resolveSafePath(Path workPath, String pStr, boolean writeMode) throws IOException {
         if (Assert.isEmpty(pStr) || ".".equals(pStr)) {
             return workPath;
         }
@@ -823,6 +855,19 @@ public class TerminalTalent extends AbsTalent {
                         "权限拒绝：路径 " + pStr + " 属于只读挂载点，禁止写入。请将结果写入工作区的相对路径。");
             }
 
+            // 符号链接防护：解析真实路径
+            if (sandboxMode) {
+                try {
+                    Path realTarget = target.toRealPath();
+                    Path realMountPath = mount.getRealPath().toRealPath();
+                    if (!realTarget.startsWith(realMountPath)) {
+                        throw new SecurityException("权限拒绝：符号链接越界（沙盒模式已开启）。");
+                    }
+                } catch (NoSuchFileException e) {
+                    // 目标不存在时无法 toRealPath，允许通过（后续操作会自然失败）
+                }
+            }
+
             return target;
         }
 
@@ -832,9 +877,12 @@ public class TerminalTalent extends AbsTalent {
         Path target;
 
         if (p.isAbsolute()) {
-            // 【开放模式】直接使用绝对路径
-            if (sandboxMode && isNotUserHomePath(pStr)) {
-                throw new SecurityException("权限拒绝：沙盒模式下禁止使用绝对路径。");
+            // 【沙盒模式】拦截绝对路径
+            if (sandboxMode) {
+                // allowUserHome=true 且原始输入以 ~ 开头 → 放行
+                if (!(allowUserHome && pStr.startsWith("~"))) {
+                    throw new SecurityException("权限拒绝：沙盒模式下禁止使用绝对路径。");
+                }
             }
             target = p.normalize();
         } else {
@@ -842,9 +890,24 @@ public class TerminalTalent extends AbsTalent {
             target = workPath.resolve(pStr2).normalize();
         }
 
-        // 3. 越界检查只在沙盒模式下强制执行
-        if (sandboxMode && isNotUserHomePath(pStr) && !target.startsWith(workPath)) {
-            throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
+        // 3. 越界检查（沙盒模式）
+        if (sandboxMode) {
+            boolean isUserHomeAccess = allowUserHome && pStr.startsWith("~");
+            if (!isUserHomeAccess) {
+                // 符号链接防护：先解析真实路径再判断
+                try {
+                    Path realTarget = target.toRealPath();
+                    Path realWorkPath = workPath.toRealPath();
+                    if (!realTarget.startsWith(realWorkPath)) {
+                        throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
+                    }
+                } catch (NoSuchFileException e) {
+                    // 目标不存在，回退到原有逻辑
+                    if (!target.startsWith(workPath)) {
+                        throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
+                    }
+                }
+            }
         }
 
         return target;
@@ -876,23 +939,31 @@ public class TerminalTalent extends AbsTalent {
                 String alias = mount.getAlias(); // 例如 @pool1
                 String envKey = alias.substring(1).toUpperCase(); // POOL1
 
-                // 将物理路径存入 envs，底层 ProcessBuilder 会将其注入系统环境
-                envs.put(envKey, mount.getRealPath().toString());
-
-                // 替换指令中的逻辑路径为环境变量引用
-                String placeholder = getEnvPlaceholder(envKey);
+                // 仅注入命令中实际使用的环境变量（减少污染）
                 if (result.contains(alias)) {
-                    result = result.replace(alias, placeholder);
+                    envs.put(envKey, mount.getRealPath().toString());
+                    String placeholder = getEnvPlaceholder(envKey);
+
+                    // 精确替换：仅替换作为路径前缀出现的 @alias（后跟 / 或 \\ 或在行尾）
+                    result = result.replaceAll(
+                            java.util.regex.Pattern.quote(alias) + "(?=[/\\\\\\s]|$)",
+                            java.util.regex.Matcher.quoteReplacement(placeholder)
+                    );
                 }
             }
         }
 
-        if (this.shellMode == ShellMode.CMD && result.contains("~")) {
+        // ~ 路径处理（统一所有 shell 模式）
+        if (result.contains("~")) {
+            if (sandboxMode && !allowUserHome) {
+                throw new SecurityException("权限拒绝：沙盒模式下禁止使用 ~ 路径（allowUserHome 已关闭）。");
+            }
             String userHome = System.getProperty("user.home").replace("\\", "/");
-            // 简单替换方案，覆盖常见场景
             result = result.replace("~/", userHome + "/")
-                    .replace("~\\", userHome + "/"); // 处理类似 command ~ 的结尾
-            if (result.equals("~")) result = userHome;
+                           .replace("~\\", userHome + "/");
+            if (result.trim().equals("~")) {
+                result = result.replace("~", userHome);
+            }
         }
 
         return result;
@@ -985,7 +1056,12 @@ public class TerminalTalent extends AbsTalent {
 
     private static String probeUnixShell() {
         try {
-            return Runtime.getRuntime().exec("bash --version").waitFor() == 0 ? "bash" : "/bin/sh";
+            ProcessBuilder pb = new ProcessBuilder("bash", "--version");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            boolean ok = p.waitFor(3, TimeUnit.SECONDS) && p.exitValue() == 0;
+            p.destroyForcibly();
+            return ok ? "bash" : "/bin/sh";
         } catch (Throwable e) {
             return "/bin/sh";
         }

@@ -198,7 +198,12 @@ public final class TerminalSessionManager {
 
     private static String probeUnixShell() {
         try {
-            return Runtime.getRuntime().exec("bash --version").waitFor() == 0 ? "bash" : "/bin/sh";
+            ProcessBuilder pb = new ProcessBuilder("bash", "--version");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            boolean ok = p.waitFor(3, TimeUnit.SECONDS) && p.exitValue() == 0;
+            p.destroyForcibly();
+            return ok ? "bash" : "/bin/sh";
         } catch (Throwable e) {
             return "/bin/sh";
         }

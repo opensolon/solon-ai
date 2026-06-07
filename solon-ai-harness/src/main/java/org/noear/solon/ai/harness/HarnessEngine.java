@@ -393,6 +393,11 @@ public class HarnessEngine {
         terminalTalent.setSandboxMode(sandboxMode);
     }
 
+    public void setAllowUserHome(Boolean allowUserHome) {
+        options.setAllowUserHome(allowUserHome);
+        terminalTalent.setAllowUserHome(allowUserHome);
+    }
+
     public void setHitlEnabled(Boolean hitlEnabled) {
         options.setHitlEnabled(hitlEnabled);
     }
@@ -728,6 +733,7 @@ public class HarnessEngine {
 
         terminalTalent.setBashAsyncEnabled(options.isBashAsyncEnabled());
         terminalTalent.setSandboxMode(options.isSandboxMode());
+        terminalTalent.setAllowUserHome(options.isAllowUserHome());
 
         //mainAgent = createMainAgent(); //改为懒加载
     }
@@ -920,6 +926,11 @@ public class HarnessEngine {
 
         public Builder sandboxMode(Boolean sandboxMode) {
             options.setSandboxMode(sandboxMode);
+            return this;
+        }
+
+        public Builder allowUserHome(Boolean allowUserHome) {
+            options.setAllowUserHome(allowUserHome);
             return this;
         }
 
