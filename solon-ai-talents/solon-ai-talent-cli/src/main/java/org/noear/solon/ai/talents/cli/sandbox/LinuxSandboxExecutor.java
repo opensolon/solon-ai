@@ -24,9 +24,7 @@ import java.util.Map;
 /**
  * Linux 平台的 bubblewrap (bwrap) 沙盒
  *
- * <p>原理：通过 bwrap 创建轻量级容器化环境，
- * 使用 mount namespace 控制文件系统可见性，
- * 使用 network namespace 控制网络访问。</p>
+ * <p>通过 mount namespace 控制文件系统可见性，通过 network namespace 控制网络访问。</p>
  *
  * @author noear
  * @since 3.9.1
@@ -43,7 +41,11 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
     @Override
     public String wrapCommand(String command, Path workPath, Map<String, String> envs) {
         List<String> args = buildBwrapArgs(workPath);
-        return String.join(" ", args) + " -- bash -c " + ShellQuote.quote(command);
+        args.add("--");
+        args.add("bash");
+        args.add("-c");
+        args.add(command);
+        return ShellQuote.quote(args.toArray(new String[0]));
     }
 
     @Override
@@ -52,104 +54,92 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
     }
 
     /**
-     * 构建 bubblewrap 参数
-     *
-     * <p>策略：</p>
-     * <ul>
-     *   <li>bind-ro: 系统目录只读挂载</li>
-     *   <li>bind: 工作区和允许写入的路径读写挂载</li>
-     *   <li>ro-bind /dev/null: 强制拒绝路径用空文件覆盖</li>
-     *   <li>unshare-pid: 独立 PID namespace</li>
-     * </ul>
+     * 构建 bubblewrap 参数。
      */
-    private List<String> buildBwrapArgs(Path workPath) {
+    List<String> buildBwrapArgs(Path workPath) {
         List<String> args = new ArrayList<>();
         args.add("bwrap");
         args.add("--new-session");
         args.add("--die-with-parent");
 
-        SandboxFsConfig fsConfig = config != null ? config.getFilesystem() : null;
+        SandboxFsConfig fsConfig = config != null ? config.getFilesystem() : new SandboxFsConfig();
+        SandboxNetConfig netConfig = config != null ? config.getNetwork() : null;
 
-        if (fsConfig != null && (!fsConfig.getDenyRead().isEmpty() || !fsConfig.getDenyWrite().isEmpty())) {
-            // 精细模式：只读根 + 白名单可写
+        boolean fineGrained = config != null;
+        if (fineGrained) {
+            // 精细模式：根只读；只对白名单路径重新 bind 为可写。
             args.add("--ro-bind"); args.add("/"); args.add("/");
 
-            // 允许写入的路径
             for (String allowPath : fsConfig.getAllowWrite()) {
                 String normalized = normalizeFsPath(allowPath, workPath);
-                File f = new File(normalized);
-                if (f.exists()) {
-                    args.add("--bind"); args.add(normalized); args.add(normalized);
-                }
+                addBindIfPossible(args, normalized, normalized, false);
             }
 
-            // 写拒绝路径：用只读覆盖
-            for (String denyPath : fsConfig.getEffectiveDenyWrite(workPath.toString())) {
-                String normalized = normalizeFsPath(denyPath, workPath);
-                File f = new File(normalized);
-                if (f.exists()) {
-                    if (f.isDirectory()) {
-                        args.add("--tmpfs"); args.add(normalized);
-                    } else {
-                        args.add("--ro-bind"); args.add("/dev/null"); args.add(normalized);
-                    }
-                }
-            }
-
-            // 读拒绝路径
+            // allowRead 在 denyRead 内打洞：在遮蔽 denyRead 后重新 ro-bind allowRead。
             for (String denyPath : fsConfig.getDenyRead()) {
                 String normalized = normalizeFsPath(denyPath, workPath);
-                File f = new File(normalized);
-                if (f.exists()) {
-                    if (f.isDirectory()) {
-                        args.add("--tmpfs"); args.add(normalized);
-                    } else {
-                        args.add("--ro-bind"); args.add("/dev/null"); args.add(normalized);
-                    }
-                }
+                addDenyMount(args, normalized);
+            }
+            for (String allowPath : fsConfig.getAllowRead()) {
+                String normalized = normalizeFsPath(allowPath, workPath);
+                addBindIfPossible(args, normalized, normalized, true);
+            }
+
+            for (String denyPath : fsConfig.getEffectiveDenyWrite(workPath.toString())) {
+                String normalized = normalizeFsPath(denyPath, workPath);
+                addDenyMount(args, normalized);
             }
         } else {
-            // 默认模式
-            args.add("--ro-bind"); args.add("/usr"); args.add("/usr");
-            args.add("--ro-bind"); args.add("/bin"); args.add("/bin");
-            args.add("--ro-bind"); args.add("/lib"); args.add("/lib");
-            args.add("--ro-bind"); args.add("/lib64"); args.add("/lib64");
-            args.add("--ro-bind"); args.add("/etc/alternatives"); args.add("/etc/alternatives");
+            // 默认兼容模式：系统目录只读，工作区和 /tmp 可写，同时叠加强制拒绝路径。
+            addBindIfPossible(args, "/usr", "/usr", true);
+            addBindIfPossible(args, "/bin", "/bin", true);
+            addBindIfPossible(args, "/lib", "/lib", true);
+            addBindIfPossible(args, "/lib64", "/lib64", true);
+            addBindIfPossible(args, "/etc/alternatives", "/etc/alternatives", true);
 
-            // 读写挂载工作区和 /tmp
-            args.add("--bind"); args.add(workPath.toString()); args.add(workPath.toString());
-            args.add("--bind"); args.add("/tmp"); args.add("/tmp");
+            addBindIfPossible(args, workPath.toString(), workPath.toString(), false);
+            addBindIfPossible(args, "/tmp", "/tmp", false);
 
-            // 强制拒绝路径
-            for (String denyFile : SandboxFsConfig.getMandatoryDenyFiles()) {
-                String fullPath = workPath + "/" + denyFile;
-                File f = new File(fullPath);
-                if (f.exists()) {
-                    args.add("--ro-bind"); args.add("/dev/null"); args.add(fullPath);
-                }
-            }
-            for (String denyDir : SandboxFsConfig.getMandatoryDenyDirs()) {
-                String fullPath = workPath + "/" + denyDir;
-                File f = new File(fullPath);
-                if (f.exists()) {
-                    args.add("--tmpfs"); args.add(fullPath);
-                }
+            for (String denyPath : fsConfig.getEffectiveDenyWrite(workPath.toString())) {
+                addDenyMount(args, normalizeFsPath(denyPath, workPath));
             }
         }
 
-        // proc 和 dev
         args.add("--proc"); args.add("/proc");
         args.add("--dev"); args.add("/dev");
-
-        // 独立 PID namespace
         args.add("--unshare-pid");
+
+        // 配置了 network 即进入网络管控模式：先禁止直连；后续代理桥接可在此基础上放行。
+        if (netConfig != null) {
+            args.add("--unshare-net");
+        }
 
         return args;
     }
 
+    private void addBindIfPossible(List<String> args, String source, String dest, boolean readOnly) {
+        if (new File(source).exists()) {
+            args.add(readOnly ? "--ro-bind" : "--bind");
+            args.add(source);
+            args.add(dest);
+        }
+    }
+
+    private void addDenyMount(List<String> args, String path) {
+        File f = new File(path);
+        if (f.exists() && f.isDirectory()) {
+            args.add("--tmpfs");
+            args.add(path);
+        } else {
+            // 对不存在的危险文件也保留覆盖规则，尽量防止命令在沙盒内创建。
+            args.add("--ro-bind");
+            args.add("/dev/null");
+            args.add(path);
+        }
+    }
+
     private String normalizeFsPath(String path, Path workPath) {
-        if (path == null) return workPath.toString();
-        if (path.equals(".")) return workPath.toString();
+        if (path == null || path.equals(".")) return workPath.toString();
         if (path.startsWith("/")) return path;
         return workPath.resolve(path).normalize().toString();
     }

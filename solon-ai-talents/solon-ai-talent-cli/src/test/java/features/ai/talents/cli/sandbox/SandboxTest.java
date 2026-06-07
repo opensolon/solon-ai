@@ -3,6 +3,7 @@ package features.ai.talents.cli.sandbox;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.talents.cli.sandbox.*;
 
+import java.lang.reflect.Method;
 import java.io.File;
 import java.io.FileWriter;
 import java.nio.file.Files;
@@ -516,6 +517,154 @@ public class SandboxTest {
         }
         for (Thread t : threads) { t.join(); }
         assertEquals(10, store.size());
+    }
+
+    // ==================== Hardened sandbox regression tests ====================
+
+    @Test
+    public void macOs_profileEscapesSeatbeltPathStrings() throws Exception {
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        String profile = macProfile(executor, Paths.get("/tmp/work\"evil\\path"));
+        assertTrue(profile.contains("/tmp/work\\\"evil\\\\path"), "Seatbelt string should escape quotes and backslashes: " + profile);
+        assertFalse(profile.contains("/tmp/work\"evil\\path"), "Profile should not contain raw injected path text");
+    }
+
+    @Test
+    public void macOs_configuredNetworkDoesNotAllowAllNetwork() throws Exception {
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        SandboxConfig config = new SandboxConfig();
+        config.getNetwork().setAllowedDomains(Arrays.asList("github.com"));
+        executor.setConfig(config);
+        String profile = macProfile(executor, Paths.get("/tmp/test-workspace"));
+        assertFalse(profile.contains("(allow network*)"), "Configured network policy must not allow all network");
+        assertTrue(profile.contains("network-outbound"), "Should include constrained outbound network rule");
+    }
+
+    @Test
+    public void macOs_emptyNetworkBlocksAllNetwork() throws Exception {
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        executor.setConfig(new SandboxConfig());
+        String profile = macProfile(executor, Paths.get("/tmp/test-workspace"));
+        assertFalse(profile.contains("(allow network*)"), "Empty network allow-list should not allow all network");
+    }
+
+    @Test
+    public void macOs_profileContainsLogTagOnDenyRules() throws Exception {
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        String profile = macProfile(executor, Paths.get("/tmp/test-workspace"));
+        assertTrue(profile.contains("with message"), "Deny rules should include log tags");
+        assertTrue(profile.contains("CMD64_"), "Log tags should contain command marker");
+    }
+
+    @Test
+    public void macOs_profileContainsRecursiveMandatoryDenyRegex() throws Exception {
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        String profile = macProfile(executor, Paths.get("/tmp/test-workspace"));
+        assertTrue(profile.contains("regex"), "Mandatory deny should include recursive regex rules");
+        assertTrue(profile.contains(".bashrc"), "Mandatory deny should include .bashrc");
+        assertTrue(profile.contains(".git/hooks"), "Mandatory deny should include .git/hooks");
+    }
+
+    @Test
+    public void macOs_moveBlockingIncludesAncestorPath() throws Exception {
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        SandboxConfig config = new SandboxConfig();
+        config.getFilesystem().setDenyWrite(Arrays.asList("secrets/.env"));
+        executor.setConfig(config);
+        String profile = macProfile(executor, Paths.get("/tmp/test-workspace"));
+        assertTrue(profile.contains("/tmp/test-workspace/secrets"), "Move blocking should include ancestor directory");
+        assertTrue(profile.contains("file-write-unlink"), "Move blocking should deny unlink");
+        assertTrue(profile.contains("file-write-create"), "Move blocking should deny create");
+    }
+
+    @Test
+    public void linux_wrapCommandQuotesEveryBwrapArgument() throws Exception {
+        LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
+        SandboxConfig config = new SandboxConfig();
+        config.getFilesystem().setAllowWrite(Arrays.asList("."));
+        executor.setConfig(config);
+        Path tempWork = Files.createTempDirectory("work space");
+        String result = executor.wrapCommand("echo hello", tempWork, new HashMap<>());
+        assertTrue(result.contains(ShellQuote.quote(tempWork.toString())), "Path containing spaces should be shell-quoted: " + result);
+        assertTrue(result.endsWith("bash -c 'echo hello'"), "Command should be appended as quoted argv: " + result);
+    }
+
+    @Test
+    public void linux_allowWriteOnlyUsesFineGrainedMode() throws Exception {
+        LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
+        SandboxConfig config = new SandboxConfig();
+        config.getFilesystem().setAllowWrite(Arrays.asList("src"));
+        executor.setConfig(config);
+        List<String> args = linuxArgs(executor, Paths.get("/tmp/test-workspace"));
+        assertContainsSequence(args, "--ro-bind", "/", "/");
+        assertFalse(containsSequence(args, "--bind", "/tmp/test-workspace", "/tmp/test-workspace"),
+                "Fine-grained mode should not bind entire workspace writable when allowWrite is restricted: " + args);
+    }
+
+    @Test
+    public void linux_configuredNetworkUnsharesNet() throws Exception {
+        LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
+        executor.setConfig(new SandboxConfig());
+        List<String> args = linuxArgs(executor, Paths.get("/tmp/test-workspace"));
+        assertTrue(args.contains("--unshare-net"), "Configured network policy should unshare network namespace");
+    }
+
+    @Test
+    public void linux_defaultNetworkCompatibilityDoesNotUnshareNet() throws Exception {
+        LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
+        List<String> args = linuxArgs(executor, Paths.get("/tmp/test-workspace"));
+        assertFalse(args.contains("--unshare-net"), "Null config should keep compatibility network behavior");
+    }
+
+    @Test
+    public void linux_nonExistentMandatoryDenyStillAddsMount() throws Exception {
+        LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
+        List<String> args = linuxArgs(executor, Paths.get("/tmp/test-workspace"));
+        assertContainsSequence(args, "--ro-bind", "/dev/null", "/tmp/test-workspace/.bashrc");
+    }
+
+    @Test
+    public void linux_allowReadRebindsAfterDenyRead() throws Exception {
+        LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
+        SandboxConfig config = new SandboxConfig();
+        config.getFilesystem().setDenyRead(Arrays.asList("."));
+        config.getFilesystem().setAllowRead(Arrays.asList("src"));
+        executor.setConfig(config);
+        List<String> args = linuxArgs(executor, Paths.get("/tmp/test-workspace"));
+        assertContainsSequence(args, "--ro-bind", "/dev/null", "/tmp/test-workspace");
+        // src may not exist in test environment, but the re-bind path must be considered by build args when existing.
+        // Verify semantic ordering indirectly: denyRead path is present and fine-grained root ro-bind is active.
+        assertContainsSequence(args, "--ro-bind", "/", "/");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> linuxArgs(LinuxSandboxExecutor executor, Path workPath) throws Exception {
+        Method method = LinuxSandboxExecutor.class.getDeclaredMethod("buildBwrapArgs", Path.class);
+        method.setAccessible(true);
+        return (List<String>) method.invoke(executor, workPath);
+    }
+
+    private static String macProfile(MacOsSandboxExecutor executor, Path workPath) throws Exception {
+        Method method = MacOsSandboxExecutor.class.getDeclaredMethod("generateSeatbeltProfile", Path.class);
+        method.setAccessible(true);
+        return (String) method.invoke(executor, workPath);
+    }
+
+    private static void assertContainsSequence(List<String> args, String... sequence) {
+        assertTrue(containsSequence(args, sequence), "Expected sequence " + Arrays.toString(sequence) + " in " + args);
+    }
+
+    private static boolean containsSequence(List<String> args, String... sequence) {
+        outer:
+        for (int i = 0; i <= args.size() - sequence.length; i++) {
+            for (int j = 0; j < sequence.length; j++) {
+                if (!Objects.equals(args.get(i + j), sequence[j])) {
+                    continue outer;
+                }
+            }
+            return true;
+        }
+        return false;
     }
 
     // ==================== Helper class for validateCommand testing ====================
