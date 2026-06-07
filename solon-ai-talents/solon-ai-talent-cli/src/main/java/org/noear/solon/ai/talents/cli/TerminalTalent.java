@@ -615,7 +615,7 @@ public class TerminalTalent extends AbsTalent {
         Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                if (isIgnored(workPath, dir) || isIgnored(target, dir)) {
+                if (isIgnored(workPath, dir) || isIgnored(target, dir) || isSandboxReadDenied(workPath, dir)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
                 return FileVisitResult.CONTINUE;
@@ -623,7 +623,7 @@ public class TerminalTalent extends AbsTalent {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (isIgnored(workPath, file) || isIgnored(target, file)) {
+                if (isIgnored(workPath, file) || isIgnored(target, file) || isSandboxReadDenied(workPath, file)) {
                     return FileVisitResult.CONTINUE;
                 }
 
@@ -681,7 +681,7 @@ public class TerminalTalent extends AbsTalent {
         Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                if (isIgnored(workPath, dir) || isIgnored(target, dir)) {
+                if (isIgnored(workPath, dir) || isIgnored(target, dir) || isSandboxReadDenied(workPath, dir)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
                 return FileVisitResult.CONTINUE;
@@ -689,7 +689,7 @@ public class TerminalTalent extends AbsTalent {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (isIgnored(workPath, file) || isIgnored(target, file)) {
+                if (isIgnored(workPath, file) || isIgnored(target, file) || isSandboxReadDenied(workPath, file)) {
                     return FileVisitResult.CONTINUE;
                 }
 
@@ -900,6 +900,9 @@ public class TerminalTalent extends AbsTalent {
                 } catch (NoSuchFileException e) {
                     // 目标不存在时无法 toRealPath，允许通过（后续操作会自然失败）
                 }
+
+                String relative = pStr.substring(alias.length()).replaceFirst("^[/\\\\]", "");
+                enforceSandboxFsPolicy(workPath, mount.getRealPath(), target, relative, writeMode);
             }
 
             return target;
@@ -959,9 +962,85 @@ public class TerminalTalent extends AbsTalent {
                     }
                 }
             }
+
+            String relativePath = target.startsWith(workPath) ? workPath.relativize(target).toString() : null;
+            enforceSandboxFsPolicy(workPath, workPath, target, relativePath, writeMode);
         }
 
         return target;
+    }
+
+    private void enforceSandboxFsPolicy(Path workPath, Path rootPath, Path target, String relativePath, boolean writeMode) throws IOException {
+        if (!sandboxMode || sandboxConfig == null || sandboxConfig.getFilesystem() == null) {
+            return;
+        }
+
+        SandboxFsConfig fsConfig = sandboxConfig.getFilesystem();
+        if (writeMode) {
+            if (isMandatoryDenyRelativePath(relativePath)) {
+                throw new SecurityException("权限拒绝：路径受保护，禁止写入。");
+            }
+            if (!isWriteAllowed(rootPath, target, fsConfig)) {
+                throw new SecurityException("权限拒绝：路径不在可写白名单内。");
+            }
+            if (matchesAnyConfiguredPath(rootPath, target, fsConfig.getDenyWrite())) {
+                throw new SecurityException("权限拒绝：路径命中写入拒绝规则。");
+            }
+        } else {
+            if (isReadDenied(rootPath, target, fsConfig)) {
+                throw new SecurityException("权限拒绝：路径命中读取拒绝规则。");
+            }
+        }
+    }
+
+    private boolean isSandboxReadDenied(Path workPath, Path target) {
+        if (!sandboxMode || sandboxConfig == null || sandboxConfig.getFilesystem() == null) {
+            return false;
+        }
+        return isReadDenied(workPath, target, sandboxConfig.getFilesystem());
+    }
+
+    private boolean isReadDenied(Path workPath, Path target, SandboxFsConfig fsConfig) {
+        return matchesAnyConfiguredPath(workPath, target, fsConfig.getDenyRead())
+                && !matchesAnyConfiguredPath(workPath, target, fsConfig.getAllowRead());
+    }
+
+    private boolean isWriteAllowed(Path rootPath, Path target, SandboxFsConfig fsConfig) {
+        for (String allowPath : fsConfig.getAllowWrite()) {
+            Path allow = normalizeConfiguredPath(rootPath, allowPath);
+            if (target.startsWith(allow)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesAnyConfiguredPath(Path workPath, Path target, List<String> paths) {
+        for (String configuredPath : paths) {
+            Path normalized = normalizeConfiguredPath(workPath, configuredPath);
+            if (target.startsWith(normalized)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Path normalizeConfiguredPath(Path rootPath, String path) {
+        if (Assert.isEmpty(path) || ".".equals(path)) {
+            return rootPath.normalize();
+        }
+        Path configured = Paths.get(path);
+        if (configured.isAbsolute()) {
+            return configured.normalize();
+        }
+        return rootPath.resolve(configured).normalize();
+    }
+
+    private boolean isMandatoryDenyRelativePath(String relativePath) {
+        if (relativePath == null) {
+            return false;
+        }
+        return SandboxFsConfig.isMandatoryDenyPath(relativePath.replace("\\", "/"));
     }
 
     private String formatDisplayPath(Path workPath, String inputPath, Path targetDir, Path file) {
@@ -1037,6 +1116,7 @@ public class TerminalTalent extends AbsTalent {
         try (Stream<Path> stream = Files.list(current)) {
             List<Path> children = stream
                     .filter(p -> !isIgnored(workPath, p))
+                    .filter(p -> !isSandboxReadDenied(workPath, p))
                     .filter(p -> showHidden || !p.getFileName().toString().startsWith("."))
                     .sorted((a, b) -> {
                         boolean aDir = Files.isDirectory(a);
@@ -1062,6 +1142,7 @@ public class TerminalTalent extends AbsTalent {
         try (Stream<Path> stream = Files.list(target)) {
             List<String> lines = stream
                     .filter(p -> !isIgnored(workPath, p))
+                    .filter(p -> !isSandboxReadDenied(workPath, p))
                     .filter(p -> showHidden || !p.getFileName().toString().startsWith("."))
                     .map(p -> {
                         boolean isDir = Files.isDirectory(p);
