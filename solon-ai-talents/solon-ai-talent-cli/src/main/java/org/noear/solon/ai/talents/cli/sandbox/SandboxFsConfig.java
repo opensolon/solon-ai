@@ -134,7 +134,9 @@ public class SandboxFsConfig {
             }
         }
         for (String denyDir : MANDATORY_DENY_DIRS) {
-            if (normalized.startsWith(denyDir + "/") || normalized.equals(denyDir)) {
+            if (normalized.equals(denyDir) || normalized.startsWith(denyDir + "/")
+                    || normalized.endsWith("/" + denyDir)
+                    || normalized.contains("/" + denyDir + "/")) {
                 return true;
             }
         }

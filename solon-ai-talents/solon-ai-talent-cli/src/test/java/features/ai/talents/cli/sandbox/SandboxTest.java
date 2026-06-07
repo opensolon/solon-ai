@@ -101,7 +101,9 @@ public class SandboxTest {
     public void fsConfig_isMandatoryDenyPath_bashrc() {
         assertTrue(SandboxFsConfig.isMandatoryDenyPath(".bashrc"));
         assertTrue(SandboxFsConfig.isMandatoryDenyPath("./.bashrc"));
-        assertTrue(SandboxFsConfig.isMandatoryDenyPath("subdir/.bashrc"));
+        assertTrue(SandboxFsConfig.isMandatoryDenyPath(".vscode/settings.json"));
+        assertTrue(SandboxFsConfig.isMandatoryDenyPath("subdir/.vscode/settings.json"));
+        assertTrue(SandboxFsConfig.isMandatoryDenyPath("subdir/.git/hooks/pre-commit"));
     }
 
     @Test

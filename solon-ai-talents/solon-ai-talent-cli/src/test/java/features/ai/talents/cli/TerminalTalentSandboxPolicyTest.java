@@ -454,6 +454,49 @@ public class TerminalTalentSandboxPolicyTest {
         }
     }
 
+    @Test
+    public void recursiveSearchSkipsWorkspaceSymlinkFileOutside() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
+        Path outsideDir = Files.createTempDirectory("solon-ai-terminal-outside-");
+        try {
+            Files.write(outsideDir.resolve("secret.txt"), Collections.singletonList("outside-secret-token"));
+            Path link = workDir.resolve("linked-secret.txt");
+            try {
+                Files.createSymbolicLink(link, outsideDir.resolve("secret.txt"));
+            } catch (UnsupportedOperationException | SecurityException | java.nio.file.FileSystemException e) {
+                assumeTrue(false, "Symbolic links are not available in this environment: " + e.getMessage());
+            }
+
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            talent.setSandboxConfig(new SandboxConfig());
+
+            String grepResult = talent.grep("outside-secret-token", ".", workDir.toString());
+            assertTrue(!grepResult.contains("outside-secret-token"), grepResult);
+
+            String globResult = talent.glob("**/*.txt", ".", workDir.toString());
+            assertTrue(!globResult.contains("linked-secret.txt"), globResult);
+        } finally {
+            deleteRecursively(workDir);
+            deleteRecursively(outsideDir);
+        }
+    }
+
+    @Test
+    public void writeRejectsNestedMandatoryDenyDirectory() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
+        try {
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            talent.setSandboxConfig(new SandboxConfig());
+
+            SecurityException ex = assertThrows(SecurityException.class,
+                    () -> talent.write("sub/.vscode/settings.json", "evil", workDir.toString()));
+            assertTrue(ex.getMessage().contains("路径受保护"), ex.getMessage());
+            assertTrue(!Files.exists(workDir.resolve("sub/.vscode/settings.json")));
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
     private static void deleteRecursively(Path root) throws Exception {
         if (!Files.exists(root)) {
             return;

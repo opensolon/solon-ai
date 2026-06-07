@@ -623,7 +623,7 @@ public class TerminalTalent extends AbsTalent {
         Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                if (isIgnored(workPath, dir) || isIgnored(target, dir) || isSandboxReadDenied(policyRoot, dir)) {
+                if (isIgnored(workPath, dir) || isIgnored(target, dir) || isSandboxBoundaryDenied(policyRoot, dir) || isSandboxReadDenied(policyRoot, dir)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
                 return FileVisitResult.CONTINUE;
@@ -631,7 +631,7 @@ public class TerminalTalent extends AbsTalent {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (isIgnored(workPath, file) || isIgnored(target, file) || isSandboxReadDenied(policyRoot, file)) {
+                if (isIgnored(workPath, file) || isIgnored(target, file) || isSandboxBoundaryDenied(policyRoot, file) || isSandboxReadDenied(policyRoot, file)) {
                     return FileVisitResult.CONTINUE;
                 }
 
@@ -690,7 +690,7 @@ public class TerminalTalent extends AbsTalent {
         Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                if (isIgnored(workPath, dir) || isIgnored(target, dir) || isSandboxReadDenied(policyRoot, dir)) {
+                if (isIgnored(workPath, dir) || isIgnored(target, dir) || isSandboxBoundaryDenied(policyRoot, dir) || isSandboxReadDenied(policyRoot, dir)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
                 return FileVisitResult.CONTINUE;
@@ -698,7 +698,7 @@ public class TerminalTalent extends AbsTalent {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (isIgnored(workPath, file) || isIgnored(target, file) || isSandboxReadDenied(policyRoot, file)) {
+                if (isIgnored(workPath, file) || isIgnored(target, file) || isSandboxBoundaryDenied(policyRoot, file) || isSandboxReadDenied(policyRoot, file)) {
                     return FileVisitResult.CONTINUE;
                 }
 
@@ -1002,6 +1002,19 @@ public class TerminalTalent extends AbsTalent {
         return isReadDenied(workPath, target, sandboxConfig.getFilesystem());
     }
 
+    private boolean isSandboxBoundaryDenied(Path rootPath, Path target) {
+        if (!sandboxMode) {
+            return false;
+        }
+        try {
+            Path realRoot = rootPath.toRealPath();
+            Path realTarget = resolveComparablePath(target);
+            return !realTarget.startsWith(realRoot);
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
     private boolean isReadDenied(Path workPath, Path target, SandboxFsConfig fsConfig) {
         return matchesAnyConfiguredPath(workPath, target, fsConfig.getDenyRead())
                 && !matchesAnyConfiguredPath(workPath, target, fsConfig.getAllowRead());
@@ -1155,6 +1168,7 @@ public class TerminalTalent extends AbsTalent {
         try (Stream<Path> stream = Files.list(current)) {
             List<Path> children = stream
                     .filter(p -> !isIgnored(workPath, p))
+                    .filter(p -> !isSandboxBoundaryDenied(workPath, p))
                     .filter(p -> !isSandboxReadDenied(workPath, p))
                     .filter(p -> showHidden || !p.getFileName().toString().startsWith("."))
                     .sorted((a, b) -> {
@@ -1168,6 +1182,9 @@ public class TerminalTalent extends AbsTalent {
                 Path child = children.get(i);
                 boolean isLast = (i == children.size() - 1);
                 boolean isDir = Files.isDirectory(child);
+                if (isSandboxBoundaryDenied(workPath, child)) {
+                    continue;
+                }
                 sb.append(indent).append(isLast ? "└── " : "├── ").append(child.getFileName()).append("\n");
                 if (isDir)
                     generateTreeInternal(workPath, child, depth + 1, maxDepth, indent + (isLast ? "    " : "│   "), sb, showHidden);
@@ -1181,6 +1198,7 @@ public class TerminalTalent extends AbsTalent {
         try (Stream<Path> stream = Files.list(target)) {
             List<String> lines = stream
                     .filter(p -> !isIgnored(workPath, p))
+                    .filter(p -> !isSandboxBoundaryDenied(policyRoot, p))
                     .filter(p -> !isSandboxReadDenied(policyRoot, p))
                     .filter(p -> showHidden || !p.getFileName().toString().startsWith("."))
                     .map(p -> {
