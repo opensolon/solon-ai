@@ -104,6 +104,8 @@ public class SandboxTest {
         assertTrue(SandboxFsConfig.isMandatoryDenyPath(".vscode/settings.json"));
         assertTrue(SandboxFsConfig.isMandatoryDenyPath("subdir/.vscode/settings.json"));
         assertTrue(SandboxFsConfig.isMandatoryDenyPath("subdir/.git/hooks/pre-commit"));
+        assertTrue(SandboxFsConfig.isMandatoryDenyPath("subdir/.bashrc"));
+        assertTrue(SandboxFsConfig.isMandatoryDenyPath("subdir/.claude/commands/init.md"));
     }
 
     @Test
@@ -737,6 +739,38 @@ public class SandboxTest {
         String profile = macProfile(executor, Paths.get("/tmp/test-workspace"));
         assertTrue(profile.contains("deny file-read* (subpath \"/tmp/policy-mount/secret\")"), profile);
         assertTrue(profile.contains("deny file-write* (subpath \"/tmp/policy-mount/.bashrc\")"), profile);
+    }
+
+    @Test
+    public void linux_recursiveMandatoryDenyAppliesInsideWorkspaceAndMount() throws Exception {
+        LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
+        executor.setConfig(new SandboxConfig());
+        Path workRoot = Files.createTempDirectory("work recursive deny");
+        Path mountRoot = Files.createTempDirectory("mount recursive deny");
+        try {
+            Files.createDirectories(workRoot.resolve("sub/.vscode"));
+            Files.createDirectories(mountRoot.resolve("sub/.git/hooks"));
+            executor.setMounts(Collections.singletonList(mount("@ro", mountRoot, false)));
+
+            List<String> args = linuxArgs(executor, workRoot);
+            assertContainsSequence(args, "--tmpfs", workRoot.resolve("sub/.vscode").toString());
+            assertContainsSequence(args, "--tmpfs", mountRoot.resolve("sub/.git/hooks").toString());
+        } finally {
+            deleteRecursively(workRoot);
+            deleteRecursively(mountRoot);
+        }
+    }
+
+    @Test
+    public void macOs_recursiveMandatoryDenyRegexAppliesInsideMountRoot() throws Exception {
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        executor.setMounts(Collections.singletonList(mount("@ro", Paths.get("/tmp/policy-mount"), false)));
+
+        String profile = macProfile(executor, Paths.get("/tmp/test-workspace"));
+        assertTrue(profile.contains("/tmp/policy"), profile);
+        assertTrue(profile.contains(".vscode"), profile);
+        assertTrue(profile.contains(".git/hooks"), profile);
+        assertTrue(profile.contains("file-write-create"), profile);
     }
 
     private static MountDir mount(String alias, Path realPath, boolean writeable) throws Exception {

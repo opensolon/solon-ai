@@ -129,7 +129,10 @@ public class SandboxFsConfig {
         if (relativePath == null) return false;
         String normalized = relativePath.startsWith("./") ? relativePath.substring(2) : relativePath;
         for (String denyFile : MANDATORY_DENY_FILES) {
-            if (normalized.equals(denyFile) || normalized.endsWith("/" + denyFile)) {
+            if (normalized.equals(denyFile)
+                    || normalized.startsWith(denyFile + "/")
+                    || normalized.endsWith("/" + denyFile)
+                    || normalized.contains("/" + denyFile + "/")) {
                 return true;
             }
         }

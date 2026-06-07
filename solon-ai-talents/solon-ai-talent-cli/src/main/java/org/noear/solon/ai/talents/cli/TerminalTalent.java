@@ -236,7 +236,7 @@ public class TerminalTalent extends AbsTalent {
         sb.append("\n<mount_list>\n");
         for (MountDir mount : mountManager.getMounts()) {
             if (mount.isEnabled()) {
-                String envKey = mount.getAlias().substring(1).toUpperCase();
+                String envKey = toMountEnvKey(mount.getAlias());
                 String envRef = getEnvPlaceholder(envKey);
                 sb.append("  <mount alias=\"").append(mount.getAlias()).append("\"");
                 if (Assert.isNotEmpty(mount.getDescription())) {
@@ -979,7 +979,8 @@ public class TerminalTalent extends AbsTalent {
 
         SandboxFsConfig fsConfig = sandboxConfig.getFilesystem();
         if (writeMode) {
-            if (isMandatoryDenyRelativePath(relativePath)) {
+            if (isMandatoryDenyRelativePath(relativePath)
+                    || isMandatoryDenyRealPath(rootPath, target)) {
                 throw new SecurityException("权限拒绝：路径受保护，禁止写入。");
             }
             if (!isWriteAllowed(rootPath, target, fsConfig)) {
@@ -1073,6 +1074,20 @@ public class TerminalTalent extends AbsTalent {
         return SandboxFsConfig.isMandatoryDenyPath(relativePath.replace("\\", "/"));
     }
 
+    private boolean isMandatoryDenyRealPath(Path rootPath, Path target) {
+        Path effectiveTarget = resolveComparablePath(target);
+        Path effectiveRoot = resolveComparablePath(rootPath);
+        if (!effectiveTarget.startsWith(effectiveRoot)) {
+            return false;
+        }
+        try {
+            String relativePath = effectiveRoot.relativize(effectiveTarget).toString();
+            return isMandatoryDenyRelativePath(relativePath);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
     private String formatDisplayPath(Path workPath, String inputPath, Path targetDir, Path file) {
         if (inputPath != null && inputPath.startsWith("@")) {
             String prefix = inputPath.split("[/\\\\]")[0];
@@ -1092,12 +1107,21 @@ public class TerminalTalent extends AbsTalent {
         }
     }
 
+    private String toMountEnvKey(String alias) {
+        String raw = alias.startsWith("@") ? alias.substring(1) : alias;
+        String envKey = raw.toUpperCase().replaceAll("[^A-Z0-9_]", "_");
+        if (envKey.isEmpty() || Character.isDigit(envKey.charAt(0))) {
+            envKey = "MOUNT_" + envKey;
+        }
+        return envKey;
+    }
+
     private String translateCommandToEnv(String command, Map<String, String> envs) {
         String result = command;
         for (MountDir mount : mountManager.getMounts()) {
             if (mount.isEnabled()) {
                 String alias = mount.getAlias(); // 例如 @pool1
-                String envKey = alias.substring(1).toUpperCase(); // POOL1
+                String envKey = toMountEnvKey(alias); // POOL1
 
                 // 仅注入命令中实际使用的环境变量（减少污染）
                 if (result.contains(alias)) {

@@ -18,8 +18,13 @@ package org.noear.solon.ai.talents.cli.sandbox;
 import org.noear.solon.ai.talents.mount.MountDir;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.FileVisitResult;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -105,6 +110,7 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
                 String normalized = normalizeFsPath(denyPath, workPath);
                 addDenyMount(args, normalized);
             }
+            addRecursiveMandatoryDenyRules(args, workPath);
             addMountWriteDenyRules(args, fsConfig);
         } else {
             // 默认兼容模式：系统目录只读，工作区和 /tmp 可写，同时叠加强制拒绝路径。
@@ -121,6 +127,7 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
             for (String denyPath : fsConfig.getEffectiveDenyWrite(workPath.toString())) {
                 addDenyMount(args, normalizeFsPath(denyPath, workPath));
             }
+            addRecursiveMandatoryDenyRules(args, workPath);
             addMountWriteDenyRules(args, fsConfig);
         }
 
@@ -176,6 +183,35 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
             for (String denyPath : fsConfig.getEffectiveDenyWrite(mountRoot)) {
                 addDenyMount(args, normalizeFsPath(denyPath, mount.getRealPath()));
             }
+            addRecursiveMandatoryDenyRules(args, mount.getRealPath());
+        }
+    }
+
+    private void addRecursiveMandatoryDenyRules(List<String> args, Path rootPath) {
+        if (rootPath == null || !Files.exists(rootPath)) {
+            return;
+        }
+        try {
+            Files.walkFileTree(rootPath, new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                    if (!dir.equals(rootPath) && SandboxFsConfig.isMandatoryDenyPath(rootPath.relativize(dir).toString().replace("\\", "/"))) {
+                        addDenyMount(args, dir.toString());
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    if (SandboxFsConfig.isMandatoryDenyPath(rootPath.relativize(file).toString().replace("\\", "/"))) {
+                        addDenyMount(args, file.toString());
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException ignored) {
+            // Best effort: static top-level deny rules are still applied by getEffectiveDenyWrite.
         }
     }
 

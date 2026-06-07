@@ -296,7 +296,8 @@ public class TerminalTalentSandboxPolicyTest {
 
             SecurityException ex = assertThrows(SecurityException.class,
                     () -> talent.read("@pool/note.txt", 1, null, workDir.toString()));
-            assertTrue(ex.getMessage().contains("未知的挂载点"), ex.getMessage());
+            assertTrue(ex.getMessage().contains("未知的挂载点")
+                    || ex.getMessage().contains("挂载点已禁用"), ex.getMessage());
         } finally {
             deleteRecursively(workDir);
             deleteRecursively(mountDir);
@@ -481,6 +482,69 @@ public class TerminalTalentSandboxPolicyTest {
         }
     }
 
+    @Test
+    public void writeRejectsWorkspaceSymlinkToMandatoryDenyFile() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
+        try {
+            Files.write(workDir.resolve(".bashrc"), "safe".getBytes());
+            Files.createSymbolicLink(workDir.resolve("safe-link"), workDir.resolve(".bashrc"));
+
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            talent.setSandboxConfig(new SandboxConfig());
+
+            assertThrows(SecurityException.class, () -> talent.write("safe-link", "evil", workDir.toString()));
+            assertTrue("safe".equals(new String(Files.readAllBytes(workDir.resolve(".bashrc")))));
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
+    @Test
+    public void writeRejectsMountSymlinkToMandatoryDenyFile() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
+        Path pool = Files.createTempDirectory("solon-ai-terminal-pool-");
+        try {
+            Files.write(pool.resolve(".bashrc"), "safe".getBytes());
+            Files.createSymbolicLink(pool.resolve("safe-link"), pool.resolve(".bashrc"));
+
+            MountManager mountManager = new MountManager(workDir.toString());
+            mountManager.register(MountDir.builder()
+                    .alias("@pool")
+                    .path(pool.toString())
+                    .type(MountType.SKILLS)
+                    .writeable(true)
+                    .build());
+            TerminalTalent talent = new TerminalTalent(mountManager);
+            talent.setSandboxConfig(new SandboxConfig());
+
+            assertThrows(SecurityException.class, () -> talent.write("@pool/safe-link", "evil", workDir.toString()));
+            assertTrue("safe".equals(new String(Files.readAllBytes(pool.resolve(".bashrc")))));
+        } finally {
+            deleteRecursively(workDir);
+            deleteRecursively(pool);
+        }
+    }
+
+    @Test
+    public void mountAliasWithHyphenUsesValidEnvName() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
+        Path pool = Files.createTempDirectory("solon-ai-terminal-agents-");
+        try {
+            MountManager mountManager = new MountManager(workDir.toString());
+            mountManager.register(MountDir.builder()
+                    .alias("@workspace-agents")
+                    .path(pool.toString())
+                    .type(MountType.AGENTS)
+                    .build());
+
+            TerminalTalent talent = new TerminalTalent(mountManager);
+            String instruction = talent.getInstruction(null);
+            assertTrue(instruction.contains("$WORKSPACE_AGENTS"), instruction);
+        } finally {
+            deleteRecursively(workDir);
+            deleteRecursively(pool);
+        }
+    }
     @Test
     public void writeRejectsNestedMandatoryDenyDirectory() throws Exception {
         Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");

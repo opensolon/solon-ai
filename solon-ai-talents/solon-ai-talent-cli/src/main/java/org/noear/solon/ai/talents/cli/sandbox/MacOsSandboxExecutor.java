@@ -201,6 +201,9 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
         }
         for (MountDir mount : mounts) {
             if (mount != null && mount.isEnabled() && mount.getRealPath() != null) {
+                for (String pattern : mandatoryDenyRegexes(mount.getRealPath().toString())) {
+                    appendRegexRule(sb, "deny", "file-write*", pattern, logTag);
+                }
                 String mountRoot = mount.getRealPath().toString();
                 for (String denyPath : fsConfig.getEffectiveDenyWrite(mountRoot)) {
                     appendPathRule(sb, "deny", "file-write*", normalizeFsPath(denyPath, mount.getRealPath()), logTag);
@@ -230,6 +233,10 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
                 continue;
             }
             String mountRoot = mount.getRealPath().toString();
+            for (String pattern : mandatoryDenyRegexes(mountRoot)) {
+                appendRegexRule(sb, "deny", "file-write-unlink", pattern, logTag);
+                appendRegexRule(sb, "deny", "file-write-create", pattern, logTag);
+            }
             for (String denyPath : fsConfig.getEffectiveDenyWrite(mountRoot)) {
                 String normalized = normalizeFsPath(denyPath, mount.getRealPath());
                 appendPathRule(sb, "deny", "file-write-unlink", normalized, logTag);
