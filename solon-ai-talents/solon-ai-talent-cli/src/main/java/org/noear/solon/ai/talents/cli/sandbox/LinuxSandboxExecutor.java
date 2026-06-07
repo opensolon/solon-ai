@@ -15,9 +15,13 @@
  */
 package org.noear.solon.ai.talents.cli.sandbox;
 
+import org.noear.solon.ai.talents.mount.MountDir;
+
 import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -32,6 +36,12 @@ import java.util.Map;
 public class LinuxSandboxExecutor implements OsSandboxExecutor {
 
     private volatile SandboxConfig config;
+    private volatile Collection<MountDir> mounts = Collections.emptyList();
+
+    @Override
+    public void setMounts(Collection<MountDir> mounts) {
+        this.mounts = mounts != null ? mounts : Collections.emptyList();
+    }
 
     @Override
     public void setConfig(SandboxConfig config) {
@@ -70,6 +80,8 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
             // 精细模式：根只读；只对白名单路径重新 bind 为可写。
             args.add("--ro-bind"); args.add("/"); args.add("/");
 
+            addMountBindings(args);
+
             for (String allowPath : fsConfig.getAllowWrite()) {
                 String normalized = normalizeFsPath(allowPath, workPath);
                 addBindIfPossible(args, normalized, normalized, false);
@@ -99,6 +111,7 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
 
             addBindIfPossible(args, workPath.toString(), workPath.toString(), false);
             addBindIfPossible(args, "/tmp", "/tmp", false);
+            addMountBindings(args);
 
             for (String denyPath : fsConfig.getEffectiveDenyWrite(workPath.toString())) {
                 addDenyMount(args, normalizeFsPath(denyPath, workPath));
@@ -115,6 +128,17 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
         }
 
         return args;
+    }
+
+    private void addMountBindings(List<String> args) {
+        for (MountDir mount : mounts) {
+            if (mount == null || !mount.isEnabled() || mount.getRealPath() == null) {
+                continue;
+            }
+
+            String path = mount.getRealPath().toString();
+            addBindIfPossible(args, path, path, !mount.isWriteable());
+        }
     }
 
     private void addBindIfPossible(List<String> args, String source, String dest, boolean readOnly) {

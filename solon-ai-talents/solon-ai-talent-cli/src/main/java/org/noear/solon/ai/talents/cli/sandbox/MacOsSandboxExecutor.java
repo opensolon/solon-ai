@@ -15,12 +15,15 @@
  */
 package org.noear.solon.ai.talents.cli.sandbox;
 
+import org.noear.solon.ai.talents.mount.MountDir;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +41,13 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
     private static final Logger LOG = LoggerFactory.getLogger(MacOsSandboxExecutor.class);
 
     private volatile SandboxConfig config;
+    private volatile Collection<MountDir> mounts = Collections.emptyList();
     private SandboxViolationStore violationStore;
+
+    @Override
+    public void setMounts(Collection<MountDir> mounts) {
+        this.mounts = mounts != null ? mounts : Collections.emptyList();
+    }
 
     @Override
     public void setConfig(SandboxConfig config) {
@@ -148,6 +157,11 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
 
         // ========== 文件系统规则（读写分离） ==========
         sb.append("(allow file-read*)\n");
+        for (MountDir mount : mounts) {
+            if (mount != null && mount.isEnabled() && mount.getRealPath() != null) {
+                appendPathRule(sb, "allow", "file-read*", mount.getRealPath().toString(), null);
+            }
+        }
         for (String denyPath : fsConfig.getDenyRead()) {
             appendPathRule(sb, "deny", "file-read*", normalizeFsPath(denyPath, workPath), logTag);
         }
@@ -161,6 +175,11 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
 
         for (String allowPath : fsConfig.getAllowWrite()) {
             appendPathRule(sb, "allow", "file-write*", normalizeFsPath(allowPath, workPath), null);
+        }
+        for (MountDir mount : mounts) {
+            if (mount != null && mount.isEnabled() && mount.isWriteable() && mount.getRealPath() != null) {
+                appendPathRule(sb, "allow", "file-write*", mount.getRealPath().toString(), null);
+            }
         }
         if (fsConfig.getAllowWrite().stream().noneMatch("/tmp"::equals)) {
             appendPathRule(sb, "allow", "file-write*", "/tmp", null);
@@ -177,6 +196,11 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
         }
         for (String pattern : mandatoryDenyRegexes(wp)) {
             appendRegexRule(sb, "deny", "file-write*", pattern, logTag);
+        }
+        for (MountDir mount : mounts) {
+            if (mount != null && mount.isEnabled() && !mount.isWriteable() && mount.getRealPath() != null) {
+                appendPathRule(sb, "deny", "file-write*", mount.getRealPath().toString(), logTag);
+            }
         }
         sb.append("\n");
 

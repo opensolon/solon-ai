@@ -125,8 +125,11 @@ public class TerminalTalent extends AbsTalent {
      */
     public void setSandboxConfig(SandboxConfig sandboxConfig) {
         this.sandboxConfig = sandboxConfig;
-        if (osSandboxExecutor != null && sandboxConfig != null) {
-            osSandboxExecutor.setConfig(sandboxConfig);
+        if (osSandboxExecutor != null) {
+            osSandboxExecutor.setMounts(mountManager.getMounts());
+            if (sandboxConfig != null) {
+                osSandboxExecutor.setConfig(sandboxConfig);
+            }
         }
     }
 
@@ -174,6 +177,7 @@ public class TerminalTalent extends AbsTalent {
         pythonCmd = executor.probePythonCommand();
         nodeCmd = executor.probeNodeCommand();
         this.osSandboxExecutor = OsSandboxExecutorFactory.create(sandboxConfig);
+        this.osSandboxExecutor.setMounts(mountManager.getMounts());
         this.osSandboxExecutor.setViolationStore(violationStore);
     }
 
@@ -339,6 +343,7 @@ public class TerminalTalent extends AbsTalent {
 
         // OS 级沙盒包装（如果可用）
         if (sandboxMode && osSandboxExecutor != null && osSandboxExecutor.isAvailable()) {
+            osSandboxExecutor.setMounts(mountManager.getMounts());
             finalCommand = osSandboxExecutor.wrapCommand(finalCommand, workPath, envs);
         }
 
@@ -374,6 +379,7 @@ public class TerminalTalent extends AbsTalent {
 
         // OS 级沙盒包装（如果可用）
         if (sandboxMode && osSandboxExecutor != null && osSandboxExecutor.isAvailable()) {
+            osSandboxExecutor.setMounts(mountManager.getMounts());
             finalCommand = osSandboxExecutor.wrapCommand(finalCommand, targetWorkPath, envs);
         }
 
@@ -430,10 +436,10 @@ public class TerminalTalent extends AbsTalent {
             StringBuilder sb = new StringBuilder();
             String displayName = (path == null || ".".equals(path)) ? "." : path;
             sb.append(displayName).append("\n");
-            generateTreeInternal(workPath, target, 0, 3, "", sb, Boolean.TRUE.equals(showHidden));
+            generateTreeInternal(getSandboxPolicyRoot(workPath, path), target, 0, 3, "", sb, Boolean.TRUE.equals(showHidden));
             return sb.toString();
         } else {
-            return flatListLogic(workPath, target, path, Boolean.TRUE.equals(showHidden));
+            return flatListLogic(workPath, getSandboxPolicyRoot(workPath, path), target, path, Boolean.TRUE.equals(showHidden));
         }
     }
 
@@ -612,11 +618,12 @@ public class TerminalTalent extends AbsTalent {
         Path target = resolveSafePath(workPath, path, false);
 
         StringBuilder sb = new StringBuilder();
+        Path policyRoot = getSandboxPolicyRoot(workPath, path);
 
         Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                if (isIgnored(workPath, dir) || isIgnored(target, dir) || isSandboxReadDenied(workPath, dir)) {
+                if (isIgnored(workPath, dir) || isIgnored(target, dir) || isSandboxReadDenied(policyRoot, dir)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
                 return FileVisitResult.CONTINUE;
@@ -624,7 +631,7 @@ public class TerminalTalent extends AbsTalent {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (isIgnored(workPath, file) || isIgnored(target, file) || isSandboxReadDenied(workPath, file)) {
+                if (isIgnored(workPath, file) || isIgnored(target, file) || isSandboxReadDenied(policyRoot, file)) {
                     return FileVisitResult.CONTINUE;
                 }
 
@@ -678,11 +685,12 @@ public class TerminalTalent extends AbsTalent {
         final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + fixedPattern);
 
         List<String> results = new ArrayList<>();
+        Path policyRoot = getSandboxPolicyRoot(workPath, path);
 
         Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                if (isIgnored(workPath, dir) || isIgnored(target, dir) || isSandboxReadDenied(workPath, dir)) {
+                if (isIgnored(workPath, dir) || isIgnored(target, dir) || isSandboxReadDenied(policyRoot, dir)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
                 return FileVisitResult.CONTINUE;
@@ -690,7 +698,7 @@ public class TerminalTalent extends AbsTalent {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (isIgnored(workPath, file) || isIgnored(target, file) || isSandboxReadDenied(workPath, file)) {
+                if (isIgnored(workPath, file) || isIgnored(target, file) || isSandboxReadDenied(policyRoot, file)) {
                     return FileVisitResult.CONTINUE;
                 }
 
@@ -885,7 +893,7 @@ public class TerminalTalent extends AbsTalent {
             String alias = pStr.split("[/\\\\]")[0];
             MountDir mount = mountManager.getMount(alias);
 
-            if (mount == null) {
+            if (mount == null || !mount.isEnabled()) {
                 throw new SecurityException("权限拒绝：未知的挂载点 " + pStr);
             }
 
@@ -897,13 +905,18 @@ public class TerminalTalent extends AbsTalent {
             // 符号链接防护：解析真实路径
             if (sandboxMode) {
                 try {
-                    Path realTarget = target.toRealPath();
                     Path realMountPath = mount.getRealPath().toRealPath();
+                    Path realTarget;
+                    try {
+                        realTarget = target.toRealPath();
+                    } catch (NoSuchFileException e) {
+                        realTarget = resolveExistingAncestor(target).toRealPath();
+                    }
                     if (!realTarget.startsWith(realMountPath)) {
                         throw new SecurityException("权限拒绝：符号链接越界（沙盒模式已开启）。");
                     }
                 } catch (NoSuchFileException e) {
-                    // 目标不存在时无法 toRealPath，允许通过（后续操作会自然失败）
+                    // 挂载根目录不存在或目标路径没有任何已存在祖先时，后续文件操作会自然失败
                 }
 
                 String relative = pStr.substring(alias.length()).replaceFirst("^[/\\\\]", "");
@@ -1116,6 +1129,28 @@ public class TerminalTalent extends AbsTalent {
         }
     }
 
+    private Path resolveExistingAncestor(Path target) throws IOException {
+        Path current = target.getParent();
+        while (current != null) {
+            if (Files.exists(current)) {
+                return current;
+            }
+            current = current.getParent();
+        }
+        throw new NoSuchFileException(String.valueOf(target));
+    }
+
+    private Path getSandboxPolicyRoot(Path workPath, String inputPath) {
+        if (inputPath != null && inputPath.startsWith("@")) {
+            String alias = inputPath.split("[/\\\\]")[0];
+            MountDir mount = mountManager.getMount(alias);
+            if (mount != null && mount.getRealPath() != null) {
+                return mount.getRealPath();
+            }
+        }
+        return workPath;
+    }
+
     private void generateTreeInternal(Path workPath, Path current, int depth, int maxDepth, String indent, StringBuilder sb, boolean showHidden) throws IOException {
         if (depth >= maxDepth) return;
         try (Stream<Path> stream = Files.list(current)) {
@@ -1143,11 +1178,11 @@ public class TerminalTalent extends AbsTalent {
         }
     }
 
-    private String flatListLogic(Path workPath, Path target, String inputPath, boolean showHidden) throws IOException {
+    private String flatListLogic(Path workPath, Path policyRoot, Path target, String inputPath, boolean showHidden) throws IOException {
         try (Stream<Path> stream = Files.list(target)) {
             List<String> lines = stream
                     .filter(p -> !isIgnored(workPath, p))
-                    .filter(p -> !isSandboxReadDenied(workPath, p))
+                    .filter(p -> !isSandboxReadDenied(policyRoot, p))
                     .filter(p -> showHidden || !p.getFileName().toString().startsWith("."))
                     .map(p -> {
                         boolean isDir = Files.isDirectory(p);

@@ -156,9 +156,14 @@ public class MountManager {
 
         if (pStr.startsWith("@")) {
             for (Map.Entry<String, MountDir> e : mountMap.entrySet()) {
-                if (pStr.startsWith(e.getKey())) {
-                    String sub = pStr.substring(e.getKey().length()).replaceFirst("^[/\\\\]", "");
-                    return e.getValue().getRealPath().resolve(sub).normalize();
+                String alias = e.getKey();
+                if (pStr.equals(alias) || pStr.startsWith(alias + "/") || pStr.startsWith(alias + "\\")) {
+                    MountDir mountDir = e.getValue();
+                    if (!mountDir.isEnabled()) {
+                        break;
+                    }
+                    String sub = pStr.substring(alias.length()).replaceFirst("^[/\\\\]", "");
+                    return mountDir.getRealPath().resolve(sub).normalize();
                 }
             }
         }

@@ -2,6 +2,8 @@ package features.ai.talents.cli.sandbox;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.talents.cli.sandbox.*;
+import org.noear.solon.ai.talents.mount.MountDir;
+import org.noear.solon.ai.talents.mount.MountType;
 
 import java.lang.reflect.Method;
 import java.io.File;
@@ -624,6 +626,42 @@ public class SandboxTest {
     }
 
     @Test
+    public void linux_mountsAreBoundWithWritableFlag() throws Exception {
+        LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
+        Path readOnlyMount = Files.createTempDirectory("ro mount");
+        Path writableMount = Files.createTempDirectory("rw mount");
+        try {
+            executor.setMounts(Arrays.asList(
+                    mount("@ro", readOnlyMount, false),
+                    mount("@rw", writableMount, true)
+            ));
+
+            List<String> args = linuxArgs(executor, Paths.get("/tmp/test-workspace"));
+            assertContainsSequence(args, "--ro-bind", readOnlyMount.toString(), readOnlyMount.toString());
+            assertContainsSequence(args, "--bind", writableMount.toString(), writableMount.toString());
+        } finally {
+            deleteRecursively(readOnlyMount);
+            deleteRecursively(writableMount);
+        }
+    }
+
+    @Test
+    public void macOs_mountsAffectReadAndWriteProfile() throws Exception {
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        Path readOnlyMount = Paths.get("/tmp/readonly-mount");
+        Path writableMount = Paths.get("/tmp/writable-mount");
+        executor.setMounts(Arrays.asList(
+                mount("@ro", readOnlyMount, false),
+                mount("@rw", writableMount, true)
+        ));
+
+        String profile = macProfile(executor, Paths.get("/tmp/test-workspace"));
+        assertTrue(profile.contains("file-read* (subpath \"/tmp/readonly-mount\")"), profile);
+        assertTrue(profile.contains("allow file-write* (subpath \"/tmp/writable-mount\")"), profile);
+        assertTrue(profile.contains("deny file-write* (subpath \"/tmp/readonly-mount\")"), profile);
+    }
+
+    @Test
     public void linux_allowReadRebindsAfterDenyRead() throws Exception {
         LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
         SandboxConfig config = new SandboxConfig();
@@ -635,6 +673,31 @@ public class SandboxTest {
         // src may not exist in test environment, but the re-bind path must be considered by build args when existing.
         // Verify semantic ordering indirectly: denyRead path is present and fine-grained root ro-bind is active.
         assertContainsSequence(args, "--ro-bind", "/", "/");
+    }
+
+    private static MountDir mount(String alias, Path realPath, boolean writeable) throws Exception {
+        MountDir mount = MountDir.builder()
+                .alias(alias)
+                .path(realPath.toString())
+                .type(MountType.SKILLS)
+                .writeable(writeable)
+                .build();
+        Method method = MountDir.class.getDeclaredMethod("setRealPath", Path.class);
+        method.setAccessible(true);
+        method.invoke(mount, realPath);
+        return mount;
+    }
+
+    private static void deleteRecursively(Path root) throws Exception {
+        if (!Files.exists(root)) {
+            return;
+        }
+        ArrayList<Path> paths = new ArrayList<>();
+        Files.walk(root).forEach(paths::add);
+        Collections.sort(paths, Collections.reverseOrder());
+        for (Path path : paths) {
+            Files.deleteIfExists(path);
+        }
     }
 
     @SuppressWarnings("unchecked")
