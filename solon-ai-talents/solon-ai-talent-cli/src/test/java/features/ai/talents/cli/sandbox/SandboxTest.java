@@ -675,6 +675,68 @@ public class SandboxTest {
         assertContainsSequence(args, "--ro-bind", "/", "/");
     }
 
+    @Test
+    public void linux_fineGrainedWritableMountRequiresAllowWritePolicy() throws Exception {
+        LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
+        SandboxConfig config = new SandboxConfig();
+        config.getFilesystem().setAllowWrite(Arrays.asList("src"));
+        executor.setConfig(config);
+        Path writableMount = Files.createTempDirectory("rw mount restricted");
+        try {
+            executor.setMounts(Collections.singletonList(mount("@rw", writableMount, true)));
+            List<String> args = linuxArgs(executor, Paths.get("/tmp/test-workspace"));
+            assertContainsSequence(args, "--ro-bind", writableMount.toString(), writableMount.toString());
+            assertFalse(containsSequence(args, "--bind", writableMount.toString(), writableMount.toString()),
+                    "Writable mount must not become writable unless fs allowWrite also permits the mount root: " + args);
+        } finally {
+            deleteRecursively(writableMount);
+        }
+    }
+
+    @Test
+    public void linux_mountDenyReadAndMandatoryDenyApplyInsideMountRoot() throws Exception {
+        LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
+        SandboxConfig config = new SandboxConfig();
+        config.getFilesystem().setDenyRead(Arrays.asList("secret"));
+        executor.setConfig(config);
+        Path mountRoot = Files.createTempDirectory("mount policy root");
+        try {
+            Files.createDirectories(mountRoot.resolve("secret"));
+            executor.setMounts(Collections.singletonList(mount("@ro", mountRoot, false)));
+            List<String> args = linuxArgs(executor, Paths.get("/tmp/test-workspace"));
+            assertContainsSequence(args, "--tmpfs", mountRoot.resolve("secret").toString());
+            assertContainsSequence(args, "--ro-bind", "/dev/null", mountRoot.resolve(".bashrc").toString());
+        } finally {
+            deleteRecursively(mountRoot);
+        }
+    }
+
+    @Test
+    public void macOs_fineGrainedWritableMountRequiresAllowWritePolicy() throws Exception {
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        SandboxConfig config = new SandboxConfig();
+        config.getFilesystem().setAllowWrite(Arrays.asList("src"));
+        executor.setConfig(config);
+        executor.setMounts(Collections.singletonList(mount("@rw", Paths.get("/tmp/restricted-rw-mount"), true)));
+
+        String profile = macProfile(executor, Paths.get("/tmp/test-workspace"));
+        assertFalse(profile.contains("allow file-write* (subpath \"/tmp/restricted-rw-mount\")"), profile);
+        assertTrue(profile.contains("deny file-write* (subpath \"/tmp/restricted-rw-mount\")"), profile);
+    }
+
+    @Test
+    public void macOs_mountDenyReadAndMandatoryDenyApplyInsideMountRoot() throws Exception {
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        SandboxConfig config = new SandboxConfig();
+        config.getFilesystem().setDenyRead(Arrays.asList("secret"));
+        executor.setConfig(config);
+        executor.setMounts(Collections.singletonList(mount("@ro", Paths.get("/tmp/policy-mount"), false)));
+
+        String profile = macProfile(executor, Paths.get("/tmp/test-workspace"));
+        assertTrue(profile.contains("deny file-read* (subpath \"/tmp/policy-mount/secret\")"), profile);
+        assertTrue(profile.contains("deny file-write* (subpath \"/tmp/policy-mount/.bashrc\")"), profile);
+    }
+
     private static MountDir mount(String alias, Path realPath, boolean writeable) throws Exception {
         MountDir mount = MountDir.builder()
                 .alias(alias)

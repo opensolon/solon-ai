@@ -19,6 +19,7 @@ import org.noear.solon.ai.talents.mount.MountDir;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -80,7 +81,9 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
             // 精细模式：根只读；只对白名单路径重新 bind 为可写。
             args.add("--ro-bind"); args.add("/"); args.add("/");
 
-            addMountBindings(args);
+            for (MountDir mount : mounts) {
+                addMountBinding(args, mount, mount != null && mount.isWriteable() && mountWriteAllowed(mount, fsConfig, workPath));
+            }
 
             for (String allowPath : fsConfig.getAllowWrite()) {
                 String normalized = normalizeFsPath(allowPath, workPath);
@@ -96,11 +99,13 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
                 String normalized = normalizeFsPath(allowPath, workPath);
                 addBindIfPossible(args, normalized, normalized, true);
             }
+            addMountReadRules(args, fsConfig);
 
             for (String denyPath : fsConfig.getEffectiveDenyWrite(workPath.toString())) {
                 String normalized = normalizeFsPath(denyPath, workPath);
                 addDenyMount(args, normalized);
             }
+            addMountWriteDenyRules(args, fsConfig);
         } else {
             // 默认兼容模式：系统目录只读，工作区和 /tmp 可写，同时叠加强制拒绝路径。
             addBindIfPossible(args, "/usr", "/usr", true);
@@ -116,6 +121,7 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
             for (String denyPath : fsConfig.getEffectiveDenyWrite(workPath.toString())) {
                 addDenyMount(args, normalizeFsPath(denyPath, workPath));
             }
+            addMountWriteDenyRules(args, fsConfig);
         }
 
         args.add("--proc"); args.add("/proc");
@@ -132,13 +138,71 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
 
     private void addMountBindings(List<String> args) {
         for (MountDir mount : mounts) {
+            addMountBinding(args, mount, mount != null && mount.isWriteable());
+        }
+    }
+
+    private void addMountBinding(List<String> args, MountDir mount, boolean writable) {
+        if (mount == null || !mount.isEnabled() || mount.getRealPath() == null) {
+            return;
+        }
+
+        String path = mount.getRealPath().toString();
+        addBindIfPossible(args, path, path, !writable);
+    }
+
+    private void addMountReadRules(List<String> args, SandboxFsConfig fsConfig) {
+        for (MountDir mount : mounts) {
             if (mount == null || !mount.isEnabled() || mount.getRealPath() == null) {
                 continue;
             }
-
-            String path = mount.getRealPath().toString();
-            addBindIfPossible(args, path, path, !mount.isWriteable());
+            Path mountPath = mount.getRealPath();
+            for (String denyPath : fsConfig.getDenyRead()) {
+                addDenyMount(args, normalizeFsPath(denyPath, mountPath));
+            }
+            for (String allowPath : fsConfig.getAllowRead()) {
+                String normalized = normalizeFsPath(allowPath, mountPath);
+                addBindIfPossible(args, normalized, normalized, true);
+            }
         }
+    }
+
+    private void addMountWriteDenyRules(List<String> args, SandboxFsConfig fsConfig) {
+        for (MountDir mount : mounts) {
+            if (mount == null || !mount.isEnabled() || mount.getRealPath() == null) {
+                continue;
+            }
+            String mountRoot = mount.getRealPath().toString();
+            for (String denyPath : fsConfig.getEffectiveDenyWrite(mountRoot)) {
+                addDenyMount(args, normalizeFsPath(denyPath, mount.getRealPath()));
+            }
+        }
+    }
+
+    private boolean mountWriteAllowed(MountDir mount, SandboxFsConfig fsConfig, Path workPath) {
+        if (mount == null || !mount.isEnabled() || !mount.isWriteable() || mount.getRealPath() == null) {
+            return false;
+        }
+
+        Path mountPath = mount.getRealPath().normalize();
+        boolean allowed = false;
+        for (String allowPath : fsConfig.getAllowWrite()) {
+            String normalized = normalizeFsPath(allowPath, mountPath);
+            if (mountPath.startsWith(Paths.get(normalized).normalize())) {
+                allowed = true;
+                break;
+            }
+        }
+        if (!allowed) {
+            return false;
+        }
+        for (String denyPath : fsConfig.getDenyWrite()) {
+            String normalized = normalizeFsPath(denyPath, mountPath);
+            if (mountPath.startsWith(Paths.get(normalized).normalize())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void addBindIfPossible(List<String> args, String source, String dest, boolean readOnly) {

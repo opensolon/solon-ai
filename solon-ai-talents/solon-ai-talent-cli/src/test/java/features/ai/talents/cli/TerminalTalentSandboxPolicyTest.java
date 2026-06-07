@@ -340,6 +340,120 @@ public class TerminalTalentSandboxPolicyTest {
         }
     }
 
+    @Test
+    public void writableMountRejectsWriteWhenSandboxConfigDisallowsMountRoot() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
+        Path mountDir = Files.createTempDirectory("solon-ai-terminal-mount-");
+        try {
+            MountManager mountManager = new MountManager(workDir.toString());
+            mountManager.register(MountDir.builder()
+                    .alias("@pool")
+                    .path(mountDir.toString())
+                    .type(MountType.SKILLS)
+                    .writeable(true)
+                    .build());
+
+            TerminalTalent talent = new TerminalTalent(mountManager);
+            SandboxConfig config = new SandboxConfig();
+            config.getFilesystem().setAllowWrite(Collections.singletonList("allowed"));
+            talent.setSandboxConfig(config);
+
+            SecurityException ex = assertThrows(SecurityException.class,
+                    () -> talent.write("@pool/new.txt", "blocked", workDir.toString()));
+            assertTrue(ex.getMessage().contains("可写白名单"), ex.getMessage());
+            assertTrue(!Files.exists(mountDir.resolve("new.txt")));
+        } finally {
+            deleteRecursively(workDir);
+            deleteRecursively(mountDir);
+        }
+    }
+
+    @Test
+    public void writeThroughWorkspaceSymlinkParentOutsideIsRejected() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
+        Path outsideDir = Files.createTempDirectory("solon-ai-terminal-outside-");
+        try {
+            Path link = workDir.resolve("link-out");
+            try {
+                Files.createSymbolicLink(link, outsideDir);
+            } catch (UnsupportedOperationException | SecurityException | java.nio.file.FileSystemException e) {
+                assumeTrue(false, "Symbolic links are not available in this environment: " + e.getMessage());
+            }
+
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            talent.setSandboxConfig(new SandboxConfig());
+
+            SecurityException ex = assertThrows(SecurityException.class,
+                    () -> talent.write("link-out/new.txt", "escape", workDir.toString()));
+            assertTrue(ex.getMessage().contains("路径越界"), ex.getMessage());
+            assertTrue(!Files.exists(outsideDir.resolve("new.txt")));
+        } finally {
+            deleteRecursively(workDir);
+            deleteRecursively(outsideDir);
+        }
+    }
+
+    @Test
+    public void readThroughMountSymlinkOutsideIsDeniedByMountRelativePolicy() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
+        Path mountDir = Files.createTempDirectory("solon-ai-terminal-mount-");
+        try {
+            Files.createDirectories(mountDir.resolve("secret"));
+            Files.write(mountDir.resolve("secret/private.txt"), Collections.singletonList("hidden"));
+            Path link = mountDir.resolve("visible-link");
+            try {
+                Files.createSymbolicLink(link, mountDir.resolve("secret/private.txt"));
+            } catch (UnsupportedOperationException | SecurityException | java.nio.file.FileSystemException e) {
+                assumeTrue(false, "Symbolic links are not available in this environment: " + e.getMessage());
+            }
+
+            MountManager mountManager = new MountManager(workDir.toString());
+            mountManager.register(MountDir.builder()
+                    .alias("@pool")
+                    .path(mountDir.toString())
+                    .type(MountType.SKILLS)
+                    .writeable(false)
+                    .build());
+
+            TerminalTalent talent = new TerminalTalent(mountManager);
+            SandboxConfig config = new SandboxConfig();
+            config.getFilesystem().setDenyRead(Collections.singletonList("secret"));
+            talent.setSandboxConfig(config);
+
+            SecurityException ex = assertThrows(SecurityException.class,
+                    () -> talent.read("@pool/visible-link", 1, null, workDir.toString()));
+            assertTrue(ex.getMessage().contains("读取拒绝"), ex.getMessage());
+        } finally {
+            deleteRecursively(workDir);
+            deleteRecursively(mountDir);
+        }
+    }
+
+    @Test
+    public void readMissingMountRootFailsClosed() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
+        Path mountDir = Files.createTempDirectory("solon-ai-terminal-mount-");
+        deleteRecursively(mountDir);
+        try {
+            MountManager mountManager = new MountManager(workDir.toString());
+            mountManager.register(MountDir.builder()
+                    .alias("@pool")
+                    .path(mountDir.toString())
+                    .type(MountType.SKILLS)
+                    .writeable(false)
+                    .build());
+
+            TerminalTalent talent = new TerminalTalent(mountManager);
+            talent.setSandboxConfig(new SandboxConfig());
+
+            assertThrows(java.nio.file.NoSuchFileException.class,
+                    () -> talent.read("@pool/note.txt", 1, null, workDir.toString()));
+        } finally {
+            deleteRecursively(workDir);
+            deleteRecursively(mountDir);
+        }
+    }
+
     private static void deleteRecursively(Path root) throws Exception {
         if (!Files.exists(root)) {
             return;

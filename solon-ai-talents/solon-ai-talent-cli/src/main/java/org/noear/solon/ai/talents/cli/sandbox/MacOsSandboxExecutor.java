@@ -168,6 +168,7 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
         for (String allowPath : fsConfig.getAllowRead()) {
             appendPathRule(sb, "allow", "file-read*", normalizeFsPath(allowPath, workPath), null);
         }
+        appendMountReadRules(sb, fsConfig, logTag);
         if (!fsConfig.getDenyRead().isEmpty()) {
             sb.append("(allow file-read-metadata (vnode-type DIRECTORY))\n");
         }
@@ -177,7 +178,8 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
             appendPathRule(sb, "allow", "file-write*", normalizeFsPath(allowPath, workPath), null);
         }
         for (MountDir mount : mounts) {
-            if (mount != null && mount.isEnabled() && mount.isWriteable() && mount.getRealPath() != null) {
+            if (mount != null && mount.isEnabled() && mount.isWriteable() && mount.getRealPath() != null
+                    && mountWriteAllowed(mount, fsConfig)) {
                 appendPathRule(sb, "allow", "file-write*", mount.getRealPath().toString(), null);
             }
         }
@@ -198,8 +200,14 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
             appendRegexRule(sb, "deny", "file-write*", pattern, logTag);
         }
         for (MountDir mount : mounts) {
-            if (mount != null && mount.isEnabled() && !mount.isWriteable() && mount.getRealPath() != null) {
-                appendPathRule(sb, "deny", "file-write*", mount.getRealPath().toString(), logTag);
+            if (mount != null && mount.isEnabled() && mount.getRealPath() != null) {
+                String mountRoot = mount.getRealPath().toString();
+                for (String denyPath : fsConfig.getEffectiveDenyWrite(mountRoot)) {
+                    appendPathRule(sb, "deny", "file-write*", normalizeFsPath(denyPath, mount.getRealPath()), logTag);
+                }
+                if (!mount.isWriteable() || !mountWriteAllowed(mount, fsConfig)) {
+                    appendPathRule(sb, "deny", "file-write*", mount.getRealPath().toString(), logTag);
+                }
             }
         }
         sb.append("\n");
@@ -216,6 +224,17 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
             String normalized = normalizeFsPath(denyPath, workPath);
             appendPathRule(sb, "deny", "file-write-unlink", normalized, logTag);
             appendPathRule(sb, "deny", "file-write-create", normalized, logTag);
+        }
+        for (MountDir mount : mounts) {
+            if (mount == null || !mount.isEnabled() || mount.getRealPath() == null) {
+                continue;
+            }
+            String mountRoot = mount.getRealPath().toString();
+            for (String denyPath : fsConfig.getEffectiveDenyWrite(mountRoot)) {
+                String normalized = normalizeFsPath(denyPath, mount.getRealPath());
+                appendPathRule(sb, "deny", "file-write-unlink", normalized, logTag);
+                appendPathRule(sb, "deny", "file-write-create", normalized, logTag);
+            }
         }
         for (String pattern : mandatoryDenyRegexes(wp)) {
             appendRegexRule(sb, "deny", "file-write-unlink", pattern, logTag);
@@ -235,6 +254,44 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
         }
 
         return sb.toString();
+    }
+
+    private void appendMountReadRules(StringBuilder sb, SandboxFsConfig fsConfig, String logTag) {
+        for (MountDir mount : mounts) {
+            if (mount == null || !mount.isEnabled() || mount.getRealPath() == null) {
+                continue;
+            }
+            Path mountRoot = mount.getRealPath();
+            for (String denyPath : fsConfig.getDenyRead()) {
+                appendPathRule(sb, "deny", "file-read*", normalizeFsPath(denyPath, mountRoot), logTag);
+            }
+            for (String allowPath : fsConfig.getAllowRead()) {
+                appendPathRule(sb, "allow", "file-read*", normalizeFsPath(allowPath, mountRoot), null);
+            }
+        }
+    }
+
+    private boolean mountWriteAllowed(MountDir mount, SandboxFsConfig fsConfig) {
+        if (mount == null || !mount.isEnabled() || !mount.isWriteable() || mount.getRealPath() == null) {
+            return false;
+        }
+        Path mountRoot = mount.getRealPath().normalize();
+        boolean allowed = false;
+        for (String allowPath : fsConfig.getAllowWrite()) {
+            if (mountRoot.startsWith(Paths.get(normalizeFsPath(allowPath, mountRoot)).normalize())) {
+                allowed = true;
+                break;
+            }
+        }
+        if (!allowed) {
+            return false;
+        }
+        for (String denyPath : fsConfig.getDenyWrite()) {
+            if (mountRoot.startsWith(Paths.get(normalizeFsPath(denyPath, mountRoot)).normalize())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void appendPathRule(StringBuilder sb, String action, String operation, String path, String logTag) {

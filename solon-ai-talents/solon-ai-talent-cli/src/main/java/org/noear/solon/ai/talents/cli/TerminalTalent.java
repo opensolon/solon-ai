@@ -904,23 +904,19 @@ public class TerminalTalent extends AbsTalent {
 
             // 符号链接防护：解析真实路径
             if (sandboxMode) {
+                Path realMountPath = mount.getRealPath().toRealPath();
+                Path realTarget;
                 try {
-                    Path realMountPath = mount.getRealPath().toRealPath();
-                    Path realTarget;
-                    try {
-                        realTarget = target.toRealPath();
-                    } catch (NoSuchFileException e) {
-                        realTarget = resolveExistingAncestor(target).toRealPath();
-                    }
-                    if (!realTarget.startsWith(realMountPath)) {
-                        throw new SecurityException("权限拒绝：符号链接越界（沙盒模式已开启）。");
-                    }
+                    realTarget = target.toRealPath();
                 } catch (NoSuchFileException e) {
-                    // 挂载根目录不存在或目标路径没有任何已存在祖先时，后续文件操作会自然失败
+                    realTarget = resolveExistingAncestor(target).toRealPath();
+                }
+                if (!realTarget.startsWith(realMountPath)) {
+                    throw new SecurityException("权限拒绝：符号链接越界（沙盒模式已开启）。");
                 }
 
                 String relative = pStr.substring(alias.length()).replaceFirst("^[/\\\\]", "");
-                enforceSandboxFsPolicy(workPath, mount.getRealPath(), target, relative, writeMode);
+                enforceSandboxFsPolicy(workPath, realMountPath, realTarget, relative, writeMode);
             }
 
             return target;
@@ -951,32 +947,20 @@ public class TerminalTalent extends AbsTalent {
             if (!isUserHomeAccess) {
                 // 符号链接防护：先解析真实路径再判断
                 try {
-                    Path realTarget = target.toRealPath();
+                    Path realTarget;
+                    try {
+                        realTarget = target.toRealPath();
+                    } catch (NoSuchFileException e) {
+                        realTarget = resolveExistingAncestor(target).toRealPath();
+                    }
                     Path realWorkPath = workPath.toRealPath();
                     if (!realTarget.startsWith(realWorkPath)) {
                         throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
                     }
                 } catch (NoSuchFileException e) {
-                    // 目标不存在：解析其父目录（通常存在）的真实路径来判断
-                    Path parent = target.getParent();
-                    if (parent != null) {
-                        try {
-                            Path realParent = parent.toRealPath();
-                            Path realWorkPath = workPath.toRealPath();
-                            if (!realParent.startsWith(realWorkPath)) {
-                                throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
-                            }
-                        } catch (NoSuchFileException e2) {
-                            // 父目录也不存在，回退到字符串检查
-                            if (!target.startsWith(workPath)) {
-                                throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
-                            }
-                        }
-                    } else {
-                        // 无父目录的极端情况，回退到字符串检查
-                        if (!target.startsWith(workPath)) {
-                            throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
-                        }
+                    // 目标路径及其已存在祖先均不存在，回退到字符串检查。
+                    if (!target.startsWith(workPath)) {
+                        throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
                     }
                 }
             }
@@ -1024,9 +1008,10 @@ public class TerminalTalent extends AbsTalent {
     }
 
     private boolean isWriteAllowed(Path rootPath, Path target, SandboxFsConfig fsConfig) {
+        Path effectiveTarget = resolveComparablePath(target);
         for (String allowPath : fsConfig.getAllowWrite()) {
             Path allow = normalizeConfiguredPath(rootPath, allowPath);
-            if (target.startsWith(allow)) {
+            if (effectiveTarget.startsWith(resolveComparablePath(allow))) {
                 return true;
             }
         }
@@ -1034,9 +1019,10 @@ public class TerminalTalent extends AbsTalent {
     }
 
     private boolean matchesAnyConfiguredPath(Path workPath, Path target, List<String> paths) {
+        Path effectiveTarget = resolveComparablePath(target);
         for (String configuredPath : paths) {
             Path normalized = normalizeConfiguredPath(workPath, configuredPath);
-            if (target.startsWith(normalized)) {
+            if (effectiveTarget.startsWith(resolveComparablePath(normalized))) {
                 return true;
             }
         }
@@ -1052,6 +1038,19 @@ public class TerminalTalent extends AbsTalent {
             return configured.normalize();
         }
         return rootPath.resolve(configured).normalize();
+    }
+
+    private Path resolveComparablePath(Path path) {
+        try {
+            if (Files.exists(path)) {
+                return path.toRealPath();
+            }
+            Path ancestor = resolveExistingAncestor(path);
+            Path relative = ancestor.relativize(path.normalize());
+            return ancestor.toRealPath().resolve(relative).normalize();
+        } catch (IOException | IllegalArgumentException e) {
+            return path.normalize();
+        }
     }
 
     private boolean isMandatoryDenyRelativePath(String relativePath) {
