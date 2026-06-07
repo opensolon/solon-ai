@@ -46,7 +46,7 @@ public class UlimitFallbackExecutor implements OsSandboxExecutor {
     /**
      * 注入 ulimit 资源限制前缀
      */
-    static String injectResourceLimits(String command) {
+    public static String injectResourceLimits(String command) {
         return String.format(
                 "ulimit -u %d -f %d 2>/dev/null; ",
                 MAX_PROCESSES, MAX_FILE_SIZE_KB

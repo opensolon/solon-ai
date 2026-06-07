@@ -42,4 +42,14 @@ public interface OsSandboxExecutor {
      * 探测当前平台是否支持此沙盒
      */
     boolean isAvailable();
+
+    /**
+     * 设置沙盒配置（可选，用于支持读写分离等高级功能）
+     */
+    default void setConfig(SandboxConfig config) {}
+
+    /**
+     * 设置违规存储（可选，用于支持违规监控）
+     */
+    default void setViolationStore(SandboxViolationStore store) {}
 }

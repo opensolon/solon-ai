@@ -21,6 +21,9 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.talents.cli.sandbox.OsSandboxExecutor;
 import org.noear.solon.ai.talents.cli.sandbox.OsSandboxExecutorFactory;
+import org.noear.solon.ai.talents.cli.sandbox.SandboxConfig;
+import org.noear.solon.ai.talents.cli.sandbox.SandboxFsConfig;
+import org.noear.solon.ai.talents.cli.sandbox.SandboxViolationStore;
 import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.annotation.Param;
@@ -65,6 +68,8 @@ public class TerminalTalent extends AbsTalent {
     private boolean allowUserHome = true;
     private final MountManager mountManager; // 引入挂载管理器
     private OsSandboxExecutor osSandboxExecutor;
+    private SandboxConfig sandboxConfig;
+    private final SandboxViolationStore violationStore = new SandboxViolationStore();
 
     private final String pythonCmd;
     private final String nodeCmd;
@@ -115,6 +120,23 @@ public class TerminalTalent extends AbsTalent {
         return bashAsyncEnabled;
     }
 
+    /**
+     * 设置沙盒配置（支持读写分离、网络过滤、违规监控等高级功能）
+     */
+    public void setSandboxConfig(SandboxConfig sandboxConfig) {
+        this.sandboxConfig = sandboxConfig;
+        if (osSandboxExecutor != null && sandboxConfig != null) {
+            osSandboxExecutor.setConfig(sandboxConfig);
+        }
+    }
+
+    /**
+     * 获取违规存储（用于查询 OS 级拦截事件）
+     */
+    public SandboxViolationStore getViolationStore() {
+        return violationStore;
+    }
+
     public TerminalTalent(MountManager mountManager) {
         this.mountManager = mountManager;
 
@@ -151,7 +173,8 @@ public class TerminalTalent extends AbsTalent {
 
         pythonCmd = executor.probePythonCommand();
         nodeCmd = executor.probeNodeCommand();
-        this.osSandboxExecutor = OsSandboxExecutorFactory.create();
+        this.osSandboxExecutor = OsSandboxExecutorFactory.create(sandboxConfig);
+        this.osSandboxExecutor.setViolationStore(violationStore);
     }
 
     public ProcessExecutor getExecutor() {

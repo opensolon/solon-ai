@@ -29,13 +29,24 @@ import java.util.concurrent.TimeUnit;
 public class OsSandboxExecutorFactory {
     private static final Logger LOG = LoggerFactory.getLogger(OsSandboxExecutorFactory.class);
 
+    /**
+     * 创建平台适配的沙盒执行器（无配置）
+     */
     public static OsSandboxExecutor create() {
+        return create(null);
+    }
+
+    /**
+     * 创建平台适配的沙盒执行器（带配置）
+     */
+    public static OsSandboxExecutor create(SandboxConfig config) {
         String os = System.getProperty("os.name").toLowerCase();
 
         // macOS: 尝试 sandbox-exec
         if (os.contains("mac")) {
             MacOsSandboxExecutor mac = new MacOsSandboxExecutor();
             if (mac.isAvailable()) {
+                if (config != null) mac.setConfig(config);
                 LOG.info("OS sandbox: MacOsSandboxExecutor (sandbox-exec/Seatbelt)");
                 return mac;
             }
@@ -45,6 +56,7 @@ public class OsSandboxExecutorFactory {
         if (os.contains("nix") || os.contains("nux") || os.contains("aix")) {
             LinuxSandboxExecutor linux = new LinuxSandboxExecutor();
             if (linux.isAvailable()) {
+                if (config != null) linux.setConfig(config);
                 LOG.info("OS sandbox: LinuxSandboxExecutor (bubblewrap)");
                 return linux;
             }
