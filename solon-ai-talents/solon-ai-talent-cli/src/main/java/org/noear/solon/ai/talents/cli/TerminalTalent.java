@@ -22,7 +22,6 @@ import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.talents.cli.sandbox.SandboxExecutor;
 import org.noear.solon.ai.talents.cli.sandbox.SandboxExecutorFactory;
 import org.noear.solon.ai.talents.cli.sandbox.SandboxConfig;
-import org.noear.solon.ai.talents.cli.sandbox.SandboxFsConfig;
 import org.noear.solon.ai.talents.cli.sandbox.SandboxViolationStore;
 import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.talents.mount.MountManager;

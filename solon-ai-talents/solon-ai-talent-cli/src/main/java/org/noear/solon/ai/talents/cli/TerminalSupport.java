@@ -136,7 +136,8 @@ class TerminalSupport {
         if (sandboxEnabled) {
             // 3a. 信息泄露命令
             if (lowerCmd.matches("(?i).*\\b(?:ifconfig|ip\\s+(?:addr|link|route|neigh|a|l|r|n))\\b.*") ||
-                    lowerCmd.matches("(?i).*\\b(?:whoami|id\\b|uname|hostname|env\\b|printenv)\\b.*") ||
+                    lowerCmd.matches("(?i).*\\b(?:whoami|id\\b|uname|hostname|printenv)\\b.*") ||
+                    lowerCmd.matches("(?i)(?:^|.*\\s)env\\s*$") ||  // env 无参数时打印环境变量（信息泄露）
                     lowerCmd.matches("(?i).*\\bcat\\s+/etc/(?:hosts|passwd|shadow|hostname|resolv\\.conf|networks)\\b.*") ||
                     lowerCmd.matches("(?i).*\\b(?:networksetup|system_profiler|sw_vers)\\b.*")) {
                 return "错误：检测到高危指令，已拦截。";
@@ -144,8 +145,10 @@ class TerminalSupport {
 
             // 3b. 子 shell / 命令执行入口逃逸
             // 拦截 bash -c / sh -c / zsh -c / eval / exec / source / .(空格) 等子进程执行方式
+            // 注意：find -exec 和 exec 作为 shell 内建命令是安全的，不应拦截
             if (lowerCmd.matches("(?i).*\\b(?:bash|sh|zsh|dash|ksh)\\s+-c\\b.*") ||
-                    lowerCmd.matches("(?i).*\\b(?:eval|exec)\\s+.*") ||
+                    lowerCmd.matches("(?i).*\\b(?:eval)\\s+.*") ||
+                    lowerCmd.matches("(?i)(?:^|.*[;|&\\s])\\s*exec\\s+.*") ||  // exec 在命令起始位置（行首/;/|/&&/||/空格后）
                     lowerCmd.matches("(?i)(?:^|.*[;\\s])\\s*source\\s+.*") ||
                     lowerCmd.matches("(?i)(?:^|.*\\s)\\.\\s+/.*")) {
                 return "错误：检测到高危指令，已拦截。";

@@ -1212,6 +1212,170 @@ public class SandboxTest {
     }
 
     @Test
+    public void validateCommand_gitLog_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("git log --oneline -10", true), "'git log' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_gitStatus_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("git status", true), "'git status' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_gitDiff_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("git diff", true), "'git diff' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_gitBranch_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("git branch -a", true), "'git branch' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_mvnCleanCompile_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("mvn clean compile", true), "'mvn clean compile' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_mvnTest_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("mvn test", true), "'mvn test' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_mvnPackage_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("mvn package -DskipTests", true), "'mvn package' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_gradleBuild_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("gradle build", true), "'gradle build' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_cargoBuild_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("cargo build", true), "'cargo build' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_goBuild_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("go build ./...", true), "'go build' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_dotnetBuild_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("dotnet build", true), "'dotnet build' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_make_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("make", true), "'make' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_cmake_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("cmake -B build", true), "'cmake' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_npmRunBuild_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("npm run build", true), "'npm run build' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_npmTest_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("npm test", true), "'npm test' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_nodeScript_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("node server.js", true), "'node server.js' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_npx_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("npx prisma migrate", true), "'npx' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_tsc_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("tsc --noEmit", true), "'tsc' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_pythonModule_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("python3 -m pytest", true), "'python3 -m pytest' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_pythonScript_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("python3 app.py", true), "'python3 app.py' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_dockerBuild_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("docker build -t app .", true), "'docker build' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_dockerCompose_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("docker compose up", true), "'docker compose up' should be allowed in sandbox");
+    }
+
+    // ==================== env/exec fix: false positive resolution tests ====================
+
+    @Test
+    public void validateCommand_envAlone_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("env", true), "'env' alone should be blocked in sandbox (info leak)");
+    }
+
+    @Test
+    public void validateCommand_envWithArgs_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("env JAVA_HOME=/usr/lib/jvm/java mvn compile", true),
+                "'env VAR=value cmd' should be allowed in sandbox (not info leak, just env prefix)");
+    }
+
+    @Test
+    public void validateCommand_envWithMultiArgs_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("env NODE_ENV=test npm test", true),
+                "'env VAR=value cmd' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_envAlone_allowed_noSandbox() {
+        assertNull(ValidateCommandTestHelper.validate("env", false), "'env' alone should be allowed without sandbox");
+    }
+
+    @Test
+    public void validateCommand_execCommand_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("exec mvn compile", true),
+                "'exec cmd' as shell builtin should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_findExec_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("find . -exec grep something {} \\;", true),
+                "'find -exec' should be allowed in sandbox (not shell escape)");
+    }
+
+    @Test
+    public void validateCommand_findExecPlus_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("find . -name '*.java' -exec grep 'class' {} +", true),
+                "'find -exec ... +' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_execAfterSemicolon_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("echo ok; exec bash", true),
+                "'exec bash' after ; should be blocked (shell escape)");
+    }
+
+    @Test
+    public void validateCommand_execAfterPipe_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("echo ok | exec sh", true),
+                "'exec sh' after | should be blocked (shell escape)");
+    }
+
+    @Test
     public void validateCommand_catEtcHosts_allowed_noSandbox() {
         assertNull(ValidateCommandTestHelper.validate("cat /etc/hosts", false), "'cat /etc/hosts' should be allowed without sandbox");
     }
@@ -1369,7 +1533,8 @@ public class SandboxTest {
             if (sandboxEnabled) {
                 // 3a. Info-leak commands
                 if (lowerCmd.matches("(?i).*\\b(?:ifconfig|ip\\s+(?:addr|link|route|neigh|a|l|r|n))\\b.*") ||
-                        lowerCmd.matches("(?i).*\\b(?:whoami|id\\b|uname|hostname|env\\b|printenv)\\b.*") ||
+                        lowerCmd.matches("(?i).*\\b(?:whoami|id\\b|uname|hostname|printenv)\\b.*") ||
+                        lowerCmd.matches("(?i)(?:^|.*\\s)env\\s*$") ||
                         lowerCmd.matches("(?i).*\\bcat\\s+/etc/(?:hosts|passwd|shadow|hostname|resolv\\.conf|networks)\\b.*") ||
                         lowerCmd.matches("(?i).*\\b(?:networksetup|system_profiler|sw_vers)\\b.*")) {
                     return "blocked";
@@ -1377,7 +1542,8 @@ public class SandboxTest {
 
                 // 3b. Sub-shell / command exec escape
                 if (lowerCmd.matches("(?i).*\\b(?:bash|sh|zsh|dash|ksh)\\s+-c\\b.*") ||
-                        lowerCmd.matches("(?i).*\\b(?:eval|exec)\\s+.*") ||
+                        lowerCmd.matches("(?i).*\\b(?:eval)\\s+.*") ||
+                        lowerCmd.matches("(?i)(?:^|.*[;|&\\s])\\s*exec\\s+.*") ||
                         lowerCmd.matches("(?i)(?:^|.*[;\\s])\\s*source\\s+.*") ||
                         lowerCmd.matches("(?i)(?:^|.*\\s)\\.\\s+/.*")) {
                     return "blocked";
