@@ -51,15 +51,15 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
  * @since 3.9.1
  */
 public class TerminalTalent extends AbsTalent {
-    private static enum ShellMode {
+    static enum ShellMode {
         CMD, POWERSHELL, UNIX_SHELL
     }
 
-    private static final int MAX_CHARACTER_LIMIT = 128 * 1024;
 
     private final String shellCmd;
     private final String extension;
     private final ShellMode shellMode;
+    private final TerminalSupport support;
 
     //沙盒模式：只能访问相对路径或逻辑路径；（否则为）开放模式：可以访问绝对路径
     private boolean sandboxEnabled = true;
@@ -169,6 +169,8 @@ public class TerminalTalent extends AbsTalent {
             this.shellMode = ShellMode.UNIX_SHELL;
         }
 
+        this.support = new TerminalSupport(mountManager, ignoreDirs, shellMode);
+
         pythonCmd = executor.probePythonCommand();
         nodeCmd = executor.probeNodeCommand();
         this.sandboxExecutor = SandboxExecutorFactory.create(sandboxConfig);
@@ -232,8 +234,8 @@ public class TerminalTalent extends AbsTalent {
         sb.append("\n<mount_list>\n");
         for (MountDir mount : mountManager.getMounts()) {
             if (mount.isEnabled()) {
-                String envKey = toMountEnvKey(mount.getAlias());
-                String envRef = getEnvPlaceholder(envKey);
+                String envKey = support.toMountEnvKey(mount.getAlias());
+                String envRef = support.getEnvPlaceholder(envKey);
                 sb.append("  <mount alias=\"").append(mount.getAlias()).append("\"");
                 if (Assert.isNotEmpty(mount.getDescription())) {
                     sb.append(" description=\"").append(mount.getDescription()).append("\"");
@@ -321,7 +323,7 @@ public class TerminalTalent extends AbsTalent {
                        String __cwd) {
 
         // 统一安全校验（替代原来的内联检查）
-        String violation = validateCommand(command);
+        String violation = support.validateCommand(command, sandboxEnabled, sandboxAllowUserHome);
         if (violation != null) return violation;
 
         Path workPath = getWorkPath(__cwd);
@@ -335,7 +337,7 @@ public class TerminalTalent extends AbsTalent {
             envs.put("NODE", nodeCmd);
         }
 
-        String finalCommand = translateCommandToEnv(command, envs);
+        String finalCommand = support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
 
         // OS 级沙盒包装（如果可用）
         if (sandboxEnabled && sandboxExecutor != null && sandboxExecutor.isAvailable()) {
@@ -355,13 +357,13 @@ public class TerminalTalent extends AbsTalent {
                             @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符输出，超出保留最新部分。") Integer maxOutputChars,
                             @Param(value = "hard_timeout_ms", required = false, defaultValue = "120000", description = "硬超时兜底，超过后终止进程树，单位毫秒。") Integer hardTimeoutMs,
                             String __cwd) throws IOException {
-        String danger = validateCommand(command);
+        String danger = support.validateCommand(command, sandboxEnabled, sandboxAllowUserHome);
         if (danger != null) {
             return danger;
         }
 
         Path workPath = getWorkPath(__cwd);
-        Path targetWorkPath = resolveCommandWorkPath(workPath, workdir);
+        Path targetWorkPath = support.resolveCommandWorkPath(workPath, workdir, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
         Map<String, String> envs = new HashMap<>();
 
         if(Assert.isNotEmpty(pythonCmd)) {
@@ -371,7 +373,7 @@ public class TerminalTalent extends AbsTalent {
             envs.put("NODE", nodeCmd);
         }
 
-        String finalCommand = translateCommandToEnv(command, envs);
+        String finalCommand = support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
 
         // OS 级沙盒包装（如果可用）
         if (sandboxEnabled && sandboxExecutor != null && sandboxExecutor.isAvailable()) {
@@ -422,7 +424,7 @@ public class TerminalTalent extends AbsTalent {
                      String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
 
-        Path target = resolveSafePath(workPath, path, false);
+        Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
 
         if (!Files.exists(target)) {
             return "错误：路径不存在";
@@ -432,10 +434,10 @@ public class TerminalTalent extends AbsTalent {
             StringBuilder sb = new StringBuilder();
             String displayName = (path == null || ".".equals(path)) ? "." : path;
             sb.append(displayName).append("\n");
-            generateTreeInternal(getSandboxPolicyRoot(workPath, path), target, 0, 3, "", sb, Boolean.TRUE.equals(showHidden));
+            support.generateTreeInternal(support.getSandboxPolicyRoot(workPath, path), target, 0, 3, "", sb, Boolean.TRUE.equals(showHidden), sandboxEnabled, sandboxConfig);
             return sb.toString();
         } else {
-            return flatListLogic(workPath, getSandboxPolicyRoot(workPath, path), target, path, Boolean.TRUE.equals(showHidden));
+            return support.flatListLogic(workPath, support.getSandboxPolicyRoot(workPath, path), target, path, Boolean.TRUE.equals(showHidden), sandboxEnabled, sandboxConfig);
         }
     }
 
@@ -447,12 +449,12 @@ public class TerminalTalent extends AbsTalent {
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
 
-        Path target = resolveSafePath(workPath, filePath, false);
+        Path target = support.resolveSafePath(workPath, filePath, false, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
         if (!Files.exists(target)) {
             return "错误：文件不存在";
         }
 
-        if (isNotTextFile(target)) {
+        if (support.isNotTextFile(target)) {
             return "错误：该文件是二进制格式，无法作为文本读取。";
         }
 
@@ -484,7 +486,7 @@ public class TerminalTalent extends AbsTalent {
                 String lineOutput = String.format("%6d | %s\n", startLine0 + count + 1, line);
 
                 // 实时检测物理长度限制 (Char Size)
-                if (contentBuilder.length() + lineOutput.length() > MAX_CHARACTER_LIMIT) {
+                if (contentBuilder.length() + lineOutput.length() > TerminalSupport.MAX_CHARACTER_LIMIT) {
                     isByteTruncated = true;
                     break;
                 }
@@ -534,7 +536,7 @@ public class TerminalTalent extends AbsTalent {
                         @Param(value = "content", description = "完整文本内容。") String content,
                         String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
-        Path target = resolveSafePath(workPath, filePath, true);
+        Path target = support.resolveSafePath(workPath, filePath, true, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
 
         Files.createDirectories(target.getParent());
         Files.write(target, content.getBytes(fileCharset));
@@ -550,8 +552,8 @@ public class TerminalTalent extends AbsTalent {
                        @Param(value = "edits", description = "编辑操作列表") List<EditOp> edits,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
-        Path target = resolveSafePath(workPath, filePath, false);
-        resolveSafePath(workPath, filePath, true);
+        Path target = support.resolveSafePath(workPath, filePath, false, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
+        support.resolveSafePath(workPath, filePath, true, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
 
         if (!Files.exists(target)) {
             return "错误：文件不存在，无法进行编辑。";
@@ -572,7 +574,7 @@ public class TerminalTalent extends AbsTalent {
                 edit.newStr = "";
             }
 
-            String finalOld = normalizeNewlines(originalContent, edit.oldStr);
+            String finalOld = support.normalizeNewlines(originalContent, edit.oldStr);
 
             int firstIndex = originalContent.indexOf(finalOld);
             if (firstIndex == -1) {
@@ -593,7 +595,7 @@ public class TerminalTalent extends AbsTalent {
             EditOp edit = edits.get(i);
             try {
                 // 注意：由于前面的修改可能改变了后续匹配项的上下文位置，这里捕获可能的运行时冲突
-                workingContent = applyEditLogic(workingContent, edit.oldStr, edit.newStr, edit.replaceAll);
+                workingContent = support.applyEditLogic(workingContent, edit.oldStr, edit.newStr, edit.replaceAll);
             } catch (IllegalArgumentException e) {
                 return String.format("执行失败（操作 #%d）: %s。可能是由于前面的修改破坏了此处的匹配上下文，请尝试分多次调用 edit。", i + 1, e.getMessage());
             }
@@ -611,15 +613,15 @@ public class TerminalTalent extends AbsTalent {
                        @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
-        Path target = resolveSafePath(workPath, path, false);
+        Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
 
         StringBuilder sb = new StringBuilder();
-        Path policyRoot = getSandboxPolicyRoot(workPath, path);
+        Path policyRoot = support.getSandboxPolicyRoot(workPath, path);
 
         Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                if (isIgnored(workPath, dir) || isIgnored(target, dir) || isSandboxBoundaryDenied(policyRoot, dir) || isSandboxReadDenied(policyRoot, dir)) {
+                if (support.isIgnored(workPath, dir) || support.isIgnored(target, dir) || support.isSandboxBoundaryDenied(policyRoot, dir, sandboxEnabled) || support.isSandboxReadDenied(policyRoot, dir, sandboxEnabled, sandboxConfig)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
                 return FileVisitResult.CONTINUE;
@@ -627,11 +629,11 @@ public class TerminalTalent extends AbsTalent {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (isIgnored(workPath, file) || isIgnored(target, file) || isSandboxBoundaryDenied(policyRoot, file) || isSandboxReadDenied(policyRoot, file)) {
+                if (support.isIgnored(workPath, file) || support.isIgnored(target, file) || support.isSandboxBoundaryDenied(policyRoot, file, sandboxEnabled) || support.isSandboxReadDenied(policyRoot, file, sandboxEnabled, sandboxConfig)) {
                     return FileVisitResult.CONTINUE;
                 }
 
-                if (attrs.size() > 10 * 1024 * 1024 || isNotTextFile(file)) {
+                if (attrs.size() > 10 * 1024 * 1024 || support.isNotTextFile(file)) {
                     return FileVisitResult.CONTINUE;
                 }
 
@@ -646,11 +648,11 @@ public class TerminalTalent extends AbsTalent {
                                 trimmedLine = trimmedLine.substring(0, 1000) + "...(line truncated)";
                             }
 
-                            String displayPath = formatDisplayPath(workPath, path, target, file);
+                            String displayPath = support.formatDisplayPath(workPath, path, target, file, sandboxEnabled);
                             sb.append(displayPath).append(":").append(lineNum).append(": ").append(trimmedLine).append("\n");
 
                             // 发现匹配后立即检查长度，防止 StringBuilder 过载
-                            if (sb.length() > MAX_CHARACTER_LIMIT) {
+                            if (sb.length() > TerminalSupport.MAX_CHARACTER_LIMIT) {
                                 return FileVisitResult.TERMINATE;
                             }
                         }
@@ -662,7 +664,7 @@ public class TerminalTalent extends AbsTalent {
             }
         });
 
-        if (sb.length() >= MAX_CHARACTER_LIMIT) {
+        if (sb.length() >= TerminalSupport.MAX_CHARACTER_LIMIT) {
             sb.append("\n\n--- [内容未完] ---");
             sb.append("\n警告：搜索结果过多，已达到 128KB 限制并截断。请缩小搜索路径或关键词。");
         }
@@ -675,18 +677,18 @@ public class TerminalTalent extends AbsTalent {
                        @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
-        Path target = resolveSafePath(workPath, path, false);
+        Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
 
         String fixedPattern = pattern.replace("\\", "/");
         final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + fixedPattern);
 
         List<String> results = new ArrayList<>();
-        Path policyRoot = getSandboxPolicyRoot(workPath, path);
+        Path policyRoot = support.getSandboxPolicyRoot(workPath, path);
 
         Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                if (isIgnored(workPath, dir) || isIgnored(target, dir) || isSandboxBoundaryDenied(policyRoot, dir) || isSandboxReadDenied(policyRoot, dir)) {
+                if (support.isIgnored(workPath, dir) || support.isIgnored(target, dir) || support.isSandboxBoundaryDenied(policyRoot, dir, sandboxEnabled) || support.isSandboxReadDenied(policyRoot, dir, sandboxEnabled, sandboxConfig)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
                 return FileVisitResult.CONTINUE;
@@ -694,12 +696,12 @@ public class TerminalTalent extends AbsTalent {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (isIgnored(workPath, file) || isIgnored(target, file) || isSandboxBoundaryDenied(policyRoot, file) || isSandboxReadDenied(policyRoot, file)) {
+                if (support.isIgnored(workPath, file) || support.isIgnored(target, file) || support.isSandboxBoundaryDenied(policyRoot, file, sandboxEnabled) || support.isSandboxReadDenied(policyRoot, file, sandboxEnabled, sandboxConfig)) {
                     return FileVisitResult.CONTINUE;
                 }
 
                 if(matcher.matches(target.relativize(file)) || matcher.matches(file)) {
-                    results.add("[FILE] " + formatDisplayPath(workPath, path, target, file));
+                    results.add("[FILE] " + support.formatDisplayPath(workPath, path, target, file, sandboxEnabled));
                 }
 
                 return results.size() >= 500 ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
@@ -712,158 +714,12 @@ public class TerminalTalent extends AbsTalent {
 
     // --- 内部逻辑逻辑 ---
 
-    private String normalizeNewlines(String context, String text) {
-        if (text == null) return null;
-        // 如果文件内容包含 \r\n，则将 text 中的 \n 转换为 \r\n
-        if (context.contains("\r\n")) {
-            return text.replace("\r\n", "\n").replace("\n", "\r\n");
-        } else {
-            return text.replace("\r\n", "\n");
-        }
-    }
-
-    private String applyEditLogic(String content, String oldStr, String newStr, boolean replaceAll) {
-        if (Utils.isEmpty(oldStr)) {
-            throw new IllegalArgumentException("old_str 不能为空");
-        }
-
-        if (oldStr.equals(newStr)) {
-            return content; // 内容相同无需处理
-        }
-
-        String finalOld = normalizeNewlines(content, oldStr);
-        String finalNew = normalizeNewlines(content, newStr);
-
-        if (replaceAll) {
-            if (!content.contains(finalOld)) {
-                throw new IllegalArgumentException("找不到待替换的文本块");
-            }
-            return content.replace(finalOld, finalNew);
-        } else {
-            int firstIndex = content.indexOf(finalOld);
-            if (firstIndex == -1) {
-                throw new IllegalArgumentException("找不到文本块。这通常是由于前面的修改改变了文件的字符偏移或内容，建议分步执行。");
-            }
-            if (content.lastIndexOf(finalOld) != firstIndex) {
-                throw new IllegalArgumentException("文本块在当前状态下不唯一");
-            }
-            return content.substring(0, firstIndex) + finalNew + content.substring(firstIndex + finalOld.length());
-        }
-    }
-
     private Path getWorkPath(String __cwd) {
         String path = (__cwd != null) ? __cwd : mountManager.getWorkDir();
         if (path == null) throw new IllegalStateException("Working directory is not set.");
         return Paths.get(path).toAbsolutePath().normalize();
     }
 
-    private Path resolveCommandWorkPath(Path workPath, String workdir) throws IOException {
-        if (Assert.isEmpty(workdir) || ".".equals(workdir)) {
-            return workPath;
-        }
-        return resolveSafePath(workPath, workdir, false);
-    }
-
-    /**
-     * 统一的命令安全校验（替代原 validateDangerousCommand + bash 内联检查）
-     *
-     * @return null 表示校验通过；非 null 为错误消息
-     */
-    private String validateCommand(String command) {
-        if (Assert.isEmpty(command)) {
-            return "错误：command 不能为空。";
-        }
-
-        String pid = Utils.pid();
-        String lowerCmd = command.toLowerCase();
-
-        // 1. 自保护：禁止杀死当前 Java 进程
-        String killPattern = "(?i).*(?:kill|pkill|killall)\\s+[\\s\\w]*\\b" + pid + "\\b.*";
-        if (lowerCmd.matches(killPattern) ||
-                lowerCmd.contains("pkill java") ||
-                lowerCmd.contains("killall java")) {
-            return "错误：检测到危险命令。严禁试图停止宿主进程 (PID: " + pid + ")。";
-        }
-
-        // 2. 系统破坏/自毁命令（全模式生效）
-        // exit: 仅拦截作为独立命令出现的 exit（行首/分号/管道/&&/|| 后），不拦截 echo 等参数中的 exit
-        if (lowerCmd.matches("(?i)^exit\\b.*") ||
-                lowerCmd.matches("(?i).*(?:;|\\|\\|?|&&)\\s*exit\\b.*") ||
-                lowerCmd.matches("(?i).*rm\\s+.*-[rR].*f\\s+/.*") ||
-                lowerCmd.matches("(?i).*(?:shutdown|reboot|halt|poweroff|init\\s+0|telinit).*") ||
-                lowerCmd.matches("(?i).*(?:dd\\s+if=|mkfs|format\\s+[a-z]:).*") ||
-                lowerCmd.matches("(?i).*:\\(\\)\\s*\\{|:.*\\|.*&.*\\}.*") ||  // fork bomb
-                lowerCmd.matches("(?i).*(?:sysctl\\s+-w|modprobe|crontab).*") ||
-                lowerCmd.matches("(?i).*(?:systemctl\\s+(?:stop|disable|mask|kill|reset-failed)).*") ||
-                lowerCmd.matches("(?i).*\\b(?:nc|ncat|socat)\\b.*(?:-(?:e|c|l|p)\\s|/bin/|\\|\\s*sh).*") ||
-                lowerCmd.matches("(?i).*(?:iptables|ufw|firewall-cmd).*") ||
-                lowerCmd.matches("(?i).*(?:pip\\s+install|npm\\s+install|gem\\s+install).*\\s-[gG]\\b.*")) {
-            return "错误：检测到高危指令，已拦截。";
-        }
-
-        // 3. 沙盒模式专属检测：信息泄露 + 子进程/解释器逃逸 + 管道注入
-        if (sandboxEnabled) {
-            // 3a. 信息泄露命令
-            if (lowerCmd.matches("(?i).*\\b(?:ifconfig|ip\\s+(?:addr|link|route|neigh|a|l|r|n))\\b.*") ||
-                    lowerCmd.matches("(?i).*\\b(?:whoami|id\\b|uname|hostname|env\\b|printenv)\\b.*") ||
-                    lowerCmd.matches("(?i).*\\bcat\\s+/etc/(?:hosts|passwd|shadow|hostname|resolv\\.conf|networks)\\b.*") ||
-                    lowerCmd.matches("(?i).*\\b(?:networksetup|system_profiler|sw_vers)\\b.*")) {
-                return "错误：检测到高危指令，已拦截。";
-            }
-
-            // 3b. 子 shell / 命令执行入口逃逸
-            // 拦截 bash -c / sh -c / zsh -c / eval / exec / source / .(空格) 等子进程执行方式
-            if (lowerCmd.matches("(?i).*\\b(?:bash|sh|zsh|dash|ksh)\\s+-c\\b.*") ||
-                    lowerCmd.matches("(?i).*\\b(?:eval|exec)\\s+.*") ||
-                    lowerCmd.matches("(?i)(?:^|.*[;\\s])\\s*source\\s+.*") ||
-                    lowerCmd.matches("(?i)(?:^|.*\\s)\\.\\s+/.*")) {
-                return "错误：检测到高危指令，已拦截。";
-            }
-
-            // 3c. 解释器内联执行逃逸
-            // 拦截 python3 -c / python -c / perl -e / ruby -e / node -e / php -r 等
-            if (lowerCmd.matches("(?i).*\\b(?:python[23]?|python3)\\s+-[cE].*") ||
-                    lowerCmd.matches("(?i).*\\bperl\\s+(?:-e|-E)\\b.*") ||
-                    lowerCmd.matches("(?i).*\\bruby\\s+(?:-e|-E)\\b.*") ||
-                    lowerCmd.matches("(?i).*\\bnode\\s+-e\\b.*") ||
-                    lowerCmd.matches("(?i).*\\bphp\\s+-r\\b.*")) {
-                return "错误：检测到高危指令，已拦截。";
-            }
-
-            // 3d. 管道注入逃逸
-            // 拦截通过管道将任意内容传入 shell 的方式（如 base64 解码后执行、echo ... | bash）
-            if (lowerCmd.matches("(?i).*\\|\\s*(?:bash|sh|zsh|dash|ksh)\\b.*") ||
-                    lowerCmd.matches("(?i).*\\|\\s*(?:sudo|su)\\b.*") ||
-                    lowerCmd.matches("(?i).*\\bxargs\\s+(?:bash|sh|zsh|dash|ksh)\\b.*")) {
-                return "错误：检测到高危指令，已拦截。";
-            }
-
-            // 3e. 变量拼接逃逸
-            // 拦截通过 Shell 变量拼接来绕过命令检测（如 a=who; b=ami; $a$b）
-            // 仅检测 $var 出现在命令执行位置：行首 或 ;/&&/||/| 之后
-            // 不拦截 $var 出现在参数位置（如 echo $PATH、A=1; echo $A）
-            if (lowerCmd.matches("(?i)^\\$\\{?\\w+.*") ||
-                    lowerCmd.matches("(?i).*(?:;|&&|\\|\\||\\|)\\s*\\$\\{?\\w+.*")) {
-                return "错误：检测到高危指令，已拦截。";
-            }
-        }
-
-        // 4. 沙盒模式下的绝对路径检测
-        if (sandboxEnabled) {
-            // 检测类 Unix 绝对路径（排除 $ 开头的环境变量引用）
-            if (command.matches("(?s).*(?<![\\$\\w/])/[a-zA-Z][\\w/].*") ||
-                    command.matches("(?i).*[a-z]:[\\\\/].*")) {
-                return "错误：沙盒模式下禁止在 bash 命令中使用绝对路径。请使用相对路径或逻辑路径（如 @pool）。";
-            }
-
-            // ~ 路径检测
-            if (containsUserHomePath(command) && !sandboxAllowUserHome) {
-                return "错误：沙盒模式下禁止使用 ~ 路径（sandboxAllowUserHome 已关闭）。";
-            }
-        }
-
-        return null; // null 表示校验通过
-    }
 
     private String formatCommandSnapshot(TerminalSessionManager.CommandSnapshot snapshot, String sourceTool) {
         StringBuilder sb = new StringBuilder();
@@ -901,424 +757,17 @@ public class TerminalTalent extends AbsTalent {
         return sb.toString();
     }
 
-    private String preprocessUserHome(String pStr) {
-        if (pStr == null) return null;
 
-        // 支持 ~/ 或 ~ 转换为用户主目录
-        if (pStr.equals("~") || pStr.startsWith("~/") || pStr.startsWith("~\\")) {
-            String userHome = System.getProperty("user.home");
-            if (pStr.length() == 1) {
-                return userHome;
-            } else {
-                return Paths.get(userHome, pStr.substring(2)).toString();
-            }
-        }
-        return pStr;
-    }
-
-
-    private Path resolveSafePath(Path workPath, String pStr, boolean writeMode) throws IOException {
-        if (Assert.isEmpty(pStr) || ".".equals(pStr)) {
-            Path target = workPath;
-            if (sandboxEnabled) {
-                enforceSandboxFsPolicy(workPath, workPath, target, ".", writeMode);
-            }
-            return target;
-        }
-
-        if (pStr.startsWith("./")) {
-            pStr = pStr.substring(2);
-        }
-
-        // 1. 如果是逻辑路径（@开头），走 mountManager 逻辑
-        if (pStr.startsWith("@")) {
-            Path target = mountManager.resolve(workPath, pStr);
-            String alias = pStr.split("[/\\\\]")[0];
-            MountDir mount = mountManager.getMount(alias);
-
-            if (mount == null || !mount.isEnabled()) {
-                throw new SecurityException("权限拒绝：未知的挂载点 " + pStr);
-            }
-
-            if (writeMode && !mount.isWriteable()) {
-                throw new SecurityException(
-                        "权限拒绝：路径 " + pStr + " 属于只读挂载点，禁止写入。请将结果写入工作区的相对路径。");
-            }
-
-            // 符号链接防护：解析真实路径
-            if (sandboxEnabled) {
-                Path realMountPath = mount.getRealPath().toRealPath();
-                Path realTarget;
-                try {
-                    realTarget = target.toRealPath();
-                } catch (NoSuchFileException e) {
-                    realTarget = resolveExistingAncestor(target).toRealPath();
-                }
-                if (!realTarget.startsWith(realMountPath)) {
-                    throw new SecurityException("权限拒绝：符号链接越界（沙盒模式已开启）。");
-                }
-
-                String relative = pStr.substring(alias.length()).replaceFirst("^[/\\\\]", "");
-                enforceSandboxFsPolicy(workPath, realMountPath, realTarget, relative, writeMode);
-            }
-
-            return target;
-        }
-
-        // 2. 处理物理路径
-        String pStr2 = preprocessUserHome(pStr);
-        Path p = Paths.get(pStr2);
-        Path target;
-
-        if (p.isAbsolute()) {
-            // 【沙盒模式】拦截绝对路径
-            if (sandboxEnabled) {
-                // sandboxAllowUserHome=true 且原始输入以 ~ 开头 → 放行
-                if (!(sandboxAllowUserHome && pStr.startsWith("~"))) {
-                    throw new SecurityException("权限拒绝：沙盒模式下禁止使用绝对路径。");
-                }
-            }
-            target = p.normalize();
-        } else {
-            // 相对路径
-            target = workPath.resolve(pStr2).normalize();
-        }
-
-        // 3. 越界检查（沙盒模式）
-        if (sandboxEnabled) {
-            boolean isUserHomeAccess = sandboxAllowUserHome && pStr.startsWith("~");
-            if (!isUserHomeAccess) {
-                // 符号链接防护：先解析真实路径再判断
-                try {
-                    Path realTarget;
-                    try {
-                        realTarget = target.toRealPath();
-                    } catch (NoSuchFileException e) {
-                        realTarget = resolveExistingAncestor(target).toRealPath();
-                    }
-                    Path realWorkPath = workPath.toRealPath();
-                    if (!realTarget.startsWith(realWorkPath)) {
-                        throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
-                    }
-                } catch (NoSuchFileException e) {
-                    // 目标路径及其已存在祖先均不存在，回退到字符串检查。
-                    if (!target.startsWith(workPath)) {
-                        throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
-                    }
-                }
-            }
-
-            String relativePath = target.startsWith(workPath) ? workPath.relativize(target).toString() : null;
-            enforceSandboxFsPolicy(workPath, workPath, target, relativePath, writeMode);
-        }
-
-        return target;
-    }
-
-    private void enforceSandboxFsPolicy(Path workPath, Path rootPath, Path target, String relativePath, boolean writeMode) throws IOException {
-        if (!sandboxEnabled || sandboxConfig == null || sandboxConfig.getFilesystem() == null) {
-            return;
-        }
-
-        SandboxFsConfig fsConfig = sandboxConfig.getFilesystem();
-        if (writeMode) {
-            if (isMandatoryDenyRelativePath(relativePath)
-                    || isMandatoryDenyRealPath(rootPath, target)) {
-                throw new SecurityException("权限拒绝：路径受保护，禁止写入。");
-            }
-            if (!isWriteAllowed(rootPath, target, fsConfig)) {
-                throw new SecurityException("权限拒绝：路径不在可写白名单内。");
-            }
-            if (matchesAnyConfiguredPath(rootPath, target, fsConfig.getDenyWrite())) {
-                throw new SecurityException("权限拒绝：路径命中写入拒绝规则。");
-            }
-        } else {
-            if (isReadDenied(rootPath, target, fsConfig)) {
-                throw new SecurityException("权限拒绝：路径命中读取拒绝规则。");
-            }
-        }
-    }
-
-    private boolean isSandboxReadDenied(Path workPath, Path target) {
-        if (!sandboxEnabled || sandboxConfig == null || sandboxConfig.getFilesystem() == null) {
-            return false;
-        }
-        return isReadDenied(workPath, target, sandboxConfig.getFilesystem());
-    }
-
-    private boolean isSandboxBoundaryDenied(Path rootPath, Path target) {
-        if (!sandboxEnabled) {
-            return false;
-        }
-        try {
-            Path realRoot = rootPath.toRealPath();
-            Path realTarget = resolveComparablePath(target);
-            return !realTarget.startsWith(realRoot);
-        } catch (IOException e) {
-            return false;
-        }
-    }
-
-    private boolean isReadDenied(Path workPath, Path target, SandboxFsConfig fsConfig) {
-        return matchesAnyConfiguredPath(workPath, target, fsConfig.getDenyRead())
-                && !matchesAnyConfiguredPath(workPath, target, fsConfig.getAllowRead());
-    }
-
-    private boolean isWriteAllowed(Path rootPath, Path target, SandboxFsConfig fsConfig) {
-        Path effectiveTarget = resolveComparablePath(target);
-        for (String allowPath : fsConfig.getAllowWrite()) {
-            Path allow = normalizeConfiguredPath(rootPath, allowPath);
-            if (effectiveTarget.startsWith(resolveComparablePath(allow))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean matchesAnyConfiguredPath(Path workPath, Path target, List<String> paths) {
-        Path effectiveTarget = resolveComparablePath(target);
-        for (String configuredPath : paths) {
-            Path normalized = normalizeConfiguredPath(workPath, configuredPath);
-            if (effectiveTarget.startsWith(resolveComparablePath(normalized))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private Path normalizeConfiguredPath(Path rootPath, String path) {
-        if (Assert.isEmpty(path) || ".".equals(path)) {
-            return rootPath.normalize();
-        }
-        Path configured = Paths.get(path);
-        if (configured.isAbsolute()) {
-            return configured.normalize();
-        }
-        return rootPath.resolve(configured).normalize();
-    }
-
-    private Path resolveComparablePath(Path path) {
-        try {
-            if (Files.exists(path)) {
-                return path.toRealPath();
-            }
-            Path ancestor = resolveExistingAncestor(path);
-            Path relative = ancestor.relativize(path.normalize());
-            return ancestor.toRealPath().resolve(relative).normalize();
-        } catch (IOException | IllegalArgumentException e) {
-            return path.normalize();
-        }
-    }
-
-    private boolean isMandatoryDenyRelativePath(String relativePath) {
-        if (relativePath == null) {
-            return false;
-        }
-        return SandboxFsConfig.isMandatoryDenyPath(relativePath.replace("\\", "/"));
-    }
-
-    private boolean isMandatoryDenyRealPath(Path rootPath, Path target) {
-        Path effectiveTarget = resolveComparablePath(target);
-        Path effectiveRoot = resolveComparablePath(rootPath);
-        if (!effectiveTarget.startsWith(effectiveRoot)) {
-            return false;
-        }
-        try {
-            String relativePath = effectiveRoot.relativize(effectiveTarget).toString();
-            return isMandatoryDenyRelativePath(relativePath);
-        } catch (IllegalArgumentException e) {
-            return false;
-        }
-    }
-
-    private String formatDisplayPath(Path workPath, String inputPath, Path targetDir, Path file) {
-        if (inputPath != null && inputPath.startsWith("@")) {
-            String prefix = inputPath.split("[/\\\\]")[0];
-            return prefix + "/" + targetDir.relativize(file).toString().replace("\\", "/");
-        }
-
-
-        // 开放模式下，如果文件不在 workPath 内部，返回绝对路径字符串
-        if (!sandboxEnabled && !file.startsWith(workPath)) {
-            return file.toAbsolutePath().toString().replace("\\", "/");
-        }
-
-        try {
-            return workPath.relativize(file).toString().replace("\\", "/");
-        } catch (IllegalArgumentException e) {
-            return file.toAbsolutePath().toString().replace("\\", "/");
-        }
-    }
-
-    private String toMountEnvKey(String alias) {
-        String raw = alias.startsWith("@") ? alias.substring(1) : alias;
-        String envKey = raw.toUpperCase().replaceAll("[^A-Z0-9_]", "_");
-        if (envKey.isEmpty() || Character.isDigit(envKey.charAt(0))) {
-            envKey = "MOUNT_" + envKey;
-        }
-        return envKey;
+    private String validateCommand(String command) {
+        return support.validateCommand(command, sandboxEnabled, sandboxAllowUserHome);
     }
 
     private String translateCommandToEnv(String command, Map<String, String> envs) {
-        String result = command;
-        for (MountDir mount : mountManager.getMounts()) {
-            if (mount.isEnabled()) {
-                String alias = mount.getAlias(); // 例如 @pool1
-                String envKey = toMountEnvKey(alias); // POOL1
-
-                // 仅注入命令中实际使用的环境变量（减少污染）
-                if (result.contains(alias)) {
-                    envs.put(envKey, mount.getRealPath().toString());
-                    String placeholder = getEnvPlaceholder(envKey);
-
-                    // 精确替换：仅替换作为路径前缀出现的 @alias（后跟 / 或 \\ 或在行尾）
-                    result = result.replaceAll(
-                            java.util.regex.Pattern.quote(alias) + "(?=[/\\\\\\s]|$)",
-                            java.util.regex.Matcher.quoteReplacement(placeholder)
-                    );
-                }
-            }
-        }
-
-        // ~ 路径处理（统一所有 shell 模式）
-        if (containsUserHomePath(result)) {
-            if (sandboxEnabled && !sandboxAllowUserHome) {
-                throw new SecurityException("权限拒绝：沙盒模式下禁止使用 ~ 路径（sandboxAllowUserHome 已关闭）。");
-            }
-            result = expandUserHomePaths(result);
-        }
-
-        return result;
+        return support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
     }
 
     private boolean containsUserHomePath(String command) {
-        return command != null && command.matches("(?s).*(^|[\\s=:\\(\\[\\{;|&<>])~(?=$|[/\\\\\\s'\"`)\\]\\};|&<>]).*");
-    }
-
-    private String expandUserHomePaths(String command) {
-        String userHome = System.getProperty("user.home").replace("\\", "/");
-        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(^|[\\s=:\\(\\[\\{;|&<>])~(?=$|[/\\\\\\s'\"`)\\]\\};|&<>])");
-        java.util.regex.Matcher matcher = pattern.matcher(command);
-        StringBuffer sb = new StringBuffer();
-        while (matcher.find()) {
-            matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(matcher.group(1) + userHome));
-        }
-        matcher.appendTail(sb);
-        return sb.toString();
-    }
-
-    private String getEnvPlaceholder(String envKey) {
-        switch (this.shellMode) {
-            case CMD:
-                return "%" + envKey + "%";
-            case POWERSHELL:
-                return "$env:" + envKey;
-            case UNIX_SHELL:
-            default:
-                return "$" + envKey;
-        }
-    }
-
-    private Path resolveExistingAncestor(Path target) throws IOException {
-        Path current = target.getParent();
-        while (current != null) {
-            if (Files.exists(current)) {
-                return current;
-            }
-            current = current.getParent();
-        }
-        throw new NoSuchFileException(String.valueOf(target));
-    }
-
-    private Path getSandboxPolicyRoot(Path workPath, String inputPath) {
-        if (inputPath != null && inputPath.startsWith("@")) {
-            String alias = inputPath.split("[/\\\\]")[0];
-            MountDir mount = mountManager.getMount(alias);
-            if (mount != null && mount.getRealPath() != null) {
-                return mount.getRealPath();
-            }
-        }
-        return workPath;
-    }
-
-    private void generateTreeInternal(Path workPath, Path current, int depth, int maxDepth, String indent, StringBuilder sb, boolean showHidden) throws IOException {
-        if (depth >= maxDepth) return;
-        try (Stream<Path> stream = Files.list(current)) {
-            List<Path> children = stream
-                    .filter(p -> !isIgnored(workPath, p))
-                    .filter(p -> !isSandboxBoundaryDenied(workPath, p))
-                    .filter(p -> !isSandboxReadDenied(workPath, p))
-                    .filter(p -> showHidden || !p.getFileName().toString().startsWith("."))
-                    .sorted((a, b) -> {
-                        boolean aDir = Files.isDirectory(a);
-                        boolean bDir = Files.isDirectory(b);
-                        if (aDir != bDir) return aDir ? -1 : 1;
-                        return a.getFileName().compareTo(b.getFileName());
-                    }).collect(Collectors.toList());
-
-            for (int i = 0; i < children.size(); i++) {
-                Path child = children.get(i);
-                boolean isLast = (i == children.size() - 1);
-                boolean isDir = Files.isDirectory(child);
-                if (isSandboxBoundaryDenied(workPath, child)) {
-                    continue;
-                }
-                sb.append(indent).append(isLast ? "└── " : "├── ").append(child.getFileName()).append("\n");
-                if (isDir)
-                    generateTreeInternal(workPath, child, depth + 1, maxDepth, indent + (isLast ? "    " : "│   "), sb, showHidden);
-            }
-        } catch (AccessDeniedException e) {
-            sb.append(indent).append("└── [拒绝访问]\n");
-        }
-    }
-
-    private String flatListLogic(Path workPath, Path policyRoot, Path target, String inputPath, boolean showHidden) throws IOException {
-        try (Stream<Path> stream = Files.list(target)) {
-            List<String> lines = stream
-                    .filter(p -> !isIgnored(workPath, p))
-                    .filter(p -> !isSandboxBoundaryDenied(policyRoot, p))
-                    .filter(p -> !isSandboxReadDenied(policyRoot, p))
-                    .filter(p -> showHidden || !p.getFileName().toString().startsWith("."))
-                    .map(p -> {
-                        boolean isDir = Files.isDirectory(p);
-                        String displayPath = formatDisplayPath(workPath, inputPath, target, p);
-                        return (isDir ? "[DIR] " : "[FILE] ") + displayPath + (isDir ? "/" : "");
-                    }).sorted().collect(Collectors.toList());
-            return lines.isEmpty() ? "(目录为空)" : String.join("\n", lines);
-        }
-    }
-
-
-    private boolean isIgnored(Path workPath, Path path) {
-        String name = path.getFileName().toString();
-        if (ignoreDirs.contains(name)) return true;
-        try {
-            // 只有在 workPath 内部时才进行递归片段检查
-            if (path.startsWith(workPath)) {
-                Path relative = workPath.relativize(path);
-                for (Path segment : relative) {
-                    if (ignoreDirs.contains(segment.toString())) return true;
-                }
-            }
-        } catch (Throwable ignored) {
-        }
-        return false;
-    }
-
-    private boolean isNotTextFile(Path file) {
-        String fileName = file.getFileName().toString().toLowerCase();
-
-        // 1. 基于已知二进制后缀的快速过滤
-        if (fileName.endsWith(".class") || fileName.endsWith(".jar") ||
-                fileName.endsWith(".exe")   || fileName.endsWith(".dll") ||
-                fileName.endsWith(".so")    || fileName.endsWith(".pyc") ||
-                fileName.endsWith(".png")   || fileName.endsWith(".jpg") ||
-                fileName.endsWith(".gif")   || fileName.endsWith(".zip") ||
-                fileName.endsWith(".gz")    || fileName.endsWith(".pdf")) {
-            return true;
-        }
-
-        return false;
+        return support.containsUserHomePath(command);
     }
 
     private static String probeUnixShell() {
