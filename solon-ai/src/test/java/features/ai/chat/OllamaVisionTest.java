@@ -44,7 +44,7 @@ public class OllamaVisionTest {
     @Test
     public void case1_b() throws IOException {
         ChatModel chatModel = ChatModel.of(apiUrl)
-                .standard(provider) //需要指定供应商，用于识别接口风格（也称为方言）
+                .standard(standard) //需要指定供应商，用于识别接口风格（也称为方言）
                 .model(model)
                 .timeout(Duration.ofSeconds(300))
                 .build();
