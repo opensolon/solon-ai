@@ -234,6 +234,14 @@ public class ChatModel implements AiModel {
         }
 
         /**
+         * 头信息添加
+         */
+        public Builder headerSet(Map<String, String> headers) {
+            config.setHeaders(headers);
+            return this;
+        }
+
+        /**
          * User-Agent
          */
         public Builder userAgent(String userAgent) {
