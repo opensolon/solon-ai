@@ -154,12 +154,15 @@ public class MacOsSandboxExecutor implements SandboxExecutor {
         sb.append("(allow distributed-notification-post)\n");
         sb.append("(allow mach-lookup (global-name \"com.apple.SecurityServer\"))\n\n");
 
+        // 设备节点：file-ioctl（ioctl 操作）+ file-write*（写重定向，git 等工具需 open /dev/null 写入）
         sb.append("(allow file-ioctl (literal \"/dev/null\"))\n");
+        sb.append("(allow file-write* (literal \"/dev/null\"))\n");
         sb.append("(allow file-ioctl (literal \"/dev/zero\"))\n");
         sb.append("(allow file-ioctl (literal \"/dev/random\"))\n");
         sb.append("(allow file-ioctl (literal \"/dev/urandom\"))\n");
         sb.append("(allow file-ioctl (literal \"/dev/dtracehelper\"))\n");
-        sb.append("(allow file-ioctl (literal \"/dev/tty\"))\n\n");
+        sb.append("(allow file-ioctl (literal \"/dev/tty\"))\n");
+        sb.append("(allow file-write* (literal \"/dev/tty\"))\n\n");
 
         // ========== 文件系统规则（读写分离） ==========
         sb.append("(allow file-read*)\n");

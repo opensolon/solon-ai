@@ -263,6 +263,46 @@ public class SandboxTest {
         assertTrue(result.contains("kern.osrelease"), "Should contain sysctl kern.osrelease");
     }
 
+    @Test
+    public void macOs_profile_devNullWriteAllowed() {
+        // git 等工具需要 open("/dev/null", O_WRONLY) 重定向输出
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        if (!executor.isAvailable()) return;
+
+        Path workPath = Paths.get("/tmp/test-workspace");
+        String profile = executor.wrapCommand("echo hello", workPath, new HashMap<>());
+        assertTrue(profile.contains("file-write* (literal \"/dev/null\")"),
+                "Profile must allow file-write* on /dev/null for git and other tools");
+    }
+
+    @Test
+    public void macOs_profile_devTtyWriteAllowed() {
+        // 交互式工具（如 git credential prompt）需要 /dev/tty 写权限
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        if (!executor.isAvailable()) return;
+
+        Path workPath = Paths.get("/tmp/test-workspace");
+        String profile = executor.wrapCommand("echo hello", workPath, new HashMap<>());
+        assertTrue(profile.contains("file-write* (literal \"/dev/tty\")"),
+                "Profile must allow file-write* on /dev/tty for interactive tools");
+    }
+
+    @Test
+    public void macOs_profile_devNullIoctlRetained() {
+        // 保留原有的 file-ioctl 权限
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        if (!executor.isAvailable()) return;
+
+        Path workPath = Paths.get("/tmp/test-workspace");
+        String profile = executor.wrapCommand("echo hello", workPath, new HashMap<>());
+        assertTrue(profile.contains("file-ioctl (literal \"/dev/null\")"),
+                "Profile should retain file-ioctl on /dev/null");
+        assertTrue(profile.contains("file-ioctl (literal \"/dev/zero\")"),
+                "Profile should retain file-ioctl on /dev/zero");
+        assertTrue(profile.contains("file-ioctl (literal \"/dev/random\")"),
+                "Profile should retain file-ioctl on /dev/random");
+    }
+
     // ==================== LinuxSandboxExecutor ====================
 
     @Test
