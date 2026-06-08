@@ -128,7 +128,7 @@ class TerminalSupport {
                 // sysctl -w / modprobe / crontab: 仅在命令位置（行首或 ;/&&/||/| 之后），避免匹配文件名中的 crontab
                 lowerCmd.matches("(?i)(?:^|.*[;|&])\\s*(?:sysctl\\s+-w|modprobe|crontab)\\b.*") ||
                 lowerCmd.matches("(?i).*(?:systemctl\\s+(?:stop|disable|mask|kill|reset-failed)).*") ||
-                lowerCmd.matches("(?i).*\\b(?:nc|ncat|socat)\\b.*(?:-(?:e|c|l|p)\\s|/bin/|\\|\\s*sh).*") ||
+                lowerCmd.matches("(?i).*\\b(?:nc|ncat|socat)\\b.*(?:-(?:e|c)\\s|/bin/|\\|\\s*sh).*") ||
                 lowerCmd.matches("(?i).*(?:iptables|ufw|firewall-cmd).*") ||
                 // 全局安装: 同时匹配 -g 和 --global 标志
                 lowerCmd.matches("(?i).*(?:pip\\s+install|npm\\s+install|gem\\s+install).*\\s(?:-[gG]\\b|--global\\b).*")) {
@@ -139,7 +139,7 @@ class TerminalSupport {
         if (sandboxEnabled) {
             // 3a. 信息泄露命令
             if (lowerCmd.matches("(?i).*\\b(?:ifconfig|ip\\s+(?:addr|link|route|neigh|a|l|r|n))\\b.*") ||
-                    lowerCmd.matches("(?i).*\\b(?:whoami|id\\b|uname|hostname|printenv)\\b.*") ||
+                    lowerCmd.matches("(?i)(?:^|.*[;|&])\\s*(?:whoami|id\\b|uname|hostname|printenv)\\b.*") ||
                     lowerCmd.matches("(?i)(?:^|.*\\s)env\\s*$") ||  // env 无参数时打印环境变量（信息泄露）
                     lowerCmd.matches("(?i).*\\bcat\\s+/etc/(?:hosts|passwd|shadow|hostname|resolv\\.conf|networks)\\b.*") ||
                     lowerCmd.matches("(?i).*\\b(?:networksetup|system_profiler|sw_vers)\\b.*")) {
@@ -157,7 +157,7 @@ class TerminalSupport {
                     lowerCmd.matches("(?i).*\\b(?:eval)\\s+.*") ||
                     lowerCmd.matches("(?i).*[;|&]\\s*exec\\s+.*") ||  // exec 在 shell 操作符之后
                     lowerCmd.matches("(?i)^exec\\s+(?:bash|sh|zsh|dash|ksh|/bin/|/usr/bin/)\\S*\\b.*") ||  // exec shell 在行首
-                    lowerCmd.matches("(?i)(?:^|.*[;\\s])\\s*source\\s+.*") ||
+                    lowerCmd.matches("(?i)(?:^|.*[;|&])\\s*source\\s+.*") ||
                     lowerCmd.matches("(?i)(?:^|.*\\s)\\.\\s+/.*")) {
                 return "错误：检测到高危指令，已拦截。";
             }
@@ -192,8 +192,8 @@ class TerminalSupport {
 
         // 4. 沙盒模式下的绝对路径检测
         if (sandboxEnabled) {
-            // 检测类 Unix 绝对路径（排除 $ 开头的环境变量引用）
-            if (command.matches("(?s).*(?<![\\$\\w/])/[a-zA-Z][\\w/].*") ||
+            // 检测类 Unix 绝对路径（排除 $ 开头的环境变量引用、./ 相对路径、=赋值、:远程路径）
+            if (command.matches("(?s).*(?<![\\$\\w/.:=])/[a-zA-Z][\\w/].*") ||
                     command.matches("(?i).*[a-z]:[\\\\/].*")) {
                 return "错误：沙盒模式下禁止在 bash 命令中使用绝对路径。请使用相对路径或逻辑路径（如 @pool）。";
             }
