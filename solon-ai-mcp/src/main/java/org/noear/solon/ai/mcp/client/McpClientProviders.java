@@ -205,7 +205,7 @@ public class McpClientProviders implements ToolProvider, ResourceProvider, Promp
     public static McpClientProvider fromMcpServer(McpServerParameters serverParameters) throws IOException {
         Assert.notNull(serverParameters, "serverParameters is null");
 
-        String type = Utils.valueOr(serverParameters.getType(), serverParameters.getTransport());
+        String type = serverParameters.getTypeOrTransport();
 
         if (Utils.isEmpty(type)) {
             //兼容没有 type 配置的情况

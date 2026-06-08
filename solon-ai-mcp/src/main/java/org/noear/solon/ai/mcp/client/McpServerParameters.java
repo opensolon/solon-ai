@@ -71,6 +71,14 @@ public class McpServerParameters implements Serializable {
         return type;
     }
 
+    public String getTypeOrTransport() {
+        if (type == null) {
+            return transport;
+        } else {
+            return type;
+        }
+    }
+
     public void setType(String type) {
         this.type = type;
     }
