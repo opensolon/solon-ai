@@ -179,12 +179,12 @@ public class McpGatewayTalent extends AbsTalent {
             try {
                 provider.close();
             } catch (Exception e) {
-                LOG.warn("McpGatewayTalent: Provider '{}' close failed", name, e);
+                LOG.warn("Mcp server {}: close failed", name, e);
             }
         }
 
         if (toolNames != null && !toolNames.isEmpty()) {
-            LOG.info("McpGatewayTalent: Removed '{}' ({} tools)", name, toolNames.size());
+            LOG.info("Mcp server {}: removed ({} tools)", name, toolNames.size());
         }
         return this;
     }
@@ -216,7 +216,7 @@ public class McpGatewayTalent extends AbsTalent {
                 }
             }
             categoryTools.remove(name);
-            LOG.info("McpGatewayTalent: '{}' is disabled, removed {} tools from index", name,
+            LOG.info("Mcp server {}: is disabled, removed {} tools from index", name,
                     toolNames != null ? toolNames.size() : 0);
             return this;
         }
@@ -225,10 +225,15 @@ public class McpGatewayTalent extends AbsTalent {
         Set<String> newToolNames = new LinkedHashSet<>();
         Map<String, FunctionTool> newCategoryMap = new ConcurrentHashMap<>();
 
-        for (FunctionTool tool : provider.getToolsActivated()) {
-            String key = tool.name().toLowerCase();
-            newCategoryMap.put(key, tool);
-            newToolNames.add(key);
+        try {
+            for (FunctionTool tool : provider.getToolsActivated()) {
+                String key = tool.name().toLowerCase();
+                newCategoryMap.put(key, tool);
+                newToolNames.add(key);
+            }
+        } catch (Throwable e) {
+            LOG.error("Mcp server {}: loading failed", name, e);
+            return this;
         }
 
         // 2. 收集旧工具名（仅属于当前 server 且不属于新工具集的）
@@ -252,7 +257,7 @@ public class McpGatewayTalent extends AbsTalent {
             allTools.remove(key);
         }
 
-        LOG.info("McpGatewayTalent: Refreshed '{}' ({} tools)", name, newToolNames.size());
+        LOG.info("Mcp server {}: refreshed ({} tools)", name, newToolNames.size());
         return this;
     }
 
