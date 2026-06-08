@@ -68,6 +68,24 @@ public class ChatConfigReadonly {
         return config.getApiUrl();
     }
 
+    /**
+     * 接口规范
+     *
+     * @since 4.0
+     */
+    public String getStandard(){
+        return config.getStandard();
+    }
+
+    /**
+     * 接口规范或提供者（临时过渡）
+     *
+     * @since 4.0
+     */
+    public String getStandardOrProvider(){
+        return config.getStandardOrProvider();
+    }
+
     public String getProvider() {
         return config.getProvider();
     }

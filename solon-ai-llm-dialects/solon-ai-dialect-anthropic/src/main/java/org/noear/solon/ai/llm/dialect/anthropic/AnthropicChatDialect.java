@@ -58,9 +58,11 @@ public class AnthropicChatDialect extends AbstractChatDialect {
      */
     @Override
     public boolean matched(ChatConfig config) {
-        return "claude".equalsIgnoreCase(config.getProvider()) ||
-                "anthropic".equalsIgnoreCase(config.getProvider()) ||
-                (Assert.isEmpty(config.getProvider()) && config.getApiUrl().endsWith("/v1/messages"));
+        String standard = config.getStandardOrProvider();
+
+        return "claude".equalsIgnoreCase(standard) ||
+                "anthropic".equalsIgnoreCase(standard) ||
+                (Assert.isEmpty(standard) && config.getApiUrl().endsWith("/v1/messages"));
     }
 
     @Override

@@ -72,7 +72,9 @@ public class DashscopeChatDialect extends AbstractChatDialect {
      */
     @Override
     public boolean matched(ChatConfig config) {
-        if ("dashscope".equalsIgnoreCase(config.getProvider())) {
+        String standard = config.getStandardOrProvider();
+
+        if ("dashscope".equalsIgnoreCase(standard)) {
             return true;
         } else {
             return config.getApiUrl().startsWith(URL_PREFIX);

@@ -44,6 +44,7 @@ public class AiConfig implements Serializable {
 
     protected String apiUrl;
     protected String apiKey;
+    protected String standard; //接口规范
     protected String provider;
     protected String model;
     protected final Map<String, String> headers = new LinkedHashMap<>();
@@ -88,6 +89,26 @@ public class AiConfig implements Serializable {
 
     public String getApiUrl() {
         return apiUrl;
+    }
+
+    /**
+     * 接口规范
+     *
+     * @since 4.0
+     */
+    public String getStandard() {
+        return standard;
+    }
+
+    /**
+     * @since 4.0
+     */
+    public String getStandardOrProvider() {
+        if (standard == null) {
+            return provider;
+        } else {
+            return standard;
+        }
     }
 
     public String getProvider() {
@@ -142,6 +163,10 @@ public class AiConfig implements Serializable {
 
     public void setApiKey(String apiKey) {
         this.apiKey = apiKey;
+    }
+
+    public void setStandard(String standard) {
+        this.standard = standard;
     }
 
     public void setProvider(String provider) {

@@ -23,6 +23,7 @@
 * 添加 solon-ai-talent-gateway McpGatewaySkill 专门处理 mcp（ToolGatewaySkill 可以处理所有工具）
 * 添加 solon-ai-core ChatOptions:httpCustomize 方法
 * 添加 solon-ai-core Talent::isEnabled 方法
+* 添加 solon-ai-core AiConfig::standard（替代 provider 之前的作用）
 * 添加 solon-ai-core ReActAgent::getModel 方法
 * 添加 solon-ai-agent ReActInterceptor.onReasonStart 事件方法
 * 添加 solon-ai-agent AgentTrace.getOriginalPrompt, getWorkingMemory 方法

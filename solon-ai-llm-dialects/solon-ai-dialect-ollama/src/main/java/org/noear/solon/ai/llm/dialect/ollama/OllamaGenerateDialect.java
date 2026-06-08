@@ -40,7 +40,9 @@ public class OllamaGenerateDialect extends AbstractGenerateDialect {
 
     @Override
     public boolean matched(GenerateConfig config) {
-        return "ollama".equals(config.getProvider());
+        String standard = config.getStandardOrProvider();
+
+        return "ollama".equals(standard);
     }
 
     @Override

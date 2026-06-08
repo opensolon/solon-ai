@@ -80,8 +80,10 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
      */
     @Override
     public boolean matched(ChatConfig config) {
-        return "openai-responses".equals(config.getProvider()) ||
-                (Assert.isEmpty(config.getProvider()) && config.getApiUrl().endsWith("/v1/responses"));
+        String standard = config.getStandardOrProvider();
+
+        return "openai-responses".equals(standard) ||
+                (Assert.isEmpty(standard) && config.getApiUrl().endsWith("/v1/responses"));
     }
 
     /**

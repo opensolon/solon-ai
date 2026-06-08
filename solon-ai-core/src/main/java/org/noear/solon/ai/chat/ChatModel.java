@@ -81,6 +81,24 @@ public class ChatModel implements AiModel {
         return config.getModel();
     }
 
+    /**
+     * 接口规范
+     *
+     * @since 4.0
+     */
+    public String getStandard(){
+        return config.getStandard();
+    }
+
+    /**
+     * 接口规范或提供者（临时过渡）
+     *
+     * @since 4.0
+     */
+    public String getStandardOrProvider(){
+        return config.getStandardOrProvider();
+    }
+
     public String getProvider(){
         return config.getProvider();
     }
@@ -170,6 +188,16 @@ public class ChatModel implements AiModel {
          */
         public Builder apiKey(String apiKey) {
             config.setApiKey(apiKey);
+            return this;
+        }
+
+        /**
+         * 接口规范
+         *
+         * @since 4.0
+         */
+        public Builder standard(String standard) {
+            config.setStandard(standard);
             return this;
         }
 

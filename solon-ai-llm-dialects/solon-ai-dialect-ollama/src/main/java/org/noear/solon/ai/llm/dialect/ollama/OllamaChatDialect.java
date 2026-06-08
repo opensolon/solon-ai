@@ -66,8 +66,10 @@ public class OllamaChatDialect extends AbstractChatDialect {
      */
     @Override
     public boolean matched(ChatConfig config) {
-        return "ollama".equalsIgnoreCase(config.getProvider()) ||
-                (Assert.isEmpty(config.getProvider()) && config.getApiUrl().endsWith("/api/chat"));
+        String standard = config.getStandardOrProvider();
+
+        return "ollama".equalsIgnoreCase(standard) ||
+                (Assert.isEmpty(standard) && config.getApiUrl().endsWith("/api/chat"));
     }
 
     @Override

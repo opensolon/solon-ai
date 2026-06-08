@@ -43,8 +43,10 @@ public class OllamaEmbeddingDialect extends AbstractEmbeddingDialect {
 
     @Override
     public boolean matched(EmbeddingConfig config) {
-        return "ollama".equals(config.getProvider()) ||
-                (Assert.isEmpty(config.getProvider()) && config.getApiUrl().endsWith("/api/embed"));
+        String standard = config.getStandardOrProvider();
+
+        return "ollama".equals(standard) ||
+                (Assert.isEmpty(standard) && config.getApiUrl().endsWith("/api/embed"));
     }
 
     @Override

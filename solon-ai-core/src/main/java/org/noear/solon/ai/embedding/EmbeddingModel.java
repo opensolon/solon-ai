@@ -180,6 +180,16 @@ public class EmbeddingModel implements AiModel {
         }
 
         /**
+         * 接口规范
+         *
+         * @since 4.0
+         */
+        public Builder standard(String standard) {
+            config.setStandard(standard);
+            return this;
+        }
+
+        /**
          * 服务提供者
          */
         public Builder provider(String provider) {

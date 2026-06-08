@@ -49,7 +49,9 @@ public class DashscopeRerankingDialect extends AbstractRerankingDialect {
      */
     @Override
     public boolean matched(RerankingConfig config) {
-        if ("dashscope".equals(config.getProvider())) {
+        String standard = config.getStandardOrProvider();
+
+        if ("dashscope".equals(standard)) {
             return true;
         } else if (config.getApiUrl().startsWith(URL_PREFIX)) {
             return true;
