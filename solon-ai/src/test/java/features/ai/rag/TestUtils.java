@@ -10,10 +10,10 @@ import org.noear.solon.ai.reranking.RerankingModel;
 public class TestUtils {
     public static ChatModel getChatModel() {
         final String apiUrl = "http://127.0.0.1:11434/api/chat";
-        final String provider = "ollama";
+        final String standard = "ollama";
         final String model = "llama3.2";//"DeepSeek-V3"; //deepseek-reasoner//deepseek-chat
 
-        return ChatModel.of(apiUrl).provider(provider).model(model).build(); //4.初始化语言模型
+        return ChatModel.of(apiUrl).standard(standard).model(model).build(); //4.初始化语言模型
     }
 
 //    public static WebSearchRepository getWebSearchRepository() {

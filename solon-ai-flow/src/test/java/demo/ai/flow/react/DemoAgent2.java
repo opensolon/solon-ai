@@ -19,7 +19,7 @@ public class DemoAgent2 {
         FlowEngine flowEngine = FlowEngine.newInstance();
 
         ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
-                .provider("ollama")
+                .standard("ollama")
                 .model("qwen2.5:1.5b")
                 .build();
 

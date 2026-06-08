@@ -13,7 +13,7 @@ public class OpenaiResponsesTest extends AbsChatTest {
     protected ChatModel.Builder getChatModelBuilder() {
         return ChatModel.of("https://api.openai.com/v1/responses")
                 .apiKey("sk-******")
-                .provider("openai-responses")
+                .standard("openai-responses")
                 .model("gpt-5.3-codex");
     }
 }

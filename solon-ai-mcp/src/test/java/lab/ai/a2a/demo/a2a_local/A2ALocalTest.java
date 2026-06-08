@@ -28,7 +28,7 @@ public class A2ALocalTest {
 
         ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
                 .model("qwen2.5:latest")
-                .provider("ollama")
+                .standard("ollama")
                 .timeout(Duration.ofMinutes(10))
                 .defaultToolAdd(agentAssistant)
                 .build();
@@ -66,7 +66,7 @@ public class A2ALocalTest {
     public static FunctionTool agent1() {
         ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
                 .model("qwen2.5:latest")
-                .provider("ollama")
+                .standard("ollama")
                 .timeout(Duration.ofMinutes(10))
                 .defaultToolAdd(new Tools1())
                 .build();
@@ -83,7 +83,7 @@ public class A2ALocalTest {
     public static FunctionTool agent2() {
         ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
                 .model("qwen2.5:latest")
-                .provider("ollama")
+                .standard("ollama")
                 .timeout(Duration.ofMinutes(10))
                 .defaultToolAdd(new Tools2())
                 .build();

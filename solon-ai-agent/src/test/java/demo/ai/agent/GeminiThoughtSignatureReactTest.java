@@ -49,7 +49,7 @@ public class GeminiThoughtSignatureReactTest {
 
         // 3. 构建 ChatModel（provider=gemini 触发 GeminiChatDialect，测试 thoughtSignature 多轮回传）
         ChatModel chatModel = ChatModel.of("")
-                .provider("gemini")
+                .standard("gemini")
                 .apiKey(System.getProperty("gemini.api.key", ""))
                 .model("gemini-3-flash-preview")
                 .build();

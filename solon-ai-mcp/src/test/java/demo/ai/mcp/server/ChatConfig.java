@@ -17,7 +17,7 @@ public class ChatConfig {
     @Bean
     public ChatModel chatModel() throws Exception {
         return ChatModel.of(_Constants.chat_apiUrl)
-                .provider(_Constants.chat_provider)
+                .standard(_Constants.chat_standard)
                 .model(_Constants.chat_model)
                 .build();
     }

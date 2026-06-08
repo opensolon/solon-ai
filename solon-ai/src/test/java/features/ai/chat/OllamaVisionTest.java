@@ -20,13 +20,13 @@ import java.time.Duration;
 public class OllamaVisionTest {
     private static final Logger log = LoggerFactory.getLogger(OllamaVisionTest.class);
     private static final String apiUrl = "http://127.0.0.1:11434/api/chat";//"http://127.0.0.1:11434";
-    private static final String provider = "ollama";
+    private static final String standard = "ollama";
     private static final String model = "llava:7b";//"llama3.2"; //deepseek-r1:1.5b;
 
     @Test
     public void case1() throws IOException {
         ChatModel chatModel = ChatModel.of(apiUrl)
-                .provider(provider) //需要指定供应商，用于识别接口风格（也称为方言）
+                .standard(standard) //需要指定供应商，用于识别接口风格（也称为方言）
                 .model(model)
                 .timeout(Duration.ofSeconds(300))
                 .build();
@@ -44,7 +44,7 @@ public class OllamaVisionTest {
     @Test
     public void case1_b() throws IOException {
         ChatModel chatModel = ChatModel.of(apiUrl)
-                .provider(provider) //需要指定供应商，用于识别接口风格（也称为方言）
+                .standard(provider) //需要指定供应商，用于识别接口风格（也称为方言）
                 .model(model)
                 .timeout(Duration.ofSeconds(300))
                 .build();

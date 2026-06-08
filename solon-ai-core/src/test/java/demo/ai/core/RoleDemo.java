@@ -7,7 +7,7 @@ public class RoleDemo {
     @Test
     public void case1() throws Exception {
         ChatModel chatModel = ChatModel.of("")
-                .provider("aaa")
+                .standard("aaa")
                 .model("bbb")
                 .role("ccc")
                 .instruction("ddd")

@@ -27,7 +27,7 @@ public class A2ARemoteTest {
 
         ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
                 .model("qwen2.5:latest")
-                .provider("ollama")
+                .standard("ollama")
                 .timeout(Duration.ofMinutes(10))
                 .defaultToolAdd(agentAssistant)
                 .build();

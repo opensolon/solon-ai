@@ -17,7 +17,7 @@ import java.util.Map;
 public class FaceShow {
     public static void main(String[] args) throws Throwable {
         ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
-                .provider("ollama")
+                .standard("ollama")
                 .model("qwen2.5:1.5b")
                 .modelOptions(o->{
                     o.optionSet("a","b");
