@@ -107,21 +107,26 @@ public class McpGatewayTalent extends AbsTalent {
 
         // disabled: 仅注册到管理表，不加入 categoryTools 和 allTools
         if (mcpProvider.isEnabled() == false) {
-            LOG.info("McpGatewayTalent: '{}' is disabled, registered to management only", name);
+            LOG.info("Mcp server '{}': is disabled, registered to management only", name);
             return this;
         }
 
-        Set<String> toolNames = new LinkedHashSet<>();
-        for (FunctionTool tool : mcpProvider.getToolsActivated()) {
-            String key = tool.name().toLowerCase();
-            categoryTools.computeIfAbsent(name, k -> new ConcurrentHashMap<>())
-                    .put(key, tool);
-            allTools.put(key, tool);
-            toolNames.add(key);
-        }
-        serverToolIndex.put(name, toolNames);
+        try {
+            Set<String> toolNames = new LinkedHashSet<>();
+            for (FunctionTool tool : mcpProvider.getToolsActivated()) {
+                String key = tool.name().toLowerCase();
+                categoryTools.computeIfAbsent(name, k -> new ConcurrentHashMap<>())
+                        .put(key, tool);
+                allTools.put(key, tool);
+                toolNames.add(key);
+            }
+            serverToolIndex.put(name, toolNames);
 
-        LOG.info("McpGatewayTalent: Added '{}' ({} tools)", name, toolNames.size());
+            LOG.info("Mcp server {}: added ({} tools)", name, toolNames.size());
+        } catch (Throwable e) {
+            LOG.error("Mcp server {}: loading failed", name, e);
+        }
+
         return this;
     }
 
@@ -141,7 +146,7 @@ public class McpGatewayTalent extends AbsTalent {
             mcpProvider.setEnabled(mcpParameters.isEnabled());
 
             addMcpServer(name, mcpProvider);
-        } catch (IOException e) {
+        } catch (Throwable e) {
             LOG.error("Mcp server '{}' create failed", name, e);
         }
         return this;
