@@ -121,14 +121,17 @@ class TerminalSupport {
         if (lowerCmd.matches("(?i)^exit\\b.*") ||
                 lowerCmd.matches("(?i).*(?:;|\\|\\|?|&&)\\s*exit\\b.*") ||
                 lowerCmd.matches("(?i).*rm\\s+.*-[rR].*f\\s+/.*") ||
-                lowerCmd.matches("(?i).*(?:shutdown|reboot|halt|poweroff|init\\s+0|telinit).*") ||
+                // shutdown/reboot/halt/poweroff: 仅在命令位置（行首或 ;/&&/||/| 之后），不拦截参数中的同名文本
+                lowerCmd.matches("(?i)(?:^|.*[;|&])\\s*(?:shutdown|reboot|halt|poweroff|init\\s+0|telinit)\\b.*") ||
                 lowerCmd.matches("(?i).*(?:dd\\s+if=|mkfs|format\\s+[a-z]:).*") ||
                 lowerCmd.matches("(?i).*:\\(\\)\\s*\\{|:.*\\|.*&.*\\}.*") ||  // fork bomb
-                lowerCmd.matches("(?i).*(?:sysctl\\s+-w|modprobe|crontab).*") ||
+                // sysctl -w / modprobe / crontab: 仅在命令位置（行首或 ;/&&/||/| 之后），避免匹配文件名中的 crontab
+                lowerCmd.matches("(?i)(?:^|.*[;|&])\\s*(?:sysctl\\s+-w|modprobe|crontab)\\b.*") ||
                 lowerCmd.matches("(?i).*(?:systemctl\\s+(?:stop|disable|mask|kill|reset-failed)).*") ||
                 lowerCmd.matches("(?i).*\\b(?:nc|ncat|socat)\\b.*(?:-(?:e|c|l|p)\\s|/bin/|\\|\\s*sh).*") ||
                 lowerCmd.matches("(?i).*(?:iptables|ufw|firewall-cmd).*") ||
-                lowerCmd.matches("(?i).*(?:pip\\s+install|npm\\s+install|gem\\s+install).*\\s-[gG]\\b.*")) {
+                // 全局安装: 同时匹配 -g 和 --global 标志
+                lowerCmd.matches("(?i).*(?:pip\\s+install|npm\\s+install|gem\\s+install).*\\s(?:-[gG]\\b|--global\\b).*")) {
             return "错误：检测到高危指令，已拦截。";
         }
 
@@ -145,10 +148,15 @@ class TerminalSupport {
 
             // 3b. 子 shell / 命令执行入口逃逸
             // 拦截 bash -c / sh -c / zsh -c / eval / exec / source / .(空格) 等子进程执行方式
-            // 注意：find -exec 和 exec 作为 shell 内建命令是安全的，不应拦截
+            // 注意：find -exec、docker exec、kubectl exec、podman exec 是安全的，不应拦截
+            // exec 规则分为两部分：
+            //   a) exec 在 shell 操作符之后（;/|/&&/||）→ 始终拦截（命令链中的 exec 是逃逸）
+            //   b) exec 在行首且后跟 shell 名称 → 拦截（exec /bin/sh 是逃逸）
+            //   c) exec 在行首但后跟普通命令（exec mvn compile）或作为子命令（docker exec）→ 放行
             if (lowerCmd.matches("(?i).*\\b(?:bash|sh|zsh|dash|ksh)\\s+-c\\b.*") ||
                     lowerCmd.matches("(?i).*\\b(?:eval)\\s+.*") ||
-                    lowerCmd.matches("(?i)(?:^|.*[;|&\\s])\\s*exec\\s+.*") ||  // exec 在命令起始位置（行首/;/|/&&/||/空格后）
+                    lowerCmd.matches("(?i).*[;|&]\\s*exec\\s+.*") ||  // exec 在 shell 操作符之后
+                    lowerCmd.matches("(?i)^exec\\s+(?:bash|sh|zsh|dash|ksh|/bin/|/usr/bin/)\\S*\\b.*") ||  // exec shell 在行首
                     lowerCmd.matches("(?i)(?:^|.*[;\\s])\\s*source\\s+.*") ||
                     lowerCmd.matches("(?i)(?:^|.*\\s)\\.\\s+/.*")) {
                 return "错误：检测到高危指令，已拦截。";
