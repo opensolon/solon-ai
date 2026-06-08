@@ -978,6 +978,193 @@ public class SandboxTest {
         return false;
     }
 
+    // ==================== ISSUE 6: Sandbox escape via sub-shell / interpreter / pipe ====================
+
+    @Test
+    public void validateCommand_halt_blocked() {
+        assertNotNull(ValidateCommandTestHelper.validate("halt"), "'halt' should be blocked");
+    }
+
+    @Test
+    public void validateCommand_poweroff_blocked() {
+        assertNotNull(ValidateCommandTestHelper.validate("poweroff"), "'poweroff' should be blocked");
+    }
+
+    @Test
+    public void validateCommand_whoami_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("whoami", true), "'whoami' should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_whoami_allowed_noSandbox() {
+        assertNull(ValidateCommandTestHelper.validate("whoami", false), "'whoami' should be allowed without sandbox");
+    }
+
+    @Test
+    public void validateCommand_ifconfig_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("ifconfig", true), "'ifconfig' should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_env_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("env", true), "'env' should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_uname_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("uname -a", true), "'uname' should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_bashC_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("bash -c whoami", true), "'bash -c' should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_shC_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("sh -c ifconfig", true), "'sh -c' should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_bashC_allowed_noSandbox() {
+        assertNull(ValidateCommandTestHelper.validate("bash -c 'echo hello'", false), "'bash -c' should be allowed without sandbox");
+    }
+
+    @Test
+    public void validateCommand_eval_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("eval whoami", true), "'eval' should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_exec_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("exec whoami", true), "'exec' should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_pythonC_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("python3 -c 'import os; os.system(\"whoami\")'", true),
+                "'python3 -c' should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_perlE_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("perl -e 'system(\"whoami\")'", true),
+                "'perl -e' should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_rubyE_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("ruby -e 'system(\"whoami\")'", true),
+                "'ruby -e' should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_nodeE_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("node -e 'require(\"child_process\").exec(\"whoami\")'", true),
+                "'node -e' should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_pythonC_allowed_noSandbox() {
+        assertNull(ValidateCommandTestHelper.validate("python3 -c 'print(1+1)'", false),
+                "'python3 -c' should be allowed without sandbox");
+    }
+
+    @Test
+    public void validateCommand_pipeBash_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("echo d2hvYW1p | base64 -d | bash", true),
+                "'... | bash' pipe should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_pipeSh_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("echo test | sh", true),
+                "'... | sh' pipe should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_pipeSudo_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("echo test | sudo bash", true),
+                "'... | sudo' pipe should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_pipeBash_allowed_noSandbox() {
+        assertNull(ValidateCommandTestHelper.validate("echo test | bash", false),
+                "'... | bash' pipe should be allowed without sandbox");
+    }
+
+    @Test
+    public void validateCommand_source_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("source /etc/profile", true),
+                "'source' should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_dotSlash_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate(". /etc/profile", true),
+                "'. /path' (source shorthand) should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_networksetup_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("networksetup -listallnetworkservices", true),
+                "'networksetup' should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_catEtcHosts_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("cat /etc/hosts", true),
+                "'cat /etc/hosts' should be blocked in sandbox");
+    }
+
+    // ==================== Positive tests: normal commands still pass ====================
+
+    @Test
+    public void validateCommand_ls_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("ls -la", true), "'ls' should be allowed");
+    }
+
+    @Test
+    public void validateCommand_javaVersion_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("java -version", true), "'java -version' should be allowed");
+    }
+
+    @Test
+    public void validateCommand_nodeVersion_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("node --version", true), "'node --version' should be allowed");
+    }
+
+    @Test
+    public void validateCommand_pythonVersion_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("python3 --version", true), "'python3 --version' should be allowed");
+    }
+
+    @Test
+    public void validateCommand_mvnVersion_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("mvn --version", true), "'mvn --version' should be allowed");
+    }
+
+    @Test
+    public void validateCommand_echoPipeGrep_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("echo hello | grep hello", true), "'echo | grep' should be allowed");
+    }
+
+    @Test
+    public void validateCommand_find_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("find . -name '*.java' -maxdepth 1", true), "'find' should be allowed");
+    }
+
+    @Test
+    public void validateCommand_gitLog_allowed_noSandbox() {
+        assertNull(ValidateCommandTestHelper.validate("git log --oneline -5", false), "'git log' should be allowed without sandbox");
+    }
+
+    @Test
+    public void validateCommand_catEtcHosts_allowed_noSandbox() {
+        assertNull(ValidateCommandTestHelper.validate("cat /etc/hosts", false), "'cat /etc/hosts' should be allowed without sandbox");
+    }
+
     // ==================== Helper class for validateCommand testing ====================
 
     private static class RecordingSandboxExecutor implements SandboxExecutor {
@@ -1005,15 +1192,20 @@ public class SandboxTest {
      */
     static class ValidateCommandTestHelper {
         static String validate(String command) {
+            return validate(command, true);
+        }
+
+        static String validate(String command, boolean sandboxEnabled) {
             if (command == null || command.trim().isEmpty()) {
                 return "error: command is empty";
             }
             String lowerCmd = command.toLowerCase();
 
+            // 2. System destructive commands (all modes)
             if (lowerCmd.matches("(?i)^exit\\b.*") ||
                     lowerCmd.matches("(?i).*(?:;|\\|\\|?|&&)\\s*exit\\b.*") ||
                     lowerCmd.matches("(?i).*rm\\s+.*-[rR].*f\\s+/.*") ||
-                    lowerCmd.matches("(?i).*(?:shutdown|reboot|init\\s+0|telinit).*") ||
+                    lowerCmd.matches("(?i).*(?:shutdown|reboot|halt|poweroff|init\\s+0|telinit).*") ||
                     lowerCmd.matches("(?i).*(?:dd\\s+if=|mkfs|format\\s+[a-z]:).*") ||
                     lowerCmd.matches("(?i).*:\\(\\)\\s*\\{|:.*\\|.*&.*\\}.*") ||
                     lowerCmd.matches("(?i).*(?:sysctl\\s+-w|modprobe|crontab).*") ||
@@ -1023,6 +1215,42 @@ public class SandboxTest {
                     lowerCmd.matches("(?i).*(?:pip\\s+install|npm\\s+install|gem\\s+install).*\\s-[gG]\\b.*")) {
                 return "blocked";
             }
+
+            // 3. Sandbox-mode-only checks
+            if (sandboxEnabled) {
+                // 3a. Info-leak commands
+                if (lowerCmd.matches("(?i).*\\b(?:ifconfig|ip\\s+(?:addr|link|route|neigh|a|l|r|n))\\b.*") ||
+                        lowerCmd.matches("(?i).*\\b(?:whoami|id\\b|uname|hostname|env\\b|printenv)\\b.*") ||
+                        lowerCmd.matches("(?i).*\\bcat\\s+/etc/(?:hosts|passwd|shadow|hostname|resolv\\.conf|networks)\\b.*") ||
+                        lowerCmd.matches("(?i).*\\b(?:networksetup|system_profiler|sw_vers)\\b.*")) {
+                    return "blocked";
+                }
+
+                // 3b. Sub-shell / command exec escape
+                if (lowerCmd.matches("(?i).*\\b(?:bash|sh|zsh|dash|ksh)\\s+-c\\b.*") ||
+                        lowerCmd.matches("(?i).*\\b(?:eval|exec)\\s+.*") ||
+                        lowerCmd.matches("(?i).*\\bsource\\s+.*") ||
+                        lowerCmd.matches("(?i)(?:^|.*\\s)\\.\\s+/.*")) {
+                    return "blocked";
+                }
+
+                // 3c. Interpreter inline exec escape
+                if (lowerCmd.matches("(?i).*\\b(?:python[23]?|python3)\\s+-[cE].*") ||
+                        lowerCmd.matches("(?i).*\\bperl\\s+(?:-e|-E)\\b.*") ||
+                        lowerCmd.matches("(?i).*\\bruby\\s+(?:-e|-E)\\b.*") ||
+                        lowerCmd.matches("(?i).*\\bnode\\s+-e\\b.*") ||
+                        lowerCmd.matches("(?i).*\\bphp\\s+-r\\b.*")) {
+                    return "blocked";
+                }
+
+                // 3d. Pipe injection escape
+                if (lowerCmd.matches("(?i).*\\|\\s*(?:bash|sh|zsh|dash|ksh)\\b.*") ||
+                        lowerCmd.matches("(?i).*\\|\\s*(?:sudo|su)\\b.*") ||
+                        lowerCmd.matches("(?i).*\\bxargs\\s+(?:bash|sh|zsh|dash|ksh)\\b.*")) {
+                    return "blocked";
+                }
+            }
+
             return null;
         }
     }

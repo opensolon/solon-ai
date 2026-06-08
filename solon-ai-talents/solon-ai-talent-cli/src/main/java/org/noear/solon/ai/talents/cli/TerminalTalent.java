@@ -785,12 +785,12 @@ public class TerminalTalent extends AbsTalent {
             return "错误：检测到危险命令。严禁试图停止宿主进程 (PID: " + pid + ")。";
         }
 
-        // 2. 系统破坏/自毁命令
+        // 2. 系统破坏/自毁命令（全模式生效）
         // exit: 仅拦截作为独立命令出现的 exit（行首/分号/管道/&&/|| 后），不拦截 echo 等参数中的 exit
         if (lowerCmd.matches("(?i)^exit\\b.*") ||
                 lowerCmd.matches("(?i).*(?:;|\\|\\|?|&&)\\s*exit\\b.*") ||
                 lowerCmd.matches("(?i).*rm\\s+.*-[rR].*f\\s+/.*") ||
-                lowerCmd.matches("(?i).*(?:shutdown|reboot|init\\s+0|telinit).*") ||
+                lowerCmd.matches("(?i).*(?:shutdown|reboot|halt|poweroff|init\\s+0|telinit).*") ||
                 lowerCmd.matches("(?i).*(?:dd\\s+if=|mkfs|format\\s+[a-z]:).*") ||
                 lowerCmd.matches("(?i).*:\\(\\)\\s*\\{|:.*\\|.*&.*\\}.*") ||  // fork bomb
                 lowerCmd.matches("(?i).*(?:sysctl\\s+-w|modprobe|crontab).*") ||
@@ -801,10 +801,48 @@ public class TerminalTalent extends AbsTalent {
             return "错误：检测到高危指令，已拦截。";
         }
 
-        // 3. 沙盒模式下的绝对路径检测
+        // 3. 沙盒模式专属检测：信息泄露 + 子进程/解释器逃逸 + 管道注入
+        if (sandboxEnabled) {
+            // 3a. 信息泄露命令
+            if (lowerCmd.matches("(?i).*\\b(?:ifconfig|ip\\s+(?:addr|link|route|neigh|a|l|r|n))\\b.*") ||
+                    lowerCmd.matches("(?i).*\\b(?:whoami|id\\b|uname|hostname|env\\b|printenv)\\b.*") ||
+                    lowerCmd.matches("(?i).*\\bcat\\s+/etc/(?:hosts|passwd|shadow|hostname|resolv\\.conf|networks)\\b.*") ||
+                    lowerCmd.matches("(?i).*\\b(?:networksetup|system_profiler|sw_vers)\\b.*")) {
+                return "错误：检测到高危指令，已拦截。";
+            }
+
+            // 3b. 子 shell / 命令执行入口逃逸
+            // 拦截 bash -c / sh -c / zsh -c / eval / exec / source / .(空格) 等子进程执行方式
+            if (lowerCmd.matches("(?i).*\\b(?:bash|sh|zsh|dash|ksh)\\s+-c\\b.*") ||
+                    lowerCmd.matches("(?i).*\\b(?:eval|exec)\\s+.*") ||
+                    lowerCmd.matches("(?i).*\\bsource\\s+.*") ||
+                    lowerCmd.matches("(?i)(?:^|.*\\s)\\.\\s+/.*")) {
+                return "错误：检测到高危指令，已拦截。";
+            }
+
+            // 3c. 解释器内联执行逃逸
+            // 拦截 python3 -c / python -c / perl -e / ruby -e / node -e / php -r 等
+            if (lowerCmd.matches("(?i).*\\b(?:python[23]?|python3)\\s+-[cE].*") ||
+                    lowerCmd.matches("(?i).*\\bperl\\s+(?:-e|-E)\\b.*") ||
+                    lowerCmd.matches("(?i).*\\bruby\\s+(?:-e|-E)\\b.*") ||
+                    lowerCmd.matches("(?i).*\\bnode\\s+-e\\b.*") ||
+                    lowerCmd.matches("(?i).*\\bphp\\s+-r\\b.*")) {
+                return "错误：检测到高危指令，已拦截。";
+            }
+
+            // 3d. 管道注入逃逸
+            // 拦截通过管道将任意内容传入 shell 的方式（如 base64 解码后执行、echo ... | bash）
+            if (lowerCmd.matches("(?i).*\\|\\s*(?:bash|sh|zsh|dash|ksh)\\b.*") ||
+                    lowerCmd.matches("(?i).*\\|\\s*(?:sudo|su)\\b.*") ||
+                    lowerCmd.matches("(?i).*\\bxargs\\s+(?:bash|sh|zsh|dash|ksh)\\b.*")) {
+                return "错误：检测到高危指令，已拦截。";
+            }
+        }
+
+        // 4. 沙盒模式下的绝对路径检测
         if (sandboxEnabled) {
             // 检测类 Unix 绝对路径（排除 $ 开头的环境变量引用）
-            if (command.matches("(?s).*(?<![\\$\\w\\-/])\\s/[a-zA-Z][\\w/].*") ||
+            if (command.matches("(?s).*(?<![\\$\\w/])/[a-zA-Z][\\w/].*") ||
                     command.matches("(?i).*[a-z]:[\\\\/].*")) {
                 return "错误：沙盒模式下禁止在 bash 命令中使用绝对路径。请使用相对路径或逻辑路径（如 @pool）。";
             }
