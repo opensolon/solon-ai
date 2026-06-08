@@ -66,7 +66,9 @@ public class LinuxSandboxExecutor implements SandboxExecutor {
         args.add("--");
         args.add("bash");
         args.add("-c");
-        args.add(command);
+        // 统一覆盖 TMPDIR=/tmp，避免部分发行版 TMPDIR 指向不可写路径
+        String wrappedCommand = "export TMPDIR=/tmp; " + command;
+        args.add(wrappedCommand);
         return ShellQuote.quote(args.toArray(new String[0]));
     }
 

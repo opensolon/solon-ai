@@ -625,6 +625,17 @@ public class SandboxTest {
     }
 
     @Test
+    public void linux_wrapCommand_tmpDirBeforeOriginalCommand() throws Exception {
+        LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
+        if (!executor.isAvailable()) return;
+
+        Path workPath = Paths.get("/tmp/test-workspace");
+        String result = executor.wrapCommand("npm install", workPath, new HashMap<>());
+        assertTrue(result.contains("export TMPDIR=/tmp; npm install"),
+                "TMPDIR export must precede original command in bwrap: " + result);
+    }
+
+    @Test
     public void linux_wrapCommandQuotesEveryBwrapArgument() throws Exception {
         LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
         SandboxConfig config = new SandboxConfig();
@@ -1250,6 +1261,57 @@ public class SandboxTest {
     @Test
     public void validateCommand_varConcat_allowed_noSandbox() {
         assertNull(ValidateCommandTestHelper.validate("a=who; b=ami; $a$b", false), "Variable concat should be allowed without sandbox");
+    }
+
+    // ==================== ISSUE 7: TMPDIR override for dev tools (Java/Maven/Node/Python) ====================
+
+    @Test
+    public void macOs_wrapCommand_overridesTmpDir() {
+        // macOS 默认 TMPDIR=/var/folders/... 不在沙盒写白名单，需覆盖为 /tmp
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        if (!executor.isAvailable()) return;
+
+        Path workPath = Paths.get("/tmp/test-workspace");
+        String result = executor.wrapCommand("echo hello", workPath, new HashMap<>());
+        assertTrue(result.contains("export TMPDIR=/tmp"),
+                "Sandbox should override TMPDIR=/tmp for dev tool compatibility: " + result);
+    }
+
+    @Test
+    public void macOs_wrapCommand_tmpDirBeforeOriginalCommand() {
+        // 确保 TMPDIR 在原始命令之前执行
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        if (!executor.isAvailable()) return;
+
+        Path workPath = Paths.get("/tmp/test-workspace");
+        String result = executor.wrapCommand("mvn compile", workPath, new HashMap<>());
+        assertTrue(result.contains("export TMPDIR=/tmp; mvn compile"),
+                "TMPDIR export must precede original command: " + result);
+    }
+
+    @Test
+    public void linux_wrapCommand_overridesTmpDir() {
+        LinuxSandboxExecutor executor = new LinuxSandboxExecutor();
+        if (!executor.isAvailable()) return;
+
+        Path workPath = Paths.get("/tmp/test-workspace");
+        String result = executor.wrapCommand("echo hello", workPath, new HashMap<>());
+        assertTrue(result.contains("export TMPDIR=/tmp"),
+                "Linux sandbox should also override TMPDIR=/tmp: " + result);
+    }
+
+    @Test
+    public void macOs_profile_tmpWriteAllowed() {
+        // 确认 profile 允许写 /tmp 和 /private/tmp（TMPDIR 覆盖后需要这两个路径可写）
+        MacOsSandboxExecutor executor = new MacOsSandboxExecutor();
+        if (!executor.isAvailable()) return;
+
+        Path workPath = Paths.get("/tmp/test-workspace");
+        String profile = executor.wrapCommand("echo hello", workPath, new HashMap<>());
+        assertTrue(profile.contains("file-write* (subpath \"/tmp\")"),
+                "Profile must allow writing to /tmp for TMPDIR override: " + profile);
+        assertTrue(profile.contains("file-write* (subpath \"/private/tmp\")"),
+                "Profile must allow writing to /private/tmp (macOS symlink target): " + profile);
     }
 
     // ==================== Helper class for validateCommand testing ====================

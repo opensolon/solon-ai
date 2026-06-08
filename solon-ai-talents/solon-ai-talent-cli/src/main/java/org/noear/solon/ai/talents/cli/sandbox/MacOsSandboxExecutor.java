@@ -68,7 +68,10 @@ public class MacOsSandboxExecutor implements SandboxExecutor {
     @Override
     public String wrapCommand(String command, Path workPath, Map<String, String> envs) {
         String profile = generateSeatbeltProfile(workPath);
-        return ShellQuote.quote(new String[]{"sandbox-exec", "-p", profile, "bash", "-c", command});
+        // macOS 默认 TMPDIR=/var/folders/... 不在沙盒写白名单中，需统一覆盖为 /tmp。
+        // 影响：Java (java.io.tmpdir)、Node.js (os.tmpdir())、Python (tempfile)、make、tar 等。
+        String wrappedCommand = "export TMPDIR=/tmp; " + command;
+        return ShellQuote.quote(new String[]{"sandbox-exec", "-p", profile, "bash", "-c", wrappedCommand});
     }
 
     @Override
