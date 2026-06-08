@@ -1165,6 +1165,53 @@ public class SandboxTest {
         assertNull(ValidateCommandTestHelper.validate("cat /etc/hosts", false), "'cat /etc/hosts' should be allowed without sandbox");
     }
 
+    // ==================== 3e. Variable concatenation escape tests ====================
+
+    @Test
+    public void validateCommand_varConcat_whoami_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("a=who; b=ami; $a$b", true), "Variable concat 'a=who; b=ami; $a$b' should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_varConcat_bashC_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("cmd=bash; args='-c whoami'; $cmd $args", true), "Variable concat to bypass bash -c should be blocked");
+    }
+
+    @Test
+    public void validateCommand_varAtStart_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("$cmd", true), "'$cmd' at start should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_varAfterSemicolon_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("echo hello; $cmd", true), "'$cmd' after ; should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_varAfterAnd_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("echo ok && $cmd", true), "'$cmd' after && should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_varAfterOr_blocked_sandbox() {
+        assertNotNull(ValidateCommandTestHelper.validate("echo ok || $cmd", true), "'$cmd' after || should be blocked in sandbox");
+    }
+
+    @Test
+    public void validateCommand_varInArg_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("echo $PATH", true), "'echo $PATH' should be allowed ($ in argument, not command position)");
+    }
+
+    @Test
+    public void validateCommand_varAssignmentAndUse_allowed_sandbox() {
+        assertNull(ValidateCommandTestHelper.validate("A=1; echo $A", true), "'A=1; echo $A' should be allowed ($A is argument to echo)");
+    }
+
+    @Test
+    public void validateCommand_varConcat_allowed_noSandbox() {
+        assertNull(ValidateCommandTestHelper.validate("a=who; b=ami; $a$b", false), "Variable concat should be allowed without sandbox");
+    }
+
     // ==================== Helper class for validateCommand testing ====================
 
     private static class RecordingSandboxExecutor implements SandboxExecutor {
@@ -1229,7 +1276,7 @@ public class SandboxTest {
                 // 3b. Sub-shell / command exec escape
                 if (lowerCmd.matches("(?i).*\\b(?:bash|sh|zsh|dash|ksh)\\s+-c\\b.*") ||
                         lowerCmd.matches("(?i).*\\b(?:eval|exec)\\s+.*") ||
-                        lowerCmd.matches("(?i).*\\bsource\\s+.*") ||
+                        lowerCmd.matches("(?i)(?:^|.*[;\\s])\\s*source\\s+.*") ||
                         lowerCmd.matches("(?i)(?:^|.*\\s)\\.\\s+/.*")) {
                     return "blocked";
                 }
@@ -1247,6 +1294,12 @@ public class SandboxTest {
                 if (lowerCmd.matches("(?i).*\\|\\s*(?:bash|sh|zsh|dash|ksh)\\b.*") ||
                         lowerCmd.matches("(?i).*\\|\\s*(?:sudo|su)\\b.*") ||
                         lowerCmd.matches("(?i).*\\bxargs\\s+(?:bash|sh|zsh|dash|ksh)\\b.*")) {
+                    return "blocked";
+                }
+
+                // 3e. Variable concatenation escape
+                if (lowerCmd.matches("(?i)^\\$\\{?\\w+.*") ||
+                        lowerCmd.matches("(?i).*(?:;|&&|\\|\\||\\|)\\s*\\$\\{?\\w+.*")) {
                     return "blocked";
                 }
             }

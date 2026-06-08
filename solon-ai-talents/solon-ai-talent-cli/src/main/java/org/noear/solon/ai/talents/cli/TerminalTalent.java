@@ -815,7 +815,7 @@ public class TerminalTalent extends AbsTalent {
             // 拦截 bash -c / sh -c / zsh -c / eval / exec / source / .(空格) 等子进程执行方式
             if (lowerCmd.matches("(?i).*\\b(?:bash|sh|zsh|dash|ksh)\\s+-c\\b.*") ||
                     lowerCmd.matches("(?i).*\\b(?:eval|exec)\\s+.*") ||
-                    lowerCmd.matches("(?i).*\\bsource\\s+.*") ||
+                    lowerCmd.matches("(?i)(?:^|.*[;\\s])\\s*source\\s+.*") ||
                     lowerCmd.matches("(?i)(?:^|.*\\s)\\.\\s+/.*")) {
                 return "错误：检测到高危指令，已拦截。";
             }
@@ -835,6 +835,15 @@ public class TerminalTalent extends AbsTalent {
             if (lowerCmd.matches("(?i).*\\|\\s*(?:bash|sh|zsh|dash|ksh)\\b.*") ||
                     lowerCmd.matches("(?i).*\\|\\s*(?:sudo|su)\\b.*") ||
                     lowerCmd.matches("(?i).*\\bxargs\\s+(?:bash|sh|zsh|dash|ksh)\\b.*")) {
+                return "错误：检测到高危指令，已拦截。";
+            }
+
+            // 3e. 变量拼接逃逸
+            // 拦截通过 Shell 变量拼接来绕过命令检测（如 a=who; b=ami; $a$b）
+            // 仅检测 $var 出现在命令执行位置：行首 或 ;/&&/||/| 之后
+            // 不拦截 $var 出现在参数位置（如 echo $PATH、A=1; echo $A）
+            if (lowerCmd.matches("(?i)^\\$\\{?\\w+.*") ||
+                    lowerCmd.matches("(?i).*(?:;|&&|\\|\\||\\|)\\s*\\$\\{?\\w+.*")) {
                 return "错误：检测到高危指令，已拦截。";
             }
         }
