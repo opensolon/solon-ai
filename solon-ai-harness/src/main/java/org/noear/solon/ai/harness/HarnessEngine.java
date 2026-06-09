@@ -444,6 +444,17 @@ public class HarnessEngine {
 
     // ========== 动态模型管理 ==========
 
+    public void setDefaultModel(String defaultModel){
+        String oldDefault = options.getDefaultModel();
+        options.setDefaultModel(defaultModel);
+
+        if (mainAgent != null
+                && !defaultModel.equals(oldDefault)
+                && (oldDefault == null || oldDefault.equals(mainAgent.getModel().getNameOrModel()))) {
+            refreshMainAgent();
+        }
+    }
+
     public void addModel(ChatConfig config) {
         if (Assert.isEmpty(config.getUserAgent())) {
             config.setUserAgent(options.getUserAgent());
