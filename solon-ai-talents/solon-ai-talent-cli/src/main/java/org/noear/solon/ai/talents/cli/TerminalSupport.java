@@ -23,6 +23,7 @@ import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.core.util.Assert;
 
 import java.io.IOException;
+import java.io.File;
 import java.nio.file.*;
 import java.util.List;
 import java.util.Map;
@@ -190,12 +191,33 @@ class TerminalSupport {
             }
         }
 
-        // 4. 沙盒模式下的绝对路径检测
+        // 4. 沙盒模式下的绝对路径检测（白名单放行机制）
         if (sandboxEnabled) {
-            // 检测类 Unix 绝对路径（排除 $ 开头的环境变量引用、./ 相对路径、=赋值、:远程路径）
-            if (command.matches("(?s).*(?<![\\$\\w/.:=])/[a-zA-Z][\\w/].*") ||
-                    command.matches("(?i).*[a-z]:[\\\\/].*")) {
-                return "错误：沙盒模式下禁止在 bash 命令中使用绝对路径。请使用相对路径或逻辑路径（如 @pool）。";
+            // 4a. 收集允许在 bash 命令中使用的绝对路径白名单
+            // 这些路径由 SandboxFsConfig 和系统属性动态构建，与 OS 级沙盒的写白名单保持一致
+            java.util.List<String> allowedAbsolutePrefixes = buildAllowedAbsolutePrefixes(sandboxAllowUserHome);
+
+            // 4b. 检测绝对路径是否在白名单内
+            // Unix 绝对路径: /path/... (排除 $, ./, =, : 等上下文)
+            // Windows 绝对路径: C:\... 或 C:/...
+            java.util.regex.Pattern unixAbsPattern = java.util.regex.Pattern.compile(
+                    "(?<![\\$\\w/.:=])(/[a-zA-Z][\\w/][\\w./-]*)");
+            java.util.regex.Matcher unixMatcher = unixAbsPattern.matcher(command);
+            while (unixMatcher.find()) {
+                String absPath = unixMatcher.group(1);
+                if (!isAllowedAbsolutePath(absPath, allowedAbsolutePrefixes)) {
+                    return "错误：沙盒模式下禁止在 bash 命令中使用绝对路径。请使用相对路径或逻辑路径（如 @pool）。";
+                }
+            }
+
+            java.util.regex.Pattern winAbsPattern = java.util.regex.Pattern.compile(
+                    "(?i)([a-z]:[\\\\/][\\\\/]*)");
+            java.util.regex.Matcher winMatcher = winAbsPattern.matcher(command);
+            while (winMatcher.find()) {
+                String absPath = winMatcher.group(1);
+                if (!isAllowedAbsolutePath(absPath, allowedAbsolutePrefixes)) {
+                    return "错误：沙盒模式下禁止在 bash 命令中使用绝对路径。请使用相对路径或逻辑路径（如 @pool）。";
+                }
             }
 
             // ~ 路径检测
@@ -205,6 +227,60 @@ class TerminalSupport {
         }
 
         return null; // null 表示校验通过
+    }
+
+    /**
+     * 构建允许在沙盒 bash 命令中使用的绝对路径前缀列表。
+     * 这些路径对应 OS 级沙盒也已放行的写/读区域，确保 Java 层校验与 OS 级沙盒一致。
+     */
+    private java.util.List<String> buildAllowedAbsolutePrefixes(boolean sandboxAllowUserHome) {
+        java.util.List<String> prefixes = new java.util.ArrayList<>();
+
+        // 系统临时目录（surefire 等构建工具依赖）
+        prefixes.add("/tmp");
+        prefixes.add("/private/tmp");
+        String tmpdir = System.getProperty("java.io.tmpdir");
+        if (Assert.isNotEmpty(tmpdir)) {
+            String normalized = tmpdir.replace("\\", "/");
+            if (!normalized.equals("/tmp")) {
+                prefixes.add(normalized);
+                if (normalized.startsWith("/var/")) {
+                    prefixes.add("/private" + normalized);
+                }
+            }
+        }
+
+        // 用户主目录（Maven/Gradle/npm 缓存等构建工具）
+        if (sandboxAllowUserHome) {
+            String home = System.getProperty("user.home");
+            if (Assert.isNotEmpty(home)) {
+                prefixes.add(home);
+            }
+        }
+
+        // 设备节点
+        prefixes.add("/dev/null");
+        prefixes.add("/dev/tty");
+        prefixes.add("/dev/stdout");
+        prefixes.add("/dev/stderr");
+        prefixes.add("/dev/zero");
+        prefixes.add("/dev/random");
+        prefixes.add("/dev/urandom");
+        prefixes.add("/dev/dtracehelper");
+
+        return prefixes;
+    }
+
+    /**
+     * 检测给定的绝对路径是否在允许列表内（前缀匹配）
+     */
+    private boolean isAllowedAbsolutePath(String absPath, java.util.List<String> allowedPrefixes) {
+        for (String prefix : allowedPrefixes) {
+            if (absPath.equals(prefix) || absPath.startsWith(prefix + "/") || absPath.startsWith(prefix + File.separator)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String preprocessUserHome(String pStr) {

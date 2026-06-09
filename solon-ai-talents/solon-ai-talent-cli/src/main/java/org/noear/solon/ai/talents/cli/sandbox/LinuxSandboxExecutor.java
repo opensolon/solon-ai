@@ -67,7 +67,8 @@ public class LinuxSandboxExecutor implements SandboxExecutor {
         args.add("bash");
         args.add("-c");
         // 统一覆盖 TMPDIR=/tmp，避免部分发行版 TMPDIR 指向不可写路径
-        String wrappedCommand = "export TMPDIR=/tmp; " + command;
+        // 同时将 java.io.tmpdir 也指向 /tmp，确保 surefire 等构建工具写文件到可写区域
+        String wrappedCommand = "export TMPDIR=/tmp; export JAVA_OPTS=\"$JAVA_OPTS -Djava.io.tmpdir=/tmp\"; " + command;
         args.add(wrappedCommand);
         return ShellQuote.quote(args.toArray(new String[0]));
     }
@@ -134,7 +135,15 @@ public class LinuxSandboxExecutor implements SandboxExecutor {
             addBindIfPossible(args, workPath.toString(), workPath.toString(), false);
             addBindIfPossible(args, "/tmp", "/tmp", false);
             if (allowUserHome) {
-                addBindIfPossible(args, System.getProperty("user.home"), System.getProperty("user.home"), true);
+                String home = System.getProperty("user.home");
+                addBindIfPossible(args, home, home, true);
+                // 构建工具缓存目录需要写权限（Maven / Gradle / npm）
+                addBindIfPossible(args, home + "/.m2", home + "/.m2", false);
+                addBindIfPossible(args, home + "/.gradle/caches", home + "/.gradle/caches", false);
+                addBindIfPossible(args, home + "/.gradle/wrapper", home + "/.gradle/wrapper", false);
+                addBindIfPossible(args, home + "/.gradle/daemon", home + "/.gradle/daemon", false);
+                addBindIfPossible(args, home + "/.npm/_logs", home + "/.npm/_logs", false);
+                addBindIfPossible(args, home + "/.npm/_cacache", home + "/.npm/_cacache", false);
             }
             addMountBindings(args);
 

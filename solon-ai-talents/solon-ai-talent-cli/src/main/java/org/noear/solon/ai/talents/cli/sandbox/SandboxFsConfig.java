@@ -20,6 +20,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import org.noear.solon.core.util.Assert;
+
 /**
  * 沙盒文件系统配置
  *
@@ -38,7 +40,9 @@ public class SandboxFsConfig {
     private List<String> allowRead = Collections.emptyList();
 
     // 写限制（allow-only 模式）
-    private List<String> allowWrite = Arrays.asList(".", "/tmp");
+    // 默认可写路径：工作区(".") + 系统临时目录 + 构建工具缓存
+    // 参考 Anthropic sandbox-runtime 的 getDefaultWritePaths() 进行对齐
+    private List<String> allowWrite = buildDefaultAllowWrite();
     private List<String> denyWrite = Collections.emptyList();
 
     /**
@@ -92,6 +96,55 @@ public class SandboxFsConfig {
 
     public void setDenyWrite(List<String> denyWrite) {
         this.denyWrite = denyWrite != null ? denyWrite : Collections.emptyList();
+    }
+
+    /**
+     * 构建默认的可写路径列表（参考 Anthropic sandbox-runtime 的 getDefaultWritePaths）
+     */
+    private static List<String> buildDefaultAllowWrite() {
+        List<String> paths = new ArrayList<>();
+        // 工作区根目录
+        paths.add(".");
+
+        // 系统临时目录（Linux & macOS）
+        paths.add("/tmp");
+        paths.add("/private/tmp");                // macOS /tmp -> /private/tmp 符号链接目标
+
+        // macOS 的 TMPDIR 实际路径（/var/folders/.../T）
+        String tmpdir = System.getProperty("java.io.tmpdir");
+        if (Assert.isNotEmpty(tmpdir)) {
+            String normalized = tmpdir.replace("\\", "/");
+            if (!paths.contains(normalized)) {
+                paths.add(normalized);
+            }
+            // macOS /var -> /private/var 符号链接目标
+            if (normalized.startsWith("/var/")) {
+                String privateVar = "/private" + normalized;
+                if (!paths.contains(privateVar)) {
+                    paths.add(privateVar);
+                }
+            }
+        }
+
+        // 设备节点（参考 sandbox-runtime）
+        paths.add("/dev/null");
+        paths.add("/dev/tty");
+        paths.add("/dev/stdout");
+        paths.add("/dev/stderr");
+
+        // 用户主目录下的构建工具缓存（Maven / Gradle / npm）
+        String home = System.getProperty("user.home");
+        if (Assert.isNotEmpty(home)) {
+            paths.add(home + "/.m2/repository");
+            paths.add(home + "/.m2/wrapper");
+            paths.add(home + "/.gradle/caches");
+            paths.add(home + "/.gradle/wrapper");
+            paths.add(home + "/.gradle/daemon");
+            paths.add(home + "/.npm/_logs");
+            paths.add(home + "/.npm/_cacache");
+        }
+
+        return paths;
     }
 
     /**

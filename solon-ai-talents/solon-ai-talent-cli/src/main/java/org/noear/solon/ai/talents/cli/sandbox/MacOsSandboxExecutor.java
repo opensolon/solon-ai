@@ -70,7 +70,8 @@ public class MacOsSandboxExecutor implements SandboxExecutor {
         String profile = generateSeatbeltProfile(workPath);
         // macOS 默认 TMPDIR=/var/folders/... 不在沙盒写白名单中，需统一覆盖为 /tmp。
         // 影响：Java (java.io.tmpdir)、Node.js (os.tmpdir())、Python (tempfile)、make、tar 等。
-        String wrappedCommand = "export TMPDIR=/tmp; " + command;
+        // 同时将 java.io.tmpdir 也指向 /tmp，确保 surefire 等构建工具写文件到可写区域。
+        String wrappedCommand = "export TMPDIR=/tmp; export JAVA_OPTS=\"$JAVA_OPTS -Djava.io.tmpdir=/tmp\"; " + command;
         return ShellQuote.quote(new String[]{"sandbox-exec", "-p", profile, "bash", "-c", wrappedCommand});
     }
 
@@ -202,6 +203,26 @@ public class MacOsSandboxExecutor implements SandboxExecutor {
             appendPathRule(sb, "allow", "file-write*", "/tmp", null);
         }
         appendPathRule(sb, "allow", "file-write*", "/private/tmp", null);
+        // macOS TMPDIR 实际路径（/var/folders/.../T），surefire 等构建工具可能通过 java.io.tmpdir 使用
+        String javaTmpDir = System.getProperty("java.io.tmpdir");
+        if (javaTmpDir != null && !javaTmpDir.equals("/tmp") && !javaTmpDir.equals("/private/tmp")) {
+            appendPathRule(sb, "allow", "file-write*", javaTmpDir, null);
+            if (javaTmpDir.startsWith("/var/")) {
+                appendPathRule(sb, "allow", "file-write*", "/private" + javaTmpDir, null);
+            }
+        }
+        // 用户主目录下的构建工具缓存目录（Maven / Gradle / npm）
+        if (allowUserHome) {
+            String home = System.getProperty("user.home");
+            if (home != null) {
+                appendPathRule(sb, "allow", "file-write*", home + "/.m2", null);
+                appendPathRule(sb, "allow", "file-write*", home + "/.gradle/caches", null);
+                appendPathRule(sb, "allow", "file-write*", home + "/.gradle/wrapper", null);
+                appendPathRule(sb, "allow", "file-write*", home + "/.gradle/daemon", null);
+                appendPathRule(sb, "allow", "file-write*", home + "/.npm/_logs", null);
+                appendPathRule(sb, "allow", "file-write*", home + "/.npm/_cacache", null);
+            }
+        }
         sb.append("\n");
 
         List<String> denyWritePaths = new ArrayList<>();
