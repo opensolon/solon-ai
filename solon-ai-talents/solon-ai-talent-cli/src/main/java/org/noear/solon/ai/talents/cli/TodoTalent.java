@@ -37,9 +37,6 @@ public class TodoTalent extends AbsTalent {
     public static final String TOOL_TODOWRITE = "todowrite";
 
     public static final String TODO_FILE_NAME = "TODO.md";
-    public static final String STATUS_PENDING = "[ ]";
-    public static final String STATUS_IN_PROGRESS = "[/]";
-    public static final String STATUS_DONE = "[x]";
 
     private final String relativeDir;
 
