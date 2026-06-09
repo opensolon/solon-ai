@@ -97,22 +97,15 @@ class TerminalSupport {
     }
 
     /**
-     * 统一的命令安全校验（替代原 validateDangerousCommand + bash 内联检查）
+     * 统一的命令安全校验
+     *
+     * <p>设计理念（参考 Anthropic sandbox-runtime）：Java 层仅做最小自保护，
+     * 安全隔离的重活交给 OS 内核沙盒（Seatbelt / bwrap）。
+     * 当 sandboxSystemRestrict=true 时，由 wrapCommand() 在 OS 内核级强制隔离。</p>
      *
      * @return null 表示校验通过；非 null 为错误消息
      */
-    String validateCommand(String command, boolean sandboxEnabled, boolean sandboxAllowUserHome) {
-        return validateCommand(command, sandboxEnabled, sandboxAllowUserHome, true);
-    }
-
-    /**
-     * 统一安全校验
-     *
-     * @param sandboxEnabled          是否启用沙盒模式
-     * @param sandboxAllowUserHome    沙盒模式下是否允许访问用户主目录
-     * @param sandboxSystemRestrict   沙盒模式下是否启用系统级限制（信息泄露/子进程逃逸/管道注入等）
-     */
-    String validateCommand(String command, boolean sandboxEnabled, boolean sandboxAllowUserHome, boolean sandboxSystemRestrict) {
+    String validateCommandNoKill(String command) {
         if (Assert.isEmpty(command)) {
             return "错误：command 不能为空。";
         }
@@ -120,7 +113,7 @@ class TerminalSupport {
         String pid = Utils.pid();
         String lowerCmd = command.toLowerCase();
 
-        // 1. 自保护：禁止杀死当前 Java 进程
+        // 1. 自保护：禁止杀死当前 Java 进程（全模式、全配置始终生效）
         String killPattern = "(?i).*(?:kill|pkill|killall)\\s+[\\s\\w]*\\b" + pid + "\\b.*";
         if (lowerCmd.matches(killPattern) ||
                 lowerCmd.contains("pkill java") ||
@@ -128,114 +121,10 @@ class TerminalSupport {
             return "错误：检测到危险命令。严禁试图停止宿主进程 (PID: " + pid + ")。";
         }
 
-        // 2. 系统破坏/自毁命令（全模式生效）
-        // exit: 仅拦截作为独立命令出现的 exit（行首/分号/管道/&&/|| 后），不拦截 echo 等参数中的 exit
-        if (lowerCmd.matches("(?i)^exit\\b.*") ||
-                lowerCmd.matches("(?i).*(?:;|\\|\\|?|&&)\\s*exit\\b.*") ||
-                lowerCmd.matches("(?i).*rm\\s+.*-[rR].*f\\s+/.*") ||
-                // shutdown/reboot/halt/poweroff: 仅在命令位置（行首或 ;/&&/||/| 之后），不拦截参数中的同名文本
-                lowerCmd.matches("(?i)(?:^|.*[;|&])\\s*(?:shutdown|reboot|halt|poweroff|init\\s+0|telinit)\\b.*") ||
-                lowerCmd.matches("(?i).*(?:dd\\s+if=|mkfs|format\\s+[a-z]:).*") ||
-                lowerCmd.matches("(?i).*:\\(\\)\\s*\\{|:.*\\|.*&.*\\}.*") ||  // fork bomb
-                // sysctl -w / modprobe / crontab: 仅在命令位置（行首或 ;/&&/||/| 之后），避免匹配文件名中的 crontab
-                lowerCmd.matches("(?i)(?:^|.*[;|&])\\s*(?:sysctl\\s+-w|modprobe|crontab)\\b.*") ||
-                lowerCmd.matches("(?i).*(?:systemctl\\s+(?:stop|disable|mask|kill|reset-failed)).*") ||
-                lowerCmd.matches("(?i).*\\b(?:nc|ncat|socat)\\b.*(?:-(?:e|c)\\s|/bin/|\\|\\s*sh).*") ||
-                lowerCmd.matches("(?i).*(?:iptables|ufw|firewall-cmd).*") ||
-                // 全局安装: 同时匹配 -g 和 --global 标志
-                lowerCmd.matches("(?i).*(?:pip\\s+install|npm\\s+install|gem\\s+install).*\\s(?:-[gG]\\b|--global\\b).*")) {
-            return "错误：检测到高危指令，已拦截。";
-        }
-
-        // 3. 沙盒模式专属检测：信息泄露 + 子进程/解释器逃逸 + 管道注入
-        // 受 sandboxSystemRestrict 控制：关闭后可减少误伤（如构建工具被拦截），但安全性降低
-        if (sandboxEnabled && sandboxSystemRestrict) {
-            // 3a. 信息泄露命令
-            if (lowerCmd.matches("(?i).*\\b(?:ifconfig|ip\\s+(?:addr|link|route|neigh|a|l|r|n))\\b.*") ||
-                    lowerCmd.matches("(?i)(?:^|.*[;|&])\\s*(?:whoami|id\\b|uname|hostname|printenv)\\b.*") ||
-                    lowerCmd.matches("(?i)(?:^|.*\\s)env\\s*$") ||  // env 无参数时打印环境变量（信息泄露）
-                    lowerCmd.matches("(?i).*\\bcat\\s+/etc/(?:hosts|passwd|shadow|hostname|resolv\\.conf|networks)\\b.*") ||
-                    lowerCmd.matches("(?i).*\\b(?:networksetup|system_profiler|sw_vers)\\b.*")) {
-                return "错误：检测到高危指令，已拦截。";
-            }
-
-            // 3b. 子 shell / 命令执行入口逃逸
-            // 拦截 bash -c / sh -c / zsh -c / eval / exec / source / .(空格) 等子进程执行方式
-            // 注意：find -exec、docker exec、kubectl exec、podman exec 是安全的，不应拦截
-            // exec 规则分为两部分：
-            //   a) exec 在 shell 操作符之后（;/|/&&/||）→ 始终拦截（命令链中的 exec 是逃逸）
-            //   b) exec 在行首且后跟 shell 名称 → 拦截（exec /bin/sh 是逃逸）
-            //   c) exec 在行首但后跟普通命令（exec mvn compile）或作为子命令（docker exec）→ 放行
-            if (lowerCmd.matches("(?i).*\\b(?:bash|sh|zsh|dash|ksh)\\s+-c\\b.*") ||
-                    lowerCmd.matches("(?i).*\\b(?:eval)\\s+.*") ||
-                    lowerCmd.matches("(?i).*[;|&]\\s*exec\\s+.*") ||  // exec 在 shell 操作符之后
-                    lowerCmd.matches("(?i)^exec\\s+(?:bash|sh|zsh|dash|ksh|/bin/|/usr/bin/)\\S*\\b.*") ||  // exec shell 在行首
-                    lowerCmd.matches("(?i)(?:^|.*[;|&])\\s*source\\s+.*") ||
-                    lowerCmd.matches("(?i)(?:^|.*\\s)\\.\\s+/.*")) {
-                return "错误：检测到高危指令，已拦截。";
-            }
-
-            // 3c. 解释器内联执行逃逸
-            // 拦截 python3 -c / python -c / perl -e / ruby -e / node -e / php -r 等
-            if (lowerCmd.matches("(?i).*\\b(?:python[23]?|python3)\\s+-[cE].*") ||
-                    lowerCmd.matches("(?i).*\\bperl\\s+(?:-e|-E)\\b.*") ||
-                    lowerCmd.matches("(?i).*\\bruby\\s+(?:-e|-E)\\b.*") ||
-                    lowerCmd.matches("(?i).*\\bnode\\s+-e\\b.*") ||
-                    lowerCmd.matches("(?i).*\\bphp\\s+-r\\b.*")) {
-                return "错误：检测到高危指令，已拦截。";
-            }
-
-            // 3d. 管道注入逃逸
-            // 拦截通过管道将任意内容传入 shell 的方式（如 base64 解码后执行、echo ... | bash）
-            if (lowerCmd.matches("(?i).*\\|\\s*(?:bash|sh|zsh|dash|ksh)\\b.*") ||
-                    lowerCmd.matches("(?i).*\\|\\s*(?:sudo|su)\\b.*") ||
-                    lowerCmd.matches("(?i).*\\bxargs\\s+(?:bash|sh|zsh|dash|ksh)\\b.*")) {
-                return "错误：检测到高危指令，已拦截。";
-            }
-
-            // 3e. 变量拼接逃逸
-            // 拦截通过 Shell 变量拼接来绕过命令检测（如 a=who; b=ami; $a$b）
-            // 仅检测 $var 出现在命令执行位置：行首 或 ;/&&/||/| 之后
-            // 不拦截 $var 出现在参数位置（如 echo $PATH、A=1; echo $A）
-            if (lowerCmd.matches("(?i)^\\$\\{?\\w+.*") ||
-                    lowerCmd.matches("(?i).*(?:;|&&|\\|\\||\\|)\\s*\\$\\{?\\w+.*")) {
-                return "错误：检测到高危指令，已拦截。";
-            }
-        }
-
-        // 4. 沙盒模式下的绝对路径检测（白名单放行机制）
-        if (sandboxEnabled) {
-            // 4a. 收集允许在 bash 命令中使用的绝对路径白名单
-            // 这些路径由 SandboxFsConfig 和系统属性动态构建，与 OS 级沙盒的写白名单保持一致
-            java.util.List<String> allowedAbsolutePrefixes = buildAllowedAbsolutePrefixes(sandboxAllowUserHome);
-
-            // 4b. 检测绝对路径是否在白名单内
-            // Unix 绝对路径: /path/... (排除 $, ./, =, : 等上下文)
-            // Windows 绝对路径: C:\... 或 C:/...
-            java.util.regex.Pattern unixAbsPattern = java.util.regex.Pattern.compile(
-                    "(?<![\\$\\w/.:=])(/[a-zA-Z][\\w/][\\w./-]*)");
-            java.util.regex.Matcher unixMatcher = unixAbsPattern.matcher(command);
-            while (unixMatcher.find()) {
-                String absPath = unixMatcher.group(1);
-                if (!isAllowedAbsolutePath(absPath, allowedAbsolutePrefixes)) {
-                    return "错误：沙盒模式下禁止在 bash 命令中使用绝对路径。请使用相对路径或逻辑路径（如 @pool）。";
-                }
-            }
-
-            java.util.regex.Pattern winAbsPattern = java.util.regex.Pattern.compile(
-                    "(?i)([a-z]:[\\\\/][\\\\/]*)");
-            java.util.regex.Matcher winMatcher = winAbsPattern.matcher(command);
-            while (winMatcher.find()) {
-                String absPath = winMatcher.group(1);
-                if (!isAllowedAbsolutePath(absPath, allowedAbsolutePrefixes)) {
-                    return "错误：沙盒模式下禁止在 bash 命令中使用绝对路径。请使用相对路径或逻辑路径（如 @pool）。";
-                }
-            }
-
-            // ~ 路径检测
-            if (containsUserHomePath(command) && !sandboxAllowUserHome) {
-                return "错误：沙盒模式下禁止使用 ~ 路径（sandboxAllowUserHome 已关闭）。";
-            }
+        // 2. 高危自毁命令：exit / rm -rf / （全模式、全配置始终生效）
+        if (lowerCmd.matches("(?i)(?:^|.*[;|&])\\s*exit\\b.*") ||
+                lowerCmd.matches("(?i).*rm\\s+.*-[rR].*f\\s+/.*")) {
+            return "错误：检测到高危指令。出于安全策略，禁止执行 exit、系统重启或根目录删除的操作。";
         }
 
         return null; // null 表示校验通过

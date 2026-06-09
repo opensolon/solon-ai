@@ -331,7 +331,7 @@ public class TerminalTalent extends AbsTalent {
                        String __cwd) {
 
         // 统一安全校验（替代原来的内联检查）
-        String violation = support.validateCommand(command, sandboxEnabled, sandboxAllowUserHome, sandboxSystemRestrict);
+        String violation = support.validateCommandNoKill(command);
         if (violation != null) return violation;
 
         Path workPath = getWorkPath(__cwd);
@@ -347,8 +347,10 @@ public class TerminalTalent extends AbsTalent {
 
         String finalCommand = support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
 
-        // OS 级沙盒包装（如果可用）
-        if (sandboxEnabled && sandboxExecutor != null && sandboxExecutor.isAvailable()) {
+        // OS 级沙盒包装（内核级强制隔离：Seatbelt / bwrap）
+        // 仅当 sandboxSystemRestrict=true 时启用，将安全隔离的重活交给 OS 内核
+        // 关闭后仅保留 Java 层最小自保护（kill PID / exit / rm -rf /），减少误伤
+        if (sandboxEnabled && sandboxSystemRestrict && sandboxExecutor != null && sandboxExecutor.isAvailable()) {
             sandboxExecutor.setMounts(mountManager.getMounts());
             finalCommand = sandboxExecutor.wrapCommand(finalCommand, workPath, envs);
         }
@@ -365,7 +367,7 @@ public class TerminalTalent extends AbsTalent {
                             @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符输出，超出保留最新部分。") Integer maxOutputChars,
                             @Param(value = "hard_timeout_ms", required = false, defaultValue = "120000", description = "硬超时兜底，超过后终止进程树，单位毫秒。") Integer hardTimeoutMs,
                             String __cwd) throws IOException {
-        String danger = support.validateCommand(command, sandboxEnabled, sandboxAllowUserHome, sandboxSystemRestrict);
+        String danger = support.validateCommandNoKill(command);
         if (danger != null) {
             return danger;
         }
@@ -383,8 +385,10 @@ public class TerminalTalent extends AbsTalent {
 
         String finalCommand = support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
 
-        // OS 级沙盒包装（如果可用）
-        if (sandboxEnabled && sandboxExecutor != null && sandboxExecutor.isAvailable()) {
+        // OS 级沙盒包装（内核级强制隔离：Seatbelt / bwrap）
+        // 仅当 sandboxSystemRestrict=true 时启用，将安全隔离的重活交给 OS 内核
+        // 关闭后仅保留 Java 层最小自保护（kill PID / exit / rm -rf /），减少误伤
+        if (sandboxEnabled && sandboxSystemRestrict && sandboxExecutor != null && sandboxExecutor.isAvailable()) {
             sandboxExecutor.setMounts(mountManager.getMounts());
             finalCommand = sandboxExecutor.wrapCommand(finalCommand, targetWorkPath, envs);
         }
@@ -763,19 +767,6 @@ public class TerminalTalent extends AbsTalent {
             sb.append(snapshot.output());
         }
         return sb.toString();
-    }
-
-
-    private String validateCommand(String command) {
-        return support.validateCommand(command, sandboxEnabled, sandboxAllowUserHome, sandboxSystemRestrict);
-    }
-
-    private String translateCommandToEnv(String command, Map<String, String> envs) {
-        return support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
-    }
-
-    private boolean containsUserHomePath(String command) {
-        return support.containsUserHomePath(command);
     }
 
     private static String probeUnixShell() {
