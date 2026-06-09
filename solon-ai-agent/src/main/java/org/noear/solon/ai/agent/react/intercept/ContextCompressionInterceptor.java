@@ -22,6 +22,7 @@ import com.knuddels.jtokkit.api.ModelType;
 import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
+import org.noear.solon.ai.agent.react.ReActStyle;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.compress.CompositeCompressionStrategy;
 import org.noear.solon.ai.agent.react.intercept.compress.HierarchicalCompressionStrategy;
@@ -29,6 +30,7 @@ import org.noear.solon.ai.agent.react.intercept.compress.LLMCompressionStrategy;
 import org.noear.solon.ai.agent.react.intercept.compress.VectorStoreCompressionStrategy;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.*;
+import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
@@ -37,6 +39,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.FluxSink;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -150,11 +153,23 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
         String systemPrompt = (systemPromptBuf == null ? null : systemPromptBuf.toString());
 
+        // 收集 tools 元信息（仅 NATIVE_TOOL 模式下 LLM 会接收 tools 定义）
+        int toolsTokens = 0;
+        if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
+            List<FunctionTool> toolsDef = new ArrayList<>();
+            toolsDef.addAll(trace.getOptions().getTools());
+            toolsDef.addAll(trace.getProtocolTools());
+
+            if (Assert.isNotEmpty(toolsDef)) {
+                toolsTokens = estimateToolsTokens(toolsDef);
+            }
+        }
+
         long messageSize = messages.stream()
                 .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
                 .count();
 
-        int currentTokens = estimateTokens(messages, systemPrompt);
+        int currentTokens = estimateTokens(messages, systemPrompt) + toolsTokens;
 
         // 预留缓冲，避免频繁重构
         if (messageSize <= maxMessages && currentTokens <= (maxTokens * 0.8)) {
@@ -173,11 +188,13 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             }
         }
 
-        // 2. 计算固定开销（不可压缩部分：systemPrompt + 初心链） —— 【已引入完备兜底】
+        // 2. 计算固定开销（不可压缩部分：systemPrompt + 初心链 + tools定义） —— 【已引入完备兜底】
         int fixedTokens = 0;
         if (!Assert.isEmpty(systemPrompt)) {
             fixedTokens += encoding.countTokens(systemPrompt) + 4;
         }
+        fixedTokens += toolsTokens;
+
         for (ChatMessage firstMsg : firstList) {
             Integer cachedSize = firstMsg.getMetadataAs(META_TOKEN_SIZE);
             if (cachedSize == null) {
@@ -406,7 +423,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                         trace.getAgentName(), beforeSize, compressed.size(), firstList.size());
             }
 
-            int afterTokens = estimateTokens(compressed, null);
+            int afterTokens = estimateTokens(compressed, null) + toolsTokens;
             pushContextChunk(trace, compressed.size(), afterTokens, true,
                             beforeSize, compressed.size(),
                             currentTokens, afterTokens);
@@ -572,6 +589,30 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         }
 
         return totalTokens + 3;
+    }
+
+    /**
+     * 估算 tools 定义（FunctionTool 的 name + description + inputSchema）的 Token 开销。
+     * 这些定义在每次 LLM 调用时都会作为请求的一部分发送，属于固定开销。
+     */
+    private int estimateToolsTokens(Collection<FunctionTool> tools) {
+        int tokens = 0;
+        for (FunctionTool tool : tools) {
+            // name
+            if (tool.name() != null) {
+                tokens += encoding.countTokens(tool.name());
+            }
+            // description（含 meta 信息）
+            if (tool.descriptionAndMeta() != null) {
+                tokens += encoding.countTokens(tool.descriptionAndMeta());
+            }
+            // inputSchema（JSON Schema 定义）
+            if (tool.inputSchema() != null) {
+                tokens += encoding.countTokens(tool.inputSchema());
+            }
+            tokens += 15; // JSON 结构开销（type, function, parameters 等字段）
+        }
+        return tokens;
     }
 
     private boolean isObservation(ChatMessage msg) {
