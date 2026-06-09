@@ -85,12 +85,13 @@ class HarnessOptions implements Serializable {
     private volatile int modelRetries = 3;
 
     // ========== 集合类配置 ==========
-    private final List<HarnessExtension> extensions = new CopyOnWriteArrayList<>();
-    private final List<ChatConfig> models = new CopyOnWriteArrayList<>();
     private final MountManager mountManager;
+    private volatile String defaultModel;
+    private final Map<String, ChatConfig> models = new ConcurrentHashMap<>();
     private final Map<String, McpServerParameters> mcpServers = new ConcurrentHashMap<>();
     private final Map<String, ApiSource> apiServers = new ConcurrentHashMap<>();
     private final Map<String, LspServerParameters> lspServers = new ConcurrentHashMap<>();
+    private final List<HarnessExtension> extensions = new CopyOnWriteArrayList<>();
 
     // ========== 服务注入 ==========
     private AgentSessionProvider sessionProvider;
@@ -336,8 +337,16 @@ class HarnessOptions implements Serializable {
         return extensions;
     }
 
-    List<ChatConfig> getModels() {
+    Map<String, ChatConfig> getModels() {
         return models;
+    }
+
+    String getDefaultModel() {
+        return defaultModel;
+    }
+
+    void setDefaultModel(String defaultModel) {
+        this.defaultModel = defaultModel;
     }
 
     public MountManager getMountManager() {
@@ -375,18 +384,15 @@ class HarnessOptions implements Serializable {
             chatConfig.setUserAgent(this.userAgent);
         }
 
-        models.add(chatConfig);
+        models.put(chatConfig.getNameOrModel(), chatConfig);
     }
 
     void removeModel(String modelName) {
-        models.removeIf(m -> m.getNameOrModel().equals(modelName));
+        models.remove(modelName);
     }
 
     boolean hasModel(String modelName) {
-        return models.stream()
-                .filter(m -> m.getNameOrModel().equals(modelName))
-                .findAny()
-                .isPresent();
+        return models.containsKey(modelName);
     }
 
     ChatConfig getModelOrNil(String modelName) {
@@ -395,16 +401,12 @@ class HarnessOptions implements Serializable {
         }
 
         if (Assert.isEmpty(modelName)) {
-            return models.get(0);
+            return getDefaultModelConfig();
         }
 
-        for (ChatConfig c : models) {
-            if (c.isEnabled()) {
-                //只检查已启用的
-                if (c.getNameOrModel().equals(modelName)) {
-                    return c;
-                }
-            }
+        ChatConfig c = models.get(modelName);
+        if (c != null && c.isEnabled()) {
+            return c;
         }
 
         return null;
@@ -416,19 +418,30 @@ class HarnessOptions implements Serializable {
         }
 
         if (Assert.isEmpty(modelName)) {
-            return models.get(0);
+            return getDefaultModelConfig();
         }
 
-        for (ChatConfig c : models) {
-            if (c.isEnabled()) {
-                //只检查已启用的
-                if (c.getNameOrModel().equals(modelName)) {
-                    return c;
-                }
+        ChatConfig c = models.get(modelName);
+        if (c != null && c.isEnabled()) {
+            return c;
+        }
+
+        return getDefaultModelConfig();
+    }
+
+    /**
+     * 获取默认模型配置：优先 defaultModel 指定的，否则取 Map 中的第一个值
+     */
+    private ChatConfig getDefaultModelConfig() {
+        if (Assert.isNotEmpty(defaultModel)) {
+            ChatConfig c = models.get(defaultModel);
+            if (c != null) {
+                return c;
             }
         }
 
-        return models.get(0);
+        // fallback 到第一个
+        return models.values().iterator().next();
     }
 
     // ========== 服务注入 getter / setter ==========

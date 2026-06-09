@@ -344,7 +344,7 @@ public class HarnessEngine {
     }
 
     public Collection<ChatConfig> getModels() {
-        return Collections.unmodifiableList(options.getModels());
+        return Collections.unmodifiableCollection(options.getModels().values());
     }
 
     public ChatConfig getModelOrNil(String name) {
@@ -449,7 +449,6 @@ public class HarnessEngine {
             config.setUserAgent(options.getUserAgent());
         }
 
-        options.removeModel(config.getNameOrModel());
         options.addModel(config);
 
         if (mainAgent != null && mainAgent.getModel().getNameOrModel().equals(config.getNameOrModel())) {
@@ -1013,7 +1012,7 @@ public class HarnessEngine {
 
         public Builder modelAdd(Iterable<ChatConfig> models) {
             for (ChatConfig val : models) {
-                options.getModels().add(val); //build 时再加 ua
+                options.getModels().put(val.getNameOrModel(), val); //build 时再加 ua
             }
             return this;
         }
@@ -1038,12 +1037,17 @@ public class HarnessEngine {
             return this;
         }
 
+        public Builder defaultModel(String defaultModel) {
+            options.setDefaultModel(defaultModel);
+            return this;
+        }
+
         public HarnessEngine build() {
             Objects.nonNull(options.getSessionProvider());
 
             //缺省 userAgent 补尝
             if (Assert.isNotEmpty(options.getUserAgent())) {
-                for (ChatConfig m1 : options.getModels()) {
+                for (ChatConfig m1 : options.getModels().values()) {
                     if (Assert.isEmpty(m1.getUserAgent())) {
                         m1.setUserAgent(options.getUserAgent());
                     }
