@@ -26,9 +26,9 @@ import org.noear.solon.lang.Preview;
  * 让用户侧能感知到当前上下文的规模以及是否发生了压缩。
  *
  * @author noear
- * @since 3.9.4
+ * @since 4.0.0
  */
-@Preview("3.9.4")
+@Preview("4.0.0")
 public class ContextCompressionChunk extends AbsAgentChunk {
     /**
      * 当前上下文的总消息数
