@@ -65,8 +65,9 @@ public class TerminalTalent extends AbsTalent {
     private boolean sandboxEnabled = true;
     //允许访问用户主目录（~ 路径）。仅在 sandboxEnabled=true 时有意义；默认 true 保持向后兼容
     private boolean sandboxAllowUserHome = true;
-    //沙盒系统级限制：是否启用信息泄露拦截、子进程逃逸拦截、管道注入拦截等系统级安全检测。
-    //关闭后可减少误伤（如构建工具被拦截），但安全性降低。仅在 sandboxEnabled=true 时有意义；默认 true 保持向后兼容
+    //OS 内核级沙盒限制：是否启用 Seatbelt/bwrap 等系统级强制隔离。
+    //关闭后仅依赖 Java 层自保护 + 系统提示词软约束，可减少误伤（如构建工具被拦截）。
+    //仅在 sandboxEnabled=true 时有意义；默认 false（轻量模式）
     private boolean sandboxSystemRestrict = false;
     private final MountManager mountManager; // 引入挂载管理器
     private final OsSandboxExecutor sandboxExecutor;
