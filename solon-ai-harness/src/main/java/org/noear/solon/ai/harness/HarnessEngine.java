@@ -355,6 +355,10 @@ public class HarnessEngine {
         return options.getModelOrDef(name);
     }
 
+    public String getDefaultModel(){
+        return options.getDefaultModel();
+    }
+
     // ========== 运行时动态修改 ==========
 
     public void setMaxTurns(Integer maxTurns) {
