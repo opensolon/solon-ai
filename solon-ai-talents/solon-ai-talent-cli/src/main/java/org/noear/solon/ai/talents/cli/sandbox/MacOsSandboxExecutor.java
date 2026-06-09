@@ -29,6 +29,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * macOS 平台的 sandbox-exec (Seatbelt) 沙盒
@@ -42,13 +43,13 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
     private static final Logger LOG = LoggerFactory.getLogger(MacOsSandboxExecutor.class);
 
     private volatile SandboxConfig config;
-    private volatile MountManager mountManager;
+    private volatile Supplier<Collection<MountDir>> mountsSupplier;
     private volatile boolean allowUserHome = true;
     private SandboxViolationStore violationStore;
 
     @Override
-    public void setMounts(MountManager mountManager) {
-        this.mountManager = mountManager;
+    public void setMounts(Supplier<Collection<MountDir>> mountsSupplier) {
+        this.mountsSupplier = mountsSupplier;
     }
 
     @Override
@@ -174,7 +175,7 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
         if (!allowUserHome) {
             appendPathRule(sb, "deny", "file-read*", System.getProperty("user.home"), logTag);
         }
-        for (MountDir mount : mountManager.getMounts()) {
+        for (MountDir mount : mountsSupplier.get()) {
             if (mount != null && mount.isEnabled() && mount.getRealPath() != null) {
                 appendPathRule(sb, "allow", "file-read*", mount.getRealPath().toString(), null);
             }
@@ -194,7 +195,7 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
         for (String allowPath : fsConfig.getAllowWrite()) {
             appendPathRule(sb, "allow", "file-write*", normalizeFsPath(allowPath, workPath), null);
         }
-        for (MountDir mount : mountManager.getMounts()) {
+        for (MountDir mount : mountsSupplier.get()) {
             if (mount != null && mount.isEnabled() && mount.isWriteable() && mount.getRealPath() != null
                     && mountWriteAllowed(mount, fsConfig)) {
                 appendPathRule(sb, "allow", "file-write*", mount.getRealPath().toString(), null);
@@ -236,7 +237,7 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
         for (String pattern : mandatoryDenyRegexes(wp)) {
             appendRegexRule(sb, "deny", "file-write*", pattern, logTag);
         }
-        for (MountDir mount : mountManager.getMounts()) {
+        for (MountDir mount : mountsSupplier.get()) {
             if (mount != null && mount.isEnabled() && mount.getRealPath() != null) {
                 for (String pattern : mandatoryDenyRegexes(mount.getRealPath().toString())) {
                     appendRegexRule(sb, "deny", "file-write*", pattern, logTag);
@@ -265,7 +266,7 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
             appendPathRule(sb, "deny", "file-write-unlink", normalized, logTag);
             appendPathRule(sb, "deny", "file-write-create", normalized, logTag);
         }
-        for (MountDir mount : mountManager.getMounts()) {
+        for (MountDir mount : mountsSupplier.get()) {
             if (mount == null || !mount.isEnabled() || mount.getRealPath() == null) {
                 continue;
             }
@@ -301,7 +302,7 @@ public class MacOsSandboxExecutor implements OsSandboxExecutor {
     }
 
     private void appendMountReadRules(StringBuilder sb, SandboxFsConfig fsConfig, String logTag) {
-        for (MountDir mount : mountManager.getMounts()) {
+        for (MountDir mount : mountsSupplier.get()) {
             if (mount == null || !mount.isEnabled() || mount.getRealPath() == null) {
                 continue;
             }

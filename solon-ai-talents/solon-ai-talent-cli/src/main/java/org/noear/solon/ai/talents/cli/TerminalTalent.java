@@ -67,7 +67,7 @@ public class TerminalTalent extends AbsTalent {
     private boolean sandboxAllowUserHome = true;
     //沙盒系统级限制：是否启用信息泄露拦截、子进程逃逸拦截、管道注入拦截等系统级安全检测。
     //关闭后可减少误伤（如构建工具被拦截），但安全性降低。仅在 sandboxEnabled=true 时有意义；默认 true 保持向后兼容
-    private boolean sandboxSystemRestrict = true;
+    private boolean sandboxSystemRestrict = false;
     private final MountManager mountManager; // 引入挂载管理器
     private final OsSandboxExecutor sandboxExecutor;
     private @Nullable SandboxConfig sandboxConfig;
@@ -186,7 +186,7 @@ public class TerminalTalent extends AbsTalent {
         pythonCmd = executor.probePythonCommand();
         nodeCmd = executor.probeNodeCommand();
         this.sandboxExecutor = OsSandboxExecutorFactory.create(sandboxConfig);
-        this.sandboxExecutor.setMounts(mountManager);
+        this.sandboxExecutor.setMounts(mountManager::getMounts);
         this.sandboxExecutor.setAllowUserHome(sandboxAllowUserHome);
         this.sandboxExecutor.setViolationStore(violationStore);
     }
