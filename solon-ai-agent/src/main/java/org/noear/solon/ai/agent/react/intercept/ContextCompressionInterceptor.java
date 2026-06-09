@@ -589,7 +589,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         try {
             FluxSink<AgentChunk> sink = trace.getOptions().getStreamSink();
             if (sink != null && !sink.isCancelled()) {
-                sink.next(new ContextCompressionChunk(trace, msgCount, tokenCount, compressed,
+                sink.next(new ContextChunk(trace, msgCount, tokenCount, compressed,
                         beforeMessageCount, afterMessageCount,
                         beforeTokenCount, afterTokenCount));
             }
