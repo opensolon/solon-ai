@@ -19,10 +19,10 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
-import org.noear.solon.ai.talents.cli.sandbox.OsSandboxExecutor;
-import org.noear.solon.ai.talents.cli.sandbox.OsSandboxExecutorFactory;
-import org.noear.solon.ai.talents.cli.sandbox.SandboxConfig;
-import org.noear.solon.ai.talents.cli.sandbox.SandboxViolationStore;
+import org.noear.solon.ai.sandbox.SandboxManager;
+import org.noear.solon.ai.sandbox.SandboxLog;
+import org.noear.solon.ai.sandbox.SandboxViolationStore;
+import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
 import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.annotation.Param;
@@ -70,9 +70,8 @@ public class TerminalTalent extends AbsTalent {
     //仅在 sandboxEnabled=true 时有意义；默认 false（轻量模式）
     private boolean sandboxSystemRestrict = false;
     private final MountManager mountManager; // 引入挂载管理器
-    private final OsSandboxExecutor sandboxExecutor;
-    private @Nullable SandboxConfig sandboxConfig;
-    private final SandboxViolationStore violationStore = new SandboxViolationStore();
+    private @Nullable SandboxRuntimeConfig sandboxConfig;
+    private final SandboxViolationStore violationStore = new SandboxViolationStore(Collections.emptyMap());
 
     private final String pythonCmd;
     private final String nodeCmd;
@@ -114,9 +113,6 @@ public class TerminalTalent extends AbsTalent {
     public void setSandboxAllowUserHome(Boolean sandboxAllowUserHome) {
         if (sandboxAllowUserHome != null) {
             this.sandboxAllowUserHome = sandboxAllowUserHome;
-            if (sandboxExecutor != null) {
-                sandboxExecutor.setAllowUserHome(sandboxAllowUserHome);
-            }
         }
     }
 
@@ -144,13 +140,8 @@ public class TerminalTalent extends AbsTalent {
     /**
      * 设置沙盒配置（支持读写分离、网络过滤、违规监控等高级功能）
      */
-    public void setSandboxConfig(SandboxConfig sandboxConfig) {
+    public void setSandboxConfig(SandboxRuntimeConfig sandboxConfig) {
         this.sandboxConfig = sandboxConfig;
-        if (sandboxExecutor != null) {
-            if (sandboxConfig != null) {
-                sandboxExecutor.setConfig(sandboxConfig);
-            }
-        }
     }
 
     /**
@@ -186,10 +177,6 @@ public class TerminalTalent extends AbsTalent {
 
         pythonCmd = executor.probePythonCommand();
         nodeCmd = executor.probeNodeCommand();
-        this.sandboxExecutor = OsSandboxExecutorFactory.create(sandboxConfig);
-        this.sandboxExecutor.setMounts(mountManager::getMounts);
-        this.sandboxExecutor.setAllowUserHome(sandboxAllowUserHome);
-        this.sandboxExecutor.setViolationStore(violationStore);
     }
 
     public ProcessExecutor getExecutor() {
@@ -351,8 +338,12 @@ public class TerminalTalent extends AbsTalent {
         // OS 级沙盒包装（内核级强制隔离：Seatbelt / bwrap）
         // 仅当 sandboxSystemRestrict=true 时启用，将安全隔离的重活交给 OS 内核
         // 关闭后仅保留 Java 层最小自保护（kill PID / exit / rm -rf /），减少误伤
-        if (sandboxEnabled && sandboxSystemRestrict && sandboxExecutor != null && sandboxExecutor.isAvailable()) {
-            finalCommand = sandboxExecutor.wrapCommand(finalCommand, workPath, envs);
+        if (sandboxEnabled && sandboxSystemRestrict && SandboxManager.isSandboxingEnabled()) {
+            try {
+                finalCommand = SandboxManager.wrapWithSandbox(finalCommand, workPath.toString(), sandboxConfig);
+            } catch (Exception e) {
+                SandboxLog.debug("Sandbox wrap failed, running without OS sandbox: " + e.getMessage());
+            }
         }
 
         return executor.executeCode(workPath, finalCommand, shellCmd, extension, envs, timeout, null);
@@ -388,8 +379,12 @@ public class TerminalTalent extends AbsTalent {
         // OS 级沙盒包装（内核级强制隔离：Seatbelt / bwrap）
         // 仅当 sandboxSystemRestrict=true 时启用，将安全隔离的重活交给 OS 内核
         // 关闭后仅保留 Java 层最小自保护（kill PID / exit / rm -rf /），减少误伤
-        if (sandboxEnabled && sandboxSystemRestrict && sandboxExecutor != null && sandboxExecutor.isAvailable()) {
-            finalCommand = sandboxExecutor.wrapCommand(finalCommand, targetWorkPath, envs);
+        if (sandboxEnabled && sandboxSystemRestrict && SandboxManager.isSandboxingEnabled()) {
+            try {
+                finalCommand = SandboxManager.wrapWithSandbox(finalCommand, targetWorkPath.toString(), sandboxConfig);
+            } catch (Exception e) {
+                SandboxLog.debug("Sandbox wrap failed, running without OS sandbox: " + e.getMessage());
+            }
         }
 
         TerminalSessionManager.CommandSnapshot snapshot =
@@ -779,6 +774,33 @@ public class TerminalTalent extends AbsTalent {
         } catch (Throwable e) {
             return "/bin/sh";
         }
+    }
+
+    // ========== 沙盒相关桥接方法（供测试反射调用） ==========
+
+    boolean containsUserHomePath(String command) {
+        return support.containsUserHomePath(command);
+    }
+
+    public String validateCommand(String command) {
+        // 先做基础安全校验（kill 保护等）
+        String violation = support.validateCommandNoKill(command);
+        if (violation != null) {
+            return violation;
+        }
+        // sandboxAllowUserHome=false 时，阻止 ~ 路径
+        if (!sandboxAllowUserHome && command.contains("~")) {
+            // 简单检查：裸 ~ 或 ~/xxx，排除引号内的纯文本 ~
+            String expanded = command.replaceAll("\"[^\"]*\"", "").replaceAll("'[^']*'", "");
+            if (expanded.contains("~")) {
+                return "错误：sandboxAllowUserHome 已禁用，不允许使用 ~ 路径。";
+            }
+        }
+        return null;
+    }
+
+    String translateCommandToEnv(String command, java.util.Map<String, String> envs) {
+        return support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
     }
 
     public static class EditOp {

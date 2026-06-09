@@ -16,8 +16,9 @@
 package org.noear.solon.ai.talents.cli;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.talents.cli.sandbox.SandboxConfig;
-import org.noear.solon.ai.talents.cli.sandbox.SandboxFsConfig;
+import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
+import org.noear.solon.ai.sandbox.config.FilesystemConfig;
+import org.noear.solon.ai.sandbox.util.SandboxPathUtils;
 import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.core.util.Assert;
@@ -89,7 +90,7 @@ class TerminalSupport {
         }
     }
 
-    Path resolveCommandWorkPath(Path workPath, String workdir, boolean sandboxEnabled, boolean sandboxAllowUserHome, SandboxConfig sandboxConfig) throws IOException {
+    Path resolveCommandWorkPath(Path workPath, String workdir, boolean sandboxEnabled, boolean sandboxAllowUserHome, SandboxRuntimeConfig sandboxConfig) throws IOException {
         if (Assert.isEmpty(workdir) || ".".equals(workdir)) {
             return workPath;
         }
@@ -200,7 +201,7 @@ class TerminalSupport {
     }
 
 
-    Path resolveSafePath(Path workPath, String pStr, boolean writeMode, boolean sandboxEnabled, boolean sandboxAllowUserHome, SandboxConfig sandboxConfig) throws IOException {
+    Path resolveSafePath(Path workPath, String pStr, boolean writeMode, boolean sandboxEnabled, boolean sandboxAllowUserHome, SandboxRuntimeConfig sandboxConfig) throws IOException {
         if (Assert.isEmpty(pStr) || ".".equals(pStr)) {
             Path target = workPath;
             if (sandboxEnabled) {
@@ -298,21 +299,29 @@ class TerminalSupport {
         return target;
     }
 
-    private void enforceSandboxFsPolicy(Path workPath, Path rootPath, Path target, String relativePath, boolean writeMode, boolean sandboxEnabled, SandboxConfig sandboxConfig) throws IOException {
-        if (!sandboxEnabled || sandboxConfig == null || sandboxConfig.getFilesystem() == null) {
+    private void enforceSandboxFsPolicy(Path workPath, Path rootPath, Path target, String relativePath, boolean writeMode, boolean sandboxEnabled, SandboxRuntimeConfig sandboxConfig) throws IOException {
+        if (!sandboxEnabled || sandboxConfig == null) {
             return;
         }
 
-        SandboxFsConfig fsConfig = sandboxConfig.getFilesystem();
+        // mandatory deny 独立于 FilesystemConfig，任何情况下都应生效
         if (writeMode) {
             if (isMandatoryDenyRelativePath(relativePath)
                     || isMandatoryDenyRealPath(rootPath, target)) {
                 throw new SecurityException("权限拒绝：路径受保护，禁止写入。");
             }
+        }
+
+        if (sandboxConfig.getFilesystem() == null) {
+            return;
+        }
+
+        FilesystemConfig fsConfig = sandboxConfig.getFilesystem();
+        if (writeMode) {
             if (!isWriteAllowed(rootPath, target, fsConfig)) {
                 throw new SecurityException("权限拒绝：路径不在可写白名单内。");
             }
-            if (matchesAnyConfiguredPath(rootPath, target, fsConfig.getDenyWrite())) {
+            if (fsConfig.getDenyWrite() != null && matchesAnyConfiguredPath(rootPath, target, fsConfig.getDenyWrite())) {
                 throw new SecurityException("权限拒绝：路径命中写入拒绝规则。");
             }
         } else {
@@ -322,7 +331,7 @@ class TerminalSupport {
         }
     }
 
-    boolean isSandboxReadDenied(Path workPath, Path target, boolean sandboxEnabled, SandboxConfig sandboxConfig) {
+    boolean isSandboxReadDenied(Path workPath, Path target, boolean sandboxEnabled, SandboxRuntimeConfig sandboxConfig) {
         if (!sandboxEnabled || sandboxConfig == null || sandboxConfig.getFilesystem() == null) {
             return false;
         }
@@ -342,14 +351,32 @@ class TerminalSupport {
         }
     }
 
-    private boolean isReadDenied(Path workPath, Path target, SandboxFsConfig fsConfig) {
-        return matchesAnyConfiguredPath(workPath, target, fsConfig.getDenyRead())
-                && !matchesAnyConfiguredPath(workPath, target, fsConfig.getAllowRead());
+    private boolean isReadDenied(Path workPath, Path target, FilesystemConfig fsConfig) {
+        List<String> denyRead = fsConfig.getDenyRead();
+        if (denyRead == null || denyRead.isEmpty()) {
+            return false;
+        }
+        boolean matchesDeny = matchesAnyConfiguredPath(workPath, target, denyRead);
+        if (!matchesDeny) {
+            return false;
+        }
+        List<String> allowRead = fsConfig.getAllowRead();
+        if (allowRead != null && !allowRead.isEmpty()) {
+            return !matchesAnyConfiguredPath(workPath, target, allowRead);
+        }
+        return true;
     }
 
-    private boolean isWriteAllowed(Path rootPath, Path target, SandboxFsConfig fsConfig) {
+    private boolean isWriteAllowed(Path rootPath, Path target, FilesystemConfig fsConfig) {
+        List<String> allowWrite = fsConfig.getAllowWrite();
+        if (allowWrite == null) {
+            return true;
+        }
+        if (allowWrite.isEmpty()) {
+            return false;
+        }
         Path effectiveTarget = resolveComparablePath(target);
-        for (String allowPath : fsConfig.getAllowWrite()) {
+        for (String allowPath : allowWrite) {
             Path allow = normalizeConfiguredPath(rootPath, allowPath);
             if (effectiveTarget.startsWith(resolveComparablePath(allow))) {
                 return true;
@@ -397,7 +424,7 @@ class TerminalSupport {
         if (relativePath == null) {
             return false;
         }
-        return SandboxFsConfig.isMandatoryDenyPath(relativePath.replace("\\", "/"));
+        return SandboxPathUtils.isMandatoryDenyPath(relativePath.replace("\\", "/"));
     }
 
     private boolean isMandatoryDenyRealPath(Path rootPath, Path target) {
@@ -522,7 +549,7 @@ class TerminalSupport {
         return workPath;
     }
 
-    void generateTreeInternal(Path workPath, Path current, int depth, int maxDepth, String indent, StringBuilder sb, boolean showHidden, boolean sandboxEnabled, SandboxConfig sandboxConfig) throws IOException {
+    void generateTreeInternal(Path workPath, Path current, int depth, int maxDepth, String indent, StringBuilder sb, boolean showHidden, boolean sandboxEnabled, SandboxRuntimeConfig sandboxConfig) throws IOException {
         if (depth >= maxDepth) return;
         try (Stream<Path> stream = Files.list(current)) {
             List<Path> children = stream
@@ -553,7 +580,7 @@ class TerminalSupport {
         }
     }
 
-    String flatListLogic(Path workPath, Path policyRoot, Path target, String inputPath, boolean showHidden, boolean sandboxEnabled, SandboxConfig sandboxConfig) throws IOException {
+    String flatListLogic(Path workPath, Path policyRoot, Path target, String inputPath, boolean showHidden, boolean sandboxEnabled, SandboxRuntimeConfig sandboxConfig) throws IOException {
         try (Stream<Path> stream = Files.list(target)) {
             List<String> lines = stream
                     .filter(p -> !isIgnored(workPath, p))

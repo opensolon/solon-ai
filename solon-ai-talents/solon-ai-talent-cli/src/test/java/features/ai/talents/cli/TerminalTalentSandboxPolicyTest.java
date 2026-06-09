@@ -2,7 +2,8 @@ package features.ai.talents.cli;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.talents.cli.TerminalTalent;
-import org.noear.solon.ai.talents.cli.sandbox.SandboxConfig;
+import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
+import org.noear.solon.ai.sandbox.config.FilesystemConfig;
 import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.ai.talents.mount.MountType;
@@ -23,7 +24,7 @@ public class TerminalTalentSandboxPolicyTest {
         Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
         try {
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            talent.setSandboxConfig(new SandboxConfig());
+            talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
             SecurityException ex = assertThrows(SecurityException.class,
                     () -> talent.write("sub/.bashrc", "evil", workDir.toString()));
@@ -38,8 +39,8 @@ public class TerminalTalentSandboxPolicyTest {
         Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
         try {
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            SandboxConfig config = new SandboxConfig();
-            config.getFilesystem().setAllowWrite(Collections.singletonList("src"));
+            FilesystemConfig fs = new FilesystemConfig(null, null, Collections.singletonList("src"), null, null);
+            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
             talent.setSandboxConfig(config);
 
             talent.write("src/App.java", "class App {}", workDir.toString());
@@ -60,9 +61,8 @@ public class TerminalTalentSandboxPolicyTest {
             Files.write(workDir.resolve("secret/public/visible.txt"), Collections.singletonList("visible"));
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            SandboxConfig config = new SandboxConfig();
-            config.getFilesystem().setDenyRead(Collections.singletonList("secret"));
-            config.getFilesystem().setAllowRead(Collections.singletonList("secret/public"));
+            FilesystemConfig fs = new FilesystemConfig(Collections.singletonList("secret"), Collections.singletonList("secret/public"), null, null, null);
+            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
             talent.setSandboxConfig(config);
 
             SecurityException ex = assertThrows(SecurityException.class,
@@ -83,8 +83,8 @@ public class TerminalTalentSandboxPolicyTest {
             Files.write(workDir.resolve("visible.txt"), Collections.singletonList("visible"));
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            SandboxConfig config = new SandboxConfig();
-            config.getFilesystem().setDenyRead(Collections.singletonList("secret"));
+            FilesystemConfig fs = new FilesystemConfig(Collections.singletonList("secret"), null, null, null, null);
+            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
             talent.setSandboxConfig(config);
 
             String result = talent.glob("**/*.txt", ".", workDir.toString());
@@ -102,8 +102,8 @@ public class TerminalTalentSandboxPolicyTest {
             Files.write(workDir.resolve("visible.txt"), Collections.singletonList("visible"));
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            SandboxConfig config = new SandboxConfig();
-            config.getFilesystem().setDenyRead(Collections.singletonList("."));
+            FilesystemConfig fs = new FilesystemConfig(Collections.singletonList("."), null, null, null, null);
+            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
             talent.setSandboxConfig(config);
 
             SecurityException ex = assertThrows(SecurityException.class,
@@ -119,8 +119,8 @@ public class TerminalTalentSandboxPolicyTest {
         Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
         try {
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            SandboxConfig config = new SandboxConfig();
-            config.getFilesystem().setAllowWrite(Collections.emptyList());
+            FilesystemConfig fs = new FilesystemConfig(null, null, Collections.emptyList(), null, null);
+            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
             talent.setSandboxConfig(config);
 
             SecurityException ex = assertThrows(SecurityException.class,
@@ -139,9 +139,8 @@ public class TerminalTalentSandboxPolicyTest {
             Files.write(workDir.resolve("secret/private.txt"), Collections.singletonList("old"));
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            SandboxConfig config = new SandboxConfig();
-            config.getFilesystem().setAllowWrite(Collections.singletonList("secret"));
-            config.getFilesystem().setDenyRead(Collections.singletonList("secret"));
+            FilesystemConfig fs = new FilesystemConfig(Collections.singletonList("secret"), null, Collections.singletonList("secret"), null, null);
+            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
             talent.setSandboxConfig(config);
 
             TerminalTalent.EditOp op = new TerminalTalent.EditOp();
@@ -171,7 +170,7 @@ public class TerminalTalentSandboxPolicyTest {
                     .build());
 
             TerminalTalent talent = new TerminalTalent(mountManager);
-            talent.setSandboxConfig(new SandboxConfig());
+            talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
             assertTrue(talent.read("@pool/note.txt", 1, null, workDir.toString()).contains("mounted"));
             SecurityException ex = assertThrows(SecurityException.class,
@@ -197,8 +196,8 @@ public class TerminalTalentSandboxPolicyTest {
                     .build());
 
             TerminalTalent talent = new TerminalTalent(mountManager);
-            SandboxConfig config = new SandboxConfig();
-            config.getFilesystem().setAllowWrite(Collections.singletonList("."));
+            FilesystemConfig fs = new FilesystemConfig(null, null, Collections.singletonList("."), null, null);
+            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
             talent.setSandboxConfig(config);
 
             talent.write("@pool/new.txt", "mounted write", workDir.toString());
@@ -227,8 +226,8 @@ public class TerminalTalentSandboxPolicyTest {
                     .build());
 
             TerminalTalent talent = new TerminalTalent(mountManager);
-            SandboxConfig config = new SandboxConfig();
-            config.getFilesystem().setDenyRead(Collections.singletonList("secret"));
+            FilesystemConfig fs = new FilesystemConfig(Collections.singletonList("secret"), null, null, null, null);
+            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
             talent.setSandboxConfig(config);
 
             String result = talent.glob("**/*.txt", "@pool", workDir.toString());
@@ -264,7 +263,7 @@ public class TerminalTalentSandboxPolicyTest {
                     .build());
 
             TerminalTalent talent = new TerminalTalent(mountManager);
-            talent.setSandboxConfig(new SandboxConfig());
+            talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
             String result = talent.read("@pool1/note.txt", 1, null, workDir.toString());
             assertTrue(result.contains("pool1"), result);
@@ -292,7 +291,7 @@ public class TerminalTalentSandboxPolicyTest {
                     .build());
 
             TerminalTalent talent = new TerminalTalent(mountManager);
-            talent.setSandboxConfig(new SandboxConfig());
+            talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
             SecurityException ex = assertThrows(SecurityException.class,
                     () -> talent.read("@pool/note.txt", 1, null, workDir.toString()));
@@ -326,8 +325,8 @@ public class TerminalTalentSandboxPolicyTest {
                     .build());
 
             TerminalTalent talent = new TerminalTalent(mountManager);
-            SandboxConfig config = new SandboxConfig();
-            config.getFilesystem().setAllowWrite(Collections.singletonList("."));
+            FilesystemConfig fs = new FilesystemConfig(null, null, Collections.singletonList("."), null, null);
+            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
             talent.setSandboxConfig(config);
 
             SecurityException ex = assertThrows(SecurityException.class,
@@ -355,8 +354,8 @@ public class TerminalTalentSandboxPolicyTest {
                     .build());
 
             TerminalTalent talent = new TerminalTalent(mountManager);
-            SandboxConfig config = new SandboxConfig();
-            config.getFilesystem().setAllowWrite(Collections.singletonList("allowed"));
+            FilesystemConfig fs = new FilesystemConfig(null, null, Collections.singletonList("allowed"), null, null);
+            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
             talent.setSandboxConfig(config);
 
             SecurityException ex = assertThrows(SecurityException.class,
@@ -382,7 +381,7 @@ public class TerminalTalentSandboxPolicyTest {
             }
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            talent.setSandboxConfig(new SandboxConfig());
+            talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
             SecurityException ex = assertThrows(SecurityException.class,
                     () -> talent.write("link-out/new.txt", "escape", workDir.toString()));
@@ -417,8 +416,8 @@ public class TerminalTalentSandboxPolicyTest {
                     .build());
 
             TerminalTalent talent = new TerminalTalent(mountManager);
-            SandboxConfig config = new SandboxConfig();
-            config.getFilesystem().setDenyRead(Collections.singletonList("secret"));
+            FilesystemConfig fs = new FilesystemConfig(Collections.singletonList("secret"), null, null, null, null);
+            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
             talent.setSandboxConfig(config);
 
             SecurityException ex = assertThrows(SecurityException.class,
@@ -445,7 +444,7 @@ public class TerminalTalentSandboxPolicyTest {
                     .build());
 
             TerminalTalent talent = new TerminalTalent(mountManager);
-            talent.setSandboxConfig(new SandboxConfig());
+            talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
             assertThrows(java.nio.file.NoSuchFileException.class,
                     () -> talent.read("@pool/note.txt", 1, null, workDir.toString()));
@@ -469,7 +468,7 @@ public class TerminalTalentSandboxPolicyTest {
             }
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            talent.setSandboxConfig(new SandboxConfig());
+            talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
             String grepResult = talent.grep("outside-secret-token", ".", workDir.toString());
             assertTrue(!grepResult.contains("outside-secret-token"), grepResult);
@@ -490,7 +489,7 @@ public class TerminalTalentSandboxPolicyTest {
             Files.createSymbolicLink(workDir.resolve("safe-link"), workDir.resolve(".bashrc"));
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            talent.setSandboxConfig(new SandboxConfig());
+            talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
             assertThrows(SecurityException.class, () -> talent.write("safe-link", "evil", workDir.toString()));
             assertTrue("safe".equals(new String(Files.readAllBytes(workDir.resolve(".bashrc")))));
@@ -515,7 +514,7 @@ public class TerminalTalentSandboxPolicyTest {
                     .writeable(true)
                     .build());
             TerminalTalent talent = new TerminalTalent(mountManager);
-            talent.setSandboxConfig(new SandboxConfig());
+            talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
             assertThrows(SecurityException.class, () -> talent.write("@pool/safe-link", "evil", workDir.toString()));
             assertTrue("safe".equals(new String(Files.readAllBytes(pool.resolve(".bashrc")))));
@@ -550,7 +549,7 @@ public class TerminalTalentSandboxPolicyTest {
         Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
         try {
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            talent.setSandboxConfig(new SandboxConfig());
+            talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
             SecurityException ex = assertThrows(SecurityException.class,
                     () -> talent.write("sub/.vscode/settings.json", "evil", workDir.toString()));
