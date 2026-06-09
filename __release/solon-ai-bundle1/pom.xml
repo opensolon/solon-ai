@@ -21,6 +21,8 @@
         <module>../../mcp-core</module>
         <module>../../mcp-json-jackson2</module>
 
+        <module>../../solon-ai-parent</module>
+
         <module>../../solon-ai</module>
         <module>../../solon-ai-core</module>
         <module>../../solon-ai-agent</module>
@@ -28,7 +30,7 @@
         <module>../../solon-ai-flow</module>
         <module>../../solon-ai-harness</module>
         <module>../../solon-ai-mcp</module>
-        <module>../../solon-ai-parent</module>
+        <module>../../solon-ai-sandbox</module>
 
 
         <module>../../solon-ai-llm-dialects/solon-ai-dialect-dashscope</module>
