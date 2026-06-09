@@ -22,6 +22,7 @@
 * 添加 solon-ai-talent-openapi OpenApiSkill.removeApi 方法
 * 添加 solon-ai-talent-openapi ApiSource 超时配置支持
 * 添加 solon-ai-talent-gateway McpGatewaySkill 专门处理 mcp（ToolGatewaySkill 可以处理所有工具）
+* 添加 solon-ai-talent-cli TerminalTalent 系统级沙盒限制支持
 * 添加 solon-ai-core ChatOptions:httpCustomize 方法
 * 添加 solon-ai-core Talent::isEnabled 方法
 * 添加 solon-ai-core AiConfig::standard（替代 provider 之前的作用）
@@ -39,8 +40,9 @@
 * 添加 solon-ai-harness 用 McpGatewaySkill 替换 ToolGatewaySkill（更有争对性）
 * 优化 solon-ai-agent 初始化时（rest）添加快照持久化
 * 优化 solon-ai-harness AgentFactory `edit` 权限添加 `read`、`write` 控制
-* 优化 solon-ai-agent SummarizationInterceptor 压缩时机（从 onObservation 改为 onReasonStart），并增加系统词大小
-* 优化 solon-ai-agent SummarizationInterceptor 增强上下文压缩拦截器中过期区 tool-use 原子序列的追溯保护，并完善文档注释
+* 优化 solon-ai-agent ContextCompressionInterceptor 压缩时机（从 onObservation 改为 onReasonStart），并增加系统词大小
+* 优化 solon-ai-agent ContextCompressionInterceptor 增强上下文压缩拦截器中过期区 tool-use 原子序列的追溯保护，并完善文档注释
+* 优化 solon-ai-agent ContextCompressionInterceptor 算法，增加 tools token
 * 优化 solon-ai-dialect-openai OpenaiResponses 协议兼容性
 * 调整 solon-ai-core 取消 ChatConfig.reasoningFieldName 配置（这个配置不合理）
 * 调整 solon-ai-core 移除 SkillProvider 类
@@ -55,8 +57,8 @@
 * 调整 solon-ai-agent ReActInterceptor.onReason 更名为 onReasonEnd（和 onReasonStart 凑成一对）
 * 调整 solon-ai-agent ReActAgent.maxSteps 更名为 maxTurns（保持行业习惯）
 * 调整 solon-ai-agent SummarizationInterceptor 更名为 ContextCompressionInterceptor（更符合语义）
-* 调整 solon-ai-skill-cli PoolManager 实现细节，并添加 refresh(alias)
-* 调整 solon-ai-skill-cli 技能标识由 aliasPath 统一改为 name，并优化技能池加载逻辑及代码格式
+* 调整 solon-ai-talent-cli PoolManager 实现细节，并添加 refresh(alias)
+* 调整 solon-ai-talent-cli 技能标识由 aliasPath 统一改为 name，并优化技能池加载逻辑及代码格式
 * 调整 solon-ai-talent-web WebfetchTool 更名为 WebfetchTalent; WebsearchTool 更名为 WebsearchTalent; CodeSearchTool 更名为 CodeSearchTalent
 * 调整 solon-ai-talent-diff ApplyDiffTool 更名为 ApplyDiffTalent；ApplyPatchTool 更名为 ApplyPatchTalent
 * 调整 solon-ai-harness HarnessEngine 打断与 HarnessProperties 关联（后者删除），避免耦合影响未来的调整
@@ -67,7 +69,7 @@
 * 移除 mcp-sdk（由 mcp-core 替代）
 * 修复 solon-ai-mcp WebRxStreamableHttpTransport 没有 event 的消息会出错的问题（优化非规范兼容）
 * 修复 solon-ai-mcp WebRxStreamableHttpTransport 没有 contentType 的消息会出错的问题（优化非规范兼容）
-* 修复 solon-ai-agent SummarizationInterceptor 压缩后可能会引起 ToolMessage 无法对齐的问题
+* 修复 solon-ai-agent ContextCompressionInterceptor 压缩后可能会引起 ToolMessage 无法对齐的问题
 * mcp-sdk 升为 1.1.3
 
 
