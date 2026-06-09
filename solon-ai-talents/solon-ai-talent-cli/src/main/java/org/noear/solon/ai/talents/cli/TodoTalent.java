@@ -72,7 +72,7 @@ public class TodoTalent extends AbsTalent {
         }
     }
 
-    @ToolMapping(name = "todoread", description = "读取任务清单。用于同步执行进度，确认下一步操作。")
+    @ToolMapping(name = TOOL_TODOREAD, description = "读取任务清单。用于同步执行进度，确认下一步操作。")
     public String todoRead(String __cwd,
                            String __sessionId) throws IOException {
         Path workPath = getWorkPath(__cwd, __sessionId);
@@ -87,7 +87,7 @@ public class TodoTalent extends AbsTalent {
         return new String(encoded, StandardCharsets.UTF_8);
     }
 
-    @ToolMapping(name = "todowrite", description = "写入任务列表（新建、更新或重构）。接收完整的 Markdown 格式清单。")
+    @ToolMapping(name = TOOL_TODOWRITE, description = "写入任务列表（新建、更新或重构）。接收完整的 Markdown 格式清单。")
     public String todoWrite(
             @Param(value = "todos", description = "完整 Markdown 列表。") String todosMarkdown,
             String __cwd,
