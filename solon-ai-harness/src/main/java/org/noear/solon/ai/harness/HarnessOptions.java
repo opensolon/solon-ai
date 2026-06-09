@@ -73,6 +73,7 @@ class HarnessOptions implements Serializable {
     // ========== 安全与模式 ==========
     private volatile boolean sandboxEnabled = true;
     private volatile boolean sandboxAllowUserHome = true;
+    private volatile boolean sandboxSystemRestrict = true;
 
     private volatile boolean hitlEnabled = false;
     private volatile boolean subagentEnabled = true;
@@ -258,6 +259,16 @@ class HarnessOptions implements Serializable {
     void setSandboxAllowUserHome(Boolean sandboxAllowUserHome) {
         if (sandboxAllowUserHome != null) {
             this.sandboxAllowUserHome = sandboxAllowUserHome;
+        }
+    }
+
+    boolean isSandboxSystemRestrict() {
+        return sandboxSystemRestrict;
+    }
+
+    void setSandboxSystemRestrict(Boolean sandboxSystemRestrict) {
+        if (sandboxSystemRestrict != null) {
+            this.sandboxSystemRestrict = sandboxSystemRestrict;
         }
     }
 

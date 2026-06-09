@@ -102,6 +102,17 @@ class TerminalSupport {
      * @return null 表示校验通过；非 null 为错误消息
      */
     String validateCommand(String command, boolean sandboxEnabled, boolean sandboxAllowUserHome) {
+        return validateCommand(command, sandboxEnabled, sandboxAllowUserHome, true);
+    }
+
+    /**
+     * 统一安全校验
+     *
+     * @param sandboxEnabled          是否启用沙盒模式
+     * @param sandboxAllowUserHome    沙盒模式下是否允许访问用户主目录
+     * @param sandboxSystemRestrict   沙盒模式下是否启用系统级限制（信息泄露/子进程逃逸/管道注入等）
+     */
+    String validateCommand(String command, boolean sandboxEnabled, boolean sandboxAllowUserHome, boolean sandboxSystemRestrict) {
         if (Assert.isEmpty(command)) {
             return "错误：command 不能为空。";
         }
@@ -137,7 +148,8 @@ class TerminalSupport {
         }
 
         // 3. 沙盒模式专属检测：信息泄露 + 子进程/解释器逃逸 + 管道注入
-        if (sandboxEnabled) {
+        // 受 sandboxSystemRestrict 控制：关闭后可减少误伤（如构建工具被拦截），但安全性降低
+        if (sandboxEnabled && sandboxSystemRestrict) {
             // 3a. 信息泄露命令
             if (lowerCmd.matches("(?i).*\\b(?:ifconfig|ip\\s+(?:addr|link|route|neigh|a|l|r|n))\\b.*") ||
                     lowerCmd.matches("(?i)(?:^|.*[;|&])\\s*(?:whoami|id\\b|uname|hostname|printenv)\\b.*") ||

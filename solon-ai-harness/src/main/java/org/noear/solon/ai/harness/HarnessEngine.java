@@ -398,6 +398,15 @@ public class HarnessEngine {
         terminalTalent.setSandboxAllowUserHome(sandboxAllowUserHome);
     }
 
+    public boolean isSandboxSystemRestrict() {
+        return options.isSandboxSystemRestrict();
+    }
+
+    public void setSandboxSystemRestrict(Boolean sandboxSystemRestrict) {
+        options.setSandboxSystemRestrict(sandboxSystemRestrict);
+        terminalTalent.setSandboxSystemRestrict(sandboxSystemRestrict);
+    }
+
     public void setHitlEnabled(Boolean hitlEnabled) {
         options.setHitlEnabled(hitlEnabled);
     }
@@ -734,6 +743,7 @@ public class HarnessEngine {
         terminalTalent.setBashAsyncEnabled(options.isBashAsyncEnabled());
         terminalTalent.setSandboxEnabled(options.isSandboxEnabled());
         terminalTalent.setSandboxAllowUserHome(options.isSandboxAllowUserHome());
+        terminalTalent.setSandboxSystemRestrict(options.isSandboxSystemRestrict());
 
         //mainAgent = createMainAgent(); //改为懒加载
     }
@@ -931,6 +941,11 @@ public class HarnessEngine {
 
         public Builder sandboxAllowUserHome(Boolean sandboxAllowUserHome) {
             options.setSandboxAllowUserHome(sandboxAllowUserHome);
+            return this;
+        }
+
+        public Builder sandboxSystemRestrict(Boolean sandboxSystemRestrict) {
+            options.setSandboxSystemRestrict(sandboxSystemRestrict);
             return this;
         }
 

@@ -64,6 +64,9 @@ public class TerminalTalent extends AbsTalent {
     private boolean sandboxEnabled = true;
     //允许访问用户主目录（~ 路径）。仅在 sandboxEnabled=true 时有意义；默认 true 保持向后兼容
     private boolean sandboxAllowUserHome = true;
+    //沙盒系统级限制：是否启用信息泄露拦截、子进程逃逸拦截、管道注入拦截等系统级安全检测。
+    //关闭后可减少误伤（如构建工具被拦截），但安全性降低。仅在 sandboxEnabled=true 时有意义；默认 true 保持向后兼容
+    private boolean sandboxSystemRestrict = true;
     private final MountManager mountManager; // 引入挂载管理器
     private SandboxExecutor sandboxExecutor;
     private SandboxConfig sandboxConfig;
@@ -112,6 +115,16 @@ public class TerminalTalent extends AbsTalent {
             if (sandboxExecutor != null) {
                 sandboxExecutor.setAllowUserHome(sandboxAllowUserHome);
             }
+        }
+    }
+
+    public boolean isSandboxSystemRestrict() {
+        return sandboxSystemRestrict;
+    }
+
+    public void setSandboxSystemRestrict(Boolean sandboxSystemRestrict) {
+        if (sandboxSystemRestrict != null) {
+            this.sandboxSystemRestrict = sandboxSystemRestrict;
         }
     }
 
@@ -282,10 +295,6 @@ public class TerminalTalent extends AbsTalent {
             sb.append("</SYSTEM_CONSTRAINTS>\n");
         }
 
-        if (sandboxEnabled && sandboxExecutor != null) {
-            sb.append("- **OS 级沙盒**: 已启用 ").append(sandboxExecutor.getClass().getSimpleName()).append("\n");
-        }
-
         return sb.toString();
     }
 
@@ -322,7 +331,7 @@ public class TerminalTalent extends AbsTalent {
                        String __cwd) {
 
         // 统一安全校验（替代原来的内联检查）
-        String violation = support.validateCommand(command, sandboxEnabled, sandboxAllowUserHome);
+        String violation = support.validateCommand(command, sandboxEnabled, sandboxAllowUserHome, sandboxSystemRestrict);
         if (violation != null) return violation;
 
         Path workPath = getWorkPath(__cwd);
@@ -356,7 +365,7 @@ public class TerminalTalent extends AbsTalent {
                             @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符输出，超出保留最新部分。") Integer maxOutputChars,
                             @Param(value = "hard_timeout_ms", required = false, defaultValue = "120000", description = "硬超时兜底，超过后终止进程树，单位毫秒。") Integer hardTimeoutMs,
                             String __cwd) throws IOException {
-        String danger = support.validateCommand(command, sandboxEnabled, sandboxAllowUserHome);
+        String danger = support.validateCommand(command, sandboxEnabled, sandboxAllowUserHome, sandboxSystemRestrict);
         if (danger != null) {
             return danger;
         }
@@ -758,7 +767,7 @@ public class TerminalTalent extends AbsTalent {
 
 
     private String validateCommand(String command) {
-        return support.validateCommand(command, sandboxEnabled, sandboxAllowUserHome);
+        return support.validateCommand(command, sandboxEnabled, sandboxAllowUserHome, sandboxSystemRestrict);
     }
 
     private String translateCommandToEnv(String command, Map<String, String> envs) {
