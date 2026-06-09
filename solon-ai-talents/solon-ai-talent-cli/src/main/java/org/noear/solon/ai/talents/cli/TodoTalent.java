@@ -36,6 +36,11 @@ public class TodoTalent extends AbsTalent {
     public static final String TOOL_TODOREAD = "todoread";
     public static final String TOOL_TODOWRITE = "todowrite";
 
+    public static final String TODO_FILE_NAME = "TODO.md";
+    public static final String STATUS_PENDING = "[ ]";
+    public static final String STATUS_IN_PROGRESS = "[/]";
+    public static final String STATUS_DONE = "[x]";
+
     private final String relativeDir;
 
     public TodoTalent() {
@@ -72,12 +77,19 @@ public class TodoTalent extends AbsTalent {
         }
     }
 
+    /**
+     * 获取 TODO.md 文件路径（供外部读取，如 Web 接口）
+     */
+    public Path getTodoPath(String cwd, String sessionId) {
+        return getWorkPath(cwd, sessionId).resolve(TODO_FILE_NAME);
+    }
+
     @ToolMapping(name = TOOL_TODOREAD, description = "读取任务清单。用于同步执行进度，确认下一步操作。")
     public String todoRead(String __cwd,
                            String __sessionId) throws IOException {
         Path workPath = getWorkPath(__cwd, __sessionId);
 
-        Path todoFile = workPath.resolve("TODO.md");
+        Path todoFile = workPath.resolve(TODO_FILE_NAME);
 
         if (!Files.exists(todoFile)) {
             return "[] (当前任务清单为空。若任务复杂，请使用 `todowrite` 初始化计划。)";
@@ -89,7 +101,7 @@ public class TodoTalent extends AbsTalent {
 
     @ToolMapping(name = TOOL_TODOWRITE, description = "写入任务列表（新建、更新或重构）。接收完整的 Markdown 格式清单。")
     public String todoWrite(
-            @Param(value = "todos", description = "完整 Markdown 列表。") String todosMarkdown,
+            @Param(value = "todos", description = "完整 Markdown 任务清单。可使用 `##` 标题分组；所有可跟踪任务必须使用 checkbox 行：`- [ ]` 待办、`- [/]` 进行中、`- [x]` 已完成。不要用无状态普通列表 `- xxx` 表示任务，必须带 checkbox 标记。") String todosMarkdown,
             String __cwd,
             String __sessionId
     ) throws IOException {
@@ -99,9 +111,13 @@ public class TodoTalent extends AbsTalent {
             Files.createDirectories(workPath);
         }
 
-        Path todoFile = workPath.resolve("TODO.md");
+        Path todoFile = workPath.resolve(TODO_FILE_NAME);
 
-        Files.write(todoFile, todosMarkdown.trim().getBytes(StandardCharsets.UTF_8));
+        String content = todosMarkdown.trim();
+        if (!content.isEmpty() && !content.endsWith("\n")) {
+            content = content + "\n";
+        }
+        Files.write(todoFile, content.getBytes(StandardCharsets.UTF_8));
 
         int lines = todosMarkdown.split("\n").length;
 
