@@ -17,11 +17,10 @@ package org.noear.solon.ai.agent.react.intercept;
 
 import org.noear.solon.ai.agent.AbsAgentChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
 /**
- * 上下文状态块：向用户侧推送当前上下文的大小信息
+ * 上下文压缩状态块：向用户侧推送当前上下文的大小信息
  *
  * <p>在每次推理回合开始前由 {@link ContextCompressionInterceptor} 生成，
  * 让用户侧能感知到当前上下文的规模以及是否发生了压缩。
@@ -30,7 +29,7 @@ import org.noear.solon.lang.Preview;
  * @since 3.9.4
  */
 @Preview("3.9.4")
-public class ContextChunk extends AbsAgentChunk {
+public class ContextCompressionChunk extends AbsAgentChunk {
     /**
      * 当前上下文的总消息数
      */
@@ -60,10 +59,10 @@ public class ContextChunk extends AbsAgentChunk {
      */
     private final int afterTokenCount;
 
-    public ContextChunk(ReActTrace trace, int messageCount, int tokenCount,
-                        boolean compressed,
-                        int beforeMessageCount, int afterMessageCount,
-                        int beforeTokenCount, int afterTokenCount) {
+    public ContextCompressionChunk(ReActTrace trace, int messageCount, int tokenCount,
+                                   boolean compressed,
+                                   int beforeMessageCount, int afterMessageCount,
+                                   int beforeTokenCount, int afterTokenCount) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession(), null);
         this.messageCount = messageCount;
         this.tokenCount = tokenCount;
