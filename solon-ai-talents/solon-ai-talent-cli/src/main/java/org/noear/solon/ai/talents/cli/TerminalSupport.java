@@ -18,7 +18,7 @@ package org.noear.solon.ai.talents.cli;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
 import org.noear.solon.ai.sandbox.config.FilesystemConfig;
-import org.noear.solon.ai.sandbox.util.SandboxPathUtils;
+
 import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.core.util.Assert;
@@ -26,6 +26,8 @@ import org.noear.solon.core.util.Assert;
 import java.io.IOException;
 import java.io.File;
 import java.nio.file.*;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -38,7 +40,7 @@ import java.util.stream.Stream;
  * @author noear
  * @since 3.9.1
  */
-class TerminalSupport {
+public class TerminalSupport {
     static final int MAX_CHARACTER_LIMIT = 128 * 1024;
 
     private final MountManager mountManager;
@@ -420,11 +422,41 @@ class TerminalSupport {
         }
     }
 
-    private boolean isMandatoryDenyRelativePath(String relativePath) {
+    // mandatory deny files (same as dangerous files + cli-specific paths)
+    private static final List<String> MANDATORY_DENY_FILES = Collections.unmodifiableList(Arrays.asList(
+            ".gitconfig", ".gitmodules", ".bashrc", ".bash_profile", ".bash_logout",
+            ".zshrc", ".zprofile", ".profile", ".ripgreprc", ".mcp.json",
+            ".soloncode/commands", ".soloncode/agents"
+    ));
+
+    private static final List<String> MANDATORY_DENY_DIRS = Collections.unmodifiableList(Arrays.asList(
+            ".vscode", ".idea", ".soloncode/commands", ".soloncode/agents", ".git/hooks"
+    ));
+
+    public static boolean isMandatoryDenyRelativePath(String relativePath) {
         if (relativePath == null) {
             return false;
         }
-        return SandboxPathUtils.isMandatoryDenyPath(relativePath.replace("\\", "/"));
+        String normalized = relativePath.replace("\\", "/");
+        if (normalized.startsWith("./")) {
+            normalized = normalized.substring(2);
+        }
+        for (String denyFile : MANDATORY_DENY_FILES) {
+            if (normalized.equals(denyFile)
+                    || normalized.startsWith(denyFile + "/")
+                    || normalized.endsWith("/" + denyFile)
+                    || normalized.contains("/" + denyFile + "/")) {
+                return true;
+            }
+        }
+        for (String denyDir : MANDATORY_DENY_DIRS) {
+            if (normalized.equals(denyDir) || normalized.startsWith(denyDir + "/")
+                    || normalized.endsWith("/" + denyDir)
+                    || normalized.contains("/" + denyDir + "/")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isMandatoryDenyRealPath(Path rootPath, Path target) {

@@ -23,47 +23,6 @@ public final class SandboxPathUtils {
         ".git", ".vscode", ".idea"
     ));
 
-    private static final List<String> MANDATORY_DENY_FILES = buildMandatoryDenyFiles();
-    private static final List<String> MANDATORY_DENY_DIRS = buildMandatoryDenyDirs();
-
-    private static List<String> buildMandatoryDenyFiles() {
-        List<String> list = new ArrayList<>(DANGEROUS_FILES);
-        list.add(".claude/commands");
-        list.add(".claude/agents");
-        return Collections.unmodifiableList(list);
-    }
-
-    private static List<String> buildMandatoryDenyDirs() {
-        List<String> list = new ArrayList<>(getDangerousDirectories());
-        list.add(".git/hooks");
-        return Collections.unmodifiableList(list);
-    }
-
-    /**
-     * 检查给定路径是否匹配强制拒绝的文件或目录。
-     * 用于 Java 层的安全检查（文件操作拒绝），与 OS 层沙盒检查对齐。
-     */
-    public static boolean isMandatoryDenyPath(String relativePath) {
-        if (relativePath == null) return false;
-        String normalized = relativePath.startsWith("./") ? relativePath.substring(2) : relativePath;
-        for (String denyFile : MANDATORY_DENY_FILES) {
-            if (normalized.equals(denyFile)
-                    || normalized.startsWith(denyFile + "/")
-                    || normalized.endsWith("/" + denyFile)
-                    || normalized.contains("/" + denyFile + "/")) {
-                return true;
-            }
-        }
-        for (String denyDir : MANDATORY_DENY_DIRS) {
-            if (normalized.equals(denyDir) || normalized.startsWith(denyDir + "/")
-                    || normalized.endsWith("/" + denyDir)
-                    || normalized.contains("/" + denyDir + "/")) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     public static List<String> getDangerousDirectories() {
         List<String> dirs = new ArrayList<>();
         dirs.add(".vscode");

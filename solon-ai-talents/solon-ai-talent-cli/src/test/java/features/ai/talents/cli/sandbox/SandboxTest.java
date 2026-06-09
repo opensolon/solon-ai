@@ -1,6 +1,7 @@
 package features.ai.talents.cli.sandbox;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.talents.cli.TerminalSupport;
 import org.noear.solon.ai.talents.cli.TerminalTalent;
 import org.noear.solon.ai.sandbox.util.ShellQuote;
 import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
@@ -75,18 +76,20 @@ public class SandboxTest {
         assertEquals("echo 'hello world' 'it'\"'\"'s me'", result);
     }
 
-    // ==================== SandboxPathUtils ====================
+    // ==================== isMandatoryDenyRelativePath (now in TerminalSupport) ====================
 
     @Test
-    public void sandboxPathUtils_isMandatoryDenyPath() {
-        assertTrue(SandboxPathUtils.isMandatoryDenyPath(".bashrc"));
-        assertTrue(SandboxPathUtils.isMandatoryDenyPath(".gitconfig"));
-        assertTrue(SandboxPathUtils.isMandatoryDenyPath("sub/.bashrc"));
-        assertTrue(SandboxPathUtils.isMandatoryDenyPath(".git/hooks/pre-commit"));
-        assertFalse(SandboxPathUtils.isMandatoryDenyPath("src/Main.java"));
-        assertFalse(SandboxPathUtils.isMandatoryDenyPath(null));
-        assertFalse(SandboxPathUtils.isMandatoryDenyPath(""));
+    public void terminalSupport_isMandatoryDenyRelativePath() throws Exception {
+        assertTrue(isMandatoryDenyRelativePath(".bashrc"));
+        assertTrue(isMandatoryDenyRelativePath(".gitconfig"));
+        assertTrue(isMandatoryDenyRelativePath("sub/.bashrc"));
+        assertTrue(isMandatoryDenyRelativePath(".git/hooks/pre-commit"));
+        assertFalse(isMandatoryDenyRelativePath("src/Main.java"));
+        assertFalse(isMandatoryDenyRelativePath(null));
+        assertFalse(isMandatoryDenyRelativePath(""));
     }
+
+    // ==================== SandboxPathUtils (dangerous files - still in sandbox module) ====================
 
     @Test
     public void sandboxPathUtils_dangerousFiles() {
@@ -289,25 +292,25 @@ public class SandboxTest {
         assertNotNull(result, "'crontab' should be blocked");
     }
 
-    // ==================== ISSUE 4: SandboxPathUtils additional checks ====================
+    // ==================== ISSUE 4: isMandatoryDenyRelativePath additional checks ====================
 
     @Test
-    public void sandboxPathUtils_isMandatoryDenyPath_vscode() {
-        assertTrue(SandboxPathUtils.isMandatoryDenyPath(".vscode"));
-        assertTrue(SandboxPathUtils.isMandatoryDenyPath(".vscode/settings.json"));
+    public void terminalSupport_isMandatoryDenyRelativePath_vscode() throws Exception {
+        assertTrue(isMandatoryDenyRelativePath(".vscode"));
+        assertTrue(isMandatoryDenyRelativePath(".vscode/settings.json"));
     }
 
     @Test
-    public void sandboxPathUtils_isMandatoryDenyPath_claude() {
-        assertTrue(SandboxPathUtils.isMandatoryDenyPath(".claude/commands"));
-        assertTrue(SandboxPathUtils.isMandatoryDenyPath(".claude/agents"));
-        assertTrue(SandboxPathUtils.isMandatoryDenyPath(".mcp.json"));
+    public void terminalSupport_isMandatoryDenyRelativePath_claude() throws Exception {
+        assertTrue(isMandatoryDenyRelativePath(".soloncode/commands"));
+        assertTrue(isMandatoryDenyRelativePath(".soloncode/agents"));
+        assertTrue(isMandatoryDenyRelativePath(".mcp.json"));
     }
 
     @Test
-    public void sandboxPathUtils_isMandatoryDenyPath_gitHooks() {
-        assertTrue(SandboxPathUtils.isMandatoryDenyPath(".git/hooks"));
-        assertTrue(SandboxPathUtils.isMandatoryDenyPath(".git/hooks/pre-commit"));
+    public void terminalSupport_isMandatoryDenyRelativePath_gitHooks() throws Exception {
+        assertTrue(isMandatoryDenyRelativePath(".git/hooks"));
+        assertTrue(isMandatoryDenyRelativePath(".git/hooks/pre-commit"));
     }
 
     // ==================== ISSUE 5: ShellQuote edge cases ====================
@@ -404,6 +407,10 @@ public class SandboxTest {
         } finally {
             deleteRecursively(workDir);
         }
+    }
+
+    private static boolean isMandatoryDenyRelativePath(String relativePath) throws Exception {
+        return TerminalSupport.isMandatoryDenyRelativePath(relativePath);
     }
 
     private static boolean terminalContainsUserHomePath(String command) throws Exception {
