@@ -39,7 +39,7 @@ import java.util.Map;
  * @author noear
  * @since 3.9.1
  */
-public class LinuxSandboxExecutor implements SandboxExecutor {
+public class LinuxSandboxExecutor implements OsSandboxExecutor {
 
     private volatile SandboxConfig config;
     private volatile Collection<MountDir> mounts = Collections.emptyList();
@@ -75,7 +75,7 @@ public class LinuxSandboxExecutor implements SandboxExecutor {
 
     @Override
     public boolean isAvailable() {
-        return SandboxExecutorFactory.isCommandAvailable("bwrap");
+        return OsSandboxExecutorFactory.isCommandAvailable("bwrap");
     }
 
     /**

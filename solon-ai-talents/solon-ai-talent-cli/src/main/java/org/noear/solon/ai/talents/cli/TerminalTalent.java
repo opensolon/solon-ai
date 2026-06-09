@@ -19,8 +19,8 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
-import org.noear.solon.ai.talents.cli.sandbox.SandboxExecutor;
-import org.noear.solon.ai.talents.cli.sandbox.SandboxExecutorFactory;
+import org.noear.solon.ai.talents.cli.sandbox.OsSandboxExecutor;
+import org.noear.solon.ai.talents.cli.sandbox.OsSandboxExecutorFactory;
 import org.noear.solon.ai.talents.cli.sandbox.SandboxConfig;
 import org.noear.solon.ai.talents.cli.sandbox.SandboxViolationStore;
 import org.noear.solon.ai.talents.mount.MountDir;
@@ -68,7 +68,7 @@ public class TerminalTalent extends AbsTalent {
     //关闭后可减少误伤（如构建工具被拦截），但安全性降低。仅在 sandboxEnabled=true 时有意义；默认 true 保持向后兼容
     private boolean sandboxSystemRestrict = true;
     private final MountManager mountManager; // 引入挂载管理器
-    private SandboxExecutor sandboxExecutor;
+    private OsSandboxExecutor sandboxExecutor;
     private SandboxConfig sandboxConfig;
     private final SandboxViolationStore violationStore = new SandboxViolationStore();
 
@@ -185,7 +185,7 @@ public class TerminalTalent extends AbsTalent {
 
         pythonCmd = executor.probePythonCommand();
         nodeCmd = executor.probeNodeCommand();
-        this.sandboxExecutor = SandboxExecutorFactory.create(sandboxConfig);
+        this.sandboxExecutor = OsSandboxExecutorFactory.create(sandboxConfig);
         this.sandboxExecutor.setMounts(mountManager.getMounts());
         this.sandboxExecutor.setAllowUserHome(sandboxAllowUserHome);
         this.sandboxExecutor.setViolationStore(violationStore);

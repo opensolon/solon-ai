@@ -29,7 +29,7 @@ import org.noear.solon.ai.talents.mount.MountDir;
  * @author noear
  * @since 3.9.1
  */
-public interface SandboxExecutor {
+public interface OsSandboxExecutor {
     /**
      * 包装命令，使其在 OS 级沙盒中执行
      *

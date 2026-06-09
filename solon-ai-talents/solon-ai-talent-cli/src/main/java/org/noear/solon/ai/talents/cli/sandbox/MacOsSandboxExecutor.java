@@ -37,7 +37,7 @@ import java.util.Set;
  * @author noear
  * @since 3.9.1
  */
-public class MacOsSandboxExecutor implements SandboxExecutor {
+public class MacOsSandboxExecutor implements OsSandboxExecutor {
     private static final Logger LOG = LoggerFactory.getLogger(MacOsSandboxExecutor.class);
 
     private volatile SandboxConfig config;
@@ -77,7 +77,7 @@ public class MacOsSandboxExecutor implements SandboxExecutor {
 
     @Override
     public boolean isAvailable() {
-        return SandboxExecutorFactory.isCommandAvailable("sandbox-exec");
+        return OsSandboxExecutorFactory.isCommandAvailable("sandbox-exec");
     }
 
     /**

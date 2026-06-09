@@ -26,20 +26,20 @@ import java.util.concurrent.TimeUnit;
  * @author noear
  * @since 3.9.1
  */
-public class SandboxExecutorFactory {
-    private static final Logger LOG = LoggerFactory.getLogger(SandboxExecutorFactory.class);
+public class OsSandboxExecutorFactory {
+    private static final Logger LOG = LoggerFactory.getLogger(OsSandboxExecutorFactory.class);
 
     /**
      * 创建平台适配的沙盒执行器（无配置）
      */
-    public static SandboxExecutor create() {
+    public static OsSandboxExecutor create() {
         return create(null);
     }
 
     /**
      * 创建平台适配的沙盒执行器（带配置）
      */
-    public static SandboxExecutor create(SandboxConfig config) {
+    public static OsSandboxExecutor create(SandboxConfig config) {
         String os = System.getProperty("os.name").toLowerCase();
 
         // macOS: 尝试 sandbox-exec

@@ -211,7 +211,7 @@ public class SandboxTest {
 
     @Test
     public void factory_createsNonNull() {
-        SandboxExecutor executor = SandboxExecutorFactory.create();
+        OsSandboxExecutor executor = OsSandboxExecutorFactory.create();
         assertNotNull(executor);
         assertTrue(executor.isAvailable());
     }
@@ -345,7 +345,7 @@ public class SandboxTest {
 
     @Test
     public void executorFactory_withNullConfig_works() {
-        SandboxExecutor executor = SandboxExecutorFactory.create(null);
+        OsSandboxExecutor executor = OsSandboxExecutorFactory.create(null);
         assertNotNull(executor);
         String result = executor.wrapCommand("echo test", Paths.get("/tmp/test"), new HashMap<>());
         assertTrue(result.contains("echo test"));
@@ -357,7 +357,7 @@ public class SandboxTest {
         config.getFilesystem().setAllowWrite(Arrays.asList(".", "/tmp"));
         config.getFilesystem().setDenyRead(Arrays.asList("/etc/shadow"));
         config.getNetwork().setAllowedDomains(Arrays.asList("github.com"));
-        SandboxExecutor executor = SandboxExecutorFactory.create(config);
+        OsSandboxExecutor executor = OsSandboxExecutorFactory.create(config);
         assertNotNull(executor);
         String result = executor.wrapCommand("echo test", Paths.get("/tmp/test"), new HashMap<>());
         assertTrue(result.contains("echo test"));
@@ -3034,7 +3034,7 @@ public class SandboxTest {
                 "'GRADLE_OPTS=... gradle build' should be allowed");
     }
 
-    private static class RecordingSandboxExecutor implements SandboxExecutor {
+    private static class RecordingSandboxExecutor implements OsSandboxExecutor {
         private Boolean sandboxAllowUserHome;
 
         @Override
