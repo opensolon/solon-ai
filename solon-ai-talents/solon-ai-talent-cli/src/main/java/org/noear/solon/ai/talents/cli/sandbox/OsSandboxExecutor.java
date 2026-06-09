@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Map;
 import org.noear.solon.ai.talents.mount.MountDir;
+import org.noear.solon.ai.talents.mount.MountManager;
 
 /**
  * OS 级沙盒执行器接口
@@ -48,7 +49,7 @@ public interface OsSandboxExecutor {
     /**
      * 设置挂载点上下文（可选，用于 OS 沙盒根据 MountManager 生成挂载/读写规则）
      */
-    default void setMounts(Collection<MountDir> mounts) {}
+    default void setMounts(MountManager mountManager) {}
 
     /**
      * 设置沙盒配置（可选，用于支持读写分离等高级功能）

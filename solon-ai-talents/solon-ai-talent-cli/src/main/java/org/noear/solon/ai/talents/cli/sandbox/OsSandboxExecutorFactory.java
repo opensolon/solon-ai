@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.talents.cli.sandbox;
 
+import org.noear.solon.lang.NonNull;
+import org.noear.solon.lang.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +41,7 @@ public class OsSandboxExecutorFactory {
     /**
      * 创建平台适配的沙盒执行器（带配置）
      */
-    public static OsSandboxExecutor create(SandboxConfig config) {
+    public static @NonNull OsSandboxExecutor create(SandboxConfig config) {
         String os = System.getProperty("os.name").toLowerCase();
 
         // macOS: 尝试 sandbox-exec

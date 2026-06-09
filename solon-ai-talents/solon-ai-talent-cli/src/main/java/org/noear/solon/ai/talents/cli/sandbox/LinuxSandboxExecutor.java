@@ -16,6 +16,7 @@
 package org.noear.solon.ai.talents.cli.sandbox;
 
 import org.noear.solon.ai.talents.mount.MountDir;
+import org.noear.solon.ai.talents.mount.MountManager;
 
 import java.io.File;
 import java.io.IOException;
@@ -42,12 +43,12 @@ import java.util.Map;
 public class LinuxSandboxExecutor implements OsSandboxExecutor {
 
     private volatile SandboxConfig config;
-    private volatile Collection<MountDir> mounts = Collections.emptyList();
+    private volatile MountManager mountManager;
     private volatile boolean allowUserHome = true;
 
     @Override
-    public void setMounts(Collection<MountDir> mounts) {
-        this.mounts = mounts != null ? mounts : Collections.emptyList();
+    public void setMounts(MountManager mountManager) {
+        this.mountManager = mountManager;
     }
 
     @Override
@@ -98,7 +99,7 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
                 addDenyMount(args, System.getProperty("user.home"));
             }
 
-            for (MountDir mount : mounts) {
+            for (MountDir mount : mountManager.getMounts()) {
                 addMountBinding(args, mount, mount != null && mount.isWriteable() && mountWriteAllowed(mount, fsConfig, workPath));
             }
 
@@ -167,7 +168,7 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
     }
 
     private void addMountBindings(List<String> args) {
-        for (MountDir mount : mounts) {
+        for (MountDir mount : mountManager.getMounts()) {
             addMountBinding(args, mount, mount != null && mount.isWriteable());
         }
     }
@@ -182,7 +183,7 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
     }
 
     private void addMountReadRules(List<String> args, SandboxFsConfig fsConfig) {
-        for (MountDir mount : mounts) {
+        for (MountDir mount : mountManager.getMounts()) {
             if (mount == null || !mount.isEnabled() || mount.getRealPath() == null) {
                 continue;
             }
@@ -198,7 +199,7 @@ public class LinuxSandboxExecutor implements OsSandboxExecutor {
     }
 
     private void addMountWriteDenyRules(List<String> args, SandboxFsConfig fsConfig) {
-        for (MountDir mount : mounts) {
+        for (MountDir mount : mountManager.getMounts()) {
             if (mount == null || !mount.isEnabled() || mount.getRealPath() == null) {
                 continue;
             }

@@ -42,6 +42,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.lang.Nullable;
 
 /**
  * Claude Code 规范对齐的 CLI 基础执行才能
@@ -68,8 +69,8 @@ public class TerminalTalent extends AbsTalent {
     //关闭后可减少误伤（如构建工具被拦截），但安全性降低。仅在 sandboxEnabled=true 时有意义；默认 true 保持向后兼容
     private boolean sandboxSystemRestrict = true;
     private final MountManager mountManager; // 引入挂载管理器
-    private OsSandboxExecutor sandboxExecutor;
-    private SandboxConfig sandboxConfig;
+    private final OsSandboxExecutor sandboxExecutor;
+    private @Nullable SandboxConfig sandboxConfig;
     private final SandboxViolationStore violationStore = new SandboxViolationStore();
 
     private final String pythonCmd;
@@ -145,7 +146,6 @@ public class TerminalTalent extends AbsTalent {
     public void setSandboxConfig(SandboxConfig sandboxConfig) {
         this.sandboxConfig = sandboxConfig;
         if (sandboxExecutor != null) {
-            sandboxExecutor.setMounts(mountManager.getMounts());
             if (sandboxConfig != null) {
                 sandboxExecutor.setConfig(sandboxConfig);
             }
@@ -186,7 +186,7 @@ public class TerminalTalent extends AbsTalent {
         pythonCmd = executor.probePythonCommand();
         nodeCmd = executor.probeNodeCommand();
         this.sandboxExecutor = OsSandboxExecutorFactory.create(sandboxConfig);
-        this.sandboxExecutor.setMounts(mountManager.getMounts());
+        this.sandboxExecutor.setMounts(mountManager);
         this.sandboxExecutor.setAllowUserHome(sandboxAllowUserHome);
         this.sandboxExecutor.setViolationStore(violationStore);
     }
@@ -351,7 +351,6 @@ public class TerminalTalent extends AbsTalent {
         // 仅当 sandboxSystemRestrict=true 时启用，将安全隔离的重活交给 OS 内核
         // 关闭后仅保留 Java 层最小自保护（kill PID / exit / rm -rf /），减少误伤
         if (sandboxEnabled && sandboxSystemRestrict && sandboxExecutor != null && sandboxExecutor.isAvailable()) {
-            sandboxExecutor.setMounts(mountManager.getMounts());
             finalCommand = sandboxExecutor.wrapCommand(finalCommand, workPath, envs);
         }
 
@@ -389,7 +388,6 @@ public class TerminalTalent extends AbsTalent {
         // 仅当 sandboxSystemRestrict=true 时启用，将安全隔离的重活交给 OS 内核
         // 关闭后仅保留 Java 层最小自保护（kill PID / exit / rm -rf /），减少误伤
         if (sandboxEnabled && sandboxSystemRestrict && sandboxExecutor != null && sandboxExecutor.isAvailable()) {
-            sandboxExecutor.setMounts(mountManager.getMounts());
             finalCommand = sandboxExecutor.wrapCommand(finalCommand, targetWorkPath, envs);
         }
 
