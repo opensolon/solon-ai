@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent;
 
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 import java.util.HashMap;
@@ -31,7 +32,7 @@ import java.util.Map;
 public abstract class AbsAgentChunk implements AgentChunk {
     protected final String runId;
     protected final String agentName;
-    protected final ChatMessage message;
+    protected final @Nullable ChatMessage message;
     protected final transient AgentSession session;
     protected Map<String, Object> meta;
 

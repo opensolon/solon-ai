@@ -19,6 +19,7 @@ import com.knuddels.jtokkit.Encodings;
 import com.knuddels.jtokkit.api.Encoding;
 import com.knuddels.jtokkit.api.EncodingRegistry;
 import com.knuddels.jtokkit.api.ModelType;
+import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
@@ -33,6 +34,7 @@ import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.FluxSink;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -156,6 +158,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         // 预留缓冲，避免频繁重构
         if (messageSize <= maxMessages && currentTokens <= (maxTokens * 0.8)) {
+            pushContextChunk(trace, messages.size(), currentTokens, false, 0, 0, 0, 0);
             return;
         }
 
@@ -393,14 +396,23 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         }
 
         // 8. 更新工作区
+        int beforeSize = messages.size();
         compressed = removeDanglingToolOutputs(compressed);
         if (!compressed.equals(messages)) {
             trace.getWorkingMemory().replaceMessages(compressed);
 
             if (log.isDebugEnabled()) {
                 log.debug("ReActAgent [{}] compressed: {} -> {} messages (FirstChain size: {})",
-                        trace.getAgentName(), messages.size(), compressed.size(), firstList.size());
+                        trace.getAgentName(), beforeSize, compressed.size(), firstList.size());
             }
+
+            int afterTokens = estimateTokens(compressed, null);
+            pushContextChunk(trace, compressed.size(), afterTokens, true,
+                            beforeSize, compressed.size(),
+                            currentTokens, afterTokens);
+        } else {
+            // 压缩条件触发但实际未变更（兜底），仍推送当前状态
+            pushContextChunk(trace, messages.size(), currentTokens, false, 0, 0, 0, 0);
         }
     }
 
@@ -565,5 +577,27 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     private boolean isObservation(ChatMessage msg) {
         return (msg instanceof ToolMessage) ||
                 (msg instanceof UserMessage && msg.getContent() != null && msg.getContent().startsWith("Observation:"));
+    }
+
+    /**
+     * 向流式输出推送上下文状态块
+     */
+    private void pushContextChunk(ReActTrace trace, int msgCount, int tokenCount,
+                                  boolean compressed,
+                                  int beforeMessageCount, int afterMessageCount,
+                                  int beforeTokenCount, int afterTokenCount) {
+        try {
+            FluxSink<AgentChunk> sink = trace.getOptions().getStreamSink();
+            if (sink != null && !sink.isCancelled()) {
+                sink.next(new ContextChunk(trace, msgCount, tokenCount, compressed,
+                        beforeMessageCount, afterMessageCount,
+                        beforeTokenCount, afterTokenCount));
+            }
+        } catch (Exception e) {
+            if (log.isDebugEnabled()) {
+                log.debug("ReActAgent [{}] failed to push ContextChunk: {}",
+                        trace.getAgentName(), e.getMessage());
+            }
+        }
     }
 }
