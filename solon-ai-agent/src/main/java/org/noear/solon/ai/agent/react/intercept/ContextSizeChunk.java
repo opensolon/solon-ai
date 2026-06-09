@@ -30,6 +30,7 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("4.0.0")
 public class ContextSizeChunk extends AbsAgentChunk {
+    private final ReActTrace trace;
     /**
      * 当前上下文的总消息数
      */
@@ -64,6 +65,8 @@ public class ContextSizeChunk extends AbsAgentChunk {
                             int beforeMessageCount, int afterMessageCount,
                             int beforeTokenCount, int afterTokenCount) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession(), null);
+
+        this.trace = trace;
         this.messageCount = messageCount;
         this.tokenCount = tokenCount;
         this.compressed = compressed;
@@ -71,6 +74,10 @@ public class ContextSizeChunk extends AbsAgentChunk {
         this.afterMessageCount = afterMessageCount;
         this.beforeTokenCount = beforeTokenCount;
         this.afterTokenCount = afterTokenCount;
+    }
+
+    public ReActTrace getTrace() {
+        return trace;
     }
 
     /**
