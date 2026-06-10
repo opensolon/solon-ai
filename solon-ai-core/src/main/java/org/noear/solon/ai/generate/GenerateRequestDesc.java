@@ -48,11 +48,9 @@ public class GenerateRequestDesc {
         this.dialect = dialect;
         this.promptStr = promptStr;
         this.promptMap = promptMap;
-        this.options = new GenerateOptions();
 
-        if (Utils.isNotEmpty(config.getDefaultOptions())) {
-            this.options.options().putAll(config.getDefaultOptions());
-        }
+        this.options = new GenerateOptions();
+        this.options.putAll(config.getModelOptions());
     }
 
     /**

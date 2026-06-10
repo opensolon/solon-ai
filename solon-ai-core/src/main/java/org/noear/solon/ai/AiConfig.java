@@ -245,6 +245,7 @@ public class AiConfig implements Serializable {
         return "AiConfig{" +
                 "apiUrl='" + apiUrl + '\'' +
                 ", apiKey='" + apiKey + '\'' +
+                ", standard='" + standard + '\'' +
                 ", provider='" + provider + '\'' +
                 ", model='" + model + '\'' +
                 ", headers=" + headers +

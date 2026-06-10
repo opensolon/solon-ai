@@ -132,6 +132,7 @@ public class ChatConfig extends AiConfig {
         return "ChatConfig{" +
                 "apiUrl='" + apiUrl + '\'' +
                 ", apiKey='" + apiKey + '\'' +
+                ", standard='" + standard + '\'' +
                 ", provider='" + provider + '\'' +
                 ", model='" + model + '\'' +
                 ", headers=" + headers +

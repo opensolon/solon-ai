@@ -18,8 +18,8 @@ package org.noear.solon.ai.generate;
 import org.noear.solon.ai.AiConfig;
 import org.noear.solon.lang.Preview;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * 生成配置
@@ -30,7 +30,29 @@ import java.util.Map;
 @Preview("3.5")
 public class GenerateConfig extends AiConfig {
     private String taskUrl;
-    private final Map<String, Object> defaultOptions = new LinkedHashMap<>();
+    private Map<String, Object> defaultOptions;
+
+    //作为构建载体（方便转换）
+    private transient GenerateOptions modelOptions;
+
+    public GenerateConfig then(Consumer<GenerateConfig> build){
+        build.accept(this);
+        return this;
+    }
+
+    public GenerateOptions getModelOptions(){
+        if (modelOptions == null) {
+            modelOptions = new GenerateOptions();
+
+            if (defaultOptions != null) {
+                modelOptions.optionSet(defaultOptions);
+                defaultOptions = null;
+            }
+        }
+
+        return modelOptions;
+    }
+
 
     /**
      * 获取任务地址
@@ -57,14 +79,7 @@ public class GenerateConfig extends AiConfig {
      * 添加默认选项
      */
     public void addDefaultOption(String key, Object value) {
-        defaultOptions.put(key, value);
-    }
-
-    /**
-     * 获取所有默认选项
-     */
-    public Map<String, Object> getDefaultOptions() {
-        return defaultOptions;
+        getModelOptions().optionSet(key, value);
     }
 
     @Override
@@ -73,11 +88,11 @@ public class GenerateConfig extends AiConfig {
                 "apiUrl='" + apiUrl + '\'' +
                 ", apiKey='" + apiKey + '\'' +
                 ", taskUrl='" + taskUrl + '\'' +
+                ", standard='" + standard + '\'' +
                 ", provider='" + provider + '\'' +
                 ", model='" + model + '\'' +
                 ", headers=" + headers +
                 ", timeout=" + timeout +
-                ", defaultOptions=" + defaultOptions +
                 '}';
     }
 }

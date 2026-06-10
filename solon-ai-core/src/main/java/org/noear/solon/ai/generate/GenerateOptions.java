@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.generate;
 
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
 import java.util.LinkedHashMap;
@@ -30,6 +31,33 @@ import java.util.Map;
 public class GenerateOptions {
     public static GenerateOptions of() {
         return new GenerateOptions();
+    }
+
+    public void putAll(GenerateOptions from) {
+        if (from != null) {
+            if(Assert.isNotEmpty(from.options)) {
+                //支持配置形态，转为旨类型（llm 需要强类型）
+                for (Map.Entry<String, Object> entry : from.options.entrySet()) {
+                    if (entry.getValue() instanceof String) {
+                        String val = (String) entry.getValue();
+
+                        if (Assert.isBoolean(val)) {
+                            options.put(entry.getKey(), Boolean.parseBoolean(val));
+                        } else if (Assert.isNumber(val)) {
+                            if (val.indexOf('.') < 0) {
+                                options.put(entry.getKey(), Integer.parseInt(val));
+                            } else {
+                                options.put(entry.getKey(), Float.parseFloat(val));
+                            }
+                        } else {
+                            options.put(entry.getKey(), val);
+                        }
+                    } else {
+                        options.put(entry.getKey(), entry.getValue());
+                    }
+                }
+            }
+        }
     }
 
 
@@ -54,6 +82,14 @@ public class GenerateOptions {
      */
     public GenerateOptions optionSet(String key, Object val) {
         options.put(key, val);
+        return this;
+    }
+
+    public GenerateOptions optionSet(Map<String, Object> map) {
+        if (Assert.isNotEmpty(map)) {
+            options.putAll(map);
+        }
+
         return this;
     }
 

@@ -27,6 +27,7 @@ import java.net.Proxy;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Properties;
+import java.util.function.Consumer;
 
 /**
  * 生成模型
@@ -167,6 +168,14 @@ public class GenerateModel implements AiModel {
         }
 
         /**
+         * 模型选项
+         */
+        public Builder modelOptions(Consumer<GenerateOptions> consumer) {
+            consumer.accept(config.getModelOptions());
+            return this;
+        }
+
+        /**
          * 头信息设置
          */
         public Builder headerSet(String key, String value) {
@@ -179,14 +188,6 @@ public class GenerateModel implements AiModel {
          */
         public Builder userAgent(String userAgent){
             config.setUserAgent(userAgent);
-            return this;
-        }
-
-        /**
-         * 添加默认选项
-         */
-        public Builder defaultOptionAdd(String key, Object val) {
-            config.addDefaultOption(key, val);
             return this;
         }
 

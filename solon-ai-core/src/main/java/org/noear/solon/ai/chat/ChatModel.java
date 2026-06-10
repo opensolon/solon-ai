@@ -218,6 +218,14 @@ public class ChatModel implements AiModel {
         }
 
         /**
+         * 模型选项
+         */
+        public Builder modelOptions(Consumer<ModelOptionsAmend<?, ChatInterceptor>> consumer) {
+            consumer.accept(config.getModelOptions());
+            return this;
+        }
+
+        /**
          * 使用模型
          */
         public Builder contextLength(long contextLength) {
@@ -286,14 +294,6 @@ public class ChatModel implements AiModel {
          */
         public Builder outputSchema(Type type) {
             config.getModelOptions().outputSchema(type);
-            return this;
-        }
-
-        /**
-         * 模型选项
-         */
-        public Builder modelOptions(Consumer<ModelOptionsAmend<?, ChatInterceptor>> consumer) {
-            consumer.accept(config.getModelOptions());
             return this;
         }
 
