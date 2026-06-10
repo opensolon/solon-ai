@@ -11,6 +11,11 @@
 *  mcp channel 概念改为 transport （并保持兼容）???
 
 
+### 4.0.1
+
+* 优化 solon-ai-talent-cli TerminalTalent.grep 参数（采用正则匹配）
+
+
 ### 4.0.0
 
 * 变更 solon skill “概念”改为 solon talent（避免与 agent skill 的冲突）

@@ -616,23 +616,27 @@ public class TerminalTalent extends AbsTalent {
     }
 
     // --- 5. 搜索工具 ---
-    @ToolMapping(name = "grep", description = "递归搜索内容。返回 '路径:行号:内容'。在不确定文件位置时先执行搜索。支持逻辑路径（如 @pool）。query 支持正则表达式匹配。")
-    public String grep(@Param(value = "query", description = "搜索关键字，支持正则表达式。") String query,
+    @ToolMapping(name = "grep", description = "递归搜索内容。返回 '路径:行号:内容'。在不确定文件位置时先执行搜索。支持逻辑路径（如 @pool）。pattern 支持正则表达式匹配。")
+    public String grep(@Param(value = "pattern", description = "搜索内容，支持正则表达式匹配") String pattern,
                        @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
+                       @Param(value = "include", required = false, description = "要包含的文件模式（如 \"*.js\"、\"*.{ts,tsx}\"）") String include,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
         Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
 
         // 预编译正则，若语法无效则回退到 contains 匹配
         final Pattern finalPattern;
-        Pattern pattern = null;
+        Pattern compiled = null;
         try {
-            pattern = Pattern.compile(query);
+            compiled = Pattern.compile(pattern);
         } catch (PatternSyntaxException ignored) {
             // 正则语法错误，回退到 contains 匹配
         } finally {
-            finalPattern = pattern;
+            finalPattern = compiled;
         }
+
+        // 构建 include 的 PathMatcher（如果提供了 include 参数）
+        final PathMatcher includeMatcher = buildIncludeMatcher(include);
 
         StringBuilder sb = new StringBuilder();
         Path policyRoot = support.getSandboxPolicyRoot(workPath, path);
@@ -652,6 +656,11 @@ public class TerminalTalent extends AbsTalent {
                     return FileVisitResult.CONTINUE;
                 }
 
+                // include 过滤：如果指定了文件模式，仅匹配符合模式的文件
+                if (includeMatcher != null && !includeMatcher.matches(file.getFileName())) {
+                    return FileVisitResult.CONTINUE;
+                }
+
                 if (attrs.size() > 10 * 1024 * 1024 || support.isNotTextFile(file)) {
                     return FileVisitResult.CONTINUE;
                 }
@@ -661,7 +670,7 @@ public class TerminalTalent extends AbsTalent {
                     String line;
                     while ((line = reader.readLine()) != null) {
                         lineNum++;
-                        if (finalPattern != null ? finalPattern.matcher(line).find() : line.contains(query)) {
+                        if (finalPattern != null ? finalPattern.matcher(line).find() : line.contains(pattern)) {
                             String trimmedLine = line.trim();
                             if (trimmedLine.length() > 1000) {
                                 trimmedLine = trimmedLine.substring(0, 1000) + "...(line truncated)";
@@ -732,6 +741,19 @@ public class TerminalTalent extends AbsTalent {
     }
 
     // --- 内部逻辑逻辑 ---
+
+    /**
+     * 构建 include 参数对应的 PathMatcher。
+     * 支持简单的 glob 模式，如 "*.java", "*.{ts,tsx}" 等。
+     * 仅匹配文件名部分（非路径）。
+     */
+    private PathMatcher buildIncludeMatcher(String include) {
+        if (include == null || include.isEmpty()) {
+            return null;
+        }
+        // Java 的 glob 语法天然支持 {ts,tsx} 这种模式
+        return FileSystems.getDefault().getPathMatcher("glob:" + include.replace("\\", "/"));
+    }
 
     private Path getWorkPath(String __cwd) {
         String path = (__cwd != null) ? __cwd : mountManager.getWorkDir();
