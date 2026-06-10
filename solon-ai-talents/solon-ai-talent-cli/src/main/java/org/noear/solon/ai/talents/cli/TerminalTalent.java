@@ -39,6 +39,8 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -614,12 +616,23 @@ public class TerminalTalent extends AbsTalent {
     }
 
     // --- 5. 搜索工具 ---
-    @ToolMapping(name = "grep", description = "递归搜索内容。返回 '路径:行号:内容'。在不确定文件位置时先执行搜索。支持逻辑路径（如 @pool）。")
-    public String grep(@Param(value = "query", description = "关键字。") String query,
+    @ToolMapping(name = "grep", description = "递归搜索内容。返回 '路径:行号:内容'。在不确定文件位置时先执行搜索。支持逻辑路径（如 @pool）。query 支持正则表达式匹配。")
+    public String grep(@Param(value = "query", description = "搜索关键字，支持正则表达式。") String query,
                        @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
         Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
+
+        // 预编译正则，若语法无效则回退到 contains 匹配
+        final Pattern finalPattern;
+        Pattern pattern = null;
+        try {
+            pattern = Pattern.compile(query);
+        } catch (PatternSyntaxException ignored) {
+            // 正则语法错误，回退到 contains 匹配
+        } finally {
+            finalPattern = pattern;
+        }
 
         StringBuilder sb = new StringBuilder();
         Path policyRoot = support.getSandboxPolicyRoot(workPath, path);
@@ -648,7 +661,7 @@ public class TerminalTalent extends AbsTalent {
                     String line;
                     while ((line = reader.readLine()) != null) {
                         lineNum++;
-                        if (line.contains(query)) {
+                        if (finalPattern != null ? finalPattern.matcher(line).find() : line.contains(query)) {
                             String trimmedLine = line.trim();
                             if (trimmedLine.length() > 1000) {
                                 trimmedLine = trimmedLine.substring(0, 1000) + "...(line truncated)";
