@@ -42,7 +42,7 @@ public class TerminalTalentGrepTest {
                     Arrays.asList("# My Project", "hello everyone", "goodbye"));
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            String result = talent.grep("hello", ".", workDir.toString());
+            String result = talent.grep("hello", ".", null, workDir.toString());
 
             assertTrue(result.contains("hello"), "应该匹配到 'hello' 关键字");
             // 两个文件都应出现
@@ -61,7 +61,7 @@ public class TerminalTalentGrepTest {
                     Arrays.asList("INFO: server started", "DEBUG: loading config", "INFO: listening on port 8080"));
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            String result = talent.grep("INFO", ".", workDir.toString());
+            String result = talent.grep("INFO", ".", null, workDir.toString());
 
             assertTrue(result.contains("server started"), "应该匹配第一条 INFO");
             assertTrue(result.contains("listening on port 8080"), "应该匹配第二条 INFO");
@@ -82,7 +82,7 @@ public class TerminalTalentGrepTest {
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
             // \d{5} 匹配恰好 5 位数字
-            String result = talent.grep("\\d{5}", ".", workDir.toString());
+            String result = talent.grep("\\d{5}", ".", null, workDir.toString());
 
             assertTrue(result.contains("12345"), "应该匹配 12345");
             assertTrue(result.contains("67890"), "应该匹配 67890");
@@ -101,7 +101,7 @@ public class TerminalTalentGrepTest {
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
             // | 表示"或"
-            String result = talent.grep("WARN|ERROR", ".", workDir.toString());
+            String result = talent.grep("WARN|ERROR", ".", null, workDir.toString());
 
             assertTrue(result.contains("WARN"), "应该匹配 WARN");
             assertTrue(result.contains("ERROR"), "应该匹配 ERROR");
@@ -120,7 +120,7 @@ public class TerminalTalentGrepTest {
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
             // (?i) 忽略大小写
-            String result = talent.grep("(?i)error", ".", workDir.toString());
+            String result = talent.grep("(?i)error", ".", null, workDir.toString());
 
             assertTrue(result.contains("Error"), "应该匹配 Error");
             assertTrue(result.contains("ERROR"), "应该匹配 ERROR");
@@ -139,7 +139,7 @@ public class TerminalTalentGrepTest {
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
             // \b 词边界：只匹配独立单词 age
-            String result = talent.grep("\\bage\\b", ".", workDir.toString());
+            String result = talent.grep("\\bage\\b", ".", null, workDir.toString());
 
             assertTrue(result.contains("int age = 10"), "应该匹配独立单词 age");
             assertTrue(result.contains("age is 10"), "应该匹配字符串中的独立单词 age");
@@ -158,7 +158,7 @@ public class TerminalTalentGrepTest {
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
             // ^ 行首：匹配非注释行
-            String result = talent.grep("^server\\.", ".", workDir.toString());
+            String result = talent.grep("^server\\.", ".", null, workDir.toString());
 
             assertTrue(result.contains("server.port"), "应该匹配 server.port");
             assertTrue(result.contains("server.host=0.0.0.0"), "应该匹配第二个 server.host");
@@ -179,7 +179,7 @@ public class TerminalTalentGrepTest {
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
             // "[unclosed" 括号未闭合，是非法正则，应回退到 contains 子串匹配
-            String result = talent.grep("[unclosed", ".", workDir.toString());
+            String result = talent.grep("[unclosed", ".", null, workDir.toString());
 
             assertTrue(result.contains("[unclosed"), "非法正则应回退到 contains 匹配");
         } finally {
@@ -196,7 +196,7 @@ public class TerminalTalentGrepTest {
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
             // "(bar" 括号未闭合，是非法正则，应回退到 contains
-            String result = talent.grep("(bar", ".", workDir.toString());
+            String result = talent.grep("(bar", ".", null, workDir.toString());
 
             assertTrue(result.contains("foo(bar)"), "非法正则 ' (bar' 应回退到 contains 匹配");
         } finally {
@@ -213,7 +213,7 @@ public class TerminalTalentGrepTest {
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
             // "Users\" 末尾反斜杠，非法正则，应回退到 contains
-            String result = talent.grep("Users\\", ".", workDir.toString());
+            String result = talent.grep("Users\\", ".", null, workDir.toString());
 
             assertTrue(result.contains("Users\\test"), "非法正则 ' Users\\' 应回退到 contains");
         } finally {
@@ -231,7 +231,7 @@ public class TerminalTalentGrepTest {
                     Arrays.asList("nothing here"));
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            String result = talent.grep("nonexistent", ".", workDir.toString());
+            String result = talent.grep("nonexistent", ".", null, workDir.toString());
 
             assertEquals("未找到结果。", result, "无匹配时应返回固定提示");
         } finally {
@@ -254,7 +254,7 @@ public class TerminalTalentGrepTest {
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
             // 只在 src/main 下搜索
-            String result = talent.grep("TODO", "src/main", workDir.toString());
+            String result = talent.grep("TODO", "src/main", null, workDir.toString());
 
             assertTrue(result.contains("implement"), "应该匹配 src/main 下的 TODO");
             assertFalse(result.contains("add tests"), "不应该搜索到 src/test 下的 TODO");
@@ -276,7 +276,7 @@ public class TerminalTalentGrepTest {
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
             // cwd 设为 module-a，path 用 "." 表示当前目录
-            String result = talent.grep("FIXME", ".", workDir.resolve("module-a").toString());
+            String result = talent.grep("FIXME", ".", null, workDir.resolve("module-a").toString());
 
             assertTrue(result.contains("bug here"), "应该匹配 module-a 下的 FIXME");
             assertFalse(result.contains("optimize"), "不应该匹配 module-b 下的 FIXME");

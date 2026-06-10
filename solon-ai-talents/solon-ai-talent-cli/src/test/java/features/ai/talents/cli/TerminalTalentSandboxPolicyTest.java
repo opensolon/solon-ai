@@ -470,7 +470,7 @@ public class TerminalTalentSandboxPolicyTest {
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
             talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
-            String grepResult = talent.grep("outside-secret-token", ".", workDir.toString());
+            String grepResult = talent.grep("outside-secret-token", ".", null, workDir.toString());
             assertTrue(!grepResult.contains("outside-secret-token"), grepResult);
 
             String globResult = talent.glob("**/*.txt", ".", workDir.toString());
