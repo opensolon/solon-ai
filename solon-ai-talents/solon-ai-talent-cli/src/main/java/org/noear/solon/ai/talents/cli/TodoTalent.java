@@ -117,8 +117,15 @@ public class TodoTalent extends AbsTalent {
         }
         Files.write(todoFile, content.getBytes(StandardCharsets.UTF_8));
 
-        int lines = todosMarkdown.split("\n").length;
+        int total = 0, done = 0, inProgress = 0, pending = 0;
+        for (String line : content.split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("- [x]")) { total++; done++; }
+            else if (trimmed.startsWith("- [/]")) { total++; inProgress++; }
+            else if (trimmed.startsWith("- [ ]")) { total++; pending++; }
+        }
 
-        return "TODO saved (" + lines + " lines).";
+        return String.format("TODO saved (total: %d, done: %d, in-progress: %d, pending: %d).",
+                total, done, inProgress, pending);
     }
 }
