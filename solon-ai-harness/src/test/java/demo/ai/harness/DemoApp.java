@@ -9,9 +9,6 @@ import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.talents.mount.MountType;
-import org.noear.solon.ai.talents.lsp.LspServerParameters;
-
-import java.util.Arrays;
 
 public class DemoApp {
     public static void main(String[] arg) throws Throwable {
@@ -35,32 +32,6 @@ public class DemoApp {
                 .extensionAdd((name, builder) -> {
                     //...
                 })
-                .mcpServerAdd("xxx", null)
-                //--- 配置 LSP 服务器（按需启用，提供代码智能补全、跳转定义、诊断等能力）
-                .lspServerAdd("java", new LspServerParameters(
-                        Arrays.asList("jdtls", "-data", ".solon/lsp/java-workspace"),
-                        Arrays.asList(".java")
-                ))
-                .lspServerAdd("typescript", new LspServerParameters(
-                        Arrays.asList("typescript-language-server", "--stdio"),
-                        Arrays.asList(".ts", ".tsx", ".js", ".jsx")
-                ))
-                .lspServerAdd("go", new LspServerParameters(
-                        Arrays.asList("gopls"),
-                        Arrays.asList(".go")
-                ))
-                .lspServerAdd("python", new LspServerParameters(
-                        Arrays.asList("pylsp"),
-                        Arrays.asList(".py", ".pyi")
-                ))
-                .lspServerAdd("rust", new LspServerParameters(
-                        Arrays.asList("rust-analyzer"),
-                        Arrays.asList(".rs")
-                ))
-                .lspServerAdd("clangd", new LspServerParameters(
-                        Arrays.asList("clangd", "--background-index"),
-                        Arrays.asList(".c", ".cpp", ".cc", ".h", ".hpp")
-                ))
                 .build();
 
         //engine.getMcpGatewayTalent().addMcpServer(...);
