@@ -17,7 +17,6 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.AgentInterceptor;
 import org.noear.solon.ai.agent.react.task.ToolExchanger;
-import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.message.AssistantMessage;
