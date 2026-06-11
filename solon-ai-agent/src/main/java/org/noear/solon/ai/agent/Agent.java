@@ -207,6 +207,7 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
     // --- Context Keys ---
     static String KEY_CURRENT_UNIT_TRACE_KEY = "_current_unit_trace_key_";
     static String KEY_CURRENT_TEAM_TRACE_KEY = "_current_team_trace_key_";
+    static String KEY_PENDING_REASON = "_pending_reason_";
     static String KEY_SESSION = "_SESSION_";
     static String KEY_PROTOCOL = "_PROTOCOL_";
 

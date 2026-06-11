@@ -64,9 +64,9 @@ public interface AgentSession extends ChatSession, NonSerializable {
         }
 
         if (reason == null) {
-            getContext().remove("_pending_reason_");
+            getContext().remove(Agent.KEY_PENDING_REASON);
         } else {
-            getContext().put("_pending_reason_", reason);
+            getContext().put(Agent.KEY_PENDING_REASON, reason);
         }
     }
 
@@ -81,6 +81,6 @@ public interface AgentSession extends ChatSession, NonSerializable {
      * 获取挂起原因
      */
     default String getPendingReason() {
-        return getContext().getAs("_pending_reason_");
+        return getContext().getAs(Agent.KEY_PENDING_REASON);
     }
 }
