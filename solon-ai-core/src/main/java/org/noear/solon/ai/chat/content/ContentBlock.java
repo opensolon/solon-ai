@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat.content;
 
+import java.io.Serializable;
 import java.util.Map;
 
 /**
@@ -24,7 +25,7 @@ import java.util.Map;
  * @since 3.1
  * @since 3.9.2
  */
-public interface ContentBlock {
+public interface ContentBlock extends Serializable {
     /**
      * 源信息
      */
