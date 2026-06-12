@@ -21,7 +21,6 @@ import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
-import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.annotation.Param;
 
@@ -79,7 +78,7 @@ public class WebsearchTalent extends AbsTalent {
     }
 
     @ToolMapping(name = "websearch", description = "执行实时web搜索")
-    public Document websearch(
+    public String websearch(
             @Param(name = "query", description = "查询关键字") String query,
             @Param(name = "numResults", required = false, defaultValue = "8", description = "返回的结果数量") Integer numResults,
             @Param(name = "livecrawl", required = false, defaultValue = "fallback", description = "实时爬行模式 (fallback/preferred)") String livecrawl,
@@ -116,19 +115,14 @@ public class WebsearchTalent extends AbsTalent {
         }
 
         // 4. 解析内容
+        String content;
         if (Utils.isNotEmpty(result.getContent())) {
-            return new Document()
-                    .title("Web search: " + query)
-                    .content(result.getContent())
-                    .metadata("query", query)
-                    .metadata("type", type) // 增加搜索类型溯源
-                    .metadata("source", "exa.ai");
+            content = result.getContent();
+        } else {
+            // 5. 兜底处理 (与原版文案完全对齐)
+            content = "No search results found. Please try a different query.";
         }
 
-        // 5. 兜底处理 (与原版文案完全对齐)
-        return new Document()
-                .title("Web search: " + query)
-                .content("No search results found. Please try a different query.");
-
+        return content;
     }
 }

@@ -26,7 +26,6 @@ import org.noear.solon.annotation.Param;
 
 import java.time.Duration;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -85,7 +84,7 @@ public class CodeSearchTalent extends AbsTalent {
                     "- 默认 5000 Token 为大多数查询提供均衡的上下文\n" +
                     "- 支持关于框架、库、API 以及编程概念的查询\n" +
                     "- 示例：'React 状态管理'、'Spring Boot 响应式编程'、'Solon 插件开发'")
-    public Map<String, Object> codesearch(@Param(name = "query", description = "搜索查询词，用于查找 API、库和 SDK 的相关上下文。 " +
+    public String codesearch(@Param(name = "query", description = "搜索查询词，用于查找 API、库和 SDK 的相关上下文。 " +
                                  "例如：'React useState 钩子示例'、'Python pandas 数据框过滤'、" +
                                  "'Express.js 中间件'、'Next.js 局部预渲染配置'")
                          String query,
@@ -121,20 +120,14 @@ public class CodeSearchTalent extends AbsTalent {
         }
 
         String title = "Code search: " + query;
-        Map<String, Object> response = new LinkedHashMap<>();
-
+        String output;
         if (Utils.isNotEmpty(result.getContent())) {
-            response.put("output", result.getContent());
-            response.put("title", title);
-            response.put("metadata", new HashMap<>()); // 成功时 metadata 为空
+            output = result.getContent();
         } else {
-            String fallback = "未找到相关的代码片段或文档。请尝试更换查询词，" +
+            output = "未找到相关的代码片段或文档。请尝试更换查询词，" +
                     "明确具体的库或编程概念，并检查框架名称拼写是否正确。";
-            response.put("output", fallback);
-            response.put("title", title);
-            response.put("metadata", new HashMap<>());
         }
 
-        return response;
+        return output;
     }
 }

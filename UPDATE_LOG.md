@@ -13,9 +13,11 @@
 
 ### 4.0.1
 
-* 优化 solon-ai-talent-cli TerminalTalent.grep 参数（采用正则匹配，并添加 include）
+* 优化 solon-ai-talent-cli TerminalTalent.grep 参数（采用正则匹配，并增加 include）
+* 优化 solon-ai-talent-cli TodoTalent 返回内容，增加各状态数据描述
+* 优化 solon-ai-talent-web CodeSearchTalent，WebfetchTalent，WebsearchTalent 返回格式
 * 重构 solon-ai-core EmbeddingOptions 参数合并逻辑，将字符串类型的配置值自动转换为布尔、整数或浮点等强类型
-
+* tika 升为 2.9.4
 
 ### 4.0.0
 

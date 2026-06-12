@@ -19,7 +19,7 @@ import com.vladsch.flexmark.html2md.converter.FlexmarkHtmlConverter;
 import org.jsoup.Jsoup;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.talent.AbsTalent;
-import org.noear.solon.ai.rag.Document;
+import org.noear.solon.ai.util.MarkdownUtil;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
@@ -30,6 +30,8 @@ import org.noear.solon.net.http.HttpUtils;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Web 抓取工具 (类似 curl)
@@ -62,8 +64,8 @@ public class WebfetchTalent extends AbsTalent {
         return this;
     }
 
-    @ToolMapping(name = "webfetch", description = "从 URL 获取网页内容。返回格式支持 markdown, text 或 html。")
-    public Document webfetch(
+    @ToolMapping(name = "webfetch", description = "从 URL 获取网页内容。返回 Markdown，正文前包含 YAML Front Matter 元数据。")
+    public String webfetch(
             @Param(name = "url", description = "目标网页的完整 URL（必须包含 http:// 或 https://）") String url,
             @Param(name = "format", required = false, defaultValue = "markdown", description = "返回格式：'markdown', 'text', 'html'") String format,
             @Param(name = "timeoutMs", required = false, description = "超时时间（毫秒），最大 120_000 毫秒") Integer timeoutMs
@@ -123,18 +125,15 @@ public class WebfetchTalent extends AbsTalent {
         String contentType = response.header("Content-Type");
         if (contentType == null) contentType = "";
         String mime = contentType.split(";")[0].trim().toLowerCase();
-        String title = url + " (" + contentType + ")";
 
         // 6. 图片处理
         boolean isImage = mime.startsWith("image/") && !mime.contains("svg") && !mime.contains("vnd.fastbidsheet");
         if (isImage) {
             String base64 = Base64.getEncoder().encodeToString(bodyBytes);
-            return new Document()
-                    .title(title)
-                    .content("Image fetched successfully")
-                    .metadata("type", "file")
-                    .metadata("mime", mime)
-                    .metadata("url", "data:" + mime + ";base64," + base64);
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("content_type", contentType);
+            metadata.put("url", "data:" + mime + ";base64," + base64);
+            return MarkdownUtil.toMarkdownWithMetadata(metadata, "Image fetched successfully");
         }
 
         // 7. 内容转换核心逻辑
@@ -152,12 +151,12 @@ public class WebfetchTalent extends AbsTalent {
             output = rawContent;
         }
 
-        return new Document()
-                .title(title)
-                .content(output)
-                .metadata("url", url)
-                .metadata("contentType", contentType);
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("content_type", contentType);
+        metadata.put("format", finalFormat);
+        return MarkdownUtil.toMarkdownWithMetadata(metadata, output);
     }
+
 
     private String extractTextFromHtml(String html) {
         org.jsoup.nodes.Document doc = Jsoup.parse(html);

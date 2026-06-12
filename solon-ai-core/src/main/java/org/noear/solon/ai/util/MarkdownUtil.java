@@ -19,6 +19,7 @@ import org.noear.solon.core.util.Assert;
 import org.yaml.snakeyaml.Yaml;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 有元数据（YamlFrontmatter）的 markdown 文档工具
@@ -87,5 +88,32 @@ public class MarkdownUtil {
         }
 
         return markdown;
+    }
+
+    public static String toMarkdownWithMetadata(Map<String, Object> metadata, String content) {
+        StringBuilder buf = new StringBuilder();
+        buf.append("---\n");
+        for (Map.Entry<String, Object> entry : metadata.entrySet()) {
+            if (entry.getValue() != null) {
+                buf.append(entry.getKey()).append(": ").append(toYamlValue(entry.getValue())).append("\n");
+            }
+        }
+        buf.append("---\n\n");
+        if (content != null) {
+            buf.append(content);
+        }
+        return buf.toString();
+    }
+
+    private static String toYamlValue(Object value) {
+        if (value instanceof Number || value instanceof Boolean) {
+            return String.valueOf(value);
+        }
+
+        String str = String.valueOf(value);
+        return "\"" + str.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\r", "\\r")
+                .replace("\n", "\\n") + "\"";
     }
 }
