@@ -145,6 +145,7 @@ public class PromptImpl implements Prompt, Serializable {
         for (ChatMessage msg : msgs) {
             if (msg != null) {
                 this.messages.add(msg);
+                this.userContent = null;
             }
         }
 
@@ -187,6 +188,8 @@ public class PromptImpl implements Prompt, Serializable {
     @Override
     public void clear() {
         messages.clear();
+        this.userContent = null;
+        this.systemContent = null;
     }
 
     @Override
