@@ -149,4 +149,34 @@ public class PromptTest {
         // 没有任何系统消息时的分支
         Assertions.assertNull(emptyUser.getSystemContent());
     }
+
+    @Test
+    @DisplayName("8. clear 清理消息与缓存内容")
+    public void testClearInvalidatesCachedContent() {
+        Prompt prompt = new PromptImpl();
+        prompt.addMessage(ChatMessage.ofSystem("sys1"));
+        prompt.addMessage("user1");
+
+        Assertions.assertEquals("sys1", prompt.getSystemContent());
+        Assertions.assertEquals("user1", prompt.getUserContent());
+
+        prompt.clear();
+
+        Assertions.assertTrue(prompt.isEmpty());
+        Assertions.assertEquals(0, prompt.size());
+        Assertions.assertNull(prompt.getSystemContent());
+        Assertions.assertNull(prompt.getUserContent());
+    }
+
+    @Test
+    @DisplayName("9. addMessage 清理用户内容缓存")
+    public void testAddMessageInvalidatesUserContentCache() {
+        Prompt prompt = new PromptImpl();
+        prompt.addMessage("user1");
+        Assertions.assertEquals("user1", prompt.getUserContent());
+
+        prompt.addMessage(ChatMessage.ofUser("user2"));
+
+        Assertions.assertEquals("user2", prompt.getUserContent());
+    }
 }
