@@ -110,11 +110,13 @@ public class TerminalSupport {
         }
 
         // 1. 将内容按行拆分
-        List<String> originalLines = new ArrayList<>(Arrays.asList(content.split("\n", -1)));
-        // 如果文件以换行结尾，移除末尾的空行标记（java-diff-utils 的 patch.applyTo 会处理末尾换行）
-        if (!content.isEmpty() && !content.endsWith("\n")) {
-            // 不以换行结尾，需要特殊处理：去掉最后一行的空字符串
-        }
+        // 记录原文换行风格，应用补丁后按原风格还原（避免破坏 Windows CRLF 文件）。
+        // 将内容规范化为 \n 后再拆分：diff 行在 prepareDiffLines 中以 \R 拆分（不含 \r），
+        // 若原文保留 \r 会导致上下文行无法匹配，CRLF 文件补丁必然失败，故此处统一规范化。
+        // 注：split("\n", -1) 与 String.join 对末尾换行可逆，无需额外处理空尾行。
+        String lineSeparator = content.contains("\r\n") ? "\r\n" : "\n";
+        String normalizedContent = content.replace("\r\n", "\n").replace("\r", "\n");
+        List<String> originalLines = new ArrayList<>(Arrays.asList(normalizedContent.split("\n", -1)));
 
         // 2. 清洗并准备 diff 行
         List<String> diffLines = prepareDiffLines(diffContent);
@@ -125,8 +127,8 @@ public class TerminalSupport {
         // 4. 应用补丁
         List<String> patchedLines = patch.applyTo(originalLines);
 
-        // 5. 重新拼接为字符串
-        return String.join("\n", patchedLines);
+        // 5. 按原文换行风格重新拼接为字符串
+        return String.join(lineSeparator, patchedLines);
     }
 
     /**
@@ -141,10 +143,15 @@ public class TerminalSupport {
         String[] lines = cleanDiff.split("\\R");
         List<String> result = new ArrayList<>();
 
-        // 检查是否已有 ---/+++ 头信息
+        // 检查是否已有 ---/+++ 头信息。
+        // 仅扫描首个 @@ hunk 之前的行，且要求 "--- " 带空格（git 标准头格式）；
+        // 避免把待删除的内容行（如 Markdown 分隔线 "---" 在 diff 中呈现为 "----"）误判为文件头。
         boolean hasHeader = false;
         for (String line : lines) {
-            if (line.startsWith("---")) {
+            if (line.startsWith("@@")) {
+                break;
+            }
+            if (line.startsWith("--- ")) {
                 hasHeader = true;
                 break;
             }

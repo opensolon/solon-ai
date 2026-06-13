@@ -504,6 +504,17 @@ public class TerminalTalent extends AbsTalent {
                 // 实时检测物理长度限制 (Char Size)
                 if (contentBuilder.length() + lineOutput.length() > TerminalSupport.MAX_CHARACTER_LIMIT) {
                     isByteTruncated = true;
+                    // 边界：单行本身超过物理上限（如 minified JS/CSS、单行大 JSON）时 contentBuilder 仍为空，
+                    // 直接 break 会导致无内容输出且 actualEndLine 不前进，分页提示 offset 与本次相同 → AI 重试死循环。
+                    // 故输出该行的安全截断片段并让行号前进一行，保证分页可推进。
+                    if (contentBuilder.length() == 0) {
+                        String prefix = String.format("%6d | ", startLine0 + count + 1);
+                        int slice = Math.max(0, Math.min(line.length(), TerminalSupport.MAX_CHARACTER_LIMIT - prefix.length() - 16));
+                        contentBuilder.append(prefix)
+                                .append(line, 0, slice)
+                                .append("…(单行过长已截断)\n");
+                        actualEndLine++;
+                    }
                     break;
                 }
 
@@ -579,6 +590,8 @@ public class TerminalTalent extends AbsTalent {
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
         Path target = support.resolveSafePath(workPath, filePath, false, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
+        // 第二次调用仅用于触发写权限校验（writeMode=true）：edit 会落盘写入，
+        // 须确保目标不在只读挂载点 / 写入拒绝规则内；返回值无需使用。
         support.resolveSafePath(workPath, filePath, true, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
 
         if (!Files.exists(target)) {
