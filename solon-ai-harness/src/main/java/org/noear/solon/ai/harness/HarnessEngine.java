@@ -487,10 +487,29 @@ public class HarnessEngine {
      * 动态授权一个工具（允许使用）
      */
     public void allowTool(String toolName) {
-        if (toolName == null || toolName.trim().isEmpty()) return;
+        if (Assert.isEmpty(toolName)) {
+            return;
+        }
 
         options.getDisallowedTools().remove(toolName);
         options.getTools().add(toolName);
+
+        // 权限变更需要重建 Agent 以重新生成工具集
+        agentLock.lock();
+        try {
+            if (this.mainAgent != null) {
+                this.mainAgent = createMainAgent();
+            }
+        } finally {
+            agentLock.unlock();
+        }
+    }
+
+    public void allowToolReset(Collection<String> tools){
+        options.getTools().clear();
+        if(tools != null) {
+            options.getTools().addAll(tools);
+        }
 
         // 权限变更需要重建 Agent 以重新生成工具集
         agentLock.lock();
@@ -507,11 +526,30 @@ public class HarnessEngine {
      * 动态撤销一个工具的权限（禁用）
      */
     public void disallowTool(String toolName) {
-        if (toolName == null || toolName.trim().isEmpty()) return;
+        if (Assert.isEmpty(toolName)) {
+            return;
+        }
 
         options.getTools().remove(toolName);
         options.getDisallowedTools().add(toolName);
 
+        agentLock.lock();
+        try {
+            if (this.mainAgent != null) {
+                this.mainAgent = createMainAgent();
+            }
+        } finally {
+            agentLock.unlock();
+        }
+    }
+
+    public void disallowToolReset(Collection<String> disallowedTools){
+        options.getDisallowedTools().clear();
+        if(disallowedTools != null) {
+            options.getDisallowedTools().addAll(disallowedTools);
+        }
+
+        // 权限变更需要重建 Agent 以重新生成工具集
         agentLock.lock();
         try {
             if (this.mainAgent != null) {
