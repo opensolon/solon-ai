@@ -38,6 +38,8 @@ public class TodoTalent extends AbsTalent {
 
     public static final String TODO_FILE_NAME = "TODO.md";
 
+    public static final String PARAM_TODOS = "todos";
+
     private final String relativeDir;
 
     public TodoTalent() {

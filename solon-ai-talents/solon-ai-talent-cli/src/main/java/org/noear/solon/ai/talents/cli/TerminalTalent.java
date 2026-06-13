@@ -53,6 +53,14 @@ import org.noear.solon.lang.Nullable;
  * @since 3.9.1
  */
 public class TerminalTalent extends AbsTalent {
+    public static final String TOOL_WRITE = "write";
+    public static final String TOOL_EDIT = "edit";
+
+    public static final String PARAM_EDITS = "edits";
+    public static final String PARAM_CONTENT = "content";
+
+
+
     static enum ShellMode {
         CMD, POWERSHELL, UNIX_SHELL
     }
