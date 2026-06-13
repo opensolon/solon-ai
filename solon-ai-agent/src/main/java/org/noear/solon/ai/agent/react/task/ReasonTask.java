@@ -98,13 +98,13 @@ public class ReasonTask {
                 LOG.info("ReActAgent [{}] auto-rethink triggered. New maxTurns: {}", config.getName(), trace.getOptions().getMaxTurns());
 
                 String rethinkPrompt = String.format(
-                        "【自动重审 (Auto-Rethink)】任务执行已达第 %d 回合（上限 %d）。\n" +
-                                "请停止当前的常规推理循环，立即进行自审：\n" +
-                                "1. **核心目标检查**：你距离解决最初提出的问题还有多远？\n" +
-                                "2. **有效性评估**：如果最近的尝试没有带来新线索，说明策略已失效，请更换思路。\n" +
-                                "3. **强制收敛**：若确定无法达成，请总结已知线索并在 Final Answer 中申请用户协助。\n" +
-                                "请在下一轮 Thought 中陈述新策略后继续。",
-                        currentTurn, maxTurns
+                        "【系统指令：自动重审 (Auto-Rethink)】\n" +
+                                "当前任务已执行至第 %d 回合。为了确保任务准确高效完成，请立即启动自审程序：\n\n" +
+                                "1. **核心目标检查**：重新审视用户最初提出的核心问题和当前要解决的任务，评估你当前的方向是否偏离了主线？\n" +
+                                "2. **有效性评估**：检查历史 Observation。如果最近的尝试没有带来有效新线索，说明当前策略已失效，请必须更换思路或换个角度切入。\n" +
+                                "3. **强制收敛**：若评估判定由于客观限制确实无法达成，请梳理已知线索，并在 Final Answer 中向用户复盘并申请协助。\n\n" +
+                                "根据新策略决定下一步行动，或直接输出 Final Answer 结束任务",
+                        currentTurn
                 );
 
                 trace.getWorkingMemory().addMessage(ChatMessage.ofUser(rethinkPrompt));
