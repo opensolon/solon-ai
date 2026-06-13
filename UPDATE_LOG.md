@@ -14,6 +14,7 @@
 ### 4.0.1
 
 * 添加 solon-ai-harness allowToolReset,disallowToolReset 方法
+* 添加 solon-ai-harness 子代理 ContextSizeChunk 流传递
 * 优化 solon-ai-talent-cli TerminalTalent.grep 参数（采用正则匹配，并增加 include）
 * 优化 solon-ai-talent-cli TodoTalent 返回内容，增加各状态数据描述
 * 优化 solon-ai-talent-web CodeSearchTalent，WebfetchTalent，WebsearchTalent 返回格式
