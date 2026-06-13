@@ -143,12 +143,10 @@ public class TerminalTalentSandboxPolicyTest {
             SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
             talent.setSandboxConfig(config);
 
-            TerminalTalent.EditOp op = new TerminalTalent.EditOp();
-            op.oldStr = "old";
-            op.newStr = "new";
+            String diff = "--- a/private.txt\n+++ b/private.txt\n@@ -1 +1 @@\n-old\n+new\n";
 
             SecurityException ex = assertThrows(SecurityException.class,
-                    () -> talent.edit("secret/private.txt", Collections.singletonList(op), workDir.toString()));
+                    () -> talent.edit("secret/private.txt", diff, workDir.toString()));
             assertTrue(ex.getMessage().contains("读取拒绝"), ex.getMessage());
         } finally {
             deleteRecursively(workDir);

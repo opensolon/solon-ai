@@ -15,6 +15,9 @@
  */
 package org.noear.solon.ai.talents.cli;
 
+import com.github.difflib.UnifiedDiffUtils;
+import com.github.difflib.patch.Patch;
+import com.github.difflib.patch.PatchFailedException;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
 import org.noear.solon.ai.sandbox.config.FilesystemConfig;
@@ -26,6 +29,7 @@ import org.noear.solon.core.util.Assert;
 import java.io.IOException;
 import java.io.File;
 import java.nio.file.*;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -90,6 +94,76 @@ public class TerminalSupport {
             }
             return content.substring(0, firstIndex) + finalNew + content.substring(firstIndex + finalOld.length());
         }
+    }
+
+    /**
+     * 基于 Unified Diff (git diff) 格式的补丁应用逻辑。
+     *
+     * @param content 原始文件内容
+     * @param diffContent Unified Diff 格式的补丁字符串
+     * @return 应用补丁后的内容
+     * @throws PatchFailedException 上下文不匹配时抛出
+     */
+    String applyDiffLogic(String content, String diffContent) throws PatchFailedException {
+        if (Utils.isEmpty(diffContent)) {
+            throw new IllegalArgumentException("diff 内容不能为空");
+        }
+
+        // 1. 将内容按行拆分
+        List<String> originalLines = new ArrayList<>(Arrays.asList(content.split("\n", -1)));
+        // 如果文件以换行结尾，移除末尾的空行标记（java-diff-utils 的 patch.applyTo 会处理末尾换行）
+        if (!content.isEmpty() && !content.endsWith("\n")) {
+            // 不以换行结尾，需要特殊处理：去掉最后一行的空字符串
+        }
+
+        // 2. 清洗并准备 diff 行
+        List<String> diffLines = prepareDiffLines(diffContent);
+
+        // 3. 解析补丁
+        Patch<String> patch = UnifiedDiffUtils.parseUnifiedDiff(diffLines);
+
+        // 4. 应用补丁
+        List<String> patchedLines = patch.applyTo(originalLines);
+
+        // 5. 重新拼接为字符串
+        return String.join("\n", patchedLines);
+    }
+
+    /**
+     * 清洗 diff 内容，移除 Markdown 包裹，自动补全头信息
+     */
+    private List<String> prepareDiffLines(String diff) {
+        String cleanDiff = diff.trim();
+        if (cleanDiff.startsWith("```")) {
+            cleanDiff = cleanDiff.replaceAll("^```[a-zA-Z]*\\s+", "").replaceAll("\\s+```$", "");
+        }
+
+        String[] lines = cleanDiff.split("\\R");
+        List<String> result = new ArrayList<>();
+
+        // 检查是否已有 ---/+++ 头信息
+        boolean hasHeader = false;
+        for (String line : lines) {
+            if (line.startsWith("---")) {
+                hasHeader = true;
+                break;
+            }
+        }
+
+        if (!hasHeader) {
+            result.add("--- a/file");
+            result.add("+++ b/file");
+        }
+
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("```") || line.startsWith("\\")) {
+                continue;
+            }
+            result.add(line);
+        }
+
+        return result;
     }
 
     Path resolveCommandWorkPath(Path workPath, String workdir, boolean sandboxEnabled, boolean sandboxAllowUserHome, SandboxRuntimeConfig sandboxConfig) throws IOException {

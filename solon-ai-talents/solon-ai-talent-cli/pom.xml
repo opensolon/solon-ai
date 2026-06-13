@@ -32,6 +32,12 @@
         </dependency>
 
         <dependency>
+            <groupId>io.github.java-diff-utils</groupId>
+            <artifactId>java-diff-utils</artifactId>
+            <version>4.17</version>
+        </dependency>
+
+        <dependency>
             <groupId>org.noear</groupId>
             <artifactId>solon-ai-agent</artifactId>
             <optional>true</optional>
