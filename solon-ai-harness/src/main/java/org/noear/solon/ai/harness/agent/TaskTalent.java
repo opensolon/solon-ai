@@ -21,6 +21,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.react.intercept.ContextSizeChunk;
 import org.noear.solon.ai.agent.react.task.ObservationChunk;
 import org.noear.solon.ai.agent.react.task.ReasonChunk;
 import org.noear.solon.ai.agent.react.task.ThoughtChunk;
@@ -217,7 +218,9 @@ public class TaskTalent extends AbsTalent {
                         .stream()
                         .takeUntil(r -> sink.isCancelled())
                         .doOnNext(chunk -> {
-                            if (chunk instanceof ObservationChunk) {
+                            if (chunk instanceof ContextSizeChunk) {
+                                sink.next(chunk);
+                            } else if (chunk instanceof ObservationChunk) {
                                 sink.next(chunk);
                             } else {
                                 if (isMultitask) {
