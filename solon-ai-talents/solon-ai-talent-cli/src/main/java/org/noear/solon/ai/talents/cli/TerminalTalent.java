@@ -326,6 +326,7 @@ public class TerminalTalent extends AbsTalent {
     )
     public String bash(@Param(value = "command", description = "要执行的指令。") String command,
                        @Param(name = "timeout", required = false, defaultValue = "120000", description = "可选超时时间，单位为毫秒") Integer timeout,
+                       @Param(name = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符输出，超出保留首尾片段。读取大文件请改用 read 工具。") Integer maxOutputChars,
                        String __cwd) {
 
         // 统一安全校验（替代原来的内联检查）
@@ -356,7 +357,7 @@ public class TerminalTalent extends AbsTalent {
             }
         }
 
-        return executor.executeCode(workPath, finalCommand, shellCmd, extension, envs, timeout, null);
+        return executor.executeCode(workPath, finalCommand, shellCmd, extension, envs, timeout, maxOutputChars, null);
     }
 
     @ToolMapping(
