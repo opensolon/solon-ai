@@ -17,9 +17,9 @@ package org.noear.solon.ai.talents.web;
 
 import com.vladsch.flexmark.html2md.converter.FlexmarkHtmlConverter;
 import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.talent.AbsTalent;
-import org.noear.solon.ai.util.MarkdownUtil;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
@@ -130,10 +130,7 @@ public class WebfetchTalent extends AbsTalent {
         boolean isImage = mime.startsWith("image/") && !mime.contains("svg") && !mime.contains("vnd.fastbidsheet");
         if (isImage) {
             String base64 = Base64.getEncoder().encodeToString(bodyBytes);
-            Map<String, Object> metadata = new LinkedHashMap<>();
-            metadata.put("content_type", contentType);
-            metadata.put("url", "data:" + mime + ";base64," + base64);
-            return MarkdownUtil.toMarkdownWithMetadata(metadata, "Image fetched successfully");
+            return "data:" + mime + ";base64," + base64;
         }
 
         // 7. 内容转换核心逻辑
@@ -151,15 +148,12 @@ public class WebfetchTalent extends AbsTalent {
             output = rawContent;
         }
 
-        Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("content_type", contentType);
-        metadata.put("format", finalFormat);
-        return MarkdownUtil.toMarkdownWithMetadata(metadata, output);
+        return output;
     }
 
 
     private String extractTextFromHtml(String html) {
-        org.jsoup.nodes.Document doc = Jsoup.parse(html);
+        Document doc = Jsoup.parse(html);
         // 移除不可见内容标签
         doc.select("script, style, noscript, iframe, object, embed").remove();
         return doc.text().trim();
