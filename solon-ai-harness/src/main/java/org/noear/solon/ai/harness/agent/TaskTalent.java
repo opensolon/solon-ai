@@ -89,7 +89,7 @@ public class TaskTalent extends AbsTalent {
         return sb.toString();
     }
 
-    @ToolMapping(name = "task", description =
+    @ToolMapping(name = TOOL_TASK, description =
             "委派单一任务给专项子代理。适用于需要深度思考、多步操作或特定领域知识（如文件操作、代码分析）的场景。不支持并行调用（并行请用 multitask）。")
     public String task(@Body SingleTaskOp taskSpec, String __cwd, String __sessionId) {
         if (Assert.isEmpty(__sessionId)) {
@@ -107,7 +107,7 @@ public class TaskTalent extends AbsTalent {
         return taskDo(__parentTrace, __cwd, __sessionId, __parentSession, taskOp, 1, false);
     }
 
-    @ToolMapping(name = "multitask", description =
+    @ToolMapping(name = TOOL_MULTITASK, description =
             "并行执行多个互不依赖的子任务。要求任务之间必须没有资源竞争（例如：不同的模块开发、多路搜索）。")
     public String multitask(@Param(name = "tasks", description = "任务列表") List<MultiTaskOp> tasks, String __cwd, String __sessionId) {
         if (Assert.isEmpty(tasks)) {

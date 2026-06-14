@@ -57,7 +57,7 @@ public class TerminalTalent extends AbsTalent {
     public static final String TOOL_EDIT = "edit";
 
     public static final String PARAM_CONTENT = "content";
-    public static final String PARAM_DIFF = "diff";
+    public static final String PARAM_EDITS = "edits";
 
 
     static enum ShellMode {
@@ -594,9 +594,9 @@ public class TerminalTalent extends AbsTalent {
     }
 
     // --- 4. 写入与编辑 ---
-    @ToolMapping(name = "write", description = "创建新文件或覆盖现有文件。")
+    @ToolMapping(name = TOOL_WRITE, description = "创建新文件或覆盖现有文件。")
     public String write(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String filePath,
-                        @Param(value = "content", description = "完整文本内容。") String content,
+                        @Param(value = PARAM_CONTENT, description = "完整文本内容。") String content,
                         String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
         Path target = support.resolveSafePath(workPath, filePath, true, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
@@ -608,11 +608,11 @@ public class TerminalTalent extends AbsTalent {
 
 
     @ToolMapping(
-            name = "edit",
+            name = TOOL_EDIT,
             description = "对文件进行精准文本替换。支持单次调用执行一处或多处编辑。具有原子性：所有编辑成功才会写入，否则全部回滚。"
     )
     public String edit(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String filePath,
-                       @Param(value = "edits", description = "编辑操作列表") List<EditOp> edits,
+                       @Param(value = PARAM_EDITS, description = "编辑操作列表") List<EditOp> edits,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
         Path target = support.resolveSafePath(workPath, filePath, false, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
