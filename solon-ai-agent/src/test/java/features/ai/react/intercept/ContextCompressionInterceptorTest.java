@@ -579,4 +579,82 @@ public class ContextCompressionInterceptorTest {
         assertEquals(goalContent, firstUser.getContent(),
                 "First-chain (META_FIRST) message must not be truncated");
     }
+
+    /**
+     * P2：非初心链的超大 UserMessage（用户粘贴超长日志/文件）应被硬上限截断。
+     */
+    @Test
+    public void testOversizedUserMessageGetsTruncated() {
+        ChatMessage sys = ChatMessage.ofSystem("System");
+        sys.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(sys);
+
+        ChatMessage goal = ChatMessage.ofUser("Goal");
+        goal.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(goal);
+
+        workingMemory.addMessage(ChatMessage.ofAssistant("ok"));
+
+        // 用户后续粘贴的超大文本（非初心链）
+        StringBuilder huge = new StringBuilder();
+        for (int i = 0; i < 100_000; i++) {
+            huge.append("paste").append(i).append(' ');
+        }
+        int originalLen = huge.length();
+        workingMemory.addMessage(ChatMessage.ofUser(huge.toString()));
+
+        interceptor.onReasonStart(trace, null);
+
+        // 取最后一条 UserMessage（粘贴的那条），应被截断
+        UserMessage pasted = workingMemory.getMessages().stream()
+                .filter(m -> m instanceof UserMessage)
+                .map(m -> (UserMessage) m)
+                .reduce((a, b) -> b)
+                .orElse(null);
+
+        assertNotNull(pasted, "粘贴的 UserMessage 应仍存在");
+        assertTrue(pasted.getContent().length() < originalLen,
+                "超大 UserMessage 应被截断");
+        assertTrue(pasted.getContent().contains("内容过大已截断"),
+                "截断内容应携带占位标记");
+    }
+
+    /**
+     * P2：含 toolCalls 的 AssistantMessage 不做 content 截断，避免破坏推理链/原子对。
+     */
+    @Test
+    public void testOversizedAssistantWithToolCallsNotTruncated() {
+        ChatMessage sys = ChatMessage.ofSystem("System");
+        sys.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(sys);
+
+        ChatMessage goal = ChatMessage.ofUser("Goal");
+        goal.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(goal);
+
+        // 超大正文 + 携带 toolCalls 的 Assistant
+        StringBuilder huge = new StringBuilder();
+        for (int i = 0; i < 100_000; i++) {
+            huge.append("think").append(i).append(' ');
+        }
+        String thought = huge.toString();
+        List<ToolCall> toolCalls = Arrays.asList(new ToolCall("0", "call_1", "bash", "{}", Utils.asMap()));
+        AssistantMessage am = new AssistantMessage(thought, false, null, null, toolCalls, null);
+        workingMemory.addMessage(am);
+        // 配对的 ToolMessage，避免被悬挂清理逻辑移除
+        workingMemory.addMessage(ChatMessage.ofTool("result", "bash", "call_1"));
+
+        interceptor.onReasonStart(trace, null);
+
+        AssistantMessage after = workingMemory.getMessages().stream()
+                .filter(m -> m instanceof AssistantMessage)
+                .map(m -> (AssistantMessage) m)
+                .filter(m -> m.getToolCalls() != null && !m.getToolCalls().isEmpty())
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(after, "含 toolCalls 的 Assistant 应保留");
+        assertEquals(thought, after.getContent(),
+                "含 toolCalls 的 Assistant 正文不应被截断");
+    }
 }

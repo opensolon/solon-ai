@@ -589,8 +589,19 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 continue;
             }
 
-            // 多模态 ToolMessage 跳过（避免破坏图片等非文本块）
-            if (msg instanceof ToolMessage && ((ToolMessage) msg).isMultiModal()) {
+            // 多模态消息跳过（避免破坏图片等非文本块）
+            if ((msg instanceof ToolMessage && ((ToolMessage) msg).isMultiModal())
+                    || (msg instanceof UserMessage && ((UserMessage) msg).isMultiModal())) {
+                result.add(msg);
+                continue;
+            }
+
+            // ⭐ 性能：优先用缓存初筛，避免每轮对全部消息做全量 BPE 编码。
+            //    缓存值（含 toolCalls 开销）可能略大于纯 content token，作为“是否超限”的
+            //    初筛是安全方向（宁可多检一条，不会漏检超限消息）。仅在缓存缺失或疑似
+            //    超限时才精确 countTokens 确认。
+            Integer cachedTokens = msg.getMetadataAs(META_TOKEN_SIZE);
+            if (cachedTokens != null && cachedTokens <= perMessageCap) {
                 result.add(msg);
                 continue;
             }
@@ -627,7 +638,13 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
     /**
      * 重建一条带有新内容的消息，复制原 metadata（但清除 token_size 以触发重算）。
-     * 仅支持 ToolMessage（超大单条消息的主要来源）；其它类型返回 null。
+     * 支持的类型：
+     * <ul>
+     *   <li>{@link ToolMessage} —— 超大单条消息的主要来源（工具读取大文件）</li>
+     *   <li>{@link UserMessage} —— 用户直接粘贴超长日志/文件（保留 Observation 前缀，因头部从索引 0 起截断）</li>
+     *   <li>{@link AssistantMessage} —— 仅纯文本 thought（无 toolCalls）；含 toolCalls 的不重建，避免损坏推理链</li>
+     * </ul>
+     * 其它类型返回 null。
      */
     private ChatMessage rebuildWithContent(ChatMessage origin, String newContent) {
         if (origin instanceof ToolMessage) {
@@ -638,20 +655,44 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                     tm.getToolCallId(),
                     tm.isReturnDirect());
 
-            // 复制原 metadata（跳过 token_size，让其按截断后的新内容重算）
-            Map<String, Object> meta = origin.getMetadata();
-            if (meta != null) {
-                for (Map.Entry<String, Object> e : meta.entrySet()) {
-                    if (META_TOKEN_SIZE.equals(e.getKey())) {
-                        continue;
-                    }
-                    rebuilt.addMetadata(e.getKey(), e.getValue());
-                }
+            copyMetadataExceptTokenSize(origin, rebuilt);
+            return rebuilt;
+        }
+
+        if (origin instanceof UserMessage) {
+            // 用户粘贴的超长文本。多模态已在调用前跳过，这里按纯文本重建。
+            UserMessage rebuilt = (UserMessage) ChatMessage.ofUser(newContent);
+            copyMetadataExceptTokenSize(origin, rebuilt);
+            return rebuilt;
+        }
+
+        if (origin instanceof AssistantMessage) {
+            AssistantMessage am = (AssistantMessage) origin;
+            // 含 toolCalls 的不截断 content（体积主要在 args，截断正文可能损坏推理链/原子对）
+            if (Assert.isNotEmpty(am.getToolCalls())) {
+                return null;
             }
+            AssistantMessage rebuilt = new AssistantMessage(newContent, am.isThinking());
+            copyMetadataExceptTokenSize(origin, rebuilt);
             return rebuilt;
         }
 
         return null;
+    }
+
+    /**
+     * 复制原消息 metadata 到目标消息，跳过 {@link #META_TOKEN_SIZE}（让其按新内容重算）。
+     */
+    private void copyMetadataExceptTokenSize(ChatMessage origin, ChatMessage target) {
+        Map<String, Object> meta = origin.getMetadata();
+        if (meta != null) {
+            for (Map.Entry<String, Object> e : meta.entrySet()) {
+                if (META_TOKEN_SIZE.equals(e.getKey())) {
+                    continue;
+                }
+                target.addMetadata(e.getKey(), e.getValue());
+            }
+        }
     }
 
     /**
@@ -676,12 +717,14 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         String head = text.substring(0, headChars);
         while (encoding.countTokens(head) > headTokens && head.length() > 0) {
-            head = head.substring(0, head.length() * 9 / 10);
+            int newLen = Math.min(head.length() - 1, head.length() * 9 / 10);
+            head = head.substring(0, Math.max(0, newLen));
         }
 
         String tail = text.substring(text.length() - tailChars);
         while (encoding.countTokens(tail) > tailTokens && tail.length() > 0) {
-            tail = tail.substring(tail.length() / 10);
+            int cut = Math.max(1, tail.length() / 10);
+            tail = tail.substring(cut);
         }
 
         return head + marker + tail;

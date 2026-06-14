@@ -751,6 +751,46 @@ public class TerminalSupport {
             return true;
         }
 
-        return false;
+        // 2. 字节级内容兜底：识别无后缀（或后缀伪装）的二进制文件，
+        //    如编译产物、core dump、无扩展名的 ELF 等。读取文件首部采样探测，
+        //    避免后缀白名单漏判后将二进制按文本强行解码输出乱码。
+        return isLikelyBinaryFile(file);
+    }
+
+    /**
+     * 读取文件首部采样，按字节判定是否疑似二进制。
+     *
+     * <p>判定规则与命令输出探测保持一致：NUL 直接判定；统计非空白控制字符占比，
+     * 超过阈值判定为二进制。对常见空白、ANSI 转义及 UTF-8 多字节高位字节（&gt;= 0x80）
+     * 做豁免，避免误伤中文等多字节文本。探测失败（IO 异常）时保守按文本处理。</p>
+     */
+    private boolean isLikelyBinaryFile(Path file) {
+        byte[] buffer = new byte[4096];
+        int read;
+        try (java.io.InputStream in = Files.newInputStream(file)) {
+            read = in.read(buffer);
+        } catch (Throwable e) {
+            return false; // 读不到就保守按文本，交由后续流程处理
+        }
+
+        if (read <= 0) {
+            return false;
+        }
+
+        int suspicious = 0;
+        for (int i = 0; i < read; i++) {
+            int b = buffer[i] & 0xFF;
+            if (b == 0x00) {
+                return true; // NUL 是二进制强特征
+            }
+            if (b == '\n' || b == '\r' || b == '\t' || b == 0x1B || b >= 0x80) {
+                continue;
+            }
+            if (b < 0x20) {
+                suspicious++;
+            }
+        }
+
+        return suspicious * 100 > read * 30; // 控制字符占比 > 30%
     }
 }

@@ -232,33 +232,48 @@ public class TerminalTalent extends AbsTalent {
             sb.append("  - Node.js 命令: `").append(nodeCmd).append("` (系统已预置变量 `$NODE`)\n");
         }
 
-        sb.append("- **路径规则**: \n");
-        sb.append("  - **工作区**: 你的主目录，支持读写。使用相对路径访问（如 `src/app.java`）。\n");
-        sb.append("  - **挂载点**: 以 `@` 开头的逻辑路径（别名），对应一个真实的物理目录（通过环境变量引用）。见下方挂载点清单。\n");
-
         // 动态判断是否有可写挂载点
         boolean hasWriteableMount = mountManager.getMounts().stream()
                 .anyMatch(m->m.isEnabled() && m.isWriteable());
 
-        // 挂载点清单表格
-        sb.append("\n<mount_list>\n");
-        for (MountDir mount : mountManager.getMounts()) {
-            if (mount.isEnabled()) {
-                String envKey = support.toMountEnvKey(mount.getAlias());
-                String envRef = support.getEnvPlaceholder(envKey);
-                sb.append("  <mount alias=\"").append(mount.getAlias()).append("\"");
-                if (Assert.isNotEmpty(mount.getDescription())) {
-                    sb.append(" description=\"").append(mount.getDescription()).append("\"");
-                }
-                sb.append(" type=\"").append(mount.getType()).append("\"");
-                sb.append(" writeable=\"").append(mount.isWriteable()).append("\"");
-                sb.append(" env=\"").append(envRef).append("\"");
-                sb.append(" />\n");
-            }
+        boolean hasMount = mountManager.getMounts().stream()
+                .anyMatch(m->m.isEnabled());
+
+        sb.append("- **路径规则**: \n");
+        sb.append("  - **工作区（默认作用域）**: 你的主目录，支持读写。所有文件查找（ls/glob/grep/read）与路径解析默认都以工作区为根，使用相对路径访问（如 `src/app.java`）。\n");
+
+        if(hasMount) {
+            sb.append("  - **挂载点（按需访问）**: 以 `@` 开头的逻辑路径（别名），对应一个真实的物理目录（通过环境变量引用）。见下方挂载点清单。仅当用户明确指名，或工作区内确认查无结果后，才扩展到挂载点检索；不要在未指定时主动进入挂载点搜索。\n");
         }
-        sb.append("</mount_list>\n");
+
+        // 挂载点清单表格
+        if(hasMount) {
+            sb.append("\n<mount_list>\n");
+            for (MountDir mount : mountManager.getMounts()) {
+                if (mount.isEnabled()) {
+                    String envKey = support.toMountEnvKey(mount.getAlias());
+                    String envRef = support.getEnvPlaceholder(envKey);
+                    sb.append("  <mount alias=\"").append(mount.getAlias()).append("\"");
+                    if (Assert.isNotEmpty(mount.getDescription())) {
+                        sb.append(" description=\"").append(mount.getDescription()).append("\"");
+                    }
+                    sb.append(" type=\"").append(mount.getType()).append("\"");
+                    sb.append(" writeable=\"").append(mount.isWriteable()).append("\"");
+                    sb.append(" env=\"").append(envRef).append("\"");
+                    sb.append(" />\n");
+                }
+            }
+            sb.append("</mount_list>\n");
+        }
+
+
         if (sandboxEnabled) {
-            sb.append("  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`) 或逻辑路径 (@pool)。\n");
+            if (hasMount) {
+                sb.append("  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`) 或逻辑路径 (@pool)。\n");
+            } else {
+                sb.append("  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`)。\n");
+            }
+
             if (sandboxAllowUserHome) {
                 sb.append("  - `~` 路径可用（如 `~/Documents`）。\n");
             } else {
@@ -269,16 +284,27 @@ public class TerminalTalent extends AbsTalent {
         }
 
         sb.append("## 执行规约\n");
-        if (hasWriteableMount) {
-            sb.append("- **挂载隔离**: 逻辑路径（以 @ 开头）默认只读。仅当挂载点清单中 `writeable=\"true\"` 时，才允许写入操作。\n");
-        } else {
-            sb.append("- **挂载隔离**: 逻辑路径（以 @ 开头）均为只读，所有写入操作使用相对路径。\n");
+
+        if(hasMount) {
+            if (hasWriteableMount) {
+                sb.append("- **挂载隔离**: 逻辑路径（以 @ 开头）默认只读。仅当挂载点清单中 `writeable=\"true\"` 时，才允许写入操作。\n");
+            } else {
+                sb.append("- **挂载隔离**: 逻辑路径（以 @ 开头）均为只读，所有写入操作使用相对路径。\n");
+            }
         }
 
         if (sandboxEnabled) {
-            sb.append("- **命令执行**: 在 `bash` 中，直接使用逻辑路径（如 `@pool1/bin/tool`），系统会自动转换。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。\n");
+            if (hasMount) {
+                sb.append("- **命令执行**: 在 `bash` 中，直接使用逻辑路径（如 `@pool1/bin/tool`），系统会自动转换。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。\n");
+            } else {
+                sb.append("- **命令执行**: 在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。\n");
+            }
         } else {
-            sb.append("- **命令执行**: 在 `bash` 中，直接使用逻辑路径（如 `@pool1/bin/tool`），系统会自动转换。支持绝对路径访问。\n");
+            if (hasMount) {
+                sb.append("- **命令执行**: 在 `bash` 中，直接使用逻辑路径（如 `@pool1/bin/tool`），系统会自动转换。支持绝对路径访问。\n");
+            } else {
+                sb.append("- **命令执行**: 在 `bash` 中支持绝对路径访问。\n");
+            }
         }
 
         if (bashAsyncEnabled) {
@@ -344,7 +370,12 @@ public class TerminalTalent extends AbsTalent {
             envs.put("NODE", nodeCmd);
         }
 
-        String finalCommand = support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
+        String finalCommand;
+        try {
+            finalCommand = support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
+        } catch (SecurityException ex) {
+            return "错误：" + ex.getMessage();
+        }
 
         // OS 级沙盒包装（内核级强制隔离：Seatbelt / bwrap）
         // 仅当 sandboxSystemRestrict=true 时启用，将安全隔离的重活交给 OS 内核
@@ -385,7 +416,12 @@ public class TerminalTalent extends AbsTalent {
             envs.put("NODE", nodeCmd);
         }
 
-        String finalCommand = support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
+        String finalCommand;
+        try {
+            finalCommand = support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
+        } catch (SecurityException ex) {
+            return "错误：" + ex.getMessage();
+        }
 
         // OS 级沙盒包装（内核级强制隔离：Seatbelt / bwrap）
         // 仅当 sandboxSystemRestrict=true 时启用，将安全隔离的重活交给 OS 内核
@@ -886,13 +922,10 @@ public class TerminalTalent extends AbsTalent {
         if (violation != null) {
             return violation;
         }
-        // sandboxAllowUserHome=false 时，阻止 ~ 路径
-        if (!sandboxAllowUserHome && command.contains("~")) {
-            // 简单检查：裸 ~ 或 ~/xxx，排除引号内的纯文本 ~
-            String expanded = command.replaceAll("\"[^\"]*\"", "").replaceAll("'[^']*'", "");
-            if (expanded.contains("~")) {
-                return "错误：sandboxAllowUserHome 已禁用，不允许使用 ~ 路径。";
-            }
+        // sandboxAllowUserHome=false 时，阻止 ~ 路径。
+        // 复用生产路径同款判定（containsUserHomePath），避免测试/生产逻辑分裂。
+        if (sandboxEnabled && !sandboxAllowUserHome && support.containsUserHomePath(command)) {
+            return "错误：sandboxAllowUserHome 已禁用，不允许使用 ~ 路径。";
         }
         return null;
     }
