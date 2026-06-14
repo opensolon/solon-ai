@@ -602,11 +602,11 @@ public class TerminalTalent extends AbsTalent {
         support.resolveSafePath(workPath, filePath, true, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
 
         if (!Files.exists(target)) {
-            return "错误：文件不存在，无法进行编辑。";
+            return buildEditFailureMessage(filePath, "文件检查", "目标文件不存在", null);
         }
 
         if (diff == null || diff.trim().isEmpty()) {
-            return "错误：diff 内容不能为空。请提供 Unified Diff 格式的补丁内容。";
+            return buildEditFailureMessage(filePath, "参数校验", "diff 内容不能为空", "请提供完整 Unified Diff 补丁内容。");
         }
 
         String originalContent = new String(Files.readAllBytes(target), fileCharset);
@@ -624,10 +624,57 @@ public class TerminalTalent extends AbsTalent {
             Files.write(target, newContent.getBytes(fileCharset));
             return "文件 " + filePath + " 成功应用补丁。";
         } catch (PatchFailedException e) {
-            return "应用补丁失败：上下文不匹配（冲突）。请重新读取文件获取最新版本后重试。";
+            return buildEditFailureMessage(filePath, "补丁应用", "补丁中的某个 @@ 块无法匹配目标文件", e.getMessage());
+        } catch (IllegalArgumentException e) {
+            if (isPatchApplyFailure(e)) {
+                return buildEditFailureMessage(filePath, "补丁应用", "补丁中的某个 @@ 块无法匹配目标文件", e.getMessage());
+            }
+            return buildEditFailureMessage(filePath, "diff 解析", normalizeErrorMessage(e), null);
         } catch (Exception e) {
-            return "应用补丁失败：" + e.getMessage();
+            return buildEditFailureMessage(filePath, "补丁应用", normalizeErrorMessage(e), null);
         }
+    }
+
+    private String buildEditFailureMessage(String filePath, String stage, String reason, String detail) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("编辑失败：Unified Diff 补丁未能应用，文件未被修改。\n\n");
+        sb.append("目标文件：").append(filePath).append('\n');
+        sb.append("失败阶段：").append(stage).append('\n');
+        sb.append("失败原因：").append(reason == null || reason.isEmpty() ? "未知错误" : reason).append('\n');
+
+        if (detail != null && !detail.isEmpty()) {
+            sb.append("诊断信息：").append(detail).append('\n');
+        }
+
+        sb.append("\n修复建议：\n");
+        sb.append("1. 重新读取目标文件的最新内容；\n");
+        sb.append("2. 从原文中逐字复制上下文行，保持缩进、空格和空行一致；\n");
+        sb.append("3. 每个 @@ 块建议保留修改位置前后 2-3 行真实上下文；\n");
+        sb.append("4. 重新提交完整 Unified Diff，必须包含 ---、+++ 和 @@ 块；\n");
+        sb.append("5. 不要提交普通代码片段、JSON 或 search/replace 格式。");
+        return sb.toString();
+    }
+
+    private String normalizeErrorMessage(Exception e) {
+        if (e == null || e.getMessage() == null || e.getMessage().isEmpty()) {
+            return "补丁格式不正确或无法应用";
+        }
+
+        return e.getMessage();
+    }
+
+    private boolean isPatchApplyFailure(Exception e) {
+        if (e == null || e.getMessage() == null) {
+            return false;
+        }
+
+        String message = e.getMessage();
+        // java-diff-utils 的 fuzzy 应用在 hunk 无法定位时，部分版本会抛出
+        // IllegalArgumentException（如 fromIndex > toIndex），但语义上仍是补丁应用失败。
+        return message.contains("fromIndex") ||
+                message.contains("toIndex") ||
+                message.contains("Incorrect Chunk") ||
+                message.contains("could not apply");
     }
 
     // --- 5. 搜索工具 ---

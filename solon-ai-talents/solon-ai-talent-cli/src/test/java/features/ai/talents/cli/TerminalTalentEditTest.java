@@ -99,4 +99,58 @@ public class TerminalTalentEditTest {
             deleteRecursively(workDir);
         }
     }
+
+    @Test
+    public void editShouldReturnActionableMessageWhenDiffCannotMatch() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-edit-");
+        try {
+            Path file = workDir.resolve("app.txt");
+            Files.write(file, (String.join("\n",
+                    "alpha",
+                    "beta",
+                    "gamma") + "\n").getBytes(StandardCharsets.UTF_8));
+
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            String diff = "--- a/app.txt\n" +
+                    "+++ b/app.txt\n" +
+                    "@@ -1,3 +1,3 @@\n" +
+                    " alpha\n" +
+                    "-missing-line\n" +
+                    "+BETA\n" +
+                    " gamma\n";
+
+            String result = talent.edit("app.txt", diff, workDir.toString());
+
+            assertTrue(result.contains("编辑失败：Unified Diff 补丁未能应用，文件未被修改。"), result);
+            assertTrue(result.contains("目标文件：app.txt"), result);
+            assertTrue(result.contains("失败阶段：补丁应用"), result);
+            assertTrue(result.contains("失败原因：补丁中的某个 @@ 块无法匹配目标文件"), result);
+            assertTrue(result.contains("修复建议："), result);
+            assertTrue(result.contains("重新读取目标文件的最新内容"), result);
+            assertEquals(String.join("\n",
+                    "alpha",
+                    "beta",
+                    "gamma") + "\n", new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
+    @Test
+    public void editShouldReturnActionableMessageWhenDiffIsEmpty() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-edit-");
+        try {
+            Path file = workDir.resolve("app.txt");
+            Files.write(file, "alpha\n".getBytes(StandardCharsets.UTF_8));
+
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            String result = talent.edit("app.txt", "   ", workDir.toString());
+
+            assertTrue(result.contains("失败阶段：参数校验"), result);
+            assertTrue(result.contains("失败原因：diff 内容不能为空"), result);
+            assertTrue(result.contains("文件未被修改"), result);
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
 }
