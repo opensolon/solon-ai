@@ -15,9 +15,6 @@
  */
 package org.noear.solon.ai.talents.cli;
 
-import com.github.difflib.UnifiedDiffUtils;
-import com.github.difflib.patch.Patch;
-import com.github.difflib.patch.PatchFailedException;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
 import org.noear.solon.ai.sandbox.config.FilesystemConfig;
@@ -94,95 +91,6 @@ public class TerminalSupport {
             }
             return content.substring(0, firstIndex) + finalNew + content.substring(firstIndex + finalOld.length());
         }
-    }
-
-    /**
-     * 基于 Unified Diff (git diff) 格式的补丁应用逻辑。
-     *
-     * @param content 原始文件内容
-     * @param diffContent Unified Diff 格式的补丁字符串
-     * @return 应用补丁后的内容
-     * @throws PatchFailedException 上下文不匹配时抛出
-     */
-    String applyDiffLogic(String content, String diffContent) throws PatchFailedException {
-        if (Utils.isEmpty(diffContent)) {
-            throw new IllegalArgumentException("diff 内容不能为空");
-        }
-
-        // 1. 将内容按行拆分
-        // 记录原文换行风格，应用补丁后按原风格还原（避免破坏 Windows CRLF 文件）。
-        // 将内容规范化为 \n 后再拆分：diff 行在 prepareDiffLines 中以 \R 拆分（不含 \r），
-        // 若原文保留 \r 会导致上下文行无法匹配，CRLF 文件补丁必然失败，故此处统一规范化。
-        // 注：split("\n", -1) 与 String.join 对末尾换行可逆，无需额外处理空尾行。
-        String lineSeparator = content.contains("\r\n") ? "\r\n" : "\n";
-        String normalizedContent = content.replace("\r\n", "\n").replace("\r", "\n");
-        List<String> originalLines = new ArrayList<>(Arrays.asList(normalizedContent.split("\n", -1)));
-
-        // 2. 清洗并准备 diff 行
-        List<String> diffLines = prepareDiffLines(diffContent);
-
-        // 3. 解析补丁
-        Patch<String> patch = UnifiedDiffUtils.parseUnifiedDiff(diffLines);
-
-        // 4. 应用补丁
-        List<String> patchedLines;
-        try {
-            patchedLines = patch.applyTo(originalLines);
-        } catch (PatchFailedException e) {
-            // LLM 生成的 diff 经常出现行号轻微偏移，或上下文行少量过期。
-            // 严格匹配失败后使用 java-diff-utils 的 fuzzy 模式重试：
-            // - 可在附近位置搜索 hunk，降低 @@ 行号错误导致的失败率；
-            // - 可忽略 hunk 首尾少量上下文行，降低上下文轻微漂移导致的失败率；
-            // - 仍会校验核心删除/替换行，避免无约束的误改。
-            patchedLines = patch.applyFuzzy(originalLines, 2);
-        }
-
-        // 5. 按原文换行风格重新拼接为字符串
-        return String.join(lineSeparator, patchedLines);
-    }
-
-    /**
-     * 清洗 diff 内容，移除 Markdown 包裹，自动补全头信息
-     */
-    private List<String> prepareDiffLines(String diff) {
-        String cleanDiff = diff.trim();
-        if (cleanDiff.startsWith("```")) {
-            cleanDiff = cleanDiff.replaceAll("^```[a-zA-Z]*\\s+", "").replaceAll("\\s+```$", "");
-        }
-
-        String[] lines = cleanDiff.split("\\R");
-        List<String> result = new ArrayList<>();
-
-        // 检查是否已有 ---/+++ 头信息。
-        // 仅扫描首个 @@ hunk 之前的行，且要求 "--- " 带空格（git 标准头格式）；
-        // 避免把待删除的内容行（如 Markdown 分隔线 "---" 在 diff 中呈现为 "----"）误判为文件头。
-        boolean hasHeader = false;
-        for (String line : lines) {
-            if (line.startsWith("@@")) {
-                break;
-            }
-            if (line.startsWith("--- ")) {
-                hasHeader = true;
-                break;
-            }
-        }
-
-        if (!hasHeader) {
-            result.add("--- a/file");
-            result.add("+++ b/file");
-        }
-
-        for (String line : lines) {
-            String trimmed = line.trim();
-            // 仅过滤 Unified Diff 标准的“文件末尾无换行符”标记，避免误删
-            // 以反斜杠开头的合法代码内容（如正则、LaTeX、Windows 路径等）。
-            if (trimmed.startsWith("```") || "\\ No newline at end of file".equals(line)) {
-                continue;
-            }
-            result.add(line);
-        }
-
-        return result;
     }
 
     Path resolveCommandWorkPath(Path workPath, String workdir, boolean sandboxEnabled, boolean sandboxAllowUserHome, SandboxRuntimeConfig sandboxConfig) throws IOException {

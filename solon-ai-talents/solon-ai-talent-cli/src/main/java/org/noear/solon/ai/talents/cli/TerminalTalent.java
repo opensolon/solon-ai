@@ -28,7 +28,6 @@ import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 
-import com.github.difflib.patch.PatchFailedException;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -610,108 +609,65 @@ public class TerminalTalent extends AbsTalent {
 
     @ToolMapping(
             name = "edit",
-            description = "对文件应用 git diff 格式的补丁（Unified Diff）。支持单次补丁包含多个 @@ 块以实现多处修改，具有原子性：补丁完全应用成功才会写入，否则全部回滚。\n\n" +
-                    "格式要求：\n" +
-                    "1. diff 必须包含完整的 Unified Diff 文件头（--- 和 +++）以及一个或多个 @@ 块。\n" +
-                    "2. 不要只提交 @@ 块。\n" +
-                    "3. 上下文行必须来自文件原文，并尽量保持原始缩进、空格和内容一致。\n" +
-                    "4. 建议每个 @@ 块在修改位置前后各保留 2-3 行上下文，以提高定位成功率。\n" +
-                    "5. diff 头中的路径仅用于满足 Unified Diff 格式，实际应用目标以 file_path 参数为准。\n" +
-                    "6. 支持 Markdown 代码块包裹；如使用代码块，代码块内必须是完整 diff 内容。\n\n" +
-                    "示例格式：\n" +
-                    "```diff\n" +
-                    "--- a/Hello.java\n" +
-                    "+++ b/Hello.java\n" +
-                    "@@ -10,7 +10,7 @@\n" +
-                    " 上下文行\n" +
-                    "-要删除的行\n" +
-                    "+新增的行\n" +
-                    " 上下文行\n" +
-                    "```"
+            description = "对文件进行精准文本替换。支持单次调用执行一处或多处编辑。具有原子性：所有编辑成功才会写入，否则全部回滚。"
     )
     public String edit(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String filePath,
-                       @Param(value = "diff", description = "Unified Diff 格式的补丁内容（标准 git diff 格式），必须包含 ---/+++ 文件头、@@ 块和上下文行；支持单个补丁包含多个 @@ 块；支持 Markdown 代码块包裹。") String diff,
+                       @Param(value = "edits", description = "编辑操作列表") List<EditOp> edits,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
         Path target = support.resolveSafePath(workPath, filePath, false, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
-        // 第二次调用仅用于触发写权限校验（writeMode=true）：edit 会落盘写入，
-        // 须确保目标不在只读挂载点 / 写入拒绝规则内；返回值无需使用。
         support.resolveSafePath(workPath, filePath, true, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
 
         if (!Files.exists(target)) {
-            return buildEditFailureMessage(filePath, "文件检查", "目标文件不存在", null);
-        }
-
-        if (diff == null || diff.trim().isEmpty()) {
-            return buildEditFailureMessage(filePath, "参数校验", "diff 内容不能为空", "请提供完整 Unified Diff 补丁内容。");
+            return "错误：文件不存在，无法进行编辑。";
         }
 
         String originalContent = new String(Files.readAllBytes(target), fileCharset);
 
-        try {
-            // 使用 java-diff-utils 解析并应用 Unified Diff 补丁
-            String newContent = support.applyDiffLogic(originalContent, diff);
+        // 在尝试应用任何修改前，先校验所有 oldStr 的有效性，确保原子性
+        for (int i = 0; i < edits.size(); i++) {
+            EditOp edit = edits.get(i);
 
-            // 内容无变化时直接返回
-            if (newContent.equals(originalContent)) {
-                return "提示：补丁应用后文件内容无变化。";
+            // 安全检测：防止 LLM 生成不完整的工具调用参数导致 NPE
+            if (edit.oldStr == null || edit.oldStr.isEmpty()) {
+                return String.format("预检查失败（操作 #%d）: old_str 不能为空。请确保调用 edit 时传入 old_str 参数，指定要替换的原始文本块。", i + 1);
             }
 
-            // 原子性写入（仅在补丁完全成功后执行）
-            Files.write(target, newContent.getBytes(fileCharset));
-            return "文件 " + filePath + " 成功应用补丁。";
-        } catch (PatchFailedException e) {
-            return buildEditFailureMessage(filePath, "补丁应用", "补丁中的某个 @@ 块无法匹配目标文件", e.getMessage());
-        } catch (IllegalArgumentException e) {
-            if (isPatchApplyFailure(e)) {
-                return buildEditFailureMessage(filePath, "补丁应用", "补丁中的某个 @@ 块无法匹配目标文件", e.getMessage());
+            if (edit.newStr == null) {
+                edit.newStr = "";
             }
-            return buildEditFailureMessage(filePath, "diff 解析", normalizeErrorMessage(e), null);
-        } catch (Exception e) {
-            return buildEditFailureMessage(filePath, "补丁应用", normalizeErrorMessage(e), null);
-        }
-    }
 
-    private String buildEditFailureMessage(String filePath, String stage, String reason, String detail) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("编辑失败：Unified Diff 补丁未能应用，文件未被修改。\n\n");
-        sb.append("目标文件：").append(filePath).append('\n');
-        sb.append("失败阶段：").append(stage).append('\n');
-        sb.append("失败原因：").append(reason == null || reason.isEmpty() ? "未知错误" : reason).append('\n');
+            String finalOld = support.normalizeNewlines(originalContent, edit.oldStr);
 
-        if (detail != null && !detail.isEmpty()) {
-            sb.append("诊断信息：").append(detail).append('\n');
-        }
+            int firstIndex = originalContent.indexOf(finalOld);
+            if (firstIndex == -1) {
+                return String.format("预检查失败（操作 #%d）: 找不到指定的文本块。请确保 old_str 的缩进和换行与文件内容完全一致。", i + 1);
+            }
 
-        sb.append("\n修复建议：\n");
-        sb.append("1. 重新读取目标文件的最新内容；\n");
-        sb.append("2. 从原文中逐字复制上下文行，保持缩进、空格和空行一致；\n");
-        sb.append("3. 每个 @@ 块建议保留修改位置前后 2-3 行真实上下文；\n");
-        sb.append("4. 重新提交完整 Unified Diff，必须包含 ---、+++ 和 @@ 块；\n");
-        sb.append("5. 不要提交普通代码片段、JSON 或 search/replace 格式。");
-        return sb.toString();
-    }
-
-    private String normalizeErrorMessage(Exception e) {
-        if (e == null || e.getMessage() == null || e.getMessage().isEmpty()) {
-            return "补丁格式不正确或无法应用";
+            // 如果不是 replaceAll 模式，校验唯一性
+            if (Boolean.FALSE.equals(edit.replaceAll)) {
+                if (originalContent.lastIndexOf(finalOld) != firstIndex) {
+                    return String.format("预检查失败（操作 #%d）: 文本块在文件中不唯一。请增加上下文行以实现精准定位。", i + 1);
+                }
+            }
         }
 
-        return e.getMessage();
-    }
-
-    private boolean isPatchApplyFailure(Exception e) {
-        if (e == null || e.getMessage() == null) {
-            return false;
+        String workingContent = originalContent;
+        // 顺序应用所有编辑
+        for (int i = 0; i < edits.size(); i++) {
+            EditOp edit = edits.get(i);
+            try {
+                // 注意：由于前面的修改可能改变了后续匹配项的上下文位置，这里捕获可能的运行时冲突
+                workingContent = support.applyEditLogic(workingContent, edit.oldStr, edit.newStr, edit.replaceAll);
+            } catch (IllegalArgumentException e) {
+                return String.format("执行失败（操作 #%d）: %s。可能是由于前面的修改破坏了此处的匹配上下文，请尝试分多次调用 edit。", i + 1, e.getMessage());
+            }
         }
 
-        String message = e.getMessage();
-        // java-diff-utils 的 fuzzy 应用在 hunk 无法定位时，部分版本会抛出
-        // IllegalArgumentException（如 fromIndex > toIndex），但语义上仍是补丁应用失败。
-        return message.contains("fromIndex") ||
-                message.contains("toIndex") ||
-                message.contains("Incorrect Chunk") ||
-                message.contains("could not apply");
+        // 原子性保存
+        Files.write(target, workingContent.getBytes(fileCharset));
+
+        return String.format("文件 %s 成功完成 %d 处修改。", filePath, edits.size());
     }
 
     // --- 5. 搜索工具 ---
@@ -934,4 +890,12 @@ public class TerminalTalent extends AbsTalent {
         return support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
     }
 
+    public static class EditOp {
+        @Param(value = "old_str", description = "待替换的唯一文本块。必须唯一且包含精确缩进。")
+        public String oldStr;
+        @Param(value = "new_str", description = "替换后的新内容")
+        public String newStr;
+        @Param(value = "replace_all", required = false, defaultValue = "false", description = "是否替换所有匹配项（仅当 old_str 全文唯一时执行替换）。")
+        public Boolean replaceAll = false; // 赋默认值
+    }
 }
