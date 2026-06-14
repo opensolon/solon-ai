@@ -125,7 +125,17 @@ public class TerminalSupport {
         Patch<String> patch = UnifiedDiffUtils.parseUnifiedDiff(diffLines);
 
         // 4. 应用补丁
-        List<String> patchedLines = patch.applyTo(originalLines);
+        List<String> patchedLines;
+        try {
+            patchedLines = patch.applyTo(originalLines);
+        } catch (PatchFailedException e) {
+            // LLM 生成的 diff 经常出现行号轻微偏移，或上下文行少量过期。
+            // 严格匹配失败后使用 java-diff-utils 的 fuzzy 模式重试：
+            // - 可在附近位置搜索 hunk，降低 @@ 行号错误导致的失败率；
+            // - 可忽略 hunk 首尾少量上下文行，降低上下文轻微漂移导致的失败率；
+            // - 仍会校验核心删除/替换行，避免无约束的误改。
+            patchedLines = patch.applyFuzzy(originalLines, 2);
+        }
 
         // 5. 按原文换行风格重新拼接为字符串
         return String.join(lineSeparator, patchedLines);
@@ -164,7 +174,9 @@ public class TerminalSupport {
 
         for (String line : lines) {
             String trimmed = line.trim();
-            if (trimmed.startsWith("```") || line.startsWith("\\")) {
+            // 仅过滤 Unified Diff 标准的“文件末尾无换行符”标记，避免误删
+            // 以反斜杠开头的合法代码内容（如正则、LaTeX、Windows 路径等）。
+            if (trimmed.startsWith("```") || "\\ No newline at end of file".equals(line)) {
                 continue;
             }
             result.add(line);

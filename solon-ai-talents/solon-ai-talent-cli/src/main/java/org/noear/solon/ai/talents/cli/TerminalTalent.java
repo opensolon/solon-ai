@@ -573,7 +573,14 @@ public class TerminalTalent extends AbsTalent {
 
     @ToolMapping(
             name = "edit",
-            description = "对文件应用 git diff 格式的补丁 (Unified Diff)。支持单次补丁包含多个 @@ 块以实现多处修改，具有原子性：补丁完全应用成功才会写入，否则全部回滚。\n\n" +
+            description = "对文件应用 git diff 格式的补丁（Unified Diff）。支持单次补丁包含多个 @@ 块以实现多处修改，具有原子性：补丁完全应用成功才会写入，否则全部回滚。\n\n" +
+                    "格式要求：\n" +
+                    "1. diff 必须包含完整的 Unified Diff 文件头（--- 和 +++）以及一个或多个 @@ 块。\n" +
+                    "2. 不要只提交 @@ 块。\n" +
+                    "3. 上下文行必须来自文件原文，并尽量保持原始缩进、空格和内容一致。\n" +
+                    "4. 建议每个 @@ 块在修改位置前后各保留 2-3 行上下文，以提高定位成功率。\n" +
+                    "5. diff 头中的路径仅用于满足 Unified Diff 格式，实际应用目标以 file_path 参数为准。\n" +
+                    "6. 支持 Markdown 代码块包裹；如使用代码块，代码块内必须是完整 diff 内容。\n\n" +
                     "示例格式：\n" +
                     "```diff\n" +
                     "--- a/Hello.java\n" +
@@ -586,7 +593,7 @@ public class TerminalTalent extends AbsTalent {
                     "```"
     )
     public String edit(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String filePath,
-                       @Param(value = "diff", description = "Unified Diff 格式的补丁内容（git diff 格式），包含 @@ 块和上下文行。支持 Markdown 代码块包裹。") String diff,
+                       @Param(value = "diff", description = "Unified Diff 格式的补丁内容（标准 git diff 格式），必须包含 ---/+++ 文件头、@@ 块和上下文行；支持单个补丁包含多个 @@ 块；支持 Markdown 代码块包裹。") String diff,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
         Path target = support.resolveSafePath(workPath, filePath, false, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
