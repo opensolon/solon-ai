@@ -644,6 +644,9 @@ public class TerminalTalent extends AbsTalent {
                 return String.format("预检查失败（操作 #%d）: 找不到指定的文本块。请确保 old_str 的缩进和换行与文件内容完全一致。", i + 1);
             }
 
+            // 由后端基于真实匹配位置回填 old_str 起始行号（1-based），仅供前端生成 diff 展示，不参与内部定位
+            edit.oldStrStartLine = toLineNumber(originalContent, firstIndex);
+
             // 如果不是 replaceAll 模式，校验唯一性
             if (Boolean.FALSE.equals(edit.replaceAll)) {
                 if (originalContent.lastIndexOf(finalOld) != firstIndex) {
@@ -668,6 +671,21 @@ public class TerminalTalent extends AbsTalent {
         Files.write(target, workingContent.getBytes(fileCharset));
 
         return String.format("文件 %s 成功完成 %d 处修改。", filePath, edits.size());
+    }
+
+    /**
+     * 计算字符偏移量对应的行号（1-based）。
+     * 用于由后端确定性回填 EditOp.oldStrStartLine，仅供前端生成 diff 展示。
+     */
+    private static int toLineNumber(String content, int charIndex) {
+        int line = 1;
+        int max = Math.min(charIndex, content.length());
+        for (int i = 0; i < max; i++) {
+            if (content.charAt(i) == '\n') {
+                line++;
+            }
+        }
+        return line;
     }
 
     // --- 5. 搜索工具 ---
@@ -897,5 +915,8 @@ public class TerminalTalent extends AbsTalent {
         public String newStr;
         @Param(value = "replace_all", required = false, defaultValue = "false", description = "是否替换所有匹配项（仅当 old_str 全文唯一时执行替换）。")
         public Boolean replaceAll = false; // 赋默认值
+
+        // 由后端基于真实匹配位置回填的 old_str 起始行号（1-based）。不暴露给模型，仅供前端生成 diff 展示，不参与内部定位。
+        public Integer oldStrStartLine;
     }
 }

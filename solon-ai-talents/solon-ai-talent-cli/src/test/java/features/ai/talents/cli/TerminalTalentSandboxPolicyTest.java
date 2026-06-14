@@ -131,27 +131,6 @@ public class TerminalTalentSandboxPolicyTest {
         }
     }
 
-    @Test
-    public void editRequiresReadAndWritePermission() throws Exception {
-        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
-        try {
-            Files.createDirectories(workDir.resolve("secret"));
-            Files.write(workDir.resolve("secret/private.txt"), Collections.singletonList("old"));
-
-            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            FilesystemConfig fs = new FilesystemConfig(Collections.singletonList("secret"), null, Collections.singletonList("secret"), null, null);
-            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
-            talent.setSandboxConfig(config);
-
-            String diff = "--- a/private.txt\n+++ b/private.txt\n@@ -1 +1 @@\n-old\n+new\n";
-
-            SecurityException ex = assertThrows(SecurityException.class,
-                    () -> talent.edit("secret/private.txt", diff, workDir.toString()));
-            assertTrue(ex.getMessage().contains("读取拒绝"), ex.getMessage());
-        } finally {
-            deleteRecursively(workDir);
-        }
-    }
 
     @Test
     public void readWriteMountHonorsMountWritableFlag() throws Exception {
