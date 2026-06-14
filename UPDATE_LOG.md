@@ -15,9 +15,12 @@
 
 * 添加 solon-ai-harness allowToolReset,disallowToolReset 方法
 * 添加 solon-ai-harness 子代理 ContextSizeChunk 流传递
-* 优化 solon-ai-talent-cli TerminalTalent.grep 参数（采用正则匹配，并增加 include）
+* 优化 solon-ai-agent ContextCompressionInterceptor 对单条消息超过 maxTokens/2 进行限制（避免上下文溢出）
+* 优化 solon-ai-talent-cli TerminalTalent.grep 参数（采用正则匹配，并增加 include 参数，）
+* 优化 solon-ai-talent-cli TerminalTalent.bash 参数（增加 max_output_chars 参数，对输出限流）
 * 优化 solon-ai-talent-cli TodoTalent 返回内容，增加各状态数据描述
 * 优化 solon-ai-talent-web CodeSearchTalent，WebfetchTalent，WebsearchTalent 返回格式
+* 调整 solon-ai-talent-cli TerminalTalent.edit 由 json 改为 diff（方便前端显示）
 * 重构 solon-ai-core EmbeddingOptions 参数合并逻辑，将字符串类型的配置值自动转换为布尔、整数或浮点等强类型
 * tika 升为 2.9.4
 

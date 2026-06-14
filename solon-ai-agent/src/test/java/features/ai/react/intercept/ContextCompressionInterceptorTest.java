@@ -39,6 +39,11 @@ public class ContextCompressionInterceptorTest {
         when(trace.getWorkingMemory()).thenReturn(workingMemory);
         when(trace.getAgentName()).thenReturn("TestAgent");
 
+        // stub config，使 onReasonStart 中的 tools 估算分支可安全跳过（默认 STRUCTURED_TEXT）
+        org.noear.solon.ai.agent.react.ReActAgentConfig cfg = mock(org.noear.solon.ai.agent.react.ReActAgentConfig.class);
+        when(cfg.getStyle()).thenReturn(org.noear.solon.ai.agent.react.ReActStyle.STRUCTURED_TEXT);
+        when(trace.getConfig()).thenReturn(cfg);
+
         chatModel = LlmUtil.getChatModel();
 
         // 阈值设为 6，消息超过 6 条时触发压缩
@@ -494,5 +499,84 @@ public class ContextCompressionInterceptorTest {
 
         assertTrue(nonFirstCount >= 5,
                 "With minReservedMessages=5, should keep at least 5 non-FIRST messages, got: " + nonFirstCount);
+    }
+
+    /**
+     * 验证单条消息硬上限兜底：当一条 ToolMessage 自身就超过窗口预算时（如读取大文件/二进制），
+     * 其内容会被头尾截断，从根本上避免 context_length_exceeded。
+     */
+    @Test
+    public void testOversizedSingleToolMessageGetsTruncated() {
+        // maxTokens=8000，perMessageCap = max(2000, 8000/2) = 4000
+        ChatMessage sys = ChatMessage.ofSystem("System");
+        sys.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(sys);
+
+        ChatMessage goal = ChatMessage.ofUser("Read the big jar");
+        goal.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(goal);
+
+        // 触发工具调用的 Assistant + 一条超大 ToolMessage（模拟读了个超大文件）
+        List<ToolCall> toolCalls = Arrays.asList(new ToolCall("0", "call_1", "bash", "{}", Utils.asMap()));
+        AssistantMessage toolCallMsg = new AssistantMessage("call", false, null, null, toolCalls, null);
+        workingMemory.addMessage(toolCallMsg);
+
+        StringBuilder huge = new StringBuilder();
+        for (int i = 0; i < 100_000; i++) {
+            huge.append("token").append(i).append(' ');
+        }
+        ToolMessage bigTool = ChatMessage.ofTool(huge.toString(), "bash", "call_1");
+        int originalLen = huge.length();
+        workingMemory.addMessage(bigTool);
+
+        interceptor.onReasonStart(trace, null);
+
+        // 找到截断后的 ToolMessage
+        ToolMessage after = workingMemory.getMessages().stream()
+                .filter(m -> m instanceof ToolMessage)
+                .map(m -> (ToolMessage) m)
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(after, "ToolMessage should still exist after compression");
+        assertTrue(after.getContent().length() < originalLen,
+                "Oversized ToolMessage content should be truncated");
+        assertTrue(after.getContent().contains("内容过大已截断"),
+                "Truncated content should carry the placeholder marker");
+        // 截断后整体上下文应落在窗口内
+        assertTrue(after.getContent().contains("token0 "), "Should keep head片段");
+    }
+
+    /**
+     * 验证初心链中的超大消息不被截断（system / 用户原始目标需完整保留）。
+     */
+    @Test
+    public void testOversizedFirstChainMessageNotTruncated() {
+        StringBuilder hugeGoal = new StringBuilder();
+        for (int i = 0; i < 100_000; i++) {
+            hugeGoal.append("goal").append(i).append(' ');
+        }
+        String goalContent = hugeGoal.toString();
+
+        ChatMessage sys = ChatMessage.ofSystem("System");
+        sys.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(sys);
+
+        ChatMessage goal = ChatMessage.ofUser(goalContent);
+        goal.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(goal);
+
+        workingMemory.addMessage(ChatMessage.ofAssistant("ok"));
+
+        interceptor.onReasonStart(trace, null);
+
+        ChatMessage firstUser = workingMemory.getMessages().stream()
+                .filter(m -> m instanceof UserMessage)
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(firstUser);
+        assertEquals(goalContent, firstUser.getContent(),
+                "First-chain (META_FIRST) message must not be truncated");
     }
 }

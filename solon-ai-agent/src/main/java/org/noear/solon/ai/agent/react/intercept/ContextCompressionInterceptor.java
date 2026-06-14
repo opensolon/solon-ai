@@ -41,6 +41,7 @@ import reactor.core.publisher.FluxSink;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -152,6 +153,12 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     public void onReasonStart(ReActTrace trace, StringBuilder systemPromptBuf) {
         List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
         String systemPrompt = (systemPromptBuf == null ? null : systemPromptBuf.toString());
+
+        // 0. ⭐ 单条消息硬上限兜底（内容级截断）
+        //    消息级压缩无法处理“单条消息自身就超过窗口”的情况（如工具读取了超大文件/二进制）。
+        //    在任何裁剪逻辑之前，先把超限的单条消息内容截断，确保不变式：
+        //    任何单条消息都不会独占超过窗口的份额，从根本上避免 context_length_exceeded。
+        messages = enforcePerMessageCap(trace, messages);
 
         // 收集 tools 元信息（仅 NATIVE_TOOL 模式下 LLM 会接收 tools 定义）
         int toolsTokens = 0;
@@ -548,6 +555,136 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         }
 
         return false;
+    }
+
+    /**
+     * 单条消息硬上限兜底：对内容 Token 数超过 {@code perMessageCap} 的单条消息做头尾截断。
+     *
+     * <p>消息级压缩（裁剪/摘要历史）无法解决“单条消息自身超过上下文窗口”的问题——
+     * 例如工具读取了一个超大文件或二进制流，产生一条数十万 Token 的 ToolMessage。
+     * 此时无论怎么删别的消息，这一条都会把请求顶爆。故在所有裁剪逻辑之前先做内容级截断。</p>
+     *
+     * <p>仅处理文本型消息；多模态消息（含图片块等）跳过，避免破坏 ContentBlock 结构。
+     * 截断后清除该消息的 {@code META_TOKEN_SIZE} 缓存以触发重算。</p>
+     *
+     * @return 处理后的消息列表（若发生截断会写回 WorkingMemory）
+     */
+    private List<ChatMessage> enforcePerMessageCap(ReActTrace trace, List<ChatMessage> messages) {
+        // 单条消息最多占用半个窗口预算（且不低于绝对下限），超出即视为异常的超大消息
+        int perMessageCap = Math.max(2_000, maxTokens / 2);
+
+        boolean changed = false;
+        List<ChatMessage> result = new ArrayList<>(messages.size());
+
+        for (ChatMessage msg : messages) {
+            // 初心链消息不截断（system prompt / 用户原始问题需完整保留）
+            if (msg.hasMetadata(AgentTrace.META_FIRST)) {
+                result.add(msg);
+                continue;
+            }
+
+            String content = msg.getContent();
+            if (content == null || content.isEmpty()) {
+                result.add(msg);
+                continue;
+            }
+
+            // 多模态 ToolMessage 跳过（避免破坏图片等非文本块）
+            if (msg instanceof ToolMessage && ((ToolMessage) msg).isMultiModal()) {
+                result.add(msg);
+                continue;
+            }
+
+            int contentTokens = encoding.countTokens(content);
+            if (contentTokens <= perMessageCap) {
+                result.add(msg);
+                continue;
+            }
+
+            String truncated = truncateTextToTokens(content, perMessageCap);
+            ChatMessage replacement = rebuildWithContent(msg, truncated);
+            if (replacement == null) {
+                // 无法安全重建（类型不支持）→ 保持原样，交由后续逻辑处理
+                result.add(msg);
+                continue;
+            }
+
+            result.add(replacement);
+            changed = true;
+
+            if (log.isWarnEnabled()) {
+                log.warn("ReActAgent [{}] single message too large ({} tokens > cap {}), content truncated",
+                        trace.getAgentName(), contentTokens, perMessageCap);
+            }
+        }
+
+        if (changed) {
+            trace.getWorkingMemory().replaceMessages(result);
+            return result;
+        }
+        return messages;
+    }
+
+    /**
+     * 重建一条带有新内容的消息，复制原 metadata（但清除 token_size 以触发重算）。
+     * 仅支持 ToolMessage（超大单条消息的主要来源）；其它类型返回 null。
+     */
+    private ChatMessage rebuildWithContent(ChatMessage origin, String newContent) {
+        if (origin instanceof ToolMessage) {
+            ToolMessage tm = (ToolMessage) origin;
+            ToolMessage rebuilt = new ToolMessage(
+                    new org.noear.solon.ai.chat.tool.ToolResult(newContent),
+                    tm.getName(),
+                    tm.getToolCallId(),
+                    tm.isReturnDirect());
+
+            // 复制原 metadata（跳过 token_size，让其按截断后的新内容重算）
+            Map<String, Object> meta = origin.getMetadata();
+            if (meta != null) {
+                for (Map.Entry<String, Object> e : meta.entrySet()) {
+                    if (META_TOKEN_SIZE.equals(e.getKey())) {
+                        continue;
+                    }
+                    rebuilt.addMetadata(e.getKey(), e.getValue());
+                }
+            }
+            return rebuilt;
+        }
+
+        return null;
+    }
+
+    /**
+     * 将文本按 Token 预算做头尾保留截断（中间插入显式占位）。
+     * 以字符切分逼近，再用编码器精确收敛，确保结果不超过 maxTokens。
+     */
+    private String truncateTextToTokens(String text, int maxTokens) {
+        if (text == null || encoding.countTokens(text) <= maxTokens) {
+            return text;
+        }
+
+        String marker = "\n... [内容过大已截断：单条消息超过上下文预算，省略中间部分，仅保留首尾。"
+                + "如需完整内容，请用分页方式重新获取] ...\n";
+        int markerTokens = encoding.countTokens(marker);
+        int budget = Math.max(0, maxTokens - markerTokens);
+        int headTokens = budget / 2;
+        int tailTokens = budget - headTokens;
+
+        // 字符与 Token 的经验比例（保守取 3 字符/Token），逐步收敛避免超限
+        int headChars = Math.min(text.length(), headTokens * 3);
+        int tailChars = Math.min(text.length() - headChars, tailTokens * 3);
+
+        String head = text.substring(0, headChars);
+        while (encoding.countTokens(head) > headTokens && head.length() > 0) {
+            head = head.substring(0, head.length() * 9 / 10);
+        }
+
+        String tail = text.substring(text.length() - tailChars);
+        while (encoding.countTokens(tail) > tailTokens && tail.length() > 0) {
+            tail = tail.substring(tail.length() / 10);
+        }
+
+        return head + marker + tail;
     }
 
     private int estimateTokens(List<ChatMessage> messages, String systemPrompt) {
