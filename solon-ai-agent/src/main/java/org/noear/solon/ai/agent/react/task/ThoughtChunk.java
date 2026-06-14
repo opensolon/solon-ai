@@ -17,9 +17,11 @@ package org.noear.solon.ai.agent.react.task;
 
 import org.noear.solon.ai.agent.AbsAgentChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 import java.util.List;
@@ -33,26 +35,32 @@ import java.util.List;
 @Preview("3.9.7")
 public class ThoughtChunk extends AbsAgentChunk {
     private final transient ReActTrace trace;
+    private final transient @Nullable ChatResponse response;
     private final transient String thoughtContent;
     private final transient AssistantMessage assistantMessage;
 
-    public ThoughtChunk(ReActTrace trace, String thoughtContent, AssistantMessage message) {
+    public ThoughtChunk(ReActTrace trace, @Nullable ChatResponse response, AssistantMessage message, String thoughtContent) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
         this.trace = trace;
+        this.response = response;
         this.thoughtContent = thoughtContent;
         this.assistantMessage = message;
     }
 
-    public String getThoughtContent() {
-        return thoughtContent;
+    public ReActTrace getTrace() {
+        return trace;
+    }
+
+    public ChatResponse getResponse() {
+        return response;
     }
 
     public AssistantMessage getAssistantMessage() {
         return assistantMessage;
     }
 
-    public ReActTrace getTrace() {
-        return trace;
+    public String getThoughtContent() {
+        return thoughtContent;
     }
 
     public boolean isToolCalls() {

@@ -49,6 +49,14 @@ public class ReasonChunk extends AbsAgentChunk {
         return trace;
     }
 
+    public ChatResponse getResponse() {
+        return response;
+    }
+
+    public AssistantMessage getAssistantMessage() {
+        return assistantMessage;
+    }
+
     /**
      * 是否已完成
      */
