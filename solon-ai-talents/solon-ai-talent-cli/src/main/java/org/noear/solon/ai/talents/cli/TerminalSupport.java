@@ -64,7 +64,7 @@ public class TerminalSupport {
         }
     }
 
-    String applyEditLogic(String content, String oldStr, String newStr, boolean replaceAll) {
+    String applyEditLogic(String content, String oldStr, String newStr, boolean replaceAll, Integer oldStrStartLine) {
         if (Utils.isEmpty(oldStr)) {
             throw new IllegalArgumentException("old_str 不能为空");
         }
@@ -82,6 +82,11 @@ public class TerminalSupport {
             }
             return content.replace(finalOld, finalNew);
         } else {
+            int lineIndex = findAtStartLine(content, finalOld, oldStrStartLine);
+            if (lineIndex >= 0) {
+                return content.substring(0, lineIndex) + finalNew + content.substring(lineIndex + finalOld.length());
+            }
+
             int firstIndex = content.indexOf(finalOld);
             if (firstIndex == -1) {
                 throw new IllegalArgumentException("找不到文本块。这通常是由于前面的修改改变了文件的字符偏移或内容，建议分步执行。");
@@ -91,6 +96,45 @@ public class TerminalSupport {
             }
             return content.substring(0, firstIndex) + finalNew + content.substring(firstIndex + finalOld.length());
         }
+    }
+
+    int findAtStartLine(String content, String oldStr, Integer oldStrStartLine) {
+        if (oldStrStartLine == null || oldStrStartLine <= 0) {
+            return -1;
+        }
+
+        int lineStartIndex = getLineStartIndex(content, oldStrStartLine);
+        if (lineStartIndex < 0) {
+            return -1;
+        }
+
+        if (content.startsWith(oldStr, lineStartIndex)) {
+            return lineStartIndex;
+        }
+
+        return -1;
+    }
+
+    int getLineStartIndex(String content, int lineNumber) {
+        if (lineNumber <= 0) {
+            return -1;
+        }
+
+        if (lineNumber == 1) {
+            return 0;
+        }
+
+        int currentLine = 1;
+        for (int i = 0; i < content.length(); i++) {
+            if (content.charAt(i) == '\n') {
+                currentLine++;
+                if (currentLine == lineNumber) {
+                    return i + 1;
+                }
+            }
+        }
+
+        return -1;
     }
 
     Path resolveCommandWorkPath(Path workPath, String workdir, boolean sandboxEnabled, boolean sandboxAllowUserHome, SandboxRuntimeConfig sandboxConfig) throws IOException {

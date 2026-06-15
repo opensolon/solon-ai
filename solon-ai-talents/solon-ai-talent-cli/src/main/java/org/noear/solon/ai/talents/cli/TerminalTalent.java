@@ -639,28 +639,37 @@ public class TerminalTalent extends AbsTalent {
 
             String finalOld = support.normalizeNewlines(originalContent, edit.oldStr);
 
+            if (Boolean.TRUE.equals(edit.replaceAll)) {
+                if (!originalContent.contains(finalOld)) {
+                    return String.format("预检查失败（操作 #%d）: 找不到指定的文本块。请确保 old_str 的缩进和换行与文件内容完全一致。", i + 1);
+                }
+                continue;
+            }
+
+            int lineIndex = support.findAtStartLine(originalContent, finalOld, edit.oldStrStartLine);
+            if (lineIndex >= 0) {
+                continue;
+            }
+
             int firstIndex = originalContent.indexOf(finalOld);
             if (firstIndex == -1) {
                 return String.format("预检查失败（操作 #%d）: 找不到指定的文本块。请确保 old_str 的缩进和换行与文件内容完全一致。", i + 1);
             }
 
-            // 如果不是 replaceAll 模式，校验唯一性
-            if (Boolean.FALSE.equals(edit.replaceAll)) {
-                if (originalContent.lastIndexOf(finalOld) != firstIndex) {
-                    return String.format("预检查失败（操作 #%d）: 文本块在文件中不唯一。请增加上下文行以实现精准定位。", i + 1);
-                }
+            if (originalContent.lastIndexOf(finalOld) != firstIndex) {
+                return String.format("预检查失败（操作 #%d）: 文本块在指定 old_StrStartLine 处未精确匹配，且在文件中不唯一。请提供正确的 old_StrStartLine 或增加上下文行。", i + 1);
             }
         }
 
         String workingContent = originalContent;
-        // 顺序应用所有编辑
-        for (int i = 0; i < edits.size(); i++) {
-            EditOp edit = edits.get(i);
+        List<Integer> executionOrder = buildEditExecutionOrder(edits);
+        // 顺序应用所有编辑；当所有操作都是带 old_StrStartLine 的单点替换时，按行号倒序执行，避免前面的修改影响后面的行号。
+        for (Integer editIndex : executionOrder) {
+            EditOp edit = edits.get(editIndex);
             try {
-                // 注意：由于前面的修改可能改变了后续匹配项的上下文位置，这里捕获可能的运行时冲突
-                workingContent = support.applyEditLogic(workingContent, edit.oldStr, edit.newStr, edit.replaceAll);
+                workingContent = support.applyEditLogic(workingContent, edit.oldStr, edit.newStr, Boolean.TRUE.equals(edit.replaceAll), edit.oldStrStartLine);
             } catch (IllegalArgumentException e) {
-                return String.format("执行失败（操作 #%d）: %s。可能是由于前面的修改破坏了此处的匹配上下文，请尝试分多次调用 edit。", i + 1, e.getMessage());
+                return String.format("执行失败（操作 #%d）: %s。可能是由于前面的修改破坏了此处的匹配上下文，请尝试分多次调用 edit。", editIndex + 1, e.getMessage());
             }
         }
 
@@ -802,6 +811,27 @@ public class TerminalTalent extends AbsTalent {
      * 支持简单的 glob 模式，如 "*.java", "*.{ts,tsx}" 等。
      * 仅匹配文件名部分（非路径）。
      */
+    private List<Integer> buildEditExecutionOrder(List<EditOp> edits) {
+        boolean allLineScopedSingleReplace = true;
+        for (EditOp edit : edits) {
+            if (Boolean.TRUE.equals(edit.replaceAll) || edit.oldStrStartLine == null || edit.oldStrStartLine <= 0) {
+                allLineScopedSingleReplace = false;
+                break;
+            }
+        }
+
+        List<Integer> order = new ArrayList<>();
+        for (int i = 0; i < edits.size(); i++) {
+            order.add(i);
+        }
+
+        if (allLineScopedSingleReplace) {
+            order.sort((a, b) -> Integer.compare(edits.get(b).oldStrStartLine, edits.get(a).oldStrStartLine));
+        }
+
+        return order;
+    }
+
     private PathMatcher buildIncludeMatcher(String include) {
         if (include == null || include.isEmpty()) {
             return null;
@@ -891,14 +921,19 @@ public class TerminalTalent extends AbsTalent {
     }
 
     public static class EditOp {
-        @Param(value = "old_str", description = "待替换的唯一文本块。必须唯一且包含精确缩进。")
+        @Param(value = "old_str",
+                description = "待替换的文本块。内容必须与 read 输出中对应文件内容精确一致，包括缩进、换行和空白字符；用于校验并限定替换范围，不要求全文唯一。")
         public String oldStr;
-        @Param(value = "old_StrStartLine", description = "old_str 的起始行号")
+        @Param(value = "old_StrStartLine",
+                description = "old_str 在 read 输出中的起始行号，用于定位替换起点；仅在该行行首精确匹配 old_str，不做附近搜索、缩进容错或空白容错。")
         public Integer oldStrStartLine;
 
-        @Param(value = "new_str", description = "替换后的新内容")
+        @Param(value = "new_str",
+                description = "替换后的新内容")
         public String newStr;
-        @Param(value = "replace_all", required = false, defaultValue = "false", description = "是否替换所有匹配项（仅当 old_str 全文唯一时执行替换）。")
-        public Boolean replaceAll = false; // 赋默认值
+
+        @Param(value = "replace_all", required = false, defaultValue = "false",
+                description = "是否替换所有匹配项。为 true 时，会忽略 old_StrStartLine，全文替换所有与 old_str 精确一致的文本。")
+        public Boolean replaceAll = false;
     }
 }
