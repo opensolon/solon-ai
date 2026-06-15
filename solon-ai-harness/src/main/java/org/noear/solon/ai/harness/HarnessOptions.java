@@ -21,8 +21,9 @@ import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
+import org.noear.solon.ai.talents.cli.SkillProvider;
 import org.noear.solon.ai.talents.lsp.LspServerParameters;
-import org.noear.solon.ai.talents.memory.MemorySolution;
+import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.ai.talents.gateway.openapi.ApiSource;
 import org.noear.solon.core.util.Assert;
@@ -97,7 +98,8 @@ class HarnessOptions implements Serializable {
     private AgentSessionProvider sessionProvider;
     private ContextCompressionInterceptor compressionInterceptor;
     private HITLInterceptor hitlInterceptor;
-    private MemorySolution.Factory memorySolution;
+    private MemorySolutionProvider memoryProvider;
+    private SkillProvider skillProvider;
 
     HarnessOptions(String workspace, String harnessHome) {
         if (Assert.isEmpty(harnessHome)) {
@@ -470,11 +472,19 @@ class HarnessOptions implements Serializable {
         this.hitlInterceptor = hitlInterceptor;
     }
 
-    MemorySolution.Factory getMemorySolution() {
-        return memorySolution;
+    MemorySolutionProvider getMemoryProvider() {
+        return memoryProvider;
     }
 
-    void setMemorySolution(MemorySolution.Factory memorySolution) {
-        this.memorySolution = memorySolution;
+    void setMemoryProvider(MemorySolutionProvider memoryProvider) {
+        this.memoryProvider = memoryProvider;
+    }
+
+    SkillProvider getSkillProvider() {
+        return skillProvider;
+    }
+
+    void setSkillProvider(SkillProvider skillProvider) {
+        this.skillProvider = skillProvider;
     }
 }

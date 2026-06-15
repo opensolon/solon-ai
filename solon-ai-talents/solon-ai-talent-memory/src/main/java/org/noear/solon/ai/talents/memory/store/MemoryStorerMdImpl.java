@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.talents.memory.store;
 
-import org.noear.solon.ai.talents.memory.MemoryStoreProvider;
+import org.noear.solon.ai.talents.memory.MemoryStorer;
 import org.noear.solon.ai.talents.memory.md.MemoryMdData;
 
 /**
@@ -46,7 +46,7 @@ import org.noear.solon.ai.talents.memory.md.MemoryMdData;
  * @author noear
  * @since 3.10.5
  */
-public class MemoryStoreProviderMdImpl implements MemoryStoreProvider {
+public class MemoryStorerMdImpl implements MemoryStorer {
     private final MemoryMdData data;
 
     /**
@@ -54,7 +54,7 @@ public class MemoryStoreProviderMdImpl implements MemoryStoreProvider {
      *
      * @param data 共享数据层实例
      */
-    public MemoryStoreProviderMdImpl(MemoryMdData data) {
+    public MemoryStorerMdImpl(MemoryMdData data) {
         this.data = data;
     }
 

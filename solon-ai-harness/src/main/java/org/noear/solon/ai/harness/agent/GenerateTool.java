@@ -142,7 +142,7 @@ public class GenerateTool extends AbsToolProvider {
                 }
             }
 
-            engine.getAgentManager().addAgent(definition);
+            engine.getAgentManager().addAgentIfAbsent(definition);
 
             return "[OK] 子代理创建成功！\n\n" +
                     String.format("**标识**: %s\n", name) +

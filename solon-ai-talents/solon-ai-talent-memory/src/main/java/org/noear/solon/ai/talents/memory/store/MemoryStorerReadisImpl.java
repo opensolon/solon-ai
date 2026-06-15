@@ -16,7 +16,7 @@
 package org.noear.solon.ai.talents.memory.store;
 
 import org.noear.redisx.RedisClient;
-import org.noear.solon.ai.talents.memory.MemoryStoreProvider;
+import org.noear.solon.ai.talents.memory.MemoryStorer;
 import org.noear.solon.core.util.Assert;
 
 /**
@@ -24,16 +24,16 @@ import org.noear.solon.core.util.Assert;
  * @author noear 2026/3/4 created
  *
  */
-public class MemoryStoreProviderReadisImpl implements MemoryStoreProvider {
+public class MemoryStorerReadisImpl implements MemoryStorer {
     private final RedisClient redis;
     private String basePrefix;
 
-    public MemoryStoreProviderReadisImpl(RedisClient redis) {
+    public MemoryStorerReadisImpl(RedisClient redis) {
         this.redis = redis;
     }
 
 
-    public MemoryStoreProviderReadisImpl basePrefix(String basePrefix) {
+    public MemoryStorerReadisImpl basePrefix(String basePrefix) {
         this.basePrefix = basePrefix;
         return this;
     }

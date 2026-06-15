@@ -76,10 +76,17 @@ public class ReasonChunk extends AbsAgentChunk {
     }
 
     /**
+     * 是否为思考
+     */
+    public boolean isThinking(){
+        return assistantMessage.isThinking();
+    }
+
+    /**
      * 是否为工具调用
      */
     public boolean isToolCalls() {
-        return Assert.isNotEmpty(assistantMessage.getToolCalls());
+        return assistantMessage.isToolCalls();
     }
 
     /**

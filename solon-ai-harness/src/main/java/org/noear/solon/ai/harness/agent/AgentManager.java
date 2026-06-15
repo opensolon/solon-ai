@@ -60,8 +60,12 @@ public class AgentManager {
         loadAgentFile("git-summary", ResourceUtil.getResource(AGENT_MD_BASE + "git-summary.md"), null);
     }
 
-    public void addAgent(AgentDefinition agentDefinition) {
+    public void addAgentIfAbsent(AgentDefinition agentDefinition) {
         agentMap.putIfAbsent(agentDefinition.getName(), agentDefinition);
+    }
+
+    public void addAgent(AgentDefinition agentDefinition) {
+        agentMap.put(agentDefinition.getName(), agentDefinition);
     }
 
     /**

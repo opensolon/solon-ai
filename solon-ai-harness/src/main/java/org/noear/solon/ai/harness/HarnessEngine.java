@@ -33,6 +33,7 @@ import org.noear.solon.ai.harness.code.CodeTalent;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
+import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 import org.noear.solon.ai.talents.mount.AgentMd;
 import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.harness.permission.ToolPermission;
@@ -42,7 +43,6 @@ import org.noear.solon.ai.talents.lsp.LspServerParameters;
 import org.noear.solon.ai.talents.lsp.LspTalent;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.talents.memory.MemoryTalent;
-import org.noear.solon.ai.talents.memory.MemorySolution;
 import org.noear.solon.ai.talents.mount.SkillDir;
 import org.noear.solon.ai.talents.gateway.openapi.ApiSource;
 import org.noear.solon.ai.talents.gateway.openapi.ApiSourceClient;
@@ -175,8 +175,12 @@ public class HarnessEngine {
         return options.getSessionProvider();
     }
 
-    public MemorySolution.Factory getMemorySolution() {
-        return options.getMemorySolution();
+    public MemorySolutionProvider getMemoryProvider() {
+        return options.getMemoryProvider();
+    }
+
+    public SkillProvider getSkillProvider() {
+        return options.getSkillProvider();
     }
 
     // ========== 配置读取（代理到 options） ==========
@@ -355,7 +359,7 @@ public class HarnessEngine {
         return options.getModelOrDef(name);
     }
 
-    public String getDefaultModel(){
+    public String getDefaultModel() {
         return options.getDefaultModel();
     }
 
@@ -419,7 +423,7 @@ public class HarnessEngine {
         options.setSubagentEnabled(subagentEnabled);
     }
 
-    public void setBashAsyncEnabled(Boolean bashAsyncEnabled){
+    public void setBashAsyncEnabled(Boolean bashAsyncEnabled) {
         options.setBashAsyncEnabled(bashAsyncEnabled);
         terminalTalent.setBashAsyncEnabled(bashAsyncEnabled);
     }
@@ -448,7 +452,7 @@ public class HarnessEngine {
 
     // ========== 动态模型管理 ==========
 
-    public void setDefaultModel(String defaultModel){
+    public void setDefaultModel(String defaultModel) {
         String oldDefault = options.getDefaultModel();
         options.setDefaultModel(defaultModel);
 
@@ -505,9 +509,9 @@ public class HarnessEngine {
         }
     }
 
-    public void allowToolReset(Collection<String> tools){
+    public void allowToolReset(Collection<String> tools) {
         options.getTools().clear();
-        if(tools != null) {
+        if (tools != null) {
             options.getTools().addAll(tools);
         }
 
@@ -543,9 +547,9 @@ public class HarnessEngine {
         }
     }
 
-    public void disallowToolReset(Collection<String> disallowedTools){
+    public void disallowToolReset(Collection<String> disallowedTools) {
         options.getDisallowedTools().clear();
-        if(disallowedTools != null) {
+        if (disallowedTools != null) {
             options.getDisallowedTools().addAll(disallowedTools);
         }
 
@@ -736,7 +740,7 @@ public class HarnessEngine {
                     options.getCompressionMaxMessages(),
                     options.getCompressionMaxTokens(),
                     options.getModelRetries(),
-                    ()-> getModelOrMain(options.getCompressionModel()),
+                    () -> getModelOrMain(options.getCompressionModel()),
                     strategy));
         }
 
@@ -764,8 +768,8 @@ public class HarnessEngine {
         this.lspTalent = new LspTalent(lspManager, options.getWorkspace());
         this.lspManager.setDiagnosticsCallback(lspTalent::updateDiagnostics);
 
-        if (options.getMemorySolution() != null) {
-            this.memoryTalent = new MemoryTalent(options.getMemorySolution()).sessionIsolation(false);
+        if (options.getMemoryProvider() != null) {
+            this.memoryTalent = new MemoryTalent(options.getMemoryProvider()).sessionIsolation(false);
             this.memoryTalent.setEnabled(options.isMemoryEnabled());
         } else {
             this.memoryTalent = null;
@@ -789,7 +793,13 @@ public class HarnessEngine {
         }
 
         terminalTalent = new TerminalTalent(options.getMountManager());
-        skillTalent = new SkillTalent(options.getMountManager());
+
+        if (options.getSkillProvider() == null) {
+            skillTalent = new SkillTalent(options.getMountManager());
+        } else {
+            skillTalent = new SkillTalent(options.getSkillProvider());
+        }
+
         agentManager = new AgentManager(options.getMountManager());
 
         terminalTalent.setBashAsyncEnabled(options.isBashAsyncEnabled());
@@ -826,7 +836,7 @@ public class HarnessEngine {
         return AgentFactory.create(this, definition, null);
     }
 
-    public ChatModel getMainModel(){
+    public ChatModel getMainModel() {
         return getMainAgent().getModel();
     }
 
@@ -850,7 +860,7 @@ public class HarnessEngine {
     /**
      * 刷新主代理
      */
-    public void refreshMainAgent(){
+    public void refreshMainAgent() {
         agentLock.lock();
         try {
             this.mainAgent = null;
@@ -933,8 +943,16 @@ public class HarnessEngine {
         /**
          * 心智记忆存储方案
          */
-        public Builder memorySolution(MemorySolution.Factory memorySolution) {
-            options.setMemorySolution(memorySolution);
+        public Builder memoryProvider(MemorySolutionProvider memoryProvider) {
+            options.setMemoryProvider(memoryProvider);
+            return this;
+        }
+
+        /**
+         * 技能提供者（如果需要对接数据库，通过此接口适配）
+         */
+        public Builder skillProvider(SkillProvider skillProvider) {
+            options.setSkillProvider(skillProvider);
             return this;
         }
 

@@ -17,7 +17,7 @@ package org.noear.solon.ai.talents.memory.store;
 
 import com.yomahub.roguemap.RogueMap;
 import com.yomahub.roguemap.serialization.StringCodec;
-import org.noear.solon.ai.talents.memory.MemoryStoreProvider;
+import org.noear.solon.ai.talents.memory.MemoryStorer;
 
 import java.util.concurrent.TimeUnit;
 
@@ -26,10 +26,10 @@ import java.util.concurrent.TimeUnit;
  * @author noear 2026/3/4 created
  *
  */
-public class MemoryStoreProviderRogueImpl implements MemoryStoreProvider {
+public class MemoryStorerRogueImpl implements MemoryStorer {
     private final RogueMap<String, String> rogueMap;
 
-    public MemoryStoreProviderRogueImpl(String filePath) {
+    public MemoryStorerRogueImpl(String filePath) {
         this.rogueMap = RogueMap.<String, String>mmap()
                 .persistent(filePath)
                 .autoExpand(true)
@@ -39,7 +39,7 @@ public class MemoryStoreProviderRogueImpl implements MemoryStoreProvider {
                 .build();
     }
 
-    public MemoryStoreProviderRogueImpl(RogueMap<String, String> rogueMap) {
+    public MemoryStorerRogueImpl(RogueMap<String, String> rogueMap) {
         this.rogueMap = rogueMap;
     }
 

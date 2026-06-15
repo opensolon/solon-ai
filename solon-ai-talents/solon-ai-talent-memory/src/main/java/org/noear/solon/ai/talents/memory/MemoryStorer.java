@@ -23,7 +23,7 @@ package org.noear.solon.ai.talents.memory;
  * @author noear
  * @since 3.9.4
  */
-public interface MemoryStoreProvider {
+public interface MemoryStorer {
     /**
      * 存入记忆条目
      *

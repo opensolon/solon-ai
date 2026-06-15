@@ -20,7 +20,7 @@
 * 优化 solon-ai-talent-cli TerminalTalent.bash 参数（增加 max_output_chars 参数，对输出限流）
 * 优化 solon-ai-talent-cli TodoTalent 返回内容，增加各状态数据描述
 * 优化 solon-ai-talent-web CodeSearchTalent，WebfetchTalent，WebsearchTalent 返回格式
-* 调整 solon-ai-talent-cli TerminalTalent.edit 由 json 改为 diff（方便前端显示）
+* 调整 solon-ai-talent-memory 接口 MemorySolution.Factory 改为 MemorySolutionProvider
 * 重构 solon-ai-core EmbeddingOptions 参数合并逻辑，将字符串类型的配置值自动转换为布尔、整数或浮点等强类型
 * tika 升为 2.9.4
 

@@ -15,21 +15,21 @@
  */
 package org.noear.solon.ai.talents.memory;
 
+import java.util.List;
+
 /**
- * 记忆方案
- * 组合了存储与搜索能力，构成完整的长期记忆解决闭环。
+ * 记忆搜索供应商接口
  *
  * @author noear
- * @since 3.9.7
+ * @since 3.9.4
  */
-public interface MemorySolution {
-    /**
-     * 获取搜索器（负责语义检索与热记忆提取）
-     */
-    MemorySearcher getSearcher();
-
-    /**
-     * 获取存储器（负责物理持久化与 TTL 管理）
-     */
-    MemoryStorer getStorer();
+public interface MemorySearcher {
+    /** 语义/模糊搜索 */
+    List<MemorySearchResult> search(String userId, String query, int limit);
+    /** 获取高价值热记忆（用于画像注入） */
+    List<MemorySearchResult> getHotMemories(String userId, int limit);
+    /** 同步索引 */
+    void updateIndex(String userId, String key, String fact, int importance, String time);
+    /** 移除索引 */
+    void removeIndex(String userId, String key);
 }

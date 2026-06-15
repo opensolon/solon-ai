@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.talents.memory.search;
 
-import org.noear.solon.ai.talents.memory.MemorySearchProvider;
+import org.noear.solon.ai.talents.memory.MemorySearcher;
 import org.noear.solon.ai.talents.memory.MemorySearchResult;
 import org.noear.solon.ai.talents.memory.md.MemoryMdData;
 
@@ -35,7 +35,7 @@ import java.util.List;
  * @author noear
  * @since 3.10.5
  */
-public class MemorySearchProviderMdImpl implements MemorySearchProvider {
+public class MemorySearcherMdImpl implements MemorySearcher {
 
     private final MemoryMdData data;
 
@@ -44,7 +44,7 @@ public class MemorySearchProviderMdImpl implements MemorySearchProvider {
      *
      * @param data 共享数据层实例
      */
-    public MemorySearchProviderMdImpl(MemoryMdData data) {
+    public MemorySearcherMdImpl(MemoryMdData data) {
         this.data = data;
     }
 

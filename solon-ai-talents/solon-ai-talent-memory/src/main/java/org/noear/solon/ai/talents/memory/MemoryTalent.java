@@ -44,11 +44,11 @@ public class MemoryTalent extends AbsTalent {
     private static final Logger LOG = LoggerFactory.getLogger(MemoryTalent.class);
 
 
-    private final MemorySolution.Factory solutionFactory;
+    private final MemorySolutionProvider solutionProvider;
     private boolean sessionIsolation = false; // 默认会话不隔离
 
-    public MemoryTalent(MemorySolution.Factory solutionFactory) {
-        this.solutionFactory = solutionFactory;
+    public MemoryTalent(MemorySolutionProvider solutionProvider) {
+        this.solutionProvider = solutionProvider;
     }
 
     /**
@@ -83,7 +83,7 @@ public class MemoryTalent extends AbsTalent {
     public String getInstruction(Prompt prompt) {
         String __cwd = prompt.attrAs("__cwd");
 
-        MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
+        MemorySearcher searchProvider = solutionProvider.get(__cwd).getSearcher();
 
         String mentalModel = "";
 
@@ -134,8 +134,9 @@ public class MemoryTalent extends AbsTalent {
                           String __sessionId) {
         String userId = getUserId(__sessionId);
 
-        MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
-        MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
+        MemorySolution memorySolution = solutionProvider.get(__cwd);
+        MemoryStorer storeProvider = memorySolution.getStorer();
+        MemorySearcher searchProvider = memorySolution.getSearcher();
 
         try {
             String oldJson = storeProvider.get(userId, key);
@@ -183,7 +184,7 @@ public class MemoryTalent extends AbsTalent {
                          String __cwd,
                          String __sessionId) {
         String userId = getUserId(__sessionId);
-        MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
+        MemorySearcher searchProvider = solutionProvider.get(__cwd).getSearcher();
 
         if (searchProvider == null) {
             return "搜索适配器未配置。";
@@ -210,7 +211,7 @@ public class MemoryTalent extends AbsTalent {
                          String __cwd,
                          String __sessionId) {
         String userId = getUserId(__sessionId);
-        MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
+        MemoryStorer storeProvider = solutionProvider.get(__cwd).getStorer();
 
         try {
             String val = storeProvider.get(userId, key);
@@ -277,8 +278,8 @@ public class MemoryTalent extends AbsTalent {
                         String __cwd,
                         String __sessionId) {
         String userId = getUserId(__sessionId);
-        MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
-        MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
+        MemoryStorer storeProvider = solutionProvider.get(__cwd).getStorer();
+        MemorySearcher searchProvider = solutionProvider.get(__cwd).getSearcher();
 
         try {
             storeProvider.remove(userId, key);

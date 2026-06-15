@@ -1,10 +1,10 @@
 package demo.ai.memory;
 
-import org.noear.solon.ai.talents.memory.MemorySearchProvider;
+import org.noear.solon.ai.talents.memory.MemorySearcher;
 import org.noear.solon.ai.talents.memory.MemorySolution;
-import org.noear.solon.ai.talents.memory.MemoryStoreProvider;
-import org.noear.solon.ai.talents.memory.search.MemorySearchProviderLuceneImpl;
-import org.noear.solon.ai.talents.memory.store.MemoryStoreProviderRogueImpl;
+import org.noear.solon.ai.talents.memory.MemoryStorer;
+import org.noear.solon.ai.talents.memory.search.MemorySearcherLuceneImpl;
+import org.noear.solon.ai.talents.memory.store.MemoryStorerRogueImpl;
 
 import java.io.IOException;
 import java.nio.file.Paths;
@@ -15,28 +15,28 @@ import java.nio.file.Paths;
  *
  */
 public class MemorySolutionImpl implements MemorySolution {
-    private MemorySearchProvider searchProvider;
-    private MemoryStoreProvider storeProvider;
+    private MemorySearcher searchProvider;
+    private MemoryStorer storeProvider;
 
     public MemorySolutionImpl(String __cwd) {
         String lucenePath = Paths.get(__cwd, "lucene").toAbsolutePath().toString();
         String roguePath = Paths.get(__cwd,  "rogue.db").toAbsolutePath().toString();
 
         try {
-            searchProvider = new MemorySearchProviderLuceneImpl(lucenePath);
-            storeProvider = new MemoryStoreProviderRogueImpl(roguePath);
+            searchProvider = new MemorySearcherLuceneImpl(lucenePath);
+            storeProvider = new MemoryStorerRogueImpl(roguePath);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
     @Override
-    public MemorySearchProvider getSearchProvider() {
+    public MemorySearcher getSearcher() {
         return searchProvider;
     }
 
     @Override
-    public MemoryStoreProvider getStoreProvider() {
+    public MemoryStorer getStorer() {
         return storeProvider;
     }
 }

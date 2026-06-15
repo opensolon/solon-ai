@@ -15,21 +15,20 @@
  */
 package org.noear.solon.ai.talents.memory;
 
-import java.util.List;
-
 /**
- * 记忆搜索供应商接口
+ * 记忆方案提供者
+ *
+ * 负责根据运行上下文（如工作目录、租户标识等）构建或检索对应的记忆方案。
  *
  * @author noear
- * @since 3.9.4
+ * @since 4.0.0
  */
-public interface MemorySearchProvider {
-    /** 语义/模糊搜索 */
-    List<MemorySearchResult> search(String userId, String query, int limit);
-    /** 获取高价值热记忆（用于画像注入） */
-    List<MemorySearchResult> getHotMemories(String userId, int limit);
-    /** 同步索引 */
-    void updateIndex(String userId, String key, String fact, int importance, String time);
-    /** 移除索引 */
-    void removeIndex(String userId, String key);
+public interface MemorySolutionProvider {
+    /**
+     * 根据当前上下文标识获取记忆方案
+     *
+     * @param __cwd 当前工作区
+     * @return 匹配的记忆方案实例
+     */
+    MemorySolution get(String __cwd);
 }

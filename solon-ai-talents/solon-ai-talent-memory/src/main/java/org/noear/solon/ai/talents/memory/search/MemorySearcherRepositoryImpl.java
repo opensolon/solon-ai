@@ -18,7 +18,7 @@ package org.noear.solon.ai.talents.memory.search;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.util.QueryCondition;
-import org.noear.solon.ai.talents.memory.MemorySearchProvider;
+import org.noear.solon.ai.talents.memory.MemorySearcher;
 import org.noear.solon.ai.talents.memory.MemorySearchResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,12 +33,12 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.9.4
  */
-public class MemorySearchProviderRepositoryImpl implements MemorySearchProvider {
-    private static final Logger log = LoggerFactory.getLogger(MemorySearchProviderRepositoryImpl.class);
+public class MemorySearcherRepositoryImpl implements MemorySearcher {
+    private static final Logger log = LoggerFactory.getLogger(MemorySearcherRepositoryImpl.class);
 
     private final RepositoryStorable repository;
 
-    public MemorySearchProviderRepositoryImpl(RepositoryStorable repository) {
+    public MemorySearcherRepositoryImpl(RepositoryStorable repository) {
         this.repository = repository;
     }
 

@@ -15,11 +15,11 @@
  */
 package org.noear.solon.ai.talents.memory.md;
 
-import org.noear.solon.ai.talents.memory.MemorySearchProvider;
+import org.noear.solon.ai.talents.memory.MemorySearcher;
 import org.noear.solon.ai.talents.memory.MemorySolution;
-import org.noear.solon.ai.talents.memory.MemoryStoreProvider;
-import org.noear.solon.ai.talents.memory.search.MemorySearchProviderMdImpl;
-import org.noear.solon.ai.talents.memory.store.MemoryStoreProviderMdImpl;
+import org.noear.solon.ai.talents.memory.MemoryStorer;
+import org.noear.solon.ai.talents.memory.search.MemorySearcherMdImpl;
+import org.noear.solon.ai.talents.memory.store.MemoryStorerMdImpl;
 
 import java.nio.file.Path;
 
@@ -44,14 +44,14 @@ import java.nio.file.Path;
  */
 public class MemorySolutionMdImpl implements MemorySolution, AutoCloseable {
     private final MemoryMdData data;
-    private final MemorySearchProvider searchProvider;
-    private final MemoryStoreProvider storeProvider;
+    private final MemorySearcher searchProvider;
+    private final MemoryStorer storeProvider;
 
     public MemorySolutionMdImpl(Path mdPath) {
         data = new MemoryMdData(mdPath).enableAutoCleanup(3600);
 
-        storeProvider = new MemoryStoreProviderMdImpl(data);
-        searchProvider = new MemorySearchProviderMdImpl(data);
+        storeProvider = new MemoryStorerMdImpl(data);
+        searchProvider = new MemorySearcherMdImpl(data);
     }
 
     @Override
@@ -62,12 +62,12 @@ public class MemorySolutionMdImpl implements MemorySolution, AutoCloseable {
     }
 
     @Override
-    public MemorySearchProvider getSearchProvider() {
+    public MemorySearcher getSearcher() {
         return searchProvider;
     }
 
     @Override
-    public MemoryStoreProvider getStoreProvider() {
+    public MemoryStorer getStorer() {
         return storeProvider;
     }
 }

@@ -19,7 +19,7 @@
 //import com.yomahub.roguemap.memory.RogueMemory;
 //import com.yomahub.roguemap.memory.SearchMode;
 //import com.yomahub.roguemap.memory.SearchOptions;
-//import org.noear.solon.ai.talents.memory.MemorySearchProvider;
+//import org.noear.solon.ai.talents.memory.MemorySearcher;
 //import org.noear.solon.ai.talents.memory.MemorySearchResult;
 //import org.slf4j.Logger;
 //import org.slf4j.LoggerFactory;
@@ -36,19 +36,19 @@
 // * @author noear
 // * @since 3.9.4
 // */
-//public class MemorySearchProviderRogueImpl implements MemorySearchProvider {
-//    private static final Logger log = LoggerFactory.getLogger(MemorySearchProviderRogueImpl.class);
+//public class MemorySearcherRogueImpl implements MemorySearcher {
+//    private static final Logger log = LoggerFactory.getLogger(MemorySearcherRogueImpl.class);
 //
 //    private final RogueMemory rogueMemory;
 //
-//    public MemorySearchProviderRogueImpl(String filePath) {
+//    public MemorySearcherRogueImpl(String filePath) {
 //        this.rogueMemory = RogueMemory.mmap()
 //                .persistent("data/mem")
 //                .searchMode(SearchMode.KEYWORD_ONLY)          // 关键词检索
 //                .build();
 //    }
 //
-//    public MemorySearchProviderRogueImpl(RogueMemory rogueMemory) {
+//    public MemorySearcherRogueImpl(RogueMemory rogueMemory) {
 //        this.rogueMemory = rogueMemory;
 //    }
 //

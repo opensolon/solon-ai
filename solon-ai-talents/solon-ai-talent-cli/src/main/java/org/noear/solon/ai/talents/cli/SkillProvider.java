@@ -13,23 +13,46 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.talents.memory;
+package org.noear.solon.ai.talents.cli;
+
+import org.noear.solon.ai.talents.mount.SkillDir;
+
+import java.util.Collection;
 
 /**
- * 记忆方案
- * 组合了存储与搜索能力，构成完整的长期记忆解决闭环。
+ * 技能提供者
  *
- * @author noear
- * @since 3.9.7
+ * @author noear 2026/6/15 created
+ * @since 4.0.1
  */
-public interface MemorySolution {
+public interface SkillProvider {
     /**
-     * 获取搜索器（负责语义检索与热记忆提取）
+     * 刷新
      */
-    MemorySearcher getSearcher();
+    void refresh();
 
     /**
-     * 获取存储器（负责物理持久化与 TTL 管理）
+     * 获取技能数
      */
-    MemoryStorer getStorer();
+    int getSkillCount();
+
+    /**
+     * 获取所有 Skill 包
+     */
+    Collection<SkillDir> getSkillAll();
+
+    /**
+     * 查找技能包
+     */
+    Collection<SkillDir> searchSkill(String query);
+
+    /**
+     * 获取 Skill 包
+     */
+    SkillDir getSkill(String name);
+
+    /**
+     * 读取 Skill 内容
+     */
+    String readSkill(String name);
 }

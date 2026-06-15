@@ -25,7 +25,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.talents.memory.MemorySearchProvider;
+import org.noear.solon.ai.talents.memory.MemorySearcher;
 import org.noear.solon.ai.talents.memory.MemorySearchResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,22 +41,22 @@ import java.util.List;
  * @author noear
  * @since 3.9.4
  */
-public class MemorySearchProviderLuceneImpl implements MemorySearchProvider, AutoCloseable {
-    private static final Logger log = LoggerFactory.getLogger(MemorySearchProviderLuceneImpl.class);
+public class MemorySearcherLuceneImpl implements MemorySearcher, AutoCloseable {
+    private static final Logger log = LoggerFactory.getLogger(MemorySearcherLuceneImpl.class);
 
     private final Directory directory;
     private final Analyzer analyzer;
     private final IndexWriter writer; // 保持单例 Writer，避免 LockObtainFailedException
 
-    public MemorySearchProviderLuceneImpl() throws IOException {
+    public MemorySearcherLuceneImpl() throws IOException {
         this(new ByteBuffersDirectory());
     }
 
-    public MemorySearchProviderLuceneImpl(String path) throws IOException {
+    public MemorySearcherLuceneImpl(String path) throws IOException {
         this(FSDirectory.open(Paths.get(path)));
     }
 
-    public MemorySearchProviderLuceneImpl(Directory directory) throws IOException {
+    public MemorySearcherLuceneImpl(Directory directory) throws IOException {
         this.directory = directory;
         this.analyzer = new StandardAnalyzer();
         IndexWriterConfig config = new IndexWriterConfig(analyzer);
