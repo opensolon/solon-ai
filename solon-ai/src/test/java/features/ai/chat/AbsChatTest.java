@@ -702,7 +702,7 @@ public abstract class AbsChatTest {
                 .role("专业的人事助理，擅长简历信息提取")
                 .instruction("请从用户提供的文本中提取关键信息")
                 .outputSchema(ResumeInfo.class)
-                .modelOptions(o -> o.temperature(0.1F))
+                .modelOptions(o -> o.temperature(0.1))
                 .build();
 
 

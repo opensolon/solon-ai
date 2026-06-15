@@ -47,7 +47,7 @@ public class GenerateOptions {
                             if (val.indexOf('.') < 0) {
                                 options.put(entry.getKey(), Integer.parseInt(val));
                             } else {
-                                options.put(entry.getKey(), Float.parseFloat(val));
+                                options.put(entry.getKey(), Double.parseDouble(val));
                             }
                         } else {
                             options.put(entry.getKey(), val);
