@@ -11,7 +11,7 @@
 *  mcp channel 概念改为 transport （并保持兼容）???
 
 
-### 4.0.1
+### 4.0.2
 
 * 添加 solon-ai-harness allowToolReset,disallowToolReset 方法
 * 添加 solon-ai-harness 子代理 ContextSizeChunk 流传递
