@@ -132,7 +132,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         //添加必要的工具上下文
         options.toolContextPut(ChatSession.ATTR_SESSIONID, session.getSessionId());
 
-        trace.prepare(config, options, session, protocol);
+        trace.prepare(config, options, session, protocol, config.getName());
 
         if (Prompt.isEmpty(prompt)) {
             //可能是旧问题（之前中断的）

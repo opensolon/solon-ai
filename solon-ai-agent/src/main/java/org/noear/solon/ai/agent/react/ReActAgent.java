@@ -175,7 +175,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         //添加必要的工具上下文
         options.getToolContext().put(ChatSession.ATTR_SESSIONID, session.getSessionId());
 
-        trace.prepare(config, options, session, protocol);
+        trace.prepare(config, options, session, protocol, config.getName());
 
 
         if (protocol != null) {

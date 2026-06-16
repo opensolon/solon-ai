@@ -38,6 +38,11 @@ public class SimpleTrace implements AgentTrace {
     private transient TeamProtocol protocol;
 
     /**
+     * 智能体名字
+     */
+    private String agentName;
+
+    /**
      * 运行ID
      */
     private String runId;
@@ -61,8 +66,9 @@ public class SimpleTrace implements AgentTrace {
         //反序列化用
     }
 
-    protected void prepare(SimpleAgentConfig config, SimpleOptions options, AgentSession session, TeamProtocol protocol) {
+    protected void prepare(SimpleAgentConfig config, SimpleOptions options, AgentSession session, TeamProtocol protocol, String agentName) {
         this.config = config;
+        this.agentName = agentName;
         this.options = options;
         this.session = session;
         this.protocol = protocol;
@@ -85,7 +91,7 @@ public class SimpleTrace implements AgentTrace {
 
     @Override
     public String getAgentName() {
-        return config.getName();
+        return agentName;
     }
 
     @Override

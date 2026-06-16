@@ -74,6 +74,11 @@ public class ReActTrace implements AgentTrace {
     private transient final Map<String, FunctionTool> protocolToolMap = new LinkedHashMap<>();
 
     /**
+     * 智能体名字
+     */
+    private String agentName;
+
+    /**
      * 运行ID
      */
     private String runId;
@@ -170,8 +175,9 @@ public class ReActTrace implements AgentTrace {
     /**
      * 准备执行环境
      */
-    protected void prepare(ReActAgentConfig config, ReActOptions options, AgentSession session, TeamProtocol protocol) {
+    protected void prepare(ReActAgentConfig config, ReActOptions options, AgentSession session, TeamProtocol protocol, String agentName) {
         this.config = config;
+        this.agentName = agentName;
         this.options = options;
         this.session = session;
         this.protocol = protocol;
@@ -237,7 +243,7 @@ public class ReActTrace implements AgentTrace {
 
     @Override
     public String getAgentName() {
-        return config.getName();
+        return agentName;
     }
 
     @Override
@@ -378,6 +384,7 @@ public class ReActTrace implements AgentTrace {
     public void setLastReasonMessage(AssistantMessage lastReasonMessage) {
         this.lastReasonMessage = lastReasonMessage;
     }
+
     /**
      * 获取人性化历史记录格式
      */
