@@ -46,9 +46,11 @@ public class OpenApiV2Resolver implements ApiResolver {
         String baseUrl = extractBaseUrl(swagger);
 
         swagger.getPaths().forEach((path, pathItem) -> {
+            // PathItem 级别的公共参数（可被各 operation 共享，常见于 path 变量）
+            List<Parameter> sharedParams = pathItem.getParameters();
             pathItem.getOperationMap().forEach((method, operation) -> {
                 if (operation != null) {
-                    tools.add(convertToTool(swagger, path, method.name(), operation, baseUrl));
+                    tools.add(convertToTool(swagger, path, method.name(), operation, baseUrl, sharedParams));
                 }
             });
         });
@@ -56,7 +58,7 @@ public class OpenApiV2Resolver implements ApiResolver {
         return tools;
     }
 
-    private ApiTool convertToTool(Swagger swagger, String path, String method, Operation op, String baseUrl) {
+    private ApiTool convertToTool(Swagger swagger, String path, String method, Operation op, String baseUrl, List<Parameter> sharedParams) {
         ApiTool tool = new ApiTool();
         tool.setBaseUrl(baseUrl);
         tool.setPath(path);
@@ -104,8 +106,7 @@ public class OpenApiV2Resolver implements ApiResolver {
         ONode bodyProps = bodySchemaRoot.getOrNew("properties");
         ONode bodyRequired = bodySchemaRoot.getOrNew("required").asArray();
 
-        if (op.getParameters() != null) {
-            for (Parameter p : op.getParameters()) {
+        for (Parameter p : mergeParameters(sharedParams, op.getParameters())) {
                 String in = p.getIn();
                 String name = p.getName();
 
@@ -150,7 +151,6 @@ public class OpenApiV2Resolver implements ApiResolver {
                     }
                 }
             }
-        }
 
         // --- D. Response 解析 ---
         if(op.getResponses() != null) {
@@ -290,5 +290,31 @@ public class OpenApiV2Resolver implements ApiResolver {
     private String generateName(String method, String path) {
         String name = method + "_" + path.replace("/", "_").replace("{", "").replace("}", "");
         return name.replaceAll("_+", "_");
+    }
+
+    /**
+     * 合并 PathItem 级别与 Operation 级别参数。
+     * 按 OpenAPI 规范：operation 级别参数会覆盖同名（name + in）的 path 级别参数。
+     */
+    private List<Parameter> mergeParameters(List<Parameter> shared, List<Parameter> operationLevel) {
+        Map<String, Parameter> merged = new LinkedHashMap<>();
+
+        if (shared != null) {
+            for (Parameter p : shared) {
+                if (p != null && p.getName() != null) {
+                    merged.put(p.getIn() + ":" + p.getName(), p);
+                }
+            }
+        }
+
+        if (operationLevel != null) {
+            for (Parameter p : operationLevel) {
+                if (p != null && p.getName() != null) {
+                    merged.put(p.getIn() + ":" + p.getName(), p);
+                }
+            }
+        }
+
+        return new ArrayList<>(merged.values());
     }
 }

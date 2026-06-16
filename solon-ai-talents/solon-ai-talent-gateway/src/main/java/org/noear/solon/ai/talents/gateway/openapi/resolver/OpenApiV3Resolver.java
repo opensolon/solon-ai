@@ -46,9 +46,11 @@ public class OpenApiV3Resolver implements ApiResolver {
         String baseUrl = extractBaseUrl(definitionUrl, openAPI);
 
         openAPI.getPaths().forEach((path, pathItem) -> {
+            // PathItem 级别的公共参数（可被各 operation 共享，常见于 path 变量）
+            List<Parameter> sharedParams = pathItem.getParameters();
             pathItem.readOperationsMap().forEach((method, operation) -> {
                 if (operation != null) {
-                    tools.add(convertToTool(openAPI, path, method.name(), operation, baseUrl));
+                    tools.add(convertToTool(openAPI, path, method.name(), operation, baseUrl, sharedParams));
                 }
             });
         });
@@ -78,7 +80,7 @@ public class OpenApiV3Resolver implements ApiResolver {
         return baseUrl;
     }
 
-    private ApiTool convertToTool(OpenAPI openAPI, String path, String method, Operation op, String baseUrl) {
+    private ApiTool convertToTool(OpenAPI openAPI, String path, String method, Operation op, String baseUrl, List<Parameter> sharedParams) {
         ApiTool tool = new ApiTool();
         tool.setBaseUrl(baseUrl);
         tool.setPath(path);
@@ -106,19 +108,18 @@ public class OpenApiV3Resolver implements ApiResolver {
 
 
         // --- 参数解析 ---
-        if (op.getParameters() != null) {
-            for (Parameter p : op.getParameters()) {
-                Schema<?> resolvedSchema = resolveSchema(openAPI, p.getSchema(), new ArrayList<>());
-                ONode pNode = ONode.ofJson(Json.pretty(resolvedSchema));
+        // 合并 PathItem 级别（公共）与 Operation 级别参数；同名同位置时 operation 优先
+        for (Parameter p : mergeParameters(sharedParams, op.getParameters())) {
+            Schema<?> resolvedSchema = resolveSchema(openAPI, p.getSchema(), new ArrayList<>());
+            ONode pNode = ONode.ofJson(Json.pretty(resolvedSchema));
 
-                if ("query".equals(p.getIn())) {
-                    queryProps.set(p.getName(), pNode);
-                    if (Boolean.TRUE.equals(p.getRequired())) queryRequired.add(p.getName());
-                } else if ("path".equals(p.getIn())) {
-                    // 【填充 Path 解析】
-                    pathProps.set(p.getName(), pNode);
-                    pathRequired.add(p.getName()); // Path 参数在 REST 规范中默认必填
-                }
+            if ("query".equals(p.getIn())) {
+                queryProps.set(p.getName(), pNode);
+                if (Boolean.TRUE.equals(p.getRequired())) queryRequired.add(p.getName());
+            } else if ("path".equals(p.getIn())) {
+                // 【填充 Path 解析】
+                pathProps.set(p.getName(), pNode);
+                pathRequired.add(p.getName()); // Path 参数在 REST 规范中默认必填
             }
         }
 
@@ -171,6 +172,32 @@ public class OpenApiV3Resolver implements ApiResolver {
         }
 
         return tool;
+    }
+
+    /**
+     * 合并 PathItem 级别与 Operation 级别参数。
+     * 按 OpenAPI 规范：operation 级别参数会覆盖同名（name + in）的 path 级别参数。
+     */
+    private List<Parameter> mergeParameters(List<Parameter> shared, List<Parameter> operationLevel) {
+        Map<String, Parameter> merged = new LinkedHashMap<>();
+
+        if (shared != null) {
+            for (Parameter p : shared) {
+                if (p != null && p.getName() != null) {
+                    merged.put(p.getIn() + ":" + p.getName(), p);
+                }
+            }
+        }
+
+        if (operationLevel != null) {
+            for (Parameter p : operationLevel) {
+                if (p != null && p.getName() != null) {
+                    merged.put(p.getIn() + ":" + p.getName(), p);
+                }
+            }
+        }
+
+        return new ArrayList<>(merged.values());
     }
 
     // 【核心修复点】递归解析 $ref
