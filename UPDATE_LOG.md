@@ -11,6 +11,11 @@
 *  mcp channel 概念改为 transport （并保持兼容）???
 
 
+### 4.0.3
+
+* 添加 solon-ai-agent ReActTrace.agentName 字段（不再从 config 获取）
+* 添加 solon-ai-agent SimpleTrace.agentName 字段（不再从 config 获取）
+
 ### 4.0.2
 
 * 添加 solon-ai-harness allowToolReset,disallowToolReset 方法
