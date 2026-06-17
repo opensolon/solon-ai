@@ -13,9 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.harness.code.impl;
+package org.noear.solon.ai.talents.code.impl;
 
-import org.noear.solon.ai.harness.code.LanguageProvider;
+import org.noear.solon.ai.talents.code.LanguageProvider;
 
 import java.io.IOException;
 import java.nio.file.DirectoryStream;

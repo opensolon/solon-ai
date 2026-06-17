@@ -13,12 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.harness.code;
+package org.noear.solon.ai.talents.code;
 
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
-import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.code.impl.*;
+import org.noear.solon.ai.talents.code.impl.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,12 +38,15 @@ public class CodeTalent extends AbsTalent {
     private static final Logger LOG = LoggerFactory.getLogger(CodeTalent.class);
 
     public final static String NAME_CODE_MD = "CODE.md";
+    public final static String ATTR_CWD = "__cwd";
 
-    private final HarnessEngine engine;
+    private final String workDir;
+    private final String codeDir;
     private final List<LanguageProvider> providers = new ArrayList<>();
 
-    public CodeTalent(HarnessEngine engine) {
-        this.engine = engine;
+    public CodeTalent(String workDir, String codeDir) {
+        this.workDir = workDir;
+        this.codeDir = codeDir;
 
         providers.add(new MavenProvider());
         providers.add(new GradleProvider());
@@ -61,7 +63,7 @@ public class CodeTalent extends AbsTalent {
     }
 
     public String HOME_CODE_MD() {
-        return engine.getHarnessHome() + NAME_CODE_MD;
+        return codeDir + NAME_CODE_MD;
     }
 
 
@@ -72,7 +74,7 @@ public class CodeTalent extends AbsTalent {
 
     @Override
     public boolean isSupported(Prompt prompt) {
-        String __cwd = prompt.attrAs(HarnessEngine.ATTR_CWD);
+        String __cwd = prompt.attrAs(ATTR_CWD);
         Path rootPath = getRootPath(__cwd);
 
         if (rootExists(rootPath, HOME_CODE_MD())) {
@@ -98,7 +100,7 @@ public class CodeTalent extends AbsTalent {
 
     @Override
     public String getInstruction(Prompt prompt) {
-        String __cwd = prompt.attrAs(HarnessEngine.ATTR_CWD);
+        String __cwd = prompt.attrAs(ATTR_CWD);
 
         StringBuilder buf = new StringBuilder();
 
@@ -115,7 +117,7 @@ public class CodeTalent extends AbsTalent {
     }
 
     private Path getRootPath(String __cwd) {
-        String path = (__cwd != null) ? __cwd : engine.getWorkspace();
+        String path = (__cwd != null) ? __cwd : workDir;
         if (path == null) throw new IllegalStateException("Working directory is not set.");
         return Paths.get(path).toAbsolutePath().normalize();
     }

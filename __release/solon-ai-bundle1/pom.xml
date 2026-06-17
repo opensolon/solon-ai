@@ -42,6 +42,7 @@
 
         <module>../../solon-ai-talents/solon-ai-talents</module>
         <module>../../solon-ai-talents/solon-ai-talent-cli</module>
+        <module>../../solon-ai-talents/solon-ai-talent-code</module>
         <module>../../solon-ai-talents/solon-ai-talent-data</module>
         <module>../../solon-ai-talents/solon-ai-talent-diff</module>
         <module>../../solon-ai-talents/solon-ai-talent-file</module>

@@ -271,6 +271,12 @@
 
             <dependency>
                 <groupId>org.noear</groupId>
+                <artifactId>solon-ai-talent-code</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
                 <artifactId>solon-ai-talent-text2sql</artifactId>
                 <version>${project.version}</version>
             </dependency>

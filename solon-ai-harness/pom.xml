@@ -28,6 +28,11 @@
 
         <dependency>
             <groupId>org.noear</groupId>
+            <artifactId>solon-ai-talent-code</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
             <artifactId>solon-ai-talent-web</artifactId>
         </dependency>
 

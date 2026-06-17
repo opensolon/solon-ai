@@ -29,7 +29,6 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.agent.*;
-import org.noear.solon.ai.harness.code.CodeTalent;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.hitl.HitlStrategy;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
@@ -38,6 +37,7 @@ import org.noear.solon.ai.talents.mount.AgentMd;
 import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.talents.cli.*;
+import org.noear.solon.ai.talents.code.CodeTalent;
 import org.noear.solon.ai.talents.lsp.LspManager;
 import org.noear.solon.ai.talents.lsp.LspServerParameters;
 import org.noear.solon.ai.talents.lsp.LspTalent;
@@ -750,7 +750,7 @@ public class HarnessEngine {
         }
 
         this.todoTalent = new TodoTalent(options.getHarnessSessions());
-        this.codeTalent = new CodeTalent(this);
+        this.codeTalent = new CodeTalent(options.getWorkspace(), options.getHarnessHome());
         this.taskTalent = new TaskTalent(this);
         this.generateTool = new GenerateTool(this);
 

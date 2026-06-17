@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.harness.code;
+package org.noear.solon.ai.talents.code;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
