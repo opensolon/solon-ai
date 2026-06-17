@@ -44,6 +44,22 @@ public class DotNetProvider implements LanguageProvider {
     }
 
     @Override
+    public String detectVersion(Path dir) {
+        // 扫描目录下的 *.csproj，取 <TargetFramework>net8.0</TargetFramework>
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, "*.csproj")) {
+            for (Path csproj : stream) {
+                String content = new String(Files.readAllBytes(csproj), java.nio.charset.StandardCharsets.UTF_8);
+                String v = LanguageProvider.find(content, "<TargetFrameworks?>\\s*([^<;]+)");
+                if (v != null) {
+                    return ".NET " + v.trim();
+                }
+            }
+        } catch (IOException ignored) {
+        }
+        return null;
+    }
+
+    @Override
     public void appendRootCommands(StringBuilder buf) {
         buf.append("### 根项目 (C#/.NET)\n")
                 .append("- 还原: `dotnet restore`\n")

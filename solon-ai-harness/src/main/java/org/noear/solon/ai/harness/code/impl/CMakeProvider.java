@@ -17,6 +17,8 @@ package org.noear.solon.ai.harness.code.impl;
 
 import org.noear.solon.ai.harness.code.LanguageProvider;
 
+import java.nio.file.Path;
+
 /**
  * @author noear
  * @since 3.10.5
@@ -25,6 +27,18 @@ public class CMakeProvider implements LanguageProvider {
     @Override public String id() { return "CMake"; }
     @Override public String typeName() { return "C/C++ 项目"; }
     @Override public String[] markers() { return new String[]{"CMakeLists.txt"}; }
+
+    @Override
+    public String detectVersion(Path dir) {
+        // CMakeLists.txt: set(CMAKE_CXX_STANDARD 17)
+        String cmake = LanguageProvider.readText(dir, "CMakeLists.txt");
+        String v = LanguageProvider.find(cmake, "set\\s*\\(\\s*CMAKE_CXX_STANDARD\\s+(\\d+)");
+        if (v != null) {
+            return "C++ " + v;
+        }
+        v = LanguageProvider.find(cmake, "set\\s*\\(\\s*CMAKE_C_STANDARD\\s+(\\d+)");
+        return (v == null) ? null : "C " + v;
+    }
 
     @Override
     public String[] ignoreFolders() {

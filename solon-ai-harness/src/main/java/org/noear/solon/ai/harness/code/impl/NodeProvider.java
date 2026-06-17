@@ -17,6 +17,8 @@ package org.noear.solon.ai.harness.code.impl;
 
 import org.noear.solon.ai.harness.code.LanguageProvider;
 
+import java.nio.file.Path;
+
 /**
  * @author noear
  * @since 3.10.5
@@ -40,6 +42,24 @@ public class NodeProvider implements LanguageProvider {
     @Override
     public String[] ignoreFolders() {
         return new String[]{"node_modules"};
+    }
+
+    @Override
+    public String detectVersion(Path dir) {
+        // 1) package.json 的 engines.node（最权威的声明）
+        String pkg = LanguageProvider.readText(dir, "package.json");
+        String node = LanguageProvider.find(pkg, "\"engines\"\\s*:\\s*\\{[^}]*?\"node\"\\s*:\\s*\"([^\"]+)\"");
+        if (node != null) {
+            return "Node " + node;
+        }
+
+        // 2) .nvmrc
+        String nvmrc = LanguageProvider.readText(dir, ".nvmrc");
+        if (nvmrc != null && !nvmrc.trim().isEmpty()) {
+            return "Node " + nvmrc.trim();
+        }
+
+        return null;
     }
 
     @Override

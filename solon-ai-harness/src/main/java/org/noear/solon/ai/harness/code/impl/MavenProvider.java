@@ -17,6 +17,8 @@ package org.noear.solon.ai.harness.code.impl;
 
 import org.noear.solon.ai.harness.code.LanguageProvider;
 
+import java.nio.file.Path;
+
 /**
  * @author noear
  * @since 3.10.5
@@ -40,6 +42,28 @@ public class MavenProvider implements LanguageProvider {
     @Override
     public String[] ignoreFolders() {
         return new String[]{"target"};
+    }
+
+    @Override
+    public String detectVersion(Path dir) {
+        String pom = LanguageProvider.readText(dir, "pom.xml");
+        if (pom == null) {
+            return null;
+        }
+
+        // 1) maven.compiler.release / source / target （含 <release>17</release> 形式）
+        String v = LanguageProvider.find(pom, "<maven\\.compiler\\.(?:release|source|target)>\\s*([\\d.]+)\\s*<");
+        // 2) <java.version>
+        if (v == null) {
+            v = LanguageProvider.find(pom, "<java\\.version>\\s*([\\d.]+)\\s*<");
+        }
+        // 3) maven-compiler-plugin 的 <release>/<source>/<target>
+        if (v == null) {
+            v = LanguageProvider.find(pom, "<(?:release|source|target)>\\s*([\\d.]+)\\s*<");
+        }
+
+        // 注：版本可能继承自外部父 POM，本地 pom.xml 解析不到时返回 null（需 mvn help:evaluate 复核）
+        return (v == null) ? null : "Java " + v;
     }
 
     @Override

@@ -17,6 +17,8 @@ package org.noear.solon.ai.harness.code.impl;
 
 import org.noear.solon.ai.harness.code.LanguageProvider;
 
+import java.nio.file.Path;
+
 /**
  * @author noear
  * @since 3.10.5
@@ -29,6 +31,27 @@ public class GradleProvider implements LanguageProvider {
     @Override
     public String[] ignoreFolders() {
         return new String[]{"build", ".gradle"};
+    }
+
+    @Override
+    public String detectVersion(Path dir) {
+        // 依次检查 kts / groovy 两种脚本
+        for (String name : new String[]{"build.gradle.kts", "build.gradle"}) {
+            String script = LanguageProvider.readText(dir, name);
+            if (script == null) {
+                continue;
+            }
+            // sourceCompatibility = JavaVersion.VERSION_17 / "17" / 1.8
+            String v = LanguageProvider.find(script, "sourceCompatibility\\s*=?\\s*(?:JavaVersion\\.VERSION_)?[\"']?([\\d._]+)[\"']?");
+            if (v == null) {
+                // jvmToolchain(17) / languageVersion = JavaLanguageVersion.of(17)
+                v = LanguageProvider.find(script, "(?:jvmToolchain\\(|JavaLanguageVersion\\.of\\()\\s*(\\d+)");
+            }
+            if (v != null) {
+                return "Java " + v.replace('_', '.');
+            }
+        }
+        return null;
     }
 
     @Override

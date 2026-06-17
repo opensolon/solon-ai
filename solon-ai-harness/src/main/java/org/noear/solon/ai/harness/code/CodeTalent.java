@@ -131,12 +131,19 @@ public class CodeTalent extends AbsTalent {
 
             List<String> detectedStacks = new ArrayList<>();
             Set<LanguageProvider> rootMatched = new HashSet<>();
+            // 保留探测顺序的版本汇总：“位置描述” -> “版本标签”
+            Map<String, String> detectedVersions = new LinkedHashMap<>();
 
             for (LanguageProvider provider : providers) {
                 if (provider.isMatch(rootPath)) {
                     rootMatched.add(provider);
                     detectedStacks.add(provider.id() + "(Root)");
                     provider.appendRootCommands(newContent);
+
+                    String ver = provider.detectVersion(rootPath);
+                    if (ver != null) {
+                        detectedVersions.put(provider.id() + " (Root)", ver);
+                    }
                 }
             }
 
@@ -178,17 +185,25 @@ public class CodeTalent extends AbsTalent {
 
                         // 判断异构：如果当前 Provider 没在根目录出现过，则是异构
                         boolean isHeterogeneous = !rootMatched.contains(provider);
+                        String ver = provider.detectVersion(dir);
 
                         if (isHeterogeneous) {
                             detectedStacks.add(relativePath + "(" + provider.id() + ")");
                             provider.appendModuleCommands(newContent, relativePath);
+                            if (ver != null) {
+                                detectedVersions.put(relativePath + " (" + provider.id() + ")", ver);
+                            }
                         } else {
                             if (!hasSubModulesSection) {
                                 newContent.append("### 子模块与子项目 (Sub-modules & Sub-projects)\n");
                                 hasSubModulesSection = true;
                             }
                             newContent.append("- ").append(relativePath).append(": ")
-                                    .append(provider.typeName()).append("。受根项目指令统一控制。\n");
+                                    .append(provider.typeName());
+                            if (ver != null) {
+                                newContent.append("（").append(ver).append("）");
+                            }
+                            newContent.append("。受根项目指令统一控制。\n");
                         }
                         break; // 一个目录识别为一个主语言即可
                     }
@@ -197,6 +212,7 @@ public class CodeTalent extends AbsTalent {
 
             if (hasSubModulesSection) newContent.append("\n");
 
+            appendVersions(newContent, detectedVersions);
 
             appendGuidelines(newContent);
 
@@ -217,12 +233,28 @@ public class CodeTalent extends AbsTalent {
             } else {
                 resultMsg.append(" (未检测到明确的技术栈)");
             }
+            if (!detectedVersions.isEmpty()) {
+                resultMsg.append(" (环境版本: ").append(String.join(", ", detectedVersions.values())).append(")");
+            }
 
             return resultMsg.toString();
         } catch (Throwable e) {
             LOG.error("Init failed", e);
             return "初始化失败: " + e.getMessage();
         }
+    }
+
+    private void appendVersions(StringBuilder buf, Map<String, String> versions) {
+        if (versions.isEmpty()) {
+            return;
+        }
+
+        buf.append("## 环境版本 (Environment Versions)\n\n")
+                .append("> 以下为项目配置文件中**声明**的版本（非本机安装版本），写代码时请对齐该版本的语法特性。\n\n");
+        for (Map.Entry<String, String> e : versions.entrySet()) {
+            buf.append("- ").append(e.getKey()).append(": ").append(e.getValue()).append("\n");
+        }
+        buf.append("\n");
     }
 
     private void appendGuidelines(StringBuilder buf) {
@@ -232,6 +264,7 @@ public class CodeTalent extends AbsTalent {
                 .append("- **验证驱动**: 任务完成前必须运行测试进行验证。\n")
                 .append("- **路径规范**: 仅使用相对路径（例如：`src/main/java/App.java`，严禁使用 `./src/...`）。\n")
                 .append("- **风格对齐**: 必须遵循代码库中已有的编码风格和设计模式。\n")
+                .append("- **版本对齐**: 参考「环境版本」章节声明的版本，不要使用超过该版本的语法特性；若未列出版本，应从配置文件或构建工具复核后再决定。\n")
                 .append("- **环境感知**: 利用你对各语言默认本地仓库路径（如 Maven、Node）的知识，协助排查依赖问题或进行源码分析。\n\n");
 
     }

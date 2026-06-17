@@ -17,6 +17,8 @@ package org.noear.solon.ai.harness.code.impl;
 
 import org.noear.solon.ai.harness.code.LanguageProvider;
 
+import java.nio.file.Path;
+
 /**
  * @author noear
  * @since 3.10.5
@@ -29,6 +31,31 @@ public class PythonProvider implements LanguageProvider {
     @Override
     public String[] ignoreFolders() {
         return new String[]{"venv", ".venv", "__pycache__"};
+    }
+
+    @Override
+    public String detectVersion(Path dir) {
+        // pyproject.toml: requires-python = ">=3.9"
+        String pyproject = LanguageProvider.readText(dir, "pyproject.toml");
+        String v = LanguageProvider.find(pyproject, "requires-python\\s*=\\s*\"([^\"]+)\"");
+        if (v != null) {
+            return "Python " + v;
+        }
+
+        // setup.py: python_requires=">=3.9"
+        String setup = LanguageProvider.readText(dir, "setup.py");
+        v = LanguageProvider.find(setup, "python_requires\\s*=\\s*['\"]([^'\"]+)['\"]");
+        if (v != null) {
+            return "Python " + v;
+        }
+
+        // .python-version
+        String pv = LanguageProvider.readText(dir, ".python-version");
+        if (pv != null && !pv.trim().isEmpty()) {
+            return "Python " + pv.trim();
+        }
+
+        return null;
     }
 
     @Override

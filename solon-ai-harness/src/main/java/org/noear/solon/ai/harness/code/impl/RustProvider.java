@@ -17,6 +17,8 @@ package org.noear.solon.ai.harness.code.impl;
 
 import org.noear.solon.ai.harness.code.LanguageProvider;
 
+import java.nio.file.Path;
+
 /**
  * @author noear
  * @since 3.10.5
@@ -40,6 +42,18 @@ public class RustProvider implements LanguageProvider {
     @Override
     public String[] ignoreFolders() {
         return new String[]{"target"};
+    }
+
+    @Override
+    public String detectVersion(Path dir) {
+        // Cargo.toml: rust-version = "1.70"  (仅取 [package] 区的 edition 作为补充)
+        String cargo = LanguageProvider.readText(dir, "Cargo.toml");
+        String v = LanguageProvider.find(cargo, "rust-version\\s*=\\s*\"([^\"]+)\"");
+        if (v != null) {
+            return "Rust " + v;
+        }
+        String edition = LanguageProvider.find(cargo, "edition\\s*=\\s*\"([^\"]+)\"");
+        return (edition == null) ? null : "Rust edition " + edition;
     }
 
     @Override

@@ -17,6 +17,8 @@ package org.noear.solon.ai.harness.code.impl;
 
 import org.noear.solon.ai.harness.code.LanguageProvider;
 
+import java.nio.file.Path;
+
 /**
  * @author noear
  * @since 3.10.5
@@ -29,6 +31,18 @@ public class FlutterProvider implements LanguageProvider {
     @Override
     public String[] ignoreFolders() {
         return new String[]{".dart_tool", ".packages", "build"};
+    }
+
+    @Override
+    public String detectVersion(Path dir) {
+        // pubspec.yaml: environment: { sdk: ">=3.0.0 <4.0.0", flutter: ">=3.10.0" }
+        String pubspec = LanguageProvider.readText(dir, "pubspec.yaml");
+        String flutter = LanguageProvider.find(pubspec, "(?m)^\\s*flutter\\s*:\\s*[\"']?([\\d][^\"'\\n]*)");
+        if (flutter != null) {
+            return "Flutter " + flutter.trim();
+        }
+        String sdk = LanguageProvider.find(pubspec, "(?m)^\\s*sdk\\s*:\\s*[\"']?([\\d][^\"'\\n]*)");
+        return (sdk == null) ? null : "Dart SDK " + sdk.trim();
     }
 
     @Override

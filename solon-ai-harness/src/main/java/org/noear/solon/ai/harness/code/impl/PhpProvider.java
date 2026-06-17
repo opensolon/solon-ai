@@ -17,6 +17,8 @@ package org.noear.solon.ai.harness.code.impl;
 
 import org.noear.solon.ai.harness.code.LanguageProvider;
 
+import java.nio.file.Path;
+
 /**
  * @author noear
  * @since 3.10.5
@@ -29,6 +31,14 @@ public class PhpProvider implements LanguageProvider {
     @Override
     public String[] ignoreFolders() {
         return new String[]{"vendor"};
+    }
+
+    @Override
+    public String detectVersion(Path dir) {
+        // composer.json: "require": { "php": ">=8.1" }
+        String composer = LanguageProvider.readText(dir, "composer.json");
+        String v = LanguageProvider.find(composer, "\"php\"\\s*:\\s*\"([^\"]+)\"");
+        return (v == null) ? null : "PHP " + v;
     }
 
     @Override

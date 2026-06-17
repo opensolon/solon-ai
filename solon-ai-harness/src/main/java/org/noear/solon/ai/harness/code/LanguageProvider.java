@@ -15,9 +15,13 @@
  */
 package org.noear.solon.ai.harness.code;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Language 规范提供者
@@ -71,4 +75,41 @@ public interface LanguageProvider {
      * 子模块指令生成
      */
     void appendModuleCommands(StringBuilder buf, String moduleName);
+
+    /**
+     * 探测该目录下配置文件中“声明”的环境/语言版本（注意：是项目配置声明的版本，而非本机安装版本）。
+     * <p>例如 Maven 的 Java 编译版本、Node 的 engines.node、Go 的 go 指令等。
+     * <p>解析不到时返回 null（例如版本以属性占位符表示，或继承自外部父配置）。
+     *
+     * @return 形如 "Java 1.8"、"Node >=18" 的可读版本标签；无法确定时为 null
+     */
+    default String detectVersion(Path dir) {
+        return null;
+    }
+
+    /**
+     * 读取目录下指定文件的文本内容；文件不存在或读取失败返回 null。
+     */
+    static String readText(Path dir, String fileName) {
+        try {
+            Path f = dir.resolve(fileName);
+            if (!Files.isRegularFile(f)) {
+                return null;
+            }
+            return new String(Files.readAllBytes(f), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 返回首个匹配项的第 1 分组（忽略大小写、支持跨行）；无匹配返回 null。
+     */
+    static String find(String content, String regex) {
+        if (content == null) {
+            return null;
+        }
+        Matcher m = Pattern.compile(regex, Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(content);
+        return m.find() ? m.group(1).trim() : null;
+    }
 }

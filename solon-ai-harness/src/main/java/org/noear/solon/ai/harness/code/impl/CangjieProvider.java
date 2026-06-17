@@ -17,6 +17,8 @@ package org.noear.solon.ai.harness.code.impl;
 
 import org.noear.solon.ai.harness.code.LanguageProvider;
 
+import java.nio.file.Path;
+
 /**
  * @author noear
  * @since 3.10.5
@@ -35,6 +37,14 @@ public class CangjieProvider implements LanguageProvider {
     @Override
     public String[] markers() {
         return new String[]{"cjpm.toml"};
+    }
+
+    @Override
+    public String detectVersion(Path dir) {
+        // cjpm.toml: cjc-version = "0.53.4"
+        String toml = LanguageProvider.readText(dir, "cjpm.toml");
+        String v = LanguageProvider.find(toml, "cjc-version\\s*=\\s*\"([^\"]+)\"");
+        return (v == null) ? null : "Cangjie " + v;
     }
 
     @Override

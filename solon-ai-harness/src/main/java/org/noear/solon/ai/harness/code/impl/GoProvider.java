@@ -17,6 +17,8 @@ package org.noear.solon.ai.harness.code.impl;
 
 import org.noear.solon.ai.harness.code.LanguageProvider;
 
+import java.nio.file.Path;
+
 /**
  * @author noear
  * @since 3.10.5
@@ -40,6 +42,14 @@ public class GoProvider implements LanguageProvider {
     @Override
     public String[] ignoreFolders() {
         return new String[]{"vendor"};
+    }
+
+    @Override
+    public String detectVersion(Path dir) {
+        // go.mod 的 go 指令，如：go 1.21
+        String mod = LanguageProvider.readText(dir, "go.mod");
+        String v = LanguageProvider.find(mod, "(?m)^\\s*go\\s+([\\d.]+)\\s*$");
+        return (v == null) ? null : "Go " + v;
     }
 
     @Override
