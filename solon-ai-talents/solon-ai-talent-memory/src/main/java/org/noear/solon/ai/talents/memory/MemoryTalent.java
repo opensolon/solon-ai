@@ -43,9 +43,25 @@ import java.time.format.DateTimeFormatter;
 public class MemoryTalent extends AbsTalent {
     private static final Logger LOG = LoggerFactory.getLogger(MemoryTalent.class);
 
+    /** 列出全部时的最大返回条数，避免上下文膨胀 */
+    private static final int LIST_ALL_LIMIT = 100;
+    /** 列目录摘要长度，控制单条占用 */
+    private static final int BRIEF_LEN = 50;
+
+    /** 画像注入：相关性检索条数 */
+    private static final int INJECT_RELEVANT = 5;
+    /** 画像注入：热记忆兜底条数 */
+    private static final int INJECT_HOT = 3;
+    /** 默认搜索返回条数 */
+    private static final int SEARCH_TOPK_DEFAULT = 5;
+    /** 近似 Key 探测：相似条目提示阈值 */
+    private static final int NEAR_KEY_PROBE = 3;
+    /** 碎片密度检测：同类低分(Imp<5)碎片数超此值时提示整合 */
+    private static final int FRAGMENT_HINT_THRESHOLD = 5;
 
     private final MemorySolutionProvider solutionProvider;
     private boolean sessionIsolation = false; // 默认会话不隔离
+    private boolean relevanceInjection = true; // 默认按“相关性+热度”混合注入画像
 
     public MemoryTalent(MemorySolutionProvider solutionProvider) {
         this.solutionProvider = solutionProvider;
@@ -56,6 +72,17 @@ public class MemoryTalent extends AbsTalent {
      */
     public MemoryTalent sessionIsolation(boolean sessionIsolation) {
         this.sessionIsolation = sessionIsolation;
+        return this;
+    }
+
+    /**
+     * 设置画像注入策略。
+     *
+     * <p>true（默认）：按当前用户输入做语义检索 + 热记忆兜底混合注入，注入内容与当前对话强相关；
+     * false：仅注入 Top 热记忆（旧行为，记忆量极大或检索有较高延迟时可用）。
+     */
+    public MemoryTalent relevanceInjection(boolean relevanceInjection) {
+        this.relevanceInjection = relevanceInjection;
         return this;
     }
 
@@ -91,11 +118,29 @@ public class MemoryTalent extends AbsTalent {
             String __sessionId = prompt.attrAs(ChatSession.ATTR_SESSIONID);
             String userId = getUserId(__sessionId);
 
-            List<MemorySearchResult> hot = searchProvider.getHotMemories(userId, 8);
+            // 混合注入：先按当前用户输入取语义相关记忆，再用热记忆兜底，按 Key 去重
+            // （相关性优先，避免高重要度但与当前话题无关的记忆挤占上下文）
+            Map<String, MemorySearchResult> merged = new LinkedHashMap<>();
+            try {
+                if (relevanceInjection) {
+                    String userContent = prompt.getUserContent();
+                    if (Utils.isNotEmpty(userContent)) {
+                        // 当前用户输入仅作为检索 query，不拼接进任何可执行上下文
+                        for (MemorySearchResult r : searchProvider.search(userId, userContent, INJECT_RELEVANT)) {
+                            merged.putIfAbsent(r.getKey(), r);
+                        }
+                    }
+                }
+                for (MemorySearchResult r : searchProvider.getHotMemories(userId, INJECT_HOT)) {
+                    merged.putIfAbsent(r.getKey(), r);
+                }
+            } catch (Exception e) {
+                LOG.warn("MemoryTalent getInstruction inject error", e);
+            }
 
-            if (!hot.isEmpty()) {
+            if (!merged.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
-                for (MemorySearchResult r : hot) {
+                for (MemorySearchResult r : merged.values()) {
                     sb.append(String.format("- [%s] %s: %s (Imp: %.2f)\n",
                             r.getTime(), r.getKey(), r.getContent(), r.getImportance()));
                 }
@@ -117,6 +162,7 @@ public class MemoryTalent extends AbsTalent {
                 "### 3. 认知维护指令：\n" +
                 "- **发现冲突时**：若新事实与“核心认知预览”冲突，必须调用 `memory_extract` 更新，并根据返回的 `[认知对比]` 向用户确认或在回复中体现认知的修正。\n" +
                 "- **碎片过多时**：当你发现检索到多个关于同一主题的低分记录（Imp < 5），应主动调用 `memory_consolidate` 将其升维为一条高分偏好（Imp >= 7）。\n" +
+                "- **列出全部时**：当用户问“记住了哪些/有哪些记忆”时，调用 `memory_search('*')` 获取全部条目索引（Key + 摘要），需要细节再用 `memory_recall` 按 Key 召回。\n" +
                 "- **时效性原则**：永远以时间戳（Time）最近的认知记录为准。";
     }
 
@@ -166,6 +212,15 @@ public class MemoryTalent extends AbsTalent {
 
             if (searchProvider != null) {
                 searchProvider.updateIndex(userId, key, fact, importance, now);
+
+                // M3.1 近似 Key 探测：用 fact 检索是否已存在同主题但不同 Key 的条目，抑制碎片化
+                // （只在新建 Key 时提示；同名覆盖已由上方认知对比处理）
+                if (Utils.isEmpty(oldJson)) {
+                    appendNearKeyHint(feedback, searchProvider, userId, key, fact);
+                }
+
+                // M4.1 碎片密度检测：低分碎片过多时提示整合
+                appendFragmentHint(feedback, searchProvider, userId);
             }
 
             return feedback.toString();
@@ -179,8 +234,9 @@ public class MemoryTalent extends AbsTalent {
      * SEARCH: 语义搜索
      */
     @ToolMapping(name = "memory_search",
-            description = "语义检索：通过自然语言描述在心智模型中寻找相关的记忆碎片，辅助找回背景信息。")
+            description = "语义检索：通过自然语言描述在心智模型中寻找相关的记忆碎片，辅助找回背景信息。传入 '*' 可列出全部记忆条目的索引（Key + 摘要），用于回答“记住了哪些”。")
     public String search(@Param("query") String query,
+                         @Param(value = "topK", required = false, defaultValue = "5", description = "返回条数上限（默认 5）。需要更全面的召回可适当调高。") Integer topK,
                          String __cwd,
                          String __sessionId) {
         String userId = getUserId(__sessionId);
@@ -190,7 +246,27 @@ public class MemoryTalent extends AbsTalent {
             return "搜索适配器未配置。";
         }
 
-        List<MemorySearchResult> results = searchProvider.search(userId, query, 3);
+        // 约定符 '*'：列出全部记忆条目索引（走 listAll，不做重要度过滤，低分碎片也能列出）
+        if ("*".equals(query.trim())) {
+            List<MemorySearchResult> all = searchProvider.listAll(userId, LIST_ALL_LIMIT);
+            if (all.isEmpty()) {
+                return "当前心智模型为空，尚未记录任何认知。";
+            }
+
+            StringBuilder sb = new StringBuilder("当前共记录以下认知条目（如需完整细节，请用 memory_recall 按 Key 召回）：\n");
+            for (MemorySearchResult res : all) {
+                sb.append(String.format("- [%s] (Key: %s) Imp:%.2f: %s\n",
+                        Utils.isNotEmpty(res.getTime()) ? res.getTime() : "未知时间",
+                        res.getKey(), res.getImportance(), briefOf(res.getContent())));
+            }
+            if (all.size() >= LIST_ALL_LIMIT) {
+                sb.append("（仅展示前 ").append(LIST_ALL_LIMIT).append(" 条，更多请按主题检索）\n");
+            }
+            return sb.toString();
+        }
+
+        int limit = (topK == null || topK <= 0) ? SEARCH_TOPK_DEFAULT : topK;
+        List<MemorySearchResult> results = searchProvider.search(userId, query, limit);
         if (results.isEmpty()) {
             return "未发现相关认知片段。";
         }
@@ -201,6 +277,58 @@ public class MemoryTalent extends AbsTalent {
                     Utils.isNotEmpty(res.getTime()) ? res.getTime() : "未知时间", res.getKey(), res.getContent()));
         }
         return sb.toString();
+    }
+
+    private static String briefOf(String content) {
+        if (content == null) {
+            return "";
+        }
+        String s = content.replace("\n", " ").trim();
+        return s.length() > BRIEF_LEN ? s.substring(0, BRIEF_LEN) + "…" : s;
+    }
+
+    /**
+     * M3.1：探测是否存在与新 fact 语义高度相似、但 Key 不同的已存条目，
+     * 命中时在 feedback 附加“疑似已存 Key”提示，引导 LLM 复用 Key 而非新建。
+     */
+    private void appendNearKeyHint(StringBuilder feedback, MemorySearcher searchProvider,
+                                   String userId, String currentKey, String fact) {
+        try {
+            List<MemorySearchResult> similar = searchProvider.search(userId, fact, NEAR_KEY_PROBE);
+            List<String> related = new ArrayList<>();
+            for (MemorySearchResult r : similar) {
+                if (!currentKey.equals(r.getKey())) {
+                    related.add(r.getKey());
+                }
+            }
+            if (!related.isEmpty()) {
+                feedback.append("\n[Key 治理] 检测到语义相近的已存条目：").append(related)
+                        .append("。若属同一主题，建议更新已有 Key 而非新建，避免记忆碎片化。");
+            }
+        } catch (Exception e) {
+            LOG.warn("MemoryTalent appendNearKeyHint error", e);
+        }
+    }
+
+    /**
+     * M4.1：统计低分（Imp<5）碎片数，超阈值时在 feedback 附加整合建议，把被动变半主动。
+     */
+    private void appendFragmentHint(StringBuilder feedback, MemorySearcher searchProvider, String userId) {
+        try {
+            List<MemorySearchResult> all = searchProvider.listAll(userId, LIST_ALL_LIMIT);
+            int fragments = 0;
+            for (MemorySearchResult r : all) {
+                if (r.getImportance() < 5) {
+                    fragments++;
+                }
+            }
+            if (fragments >= FRAGMENT_HINT_THRESHOLD) {
+                feedback.append("\n[维护建议] 当前累计 ").append(fragments)
+                        .append(" 条低分碎片(Imp<5)，如存在同主题可调用 memory_consolidate 升维为高分偏好。");
+            }
+        } catch (Exception e) {
+            LOG.warn("MemoryTalent appendFragmentHint error", e);
+        }
     }
 
     /**

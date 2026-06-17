@@ -25,6 +25,7 @@
 //import org.slf4j.LoggerFactory;
 //
 //import java.util.ArrayList;
+//import java.util.Comparator;
 //import java.util.LinkedHashMap;
 //import java.util.List;
 //import java.util.Map;
@@ -74,6 +75,21 @@
 //                    .collect(Collectors.toList());
 //        } catch (Exception e) {
 //            log.error("MemSearchProvider getHotMemories error: {}", e.getMessage());
+//            return new ArrayList<>();
+//        }
+//    }
+//
+//    @Override
+//    public List<MemorySearchResult> listAll(String userId, int limit) {
+//        try {
+//            // 全量列举：空查询取该 namespace 下全部，不限重要度，按重要度倒序
+//            List<MemoryResult> docs = rogueMemory.search("", limit, SearchOptions.builder().namespace(userId).build());
+//            return docs.stream()
+//                    .map(this::mapToResult)
+//                    .sorted(Comparator.comparingDouble(MemorySearchResult::getImportance).reversed())
+//                    .collect(Collectors.toList());
+//        } catch (Exception e) {
+//            log.error("MemSearchProvider listAll error: {}", e.getMessage());
 //            return new ArrayList<>();
 //        }
 //    }

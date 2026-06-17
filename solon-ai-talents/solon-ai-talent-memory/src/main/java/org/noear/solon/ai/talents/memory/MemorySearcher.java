@@ -28,6 +28,18 @@ public interface MemorySearcher {
     List<MemorySearchResult> search(String userId, String query, int limit);
     /** 获取高价值热记忆（用于画像注入） */
     List<MemorySearchResult> getHotMemories(String userId, int limit);
+
+    /**
+     * 列举全部记忆条目（不做重要度过滤），按重要度倒序返回，用于回答“记住了哪些”。
+     *
+     * <p>默认实现退化为 {@link #getHotMemories(String, int)}（仅 Imp≥5，存在低分条目漏列的局限）；
+     * 各实现应覆盖此方法以返回不受重要度阈值限制的全量结果。
+     *
+     * @since 4.0.0
+     */
+    default List<MemorySearchResult> listAll(String userId, int limit) {
+        return getHotMemories(userId, limit);
+    }
     /** 同步索引 */
     void updateIndex(String userId, String key, String fact, int importance, String time);
     /** 移除索引 */

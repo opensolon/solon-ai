@@ -67,15 +67,23 @@ public class MemorySearcherLuceneImpl implements MemorySearcher, AutoCloseable {
 
     @Override
     public List<MemorySearchResult> search(String userId, String query, int limit) {
-        return queryInternal(userId, query, limit, false);
+        return queryInternal(userId, query, limit, QueryMode.SEARCH);
     }
 
     @Override
     public List<MemorySearchResult> getHotMemories(String userId, int limit) {
-        return queryInternal(userId, null, limit, true);
+        return queryInternal(userId, null, limit, QueryMode.HOT);
     }
 
-    private List<MemorySearchResult> queryInternal(String userId, String queryStr, int limit, boolean isHotMode) {
+    @Override
+    public List<MemorySearchResult> listAll(String userId, int limit) {
+        return queryInternal(userId, null, limit, QueryMode.LIST_ALL);
+    }
+
+    /** 查询模式：语义检索 / 热记忆（Imp≥5）/ 全量列举（无重要度过滤） */
+    private enum QueryMode { SEARCH, HOT, LIST_ALL }
+
+    private List<MemorySearchResult> queryInternal(String userId, String queryStr, int limit, QueryMode mode) {
         List<MemorySearchResult> results = new ArrayList<>();
 
         // 使用 DirectoryReader.open(writer) 可以实现 Near Real Time (NRT) 搜索
@@ -90,11 +98,15 @@ public class MemorySearcherLuceneImpl implements MemorySearcher, AutoCloseable {
                 mainQuery.add(parser.parse(queryStr), BooleanClause.Occur.MUST);
             }
 
-            if (isHotMode) {
+            // 仅热记忆模式做重要度过滤；全量列举模式不过滤，避免漏掉低分条目
+            if (mode == QueryMode.HOT) {
                 mainQuery.add(IntPoint.newRangeQuery("importance", 5, Integer.MAX_VALUE), BooleanClause.Occur.MUST);
             }
 
-            Sort sort = isHotMode ? new Sort(new SortField("importance", SortField.Type.INT, true)) : Sort.RELEVANCE;
+            // 热记忆与全量列举都按重要度倒序；语义检索按相关性
+            Sort sort = (mode == QueryMode.SEARCH)
+                    ? Sort.RELEVANCE
+                    : new Sort(new SortField("importance", SortField.Type.INT, true));
             TopDocs topDocs = searcher.search(mainQuery.build(), limit, sort);
 
             for (ScoreDoc sd : topDocs.scoreDocs) {

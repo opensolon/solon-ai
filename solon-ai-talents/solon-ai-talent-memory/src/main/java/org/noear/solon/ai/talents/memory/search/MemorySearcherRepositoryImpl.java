@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -76,6 +77,25 @@ public class MemorySearcherRepositoryImpl implements MemorySearcher {
                     .collect(Collectors.toList());
         } catch (Exception e) {
             log.error("MemSearchProvider getHotMemories error: {}", e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    @Override
+    public List<MemorySearchResult> listAll(String userId, int limit) {
+        try {
+            // 全量列举：仅按用户过滤，不限重要度，避免漏掉低分条目
+            QueryCondition condition = new QueryCondition("")
+                    .filterExpression(String.format("user_id = '%s'", userId))
+                    .limit(limit);
+
+            List<Document> docs = repository.search(condition);
+            return docs.stream()
+                    .map(this::mapToResult)
+                    .sorted(Comparator.comparingDouble(MemorySearchResult::getImportance).reversed())
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("MemSearchProvider listAll error: {}", e.getMessage());
             return new ArrayList<>();
         }
     }

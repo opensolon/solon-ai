@@ -231,6 +231,23 @@ public class MemoryMdData implements AutoCloseable {
     }
 
     /**
+     * 列举全部记忆条目（不做重要度过滤），按重要度倒序、时间倒序返回
+     */
+    public List<MemorySearchResult> listAll(String userId, int limit) {
+        Map<String, IndexEntry> userIndex = indexByUser.get(userId);
+        if (userIndex == null || userIndex.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return userIndex.values().stream()
+                .sorted(Comparator.comparingInt((IndexEntry e) -> e.importance).reversed()
+                        .thenComparing((IndexEntry e) -> e.time, Comparator.reverseOrder()))
+                .limit(limit)
+                .map(e -> new MemorySearchResult(e.userKey, e.content, e.importance, e.time))
+                .collect(Collectors.toList());
+    }
+
+    /**
      * 列举指定用户下所有记忆条目的 key
      */
     public Set<String> keys(String userId) {
