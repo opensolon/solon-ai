@@ -204,7 +204,7 @@ public class AgentFactory {
 
             case "generate": {
                 if (engine.isSubagentEnabled()) {
-                    builder.defaultToolAdd(engine.getGenerateTool());
+                    builder.defaultTalentAdd(engine.getGenerateTalent());
                 }
                 break;
             }

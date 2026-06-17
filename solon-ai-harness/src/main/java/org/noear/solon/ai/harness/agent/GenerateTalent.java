@@ -17,7 +17,7 @@ package org.noear.solon.ai.harness.agent;
 
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatConfig;
-import org.noear.solon.ai.chat.tool.AbsToolProvider;
+import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
@@ -39,12 +39,12 @@ import java.util.Map;
  * @author noear 2026/3/21 created
  *
  */
-public class GenerateTool extends AbsToolProvider {
-    private static final Logger LOG = LoggerFactory.getLogger(GenerateTool.class);
+public class GenerateTalent extends AbsTalent {
+    private static final Logger LOG = LoggerFactory.getLogger(GenerateTalent.class);
 
     private HarnessEngine engine;
 
-    public GenerateTool(HarnessEngine engine) {
+    public GenerateTalent(HarnessEngine engine) {
         super(createBinding(engine));
         this.engine = engine;
     }

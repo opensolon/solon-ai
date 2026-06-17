@@ -76,7 +76,7 @@ public class HarnessEngine {
     private final CodeTalent codeTalent;
     private final TodoTalent todoTalent;
     private final TaskTalent taskTalent;
-    private final GenerateTool generateTool;
+    private final GenerateTalent generateTalent;
 
     private final WebfetchTalent webfetchTalent;
     private final WebsearchTalent websearchTalent;
@@ -143,8 +143,8 @@ public class HarnessEngine {
         return memoryTalent;
     }
 
-    public GenerateTool getGenerateTool() {
-        return generateTool;
+    public GenerateTalent getGenerateTalent() {
+        return generateTalent;
     }
 
     public CodeSearchTalent getCodeSearchTalent() {
@@ -752,7 +752,7 @@ public class HarnessEngine {
         this.todoTalent = new TodoTalent(options.getHarnessSessions());
         this.codeTalent = new CodeTalent(options.getWorkspace(), options.getHarnessHome());
         this.taskTalent = new TaskTalent(this);
-        this.generateTool = new GenerateTool(this);
+        this.generateTalent = new GenerateTalent(this);
 
         this.codeSearchTalent = new CodeSearchTalent().retryConfig(options.getMcpRetries());
         this.websearchTalent = new WebsearchTalent().retryConfig(options.getMcpRetries());

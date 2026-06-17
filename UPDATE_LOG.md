@@ -16,6 +16,7 @@
 * 新增 solon-ai-talent-code 才能插件（从 solon-ai-harness 分离出来）
 * 添加 solon-ai-agent ReActTrace.agentName 字段（不再从 config 获取）
 * 添加 solon-ai-agent SimpleTrace.agentName 字段（不再从 config 获取）
+* 调整 solon-ai-harness GenerateTool 更名为 GenerateTalent（方便动态启用/禁用）
 
 ### 4.0.2
 
