@@ -159,6 +159,10 @@ public class TerminalTalent extends AbsTalent {
     /**
      * 延迟初始化 SandboxManager。在 bash()/bashStart() 执行前自动调用，
      * 确保 Solon 配置注入完毕后才初始化，避免时序问题导致的单例锁定。
+     *
+     * <p>注意：文件系统路径白名单是动态构建的（每次 bash 调用时从当前挂载点重建），
+     * 因此 init 时传入的 sandboxConfig 中的 filesystem 字段会被 buildDynamicCustomConfig()
+     * 返回的动态配置覆盖，确保挂载点增删变化后沙箱边界实时生效。
      */
     private void ensureSandboxInitialized() {
         if (sandboxSystemRestrict && sandboxEnabled && !SandboxManager.isSandboxingEnabled()) {
@@ -179,17 +183,57 @@ public class TerminalTalent extends AbsTalent {
     }
 
     /**
-     * 构建默认沙箱配置：从挂载点提取路径白名单，让沙箱基于实际边界生效。
-     * 当用户未显式提供 sandboxConfig 时自动启用。
+     * 构建动态沙箱配置：合并用户配置的 sandboxConfig（网络、seccomp 等静态部分）
+     * 与当前挂载点的文件系统路径白名单（动态部分）。
+     *
+     * <p>文件系统路径每次从 mountManager 实时获取，确保挂载点增删变化后沙箱边界实时生效。
+     * 返回值可作为 SandboxManager.wrapWithSandbox() 的 customConfig 参数传入。
      */
-    private SandboxRuntimeConfig buildDefaultSandboxConfig() {
+    private SandboxRuntimeConfig buildDynamicCustomConfig() {
+        // 1) 从 mountManager 构建当前最新的文件系统白名单
+        FilesystemConfig dynamicFs = buildDynamicFilesystemConfig();
+
+        // 2) 合并用户配置：保留用户的 network/seccomp/windows 等非文件系统设置
+        if (sandboxConfig != null) {
+            return new SandboxRuntimeConfig(
+                    sandboxConfig.getNetwork(),       // 用户自定义网络策略（优先）
+                    dynamicFs,                        // 动态文件系统白名单（始终最新）
+                    sandboxConfig.getIgnoreViolations(),
+                    sandboxConfig.getEnableWeakerNestedSandbox(),
+                    sandboxConfig.getEnableWeakerNetworkIsolation(),
+                    sandboxConfig.getAllowAppleEvents(),
+                    sandboxConfig.getRipgrep(),
+                    sandboxConfig.getMandatoryDenySearchDepth(),
+                    sandboxConfig.getAllowPty(),
+                    sandboxConfig.getSeccomp(),
+                    sandboxConfig.getBwrapPath(),
+                    sandboxConfig.getSocatPath(),
+                    sandboxConfig.getWindows()
+            );
+        }
+
+        // 3) 无用户配置，返回纯动态配置（filesystem 使用动态构建的白名单）
+        return new SandboxRuntimeConfig(
+                null, dynamicFs, null,
+                null, null, null, null,
+                null, null, null, null, null, null
+        );
+    }
+
+    /**
+     * 基于当前挂载点构建动态文件系统配置。
+     * 每次调用都会从 mountManager 实时读取最新挂载状态。
+     */
+    private FilesystemConfig buildDynamicFilesystemConfig() {
         List<String> allowWrite = new ArrayList<>();
         List<String> allowRead = new ArrayList<>();
 
         // 1) 工作区目录：允许读写
         String workDir = mountManager.getWorkDir();
-        allowWrite.add(workDir + "/**");
-        allowRead.add(workDir + "/**");
+        if (workDir != null) {
+            allowWrite.add(workDir + "/**");
+            allowRead.add(workDir + "/**");
+        }
 
         // 2) 所有挂载点：按可写性加入对应列表
         for (MountDir mount : mountManager.getMounts()) {
@@ -203,13 +247,23 @@ public class TerminalTalent extends AbsTalent {
             }
         }
 
-        FilesystemConfig fsConfig = new FilesystemConfig(
-                null,                          // denyRead
+        return new FilesystemConfig(
+                null,                           // denyRead
                 allowRead.isEmpty() ? null : allowRead,
                 allowWrite.isEmpty() ? null : allowWrite,
-                null,                          // denyWrite
-                false                          // allowGitConfig
+                null,                           // denyWrite
+                false                           // allowGitConfig
         );
+    }
+
+    /**
+     * 构建默认沙箱配置：复用动态文件系统白名单，让沙箱基于实际边界生效。
+     * 当用户未显式提供 sandboxConfig 时自动启用。
+     */
+    private SandboxRuntimeConfig buildDefaultSandboxConfig() {
+        // 复用 buildDynamicFilesystemConfig() 获取当前挂载点的实时路径白名单
+        // 避免两份相同逻辑的维护成本
+        FilesystemConfig fsConfig = buildDynamicFilesystemConfig();
 
         return new SandboxRuntimeConfig(
                 null,   // network
@@ -457,7 +511,8 @@ public class TerminalTalent extends AbsTalent {
         ensureSandboxInitialized();
         if (sandboxEnabled && sandboxSystemRestrict && SandboxManager.isSandboxingEnabled()) {
             try {
-                finalCommand = SandboxManager.wrapWithSandbox(finalCommand, workPath.toString(), sandboxConfig);
+                finalCommand = SandboxManager.wrapWithSandbox(
+                        finalCommand, workPath.toString(), buildDynamicCustomConfig());
             } catch (Exception e) {
                 SandboxLog.debug("Sandbox wrap failed, running without OS sandbox: " + e.getMessage());
             }
@@ -504,7 +559,8 @@ public class TerminalTalent extends AbsTalent {
         ensureSandboxInitialized();
         if (sandboxEnabled && sandboxSystemRestrict && SandboxManager.isSandboxingEnabled()) {
             try {
-                finalCommand = SandboxManager.wrapWithSandbox(finalCommand, targetWorkPath.toString(), sandboxConfig);
+                finalCommand = SandboxManager.wrapWithSandbox(
+                        finalCommand, targetWorkPath.toString(), buildDynamicCustomConfig());
             } catch (Exception e) {
                 SandboxLog.debug("Sandbox wrap failed, running without OS sandbox: " + e.getMessage());
             }
