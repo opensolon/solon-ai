@@ -41,6 +41,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -80,6 +81,7 @@ public class TerminalTalent extends AbsTalent {
     private boolean sandboxSystemRestrict = false;
     private final MountManager mountManager; // 引入挂载管理器
     private @Nullable SandboxRuntimeConfig sandboxConfig;
+    private final ReentrantLock sandboxInitLock = new ReentrantLock();
     private final SandboxViolationStore violationStore = new SandboxViolationStore(Collections.emptyMap());
 
     private final String pythonCmd;
@@ -151,6 +153,28 @@ public class TerminalTalent extends AbsTalent {
      */
     public void setSandboxConfig(SandboxRuntimeConfig sandboxConfig) {
         this.sandboxConfig = sandboxConfig;
+    }
+
+    /**
+     * 延迟初始化 SandboxManager。在 bash()/bashStart() 执行前自动调用，
+     * 确保 Solon 配置注入完毕后才初始化，避免时序问题导致的单例锁定。
+     */
+    private void ensureSandboxInitialized() {
+        if (sandboxSystemRestrict && sandboxEnabled && !SandboxManager.isSandboxingEnabled()) {
+            sandboxInitLock.lock();
+            try {
+                if (!SandboxManager.isSandboxingEnabled()) {
+                    SandboxRuntimeConfig cfg = sandboxConfig != null
+                            ? sandboxConfig
+                            : new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null);
+                    SandboxManager.initialize(cfg, null);
+                }
+            } catch (Exception e) {
+                SandboxLog.debug("Auto sandbox init failed, running without OS sandbox: " + e.getMessage());
+            } finally {
+                sandboxInitLock.unlock();
+            }
+        }
     }
 
     /**
@@ -379,6 +403,7 @@ public class TerminalTalent extends AbsTalent {
         // OS 级沙盒包装（内核级强制隔离：Seatbelt / bwrap）
         // 仅当 sandboxSystemRestrict=true 时启用，将安全隔离的重活交给 OS 内核
         // 关闭后仅保留 Java 层最小自保护（kill PID / exit / rm -rf /），减少误伤
+        ensureSandboxInitialized();
         if (sandboxEnabled && sandboxSystemRestrict && SandboxManager.isSandboxingEnabled()) {
             try {
                 finalCommand = SandboxManager.wrapWithSandbox(finalCommand, workPath.toString(), sandboxConfig);
@@ -425,6 +450,7 @@ public class TerminalTalent extends AbsTalent {
         // OS 级沙盒包装（内核级强制隔离：Seatbelt / bwrap）
         // 仅当 sandboxSystemRestrict=true 时启用，将安全隔离的重活交给 OS 内核
         // 关闭后仅保留 Java 层最小自保护（kill PID / exit / rm -rf /），减少误伤
+        ensureSandboxInitialized();
         if (sandboxEnabled && sandboxSystemRestrict && SandboxManager.isSandboxingEnabled()) {
             try {
                 finalCommand = SandboxManager.wrapWithSandbox(finalCommand, targetWorkPath.toString(), sandboxConfig);
