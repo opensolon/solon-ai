@@ -77,8 +77,11 @@ public class McpTalentClient implements Talent {
         return metadata;
     }
 
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
+    @Override
+    public void setEnabled(Boolean enabled) {
+        if (enabled != null) {
+            this.enabled = enabled;
+        }
     }
 
     @Override

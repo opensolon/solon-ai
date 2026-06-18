@@ -30,6 +30,7 @@ import java.util.Collection;
  *
  * @author noear
  * @since 3.8.4
+ * @since 4.0.0
  */
 @Preview("3.8.4")
 public interface Talent {
@@ -38,6 +39,13 @@ public interface Talent {
      */
     default boolean isEnabled() {
         return true;
+    }
+
+    /**
+     * 设置是否启用
+     */
+    default void setEnabled(Boolean enabled) {
+
     }
 
     /**

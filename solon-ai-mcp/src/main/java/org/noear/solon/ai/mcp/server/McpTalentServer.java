@@ -42,6 +42,20 @@ import java.util.List;
 @Preview("3.9.0")
 public abstract class McpTalentServer implements Talent {
 
+    protected volatile boolean enabled = true;
+
+    @Override
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    @Override
+    public void setEnabled(Boolean enabled) {
+        if(enabled != null){
+            this.enabled = enabled;
+        }
+    }
+
     /**
      * 导出才能元数据作为 MCP 资源
      */

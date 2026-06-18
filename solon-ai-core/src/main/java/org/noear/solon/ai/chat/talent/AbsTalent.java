@@ -89,6 +89,7 @@ public abstract class AbsTalent implements Talent {
         return list;
     }
 
+    @Override
     public void setEnabled(Boolean enabled) {
         if (enabled != null) {
             this.enabled = enabled;

@@ -81,6 +81,7 @@ public class TalentDesc implements Talent {
         return enabled;
     }
 
+    @Override
     public void setEnabled(Boolean enabled) {
         if (enabled != null) {
             this.enabled = enabled;
