@@ -25,6 +25,20 @@ import org.noear.solon.ai.chat.tool.ToolResult;
  */
 public interface ToolInterceptor {
     /**
+     * 是否启用
+     */
+    default boolean isEnabled() {
+        return true;
+    }
+
+    /**
+     * 设置是否启用
+     */
+    default void setEnabled(Boolean enabled) {
+
+    }
+
+    /**
      * 拦截工具调用
      *
      * @param req   请求

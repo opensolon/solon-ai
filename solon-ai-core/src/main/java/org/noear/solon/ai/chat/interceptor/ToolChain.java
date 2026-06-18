@@ -53,13 +53,19 @@ public class ToolChain<T extends ToolInterceptor> {
     }
 
     public ToolResult doIntercept(ToolRequest req) throws Throwable {
-        if (lastHandler == null) {
+        // 跳过已禁用的拦截器
+        while (index < interceptorList.size() && !interceptorList.get(index).target.isEnabled()) {
+            index++;
+        }
+
+        if (index < interceptorList.size()) {
             return interceptorList.get(index++).target.interceptTool(req, this);
         } else {
-            if (index < interceptorList.size()) {
-                return interceptorList.get(index++).target.interceptTool(req, this);
-            } else {
+            // 所有拦截器都已禁用或已处理完
+            if (lastHandler != null) {
                 return lastHandler.call(req.getArgs());
+            } else {
+                throw new IllegalStateException("No handler available and all interceptors are disabled");
             }
         }
     }
