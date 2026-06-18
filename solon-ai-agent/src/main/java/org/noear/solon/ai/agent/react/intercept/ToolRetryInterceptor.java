@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.intercept;
 
-import org.noear.solon.ai.agent.react.ReActInterceptor;
+import org.noear.solon.ai.agent.react.AbsReActInterceptor;
 import org.noear.solon.ai.chat.interceptor.ToolChain;
 import org.noear.solon.ai.chat.interceptor.ToolRequest;
 import org.noear.solon.ai.chat.tool.ToolResult;
@@ -31,7 +31,7 @@ import org.slf4j.LoggerFactory;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class ToolRetryInterceptor implements ReActInterceptor {
+public class ToolRetryInterceptor extends AbsReActInterceptor {
     private static final Logger LOG = LoggerFactory.getLogger(ToolRetryInterceptor.class);
 
     private final int maxRetries;

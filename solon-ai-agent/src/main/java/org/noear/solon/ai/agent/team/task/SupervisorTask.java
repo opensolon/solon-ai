@@ -74,12 +74,14 @@ public class SupervisorTask implements NamedTaskComponent {
 
             // 1. 拦截器准入检查
             for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
-                if (!item.target.shouldSupervisorContinue(trace)) {
-                    trace.addRecord(ChatRole.SYSTEM, TeamAgent.ID_SUPERVISOR, "[Skipped] Intercepted by " + item.target.getClass().getSimpleName(), 0);
-                    if (TeamAgent.ID_SUPERVISOR.equals(trace.getRoute())) {
-                        routeTo(context, trace, Agent.ID_END);
+                if (item.target.isEnabled()) {
+                    if (!item.target.shouldSupervisorContinue(trace)) {
+                        trace.addRecord(ChatRole.SYSTEM, TeamAgent.ID_SUPERVISOR, "[Skipped] Intercepted by " + item.target.getClass().getSimpleName(), 0);
+                        if (TeamAgent.ID_SUPERVISOR.equals(trace.getRoute())) {
+                            routeTo(context, trace, Agent.ID_END);
+                        }
+                        return;
                     }
-                    return;
                 }
             }
 
@@ -177,8 +179,11 @@ public class SupervisorTask implements NamedTaskComponent {
         }
 
         for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onModelEnd(trace, response);
+            if (item.target.isEnabled()) {
+                item.target.onModelEnd(trace, response);
+            }
         }
+
         if (trace.getSession().isPending()) {
             return;
         }
@@ -188,8 +193,11 @@ public class SupervisorTask implements NamedTaskComponent {
         trace.setLastDecision(decision);
 
         for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onSupervisorDecision(trace, decision);
+            if (item.target.isEnabled()) {
+                item.target.onSupervisorDecision(trace, decision);
+            }
         }
+
         if (trace.getSession().isPending()) {
             return;
         }
@@ -304,14 +312,21 @@ public class SupervisorTask implements NamedTaskComponent {
             config.getProtocol().injectSupervisorTools(trace.getContext(), o::toolAdd);
 
             o.toolContextPut(trace.getOptions().getToolContext());
-            trace.getOptions().getInterceptors().forEach(item -> o.interceptorAdd(item.target));
+
+            for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
+                //内部已支持启用控制
+                o.interceptorAdd(item.index, item.target);
+            }
 
             o.optionSet(trace.getOptions().getModelOptions().options());
         });
 
         for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onModelStart(trace, req);
+            if (item.target.isEnabled()) {
+                item.target.onModelStart(trace, req);
+            }
         }
+
         if (trace.getSession().isPending()) {
             return null;
         }

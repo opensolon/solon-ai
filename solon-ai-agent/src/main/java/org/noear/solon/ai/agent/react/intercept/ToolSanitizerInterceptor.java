@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.intercept;
 
-import org.noear.solon.ai.agent.react.ReActInterceptor;
+import org.noear.solon.ai.agent.react.AbsReActInterceptor;
 import org.noear.solon.ai.chat.interceptor.ToolChain;
 import org.noear.solon.ai.chat.interceptor.ToolRequest;
 import org.noear.solon.ai.chat.tool.ToolResult;
@@ -31,7 +31,7 @@ import java.util.function.Function;
  * <p>负责在 Observation 阶段对原始数据进行脱敏、降噪与长度截断，确保上下文精简安全。</p>
  */
 @Preview("3.8.1")
-public class ToolSanitizerInterceptor implements ReActInterceptor {
+public class ToolSanitizerInterceptor extends AbsReActInterceptor {
     private static final Logger log = LoggerFactory.getLogger(ToolSanitizerInterceptor.class);
 
     private final int maxObservationLength;

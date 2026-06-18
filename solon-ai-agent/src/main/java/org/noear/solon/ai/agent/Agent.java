@@ -136,14 +136,16 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
         if (trace != null) {
             trace.setLastAgentName(this.name());
             for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
-                if (item.target.shouldAgentContinue(trace, this) == false) {
-                    trace.addRecord(ChatRole.ASSISTANT, name(),
-                            "[Skipped] Cancelled by " + item.target.getClass().getSimpleName(), 0);
+                if (item.target.isEnabled()) {
+                    if (item.target.shouldAgentContinue(trace, this) == false) {
+                        trace.addRecord(ChatRole.ASSISTANT, name(),
+                                "[Skipped] Cancelled by " + item.target.getClass().getSimpleName(), 0);
 
-                    if (LOG.isDebugEnabled()) {
-                        LOG.debug("Agent [{}] execution skipped by interceptor: {}", name(), item.target.getClass().getSimpleName());
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("Agent [{}] execution skipped by interceptor: {}", name(), item.target.getClass().getSimpleName());
+                        }
+                        return;
                     }
-                    return;
                 }
             }
         }
@@ -195,7 +197,9 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
             // 执行后置回调
             trace.getProtocol().onAgentEnd(trace, this);
             for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
-                item.target.onAgentEnd(trace, this);
+                if (item.target.isEnabled()) {
+                    item.target.onAgentEnd(trace, this);
+                }
             }
         }
 

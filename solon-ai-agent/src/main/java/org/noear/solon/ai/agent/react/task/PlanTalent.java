@@ -85,8 +85,10 @@ public class PlanTalent extends AbsTalent {
             trace.setPlans(cleaned);
             trace.setPlanIndex(0);
 
-            for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-                item.target.onPlan(trace, trace.getLastReasonMessage());
+            for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
+                if (entity.target.isEnabled()) {
+                    entity.target.onPlan(trace, trace.getLastReasonMessage());
+                }
             }
 
             if (trace.getOptions().getStreamSink() != null) {
@@ -115,8 +117,10 @@ public class PlanTalent extends AbsTalent {
             desc = "成功：所有计划步骤已执行完毕。";
         }
 
-        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onPlan(trace, trace.getLastReasonMessage());
+        for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
+            if (entity.target.isEnabled()) {
+                entity.target.onPlan(trace, trace.getLastReasonMessage());
+            }
         }
 
         if (trace.getOptions().getStreamSink() != null) {
@@ -158,8 +162,10 @@ public class PlanTalent extends AbsTalent {
             trace.setPlanIndex(splitAt);
         }
 
-        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onPlan(trace, trace.getLastReasonMessage());
+        for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
+            if (entity.target.isEnabled()) {
+                entity.target.onPlan(trace, trace.getLastReasonMessage());
+            }
         }
 
         if (trace.getOptions().getStreamSink() != null) {

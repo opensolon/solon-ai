@@ -226,7 +226,9 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
 
         // 触发团队启动拦截
         for (RankEntity<TeamInterceptor> item : options.getInterceptors()) {
-            item.target.onTeamStart(trace);
+            if (item.target.isEnabled()) {
+                item.target.onTeamStart(trace);
+            }
         }
 
         try {
@@ -240,7 +242,11 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
 
                 try {
                     final FlowOptions flowOptions = new FlowOptions();
-                    options.getInterceptors().forEach(item -> flowOptions.interceptorAdd(item.target, item.index));
+                    for(RankEntity<TeamInterceptor> item : options.getInterceptors()) {
+                        if (item.target.isEnabled()) {
+                            flowOptions.interceptorAdd(item.target, item.index);
+                        }
+                    }
 
                     trace.getMetrics().reset();
 
@@ -299,8 +305,11 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             session.updateSnapshot();
 
             // 触发完成拦截
-            options.getInterceptors().forEach(item -> item.target.onTeamEnd(trace));
-
+            for (RankEntity<TeamInterceptor> item : options.getInterceptors()) {
+                if (item.target.isEnabled()) {
+                    item.target.onTeamEnd(trace);
+                }
+            }
 
             if (LOG.isInfoEnabled()) {
                 LOG.info("TeamAgent [{}] completed: {}", config.getName(), assistantMessage.getContent());

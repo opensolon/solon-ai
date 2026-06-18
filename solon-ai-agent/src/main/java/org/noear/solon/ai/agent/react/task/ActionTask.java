@@ -105,7 +105,9 @@ public class ActionTask {
 
         // 1. 触发前置生命周期
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onAction(trace, toolExchanger);
+            if (item.target.isEnabled()) {
+                item.target.onAction(trace, toolExchanger);
+            }
         }
 
         // 2. 如果前置拦截器直接挂起或截断了路由，立刻退出（交给 finally 闭环）
@@ -303,10 +305,12 @@ public class ActionTask {
 
         // 2. 拦截器现场清理闭环
         for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
-            try {
-                entity.target.onObservation(trace, toolExchanger, observationMessage, error, durationMs);
-            } catch (Throwable e) {
-                LOG.error("Interceptor onObservation execution failed", e);
+            if (entity.target.isEnabled()) {
+                try {
+                    entity.target.onObservation(trace, toolExchanger, observationMessage, error, durationMs);
+                } catch (Throwable e) {
+                    LOG.error("Interceptor onObservation execution failed", e);
+                }
             }
         }
     }

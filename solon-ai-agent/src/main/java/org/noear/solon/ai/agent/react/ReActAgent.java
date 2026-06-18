@@ -239,7 +239,9 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
         // 拦截器：任务开始事件
         for (RankEntity<ReActInterceptor> item : options.getInterceptors()) {
-            item.target.onAgentStart(trace);
+            if (item.target.isEnabled()) {
+                item.target.onAgentStart(trace);
+            }
         }
 
         if (trace.getSession().isPending() == false) {
@@ -299,7 +301,9 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
         // 拦截器：任务结束事件
         for (RankEntity<ReActInterceptor> item : options.getInterceptors()) {
-            item.target.onAgentEnd(trace);
+            if (item.target.isEnabled()) {
+                item.target.onAgentEnd(trace);
+            }
         }
 
         if (LOG.isInfoEnabled()) {

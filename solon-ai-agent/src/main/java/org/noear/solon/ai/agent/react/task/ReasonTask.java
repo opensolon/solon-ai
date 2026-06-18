@@ -185,8 +185,10 @@ public class ReasonTask {
 
 
         // [逻辑 2.1: 上下文预处理] 在消息组装前触发，允许拦截器压缩 WorkingMemory
-        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onReasonStart(trace, systemPromptBuf);
+        for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
+            if (entity.target.isEnabled()) {
+                entity.target.onReasonStart(trace, systemPromptBuf);
+            }
         }
 
         if (Agent.ID_END.equals(trace.getRoute())) {
@@ -332,7 +334,10 @@ public class ReasonTask {
                     o.autoToolCall(false); // 强制由 Agent 框架接管工具链路管理
                     o.toolContextPut(trace.getOptions().getToolContext());
 
-                    trace.getOptions().getInterceptors().forEach(item -> o.interceptorAdd(item.index, item.target));
+                    for(RankEntity<ReActInterceptor> entity :  trace.getOptions().getInterceptors()) {
+                        //内部已支持启用控制
+                        o.interceptorAdd(entity.index, entity.target);
+                    }
 
                     if (trace.getOptions().getOutputSchema() != null) {
                         trace.getOptions().getChatModel().getDialect().prepareOutputFormatOptions(o);

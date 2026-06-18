@@ -32,6 +32,7 @@ import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.ai.util.RetryTask;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -300,7 +301,10 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                         o.toolContextPut(options.toolContext());
                         o.talentAdd(options.talents());
 
-                        options.interceptors().forEach(item -> o.interceptorAdd(item.index, item.target));
+                        for(RankEntity<SimpleInterceptor> item : options.interceptors()) {
+                            //内部已支持启用控制
+                            o.interceptorAdd(item.index, item.target);
+                        }
 
                         if (Assert.isNotEmpty(config.getOutputSchema())) {
                             config.getChatModel().getDialect().prepareOutputFormatOptions(o);

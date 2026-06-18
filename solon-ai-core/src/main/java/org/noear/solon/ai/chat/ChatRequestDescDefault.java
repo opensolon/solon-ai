@@ -156,7 +156,9 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             }
 
             for (RankEntity<ChatInterceptor> item : options.interceptors()) {
-                item.target.onPrepare(session, options, originalPrompt, instructionBuilder);
+                if (item.target.isEnabled()) {
+                    item.target.onPrepare(session, options, originalPrompt, instructionBuilder);
+                }
             }
 
             StringBuilder talentsInstruction = TalentUtil.activeTalents(options, originalPrompt, new StringBuilder());

@@ -16,7 +16,7 @@
 package org.noear.solon.ai.agent.react.intercept;
 
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.react.ReActInterceptor;
+import org.noear.solon.ai.agent.react.AbsReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.task.ToolExchanger;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -39,7 +39,7 @@ import java.util.*;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class HITLInterceptor implements ReActInterceptor {
+public class HITLInterceptor extends AbsReActInterceptor {
 
     private final Map<String, InterventionStrategy> strategyMap = new HashMap<>();
 

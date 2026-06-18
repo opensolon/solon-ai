@@ -16,7 +16,7 @@
 package org.noear.solon.ai.agent.react.intercept;
 
 import org.noear.snack4.ONode;
-import org.noear.solon.ai.agent.react.ReActInterceptor;
+import org.noear.solon.ai.agent.react.AbsReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
@@ -33,7 +33,7 @@ import java.util.*;
  * <p>通过监控动作意图的滑动窗口频率，防止智能体陷入连续重复或 A-B-A-B 型往复迭代。</p>
  */
 @Preview("3.8.1")
-public class StopLoopInterceptor implements ReActInterceptor {
+public class StopLoopInterceptor extends AbsReActInterceptor {
     private static final Logger log = LoggerFactory.getLogger(StopLoopInterceptor.class);
     private static final String EXTRAS_HISTORY_KEY = "stoploop_history";
 
