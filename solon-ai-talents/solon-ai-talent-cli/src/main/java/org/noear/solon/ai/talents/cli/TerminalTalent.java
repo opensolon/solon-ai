@@ -792,8 +792,8 @@ public class TerminalTalent extends AbsTalent {
                 continue;
             }
 
-            int lineIndex = support.findAtStartLine(originalContent, finalOld, edit.oldStrStartLine);
-            if (lineIndex >= 0) {
+            TerminalSupport.MatchResult match = support.findAtStartLine(originalContent, finalOld, edit.oldStrStartLine);
+            if (match != null) {
                 continue;
             }
 

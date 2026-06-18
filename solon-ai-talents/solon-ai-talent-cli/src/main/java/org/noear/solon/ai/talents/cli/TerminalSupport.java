@@ -42,6 +42,19 @@ import java.util.stream.Stream;
  * @since 3.9.1
  */
 public class TerminalSupport {
+
+    /**
+     * 匹配结果：包含起始位置和实际匹配长度（含缩进和换行符）。
+     */
+    static class MatchResult {
+        final int startIndex;
+        final int matchedLength;
+
+        MatchResult(int startIndex, int matchedLength) {
+            this.startIndex = startIndex;
+            this.matchedLength = matchedLength;
+        }
+    }
     static final int MAX_CHARACTER_LIMIT = 128 * 1024;
 
     private final MountManager mountManager;
@@ -82,9 +95,9 @@ public class TerminalSupport {
             }
             return content.replace(finalOld, finalNew);
         } else {
-            int lineIndex = findAtStartLine(content, finalOld, oldStrStartLine);
-            if (lineIndex >= 0) {
-                return content.substring(0, lineIndex) + finalNew + content.substring(lineIndex + finalOld.length());
+            MatchResult match = findAtStartLine(content, finalOld, oldStrStartLine);
+            if (match != null) {
+                return content.substring(0, match.startIndex) + finalNew + content.substring(match.startIndex + match.matchedLength);
             }
 
             int firstIndex = content.indexOf(finalOld);
@@ -98,21 +111,142 @@ public class TerminalSupport {
         }
     }
 
-    int findAtStartLine(String content, String oldStr, Integer oldStrStartLine) {
+    MatchResult findAtStartLine(String content, String oldStr, Integer oldStrStartLine) {
         if (oldStrStartLine == null || oldStrStartLine <= 0) {
-            return -1;
+            return null;
         }
 
         int lineStartIndex = getLineStartIndex(content, oldStrStartLine);
         if (lineStartIndex < 0) {
-            return -1;
+            return null;
         }
 
+        // 精确匹配（保留原有行为）
         if (content.startsWith(oldStr, lineStartIndex)) {
-            return lineStartIndex;
+            return new MatchResult(lineStartIndex, oldStr.length());
         }
 
-        return -1;
+        // 宽松匹配：忽略每行行首的空白差异（缩进、Tab/空格混合等）
+        MatchResult looseMatch = findAtStartLineLoose(content, oldStr, lineStartIndex);
+        if (looseMatch != null) {
+            return looseMatch;
+        }
+
+        return null;
+    }
+
+    /**
+     * 宽松匹配：将 oldStr 按行拆分，与 content 从指定起始位置开始的行逐行比较，
+     * 忽略每行行首的空白字符差异（空格 vs Tab、空格数量不同等）。
+     */
+    private MatchResult findAtStartLineLoose(String content, String oldStr, int lineStartIndex) {
+        // 提取 content 中从 lineStartIndex 开始的各行的实际内容（不含行首空白和换行符）
+        List<String> contentLines = extractLinesWithoutLeadingWhitespace(content, lineStartIndex);
+        if (contentLines.isEmpty()) {
+            return null;
+        }
+
+        // 拆分 oldStr 为行列表
+        String[] oldStrLines = oldStr.split("\\r?\\n", -1);
+        if (oldStrLines.length > contentLines.size()) {
+            return null; // oldStr 行数多于 content 可用行数，不可能匹配
+        }
+
+        // 逐行比较（忽略每行行首空白）
+        for (int i = 0; i < oldStrLines.length; i++) {
+            String actualLine = contentLines.get(i);
+            String expectedLine = stripLeadingWhitespace(oldStrLines[i]);
+            if (!actualLine.equals(expectedLine)) {
+                return null;
+            }
+        }
+
+        int computedLength = computeMatchLength(content, lineStartIndex, oldStrLines.length);
+        return computedLength > 0 ? new MatchResult(lineStartIndex, computedLength) : null;
+    }
+
+    /**
+     * 从 content 的 lineStartIndex 开始，提取前 nLines 行的内容（去除行首空白，不含换行符）。
+     */
+    private List<String> extractLinesWithoutLeadingWhitespace(String content, int lineStartIndex) {
+        List<String> lines = new ArrayList<>();
+        int pos = lineStartIndex;
+        while (pos < content.length()) {
+            int lineEnd = findLineEnd(content, pos);
+            String lineContent = content.substring(pos, lineEnd);
+            lines.add(stripLeadingWhitespace(lineContent));
+            if (lineEnd >= content.length()) {
+                break; // 文件末尾
+            }
+            char c = content.charAt(lineEnd);
+            if (c == '\n') {
+                pos = lineEnd + 1;
+            } else if (c == '\r') {
+                pos = lineEnd + 1;
+                if (pos < content.length() && content.charAt(pos) == '\n') {
+                    pos++;
+                }
+            }
+        }
+        return lines;
+    }
+
+    /**
+     * 查找从 pos 开始的行的结束位置（换行符之前的位置）。
+     */
+    private int findLineEnd(String content, int pos) {
+        for (int i = pos; i < content.length(); i++) {
+            char c = content.charAt(i);
+            if (c == '\n' || c == '\r') {
+                return i;
+            }
+        }
+        return content.length();
+    }
+
+    /**
+     * 计算从 lineStartIndex 开始的 n 行的总字符数（包含换行符）。
+     */
+    private int computeMatchLength(String content, int lineStartIndex, int nLines) {
+        int pos = lineStartIndex;
+        int length = 0;
+        for (int i = 0; i < nLines; i++) {
+            int lineEnd = findLineEnd(content, pos);
+            length = lineEnd - lineStartIndex;
+            boolean isLastLine = (i == nLines - 1);
+            // 包含换行符（仅非最后一行包含行尾换行符）
+            if (lineEnd < content.length() && content.charAt(lineEnd) == '\n') {
+                if (!isLastLine) {
+                    length++;
+                }
+                pos = lineEnd + 1;
+            } else if (lineEnd < content.length() && content.charAt(lineEnd) == '\r') {
+                if (!isLastLine) {
+                    length++;
+                }
+                pos = lineEnd + 1;
+                if (lineEnd + 1 < content.length() && content.charAt(lineEnd + 1) == '\n') {
+                    if (!isLastLine) {
+                        length++;
+                    }
+                    pos = lineEnd + 2;
+                }
+            } else {
+                pos = lineEnd;
+            }
+        }
+        return length;
+    }
+
+    /**
+     * 去除字符串行首的空白字符（空格、Tab）。
+     */
+    private String stripLeadingWhitespace(String s) {
+        int start = 0;
+        while (start < s.length() && (s.charAt(start) == ' ' || s.charAt(start) == '\t')) {
+            start++;
+        }
+        return s.substring(start);
     }
 
     int getLineStartIndex(String content, int lineNumber) {
