@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.sandbox.SandboxManager;
 import org.noear.solon.ai.sandbox.SandboxLog;
 import org.noear.solon.ai.sandbox.SandboxViolationStore;
+import org.noear.solon.ai.sandbox.config.FilesystemConfig;
 import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
 import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.talents.mount.MountManager;
@@ -166,7 +167,7 @@ public class TerminalTalent extends AbsTalent {
                 if (!SandboxManager.isSandboxingEnabled()) {
                     SandboxRuntimeConfig cfg = sandboxConfig != null
                             ? sandboxConfig
-                            : new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null);
+                            : buildDefaultSandboxConfig();
                     SandboxManager.initialize(cfg, null);
                 }
             } catch (Exception e) {
@@ -175,6 +176,56 @@ public class TerminalTalent extends AbsTalent {
                 sandboxInitLock.unlock();
             }
         }
+    }
+
+    /**
+     * 构建默认沙箱配置：从挂载点提取路径白名单，让沙箱基于实际边界生效。
+     * 当用户未显式提供 sandboxConfig 时自动启用。
+     */
+    private SandboxRuntimeConfig buildDefaultSandboxConfig() {
+        List<String> allowWrite = new ArrayList<>();
+        List<String> allowRead = new ArrayList<>();
+
+        // 1) 工作区目录：允许读写
+        String workDir = mountManager.getWorkDir();
+        allowWrite.add(workDir + "/**");
+        allowRead.add(workDir + "/**");
+
+        // 2) 所有挂载点：按可写性加入对应列表
+        for (MountDir mount : mountManager.getMounts()) {
+            Path realPath = mount.getRealPath();
+            if (realPath != null) {
+                String pathGlob = realPath.toString() + "/**";
+                allowRead.add(pathGlob);
+                if (mount.isWriteable()) {
+                    allowWrite.add(pathGlob);
+                }
+            }
+        }
+
+        FilesystemConfig fsConfig = new FilesystemConfig(
+                null,                          // denyRead
+                allowRead.isEmpty() ? null : allowRead,
+                allowWrite.isEmpty() ? null : allowWrite,
+                null,                          // denyWrite
+                false                          // allowGitConfig
+        );
+
+        return new SandboxRuntimeConfig(
+                null,   // network
+                fsConfig,
+                null,   // ignoreViolations
+                null,   // enableWeakerNestedSandbox
+                null,   // enableWeakerNetworkIsolation
+                null,   // allowAppleEvents
+                null,   // ripgrep
+                null,   // mandatoryDenySearchDepth
+                null,   // allowPty
+                null,   // seccomp
+                null,   // bwrapPath
+                null,   // socatPath
+                null    // windows
+        );
     }
 
     /**
