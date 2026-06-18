@@ -243,12 +243,14 @@ public class TerminalTalent extends AbsTalent {
 
         // 2) 所有挂载点：按可写性加入对应列表（无需 /** 后缀，startsWith 匹配覆盖子路径）
         for (MountDir mount : mountManager.getMounts()) {
-            Path realPath = mount.getRealPath();
-            if (realPath != null) {
-                String pathStr = realPath.toString();
-                allowRead.add(pathStr);
-                if (mount.isWriteable()) {
-                    allowWrite.add(pathStr);
+            if (mount.isEnabled()) {
+                Path realPath = mount.getRealPath();
+                if (realPath != null) {
+                    String pathStr = realPath.toString();
+                    allowRead.add(pathStr);
+                    if (mount.isWriteable()) {
+                        allowWrite.add(pathStr);
+                    }
                 }
             }
         }
