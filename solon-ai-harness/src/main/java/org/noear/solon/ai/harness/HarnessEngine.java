@@ -417,6 +417,10 @@ public class HarnessEngine {
 
     public void setHitlEnabled(Boolean hitlEnabled) {
         options.setHitlEnabled(hitlEnabled);
+
+        if (options.getHitlInterceptor() != null) {
+            options.getHitlInterceptor().setEnabled(hitlEnabled);
+        }
     }
 
     public void setSubagentEnabled(Boolean subagentEnabled) {
@@ -428,6 +432,7 @@ public class HarnessEngine {
 
     public void setBashAsyncEnabled(Boolean bashAsyncEnabled) {
         options.setBashAsyncEnabled(bashAsyncEnabled);
+
         terminalTalent.setBashAsyncEnabled(bashAsyncEnabled);
     }
 

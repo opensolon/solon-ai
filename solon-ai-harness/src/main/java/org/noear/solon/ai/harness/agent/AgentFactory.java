@@ -171,13 +171,6 @@ public class AgentFactory {
                 terminalTalentProxy.addTools("bash_stop");
                 break;
             }
-            case "subagent":
-            case "task": {
-                if (engine.isSubagentEnabled()) {
-                    builder.defaultTalentAdd(engine.getTaskTalent());
-                }
-                break;
-            }
             case "todoread":
             case "todowrite":
             case "todo": {
@@ -200,16 +193,23 @@ public class AgentFactory {
                 builder.defaultTalentAdd(engine.getSkillTalent());
                 break;
             }
+            case "subagent":
+            case "task": {
+                engine.getTaskTalent().setEnabled(engine.isSubagentEnabled());
+
+                builder.defaultTalentAdd(engine.getTaskTalent());
+                break;
+            }
+            case "generate": {
+                engine.getGenerateTalent().setEnabled(engine.isSubagentEnabled());
+
+                builder.defaultTalentAdd(engine.getGenerateTalent());
+                break;
+            }
 
             //-------
 
 
-            case "generate": {
-                if (engine.isSubagentEnabled()) {
-                    builder.defaultTalentAdd(engine.getGenerateTalent());
-                }
-                break;
-            }
             case "memory": {
                 builder.defaultTalentAdd(engine.getMemoryTalent());
                 break;
@@ -231,9 +231,9 @@ public class AgentFactory {
                 break;
             }
             case "hitl": {
-                if (engine.isHitlEnabled()) {
-                    builder.defaultInterceptorAdd(engine.getHitlInterceptor());
-                }
+                engine.getHitlInterceptor().setEnabled(engine.isHitlEnabled());
+
+                builder.defaultInterceptorAdd(engine.getHitlInterceptor());
                 break;
             }
         }
