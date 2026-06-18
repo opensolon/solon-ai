@@ -421,6 +421,9 @@ public class HarnessEngine {
 
     public void setSubagentEnabled(Boolean subagentEnabled) {
         options.setSubagentEnabled(subagentEnabled);
+
+        generateTalent.setEnabled(options.isSubagentEnabled());
+        taskTalent.setEnabled(options.isSubagentEnabled());
     }
 
     public void setBashAsyncEnabled(Boolean bashAsyncEnabled) {

@@ -173,7 +173,9 @@ public class AgentFactory {
             }
             case "subagent":
             case "task": {
-                builder.defaultTalentAdd(engine.getTaskTalent());
+                if (engine.isSubagentEnabled()) {
+                    builder.defaultTalentAdd(engine.getTaskTalent());
+                }
                 break;
             }
             case "todoread":
