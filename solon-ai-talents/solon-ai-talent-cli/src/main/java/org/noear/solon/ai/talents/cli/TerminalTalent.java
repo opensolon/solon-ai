@@ -518,7 +518,7 @@ public class TerminalTalent extends AbsTalent {
         if (sandboxEnabled && sandboxSystemRestrict && SandboxManager.isSandboxingEnabled()) {
             try {
                 finalCommand = SandboxManager.wrapWithSandbox(
-                        finalCommand, workPath.toString(), buildDynamicCustomConfig());
+                        finalCommand, null, buildDynamicCustomConfig());
             } catch (Exception e) {
                 SandboxLog.debug("Sandbox wrap failed, running without OS sandbox: " + e.getMessage());
             }
@@ -567,7 +567,7 @@ public class TerminalTalent extends AbsTalent {
         if (sandboxEnabled && sandboxSystemRestrict && SandboxManager.isSandboxingEnabled()) {
             try {
                 finalCommand = SandboxManager.wrapWithSandbox(
-                        finalCommand, targetWorkPath.toString(), buildDynamicCustomConfig());
+                        finalCommand, null, buildDynamicCustomConfig());
             } catch (Exception e) {
                 SandboxLog.debug("Sandbox wrap failed, running without OS sandbox: " + e.getMessage());
             }
