@@ -34,9 +34,7 @@ import java.util.regex.Pattern;
  * @since 3.1
  */
 public class OpenaiChatDialect extends AbstractChatDialect {
-
     private static final OpenaiChatDialect instance = new OpenaiChatDialect();
-
     public static OpenaiChatDialect getInstance() {
         return instance;
     }

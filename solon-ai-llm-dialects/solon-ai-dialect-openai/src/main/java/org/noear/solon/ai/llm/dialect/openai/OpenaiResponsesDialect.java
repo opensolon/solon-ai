@@ -29,6 +29,7 @@ import org.noear.solon.core.util.Assert;
 
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * OpenAI Responses 接口方言
@@ -39,14 +40,16 @@ import java.util.Map;
  */
 public class OpenaiResponsesDialect extends AbstractChatDialect {
     private static final Logger log = LoggerFactory.getLogger(OpenaiResponsesDialect.class);
+
     private static final OpenaiResponsesDialect instance = new OpenaiResponsesDialect();
+    public static OpenaiResponsesDialect getInstance() {
+        return instance;
+    }
 
     private final OpenaiResponsesResponseParser responseParser;
     private final OpenaiResponsesRequestBuilder requestBuilder;
 
-    public static OpenaiResponsesDialect getInstance() {
-        return instance;
-    }
+    private static final Pattern pattern =  Pattern.compile("/v\\d+/?$");
 
     public OpenaiResponsesDialect() {
         this.responseParser = new OpenaiResponsesResponseParser();
@@ -62,13 +65,23 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
         }
 
         //自动补全地址
-        if (config.getApiUrl().endsWith("/v1/responses")) {
+        if (config.getApiUrl().endsWith("/responses")) {
             return config.getApiUrl();
         } else {
-            if (config.getApiUrl().endsWith("/")) {
-                return config.getApiUrl() + "v1/responses";
+            if (pattern.matcher(config.getApiUrl()).find()) { //匹配 /v1,/v4/ 等
+                //已带版本
+                if (config.getApiUrl().endsWith("/")) {
+                    return config.getApiUrl() + "responses";
+                } else {
+                    return config.getApiUrl() + "/responses";
+                }
             } else {
-                return config.getApiUrl() + "/v1/responses";
+                //未带版本
+                if (config.getApiUrl().endsWith("/")) {
+                    return config.getApiUrl() + "v1/responses";
+                } else {
+                    return config.getApiUrl() + "/v1/responses";
+                }
             }
         }
     }
@@ -83,7 +96,7 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
         String standard = config.getStandardOrProvider();
 
         return "openai-responses".equals(standard) ||
-                (Assert.isEmpty(standard) && config.getApiUrl().endsWith("/v1/responses"));
+                (Assert.isEmpty(standard) && config.getApiUrl().endsWith("/responses"));
     }
 
     /**

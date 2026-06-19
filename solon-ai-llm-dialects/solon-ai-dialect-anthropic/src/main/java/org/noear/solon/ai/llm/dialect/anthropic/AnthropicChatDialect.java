@@ -30,6 +30,7 @@ import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 
 import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * Anthropic Claude Messages接口方言
@@ -38,13 +39,14 @@ import java.util.*;
  */
 public class AnthropicChatDialect extends AbstractChatDialect {
     private static final AnthropicChatDialect instance = new AnthropicChatDialect();
+    public static AnthropicChatDialect getInstance() {
+        return instance;
+    }
 
     private final AnthropicResponseParser responseParser;
     private final AnthropicRequestBuilder requestBuilder;
 
-    public static AnthropicChatDialect getInstance() {
-        return instance;
-    }
+    private static final Pattern pattern =  Pattern.compile("/v\\d+/?$");
 
     public AnthropicChatDialect() {
         this.responseParser = new AnthropicResponseParser();
@@ -62,7 +64,7 @@ public class AnthropicChatDialect extends AbstractChatDialect {
 
         return "claude".equalsIgnoreCase(standard) ||
                 "anthropic".equalsIgnoreCase(standard) ||
-                (Assert.isEmpty(standard) && config.getApiUrl().endsWith("/v1/messages"));
+                (Assert.isEmpty(standard) && config.getApiUrl().endsWith("/messages"));
     }
 
     @Override
@@ -75,13 +77,23 @@ public class AnthropicChatDialect extends AbstractChatDialect {
         }
 
         //自动补全地址
-        if (config.getApiUrl().endsWith("/v1/messages")) {
+        if (config.getApiUrl().endsWith("/messages")) {
             return config.getApiUrl();
         } else {
-            if (config.getApiUrl().endsWith("/")) {
-                return config.getApiUrl() + "v1/messages";
+            if (pattern.matcher(config.getApiUrl()).find()) { //匹配 /v1,/v4/ 等
+                //已带版本
+                if (config.getApiUrl().endsWith("/")) {
+                    return config.getApiUrl() + "messages";
+                } else {
+                    return config.getApiUrl() + "/messages";
+                }
             } else {
-                return config.getApiUrl() + "/v1/messages";
+                //未带版本
+                if (config.getApiUrl().endsWith("/")) {
+                    return config.getApiUrl() + "v1/messages";
+                } else {
+                    return config.getApiUrl() + "/v1/messages";
+                }
             }
         }
     }
