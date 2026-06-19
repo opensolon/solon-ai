@@ -255,6 +255,17 @@ public class TerminalTalent extends AbsTalent {
             }
         }
 
+        // 3) 用户主目录：当启用 sandboxAllowUserHome 时加入读写白名单
+        //    解决 agent-browser（npx ~/.npm/_npx）、npm 缓存（~/.npm/_cacache）
+        //    等工具需要在用户主目录下读写的问题。
+        if (sandboxAllowUserHome) {
+            String userHome = System.getProperty("user.home");
+            if (userHome != null && !userHome.isEmpty()) {
+                allowRead.add(userHome);
+                allowWrite.add(userHome);
+            }
+        }
+
         return new FilesystemConfig(
                 null,                           // denyRead
                 allowRead.isEmpty() ? null : allowRead,
