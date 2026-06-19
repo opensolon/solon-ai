@@ -119,10 +119,16 @@ public class TerminalSupport {
             return new MatchResult(lineStartIndex, oldStr.length());
         }
 
-        // 宽松匹配：忽略每行行首的空白差异（缩进、Tab/空格混合等）
+        // 策略2：逐行 trim 匹配（忽略每行首尾空白差异）
         MatchResult looseMatch = findAtStartLineLoose(content, oldStr, lineStartIndex);
         if (looseMatch != null) {
             return looseMatch;
+        }
+
+        // 策略3：折叠空白匹配（行内多余空格/Tab混合等，collapseWhitespace 兜底）
+        MatchResult collapsedMatch = findAtStartLineCollapseWhitespace(content, oldStr, lineStartIndex);
+        if (collapsedMatch != null) {
+            return collapsedMatch;
         }
 
         return null;
@@ -165,6 +171,34 @@ public class TerminalSupport {
     }
 
     /**
+     * 折叠空白匹配：在 trim 行首尾空白的基础上，将行内连续空白折叠为单个空格后比较。
+     * 作为 findAtStartLineLoose 的兜底策略，处理行内多余空格或 Tab 混合的情况。
+     */
+    private MatchResult findAtStartLineCollapseWhitespace(String content, String oldStr, int lineStartIndex) {
+        List<String> contentLines = extractTrimmedLines(content, lineStartIndex);
+        if (contentLines.isEmpty()) {
+            return null;
+        }
+
+        String[] oldStrLinesRaw = oldStr.split("\\r?\\n", -1);
+        List<String> oldStrLines = trimTrailingEmptyLines(oldStrLinesRaw);
+        if (oldStrLines.isEmpty() || oldStrLines.size() > contentLines.size()) {
+            return null;
+        }
+
+        for (int i = 0; i < oldStrLines.size(); i++) {
+            String actualLine = collapseWhitespace(contentLines.get(i));
+            String expectedLine = collapseWhitespace(trimLine(oldStrLines.get(i)));
+            if (!actualLine.equals(expectedLine)) {
+                return null;
+            }
+        }
+
+        int computedLength = computeMatchLength(content, lineStartIndex, oldStrLines.size());
+        return computedLength > 0 ? new MatchResult(lineStartIndex, computedLength) : null;
+    }
+
+    /**
      * 去掉字符串列表末尾的空白行。
      */
     private List<String> trimTrailingEmptyLines(String[] lines) {
@@ -180,10 +214,32 @@ public class TerminalSupport {
     }
 
     /**
-     * 宽松匹配诊断版：当匹配失败时，返回具体是哪一行不匹配及其差异描述。
-     * 匹配成功时返回 null。
+     * 多策略匹配诊断版：按策略链（trim → collapseWhitespace）依次检查，
+     * 返回具体是哪一行不匹配及其差异描述。匹配成功时返回 null。
      */
     String findLooseMatchDiagnostics(String content, String oldStr, int lineStartIndex) {
+        // 先尝试 trim 策略检查
+        String diag = tryTrimMatchDiagnostics(content, oldStr, lineStartIndex, "trim");
+        if (diag == null) {
+            return null; // trim 策略匹配成功
+        }
+
+        // trim 策略失败，检查是否是 whitespace 折叠可以解决的差异
+        String collapseDiag = tryTrimMatchDiagnostics(content, oldStr, lineStartIndex, "collapse");
+        if (collapseDiag == null) {
+            return null; // collapse 策略匹配成功
+        }
+
+        // 两个策略都失败，报告 trim 策略的诊断信息（最贴近用户预期）
+        return diag;
+    }
+
+    /**
+     * 单一策略诊断：按指定模式检查每一行的差异。
+     *
+     * @param mode "trim" 使用 trimLine 比较，"collapse" 使用 collapseWhitespace 比较
+     */
+    private String tryTrimMatchDiagnostics(String content, String oldStr, int lineStartIndex, String mode) {
         List<String> contentLines = extractTrimmedLines(content, lineStartIndex);
         if (contentLines.isEmpty()) {
             return "文件在指定行号处无内容";
@@ -200,13 +256,21 @@ public class TerminalSupport {
                     oldStrLines.size(), contentLines.size());
         }
 
+        boolean useCollapse = "collapse".equals(mode);
         for (int i = 0; i < oldStrLines.size(); i++) {
-            String actualLine = contentLines.get(i);
-            String expectedLine = trimLine(oldStrLines.get(i));
-            if (!actualLine.equals(expectedLine)) {
+            String actualRaw = contentLines.get(i);
+            String expectedRaw = trimLine(oldStrLines.get(i));
+            String actual = useCollapse ? collapseWhitespace(actualRaw) : actualRaw;
+            String expected = useCollapse ? collapseWhitespace(expectedRaw) : expectedRaw;
+            if (!actual.equals(expected)) {
                 int fileLineNum = lineStartIndexToLineNumber(content, lineStartIndex) + i;
-                return String.format("第 %d 行内容不匹配：期待「%s」，文件中是「%s」",
-                        fileLineNum, expectedLine, actualLine);
+                if (useCollapse) {
+                    return String.format("第 %d 行内容不匹配（折叠空白后）：期待「%s」，文件中是「%s」",
+                            fileLineNum, expected, actual);
+                } else {
+                    return String.format("第 %d 行内容不匹配：期待「%s」，文件中是「%s」",
+                            fileLineNum, expected, actual);
+                }
             }
         }
 
@@ -312,6 +376,14 @@ public class TerminalSupport {
             end--;
         }
         return s.substring(start, end);
+    }
+
+    /**
+     * 将字符串内部的所有连续空白字符折叠为单个空格，并去除首尾空白。
+     * 用于处理行内多余空格或 Tab 混合等 whitespace 差异。
+     */
+    private String collapseWhitespace(String s) {
+        return s.replaceAll("\\s+", " ").trim();
     }
 
     int getLineStartIndex(String content, int lineNumber) {

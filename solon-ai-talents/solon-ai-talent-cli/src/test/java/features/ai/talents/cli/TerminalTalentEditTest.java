@@ -608,4 +608,77 @@ public class TerminalTalentEditTest {
             deleteRecursively(workDir);
         }
     }
+
+    // ============================================================
+    // 折叠空白匹配（collapseWhitespace 兜底策略）
+    // ============================================================
+
+    @Test
+    public void editCollapseWhitespaceMatchDoubleSpaces() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-edit-");
+        try {
+            // 文件有行内多余空格（双空格），oldStr 使用单空格
+            Path file = workDir.resolve("demo.txt");
+            Files.write(file, Arrays.asList("  int  x  =  1;", "  bar();"));
+
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            TerminalTalent.EditOp edit = new TerminalTalent.EditOp();
+            edit.oldStrStartLine = 1;
+            edit.oldStr = "int x = 1;\nbar();";
+            edit.newStr = "int y = 2;\nbaz();";
+
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+
+            assertTrue(result.contains("成功完成"));
+            assertEquals(Arrays.asList("int y = 2;", "baz();"), Files.readAllLines(file));
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
+    @Test
+    public void editCollapseWhitespaceMatchMixedTabAndSpaces() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-edit-");
+        try {
+            // 文件使用 Tab + 空格混合内间距（int\tx  =  1;），oldStr 使用单空格
+            Path file = workDir.resolve("demo.txt");
+            Files.write(file, Arrays.asList("  int\tx  =  1;", "  bar();"));
+
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            TerminalTalent.EditOp edit = new TerminalTalent.EditOp();
+            edit.oldStrStartLine = 1;
+            edit.oldStr = "int x = 1;\nbar();";
+            edit.newStr = "int y = 2;\nbaz();";
+
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+
+            assertTrue(result.contains("成功完成"));
+            assertEquals(Arrays.asList("int y = 2;", "baz();"), Files.readAllLines(file));
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
+    @Test
+    public void editCollapseWhitespaceStillFailsWhenContentDiffers() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-edit-");
+        try {
+            Path file = workDir.resolve("demo.txt");
+            // 即使折叠空白后，内容仍然不同
+            Files.write(file, Arrays.asList("  int  x  =  1;", "  baz();"));
+
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            TerminalTalent.EditOp edit = new TerminalTalent.EditOp();
+            edit.oldStrStartLine = 1;
+            edit.oldStr = "int x = 2;\nbar();";
+            edit.newStr = "int y = 2;\nbaz();";
+
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+
+            assertTrue(result.contains("预检查失败"));
+            assertEquals(Arrays.asList("  int  x  =  1;", "  baz();"), Files.readAllLines(file));
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
 }
