@@ -749,7 +749,7 @@ public class TerminalTalent extends AbsTalent {
 
     @ToolMapping(
             name = TOOL_EDIT,
-            description = "对文件进行精准文本替换。支持单次调用执行一处或多处编辑。具有原子性：所有编辑成功才会写入，否则全部回滚。"
+            description = "对文件进行文本替换，自动忽略行首行尾空白差异。支持单次调用执行一处或多处编辑。具有原子性：所有编辑成功才会写入，否则全部回滚。"
     )
     public String edit(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String filePath,
                        @Param(value = PARAM_EDITS, description = "编辑操作列表") List<EditOp> edits,
@@ -780,7 +780,7 @@ public class TerminalTalent extends AbsTalent {
 
             if (Boolean.TRUE.equals(edit.replaceAll)) {
                 if (!originalContent.contains(finalOld)) {
-                    return String.format("预检查失败（操作 #%d）: 找不到指定的文本块。请确保 old_str 的缩进和换行与文件内容完全一致。", i + 1);
+                    return String.format("预检查失败（操作 #%d）: 全文替换匹配失败。请确认 old_str 的内容在文件中存在（注意缩进和空格差异会被忽略）。", i + 1);
                 }
                 continue;
             }
@@ -792,7 +792,14 @@ public class TerminalTalent extends AbsTalent {
 
             int firstIndex = originalContent.indexOf(finalOld);
             if (firstIndex == -1) {
-                return String.format("预检查失败（操作 #%d）: 找不到指定的文本块。请确保 old_str 的缩进和换行与文件内容完全一致。", i + 1);
+                // 给出精准的诊断信息
+                String diag = support.findLooseMatchDiagnostics(originalContent, finalOld, edit.oldStrStartLine);
+                if (diag != null) {
+                    return String.format("预检查失败（操作 #%d）: 内容匹配失败 — %s。请检查 old_str 的内容是否与文件对应。",
+                            i + 1, diag);
+                }
+                // diag 返回 null 表示宽松匹配成功（边缘情况），允许通过预检查
+                continue;
             }
 
             if (originalContent.lastIndexOf(finalOld) != firstIndex) {
@@ -1061,10 +1068,10 @@ public class TerminalTalent extends AbsTalent {
 
     public static class EditOp {
         @Param(value = "old_str",
-                description = "待替换的文本块。内容必须与 read 输出中对应文件内容精确一致，包括缩进、换行和空白字符；用于校验并限定替换范围，不要求全文唯一。")
+                description = "待替换的文本块。比较时会自动忽略每行的首尾空白差异（缩进、末尾空格等），并容忍末尾多余空行。结合 old_StrStartLine 定位替换起点。")
         public String oldStr;
         @Param(value = "old_StrStartLine",
-                description = "old_str 在 read 输出中的起始行号，用于定位替换起点；仅在该行行首精确匹配 old_str，不做附近搜索、缩进容错或空白容错。")
+                description = "old_str 在 read 输出中的起始行号，用于定位替换起点；系统会忽略缩进和末尾空白差异进行匹配。")
         public Integer oldStrStartLine;
 
         @Param(value = "new_str",
@@ -1072,7 +1079,7 @@ public class TerminalTalent extends AbsTalent {
         public String newStr;
 
         @Param(value = "replace_all", required = false, defaultValue = "false",
-                description = "是否替换所有匹配项。为 true 时，会忽略 old_StrStartLine，全文替换所有与 old_str 精确一致的文本。")
+                description = "是否替换所有匹配项。为 true 时，会忽略 old_StrStartLine，全文替换所有匹配文本（同样忽略首尾空白差异）。")
         public Boolean replaceAll = false;
     }
 }

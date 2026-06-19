@@ -75,10 +75,11 @@ public class TerminalTalentEditTest {
     }
 
     @Test
-    public void editDoesNotIgnoreTrailingWhitespaceWithOldStrStartLine() throws Exception {
+    public void editAcceptsTrailingWhitespaceWithOldStrStartLine() throws Exception {
         Path workDir = Files.createTempDirectory("solon-ai-edit-");
         try {
             Path file = workDir.resolve("demo.txt");
+            // 文件有尾部空格，oldStr 没有（尾部空格差异应被忽略）
             Files.write(file, Arrays.asList("foo();    ", "bar();"));
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
@@ -89,8 +90,8 @@ public class TerminalTalentEditTest {
 
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
-            assertTrue(result.contains("预检查失败"));
-            assertEquals(Arrays.asList("foo();    ", "bar();"), Files.readAllLines(file));
+            assertTrue(result.contains("成功完成"));
+            assertEquals(Arrays.asList("foo();", "baz();"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
@@ -431,11 +432,11 @@ public class TerminalTalentEditTest {
     }
 
     @Test
-    public void editLooseMatchFailsWhenTrailingWhitespaceDiffers() throws Exception {
+    public void editLooseMatchAcceptsTrailingWhitespace() throws Exception {
         Path workDir = Files.createTempDirectory("solon-ai-edit-");
         try {
             Path file = workDir.resolve("demo.txt");
-            // 文件有尾部空格，oldStr 没有
+            // 文件有尾部空格，oldStr 没有（尾部空格差异应被忽略）
             Files.write(file, Arrays.asList("  foo();    ", "  bar();"));
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
@@ -446,19 +447,19 @@ public class TerminalTalentEditTest {
 
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
-            assertTrue(result.contains("预检查失败"));
-            assertEquals(Arrays.asList("  foo();    ", "  bar();"), Files.readAllLines(file));
+            assertTrue(result.contains("成功完成"));
+            assertEquals(Arrays.asList("newFoo();", "newBar();"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
     }
 
     @Test
-    public void editLooseMatchFailsWhenTrailingWhitespaceDiffersOnSecondLine() throws Exception {
+    public void editLooseMatchAcceptsTrailingWhitespaceOnSecondLine() throws Exception {
         Path workDir = Files.createTempDirectory("solon-ai-edit-");
         try {
             Path file = workDir.resolve("demo.txt");
-            // 第 2 行有尾部空格
+            // 第 2 行有尾部空格（尾部空格差异应被忽略）
             Files.write(file, Arrays.asList("  foo();", "  bar();    "));
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
@@ -469,8 +470,8 @@ public class TerminalTalentEditTest {
 
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
-            assertTrue(result.contains("预检查失败"));
-            assertEquals(Arrays.asList("  foo();", "  bar();    "), Files.readAllLines(file));
+            assertTrue(result.contains("成功完成"));
+            assertEquals(Arrays.asList("newFoo();", "newBar();"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }

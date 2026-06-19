@@ -130,44 +130,112 @@ public class TerminalSupport {
 
     /**
      * 宽松匹配：将 oldStr 按行拆分，与 content 从指定起始位置开始的行逐行比较，
-     * 忽略每行行首的空白字符差异（空格 vs Tab、空格数量不同等）。
+     * 忽略每行行首和行尾的空白字符差异（空格 vs Tab、空格数量不同等）。
+     * 同时容忍 oldStr 末尾多余的空白行（例如从 diff 格式转换带来的多余换行）。
      */
     private MatchResult findAtStartLineLoose(String content, String oldStr, int lineStartIndex) {
-        // 提取 content 中从 lineStartIndex 开始的各行的实际内容（不含行首空白和换行符）
-        List<String> contentLines = extractLinesWithoutLeadingWhitespace(content, lineStartIndex);
+        // 提取 content 中从 lineStartIndex 开始的各行的实际内容（trim 后）
+        List<String> contentLines = extractTrimmedLines(content, lineStartIndex);
         if (contentLines.isEmpty()) {
             return null;
         }
 
-        // 拆分 oldStr 为行列表
-        String[] oldStrLines = oldStr.split("\\r?\\n", -1);
-        if (oldStrLines.length > contentLines.size()) {
+        // 拆分 oldStr 为行列表，并去掉末尾多余的空白行
+        String[] oldStrLinesRaw = oldStr.split("\\r?\\n", -1);
+        List<String> oldStrLines = trimTrailingEmptyLines(oldStrLinesRaw);
+        if (oldStrLines.isEmpty()) {
+            return null;
+        }
+
+        if (oldStrLines.size() > contentLines.size()) {
             return null; // oldStr 行数多于 content 可用行数，不可能匹配
         }
 
-        // 逐行比较（忽略每行行首空白）
-        for (int i = 0; i < oldStrLines.length; i++) {
+        // 逐行比较（忽略每行首尾空白）
+        for (int i = 0; i < oldStrLines.size(); i++) {
             String actualLine = contentLines.get(i);
-            String expectedLine = stripLeadingWhitespace(oldStrLines[i]);
+            String expectedLine = trimLine(oldStrLines.get(i));
             if (!actualLine.equals(expectedLine)) {
                 return null;
             }
         }
 
-        int computedLength = computeMatchLength(content, lineStartIndex, oldStrLines.length);
+        int computedLength = computeMatchLength(content, lineStartIndex, oldStrLines.size());
         return computedLength > 0 ? new MatchResult(lineStartIndex, computedLength) : null;
     }
 
     /**
-     * 从 content 的 lineStartIndex 开始，提取前 nLines 行的内容（去除行首空白，不含换行符）。
+     * 去掉字符串列表末尾的空白行。
      */
-    private List<String> extractLinesWithoutLeadingWhitespace(String content, int lineStartIndex) {
+    private List<String> trimTrailingEmptyLines(String[] lines) {
+        int end = lines.length;
+        while (end > 0 && lines[end - 1].trim().isEmpty()) {
+            end--;
+        }
+        List<String> result = new ArrayList<>(end);
+        for (int i = 0; i < end; i++) {
+            result.add(lines[i]);
+        }
+        return result;
+    }
+
+    /**
+     * 宽松匹配诊断版：当匹配失败时，返回具体是哪一行不匹配及其差异描述。
+     * 匹配成功时返回 null。
+     */
+    String findLooseMatchDiagnostics(String content, String oldStr, int lineStartIndex) {
+        List<String> contentLines = extractTrimmedLines(content, lineStartIndex);
+        if (contentLines.isEmpty()) {
+            return "文件在指定行号处无内容";
+        }
+
+        String[] oldStrLinesRaw = oldStr.split("\\r?\\n", -1);
+        List<String> oldStrLines = trimTrailingEmptyLines(oldStrLinesRaw);
+        if (oldStrLines.isEmpty()) {
+            return "old_str 全为空行";
+        }
+
+        if (oldStrLines.size() > contentLines.size()) {
+            return String.format("行数不匹配：old_str 有 %d 行，但文件中从起始行开始只剩 %d 行",
+                    oldStrLines.size(), contentLines.size());
+        }
+
+        for (int i = 0; i < oldStrLines.size(); i++) {
+            String actualLine = contentLines.get(i);
+            String expectedLine = trimLine(oldStrLines.get(i));
+            if (!actualLine.equals(expectedLine)) {
+                int fileLineNum = lineStartIndexToLineNumber(content, lineStartIndex) + i;
+                return String.format("第 %d 行内容不匹配：期待「%s」，文件中是「%s」",
+                        fileLineNum, expectedLine, actualLine);
+            }
+        }
+
+        return null; // 匹配成功
+    }
+
+    /**
+     * 将字符偏移位置转换为行号
+     */
+    private int lineStartIndexToLineNumber(String content, int lineStartIndex) {
+        int line = 1;
+        for (int i = 0; i < lineStartIndex && i < content.length(); i++) {
+            if (content.charAt(i) == '\n') {
+                line++;
+            }
+        }
+        return line;
+    }
+
+    /**
+     * 从 content 的 lineStartIndex 开始，提取所有行的内容（trim 后，不含换行符）。
+     */
+    private List<String> extractTrimmedLines(String content, int lineStartIndex) {
         List<String> lines = new ArrayList<>();
         int pos = lineStartIndex;
         while (pos < content.length()) {
             int lineEnd = findLineEnd(content, pos);
             String lineContent = content.substring(pos, lineEnd);
-            lines.add(stripLeadingWhitespace(lineContent));
+            lines.add(trimLine(lineContent));
             if (lineEnd >= content.length()) {
                 break; // 文件末尾
             }
@@ -232,14 +300,18 @@ public class TerminalSupport {
     }
 
     /**
-     * 去除字符串行首的空白字符（空格、Tab）。
+     * 去除字符串行首和行尾的空白字符（空格、Tab）。
      */
-    private String stripLeadingWhitespace(String s) {
+    private String trimLine(String s) {
         int start = 0;
         while (start < s.length() && (s.charAt(start) == ' ' || s.charAt(start) == '\t')) {
             start++;
         }
-        return s.substring(start);
+        int end = s.length();
+        while (end > start && (s.charAt(end - 1) == ' ' || s.charAt(end - 1) == '\t')) {
+            end--;
+        }
+        return s.substring(start, end);
     }
 
     int getLineStartIndex(String content, int lineNumber) {
