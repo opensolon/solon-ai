@@ -545,7 +545,7 @@ public class TerminalTalent extends AbsTalent {
 
         Path workPath = getWorkPath(__cwd);
         SandboxRuntimeConfig dynamicCfg = buildDynamicCustomConfig();
-        Path targetWorkPath = support.resolveCommandWorkPath(workPath, workdir, sandboxEnabled, sandboxAllowUserHome, dynamicCfg);
+        Path targetWorkPath = support.resolveCommandWorkPath(workPath, workdir, sandboxEnabled, sandboxAllowUserHome);
         Map<String, String> envs = new HashMap<>();
 
         if(Assert.isNotEmpty(pythonCmd)) {
@@ -617,9 +617,7 @@ public class TerminalTalent extends AbsTalent {
                      @Param(value = "show_hidden", required = false, description = "是否显示隐藏文件") Boolean showHidden,
                      String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
-        SandboxRuntimeConfig dynamicCfg = buildDynamicCustomConfig();
-
-        Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome, dynamicCfg);
+        Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome);
 
         if (!Files.exists(target)) {
             return "错误：路径不存在";
@@ -629,10 +627,10 @@ public class TerminalTalent extends AbsTalent {
             StringBuilder sb = new StringBuilder();
             String displayName = (path == null || ".".equals(path)) ? "." : path;
             sb.append(displayName).append("\n");
-            support.generateTreeInternal(support.getSandboxPolicyRoot(workPath, path), target, 0, 3, "", sb, Boolean.TRUE.equals(showHidden), sandboxEnabled, dynamicCfg);
+            support.generateTreeInternal(support.getSandboxPolicyRoot(workPath, path), target, 0, 3, "", sb, Boolean.TRUE.equals(showHidden), sandboxEnabled);
             return sb.toString();
         } else {
-            return support.flatListLogic(workPath, support.getSandboxPolicyRoot(workPath, path), target, path, Boolean.TRUE.equals(showHidden), sandboxEnabled, dynamicCfg);
+            return support.flatListLogic(workPath, support.getSandboxPolicyRoot(workPath, path), target, path, Boolean.TRUE.equals(showHidden), sandboxEnabled);
         }
     }
 
@@ -643,9 +641,7 @@ public class TerminalTalent extends AbsTalent {
                        @Param(value = "limit", required = false, description = "需要读取的最大行数（默认不限制）。注意：单次读取受 128KB 物理长度保护，若触发截断，请根据输出提示调整 offset 分页读取。") Integer limit,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
-        SandboxRuntimeConfig dynamicCfg = buildDynamicCustomConfig();
-
-        Path target = support.resolveSafePath(workPath, filePath, false, sandboxEnabled, sandboxAllowUserHome, dynamicCfg);
+        Path target = support.resolveSafePath(workPath, filePath, false, sandboxEnabled, sandboxAllowUserHome);
         if (!Files.exists(target)) {
             return "错误：文件不存在";
         }
@@ -743,8 +739,7 @@ public class TerminalTalent extends AbsTalent {
                         @Param(value = PARAM_CONTENT, description = "完整文本内容。") String content,
                         String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
-        SandboxRuntimeConfig dynamicCfg = buildDynamicCustomConfig();
-        Path target = support.resolveSafePath(workPath, filePath, true, sandboxEnabled, sandboxAllowUserHome, dynamicCfg);
+        Path target = support.resolveSafePath(workPath, filePath, true, sandboxEnabled, sandboxAllowUserHome);
 
         Files.createDirectories(target.getParent());
         Files.write(target, content.getBytes(fileCharset));
@@ -760,9 +755,7 @@ public class TerminalTalent extends AbsTalent {
                        @Param(value = PARAM_EDITS, description = "编辑操作列表") List<EditOp> edits,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
-        SandboxRuntimeConfig dynamicCfg = buildDynamicCustomConfig();
-        Path target = support.resolveSafePath(workPath, filePath, false, sandboxEnabled, sandboxAllowUserHome, dynamicCfg);
-        support.resolveSafePath(workPath, filePath, true, sandboxEnabled, sandboxAllowUserHome, dynamicCfg);
+        Path target = support.resolveSafePath(workPath, filePath, true, sandboxEnabled, sandboxAllowUserHome);
 
         if (!Files.exists(target)) {
             return "错误：文件不存在，无法进行编辑。";
@@ -832,8 +825,7 @@ public class TerminalTalent extends AbsTalent {
                        @Param(value = "include", required = false, description = "要包含的文件模式（如 \"*.js\"、\"*.{ts,tsx}\"）") String include,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
-        SandboxRuntimeConfig dynamicCfg = buildDynamicCustomConfig();
-        Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome, dynamicCfg);
+        Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome);
 
         // 预编译正则，若语法无效则回退到 contains 匹配
         final Pattern finalPattern;
@@ -855,7 +847,7 @@ public class TerminalTalent extends AbsTalent {
         Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                if (support.isIgnored(workPath, dir) || support.isIgnored(target, dir) || support.isSandboxBoundaryDenied(policyRoot, dir, sandboxEnabled) || support.isSandboxReadDenied(policyRoot, dir, sandboxEnabled, dynamicCfg)) {
+                if (support.isIgnored(workPath, dir) || support.isIgnored(target, dir) || support.isSandboxBoundaryDenied(policyRoot, dir, sandboxEnabled)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
                 return FileVisitResult.CONTINUE;
@@ -863,7 +855,7 @@ public class TerminalTalent extends AbsTalent {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (support.isIgnored(workPath, file) || support.isIgnored(target, file) || support.isSandboxBoundaryDenied(policyRoot, file, sandboxEnabled) || support.isSandboxReadDenied(policyRoot, file, sandboxEnabled, dynamicCfg)) {
+                if (support.isIgnored(workPath, file) || support.isIgnored(target, file) || support.isSandboxBoundaryDenied(policyRoot, file, sandboxEnabled)) {
                     return FileVisitResult.CONTINUE;
                 }
 
@@ -916,8 +908,7 @@ public class TerminalTalent extends AbsTalent {
                        @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
-        SandboxRuntimeConfig dynamicCfg = buildDynamicCustomConfig();
-        Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome, dynamicCfg);
+        Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome);
 
         String fixedPattern = pattern.replace("\\", "/");
         final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + fixedPattern);
@@ -928,7 +919,7 @@ public class TerminalTalent extends AbsTalent {
         Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                if (support.isIgnored(workPath, dir) || support.isIgnored(target, dir) || support.isSandboxBoundaryDenied(policyRoot, dir, sandboxEnabled) || support.isSandboxReadDenied(policyRoot, dir, sandboxEnabled, dynamicCfg)) {
+                if (support.isIgnored(workPath, dir) || support.isIgnored(target, dir) || support.isSandboxBoundaryDenied(policyRoot, dir, sandboxEnabled)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
                 return FileVisitResult.CONTINUE;
@@ -936,7 +927,7 @@ public class TerminalTalent extends AbsTalent {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (support.isIgnored(workPath, file) || support.isIgnored(target, file) || support.isSandboxBoundaryDenied(policyRoot, file, sandboxEnabled) || support.isSandboxReadDenied(policyRoot, file, sandboxEnabled, dynamicCfg)) {
+                if (support.isIgnored(workPath, file) || support.isIgnored(target, file) || support.isSandboxBoundaryDenied(policyRoot, file, sandboxEnabled)) {
                     return FileVisitResult.CONTINUE;
                 }
 

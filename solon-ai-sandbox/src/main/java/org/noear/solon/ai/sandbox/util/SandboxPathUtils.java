@@ -34,13 +34,37 @@ public final class SandboxPathUtils {
 
     public static List<String> getDefaultWritePaths() {
         String home = System.getProperty("user.home");
+        String javaTmpDir = System.getProperty("java.io.tmpdir");
         List<String> paths = new ArrayList<>();
+
+        // 设备文件
         paths.add("/dev/stdout");
         paths.add("/dev/stderr");
         paths.add("/dev/null");
         paths.add("/dev/tty");
         paths.add("/dev/dtracehelper");
         paths.add("/dev/autofs_nowait");
+
+        // 通用临时目录（Linux/macOS）
+        paths.add("/tmp");
+        paths.add("/private/tmp");
+
+        // macOS 特有临时目录
+        paths.add("/var/folders");
+        paths.add("/private/var/folders");
+
+        // Java 临时目录（平台特定，Windows/macOS/Linux 均适用）
+        if (javaTmpDir != null && !javaTmpDir.isEmpty()) {
+            Path tmpPath = Paths.get(javaTmpDir);
+            String normalizedTmpDir = tmpPath.toAbsolutePath().normalize().toString();
+            paths.add(normalizedTmpDir);
+            // macOS 下 Java tmpdir 可能是 /var/folders/... 的符号链接
+            if (normalizedTmpDir.startsWith("/var/")) {
+                paths.add("/private" + normalizedTmpDir);
+            }
+        }
+
+        // 特定应用目录
         paths.add("/tmp/claude");
         paths.add("/private/tmp/claude");
         if (home != null) {

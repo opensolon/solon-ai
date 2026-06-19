@@ -16,8 +16,6 @@
 package org.noear.solon.ai.talents.cli;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
-import org.noear.solon.ai.sandbox.config.FilesystemConfig;
 
 import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.talents.mount.MountManager;
@@ -26,12 +24,7 @@ import org.noear.solon.core.util.Assert;
 import java.io.IOException;
 import java.io.File;
 import java.nio.file.*;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -271,11 +264,11 @@ public class TerminalSupport {
         return -1;
     }
 
-    Path resolveCommandWorkPath(Path workPath, String workdir, boolean sandboxEnabled, boolean sandboxAllowUserHome, SandboxRuntimeConfig sandboxConfig) throws IOException {
+    Path resolveCommandWorkPath(Path workPath, String workdir, boolean sandboxEnabled, boolean sandboxAllowUserHome) throws IOException {
         if (Assert.isEmpty(workdir) || ".".equals(workdir)) {
             return workPath;
         }
-        return resolveSafePath(workPath, workdir, false, sandboxEnabled, sandboxAllowUserHome, sandboxConfig);
+        return resolveSafePath(workPath, workdir, false, sandboxEnabled, sandboxAllowUserHome);
     }
 
     /**
@@ -316,8 +309,8 @@ public class TerminalSupport {
      * 构建允许在沙盒 bash 命令中使用的绝对路径前缀列表。
      * 这些路径对应 OS 级沙盒也已放行的写/读区域，确保 Java 层校验与 OS 级沙盒一致。
      */
-    private java.util.List<String> buildAllowedAbsolutePrefixes(boolean sandboxAllowUserHome) {
-        java.util.List<String> prefixes = new java.util.ArrayList<>();
+    public Collection<String> buildAllowedAbsolutePrefixes(boolean sandboxAllowUserHome) {
+        Set<String> prefixes = new HashSet<>();
 
         // 系统临时目录（surefire 等构建工具依赖）
         prefixes.add("/tmp");
@@ -381,14 +374,9 @@ public class TerminalSupport {
         return pStr;
     }
 
-
-    Path resolveSafePath(Path workPath, String pStr, boolean writeMode, boolean sandboxEnabled, boolean sandboxAllowUserHome, SandboxRuntimeConfig sandboxConfig) throws IOException {
+    Path resolveSafePath(Path workPath, String pStr, boolean writeMode, boolean sandboxEnabled, boolean sandboxAllowUserHome) throws IOException {
         if (Assert.isEmpty(pStr) || ".".equals(pStr)) {
-            Path target = workPath;
-            if (sandboxEnabled) {
-                enforceSandboxFsPolicy(workPath, workPath, target, ".", writeMode, sandboxEnabled, sandboxConfig);
-            }
-            return target;
+            return workPath;
         }
 
         if (pStr.startsWith("./")) {
@@ -422,9 +410,6 @@ public class TerminalSupport {
                 if (!realTarget.startsWith(realMountPath)) {
                     throw new SecurityException("权限拒绝：符号链接越界（沙盒模式已开启）。");
                 }
-
-                String relative = pStr.substring(alias.length()).replaceFirst("^[/\\\\]", "");
-                enforceSandboxFsPolicy(workPath, realMountPath, realTarget, relative, writeMode, sandboxEnabled, sandboxConfig);
             }
 
             return target;
@@ -438,7 +423,7 @@ public class TerminalSupport {
         if (p.isAbsolute()) {
             // 【沙盒模式】拦截绝对路径
             if (sandboxEnabled) {
-                // sandboxAllowUserHome=true 且原始输入以 ~ 开头 → 放行
+                // sandboxAllowUserHome=true 且原始输入以 /Users/noear 开头 → 放行
                 if (!(sandboxAllowUserHome && pStr.startsWith("~"))) {
                     throw new SecurityException("权限拒绝：沙盒模式下禁止使用绝对路径。");
                 }
@@ -472,52 +457,12 @@ public class TerminalSupport {
                     }
                 }
             }
-
-            String relativePath = target.startsWith(workPath) ? workPath.relativize(target).toString() : null;
-            enforceSandboxFsPolicy(workPath, workPath, target, relativePath, writeMode, sandboxEnabled, sandboxConfig);
         }
 
         return target;
     }
 
-    private void enforceSandboxFsPolicy(Path workPath, Path rootPath, Path target, String relativePath, boolean writeMode, boolean sandboxEnabled, SandboxRuntimeConfig sandboxConfig) throws IOException {
-        if (!sandboxEnabled || sandboxConfig == null) {
-            return;
-        }
 
-        // mandatory deny 独立于 FilesystemConfig，任何情况下都应生效
-        if (writeMode) {
-            if (isMandatoryDenyRelativePath(relativePath)
-                    || isMandatoryDenyRealPath(rootPath, target)) {
-                throw new SecurityException("权限拒绝：路径受保护，禁止写入。");
-            }
-        }
-
-        if (sandboxConfig.getFilesystem() == null) {
-            return;
-        }
-
-        FilesystemConfig fsConfig = sandboxConfig.getFilesystem();
-        if (writeMode) {
-            if (!isWriteAllowed(rootPath, target, fsConfig)) {
-                throw new SecurityException("权限拒绝：路径不在可写白名单内。");
-            }
-            if (fsConfig.getDenyWrite() != null && matchesAnyConfiguredPath(rootPath, target, fsConfig.getDenyWrite())) {
-                throw new SecurityException("权限拒绝：路径命中写入拒绝规则。");
-            }
-        } else {
-            if (isReadDenied(rootPath, target, fsConfig)) {
-                throw new SecurityException("权限拒绝：路径命中读取拒绝规则。");
-            }
-        }
-    }
-
-    boolean isSandboxReadDenied(Path workPath, Path target, boolean sandboxEnabled, SandboxRuntimeConfig sandboxConfig) {
-        if (!sandboxEnabled || sandboxConfig == null || sandboxConfig.getFilesystem() == null) {
-            return false;
-        }
-        return isReadDenied(workPath, target, sandboxConfig.getFilesystem());
-    }
 
     boolean isSandboxBoundaryDenied(Path rootPath, Path target, boolean sandboxEnabled) {
         if (!sandboxEnabled) {
@@ -525,81 +470,27 @@ public class TerminalSupport {
         }
         try {
             Path realRoot = rootPath.toRealPath();
-            Path realTarget = resolveComparablePath(target);
+            Path realTarget;
+            try {
+                if (Files.exists(target)) {
+                    realTarget = target.toRealPath();
+                } else {
+                    Path ancestor = resolveExistingAncestor(target);
+                    Path relative = ancestor.relativize(target.normalize());
+                    realTarget = ancestor.toRealPath().resolve(relative).normalize();
+                }
+            } catch (IOException | IllegalArgumentException e) {
+                realTarget = target.normalize();
+            }
             return !realTarget.startsWith(realRoot);
         } catch (IOException e) {
             return false;
         }
     }
 
-    private boolean isReadDenied(Path workPath, Path target, FilesystemConfig fsConfig) {
-        List<String> denyRead = fsConfig.getDenyRead();
-        if (denyRead == null || denyRead.isEmpty()) {
-            return false;
-        }
-        boolean matchesDeny = matchesAnyConfiguredPath(workPath, target, denyRead);
-        if (!matchesDeny) {
-            return false;
-        }
-        List<String> allowRead = fsConfig.getAllowRead();
-        if (allowRead != null && !allowRead.isEmpty()) {
-            return !matchesAnyConfiguredPath(workPath, target, allowRead);
-        }
-        return true;
-    }
 
-    private boolean isWriteAllowed(Path rootPath, Path target, FilesystemConfig fsConfig) {
-        List<String> allowWrite = fsConfig.getAllowWrite();
-        if (allowWrite == null) {
-            return true;
-        }
-        if (allowWrite.isEmpty()) {
-            return false;
-        }
-        Path effectiveTarget = resolveComparablePath(target);
-        for (String allowPath : allowWrite) {
-            Path allow = normalizeConfiguredPath(rootPath, allowPath);
-            if (effectiveTarget.startsWith(resolveComparablePath(allow))) {
-                return true;
-            }
-        }
-        return false;
-    }
 
-    private boolean matchesAnyConfiguredPath(Path workPath, Path target, List<String> paths) {
-        Path effectiveTarget = resolveComparablePath(target);
-        for (String configuredPath : paths) {
-            Path normalized = normalizeConfiguredPath(workPath, configuredPath);
-            if (effectiveTarget.startsWith(resolveComparablePath(normalized))) {
-                return true;
-            }
-        }
-        return false;
-    }
 
-    private Path normalizeConfiguredPath(Path rootPath, String path) {
-        if (Assert.isEmpty(path) || ".".equals(path)) {
-            return rootPath.normalize();
-        }
-        Path configured = Paths.get(path);
-        if (configured.isAbsolute()) {
-            return configured.normalize();
-        }
-        return rootPath.resolve(configured).normalize();
-    }
-
-    private Path resolveComparablePath(Path path) {
-        try {
-            if (Files.exists(path)) {
-                return path.toRealPath();
-            }
-            Path ancestor = resolveExistingAncestor(path);
-            Path relative = ancestor.relativize(path.normalize());
-            return ancestor.toRealPath().resolve(relative).normalize();
-        } catch (IOException | IllegalArgumentException e) {
-            return path.normalize();
-        }
-    }
 
     // mandatory deny files (same as dangerous files + cli-specific paths)
     private static final List<String> MANDATORY_DENY_FILES = Collections.unmodifiableList(Arrays.asList(
@@ -638,19 +529,6 @@ public class TerminalSupport {
         return false;
     }
 
-    private boolean isMandatoryDenyRealPath(Path rootPath, Path target) {
-        Path effectiveTarget = resolveComparablePath(target);
-        Path effectiveRoot = resolveComparablePath(rootPath);
-        if (!effectiveTarget.startsWith(effectiveRoot)) {
-            return false;
-        }
-        try {
-            String relativePath = effectiveRoot.relativize(effectiveTarget).toString();
-            return isMandatoryDenyRelativePath(relativePath);
-        } catch (IllegalArgumentException e) {
-            return false;
-        }
-    }
 
     String formatDisplayPath(Path workPath, String inputPath, Path targetDir, Path file, boolean sandboxEnabled) {
         if (inputPath != null && inputPath.startsWith("@")) {
@@ -760,13 +638,12 @@ public class TerminalSupport {
         return workPath;
     }
 
-    void generateTreeInternal(Path workPath, Path current, int depth, int maxDepth, String indent, StringBuilder sb, boolean showHidden, boolean sandboxEnabled, SandboxRuntimeConfig sandboxConfig) throws IOException {
+    void generateTreeInternal(Path workPath, Path current, int depth, int maxDepth, String indent, StringBuilder sb, boolean showHidden, boolean sandboxEnabled) throws IOException {
         if (depth >= maxDepth) return;
         try (Stream<Path> stream = Files.list(current)) {
             List<Path> children = stream
                     .filter(p -> !isIgnored(workPath, p))
                     .filter(p -> !isSandboxBoundaryDenied(workPath, p, sandboxEnabled))
-                    .filter(p -> !isSandboxReadDenied(workPath, p, sandboxEnabled, sandboxConfig))
                     .filter(p -> showHidden || !p.getFileName().toString().startsWith("."))
                     .sorted((a, b) -> {
                         boolean aDir = Files.isDirectory(a);
@@ -784,19 +661,18 @@ public class TerminalSupport {
                 }
                 sb.append(indent).append(isLast ? "└── " : "├── ").append(child.getFileName()).append("\n");
                 if (isDir)
-                    generateTreeInternal(workPath, child, depth + 1, maxDepth, indent + (isLast ? "    " : "│   "), sb, showHidden, sandboxEnabled, sandboxConfig);
+                    generateTreeInternal(workPath, child, depth + 1, maxDepth, indent + (isLast ? "    " : "│   "), sb, showHidden, sandboxEnabled);
             }
         } catch (AccessDeniedException e) {
             sb.append(indent).append("└── [拒绝访问]\n");
         }
     }
 
-    String flatListLogic(Path workPath, Path policyRoot, Path target, String inputPath, boolean showHidden, boolean sandboxEnabled, SandboxRuntimeConfig sandboxConfig) throws IOException {
+    String flatListLogic(Path workPath, Path policyRoot, Path target, String inputPath, boolean showHidden, boolean sandboxEnabled) throws IOException {
         try (Stream<Path> stream = Files.list(target)) {
             List<String> lines = stream
                     .filter(p -> !isIgnored(workPath, p))
                     .filter(p -> !isSandboxBoundaryDenied(policyRoot, p, sandboxEnabled))
-                    .filter(p -> !isSandboxReadDenied(policyRoot, p, sandboxEnabled, sandboxConfig))
                     .filter(p -> showHidden || !p.getFileName().toString().startsWith("."))
                     .map(p -> {
                         boolean isDir = Files.isDirectory(p);

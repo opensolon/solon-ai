@@ -117,6 +117,42 @@ class SandboxPathUtilsTest {
         assertTrue(paths.contains("/private/tmp/claude"));
     }
 
+    @Test
+    void getDefaultWritePaths_containsTmp() {
+        List<String> paths = SandboxPathUtils.getDefaultWritePaths();
+        assertTrue(paths.contains("/tmp"));
+    }
+
+    @Test
+    void getDefaultWritePaths_containsPrivateTmp() {
+        List<String> paths = SandboxPathUtils.getDefaultWritePaths();
+        assertTrue(paths.contains("/private/tmp"));
+    }
+
+    @Test
+    void getDefaultWritePaths_containsVarFolders() {
+        List<String> paths = SandboxPathUtils.getDefaultWritePaths();
+        assertTrue(paths.contains("/var/folders"));
+    }
+
+    @Test
+    void getDefaultWritePaths_containsPrivateVarFolders() {
+        List<String> paths = SandboxPathUtils.getDefaultWritePaths();
+        assertTrue(paths.contains("/private/var/folders"));
+    }
+
+    @Test
+    void getDefaultWritePaths_containsJavaTmpDir() {
+        String javaTmpDir = System.getProperty("java.io.tmpdir");
+        if (javaTmpDir != null && !javaTmpDir.isEmpty()) {
+            java.nio.file.Path tmpPath = java.nio.file.Paths.get(javaTmpDir);
+            String normalizedTmpDir = tmpPath.toAbsolutePath().normalize().toString();
+            List<String> paths = SandboxPathUtils.getDefaultWritePaths();
+            assertTrue(paths.contains(normalizedTmpDir),
+                "Should contain Java tmpdir: " + normalizedTmpDir);
+        }
+    }
+
     // --- normalizeCaseForComparison ---
 
     @Test

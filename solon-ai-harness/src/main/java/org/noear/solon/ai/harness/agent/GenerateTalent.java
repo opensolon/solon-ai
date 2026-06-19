@@ -16,11 +16,9 @@
 package org.noear.solon.ai.harness.agent;
 
 import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.annotation.Param;
-import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,29 +43,7 @@ public class GenerateTalent extends AbsTalent {
     private HarnessEngine engine;
 
     public GenerateTalent(HarnessEngine engine) {
-        super(createBinding(engine));
         this.engine = engine;
-    }
-
-    private static Map<String, Object> createBinding(HarnessEngine engine) {
-        Map<String, Object> binding = new LinkedHashMap<>();
-
-        if (Assert.isNotEmpty(engine.getModels())) {
-            //有模型配置
-            StringBuilder buf = new StringBuilder("从给定列表中选择：\n");
-            for (ChatConfig entry : engine.getModels()) {
-                if (entry.isEnabled()) {
-                    buf.append("- `").append(entry.getNameOrModel()).append("`，").append(entry.getDescriptionOrModel()).append("\n");
-                }
-            }
-
-            binding.put("models", buf.toString());
-        } else {
-            //没有
-            binding.put("models", "暂无模型可选");
-        }
-
-        return binding;
     }
 
 
@@ -79,7 +55,6 @@ public class GenerateTalent extends AbsTalent {
             @Param(name = "name", description = "子代理的唯一英文标识符（如 code_reviewer）") String name,
             @Param(name = "description", description = "对该代理职能的精炼描述，便于主代理后续识别和调用") String description,
             @Param(name = "systemPrompt", description = "核心指令集。需包含角色身份、技能范畴、输出格式规范及负面约束（避免废话）") String systemPrompt,
-            @Param(name = "model", description = "使用的模型标识。建议复杂逻辑用高级模型，简单任务用基础模型。#{models}", required = false) String model,
             @Param(name = "tools", required = false, description = "赋予子代理的工具权限（严禁全选，仅勾选任务相关项）。从给定列表中选择：\n" +
                     "- `read`，读取文件完整内容\n" +
                     "- `write`，写入文件完整内容\n" +
@@ -117,7 +92,6 @@ public class GenerateTalent extends AbsTalent {
             definition.getMetadata().setDescription(description);
             definition.getMetadata().setEnabled(true);
 
-            definition.getMetadata().setModel(model);
             definition.getMetadata().setTools(tools);
             definition.getMetadata().setSkills(skills);
 
