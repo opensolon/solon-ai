@@ -236,7 +236,7 @@ public class ReasonTask {
         }
 
         // 容错处理：模型响应内容及工具调用均为空时，引导其重新生成
-        if (Assert.isEmpty(responseMessage.getContent()) && Assert.isEmpty(responseMessage.getToolCalls())) {
+        if (Assert.isEmpty(responseMessage.getResultContent()) && Assert.isEmpty(responseMessage.getToolCalls())) {
             if (trace.getEmptyRetryCounter().incrementAndGet() < 3) {
                 //做3次重复
                 LOG.warn("ReActAgent[{}] choices size:{}, responseMessage is empty: {}", trace.getAgentName(), response.getChoices().size(), responseMessage);
