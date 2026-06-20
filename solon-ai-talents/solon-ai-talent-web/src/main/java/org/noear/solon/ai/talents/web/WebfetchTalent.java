@@ -27,7 +27,10 @@ import org.noear.solon.net.http.HttpResponse;
 import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtils;
 
+import java.nio.charset.Charset;
+import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.StandardCharsets;
+import java.nio.charset.UnsupportedCharsetException;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -134,7 +137,7 @@ public class WebfetchTalent extends AbsTalent {
         }
 
         // 7. 内容转换核心逻辑
-        String rawContent = new String(bodyBytes, StandardCharsets.UTF_8);
+        String rawContent = new String(bodyBytes, resolveCharset(contentType));
         String output;
 
         // 仅在 Content-Type 包含 HTML 时进行转换，否则直接输出
@@ -174,5 +177,27 @@ public class WebfetchTalent extends AbsTalent {
         } else {
             return "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
         }
+    }
+
+    private Charset resolveCharset(String contentType) {
+        if (contentType != null) {
+            for (String part : contentType.split(";")) {
+                String item = part.trim();
+                if (item.regionMatches(true, 0, "charset=", 0, 8)) {
+                    String charsetName = item.substring(8).trim();
+                    if (charsetName.length() > 1 && charsetName.startsWith("\"") && charsetName.endsWith("\"")) {
+                        charsetName = charsetName.substring(1, charsetName.length() - 1);
+                    }
+
+                    try {
+                        return Charset.forName(charsetName);
+                    } catch (IllegalCharsetNameException | UnsupportedCharsetException ignored) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        return StandardCharsets.UTF_8;
     }
 }
