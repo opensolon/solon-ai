@@ -719,7 +719,7 @@ public class TerminalTalent extends AbsTalent {
 
         // 3. 组装最终结果
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format("[File: %s (Lines: %d - %d, Size: %.2f KB)]\n",
+        sb.append(String.format("--- File: %s (Lines: %d - %d, Size: %.2f KB) ---\n",
                 filePath, startLine0 + 1, actualEndLine, fileSize / 1024.0));
         sb.append("--------------------------------------------------\n");
         sb.append(contentBuilder);
