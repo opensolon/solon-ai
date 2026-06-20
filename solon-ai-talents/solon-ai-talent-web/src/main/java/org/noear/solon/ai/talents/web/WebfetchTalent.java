@@ -140,8 +140,8 @@ public class WebfetchTalent extends AbsTalent {
         String rawContent = new String(bodyBytes, resolveCharset(contentType));
         String output;
 
-        // 仅在 Content-Type 包含 HTML 时进行转换，否则直接输出
-        boolean isHtml = contentType.contains("text/html");
+        // 仅在 Content-Type 为 HTML 时进行转换，否则直接输出
+        boolean isHtml = "text/html".equals(mime);
 
         if ("markdown".equals(finalFormat) && isHtml) {
             output = convertHtmlToMarkdown(rawContent);
