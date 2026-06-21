@@ -28,13 +28,15 @@ import org.noear.solon.lang.Preview;
  *       LLM 提供商自动缓存并复用相同键的前缀上下文</li>
  * </ul>
  *
+ * <p>注意：OpenAI 的 Prompt Caching 是全自动的（基于前缀哈希自动命中），无需额外配置。
+ *
  * <p>使用示例：
  * <pre>{@code
- * // Anthropic：在最后一条系统消息后设置缓存断点
- * o.cacheControl(CacheControl.ephemeral(0));
+ * // Anthropic：设置 ephemeral 缓存断点（缓存系统提示词 + 工具定义）
+ * o.cacheControl(CacheControl.ofEphemeral());
  *
- * // OpenAI：设置缓存键
- * o.promptCacheKey("session:abc123:v1");
+ * // DeepSeek：设置 prompt_cache_key 缓存键
+ * o.cacheControl(CacheControl.ofPromptKey("session:abc123:v1"));
  * }</pre>
  *
  * @author noear
@@ -44,7 +46,6 @@ import org.noear.solon.lang.Preview;
 public class CacheControl {
     // 缓存控制（Anthropic 风格）
     private String type;
-    private int breakpointIndex;
 
     // 缓存键（OpenAI 风格）
     private String promptCacheKey;
@@ -53,34 +54,38 @@ public class CacheControl {
         // 用于反序列化
     }
 
-    /**
-     * 构造缓存控制
-     *
-     * @param type            缓存类型，通常为 "ephemeral" (Anthropic)
-     * @param breakpointIndex 缓存断点的消息索引位置（从 0 开始）
-     */
-    public CacheControl(String type, int breakpointIndex, String promptCacheKey) {
+    private CacheControl(String type, String promptCacheKey) {
         this.type = type;
-        this.breakpointIndex = breakpointIndex;
         this.promptCacheKey = promptCacheKey;
     }
 
-    public CacheControl(int breakpointIndex, String promptCacheKey) {
-        this("ephemeral", breakpointIndex, promptCacheKey);
+    /**
+     * Anthropic 风格：创建 ephemeral 缓存控制
+     * <p>在系统提示词和工具定义末尾添加 cache_control 断点，缓存前缀上下文</p>
+     */
+    public static CacheControl ofEphemeral() {
+        return new CacheControl("ephemeral", null);
     }
 
-    public CacheControl(String promptCacheKey) {
-        this("ephemeral", 0, promptCacheKey);
+    /**
+     * DeepSeek 风格：通过 prompt_cache_key 指定缓存键
+     *
+     * @param promptCacheKey 缓存键，相同键的请求将复用缓存的前缀上下文
+     */
+    public static CacheControl ofPromptKey(String promptCacheKey) {
+        return new CacheControl(null, promptCacheKey);
     }
 
+    /**
+     * 获取缓存类型（Anthropic 风格，如 "ephemeral"）
+     */
     public String getType() {
         return type;
     }
 
-    public int getBreakpointIndex() {
-        return breakpointIndex;
-    }
-
+    /**
+     * 获取缓存键（DeepSeek 风格）
+     */
     public String getPromptCacheKey() {
         return promptCacheKey;
     }

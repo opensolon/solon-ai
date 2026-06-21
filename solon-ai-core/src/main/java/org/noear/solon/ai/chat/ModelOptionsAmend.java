@@ -466,15 +466,16 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     /// ///////////////////////////////////
 
     /**
-     * 获取缓存控制（Anthropic 风格）
+     * 获取缓存控制
      */
     public CacheControl cacheControl() {
         return cacheControl;
     }
 
     /**
-     * 设置缓存控制（Anthropic 风格）
-     * <p>在系统提示词/工具定义后设置缓存断点，让 LLM 提供商缓存此前缀上下文</p>
+     * 设置缓存控制
+     * <p>Anthropic 风格：在系统提示词/工具定义后设置缓存断点，让 LLM 提供商缓存此前缀上下文</p>
+     * <p>DeepSeek 风格：通过 prompt_cache_key 指定缓存键，复用相同键的前缀上下文</p>
      */
     public T cacheControl(CacheControl cacheControl) {
         this.cacheControl = cacheControl;
