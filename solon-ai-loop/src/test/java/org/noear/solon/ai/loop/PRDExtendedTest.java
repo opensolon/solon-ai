@@ -189,7 +189,8 @@ public class PRDExtendedTest {
 
                 PRDFileManager.EnsurePrdResult result = fm.ensurePrdForStartup("nonexistent-session");
                 assertNotNull(result);
-                assertNull(result.prd, "PRD should be null for non-existent session");
+                // autoScaffold=true 时自动创建 scaffold PRD
+                assertNotNull(result.prd, "Scaffold PRD should be created when autoScaffold=true");
                 assertTrue(result.needsCreation, "Should need creation");
 
             } finally {
@@ -220,7 +221,8 @@ public class PRDExtendedTest {
                 // ensurePrdForStartup 检查到 userStories 为空，应该标记 needsCreation=true
                 PRDFileManager.EnsurePrdResult result = fm.ensurePrdForStartup("empty-stories-session");
                 assertNotNull(result);
-                assertNull(result.prd, "null PRD returned when existing has empty stories");
+                // autoScaffold=true 时自动创建 scaffold PRD（即使已有空 stories PRD）
+                assertNotNull(result.prd, "Scaffold PRD should be created when existing has empty stories");
                 assertTrue(result.needsCreation,
                         "Should need creation when existing PRD has empty stories");
 
@@ -309,8 +311,8 @@ public class PRDExtendedTest {
         }
 
         @Test
-        void testMarkStoryArchitectRequiresPasses() throws IOException {
-            Path tempDir = Files.createTempDirectory("story-verify-requires-pass-test");
+        void testMarkStoryArchitectWithoutPasses() throws IOException {
+            Path tempDir = Files.createTempDirectory("story-verify-no-pass-test");
             try {
                 DiskStateManager dsm = new DiskStateManager(tempDir.toString());
                 PRDFileManager fm = new PRDFileManager(dsm);
@@ -318,11 +320,18 @@ public class PRDExtendedTest {
                 List<PRDFileManager.UserStoryInput> inputs = Collections.singletonList(
                         new PRDFileManager.UserStoryInput("Feature", "Desc",
                                 Collections.singletonList("AC"), 1));
-                fm.initPrd("verify-requires-session", "App", "main", "Test", inputs);
+                fm.initPrd("verify-no-pass-session", "App", "main", "Test", inputs);
 
-                // 未完成的故事不能被 Architect 验证
-                assertFalse(fm.markStoryArchitectVerified("verify-requires-session", "US-001"),
-                        "Cannot mark as architect verified if story is not passes");
+                // Architect 验证不依赖 story 完成（对标 OMC 语义）
+                boolean result = fm.markStoryArchitectVerified("verify-no-pass-session", "US-001");
+                assertTrue(result, "Architect verification should work independent of completion");
+
+                PRDDocument prd = fm.readPrd("verify-no-pass-session");
+                assertNotNull(prd);
+                UserStory story = prd.findStoryById("US-001");
+                assertNotNull(story);
+                assertTrue(story.isArchitectVerified(), "Story should be architect verified");
+                assertFalse(story.isPasses(), "Completion state should still be false");
 
             } finally {
                 deleteDirectory(tempDir);
@@ -543,6 +552,94 @@ public class PRDExtendedTest {
     // ==========================================
     // 辅助方法
     // ==========================================
+
+    // ==========================================
+    // 4. Scaffold 创建测试（第五轮新增）
+    // ==========================================
+
+    @Nested
+    class ScaffoldTest {
+
+        @Test
+        void testCreateScaffoldPrd() throws IOException {
+            Path tempDir = Files.createTempDirectory("scaffold-test");
+            try {
+                DiskStateManager dsm = new DiskStateManager(tempDir.toString());
+                PRDFileManager fm = new PRDFileManager(dsm);
+
+                PRDDocument scaffold = fm.createScaffoldPrd("scaffold-session");
+                assertNotNull(scaffold);
+                assertEquals(1, scaffold.getUserStories().size());
+                assertEquals("US-001", scaffold.getUserStories().get(0).getId());
+                assertTrue(scaffold.getUserStories().get(0).getDescription().contains("initial"));
+
+                // Verify persisted
+                PRDDocument readBack = fm.readPrd("scaffold-session");
+                assertNotNull(readBack);
+                assertEquals(1, readBack.getUserStories().size());
+            } finally {
+                deleteDirectory(tempDir);
+            }
+        }
+
+        @Test
+        void testEnsurePrdForStartupCreatesScaffold() throws IOException {
+            Path tempDir = Files.createTempDirectory("ensure-scaffold");
+            try {
+                DiskStateManager dsm = new DiskStateManager(tempDir.toString());
+                PRDFileManager fm = new PRDFileManager(dsm);
+
+                // No existing PRD -> should create scaffold
+                PRDFileManager.EnsurePrdResult result = fm.ensurePrdForStartup("new-session");
+                assertNotNull(result);
+                assertTrue(result.needsCreation);
+                assertNotNull(result.prd);
+                assertEquals(1, result.prd.getUserStories().size());
+            } finally {
+                deleteDirectory(tempDir);
+            }
+        }
+
+        @Test
+        void testEnsurePrdForStartupUsesExisting() throws IOException {
+            Path tempDir = Files.createTempDirectory("ensure-existing");
+            try {
+                DiskStateManager dsm = new DiskStateManager(tempDir.toString());
+                PRDFileManager fm = new PRDFileManager(dsm);
+
+                // Create PRD first
+                PRDFileManager.UserStoryInput input = new PRDFileManager.UserStoryInput("Existing", "desc",
+                        Arrays.asList("AC"), 1);
+                fm.initPrd("existing-session", "ExistingProj", "main", "desc", Arrays.asList(input));
+
+                // Should use existing without scaffold
+                PRDFileManager.EnsurePrdResult result = fm.ensurePrdForStartup("existing-session");
+                assertNotNull(result);
+                assertFalse(result.needsCreation); // false = existing was used
+                assertNotNull(result.prd);
+                assertEquals("ExistingProj", result.prd.getProject());
+            } finally {
+                deleteDirectory(tempDir);
+            }
+        }
+
+        @Test
+        void testCreateScaffoldPrdWithProjectName() throws IOException {
+            Path tempDir = Files.createTempDirectory("scaffold-proj");
+            try {
+                DiskStateManager dsm = new DiskStateManager(tempDir.toString());
+                PRDFileManager fm = new PRDFileManager(dsm);
+
+                PRDDocument scaffold = fm.createScaffoldPrd("proj-session", "MyCustomProject", "develop");
+                assertNotNull(scaffold);
+                assertEquals("MyCustomProject", scaffold.getProject());
+                assertEquals("develop", scaffold.getBranchName());
+                assertEquals("Auto-generated PRD for project: MyCustomProject", scaffold.getDescription());
+            } finally {
+                deleteDirectory(tempDir);
+            }
+        }
+    }
 
     private static void deleteDirectory(Path path) throws IOException {
         if (Files.exists(path)) {

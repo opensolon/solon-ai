@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -86,36 +87,6 @@ public class PRDFileManager {
     }
 
     /**
-     * 确保启动时有有效的 PRD 文档。
-     *
-     * @param sessionId 会话 ID
-     * @return 确认结果
-     */
-    public EnsurePrdResult ensurePrdForStartup(String sessionId) {
-        PRDDocument existing = readPrd(sessionId);
-        if (existing != null && !existing.getUserStories().isEmpty()) {
-            return new EnsurePrdResult(existing, false);
-        }
-
-        // 尝试从 root 查找 prd.json
-        Path rootPrdPath = Paths.get(stateManager.getRootDirectory(), "prd.json");
-        if (Files.exists(rootPrdPath)) {
-            try {
-                String rootJson = new String(Files.readAllBytes(rootPrdPath), java.nio.charset.StandardCharsets.UTF_8);
-                PRDDocument rootPrd = deserializePrd(rootJson);
-                if (rootPrd != null) {
-                    writePrd(sessionId, rootPrd);
-                    return new EnsurePrdResult(rootPrd, true);
-                }
-            } catch (IOException e) {
-                // 读取失败则忽略
-            }
-        }
-
-        return new EnsurePrdResult(null, true);
-    }
-
-    /**
      * 标记故事完成。
      */
     public boolean markStoryComplete(String sessionId, String storyId, String notes) {
@@ -158,7 +129,7 @@ public class PRDFileManager {
         if (prd == null) return false;
 
         UserStory story = prd.findStoryById(storyId);
-        if (story == null || !story.isPasses()) return false;
+        if (story == null) return false;
 
         story.setArchitectVerified(true);
         return writePrd(sessionId, prd);
@@ -293,6 +264,37 @@ public class PRDFileManager {
         return content.replaceAll("(?i)-?-?(?:critic-mode|cm)\\s+\\S+", "").trim();
     }
 
+    // ===== PRD 文件路径查找 =====
+
+    /**
+     * 查找 PRD 文件路径（优先按 session，否则按 root）。
+     * 对标 oh-my-claudecode 的 findPrdPath。
+     *
+     * @param sessionId 会话 ID
+     * @return PRD 文件路径
+     */
+    public Path findPrdPath(String sessionId) {
+        // 优先按 session 查找
+        Path sessionPath = stateManager.getPrdFilePath(sessionId);
+        if (java.nio.file.Files.exists(sessionPath)) {
+            return sessionPath;
+        }
+        // 回退到 root 级别
+        Path rootPath = java.nio.file.Paths.get(stateManager.getRootDirectory(), "prd.json");
+        if (java.nio.file.Files.exists(rootPath)) {
+            return rootPath;
+        }
+        // 都不存在时返回 session 路径（OMC 行为）
+        return sessionPath;
+    }
+
+    /**
+     * 获取 Session PRD 路径。
+     */
+    public Path getSessionPrdPath(String sessionId) {
+        return stateManager.getPrdFilePath(sessionId);
+    }
+
     // ===== XML 转义 =====
 
     private static String escapeXml(String s) {
@@ -371,6 +373,138 @@ public class PRDFileManager {
         }
         prd.setUserStories(stories);
         return prd;
+    }
+
+    // ===== Scaffold 创建（启动保障） =====
+
+    /**
+     * 创建最小 scaffold PRD 模板。
+     * 对标 oh-my-claudecode 中 ensurePrdForStartup 的 scaffold 创建逻辑。
+     *
+     * <p>当 session 中不存在 PRD 且 root 也没有 prd.json 时，
+     * 自动创建一个带有默认用户故事的 PRD，确保启动流程可以继续。</p>
+     *
+     * @param sessionId  会话 ID
+     * @param project    项目名称（自动检测或使用默认值）
+     * @param branchName 分支名
+     * @return 创建的 PRD 文档
+     */
+    public PRDDocument createScaffoldPrd(String sessionId, String project, String branchName) {
+        PRDDocument prd = new PRDDocument(project, branchName,
+                "Auto-generated PRD for project: " + project);
+
+        UserStory defaultStory = new UserStory(
+                "US-001",
+                "Initial project setup and configuration",
+                "Set up the basic project structure, dependencies, and initial configuration",
+                Arrays.asList("Project compiles successfully",
+                        "All dependencies are resolved",
+                        "Basic configuration files are in place"),
+                1
+        );
+        prd.addUserStory(defaultStory);
+
+        writePrd(sessionId, prd);
+        return prd;
+    }
+
+    /**
+     * 创建 scaffold PRD（自动检测项目名）。
+     */
+    public PRDDocument createScaffoldPrd(String sessionId) {
+        String project = detectProjectName();
+        String branch = detectBranchName();
+        return createScaffoldPrd(sessionId, project, branch);
+    }
+
+    /**
+     * 从工作目录推断项目名称。
+     */
+    private String detectProjectName() {
+        // 检查 pom.xml
+        Path pomPath = Paths.get(stateManager.getRootDirectory(), "pom.xml");
+        if (Files.exists(pomPath)) {
+            try {
+                String pomContent = new String(Files.readAllBytes(pomPath), StandardCharsets.UTF_8);
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("<artifactId>([^<]+)</artifactId>").matcher(pomContent);
+                if (m.find()) {
+                    return m.group(1);
+                }
+            } catch (IOException ignored) {}
+        }
+        // 检查 build.gradle
+        Path gradlePath = Paths.get(stateManager.getRootDirectory(), "build.gradle");
+        if (Files.exists(gradlePath)) {
+            try {
+                String gradleContent = new String(Files.readAllBytes(gradlePath), StandardCharsets.UTF_8);
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("rootProject\\.name\\s*=\\s*['\"]([^'\"]+)").matcher(gradleContent);
+                if (m.find()) {
+                    return m.group(1);
+                }
+            } catch (IOException ignored) {}
+        }
+        // 使用目录名作为项目名
+        Path dir = Paths.get(stateManager.getRootDirectory()).getFileName();
+        return dir != null ? dir.toString() : "unknown-project";
+    }
+
+    /**
+     * 检测当前 Git 分支名。
+     */
+    private String detectBranchName() {
+        try {
+            Path gitHeadPath = Paths.get(stateManager.getRootDirectory(), ".git", "HEAD");
+            if (Files.exists(gitHeadPath)) {
+                String headContent = new String(Files.readAllBytes(gitHeadPath), StandardCharsets.UTF_8).trim();
+                if (headContent.startsWith("ref: ")) {
+                    String ref = headContent.substring(5);
+                    return ref.substring(ref.lastIndexOf('/') + 1);
+                }
+            }
+        } catch (IOException ignored) {}
+        return "main";
+    }
+
+    /**
+     * 带 scaffold 创建的 ensurePrdForStartup（三路径检查）。
+     * 对标 oh-my-claudecode 的三层检查：session/root/scaffold。
+     */
+    public EnsurePrdResult ensurePrdForStartup(String sessionId, boolean autoScaffold) {
+        // 1. 检查 Session 级 PRD
+        PRDDocument existing = readPrd(sessionId);
+        if (existing != null && !existing.getUserStories().isEmpty()) {
+            return new EnsurePrdResult(existing, false);
+        }
+
+        // 2. 检查 Root 级 prd.json
+        Path rootPrdPath = Paths.get(stateManager.getRootDirectory(), "prd.json");
+        if (Files.exists(rootPrdPath)) {
+            try {
+                String rootJson = new String(Files.readAllBytes(rootPrdPath), StandardCharsets.UTF_8);
+                PRDDocument rootPrd = deserializePrd(rootJson);
+                if (rootPrd != null) {
+                    writePrd(sessionId, rootPrd);
+                    return new EnsurePrdResult(rootPrd, true);
+                }
+            } catch (IOException e) {
+                // 读取失败则忽略
+            }
+        }
+
+        // 3. Scaffold 创建（仅在 autoScaffold=true 时）
+        if (autoScaffold) {
+            PRDDocument scaffold = createScaffoldPrd(sessionId);
+            return new EnsurePrdResult(scaffold, true);
+        }
+
+        return new EnsurePrdResult(null, true);
+    }
+
+    /**
+     * 重载 ensurePrdForStartup，为保持向后兼容，默认启用 scaffold。
+     */
+    public EnsurePrdResult ensurePrdForStartup(String sessionId) {
+        return ensurePrdForStartup(sessionId, true);
     }
 
     // ===== 内部类型 =====

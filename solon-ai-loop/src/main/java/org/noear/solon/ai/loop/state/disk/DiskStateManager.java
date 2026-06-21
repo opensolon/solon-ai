@@ -4,6 +4,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.ai.loop.state.LoopState;
 import org.noear.solon.ai.loop.state.LoopStateData;
 import org.noear.solon.ai.loop.state.StateManager;
+import org.noear.solon.ai.loop.state.disk.FilePermissionUtil;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -247,7 +248,12 @@ public class DiskStateManager implements StateManager {
             ONode root = ONode.ofJson(json);
             ONode data = root.get("data");
             if (data == null || !data.isObject()) {
-                return null;
+                // 旧版格式（无 _meta 包装）：根节点本身就是 data
+                if (root.hasKey("sessionId")) {
+                    data = root;
+                } else {
+                    return null;
+                }
             }
 
             LoopStateData result = new LoopStateData();
@@ -579,7 +585,10 @@ public class DiskStateManager implements StateManager {
         return basePath.resolve(STATE_DIR).resolve(SESSIONS_DIR).resolve(sessionId + ".json");
     }
 
-    private Path getPrdFilePath(String sessionId) {
+    /**
+     * 获取 PRD 文件路径。
+     */
+    public Path getPrdFilePath(String sessionId) {
         return basePath.resolve(PRD_DIR).resolve(sessionId + ".json");
     }
 
@@ -589,12 +598,24 @@ public class DiskStateManager implements StateManager {
 
     private void ensureDirectories() {
         try {
-            Files.createDirectories(basePath.resolve(STATE_DIR).resolve("ralph"));
-            Files.createDirectories(basePath.resolve(STATE_DIR).resolve("team"));
-            Files.createDirectories(basePath.resolve(STATE_DIR).resolve("ultraqa"));
-            Files.createDirectories(basePath.resolve(STATE_DIR).resolve(SESSIONS_DIR));
-            Files.createDirectories(basePath.resolve(PRD_DIR));
-            Files.createDirectories(basePath.resolve(PROGRESS_DIR));
+            // 创建目录后设置 0o700 权限（对标 OMC）
+            Path baseDir = Files.createDirectories(basePath);
+            FilePermissionUtil.set0700(baseDir);
+
+            Path stateDir = Files.createDirectories(basePath.resolve(STATE_DIR));
+            FilePermissionUtil.set0700(stateDir);
+
+            Path[] dirs = {
+                    Files.createDirectories(basePath.resolve(STATE_DIR).resolve("ralph")),
+                    Files.createDirectories(basePath.resolve(STATE_DIR).resolve("team")),
+                    Files.createDirectories(basePath.resolve(STATE_DIR).resolve("ultraqa")),
+                    Files.createDirectories(basePath.resolve(STATE_DIR).resolve(SESSIONS_DIR)),
+                    Files.createDirectories(basePath.resolve(PRD_DIR)),
+                    Files.createDirectories(basePath.resolve(PROGRESS_DIR))
+            };
+            for (Path dir : dirs) {
+                FilePermissionUtil.set0700(dir);
+            }
         } catch (IOException ignored) {
         }
     }

@@ -5,6 +5,7 @@ import org.noear.solon.ai.loop.state.LoopState;
 import org.noear.solon.ai.loop.state.LoopStateData;
 import org.noear.solon.ai.loop.state.disk.AtomicWrite;
 import org.noear.solon.ai.loop.state.disk.DiskStateManager;
+import org.noear.solon.ai.loop.state.disk.FilePermissionUtil;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -247,9 +248,12 @@ public class DiskStateManagerExtendedTest {
                         + "}";
                 AtomicWrite.write(stateFile, legacyJson);
 
-                // readState 应返回 null（因为期望的格式是 root._meta + root.data）
+                // readState 现在兼容旧版格式（无 _meta 包装时 root 本身即 data）
                 LoopStateData loaded = dsm.readState("ralph", "legacy-001");
-                assertNull(loaded, "readState should return null for legacy format without _meta+data wrapper");
+                assertNotNull(loaded, "readState should support legacy format without _meta+data wrapper");
+                assertEquals("legacy-001", loaded.getSessionId());
+                assertEquals(org.noear.solon.ai.loop.state.LoopState.EXECUTING, loaded.getState());
+                assertEquals(3, loaded.getIterationCount());
 
             } finally {
                 deleteDirectory(tempDir);
@@ -645,6 +649,223 @@ public class DiskStateManagerExtendedTest {
         data.setIterationCount(0);
         data.setSuccessfulIterations(0);
         return data;
+    }
+
+    // ==========================================
+    // 7. FilePermissionUtil 权限测试（第五轮新增）
+    // ==========================================
+
+    @Nested
+    class FilePermissionTest {
+
+        @Test
+        void testSet0600OnPosix() throws IOException {
+            Path tempDir = Files.createTempDirectory("perm-test");
+            try {
+                Path testFile = tempDir.resolve("perm-test.txt");
+                Files.write(testFile, "test content".getBytes());
+
+                // 设置权限
+                FilePermissionUtil.set0600(testFile);
+                assertTrue(Files.exists(testFile));
+
+                // 验证内容未受影响
+                String content = new String(Files.readAllBytes(testFile));
+                assertEquals("test content", content);
+
+                // 在 POSIX 系统上验证权限位
+                if (FilePermissionUtil.isPosixSupported()) {
+                    java.nio.file.attribute.PosixFileAttributes attrs =
+                            Files.readAttributes(testFile, java.nio.file.attribute.PosixFileAttributes.class);
+                    java.util.Set<java.nio.file.attribute.PosixFilePermission> perms = attrs.permissions();
+                    assertTrue(perms.contains(java.nio.file.attribute.PosixFilePermission.OWNER_READ));
+                    assertTrue(perms.contains(java.nio.file.attribute.PosixFilePermission.OWNER_WRITE));
+                    assertFalse(perms.contains(java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE));
+                    assertFalse(perms.contains(java.nio.file.attribute.PosixFilePermission.GROUP_READ));
+                    assertFalse(perms.contains(java.nio.file.attribute.PosixFilePermission.OTHERS_READ));
+                }
+            } finally {
+                deleteDirectory(tempDir);
+            }
+        }
+
+        @Test
+        void testSet0600NonExistentFileDoesNotThrow() {
+            Path nonExistent = java.nio.file.Paths.get("/tmp/non-existent-file-xxx");
+            assertDoesNotThrow(() -> FilePermissionUtil.set0600(nonExistent));
+        }
+
+        @Test
+        void testSet0600NullDoesNotThrow() {
+            assertDoesNotThrow(() -> FilePermissionUtil.set0600(null));
+        }
+
+        @Test
+        void testSet0700OnDirectory() throws IOException {
+            Path tempDir = Files.createTempDirectory("perm-dir-test");
+            try {
+                FilePermissionUtil.set0700(tempDir);
+                assertTrue(Files.exists(tempDir) && Files.isDirectory(tempDir));
+
+                if (FilePermissionUtil.isPosixSupported()) {
+                    java.nio.file.attribute.PosixFileAttributes attrs =
+                            Files.readAttributes(tempDir, java.nio.file.attribute.PosixFileAttributes.class);
+                    java.util.Set<java.nio.file.attribute.PosixFilePermission> perms = attrs.permissions();
+                    assertTrue(perms.contains(java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE));
+                    assertFalse(perms.contains(java.nio.file.attribute.PosixFilePermission.GROUP_READ));
+                }
+            } finally {
+                deleteDirectory(tempDir);
+            }
+        }
+    }
+
+    // ==========================================
+    // 8. 原子竞态测试增强（第五轮新增）
+    // ==========================================
+
+    @Nested
+    class AtomicRaceTest {
+
+        @Test
+        void testConcurrentWritesNoDataLoss() throws IOException, InterruptedException {
+            Path tempDir = Files.createTempDirectory("race-write");
+            try {
+                Path file = tempDir.resolve("race-test.json");
+                int threadCount = 10;
+                CountDownLatch latch = new CountDownLatch(threadCount);
+                AtomicInteger successCount = new AtomicInteger(0);
+
+                // 多线程并发写入同一个文件
+                for (int i = 0; i < threadCount; i++) {
+                    final int idx = i;
+                    new Thread(() -> {
+                        try {
+                            AtomicWrite.write(file, "{\"data\":" + idx + "}");
+                            successCount.incrementAndGet();
+                        } catch (IOException ignored) {
+                        } finally {
+                            latch.countDown();
+                        }
+                    }).start();
+                }
+
+                latch.await(10, TimeUnit.SECONDS);
+                assertEquals(threadCount, successCount.get(), "All writes should succeed");
+
+                // 最终文件应是有效的 JSON
+                String content = AtomicWrite.read(file);
+                assertNotNull(content);
+                assertTrue(content.startsWith("{") && content.endsWith("}"),
+                        "Final content should be valid JSON: " + content);
+
+                // 不应有残留的 .tmp 文件
+                try (java.util.stream.Stream<Path> files = Files.list(tempDir)) {
+                    long tmpCount = files.filter(p -> p.toString().endsWith(".tmp")).count();
+                    assertEquals(0, tmpCount, "No .tmp files should remain after writes");
+                }
+            } finally {
+                deleteDirectory(tempDir);
+            }
+        }
+
+        @Test
+        void testConcurrentReadWriteConsistency() throws IOException, InterruptedException {
+            Path tempDir = Files.createTempDirectory("race-consistency");
+            try {
+                DiskStateManager dsm = new DiskStateManager(tempDir.toString());
+                String sessionId = "race-consistency-session";
+                int operationCount = 20;
+                CountDownLatch latch = new CountDownLatch(operationCount);
+                AtomicInteger readErrors = new AtomicInteger(0);
+
+                // 写入初始状态
+                LoopStateData initialState = new LoopStateData();
+                initialState.setSessionId(sessionId);
+                initialState.setState(LoopState.PLANNING);
+                initialState.setIterationCount(0);
+                dsm.writeState("ralph", initialState, sessionId);
+
+                // 多线程交替读写
+                for (int i = 0; i < operationCount; i++) {
+                    final int iteration = i;
+                    new Thread(() -> {
+                        try {
+                            if (iteration % 2 == 0) {
+                                // 写
+                                LoopStateData data = new LoopStateData();
+                                data.setSessionId(sessionId);
+                                data.setState(LoopState.EXECUTING);
+                                data.setIterationCount(iteration);
+                                dsm.writeState("ralph", data, sessionId);
+                            } else {
+                                // 读
+                                LoopStateData read = dsm.readState("ralph", sessionId);
+                                if (read == null) {
+                                    readErrors.incrementAndGet();
+                                }
+                            }
+                        } catch (Exception ignored) {
+                            readErrors.incrementAndGet();
+                        } finally {
+                            latch.countDown();
+                        }
+                    }).start();
+                }
+
+                latch.await(10, TimeUnit.SECONDS);
+
+                // 最终状态应可正常读取
+                LoopStateData finalState = dsm.readState("ralph", sessionId);
+                assertNotNull(finalState, "Final state should be readable");
+                assertEquals(0, readErrors.get(), "No read errors expected");
+
+                // 验证没有残留 tmp 文件
+                try (java.util.stream.Stream<Path> files = Files.walk(tempDir)) {
+                    long tmpCount = files.filter(p -> p.toString().endsWith(".tmp")).count();
+                    assertEquals(0, tmpCount, "No .tmp files should remain");
+                }
+            } finally {
+                deleteDirectory(tempDir);
+            }
+        }
+
+        @Test
+        void testAtomicWriteRaceDoesNotCausePartialWrite() throws IOException, InterruptedException {
+            Path tempDir = Files.createTempDirectory("race-partial");
+            try {
+                Path file = tempDir.resolve("partial-test.txt");
+                int threadCount = 5;
+                CountDownLatch latch = new CountDownLatch(threadCount);
+
+                // 不同线程写入不同长度的内容
+                for (int i = 0; i < threadCount; i++) {
+                    StringBuilder sb = new StringBuilder();
+                    for (int _ri = 0; _ri < (i + 1) * 100; _ri++) sb.append('X');
+                    final String content = sb.toString();
+                    new Thread(() -> {
+                        try {
+                            AtomicWrite.write(file, content);
+                        } catch (IOException ignored) {
+                        } finally {
+                            latch.countDown();
+                        }
+                    }).start();
+                }
+
+                latch.await(10, TimeUnit.SECONDS);
+
+                // 最终内容长度必须是 100 的整数倍（原子写入的完整性）
+                String finalContent = AtomicWrite.read(file);
+                assertNotNull(finalContent);
+                assertTrue(finalContent.length() % 100 == 0,
+                        "Content length " + finalContent.length() + " should be multiple of 100");
+                assertTrue(finalContent.matches("X+"),
+                        "Content should only contain X characters");
+            } finally {
+                deleteDirectory(tempDir);
+            }
+        }
     }
 
     private static void deleteDirectory(Path path) throws IOException {

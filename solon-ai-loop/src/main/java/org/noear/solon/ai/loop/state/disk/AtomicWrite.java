@@ -60,6 +60,9 @@ public class AtomicWrite {
                 // 某些文件系统（如跨分区 tmpfs）不支持原子移动，回退到普通移动
                 Files.move(tmpPath, targetPath, StandardCopyOption.REPLACE_EXISTING);
             }
+
+            // 设置 0o600 权限（对标 OMC）
+            FilePermissionUtil.set0600(targetPath);
         } catch (IOException e) {
             cleanupTmp(tmpPath);
             throw new IOException("Atomic write failed for: " + targetPath, e);

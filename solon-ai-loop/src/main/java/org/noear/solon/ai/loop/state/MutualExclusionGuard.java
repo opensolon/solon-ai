@@ -45,9 +45,9 @@ public class MutualExclusionGuard {
      * @return true 可以启动 Ralph
      */
     public boolean canStartRalph(String sessionId) {
-        // 检查 UltraQA 是否活跃（exclude 当前 session）
+        // 检查 UltraQA 是否活跃（含当前 session，同 session 互斥）
         for (java.util.Map.Entry<String, String> entry : activeModes.entrySet()) {
-            if (!entry.getKey().equals(sessionId) && MODE_ULTRAQA.equals(entry.getValue())) {
+            if (MODE_ULTRAQA.equals(entry.getValue())) {
                 return false;
             }
         }
@@ -65,8 +65,9 @@ public class MutualExclusionGuard {
      * @return true 可以启动 UltraQA
      */
     public boolean canStartUltraQA(String sessionId) {
+        // 检查任何 session 是否有 Ralph 活跃（含当前 session，同 session 互斥）
         for (java.util.Map.Entry<String, String> entry : activeModes.entrySet()) {
-            if (!entry.getKey().equals(sessionId) && MODE_RALPH.equals(entry.getValue())) {
+            if (MODE_RALPH.equals(entry.getValue())) {
                 return false;
             }
         }
@@ -81,7 +82,6 @@ public class MutualExclusionGuard {
      */
     public boolean canStartTeam(String sessionId) {
         for (java.util.Map.Entry<String, String> entry : activeModes.entrySet()) {
-            if (entry.getKey().equals(sessionId)) continue;
             String mode = entry.getValue();
             if (MODE_RALPH.equals(mode) || MODE_ULTRAQA.equals(mode)) {
                 return false;

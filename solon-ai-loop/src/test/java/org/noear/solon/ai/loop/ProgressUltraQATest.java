@@ -5,7 +5,9 @@ import org.noear.solon.ai.loop.progress.*;
 import org.noear.solon.ai.loop.state.LoopState;
 import org.noear.solon.ai.loop.state.LoopStateData;
 import org.noear.solon.ai.loop.state.disk.DiskStateManager;
+import org.noear.solon.ai.loop.strategy.CommandExecutor;
 import org.noear.solon.ai.loop.strategy.LoopContext;
+import org.noear.solon.ai.loop.strategy.ProcessCommandExecutor;
 import org.noear.solon.ai.loop.strategy.UltraQAStrategy;
 import org.noear.solon.ai.loop.validator.QualityGate;
 
@@ -533,6 +535,141 @@ public class ProgressUltraQATest {
                 Instant.now(),
                 new HashMap<>(), new ArrayList<>(), new HashMap<>()
         );
+    }
+
+    // ==========================================
+    // 6. CommandExecutor 测试（第五轮新增）
+    // ==========================================
+
+    @Nested
+    @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+    class CommandExecutorTest {
+
+        @Test
+        @Order(1)
+        void testCommandResultSuccess() {
+            CommandExecutor.CommandResult result =
+                    new CommandExecutor.CommandResult(0, "Build successful", "", 100);
+            assertTrue(result.isSuccess());
+            assertEquals(0, result.getExitCode());
+            assertEquals("Build successful", result.getStdout());
+            assertEquals(100, result.getExecutionTimeMs());
+            assertEquals("Build successful", result.getSummary());
+        }
+
+        @Test
+        @Order(2)
+        void testCommandResultFailure() {
+            CommandExecutor.CommandResult result =
+                    new CommandExecutor.CommandResult(1, "", "Compilation error", 200);
+            assertFalse(result.isSuccess());
+            assertEquals(1, result.getExitCode());
+            assertEquals("[err] Compilation error", result.getSummary());
+            assertTrue(result.getDiagnosis().contains("exit code: 1"));
+        }
+
+        @Test
+        @Order(3)
+        void testCommandResultEmptyOutput() {
+            CommandExecutor.CommandResult result =
+                    new CommandExecutor.CommandResult(0, "", "", 50);
+            assertTrue(result.isSuccess());
+            assertEquals("OK", result.getSummary());
+        }
+
+        @Test
+        @Order(4)
+        void testProcessCommandExecutorExecuteEcho() throws IOException {
+            ProcessCommandExecutor executor = new ProcessCommandExecutor(5000);
+            assertTrue(executor.isAvailable(), "Shell should be available");
+
+            CommandExecutor.CommandResult result = executor.execute("echo 'hello world'");
+            assertTrue(result.isSuccess());
+            assertTrue(result.getStdout().contains("hello world"));
+            assertTrue(result.getExecutionTimeMs() >= 0);
+        }
+
+        @Test
+        @Order(5)
+        void testProcessCommandExecutorExitCode() throws IOException {
+            ProcessCommandExecutor executor = new ProcessCommandExecutor(5000);
+
+            // false should return non-zero exit code
+            if (System.getProperty("os.name", "").toLowerCase().contains("win")) {
+                CommandExecutor.CommandResult result = executor.execute("exit /b 1");
+                assertFalse(result.isSuccess());
+                assertEquals(1, result.getExitCode());
+            } else {
+                CommandExecutor.CommandResult result = executor.execute("false");
+                assertFalse(result.isSuccess());
+                assertEquals(1, result.getExitCode());
+            }
+        }
+
+        @Test
+        @Order(6)
+        void testProcessCommandExecutorTimeout() throws IOException {
+            ProcessCommandExecutor executor = new ProcessCommandExecutor(200); // 200ms timeout
+
+            // sleep longer than timeout
+            String sleepCmd = System.getProperty("os.name", "").toLowerCase().contains("win")
+                    ? "ping -n 3 127.0.0.1"
+                    : "sleep 3";
+            CommandExecutor.CommandResult result = executor.execute(sleepCmd);
+            assertFalse(result.isSuccess(), "Should time out");
+            assertTrue(result.getExitCode() < 0 || result.getStdout().contains("TIMEOUT"),
+                    "Should indicate timeout");
+        }
+
+        @Test
+        @Order(7)
+        void testCommandExecutorWithWorkDir() throws IOException {
+            Path tempDir = Files.createTempDirectory("exec-workdir");
+            try {
+                ProcessCommandExecutor executor = new ProcessCommandExecutor(5000);
+
+                if (!System.getProperty("os.name", "").toLowerCase().contains("win")) {
+                    CommandExecutor.CommandResult result = executor.execute("pwd", tempDir.toString());
+                    assertTrue(result.isSuccess());
+                    assertTrue(result.getStdout().contains(tempDir.getFileName().toString()),
+                            "Should execute in the given workdir");
+                }
+            } finally {
+                deleteDirectory(tempDir);
+            }
+        }
+
+        @Test
+        @Order(8)
+        void testCommandExecutorInvalidCommand() {
+            ProcessCommandExecutor executor = new ProcessCommandExecutor(5000);
+
+            assertThrows(IOException.class, () -> {
+                executor.execute(""); // Empty command should throw
+            });
+        }
+
+        @Test
+        @Order(9)
+        void testUltraQAWithCommandExecutor() throws IOException {
+            Path tempDir = Files.createTempDirectory("ultraqa-exec");
+            try {
+                DiskStateManager dsm = new DiskStateManager(tempDir.toString());
+                ProcessCommandExecutor exec = new ProcessCommandExecutor(5000);
+
+                // Create UltraQA with CommandExecutor
+                UltraQAStrategy strategy = new UltraQAStrategy(
+                        Arrays.asList(QualityGate.build(), QualityGate.test()),
+                        false, 10, UltraQAStrategy.UltraQAGoalType.TESTS,
+                        null, false, exec);
+
+                assertEquals(UltraQAStrategy.UltraQAGoalType.TESTS, strategy.getGoalType());
+                assertNotNull(strategy.getGates());
+                assertEquals(2, strategy.getGates().size());
+            } finally {
+                deleteDirectory(tempDir);
+            }
+        }
     }
 
     private static void deleteDirectory(Path path) throws IOException {

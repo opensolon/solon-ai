@@ -6,6 +6,7 @@ import org.noear.solon.ai.loop.validator.QualityGate;
 import org.noear.solon.ai.loop.validator.ValidationResult;
 import org.noear.solon.ai.loop.validator.Validator;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -37,19 +38,27 @@ public class UltraQAStrategy extends AbstractLoopStrategy {
     private final UltraQAGoalType goalType;
     private final Validator validator;
     private final boolean strictMode;
+    private final CommandExecutor commandExecutor;
 
     public UltraQAStrategy() {
-        this(Arrays.asList(QualityGate.build(), QualityGate.test()), false, 10, UltraQAGoalType.TESTS, null, false);
+        this(Arrays.asList(QualityGate.build(), QualityGate.test()), false, 10, UltraQAGoalType.TESTS, null, false, null);
     }
 
     public UltraQAStrategy(List<QualityGate> gates, boolean parallelTesting,
                            int maxTestAttempts, UltraQAGoalType goalType) {
-        this(gates, parallelTesting, maxTestAttempts, goalType, null, false);
+        this(gates, parallelTesting, maxTestAttempts, goalType, null, false, null);
     }
 
     public UltraQAStrategy(List<QualityGate> gates, boolean parallelTesting,
                            int maxTestAttempts, UltraQAGoalType goalType,
                            Validator validator, boolean strictMode) {
+        this(gates, parallelTesting, maxTestAttempts, goalType, validator, strictMode, null);
+    }
+
+    public UltraQAStrategy(List<QualityGate> gates, boolean parallelTesting,
+                           int maxTestAttempts, UltraQAGoalType goalType,
+                           Validator validator, boolean strictMode,
+                           CommandExecutor commandExecutor) {
         super(NAME, DESCRIPTION, 100, parallelTesting);
         this.gates = gates != null ? gates : Arrays.asList(QualityGate.build(), QualityGate.test());
         this.parallelTesting = parallelTesting;
@@ -57,6 +66,7 @@ public class UltraQAStrategy extends AbstractLoopStrategy {
         this.goalType = goalType;
         this.validator = validator;
         this.strictMode = strictMode;
+        this.commandExecutor = commandExecutor;
     }
 
     @Override
@@ -337,18 +347,114 @@ public class UltraQAStrategy extends AbstractLoopStrategy {
             case "style": return executeStyleCheck(context);
             case "complexity": return executeComplexityCheck(context);
             case "duplication": return executeDuplicationCheck(context);
-            default: return !strictMode;
+            default: return executeWithExecutor("custom: " + check, context);
         }
     }
 
-    // 可覆盖的方法
-    protected boolean executeCompilationCheck(LoopContext context) { return !strictMode; }
-    protected boolean executeDependencyCheck(LoopContext context) { return !strictMode; }
-    protected boolean executeUnitTestCheck(LoopContext context) { return !strictMode; }
-    protected boolean executeIntegrationTestCheck(LoopContext context) { return !strictMode; }
-    protected boolean executeStyleCheck(LoopContext context) { return !strictMode; }
-    protected boolean executeComplexityCheck(LoopContext context) { return !strictMode; }
-    protected boolean executeDuplicationCheck(LoopContext context) { return !strictMode; }
+    // ===== 命令执行核心 =====
+
+    /**
+     * 使用 CommandExecutor 执行命令（如果可用）。
+     * 否则回退到当前行为（strictMode 守卫）。
+     */
+    private boolean executeWithExecutor(String commandDescription, LoopContext context) {
+        if (commandExecutor != null) {
+            try {
+                String workDir = context != null ? (String) context.get("workDir") : null;
+                String command = buildGoalCommand(commandDescription);
+                CommandExecutor.CommandResult result = commandExecutor.execute(command, workDir);
+                // 记录执行结果到 contextData
+                if (context != null) {
+                    Map<String, Object> execResults = getExecutorResults(context);
+                    execResults.put(commandDescription, new ExecutorRecord(result.isSuccess(), result.getSummary(), result.getExecutionTimeMs()));
+                }
+                return result.isSuccess();
+            } catch (IOException e) {
+                // 命令执行失败，记录但不阻止流程
+                if (context != null) {
+                    Map<String, Object> execResults = getExecutorResults(context);
+                    execResults.put(commandDescription, new ExecutorRecord(false, "IO Error: " + e.getMessage(), 0));
+                }
+                return false;
+            }
+        }
+        // 无 CommandExecutor 时的守卫行为
+        return !strictMode;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getExecutorResults(LoopContext context) {
+        Map<String, Object> execResults = (Map<String, Object>) context.get("executorResults");
+        if (execResults == null) {
+            execResults = new HashMap<>();
+            context.getContextData().put("executorResults", execResults);
+        }
+        return execResults;
+    }
+
+    /**
+     * 根据 goalType 和检查名称构建具体的命令。
+     */
+    private String buildGoalCommand(String checkName) {
+        switch (goalType) {
+            case TESTS:
+                if (checkName.contains("unit-tests") || checkName.contains("integration-tests")) {
+                    return "mvn test";
+                }
+                if (checkName.contains("compilation")) {
+                    return "mvn compile";
+                }
+                return "mvn test";
+            case BUILD:
+                return "mvn compile";
+            case LINT:
+                return "mvn checkstyle:check";
+            case TYPECHECK:
+                return "mvn compile";
+            case CUSTOM:
+                return checkName.replace("custom: ", "");
+            default:
+                return "mvn test";
+        }
+    }
+
+    /**
+     * 执行检查结果记录。
+     */
+    public static class ExecutorRecord {
+        public final boolean success;
+        public final String summary;
+        public final long executionTimeMs;
+
+        public ExecutorRecord(boolean success, String summary, long executionTimeMs) {
+            this.success = success;
+            this.summary = summary;
+            this.executionTimeMs = executionTimeMs;
+        }
+    }
+
+    // 可覆盖的方法（支持 CommandExecutor）
+    protected boolean executeCompilationCheck(LoopContext context) {
+        return executeWithExecutor("compilation", context);
+    }
+    protected boolean executeDependencyCheck(LoopContext context) {
+        return executeWithExecutor("dependencies", context);
+    }
+    protected boolean executeUnitTestCheck(LoopContext context) {
+        return executeWithExecutor("unit-tests", context);
+    }
+    protected boolean executeIntegrationTestCheck(LoopContext context) {
+        return executeWithExecutor("integration-tests", context);
+    }
+    protected boolean executeStyleCheck(LoopContext context) {
+        return executeWithExecutor("style", context);
+    }
+    protected boolean executeComplexityCheck(LoopContext context) {
+        return executeWithExecutor("complexity", context);
+    }
+    protected boolean executeDuplicationCheck(LoopContext context) {
+        return executeWithExecutor("duplication", context);
+    }
 
     // ===== 辅助方法 =====
 
