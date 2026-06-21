@@ -25,6 +25,7 @@ import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.agent.react.intercept.compress.CompositeCompressionStrategy;
 import org.noear.solon.ai.agent.react.intercept.compress.HierarchicalCompressionStrategy;
 import org.noear.solon.ai.agent.react.intercept.compress.KeyInfoExtractionStrategy;
+import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -115,6 +116,10 @@ public class HarnessEngine {
 
     public ContextCompressionInterceptor getCompressionInterceptor() {
         return options.getCompressionInterceptor();
+    }
+
+    public CacheControl getCacheControl() {
+        return options.getCacheControl();
     }
 
     public HITLInterceptor getHitlInterceptor() {
@@ -461,6 +466,12 @@ public class HarnessEngine {
     public void setSystemPrompt(String systemPrompt) {
         if (Assert.isNotEmpty(systemPrompt)) {
             options.setSystemPrompt(systemPrompt);
+        }
+    }
+
+    public void setCacheControl(CacheControl cacheControl) {
+        if (cacheControl != null) {
+            options.setCacheControl(cacheControl);
         }
     }
 
@@ -1012,6 +1023,11 @@ public class HarnessEngine {
 
         public Builder compressionInterceptor(ContextCompressionInterceptor compressionInterceptor) {
             options.setCompressionInterceptor(compressionInterceptor);
+            return this;
+        }
+
+        public Builder cacheControl(CacheControl cacheControl) {
+            options.setCacheControl(cacheControl);
             return this;
         }
 

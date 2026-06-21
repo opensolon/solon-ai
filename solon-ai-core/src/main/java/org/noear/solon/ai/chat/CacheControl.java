@@ -67,6 +67,10 @@ public class CacheControl {
         return new CacheControl("ephemeral", null);
     }
 
+    public static CacheControl ofType(String type) {
+        return new CacheControl(type, null);
+    }
+
     /**
      * DeepSeek 风格：通过 prompt_cache_key 指定缓存键
      *

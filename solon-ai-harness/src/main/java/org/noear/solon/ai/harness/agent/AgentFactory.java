@@ -108,6 +108,12 @@ public class AgentFactory {
             extension.configure(agentDefinition.getName(), builder);
         }
 
+        builder.modelOptions(o -> {
+            if (engine.getCacheControl() != null) {
+                o.cacheControl(engine.getCacheControl());
+            }
+        });
+
         return builder;
     }
 

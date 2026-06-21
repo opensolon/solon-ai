@@ -347,13 +347,8 @@ public class ReasonTask {
                     o.optionSet(trace.getOptions().getModelOptions().options());
 
                     // 缓存配置：Agent 级优先，ChatModel 级次之
-                    ModelOptionsAmend<?, ?> agentOptions = trace.getOptions().getModelOptions();
-                    if (agentOptions.cacheControl() != null) {
-                        o.cacheControl(agentOptions.cacheControl());
-                    }
-
-                    if (agentOptions.cacheControl() != null) {
-                        o.cacheControl(agentOptions.cacheControl());
+                    if(trace.getOptions().getCacheControl() != null) {
+                        o.cacheControl(trace.getOptions().getCacheControl());
                     }
                 });
 

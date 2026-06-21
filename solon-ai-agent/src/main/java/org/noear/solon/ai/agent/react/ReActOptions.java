@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.AgentChunk;
+import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -42,7 +43,9 @@ public class ReActOptions implements NonSerializable {
 
     private transient FluxSink<AgentChunk> streamSink;
 
-    /** 执行推理的基础模型 */
+    /**
+     * 执行推理的基础模型
+     */
     private ChatModel chatModel;
 
     /**
@@ -93,11 +96,11 @@ public class ReActOptions implements NonSerializable {
     private Function<ReActTrace, String> planningInstructionProvider;
 
 
-    public ReActOptions(ChatModel chatModel){
+    public ReActOptions(ChatModel chatModel) {
         this.chatModel = chatModel;
     }
 
-    private ReActOptions(){
+    private ReActOptions() {
 
     }
 
@@ -225,6 +228,10 @@ public class ReActOptions implements NonSerializable {
         return modelOptions.toolContext();
     }
 
+    public CacheControl getCacheControl() {
+        return modelOptions.cacheControl();
+    }
+
     public ChatModel getChatModel() {
         return chatModel;
     }
@@ -244,7 +251,7 @@ public class ReActOptions implements NonSerializable {
     /**
      * 初始 maxTurns 值
      */
-    public int getInitialMaxTurns(){
+    public int getInitialMaxTurns() {
         return maxTurns;
     }
 
@@ -260,7 +267,7 @@ public class ReActOptions implements NonSerializable {
      * @deprecated 4.0 Use {@link #getInitialMaxTurns()} instead.
      */
     @Deprecated
-    public int getInitialMaxSteps(){
+    public int getInitialMaxSteps() {
         return getInitialMaxTurns();
     }
 

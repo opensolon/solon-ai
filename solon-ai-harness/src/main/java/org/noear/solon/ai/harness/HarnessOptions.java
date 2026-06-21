@@ -18,6 +18,7 @@ package org.noear.solon.ai.harness;
 import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
+import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
@@ -84,6 +85,9 @@ class HarnessOptions implements Serializable {
     private volatile int apiRetries = 3;
     private volatile int mcpRetries = 3;
     private volatile int modelRetries = 3;
+
+    // ========== 缓存控制 ==========
+    private volatile CacheControl cacheControl;
 
     // ========== 集合类配置 ==========
     private final MountManager mountManager;
@@ -333,6 +337,16 @@ class HarnessOptions implements Serializable {
         if (modelRetries != null) {
             this.modelRetries = modelRetries;
         }
+    }
+
+    // ========== 缓存控制 ==========
+
+    CacheControl getCacheControl() {
+        return cacheControl;
+    }
+
+    void setCacheControl(CacheControl cacheControl) {
+        this.cacheControl = cacheControl;
     }
 
     List<HarnessExtension> getExtensions() {
