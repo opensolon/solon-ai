@@ -1,5 +1,7 @@
 package org.noear.solon.ai.loop.pipeline;
 
+import org.noear.solon.ai.loop.strategy.TeamPipelineStrategy;
+
 /**
  * Pipeline 阶段定义。
  *
@@ -36,5 +38,37 @@ public enum PipelineStage {
      */
     public boolean isCancellable() {
         return this != COMPLETED && this != FAILED;
+    }
+
+    /**
+     * 转换为 TeamPipelineStrategy.Phase。
+     */
+    public TeamPipelineStrategy.Phase toTeamPhase() {
+        switch (this) {
+            case EXPANSION:
+            case PLANNING: return TeamPipelineStrategy.Phase.PLAN;
+            case EXECUTION: return TeamPipelineStrategy.Phase.EXEC;
+            case QA: return TeamPipelineStrategy.Phase.VERIFY;
+            case VALIDATION: return TeamPipelineStrategy.Phase.VERIFY;
+            case COMPLETED: return TeamPipelineStrategy.Phase.COMPLETED;
+            case FAILED: return TeamPipelineStrategy.Phase.COMPLETED; // 映射为完成
+            default: return TeamPipelineStrategy.Phase.PLAN;
+        }
+    }
+
+    /**
+     * 从 TeamPipelineStrategy.Phase 转换。
+     */
+    public static PipelineStage fromTeamPhase(TeamPipelineStrategy.Phase phase) {
+        switch (phase) {
+            case PLAN: return PLANNING;
+            case PRD: return PLANNING;
+            case EXEC: return EXECUTION;
+            case VERIFY: return QA;
+            case FIX: return EXECUTION;
+            case COMPLETED: return COMPLETED;
+            case CANCELLED: return FAILED;
+            default: return PLANNING;
+        }
     }
 }

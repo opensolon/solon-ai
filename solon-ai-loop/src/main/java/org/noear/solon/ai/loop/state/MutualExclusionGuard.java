@@ -1,5 +1,6 @@
 package org.noear.solon.ai.loop.state;
 
+import org.noear.solon.ai.loop.state.LoopStateData;
 import org.noear.solon.ai.loop.state.disk.DiskStateManager;
 
 /**
@@ -86,6 +87,13 @@ public class MutualExclusionGuard {
                 return false;
             }
         }
+        // 也检查磁盘状态
+        if (stateManager.hasState(MODE_RALPH, sessionId)) {
+            return false;
+        }
+        if (stateManager.hasState(MODE_ULTRAQA, sessionId)) {
+            return false;
+        }
         return true;
     }
 
@@ -123,7 +131,7 @@ public class MutualExclusionGuard {
      * @param mode      模式名
      * @return 是否成功注册
      */
-    public boolean acquire(String sessionId, String mode) {
+    public synchronized boolean acquire(String sessionId, String mode) {
         // 先检查互斥
         switch (mode) {
             case MODE_RALPH:
@@ -147,7 +155,7 @@ public class MutualExclusionGuard {
      *
      * @param sessionId 会话 ID
      */
-    public void release(String sessionId) {
+    public synchronized void release(String sessionId) {
         activeModes.remove(sessionId);
     }
 
@@ -158,15 +166,53 @@ public class MutualExclusionGuard {
      * @param sessionId 会话 ID
      * @return 是否成功释放
      */
-    public boolean forceRelease(String mode, String sessionId) {
+    public synchronized boolean forceRelease(String mode, String sessionId) {
         String current = activeModes.get(sessionId);
         if (current != null && current.equals(mode)) {
             activeModes.remove(sessionId);
+            // 同时清除磁盘状态
+            stateManager.clearState(mode, sessionId);
             return true;
         }
         // 如果不是精确匹配，尝试强制移除
         activeModes.remove(sessionId);
+        // 同时清除磁盘状态
+        stateManager.clearState(mode, sessionId);
         return true;
+    }
+
+    /**
+     * 检测并清理 stale 锁。
+     * 如果磁盘状态文件存在但内存中无对应活跃记录，且状态文件超过指定时间未更新，则视为 stale。
+     *
+     * @param maxAgeMs 最大年龄（毫秒）
+     * @return 清理的 stale 锁数量
+     */
+    public synchronized int cleanupStaleLocks(long maxAgeMs) {
+        int cleaned = 0;
+        for (String mode : new String[]{MODE_RALPH, MODE_ULTRAQA, MODE_TEAM}) {
+            for (String sid : stateManager.getAllActiveSessionIds()) {
+                if (!activeModes.containsKey(sid)) {
+                    // 内存中无记录，检查磁盘状态是否 stale
+                    if (stateManager.hasState(mode, sid)) {
+                        // 尝试读取状态，检查最后更新时间
+                        LoopStateData data = stateManager.readState(mode, sid);
+                        if (data != null && data.getLastUpdateTime() != null) {
+                            long age = System.currentTimeMillis() - data.getLastUpdateTime().toEpochMilli();
+                            if (age > maxAgeMs) {
+                                stateManager.clearState(mode, sid);
+                                cleaned++;
+                            }
+                        } else if (data == null) {
+                            // 状态文件存在但无法读取，清理
+                            stateManager.clearState(mode, sid);
+                            cleaned++;
+                        }
+                    }
+                }
+            }
+        }
+        return cleaned;
     }
 
     /**

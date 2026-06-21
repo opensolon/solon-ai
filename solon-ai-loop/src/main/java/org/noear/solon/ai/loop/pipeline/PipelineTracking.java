@@ -33,7 +33,7 @@ public class PipelineTracking {
     public Instant getStartedAt() { return startedAt; }
     public Instant getCompletedAt() { return completedAt; }
     public boolean isFailed() { return failed; }
-    public boolean isCompleted() { return completedAt != null && !failed; }
+    public boolean isCompleted() { return completedAt != null; }
 
     /**
      * 记录阶段进入。

@@ -44,6 +44,9 @@ public class AutopilotExecutor {
     public AutopilotExecutor(LoopEngine loopEngine, PipelineConfig config) {
         this.loopEngine = loopEngine;
         this.config = config;
+        // 注册默认适配器
+        registerAdapter(DefaultStageAdapters.executionAdapter());
+        registerAdapter(DefaultStageAdapters.qaAdapter());
     }
 
     /**
@@ -204,13 +207,15 @@ public class AutopilotExecutor {
      * 取消整个 Pipeline。
      */
     public boolean cancelPipeline(String sessionId) {
-        Map<PipelineStage, LoopSession> sessions = stageSessions.get(sessionId);
+        // 停止所有阶段会话
+        Map<PipelineStage, LoopSession> sessions = stageSessions.remove(sessionId);
         if (sessions != null) {
             for (LoopSession s : sessions.values()) {
                 try { s.stop(); } catch (Exception ignored) {}
             }
         }
-        PipelineTracking tracking = trackingMap.get(sessionId);
+        // 完成追踪并移除
+        PipelineTracking tracking = trackingMap.remove(sessionId);
         if (tracking != null) {
             tracking.complete(true);
         }
@@ -221,7 +226,50 @@ public class AutopilotExecutor {
      * 获取所有活跃的 Pipeline 会话。
      */
     public List<String> getActivePipelines() {
-        return new ArrayList<String>(trackingMap.keySet());
+        List<String> active = new ArrayList<>();
+        for (Map.Entry<String, PipelineTracking> entry : trackingMap.entrySet()) {
+            if (!entry.getValue().isCompleted()) {
+                active.add(entry.getKey());
+            }
+        }
+        return active;
+    }
+
+    /**
+     * 阶段执行步骤（用于事务性回滚）。
+     */
+    private static class TransitionStep {
+        final String name;
+        final Runnable execute;
+        final Runnable rollback;
+
+        TransitionStep(String name, Runnable execute, Runnable rollback) {
+            this.name = name;
+            this.execute = execute;
+            this.rollback = rollback;
+        }
+    }
+
+    /**
+     * 顺序执行步骤，失败时逆序回滚。
+     */
+    private boolean executeWithRollback(List<TransitionStep> steps) {
+        List<TransitionStep> completed = new ArrayList<>();
+        for (TransitionStep step : steps) {
+            try {
+                step.execute.run();
+                completed.add(step);
+            } catch (Exception e) {
+                // 逆序回滚
+                for (int i = completed.size() - 1; i >= 0; i--) {
+                    try {
+                        completed.get(i).rollback.run();
+                    } catch (Exception ignored) {}
+                }
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

@@ -162,7 +162,9 @@ public class SimpleLoopEngine implements LoopEngine {
     @Override
     public boolean isRunning(String sessionId) {
         SimpleLoopSession session = sessions.get(sessionId);
-        return session != null && session.getState().isActive();
+        // 同时检查 running 标志和状态：stop() 会将 running 置为 false，
+        // 即使执行线程竞态覆盖了 state，running 仍为 false
+        return session != null && session.running && session.getState().isActive();
     }
 
     @Override
@@ -226,8 +228,8 @@ public class SimpleLoopEngine implements LoopEngine {
         private volatile LoopState state = LoopState.IDLE;
         private volatile boolean running = false;
         private volatile boolean paused = false;
-        private final List<IterationResult> iterationHistory = new ArrayList<>();
-        private final List<ValidationResult> validationResults = new ArrayList<>();
+        private final List<IterationResult> iterationHistory = new java.util.concurrent.CopyOnWriteArrayList<>();
+        private final List<ValidationResult> validationResults = new java.util.concurrent.CopyOnWriteArrayList<>();
         private final List<java.util.function.Consumer<LoopState>> stateListeners = new ArrayList<>();
         private final List<java.util.function.Consumer<IterationResult>> iterationListeners = new ArrayList<>();
         private final List<java.util.function.Consumer<ValidationResult>> validationListeners = new ArrayList<>();
@@ -374,6 +376,9 @@ public class SimpleLoopEngine implements LoopEngine {
 
         @Override
         public void updateState(ValidationResult validation) {
+            // 守卫：如果会话已被 stop() 终止，不再修改状态
+            if (!running || state.isTerminal()) return;
+
             validationResults.add(validation);
             notifyValidationResult(validation);
 
@@ -397,6 +402,10 @@ public class SimpleLoopEngine implements LoopEngine {
             while (running && shouldContinue() && !paused) {
                 try {
                     IterationResult iterationResult = executeIteration();
+
+                    // 守卫：如果 stop() 在 executeIteration() 期间被调用，立即退出
+                    if (!running || state.isTerminal()) break;
+
                     iterationHistory.add(iterationResult);
                     notifyIterationComplete(iterationResult);
 

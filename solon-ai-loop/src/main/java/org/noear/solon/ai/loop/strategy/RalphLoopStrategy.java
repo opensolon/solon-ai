@@ -5,11 +5,13 @@ import org.noear.solon.ai.loop.prd.*;
 import org.noear.solon.ai.loop.progress.ProgressEntry;
 import org.noear.solon.ai.loop.progress.ProgressManager;
 import org.noear.solon.ai.loop.state.LoopState;
+import org.noear.solon.ai.loop.state.LoopStateData;
 import org.noear.solon.ai.loop.state.disk.DiskStateManager;
 import org.noear.solon.ai.loop.validator.Validator;
 import org.noear.solon.ai.loop.validator.ValidationCriteria;
 import org.noear.solon.ai.loop.validator.verify.ArchitectVerifier;
 import org.noear.solon.ai.loop.validator.verify.CriticVerifier;
+import org.noear.solon.ai.loop.validator.verify.VerificationState;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -52,6 +54,7 @@ public class RalphLoopStrategy extends AbstractLoopStrategy {
     private ArchitectVerifier architectVerifier;
     private CriticVerifier criticVerifier;
     private DiskStateManager diskStateManager;
+    private VerificationState verificationState;
 
     public RalphLoopStrategy() {
         this(true, DEFAULT_CRITIC_MODE, 50, null, null, null);
@@ -81,6 +84,43 @@ public class RalphLoopStrategy extends AbstractLoopStrategy {
         this.diskStateManager = diskStateManager;
         this.architectVerifier = new ArchitectVerifier();
         this.criticVerifier = new CriticVerifier(this.criticMode);
+        this.verificationState = new VerificationState();
+    }
+
+    /**
+     * 获取 Team Pipeline 阶段指令。
+     * 当 Ralph 与 Team Pipeline 协同运行时，根据 Team 的当前阶段决定 Ralph 的行为。
+     *
+     * @param sessionId 会话 ID
+     * @return "continue" 表示继续循环，"complete" 表示应结束循环，null 表示无 Team 状态
+     */
+    public String getTeamPhaseDirective(String sessionId) {
+        if (diskStateManager == null || sessionId == null) return null;
+
+        // 读取 Team 状态
+        LoopStateData teamState = diskStateManager.readState("team", sessionId);
+        if (teamState == null) return null;  // 无 Team 状态，Ralph 独立运行
+
+        // 检查 Team 是否活跃
+        String teamPhase = teamState.getContextData() != null
+                ? (String) teamState.getContextData().get("currentPhase")
+                : null;
+
+        if (teamPhase == null) return null;
+
+        // 终态检查
+        if ("COMPLETED".equals(teamPhase) || "FAILED".equals(teamPhase)) {
+            return "complete";
+        }
+
+        // 活跃阶段检查
+        if ("VERIFY".equals(teamPhase) || "FIX".equals(teamPhase)
+                || "EXEC".equals(teamPhase) || "PLAN".equals(teamPhase)
+                || "PRD".equals(teamPhase)) {
+            return "continue";
+        }
+
+        return null;
     }
 
     @Override
@@ -89,10 +129,16 @@ public class RalphLoopStrategy extends AbstractLoopStrategy {
         String sessionId = getSessionId(context);
         if (sessionId == null || prdFileManager == null) return false;
 
+        // 检查 Team Pipeline 指令
+        String teamDirective = getTeamPhaseDirective(sessionId);
+        if ("complete".equals(teamDirective)) {
+            return false;
+        }
+
         PRDDocument prd = prdFileManager.readPrd(sessionId);
         if (prd == null) return false;
 
-        // 检查是否所有故事都已完成并通过验证
+        // 统一使用 allStoriesFullyComplete（与 executeIteration 一致）
         if (verificationRequired) {
             return !prd.allStoriesFullyComplete();
         }
@@ -152,8 +198,19 @@ public class RalphLoopStrategy extends AbstractLoopStrategy {
             message = "Story completed and verified: " + nextStory.getId();
         }
 
-        // 5. 检查是否全部完成
-        boolean allDone = prd.allStoriesCompleted();
+        // 5. 检查是否全部完成（与 shouldContinueInternal 保持一致）
+        boolean allDone = verificationRequired ? prd.allStoriesFullyComplete() : prd.allStoriesCompleted();
+
+        // 6. 使用 statusCalculator 更新 PRD 状态到上下文
+        if (statusCalculator != null && prd != null) {
+            PRDStatus status = statusCalculator.calculate(prd);
+            Map<String, Object> ctxData = context.getContextData();
+            if (ctxData != null) {
+                ctxData.put("prdStatus", status.getSummary());
+                ctxData.put("prdTotalStories", status.getTotal());
+                ctxData.put("prdCompletedStories", status.getCompleted());
+            }
+        }
 
         return createResult(context, startTime, result, validationPassed,
                 message, allDone ? LoopState.COMPLETED :
@@ -205,16 +262,49 @@ public class RalphLoopStrategy extends AbstractLoopStrategy {
             return storyValidator.apply(story.getId() + ": " + story.getTitle(), result, context);
         }
 
+        // 启动验证状态
+        if (verificationState != null) {
+            verificationState.startVerification(
+                "Verify story: " + story.getId(),
+                story.getId(),
+                criticMode);
+            verificationState.setCompletionClaim("Story " + story.getId() + " implemented");
+        }
+
         // Architect 验证
         ArchitectVerifier.VerificationResult archResult =
                 architectVerifier.verify(story, result, context);
-        if (!archResult.isPassed()) {
+
+        if (verificationState != null) {
+            boolean verified = verificationState.recordArchitectFeedback(
+                archResult.isPassed(),
+                archResult.getMessage());
+
+            if (!archResult.isPassed() && !verified) {
+                // 验证失败但未达最大尝试次数
+                context.getContextData().put("verificationState", verificationState.getCurrentState());
+                context.getContextData().put("verificationAttempts", verificationState.getVerificationAttempts());
+                return false;
+            }
+
+            if (!archResult.isPassed() && verified) {
+                // 达到最大尝试次数，强制失败
+                context.getContextData().put("verificationState", verificationState.getCurrentState());
+                return false;
+            }
+        } else if (!archResult.isPassed()) {
             return false;
         }
 
         // Critic 评审
         CriticVerifier.CriticResult criticResult =
                 criticVerifier.review(story, result, context);
+
+        if (verificationState != null && criticResult.isApproved()) {
+            verificationState.setCurrentState(VerificationState.STATE_CRITIC_APPROVED);
+            context.getContextData().put("verificationState", verificationState.getCurrentState());
+        }
+
         return criticResult.isApproved();
     }
 
@@ -259,7 +349,9 @@ public class RalphLoopStrategy extends AbstractLoopStrategy {
     private void markFallbackStoryCompleted(String story, LoopContext context) {
         Map<String, Object> contextData = context.getContextData();
         if (contextData == null) {
-            contextData = new HashMap<>();
+            // LoopContext 没有 setContextData 方法，contextData 为 null 时无法写回
+            // 正常情况下 contextData 不应为 null（在 LoopContext 构造时初始化）
+            return;
         }
         List<String> completedStories = (List<String>) contextData.get("completedStories");
         if (completedStories == null) {

@@ -135,6 +135,31 @@ public class SolonFlowIntegration {
     }
 
     /**
+     * 使用 FlowContext 驱动 Team Pipeline。
+     * <p>从已注入的 FlowContext 中提取变量作为循环参数，
+     * 并将 flowId 加入参数中。</p>
+     *
+     * @param flowId   流 ID
+     * @param strategy Team Pipeline 策略
+     * @return 循环会话
+     */
+    public LoopSession startFlowDrivenPipeline(String flowId, TeamPipelineStrategy strategy) {
+        Map<String, Object> flowVars = flowBridge.extractFlowVariables();
+        flowVars.put("flowId", flowId);
+
+        LoopConfig config = LoopConfig.builder()
+                .taskDescription("Flow-driven pipeline: " + flowId)
+                .strategy(strategy)
+                .maxIterations(strategy.getMaxIterations())
+                .verificationRequired(false)
+                .statePersistenceEnabled(true)
+                .parameters(flowVars)
+                .build();
+
+        return loopEngine.start(config);
+    }
+
+    /**
      * 获取 Flow 桥接器。
      */
     public FlowBridge getFlowBridge() {
@@ -167,10 +192,11 @@ public class SolonFlowIntegration {
     public static class FlowBridge {
 
         private boolean flowAvailable;
+        private Object flowContext;  // org.noear.solon.flow.FlowContext (optional)
 
         public FlowBridge() {
             try {
-                Class.forName("org.noear.solon.flow.FlowEngine");
+                Class.forName("org.noear.solon.flow.FlowContext");
                 this.flowAvailable = true;
             } catch (ClassNotFoundException e) {
                 this.flowAvailable = false;
@@ -182,6 +208,54 @@ public class SolonFlowIntegration {
          */
         public boolean isFlowAvailable() {
             return flowAvailable;
+        }
+
+        /**
+         * 注入 FlowContext（来自 solon-flow）。
+         */
+        public void setFlowContext(Object flowContext) {
+            this.flowContext = flowContext;
+            this.flowAvailable = true;
+        }
+
+        /**
+         * 获取注入的 FlowContext。
+         */
+        public Object getFlowContext() {
+            return flowContext;
+        }
+
+        /**
+         * 从 Flow 上下文中提取变量到 LoopContext 参数。
+         * <p>使用反射调用 FlowContext.vars() 获取变量映射。</p>
+         *
+         * @return 变量映射，如果 FlowContext 未注入则返回空 Map
+         */
+        @SuppressWarnings("unchecked")
+        public Map<String, Object> extractFlowVariables() {
+            if (flowContext == null) return new HashMap<>();
+            try {
+                java.lang.reflect.Method getVariables = flowContext.getClass().getMethod("vars");
+                return (Map<String, Object>) getVariables.invoke(flowContext);
+            } catch (Exception e) {
+                return new HashMap<>();
+            }
+        }
+
+        /**
+         * 将循环结果写回 FlowContext。
+         * <p>使用反射调用 FlowContext.put(String, Object) 写入结果。</p>
+         *
+         * @param key   结果键名
+         * @param value 结果值
+         */
+        public void writeBackResult(String key, Object value) {
+            if (flowContext == null) return;
+            try {
+                java.lang.reflect.Method put = flowContext.getClass().getMethod("put", String.class, Object.class);
+                put.invoke(flowContext, key, value);
+            } catch (Exception ignored) {
+            }
         }
     }
 }

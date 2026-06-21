@@ -235,7 +235,7 @@ class SolonIntegrationTest {
         LoopSession session = harnessIntegration.startToolExecution(config);
         assertNotNull(session);
 
-        Thread.sleep(100);
+        Thread.sleep(200);
 
         SolonHarnessIntegration.ToolExecutionStatus status =
                 harnessIntegration.getToolExecutionStatus(session.getId());
@@ -272,12 +272,15 @@ class SolonIntegrationTest {
                         .maxIterations(2)
                         .build());
 
-        Thread.sleep(300);
+        Thread.sleep(500);
 
         // 停止所有会话
         flowIntegration.stopFlowExecution(flowSession.getId());
         agentIntegration.stopAgentExecution(agentSession.getId());
         harnessIntegration.stopToolExecution(harnessSession.getId());
+
+        // 停止后等待执行线程退出，避免竞态条件
+        Thread.sleep(500);
 
         // 验证所有会话都已停止
         assertFalse(engine.isRunning(flowSession.getId()));

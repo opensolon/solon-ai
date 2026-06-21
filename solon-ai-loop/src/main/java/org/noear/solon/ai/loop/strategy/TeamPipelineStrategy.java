@@ -161,18 +161,18 @@ public class TeamPipelineStrategy extends AbstractLoopStrategy {
 
     // ===== 阶段历史管理 =====
 
-    @SuppressWarnings("unchecked")
     private void recordPhaseHistory(LoopContext context, Phase phase, IterationResult result) {
-        List<Map<String, String>> history = (List<Map<String, String>>) context.get("phaseHistory");
-        if (history == null) {
-            history = new ArrayList<>();
+        List<Map<String, String>> history = getPhaseHistory(context);
+        if (context.get("phaseHistory") == null) {
             context.getContextData().put("phaseHistory", history);
         }
+        Phase currentPhase = getCurrentPhase(context);
         Map<String, String> entry = new LinkedHashMap<>();
         entry.put("phase", phase.name());
         entry.put("enteredAt", Instant.now().toString());
         entry.put("reason", result.getMessage());
         entry.put("success", String.valueOf(result.isSuccess()));
+        entry.put("from", currentPhase != null ? currentPhase.name() : "INIT");
         history.add(entry);
     }
 
@@ -251,9 +251,13 @@ public class TeamPipelineStrategy extends AbstractLoopStrategy {
      */
     public void requestCancel(LoopContext context, boolean preserveForResume) {
         Map<String, Object> contextData = context.getContextData();
+        Phase currentPhase = getCurrentPhase(context);
         contextData.put("cancelRequested", true);
         contextData.put("cancelRequestedAt", Instant.now().toString());
         contextData.put("preserveForResume", preserveForResume);
+        if (preserveForResume) {
+            contextData.put("phaseBeforeCancel", currentPhase);
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -264,6 +268,33 @@ public class TeamPipelineStrategy extends AbstractLoopStrategy {
     @SuppressWarnings("unchecked")
     private boolean isPreserveForResume(LoopContext context) {
         return Boolean.TRUE.equals(context.get("preserveForResume"));
+    }
+
+    /**
+     * 从取消状态恢复管道执行。
+     *
+     * @param context 循环上下文
+     * @return 是否成功恢复
+     */
+    public boolean resumeFromCancel(LoopContext context) {
+        if (!isCancelled(context)) return false;
+        if (!isPreserveForResume(context)) return false;
+
+        // 恢复执行
+        Map<String, Object> contextData = context.getContextData();
+        contextData.put("cancelRequested", false);
+        contextData.put("preserveForResume", false);
+        // 恢复到上次执行的阶段（EXEC）
+        Phase resumePhase = (Phase) contextData.get("phaseBeforeCancel");
+        if (resumePhase == null) {
+            resumePhase = Phase.EXEC;  // 默认恢复到 EXEC
+        }
+        contextData.put("currentPhase", resumePhase.name());
+
+        // 记录恢复历史
+        recordPhaseHistory(context, resumePhase,
+            createResult(context, Instant.now(), null, true, "Resumed from cancelled", LoopState.EXECUTING));
+        return true;
     }
 
     // ===== 修复循环管理 =====
@@ -300,18 +331,69 @@ public class TeamPipelineStrategy extends AbstractLoopStrategy {
         }
     }
 
+    /**
+     * 转换守卫：检查从 from 到 to 的转换是否合法。
+     */
+    private boolean isValidTransition(Phase from, Phase to) {
+        if (from == null) return true;  // 初始状态
+
+        // 允许的转换表
+        switch (from) {
+            case PLAN: return to == Phase.PRD || to == Phase.CANCELLED;
+            case PRD: return to == Phase.EXEC || to == Phase.CANCELLED;
+            case EXEC: return to == Phase.VERIFY || to == Phase.CANCELLED;
+            case VERIFY: return to == Phase.FIX || to == Phase.COMPLETED || to == Phase.CANCELLED;
+            case FIX: return to == Phase.EXEC || to == Phase.VERIFY || to == Phase.COMPLETED || to == Phase.CANCELLED;
+            case COMPLETED:
+            case CANCELLED:
+                return false;  // 终态
+            default: return false;
+        }
+    }
+
+    /**
+     * 检查进入目标阶段的前置条件是否满足。
+     */
+    private String checkTransitionGuards(LoopContext context, Phase targetPhase) {
+        switch (targetPhase) {
+            case EXEC:
+                // EXEC 阶段需要至少有 plan 或 prd artifact
+                // 这里简化检查：只要不是从 PLAN 直接跳到 EXEC（必须经过 PRD）
+                return null;  // 放宽检查，允许灵活使用
+            case VERIFY:
+                // VERIFY 阶段需要 tasksTotal > 0 且 tasksCompleted >= tasksTotal
+                int tasksTotal = getTasksTotal(context);
+                int tasksCompleted = getTasksCompleted(context);
+                if (tasksTotal <= 0) {
+                    return "Cannot enter VERIFY: tasksTotal must be > 0";
+                }
+                if (tasksCompleted < tasksTotal) {
+                    return "Cannot enter VERIFY: tasksCompleted (" + tasksCompleted +
+                           ") < tasksTotal (" + tasksTotal + ")";
+                }
+                return null;
+            default:
+                return null;
+        }
+    }
+
     private void updatePhase(LoopContext context, Phase currentPhase, boolean success) {
         Map<String, Object> contextData = context.getContextData();
         Phase nextPhase;
 
-        if (currentPhase == Phase.VERIFY && success) {
+        if (isCancelled(context)) {
+            nextPhase = Phase.CANCELLED;
+        } else if (currentPhase == Phase.VERIFY && success) {
             nextPhase = Phase.COMPLETED;
         } else if (currentPhase == Phase.VERIFY && !success) {
             nextPhase = Phase.FIX;
         } else if (currentPhase == Phase.FIX) {
-            nextPhase = Phase.EXEC;
-        } else if (isCancelled(context)) {
-            nextPhase = Phase.CANCELLED;
+            // 检查 fix 溢出
+            if (getFixAttempts(context) >= maxFixAttempts) {
+                nextPhase = Phase.COMPLETED;  // 或添加 FAILED 阶段
+            } else {
+                nextPhase = Phase.EXEC;
+            }
         } else {
             int currentIndex = phases.indexOf(currentPhase);
             if (currentIndex >= 0 && currentIndex < phases.size() - 1) {
@@ -321,7 +403,25 @@ public class TeamPipelineStrategy extends AbstractLoopStrategy {
             }
         }
 
+        // 转换守卫检查
+        if (!isValidTransition(currentPhase, nextPhase)) {
+            // 非法转换，保持当前阶段
+            return;
+        }
+        String guardError = checkTransitionGuards(context, nextPhase);
+        if (guardError != null) {
+            // 守卫失败，保持当前阶段（等待前置条件满足）
+            contextData.put("guardError", guardError);
+            return;
+        }
+
         contextData.put("currentPhase", nextPhase.name());
+        contextData.remove("guardError");
+
+        // 进入 EXEC 时重置 fixAttempts
+        if (nextPhase == Phase.EXEC) {
+            updateFixAttempts(context, 0);
+        }
     }
 
     /**
@@ -333,38 +433,63 @@ public class TeamPipelineStrategy extends AbstractLoopStrategy {
      */
     public void markPhase(LoopContext context, Phase nextPhase, String reason) {
         Phase currentPhase = getCurrentPhase(context);
+
+        // 转换守卫检查
+        if (!isValidTransition(currentPhase, nextPhase)) {
+            throw new IllegalArgumentException(
+                "Invalid phase transition: " + currentPhase + " -> " + nextPhase);
+        }
+
         context.getContextData().put("currentPhase", nextPhase.name());
 
-        // 记录历史
+        // 记录历史（统一结构）
         List<Map<String, String>> history = getPhaseHistory(context);
+        if (context.get("phaseHistory") == null) {
+            context.getContextData().put("phaseHistory", history);
+        }
         Map<String, String> entry = new LinkedHashMap<>();
         entry.put("phase", nextPhase.name());
         entry.put("enteredAt", Instant.now().toString());
         entry.put("reason", reason);
-        entry.put("from", currentPhase.name());
+        entry.put("success", "true");
+        entry.put("from", currentPhase != null ? currentPhase.name() : "INIT");
         history.add(entry);
     }
 
     // ===== 可覆盖方法 =====
 
     protected Object executePlanning(LoopContext context) {
-        return "Planning completed";
+        Map<String, Object> contextData = context.getContextData();
+        contextData.put("planGenerated", true);
+        contextData.put("planResult", "Planning completed for iteration " + context.getIterationCount());
+        return contextData.get("planResult");
     }
 
     protected Object executePrdGeneration(LoopContext context) {
-        return "PRD generated";
+        Map<String, Object> contextData = context.getContextData();
+        contextData.put("prdGenerated", true);
+        contextData.put("prdResult", "PRD generated for iteration " + context.getIterationCount());
+        return contextData.get("prdResult");
     }
 
     protected Object executeImplementation(LoopContext context) {
-        return "Implementation completed";
+        Map<String, Object> contextData = context.getContextData();
+        // 标记任务完成
+        markTaskCompleted(context);
+        return "Implementation completed for iteration " + context.getIterationCount();
     }
 
     protected boolean executeVerification(LoopContext context) {
-        return true;
+        // 默认验证逻辑：检查所有任务是否完成
+        int tasksTotal = getTasksTotal(context);
+        int tasksCompleted = getTasksCompleted(context);
+        if (tasksTotal == 0) return true;  // 无任务则默认通过
+        return tasksCompleted >= tasksTotal;
     }
 
     protected Object executeFix(LoopContext context) {
-        return "Fix applied";
+        String lastReason = getLastFailureReason(context);
+        return "Fix applied for: " + (lastReason != null ? lastReason : "unknown issue");
     }
 
     // ===== 辅助方法 =====

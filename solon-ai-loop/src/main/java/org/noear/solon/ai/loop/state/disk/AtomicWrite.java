@@ -18,7 +18,6 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class AtomicWrite {
 
-    private static final String TMP_SUFFIX = ".tmp";
     private static final ReentrantLock globalLock = new ReentrantLock();
 
     /**
@@ -37,12 +36,15 @@ public class AtomicWrite {
             Files.createDirectories(parentDir);
         }
 
-        Path tmpPath = targetPath.resolveSibling(targetPath.getFileName() + TMP_SUFFIX);
+        // 使用 UUID 生成唯一临时文件名，避免多进程竞争
+        String tmpName = "." + targetPath.getFileName() + ".tmp." + java.util.UUID.randomUUID();
+        Path tmpPath = targetPath.resolveSibling(tmpName);
 
         globalLock.lock();
         try {
-            Files.write(tmpPath, data, StandardOpenOption.CREATE,
-                    StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+            // 使用 CREATE_NEW 独占创建，如果文件已存在则抛异常
+            Files.write(tmpPath, data, StandardOpenOption.CREATE_NEW,
+                    StandardOpenOption.WRITE);
 
             try (FileChannel channel = FileChannel.open(tmpPath, StandardOpenOption.WRITE);
                  FileLock lock = channel.tryLock(0, Long.MAX_VALUE, false)) {
@@ -74,6 +76,14 @@ public class AtomicWrite {
     }
 
     /**
+     * 读取文件内容，文件不存在时抛出 IOException。
+     * 比 exists + read 两步调用更安全（减少 TOCTOU 窗口）。
+     */
+    public static String readOrThrow(Path targetPath) throws IOException {
+        return new String(Files.readAllBytes(targetPath), StandardCharsets.UTF_8);
+    }
+
+    /**
      * 检查文件是否存在。
      */
     public static boolean exists(Path targetPath) {
@@ -97,7 +107,11 @@ public class AtomicWrite {
     public static void cleanupStaleTmpFiles(Path directory) throws IOException {
         if (!Files.exists(directory)) return;
         try (java.util.stream.Stream<Path> stream = Files.walk(directory, 1)) {
-            stream.filter(p -> p.toString().endsWith(TMP_SUFFIX))
+            stream.filter(p -> {
+                        String name = p.getFileName().toString();
+                        // 匹配旧格式 .tmp 后缀 和 新格式 .tmp.{uuid}
+                        return name.endsWith(".tmp") || name.contains(".tmp.");
+                    })
                     .forEach(p -> {
                         try {
                             Files.deleteIfExists(p);

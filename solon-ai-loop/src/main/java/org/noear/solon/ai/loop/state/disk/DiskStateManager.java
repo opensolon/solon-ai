@@ -1,6 +1,9 @@
 package org.noear.solon.ai.loop.state.disk;
 
+import org.noear.snack4.ONode;
+import org.noear.solon.ai.loop.state.LoopState;
 import org.noear.solon.ai.loop.state.LoopStateData;
+import org.noear.solon.ai.loop.state.StateManager;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -9,6 +12,7 @@ import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 /**
  * 磁盘状态管理器 —— 对标 oh-my-claudecode 的 lib/mode-state-io.ts
@@ -37,9 +41,14 @@ import java.util.concurrent.ConcurrentHashMap;
  *     └── {sessionId}.txt          // 进度记忆
  * </pre>
  *
+ * <p>序列化采用 ONode（org.noear.snack4），完整支持 contextData 和 metadata
+ * 嵌套对象的序列化与反序列化。</p>
+ *
  * @since 4.0.3
  */
-public class DiskStateManager {
+public class DiskStateManager implements StateManager {
+
+    private static final String[] MODES = {"ralph", "team", "ultraqa"};
 
     private static final String BASE_DIR = ".solon-ai-loop";
     private static final String STATE_DIR = "state";
@@ -64,10 +73,111 @@ public class DiskStateManager {
         return rootDirectory;
     }
 
+    // ===== StateManager 接口实现 =====
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>内部委托 writeState，模式从 contextData 中的 mode 字段推断。</p>
+     */
+    @Override
+    public void saveState(String sessionId, LoopStateData state) {
+        String mode = getModeFromState(state);
+        writeState(mode, state, sessionId);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>依次尝试 ralph / team / ultraqa 三个目录查找状态文件，返回首个匹配结果。</p>
+     */
+    @Override
+    public LoopStateData loadState(String sessionId) {
+        for (String mode : MODES) {
+            LoopStateData data = readState(mode, sessionId);
+            if (data != null) {
+                return data;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>清理 ralph / team / ultraqa 三个目录下该 session 的所有状态文件及摘要。</p>
+     */
+    @Override
+    public void clearState(String sessionId) {
+        for (String mode : MODES) {
+            clearState(mode, sessionId);
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>检查 ralph / team / ultraqa 任一目录下是否存在该 session 的状态文件。</p>
+     */
+    @Override
+    public boolean hasState(String sessionId) {
+        for (String mode : MODES) {
+            if (hasState(mode, sessionId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public List<String> getAllSessionIds() {
+        return new ArrayList<>(sessionOwnership.keySet());
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>遍历所有模式目录下的状态文件，删除最后修改时间超过 maxAge 的文件。</p>
+     */
+    @Override
+    public int cleanupExpiredStates(long maxAge) {
+        long cutoffMillis = System.currentTimeMillis() - maxAge;
+        int cleaned = 0;
+        for (String mode : MODES) {
+            Path modeDir = basePath.resolve(STATE_DIR).resolve(mode);
+            if (!Files.exists(modeDir)) {
+                continue;
+            }
+            List<Path> files = new ArrayList<>();
+            try (Stream<Path> paths = Files.list(modeDir)) {
+                paths.filter(p -> p.toString().endsWith(".json")).forEach(files::add);
+            } catch (IOException ignored) {
+            }
+            for (Path file : files) {
+                try {
+                    long lastModified = Files.getLastModifiedTime(file).toMillis();
+                    if (lastModified < cutoffMillis) {
+                        if (AtomicWrite.delete(file)) {
+                            cleaned++;
+                        }
+                    }
+                } catch (IOException ignored) {
+                }
+            }
+        }
+        return cleaned;
+    }
+
     // ===== 核心状态读写 =====
 
     /**
-     * 写入状态数据（原子写入 + JSON 序列化）。
+     * 写入状态数据（原子写入 + ONode 序列化）。
+     *
+     * <p>JSON 结构包含 _meta（written_at, mode, sessionId）和 data 两层。
+     * data 层完整序列化 LoopStateData 的所有字段，包括 contextData 和 metadata。</p>
      *
      * @param mode      模式名：ralph / team / ultraqa
      * @param state     状态数据
@@ -77,8 +187,39 @@ public class DiskStateManager {
     public boolean writeState(String mode, LoopStateData state, String sessionId) {
         try {
             Path filePath = getStateFilePath(mode, sessionId);
-            String json = serializeStateWithMeta(state, mode, sessionId);
-            AtomicWrite.write(filePath, json);
+
+            // 先构建 _meta 子对象
+            ONode meta = new ONode().asObject();
+            meta.set("written_at", Instant.now().toString());
+            meta.set("mode", mode);
+            meta.set("sessionId", sessionId);
+
+            // 先构建 data 子对象
+            ONode data = new ONode().asObject();
+            data.set("sessionId", state.getSessionId());
+            data.set("state", state.getState() != null ? state.getState().name() : "UNKNOWN");
+            data.set("iterationCount", state.getIterationCount());
+            data.set("successfulIterations", state.getSuccessfulIterations());
+
+            if (state.getStartTime() != null) {
+                data.set("startTime", state.getStartTime().toString());
+            }
+            if (state.getLastUpdateTime() != null) {
+                data.set("lastUpdateTime", state.getLastUpdateTime().toString());
+            }
+            if (state.getContextData() != null) {
+                data.set("contextData", ONode.ofBean(state.getContextData()));
+            }
+            if (state.getMetadata() != null) {
+                data.set("metadata", ONode.ofBean(state.getMetadata()));
+            }
+
+            // 组装 root
+            ONode root = new ONode().asObject();
+            root.set("_meta", meta);
+            root.set("data", data);
+
+            AtomicWrite.write(filePath, root.toJson());
             updateSessionSummary(sessionId, mode);
             return true;
         } catch (IOException e) {
@@ -87,12 +228,13 @@ public class DiskStateManager {
     }
 
     /**
-     * 读取状态数据（带 Session 隔离验证）。
+     * 读取状态数据（ONode 反序列化，剥离 _meta 只返回 data 部分）。
      *
      * @param mode      模式名
      * @param sessionId 会话 ID
      * @return 状态数据，不匹配或不存在时返回 null
      */
+    @SuppressWarnings("unchecked")
     public LoopStateData readState(String mode, String sessionId) {
         try {
             Path filePath = getStateFilePath(mode, sessionId);
@@ -100,7 +242,66 @@ public class DiskStateManager {
                 return null;
             }
             String json = AtomicWrite.read(filePath);
-            return deserializeState(json);
+
+            // ONode 解析，剥离 _meta，提取 data
+            ONode root = ONode.ofJson(json);
+            ONode data = root.get("data");
+            if (data == null || !data.isObject()) {
+                return null;
+            }
+
+            LoopStateData result = new LoopStateData();
+
+            if (data.hasKey("sessionId")) {
+                result.setSessionId(data.get("sessionId").getString());
+            }
+            if (data.hasKey("state")) {
+                String stateStr = data.get("state").getString();
+                if (stateStr != null) {
+                    try {
+                        result.setState(LoopState.valueOf(stateStr));
+                    } catch (IllegalArgumentException ignored) {
+                    }
+                }
+            }
+            if (data.hasKey("iterationCount")) {
+                result.setIterationCount(data.get("iterationCount").getInt());
+            }
+            if (data.hasKey("successfulIterations")) {
+                result.setSuccessfulIterations(data.get("successfulIterations").getInt());
+            }
+            if (data.hasKey("startTime")) {
+                String startTimeStr = data.get("startTime").getString();
+                if (startTimeStr != null) {
+                    try {
+                        result.setStartTime(Instant.parse(startTimeStr));
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+            if (data.hasKey("lastUpdateTime")) {
+                String lastUpdateStr = data.get("lastUpdateTime").getString();
+                if (lastUpdateStr != null) {
+                    try {
+                        result.setLastUpdateTime(Instant.parse(lastUpdateStr));
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+            if (data.hasKey("contextData")) {
+                ONode ctxNode = data.get("contextData");
+                if (ctxNode.isObject()) {
+                    result.setContextData(ctxNode.toBean(Map.class));
+                }
+            }
+            if (data.hasKey("metadata")) {
+                ONode metaNode = data.get("metadata");
+                if (metaNode.isObject()) {
+                    result.setMetadata(metaNode.toBean(Map.class));
+                }
+            }
+
+            return result;
         } catch (IOException e) {
             return null;
         }
@@ -246,22 +447,36 @@ public class DiskStateManager {
         return new ArrayList<>(sessionOwnership.keySet());
     }
 
+    // ===== 辅助方法 =====
+
+    /**
+     * 从 LoopStateData 的 contextData 中推断模式。
+     *
+     * <p>读取 contextData 中的 "mode" 字段；如果不存在或为 null，则返回 "ralph" 作为默认值。</p>
+     *
+     * @param state 状态数据
+     * @return 模式名
+     */
+    public String getModeFromState(LoopStateData state) {
+        if (state != null && state.getContextData() != null) {
+            Object mode = state.getContextData().get("mode");
+            if (mode != null) {
+                return mode.toString();
+            }
+        }
+        return "ralph";
+    }
+
     // ===== 会话摘要管理 =====
 
     private void updateSessionSummary(String sessionId, String mode) {
         try {
             Path summaryPath = getSessionSummaryPath(sessionId);
-            Map<String, String> summary = new LinkedHashMap<>();
-            summary.put("sessionId", sessionId);
-            summary.put("mode", mode);
-            summary.put("lastUpdated", Instant.now().toString());
-            StringBuilder sb = new StringBuilder();
-            sb.append("{\n");
-            sb.append("  \"sessionId\": \"").append(escapeJson(summary.get("sessionId"))).append("\",\n");
-            sb.append("  \"mode\": \"").append(escapeJson(summary.get("mode"))).append("\",\n");
-            sb.append("  \"lastUpdated\": \"").append(escapeJson(summary.get("lastUpdated"))).append("\"\n");
-            sb.append("}\n");
-            AtomicWrite.write(summaryPath, sb.toString());
+            ONode summary = new ONode().asObject();
+            summary.set("sessionId", sessionId);
+            summary.set("mode", mode);
+            summary.set("lastUpdated", Instant.now().toString());
+            AtomicWrite.write(summaryPath, summary.toJson());
         } catch (IOException ignored) {
         }
     }
@@ -296,124 +511,4 @@ public class DiskStateManager {
         }
     }
 
-    // ===== 序列化工具 =====
-
-    private String serializeStateWithMeta(LoopStateData state, String mode, String sessionId) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{\n");
-        sb.append("  \"_meta\": {\n");
-        sb.append("    \"written_at\": \"").append(escapeJson(Instant.now().toString())).append("\",\n");
-        sb.append("    \"mode\": \"").append(escapeJson(mode)).append("\",\n");
-        sb.append("    \"sessionId\": \"").append(escapeJson(sessionId)).append("\"\n");
-        sb.append("  },\n");
-        sb.append("  \"data\": {\n");
-        sb.append("    \"sessionId\": \"").append(escapeJson(state.getSessionId())).append("\",\n");
-        String stateName = state.getState() != null ? state.getState().name() : "UNKNOWN";
-        sb.append("    \"state\": \"").append(escapeJson(stateName)).append("\",");
-        sb.append("\n");
-        sb.append("    \"iterationCount\": ").append(state.getIterationCount()).append(",\n");
-        sb.append("    \"successfulIterations\": ").append(state.getSuccessfulIterations()).append(",\n");
-        if (state.getStartTime() != null) {
-            sb.append("    \"startTime\": \"").append(escapeJson(state.getStartTime().toString())).append("\",\n");
-        }
-        if (state.getLastUpdateTime() != null) {
-            sb.append("    \"lastUpdateTime\": \"").append(escapeJson(state.getLastUpdateTime().toString())).append("\"\n");
-        }
-        sb.append("  }\n");
-        sb.append("}\n");
-        return sb.toString();
-    }
-
-    @SuppressWarnings("unchecked")
-    private LoopStateData deserializeState(String json) {
-        try {
-            // 简单的 JSON 手动解析（避免 Jackson 依赖）
-            LoopStateData data = new LoopStateData();
-
-            // 提取 sessionId
-            String sessionId = extractJsonValue(json, "sessionId");
-            if (sessionId != null) {
-                data.setSessionId(sessionId);
-            }
-
-            // 提取 state
-            String stateStr = extractJsonValue(json, "state");
-            if (stateStr != null) {
-                try {
-                    data.setState(org.noear.solon.ai.loop.state.LoopState.valueOf(stateStr));
-                } catch (IllegalArgumentException ignored) {
-                }
-            }
-
-            // 提取 iterationCount
-            Integer iterationCount = extractJsonInt(json, "iterationCount");
-            if (iterationCount != null) {
-                data.setIterationCount(iterationCount);
-            }
-
-            // 提取 successfulIterations
-            Integer successCount = extractJsonInt(json, "successfulIterations");
-            if (successCount != null) {
-                data.setSuccessfulIterations(successCount);
-            }
-
-            // 提取时间戳
-            String startTime = extractJsonValue(json, "startTime");
-            if (startTime != null) {
-                try {
-                    data.setStartTime(Instant.parse(startTime));
-                } catch (Exception ignored) {
-                }
-            }
-
-            String lastUpdate = extractJsonValue(json, "lastUpdateTime");
-            if (lastUpdate != null) {
-                try {
-                    data.setLastUpdateTime(Instant.parse(lastUpdate));
-                } catch (Exception ignored) {
-                }
-            }
-
-            return data;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private String extractJsonValue(String json, String key) {
-        String searchKey = "\"" + key + "\": \"";
-        int start = json.indexOf(searchKey);
-        if (start < 0) return null;
-        start += searchKey.length();
-        int end = json.indexOf("\"", start);
-        if (end < 0) return null;
-        return json.substring(start, end);
-    }
-
-    private Integer extractJsonInt(String json, String key) {
-        String searchKey = "\"" + key + "\": ";
-        int start = json.indexOf(searchKey);
-        if (start < 0) return null;
-        start += searchKey.length();
-        // 找到数字结束位置
-        int end = start;
-        while (end < json.length() && (Character.isDigit(json.charAt(end)) || json.charAt(end) == '-')) {
-            end++;
-        }
-        if (end == start) return null;
-        try {
-            return Integer.parseInt(json.substring(start, end));
-        } catch (NumberFormatException e) {
-            return null;
-        }
-    }
-
-    private String escapeJson(String value) {
-        if (value == null) return "";
-        return value.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
-    }
 }

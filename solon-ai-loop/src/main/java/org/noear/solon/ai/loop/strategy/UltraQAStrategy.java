@@ -4,6 +4,7 @@ import org.noear.solon.ai.loop.engine.IterationResult;
 import org.noear.solon.ai.loop.state.LoopState;
 import org.noear.solon.ai.loop.validator.QualityGate;
 import org.noear.solon.ai.loop.validator.ValidationResult;
+import org.noear.solon.ai.loop.validator.Validator;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -34,18 +35,28 @@ public class UltraQAStrategy extends AbstractLoopStrategy {
     private final boolean parallelTesting;
     private final int maxTestAttempts;
     private final UltraQAGoalType goalType;
+    private final Validator validator;
+    private final boolean strictMode;
 
     public UltraQAStrategy() {
-        this(Arrays.asList(QualityGate.build(), QualityGate.test()), false, 10, UltraQAGoalType.TESTS);
+        this(Arrays.asList(QualityGate.build(), QualityGate.test()), false, 10, UltraQAGoalType.TESTS, null, false);
     }
 
     public UltraQAStrategy(List<QualityGate> gates, boolean parallelTesting,
                            int maxTestAttempts, UltraQAGoalType goalType) {
+        this(gates, parallelTesting, maxTestAttempts, goalType, null, false);
+    }
+
+    public UltraQAStrategy(List<QualityGate> gates, boolean parallelTesting,
+                           int maxTestAttempts, UltraQAGoalType goalType,
+                           Validator validator, boolean strictMode) {
         super(NAME, DESCRIPTION, 100, parallelTesting);
         this.gates = gates != null ? gates : Arrays.asList(QualityGate.build(), QualityGate.test());
         this.parallelTesting = parallelTesting;
         this.maxTestAttempts = maxTestAttempts;
         this.goalType = goalType;
+        this.validator = validator;
+        this.strictMode = strictMode;
     }
 
     @Override
@@ -179,11 +190,16 @@ public class UltraQAStrategy extends AbstractLoopStrategy {
      */
     private String normalizeFailure(String failure) {
         if (failure == null) return "";
-        // 去除行号信息
-        return failure.replaceAll(":\\d+", ":N")
-                .replaceAll("line \\d+", "line N")
-                .replaceAll("\\[\\d+ms\\]", "[Nms]")
-                .replaceAll("\\d+\\.\\d+\\.\\d+", "X.Y.Z");
+        return failure
+                .replaceAll("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}", "")  // 移除 ISO 时间戳
+                .replaceAll(":\\d+:\\d+", "")                        // 移除行:列号
+                .replaceAll("\\d+ms", "")                              // 移除计时信息
+                .replaceAll("line \\d+", "line N")                  // 移除行号
+                .replaceAll("\\[\\d+ms\\]", "[Nms]")              // 移除耗时
+                .replaceAll("\\d+\\.\\d+\\.\\d+", "X.Y.Z")        // 移除版本号
+                .replaceAll("\\s+", " ")                            // 空白归一化
+                .trim()
+                .toLowerCase();                                       // 转小写
     }
 
     // ===== 退出原因管理 =====
@@ -211,6 +227,21 @@ public class UltraQAStrategy extends AbstractLoopStrategy {
         // 如果所有门禁通过则返回 GOAL_MET
         if (allGatesPassed(context)) return UltraQAExitReason.GOAL_MET;
         return UltraQAExitReason.MAX_CYCLES;
+    }
+
+    /**
+     * 报告环境错误并停止循环。
+     */
+    public void reportEnvError(LoopContext context, String diagnosis) {
+        setExitReason(context, UltraQAExitReason.ENV_ERROR);
+        context.getContextData().put("envErrorDiagnosis", diagnosis);
+    }
+
+    /**
+     * 取消循环。
+     */
+    public void cancel(LoopContext context) {
+        setExitReason(context, UltraQAExitReason.CANCELLED);
     }
 
     // ===== 周期计数 =====
@@ -293,6 +324,11 @@ public class UltraQAStrategy extends AbstractLoopStrategy {
     }
 
     private boolean executeCheck(String check, QualityGate gate, LoopContext context) {
+        // 如果有 Validator，优先使用
+        if (validator != null) {
+            ValidationResult vr = validator.validateQualityGate(gate, context);
+            if (vr != null) return vr.isPassed();
+        }
         switch (check) {
             case "compilation": return executeCompilationCheck(context);
             case "dependencies": return executeDependencyCheck(context);
@@ -301,18 +337,18 @@ public class UltraQAStrategy extends AbstractLoopStrategy {
             case "style": return executeStyleCheck(context);
             case "complexity": return executeComplexityCheck(context);
             case "duplication": return executeDuplicationCheck(context);
-            default: return true;
+            default: return !strictMode;
         }
     }
 
     // 可覆盖的方法
-    protected boolean executeCompilationCheck(LoopContext context) { return true; }
-    protected boolean executeDependencyCheck(LoopContext context) { return true; }
-    protected boolean executeUnitTestCheck(LoopContext context) { return true; }
-    protected boolean executeIntegrationTestCheck(LoopContext context) { return true; }
-    protected boolean executeStyleCheck(LoopContext context) { return true; }
-    protected boolean executeComplexityCheck(LoopContext context) { return true; }
-    protected boolean executeDuplicationCheck(LoopContext context) { return true; }
+    protected boolean executeCompilationCheck(LoopContext context) { return !strictMode; }
+    protected boolean executeDependencyCheck(LoopContext context) { return !strictMode; }
+    protected boolean executeUnitTestCheck(LoopContext context) { return !strictMode; }
+    protected boolean executeIntegrationTestCheck(LoopContext context) { return !strictMode; }
+    protected boolean executeStyleCheck(LoopContext context) { return !strictMode; }
+    protected boolean executeComplexityCheck(LoopContext context) { return !strictMode; }
+    protected boolean executeDuplicationCheck(LoopContext context) { return !strictMode; }
 
     // ===== 辅助方法 =====
 
@@ -378,11 +414,15 @@ public class UltraQAStrategy extends AbstractLoopStrategy {
         private boolean parallelTesting = false;
         private int maxTestAttempts = 10;
         private UltraQAGoalType goalType = UltraQAGoalType.TESTS;
+        private Validator validator;
+        private boolean strictMode = false;
 
         public Builder gates(List<QualityGate> gates) { this.gates = gates; return this; }
         public Builder parallelTesting(boolean parallelTesting) { this.parallelTesting = parallelTesting; return this; }
         public Builder maxTestAttempts(int maxTestAttempts) { this.maxTestAttempts = maxTestAttempts; return this; }
         public Builder goalType(UltraQAGoalType goalType) { this.goalType = goalType; return this; }
-        public UltraQAStrategy build() { return new UltraQAStrategy(gates, parallelTesting, maxTestAttempts, goalType); }
+        public Builder validator(Validator validator) { this.validator = validator; return this; }
+        public Builder strictMode(boolean strictMode) { this.strictMode = strictMode; return this; }
+        public UltraQAStrategy build() { return new UltraQAStrategy(gates, parallelTesting, maxTestAttempts, goalType, validator, strictMode); }
     }
 }

@@ -567,13 +567,21 @@ public class InfrastructureTest {
 
         @Test
         void testVerificationState() {
-            assertEquals("PENDING", VerificationState.PENDING.name());
-            assertFalse(VerificationState.PENDING.isTerminal());
-            assertTrue(VerificationState.ARCHITECT_APPROVED.isTerminal());
-            assertTrue(VerificationState.FAILED.isTerminal());
+            VerificationState state = new VerificationState();
+            assertEquals(VerificationState.STATE_PENDING, state.getCurrentState());
+            assertFalse(state.isTerminal());
 
-            assertTrue(VerificationState.IMPLEMENTED.canTransitionToReview());
-            assertFalse(VerificationState.PENDING.canTransitionToReview());
+            state.setCurrentState(VerificationState.STATE_ARCHITECT_APPROVED);
+            assertTrue(state.isTerminal());
+
+            state.setCurrentState(VerificationState.STATE_FAILED);
+            assertTrue(state.isTerminal());
+
+            state.setCurrentState(VerificationState.STATE_IMPLEMENTED);
+            assertTrue(state.canTransitionToReview());
+
+            state.setCurrentState(VerificationState.STATE_PENDING);
+            assertFalse(state.canTransitionToReview());
         }
 
         @Test

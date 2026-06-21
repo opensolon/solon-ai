@@ -5,6 +5,7 @@ import org.noear.solon.ai.loop.engine.LoopEngine;
 import org.noear.solon.ai.loop.engine.SimpleLoopEngine;
 import org.noear.solon.ai.loop.state.InMemoryStateManager;
 import org.noear.solon.ai.loop.state.StateManager;
+import org.noear.solon.ai.loop.state.disk.DiskStateManager;
 
 /**
  * Loop 引擎自动配置 —— 提供便利的引擎初始化方法。
@@ -48,10 +49,22 @@ public class LoopAutoConfiguration {
     }
 
     /**
-     * 设置自定义状态管理器。
+     * 使用自定义状态管理器。
      */
     public LoopAutoConfiguration stateManager(StateManager stateManager) {
         this.stateManager = stateManager;
+        return this;
+    }
+
+    /**
+     * 使用磁盘状态管理器。
+     * <p>将循环状态持久化到指定目录，支持跨重启恢复。</p>
+     *
+     * @param rootDirectory 状态持久化根目录
+     * @return 当前配置实例（链式调用）
+     */
+    public LoopAutoConfiguration useDiskState(String rootDirectory) {
+        this.stateManager = new DiskStateManager(rootDirectory);
         return this;
     }
 
@@ -104,16 +117,28 @@ public class LoopAutoConfiguration {
 
     /**
      * 构建完整的集成层。
+     * <p>创建 LoopEngine 并包装为三个集成组件（Agent/Flow/Harness）。
+     * 如果配置了磁盘状态管理器，会在集成层中传递。</p>
      *
      * @return 包含所有集成组件的容器
      */
     public IntegratedComponents buildWithIntegrations() {
         LoopEngine engine = build();
+        SolonAgentIntegration agentIntegration = new SolonAgentIntegration(engine);
+        SolonFlowIntegration flowIntegration = new SolonFlowIntegration(engine);
+        SolonHarnessIntegration harnessIntegration = new SolonHarnessIntegration(engine);
+
+        // 如果使用磁盘状态管理器，标记集成层已具备磁盘持久化能力
+        if (stateManager instanceof DiskStateManager) {
+            // DiskStateManager 已通过 LoopEngineConfig 注入到引擎中
+            // 集成层可通过 engine 获取状态管理器，无需额外注入
+        }
+
         return new IntegratedComponents(
                 engine,
-                new SolonAgentIntegration(engine),
-                new SolonFlowIntegration(engine),
-                new SolonHarnessIntegration(engine)
+                agentIntegration,
+                flowIntegration,
+                harnessIntegration
         );
     }
 

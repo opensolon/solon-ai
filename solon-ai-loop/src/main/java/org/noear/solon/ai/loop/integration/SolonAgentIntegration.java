@@ -1,5 +1,7 @@
 package org.noear.solon.ai.loop.integration;
 
+import org.noear.solon.ai.agent.simple.SimpleAgent;
+import org.noear.solon.ai.agent.simple.SimpleResponse;
 import org.noear.solon.ai.loop.config.LoopConfig;
 import org.noear.solon.ai.loop.engine.LoopEngine;
 import org.noear.solon.ai.loop.engine.LoopResult;
@@ -9,7 +11,10 @@ import org.noear.solon.ai.loop.strategy.RalphLoopStrategy;
 import org.noear.solon.ai.loop.strategy.UltraQAStrategy;
 import org.noear.solon.ai.loop.validator.Validator;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * Solon Agent 集成 —— 将 LoopEngine 与 solon-ai-agent 的 SimpleAgent 集成。
@@ -131,6 +136,46 @@ public class SolonAgentIntegration {
     }
 
     /**
+     * 使用 SimpleAgent 作为故事实现器创建 Ralph 循环。
+     *
+     * <p>将注入的 SimpleAgent 包装为 {@link RalphLoopStrategy.StoryImplementor}，
+     * 使 Ralph 循环的每个故事通过 Agent 调用实现。</p>
+     *
+     * @param taskDescription 任务描述
+     * @param agent           SimpleAgent 实例
+     * @return 循环会话
+     */
+    public LoopSession startAgentDrivenRalphLoop(String taskDescription, SimpleAgent agent) {
+        agentBridge.setAgent(agent);
+
+        RalphLoopStrategy.StoryImplementor implementor = (story, context) -> {
+            String prompt = "Implement the following story: " + story;
+            return agentBridge.executePrompt(prompt);
+        };
+
+        RalphLoopStrategy strategy = RalphLoopStrategy.builder()
+                .criticMode("architect")
+                .maxIterations(50)
+                .verificationRequired(true)
+                .storyImplementor(implementor)
+                .build();
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("sessionId", UUID.randomUUID().toString());
+
+        LoopConfig config = LoopConfig.builder()
+                .taskDescription(taskDescription)
+                .strategy(strategy)
+                .maxIterations(50)
+                .verificationRequired(true)
+                .statePersistenceEnabled(true)
+                .parameters(params)
+                .build();
+
+        return startAgentExecution(config);
+    }
+
+    /**
      * 获取 Agent 桥接器（用于扩展 SimpleAgent 相关功能）。
      */
     public AgentBridge getAgentBridge() {
@@ -163,6 +208,7 @@ public class SolonAgentIntegration {
      */
     public static class AgentBridge {
 
+        private SimpleAgent agent;
         private boolean agentAvailable;
 
         public AgentBridge() {
@@ -179,6 +225,42 @@ public class SolonAgentIntegration {
          */
         public boolean isAgentAvailable() {
             return agentAvailable;
+        }
+
+        /**
+         * 注入 SimpleAgent 实例。
+         */
+        public void setAgent(SimpleAgent agent) {
+            this.agent = agent;
+            this.agentAvailable = true;
+        }
+
+        /**
+         * 获取注入的 SimpleAgent 实例。
+         */
+        public SimpleAgent getAgent() {
+            return agent;
+        }
+
+        /**
+         * 执行 Agent 调用并返回响应文本。
+         *
+         * @param promptText 提示词文本
+         * @return Agent 响应内容，出错时返回错误信息
+         */
+        public String executePrompt(String promptText) {
+            if (agent == null) {
+                throw new IllegalStateException("SimpleAgent not injected. Call setAgent() first.");
+            }
+            try {
+                SimpleResponse response = agent.prompt(promptText).call();
+                if (response != null) {
+                    return response.getContent();
+                }
+                return "";
+            } catch (Throwable e) {
+                return "Agent error: " + e.getMessage();
+            }
         }
     }
 }

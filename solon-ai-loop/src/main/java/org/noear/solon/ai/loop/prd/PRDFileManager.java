@@ -1,10 +1,10 @@
 package org.noear.solon.ai.loop.prd;
 
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.loop.state.disk.DiskStateManager;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * PRD 文件管理器 —— 负责 PRD 文档的读写和启动确认。
@@ -155,176 +155,70 @@ public class PRDFileManager {
     // ===== 序列化/反序列化 =====
 
     private String serializePrd(PRDDocument prd) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{\n");
-        sb.append("  \"project\": \"").append(escapeJson(prd.getProject())).append("\",\n");
-        sb.append("  \"branchName\": \"").append(escapeJson(prd.getBranchName())).append("\",\n");
-        sb.append("  \"description\": \"").append(escapeJson(prd.getDescription())).append("\",\n");
-        sb.append("  \"userStories\": [\n");
-        List<UserStory> stories = prd.getUserStories();
-        for (int i = 0; i < stories.size(); i++) {
-            UserStory s = stories.get(i);
-            sb.append("    {\n");
-            sb.append("      \"id\": \"").append(escapeJson(s.getId())).append("\",\n");
-            sb.append("      \"title\": \"").append(escapeJson(s.getTitle())).append("\",\n");
-            sb.append("      \"description\": \"").append(escapeJson(s.getDescription())).append("\",\n");
-            sb.append("      \"acceptanceCriteria\": [");
-            List<String> ac = s.getAcceptanceCriteria();
-            for (int j = 0; j < ac.size(); j++) {
-                if (j > 0) sb.append(",");
-                sb.append("\"").append(escapeJson(ac.get(j))).append("\"");
+        ONode root = new ONode();
+        root.set("project", prd.getProject());
+        root.set("branchName", prd.getBranchName());
+        root.set("description", prd.getDescription());
+
+        ONode storiesNode = new ONode().asArray();
+        root.set("userStories", storiesNode);
+        for (UserStory s : prd.getUserStories()) {
+            ONode storyNode = storiesNode.addNew();
+            storyNode.set("id", s.getId());
+            storyNode.set("title", s.getTitle());
+            storyNode.set("description", s.getDescription());
+
+            ONode acNode = new ONode().asArray();
+            storyNode.set("acceptanceCriteria", acNode);
+            for (String ac : s.getAcceptanceCriteria()) {
+                acNode.add(ac);
             }
-            sb.append("],\n");
-            sb.append("      \"priority\": ").append(s.getPriority()).append(",\n");
-            sb.append("      \"passes\": ").append(s.isPasses()).append(",\n");
-            sb.append("      \"architectVerified\": ").append(s.isArchitectVerified()).append(",\n");
-            sb.append("      \"notes\": \"").append(escapeJson(s.getNotes())).append("\"\n");
-            sb.append("    }");
-            if (i < stories.size() - 1) sb.append(",");
-            sb.append("\n");
+
+            storyNode.set("priority", s.getPriority());
+            storyNode.set("passes", s.isPasses());
+            storyNode.set("architectVerified", s.isArchitectVerified());
+            storyNode.set("notes", s.getNotes());
         }
-        sb.append("  ]\n");
-        sb.append("}\n");
-        return sb.toString();
+        return root.toJson();
     }
 
     private PRDDocument deserializePrd(String json) {
-        try {
-            PRDDocument prd = new PRDDocument();
-
-            prd.setProject(extractJsonValue(json, "project"));
-            prd.setBranchName(extractJsonValue(json, "branchName"));
-            prd.setDescription(extractJsonValue(json, "description"));
-
-            // 解析 userStories 数组（简化实现）
-            List<UserStory> stories = new ArrayList<>();
-            int storiesStart = json.indexOf("\"userStories\"");
-            if (storiesStart >= 0) {
-                int arrayStart = json.indexOf("[", storiesStart);
-                int arrayEnd = json.lastIndexOf("]");
-                if (arrayStart >= 0 && arrayEnd > arrayStart) {
-                    String arrayContent = json.substring(arrayStart + 1, arrayEnd);
-                    stories = parseStoriesArray(arrayContent);
-                }
-            }
-            prd.setUserStories(stories);
-            return prd;
-        } catch (Exception e) {
+        ONode root = ONode.ofJson(json);
+        if (root.isNull()) {
             return null;
         }
-    }
 
-    private List<UserStory> parseStoriesArray(String arrayContent) {
+        PRDDocument prd = new PRDDocument();
+        prd.setProject(root.get("project").getString());
+        prd.setBranchName(root.get("branchName").getString());
+        prd.setDescription(root.get("description").getString());
+
         List<UserStory> stories = new ArrayList<>();
-        int depth = 0;
-        int objStart = -1;
+        ONode storiesNode = root.get("userStories");
+        if (storiesNode.isArray()) {
+            for (ONode sn : storiesNode.getArray()) {
+                UserStory story = new UserStory();
+                story.setId(sn.get("id").getString());
+                story.setTitle(sn.get("title").getString());
+                story.setDescription(sn.get("description").getString());
+                story.setPriority(sn.get("priority").getInt());
+                story.setPasses(sn.get("passes").getBoolean());
+                story.setArchitectVerified(sn.get("architectVerified").getBoolean());
+                story.setNotes(sn.get("notes").getString());
 
-        for (int i = 0; i < arrayContent.length(); i++) {
-            char c = arrayContent.charAt(i);
-            if (c == '{') {
-                if (depth == 0) objStart = i;
-                depth++;
-            } else if (c == '}') {
-                depth--;
-                if (depth == 0 && objStart >= 0) {
-                    String objContent = arrayContent.substring(objStart, i + 1);
-                    UserStory story = parseSingleStory(objContent);
-                    if (story != null) {
-                        stories.add(story);
-                    }
-                    objStart = -1;
-                }
-            }
-        }
-        return stories;
-    }
-
-    private UserStory parseSingleStory(String objContent) {
-        try {
-            UserStory story = new UserStory();
-            story.setId(extractJsonValue(objContent, "id"));
-            story.setTitle(extractJsonValue(objContent, "title"));
-            story.setDescription(extractJsonValue(objContent, "description"));
-            story.setPriority(extractJsonInt(objContent, "priority", 5));
-            story.setPasses(extractJsonBoolean(objContent, "passes", false));
-            story.setArchitectVerified(extractJsonBoolean(objContent, "architectVerified", false));
-            story.setNotes(extractJsonValue(objContent, "notes"));
-
-            // 解析 acceptanceCriteria 数组
-            List<String> ac = new ArrayList<>();
-            int acStart = objContent.indexOf("\"acceptanceCriteria\"");
-            if (acStart >= 0) {
-                int bracketStart = objContent.indexOf("[", acStart);
-                int bracketEnd = objContent.indexOf("]", bracketStart);
-                if (bracketStart >= 0 && bracketEnd > bracketStart) {
-                    String acContent = objContent.substring(bracketStart + 1, bracketEnd);
-                    int si = 0;
-                    while ((si = acContent.indexOf("\"", si)) >= 0) {
-                        int ei = acContent.indexOf("\"", si + 1);
-                        if (ei > si) {
-                            ac.add(acContent.substring(si + 1, ei));
-                            si = ei + 1;
-                        } else break;
+                List<String> ac = new ArrayList<>();
+                ONode acNode = sn.get("acceptanceCriteria");
+                if (acNode.isArray()) {
+                    for (ONode acItem : acNode.getArray()) {
+                        ac.add(acItem.getString());
                     }
                 }
+                story.setAcceptanceCriteria(ac);
+                stories.add(story);
             }
-            story.setAcceptanceCriteria(ac);
-            return story;
-        } catch (Exception e) {
-            return null;
         }
-    }
-
-    private String extractJsonValue(String json, String key) {
-        String searchKey = "\"" + key + "\": \"";
-        int start = json.indexOf(searchKey);
-        if (start < 0) return "";
-        start += searchKey.length();
-        int end = json.indexOf("\"", start);
-        if (end < 0) return "";
-        return unescapeJson(json.substring(start, end));
-    }
-
-    private int extractJsonInt(String json, String key, int defaultValue) {
-        String searchKey = "\"" + key + "\": ";
-        int start = json.indexOf(searchKey);
-        if (start < 0) return defaultValue;
-        start += searchKey.length();
-        int end = start;
-        while (end < json.length() && (Character.isDigit(json.charAt(end)) || json.charAt(end) == '-')) {
-            end++;
-        }
-        if (end == start) return defaultValue;
-        try { return Integer.parseInt(json.substring(start, end)); }
-        catch (NumberFormatException e) { return defaultValue; }
-    }
-
-    private boolean extractJsonBoolean(String json, String key, boolean defaultValue) {
-        String searchKey = "\"" + key + "\": ";
-        int start = json.indexOf(searchKey);
-        if (start < 0) return defaultValue;
-        start += searchKey.length();
-        if (json.startsWith("true", start)) return true;
-        if (json.startsWith("false", start)) return false;
-        return defaultValue;
-    }
-
-    private String escapeJson(String value) {
-        if (value == null) return "";
-        return value.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
-    }
-
-    private String unescapeJson(String value) {
-        if (value == null) return "";
-        return value.replace("\\t", "\t")
-                .replace("\\r", "\r")
-                .replace("\\n", "\n")
-                .replace("\\\"", "\"")
-                .replace("\\\\", "\\");
+        prd.setUserStories(stories);
+        return prd;
     }
 
     // ===== 内部类型 =====
