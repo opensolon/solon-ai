@@ -831,18 +831,15 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      */
     private void markStaticContextBoundary(ReActTrace trace, String systemPrompt) {
         // 通过 ChatModel -> ChatConfigReadonly -> ChatOptions 获取缓存配置
-        ChatOptions chatOptions = trace.getOptions().getChatModel().getConfig().getModelOptions();
-        CacheControl cacheControl = chatOptions.cacheControl();
-        String promptCacheKey = chatOptions.promptCacheKey();
-
-        if (cacheControl != null || Utils.isNotEmpty(promptCacheKey)) {
+        CacheControl cacheControl = trace.getOptions().getChatModel().getConfig().getCacheControl();
+        if (cacheControl != null) {
             // 静态上下文就绪：不修改消息内容，仅输出调试信息
             // Dialect 层在构建 HTTP 请求时会根据 ChatOptions 中的 cacheControl/promptCacheKey
             // 自动在系统提示词和工具定义上添加 cache_control 标记
             if (log.isDebugEnabled()) {
                 String cacheType = (cacheControl != null)
-                        ? "Anthropic cache_control=" + cacheControl.type()
-                        : "OpenAI prompt_cache_key=" + promptCacheKey;
+                        ? "Anthropic cache_control=" + cacheControl.getType()
+                        : "OpenAI prompt_cache_key=" + cacheControl.getPromptCacheKey();
                 log.debug("ReActAgent [{}] static context boundary marked for LLM prompt caching ({})",
                         trace.getAgentName(), cacheType);
             }

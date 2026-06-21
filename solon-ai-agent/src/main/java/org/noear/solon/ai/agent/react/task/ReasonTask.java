@@ -352,8 +352,8 @@ public class ReasonTask {
                         o.cacheControl(agentOptions.cacheControl());
                     }
 
-                    if (Utils.isNotEmpty(agentOptions.promptCacheKey())) {
-                        o.promptCacheKey(agentOptions.promptCacheKey());
+                    if (agentOptions.cacheControl() != null) {
+                        o.cacheControl(agentOptions.cacheControl());
                     }
                 });
 

@@ -318,9 +318,6 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                         if (options.cacheControl() != null) {
                             o.cacheControl(options.cacheControl());
                         }
-                        if (options.promptCacheKey() != null) {
-                            o.promptCacheKey(options.promptCacheKey());
-                        }
                     });
         } else {
             chatSession = null;

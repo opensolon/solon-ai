@@ -68,7 +68,7 @@ public class AnthropicRequestBuilder {
                 systemNode.addNew().then(contentBlock->{
                     contentBlock.set("type", "text");
                     contentBlock.set("text", systemMessage);
-                    contentBlock.getOrNew("cache_control").set("type", cacheControl.type());
+                    contentBlock.getOrNew("cache_control").set("type", cacheControl.getType());
                 });
 
                 root.set("system", systemNode);
@@ -412,7 +412,7 @@ public class AnthropicRequestBuilder {
 
                 // ⭐ 在最后一个工具定义上添加 cache_control (Anthropic Prompt Caching)
                 if (isLast && cacheControl != null) {
-                    toolNode.getOrNew("cache_control").set("type", cacheControl.type());
+                    toolNode.getOrNew("cache_control").set("type", cacheControl.getType());
                 }
             });
         }

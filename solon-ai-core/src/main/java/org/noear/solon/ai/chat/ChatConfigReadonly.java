@@ -44,19 +44,19 @@ public class ChatConfigReadonly {
         this.config = config;
     }
 
-    public String getName(){
-       return config.getName();
+    public String getName() {
+        return config.getName();
     }
 
-    public String getNameOrModel(){
+    public String getNameOrModel() {
         return config.getNameOrModel();
     }
 
-    public String getDescription(){
+    public String getDescription() {
         return config.getDescription();
     }
 
-    public String getDescriptionOrModel(){
+    public String getDescriptionOrModel() {
         return config.getDescriptionOrModel();
     }
 
@@ -73,7 +73,7 @@ public class ChatConfigReadonly {
      *
      * @since 4.0
      */
-    public String getStandard(){
+    public String getStandard() {
         return config.getStandard();
     }
 
@@ -82,7 +82,7 @@ public class ChatConfigReadonly {
      *
      * @since 4.0
      */
-    public String getStandardOrProvider(){
+    public String getStandardOrProvider() {
         return config.getStandardOrProvider();
     }
 
@@ -105,7 +105,7 @@ public class ChatConfigReadonly {
         }
     }
 
-    public long getContextLength(){
+    public long getContextLength() {
         return config.getContextLength();
     }
 
@@ -119,6 +119,10 @@ public class ChatConfigReadonly {
 
     public Proxy getProxy() {
         return config.getProxy();
+    }
+
+    public CacheControl getCacheControl() {
+        return config.getModelOptions().cacheControl();
     }
 
     /**

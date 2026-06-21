@@ -54,10 +54,8 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     protected final Map<String, RankEntity<Talent>> talents;
     protected final Map<Class<?>, RankEntity<X>> interceptors;
 
-    // 缓存控制（Anthropic 风格）
+
     protected CacheControl cacheControl;
-    // 缓存键（OpenAI 风格）
-    protected String promptCacheKey;
 
     public ModelOptionsAmend() {
         this.autoToolCall = new AtomicBoolean(true);
@@ -116,9 +114,6 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
 
             if(from.cacheControl != null) {
                 this.cacheControl = from.cacheControl;
-            }
-            if(from.promptCacheKey != null) {
-                this.promptCacheKey = from.promptCacheKey;
             }
         }
     }
@@ -483,22 +478,6 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      */
     public T cacheControl(CacheControl cacheControl) {
         this.cacheControl = cacheControl;
-        return (T) this;
-    }
-
-    /**
-     * 获取缓存键（OpenAI 风格）
-     */
-    public String promptCacheKey() {
-        return promptCacheKey;
-    }
-
-    /**
-     * 设置缓存键（OpenAI 风格）
-     * <p>相同的缓存键将复用之前缓存的前缀上下文，减少重复计算</p>
-     */
-    public T promptCacheKey(String promptCacheKey) {
-        this.promptCacheKey = promptCacheKey;
         return (T) this;
     }
 }

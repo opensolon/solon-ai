@@ -129,12 +129,10 @@ public class ChatConfig extends AiConfig {
      * 设置缓存控制（Anthropic Prompt Caching）
      *
      * <p>在系统提示词和工具定义上添加 cache_control 标记，复用 LLM 提供商的前缀缓存。</p>
-     *
-     * @param cacheType 缓存类型，如 "ephemeral"
      */
-    public void setCacheControl(String cacheType) {
-        if (Assert.isNotEmpty(cacheType)) {
-            getModelOptions().cacheControl(CacheControl.ephemeral(0));
+    public void setCacheControl(CacheControl cacheControl) {
+        if (cacheControl != null) {
+            getModelOptions().cacheControl(cacheControl);
         }
     }
 
@@ -143,24 +141,6 @@ public class ChatConfig extends AiConfig {
      */
     public CacheControl getCacheControl() {
         return getModelOptions().cacheControl();
-    }
-
-    /**
-     * 设置缓存键（OpenAI Prompt Caching）
-     *
-     * <p>相同的缓存键将复用之前缓存的前缀上下文，减少重复计算。</p>
-     *
-     * @param promptCacheKey 缓存键值
-     */
-    public void setPromptCacheKey(String promptCacheKey) {
-        getModelOptions().promptCacheKey(promptCacheKey);
-    }
-
-    /**
-     * 获取缓存键
-     */
-    public String getPromptCacheKey() {
-        return getModelOptions().promptCacheKey();
     }
 
     //======================

@@ -244,9 +244,9 @@ public class OllamaChatDialect extends AbstractChatDialect {
             }
 
             // ⭐ 支持 prompt_cache_key (OpenAI 兼容模式下的 Prompt Caching)
-            String promptCacheKey = options.promptCacheKey();
-            if (Utils.isNotEmpty(promptCacheKey)) {
-                n.set("prompt_cache_key", promptCacheKey);
+            CacheControl cacheControl = options.cacheControl();
+            if (cacheControl != null && Utils.isNotEmpty(cacheControl.getPromptCacheKey())) {
+                n.set("prompt_cache_key", cacheControl.getPromptCacheKey());
             }
 
             for (Map.Entry<String, Object> kv : options.options().entrySet()) {

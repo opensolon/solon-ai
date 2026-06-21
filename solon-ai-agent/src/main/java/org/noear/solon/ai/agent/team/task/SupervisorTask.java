@@ -326,9 +326,6 @@ public class SupervisorTask implements NamedTaskComponent {
             if (agentOptions.cacheControl() != null) {
                 o.cacheControl(agentOptions.cacheControl());
             }
-            if (agentOptions.promptCacheKey() != null) {
-                o.promptCacheKey(agentOptions.promptCacheKey());
-            }
         });
 
         for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {

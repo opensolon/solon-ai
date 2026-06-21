@@ -17,6 +17,7 @@ package org.noear.solon.ai.llm.dialect.openai;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.ChatConfig;
@@ -100,9 +101,9 @@ public class OpenaiResponsesRequestBuilder {
 
         // ⭐ 支持 previous_response_id（OpenAI Responses API 上下文缓存）
         //    通过 ChatOptions.promptCacheKey() 传入
-        String promptCacheKey = options.promptCacheKey();
-        if (Utils.isNotEmpty(promptCacheKey)) {
-            root.set("previous_response_id", promptCacheKey);
+        CacheControl cacheControl = options.cacheControl();
+        if (cacheControl != null && Utils.isNotEmpty(cacheControl.getPromptCacheKey())) {
+            root.set("previous_response_id", cacheControl.getPromptCacheKey());
         }
         // 构建 tools
         buildToolsNode(root, options);

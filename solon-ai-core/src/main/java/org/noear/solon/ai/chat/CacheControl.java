@@ -42,34 +42,46 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("4.0")
 public class CacheControl {
-    private final String type;
-    private final int breakpointIndex;
+    // 缓存控制（Anthropic 风格）
+    private String type;
+    private int breakpointIndex;
+
+    // 缓存键（OpenAI 风格）
+    private String promptCacheKey;
+
+    public CacheControl() {
+        // 用于反序列化
+    }
 
     /**
      * 构造缓存控制
      *
-     * @param type           缓存类型，通常为 "ephemeral" (Anthropic)
+     * @param type            缓存类型，通常为 "ephemeral" (Anthropic)
      * @param breakpointIndex 缓存断点的消息索引位置（从 0 开始）
      */
-    public CacheControl(String type, int breakpointIndex) {
+    public CacheControl(String type, int breakpointIndex, String promptCacheKey) {
         this.type = type;
         this.breakpointIndex = breakpointIndex;
+        this.promptCacheKey = promptCacheKey;
     }
 
-    /**
-     * 创建 ephemeral 类型缓存控制
-     *
-     * @param breakpointIndex 缓存断点的消息索引位置
-     */
-    public static CacheControl ephemeral(int breakpointIndex) {
-        return new CacheControl("ephemeral", breakpointIndex);
+    public CacheControl(int breakpointIndex, String promptCacheKey) {
+        this("ephemeral", breakpointIndex, promptCacheKey);
     }
 
-    public String type() {
+    public CacheControl(String promptCacheKey) {
+        this("ephemeral", 0, promptCacheKey);
+    }
+
+    public String getType() {
         return type;
     }
 
-    public int breakpointIndex() {
+    public int getBreakpointIndex() {
         return breakpointIndex;
+    }
+
+    public String getPromptCacheKey() {
+        return promptCacheKey;
     }
 }
