@@ -270,7 +270,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
             n.set("stream", isStream);
 
-            // ⭐ 支持 prompt_cache_key (OpenAI Prompt Caching)
+            // ⭐ 支持 prompt_cache_key（OpenAI 兼容协议字段，DeepSeek 等提供商使用此键复用前缀缓存）
             CacheControl cacheControl = options.cacheControl();
             if (cacheControl != null && Utils.isNotEmpty(cacheControl.getPromptCacheKey())) {
                 n.set("prompt_cache_key", cacheControl.getPromptCacheKey());
