@@ -243,6 +243,7 @@ public class AgentFactory {
         if (metadata.isPrimary()) {
             //主代理，用文件模式
             builder.defaultTalentAdd(agentRuntime.getTodoTalent());
+            builder.defaultTalentAdd(agentRuntime.getClockTalent());
         } else {
             //次代理，用内存模式
             builder.planningMode(true);

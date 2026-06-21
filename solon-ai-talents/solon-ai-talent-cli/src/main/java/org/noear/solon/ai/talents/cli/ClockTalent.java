@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.talents.sys;
+package org.noear.solon.ai.talents.cli;
 
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.talent.AbsTalent;
@@ -30,7 +30,7 @@ import java.util.Locale;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class SystemClockTalent extends AbsTalent {
+public class ClockTalent extends AbsTalent {
     @ToolMapping(name = "get_current_time", description = "获取系统当前的日期、精确时间、星期及本地时区（例如：2026-01-30 21:00:00 Friday CST）")
     public String getCurrentTime() {
         ZonedDateTime now = ZonedDateTime.now();
