@@ -47,7 +47,7 @@ public class TeamPipelineStrategy extends AbstractLoopStrategy {
     protected boolean shouldContinueInternal(LoopContext context) {
         if (isCancelled(context)) return false;
         Phase currentPhase = getCurrentPhase(context);
-        return currentPhase != Phase.COMPLETED && currentPhase != Phase.CANCELLED;
+        return currentPhase != Phase.COMPLETED && currentPhase != Phase.CANCELLED && currentPhase != Phase.FAILED;
     }
 
     @Override
@@ -339,12 +339,13 @@ public class TeamPipelineStrategy extends AbstractLoopStrategy {
 
         // 允许的转换表
         switch (from) {
-            case PLAN: return to == Phase.PRD || to == Phase.CANCELLED;
-            case PRD: return to == Phase.EXEC || to == Phase.CANCELLED;
-            case EXEC: return to == Phase.VERIFY || to == Phase.CANCELLED;
-            case VERIFY: return to == Phase.FIX || to == Phase.COMPLETED || to == Phase.CANCELLED;
-            case FIX: return to == Phase.EXEC || to == Phase.VERIFY || to == Phase.COMPLETED || to == Phase.CANCELLED;
+            case PLAN: return to == Phase.PRD || to == Phase.CANCELLED || to == Phase.FAILED;
+            case PRD: return to == Phase.EXEC || to == Phase.CANCELLED || to == Phase.FAILED;
+            case EXEC: return to == Phase.VERIFY || to == Phase.CANCELLED || to == Phase.FAILED;
+            case VERIFY: return to == Phase.FIX || to == Phase.COMPLETED || to == Phase.CANCELLED || to == Phase.FAILED;
+            case FIX: return to == Phase.EXEC || to == Phase.VERIFY || to == Phase.COMPLETED || to == Phase.FAILED || to == Phase.CANCELLED;
             case COMPLETED:
+            case FAILED:
             case CANCELLED:
                 return false;  // 终态
             default: return false;
@@ -390,7 +391,7 @@ public class TeamPipelineStrategy extends AbstractLoopStrategy {
         } else if (currentPhase == Phase.FIX) {
             // 检查 fix 溢出
             if (getFixAttempts(context) >= maxFixAttempts) {
-                nextPhase = Phase.COMPLETED;  // 或添加 FAILED 阶段
+                nextPhase = Phase.FAILED;  // fix 溢出 → FAILED
             } else {
                 nextPhase = Phase.EXEC;
             }
@@ -552,6 +553,7 @@ public class TeamPipelineStrategy extends AbstractLoopStrategy {
         VERIFY,
         FIX,
         COMPLETED,
+        FAILED,
         CANCELLED
     }
 

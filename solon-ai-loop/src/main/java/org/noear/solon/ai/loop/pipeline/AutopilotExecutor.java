@@ -10,6 +10,7 @@ import org.noear.solon.ai.loop.strategy.TeamPipelineStrategy;
 import org.noear.solon.ai.loop.strategy.UltraQAStrategy;
 import org.noear.solon.ai.loop.validator.*;
 
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -150,6 +151,127 @@ public class AutopilotExecutor {
             tracking.completeStage(stage, false, "Error: " + e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * 初始化管道跟踪（独立方法）。
+     * 对标 oh-my-claudecode 的 initPipeline。
+     *
+     * @param sessionId 会话 ID
+     * @param request   Pipeline 请求
+     */
+    public PipelineTracking initPipeline(String sessionId, PipelineRequest request) {
+        PipelineTracking tracking = new PipelineTracking(sessionId);
+        trackingMap.put(sessionId, tracking);
+        stageSessions.put(sessionId, new ConcurrentHashMap<PipelineStage, LoopSession>());
+        return tracking;
+    }
+
+    /**
+     * 推进到下一个阶段（独立方法）。
+     * 对标 oh-my-claudecode 的 advanceStage。
+     *
+     * @param sessionId 会话 ID
+     * @return 是否成功推进
+     */
+    public boolean advanceStage(String sessionId) {
+        PipelineTracking tracking = trackingMap.get(sessionId);
+        if (tracking == null) return false;
+
+        PipelineStage current = tracking.getCurrentStage();
+        List<PipelineStage> enabledStages = config.getEnabledStages();
+
+        // 找到当前阶段在列表中的位置
+        int index = enabledStages.indexOf(current);
+        if (index < 0 || index >= enabledStages.size() - 1) {
+            return false;  // 已是最后阶段
+        }
+
+        // 跳过终态阶段
+        PipelineStage next = enabledStages.get(index + 1);
+        tracking.enterStage(next);
+        return true;
+    }
+
+    /**
+     * 标记当前阶段失败（独立方法）。
+     * 对标 oh-my-claudecode 的 failCurrentStage。
+     *
+     * @param sessionId 会话 ID
+     * @param message   失败消息
+     */
+    public void failCurrentStage(String sessionId, String message) {
+        PipelineTracking tracking = trackingMap.get(sessionId);
+        if (tracking == null) return;
+
+        PipelineStage current = tracking.getCurrentStage();
+        tracking.completeStage(current, false, message);
+        tracking.complete(true);  // 标记整体失败
+    }
+
+    /**
+     * 获取格式化的 HUD 显示信息。
+     * 对标 oh-my-claudecode 的 formatPipelineHUD。
+     *
+     * @param sessionId 会话 ID
+     * @return HUD 文本
+     */
+    public String formatPipelineHUD(String sessionId) {
+        PipelineTracking tracking = trackingMap.get(sessionId);
+        if (tracking == null) return "No active pipeline.";
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("╔══════════════════════════════════════╗\n");
+        sb.append("║        AUTOPILOT PIPELINE            ║\n");
+        sb.append("╚══════════════════════════════════════╝\n");
+        sb.append("Session: ").append(tracking.getSessionId()).append("\n");
+
+        String status;
+        if (tracking.isCompleted()) {
+            status = tracking.isFailed() ? "❌ FAILED" : "✅ COMPLETED";
+        } else {
+            status = "🔄 RUNNING";
+        }
+        sb.append("Status: ").append(status).append("\n");
+        sb.append("Current Stage: ").append(tracking.getCurrentStage()).append("\n");
+
+        long elapsed = java.time.Duration.between(tracking.getStartedAt(), Instant.now()).getSeconds();
+        sb.append("Elapsed: ").append(elapsed).append("s\n");
+
+        sb.append("\n── Stage History ──\n");
+        for (PipelineTracking.StageRecord record : tracking.getStageHistory()) {
+            String icon;
+            if (record.isSkipped()) {
+                icon = "⏭";
+            } else if (record.getCompletedAt() != null) {
+                icon = record.isSuccess() ? "✅" : "❌";
+            } else {
+                icon = "🔄";
+            }
+            sb.append("  ").append(icon).append(" ").append(record.getStage());
+            if (record.getSummary() != null) {
+                sb.append(": ").append(record.getSummary());
+            }
+            sb.append("\n");
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * 获取当前管道状态。
+     * 对标 oh-my-claudecode 的 getPipelineStatus。
+     *
+     * @param sessionId 会话 ID
+     * @return 状态描述
+     */
+    public String getPipelineStatus(String sessionId) {
+        PipelineTracking tracking = trackingMap.get(sessionId);
+        if (tracking == null) return "NOT_STARTED";
+        if (tracking.isCompleted()) {
+            return tracking.isFailed() ? "FAILED" : "COMPLETED";
+        }
+        return "RUNNING:" + tracking.getCurrentStage().name();
     }
 
     /**

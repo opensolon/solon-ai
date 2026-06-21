@@ -447,6 +447,94 @@ public class DiskStateManager implements StateManager {
         return new ArrayList<>(sessionOwnership.keySet());
     }
 
+    // ===== Ghost-Legacy 清理 =====
+
+    /**
+     * 清理幽灵/遗留状态文件。
+     *
+     * <p>对标 oh-my-claudecode 的 ghost-legacy 清理逻辑。处理以下场景：</p>
+     * <ul>
+     *   <li>孤儿文件：属于已不存在 session 的状态文件</li>
+     *   <li>不属于当前 projectPath 的 session 文件</li>
+     *   <li>不同的文件命名变体</li>
+     * </ul>
+     *
+     * @param projectPath 当前项目路径，用于归属判定
+     * @return 清理的文件数
+     */
+    public int cleanupGhostLegacy(String projectPath) {
+        final int[] cleaned = {0};  // 使用数组绕过 lambda 限制
+
+        // 遍历所有模式目录
+        for (String mode : MODES) {
+            Path modeDir = basePath.resolve(STATE_DIR).resolve(mode);
+            if (!Files.exists(modeDir)) continue;
+
+            List<Path> files = new ArrayList<>();
+            try (Stream<Path> paths = Files.list(modeDir)) {
+                paths.filter(p -> p.toString().endsWith(".json")).forEach(files::add);
+            } catch (IOException ignored) {}
+
+            for (Path file : files) {
+                String sessionId = file.getFileName().toString().replace(".json", "");
+
+                // 检查 session 归属
+                String ownership = sessionOwnership.get(sessionId);
+                if (ownership == null) {
+                    // 无归属 → 孤儿文件，清理
+                    if (AtomicWrite.delete(file)) cleaned[0]++;
+                    continue;
+                }
+
+                // 检查项目路径匹配
+                if (projectPath != null && !ownership.contains(projectPath)) {
+                    if (AtomicWrite.delete(file)) cleaned[0]++;
+                }
+            }
+        }
+
+        // 清理 PRD 目录中的幽灵文件
+        Path prdDir = basePath.resolve(PRD_DIR);
+        if (Files.exists(prdDir)) {
+            try (Stream<Path> paths = Files.list(prdDir)) {
+                paths.filter(p -> p.toString().endsWith(".json")).forEach(file -> {
+                    String sessionId = file.getFileName().toString().replace(".json", "");
+                    if (!sessionOwnership.containsKey(sessionId)) {
+                        if (AtomicWrite.delete(file)) cleaned[0]++;
+                    }
+                });
+            } catch (IOException ignored) {}
+        }
+
+        // 清理 Progress 目录中的幽灵文件
+        Path progressDir = basePath.resolve(PROGRESS_DIR);
+        if (Files.exists(progressDir)) {
+            try (Stream<Path> paths = Files.list(progressDir)) {
+                paths.filter(p -> p.toString().endsWith(".txt")).forEach(file -> {
+                    String sessionId = file.getFileName().toString().replace(".txt", "");
+                    if (!sessionOwnership.containsKey(sessionId)) {
+                        if (AtomicWrite.delete(file)) cleaned[0]++;
+                    }
+                });
+            } catch (IOException ignored) {}
+        }
+
+        // 清理 session 摘要目录中的幽灵文件
+        Path sessionsDir = basePath.resolve(STATE_DIR).resolve(SESSIONS_DIR);
+        if (Files.exists(sessionsDir)) {
+            try (Stream<Path> paths = Files.list(sessionsDir)) {
+                paths.filter(p -> p.toString().endsWith(".json")).forEach(file -> {
+                    String sessionId = file.getFileName().toString().replace(".json", "");
+                    if (!sessionOwnership.containsKey(sessionId)) {
+                        if (AtomicWrite.delete(file)) cleaned[0]++;
+                    }
+                });
+            } catch (IOException ignored) {}
+        }
+
+        return cleaned[0];
+    }
+
     // ===== 辅助方法 =====
 
     /**

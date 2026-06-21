@@ -46,9 +46,46 @@ public class ProgressEntry {
     public void addLearning(String learning) { this.learnings.add(learning); }
 
     /**
-     * 格式化为进度文本。
+     * 格式化为进度文本（XML 标签格式，用于 LLM 上下文注入）。
      */
     public String format() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("    <entry>\n");
+        sb.append("      <story_id>").append(escapeXml(storyId)).append("</story_id>\n");
+        sb.append("      <timestamp>").append(escapeXml(timestamp)).append("</timestamp>\n");
+
+        if (!implementation.isEmpty()) {
+            sb.append("      <implementation>\n");
+            for (String item : implementation) {
+                sb.append("        <item>").append(escapeXml(item)).append("</item>\n");
+            }
+            sb.append("      </implementation>\n");
+        }
+
+        if (!filesChanged.isEmpty()) {
+            sb.append("      <files_changed>\n");
+            for (String file : filesChanged) {
+                sb.append("        <file>").append(escapeXml(file)).append("</file>\n");
+            }
+            sb.append("      </files_changed>\n");
+        }
+
+        if (!learnings.isEmpty()) {
+            sb.append("      <learnings>\n");
+            for (String learning : learnings) {
+                sb.append("        <learning>").append(escapeXml(learning)).append("</learning>\n");
+            }
+            sb.append("      </learnings>\n");
+        }
+
+        sb.append("    </entry>\n");
+        return sb.toString();
+    }
+
+    /**
+     * 格式化为 Markdown 文本（用于控制台显示）。
+     */
+    public String formatMarkdown() {
         StringBuilder sb = new StringBuilder();
         String shortTimestamp = timestamp.length() > 19 ? timestamp.substring(0, 19).replace("T", " ") : timestamp;
         sb.append("## [").append(shortTimestamp).append("] - ").append(storyId).append("\n\n");
@@ -78,5 +115,16 @@ public class ProgressEntry {
         }
 
         return sb.toString();
+    }
+
+    // ===== XML 转义 =====
+
+    private static String escapeXml(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&apos;");
     }
 }

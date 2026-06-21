@@ -3,8 +3,15 @@ package org.noear.solon.ai.loop.prd;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.loop.state.disk.DiskStateManager;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * PRD 文件管理器 —— 负责 PRD 文档的读写和启动确认。
@@ -91,12 +98,17 @@ public class PRDFileManager {
         }
 
         // 尝试从 root 查找 prd.json
-        String rootJson = null; // 从 root 目录读取
-        if (rootJson != null) {
-            PRDDocument rootPrd = deserializePrd(rootJson);
-            if (rootPrd != null) {
-                writePrd(sessionId, rootPrd);
-                return new EnsurePrdResult(rootPrd, true);
+        Path rootPrdPath = Paths.get(stateManager.getRootDirectory(), "prd.json");
+        if (Files.exists(rootPrdPath)) {
+            try {
+                String rootJson = new String(Files.readAllBytes(rootPrdPath), java.nio.charset.StandardCharsets.UTF_8);
+                PRDDocument rootPrd = deserializePrd(rootJson);
+                if (rootPrd != null) {
+                    writePrd(sessionId, rootPrd);
+                    return new EnsurePrdResult(rootPrd, true);
+                }
+            } catch (IOException e) {
+                // 读取失败则忽略
             }
         }
 
@@ -150,6 +162,146 @@ public class PRDFileManager {
 
         story.setArchitectVerified(true);
         return writePrd(sessionId, prd);
+    }
+
+    // ===== PRD 格式化输出（用于 LLM prompt 注入） =====
+
+    /**
+     * 生成下一个待实现故事的 LLM prompt。
+     * 对标 oh-my-claudecode 的 formatNextStoryPrompt。
+     *
+     * @param prd PRD 文档
+     * @return XML 标签格式的 prompt 文本，如果全部完成则返回空字符串
+     */
+    public String formatNextStoryPrompt(PRDDocument prd) {
+        if (prd == null) return "";
+
+        UserStory nextStory = prd.getNextIncompleteStory();
+        if (nextStory == null) {
+            return "";  // 所有故事已完成
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("<next_story>\n");
+        sb.append("  <storyId>").append(escapeXml(nextStory.getId())).append("</storyId>\n");
+        sb.append("  <title>").append(escapeXml(nextStory.getTitle())).append("</title>\n");
+        if (nextStory.getDescription() != null && !nextStory.getDescription().trim().isEmpty()) {
+            sb.append("  <description>").append(escapeXml(nextStory.getDescription())).append("</description>\n");
+        }
+        if (!nextStory.getAcceptanceCriteria().isEmpty()) {
+            sb.append("  <acceptance_criteria>\n");
+            for (String ac : nextStory.getAcceptanceCriteria()) {
+                sb.append("    <criterion>").append(escapeXml(ac)).append("</criterion>\n");
+            }
+            sb.append("  </acceptance_criteria>\n");
+        }
+        sb.append("  <priority>").append(nextStory.getPriority()).append("</priority>\n");
+        sb.append("</next_story>\n");
+        return sb.toString();
+    }
+
+    /**
+     * 格式化单个故事的输出（包含状态标记）。
+     * 对标 oh-my-claudecode 的 formatStory。
+     *
+     * @param story 用户故事
+     * @return 格式化文本
+     */
+    public String formatStory(UserStory story) {
+        if (story == null) return "";
+
+        StringBuilder sb = new StringBuilder();
+        String status;
+        if (story.isArchitectVerified()) {
+            status = "COMPLETE";
+        } else if (story.isPasses()) {
+            status = "AWAITING_VERIFICATION";
+        } else {
+            status = "PENDING";
+        }
+
+        sb.append("<story>\n");
+        sb.append("  <id>").append(escapeXml(story.getId())).append("</id>\n");
+        sb.append("  <title>").append(escapeXml(story.getTitle())).append("</title>\n");
+        sb.append("  <status>").append(status).append("</status>\n");
+        if (story.getNotes() != null && !story.getNotes().trim().isEmpty()) {
+            sb.append("  <notes>").append(escapeXml(story.getNotes())).append("</notes>\n");
+        }
+        sb.append("</story>\n");
+        return sb.toString();
+    }
+
+    /**
+     * 检测内容中是否包含 -no-prd / --no-prd 标记。
+     * 对标 oh-my-claudecode 的 detectNoPrdFlag。
+     *
+     * @param content 用户输入内容
+     * @return true 如果包含 no-prd 标记
+     */
+    public static boolean detectNoPrdFlag(String content) {
+        if (content == null) return false;
+        return Pattern.compile("-?-?no-prd\\b", Pattern.CASE_INSENSITIVE).matcher(content).find();
+    }
+
+    /**
+     * 移除内容中的 -no-prd / --no-prd 标记。
+     * 对标 oh-my-claudecode 的 stripNoPrdFlag。
+     *
+     * @param content 用户输入内容
+     * @return 移除标记后的内容
+     */
+    public static String stripNoPrdFlag(String content) {
+        if (content == null) return "";
+        return content.replaceAll("(?i)-?-?no-prd\\b", "").trim();
+    }
+
+    /**
+     * 检测内容中的 critic mode 标记，返回模式值。
+     * 对标 oh-my-claudecode 的 detectCriticModeFlag。
+     *
+     * <p>支持格式：-critic-mode arch, --critic-mode arch, -cm arch, --cm arch</p>
+     *
+     * @param content 用户输入内容
+     * @return 检测到的 critic mode，未发现则返回 "architect" 默认值
+     */
+    public static String detectCriticModeFlag(String content) {
+        if (content == null) return "architect";
+        Matcher m = Pattern.compile("-?-?(?:critic-mode|cm)\\s+(\\S+)", Pattern.CASE_INSENSITIVE).matcher(content);
+        if (m.find()) {
+            String mode = m.group(1).toLowerCase();
+            if (mode.equals("arch") || mode.equals("architect")) {
+                return "architect";
+            } else if (mode.equals("critic") || mode.equals("full")) {
+                return "critic";
+            } else if (mode.equals("none") || mode.equals("off")) {
+                return "none";
+            }
+            return mode;
+        }
+        return "architect";
+    }
+
+    /**
+     * 移除内容中的 critic mode 标记。
+     * 对标 oh-my-claudecode 的 stripCriticModeFlag。
+     *
+     * @param content 用户输入内容
+     * @return 移除标记后的内容
+     */
+    public static String stripCriticModeFlag(String content) {
+        if (content == null) return "";
+        return content.replaceAll("(?i)-?-?(?:critic-mode|cm)\\s+\\S+", "").trim();
+    }
+
+    // ===== XML 转义 =====
+
+    private static String escapeXml(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&apos;");
     }
 
     // ===== 序列化/反序列化 =====

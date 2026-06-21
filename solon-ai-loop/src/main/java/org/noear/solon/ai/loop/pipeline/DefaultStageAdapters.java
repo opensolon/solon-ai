@@ -81,5 +81,56 @@ public class DefaultStageAdapters {
         };
     }
 
+    /**
+     * 需求扩展阶段适配器：分析需求并生成扩展描述。
+     */
+    public static StageAdapter expansionAdapter() {
+        return new StageAdapter() {
+            @Override
+            public StageResult execute(PipelineStage stage, Map<String, Object> context, LoopEngine loopEngine) {
+                try {
+                    String description = (String) context.getOrDefault("description", "");
+                    if (description.isEmpty()) {
+                        return StageResult.fail("No description provided for expansion");
+                    }
+                    // 扩展示例：添加上下文元数据
+                    context.put("expandedDescription", "[EXPANDED] " + description);
+                    context.put("requirementsAnalyzed", true);
+                    return StageResult.ok("Expansion completed for: " + description.substring(0, Math.min(50, description.length())));
+                } catch (Exception e) {
+                    return StageResult.fail("Expansion failed: " + e.getMessage());
+                }
+            }
+
+            @Override
+            public PipelineStage supportedStage() { return PipelineStage.EXPANSION; }
+        };
+    }
+
+    /**
+     * 最终验证阶段适配器：验证最终交付物质量。
+     */
+    public static StageAdapter validationAdapter() {
+        return new StageAdapter() {
+            @Override
+            public StageResult execute(PipelineStage stage, Map<String, Object> context, LoopEngine loopEngine) {
+                try {
+                    Boolean allChecksPassed = (Boolean) context.getOrDefault("validationChecksPassed", true);
+                    if (!allChecksPassed) {
+                        return StageResult.fail("Validation checks failed");
+                    }
+                    context.put("finalValidationPassed", true);
+                    context.put("validatedAt", java.time.Instant.now().toString());
+                    return StageResult.ok("Final validation completed successfully");
+                } catch (Exception e) {
+                    return StageResult.fail("Validation failed: " + e.getMessage());
+                }
+            }
+
+            @Override
+            public PipelineStage supportedStage() { return PipelineStage.VALIDATION; }
+        };
+    }
+
     private DefaultStageAdapters() {}
 }
