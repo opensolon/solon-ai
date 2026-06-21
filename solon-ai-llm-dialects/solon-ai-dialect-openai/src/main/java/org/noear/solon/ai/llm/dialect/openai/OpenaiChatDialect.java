@@ -150,7 +150,15 @@ public class OpenaiChatDialect extends AbstractChatDialect {
                 long completionTokens = oUsage.get("completion_tokens").getLong();
                 long totalTokens = oUsage.get("total_tokens").getLong();
 
-                resp.setUsage(new AiUsage(promptTokens, thinkTokens, completionTokens, totalTokens, oUsage));
+                // 读取缓存 token 统计（OpenAI: prompt_tokens_details.cached_tokens）
+                long cacheReadInputTokens = 0L;
+                ONode promptTokensDetails = oUsage.getOrNull("prompt_tokens_details");
+                if (promptTokensDetails != null) {
+                    cacheReadInputTokens = promptTokensDetails.get("cached_tokens").getLong();
+                }
+
+                resp.setUsage(new AiUsage(promptTokens, thinkTokens, completionTokens, totalTokens,
+                        0L, cacheReadInputTokens, oUsage));
             }
         }
 

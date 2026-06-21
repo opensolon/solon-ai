@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -319,6 +320,15 @@ public class SupervisorTask implements NamedTaskComponent {
             }
 
             o.optionSet(trace.getOptions().getModelOptions().options());
+
+            // 从 Agent 级选项复制缓存控制配置
+            ModelOptionsAmend<?, ?> agentOptions = trace.getOptions().getModelOptions();
+            if (agentOptions.cacheControl() != null) {
+                o.cacheControl(agentOptions.cacheControl());
+            }
+            if (agentOptions.promptCacheKey() != null) {
+                o.promptCacheKey(agentOptions.promptCacheKey());
+            }
         });
 
         for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {

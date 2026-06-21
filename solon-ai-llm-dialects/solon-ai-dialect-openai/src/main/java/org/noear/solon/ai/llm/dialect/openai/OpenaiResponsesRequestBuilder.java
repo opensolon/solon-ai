@@ -97,6 +97,13 @@ public class OpenaiResponsesRequestBuilder {
 
             root.set(key, ONode.ofBean(kv.getValue()));
         }
+
+        // ⭐ 支持 previous_response_id（OpenAI Responses API 上下文缓存）
+        //    通过 ChatOptions.promptCacheKey() 传入
+        String promptCacheKey = options.promptCacheKey();
+        if (Utils.isNotEmpty(promptCacheKey)) {
+            root.set("previous_response_id", promptCacheKey);
+        }
         // 构建 tools
         buildToolsNode(root, options);
         return root;

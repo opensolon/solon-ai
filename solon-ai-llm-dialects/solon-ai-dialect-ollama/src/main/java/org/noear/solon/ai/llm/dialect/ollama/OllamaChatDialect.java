@@ -20,6 +20,7 @@ import org.noear.snack4.ONode;
 import org.noear.snack4.Options;
 import org.noear.snack4.json.JsonReader;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.content.AudioBlock;
@@ -29,6 +30,7 @@ import org.noear.solon.ai.chat.ChatException;
 import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
@@ -212,5 +214,47 @@ public class OllamaChatDialect extends AbstractChatDialect {
         }
 
         return new ToolCall(index, callId, name, argStr, argMap);
+    }
+
+    @Override
+    public ONode buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
+        return new ONode().then(n -> {
+            // 复用父类的通用逻辑
+            if (Utils.isNotEmpty(config.getModel())) {
+                n.set("model", config.getModel());
+            }
+
+            n.getOrNew("messages").then(n1 -> {
+                for (ChatMessage m1 : messages) {
+                    if (m1.isThinking() == false || m1.isToolCalls()) {
+                        n1.add(buildChatMessageNode(config, m1));
+                    }
+                }
+            });
+
+            n.set("stream", isStream);
+
+            // ⭐ Ollama 模型驻留时间控制（keep_alive 决定 KV Cache 的保留时间）
+            //    默认 5 分钟，确保后续请求能复用缓存
+            Object keepAlive = options.option("keep_alive");
+            if (keepAlive != null) {
+                n.set("keep_alive", keepAlive);
+            } else {
+                n.set("keep_alive", "5m");
+            }
+
+            // ⭐ 支持 prompt_cache_key (OpenAI 兼容模式下的 Prompt Caching)
+            String promptCacheKey = options.promptCacheKey();
+            if (Utils.isNotEmpty(promptCacheKey)) {
+                n.set("prompt_cache_key", promptCacheKey);
+            }
+
+            for (Map.Entry<String, Object> kv : options.options().entrySet()) {
+                n.set(kv.getKey(), ONode.ofBean(kv.getValue()));
+            }
+
+            ChatMessage lastMessage = messages.get(messages.size() - 1);
+            buildReqToolsNode(n, config, options, lastMessage);
+        });
     }
 }

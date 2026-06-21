@@ -54,6 +54,11 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     protected final Map<String, RankEntity<Talent>> talents;
     protected final Map<Class<?>, RankEntity<X>> interceptors;
 
+    // 缓存控制（Anthropic 风格）
+    protected CacheControl cacheControl;
+    // 缓存键（OpenAI 风格）
+    protected String promptCacheKey;
+
     public ModelOptionsAmend() {
         this.autoToolCall = new AtomicBoolean(true);
 
@@ -108,6 +113,13 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
             tools.putAll(from.tools);
             talents.putAll(from.talents);
             interceptors.putAll(from.interceptors);
+
+            if(from.cacheControl != null) {
+                this.cacheControl = from.cacheControl;
+            }
+            if(from.promptCacheKey != null) {
+                this.promptCacheKey = from.promptCacheKey;
+            }
         }
     }
 
@@ -454,5 +466,39 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     @Nullable
     public String user() {
         return (String) option("user");
+    }
+
+    /// ///////////////////////////////////
+
+    /**
+     * 获取缓存控制（Anthropic 风格）
+     */
+    public CacheControl cacheControl() {
+        return cacheControl;
+    }
+
+    /**
+     * 设置缓存控制（Anthropic 风格）
+     * <p>在系统提示词/工具定义后设置缓存断点，让 LLM 提供商缓存此前缀上下文</p>
+     */
+    public T cacheControl(CacheControl cacheControl) {
+        this.cacheControl = cacheControl;
+        return (T) this;
+    }
+
+    /**
+     * 获取缓存键（OpenAI 风格）
+     */
+    public String promptCacheKey() {
+        return promptCacheKey;
+    }
+
+    /**
+     * 设置缓存键（OpenAI 风格）
+     * <p>相同的缓存键将复用之前缓存的前缀上下文，减少重复计算</p>
+     */
+    public T promptCacheKey(String promptCacheKey) {
+        this.promptCacheKey = promptCacheKey;
+        return (T) this;
     }
 }

@@ -270,6 +270,12 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
             n.set("stream", isStream);
 
+            // ⭐ 支持 prompt_cache_key (OpenAI Prompt Caching)
+            String promptCacheKey = options.promptCacheKey();
+            if (Utils.isNotEmpty(promptCacheKey)) {
+                n.set("prompt_cache_key", promptCacheKey);
+            }
+
             for (Map.Entry<String, Object> kv : options.options().entrySet()) {
                 n.set(kv.getKey(), ONode.ofBean(kv.getValue()));
             }

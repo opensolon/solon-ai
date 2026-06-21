@@ -17,11 +17,8 @@ package org.noear.solon.ai.llm.dialect.anthropic;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.content.ContentBlock;
-import org.noear.solon.ai.chat.ChatConfig;
-import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
@@ -64,7 +61,20 @@ public class AnthropicRequestBuilder {
         // 提取系统消息
         String systemMessage = extractSystemMessage(messages);
         if (Utils.isNotEmpty(systemMessage)) {
-            root.set("system", systemMessage);
+            CacheControl cacheControl = options.cacheControl();
+            if (cacheControl != null) {
+                // 启用 Prompt Caching：system prompt 作为 content blocks 数组，最后一块添加 cache_control
+                ONode systemNode = new ONode();
+                systemNode.addNew().then(contentBlock->{
+                    contentBlock.set("type", "text");
+                    contentBlock.set("text", systemMessage);
+                    contentBlock.getOrNew("cache_control").set("type", cacheControl.type());
+                });
+
+                root.set("system", systemNode);
+            } else {
+                root.set("system", systemMessage);
+            }
         }
 
         // 构建消息数组，过滤掉系统消息
@@ -371,8 +381,14 @@ public class AnthropicRequestBuilder {
             return;
         }
 
+        CacheControl cacheControl = options.cacheControl();
+
         ONode toolsNode = root.getOrNew("tools").asArray();
+        int toolCount = 0;
+        int totalTools = tools.size();
         for (FunctionTool func : tools) {
+            toolCount++;
+            final boolean isLast = (toolCount == totalTools);
             toolsNode.addNew().then(toolNode -> {
                 toolNode.set("name", func.name());
                 toolNode.set("description", func.descriptionAndMeta());
@@ -392,6 +408,11 @@ public class AnthropicRequestBuilder {
                     toolNode.getOrNew("input_schema")
                         .set("type", "object")
                         .getOrNew("properties").set("", new ONode());
+                }
+
+                // ⭐ 在最后一个工具定义上添加 cache_control (Anthropic Prompt Caching)
+                if (isLast && cacheControl != null) {
+                    toolNode.getOrNew("cache_control").set("type", cacheControl.type());
                 }
             });
         }

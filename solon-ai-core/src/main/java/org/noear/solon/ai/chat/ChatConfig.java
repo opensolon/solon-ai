@@ -19,6 +19,7 @@ import org.noear.solon.ai.AiConfig;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.core.util.Assert;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -119,6 +120,50 @@ public class ChatConfig extends AiConfig {
     public void addDefaultOption(String key, Object value) {
         getModelOptions().optionSet(key, value);
     }
+
+    //======================
+    // 缓存控制（Prompt Caching）
+    //
+
+    /**
+     * 设置缓存控制（Anthropic Prompt Caching）
+     *
+     * <p>在系统提示词和工具定义上添加 cache_control 标记，复用 LLM 提供商的前缀缓存。</p>
+     *
+     * @param cacheType 缓存类型，如 "ephemeral"
+     */
+    public void setCacheControl(String cacheType) {
+        if (Assert.isNotEmpty(cacheType)) {
+            getModelOptions().cacheControl(CacheControl.ephemeral(0));
+        }
+    }
+
+    /**
+     * 获取缓存控制配置
+     */
+    public CacheControl getCacheControl() {
+        return getModelOptions().cacheControl();
+    }
+
+    /**
+     * 设置缓存键（OpenAI Prompt Caching）
+     *
+     * <p>相同的缓存键将复用之前缓存的前缀上下文，减少重复计算。</p>
+     *
+     * @param promptCacheKey 缓存键值
+     */
+    public void setPromptCacheKey(String promptCacheKey) {
+        getModelOptions().promptCacheKey(promptCacheKey);
+    }
+
+    /**
+     * 获取缓存键
+     */
+    public String getPromptCacheKey() {
+        return getModelOptions().promptCacheKey();
+    }
+
+    //======================
 
     /**
      * 快速转为聊天模型

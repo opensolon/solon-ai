@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.exception.LlmNoReturnException;
 import org.noear.solon.ai.agent.react.*;
+import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -344,6 +345,16 @@ public class ReasonTask {
                     }
 
                     o.optionSet(trace.getOptions().getModelOptions().options());
+
+                    // 缓存配置：Agent 级优先，ChatModel 级次之
+                    ModelOptionsAmend<?, ?> agentOptions = trace.getOptions().getModelOptions();
+                    if (agentOptions.cacheControl() != null) {
+                        o.cacheControl(agentOptions.cacheControl());
+                    }
+
+                    if (Utils.isNotEmpty(agentOptions.promptCacheKey())) {
+                        o.promptCacheKey(agentOptions.promptCacheKey());
+                    }
                 });
 
         int maxRetries = trace.getOptions().getMaxRetries();

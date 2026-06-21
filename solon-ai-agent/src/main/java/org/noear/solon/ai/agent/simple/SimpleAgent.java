@@ -313,6 +313,14 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
                         o.autoToolCall(options.isAutoToolCall());
                         o.optionSet(options.options());
+
+                        // 从 Agent 级选项复制缓存控制配置
+                        if (options.cacheControl() != null) {
+                            o.cacheControl(options.cacheControl());
+                        }
+                        if (options.promptCacheKey() != null) {
+                            o.promptCacheKey(options.promptCacheKey());
+                        }
                     });
         } else {
             chatSession = null;

@@ -448,8 +448,17 @@ public class OpenaiResponsesResponseParser {
         long inputTokens = usageNode.hasKey("input_tokens") ? usageNode.get("input_tokens").getLong() : 0L;
         long outputTokens = usageNode.hasKey("output_tokens") ? usageNode.get("output_tokens").getLong() : 0L;
         long totalTokens = usageNode.hasKey("total_tokens") ? usageNode.get("total_tokens").getLong() : (inputTokens + outputTokens);
-        if (inputTokens > 0 || outputTokens > 0) {
-            return new AiUsage(inputTokens, 0L, outputTokens, totalTokens, usageNode);
+
+        // 读取缓存 token 统计
+        long cacheReadInputTokens = 0L;
+        ONode inputTokensDetails = usageNode.getOrNull("input_tokens_details");
+        if (inputTokensDetails != null) {
+            cacheReadInputTokens = inputTokensDetails.get("cached_tokens").getLong();
+        }
+
+        if (inputTokens > 0 || outputTokens > 0 || cacheReadInputTokens > 0) {
+            return new AiUsage(inputTokens, 0L, outputTokens, totalTokens,
+                    0L, cacheReadInputTokens, usageNode);
         }
 
         return null;

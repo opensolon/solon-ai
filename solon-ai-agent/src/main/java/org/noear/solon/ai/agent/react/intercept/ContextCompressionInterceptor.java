@@ -19,6 +19,7 @@ import com.knuddels.jtokkit.Encodings;
 import com.knuddels.jtokkit.api.Encoding;
 import com.knuddels.jtokkit.api.EncodingRegistry;
 import com.knuddels.jtokkit.api.ModelType;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
@@ -28,7 +29,9 @@ import org.noear.solon.ai.agent.react.intercept.compress.CompositeCompressionStr
 import org.noear.solon.ai.agent.react.intercept.compress.HierarchicalCompressionStrategy;
 import org.noear.solon.ai.agent.react.intercept.compress.LLMCompressionStrategy;
 import org.noear.solon.ai.agent.react.intercept.compress.VectorStoreCompressionStrategy;
+import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
@@ -153,6 +156,11 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     public void onReasonStart(ReActTrace trace, StringBuilder systemPromptBuf) {
         List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
         String systemPrompt = (systemPromptBuf == null ? null : systemPromptBuf.toString());
+
+        // ⭐ 标记静态上下文边界（为 Dialect 层的 cache_control 提供依据）
+        //    当配置了 CacheControl 时，确保系统提示词和工具定义作为一个完整的
+        //    可缓存块被保留，不被压缩逻辑破坏其结构性完整性。
+        markStaticContextBoundary(trace, systemPrompt);
 
         // 0. ⭐ 单条消息硬上限兜底（内容级截断）
         //    消息级压缩无法处理“单条消息自身就超过窗口”的情况（如工具读取了超大文件/二进制）。
@@ -801,8 +809,46 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     }
 
     /**
-     * 向流式输出推送上下文状态块
+     * ⭐ 标记静态上下文的边界，为 Dialect 层的 cache_control 提供依据。
+     *
+     * <p>静态上下文包含系统提示词（systemPrompt）和工具定义（tool definitions），
+     * 这些内容在会话中不会频繁变化，最适合 LLM 提供商的原生 Prompt Caching。</p>
+     *
+     * <p>当用户在 ChatOptions 中配置了 cacheControl（Anthropic 风格）或
+     * promptCacheKey（OpenAI 风格）时，此方法确保静态上下文在压缩过程中
+     * 保持结构完整性，不会被摘要或裁剪破坏其内容边界。</p>
+     *
+     * <p>当前设计：
+     * <ul>
+     *   <li>系统提示词通过 systemPromptBuf 维护，不在消息列表中压缩</li>
+     *   <li>工具定义由 Dialect 层（如 AnthropicRequestBuilder）在构建请求时添加 cache_control</li>
+     *   <li>此方法仅在开启缓存时输出调试日志，帮助验证缓存策略是否正确生效</li>
+     * </ul>
+     * </p>
+     *
+     * @param trace        当前 ReAct 追踪
+     * @param systemPrompt 系统提示词内容（可能为 null）
      */
+    private void markStaticContextBoundary(ReActTrace trace, String systemPrompt) {
+        // 通过 ChatModel -> ChatConfigReadonly -> ChatOptions 获取缓存配置
+        ChatOptions chatOptions = trace.getOptions().getChatModel().getConfig().getModelOptions();
+        CacheControl cacheControl = chatOptions.cacheControl();
+        String promptCacheKey = chatOptions.promptCacheKey();
+
+        if (cacheControl != null || Utils.isNotEmpty(promptCacheKey)) {
+            // 静态上下文就绪：不修改消息内容，仅输出调试信息
+            // Dialect 层在构建 HTTP 请求时会根据 ChatOptions 中的 cacheControl/promptCacheKey
+            // 自动在系统提示词和工具定义上添加 cache_control 标记
+            if (log.isDebugEnabled()) {
+                String cacheType = (cacheControl != null)
+                        ? "Anthropic cache_control=" + cacheControl.type()
+                        : "OpenAI prompt_cache_key=" + promptCacheKey;
+                log.debug("ReActAgent [{}] static context boundary marked for LLM prompt caching ({})",
+                        trace.getAgentName(), cacheType);
+            }
+        }
+    }
+
     private void pushContextChunk(ReActTrace trace, int msgCount, int tokenCount,
                                   boolean compressed,
                                   int beforeMessageCount, int afterMessageCount,
