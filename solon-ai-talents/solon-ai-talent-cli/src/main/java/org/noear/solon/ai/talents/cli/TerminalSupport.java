@@ -216,16 +216,24 @@ public class TerminalSupport {
     /**
      * 多策略匹配诊断版：按策略链（trim → collapseWhitespace）依次检查，
      * 返回具体是哪一行不匹配及其差异描述。匹配成功时返回 null。
+     *
+     * @param lineStartIndex 1-based 行号（来自 edit.oldStrStartLine），注意不是字符偏移量
      */
     String findLooseMatchDiagnostics(String content, String oldStr, int lineStartIndex) {
+        // 先将 1-based 行号转换为字符偏移量（和 findAtStartLine 的转换方式保持一致）
+        int startOffset = getLineStartIndex(content, lineStartIndex);
+        if (startOffset < 0) {
+            startOffset = 0; // 行号超出范围时的回退
+        }
+
         // 先尝试 trim 策略检查
-        String diag = tryTrimMatchDiagnostics(content, oldStr, lineStartIndex, "trim");
+        String diag = tryTrimMatchDiagnostics(content, oldStr, startOffset, "trim");
         if (diag == null) {
             return null; // trim 策略匹配成功
         }
 
         // trim 策略失败，检查是否是 whitespace 折叠可以解决的差异
-        String collapseDiag = tryTrimMatchDiagnostics(content, oldStr, lineStartIndex, "collapse");
+        String collapseDiag = tryTrimMatchDiagnostics(content, oldStr, startOffset, "collapse");
         if (collapseDiag == null) {
             return null; // collapse 策略匹配成功
         }
@@ -239,8 +247,8 @@ public class TerminalSupport {
      *
      * @param mode "trim" 使用 trimLine 比较，"collapse" 使用 collapseWhitespace 比较
      */
-    private String tryTrimMatchDiagnostics(String content, String oldStr, int lineStartIndex, String mode) {
-        List<String> contentLines = extractTrimmedLines(content, lineStartIndex);
+    private String tryTrimMatchDiagnostics(String content, String oldStr, int startOffset, String mode) {
+        List<String> contentLines = extractTrimmedLines(content, startOffset);
         if (contentLines.isEmpty()) {
             return "文件在指定行号处无内容";
         }
@@ -263,7 +271,7 @@ public class TerminalSupport {
             String actual = useCollapse ? collapseWhitespace(actualRaw) : actualRaw;
             String expected = useCollapse ? collapseWhitespace(expectedRaw) : expectedRaw;
             if (!actual.equals(expected)) {
-                int fileLineNum = lineStartIndexToLineNumber(content, lineStartIndex) + i;
+                int fileLineNum = lineStartIndexToLineNumber(content, startOffset) + i;
                 if (useCollapse) {
                     return String.format("第 %d 行内容不匹配（折叠空白后）：期待「%s」，文件中是「%s」",
                             fileLineNum, expected, actual);
@@ -280,9 +288,9 @@ public class TerminalSupport {
     /**
      * 将字符偏移位置转换为行号
      */
-    private int lineStartIndexToLineNumber(String content, int lineStartIndex) {
+    private int lineStartIndexToLineNumber(String content, int charOffset) {
         int line = 1;
-        for (int i = 0; i < lineStartIndex && i < content.length(); i++) {
+        for (int i = 0; i < charOffset && i < content.length(); i++) {
             if (content.charAt(i) == '\n') {
                 line++;
             }
@@ -293,9 +301,9 @@ public class TerminalSupport {
     /**
      * 从 content 的 lineStartIndex 开始，提取所有行的内容（trim 后，不含换行符）。
      */
-    private List<String> extractTrimmedLines(String content, int lineStartIndex) {
+    private List<String> extractTrimmedLines(String content, int startOffset) {
         List<String> lines = new ArrayList<>();
-        int pos = lineStartIndex;
+        int pos = startOffset;
         while (pos < content.length()) {
             int lineEnd = findLineEnd(content, pos);
             String lineContent = content.substring(pos, lineEnd);

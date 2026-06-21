@@ -681,4 +681,53 @@ public class TerminalTalentEditTest {
             deleteRecursively(workDir);
         }
     }
+
+    // ============================================================
+    // 诊断信息行号正确性测试
+    // ============================================================
+
+    /**
+     * 验证当 oldStrStartLine > 1 且匹配失败时，
+     * 诊断信息能正确报告文件中的实际行号，而非将行号误当作字符偏移量使用。
+     *
+     * 旧版 bug：findLooseMatchDiagnostics 收到 lineStartIndex=2 后，
+     * 直接将其作为字符偏移量传递给 extractTrimmedLines，导致从错误位置读取内容。
+     */
+    @Test
+    public void editLooseMatchDiagnosticShowsCorrectLineNumber() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-edit-");
+        try {
+            // 一个多行文件，第 3 行是目标内容，第 4 行不同
+            Path file = workDir.resolve("demo.txt");
+            Files.write(file, Arrays.asList(
+                    "line one",
+                    "line two",
+                    "line three",
+                    "line four different"
+            ));
+
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            TerminalTalent.EditOp edit = new TerminalTalent.EditOp();
+            // oldStrStartLine = 3 指向第 3 行；oldStr 内容与第 3 行的 "line three" 不匹配
+            // 且 "x_nonexistent_99z" 在文件中不存在（确保 indexOf 也失败，触发诊断路径）
+            edit.oldStrStartLine = 3;
+            edit.oldStr = "x_nonexistent_99z";
+            edit.newStr = "changed";
+
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+
+            assertTrue(result.contains("预检查失败"));
+            // 诊断应提到 "第 3 行"（因为 oldStrStartLine=3）
+            assertTrue(result.contains("第 3 行"),
+                    "诊断应报告第 3 行，而非错误地使用行号 3 作为字符偏移量: " + result);
+            // 诊断应显示第 3 行的内容是 "line three"
+            assertTrue(result.contains("line three"),
+                    "诊断应正确显示第 3 行的文件内容，而非从字符位置 3 读取的碎片: " + result);
+            // 文件未被修改
+            assertEquals(Arrays.asList("line one", "line two", "line three", "line four different"),
+                    Files.readAllLines(file));
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
 }
