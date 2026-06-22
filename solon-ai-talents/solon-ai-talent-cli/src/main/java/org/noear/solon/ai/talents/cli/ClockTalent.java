@@ -31,8 +31,8 @@ import java.util.Locale;
  */
 @Preview("3.9.1")
 public class ClockTalent extends AbsTalent {
-    @ToolMapping(name = "get_current_time", description = "获取系统当前的日期、精确时间、星期及本地时区（例如：2026-01-30 21:00:00 Friday CST）")
-    public String getCurrentTime() {
+    @ToolMapping(name = "now", description = "获取系统当前的日期、精确时间、星期及本地时区（例如：2026-01-30 21:00:00 Friday CST）")
+    public String now() {
         ZonedDateTime now = ZonedDateTime.now();
 
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss EEEE z", Locale.CHINESE);

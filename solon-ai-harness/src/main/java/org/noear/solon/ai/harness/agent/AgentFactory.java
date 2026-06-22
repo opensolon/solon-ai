@@ -103,6 +103,8 @@ public class AgentFactory {
             if (terminalTalentProxy.isEmpty() == false) {
                 builder.defaultTalentAdd(terminalTalentProxy);
             }
+
+            builder.defaultTalentAdd(engine.getClockTalent());
         }
 
         for (HarnessExtension extension : engine.getExtensions()) {
@@ -246,11 +248,10 @@ public class AgentFactory {
         }
     }
 
-    private static void todoToolAddDo(AgentDefinition.Metadata metadata, ReActAgent.Builder builder, HarnessEngine agentRuntime) {
+    private static void todoToolAddDo(AgentDefinition.Metadata metadata, ReActAgent.Builder builder, HarnessEngine engine) {
         if (metadata.isPrimary()) {
             //主代理，用文件模式
-            builder.defaultTalentAdd(agentRuntime.getTodoTalent());
-            builder.defaultTalentAdd(agentRuntime.getClockTalent());
+            builder.defaultTalentAdd(engine.getTodoTalent());
         } else {
             //次代理，用内存模式
             builder.planningMode(true);
