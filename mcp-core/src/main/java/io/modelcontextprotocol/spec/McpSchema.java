@@ -668,6 +668,7 @@ public final class McpSchema {
 		 * from MCP servers in their prompts.
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class Sampling {
 
 		@Override
@@ -2886,7 +2887,7 @@ public final class McpSchema {
 		public CallToolResult(@JsonProperty("content") List<Content> content, @JsonProperty("isError") Boolean isError, @JsonProperty("structuredContent") Object structuredContent, @JsonProperty("_meta") Map<String, Object> meta) {
 			this.content = content;
 			this.isError = isError;
-			this.structuredContent = structuredContent;
+			this.structuredContent = normalizeStructuredContent(structuredContent);
 			this.meta = meta;
 		}
 
@@ -3030,6 +3031,14 @@ public final class McpSchema {
 				return new CallToolResult(content, isError, structuredContent, meta);
 			}
 
+		}
+
+		private static Object normalizeStructuredContent(Object structuredContent) {
+			if (structuredContent instanceof Map && ((Map<?, ?>) structuredContent).isEmpty()) {
+				return null;
+			}
+
+			return structuredContent;
 		}
 	}
 
