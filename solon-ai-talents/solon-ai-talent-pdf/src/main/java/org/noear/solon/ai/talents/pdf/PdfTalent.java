@@ -165,7 +165,7 @@ public class PdfTalent extends AbsTalent {
         if ("markdown".equalsIgnoreCase(format)) {
             body = HtmlRenderer.builder().build().render(Parser.builder().build().parse(content));
         } else if ("text".equalsIgnoreCase(format)) {
-            body = "<pre style='white-space: pre-wrap;'>" + content + "</pre>";
+            body = "<pre style='white-space: pre-wrap;'>" + escapeHtml(content) + "</pre>";
         } else {
             body = content;
         }
@@ -177,6 +177,31 @@ public class PdfTalent extends AbsTalent {
                 "table { border-collapse: collapse; width: 100%; }" +
                 "th, td { border: 1px solid #ccc; padding: 8px; }" +
                 "</style></head><body>" + body + "</body></html>";
+    }
+
+    private String escapeHtml(String text) {
+        if (text == null) {
+            return "";
+        }
+
+        StringBuilder buf = new StringBuilder(text.length());
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '&') {
+                buf.append("&amp;");
+            } else if (c == '<') {
+                buf.append("&lt;");
+            } else if (c == '>') {
+                buf.append("&gt;");
+            } else if (c == '"') {
+                buf.append("&quot;");
+            } else if (c == '\'') {
+                buf.append("&#39;");
+            } else {
+                buf.append(c);
+            }
+        }
+        return buf.toString();
     }
 
     /**

@@ -11,6 +11,7 @@ import org.noear.solon.ai.talents.pdf.PdfTalent;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -83,6 +84,17 @@ public class PdfTalentTests {
 
         pdfTalent.create(fileName, html, "html");
         Assertions.assertTrue(Files.exists(Paths.get(workDir, fileName)));
+    }
+
+    @Test
+    public void testTextFormatEscapesHtml() throws Exception {
+        Method method = PdfTalent.class.getDeclaredMethod("convertToHtml", String.class, String.class);
+        method.setAccessible(true);
+
+        String html = (String) method.invoke(pdfTalent, "<b>bold</b> & \"quote\" 'apos'", "text");
+
+        Assertions.assertTrue(html.contains("&lt;b&gt;bold&lt;/b&gt; &amp; &quot;quote&quot; &#39;apos&#39;"));
+        Assertions.assertFalse(html.contains("<b>bold</b>"));
     }
 
     @Test
