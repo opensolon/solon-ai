@@ -51,7 +51,6 @@ public class DiskStateManager implements StateManager {
 
     private static final String[] MODES = {"ralph", "team", "ultraqa"};
 
-    private static final String BASE_DIR = ".solon-ai-loop";
     private static final String STATE_DIR = "state";
     private static final String SESSIONS_DIR = "sessions";
     private static final String PRD_DIR = "prd";
@@ -62,8 +61,12 @@ public class DiskStateManager implements StateManager {
     private final Map<String, String> sessionOwnership = new ConcurrentHashMap<>();
 
     public DiskStateManager(String rootDirectory) {
+       this(rootDirectory, ".loops");
+    }
+
+    public DiskStateManager(String rootDirectory, String loopDir) {
         this.rootDirectory = rootDirectory;
-        this.basePath = Paths.get(rootDirectory, BASE_DIR);
+        this.basePath = Paths.get(rootDirectory, loopDir);
         ensureDirectories();
     }
 
