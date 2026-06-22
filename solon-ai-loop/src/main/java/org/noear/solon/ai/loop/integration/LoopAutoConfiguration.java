@@ -10,8 +10,7 @@ import org.noear.solon.ai.loop.state.disk.DiskStateManager;
 /**
  * Loop 引擎自动配置 —— 提供便利的引擎初始化方法。
  *
- * <p>对标 Spring Boot 的 AutoConfiguration 风格，
- * 支持通过代码一行初始化所有组件。</p>
+ * <p>支持通过代码一行初始化所有组件。</p>
  *
  * <p>使用示例：</p>
  * <pre>{@code

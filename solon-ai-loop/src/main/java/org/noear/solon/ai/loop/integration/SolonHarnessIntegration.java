@@ -1,5 +1,11 @@
 package org.noear.solon.ai.loop.integration;
 
+import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActRequest;
+import org.noear.solon.ai.agent.react.ReActResponse;
+import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.agent.AgentManager;
 import org.noear.solon.ai.loop.config.LoopConfig;
 import org.noear.solon.ai.loop.engine.LoopEngine;
 import org.noear.solon.ai.loop.engine.LoopSession;
@@ -135,7 +141,7 @@ public class SolonHarnessIntegration {
      * @param harnessEngine   HarnessEngine 实例
      * @return 循环会话
      */
-    public LoopSession startHarnessDrivenUltraQA(String taskDescription, Object harnessEngine) {
+    public LoopSession startHarnessDrivenUltraQA(String taskDescription, HarnessEngine harnessEngine) {
         harnessBridge.setHarnessEngine(harnessEngine);
 
         UltraQAStrategy strategy = UltraQAStrategy.builder()
@@ -188,23 +194,17 @@ public class SolonHarnessIntegration {
 
     /**
      * Harness 桥接器 —— 连接 LoopEngine 和 solon-ai-harness。
+     *
+     * <p>{@code solon-ai-harness} 为编译期直接依赖（已在 pom.xml 中显式引入），
+     * 因此直接使用 {@link HarnessEngine} 类型而非反射。</p>
      */
     public static class HarnessBridge {
 
-        private boolean harnessAvailable;
-        private Object harnessEngine;  // org.noear.solon.ai.harness.HarnessEngine (optional)
-
-        public HarnessBridge() {
-            try {
-                Class.forName("org.noear.solon.ai.harness.HarnessEngine");
-                this.harnessAvailable = true;
-            } catch (ClassNotFoundException e) {
-                this.harnessAvailable = false;
-            }
-        }
+        private boolean harnessAvailable = true;
+        private HarnessEngine harnessEngine;
 
         /**
-         * 检查 HarnessEngine 是否可用。
+         * 检查 HarnessEngine 是否可用（始终为 {@code true}）。
          */
         public boolean isHarnessAvailable() {
             return harnessAvailable;
@@ -213,40 +213,33 @@ public class SolonHarnessIntegration {
         /**
          * 注入 HarnessEngine 实例。
          */
-        public void setHarnessEngine(Object harnessEngine) {
+        public void setHarnessEngine(HarnessEngine harnessEngine) {
             this.harnessEngine = harnessEngine;
-            this.harnessAvailable = true;
         }
 
         /**
          * 获取注入的 HarnessEngine。
          */
-        public Object getHarnessEngine() {
+        public HarnessEngine getHarnessEngine() {
             return harnessEngine;
         }
 
         /**
          * 检查指定工具是否可用。
-         * <p>通过反射检查 HarnessEngine.getAgentManager() 是否返回非 null 的管理器。</p>
          *
          * @param toolName 工具名称
          * @return 工具是否可用
          */
         public boolean isToolAvailable(String toolName) {
-            if (harnessEngine == null) return false;
-            try {
-                java.lang.reflect.Method getAgentManager = harnessEngine.getClass().getMethod("getAgentManager");
-                Object agentManager = getAgentManager.invoke(harnessEngine);
-                return agentManager != null;
-            } catch (Exception ignored) {
+            if (harnessEngine == null) {
+                return false;
             }
-            return false;
+            AgentManager agentManager = harnessEngine.getAgentManager();
+            return agentManager != null;
         }
 
         /**
          * 执行 HarnessEngine 中的 Agent。
-         * <p>使用反射调用 HarnessEngine.getMainAgent() 获取主 Agent，
-         * 然后调用 agent.prompt(taskPrompt).call() 获取响应。</p>
          *
          * @param taskPrompt 任务提示词
          * @return Agent 响应内容，出错时返回错误信息
@@ -256,21 +249,16 @@ public class SolonHarnessIntegration {
                 throw new IllegalStateException("HarnessEngine not injected");
             }
             try {
-                java.lang.reflect.Method getMainAgent = harnessEngine.getClass().getMethod("getMainAgent");
-                Object agent = getMainAgent.invoke(harnessEngine);
+                ReActAgent agent = harnessEngine.getMainAgent();
                 if (agent != null) {
-                    java.lang.reflect.Method prompt = agent.getClass().getMethod("prompt", String.class);
-                    Object request = prompt.invoke(agent, taskPrompt);
-                    java.lang.reflect.Method call = request.getClass().getMethod("call");
-                    Object response = call.invoke(request);
-                    java.lang.reflect.Method getMessage = response.getClass().getMethod("getMessage");
-                    Object message = getMessage.invoke(response);
+                    ReActRequest request = agent.prompt(taskPrompt);
+                    ReActResponse response = request.call();
+                    AssistantMessage message = response.getMessage();
                     if (message != null) {
-                        java.lang.reflect.Method getContent = message.getClass().getMethod("getContent");
-                        return (String) getContent.invoke(message);
+                        return message.getContent();
                     }
                 }
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 return "Harness execution error: " + e.getMessage();
             }
             return "";

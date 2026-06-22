@@ -1,18 +1,15 @@
 package org.noear.solon.ai.loop.integration;
 
-import org.noear.solon.ai.agent.simple.SimpleAgent;
-import org.noear.solon.ai.agent.simple.SimpleResponse;
+import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentResponse;
 import org.noear.solon.ai.loop.config.LoopConfig;
 import org.noear.solon.ai.loop.engine.LoopEngine;
-import org.noear.solon.ai.loop.engine.LoopResult;
 import org.noear.solon.ai.loop.engine.LoopSession;
-import org.noear.solon.ai.loop.state.LoopState;
 import org.noear.solon.ai.loop.strategy.RalphLoopStrategy;
 import org.noear.solon.ai.loop.strategy.UltraQAStrategy;
 import org.noear.solon.ai.loop.validator.Validator;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -42,7 +39,7 @@ public class SolonAgentIntegration {
      * 创建 Agent 驱动的循环配置。
      */
     public LoopConfig createAgentDrivenConfig(String taskDescription, RalphLoopStrategy strategy,
-                                               Validator validator) {
+                                                Validator validator) {
         return LoopConfig.builder()
                 .taskDescription(taskDescription)
                 .strategy(strategy)
@@ -145,7 +142,7 @@ public class SolonAgentIntegration {
      * @param agent           SimpleAgent 实例
      * @return 循环会话
      */
-    public LoopSession startAgentDrivenRalphLoop(String taskDescription, SimpleAgent agent) {
+    public LoopSession startAgentDrivenRalphLoop(String taskDescription, Agent agent) {
         agentBridge.setAgent(agent);
 
         RalphLoopStrategy.StoryImplementor implementor = (story, context) -> {
@@ -204,24 +201,17 @@ public class SolonAgentIntegration {
 
     /**
      * Agent 桥接器 —— 连接 LoopEngine 和 SimpleAgent 的桥梁。
-     * 如果 SimpleAgent 在类路径中，则提供额外功能。
+     *
+     * <p>{@code solon-ai-agent} 为编译期直接依赖（已在 pom.xml 中显式引入），
+     * 因此无需反射检测即可直接使用 SimpleAgent。</p>
      */
     public static class AgentBridge {
 
-        private SimpleAgent agent;
-        private boolean agentAvailable;
-
-        public AgentBridge() {
-            try {
-                Class.forName("org.noear.solon.ai.agent.simple.SimpleAgent");
-                this.agentAvailable = true;
-            } catch (ClassNotFoundException e) {
-                this.agentAvailable = false;
-            }
-        }
+        private Agent agent;
+        private boolean agentAvailable = true;
 
         /**
-         * 检查 SimpleAgent 是否可用。
+         * 检查 SimpleAgent 是否可用（始终为 {@code true}）。
          */
         public boolean isAgentAvailable() {
             return agentAvailable;
@@ -230,15 +220,14 @@ public class SolonAgentIntegration {
         /**
          * 注入 SimpleAgent 实例。
          */
-        public void setAgent(SimpleAgent agent) {
+        public void setAgent(Agent agent) {
             this.agent = agent;
-            this.agentAvailable = true;
         }
 
         /**
          * 获取注入的 SimpleAgent 实例。
          */
-        public SimpleAgent getAgent() {
+        public Agent getAgent() {
             return agent;
         }
 
@@ -250,10 +239,10 @@ public class SolonAgentIntegration {
          */
         public String executePrompt(String promptText) {
             if (agent == null) {
-                throw new IllegalStateException("SimpleAgent not injected. Call setAgent() first.");
+                throw new IllegalStateException("Agent not injected. Call setAgent() first.");
             }
             try {
-                SimpleResponse response = agent.prompt(promptText).call();
+                AgentResponse response = agent.prompt(promptText).call();
                 if (response != null) {
                     return response.getContent();
                 }
