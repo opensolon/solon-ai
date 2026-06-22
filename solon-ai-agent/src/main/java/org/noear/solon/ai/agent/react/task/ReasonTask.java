@@ -244,7 +244,14 @@ public class ReasonTask {
 
                 if (Assert.isNotEmpty(responseMessage.getContent())) {
                     trace.getWorkingMemory().addMessage(responseMessage); //有些 llm 不能接受空消息
-                    trace.getWorkingMemory().addMessage(ChatMessage.ofUser("您上一次的回答是空的。请提供行动步骤或最终答案。"));
+                    int retryCount = trace.getEmptyRetryCounter().get();
+                    String formatFixPrompt = String.format(
+                            "【系统指令：输出格式修正 (Format Correction)】\n" +
+                            "您在第 %d 轮中输出了思考内容，但未包含有效的行动（Action）或最终答案（Final Answer）（第 %d 次尝试）。\n\n" +
+                            "请检查您最近的 Observation 和之前的思考链，确保下一步操作或最终结论已明确给出。",
+                            currentTurn, retryCount
+                    );
+                    trace.getWorkingMemory().addMessage(ChatMessage.ofUser(formatFixPrompt));
                 } else {
                     // 反思机制：模型返回完全空响应（无内容、无工具调用）时， 通过自我反思提示引导模型回溯任务目标、审视历史轨迹并重新输出
                     int retryCount = trace.getEmptyRetryCounter().get();
