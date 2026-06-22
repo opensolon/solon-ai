@@ -14,11 +14,11 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Solon Agent 集成 —— 将 LoopEngine 与 solon-ai-agent 的 SimpleAgent 集成。
+* Solon Agent 集成 —— 将 LoopEngine 与 {@link Agent} 接口集成。
  *
  * <p>集成能力：
  * <ul>
- *   <li>使用 SimpleAgent 执行 Agent 驱动的循环任务</li>
+ *   <li>使用 {@link Agent} 接口驱动循环任务（支持 SimpleAgent、ReActAgent、TeamAgent 等实现）</li>
  *   <li>支持 Ralph 循环（故事驱动）和 UltraQA 循环（质量门禁）</li>
  *   <li>Agent 会话管理和生命周期控制</li>
  * </ul>
@@ -133,16 +133,17 @@ public class SolonAgentIntegration {
     }
 
     /**
-     * 使用 SimpleAgent 作为故事实现器创建 Ralph 循环。
+     * 使用 Agent 作为故事实现器创建 Ralph 循环。
      *
-     * <p>将注入的 SimpleAgent 包装为 {@link RalphLoopStrategy.StoryImplementor}，
-     * 使 Ralph 循环的每个故事通过 Agent 调用实现。</p>
+     * <p>将注入的 Agent 包装为 {@link RalphLoopStrategy.StoryImplementor}，
+     * 使 Ralph 循环的每个故事通过 Agent 调用实现。支持任意 Agent 实现
+     * （如 SimpleAgent、ReActAgent、TeamAgent）。</p>
      *
      * @param taskDescription 任务描述
-     * @param agent           SimpleAgent 实例
+     * @param agent           Agent 实例（SimpleAgent / ReActAgent / TeamAgent 等）
      * @return 循环会话
      */
-    public LoopSession startAgentDrivenRalphLoop(String taskDescription, Agent agent) {
+    public LoopSession startAgentDrivenRalphLoop(String taskDescription, Agent<?, ?> agent) {
         agentBridge.setAgent(agent);
 
         RalphLoopStrategy.StoryImplementor implementor = (story, context) -> {
@@ -173,7 +174,7 @@ public class SolonAgentIntegration {
     }
 
     /**
-     * 获取 Agent 桥接器（用于扩展 SimpleAgent 相关功能）。
+     * 获取 Agent 桥接器（用于扩展 Agent 相关功能）。
      */
     public AgentBridge getAgentBridge() {
         return agentBridge;
@@ -200,35 +201,28 @@ public class SolonAgentIntegration {
     }
 
     /**
-     * Agent 桥接器 —— 连接 LoopEngine 和 SimpleAgent 的桥梁。
+     * Agent 桥接器 —— 连接 LoopEngine 和任意 {@link Agent} 实现的桥梁。
      *
      * <p>{@code solon-ai-agent} 为编译期直接依赖（已在 pom.xml 中显式引入），
-     * 因此无需反射检测即可直接使用 SimpleAgent。</p>
+     * 因此可以对接所有 Agent 实现（如 SimpleAgent、ReActAgent、TeamAgent）。</p>
      */
     public static class AgentBridge {
 
-        private Agent agent;
-        private boolean agentAvailable = true;
+        private Agent<?, ?> agent;
 
         /**
-         * 检查 SimpleAgent 是否可用（始终为 {@code true}）。
+         * 注入 Agent 实例。
          */
-        public boolean isAgentAvailable() {
-            return agentAvailable;
-        }
-
-        /**
-         * 注入 SimpleAgent 实例。
-         */
-        public void setAgent(Agent agent) {
+        public void setAgent(Agent<?, ?> agent) {
             this.agent = agent;
         }
 
         /**
-         * 获取注入的 SimpleAgent 实例。
+         * 获取注入的 Agent 实例。
          */
-        public Agent getAgent() {
-            return agent;
+        @SuppressWarnings("unchecked")
+        public <T extends Agent<?, ?>> T getAgent() {
+            return (T) agent;
         }
 
         /**
@@ -242,7 +236,7 @@ public class SolonAgentIntegration {
                 throw new IllegalStateException("Agent not injected. Call setAgent() first.");
             }
             try {
-                AgentResponse response = agent.prompt(promptText).call();
+                AgentResponse<?> response = agent.prompt(promptText).call();
                 if (response != null) {
                     return response.getContent();
                 }

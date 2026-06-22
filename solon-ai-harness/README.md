@@ -8,34 +8,94 @@
 
 ## 项目结构
 
+`solon-ai-harness` 的物理代码与依赖包共同构成了完整的代理编排能力。下图从**模块自身源码**和**集成依赖**两个维度展示全貌：
+
 ```
-solon-ai-harness/
-├── pom.xml
-└── src/
-    ├── main/
-    │   ├── java/org/noear/solon/ai/harness/
-    │   │   ├── HarnessEngine.java          # 核心引擎入口
-    │   │   ├── HarnessExtension.java        # 引擎扩展点接口
-    │   │   ├── HarnessOptions.java          # 引擎配置选项（内部）
-    │   │   ├── agent/                       # 代理定义与调度
-    │   │   ├── channel/                     # IM 通道抽象
-    │   │   ├── command/                     # 命令系统
-    │   │   ├── hitl/                        # 人工介入安全审计
-    │   │   └── permission/                  # 工具权限枚举
-    │   └── resources/META-INF/solon/ai/harness/
-    │       ├── bash.md                      # bash 子代理定义
-    │       ├── explore.md                   # explore 子代理定义
-    │       ├── general.md                   # general 子代理定义
-    │       ├── git-summary.md               # git 提交摘要子代理
-    │       └── plan.md                      # plan 子代理定义
-    └── test/java/
-        ├── demo/ai/harness/DemoApp.java     # 完整使用示例
-        └── features/ai/harness/
-            ├── AgentDefaultTest.java        # 内置子代理加载验证
-            ├── AgentFactoryCommandSessionTest.java
-            ├── AgentMetadataTest.java       # 代理元数据解析测试
-            ├── CommandUtilTest.java         # 命令解析测试
-            └── JsonSchemaTest.java          # JSON Schema 测试
+solon-ai-harness/                                  # AI 代理编排引擎
+│
+├── pom.xml                                        # Maven 坐标: org.noear:solon-ai-harness
+│
+├── # ═══════════ 模块自身源码 ═══════════
+│
+├── src/main/java/org/noear/solon/ai/harness/
+│   ├── HarnessEngine.java                         # 核心引擎入口（Builder 模式，主代理运行时容器）
+│   ├── HarnessExtension.java                      # 引擎扩展点 SPI 接口
+│   ├── HarnessOptions.java                        # 引擎运行时配置（路径、重试、窗口策略）
+│   │
+│   ├── agent/                                     # 代理定义、工厂、调度
+│   │   ├── AgentDefinition.java                   # 代理元数据模型（名称/描述/工具/模型/MCP）
+│   │   ├── AgentFactory.java                      # 根据 AgentDefinition 构建 ReActAgent
+│   │   ├── AgentManager.java                      # 发现、注册、管理内置和挂载的代理定义
+│   │   ├── TaskTalent.java                        # 子代理调度器（task 串行 / multitask 并行）
+│   │   └── GenerateTalent.java                    # 运行时动态创建子代理定义
+│   │
+│   ├── command/                                   # 通用命令框架
+│   │   ├── Command.java                           # 命令接口
+│   │   ├── CommandContext.java                    # 命令执行上下文
+│   │   ├── CommandRegistry.java                   # 命令注册中心
+│   │   ├── MarkdownCommand.java                   # Markdown 命令模型
+│   │   └── MarkdownCommandLoader.java             # 从 Markdown 文件加载自定义命令
+│   │
+│   ├── channel/
+│   │   └── Channel.java                           # IM 通道接口抽象（微信/飞书/钉钉等）
+│   │
+│   ├── hitl/
+│   │   └── HitlStrategy.java                      # 人工介入安全审计策略
+│   │
+│   └── permission/
+│       └── ToolPermission.java                    # 工具权限枚举（三级快捷权限）
+│
+├── src/main/resources/META-INF/solon/ai/harness/  # 内置子代理定义（Markdown + YAML）
+│   ├── general.md                                 # 通用全能专家  工具: *
+│   ├── bash.md                                    # 命令执行专家  工具: list, read, bash
+│   ├── explore.md                                 # 信息探索专家  工具: list, read, grep, glob, ...
+│   ├── plan.md                                    # 规划与计划专家 工具: list, read, grep, glob, ...
+│   └── git-summary.md                             # Git 提交摘要   隐藏代理
+│
+├── src/test/java/
+│   ├── demo/ai/harness/DemoApp.java               # 完整使用示例
+│   └── features/ai/harness/
+│       ├── AgentDefaultTest.java                  # 内置子代理加载验证
+│       ├── AgentFactoryCommandSessionTest.java     # 代理工厂 & 命令会话测试
+│       ├── AgentMetadataTest.java                 # 代理元数据解析测试
+│       ├── CommandUtilTest.java                   # 命令解析工具测试
+│       └── JsonSchemaTest.java                    # JSON Schema 生成与验证
+│
+├── # ═══════════ 依赖包（整合能力） ═══════════
+│
+├── [solon-lib]                                   # Solon 核心 IoC/AOP/Web 框架
+│   └── org.noear:solon-lib                        #   提供依赖注入、配置管理、生命周期
+│
+├── [solon-ai-agent]                              # ⭐ AI Agent 核心引擎
+│   └── org.noear:solon-ai-agent                  #   提供 ReActAgent（思考-行动循环）、
+│                                                  #   ChatModel、ToolSet、Interceptor 等
+│
+├── [solon-ai-talent-cli]                         # CLI 终端交互能力
+│   └── org.noear:solon-ai-talent-cli             #   提供 TerminalTalent（bash/read/write/edit/glob/grep/ls）、
+│                                                  #   BashInterceptor 沙箱保护、挂载点路径解析
+│
+├── [solon-ai-talent-code]                        # 代码工程规约
+│   └── org.noear:solon-ai-talent-code            #   提供 CodeTalent（技术栈自动识别、
+│                                                  #   .soloncode/CODE.md 规约生成与验证）
+│
+├── [solon-ai-talent-web]                         # 网络搜索与抓取
+│   └── org.noear:solon-ai-talent-web             #   提供 WebsearchTalent、WebfetchTalent（
+│                                                  #   互联网搜索 & 网页内容抓取）
+│
+├── [solon-ai-talent-lsp]                         # LSP 语言服务器协议
+│   └── org.noear:solon-ai-talent-lsp             #   提供 LspTalent（深度代码理解、
+│                                                  #   符号解析、引用查找）
+│
+├── [solon-ai-talent-memory]                      # 长期记忆与心智模型
+│   └── org.noear:solon-ai-talent-memory          #   提供 MemoryTalent（用户偏好提取、
+│                                                  #   知识检索、认知演进与冲突消解）
+│
+├── [solon-ai-talent-gateway]                     # MCP / OpenAPI 网关
+│   └── org.noear:solon-ai-talent-gateway         #   提供 McpGatewayTalent（MCP 工具发现与调用、
+│                                                  #   OpenAPI 导入、第三方工具集成）
+│
+└── [solon-serialization-snack4]                  # JSON 序列化引擎
+    └── org.noear:solon-serialization-snack4      #   用于配置序列化、指令参数编解码
 ```
 
 ---
@@ -44,31 +104,130 @@ solon-ai-harness/
 
 ### 核心组件关系图
 
+下图完整展示了 `HarnessEngine` 构造函数和 `AgentFactory.create()` 中引用的所有组件，按**归属 Maven 依赖包**分区展示。
+
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     HarnessEngine                            │
-│              (核心引擎 - Agent 运行时容器)                     │
-│                                                             │
-│  ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌───────────┐  │
-│  │Agent     │  │Agent     │  │TaskTalent │  │Generate   │  │
-│  │Manager   │  │Factory   │  │(子代理调度)│  │Talent     │  │
-│  │(代理定义)│  │(构建代理) │  │           │  │(动态创建) │  │
-│  └──────────┘  └──────────┘  └───────────┘  └───────────┘  │
-│                                                             │
-│  ┌──────────┐  ┌──────────┐  ┌────────────┐  ┌──────────┐  │
-│  │Command   │  │Channel   │  │HitlStrategy│  │Tool      │  │
-│  │Registry  │  │Interface │  │(安全审计)  │  │Permission│  │
-│  └──────────┘  └──────────┘  └────────────┘  └──────────┘  │
-│                                                             │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │              ReActAgent (主代理/子代理)               │   │
-│  │   ┌───────────┐ ┌──────────┐ ┌──────────────────┐   │   │
-│  │   │System     │ │Tool      │ │ChatModel +       │   │   │
-│  │   │Prompt     │ │Set       │ │Interceptors      │   │   │
-│  │   └───────────┘ └──────────┘ └──────────────────┘   │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+┌══════════════════════════════════════════════════════════════════════════════════════════┐
+║                                    HarnessEngine                                        ║
+║                            AI 代理编排引擎（核心容器）                                    ║
+║                                                                                         ║
+║  ┌──── solon-ai-harness (自有源码) ─────────────────────────────────────────────────┐    ║
+║  │                                                                                   │    ║
+║  │  HarnessOptions (配置模型)        ───→ AgentFactory (构建工厂, 静态方法)          │    ║
+║  │     workspace / maxTurns / sandbox     │ 根据 AgentDefinition 中的工具名列表，     │    ║
+║  │     sessionProvider / memoryProvider   │ 从 engine 各 getter 获取 Talent 实例，     │    ║
+║  │     tools(白名单) / disallowedTools    │ 通过 builder.defaultTalentAdd() 注册       │    ║
+║  │     models(多模型池) / extensions      │                                           │    ║
+║  │     mcpServers / apiServers / lsp...   │  AgentDefinition (代理元数据模型)           │    ║
+║  └──────────────────────────────────────┘ │   name/tools/disallowedTools/model/memory    │    ║
+║                                           │   skills/mcpServers/hidden/primary          │    ║
+║  ┌── 自有核心组件 ─────────────────────┐ └──────────┬─────────────────────────────────┘    ║
+║  │                                     │            │ 构建结果                            ║
+║  │  AgentManager  (代理定义发现/注册/管理)│           ▼                                   ║
+║  │  CommandRegistry(命令注册中心)       │  ┌─────────────────────────────────────────┐  ║
+║  │  Command / CommandContext /          │  │        ReActAgent (主代理/子代理)         │  ║
+║  │    MarkdownCommand / Loader          │  │  思考-行动循环 + ToolSet + Interceptors  │  ║
+║  │  Channel (IM 通道接口抽象)           │  │   + SystemPrompt + ChatModel             │  ║
+║  │  HitlStrategy (bash 安全审计策略)    │  └─────────────────────────────────────────┘  ║
+║  │  ToolPermission (工具权限枚举)       │            │                                 ║
+║  │  HarnessExtension (扩展 SPI 接口)    │            │ 持有引用                         ║
+║  │                                     │            ▼                                 ║
+║  │  ┌── 子代理管理 ─────────────────┐   │  ┌──────────────────────────────────────┐   ║
+║  │  │  TaskTalent (串行/并行调度)     │   │  │     Interceptors (拦截器链)          │   ║
+║  │  │  GenerateTalent (动态创建定义)   │   │  │  HITLInterceptor  (人工介入,onTool) │   ║
+║  │  └────────────────────────────────-┘   │  │  ContextCompressionInterceptor      │   ║
+║  │                                         │  │  (上下文压缩,30条/3万token触发)     │   ║
+║  │  ◄── 注入到 ReActAgent ────────────────┤  └──────────────────────────────────────┘   ║
+║  └─────────────────────────────────────────┘                                           ║
+╚══════════════════════════════════════════════════════════════════════════════════════════╝
+           │ ① toolAddDo()                                                               
+           │ 从 engine 各 getter 获取实例并注入                                           
+           ▼                                                                             
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                          AgentFactory 注入的外部依赖组件                                  │
+├─────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                         │
+│  ┌─ solon-ai-talent-cli ──────────────────────────────────────────────────────────┐     │
+│  │                                                                                 │     │
+│  │  TerminalTalent          ◄── TerminalTalentProxy (权限白名单代理)                  │     │
+│  │  (bash/read/write/edit      │  按工具名白名单选择性暴露子集                       │     │
+│  │   glob/grep/ls/沙箱)        │                                                    │     │
+│  │                          SkillTalent (技能发现与加载,skillread/skillrefresh)       │     │
+│  │                          TodoTalent (任务清单管理,todoread/todowrite)             │     │
+│  │                          ClockTalent (系统时间工具,get_current_time)              │     │
+│  │                          MountManager (挂载点扫描与刷新)                          │     │
+│  │                            ├── MountDir / SkillDir / AgentMd                     │     │
+│  │                                                                                  │     │
+│  └──────────────────────────────────────────────────────────────────────────────────┘     │
+│                                                                                         │
+│  ┌─ solon-ai-agent ───────────────────────────────────────────────────────────────┐     │
+│  │                                                                                 │     │
+│  │  ChatModel / ChatConfig (大模型调用,含重试和缓存)                               │     │
+│  │  AgentSessionProvider / AgentSession (会话生命周期管理)                          │     │
+│  │  CacheControl (缓存控制)                                                        │     │
+│  │  Prompt (提示词构建)                                                            │     │
+│  │  CompressionStrategy 体系:                                                      │     │
+│  │    CompositeCompressionStrategy (组合策略)                                      │     │
+│  │      ├── KeyInfoExtractionStrategy (去水提取干货)                               │     │
+│  │      └── HierarchicalCompressionStrategy (滚动摘要)                             │     │
+│  │                                                                                 │     │
+│  └──────────────────────────────────────────────────────────────────────────────────┘     │
+│                                                                                         │
+│  ┌─ solon-ai-talent-gateway ──────────────────────────────────────────────────────┐     │
+│  │                                                                                 │     │
+│  │  McpGatewayTalent  (MCP 工具网关)                                               │     │
+│  │    ├── McpClientProvider / McpServerParameters (MCP 服务连接管理)               │     │
+│  │  OpenApiGatewayTalent (OpenAPI 导入网关)                                         │     │
+│  │    └── ApiSource / ApiSourceClient (API 源客户端)                                │     │
+│  │                                                                                 │     │
+│  └──────────────────────────────────────────────────────────────────────────────────┘     │
+│                                                                                         │
+│  ┌─ solon-ai-talent-memory ───────────────────────────────────────────────────────┐     │
+│  │                                                                                 │     │
+│  │  MemoryTalent (用户心智模型)   ◄── MemorySolutionProvider (持久化存储接口)       │     │
+│  │    memory_extract / memory_search / memory_recall / memory_consolidate / prune  │     │
+│  │                                                                                 │     │
+│  └──────────────────────────────────────────────────────────────────────────────────┘     │
+│                                                                                         │
+│  ┌─ solon-ai-talent-web ──────────┐    ┌─ solon-ai-talent-lsp ────────────────────┐     │
+│  │                                 │    │                                           │     │
+│  │  WebsearchTalent (互联网搜索)   │    │  LspManager (LSP 服务生命周期管理)         │     │
+│  │  WebfetchTalent  (网页内容抓取) │    │    ├── LspServerParameters                │     │
+│  │  CodeSearchTalent(代码搜索)     │    │  LspTalent (符号解析/引用查找)             │     │
+│  │                                 │    │                                           │     │
+│  └─────────────────────────────────┘    └───────────────────────────────────────────┘     │
+│                                                                                         │
+│  ┌─ solon-ai-talent-code ─────────────────────────────────────────────────────────┐     │
+│  │                                                                                 │     │
+│  │  CodeTalent (技术栈识别 / .soloncode/CODE.md 规约生成验证)                       │     │
+│  │                                                                                 │     │
+│  └──────────────────────────────────────────────────────────────────────────────────┘     │
+│                                                                                         │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+**组件流向说明（对照 `HarnessEngine` 构造函数 & `AgentFactory.toolAddDo()`）：**
+
+| 编号 | 流向 | 源码位置 |
+|------|------|----------|
+| ① | `AgentFactory.toolAddDo()` 遍历 `AgentDefinition.getMetadata().getTools()` 中的工具名；每个工具名映射到 `HarnessEngine` 的某个 getter（如 `read` → `getTerminalTalent()`），获取实例后通过 `builder.defaultTalentAdd()` 注册到 `ReActAgent.Builder` | `AgentFactory.java:120-246` |
+| ② | `TerminalTalentProxy` 包装 `TerminalTalent`，按工具名白名单选择性暴露子集（如只暴露 `read` 而不暴露 `bash`），实现细粒度权限控制 | `AgentFactory.java:82` → `TerminalTalentProxy` |
+| ③ | `TaskTalent` / `GenerateTalent` 持有 `HarnessEngine` 自身引用，通过 `task()`/`multitask()` 分发任务或动态创建 `AgentDefinition` | `TaskTalent.java` / `GenerateTalent.java` |
+| ④ | `ContextCompressionInterceptor` 内部持有 `CompressionStrategy` 链（组合策略 → 去水 + 滚动摘要），在消息数或 token 超阈值时触发压缩 | `HarnessEngine.java:758-770` |
+| ⑤ | `HITLInterceptor` 注册到 `ReActAgent` 的拦截器链，默认对 `bash` 工具启用 `HitlStrategy` 安全检查（注入防御/黑名单/路径边界等 7 层防护） | `HarnessEngine.java:772-775` |
+| ⑥ | `MemorySolutionProvider` 是存储抽象接口，`MemoryTalent` 通过它完成记忆的持久化和检索；`SkillProvider` 同理（默认走 `MountManager` 文件扫描） | `HarnessEngine.java:798-803`、`824-828` |
+| ⑦ | `McpGatewayTalent` / `OpenApiGatewayTalent` 分别管理 MCP 和 OpenAPI 服务池，运行时动态增删，且支持 `retryConfig()` | `HarnessEngine.java:805-820` |
+| ⑧ | `HarnessExtension` SPI：`AgentFactory.create()` 末尾循环调用所有已注册扩展的 `configure()` 方法，允许外部介入 Agent 构建 | `AgentFactory.java:107-109` |
+
+**图例：**
+
+| 符号 | 含义 |
+|------|------|
+| `═══ HarnessEngine ═══` (双线边框) | solon-ai-harness 模块自有源码 |
+| `┌─ dependency ─┐` (单线边框) | 外部 Maven 依赖包提供的组件 |
+| `──→` | 直接引用/构建/注册关系 |
+| `◄──` | 反向持有引用关系 |
+| `└┬┘` 分支 | 同一包内的内部组件组合 |
 
 ### 模块职责
 
@@ -336,16 +495,19 @@ argument-hint: [message]
 
 ## 依赖关系
 
-`solon-ai-harness` 整合了以下 AI Talent 模块：
+各依赖包的详细角色已在上方 [项目结构](#项目结构) 中按模块标注。整体依赖拓扑如下：
 
-| 依赖 | 说明 |
-|------|------|
-| `solon-lib` | Solon 核心框架 |
-| `solon-ai-agent` | AI Agent 核心（ReAct 模式） |
-| `solon-ai-talent-cli` | CLI 终端交互能力 |
-| `solon-ai-talent-code` | 代码分析与工程规约 |
-| `solon-ai-talent-web` | 网络搜索与抓取能力 |
-| `solon-ai-talent-lsp` | LSP 语言服务器协议支持 |
-| `solon-ai-talent-memory` | 长期记忆与心智模型 |
-| `solon-ai-talent-gateway` | MCP/OpenAPI 网关 |
-| `solon-serialization-snack4` | JSON 序列化 |
+```
+solon-ai-harness
+  ├── solon-lib                          # Solon 核心框架
+  ├── solon-ai-agent                     # ReAct 代理引擎
+  ├── solon-ai-talent-cli                # 终端交互 & 沙箱
+  ├── solon-ai-talent-code               # 代码工程规约
+  ├── solon-ai-talent-web                # 网络搜索 & 抓取
+  ├── solon-ai-talent-lsp                # 语言服务器协议 (LSP)
+  ├── solon-ai-talent-memory             # 长期记忆 & 心智模型
+  ├── solon-ai-talent-gateway            # MCP / OpenAPI 网关
+  └── solon-serialization-snack4         # JSON 序列化
+```
+
+> **测试依赖**: `solon-test` (test scope) | **编译辅助**: `lombok` (provided scope)

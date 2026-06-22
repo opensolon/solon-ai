@@ -488,7 +488,7 @@ public class SecondRoundFixTest {
             SolonAgentIntegration integration = new SolonAgentIntegration(engine);
 
             SolonAgentIntegration.AgentBridge bridge = integration.getAgentBridge();
-            // 没有注入 SimpleAgent，executePrompt 应抛异常
+            // 没有注入 Agent，executePrompt 应抛异常
             assertThrows(IllegalStateException.class, () -> bridge.executePrompt("test"),
                     "executePrompt should throw without agent injected");
         }
