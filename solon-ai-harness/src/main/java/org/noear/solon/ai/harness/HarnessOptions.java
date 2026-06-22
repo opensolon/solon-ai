@@ -18,6 +18,7 @@ package org.noear.solon.ai.harness;
 import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
+import org.noear.solon.ai.agent.react.intercept.StopLoopInterceptor;
 import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.permission.ToolPermission;
@@ -101,6 +102,7 @@ class HarnessOptions implements Serializable {
     // ========== 服务注入 ==========
     private AgentSessionProvider sessionProvider;
     private ContextCompressionInterceptor compressionInterceptor;
+    private StopLoopInterceptor stopLoopInterceptor;
     private HITLInterceptor hitlInterceptor;
     private MemorySolutionProvider memoryProvider;
     private SkillProvider skillProvider;
@@ -476,6 +478,14 @@ class HarnessOptions implements Serializable {
 
     void setCompressionInterceptor(ContextCompressionInterceptor compressionInterceptor) {
         this.compressionInterceptor = compressionInterceptor;
+    }
+
+    StopLoopInterceptor getStopLoopInterceptor() {
+        return stopLoopInterceptor;
+    }
+
+    void setStopLoopInterceptor(StopLoopInterceptor stopLoopInterceptor) {
+        this.stopLoopInterceptor = stopLoopInterceptor;
     }
 
     HITLInterceptor getHitlInterceptor() {

@@ -15,10 +15,10 @@
  */
 package org.noear.solon.ai.agent.react.intercept;
 
-import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.react.AbsReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
@@ -70,32 +70,38 @@ public class StopLoopInterceptor extends AbsReActInterceptor {
         long count = history.stream().filter(fp -> fp.equals(fingerprint)).count();
 
         if (count >= maxRepeatCount) {
-            // --- 核心优化点：软中断策略 ---
+            // --- 核心优化：软提醒 + LLM 自纠（不再 pending 挂起） ---
 
-            // 1. 构造一个引导模型收尾的提示语，而不是直接停止
             String breakMsg = String.format(
-                    "SYSTEM ALERT: Potential loop detected. You have called the same action %d times. " +
-                            "Please STOP further actions and provide a Final Answer based on the information you currently have.",
-                    count
+                    "【系统提示：检测到潜在循环 (Loop Detected)】\n" +
+                            "系统检测到您最近 %d 次（连续 %d 次相同）执行了高度相似的操作，可能存在\"原地打转\"的情况。\n\n" +
+                            "请立即暂停当前操作思路，审视历史 Observation 并执行以下步骤：\n" +
+                            "1. **有效性评估**：如果最近的尝试没有带来有效新线索，说明当前策略已失效，请必须更换思路或换个角度切入。\n" +
+                            "2. **强制收敛**：若已有足够信息供用户参考，请直接输出 Final Answer 结束任务。\n" +
+                            "3. **避免重复**：不要重复执行已经执行过且未产生新信息的操作。",
+                    count, count
             );
 
-            log.warn("ReAct Loop detected for agent [{}], injecting break command.", trace.getAgentName());
+            // 注入用户消息到工作记忆（与 auto-rethink 同一机制，参见 ReasonTask 第 111 行）
+            trace.getWorkingMemory().addMessage(ChatMessage.ofUser(breakMsg));
+            log.warn("ReAct Loop detected for agent [{}], injected self-correction prompt.", trace.getAgentName());
 
-            // 2. 将其注入为下一次的 Observation，给模型“自省”和“总结”的机会
-            trace.getSession().pending(true, breakMsg);
-            trace.setFinalAnswer(breakMsg);
-
-            // 3. 清理该 trace 的历史，防止在收尾阶段再次触发
+            // 清除计数，避免注入的消息本身又被算成一次循环
             history.clear();
+
+            // 不设 session.pending(true) — 不永久挂起
+            // 不设 trace.setFinalAnswer(...) — 不强行终止
+            // 不改 route — 当前 tool call 正常执行
+            // LLM 在下一轮 Reasoning 时会看到提醒并自纠
         }
     }
 
     private String generateNormalizedFingerprint(AssistantMessage message) {
         if (Assert.isNotEmpty(message.getToolCalls())) {
+            // 只取工具名做指纹，忽略参数差异（避免"读不同文件"检测不到）
             StringBuilder sb = new StringBuilder();
             for (ToolCall call : message.getToolCalls()) {
-                // 仅对工具名+参数进行指纹化
-                sb.append(call.getName()).append(":").append(ONode.serialize(call.getArguments()));
+                sb.append("tool:").append(call.getName());
             }
             return sb.toString();
         } else if (Assert.isNotEmpty(message.getContent())) {
@@ -103,9 +109,15 @@ public class StopLoopInterceptor extends AbsReActInterceptor {
             // 提取 Action 块，忽略 Thought 的微小差异
             int actionIdx = content.indexOf("Action:");
             if (actionIdx >= 0) {
-                return content.substring(actionIdx).trim();
+                String actionLine = content.substring(actionIdx).trim();
+                // 取 Action: 工具名 部分，忽略参数
+                int braceIdx = actionLine.indexOf("{");
+                if (braceIdx >= 0) {
+                    return actionLine.substring(0, braceIdx).trim();
+                }
+                return actionLine;
             }
-            // 如果只有内容，取前 50 个字符作为特征，防止文本生成死循环
+            // 如果只有内容，取前 50 个字符作为特征
             return content.length() > 50 ? content.substring(0, 50) : content;
         }
         return null;

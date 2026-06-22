@@ -22,6 +22,7 @@ import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
+import org.noear.solon.ai.agent.react.intercept.StopLoopInterceptor;
 import org.noear.solon.ai.agent.react.intercept.compress.CompositeCompressionStrategy;
 import org.noear.solon.ai.agent.react.intercept.compress.HierarchicalCompressionStrategy;
 import org.noear.solon.ai.agent.react.intercept.compress.KeyInfoExtractionStrategy;
@@ -116,6 +117,10 @@ public class HarnessEngine {
 
     public ContextCompressionInterceptor getCompressionInterceptor() {
         return options.getCompressionInterceptor();
+    }
+
+    public StopLoopInterceptor getStopLoopInterceptor() {
+        return options.getStopLoopInterceptor();
     }
 
     public CacheControl getCacheControl() {
@@ -769,6 +774,11 @@ public class HarnessEngine {
                     strategy));
         }
 
+        //停止循环拦截器默认处理
+        if (options.getStopLoopInterceptor() == null) {
+            options.setStopLoopInterceptor(new StopLoopInterceptor(3, 8));
+        }
+
         //人工介入拉截器默认处理
         if (options.getHitlInterceptor() == null) {
             options.setHitlInterceptor(new HITLInterceptor().onTool("bash", new HitlStrategy()));
@@ -1023,6 +1033,11 @@ public class HarnessEngine {
 
         public Builder compressionInterceptor(ContextCompressionInterceptor compressionInterceptor) {
             options.setCompressionInterceptor(compressionInterceptor);
+            return this;
+        }
+
+        public Builder stopLoopInterceptor(StopLoopInterceptor stopLoopInterceptor) {
+            options.setStopLoopInterceptor(stopLoopInterceptor);
             return this;
         }
 

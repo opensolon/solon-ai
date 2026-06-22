@@ -68,6 +68,7 @@ public class AgentFactory {
         builder.autoRethink(engine.isAutoRethink());
         builder.sessionWindowSize(engine.getSessionWindowSize());
         builder.defaultInterceptorAdd(engine.getCompressionInterceptor());
+        builder.defaultInterceptorAdd(9, engine.getStopLoopInterceptor());
 
         if (Assert.isNotEmpty(agentDefinition.getSystemPrompt())) {
             builder.systemPrompt(r -> agentDefinition.getSystemPrompt());
