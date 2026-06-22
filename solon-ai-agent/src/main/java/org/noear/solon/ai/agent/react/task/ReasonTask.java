@@ -99,12 +99,12 @@ public class ReasonTask {
                 LOG.info("ReActAgent [{}] auto-rethink triggered. New maxTurns: {}", config.getName(), trace.getOptions().getMaxTurns());
 
                 String rethinkPrompt = String.format(
-                        "【系统指令：自动重审 (Auto-Rethink)】\n" +
+                                "【系统指令：自我反思 (Self-Reflection)】\n" +
                                 "当前任务已执行至第 %d 回合。为了确保任务准确高效完成，请立即启动自审程序：\n\n" +
                                 "1. **核心目标检查**：重新审视用户最初提出的核心问题和当前要解决的任务，评估你当前的方向是否偏离了主线？\n" +
                                 "2. **有效性评估**：检查历史 Observation。如果最近的尝试没有带来有效新线索，说明当前策略已失效，请必须更换思路或换个角度切入。\n" +
                                 "3. **强制收敛**：若评估判定由于客观限制确实无法达成，请梳理已知线索，并在 Final Answer 中向用户复盘并申请协助。\n\n" +
-                                "根据新策略决定下一步行动，或直接输出 Final Answer 结束任务",
+                                "根据新策略决定下一步行动，或输出 Final Answer 结束任务",
                         currentTurn
                 );
 
@@ -242,8 +242,23 @@ public class ReasonTask {
                 //做3次重复
                 LOG.warn("ReActAgent[{}] choices size:{}, responseMessage is empty: {}", trace.getAgentName(), response.getChoices().size(), responseMessage);
 
-                //trace.getWorkingMemory().addMessage(responseMessage); //有些 llm 不能接受空消息
-                //trace.getWorkingMemory().addMessage(ChatMessage.ofUser("您上一次的回答是空的。请提供行动步骤或最终答案。"));
+                if (Assert.isNotEmpty(responseMessage.getContent())) {
+                    trace.getWorkingMemory().addMessage(responseMessage); //有些 llm 不能接受空消息
+                    trace.getWorkingMemory().addMessage(ChatMessage.ofUser("您上一次的回答是空的。请提供行动步骤或最终答案。"));
+                } else {
+                    // 反思机制：模型返回完全空响应（无内容、无工具调用）时， 通过自我反思提示引导模型回溯任务目标、审视历史轨迹并重新输出
+                    int retryCount = trace.getEmptyRetryCounter().get();
+                    String reflectPrompt = String.format(
+                            "【系统指令：自我反思 (Self-Reflection)】\n" +
+                            "您在第 %d 轮推理中返回了空响应（第 %d 次尝试），请立即启动自我反思：\n\n" +
+                            "1. **回溯任务目标**：重新审视您最初被分配的任务核心目标，检查是否偏离了主线。\n" +
+                            "2. **审视历史轨迹**：回顾最近的 Observation 和之前的思考链，定位导致空响应的原因。\n" +
+                            "3. **策略修正**：若当前路径受阻，请果断切换思路或拆分为更小的子任务推进。\n",
+                            currentTurn, retryCount
+                    );
+                    trace.getWorkingMemory().addMessage(ChatMessage.ofUser(reflectPrompt));
+                }
+
                 trace.setRoute(ReActAgent.ID_REASON);
             }
 
