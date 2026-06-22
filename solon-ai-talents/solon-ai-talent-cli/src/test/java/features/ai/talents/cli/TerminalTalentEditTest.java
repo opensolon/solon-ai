@@ -170,7 +170,7 @@ public class TerminalTalentEditTest {
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
             assertTrue(result.contains("成功完成"));
-            assertEquals(Arrays.asList("newFoo();", "newBar();", "end"), Files.readAllLines(file));
+            assertEquals(Arrays.asList("  newFoo();", "    newBar();", "end"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
@@ -193,7 +193,7 @@ public class TerminalTalentEditTest {
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
             assertTrue(result.contains("成功完成"));
-            assertEquals(Arrays.asList("newFoo();", "newBar();", "end"), Files.readAllLines(file));
+            assertEquals(Arrays.asList("\t\tnewFoo();", "\tnewBar();", "end"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
@@ -216,7 +216,7 @@ public class TerminalTalentEditTest {
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
             assertTrue(result.contains("成功完成"));
-            assertEquals(Arrays.asList("newFoo();", "newBar();", "end"), Files.readAllLines(file));
+            assertEquals(Arrays.asList("\t  newFoo();", "  \tnewBar();", "end"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
@@ -239,7 +239,7 @@ public class TerminalTalentEditTest {
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
             assertTrue(result.contains("成功完成"));
-            assertEquals(Arrays.asList("  newFoo();", "  newBar();", "end"), Files.readAllLines(file));
+            assertEquals(Arrays.asList("    newFoo();", "    newBar();", "end"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
@@ -262,7 +262,7 @@ public class TerminalTalentEditTest {
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
             assertTrue(result.contains("成功完成"));
-            assertEquals(Arrays.asList("header", "newFoo();", "newBar();", "footer"), Files.readAllLines(file));
+            assertEquals(Arrays.asList("header", "  newFoo();", "    newBar();", "footer"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
@@ -285,7 +285,7 @@ public class TerminalTalentEditTest {
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
             assertTrue(result.contains("成功完成"));
-            assertEquals(Arrays.asList("newFoo();", "end"), Files.readAllLines(file));
+            assertEquals(Arrays.asList("  newFoo();", "end"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
@@ -308,7 +308,7 @@ public class TerminalTalentEditTest {
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
             assertTrue(result.contains("成功完成"));
-            assertEquals(Arrays.asList("newFoo();", "newBar();", "end"), Files.readAllLines(file));
+            assertEquals(Arrays.asList("  newFoo();", "    newBar();", "end"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
@@ -330,7 +330,7 @@ public class TerminalTalentEditTest {
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
             assertTrue(result.contains("成功完成"));
-            assertEquals(Arrays.asList("prefix", "replaced();", "suffix"), Files.readAllLines(file));
+            assertEquals(Arrays.asList("prefix", "  replaced();", "suffix"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
@@ -353,7 +353,7 @@ public class TerminalTalentEditTest {
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
             assertTrue(result.contains("成功完成"));
-            assertEquals("newFoo();\nnewBar();", new String(Files.readAllBytes(file)));
+            assertEquals("  newFoo();\n  newBar();", new String(Files.readAllBytes(file)));
         } finally {
             deleteRecursively(workDir);
         }
@@ -377,7 +377,7 @@ public class TerminalTalentEditTest {
 
             assertTrue(result.contains("成功完成"));
             // \r\n 应被保留
-            assertEquals("newFoo();\r\nnewBar();\r\nend", new String(Files.readAllBytes(file)));
+            assertEquals("  newFoo();\r\n    newBar();\r\nend", new String(Files.readAllBytes(file)));
         } finally {
             deleteRecursively(workDir);
         }
@@ -448,7 +448,7 @@ public class TerminalTalentEditTest {
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
             assertTrue(result.contains("成功完成"));
-            assertEquals(Arrays.asList("newFoo();", "newBar();"), Files.readAllLines(file));
+            assertEquals(Arrays.asList("  newFoo();", "  newBar();"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
@@ -471,7 +471,7 @@ public class TerminalTalentEditTest {
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
             assertTrue(result.contains("成功完成"));
-            assertEquals(Arrays.asList("newFoo();", "newBar();"), Files.readAllLines(file));
+            assertEquals(Arrays.asList("  newFoo();", "  newBar();"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
@@ -545,7 +545,7 @@ public class TerminalTalentEditTest {
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
             assertTrue(result.contains("成功完成"));
-            assertEquals(Arrays.asList("newFoo();", "newBar();"), Files.readAllLines(file));
+            assertEquals(Arrays.asList("  newFoo();", "newBar();"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
@@ -576,7 +576,7 @@ public class TerminalTalentEditTest {
             String result = talent.edit("demo.txt", Arrays.asList(first, second), workDir.toString());
 
             assertTrue(result.contains("成功完成"));
-            assertEquals(Arrays.asList("header", "p", "q", "middle", "x", "y", "footer"), Files.readAllLines(file));
+            assertEquals(Arrays.asList("header", "  p", "  q", "middle", "    x", "    y", "footer"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
@@ -603,7 +603,7 @@ public class TerminalTalentEditTest {
             String result = talent.edit("demo.txt", Arrays.asList(exact, loose), workDir.toString());
 
             assertTrue(result.contains("成功完成"));
-            assertEquals(Arrays.asList("x", "y"), Files.readAllLines(file));
+            assertEquals(Arrays.asList("x", "  y"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
@@ -630,7 +630,7 @@ public class TerminalTalentEditTest {
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
             assertTrue(result.contains("成功完成"));
-            assertEquals(Arrays.asList("int y = 2;", "baz();"), Files.readAllLines(file));
+            assertEquals(Arrays.asList("  int y = 2;", "  baz();"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
@@ -653,7 +653,7 @@ public class TerminalTalentEditTest {
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
             assertTrue(result.contains("成功完成"));
-            assertEquals(Arrays.asList("int y = 2;", "baz();"), Files.readAllLines(file));
+            assertEquals(Arrays.asList("  int y = 2;", "  baz();"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }

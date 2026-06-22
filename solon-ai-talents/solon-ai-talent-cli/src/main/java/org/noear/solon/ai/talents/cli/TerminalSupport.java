@@ -42,10 +42,12 @@ public class TerminalSupport {
     static class MatchResult {
         final int startIndex;
         final int matchedLength;
+        final boolean isLooseMatch; // true 表示通过忽略行首行尾空白匹配（findAtStartLineLoose / collapse）
 
-        MatchResult(int startIndex, int matchedLength) {
+        MatchResult(int startIndex, int matchedLength, boolean isLooseMatch) {
             this.startIndex = startIndex;
             this.matchedLength = matchedLength;
+            this.isLooseMatch = isLooseMatch;
         }
     }
     static final int MAX_CHARACTER_LIMIT = 128 * 1024;
@@ -90,7 +92,12 @@ public class TerminalSupport {
         } else {
             MatchResult match = findAtStartLine(content, finalOld, oldStrStartLine);
             if (match != null) {
-                return content.substring(0, match.startIndex) + finalNew + content.substring(match.startIndex + match.matchedLength);
+                String replacement = finalNew;
+                if (match.isLooseMatch) {
+                    // 当通过忽略缩进的宽松匹配时，提取原始内容的行首缩进并应用到 newStr
+                    replacement = applyContentLeadingWhitespace(content, match.startIndex, match.matchedLength, finalNew);
+                }
+                return content.substring(0, match.startIndex) + replacement + content.substring(match.startIndex + match.matchedLength);
             }
 
             int firstIndex = content.indexOf(finalOld);
@@ -116,7 +123,7 @@ public class TerminalSupport {
 
         // 精确匹配（保留原有行为）
         if (content.startsWith(oldStr, lineStartIndex)) {
-            return new MatchResult(lineStartIndex, oldStr.length());
+            return new MatchResult(lineStartIndex, oldStr.length(), false);
         }
 
         // 策略2：逐行 trim 匹配（忽略每行首尾空白差异）
@@ -167,7 +174,7 @@ public class TerminalSupport {
         }
 
         int computedLength = computeMatchLength(content, lineStartIndex, oldStrLines.size());
-        return computedLength > 0 ? new MatchResult(lineStartIndex, computedLength) : null;
+        return computedLength > 0 ? new MatchResult(lineStartIndex, computedLength, true) : null;
     }
 
     /**
@@ -195,7 +202,7 @@ public class TerminalSupport {
         }
 
         int computedLength = computeMatchLength(content, lineStartIndex, oldStrLines.size());
-        return computedLength > 0 ? new MatchResult(lineStartIndex, computedLength) : null;
+        return computedLength > 0 ? new MatchResult(lineStartIndex, computedLength, true) : null;
     }
 
     /**
@@ -392,6 +399,82 @@ public class TerminalSupport {
      */
     private String collapseWhitespace(String s) {
         return s.replaceAll("\\s+", " ").trim();
+    }
+
+    /**
+     * 将原始匹配内容各行的行首缩进提取出来，逐行应用到 newStr 上。
+     *
+     * <p>当通过忽略缩进的宽松匹配（loose match / collapse match）时，此方法确保
+     * newStr 中的每一行都继承原始内容对应行的行首缩进，避免替换后缩进丢失。</p>
+     *
+     * @param content      原始文件内容
+     * @param startIndex   匹配区域的起始字符偏移
+     * @param matchedLength 匹配区域的字符长度
+     * @param newStr       用户提供的替换内容（newline 已归一化）
+     * @return 调整后的替换文本，每行继承了原始内容的行首缩进
+     */
+    private String applyContentLeadingWhitespace(String content, int startIndex, int matchedLength, String newStr) {
+        // Step 1: 提取原始匹配内容中每行的行首空白
+        List<String> leadingWhitespaces = new ArrayList<>();
+        int pos = startIndex;
+        int end = startIndex + matchedLength;
+        while (pos < end && pos < content.length()) {
+            int lineStart = pos;
+            int lineEnd = findLineEnd(content, pos);
+            if (lineEnd > end) {
+                lineEnd = end;
+            }
+            String line = content.substring(lineStart, lineEnd);
+            // 提取行首空白（空格和 Tab）
+            int wsLen = 0;
+            while (wsLen < line.length() && (line.charAt(wsLen) == ' ' || line.charAt(wsLen) == '\t')) {
+                wsLen++;
+            }
+            leadingWhitespaces.add(line.substring(0, wsLen));
+
+            // 前进到下一行
+            if (lineEnd >= end || lineEnd >= content.length()) break;
+            char c = content.charAt(lineEnd);
+            if (c == '\n') {
+                pos = lineEnd + 1;
+            } else if (c == '\r') {
+                pos = lineEnd + 1;
+                if (pos < content.length() && content.charAt(pos) == '\n') {
+                    pos++;
+                }
+            } else {
+                pos = lineEnd;
+            }
+        }
+
+        if (leadingWhitespaces.isEmpty()) {
+            return newStr; // 没有原始内容可提取
+        }
+
+        // Step 2: 确定行分隔符
+        String lineSep = content.contains("\r\n") ? "\r\n" : "\n";
+
+        // Step 3: 逐行处理 newStr
+        String[] newLines = newStr.split("\\r?\\n", -1);
+        boolean hasTrailingNewline = newLines.length > 1 && newLines[newLines.length - 1].isEmpty();
+        int linesToProcess = hasTrailingNewline ? newLines.length - 1 : newLines.length;
+
+        StringBuilder sb = new StringBuilder(newStr.length());
+        for (int i = 0; i < linesToProcess; i++) {
+            if (i > 0) {
+                sb.append(lineSep);
+            }
+            // 取对应原始行的缩进；如果 newStr 行数多于原始行，则重复最后一行缩进
+            int wsIdx = Math.min(i, leadingWhitespaces.size() - 1);
+            String ws = leadingWhitespaces.get(wsIdx);
+            String trimmed = trimLine(newLines[i]);
+            sb.append(ws).append(trimmed);
+        }
+        if (hasTrailingNewline) {
+            sb.append(lineSep);
+        }
+
+        return sb.toString();
     }
 
     int getLineStartIndex(String content, int lineNumber) {
