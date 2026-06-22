@@ -464,11 +464,16 @@ public class TerminalSupport {
             if (i > 0) {
                 sb.append(lineSep);
             }
-            // 取对应原始行的缩进；如果 newStr 行数多于原始行，则重复最后一行缩进
-            int wsIdx = Math.min(i, leadingWhitespaces.size() - 1);
-            String ws = leadingWhitespaces.get(wsIdx);
-            String trimmed = trimLine(newLines[i]);
-            sb.append(ws).append(trimmed);
+            String line = newLines[i];
+            // 如果 newStr 该行已有行首空白（用户有意指定缩进），则原样保留
+            if (!line.isEmpty() && (line.charAt(0) == ' ' || line.charAt(0) == '\t')) {
+                sb.append(line);
+            } else {
+                // 用户没写缩进 → 继承原文件对应行的缩进
+                // 如果 newStr 行数多于原始行，则重复最后一行缩进
+                int wsIdx = Math.min(i, leadingWhitespaces.size() - 1);
+                sb.append(leadingWhitespaces.get(wsIdx)).append(line);
+            }
         }
         if (hasTrailingNewline) {
             sb.append(lineSep);

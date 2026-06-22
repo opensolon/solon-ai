@@ -239,7 +239,8 @@ public class TerminalTalentEditTest {
             String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
 
             assertTrue(result.contains("成功完成"));
-            assertEquals(Arrays.asList("    newFoo();", "    newBar();", "end"), Files.readAllLines(file));
+            // newStr 自带 2 空格缩进，应以用户为准
+            assertEquals(Arrays.asList("  newFoo();", "  newBar();", "end"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
@@ -726,6 +727,89 @@ public class TerminalTalentEditTest {
             // 文件未被修改
             assertEquals(Arrays.asList("line one", "line two", "line three", "line four different"),
                     Files.readAllLines(file));
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
+    // ============================================================
+    // 宽松匹配缩进保留规则：逐行填充（fill-in-the-blank）
+    // ============================================================
+
+    /**
+     * 验证：newStr 带行首缩进时，以用户缩进为准（不继承原文件缩进）。
+     * 文件缩进 4 空格，newStr 含 2 空格缩进 → 保留 2 空格。
+     */
+    @Test
+    public void editLooseMatchPreservesUserIndent() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-edit-");
+        try {
+            Path file = workDir.resolve("demo.txt");
+            Files.write(file, Arrays.asList("    foo();", "end"));
+
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            TerminalTalent.EditOp edit = new TerminalTalent.EditOp();
+            edit.oldStrStartLine = 1;
+            edit.oldStr = "foo();";
+            edit.newStr = "  bar();";  // 用户主动写了 2 空格
+
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+
+            assertTrue(result.contains("成功完成"));
+            assertEquals(Arrays.asList("  bar();", "end"), Files.readAllLines(file));
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
+    /**
+     * 验证：newStr 部分行有缩进、部分行无缩进时，各行独立判断。
+     * 有缩进的行保留用户缩进，无缩进的行继承原文件缩进。
+     */
+    @Test
+    public void editLooseMatchMixedIndentAndNoIndent() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-edit-");
+        try {
+            Path file = workDir.resolve("demo.txt");
+            Files.write(file, Arrays.asList("    foo();", "    bar();", "    baz();", "end"));
+
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            TerminalTalent.EditOp edit = new TerminalTalent.EditOp();
+            edit.oldStrStartLine = 1;
+            edit.oldStr = "foo();\nbar();\nbaz();";
+            // 第 2 行带 2 空格缩进，其余不带
+            edit.newStr = "newFoo();\n  newBar();\nnewBaz();";
+
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+
+            assertTrue(result.contains("成功完成"));
+            assertEquals(Arrays.asList("    newFoo();", "  newBar();", "    newBaz();", "end"), Files.readAllLines(file));
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
+    /**
+     * 验证：用户通过 newStr 有意改变缩进级别（与原文件不同）时，以用户为准。
+     * 文件缩进 4 空格，newStr 缩进 6 空格 → 保留 6 空格。
+     */
+    @Test
+    public void editLooseMatchUserIntentChangesIndentLevel() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-edit-");
+        try {
+            Path file = workDir.resolve("demo.txt");
+            Files.write(file, Arrays.asList("    foo();", "    bar();", "end"));
+
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            TerminalTalent.EditOp edit = new TerminalTalent.EditOp();
+            edit.oldStrStartLine = 1;
+            edit.oldStr = "foo();\nbar();";
+            edit.newStr = "      newFoo();\n      newBar();";  // 6 空格，与原文件不同
+
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+
+            assertTrue(result.contains("成功完成"));
+            assertEquals(Arrays.asList("      newFoo();", "      newBar();", "end"), Files.readAllLines(file));
         } finally {
             deleteRecursively(workDir);
         }
