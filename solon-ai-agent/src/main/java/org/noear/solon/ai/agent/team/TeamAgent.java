@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.*;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -191,6 +192,7 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
         } else {
             //新问题（重置数据）
             trace.reset(prompt);
+            prompt.attrs().computeIfAbsent(ChatSession.ATTR_SESSIONID, (k) -> session.getSessionId());
             context.trace().recordNode(graph, null);
 
 

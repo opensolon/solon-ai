@@ -122,6 +122,9 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
             if (originalPrompt != null) {
                 session.addMessage(originalPrompt);
+            } else {
+                originalPrompt.attrs().computeIfAbsent(ChatSession.ATTR_SESSIONID,
+                        k -> session.getSessionId());
             }
 
             // 如果没有 sessionId 则推入

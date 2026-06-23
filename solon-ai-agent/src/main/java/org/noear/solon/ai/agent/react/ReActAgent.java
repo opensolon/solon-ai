@@ -194,6 +194,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         } else {
             // 新任务（重置相关数据）
             trace.reset(prompt);
+            prompt.attrs().computeIfAbsent(ChatSession.ATTR_SESSIONID, (k) -> session.getSessionId());
 
             // 1. 加载历史上下文（短期记忆）
             if (trace.getWorkingMemory().isEmpty() && options.getSessionWindowSize() > 0) {

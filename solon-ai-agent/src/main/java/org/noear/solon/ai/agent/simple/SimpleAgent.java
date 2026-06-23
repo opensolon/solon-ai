@@ -145,6 +145,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             }
         } else {
             trace.reset(prompt);
+            prompt.attrs().computeIfAbsent(ChatSession.ATTR_SESSIONID, (k) -> session.getSessionId());
 
             //更新下快照（记录上面的数据）
             session.updateSnapshot();

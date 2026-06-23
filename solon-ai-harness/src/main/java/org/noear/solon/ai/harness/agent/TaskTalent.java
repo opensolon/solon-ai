@@ -179,6 +179,8 @@ public class TaskTalent extends AbsTalent {
 
         String result = null;
         Prompt originalPrompt = Prompt.of(task.prompt);
+        originalPrompt.attrs().computeIfAbsent(ChatSession.ATTR_SESSIONID,
+                k -> session.getSessionId());
 
         try {
             AtomicReference<Throwable> errRef = new AtomicReference<>();
