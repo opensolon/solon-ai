@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.harness.command;
 
+import org.noear.solon.lang.Nullable;
+
 /**
  * 通用命令接口（适用于 CLI、Web 等所有端）
  *

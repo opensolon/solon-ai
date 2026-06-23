@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.harness.command;
 
+import org.noear.solon.lang.Nullable;
+
 import java.util.List;
 
 /**
@@ -54,6 +56,11 @@ public class MarkdownCommand implements Command {
     @Override
     public String description() {
         return description;
+    }
+
+    @Override
+    public String[] examples() {
+        return new String[0];
     }
 
     @Override
