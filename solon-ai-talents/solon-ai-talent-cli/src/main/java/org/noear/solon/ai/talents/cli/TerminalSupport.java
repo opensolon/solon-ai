@@ -944,12 +944,25 @@ public class TerminalSupport {
         String fileName = file.getFileName().toString().toLowerCase();
 
         // 1. 基于已知二进制后缀的快速过滤
-        if (fileName.endsWith(".class") || fileName.endsWith(".jar") ||
-                fileName.endsWith(".exe")   || fileName.endsWith(".dll") ||
-                fileName.endsWith(".so")    || fileName.endsWith(".pyc") ||
-                fileName.endsWith(".png")   || fileName.endsWith(".jpg") ||
-                fileName.endsWith(".gif")   || fileName.endsWith(".zip") ||
-                fileName.endsWith(".gz")    || fileName.endsWith(".pdf")) {
+        if (fileName.endsWith(".class") || fileName.endsWith(".jar")  ||
+                fileName.endsWith(".war")   || fileName.endsWith(".exe")   ||
+                fileName.endsWith(".dll")   || fileName.endsWith(".so")    ||
+                fileName.endsWith(".a")     || fileName.endsWith(".lib")   ||
+                fileName.endsWith(".o")     || fileName.endsWith(".obj")   ||
+                fileName.endsWith(".pyc")   || fileName.endsWith(".pyo")   ||
+                fileName.endsWith(".png")   || fileName.endsWith(".jpg")   ||
+                fileName.endsWith(".jpeg")  || fileName.endsWith(".gif")   ||
+                fileName.endsWith(".webp")  || fileName.endsWith(".ico")   ||
+                fileName.endsWith(".zip")   || fileName.endsWith(".gz")    ||
+                fileName.endsWith(".tar")   || fileName.endsWith(".bz2")   ||
+                fileName.endsWith(".7z")    || fileName.endsWith(".rar")   ||
+                fileName.endsWith(".pdf")   || fileName.endsWith(".doc")   ||
+                fileName.endsWith(".docx")  || fileName.endsWith(".xls")   ||
+                fileName.endsWith(".xlsx")  || fileName.endsWith(".ppt")   ||
+                fileName.endsWith(".pptx")  || fileName.endsWith(".odt")   ||
+                fileName.endsWith(".ods")   || fileName.endsWith(".odp")   ||
+                fileName.endsWith(".bin")   || fileName.endsWith(".dat")   ||
+                fileName.endsWith(".wasm")  || fileName.endsWith(".class")) {
             return true;
         }
 
