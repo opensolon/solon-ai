@@ -59,5 +59,5 @@ public interface Command {
      *
      * @return true 表示已处理该输入（不再触发 Agent 任务）
      */
-    boolean execute(CommandContext ctx) throws Exception;
+    void execute(CommandContext ctx) throws Exception;
 }

@@ -105,12 +105,11 @@ public class MarkdownCommand implements Command {
     }
 
     @Override
-    public boolean execute(CommandContext ctx) throws Exception {
+    public void execute(CommandContext ctx) throws Exception {
         // 替换变量得到 prompt
         String prompt = getResolvedPrompt(ctx.getArgs());
 
         // 作为 Agent 任务执行
         ctx.runAgentTask(prompt, model());
-        return true;
     }
 }
