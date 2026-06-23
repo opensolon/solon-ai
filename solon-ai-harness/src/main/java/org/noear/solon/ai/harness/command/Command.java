@@ -32,6 +32,11 @@ public interface Command {
     String description();
 
     /**
+     * 示例
+     * */
+    String[] examples();
+
+    /**
      * 使用模型
      */
     default String model(){
