@@ -56,7 +56,7 @@ public class StopLoopInterceptor extends AbsReActInterceptor {
         String fingerprint = generateNormalizedFingerprint(assistantMessage);
         if (fingerprint == null) return;
 
-        LinkedList<String> history = trace.getExtraAs(EXTRAS_HISTORY_KEY);
+        List<String> history = trace.getExtraAs(EXTRAS_HISTORY_KEY);
         if (history == null) {
             history = new LinkedList<>();
             trace.setExtra(EXTRAS_HISTORY_KEY, history);
@@ -64,7 +64,7 @@ public class StopLoopInterceptor extends AbsReActInterceptor {
 
         history.add(fingerprint);
         if (history.size() > windowSize) {
-            history.removeFirst();
+            history.remove(0);
         }
 
         long count = history.stream().filter(fp -> fp.equals(fingerprint)).count();
