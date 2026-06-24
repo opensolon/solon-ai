@@ -404,7 +404,7 @@ public class ReasonTask {
                                     response = req.call();
                                 }
 
-                                if (response.isEmpty()) {
+                                if (response == null || response.isEmpty()) {
                                     throw new LlmNoReturnException("The LLM did not return");
                                 }
 
