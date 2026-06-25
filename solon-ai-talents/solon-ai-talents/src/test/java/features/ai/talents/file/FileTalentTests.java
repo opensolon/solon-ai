@@ -82,6 +82,16 @@ public class FileTalentTests {
         Assertions.assertTrue(Files.size(zipPath) > 0);
     }
 
+    @Test
+    public void testZipIllegalOutputPath() {
+        fileTalent.write("a.txt", "content a");
+
+        String result = Assertions.assertDoesNotThrow(() ->
+                zipTalent.zip("../out.zip", new String[]{"a.txt"}));
+
+        Assertions.assertTrue(result.contains("打包失败"));
+    }
+
     // --- 3. Agent 集成测试 (多工具包联动) ---
 
     @Test
