@@ -65,8 +65,14 @@ public class ZipTalent extends AbsTalent {
 
     @ToolMapping(name = "zip", description = "将指定的路径列表（支持文件和目录混合）打包到 ZIP 文件中。")
     public String zip(@Param("zipFileName") String zipFileName, @Param("paths") String[] paths) {
-        Path zipPath = resolvePath(zipFileName);
-        ensureParentDir(zipPath);
+        Path zipPath;
+        try {
+            zipPath = resolvePath(zipFileName);
+            ensureParentDir(zipPath);
+        } catch (Exception e) {
+            LOG.error("Zip failed: {}, charset: {}", zipFileName, charset, e);
+            return "打包失败: " + e.getMessage();
+        }
 
         Map<String, String> env = new HashMap<>();
         env.put("create", "true");
@@ -88,7 +94,7 @@ public class ZipTalent extends AbsTalent {
                 }
             }
             return "打包成功，保存至: " + zipFileName;
-        } catch (IOException e) {
+        } catch (Exception e) {
             LOG.error("Zip failed: {}, charset: {}", zipFileName, charset, e);
             return "打包失败: " + e.getMessage();
         }
