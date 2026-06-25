@@ -64,6 +64,13 @@ public class FileTalentTests {
         Assertions.assertTrue(fileTalent.read(subFile).contains("不存在"));
     }
 
+    @Test
+    public void testFileListIllegalPath() {
+        String result = Assertions.assertDoesNotThrow(() -> fileTalent.list("../"));
+
+        Assertions.assertTrue(result.contains("获取列表失败"));
+    }
+
     // --- 2. ZipTalent 逻辑测试 ---
 
     @Test

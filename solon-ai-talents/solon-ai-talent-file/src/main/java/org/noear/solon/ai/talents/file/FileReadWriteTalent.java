@@ -84,7 +84,12 @@ public class FileReadWriteTalent extends AbsTalent {
 
     @ToolMapping(name = "file_list", description = "列出指定目录下的文件和子目录。如果不指定目录，则列出根目录。")
     public String list(@Param(value = "dirName", required = false) String dirName) {
-        Path targetDir = (dirName == null || dirName.isEmpty()) ? rootPath : resolvePath(dirName);
+        Path targetDir;
+        try {
+            targetDir = (dirName == null || dirName.isEmpty()) ? rootPath : resolvePath(dirName);
+        } catch (Exception e) {
+            return "获取列表失败: " + e.getMessage();
+        }
 
         if (!Files.exists(targetDir)) return "目录不存在: " + (dirName == null ? "/" : dirName);
         if (!Files.isDirectory(targetDir)) return "路径不是目录: " + dirName;
