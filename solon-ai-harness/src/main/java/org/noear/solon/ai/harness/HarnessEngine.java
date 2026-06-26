@@ -465,6 +465,8 @@ public class HarnessEngine {
         if (maxTokens != null) {
             options.setCompressionMaxTokens(maxTokens);
             options.getCompressionInterceptor().setMaxTokens(maxTokens);
+
+            terminalTalent.setMaxCharacterLimit(maxTokens);
         }
     }
 
@@ -843,6 +845,7 @@ public class HarnessEngine {
         terminalTalent.setSandboxEnabled(options.isSandboxEnabled());
         terminalTalent.setSandboxAllowUserHome(options.isSandboxAllowUserHome());
         terminalTalent.setSandboxSystemRestrict(options.isSandboxSystemRestrict());
+        terminalTalent.setMaxCharacterLimit(options.getCompressionMaxTokens());
 
         //mainAgent = createMainAgent(); //改为懒加载
     }

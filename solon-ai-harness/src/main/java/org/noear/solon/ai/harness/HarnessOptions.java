@@ -66,8 +66,8 @@ class HarnessOptions implements Serializable {
 
     // ========== 会话与压缩 ==========
     private volatile int sessionWindowSize = 8;
-    private volatile int compressionMaxMessages = 30;
-    private volatile int compressionMaxTokens = 30_000;
+    private volatile int compressionMaxMessages = 40;
+    private volatile int compressionMaxTokens = 60_000;
     private volatile String compressionModel; //压缩大模型
 
     // ========== 记忆 ==========
