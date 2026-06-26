@@ -50,7 +50,19 @@ public class TerminalSupport {
             this.isLooseMatch = isLooseMatch;
         }
     }
-    static final int MAX_CHARACTER_LIMIT = 128 * 1024;
+    int maxCharacterLimit = 128 * 1024;
+
+    /**
+     * 设置单次读取/搜索的最大物理长度限制（字符数）。
+     * 默认 128KB (128 * 1024)。
+     */
+    public void setMaxCharacterLimit(int maxCharacterLimit) {
+        this.maxCharacterLimit = maxCharacterLimit;
+    }
+
+    public int getMaxCharacterLimit() {
+        return maxCharacterLimit;
+    }
 
     private final MountManager mountManager;
     private final Set<String> ignoreDirs;

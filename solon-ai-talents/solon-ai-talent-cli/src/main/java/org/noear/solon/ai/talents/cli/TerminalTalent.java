@@ -80,6 +80,11 @@ public class TerminalTalent extends AbsTalent {
     //关闭后仅依赖 Java 层自保护 + 系统提示词软约束，可减少误伤（如构建工具被拦截）。
     //仅在 sandboxEnabled=true 时有意义；默认 false（轻量模式）
     private boolean sandboxSystemRestrict = false;
+    /**
+     * 单次读取/搜索的最大物理长度限制（字符数）。
+     * 默认 128KB (128 * 1024)。
+     */
+    private int maxCharacterLimit = 128 * 1024;
     private final MountManager mountManager; // 引入挂载管理器
     private @Nullable SandboxRuntimeConfig sandboxConfig;
     private final ReentrantLock sandboxInitLock = new ReentrantLock();
@@ -145,6 +150,17 @@ public class TerminalTalent extends AbsTalent {
     public void setBashAsyncEnabled(Boolean bashAsyncEnabled) {
         if (bashAsyncEnabled != null) {
             this.bashAsyncEnabled = bashAsyncEnabled;
+        }
+    }
+
+    public int getMaxCharacterLimit() {
+        return maxCharacterLimit;
+    }
+
+    public void setMaxCharacterLimit(int maxCharacterLimit) {
+        this.maxCharacterLimit = maxCharacterLimit;
+        if (support != null) {
+            support.setMaxCharacterLimit(maxCharacterLimit);
         }
     }
 
@@ -331,6 +347,7 @@ public class TerminalTalent extends AbsTalent {
         }
 
         this.support = new TerminalSupport(mountManager, ignoreDirs, shellMode);
+        this.support.setMaxCharacterLimit(this.maxCharacterLimit);
 
         pythonCmd = executor.probePythonCommand();
         nodeCmd = executor.probeNodeCommand();
@@ -647,7 +664,7 @@ public class TerminalTalent extends AbsTalent {
     @ToolMapping(name = "read", description = "读取文件内容。修改文件前先通过此工具确认最新的文本内容、缩进和换行符。支持大文件分页。支持逻辑路径（如 @pool）。优先尝试不限制读取（即尝试完整读取）")
     public String read(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String filePath,
                        @Param(value = "offset", required = false, defaultValue = "1", description = "开始读取的行号（默认从1开始索引）") Integer offset,
-                       @Param(value = "limit", required = false, description = "需要读取的最大行数（默认不限制）。注意：单次读取受 128KB 物理长度保护，若触发截断，请根据输出提示调整 offset 分页读取。") Integer limit,
+                        @Param(value = "limit", required = false, description = "需要读取的最大行数（默认不限制）。注意：单次读取受最大物理长度保护，如果触发截断，请根据输出提示调整 offset 分页读取。") Integer limit,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
         Path target = support.resolveSafePath(workPath, filePath, false, sandboxEnabled, sandboxAllowUserHome);
@@ -687,14 +704,14 @@ public class TerminalTalent extends AbsTalent {
                 String lineOutput = String.format("%6d | %s\n", startLine0 + count + 1, line);
 
                 // 实时检测物理长度限制 (Char Size)
-                if (contentBuilder.length() + lineOutput.length() > TerminalSupport.MAX_CHARACTER_LIMIT) {
+                if (contentBuilder.length() + lineOutput.length() > support.maxCharacterLimit) {
                     isByteTruncated = true;
                     // 边界：单行本身超过物理上限（如 minified JS/CSS、单行大 JSON）时 contentBuilder 仍为空，
                     // 直接 break 会导致无内容输出且 actualEndLine 不前进，分页提示 offset 与本次相同 → AI 重试死循环。
                     // 故输出该行的安全截断片段并让行号前进一行，保证分页可推进。
                     if (contentBuilder.length() == 0) {
                         String prefix = String.format("%6d | ", startLine0 + count + 1);
-                        int slice = Math.max(0, Math.min(line.length(), TerminalSupport.MAX_CHARACTER_LIMIT - prefix.length() - 16));
+                        int slice = Math.max(0, Math.min(line.length(), support.maxCharacterLimit - prefix.length() - 16));
                         contentBuilder.append(prefix)
                                 .append(line, 0, slice)
                                 .append("…(单行过长已截断)\n");
@@ -726,7 +743,7 @@ public class TerminalTalent extends AbsTalent {
         if (isByteTruncated || (limit != null && hasMore)) {
             sb.append("\n\n--- [内容未完] ---");
             if (isByteTruncated) {
-                sb.append("\n警告：因单次读取物理长度限制（128KB），内容已被截断。");
+                sb.append("\n警告：因单次读取物理长度限制（" + (support.maxCharacterLimit / 1024) + "KB），内容已被截断。");
             } else {
                 sb.append("\n提示：已达到你指定的 limit 行数限制。");
             }
@@ -899,7 +916,7 @@ public class TerminalTalent extends AbsTalent {
                             sb.append(displayPath).append(":").append(lineNum).append(": ").append(trimmedLine).append("\n");
 
                             // 发现匹配后立即检查长度，防止 StringBuilder 过载
-                            if (sb.length() > TerminalSupport.MAX_CHARACTER_LIMIT) {
+                            if (sb.length() > support.maxCharacterLimit) {
                                 return FileVisitResult.TERMINATE;
                             }
                         }
@@ -911,9 +928,9 @@ public class TerminalTalent extends AbsTalent {
             }
         });
 
-        if (sb.length() >= TerminalSupport.MAX_CHARACTER_LIMIT) {
+        if (sb.length() >= support.maxCharacterLimit) {
             sb.append("\n\n--- [内容未完] ---");
-            sb.append("\n警告：搜索结果过多，已达到 128KB 限制并截断。请缩小搜索路径或关键词。");
+            sb.append("\n警告：搜索结果过多，已达到 " + (support.maxCharacterLimit / 1024) + "KB 限制并截断。请缩小搜索路径或关键词。");
         }
 
         return sb.length() == 0 ? "未找到结果。" : sb.toString();
