@@ -261,6 +261,10 @@ public class ApplyPatchTalent extends AbsTalent {
             } else if (line.startsWith("*** Delete File:")) {
                 current = new PatchHunk("delete", line.substring(16).trim());
                 hunks.add(current);
+            } else if (line.equals("*** Begin Patch")) {
+                continue;
+            } else if (line.equals("*** End Patch")) {
+                current = null;
             } else if (line.startsWith("*** Move to:") && current != null) {
                 // 对齐 OpenCode 的 move_path 映射
                 current.move_path = line.substring(12).trim();
