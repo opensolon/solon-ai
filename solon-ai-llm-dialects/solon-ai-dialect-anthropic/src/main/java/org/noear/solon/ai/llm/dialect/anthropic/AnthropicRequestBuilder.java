@@ -127,12 +127,65 @@ public class AnthropicRequestBuilder {
                 continue;
             }
 
+            // 处理tool_choice（需要从OpenAI格式转换为Anthropic格式）
+            if ("tool_choice".equals(key)) {
+                buildToolChoiceNode(root, kv.getValue());
+                continue;
+            }
+
             root.set(key, ONode.ofBean(kv.getValue()));
+        }
+
+        // 如果用户未显式设置 tool_choice 但有 tools，默认使用 auto 语义（由API自行决定）
+        if (!options.options().containsKey("tool_choice") && !Utils.isEmpty(options.tools())) {
+            // Anthropic 默认行为等同于 auto，无需显式设置
         }
 
         buildToolsNode(root, options);
 
         return root;
+    }
+
+    /**
+     * 构建 tool_choice 节点（转换为Anthropic格式）
+     *
+     * OpenAI 格式 → Anthropic 格式：
+     *   "auto"       → {"type": "auto"}
+     *   "required"   → {"type": "any"}
+     *   "none"       → {"type": "none"}  (仅 Anthropic 特定客户端支持)
+     *   {"type":"function",...} → {"type":"tool","name":"..."}
+     */
+    @SuppressWarnings("unchecked")
+    private void buildToolChoiceNode(ONode root, Object toolChoice) {
+        ONode tcNode = root.getOrNew("tool_choice");
+        if (toolChoice instanceof Map) {
+            Map<String, Object> choiceMap = (Map<String, Object>) toolChoice;
+            String type = (String) choiceMap.get("type");
+            if ("function".equals(type) && choiceMap.containsKey("function")) {
+                Map<String, Object> funcMap = (Map<String, Object>) choiceMap.get("function");
+                String name = (String) funcMap.get("name");
+                tcNode.set("type", "tool");
+                if (Utils.isNotEmpty(name)) {
+                    tcNode.set("name", name);
+                }
+            } else {
+                tcNode.set("type", "auto");
+            }
+        } else if (toolChoice instanceof String) {
+            String choice = (String) toolChoice;
+            switch (choice) {
+                case "required":
+                    tcNode.set("type", "any");
+                    break;
+                case "none":
+                    tcNode.set("type", "none");
+                    break;
+                case "auto":
+                default:
+                    tcNode.set("type", "auto");
+                    break;
+            }
+        }
     }
 
     /**
