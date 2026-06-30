@@ -104,7 +104,6 @@ public class GeminiThoughtProcessor {
             if (!toolCalls.isEmpty()) {
                 if (resp.in_thinking && resp.isStream()) {
                     messageList.add(new AssistantMessage("</think>", true));
-                    messageList.add(new AssistantMessage("\n\n", false));
                 }
                 resp.in_thinking = false;
 
@@ -116,7 +115,6 @@ public class GeminiThoughtProcessor {
             if (resp.isStream()) {
                 if (hasThoughtPart && !hasNormalPart) {
                     if (!resp.in_thinking) {
-                        messageList.add(new AssistantMessage("\n\n", true));
                         messageList.add(new AssistantMessage("\n\n", true));
                         resp.in_thinking = true;
                     }
@@ -135,7 +133,6 @@ public class GeminiThoughtProcessor {
                 } else if (!hasThoughtPart && hasNormalPart) {
                     if (resp.in_thinking) {
                         messageList.add(new AssistantMessage("</think>", true));
-                        messageList.add(new AssistantMessage("\n\n", false));
                         resp.in_thinking = false;
                     }
 
@@ -153,7 +150,6 @@ public class GeminiThoughtProcessor {
                 } else if (hasThoughtPart && hasNormalPart) {
                     if (!resp.in_thinking) {
                         messageList.add(new AssistantMessage("\n\n", true));
-                        messageList.add(new AssistantMessage("\n\n", true));
                     }
 
                     for (ONode oPart : oParts.getArray()) {
@@ -169,7 +165,6 @@ public class GeminiThoughtProcessor {
                     }
 
                     messageList.add(new AssistantMessage("</think>", true));
-                    messageList.add(new AssistantMessage("\n\n", false));
                     resp.in_thinking = false;
 
                     for (ONode oPart : oParts.getArray()) {

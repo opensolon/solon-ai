@@ -161,12 +161,12 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
             } else {
                 int thinkEndIndex = content.indexOf("</think>");
                 if (thinkEndIndex > -1) {
-                    resultContent = content.substring(thinkEndIndex + 8).trim();
+                    resultContent = content.substring(thinkEndIndex + 8);
                 } else {
                     if (content.contains("<think>")) {
                         resultContent = "";
                     } else {
-                        resultContent = content.trim();
+                        resultContent = content;
                     }
                 }
             }

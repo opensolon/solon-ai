@@ -193,8 +193,6 @@ public class AnthropicResponseParser {
                             // 第一次进入思考模式，添加开始标记
                             resp.addChoice(new ChatChoice(0, new Date(), null,
                                     new AssistantMessage("<think>", true)));
-                            resp.addChoice(new ChatChoice(0, new Date(), null,
-                                    new AssistantMessage("\n\n", true)));
                             resp.in_thinking = true;
                             hasChoices = true;
                         }
@@ -209,8 +207,6 @@ public class AnthropicResponseParser {
                         if (resp.in_thinking) {
                             resp.addChoice(new ChatChoice(0, new Date(), null,
                                     new AssistantMessage("</think>", true)));
-                            resp.addChoice(new ChatChoice(0, new Date(), null,
-                                    new AssistantMessage("\n\n", false)));
                             resp.in_thinking = false;
                             hasChoices = true;
                         }
@@ -225,8 +221,6 @@ public class AnthropicResponseParser {
                         if (resp.in_thinking) {
                             resp.addChoice(new ChatChoice(0, new Date(), null,
                                     new AssistantMessage("</think>", true)));
-                            resp.addChoice(new ChatChoice(0, new Date(), null,
-                                    new AssistantMessage("\n\n", false)));
                             resp.in_thinking = false;
                             hasChoices = true;
                         }
@@ -338,7 +332,7 @@ public class AnthropicResponseParser {
                 // 消息结束，清理状态并添加信息对 finished 进行透传
                 resp.attrRemove(STREAM_TOOL_STATE_KEY);
 
-                if (resp.isEmpty()) { //完成时。如果为空，则补位
+                if (resp.hasChoices() == false) { //完成时。如果为空，则补位
                     resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 }
 

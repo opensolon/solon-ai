@@ -251,7 +251,6 @@ public class AnthropicChatDialect extends AbstractChatDialect {
 
         if (resp.in_thinking && resp.isStream()) {
             messageList.add(new AssistantMessage("</think>", true));
-            messageList.add(new AssistantMessage("\n\n", false));
             resp.in_thinking = false;
         }
 
