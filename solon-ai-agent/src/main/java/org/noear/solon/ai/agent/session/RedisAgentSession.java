@@ -174,7 +174,7 @@ public class RedisAgentSession implements AgentSession {
         try {
             // 严格遵循原逻辑：使用 snapshotKey 持久化
             redisClient.getBucket().store(snapshotKey, cache.getContext().toJson());
-        } catch (Exception e) {
+        } catch (Throwable e) {
             LOG.error("Persistence snapshot failed: {}", e.toString());
         } finally {
             locker.unlock();

@@ -186,7 +186,7 @@ public class FileAgentSession implements AgentSession {
             // 将缓存中的快照全量持久化
             String json = cache.getContext().toJson();
             Files.write(snapshotFile.toPath(), json.getBytes(StandardCharsets.UTF_8));
-        } catch (Exception e) {
+        } catch (Throwable e) {
             LOG.error("Persistence snapshot failed: {}", e.toString());
         } finally {
             locker.unlock();
