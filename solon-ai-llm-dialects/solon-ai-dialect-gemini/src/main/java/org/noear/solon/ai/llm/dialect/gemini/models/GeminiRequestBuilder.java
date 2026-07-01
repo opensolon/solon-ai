@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.llm.dialect.gemini;
+package org.noear.solon.ai.llm.dialect.gemini.models;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
@@ -31,7 +31,7 @@ import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
-import org.noear.solon.ai.llm.dialect.gemini.model.GenerationConfig;
+import org.noear.solon.ai.llm.dialect.gemini.models.model.GenerationConfig;
 
 import java.util.Collection;
 import java.util.List;

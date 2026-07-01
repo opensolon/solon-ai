@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.llm.dialect.gemini;
+package org.noear.solon.ai.llm.dialect.gemini.models;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;

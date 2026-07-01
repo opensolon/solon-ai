@@ -22,6 +22,9 @@ import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
+import org.noear.solon.ai.llm.dialect.gemini.models.GeminiRequestBuilder;
+import org.noear.solon.ai.llm.dialect.gemini.models.GeminiResponseParser;
+import org.noear.solon.ai.llm.dialect.gemini.models.GeminiThoughtProcessor;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.impl.HttpSslSupplierAny;
@@ -78,8 +81,12 @@ public class GeminiChatDialect extends AbstractChatDialect {
     public boolean matched(ChatConfig config) {
         String standard = config.getStandardOrProvider();
 
-        return "gemini".equalsIgnoreCase(standard) ||
-                (Assert.isEmpty(standard) && config.getApiUrl().contains("/v1beta/models/") && config.getApiUrl().endsWith("generateContent"));
+        if ("gemini".equalsIgnoreCase(standard)
+                || "gemini-models".equalsIgnoreCase(standard)) {
+            return true;
+        }
+
+        return (Assert.isEmpty(standard) && config.getApiUrl().contains("/v1beta/models/") && config.getApiUrl().endsWith("generateContent"));
     }
 
     @Override

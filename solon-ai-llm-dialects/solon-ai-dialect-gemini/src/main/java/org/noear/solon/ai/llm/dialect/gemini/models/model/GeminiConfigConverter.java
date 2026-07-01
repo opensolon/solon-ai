@@ -13,11 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.llm.dialect.gemini.model;
+package org.noear.solon.ai.llm.dialect.gemini.models.model;
 
 import org.noear.snack4.ONode;
 
-import java.lang.reflect.Field;
 import java.util.*;
 
 /**

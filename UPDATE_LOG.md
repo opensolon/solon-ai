@@ -15,6 +15,7 @@
 
 * 新增 solon-ai-loop 插件
 * 新增 solon-ai-talent-code 才能插件（从 solon-ai-harness 分离出来）
+* 新增 solon-ai-dialect-gemini gemini-interactions 方言适配
 * 添加 solon-ai-core Talent.setEnabled 方法（提供接口级的开关设置）
 * 添加 solon-ai-core 方言缓存控制机制
 * 添加 solon-ai-agent ReActTrace.agentName 字段（不再从 config 获取）
