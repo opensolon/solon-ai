@@ -23,6 +23,7 @@
 * 添加 solon-ai-talent-cli TerminalTalent.maxCharacterLimit 设置
 * 优化 solon-ai-dialect-x 方言解析
 * 调整 solon-ai-harness GenerateTool 更名为 GenerateTalent（方便动态启用/禁用）
+* 修复 solon-ai-core 方言结束时没有 choice 时，不会触发最后一个 stream 输出的问题（造成无法获取 getUsage）
 * mcp McpSchema.Sampling 类添加 `@JsonIgnoreProperties(ignoreUnknown = true)` 增加兼容性
 
 ### 4.0.2

@@ -403,6 +403,10 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                     resp.addChoice(choice);
                     publishResponse(sink, resp, choice);
                 }
+            } else if (resp.getUsage() != null) {
+                ChatChoice choice = new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage(""));
+                resp.addChoice(choice);
+                publishResponse(sink, resp, choice);
             }
         }
 
