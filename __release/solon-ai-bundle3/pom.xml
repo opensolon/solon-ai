@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.noear</groupId>
+        <artifactId>solon-parent</artifactId>
+        <version>4.0.3-SNAPSHOT</version>
+        <relativePath />
+    </parent>
+
+    <groupId>org.noear.bundle</groupId>
+    <artifactId>solon-ai-bundle3</artifactId>
+    <name>${project.artifactId}</name>
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>../../solon-ai-talents/solon-ai-talents</module>
+        <module>../../solon-ai-talents/solon-ai-talent-cli</module>
+        <module>../../solon-ai-talents/solon-ai-talent-code</module>
+        <module>../../solon-ai-talents/solon-ai-talent-data</module>
+        <module>../../solon-ai-talents/solon-ai-talent-diff</module>
+        <module>../../solon-ai-talents/solon-ai-talent-file</module>
+        <module>../../solon-ai-talents/solon-ai-talent-generation</module>
+        <module>../../solon-ai-talents/solon-ai-talent-lsp</module>
+        <module>../../solon-ai-talents/solon-ai-talent-mail</module>
+        <module>../../solon-ai-talents/solon-ai-talent-memory</module>
+        <module>../../solon-ai-talents/solon-ai-talent-mount</module>
+        <module>../../solon-ai-talents/solon-ai-talent-pdf</module>
+        <module>../../solon-ai-talents/solon-ai-talent-social</module>
+        <module>../../solon-ai-talents/solon-ai-talent-sys</module>
+        <module>../../solon-ai-talents/solon-ai-talent-text2sql</module>
+        <module>../../solon-ai-talents/solon-ai-talent-gateway</module>
+        <module>../../solon-ai-talents/solon-ai-talent-web</module>
+        <module>../../solon-ai-talents/solon-ai-talent-lucene</module>
+    </modules>
+</project>

@@ -40,26 +40,6 @@
         <module>../../solon-ai-llm-dialects/solon-ai-dialect-openai</module>
         <module>../../solon-ai-llm-dialects/solon-ai-dialect-anthropic</module>
 
-
-        <module>../../solon-ai-talents/solon-ai-talents</module>
-        <module>../../solon-ai-talents/solon-ai-talent-cli</module>
-        <module>../../solon-ai-talents/solon-ai-talent-code</module>
-        <module>../../solon-ai-talents/solon-ai-talent-data</module>
-        <module>../../solon-ai-talents/solon-ai-talent-diff</module>
-        <module>../../solon-ai-talents/solon-ai-talent-file</module>
-        <module>../../solon-ai-talents/solon-ai-talent-generation</module>
-        <module>../../solon-ai-talents/solon-ai-talent-lsp</module>
-        <module>../../solon-ai-talents/solon-ai-talent-mail</module>
-        <module>../../solon-ai-talents/solon-ai-talent-memory</module>
-        <module>../../solon-ai-talents/solon-ai-talent-mount</module>
-        <module>../../solon-ai-talents/solon-ai-talent-pdf</module>
-        <module>../../solon-ai-talents/solon-ai-talent-social</module>
-        <module>../../solon-ai-talents/solon-ai-talent-sys</module>
-        <module>../../solon-ai-talents/solon-ai-talent-text2sql</module>
-        <module>../../solon-ai-talents/solon-ai-talent-gateway</module>
-        <module>../../solon-ai-talents/solon-ai-talent-web</module>
-        <module>../../solon-ai-talents/solon-ai-talent-lucene</module>
-
         <module>../../solon-ai-ui/solon-ai-ui-aisdk</module>
         <module>../../solon-ai-ui/solon-ai-ui-agui</module>
     </modules>
