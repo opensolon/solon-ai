@@ -261,7 +261,7 @@ UltraQAStrategy strategy = UltraQAStrategy.builder()
 <dependency>
     <groupId>org.noear</groupId>
     <artifactId>solon-ai-loop</artifactId>
-    <version>4.0.3-SNAPSHOT</version>
+    <version>4.0.3</version>
 </dependency>
 ```
 
