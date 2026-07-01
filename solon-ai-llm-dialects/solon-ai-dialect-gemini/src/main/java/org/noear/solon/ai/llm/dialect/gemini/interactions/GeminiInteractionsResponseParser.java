@@ -85,7 +85,7 @@ public class GeminiInteractionsResponseParser {
      *   "steps": [
      *     {"type": "thought", "summary": [...], "signature": "..."},
      *     {"type": "model_output", "content": [{"type":"text","text":"Answer"}]},
-     *     {"type": "function_call", "name":"...", "arguments":"...", "call_id":"..."}
+     *     {"type": "function_call", "name":"...", "arguments":{...}, "id":"..."}
      *   ],
      *   "usage": {"total_input_tokens":7, "total_output_tokens":20, "total_tokens":49}
      * }
@@ -336,13 +336,14 @@ public class GeminiInteractionsResponseParser {
             return true;
         }
 
-        // 如果是 function_call 类型，保存函数名和 call_id
+        // 如果是 function_call 类型，保存函数名和 id
+        // Interactions API 在 function_call step 中使用 "id" 字段（非 "call_id"）
         if ("function_call".equals(stepType)) {
             if (step.hasKey("name")) {
                 acc.functionName = step.get("name").getString();
             }
-            if (step.hasKey("call_id")) {
-                acc.callId = step.get("call_id").getString();
+            if (step.hasKey("id")) {
+                acc.callId = step.get("id").getString();
             }
         }
 
@@ -494,7 +495,8 @@ public class GeminiInteractionsResponseParser {
      */
     private ToolCall parseFunctionCallStep(ONode oStep) {
         String name = oStep.get("name").getString();
-        String callId = oStep.get("call_id").getString();
+        // Interactions API 在 function_call step 中使用 "id" 字段（非 "call_id"）
+        String callId = oStep.get("id").getString();
         if (name == null) return null;
 
         if (Utils.isEmpty(callId)) {

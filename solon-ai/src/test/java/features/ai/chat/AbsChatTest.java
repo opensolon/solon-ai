@@ -55,6 +55,10 @@ public abstract class AbsChatTest {
 
         //打印消息
         log.info("{}", resp.getMessage());
+
+        assert resp.hasChoices();
+        assert resp.getUsage() != null;
+        assert resp.getUsage().totalTokens() >= 0;
     }
 
     @Test
@@ -64,11 +68,17 @@ public abstract class AbsChatTest {
 
         //流返回
         CountDownLatch doneLatch = new CountDownLatch(1);
+        AtomicReference<ChatResponse> lastRespRef = new AtomicReference<>();
         AtomicBoolean done = new AtomicBoolean(false);
         chatModel.prompt("hello").stream()
                 .subscribe(new SimpleSubscriber<ChatResponse>()
                         .doOnNext(resp -> {
                             log.info("{} - {}", resp.isFinished(), resp.getMessage());
+
+                            if (resp.isFinished()) {
+                                lastRespRef.set(resp);
+                            }
+
                             done.set(resp.isFinished());
                         }).doOnComplete(() -> {
                             log.debug("::完成!");
@@ -80,6 +90,13 @@ public abstract class AbsChatTest {
 
         doneLatch.await();
         assert done.get();
+
+        assert lastRespRef.get() != null;
+        assert lastRespRef.get().getUsage() != null;
+
+        System.out.println(lastRespRef.get().getUsage());
+
+        assert lastRespRef.get().getUsage().totalTokens() >= 0;
     }
 
     @Test

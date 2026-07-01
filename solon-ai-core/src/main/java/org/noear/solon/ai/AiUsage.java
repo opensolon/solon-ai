@@ -97,4 +97,16 @@ public class AiUsage {
     public ONode getSource() {
         return source;
     }
+
+    @Override
+    public String toString() {
+        return "AiUsage{" +
+                "cacheReadInputTokens=" + cacheReadInputTokens +
+                ", cacheCreationInputTokens=" + cacheCreationInputTokens +
+                ", totalTokens=" + totalTokens +
+                ", completionTokens=" + completionTokens +
+                ", thinkTokens=" + thinkTokens +
+                ", promptTokens=" + promptTokens +
+                '}';
+    }
 }

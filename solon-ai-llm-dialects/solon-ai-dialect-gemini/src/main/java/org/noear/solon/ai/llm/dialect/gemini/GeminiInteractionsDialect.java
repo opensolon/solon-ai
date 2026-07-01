@@ -23,6 +23,7 @@ import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.llm.dialect.gemini.interactions.GeminiInteractionsRequestBuilder;
 import org.noear.solon.ai.llm.dialect.gemini.interactions.GeminiInteractionsResponseParser;
@@ -32,6 +33,7 @@ import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -132,10 +134,9 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
     @Override
     public HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
         String apiUrl = getApiUrl(config);
-        if(apiUrl.contains("?") == false) {
+        if (isStream && apiUrl.contains("?") == false) {
             apiUrl += "?alt=sse";
         }
-
 
         HttpUtils httpUtils = HttpUtils.http(apiUrl)
                 .ssl(HttpSslSupplierAny.getInstance())
@@ -190,8 +191,55 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
 
     @Override
     public List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
-        // Interactions API 不使用 parts[] 结构，由 responseParser 直接处理
-        // 此方法为兜底，通常不会被调用
+        // 处理 steps 数组格式（来自 buildAssistantToolCallMessageNode）
+        // 格式: [{type:"function_call", name:"...", id:"...", arguments:{...}}, ...]
+        if (oMessage != null && oMessage.isArray()) {
+            List<ToolCall> toolCalls = new ArrayList<>();
+            int idx = 0;
+            for (ONode step : oMessage.getArray()) {
+                String type = step.get("type").getString();
+                if ("function_call".equals(type)) {
+                    String name = step.get("name").getString();
+                    String callId = step.get("id").getString();
+                    if (Utils.isEmpty(callId)) {
+                        callId = name + "_" + System.currentTimeMillis();
+                    }
+
+                    // 解析 arguments
+                    ONode argsNode = step.getOrNull("arguments");
+                    String argsStr = "{}";
+                    Map<String, Object> argsMap = null;
+                    if (argsNode != null) {
+                        if (argsNode.isObject()) {
+                            argsStr = argsNode.toJson();
+                            argsMap = argsNode.toBean(Map.class);
+                        } else {
+                            argsStr = argsNode.getString();
+                        }
+                    }
+
+                    ToolCall toolCall = new ToolCall(String.valueOf(idx), callId, name, argsStr, argsMap);
+
+                    // 第一个 function_call 可能携带 thought_signature
+                    if (idx == 0 && step.hasKey("thought_signature")) {
+                        String sig = step.get("thought_signature").getString();
+                        if (Utils.isNotEmpty(sig)) {
+                            toolCall.setThoughtSignature(sig);
+                        }
+                    }
+
+                    toolCalls.add(toolCall);
+                    idx++;
+                }
+            }
+
+            List<AssistantMessage> messages = new ArrayList<>();
+            if (!toolCalls.isEmpty()) {
+                messages.add(new AssistantMessage("", false, null, null, toolCalls, null));
+            }
+            return messages;
+        }
+
         return super.parseAssistantMessage(resp, oMessage);
     }
 }

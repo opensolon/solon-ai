@@ -201,10 +201,11 @@ public class GeminiInteractionsRequestBuilder {
                 ONode step = new ONode();
                 step.set("type", "function_call");
                 step.set("name", call.getName());
+                // Interactions API: function_call step 使用 "id" 字段
                 if (Utils.isNotEmpty(call.getId())) {
-                    step.set("call_id", call.getId());
+                    step.set("id", call.getId());
                 } else {
-                    step.set("call_id", call.getName() + "_" + System.currentTimeMillis());
+                    step.set("id", call.getName() + "_" + System.currentTimeMillis());
                 }
                 // arguments
                 if (call.getArgumentsStr() != null) {
@@ -253,10 +254,9 @@ public class GeminiInteractionsRequestBuilder {
             step.set("call_id", msg.getToolCallId());
         }
 
-        // result.content[]
-        ONode resultNode = step.getOrNew("result");
-        ONode resultContent = resultNode.getOrNew("content").asArray();
-        resultContent.addNew().set("type", "text").set("text", msg.getContent());
+        // result[] — 直接数组，每个元素是 FunctionResultSubcontent
+        ONode resultArr = step.getOrNew("result").asArray();
+        resultArr.addNew().set("type", "text").set("text", msg.getContent());
 
         return step;
     }
@@ -385,7 +385,14 @@ public class GeminiInteractionsRequestBuilder {
     /**
      * 构建 tools 节点
      * <p>
-     * Interactions API 的 tools 结构与 Generate Content API 相同。
+     * Interactions API 的 tools 结构：
+     * <pre>
+     * tools: [
+     *   { "type": "function", "name": "...", "description": "...", "parameters": {...} }
+     * ]
+     * </pre>
+     * 与 Generate Content API（functionDeclarations[] 包装）不同，
+     * Interactions API 采用扁平化结构，每个工具元素通过 type 字段做多态鉴别。
      */
     private void buildToolsNode(ONode root, ChatOptions options) {
         Collection<FunctionTool> tools = options.tools();
@@ -396,21 +403,22 @@ public class GeminiInteractionsRequestBuilder {
         root.getOrNew("tools").asArray().then(toolsNode -> {
             for (FunctionTool func : tools) {
                 toolsNode.addNew().then(toolNode -> {
-                    toolNode.getOrNew("functionDeclarations").asArray().addNew().then(funcNode -> {
-                        funcNode.set("name", func.name());
-                        funcNode.set("description", func.descriptionAndMeta());
-                        String inputSchema = func.inputSchema();
-                        if (Utils.isNotEmpty(inputSchema)) {
-                            try {
-                                ONode schemaNode = ONode.ofJson(inputSchema);
-                                funcNode.set("parameters", schemaNode);
-                            } catch (Exception e) {
-                                funcNode.getOrNew("parameters").asArray();
-                            }
-                        } else {
-                            funcNode.getOrNew("parameters").asArray();
+                    // Interactions API: 扁平结构 + type 鉴别器
+                    toolNode.set("type", func.type());
+                    toolNode.set("name", func.name());
+                    toolNode.set("description", func.descriptionAndMeta());
+
+                    String inputSchema = func.inputSchema();
+                    if (Utils.isNotEmpty(inputSchema)) {
+                        try {
+                            ONode schemaNode = ONode.ofJson(inputSchema);
+                            toolNode.set("parameters", schemaNode);
+                        } catch (Exception e) {
+                            toolNode.getOrNew("parameters").asArray();
                         }
-                    });
+                    } else {
+                        toolNode.getOrNew("parameters").asArray();
+                    }
                 });
             }
         });
@@ -455,7 +463,8 @@ public class GeminiInteractionsRequestBuilder {
             ONode step = arrNode.addNew();
             step.set("type", "function_call");
             step.set("name", builder.nameBuilder.toString());
-            step.set("call_id", builder.idBuilder.toString());
+            // Interactions API: function_call step 使用 "id" 字段
+            step.set("id", builder.idBuilder.toString());
 
             if (builder.argumentsBuilder.length() > 0) {
                 String argsStr = builder.argumentsBuilder.toString();
