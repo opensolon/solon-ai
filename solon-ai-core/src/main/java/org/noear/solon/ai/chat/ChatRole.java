@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.chat;
 
+import java.util.Locale;
+
 /**
  * 聊天角色
  *
@@ -44,6 +46,6 @@ public enum ChatRole {
             return ASSISTANT;
         }
 
-        return valueOf(name.toUpperCase());
+        return valueOf(name.toUpperCase(Locale.ROOT));
     }
 }
