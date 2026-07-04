@@ -84,10 +84,54 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     }
 
     /**
+     * 角色
+     *
+     * @since 4.0.4
+     */
+    @Override
+    public ChatRequestDesc role(String role) {
+        if (options != null) {
+            options.role(role);
+        }
+
+        return this;
+    }
+
+    /**
+     * 指令
+     *
+     * @since 4.0.4
+     */
+    @Override
+    public ChatRequestDesc instruction(String instruction) {
+        if (options != null) {
+            options.instruction(instruction);
+        }
+
+        return this;
+    }
+
+    /**
+     * 系统提示词
+     *
+     * @since 4.0.4
+     */
+    @Override
+    public ChatRequestDesc systemPrompt(String systemPrompt) {
+        if (options != null) {
+            options.systemPrompt(systemPrompt);
+        }
+
+        return this;
+    }
+
+    /**
      * 选项设置
      *
      * @param options 选项
+     * @deprecated 4.0.4
      */
+    @Deprecated
     @Override
     public ChatRequestDesc options(ChatOptions options) {
         if (options != null) {

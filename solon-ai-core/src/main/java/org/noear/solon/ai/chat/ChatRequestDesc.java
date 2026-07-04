@@ -39,10 +39,33 @@ public interface ChatRequestDesc {
     ChatRequestDesc session(ChatSession session);
 
     /**
+     * 角色
+     *
+     * @since 4.0.4
+     */
+    ChatRequestDesc role(String role);
+
+    /**
+     * 指令
+     *
+     * @since 4.0.4
+     */
+    ChatRequestDesc instruction(String instruction);
+
+    /**
+     * 系统提示词
+     *
+     * @since 4.0.4
+     */
+    ChatRequestDesc systemPrompt(String systemPrompt);
+
+    /**
      * 选项设置
      *
      * @param options 选项
+     * @deprecated 4.0.4
      */
+    @Deprecated
     ChatRequestDesc options(ChatOptions options);
 
     /**

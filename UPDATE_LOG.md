@@ -11,6 +11,11 @@
 *  mcp channel 概念改为 transport （并保持兼容）???
 
 
+
+### 4.0.4
+
+* 添加 solon-ai-core ChatRequestDesc.role, instruction, systemPrompt 方法
+
 ### 4.0.3
 
 * 新增 solon-ai-loop 插件
