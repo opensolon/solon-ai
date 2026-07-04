@@ -110,7 +110,7 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
         }
 
         //自动补全地址
-        if (config.getApiUrl().endsWith("/interactions?alt=sse")) {
+        if (config.getApiUrl().endsWith("/interactions?alt=sse") || config.getApiUrl().endsWith("/interactions")) {
             return config.getApiUrl();
         } else {
             if (pattern.matcher(config.getApiUrl()).find()) { //匹配 /v1,/v4/ 等
