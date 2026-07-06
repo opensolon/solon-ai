@@ -144,8 +144,8 @@ assert !resp2.getSession().isPending();  // 流程正常结束
 | 模式 | 写操作 | 读操作 | 适用场景 |
 |------|--------|--------|----------|
 | `DEFAULT` | ASK（人工确认） | ASK | 日常开发，安全优先 |
-| `PLAN` | DENY（拒绝） | ALLOW | 只读分析模式，不修改任何文件 |
-| `BYPASS_PERMISSIONS` | ALLOW | ALLOW | 完全信任，跳过所有审批 |
+| `READ_ONLY` | DENY（拒绝） | ALLOW | 只读分析模式，不修改任何文件 |
+| `BYPASS` | ALLOW | ALLOW | 完全信任，跳过所有审批 |
 | `ACCEPT_EDITS` | ALLOW | ASK | 自动接受文件编辑，网络等仍需确认 |
 | `DONT_ASK` | ALLOW | ALLOW | 免打扰，不弹确认 |
 | `AUTO` | ALLOW | ALLOW | 自动模式，使用分类器自动决策 |
@@ -163,7 +163,7 @@ HarnessEngine.of(workspace, home)
 **运行时动态切换：**
 
 ```java
-engine.setPermissionMode(PermissionMode.PLAN);  // 切换到只读模式
+engine.setPermissionMode(PermissionMode.READ_ONLY);  // 切换到只读模式
 ```
 
 ---
@@ -273,7 +273,7 @@ PermissionContext ctx = PermissionContext.builder()
 PermissionContext ctx = PermissionContext.create();
 
 // 切换模式
-PermissionContext ctx2 = ctx.withMode(PermissionMode.PLAN);
+PermissionContext ctx2 = ctx.withMode(PermissionMode.READ_ONLY);
 
 // 添加规则
 PermissionContext ctx3 = ctx.addRule(PermissionRule.allow("bash", RuleSource.SESSION));
@@ -316,8 +316,8 @@ PermissionContext ctx7 = ctx.addDirectories(List.of(Path.of("/shared")));
 | 模式 | 写工具 | 非写工具 |
 |------|--------|----------|
 | `DEFAULT` | ASK | ASK |
-| `PLAN` | DENY | ALLOW |
-| `BYPASS_PERMISSIONS` | ALLOW | ALLOW |
+| `READ_ONLY` | DENY | ALLOW |
+| `BYPASS` | ALLOW | ALLOW |
 | `ACCEPT_EDITS` | ALLOW | ASK |
 | `DONT_ASK` | ALLOW | ALLOW |
 | `AUTO` | ALLOW | ALLOW |

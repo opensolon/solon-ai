@@ -28,7 +28,6 @@ import java.util.Optional;
 public class PermissionRule {
     private final String toolName;
     private final PermissionBehavior behavior;
-    private final RuleSource source;
     private final String pattern; // null 表示无模式，匹配全部
 
     /**
@@ -36,13 +35,11 @@ public class PermissionRule {
      *
      * @param toolName  工具名称（如 "bash", "write", "*"）
      * @param behavior  匹配后的权限行为
-     * @param source    规则来源
      * @param pattern   glob 模式（如 "git *", "cat *"），null 表示无模式
      */
-    public PermissionRule(String toolName, PermissionBehavior behavior, RuleSource source, String pattern) {
+    public PermissionRule(String toolName, PermissionBehavior behavior, String pattern) {
         this.toolName = toolName;
         this.behavior = behavior;
-        this.source = source;
         this.pattern = pattern;
     }
 
@@ -52,10 +49,6 @@ public class PermissionRule {
 
     public PermissionBehavior behavior() {
         return behavior;
-    }
-
-    public RuleSource source() {
-        return source;
     }
 
     /**
@@ -68,56 +61,55 @@ public class PermissionRule {
     /**
      * 创建无模式规则
      */
-    public static PermissionRule of(String toolName, PermissionBehavior behavior, RuleSource source) {
-        return new PermissionRule(toolName, behavior, source, null);
+    public static PermissionRule of(String toolName, PermissionBehavior behavior) {
+        return new PermissionRule(toolName, behavior, null);
     }
 
     /**
      * 创建带 glob 模式的规则
      */
-    public static PermissionRule withPattern(String toolName, PermissionBehavior behavior,
-                                              RuleSource source, String pattern) {
-        return new PermissionRule(toolName, behavior, source, pattern);
+    public static PermissionRule withPattern(String toolName, PermissionBehavior behavior, String pattern) {
+        return new PermissionRule(toolName, behavior, pattern);
     }
 
     // 便捷工厂：放行
-    public static PermissionRule allow(String toolName, RuleSource source) {
-        return of(toolName, PermissionBehavior.ALLOW, source);
+    public static PermissionRule allow(String toolName) {
+        return of(toolName, PermissionBehavior.ALLOW);
     }
 
     /**
      * 便捷工厂：放行（带 glob 模式）
      */
-    public static PermissionRule allow(String toolName, String pattern, RuleSource source) {
-        return withPattern(toolName, PermissionBehavior.ALLOW, source, pattern);
+    public static PermissionRule allow(String toolName, String pattern) {
+        return withPattern(toolName, PermissionBehavior.ALLOW, pattern);
     }
 
     /**
      * 便捷工厂：拒绝
      */
-    public static PermissionRule deny(String toolName, RuleSource source) {
-        return of(toolName, PermissionBehavior.DENY, source);
+    public static PermissionRule deny(String toolName) {
+        return of(toolName, PermissionBehavior.DENY);
     }
 
     /**
      * 便捷工厂：拒绝（带 glob 模式）
      */
-    public static PermissionRule deny(String toolName, String pattern, RuleSource source) {
-        return withPattern(toolName, PermissionBehavior.DENY, source, pattern);
+    public static PermissionRule deny(String toolName, String pattern) {
+        return withPattern(toolName, PermissionBehavior.DENY, pattern);
     }
 
     /**
      * 便捷工厂：询问
      */
-    public static PermissionRule ask(String toolName, RuleSource source) {
-        return of(toolName, PermissionBehavior.ASK, source);
+    public static PermissionRule ask(String toolName) {
+        return of(toolName, PermissionBehavior.ASK);
     }
 
     /**
      * 便捷工厂：询问（带 glob 模式）
      */
-    public static PermissionRule ask(String toolName, String pattern, RuleSource source) {
-        return withPattern(toolName, PermissionBehavior.ASK, source, pattern);
+    public static PermissionRule ask(String toolName, String pattern) {
+        return withPattern(toolName, PermissionBehavior.ASK, pattern);
     }
 
     @Override
@@ -129,7 +121,6 @@ public class PermissionRule {
 
         if (!toolName.equals(that.toolName)) return false;
         if (behavior != that.behavior) return false;
-        if (source != that.source) return false;
         return pattern != null ? pattern.equals(that.pattern) : that.pattern == null;
     }
 
@@ -137,7 +128,6 @@ public class PermissionRule {
     public int hashCode() {
         int result = toolName.hashCode();
         result = 31 * result + behavior.hashCode();
-        result = 31 * result + source.hashCode();
         result = 31 * result + (pattern != null ? pattern.hashCode() : 0);
         return result;
     }
@@ -147,7 +137,6 @@ public class PermissionRule {
         return "PermissionRule{" +
                 "toolName='" + toolName + '\'' +
                 ", behavior=" + behavior +
-                ", source=" + source +
                 ", pattern=" + (pattern != null ? "'" + pattern + "'" : "null") +
                 '}';
     }

@@ -6,7 +6,6 @@ import org.noear.solon.ai.harness.hitl.BashToolStrategy;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionMode;
 import org.noear.solon.ai.harness.permission.PermissionRule;
-import org.noear.solon.ai.harness.permission.RuleSource;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -162,7 +161,7 @@ public class BashToolStrategyTest {
     @Test
     public void testRuleAllow_Pass() {
         PermissionContext ctx = PermissionContext.create()
-                .addRule(PermissionRule.allow("bash", "git push *", RuleSource.SESSION));
+                .addRule(PermissionRule.allow("bash", "git push *"));
         BashToolStrategy s = strategy(ctx);
         Assertions.assertNull(s.evaluate(null, args("git push origin main")));
     }
@@ -170,7 +169,7 @@ public class BashToolStrategyTest {
     @Test
     public void testRuleDeny_Block() {
         PermissionContext ctx = PermissionContext.create()
-                .addRule(PermissionRule.deny("bash", "rm *", RuleSource.SESSION));
+                .addRule(PermissionRule.deny("bash", "rm *"));
         BashToolStrategy s = strategy(ctx);
         Assertions.assertNotNull(s.evaluate(null, args("rm -rf /tmp")));
     }

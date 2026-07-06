@@ -6,7 +6,6 @@ import org.noear.solon.ai.harness.hitl.WriteToolStrategy;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionMode;
 import org.noear.solon.ai.harness.permission.PermissionRule;
-import org.noear.solon.ai.harness.permission.RuleSource;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -125,7 +124,7 @@ public class WriteToolStrategyTest {
     @Test
     public void testRuleAllow_Pass() {
         PermissionContext ctx = PermissionContext.create()
-                .addRule(PermissionRule.allow("write", "src/*", RuleSource.SESSION));
+                .addRule(PermissionRule.allow("write", "src/*"));
         WriteToolStrategy s = strategy("write", ctx);
         Assertions.assertNull(s.evaluate(null, args("src/App.java")));
     }
@@ -133,7 +132,7 @@ public class WriteToolStrategyTest {
     @Test
     public void testRuleDeny_Block() {
         PermissionContext ctx = PermissionContext.create()
-                .addRule(PermissionRule.deny("write", "*.sh", RuleSource.SESSION));
+                .addRule(PermissionRule.deny("write", "*.sh"));
         WriteToolStrategy s = strategy("write", ctx);
         Assertions.assertNotNull(s.evaluate(null, args("deploy.sh")));
     }

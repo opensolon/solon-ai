@@ -8,7 +8,6 @@ import org.noear.solon.ai.harness.permission.PermissionDecision;
 import org.noear.solon.ai.harness.permission.PermissionEngine;
 import org.noear.solon.ai.harness.permission.PermissionMode;
 import org.noear.solon.ai.harness.permission.PermissionRule;
-import org.noear.solon.ai.harness.permission.RuleSource;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -27,8 +26,8 @@ public class PermissionEngineTest {
     @Test
     public void testDenyOverridesAllow() {
         PermissionContext ctx = PermissionContext.create()
-            .addRule(PermissionRule.allow("bash", RuleSource.SESSION))
-            .addRule(PermissionRule.deny("bash", RuleSource.SESSION));
+            .addRule(PermissionRule.allow("bash"))
+            .addRule(PermissionRule.deny("bash"));
 
         Assertions.assertEquals(PermissionDecision.DENY,
             engine.evaluate("bash", args("ls"), ctx));
@@ -37,8 +36,8 @@ public class PermissionEngineTest {
     @Test
     public void testDenyOverridesAsk() {
         PermissionContext ctx = PermissionContext.create()
-            .addRule(PermissionRule.ask("bash", RuleSource.SESSION))
-            .addRule(PermissionRule.deny("bash", RuleSource.SESSION));
+            .addRule(PermissionRule.ask("bash"))
+            .addRule(PermissionRule.deny("bash"));
 
         Assertions.assertEquals(PermissionDecision.DENY,
             engine.evaluate("bash", args("ls"), ctx));
@@ -47,8 +46,8 @@ public class PermissionEngineTest {
     @Test
     public void testAllowOverridesAsk() {
         PermissionContext ctx = PermissionContext.create()
-            .addRule(PermissionRule.ask("bash", RuleSource.SESSION))
-            .addRule(PermissionRule.allow("bash", RuleSource.SESSION));
+            .addRule(PermissionRule.ask("bash"))
+            .addRule(PermissionRule.allow("bash"));
 
         // DENY 最高优先级，无 DENY 后按规则顺序扫描
         // ask 在前 -> 先匹配到 ASK
@@ -59,8 +58,8 @@ public class PermissionEngineTest {
     @Test
     public void testAllowBeforeAsk() {
         PermissionContext ctx = PermissionContext.create()
-            .addRule(PermissionRule.allow("bash", RuleSource.SESSION))
-            .addRule(PermissionRule.ask("bash", RuleSource.SESSION));
+            .addRule(PermissionRule.allow("bash"))
+            .addRule(PermissionRule.ask("bash"));
 
         // allow 在前 -> 先匹配到 ALLOW
         Assertions.assertEquals(PermissionDecision.ALLOW,
@@ -72,8 +71,8 @@ public class PermissionEngineTest {
     @Test
     public void testPassthroughSkips() {
         PermissionContext ctx = PermissionContext.create()
-            .addRule(PermissionRule.withPattern("bash", PermissionBehavior.PASSTHROUGH, RuleSource.SESSION, "rm *"))
-            .addRule(PermissionRule.allow("bash", RuleSource.SESSION));
+            .addRule(PermissionRule.withPattern("bash", PermissionBehavior.PASSTHROUGH, "rm *"))
+            .addRule(PermissionRule.allow("bash"));
 
         Map<String, Object> args = args("rm -rf /tmp");
         // PASSTHROUGH 跳过，继续匹配 ALLOW -> 放行
@@ -84,8 +83,8 @@ public class PermissionEngineTest {
     @Test
     public void testPassthroughAllSkips() {
         PermissionContext ctx = PermissionContext.create()
-            .addRule(PermissionRule.withPattern("bash", PermissionBehavior.PASSTHROUGH, RuleSource.SESSION, "rm *"))
-            .addRule(PermissionRule.withPattern("bash", PermissionBehavior.PASSTHROUGH, RuleSource.SESSION, "git *"));
+            .addRule(PermissionRule.withPattern("bash", PermissionBehavior.PASSTHROUGH, "rm *"))
+            .addRule(PermissionRule.withPattern("bash", PermissionBehavior.PASSTHROUGH, "git *"));
 
         // 全部 PASSTHROUGH -> 无匹配规则 -> 模式降级 -> DEFAULT -> ASK
         Assertions.assertEquals(PermissionDecision.ASK,
@@ -97,7 +96,7 @@ public class PermissionEngineTest {
     @Test
     public void testWildcardToolName() {
         PermissionContext ctx = PermissionContext.create()
-            .addRule(PermissionRule.allow("*", RuleSource.SESSION));
+            .addRule(PermissionRule.allow("*"));
 
         Assertions.assertEquals(PermissionDecision.ALLOW,
             engine.evaluate("bash", args("ls"), ctx));
@@ -110,7 +109,7 @@ public class PermissionEngineTest {
     @Test
     public void testGlobPatternMatch() {
         PermissionContext ctx = PermissionContext.create()
-            .addRule(PermissionRule.allow("bash", "git *", RuleSource.SESSION));
+            .addRule(PermissionRule.allow("bash", "git *"));
 
         Assertions.assertEquals(PermissionDecision.ALLOW,
             engine.evaluate("bash", args("git log --oneline"), ctx));
@@ -121,7 +120,7 @@ public class PermissionEngineTest {
     @Test
     public void testGlobPatternExactMatch() {
         PermissionContext ctx = PermissionContext.create()
-            .addRule(PermissionRule.deny("bash", "rm -rf *", RuleSource.SESSION));
+            .addRule(PermissionRule.deny("bash", "rm -rf *"));
 
         Assertions.assertEquals(PermissionDecision.DENY,
             engine.evaluate("bash", args("rm -rf /tmp"), ctx));

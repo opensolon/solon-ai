@@ -38,7 +38,6 @@ import org.noear.solon.ai.harness.hitl.WebToolStrategy;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionMode;
 import org.noear.solon.ai.harness.permission.PermissionRule;
-import org.noear.solon.ai.harness.permission.RuleSource;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 import org.noear.solon.ai.talents.mount.AgentMd;
@@ -836,12 +835,12 @@ public class HarnessEngine {
                         // 细粒度放行：只放行匹配此命令/路径模式的操作
                         options.setPermissionContext(
                                 options.getPermissionContext().addRule(
-                                        PermissionRule.allow(toolName, pattern, RuleSource.SESSION)));
+                                        PermissionRule.allow(toolName, pattern)));
                     } else {
                         // 无命令/路径时退化为工具级放行
                         options.setPermissionContext(
                                 options.getPermissionContext().addRule(
-                                        PermissionRule.allow(toolName, RuleSource.SESSION)));
+                                        PermissionRule.allow(toolName)));
                     }
                 }));
     }
