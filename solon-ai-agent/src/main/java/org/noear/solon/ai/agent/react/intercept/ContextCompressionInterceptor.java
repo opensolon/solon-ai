@@ -104,7 +104,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     private int perMessageCap;
     // 系统提示词保留缓冲（用于模型感知阈值，对应 claude-code 的 SYSTEM_PROMPT_RESERVE=20000）
     private static final int SYSTEM_PROMPT_RESERVE = 20_000;
-    // 压缩触发比例（对应 claude-code 的 AUTO_COMPACT_THRESHOLD_RATIO=0.93）
+    // 压缩触发比例（claude-code 使用 0.93；本框架使用 0.75，为用户配置的 maxTokens 预留 25% 缓冲，
+    // 因为框架场景下 maxTokens 是用户显式设定的上下文预算，比 CLI 工具需要更多安全余量）
     private static final double COMPACT_THRESHOLD_RATIO = 0.75;
     // 压缩策略
     private final CompressionStrategy compressionStrategy;
@@ -178,9 +179,12 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      * <p>对应 claude-code 的模型上下文窗口感知逻辑：
      * 当 ChatModel 配置了 {@code contextLength} 时，用其推导有效的 maxTokens：
      * <pre>
-     * effectiveMaxTokens = max(this.maxTokens, contextLength - SYSTEM_PROMPT_RESERVE)
+     * effectiveMaxTokens = min(this.maxTokens, contextLength - SYSTEM_PROMPT_RESERVE)
      * </pre>
      * 其中 SYSTEM_PROMPT_RESERVE = 20000 保留给系统提示词（与 claude-code 一致）。
+     *
+     * <p>取 min 的语义：用户配置的 maxTokens 是上下文预算上限，模型窗口是物理上限，
+     * 实际有效阈值取两者中较小者——既不超出模型能力，也不违背用户意图。
      *
      * <p>若未配置 contextLength 或 chatModelSupplier 不可用，回退到 this.maxTokens。
      */
@@ -192,10 +196,12 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                     long contextLength = model.getConfig().getContextLength();
                     if (contextLength > 0) {
                         // 有效上下文窗口 = 模型窗口 - 系统提示词保留
+                        // 底线保护：若 SYSTEM_PROMPT_RESERVE 超过窗口的 20%，
+                        // 则至少保留 80% 的窗口给对话（针对小窗口模型）
                         int effectiveWindow = (int) Math.max(contextLength - SYSTEM_PROMPT_RESERVE,
                                 contextLength * 8 / 10);
-                        // 取最大值：模型推导的值至少不应低于用户配置的 maxTokens
-                        return Math.max(this.maxTokens, effectiveWindow);
+                        // 取较小值：不超出模型物理能力，也不违背用户配置的预算意图
+                        return Math.min(this.maxTokens, effectiveWindow);
                     }
                 }
             } catch (Exception e) {
