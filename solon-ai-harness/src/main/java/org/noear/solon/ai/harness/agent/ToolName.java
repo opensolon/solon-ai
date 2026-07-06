@@ -27,7 +27,8 @@ import org.noear.solon.lang.Preview;
 public enum ToolName {
     TOOL_HITL("hitl"),
     TOOL_GENERATE("generate"),
-    TOOL_RESTAPI("restapi"),
+
+    TOOL_OPENAPI("openapi"),
     TOOL_MCP("mcp"),
     TOOL_LSP("lsp"),
     TOOL_CODE("code"),

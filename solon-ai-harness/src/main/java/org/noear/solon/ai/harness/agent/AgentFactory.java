@@ -231,6 +231,7 @@ public class AgentFactory {
                 builder.defaultTalentAdd(engine.getMcpGatewayTalent());
                 break;
             }
+            case "restapi": //兼容旧的代号
             case "openapi": {
                 builder.defaultTalentAdd(engine.getOpenApiGatewayTalent());
                 break;
