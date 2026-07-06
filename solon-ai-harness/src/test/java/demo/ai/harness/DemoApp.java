@@ -60,7 +60,7 @@ public class DemoApp {
                     //o.chatModel(engine.getMainModel());
 
                     //按需，动态指定工作区（没有，则为默认工作区）
-                    o.toolContextPut(HarnessEngine.CTX_CWD, "xxx");
+                    o.toolContextPut(HarnessEngine.ATTR_CWD, "xxx");
                 })
                 .call();
     }
@@ -78,7 +78,7 @@ public class DemoApp {
                 .session(session) //没有，则为临时会话
                 .options(o -> {
                     //按需，动态指定工作区（没有，则为默认工作区）
-                    o.toolContextPut(HarnessEngine.CTX_CWD, "xxx");
+                    o.toolContextPut(HarnessEngine.ATTR_CWD, "xxx");
                 })
                 .call();
     }

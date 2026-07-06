@@ -77,7 +77,7 @@ public class AgentFactory {
         }
 
         if (Assert.isNotEmpty(engine.getWorkspace())) {
-            builder.defaultToolContextPut(HarnessEngine.CTX_CWD, engine.getWorkspace());
+            builder.defaultToolContextPut(HarnessEngine.ATTR_CWD, engine.getWorkspace());
         }
 
         if (Assert.isNotEmpty(metadata.getTools())) {
