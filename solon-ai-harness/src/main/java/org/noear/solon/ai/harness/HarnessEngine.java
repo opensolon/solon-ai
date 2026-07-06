@@ -32,7 +32,13 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.command.CommandRegistry;
-import org.noear.solon.ai.harness.hitl.HitlStrategy;
+import org.noear.solon.ai.harness.hitl.BashToolStrategy;
+import org.noear.solon.ai.harness.hitl.WriteToolStrategy;
+import org.noear.solon.ai.harness.hitl.WebToolStrategy;
+import org.noear.solon.ai.harness.permission.PermissionContext;
+import org.noear.solon.ai.harness.permission.PermissionMode;
+import org.noear.solon.ai.harness.permission.PermissionRule;
+import org.noear.solon.ai.harness.permission.RuleSource;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 import org.noear.solon.ai.talents.mount.AgentMd;
@@ -126,6 +132,37 @@ public class HarnessEngine {
     public CacheControl getCacheControl() {
         return options.getCacheControl();
     }
+
+    // ========== 权限系统 ==========
+
+    /**
+     * 获取当前权限上下文
+     */
+    public PermissionContext getPermissionContext() {
+        return options.getPermissionContext();
+    }
+
+    /**
+     * 设置权限模式
+     */
+    public void setPermissionMode(PermissionMode mode) {
+        options.setPermissionContext(options.getPermissionContext().withMode(mode));
+    }
+
+    /**
+     * 添加权限规则
+     */
+    public void addPermissionRule(PermissionRule rule) {
+        options.setPermissionContext(options.getPermissionContext().addRule(rule));
+    }
+
+    /**
+     * 批量添加权限规则
+     */
+    public void addPermissionRules(List<PermissionRule> rules) {
+        options.setPermissionContext(options.getPermissionContext().addRules(rules));
+    }
+
 
     public HITLInterceptor getHitlInterceptor() {
         return options.getHitlInterceptor();
@@ -758,6 +795,56 @@ public class HarnessEngine {
         }
     }
 
+    private void initHitlDefault(){
+        BashToolStrategy bashStrategy = new BashToolStrategy()
+                .permissionContextSupplier(options::getPermissionContext);
+
+        WriteToolStrategy writeStrategy = new WriteToolStrategy("write")
+                .permissionContextSupplier(options::getPermissionContext);
+        WriteToolStrategy editStrategy = new WriteToolStrategy("edit")
+                .permissionContextSupplier(options::getPermissionContext);
+
+        WebToolStrategy webfetchStrategy = new WebToolStrategy("webfetch")
+                .permissionContextSupplier(options::getPermissionContext);
+        WebToolStrategy websearchStrategy = new WebToolStrategy("websearch")
+                .permissionContextSupplier(options::getPermissionContext);
+
+        options.setHitlInterceptor(new HITLInterceptor()
+                .onTool("bash", bashStrategy)
+                .onTool("write", writeStrategy)
+                .onTool("edit", editStrategy)
+                .onTool("webfetch", webfetchStrategy)
+                .onTool("websearch", websearchStrategy)
+                .onApproved((toolName, args) -> {
+                    // alwaysAllow 回调：从参数提取命令/路径，注入细粒度放行规则
+                    String pattern = null;
+                    if (args != null) {
+                        // 优先提取 command（bash 工具）
+                        Object cmd = args.get("command");
+                        if (cmd instanceof String && !((String) cmd).trim().isEmpty()) {
+                            pattern = (String) cmd;
+                        }
+                        // 其次提取 file_path（write/edit 工具）
+                        if (pattern == null) {
+                            Object path = args.get("file_path");
+                            if (path instanceof String && !((String) path).trim().isEmpty()) {
+                                pattern = (String) path;
+                            }
+                        }
+                    }
+                    if (pattern != null) {
+                        // 细粒度放行：只放行匹配此命令/路径模式的操作
+                        options.setPermissionContext(
+                                options.getPermissionContext().addRule(
+                                        PermissionRule.allow(toolName, pattern, RuleSource.SESSION)));
+                    } else {
+                        // 无命令/路径时退化为工具级放行
+                        options.setPermissionContext(
+                                options.getPermissionContext().addRule(
+                                        PermissionRule.allow(toolName, RuleSource.SESSION)));
+                    }
+                }));
+    }
 
     private HarnessEngine(HarnessOptions options) {
         this.options = options;
@@ -783,7 +870,7 @@ public class HarnessEngine {
 
         //人工介入拉截器默认处理
         if (options.getHitlInterceptor() == null) {
-            options.setHitlInterceptor(new HITLInterceptor().onTool("bash", new HitlStrategy()));
+            initHitlDefault();
         }
 
         this.todoTalent = new TodoTalent(options.getHarnessSessions());
@@ -1066,6 +1153,24 @@ public class HarnessEngine {
 
         public Builder sandboxSystemRestrict(Boolean sandboxSystemRestrict) {
             options.setSandboxSystemRestrict(sandboxSystemRestrict);
+            return this;
+        }
+
+        // ========== 权限系统 ==========
+
+        /**
+         * 设置权限模式
+         */
+        public Builder permissionMode(PermissionMode mode) {
+            options.setPermissionContext(options.getPermissionContext().withMode(mode));
+            return this;
+        }
+
+        /**
+         * 添加权限规则
+         */
+        public Builder permissionRuleAdd(PermissionRule rule) {
+            options.setPermissionContext(options.getPermissionContext().addRule(rule));
             return this;
         }
 

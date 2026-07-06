@@ -68,6 +68,15 @@ public class HITL {
     }
 
     /**
+     * 快捷批准工具执行（带 alwaysAllow 标志）
+     *
+     * @param alwaysAllow true 表示后续同类操作自动放行，不再弹确认
+     */
+    public static void approve(AgentSession session, String toolName, boolean alwaysAllow) {
+        submit(session, toolName, HITLDecision.approve(alwaysAllow));
+    }
+
+    /**
      * 快捷批准工具执行
      */
     public static void approve(AgentSession session, String toolName, String comment) {

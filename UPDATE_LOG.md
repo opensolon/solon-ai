@@ -15,6 +15,7 @@
 ### 4.0.4
 
 * 添加 solon-ai-core ChatRequestDesc.role, instruction, systemPrompt 方法
+* 调整 solon-ai-harness 重构 hitl 实现
 
 ### 4.0.3
 

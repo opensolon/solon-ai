@@ -52,6 +52,10 @@ public class HITLDecision implements Serializable {
      * 修正后的参数（若不为空，将覆盖 AI 生成的原参数）
      */
     private Map<String, Object> modifiedArgs;
+    /**
+     * 是否"始终允许"（批准后自动注入会话级规则，后续同类操作不再弹确认）
+     */
+    private boolean alwaysAllow;
 
     public HITLDecision() {
         //用于反序列化
@@ -66,6 +70,17 @@ public class HITLDecision implements Serializable {
      */
     public static HITLDecision approve() {
         return new HITLDecision(ACTION_APPROVE);
+    }
+
+    /**
+     * 快速创建批准决策（带 alwaysAllow 标志）
+     *
+     * @param alwaysAllow true 表示后续同类操作自动放行
+     */
+    public static HITLDecision approve(boolean alwaysAllow) {
+        HITLDecision d = new HITLDecision(ACTION_APPROVE);
+        d.alwaysAllow = alwaysAllow;
+        return d;
     }
 
     /**
@@ -89,6 +104,14 @@ public class HITLDecision implements Serializable {
 
     public HITLDecision modifiedArgs(Map<String, Object> modifiedArgs) {
         this.modifiedArgs = modifiedArgs;
+        return this;
+    }
+
+    /**
+     * 设置 alwaysAllow 标志
+     */
+    public HITLDecision alwaysAllow(boolean alwaysAllow) {
+        this.alwaysAllow = alwaysAllow;
         return this;
     }
 
@@ -121,5 +144,12 @@ public class HITLDecision implements Serializable {
 
     public Map<String, Object> getModifiedArgs() {
         return modifiedArgs;
+    }
+
+    /**
+     * 是否标记为"始终允许"
+     */
+    public boolean isAlwaysAllow() {
+        return alwaysAllow;
     }
 }

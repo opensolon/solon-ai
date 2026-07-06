@@ -21,6 +21,7 @@ import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.agent.react.intercept.StopLoopInterceptor;
 import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatConfig;
+import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.talents.cli.SkillProvider;
@@ -79,6 +80,7 @@ class HarnessOptions implements Serializable {
     private volatile boolean sandboxSystemRestrict = true;
 
     private volatile boolean hitlEnabled = false;
+    private volatile PermissionContext permissionContext = PermissionContext.create();
     private volatile boolean subagentEnabled = true;
     private volatile boolean bashAsyncEnabled = false;
 
@@ -288,6 +290,16 @@ class HarnessOptions implements Serializable {
     void setHitlEnabled(Boolean hitlEnabled) {
         if (hitlEnabled != null) {
             this.hitlEnabled = hitlEnabled;
+        }
+    }
+
+    PermissionContext getPermissionContext() {
+        return permissionContext;
+    }
+
+    void setPermissionContext(PermissionContext permissionContext) {
+        if (permissionContext != null) {
+            this.permissionContext = permissionContext;
         }
     }
 

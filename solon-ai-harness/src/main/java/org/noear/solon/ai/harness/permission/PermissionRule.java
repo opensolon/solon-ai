@@ -1,0 +1,154 @@
+/*
+ * Copyright 2017-2025 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.noear.solon.ai.harness.permission;
+
+import java.util.Optional;
+
+/**
+ * 权限规则
+ *
+ * <p>将工具名（含可选 glob 模式）映射到一种权限行为。</p>
+ *
+ * @author noear
+ * @since 4.0
+ */
+public class PermissionRule {
+    private final String toolName;
+    private final PermissionBehavior behavior;
+    private final RuleSource source;
+    private final String pattern; // null 表示无模式，匹配全部
+
+    /**
+     * 构造函数
+     *
+     * @param toolName  工具名称（如 "bash", "write", "*"）
+     * @param behavior  匹配后的权限行为
+     * @param source    规则来源
+     * @param pattern   glob 模式（如 "git *", "cat *"），null 表示无模式
+     */
+    public PermissionRule(String toolName, PermissionBehavior behavior, RuleSource source, String pattern) {
+        this.toolName = toolName;
+        this.behavior = behavior;
+        this.source = source;
+        this.pattern = pattern;
+    }
+
+    public String toolName() {
+        return toolName;
+    }
+
+    public PermissionBehavior behavior() {
+        return behavior;
+    }
+
+    public RuleSource source() {
+        return source;
+    }
+
+    /**
+     * 获取 glob 模式（返回 Optional 视图，调用端无需处理 null）
+     */
+    public Optional<String> pattern() {
+        return pattern != null ? Optional.of(pattern) : Optional.empty();
+    }
+
+    /**
+     * 创建无模式规则
+     */
+    public static PermissionRule of(String toolName, PermissionBehavior behavior, RuleSource source) {
+        return new PermissionRule(toolName, behavior, source, null);
+    }
+
+    /**
+     * 创建带 glob 模式的规则
+     */
+    public static PermissionRule withPattern(String toolName, PermissionBehavior behavior,
+                                              RuleSource source, String pattern) {
+        return new PermissionRule(toolName, behavior, source, pattern);
+    }
+
+    // 便捷工厂：放行
+    public static PermissionRule allow(String toolName, RuleSource source) {
+        return of(toolName, PermissionBehavior.ALLOW, source);
+    }
+
+    /**
+     * 便捷工厂：放行（带 glob 模式）
+     */
+    public static PermissionRule allow(String toolName, String pattern, RuleSource source) {
+        return withPattern(toolName, PermissionBehavior.ALLOW, source, pattern);
+    }
+
+    /**
+     * 便捷工厂：拒绝
+     */
+    public static PermissionRule deny(String toolName, RuleSource source) {
+        return of(toolName, PermissionBehavior.DENY, source);
+    }
+
+    /**
+     * 便捷工厂：拒绝（带 glob 模式）
+     */
+    public static PermissionRule deny(String toolName, String pattern, RuleSource source) {
+        return withPattern(toolName, PermissionBehavior.DENY, source, pattern);
+    }
+
+    /**
+     * 便捷工厂：询问
+     */
+    public static PermissionRule ask(String toolName, RuleSource source) {
+        return of(toolName, PermissionBehavior.ASK, source);
+    }
+
+    /**
+     * 便捷工厂：询问（带 glob 模式）
+     */
+    public static PermissionRule ask(String toolName, String pattern, RuleSource source) {
+        return withPattern(toolName, PermissionBehavior.ASK, source, pattern);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        PermissionRule that = (PermissionRule) o;
+
+        if (!toolName.equals(that.toolName)) return false;
+        if (behavior != that.behavior) return false;
+        if (source != that.source) return false;
+        return pattern != null ? pattern.equals(that.pattern) : that.pattern == null;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = toolName.hashCode();
+        result = 31 * result + behavior.hashCode();
+        result = 31 * result + source.hashCode();
+        result = 31 * result + (pattern != null ? pattern.hashCode() : 0);
+        return result;
+    }
+
+    @Override
+    public String toString() {
+        return "PermissionRule{" +
+                "toolName='" + toolName + '\'' +
+                ", behavior=" + behavior +
+                ", source=" + source +
+                ", pattern=" + (pattern != null ? "'" + pattern + "'" : "null") +
+                '}';
+    }
+}

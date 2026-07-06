@@ -42,7 +42,9 @@ solon-ai-harness/                                  # AI 代理编排引擎
 │   │   └── Channel.java                           # IM 通道接口（微信/飞书/钉钉等）
 │   │
 │   ├── hitl/
-│   │   └── HitlStrategy.java                      # 人工介入安全审计（7 层防护）
+│   │   ├── BashToolStrategy.java                  # Bash 工具干预策略（P0 防御 + 只读分类 + 规则引擎）
+│   │   ├── WriteToolStrategy.java                 # 文件写入工具干预策略（路径防御 + 规则引擎）
+│   │   └── WebToolStrategy.java                   # Web 工具干预策略（域名黑名单 + 规则引擎）
 │   │
 │   └── permission/
 │       └── ToolPermission.java                    # 工具权限枚举（三级快捷权限）
@@ -126,7 +128,7 @@ solon-ai-harness/                                  # AI 代理编排引擎
 │  (上下文压缩)                             ├── KeyInfoExtractionStrategy (干货提取)                   │
 │                                            └── HierarchicalCompressionStrategy (滚动摘要)            │
 │                                                                                                     │
-│  HITLInterceptor  (人工介入拦截器)  ←  默认对 bash 绑定 HitlStrategy                               │
+│  HITLInterceptor  (人工介入拦截器)  ←  默认对 bash 绑定 BashToolStrategy                            │
 │  CacheControl / AgentSessionProvider  (缓存 / 会话提供者)                                           │
 │                                                                                                     │
 └────────────────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -260,7 +262,7 @@ solon-ai-harness/                                  # AI 代理编排引擎
 | **动态创建** | `agent.GenerateTalent` | 运行时动态创建子代理定义（可持久化到文件） |
 | **命令系统** | `command.*` | CLI/Web 共用的命令框架，支持 Markdown 模板自定义命令 |
 | **IM 通道** | `channel.Channel` | 统一 IM 通道接口（微信、飞书、钉钉等） |
-| **安全审计** | `hitl.HitlStrategy` | 针对 bash 等高危操作的 7 层防护策略 |
+| **安全审计** | `hitl.BashToolStrategy` | Bash 工具干预策略（P0 防御 + 只读分类 + 规则引擎） |
 | **工具权限** | `permission.ToolPermission` | 三级快捷权限（`pi` / `*` / `**`） |
 
 ---
@@ -494,7 +496,7 @@ argument-hint: [message]
 
 ## 安全机制
 
-`HitlStrategy` 提供了 7 层安全审计策略，默认绑定到 `bash` 工具：
+`BashToolStrategy` 提供了多层安全审计策略，默认绑定到 `bash` 工具：
 
 1. **注入防御** — 拦截反引号、`$()`、设备重定向（`/dev/`）
 2. **系统黑名单** — 禁止 `sudo`、`kill`、`reboot`、`systemctl` 等系统级命令

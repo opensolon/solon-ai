@@ -25,6 +25,8 @@ import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
 
 /**
  * 人工介入拦截器 (Human-in-the-Loop Interceptor)
@@ -41,7 +43,8 @@ import java.util.*;
 @Preview("3.9.1")
 public class HITLInterceptor extends AbsReActInterceptor {
 
-    private final Map<String, InterventionStrategy> strategyMap = new HashMap<>();
+    private final Map<String, InterventionStrategy> strategyMap = new ConcurrentHashMap<>();
+    private volatile BiConsumer<String, Map<String, Object>> approvedCallback;
 
     /**
      * 注册工具介入策略
@@ -96,6 +99,10 @@ public class HITLInterceptor extends AbsReActInterceptor {
             if (decision.getModifiedArgs() != null) {
                 toolExchanger.getArgs().putAll(decision.getModifiedArgs());
             }
+            // 情况：批准执行 —— 如果标记了 alwaysAllow，触发回调注入会话级规则
+            if (decision.isAlwaysAllow() && approvedCallback != null) {
+                approvedCallback.accept(toolExchanger.getToolName(), toolExchanger.getArgs());
+            }
         } else if (decision.isSkipped()) {
             String msg = decision.getCommentOrDefault("操作跳过：请继续下一步。");
             toolExchanger.setResult(msg);
@@ -125,6 +132,16 @@ public class HITLInterceptor extends AbsReActInterceptor {
         // 100% 闭环：现场清理，确保 Session 状态幂等
         trace.getContext().remove(HITL.LAST_INTERVENED);
         trace.getContext().remove(HITL.DECISION_PREFIX + toolExchanger.getToolName());
+    }
+
+    /**
+     * 设置批准回调（用于 alwaysAllow 场景，自动注入会话级规则）
+     *
+     * @param callback 回调函数，参数为 (toolName, args)
+     */
+    public HITLInterceptor onApproved(BiConsumer<String, Map<String, Object>> callback) {
+        this.approvedCallback = callback;
+        return this;
     }
 
     /**
