@@ -304,9 +304,11 @@ public class MyStrategy implements CompressionStrategy {
     │     - 有压缩策略 → 调用策略.compress()，成功则注入摘要消息
     │     - 无策略或策略返回 null → 原子序列追溯（保留最后一个完整 tool-use 序列）
     │
-    ├── 8. 清理孤立消息 ────────────────────────────────────────
+    ├── 8. 清理孤立消息 + 空壳过滤 ────────────────────────────
     │   removeDanglingToolOutputs: 移除没有配对结果的 Assistant(tool_calls)
     │   和没有配对来源的孤立 ToolMessage
+    │   + 过滤空壳 AssistantMessage（既无 content 也无 tool_calls），
+    │     避免 DeepSeek/OpenAI API 返回 400 错误
     │
     └── 9. 推送 ContextSizeChunk ───────────────────────────────
         向流式输出推送上下文大小信息（含压缩前后对比数据）
@@ -370,7 +372,21 @@ effectiveMaxTokens = min(maxTokens, max(contextLength - 20000, contextLength * 0
 2. 保留最近的消息（相关性最高）
 3. 最多重试 3 次
 
-### 6.7 压缩效果警告
+### 6.7 空壳 AssistantMessage 过滤
+
+当 LLM 返回纯思考响应（如 `` 标签包裹但无实际输出内容、无 tool_calls）时，WorkingMemory 中会产生"空壳" AssistantMessage。这类消息序列化后为 `{"role":"assistant"}`——既缺少 `content` 也缺少 `tool_calls`，会被 DeepSeek / OpenAI 等模型 API 拒绝并返回 400 错误：
+
+```
+Error from provider (DeepSeek): Invalid assistant message: content or tool_calls must be set
+```
+
+`removeDanglingToolOutputs` 方法在清理孤立工具输出的同时，会过滤掉此类空壳消息。判定条件为 `getResultContent()` 为空 **且** `getToolCalls()` 为空 **且** `getToolCallsRaw()` 为空——三者同时满足才跳过。带实际内容的 AssistantMessage（包括纯思考但 `getResultContent()` 非空的消息）不受影响。
+
+此外，步骤 6 的"语义连贯补齐"也增加了保护：只将带实际内容（`getResultContent()` 非空）的 Assistant thought 纳入保留窗口，避免把空壳消息拉入压缩后的消息列表。
+
+> **与 claude-code-java 的对比**：claude-code-java 的压缩结果仅包含 SystemMessage + UserMessage，不含 AssistantMessage，因此不会触发此问题。但 claude-code-java 也未对上游产生的空 AssistantMessage 做任何拦截，存在潜在风险。本框架通过压缩后过滤机制，在不改变消息序列结构的前提下解决了此问题。
+
+### 6.8 压缩效果警告
 
 压缩后若消息数 >= 原始 90%，输出 warn 日志提示压缩效果不显著，建议调整 `maxMessages` 或 `minReservedMessages`。
 

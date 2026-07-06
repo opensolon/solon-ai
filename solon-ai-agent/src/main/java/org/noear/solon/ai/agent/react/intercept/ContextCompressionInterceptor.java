@@ -362,11 +362,13 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             }
         }
 
-        // 6. 语义连贯补齐：若截断点前一条为空想的 Assistant thought，一并纳入保留区
-        //    使 LLM 获得完整的推理上下文
+        // 6. 语义连贯补齐：若截断点前一条为带思考内容的 Assistant thought，一并纳入保留区
+        //    使 LLM 获得完整的推理上下文（排除空壳消息：既无 content 也无 tool_calls 的不应纳入）
         if (targetIdx > (lastFirstIdx + 1)) {
             ChatMessage prev = messages.get(targetIdx - 1);
-            if (prev instanceof AssistantMessage && Assert.isEmpty(((AssistantMessage) prev).getToolCalls())) {
+            if (prev instanceof AssistantMessage
+                    && Assert.isEmpty(((AssistantMessage) prev).getToolCalls())
+                    && Assert.isNotEmpty(((AssistantMessage) prev).getResultContent())) {
                 targetIdx--;
             }
         }
@@ -636,6 +638,18 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
             if (msg instanceof ToolMessage || isObservation(msg)) {
                 continue;
+            }
+
+            // 过滤空壳 AssistantMessage：既无结果内容也无工具调用
+            // 这类消息通常来自 LLM 的纯思考响应（thinking 标签包裹但无实际输出），
+            // 序列化后为 {"role":"assistant"}，缺少 content 或 tool_calls，
+            // 会被 DeepSeek / OpenAI 等模型 API 拒绝（400 错误）
+            if (msg instanceof AssistantMessage) {
+                AssistantMessage am = (AssistantMessage) msg;
+                if (Assert.isEmpty(am.getResultContent())
+                        && Assert.isEmpty(am.getToolCalls())) {
+                    continue;
+                }
             }
 
             result.add(msg);
