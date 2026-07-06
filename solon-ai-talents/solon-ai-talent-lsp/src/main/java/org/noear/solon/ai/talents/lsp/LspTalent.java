@@ -74,15 +74,25 @@ public class LspTalent extends AbsTalent {
     //可以返回 Document（结果结构数据） 或 String（给 llm 的提示）
     @ToolMapping(
             name = "lsp",
-            description = "执行 LSP 操作（跳转定义、找引用、悬停提示、文档符号等）。" +
-                    "支持操作：goToDefinition, findReferences, hover, documentSymbol, workspaceSymbol, " +
-                    "goToImplementation, prepareCallHierarchy, incomingCalls, outgoingCalls, diagnostics"
+            description = "执行 LSP 操作，用于代码导航与分析。根据操作类型可能需要光标位置（行号+列号）。\n\n" +
+                    "操作说明：\n" +
+                    "  - goToDefinition：跳转到光标处符号的定义位置\n" +
+                    "  - findReferences：查找光标处符号的所有引用\n" +
+                    "  - hover：获取光标处符号的类型签名/文档注释\n" +
+                    "  - goToImplementation：跳转到光标处接口/抽象方法的实现\n" +
+                    "  - prepareCallHierarchy：查看光标处方法的调用层级\n" +
+                    "  - incomingCalls：谁调用了光标处的方法\n" +
+                    "  - outgoingCalls：光标处的方法调用了谁\n" +
+                    "  - documentSymbol：列出当前文件中的所有符号（类/方法/字段），不需光标位置\n" +
+                    "  - workspaceSymbol：在整个工作区中搜索符号，不需光标位置\n" +
+                    "  - diagnostics：获取当前文件的编译/语法诊断信息，不需光标位置\n\n" +
+                    "使用建议：当需要理解代码结构、查找定义、搜索符号时优先使用此工具。"
     )
     public Document lsp(
-            @Param(name = "operation") String operation,
-            @Param(name = "filePath") String filePath,
-            @Param(name = "line") int line,
-            @Param(name = "character") int character,
+            @Param(name = "operation", description = "LSP 操作类型。可选值：goToDefinition（跳转到定义）、findReferences（查找引用）、hover（悬停类型/文档）、documentSymbol（当前文件符号）、workspaceSymbol（工作区符号搜索）、goToImplementation（跳转实现）、prepareCallHierarchy（准备调用层次）、incomingCalls（谁调用了当前方法）、outgoingCalls（当前方法调用了谁）、diagnostics（获取诊断信息）") String operation,
+            @Param(name = "filePath", description = "目标文件路径，相对于工作区根目录。例如：src/main/java/App.java") String filePath,
+            @Param(name = "line", required = false, defaultValue = "1", description = "行号（1-based，如编辑器中显示的行号）。仅 goToDefinition/findReferences/hover/goToImplementation/prepareCallHierarchy/incomingCalls/outgoingCalls 需要）") Integer line,
+            @Param(name = "character", required = false, defaultValue = "1", description = "列号（1-based，如编辑器中显示的列号）。仅 goToDefinition/findReferences/hover/goToImplementation/prepareCallHierarchy/incomingCalls/outgoingCalls 需要）") Integer character,
             String __cwd,
             String __sessionId
     ) throws Exception {
@@ -176,9 +186,9 @@ public class LspTalent extends AbsTalent {
                     .metadata("uri", uri);
         }
 
-        // 4. 坐标转换 (1-based -> 0-based)
-        int lspLine = line - 1;
-        int lspChar = character - 1;
+        // 4. 坐标转换 (1-based -> 0-based)，line/character 可为 null（documentSymbol/workspaceSymbol/diagnostics 不需要）
+        int lspLine = (line != null) ? line - 1 : 0;
+        int lspChar = (character != null) ? character - 1 : 0;
 
         // 5. 确保文件已同步给 Language Server
         client.touchFile(uri);
@@ -197,7 +207,8 @@ public class LspTalent extends AbsTalent {
             output = ONode.serialize(result);
         }
 
-        String title = String.format("%s %s:%d:%d", operation, workPath.relativize(path), line, character);
+        String title = String.format("%s %s:%d:%d", operation, workPath.relativize(path),
+                line != null ? line : 1, character != null ? character : 1);
 
         return new Document()
                 .title(title)
