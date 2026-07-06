@@ -74,6 +74,12 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 @Preview("3.10")
 public class HarnessEngine {
+    /**
+     * @deprecated 4.0.4 {@link #CTX_CWD}
+     */
+    @Deprecated
+    public final static String ATTR_CWD = "__cwd";
+
     public final static String CTX_CWD = "__cwd";
     public final static String CTX_MODEL_SELECTED = "_model_selected";
 
