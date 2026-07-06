@@ -145,7 +145,7 @@ public interface CompressionStrategy {
 | 关键信息提取 | `KeyInfoExtractionStrategy` | 是 | 提取事实/参数/结论，过滤思考过程 | 需要精确保留关键数据的场景 |
 | 层级滚动摘要 | `HierarchicalCompressionStrategy` | 是 | 旧摘要 + 新增量递归合并，记忆链不断裂 | 超长对话、需要无限续航的场景 |
 | 向量存储归档 | `VectorStoreCompressionStrategy` | 否 | 消息持久化到向量库，Agent 可通过 `recall_history` 工具回溯 | 需要冷热记忆分离的场景 |
-| 组合策略 | `CompositeCompressionStrategy` | 取决于子策略 | 多策略级联，支持 ALL / FIRST_MATCH 两种模式 | 复杂场景 |
+| 组合策略 | `CompositeCompressionStrategy` | 取决于子策略 | 多策略级联，结果按顺序以 Markdown 分割线合并 | 需要多层处理的复杂场景 |
 
 ### 4.3 LLMCompressionStrategy
 
@@ -219,29 +219,20 @@ Tool: recall_history(query="用户订单号", limit=3)
 
 ### 4.7 CompositeCompressionStrategy
 
-按顺序执行多个子策略，支持两种执行模式：
+按顺序执行所有子策略，将各策略输出以 Markdown 分割线合并为一条摘要消息。
+每个子策略独立执行、互不干扰，某个策略异常不会影响其他策略的执行。
 
-| 模式 | 说明 | 适用场景 |
-|------|------|----------|
-| `ALL`（默认） | 所有子策略全部执行，结果合并 | 先存档到向量库，再用 LLM 总结 |
-| `FIRST_MATCH` | 短路模式，第一个有效结果即返回 | 有优先级的兜底场景 |
+> **设计说明**：不需要 FIRST_MATCH 短路模式 —— 如果只需要单个策略，直接将该策略赋值给 `ContextCompressionInterceptor` 即可，无需包一层 Composite。
 
 ```java
-// 示例 1：ALL 模式 —— 先存档再用 LLM 总结
+// 示例：先存档再总结
 CompositeCompressionStrategy composite = new CompositeCompressionStrategy()
         .addStrategy(new VectorStoreCompressionStrategy(repository))  // 先存档
         .addStrategy(new KeyInfoExtractionStrategy())                 // 再提取干货
         .addStrategy(new HierarchicalCompressionStrategy());          // 后滚动摘要
-// 默认就是 ALL 模式
 
 ContextCompressionInterceptor interceptor = new ContextCompressionInterceptor(
         20, 20000, () -> chatModel, composite);
-
-// 示例 2：FIRST_MATCH 模式 —— 优先 LLM，失败则回退
-CompositeCompressionStrategy fallback = new CompositeCompressionStrategy()
-        .addStrategy(new LLMCompressionStrategy())    // 优先 LLM 摘要
-        .addStrategy(new KeyInfoExtractionStrategy()) // LLM 失败则提取关键信息
-        .mode(CompositeCompressionStrategy.CompositeMode.FIRST_MATCH);
 ```
 
 ### 4.8 自定义策略
@@ -565,7 +556,7 @@ ContextCompressionInterceptor (implements ReActInterceptor)
     │       ├── KeyInfoExtractionStrategy      ── 关键信息提取
     │       ├── HierarchicalCompressionStrategy ── 层级滚动摘要
     │       ├── VectorStoreCompressionStrategy ── 向量存储归档 + recall_history 工具
-    │       └── CompositeCompressionStrategy   ── 组合策略 (ALL / FIRST_MATCH)
+    │       └── CompositeCompressionStrategy   ── 组合策略 (级联合并)
     │
     ├── 工具类
     │   └── CompressionUtil                    ── 消息格式化、截断、PTL 检测、结果构建

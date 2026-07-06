@@ -709,36 +709,11 @@ public class ContextCompressionInterceptorTest {
     }
 
     /**
-     * 测试 CompositeCompressionStrategy 的 FIRST_MATCH 短路模式。
-     * 当第一个策略返回有效结果时，后续策略不应被执行。
+     * 测试 CompositeCompressionStrategy 的级联合并行为。
+     * 所有子策略应全部执行，结果按顺序以 Markdown 分割线合并。
      */
     @Test
-    public void testCompositeStrategy_FirstMatchMode() {
-        CompressionStrategy first = mock(CompressionStrategy.class);
-        CompressionStrategy second = mock(CompressionStrategy.class);
-
-        ChatMessage expectedResult = ChatMessage.ofUser("first strategy result");
-        when(first.compress(any(), anyInt(), any(), anyList()))
-                .thenReturn(expectedResult);
-
-        CompositeCompressionStrategy composite = new CompositeCompressionStrategy(first, second)
-                .mode(CompositeCompressionStrategy.CompositeMode.FIRST_MATCH);
-
-        ChatMessage result = composite.compress(null, 0, null, Arrays.asList(ChatMessage.ofUser("test")));
-
-        assertNotNull(result);
-        assertTrue(result.getContent().contains("first strategy result"));
-
-        // 验证第二个策略从未被调用
-        verify(second, never()).compress(any(), anyInt(), any(), anyList());
-    }
-
-    /**
-     * 测试 CompositeCompressionStrategy 的 ALL 模式（默认）。
-     * 所有策略应全部执行，结果合并。
-     */
-    @Test
-    public void testCompositeStrategy_AllMode() {
+    public void testCompositeStrategy_MergesAllResults() {
         CompressionStrategy first = mock(CompressionStrategy.class);
         CompressionStrategy second = mock(CompressionStrategy.class);
 
@@ -750,13 +725,14 @@ public class ContextCompressionInterceptorTest {
         CompositeCompressionStrategy composite = new CompositeCompressionStrategy(first, second);
         ChatMessage result = composite.compress(null, 0, null, Arrays.asList(ChatMessage.ofUser("test")));
 
-        // 默认 ALL 模式，两者都应执行
+        // 所有策略都应执行
         verify(first, times(1)).compress(any(), anyInt(), any(), anyList());
         verify(second, times(1)).compress(any(), anyInt(), any(), anyList());
 
         assertNotNull(result);
         assertTrue(result.getContent().contains("first result"), "应包含第一个策略结果");
         assertTrue(result.getContent().contains("second result"), "应包含第二个策略结果");
+        assertTrue(result.getContent().contains("---"), "结果间应有 Markdown 分割线");
     }
 
     /**

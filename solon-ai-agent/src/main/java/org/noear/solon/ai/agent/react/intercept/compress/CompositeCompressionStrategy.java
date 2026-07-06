@@ -16,8 +16,8 @@
 package org.noear.solon.ai.agent.react.intercept.compress;
 
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
+import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
@@ -29,7 +29,11 @@ import java.util.List;
 
 /**
  * 多策略级联压缩策略 (Composite Compression Strategy)
- * 核心逻辑：按顺序执行多个子策略，并决定如何合并它们的输出。
+ * 核心逻辑：按顺序执行所有子策略，将各策略输出合并为一条摘要消息。
+ *
+ * <p>适合需要多层处理的场景，例如：先用 VectorStore 存档原始内容，
+ * 再用 KeyInfoExtraction 提取关键信息，最后用 HierarchicalCompression 生成滚动摘要。
+ * 每个子策略独立执行，互不干扰，结果按顺序以 Markdown 分割线拼接。
  *
  * <pre>{@code
  * // 1. 构建级联策略
@@ -48,25 +52,6 @@ import java.util.List;
 public class CompositeCompressionStrategy implements CompressionStrategy {
     private final static Logger LOG = LoggerFactory.getLogger(CompositeCompressionStrategy.class);
     private final List<CompressionStrategy> strategies = new ArrayList<>();
-    private CompositeMode mode = CompositeMode.ALL;
-
-    /**
-     * 组合策略执行模式
-     */
-    public enum CompositeMode {
-        /**
-         * 所有策略全部执行，结果合并（默认）。
-         * 适合需要多层处理的场景：先存档到向量库，再用 LLM 总结。
-         */
-        ALL,
-
-        /**
-         * 短路模式：一旦有子策略返回有效结果（非 null），
-         * 立即返回该结果，不再执行后续策略。
-         * 适合有优先级的兜底场景：先用 LLM，失败则 fallback。
-         */
-        FIRST_MATCH
-    }
 
     // 允许通过构造函数快速组合
     public CompositeCompressionStrategy(CompressionStrategy... strategies) {
@@ -82,37 +67,10 @@ public class CompositeCompressionStrategy implements CompressionStrategy {
         return this;
     }
 
-    /**
-     * 设置组合执行模式
-     */
-    public CompositeCompressionStrategy mode(CompositeMode mode) {
-        if (mode != null) {
-            this.mode = mode;
-        }
-        return this;
-    }
-
     @Override
     public ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToCompress) {
         if (messagesToCompress == null || messagesToCompress.isEmpty()) return null;
 
-        if (mode == CompositeMode.FIRST_MATCH) {
-            // 短路模式：第一个有效结果即返回
-            for (CompressionStrategy strategy : strategies) {
-                try {
-                    ChatMessage result = strategy.compress(chatModel, maxRetries, trace, messagesToCompress);
-                    if (result != null && Assert.isNotEmpty(result.getContent())) {
-                        return result;
-                    }
-                } catch (Throwable e) {
-                    LOG.error("Strategy [{}] execution failed in FIRST_MATCH mode",
-                            strategy.getClass().getSimpleName(), e);
-                }
-            }
-            return null;
-        }
-
-        // ALL 模式：所有策略全部执行，结果合并
         StringBuilder buf = new StringBuilder(1024);
         for (CompressionStrategy strategy : strategies) {
             try {
