@@ -259,9 +259,6 @@ public class AgentDefinition {
         // 细粒度权限规则
         private List<PermissionRule> permissionRules = new ArrayList<>();
 
-        // 代理角色
-        private String mode; // "primary" | "subagent" | "all"
-
         // Skills 配置
         private List<String> skills;
 
@@ -353,10 +350,6 @@ public class AgentDefinition {
 
         public boolean hasPermissionRules() {
             return permissionRules != null && !permissionRules.isEmpty();
-        }
-
-        public boolean hasMode() {
-            return mode != null && !mode.isEmpty();
         }
 
         public boolean hasSkills() {
