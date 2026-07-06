@@ -17,9 +17,11 @@ package org.noear.solon.ai.harness.hitl;
 
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
+import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionDecision;
 import org.noear.solon.ai.harness.permission.PermissionEngine;
+import org.noear.solon.ai.harness.permission.PermissionMode;
 
 import java.util.Map;
 import java.util.function.Supplier;
@@ -65,6 +67,27 @@ public class WriteToolStrategy implements HITLInterceptor.InterventionStrategy {
         return this;
     }
 
+    /**
+     * 解析权限上下文（全局上下文 + Agent 级 delta）
+     */
+    private PermissionContext resolveContext(ReActTrace trace) {
+        PermissionContext global = permissionContextSupplier.get();
+
+        if (trace != null) {
+            PermissionContext agentCtx = trace.getOptions().getAttrAs(AgentDefinition.ATTR_PERMISSION_CONTEXT);
+            if (agentCtx != null) {
+                if (agentCtx.mode() != PermissionMode.DEFAULT) {
+                    global = global.withMode(agentCtx.mode());
+                }
+                if (!agentCtx.rules().isEmpty()) {
+                    global = global.addRules(agentCtx.rules());
+                }
+            }
+        }
+
+        return global;
+    }
+
     @Override
     public String evaluate(ReActTrace trace, Map<String, Object> args) {
         // P0 硬编码防御：路径回溯和系统敏感目录（不依赖规则引擎，始终生效）
@@ -79,7 +102,7 @@ public class WriteToolStrategy implements HITLInterceptor.InterventionStrategy {
             }
         }
 
-        PermissionContext ctx = permissionContextSupplier.get();
+        PermissionContext ctx = resolveContext(trace);
         PermissionDecision decision = permissionEngine.evaluate(toolName, args, ctx);
 
         switch (decision) {

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.*;
 import org.noear.solon.ai.agent.react.task.*;
 import org.noear.solon.ai.agent.team.TeamProtocol;
@@ -412,6 +413,24 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
         public Builder modelOptions(Consumer<ModelOptionsAmend<?, ReActInterceptor>> chatOptions) {
             chatOptions.accept(config.getDefaultOptions().getModelOptions());
+            return this;
+        }
+
+        /**
+         * @since 4.0.4
+         */
+        public Builder attr(String name, Object val) {
+            config.getDefaultOptions().setAttr(name, val);
+            return this;
+        }
+
+        /**
+         * @since 4.0.4
+         */
+        public Builder attrs(Map<String, Object> vals) {
+            if(Utils.isNotEmpty(vals)) {
+                config.getDefaultOptions().getAttrs().putAll(vals);
+            }
             return this;
         }
 

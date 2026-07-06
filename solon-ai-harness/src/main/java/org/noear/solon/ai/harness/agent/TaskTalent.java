@@ -190,7 +190,7 @@ public class TaskTalent extends AbsTalent {
                 ReActChunk agentChunk = (ReActChunk) agent.prompt(originalPrompt)
                         .session(session)
                         .options(o -> {
-                            o.toolContextPut(HarnessEngine.ATTR_CWD, __cwd);
+                            o.toolContextPut(HarnessEngine.CTX_CWD, __cwd);
                             o.toolContextPut(ChatSession.ATTR_SESSIONID, __sessionId);
                         })
                         .stream()
@@ -215,7 +215,7 @@ public class TaskTalent extends AbsTalent {
                 ReActChunk response = (ReActChunk) agent.prompt(originalPrompt)
                         .session(session)
                         .options(o -> {
-                            o.toolContextPut(HarnessEngine.ATTR_CWD, __cwd);
+                            o.toolContextPut(HarnessEngine.CTX_CWD, __cwd);
                             o.toolContextPut(ChatSession.ATTR_SESSIONID, __sessionId);
                         })
                         .stream()

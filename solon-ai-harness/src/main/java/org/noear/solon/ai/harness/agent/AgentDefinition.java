@@ -20,16 +20,15 @@ import lombok.Setter;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.permission.PermissionBehavior;
+import org.noear.solon.ai.harness.permission.PermissionRule;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.util.Markdown;
 import org.noear.solon.ai.util.MarkdownUtil;
 import org.noear.solon.core.util.Assert;
 import org.yaml.snakeyaml.Yaml;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * 代理定义
@@ -41,6 +40,7 @@ import java.util.Map;
 public class AgentDefinition {
     public static final String AGENT_MAIN = "main";
     public static final String AGENT_GENERAL = "general";
+    public final static String ATTR_PERMISSION_CONTEXT = "__permissionContext";
 
     protected Metadata metadata = new Metadata();
     protected String systemPrompt;
@@ -56,7 +56,15 @@ public class AgentDefinition {
     public AgentDefinition copy() {
         AgentDefinition definition = new AgentDefinition();
 
+        // 暂存规则，避免 Snack4 无法处理 PermissionRule
+        List<PermissionRule> savedRules = metadata.permissionRules;
+        metadata.permissionRules = null;
+
         definition.metadata = ONode.ofBean(metadata).toBean(Metadata.class);
+
+        metadata.permissionRules = savedRules;
+        definition.metadata.permissionRules = savedRules != null ? new ArrayList<>(savedRules) : null;
+
         definition.systemPrompt = systemPrompt;
 
         return definition;
@@ -124,6 +132,29 @@ public class AgentDefinition {
         markdown.getMetadata().bindTo(definition.metadata);
         definition.systemPrompt = markdown.getContent();
 
+        // 手动解析 permissionRules
+        ONode rulesNode = markdown.getMetadata().get("permissionRules");
+        if (rulesNode != null && rulesNode.isArray()) {
+            List<PermissionRule> rules = new ArrayList<>();
+            for (ONode ruleNode : rulesNode.getArray()) {
+                String toolName = ruleNode.get("toolName").getString();
+                if (toolName == null) continue;
+
+                String behaviorStr = ruleNode.get("behavior").getString();
+                if (behaviorStr == null) continue;
+
+                String pattern = ruleNode.get("pattern").getString();
+                PermissionBehavior behavior = PermissionBehavior.valueOf(behaviorStr.toUpperCase());
+
+                if (pattern != null && !pattern.isEmpty()) {
+                    rules.add(PermissionRule.withPattern(toolName, behavior, pattern));
+                } else {
+                    rules.add(PermissionRule.of(toolName, behavior));
+                }
+            }
+            definition.metadata.setPermissionRules(rules);
+        }
+
         return definition;
     }
 
@@ -144,6 +175,29 @@ public class AgentDefinition {
 
         definition.metadata = markdown.getMetadata().toBean(Metadata.class);
         definition.systemPrompt = markdown.getContent();
+
+        // 手动解析 permissionRules（Snack4 无法直接反序列化 PermissionRule）
+        ONode rulesNode = markdown.getMetadata().get("permissionRules");
+        if (rulesNode != null && rulesNode.isArray()) {
+            List<PermissionRule> rules = new ArrayList<>();
+            for (ONode ruleNode : rulesNode.getArray()) {
+                String toolName = ruleNode.get("toolName").getString();
+                if (toolName == null) continue;
+
+                String behaviorStr = ruleNode.get("behavior").getString();
+                if (behaviorStr == null) continue;
+
+                String pattern = ruleNode.get("pattern").getString();
+                PermissionBehavior behavior = PermissionBehavior.valueOf(behaviorStr.toUpperCase());
+
+                if (pattern != null && !pattern.isEmpty()) {
+                    rules.add(PermissionRule.withPattern(toolName, behavior, pattern));
+                } else {
+                    rules.add(PermissionRule.of(toolName, behavior));
+                }
+            }
+            definition.metadata.setPermissionRules(rules);
+        }
 
         return definition;
     }
@@ -202,6 +256,12 @@ public class AgentDefinition {
         // 权限配置
         private String permissionMode;
 
+        // 细粒度权限规则
+        private List<PermissionRule> permissionRules = new ArrayList<>();
+
+        // 代理角色
+        private String mode; // "primary" | "subagent" | "all"
+
         // Skills 配置
         private List<String> skills;
 
@@ -224,12 +284,40 @@ public class AgentDefinition {
         private String teamName;  // 所属团队名称（用于团队成员）
 
         protected void injectYamlFrontmatter(StringBuilder buf) {
+            // 暂存 permissionRules，避免 Snack4 序列化不识别的类型
+            List<PermissionRule> savedRules = this.permissionRules;
+            this.permissionRules = null;
+
             String yaml = new Yaml().dump(ONode.ofBean(this).toBean(Map.class));
+
+            this.permissionRules = savedRules;
 
             if (Assert.isNotEmpty(yaml)) {
                 buf.append("---\n");
                 buf.append(yaml);
+
+                // 手动追加 permissionRules（Snack4 无法直接序列化 PermissionRule）
+                if (hasPermissionRules()) {
+                    buf.append("permissionRules:\n");
+                    for (PermissionRule rule : permissionRules) {
+                        buf.append("  - toolName: \"").append(rule.toolName()).append("\"\n");
+                        buf.append("    behavior: ").append(rule.behavior().name().toLowerCase()).append("\n");
+                        rule.pattern().ifPresent(p ->
+                                buf.append("    pattern: \"").append(p).append("\"\n"));
+                    }
+                }
+
                 buf.append("---\n\n");
+            }
+        }
+
+        public void addPermissionRule(PermissionRule rule) {
+            permissionRules.add(rule);
+        }
+
+        public void addPermissionRules(List<PermissionRule> rules) {
+            if (rules != null) {
+                permissionRules.addAll(rules);
             }
         }
 
@@ -261,6 +349,14 @@ public class AgentDefinition {
 
         public boolean hasPermissionMode() {
             return permissionMode != null && !permissionMode.isEmpty();
+        }
+
+        public boolean hasPermissionRules() {
+            return permissionRules != null && !permissionRules.isEmpty();
+        }
+
+        public boolean hasMode() {
+            return mode != null && !mode.isEmpty();
         }
 
         public boolean hasSkills() {

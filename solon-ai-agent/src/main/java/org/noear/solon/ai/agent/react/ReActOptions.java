@@ -23,11 +23,10 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.FluxSink;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 /**
@@ -39,7 +38,28 @@ import java.util.function.Function;
  */
 @Preview("3.8.1")
 public class ReActOptions implements NonSerializable {
-    private static final Logger LOG = LoggerFactory.getLogger(ReActOptions.class);
+    private final Map<String, Object> attrs = new ConcurrentHashMap<>();
+
+    /**
+     * @since 4.0.4
+     */
+    public Map<String, Object> getAttrs() {
+        return attrs;
+    }
+
+    public Object getAttr(String key) {
+        return attrs.get(key);
+    }
+
+    public <T> T getAttrAs(String key) {
+        return (T) attrs.get(key);
+    }
+
+    public void setAttr(String key, Object val) {
+        attrs.put(key, val);
+    }
+
+    //------------
 
     private transient FluxSink<AgentChunk> streamSink;
 
@@ -109,9 +129,10 @@ public class ReActOptions implements NonSerializable {
      */
     protected ReActOptions copy() {
         ReActOptions tmp = new ReActOptions();
-        tmp.chatModel = chatModel;
+        tmp.attrs.putAll(this.attrs);
         tmp.modelOptions.putAll(modelOptions);
 
+        tmp.chatModel = chatModel;
         tmp.maxTurns = maxTurns;
         tmp.autoRethink = autoRethink;
         tmp.maxRetries = maxRetries;

@@ -17,9 +17,11 @@ package org.noear.solon.ai.harness.hitl;
 
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
+import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionDecision;
 import org.noear.solon.ai.harness.permission.PermissionEngine;
+import org.noear.solon.ai.harness.permission.PermissionMode;
 import org.noear.solon.core.util.Assert;
 
 import java.util.Map;
@@ -55,6 +57,32 @@ public class BashToolStrategy implements HITLInterceptor.InterventionStrategy {
             this.permissionContextSupplier = supplier;
         }
         return this;
+    }
+
+    /**
+     * 解析权限上下文（全局上下文 + Agent 级 delta）
+     *
+     * <p>以最新的全局权限上下文为基础，若 trace 中携带了 Agent 级权限 delta，
+     * 则合并追加（mode 优先覆盖，rules 追加到末尾）。</p>
+     */
+    private PermissionContext resolveContext(ReActTrace trace) {
+        PermissionContext global = permissionContextSupplier.get();
+
+        if (trace != null) {
+            PermissionContext agentCtx = trace.getOptions().getAttrAs(AgentDefinition.ATTR_PERMISSION_CONTEXT);
+            if (agentCtx != null) {
+                // mode 优先覆盖
+                if (agentCtx.mode() != PermissionMode.DEFAULT) {
+                    global = global.withMode(agentCtx.mode());
+                }
+                // rules 追加
+                if (!agentCtx.rules().isEmpty()) {
+                    global = global.addRules(agentCtx.rules());
+                }
+            }
+        }
+
+        return global;
     }
 
     @Override
@@ -99,7 +127,7 @@ public class BashToolStrategy implements HITLInterceptor.InterventionStrategy {
 
         // ========== 委托 PermissionEngine 按规则 + 模式决策 ==========
 
-        PermissionContext ctx = permissionContextSupplier.get();
+        PermissionContext ctx = resolveContext(trace);
         PermissionDecision decision = permissionEngine.evaluate("bash", args, ctx);
 
         switch (decision) {

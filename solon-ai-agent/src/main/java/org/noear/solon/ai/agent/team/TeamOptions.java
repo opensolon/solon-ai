@@ -20,11 +20,10 @@ import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.NonSerializable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.FluxSink;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 /**
@@ -36,7 +35,28 @@ import java.util.function.Function;
  * @since 3.8.1
  */
 public class TeamOptions implements NonSerializable {
-    private static final Logger LOG = LoggerFactory.getLogger(TeamOptions.class);
+    private final Map<String, Object> attrs = new ConcurrentHashMap<>();
+
+    /**
+     * @since 4.0.4
+     */
+    public Map<String, Object> getAttrs() {
+        return attrs;
+    }
+
+    public Object getAttr(String key) {
+        return attrs.get(key);
+    }
+
+    public <T> T getAttrAs(String key) {
+        return (T) attrs.get(key);
+    }
+
+    public void setAttr(String key, Object val) {
+        attrs.put(key, val);
+    }
+
+    //------------
 
     private transient FluxSink<AgentChunk> streamSink;
 
@@ -75,6 +95,7 @@ public class TeamOptions implements NonSerializable {
 
     public TeamOptions copy() {
         TeamOptions tmp = new TeamOptions();
+        tmp.attrs.putAll(this.attrs);
         tmp.modelOptions.putAll(this.modelOptions);
         tmp.maxTurns = this.maxTurns;
         tmp.maxRetries = this.maxRetries;

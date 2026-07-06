@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.simple;
 
 import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.*;
 import org.noear.solon.ai.agent.exception.LlmNoReturnException;
 import org.noear.solon.ai.agent.team.TeamProtocol;
@@ -470,6 +471,18 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
         public Builder modelOptions(Consumer<ModelOptionsAmend<?, SimpleInterceptor>> amendConsumer) {
             amendConsumer.accept(config.getDefaultOptions());
+            return this;
+        }
+
+        public Builder attr(String name, Object val) {
+            config.getDefaultOptions().setAttr(name, val);
+            return this;
+        }
+
+        public Builder attrs(Map<String, Object> vals) {
+            if(Utils.isNotEmpty(vals)) {
+                config.getDefaultOptions().getAttrs().putAll(vals);
+            }
             return this;
         }
 

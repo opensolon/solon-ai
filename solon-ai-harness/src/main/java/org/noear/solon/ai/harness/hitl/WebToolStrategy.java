@@ -17,9 +17,11 @@ package org.noear.solon.ai.harness.hitl;
 
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
+import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionDecision;
 import org.noear.solon.ai.harness.permission.PermissionEngine;
+import org.noear.solon.ai.harness.permission.PermissionMode;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -73,6 +75,27 @@ public class WebToolStrategy implements HITLInterceptor.InterventionStrategy {
         return this;
     }
 
+    /**
+     * 解析权限上下文（全局上下文 + Agent 级 delta）
+     */
+    private PermissionContext resolveContext(ReActTrace trace) {
+        PermissionContext global = permissionContextSupplier.get();
+
+        if (trace != null) {
+            PermissionContext agentCtx = trace.getOptions().getAttrAs(AgentDefinition.ATTR_PERMISSION_CONTEXT);
+            if (agentCtx != null) {
+                if (agentCtx.mode() != PermissionMode.DEFAULT) {
+                    global = global.withMode(agentCtx.mode());
+                }
+                if (!agentCtx.rules().isEmpty()) {
+                    global = global.addRules(agentCtx.rules());
+                }
+            }
+        }
+
+        return global;
+    }
+
     @Override
     public String evaluate(ReActTrace trace, Map<String, Object> args) {
         // 1. 域名级风险检查
@@ -85,7 +108,7 @@ public class WebToolStrategy implements HITLInterceptor.InterventionStrategy {
         }
 
         // 2. 委托 PermissionEngine 按规则 + 模式决策
-        PermissionContext ctx = permissionContextSupplier.get();
+        PermissionContext ctx = resolveContext(trace);
         PermissionDecision decision = permissionEngine.evaluate(toolName, args, ctx);
 
         switch (decision) {

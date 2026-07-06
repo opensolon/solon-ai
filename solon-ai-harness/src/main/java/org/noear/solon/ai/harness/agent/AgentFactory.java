@@ -17,6 +17,8 @@ package org.noear.solon.ai.harness.agent;
 
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.harness.HarnessExtension;
+import org.noear.solon.ai.harness.permission.PermissionContext;
+import org.noear.solon.ai.harness.permission.PermissionMode;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.talents.cli.TerminalTalentProxy;
@@ -75,7 +77,7 @@ public class AgentFactory {
         }
 
         if (Assert.isNotEmpty(engine.getWorkspace())) {
-            builder.defaultToolContextPut(HarnessEngine.ATTR_CWD, engine.getWorkspace());
+            builder.defaultToolContextPut(HarnessEngine.CTX_CWD, engine.getWorkspace());
         }
 
         if (Assert.isNotEmpty(metadata.getTools())) {
@@ -109,6 +111,19 @@ public class AgentFactory {
 
         for (HarnessExtension extension : engine.getExtensions()) {
             extension.configure(agentDefinition.getName(), builder);
+        }
+
+        // 注入 Agent 级权限 delta（仅 agent 自身的规则和模式，不含全局规则）
+        // HITL 策略在 evaluate 时会通过 trace.getExtraAs 读取并合并
+        if (metadata.hasPermissionRules() || metadata.hasPermissionMode()) {
+            PermissionContext agentCtx = PermissionContext.create();
+            if (metadata.hasPermissionMode()) {
+                agentCtx = agentCtx.withMode(PermissionMode.valueOf(metadata.getPermissionMode().toUpperCase()));
+            }
+            if (metadata.hasPermissionRules()) {
+                agentCtx = agentCtx.addRules(metadata.getPermissionRules());
+            }
+            builder.attr(AgentDefinition.ATTR_PERMISSION_CONTEXT, agentCtx);
         }
 
         builder.modelOptions(o -> {

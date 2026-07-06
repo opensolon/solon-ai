@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.*;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatSession;
@@ -443,6 +444,21 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
          */
         public Builder modelOptions(Consumer<ModelOptionsAmend<?, TeamInterceptor>> chatOptions) {
             chatOptions.accept(config.getDefaultOptions().getModelOptions());
+            return this;
+        }
+
+        /**
+         * @since 4.0.4
+         */
+        public Builder attr(String name, Object val) {
+            config.getDefaultOptions().setAttr(name, val);
+            return this;
+        }
+
+        public Builder attrs(Map<String, Object> vals) {
+            if(Utils.isNotEmpty(vals)) {
+                config.getDefaultOptions().getAttrs().putAll(vals);
+            }
             return this;
         }
 
