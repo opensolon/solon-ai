@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,9 +22,7 @@ import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
-import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +32,7 @@ import java.util.stream.Collectors;
 
 /**
  * 基于 LLM 的关键信息提取策略实现
- * 相比于全文压缩，该策略更侧重于提取“事实、参数、结论”，过滤掉无用的思考过程。
+ * 相比于全文压缩，该策略更侧重于提取"事实、参数、结论"，过滤掉无用的思考过程。
  *
  * @author noear
  * @since 3.9.4
@@ -44,7 +42,7 @@ public class KeyInfoExtractionStrategy implements CompressionStrategy {
 
     // 1. 系统指令：定义提取协议和专家身份
     private String systemInstruction = "## 角色定义\n" +
-            "你是一个精密的信息审计专家。你的任务是从杂乱的对话历史中“脱水”，仅保留高价值的结构化信息。\n\n" +
+            "你是一个精密的信息审计专家。你的任务是从杂乱的对话历史中\"脱水\"，仅保留高价值的结构化信息。\n\n" +
             "## 提取维度\n" +
             "1. **业务参数**：用户提及的特定 ID、数值、时间、偏好或硬性约束。\n" +
             "2. **确定性事实**：通过工具调用已证实的真实状态或返回的关键结果。\n" +
@@ -66,22 +64,10 @@ public class KeyInfoExtractionStrategy implements CompressionStrategy {
         }
 
         try {
-            // 1. 过滤初心，仅对中间过程进行“提纯”
+            // 1. 过滤初心 + 格式化（使用 CompressionUtil 统一处理截断逻辑）
             String newHistoryText = messagesToCompress.stream()
                     .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
-                    .map(m -> {
-                        if (m instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) m).getToolCalls())) {
-                            return "[Action]: 调用工具 " + ((AssistantMessage) m).getToolCalls().get(0).getName();
-                        }
-                        if (m instanceof ToolMessage) {
-                            String content = m.getContent();
-                            if (content != null && content.length() > 2000) {
-                                content = content.substring(0, 2000) + "...[内容过长已截断]";
-                            }
-                            return "[Observation]: 得到结果 " + content;
-                        }
-                        return m.getRole().name() + ": " + m.getContent();
-                    })
+                    .map(CompressionUtil::formatMessageForCompression)
                     .collect(Collectors.joining("\n"));
 
             if (Assert.isEmpty(newHistoryText)) return null;
@@ -109,13 +95,12 @@ public class KeyInfoExtractionStrategy implements CompressionStrategy {
                 }
             });
 
-            if (Assert.isEmpty(keyInfo) || keyInfo.contains("(无关键增量)")) {
+            if (CompressionUtil.isEmptySummary(keyInfo)) {
                 return null; // 如果没有新干货，就不产生这次摘要注入，节省上下文
             }
 
-            // 3. 将提取到的“干货”作为系统信息注入
-            return ChatMessage.ofUser("--- [已确认的关键信息] ---\n" + keyInfo)
-                    .addMetadata(ContextCompressionInterceptor.META_COMPRESSED, 1);
+            // 3. 将提取到的"干货"作为系统信息注入
+            return CompressionUtil.buildCompressedMessage("--- [已确认的关键信息] ---", keyInfo);
 
         } catch (Throwable e) {
             log.error("Failed to extract key info", e);

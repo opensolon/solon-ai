@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -48,6 +48,25 @@ import java.util.List;
 public class CompositeCompressionStrategy implements CompressionStrategy {
     private final static Logger LOG = LoggerFactory.getLogger(CompositeCompressionStrategy.class);
     private final List<CompressionStrategy> strategies = new ArrayList<>();
+    private CompositeMode mode = CompositeMode.ALL;
+
+    /**
+     * 组合策略执行模式
+     */
+    public enum CompositeMode {
+        /**
+         * 所有策略全部执行，结果合并（默认）。
+         * 适合需要多层处理的场景：先存档到向量库，再用 LLM 总结。
+         */
+        ALL,
+
+        /**
+         * 短路模式：一旦有子策略返回有效结果（非 null），
+         * 立即返回该结果，不再执行后续策略。
+         * 适合有优先级的兜底场景：先用 LLM，失败则 fallback。
+         */
+        FIRST_MATCH
+    }
 
     // 允许通过构造函数快速组合
     public CompositeCompressionStrategy(CompressionStrategy... strategies) {
@@ -63,11 +82,37 @@ public class CompositeCompressionStrategy implements CompressionStrategy {
         return this;
     }
 
+    /**
+     * 设置组合执行模式
+     */
+    public CompositeCompressionStrategy mode(CompositeMode mode) {
+        if (mode != null) {
+            this.mode = mode;
+        }
+        return this;
+    }
+
     @Override
     public ChatMessage compress(ChatModel chatModel, int maxRetries, ReActTrace trace, List<ChatMessage> messagesToCompress) {
         if (messagesToCompress == null || messagesToCompress.isEmpty()) return null;
 
-        // 使用初始容量，减少扩容开销
+        if (mode == CompositeMode.FIRST_MATCH) {
+            // 短路模式：第一个有效结果即返回
+            for (CompressionStrategy strategy : strategies) {
+                try {
+                    ChatMessage result = strategy.compress(chatModel, maxRetries, trace, messagesToCompress);
+                    if (result != null && Assert.isNotEmpty(result.getContent())) {
+                        return result;
+                    }
+                } catch (Throwable e) {
+                    LOG.error("Strategy [{}] execution failed in FIRST_MATCH mode",
+                            strategy.getClass().getSimpleName(), e);
+                }
+            }
+            return null;
+        }
+
+        // ALL 模式：所有策略全部执行，结果合并
         StringBuilder buf = new StringBuilder(1024);
         for (CompressionStrategy strategy : strategies) {
             try {

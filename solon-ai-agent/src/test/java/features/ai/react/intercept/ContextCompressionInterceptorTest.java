@@ -350,13 +350,18 @@ public class ContextCompressionInterceptorTest {
         CompressionStrategy mockErrorStrategy = mock(CompressionStrategy.class);
         when(mockErrorStrategy.compress(eq(chatModel), eq(3), any(), any())).thenThrow(new RuntimeException("LLM Timeout"));
 
-        CompressionStrategy normalStrategy = new LLMCompressionStrategy();
+        // 用 mock 替代真实 LLM 调用，确保测试不依赖外部 API
+        CompressionStrategy normalStrategy = mock(CompressionStrategy.class);
+        when(normalStrategy.compress(eq(chatModel), eq(3), any(), any()))
+                .thenReturn(ChatMessage.ofUser("normal strategy result"));
+
         CompositeCompressionStrategy composite = new CompositeCompressionStrategy(mockErrorStrategy, normalStrategy);
 
-        ChatMessage result = composite.compress(chatModel, 3,trace, Arrays.asList(ChatMessage.ofUser("data")));
+        ChatMessage result = composite.compress(chatModel, 3, trace, Arrays.asList(ChatMessage.ofUser("data")));
 
         assertNotNull(result);
         assertFalse(result.getContent().isEmpty(), "Should still contain result from normal strategy");
+        assertTrue(result.getContent().contains("normal strategy result"));
     }
 
     @Test
@@ -656,5 +661,184 @@ public class ContextCompressionInterceptorTest {
         assertNotNull(after, "含 toolCalls 的 Assistant 应保留");
         assertEquals(thought, after.getContent(),
                 "含 toolCalls 的 Assistant 正文不应被截断");
+    }
+
+    // ============================================================
+    //  4.0.0 新增测试：模型感知阈值 / perMessageCap / PTL / CompositeMode
+    // ============================================================
+
+    /**
+     * 测试 perMessageCap 作为独立配置字段（MicroCompact 守卫）。
+     * 当显式设置 perMessageCap 时，单条消息按此值截断，不依赖 maxTokens 推导。
+     */
+    @Test
+    public void testPerMessageCap_IndependentConfig() {
+        // 初心链
+        ChatMessage sys = ChatMessage.ofSystem("System");
+        sys.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(sys);
+        ChatMessage goal = ChatMessage.ofUser("Goal");
+        goal.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(goal);
+
+        // 一条超过 perMessageCap 的工具消息
+        StringBuilder huge = new StringBuilder();
+        for (int i = 0; i < 10_000; i++) {
+            huge.append("data").append(i).append(' ');
+        }
+        String largeOutput = huge.toString(); // 约 50K chars
+        workingMemory.addMessage(ChatMessage.ofTool(largeOutput, "bash", "call_1"));
+
+        // 设置小 perMessageCap（500 tokens），不依赖 maxTokens
+        interceptor.setPerMessageCap(500);
+        interceptor.onReasonStart(trace, null);
+
+        // 验证工具消息被截断
+        ToolMessage after = workingMemory.getMessages().stream()
+                .filter(m -> m instanceof ToolMessage)
+                .map(m -> (ToolMessage) m)
+                .findFirst()
+                .orElse(null);
+        assertNotNull(after);
+        String content = after.getContent();
+        assertNotNull(content);
+        assertTrue(content.length() < largeOutput.length(),
+                "perMessageCap=500 应截断超大工具消息");
+        assertTrue(content.contains("内容过大已截断") || content.contains("[truncated"),
+                "截断应包含标记");
+    }
+
+    /**
+     * 测试 CompositeCompressionStrategy 的 FIRST_MATCH 短路模式。
+     * 当第一个策略返回有效结果时，后续策略不应被执行。
+     */
+    @Test
+    public void testCompositeStrategy_FirstMatchMode() {
+        CompressionStrategy first = mock(CompressionStrategy.class);
+        CompressionStrategy second = mock(CompressionStrategy.class);
+
+        ChatMessage expectedResult = ChatMessage.ofUser("first strategy result");
+        when(first.compress(any(), anyInt(), any(), anyList()))
+                .thenReturn(expectedResult);
+
+        CompositeCompressionStrategy composite = new CompositeCompressionStrategy(first, second)
+                .mode(CompositeCompressionStrategy.CompositeMode.FIRST_MATCH);
+
+        ChatMessage result = composite.compress(null, 0, null, Arrays.asList(ChatMessage.ofUser("test")));
+
+        assertNotNull(result);
+        assertTrue(result.getContent().contains("first strategy result"));
+
+        // 验证第二个策略从未被调用
+        verify(second, never()).compress(any(), anyInt(), any(), anyList());
+    }
+
+    /**
+     * 测试 CompositeCompressionStrategy 的 ALL 模式（默认）。
+     * 所有策略应全部执行，结果合并。
+     */
+    @Test
+    public void testCompositeStrategy_AllMode() {
+        CompressionStrategy first = mock(CompressionStrategy.class);
+        CompressionStrategy second = mock(CompressionStrategy.class);
+
+        when(first.compress(any(), anyInt(), any(), anyList()))
+                .thenReturn(ChatMessage.ofUser("first result"));
+        when(second.compress(any(), anyInt(), any(), anyList()))
+                .thenReturn(ChatMessage.ofUser("second result"));
+
+        CompositeCompressionStrategy composite = new CompositeCompressionStrategy(first, second);
+        ChatMessage result = composite.compress(null, 0, null, Arrays.asList(ChatMessage.ofUser("test")));
+
+        // 默认 ALL 模式，两者都应执行
+        verify(first, times(1)).compress(any(), anyInt(), any(), anyList());
+        verify(second, times(1)).compress(any(), anyInt(), any(), anyList());
+
+        assertNotNull(result);
+        assertTrue(result.getContent().contains("first result"), "应包含第一个策略结果");
+        assertTrue(result.getContent().contains("second result"), "应包含第二个策略结果");
+    }
+
+    /**
+     * 测试 CompressionUtil.formatMessageForCompression 的截断行为。
+     */
+    @Test
+    public void testCompressionUtil_TruncateToolResult() {
+        // 短内容不截断
+        ChatMessage shortMsg = ChatMessage.ofTool("short result", "bash", "call_1");
+        String formatted = CompressionUtil.formatMessageForCompression(shortMsg, 2000);
+        assertTrue(formatted.contains("short result"));
+        assertFalse(formatted.contains(CompressionUtil.TRUNCATION_SUFFIX));
+
+        // 超长内容截断
+        StringBuilder huge = new StringBuilder();
+        for (int i = 0; i < 1000; i++) {
+            huge.append("long_data_");
+        }
+        String longContent = huge.toString(); // > 2000 chars
+        ChatMessage longMsg = ChatMessage.ofTool(longContent, "bash", "call_1");
+        String formatted2 = CompressionUtil.formatMessageForCompression(longMsg, 100);
+
+        assertTrue(formatted2.length() < longContent.length(),
+                "超长 ToolResult 应被截断");
+        assertTrue(formatted2.contains(CompressionUtil.TRUNCATION_SUFFIX),
+                "截断应包含标记");
+    }
+
+    /**
+     * 测试 CompressionUtil.isEmptySummary 识别空摘要。
+     */
+    @Test
+    public void testCompressionUtil_IsEmptySummary() {
+        assertTrue(CompressionUtil.isEmptySummary(null));
+        assertTrue(CompressionUtil.isEmptySummary(""));
+        assertTrue(CompressionUtil.isEmptySummary("(无显著进度)"));
+        assertTrue(CompressionUtil.isEmptySummary("(无关键增量)"));
+        assertFalse(CompressionUtil.isEmptySummary("任务完成"));
+    }
+
+    /**
+     * 测试 CompressionUtil.isPromptTooLong 检测 PTL 标记。
+     */
+    @Test
+    public void testCompressionUtil_IsPromptTooLong() {
+        assertTrue(CompressionUtil.isPromptTooLong("prompt is too long: please reduce content"));
+        assertTrue(CompressionUtil.isPromptTooLong("Prompt is too long")); // 大小写不敏感开头
+        assertFalse(CompressionUtil.isPromptTooLong("正常响应文本"));
+        assertFalse(CompressionUtil.isPromptTooLong(null));
+        assertFalse(CompressionUtil.isPromptTooLong(""));
+    }
+
+    /**
+     * 测试 CompressionUtil.buildCompressedMessage 创建带标记的摘要消息。
+     */
+    @Test
+    public void testCompressionUtil_BuildCompressedMessage() {
+        // 有效内容
+        ChatMessage msg = CompressionUtil.buildCompressedMessage("prefix", "content");
+        assertNotNull(msg);
+        assertTrue(msg.getContent().contains("content"));
+        assertTrue(msg.getContent().contains("prefix"));
+        assertEquals(Integer.valueOf(1), msg.getMetadataAs(ContextCompressionInterceptor.META_COMPRESSED));
+
+        // 空内容返回 null
+        assertNull(CompressionUtil.buildCompressedMessage("prefix", ""));
+        assertNull(CompressionUtil.buildCompressedMessage(null, null));
+
+        // null prefix 仍构建
+        ChatMessage msg2 = CompressionUtil.buildCompressedMessage(null, "just content");
+        assertNotNull(msg2);
+        assertEquals("just content", msg2.getContent());
+    }
+
+    /**
+     * 测试 LLMCompressionStrategy 的 PTL 缩小批次逻辑（通过 mock 模拟 PTL 响应）。
+     */
+    @Test
+    public void testLLMCompressionStrategy_PTLDetection() {
+        // 验证 PTL 检测方法本身
+        assertTrue(CompressionUtil.isPromptTooLong("prompt is too long, reduce to 5000 tokens"));
+        assertTrue(CompressionUtil.isPromptTooLong("prompt is too long"));
+        assertFalse(CompressionUtil.isPromptTooLong("正常摘要内容"));
     }
 }

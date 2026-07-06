@@ -23,6 +23,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
+import org.noear.solon.ai.agent.react.ReActOptions;
 import org.noear.solon.ai.agent.react.ReActStyle;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.compress.CompositeCompressionStrategy;
@@ -97,6 +98,14 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     private int minReservedMessages;
     // 重试次数
     private int maxRetries = 3;
+    // 单条消息硬上限（0 表示由系统自动推导：max(2000, maxTokens/2)）
+    // ⭐ 对应 claude-code 的 MicroCompact TRUNCATION_THRESHOLD（10000 chars）
+    //    与 claude-code 按字符数不同，此处按 Token 数截断，更精确。
+    private int perMessageCap;
+    // 系统提示词保留缓冲（用于模型感知阈值，对应 claude-code 的 SYSTEM_PROMPT_RESERVE=20000）
+    private static final int SYSTEM_PROMPT_RESERVE = 20_000;
+    // 压缩触发比例（对应 claude-code 的 AUTO_COMPACT_THRESHOLD_RATIO=0.93）
+    private static final double COMPACT_THRESHOLD_RATIO = 0.75;
     // 压缩策略
     private final CompressionStrategy compressionStrategy;
     // llm 动态提供者
@@ -116,6 +125,17 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
     public void setMaxRetries(int maxRetries) {
         this.maxRetries = maxRetries;
+    }
+
+    /**
+     * 设置单条消息 Token 硬上限（MicroCompact 守卫）。
+     * <p>当一条消息的 Token 数超过此值时，其内容将被头尾截断。
+     * 设置为 0 表示由系统自动推导为 {@code max(2000, maxTokens/2)}。
+     *
+     * @param perMessageCap Token 上限，0 表示自动推导
+     */
+    public void setPerMessageCap(int perMessageCap) {
+        this.perMessageCap = Math.max(0, perMessageCap);
     }
 
     public ContextCompressionInterceptor(int maxMessages, int maxTokens, Supplier<ChatModel> chatModelSupplier, CompressionStrategy compressionStrategy) {
@@ -152,6 +172,41 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         return tmp;
     }
 
+    /**
+     * 解析有效的 Token 阈值（模型感知）。
+     *
+     * <p>对应 claude-code 的模型上下文窗口感知逻辑：
+     * 当 ChatModel 配置了 {@code contextLength} 时，用其推导有效的 maxTokens：
+     * <pre>
+     * effectiveMaxTokens = max(this.maxTokens, contextLength - SYSTEM_PROMPT_RESERVE)
+     * </pre>
+     * 其中 SYSTEM_PROMPT_RESERVE = 20000 保留给系统提示词（与 claude-code 一致）。
+     *
+     * <p>若未配置 contextLength 或 chatModelSupplier 不可用，回退到 this.maxTokens。
+     */
+    private int resolveEffectiveMaxTokens() {
+        if (chatModelSupplier != null) {
+            try {
+                ChatModel model = chatModelSupplier.get();
+                if (model != null) {
+                    long contextLength = model.getConfig().getContextLength();
+                    if (contextLength > 0) {
+                        // 有效上下文窗口 = 模型窗口 - 系统提示词保留
+                        int effectiveWindow = (int) Math.max(contextLength - SYSTEM_PROMPT_RESERVE,
+                                contextLength * 8 / 10);
+                        // 取最大值：模型推导的值至少不应低于用户配置的 maxTokens
+                        return Math.max(this.maxTokens, effectiveWindow);
+                    }
+                }
+            } catch (Exception e) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Failed to resolve model context length, fallback to maxTokens={}", this.maxTokens, e);
+                }
+            }
+        }
+        return this.maxTokens;
+    }
+
     @Override
     public void onReasonStart(ReActTrace trace, StringBuilder systemPromptBuf) {
         List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
@@ -162,11 +217,16 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         //    可缓存块被保留，不被压缩逻辑破坏其结构性完整性。
         markStaticContextBoundary(trace, systemPrompt);
 
-        // 0. ⭐ 单条消息硬上限兜底（内容级截断）
-        //    消息级压缩无法处理“单条消息自身就超过窗口”的情况（如工具读取了超大文件/二进制）。
-        //    在任何裁剪逻辑之前，先把超限的单条消息内容截断，确保不变式：
-        //    任何单条消息都不会独占超过窗口的份额，从根本上避免 context_length_exceeded。
-        messages = enforcePerMessageCap(trace, messages);
+        // ⭐ 解析模型感知的有效 Token 阈值（仅用于触发判断和极端场景防御，
+        //    不影响保留窗口预算——窗口预算始终使用用户配置的 maxTokens）
+        int effectiveMaxTokens = resolveEffectiveMaxTokens();
+
+        // 0. ⭐ 单条消息硬上限兜底（内容级截断）—— MicroCompact 守卫
+        //    对应 claude-code 的 microcompactMessages()：在每次调用前
+        //    无条件截断超大的工具输出，防止单条消息撑爆上下文。
+        //    perMessageCap 自动推导基于用户配置的 maxTokens（而非模型窗口），
+        //    确保单条消息不会占满整个滑动窗口预算。
+        messages = enforcePerMessageCap(trace, messages, this.maxTokens);
 
         // 收集 tools 元信息（仅 NATIVE_TOOL 模式下 LLM 会接收 tools 定义）
         int toolsTokens = 0;
@@ -187,7 +247,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         int currentTokens = estimateTokens(messages, systemPrompt) + toolsTokens;
 
         // 预留缓冲，避免频繁重构
-        if (messageSize <= maxMessages && currentTokens <= (maxTokens * 0.8)) {
+        if (messageSize <= maxMessages && currentTokens <= (effectiveMaxTokens * COMPACT_THRESHOLD_RATIO)) {
             pushContextChunk(trace, messages.size(), currentTokens, false, 0, 0, 0, 0);
             return;
         }
@@ -232,11 +292,11 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             fixedTokens += cachedSize + 4;
         }
 
-        // 极端场景防御
-        if (fixedTokens >= maxTokens) {
+        // 极端场景防御：固定开销超过用户配置的窗口预算
+        if (fixedTokens >= this.maxTokens) {
             if (log.isWarnEnabled()) {
-                log.warn("ReActAgent [{}] first chain + systemPrompt ({} tokens) exceeds maxTokens ({}), keep first chain only",
-                        trace.getAgentName(), fixedTokens, maxTokens);
+                log.warn("ReActAgent [{}] first chain + systemPrompt ({} tokens) exceeds budget ({}), keep first chain only",
+                        trace.getAgentName(), fixedTokens, this.maxTokens);
             }
             if (firstList.size() < messages.size()) {
                 trace.getWorkingMemory().replaceMessages(new ArrayList<>(firstList));
@@ -245,7 +305,11 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         }
 
         // 3. 为压缩消息预留空间
-        int availableTokens = maxTokens - fixedTokens;
+        //    窗口预算始终使用用户配置的 maxTokens，不受模型上下文窗口膨胀。
+        //    模型感知阈值（effectiveMaxTokens）仅用于触发判断（是否需要压缩），
+        //    不用于决定保留多少消息——否则大上下文模型（如 200K）会导致
+        //    窗口预算膨胀到 180K，使压缩形同虚设。
+        int availableTokens = this.maxTokens - fixedTokens;
         int summaryReserve = Math.max(200, (int) (availableTokens * 0.1));
         int windowBudget = availableTokens - summaryReserve;
 
@@ -336,20 +400,24 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                     .collect(Collectors.toList());
 
             if (!pureHistory.isEmpty()) {
+                boolean summaryAdded = false;
                 if (compressionStrategy != null) {
                     ChatModel chatModel = chatModelSupplier.get();
 
                     ChatMessage summaryMsg = compressionStrategy.compress(chatModel, maxRetries, trace, pureHistory);
                     if (summaryMsg != null) {
                         compressed.add(summaryMsg);
+                        summaryAdded = true;
                     }
-                } else {
+                }
+                if (!summaryAdded) {
                     // ⭐ fallback 原子序列追溯（零成本裁剪路径，不调用 LLM 生成摘要）
+                    //    当无压缩策略、或策略返回 null（LLM 调用失败/返回无效摘要）时走此分支。
                     //
                     // 问题背景：过期区（expired）可能包含不完整的 tool-use 原子对。
                     // 例如 [Assistant(tc=[search]), Tool(res)] 被整体移入过期区，
                     // 若直接丢弃、仅保留保留窗口内的后续轮次，恢复后的上下文会变成：
-                    //   [摘要] → [Tool(res)] → [下一个 Assistant(tc=...)]
+                    //   [Tool(res)] → [下一个 Assistant(tc=...)]
                     // 此时 Tool(res) 找不到配对的 tool_calls → LLM 感知异常。
                     //
                     // 追溯策略：从过期区末尾向前查找，找到最后一个完整的 tool-use 序列。
@@ -392,13 +460,16 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                     .collect(Collectors.toList());
 
             if (!pureProtected.isEmpty()) {
+                boolean protectedSummaryAdded = false;
                 if (compressionStrategy != null) {
                     ChatModel chatModel = chatModelSupplier.get();
                     ChatMessage summaryMsg = compressionStrategy.compress(chatModel, maxRetries, trace, pureProtected);
                     if (summaryMsg != null) {
                         compressed.add(summaryMsg);
+                        protectedSummaryAdded = true;
                     }
-                } else {
+                }
+                if (!protectedSummaryAdded) {
                     // fallback：原子序列追溯（零成本裁剪路径，不调用 LLM）
                     int captureStart = pureProtected.size() - 1;
                     while (captureStart > 0) {
@@ -436,6 +507,18 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             if (log.isDebugEnabled()) {
                 log.debug("ReActAgent [{}] compressed: {} -> {} messages (FirstChain size: {})",
                         trace.getAgentName(), beforeSize, compressed.size(), firstList.size());
+            }
+
+            // ⭐ 压缩效果警告（对应 claude-code 的 CompactWarningHook）
+            //    如果压缩后消息数 >= 原始 90%，说明压缩效果不显著。
+            //    常见原因：保留窗口已占满，或被 minReserved 保护覆盖。
+            if (compressed.size() >= beforeSize * 0.9) {
+                if (log.isWarnEnabled()) {
+                    log.warn("ReActAgent [{}] compression ineffective: {} -> {} messages ({}% reduction). " +
+                                    "Consider increasing maxMessages or adjusting minReservedMessages.",
+                            trace.getAgentName(), beforeSize, compressed.size(),
+                            (beforeSize > 0) ? (beforeSize - compressed.size()) * 100 / beforeSize : 0);
+                }
             }
 
             int afterTokens = estimateTokens(compressed, null) + toolsTokens;
@@ -577,9 +660,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      *
      * @return 处理后的消息列表（若发生截断会写回 WorkingMemory）
      */
-    private List<ChatMessage> enforcePerMessageCap(ReActTrace trace, List<ChatMessage> messages) {
-        // 单条消息最多占用半个窗口预算（且不低于绝对下限），超出即视为异常的超大消息
-        int perMessageCap = Math.max(2_000, maxTokens / 2);
+    private List<ChatMessage> enforcePerMessageCap(ReActTrace trace, List<ChatMessage> messages, int tokenBudget) {
+        // 单条消息硬上限：优先使用用户配置的 perMessageCap，否则自动推导
+        // 自动推导逻辑：max(2000, tokenBudget/2)，确保不会超过半个窗口
+        int cap = (this.perMessageCap > 0) ? this.perMessageCap : Math.max(2_000, tokenBudget / 2);
 
         boolean changed = false;
         List<ChatMessage> result = new ArrayList<>(messages.size());
@@ -609,18 +693,18 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             //    初筛是安全方向（宁可多检一条，不会漏检超限消息）。仅在缓存缺失或疑似
             //    超限时才精确 countTokens 确认。
             Integer cachedTokens = msg.getMetadataAs(META_TOKEN_SIZE);
-            if (cachedTokens != null && cachedTokens <= perMessageCap) {
+            if (cachedTokens != null && cachedTokens <= cap) {
                 result.add(msg);
                 continue;
             }
 
             int contentTokens = encoding.countTokens(content);
-            if (contentTokens <= perMessageCap) {
+            if (contentTokens <= cap) {
                 result.add(msg);
                 continue;
             }
 
-            String truncated = truncateTextToTokens(content, perMessageCap);
+            String truncated = truncateTextToTokens(content, cap);
             ChatMessage replacement = rebuildWithContent(msg, truncated);
             if (replacement == null) {
                 // 无法安全重建（类型不支持）→ 保持原样，交由后续逻辑处理
@@ -633,7 +717,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
             if (log.isWarnEnabled()) {
                 log.warn("ReActAgent [{}] single message too large ({} tokens > cap {}), content truncated",
-                        trace.getAgentName(), contentTokens, perMessageCap);
+                        trace.getAgentName(), contentTokens, cap);
             }
         }
 
@@ -831,13 +915,22 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      */
     private void markStaticContextBoundary(ReActTrace trace, String systemPrompt) {
         // 通过 ChatModel -> ChatConfigReadonly -> ChatOptions 获取缓存配置
-        CacheControl cacheControl = trace.getOptions().getChatModel().getConfig().getCacheControl();
+        // 增加空安全防护（测试环境中可能为 mock）
+        ReActOptions options = trace.getOptions();
+        if (options == null) {
+            return;
+        }
+        ChatModel chatModel = options.getChatModel();
+        if (chatModel == null) {
+            return;
+        }
+        CacheControl cacheControl = chatModel.getConfig().getCacheControl();
         if (cacheControl != null) {
             // 静态上下文就绪：不修改消息内容，仅输出调试信息
             // Dialect 层在构建 HTTP 请求时会根据 ChatOptions 中的 cacheControl/promptCacheKey
             // 自动在系统提示词和工具定义上添加 cache_control 标记
             if (log.isDebugEnabled()) {
-                String cacheType = (cacheControl != null)
+                String cacheType = cacheControl.getType() != null
                         ? "Anthropic cache_control=" + cacheControl.getType()
                         : "OpenAI prompt_cache_key=" + cacheControl.getPromptCacheKey();
                 log.debug("ReActAgent [{}] static context boundary marked for LLM prompt caching ({})",

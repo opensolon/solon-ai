@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,24 +22,32 @@ import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
-import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * 基于 LLM 的语义压缩策略实现
+ * <p>
+ * 特性（4.0 新增）：
+ * <ul>
+ *   <li>使用 {@link CompressionUtil} 统一格式化消息，消除截断逻辑重复</li>
+ *   <li>PTL (Prompt-Too-Long) 自动重试：当待压缩历史过大导致 LLM 调用失败时，
+ *       逐步收窄范围后重试（对应 claude-code-java 的 PTL 重试机制，最多重试 3 次）</li>
+ * </ul>
  *
  * @author noear
  * @since 3.9.4
  */
 public class LLMCompressionStrategy implements CompressionStrategy {
     private static final Logger log = LoggerFactory.getLogger(LLMCompressionStrategy.class);
+
+    // PTL 最大重试次数（对应 claude-code-java 的 MAX_PTL_RETRIES = 3）
+    private static final int MAX_PTL_RETRIES = 3;
 
     // 1. 系统指令：定义压缩逻辑和约束
     private String systemInstruction = "## 角色定义\n" +
@@ -64,52 +72,21 @@ public class LLMCompressionStrategy implements CompressionStrategy {
             return null;
         }
 
+        // 过滤初心
+        List<ChatMessage> filtered = new ArrayList<>();
+        for (ChatMessage m : messagesToCompress) {
+            if (!m.hasMetadata(AgentTrace.META_FIRST)) {
+                filtered.add(m);
+            }
+        }
+        if (filtered.isEmpty()) return null;
+
         try {
-            // 1. 过滤初心，只看发生了什么
-            String newHistoryText = messagesToCompress.stream()
-                    .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
-                    .map(m -> {
-                        if (m instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) m).getToolCalls())) {
-                            return "[Action]: 调用工具 " + ((AssistantMessage) m).getToolCalls().get(0).getName();
-                        }
-                        if (m instanceof ToolMessage) {
-                            String content = m.getContent();
-                            if (content != null && content.length() > 2000) {
-                                content = content.substring(0, 2000) + "...[内容过长已截断]";
-                            }
-                            return "[Observation]: 得到结果 " + content;
-                        }
-                        return m.getRole().name() + ": " + m.getContent();
-                    })
-                    .collect(Collectors.joining("\n"));
-
-            if (Assert.isEmpty(newHistoryText)) return null;
-
-            // 2. 构建提示词
-            String userData = "### 待压缩历史片段\n" +
-                    newHistoryText +
-                    "\n\n" +
-                    "### 任务指令\n" +
-                    "请根据系统指令对上述执行过程进行语义总结：";
-
-            String summary = RetryUtil.callWithRetry(maxRetries, () -> {
-                ChatResponse resp = chatModel.prompt(userData)
-                        .options(o -> {
-                            o.agentName(LLMCompressionStrategy.class.getSimpleName());
-                            o.systemPrompt(systemInstruction);
-                        })
-                        .call();
-
-                if (resp.hasContent()) {
-                    return resp.getContent();
-                } else {
-                    //触发重试
-                    throw new IllegalStateException("The LLM did not return");
-                }
-            });
+            // PTL 重试循环
+            String summary = compressWithPTLRetry(chatModel, maxRetries, filtered);
 
             // 模糊匹配“无显著进度”，防大模型胡乱加标点或 Markdown 样式
-            if (Assert.isEmpty(summary) || summary.contains("无显著进度")) {
+            if (CompressionUtil.isEmptySummary(summary)) {
                 return null;
             }
 
@@ -121,5 +98,81 @@ public class LLMCompressionStrategy implements CompressionStrategy {
             log.error("Failed to generate LLM compression", e);
             return null;
         }
+    }
+
+    /**
+     * 带 PTL 重试的压缩调用。
+     * <p>当待压缩历史过大导致 LLM 调用失败（返回 prompt is too long）时，
+     * 逐步丢弃最旧的消息缩小范围后重试，最多重试 {@link #MAX_PTL_RETRIES} 次。
+     * 对应 claude-code-java 的 CompactService.PTL 重试机制。
+     */
+    private String compressWithPTLRetry(ChatModel chatModel, int maxRetries, List<ChatMessage> filtered) throws Throwable {
+        List<ChatMessage> currentBatch = filtered;
+
+        for (int ptlAttempt = 0; ptlAttempt <= MAX_PTL_RETRIES; ptlAttempt++) {
+            final List<ChatMessage> batch = currentBatch;
+
+            // 构建待压缩文本
+            String newHistoryText = CompressionUtil.formatMessages(batch, CompressionUtil.DEFAULT_MAX_TOOL_RESULT_LENGTH);
+            if (Assert.isEmpty(newHistoryText)) return null;
+
+            String userData = "### 待压缩历史片段\n" +
+                    newHistoryText +
+                    "\n\n" +
+                    "### 任务指令\n" +
+                    "请根据系统指令对上述执行过程进行语义总结：";
+
+            String summary;
+            try {
+                summary = RetryUtil.callWithRetry(maxRetries, () -> {
+                    ChatResponse resp = chatModel.prompt(userData)
+                            .options(o -> {
+                                o.agentName(LLMCompressionStrategy.class.getSimpleName());
+                                o.systemPrompt(systemInstruction);
+                            })
+                            .call();
+
+                    if (resp.hasContent()) {
+                        return resp.getContent();
+                    } else {
+                        throw new IllegalStateException("The LLM did not return");
+                    }
+                });
+            } catch (Throwable e) {
+                // PTL 可能以 API 异常形式抛出（而非 LLM 返回内容文本）
+                if (CompressionUtil.isPromptTooLongError(e)) {
+                    log.warn("PTL detected via exception, will reduce batch (attempt {}/{})",
+                            ptlAttempt + 1, MAX_PTL_RETRIES, e);
+                    // 转入统一 PTL 缩小重试路径
+                    summary = "prompt is too long";
+                } else {
+                    throw e; // 非 PTL 异常，向上抛出
+                }
+            }
+
+            // PTL 检测：若返回 PTL 错误（内容文本或异常转译），缩小范围重试
+            if (CompressionUtil.isPromptTooLong(summary)) {
+                int currentSize = currentBatch.size();
+                int newSize = currentSize / 2;
+                if (newSize < 1) {
+                    // 已经缩减到最小了还是不行，放弃
+                    log.warn("PTL retry exhausted (attempt {}/{}), batch size too small to continue",
+                            ptlAttempt + 1, MAX_PTL_RETRIES);
+                    return null;
+                }
+
+                // 丢弃最旧的一半消息（保留最近的消息，它们最相关）
+                List<ChatMessage> reduced = new ArrayList<>(currentBatch.subList(currentSize - newSize, currentSize));
+                currentBatch = reduced;
+
+                log.warn("PTL detected, reduced batch from {} to {} messages for retry (attempt {}/{})",
+                        currentSize, newSize, ptlAttempt + 1, MAX_PTL_RETRIES);
+                continue;
+            }
+
+            return summary;
+        }
+
+        return null;
     }
 }

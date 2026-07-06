@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,9 +21,7 @@ import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.rag.Document;
@@ -64,7 +62,7 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
                 "- 如果后续任务需要早前的具体事实、ID 或详细数据，请调用 `recall_history` 工具找回。";
     }
 
-    // --- Tool 实现（负责“取”） ---
+    // --- Tool 实现（负责"取"） ---
     @ToolMapping(name = "recall_history", description = "回溯本会话中早前已归档的长记忆、历史细节或事实")
     public String recall(@Param(name = "query", description = "检索关键词或核心短语") String query,
                          @Param(name = "limit", description = "返回记忆片段的数量", defaultValue = "3") int limit,
@@ -104,28 +102,16 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
             return null;
         }
 
-        // 优化点 1: 预处理消息，进行“结构化降噪”，节省向量库空间并提升检索质量
+        // 使用 CompressionUtil 统一格式化消息（超长内容自动截断）
         String archivedContent = messagesToCompress.stream()
                 .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
-                .map(m -> {
-                    if (m instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) m).getToolCalls())) {
-                        return "[Action]: 调用工具 " + ((AssistantMessage) m).getToolCalls().get(0).getName();
-                    }
-                    if (m instanceof ToolMessage) {
-                        String content = m.getContent();
-                        if (content != null && content.length() > 2000) {
-                            content = content.substring(0, 2000) + "...[内容过长已截断]";
-                        }
-                        return "[Observation]: 得到结果 " + content;
-                    }
-                    return m.getRole().name() + ": " + m.getContent();
-                })
+                .map(CompressionUtil::formatMessageForCompression)
                 .collect(Collectors.joining("\n"));
 
         if (Assert.isEmpty(archivedContent.trim())) return null;
 
         try {
-            // 优化点 3: 封装为高质量 Document
+            // 封装为高质量 Document
             Document doc = new Document(archivedContent);
             doc.metadata("sessionId", trace.getSession().getSessionId());
             doc.metadata("timestamp_long", System.currentTimeMillis());
