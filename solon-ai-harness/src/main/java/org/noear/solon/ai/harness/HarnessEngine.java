@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.ReActAgent;
@@ -146,21 +147,27 @@ public class HarnessEngine {
      * 设置权限模式
      */
     public void setPermissionMode(PermissionMode mode) {
-        options.setPermissionContext(options.getPermissionContext().withMode(mode));
+        if (mode != null) {
+            options.setPermissionContext(options.getPermissionContext().withMode(mode));
+        }
     }
 
     /**
      * 添加权限规则
      */
     public void addPermissionRule(PermissionRule rule) {
-        options.setPermissionContext(options.getPermissionContext().addRule(rule));
+        if (rule != null) {
+            options.setPermissionContext(options.getPermissionContext().addRule(rule));
+        }
     }
 
     /**
      * 批量添加权限规则
      */
     public void addPermissionRules(List<PermissionRule> rules) {
-        options.setPermissionContext(options.getPermissionContext().addRules(rules));
+        if (Utils.isNotEmpty(rules)) {
+            options.setPermissionContext(options.getPermissionContext().addRules(rules));
+        }
     }
 
 
