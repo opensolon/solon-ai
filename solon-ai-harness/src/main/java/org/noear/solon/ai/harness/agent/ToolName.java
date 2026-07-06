@@ -13,16 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.harness.permission;
+package org.noear.solon.ai.harness.agent;
+
+import org.noear.solon.lang.Preview;
 
 /**
  * 工具权限
  *
- * @author noear 2026/4/3 created
- * @deprecated 4.0.4 {@link org.noear.solon.ai.harness.agent.ToolName}
+ * @author noear 2026/7/6 created
+ * @since 4.0.4
  */
-@Deprecated
-public enum ToolPermission {
+@Preview("4.0.4")
+public enum ToolName {
     TOOL_HITL("hitl"),
     TOOL_GENERATE("generate"),
     TOOL_RESTAPI("restapi"),
@@ -57,7 +59,7 @@ public enum ToolPermission {
         return name;
     }
 
-    ToolPermission(String name) {
+    ToolName(String name) {
         this.name = name;
     }
 }

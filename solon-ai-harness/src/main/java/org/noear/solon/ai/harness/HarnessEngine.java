@@ -38,11 +38,12 @@ import org.noear.solon.ai.harness.hitl.WebToolStrategy;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionMode;
 import org.noear.solon.ai.harness.permission.PermissionRule;
+import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 import org.noear.solon.ai.talents.mount.AgentMd;
 import org.noear.solon.ai.talents.mount.MountDir;
-import org.noear.solon.ai.harness.permission.ToolPermission;
+import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.talents.cli.*;
 import org.noear.solon.ai.talents.code.CodeTalent;
 import org.noear.solon.ai.talents.lsp.LspManager;
@@ -1205,8 +1206,17 @@ public class HarnessEngine {
 
         // ========== 集合类配置（代理到 options） ==========
 
-        public Builder toolsAdd(ToolPermission... val) {
-            options.addTools(val);
+        /**
+         * @deprecated 4.0.4
+         */
+        @Deprecated
+        public Builder toolsAdd(ToolPermission... tools) {
+            options.addTools(tools);
+            return this;
+        }
+
+        public Builder toolsAdd(ToolName... tools) {
+            options.addTools(tools);
             return this;
         }
 
@@ -1215,8 +1225,17 @@ public class HarnessEngine {
             return this;
         }
 
-        public Builder disallowedToolsAdd(ToolPermission... val) {
-            options.addDisallowedTools(val);
+        /**
+         * @deprecated 4.0.4
+         */
+        @Deprecated
+        public Builder disallowedToolsAdd(ToolPermission... tools) {
+            options.addDisallowedTools(tools);
+            return this;
+        }
+
+        public Builder disallowedToolsAdd(ToolName... tools) {
+            options.addDisallowedTools(tools);
             return this;
         }
 

@@ -7,7 +7,7 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.talents.mount.MountDir;
-import org.noear.solon.ai.harness.permission.ToolPermission;
+import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.talents.mount.MountType;
 
 public class DemoApp {
@@ -16,8 +16,8 @@ public class DemoApp {
         HarnessEngine engine = HarnessEngine.of("/data/work/", ".tmp")
                 .systemPrompt("xxx")
                 .sessionProvider(InMemoryAgentSession::of)
-                .toolsAdd(ToolPermission.TOOL_ALL_FULL) //设定工具权限
-                .disallowedToolsAdd(ToolPermission.TOOL_ALL_FULL)
+                .toolsAdd(ToolName.TOOL_ALL_FULL) //设定工具权限
+                .disallowedToolsAdd(ToolName.TOOL_ALL_FULL)
                 .mountAdd(MountDir.builder()
                         .alias("@global-agents")
                         .type(MountType.AGENTS)
@@ -71,7 +71,7 @@ public class DemoApp {
         //动态定义智能体
         AgentDefinition definition = new AgentDefinition();
         definition.setSystemPrompt("xxx"); //系统提示词
-        definition.getMetadata().addTools(ToolPermission.TOOL_BASH); //工具权限
+        definition.getMetadata().addTools(ToolName.TOOL_BASH); //工具权限
 
         ReActAgent subagent = engine.createSubagent(definition).build();
         subagent.prompt(prompt)

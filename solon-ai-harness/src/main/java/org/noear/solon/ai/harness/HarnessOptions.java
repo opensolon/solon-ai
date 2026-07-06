@@ -22,6 +22,7 @@ import org.noear.solon.ai.agent.react.intercept.StopLoopInterceptor;
 import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.permission.PermissionContext;
+import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.talents.cli.SkillProvider;
@@ -397,14 +398,34 @@ class HarnessOptions implements Serializable {
 
     // ========== 集合操作方法 ==========
 
-    void addTools(ToolPermission... toolPermissions) {
-        for (ToolPermission p1 : toolPermissions) {
+    /**
+     * @deprecated 4.0.4
+     */
+    @Deprecated
+    void addTools(ToolPermission... toolNames) {
+        for (ToolPermission p1 : toolNames) {
             tools.add(p1.getName());
         }
     }
 
-    void addDisallowedTools(ToolPermission... toolPermissions) {
-        for (ToolPermission p1 : toolPermissions) {
+    void addTools(ToolName... toolNames) {
+        for (ToolName p1 : toolNames) {
+            tools.add(p1.getName());
+        }
+    }
+
+    /**
+     * @deprecated 4.0.4
+     */
+    @Deprecated
+    void addDisallowedTools(ToolPermission... toolNames) {
+        for (ToolPermission p1 : toolNames) {
+            disallowedTools.add(p1.getName());
+        }
+    }
+
+    void addDisallowedTools(ToolName... toolNames) {
+        for (ToolName p1 : toolNames) {
             disallowedTools.add(p1.getName());
         }
     }
