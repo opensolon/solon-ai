@@ -284,7 +284,7 @@ public class MyStrategy implements CompressionStrategy {
     │   初心链消息跳过，多模态消息跳过。
     │
     ├── 1. 模型感知阈值判断 ────────────────────────────────────
-    │   effectiveMaxTokens = max(maxTokens, contextLength - 20000)
+    │   effectiveMaxTokens = min(maxTokens, max(contextLength - 20000, contextLength * 0.8))
     │   若 消息数 <= maxMessages 且 Token <= effectiveMaxTokens * 0.75 → 不压缩，返回
     │
     ├── 2. 提取初心链 ──────────────────────────────────────────
@@ -366,7 +366,7 @@ interceptor.setMinReservedMessages(5); // 至少保留 5 条非初心消息
 当 `ChatModel` 配置了 `contextLength` 时，压缩触发阈值自动感知模型上下文窗口：
 
 ```
-effectiveMaxTokens = max(maxTokens, contextLength - 20000)
+effectiveMaxTokens = min(maxTokens, max(contextLength - 20000, contextLength * 0.8))
 触发条件: Token > effectiveMaxTokens * 0.75
 ```
 
@@ -393,7 +393,7 @@ effectiveMaxTokens = max(maxTokens, contextLength - 20000)
 
 | 方法 | 说明 |
 |------|------|
-| `formatMessageForCompression(msg)` | 将单条消息格式化为文本行，ToolMessage 超过 2000 字符自动截断 |
+| `formatMessageForCompression(msg)` | 将单条消息格式化为文本行。AssistantMessage 保留 thought + 工具调用参数（`getArgumentsStr()`），ToolMessage 超过 10000 字符自动截断 |
 | `formatMessages(messages)` | 将多条消息拼接为压缩用文本块 |
 | `isEmptySummary(summary)` | 检测 LLM 返回是否为"无显著增量"标记 |
 | `isPromptTooLong(response)` | 检测 LLM 返回文本是否为 PTL 错误 |

@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
 
 /**
@@ -33,21 +34,20 @@ import org.noear.solon.core.util.Assert;
 public class CompressionUtil {
 
     /**
-     * 默认 ToolMessage 内容截断长度
+     * 默认 ToolMessage 内容截断长度（对齐 claude-code-java 的 TRUNCATION_THRESHOLD = 10,000 字符）
      *
      * @see #formatMessageForCompression(ChatMessage)
      */
-    public static final int DEFAULT_MAX_TOOL_RESULT_LENGTH = 2000;
+    public static final int DEFAULT_MAX_TOOL_RESULT_LENGTH = 10000;
 
     /**
-     * 工具调用内容的截断后缀标记
+     * 工具调用内容的截断后缀标记（对齐 claude-code-java 的 "... [truncated, N chars total]" 格式）
      */
-    public static final String TRUNCATION_SUFFIX = "...[内容过长已截断]";
+    public static final String TRUNCATION_SUFFIX = "... [truncated";
 
     /**
      * 将消息格式化为供 LLM 压缩或归档用的文本行。
-     * <p>等效于各策略中反复出现的 {@code .map(m -> ...)} lambda 块。
-     * 使用 {@link #DEFAULT_MAX_TOOL_RESULT_LENGTH}（2000 字符）。
+     * <p>使用 {@link #DEFAULT_MAX_TOOL_RESULT_LENGTH}（10000 字符）。
      *
      * @param msg 待格式化的消息
      * @return 格式化后的文本行，不会为 null
@@ -58,9 +58,13 @@ public class CompressionUtil {
 
     /**
      * 将消息格式化为供 LLM 压缩或归档用的文本行。
-     * <p>等效于各策略中反复出现的 {@code .map(m -> ...)} lambda 块。
+     * <p>对应 claude-code-java 的消息格式化逻辑：工具调用参数完整保留，
+     * 工具结果按阈值截断。与 claude-code-java 的差异是：claude-code-java
+     * 直接把原始 Message 对象（含完整 ToolUseBlock.input）发给 LLM，
+     * 而本框架将其序列化为文本行格式。
      * <ul>
-     *     <li>Assistant(with tool_calls) → {@code "[Action]: 调用工具 <name>"}</li>
+     *     <li>Assistant(thought + tool_calls) → {@code "[Thought]: <content>\n[Action]: 调用工具 <name>，参数: <args>"}</li>
+     *     <li>Assistant(only tool_calls) → {@code "[Action]: 调用工具 <name>，参数: <args>"}</li>
      *     <li>ToolMessage → {@code "[Observation]: 得到结果 <content>"}（超长内容自动截断）</li>
      *     <li>其它消息 → {@code "<role>: <content>"}</li>
      * </ul>
@@ -70,13 +74,34 @@ public class CompressionUtil {
      * @return 格式化后的文本行，不会为 null
      */
     public static String formatMessageForCompression(ChatMessage msg, int maxToolResultLength) {
-        if (msg instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls())) {
-            return "[Action]: 调用工具 " + ((AssistantMessage) msg).getToolCalls().get(0).getName();
+        if (msg instanceof AssistantMessage) {
+            AssistantMessage am = (AssistantMessage) msg;
+            StringBuilder sb = new StringBuilder();
+            // 保留思考文本（当 Assistant 同时有 thought 和 tool_calls 时，两者都保留）
+            if (Assert.isNotEmpty(am.getContent())) {
+                sb.append("[Thought]: ").append(am.getContent());
+            }
+            // 保留所有工具调用及其完整参数（对应 claude-code-java 保留完整 ToolUseBlock.input）
+            if (Assert.isNotEmpty(am.getToolCalls())) {
+                for (ToolCall tc : am.getToolCalls()) {
+                    if (sb.length() > 0) sb.append('\n');
+                    String name = tc.getName() != null ? tc.getName() : "";
+                    String args = tc.getArgumentsStr() != null ? tc.getArgumentsStr() : "";
+                    sb.append("[Action]: 调用工具 ").append(name);
+                    if (!args.isEmpty()) {
+                        sb.append("，参数: ").append(args);
+                    }
+                }
+            }
+            if (sb.length() > 0) {
+                return sb.toString();
+            }
         }
         if (msg instanceof ToolMessage) {
             String content = msg.getContent();
             if (content != null && content.length() > maxToolResultLength) {
-                content = content.substring(0, maxToolResultLength) + TRUNCATION_SUFFIX;
+                int totalLen = content.length();
+                content = content.substring(0, maxToolResultLength) + TRUNCATION_SUFFIX + ", " + totalLen + " chars total]";
             }
             return "[Observation]: 得到结果 " + content;
         }

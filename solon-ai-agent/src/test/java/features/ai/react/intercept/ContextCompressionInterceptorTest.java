@@ -766,7 +766,7 @@ public class ContextCompressionInterceptorTest {
     public void testCompressionUtil_TruncateToolResult() {
         // 短内容不截断
         ChatMessage shortMsg = ChatMessage.ofTool("short result", "bash", "call_1");
-        String formatted = CompressionUtil.formatMessageForCompression(shortMsg, 2000);
+        String formatted = CompressionUtil.formatMessageForCompression(shortMsg, 10000);
         assertTrue(formatted.contains("short result"));
         assertFalse(formatted.contains(CompressionUtil.TRUNCATION_SUFFIX));
 
@@ -775,7 +775,7 @@ public class ContextCompressionInterceptorTest {
         for (int i = 0; i < 1000; i++) {
             huge.append("long_data_");
         }
-        String longContent = huge.toString(); // > 2000 chars
+        String longContent = huge.toString(); // ~10000 chars
         ChatMessage longMsg = ChatMessage.ofTool(longContent, "bash", "call_1");
         String formatted2 = CompressionUtil.formatMessageForCompression(longMsg, 100);
 
@@ -783,6 +783,51 @@ public class ContextCompressionInterceptorTest {
                 "超长 ToolResult 应被截断");
         assertTrue(formatted2.contains(CompressionUtil.TRUNCATION_SUFFIX),
                 "截断应包含标记");
+    }
+
+    /**
+     * 测试 CompressionUtil.formatMessageForCompression 保留工具调用参数。
+     * <p>对应改进：claude-code-java 保留完整 ToolUseBlock.input，
+     * 本框架也应在格式化时保留工具调用参数（如文件路径），避免压缩后"白读"。
+     */
+    @Test
+    public void testCompressionUtil_PreservesToolCallArgs() {
+        // 构造带参数的 AssistantMessage（模拟读取文件的工具调用）
+        ToolCall tc = new ToolCall("0", "call_1", "read", "{\"file_path\":\"src/App.java\"}",
+                java.util.Collections.singletonMap("file_path", "src/App.java"));
+        List<ToolCall> toolCalls = java.util.Collections.singletonList(tc);
+        AssistantMessage am = new AssistantMessage("", false, null, null, toolCalls, null);
+
+        String formatted = CompressionUtil.formatMessageForCompression(am);
+
+        // 验证工具名称保留
+        assertTrue(formatted.contains("read"),
+                "格式化结果应包含工具名称");
+        // 验证工具参数保留（关键改进：之前参数被丢弃，现在保留）
+        assertTrue(formatted.contains("file_path"),
+                "格式化结果应保留工具参数（文件路径）");
+        assertTrue(formatted.contains("src/App.java"),
+                "格式化结果应保留具体的文件路径值");
+    }
+
+    /**
+     * 测试 CompressionUtil.formatMessageForCompression 同时保留 thought 和 tool_call。
+     */
+    @Test
+    public void testCompressionUtil_PreservesThoughtAndAction() {
+        ToolCall tc = new ToolCall("0", "call_1", "bash", "{\"command\":\"ls -la\"}",
+                java.util.Collections.singletonMap("command", "ls -la"));
+        List<ToolCall> toolCalls = java.util.Collections.singletonList(tc);
+        AssistantMessage am = new AssistantMessage("我需要先查看目录结构", false, null, null, toolCalls, null);
+
+        String formatted = CompressionUtil.formatMessageForCompression(am);
+
+        // thought 和 action 都应保留
+        assertTrue(formatted.contains("[Thought]"), "应保留思考文本标记");
+        assertTrue(formatted.contains("我需要先查看目录结构"), "应保留思考内容");
+        assertTrue(formatted.contains("[Action]"), "应保留动作标记");
+        assertTrue(formatted.contains("bash"), "应保留工具名称");
+        assertTrue(formatted.contains("ls -la"), "应保留工具参数");
     }
 
     /**
