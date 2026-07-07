@@ -924,12 +924,11 @@ public class HarnessEngine {
     }
 
     protected ReActAgent createMainAgent() {
-        AgentDefinition agentDefinition = new AgentDefinition(AgentDefinition.AGENT_MAIN) // 名字
-                .systemPrompt(options.getSystemPrompt())// 系统提示词
-                .metadata(m -> {
-                    m.setPrimary(true); // 主代理
-                    m.addTools(options.getTools()); // 工具权限
-                });
+        AgentDefinition agentDefinition = new AgentDefinition()
+                .primary(true) // 主代理
+                .name(AgentDefinition.AGENT_MAIN) // 名字
+                .toolsAdd(options.getTools()) // 工具权限
+                .systemPrompt(options.getSystemPrompt());// 系统提示词
 
         ReActAgent.Builder agentBuilder = AgentFactory.create(this, agentDefinition, null);
 

@@ -55,12 +55,48 @@ public class AgentDefinition {
         //用于反序列化
     }
 
-    public AgentDefinition(String name) {
-        getMetadata().setName(name);
-    }
-
     public AgentDefinition systemPrompt(String systemPrompt){
         setSystemPrompt(systemPrompt);
+        return this;
+    }
+
+    public AgentDefinition primary(boolean primary){
+        getMetadata().setPrimary(primary);
+        return this;
+    }
+
+    public AgentDefinition hidden(boolean hidden){
+        getMetadata().setHidden(hidden);
+        return this;
+    }
+
+    public AgentDefinition name(String name) {
+        getMetadata().setName(name);
+        return this;
+    }
+
+    public AgentDefinition description(String description) {
+        getMetadata().setDescription(description);
+        return this;
+    }
+
+    public AgentDefinition toolsAdd(Collection<String> toolNames){
+        getMetadata().addTools(toolNames);
+        return this;
+    }
+
+    public AgentDefinition toolsAdd(String... toolNames){
+        getMetadata().addTools(toolNames);
+        return this;
+    }
+
+    public AgentDefinition disallowedToolsAdd(Collection<String> toolNames){
+        getMetadata().getDisallowedTools().addAll(toolNames);
+        return this;
+    }
+
+    public AgentDefinition disallowedToolsAdd(String... toolNames){
+        getMetadata().getDisallowedTools().addAll(Arrays.asList(toolNames));
         return this;
     }
 
