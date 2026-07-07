@@ -378,24 +378,7 @@ public class OpenApiGatewayTalent extends AbsTalent {
         }
 
         String baseUrl = tool.getBaseUrl();
-        String finalPath = tool.getPath();
-
-        // 1. 路径参数替换 (Path Parameters)
-        if (Assert.isNotEmpty(pathParams)) {
-            for (Map.Entry<String, Object> entry : pathParams.entrySet()) {
-                Object value = entry.getValue();
-                if (value == null) continue;
-
-                String valStr = String.valueOf(value);
-                try {
-                    // 必须进行 URL 编码，防止路径参数中包含特殊字符或中文
-                    String encodedVal = URLEncoder.encode(valStr, "UTF-8");
-                    finalPath = finalPath.replace("{" + entry.getKey() + "}", encodedVal);
-                } catch (java.io.UnsupportedEncodingException e) {
-                    finalPath = finalPath.replace("{" + entry.getKey() + "}", valStr);
-                }
-            }
-        }
+        String finalPath = replacePathParams(tool, pathParams);
 
         // 如果 finalPath 依然包含 {xxx}，说明 AI 漏传了 pathSchema 中定义的必填路径参数
         if (finalPath.contains("{") && finalPath.contains("}")) {
@@ -468,6 +451,37 @@ public class OpenApiGatewayTalent extends AbsTalent {
 
     // --- 私有辅助 ---
 
+    private String replacePathParams(ApiTool tool, Map<String, Object> pathParams) {
+        String finalPath = tool.getPath();
+     
+        if (Assert.isEmpty(tool.getPathSchema())) {
+            return finalPath;
+        }
+     
+        ONode pathSchema = ONode.ofJson(tool.getPathSchema());
+        ONode required = pathSchema.get("required");
+        if (required.isArray()) {
+            for (ONode nameNode : required.getArray()) {
+                String name = nameNode.getString();
+                Object value = pathParams == null ? null : pathParams.get(name);
+                if (value != null) {
+                    finalPath = finalPath.replace("{" + name + "}", encodePathValue(value));
+                }
+            }
+        }
+     
+        return finalPath;
+    }
+     
+    private String encodePathValue(Object value) {
+        try {
+            return URLEncoder.encode(String.valueOf(value), "UTF-8").replace("+", "%20");
+        } catch (java.io.UnsupportedEncodingException e) {
+            return String.valueOf(value);
+        }
+    }
+
+     
     /**
      * 从 ApiSource 创建 Provider 并加载 API 定义，然后同步到全局索引
      */

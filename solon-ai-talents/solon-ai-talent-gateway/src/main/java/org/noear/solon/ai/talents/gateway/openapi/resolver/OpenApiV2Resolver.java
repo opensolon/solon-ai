@@ -135,12 +135,8 @@ public class OpenApiV2Resolver implements ApiResolver {
                     if ("header".equals(in)) {
                         headerProps.set(name, pNode);
                     } else if ("path".equals(in)) {
-                        // 1. 放入 Path 容器并标记必填
                         pathProps.set(name, pNode);
                         pathRequired.add(name);
-                        // 2. 冗余放入 Query 容器以便 AI 感知，同时标记必填
-                        queryProps.set(name, pNode);
-                        queryRequired.add(name);
                     } else if ("query".equals(in)) {
                         queryProps.set(name, pNode);
                         if (p.getRequired()) queryRequired.add(name);

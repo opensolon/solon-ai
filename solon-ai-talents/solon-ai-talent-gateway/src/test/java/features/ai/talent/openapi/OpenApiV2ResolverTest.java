@@ -54,6 +54,7 @@ public class OpenApiV2ResolverTest {
         assertNotNull(tool.getPathSchema());
         assertTrue(tool.getPathSchema().contains("petId"));
         assertTrue(tool.getPathSchema().contains("\"type\":\"integer\""));
+        assertNull(tool.getQuerySchema(), "Path 参数不应重复暴露到 Query Schema");
     }
 
     @Test
@@ -253,6 +254,62 @@ public class OpenApiV2ResolverTest {
         // 对于 Map，Swagger V2 通常将其表现为没有 properties 的 object
         // 验证它是否被识别为 object 或者是包含 integer 的结构
         assertTrue(output.contains("object") || output.contains("integer"));
+    }
+
+    @Test
+    @DisplayName("Swagger V2：验证 PathItem 级 Path 参数可被解析")
+    void testSharedPathParameterResolution() throws IOException {
+        String json = "{"
+                + "\"swagger\":\"2.0\"," 
+                + "\"info\":{\"title\":\"test\",\"version\":\"1.0\"},"
+                + "\"host\":\"example.com\"," 
+                + "\"schemes\":[\"https\"],"
+                + "\"paths\":{\"/tenants/{tenantId}/users/{userId}\":{"
+                + "\"parameters\":[{\"name\":\"tenantId\",\"in\":\"path\",\"required\":true,\"type\":\"integer\"}],"
+                + "\"get\":{\"operationId\":\"getTenantUser\",\"parameters\":["
+                + "{\"name\":\"userId\",\"in\":\"path\",\"required\":true,\"type\":\"string\"},"
+                + "{\"name\":\"verbose\",\"in\":\"query\",\"type\":\"boolean\"}"
+                + "],\"responses\":{\"200\":{\"description\":\"ok\"}}}"
+                + "}}}";
+
+        List<ApiTool> tools = resolver.resolve(null, json);
+        ApiTool tool = tools.stream()
+                .filter(t -> "getTenantUser".equals(t.getName()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        assertTrue(tool.getPathSchema().contains("tenantId"));
+        assertTrue(tool.getPathSchema().contains("userId"));
+        assertTrue(tool.getPathSchema().contains("\"required\":[\"tenantId\",\"userId\"]"));
+        assertTrue(tool.getQuerySchema().contains("verbose"));
+        assertFalse(tool.getQuerySchema().contains("tenantId"));
+        assertFalse(tool.getQuerySchema().contains("userId"));
+    }
+
+    @Test
+    @DisplayName("Swagger V2：Operation 级同名 Path 参数覆盖 PathItem 参数")
+    void testOperationPathParameterOverridesSharedParameter() throws IOException {
+        String json = "{"
+                + "\"swagger\":\"2.0\"," 
+                + "\"info\":{\"title\":\"test\",\"version\":\"1.0\"},"
+                + "\"paths\":{\"/users/{id}\":{"
+                + "\"parameters\":[{\"name\":\"id\",\"in\":\"path\",\"required\":true,\"type\":\"integer\"}],"
+                + "\"get\":{\"operationId\":\"getUser\",\"parameters\":["
+                + "{\"name\":\"id\",\"in\":\"path\",\"required\":true,\"type\":\"string\",\"description\":\"operation id\"}"
+                + "],\"responses\":{\"200\":{\"description\":\"ok\"}}}"
+                + "}}}";
+
+        List<ApiTool> tools = resolver.resolve(null, json);
+        ApiTool tool = tools.stream()
+                .filter(t -> "getUser".equals(t.getName()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        assertTrue(tool.getPathSchema().contains("\"type\":\"string\""));
+        assertFalse(tool.getPathSchema().contains("\"type\":\"integer\""));
+        assertNull(tool.getQuerySchema());
     }
 
     @Test

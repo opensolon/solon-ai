@@ -170,6 +170,61 @@ public class OpenApiV3ResolverTest {
         // 验证 pathSchema 是否包含 petId 且标记为必填
         assertTrue(pathSchema.contains("petId"));
         assertTrue(pathSchema.contains("\"required\":[\"petId\""));
+        assertTrue(tool.getQuerySchema() == null || !tool.getQuerySchema().contains("petId"), "Path 参数不应重复暴露到 Query Schema");
+    }
+
+    @Test
+    @DisplayName("OpenAPI V3：验证 PathItem 级 Path 参数可被解析")
+    void testV3SharedPathParameterResolution() {
+        String json = "{"
+                + "\"openapi\":\"3.0.1\"," 
+                + "\"info\":{\"title\":\"test\",\"version\":\"1.0\"},"
+                + "\"paths\":{\"/tenants/{tenantId}/users/{userId}\":{"
+                + "\"parameters\":[{\"name\":\"tenantId\",\"in\":\"path\",\"required\":true,\"schema\":{\"type\":\"integer\"}}],"
+                + "\"get\":{\"operationId\":\"getTenantUser\",\"parameters\":["
+                + "{\"name\":\"userId\",\"in\":\"path\",\"required\":true,\"schema\":{\"type\":\"string\"}},"
+                + "{\"name\":\"verbose\",\"in\":\"query\",\"schema\":{\"type\":\"boolean\"}}"
+                + "],\"responses\":{\"200\":{\"description\":\"ok\"}}}"
+                + "}}}";
+
+        List<ApiTool> tools = resolver.resolve(null, json);
+        ApiTool tool = tools.stream()
+                .filter(t -> "getTenantUser".equals(t.getName()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        assertTrue(tool.getPathSchema().contains("tenantId"));
+        assertTrue(tool.getPathSchema().contains("userId"));
+        assertTrue(tool.getPathSchema().contains("\"required\":[\"tenantId\",\"userId\"]"));
+        assertTrue(tool.getQuerySchema().contains("verbose"));
+        assertFalse(tool.getQuerySchema().contains("tenantId"));
+        assertFalse(tool.getQuerySchema().contains("userId"));
+    }
+
+    @Test
+    @DisplayName("OpenAPI V3：Operation 级同名 Path 参数覆盖 PathItem 参数")
+    void testV3OperationPathParameterOverridesSharedParameter() {
+        String json = "{"
+                + "\"openapi\":\"3.0.1\"," 
+                + "\"info\":{\"title\":\"test\",\"version\":\"1.0\"},"
+                + "\"paths\":{\"/users/{id}\":{"
+                + "\"parameters\":[{\"name\":\"id\",\"in\":\"path\",\"required\":true,\"schema\":{\"type\":\"integer\"}}],"
+                + "\"get\":{\"operationId\":\"getUser\",\"parameters\":["
+                + "{\"name\":\"id\",\"in\":\"path\",\"required\":true,\"schema\":{\"type\":\"string\"},\"description\":\"operation id\"}"
+                + "],\"responses\":{\"200\":{\"description\":\"ok\"}}}"
+                + "}}}";
+
+        List<ApiTool> tools = resolver.resolve(null, json);
+        ApiTool tool = tools.stream()
+                .filter(t -> "getUser".equals(t.getName()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        assertTrue(tool.getPathSchema().contains("\"type\":\"string\""));
+        assertFalse(tool.getPathSchema().contains("\"type\":\"integer\""));
+        assertNull(tool.getQuerySchema());
     }
 
     @Test
