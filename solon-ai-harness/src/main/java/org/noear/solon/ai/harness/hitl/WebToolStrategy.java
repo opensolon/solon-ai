@@ -57,6 +57,7 @@ public class WebToolStrategy implements HITLInterceptor.InterventionStrategy {
     private final PermissionEngine permissionEngine = new PermissionEngine();
     private final String toolName;
     private Supplier<PermissionContext> permissionContextSupplier = () -> PermissionContext.create();
+    private PermissionDecision defaultDecision = PermissionDecision.ALLOW;
 
     /**
      * @param toolName 工具名称（如 "webfetch", "websearch"）
@@ -71,6 +72,16 @@ public class WebToolStrategy implements HITLInterceptor.InterventionStrategy {
     public WebToolStrategy permissionContextSupplier(Supplier<PermissionContext> supplier) {
         if (supplier != null) {
             this.permissionContextSupplier = supplier;
+        }
+        return this;
+    }
+
+    /**
+     * 设置无规则匹配时的默认决策
+     */
+    public WebToolStrategy defaultDecision(PermissionDecision decision) {
+        if (decision != null) {
+            this.defaultDecision = decision;
         }
         return this;
     }
@@ -104,7 +115,7 @@ public class WebToolStrategy implements HITLInterceptor.InterventionStrategy {
 
         // 2. 委托 PermissionEngine 按规则决策
         PermissionContext ctx = resolveContext(trace);
-        PermissionDecision decision = permissionEngine.evaluate(toolName, args, ctx);
+        PermissionDecision decision = permissionEngine.evaluate(toolName, args, ctx, this.defaultDecision);
 
         switch (decision) {
             case ALLOW:

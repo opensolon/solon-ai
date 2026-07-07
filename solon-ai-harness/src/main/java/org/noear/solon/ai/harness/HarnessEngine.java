@@ -797,24 +797,10 @@ public class HarnessEngine {
         BashToolStrategy bashStrategy = new BashToolStrategy()
                 .permissionContextSupplier(options::getPermissionContext);
 
-        WriteToolStrategy writeStrategy = new WriteToolStrategy("write")
-                .permissionContextSupplier(options::getPermissionContext);
-        WriteToolStrategy editStrategy = new WriteToolStrategy("edit")
-                .permissionContextSupplier(options::getPermissionContext);
-
-        WebToolStrategy webfetchStrategy = new WebToolStrategy("webfetch")
-                .permissionContextSupplier(options::getPermissionContext);
-        WebToolStrategy websearchStrategy = new WebToolStrategy("websearch")
-                .permissionContextSupplier(options::getPermissionContext);
-
         options.setHitlInterceptor(new HITLInterceptor()
                 .onTool("bash", bashStrategy)
-                .onTool("write", writeStrategy)
-                .onTool("edit", editStrategy)
-                .onTool("webfetch", webfetchStrategy)
-                .onTool("websearch", websearchStrategy)
                 .onApproved((toolName, args) -> {
-                    // alwaysAllow 回调：从参数提取命令/路径，注入细粒度放行规则
+                    // 记住本次审批：提取命令/路径，注入放行规则，后续相同操作免弹窗
                     String pattern = null;
                     if (args != null) {
                         // 优先提取 command（bash 工具）
@@ -822,6 +808,7 @@ public class HarnessEngine {
                         if (cmd instanceof String && !((String) cmd).trim().isEmpty()) {
                             pattern = (String) cmd;
                         }
+
                         // 其次提取 file_path（write/edit 工具）
                         if (pattern == null) {
                             Object path = args.get("file_path");
@@ -830,13 +817,14 @@ public class HarnessEngine {
                             }
                         }
                     }
+
                     if (pattern != null) {
-                        // 细粒度放行：只放行匹配此命令/路径模式的操作
+                        // 带模式的细粒度放行：后续相同 pattern 自动放行
                         options.setPermissionContext(
                                 options.getPermissionContext().addRule(
                                         PermissionRule.allow(toolName, pattern)));
                     } else {
-                        // 无命令/路径时退化为工具级放行
+                        // 无精确模式时退化为工具级放行（后续该工具的所有操作不再弹窗）
                         options.setPermissionContext(
                                 options.getPermissionContext().addRule(
                                         PermissionRule.allow(toolName)));

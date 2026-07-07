@@ -48,6 +48,7 @@ public class BashToolStrategy implements HITLInterceptor.InterventionStrategy {
     private final PermissionEngine permissionEngine = new PermissionEngine();
     private final BashCommandClassifier commandClassifier = new BashCommandClassifier();
     private Supplier<PermissionContext> permissionContextSupplier = () -> PermissionContext.create();
+    private PermissionDecision defaultDecision = PermissionDecision.ALLOW;
 
     /**
      * 设置权限上下文提供者
@@ -55,6 +56,16 @@ public class BashToolStrategy implements HITLInterceptor.InterventionStrategy {
     public BashToolStrategy permissionContextSupplier(Supplier<PermissionContext> supplier) {
         if (supplier != null) {
             this.permissionContextSupplier = supplier;
+        }
+        return this;
+    }
+
+    /**
+     * 设置无规则匹配时的默认决策
+     */
+    public BashToolStrategy defaultDecision(PermissionDecision decision) {
+        if (decision != null) {
+            this.defaultDecision = decision;
         }
         return this;
     }
@@ -118,7 +129,7 @@ public class BashToolStrategy implements HITLInterceptor.InterventionStrategy {
         // ========== 委托 PermissionEngine 按规则决策 ==========
 
         PermissionContext ctx = resolveContext(trace);
-        PermissionDecision decision = permissionEngine.evaluate("bash", args, ctx);
+        PermissionDecision decision = permissionEngine.evaluate("bash", args, ctx, this.defaultDecision);
 
         switch (decision) {
             case ALLOW:

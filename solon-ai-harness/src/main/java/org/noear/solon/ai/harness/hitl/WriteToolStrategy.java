@@ -41,6 +41,7 @@ public class WriteToolStrategy implements HITLInterceptor.InterventionStrategy {
     private final PermissionEngine permissionEngine = new PermissionEngine();
     private final String toolName;
     private Supplier<PermissionContext> permissionContextSupplier = () -> PermissionContext.create();
+    private PermissionDecision defaultDecision = PermissionDecision.ALLOW;
 
     /**
      * @param toolName 工具名称（如 "write", "edit"）
@@ -55,6 +56,16 @@ public class WriteToolStrategy implements HITLInterceptor.InterventionStrategy {
     public WriteToolStrategy permissionContextSupplier(Supplier<PermissionContext> supplier) {
         if (supplier != null) {
             this.permissionContextSupplier = supplier;
+        }
+        return this;
+    }
+
+    /**
+     * 设置无规则匹配时的默认决策
+     */
+    public WriteToolStrategy defaultDecision(PermissionDecision decision) {
+        if (decision != null) {
+            this.defaultDecision = decision;
         }
         return this;
     }
@@ -90,7 +101,7 @@ public class WriteToolStrategy implements HITLInterceptor.InterventionStrategy {
         }
 
         PermissionContext ctx = resolveContext(trace);
-        PermissionDecision decision = permissionEngine.evaluate(toolName, args, ctx);
+        PermissionDecision decision = permissionEngine.evaluate(toolName, args, ctx, this.defaultDecision);
 
         switch (decision) {
             case ALLOW:

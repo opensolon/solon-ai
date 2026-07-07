@@ -43,20 +43,22 @@ public class PermissionEngine {
     /**
      * 评估工具调用
      *
- * <p>评估策略：
- * <ol>
- * <li><b>规则优先级</b>：priority 越大越优先。</li>
- * <li><b>同级安全兜底</b>：同 priority 下 DENY &gt; ALLOW &gt; ASK。</li>
- * <li><b>默认询问</b>：无规则匹配时返回 ASK。</li>
- * </ol>
+     * <p>评估策略：
+     * <ol>
+     * <li><b>规则优先级</b>：priority 越大越优先。</li>
+     * <li><b>同级安全兜底</b>：同 priority 下 DENY &gt; ALLOW &gt; ASK。</li>
+     * <li><b>默认决策</b>：无规则匹配时返回 {@code defaultDecision}。</li>
+     * </ol>
      *
-     * @param toolName 工具名称
-     * @param args     工具参数
-     * @param context  权限上下文（含规则）
+     * @param toolName       工具名称
+     * @param args           工具参数
+     * @param context        权限上下文（含规则）
+     * @param defaultDecision 无规则匹配时的默认决策
      * @return 决策结果
      */
     public PermissionDecision evaluate(String toolName, Map<String, Object> args,
-                                        PermissionContext context) {
+                                        PermissionContext context,
+                                        PermissionDecision defaultDecision) {
         List<PermissionRule> rules = new ArrayList<>(context.rules());
         Collections.sort(rules, RULE_COMPARATOR);
 
@@ -66,7 +68,17 @@ public class PermissionEngine {
             }
         }
 
-        return PermissionDecision.ASK;
+        return defaultDecision;
+    }
+
+    /**
+     * 评估工具调用（无规则匹配时默认返回 ASK）
+     *
+     * @see #evaluate(String, Map, PermissionContext, PermissionDecision)
+     */
+    public PermissionDecision evaluate(String toolName, Map<String, Object> args,
+                                        PermissionContext context) {
+        return evaluate(toolName, args, context, PermissionDecision.ASK);
     }
 
     private static final Comparator<PermissionRule> RULE_COMPARATOR = new Comparator<PermissionRule>() {
