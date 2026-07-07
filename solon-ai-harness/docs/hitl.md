@@ -184,10 +184,7 @@ assert !resp2.getSession().isPending();  // 流程正常结束
 |------|--------|--------|----------|
 | `DEFAULT` | ASK（人工确认） | ASK | 日常开发，安全优先 |
 | `READ_ONLY` | DENY（拒绝） | ALLOW | 只读分析模式，不修改任何文件 |
-| `BYPASS` | ALLOW | ALLOW | 完全信任，跳过所有审批 |
-| `ACCEPT_EDITS` | ALLOW | ASK | 自动接受文件编辑，网络等仍需确认 |
-| `DONT_ASK` | ALLOW | ALLOW | 免打扰，不弹确认 |
-| `AUTO` | ALLOW | ALLOW | 自动模式，使用分类器自动决策 |
+| `UNLIMITED` | ALLOW | ALLOW | 完全信任，跳过所有审批 |
 
 ### 设置方式
 
@@ -376,10 +373,7 @@ PermissionContext ctx7 = ctx.addDirectories(List.of(Path.of("/shared")));
 |------|--------|----------|
 | `DEFAULT` | ASK | ASK |
 | `READ_ONLY` | DENY | ALLOW |
-| `BYPASS` | ALLOW | ALLOW |
-| `ACCEPT_EDITS` | ALLOW | ASK |
-| `DONT_ASK` | ALLOW | ALLOW |
-| `AUTO` | ALLOW | ALLOW |
+| `UNLIMITED` | ALLOW | ALLOW |
 
 **写工具白名单**：`bash`, `write`, `edit`, `rm`, `mv`, `cp`, `mkdir`
 

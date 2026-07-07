@@ -92,25 +92,16 @@ public class WriteToolStrategyTest {
         Assertions.assertNotNull(s.evaluate(null, args("src/main/java/App.java")));
     }
 
-    // ========== BYPASS 模式放行 ==========
+    // ========== UNLIMITED 模式放行 ==========
 
     @Test
-    public void testNormalPath_Bypass_Pass() {
+    public void testNormalPath_Unlimited_Pass() {
         WriteToolStrategy s = strategy("write",
-                PermissionContext.create().withMode(PermissionMode.BYPASS));
+                PermissionContext.create().withMode(PermissionMode.UNLIMITED));
         Assertions.assertNull(s.evaluate(null, args("src/test.java")));
     }
 
-    // ========== ACCEPT_EDITS 模式放行 ==========
-
-    @Test
-    public void testNormalPath_AcceptEdits_Pass() {
-        WriteToolStrategy s = strategy("write",
-                PermissionContext.create().withMode(PermissionMode.ACCEPT_EDITS));
-        Assertions.assertNull(s.evaluate(null, args("src/test.java")));
-    }
-
-    // ========== PLAN 模式拒绝 ==========
+    // ========== READ_ONLY 模式拒绝 ==========
 
     @Test
     public void testNormalPath_Plan_Block() {

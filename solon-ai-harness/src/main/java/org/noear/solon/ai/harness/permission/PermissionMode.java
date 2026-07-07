@@ -18,8 +18,6 @@ package org.noear.solon.ai.harness.permission;
 /**
  * 权限模式，控制整体权限行为
  *
- * <p>对应 claude-code-java 的 PermissionMode，适配 HITL 框架场景。</p>
- *
  * @author noear
  * @since 4.0
  */
@@ -28,8 +26,6 @@ public enum PermissionMode {
     DEFAULT,
     /** 只读模式，拒绝所有写操作 */
     READ_ONLY,
-    /** 绕过模式 — 放行所有操作 */
-    BYPASS,
-    /** 接受文件编辑，写操作放行但读操作仍需确认 */
-    ACCEPT_EDITS
+    /** 无限制模式 — 放行所有操作 */
+    UNLIMITED
 }

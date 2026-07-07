@@ -175,8 +175,8 @@ public class BashToolStrategyTest {
     }
 
     @Test
-    public void testBypassMode_Pass() {
-        PermissionContext ctx = PermissionContext.create().withMode(PermissionMode.BYPASS);
+    public void testUnlimitedMode_Pass() {
+        PermissionContext ctx = PermissionContext.create().withMode(PermissionMode.UNLIMITED);
         BashToolStrategy s = strategy(ctx);
         Assertions.assertNull(s.evaluate(null, args("rm -rf /tmp/test")));
     }

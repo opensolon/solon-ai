@@ -28,7 +28,7 @@ import java.util.regex.Pattern;
  * <p>评估工具调用请求是否应被放行、拒绝或需要人工介入。
  * 评估优先级：DENY &gt; ALLOW &gt; ASK &gt; 模式默认。</p>
  *
- * <p>内部维护写工具白名单，支持 PLAN 模式自动拒绝写操作。</p>
+ * <p>内部维护写工具白名单。</p>
  *
  * @author noear
  * @since 4.0
@@ -194,10 +194,8 @@ public class PermissionEngine {
      */
     private PermissionDecision evaluateByMode(String toolName, PermissionMode mode) {
         switch (mode) {
-            case BYPASS:
+            case UNLIMITED:
                 return PermissionDecision.ALLOW;
-            case ACCEPT_EDITS:
-                return isWriteTool(toolName) ? PermissionDecision.ALLOW : PermissionDecision.ASK;
             case READ_ONLY:
                 return isWriteTool(toolName) ? PermissionDecision.DENY : PermissionDecision.ALLOW;
             default:

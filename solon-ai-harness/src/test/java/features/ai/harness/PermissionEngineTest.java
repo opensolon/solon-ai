@@ -108,16 +108,14 @@ public class PermissionEngineTest {
     // ========== 模式降级 ==========
 
     @Test
-    public void testModeBypass() {
-        PermissionContext ctx = PermissionContext.create().withMode(PermissionMode.BYPASS);
+    public void testModeUnlimited() {
+        PermissionContext ctx = PermissionContext.create().withMode(PermissionMode.UNLIMITED);
         Assertions.assertEquals(PermissionDecision.ALLOW,
             engine.evaluate("bash", args("rm -rf /"), ctx));
     }
 
-
-
     @Test
-    public void testModePlan_WriteDeny() {
+    public void testModeReadOnly_WriteDeny() {
         PermissionContext ctx = PermissionContext.create().withMode(PermissionMode.READ_ONLY);
         Assertions.assertEquals(PermissionDecision.DENY,
             engine.evaluate("bash", args("rm -rf /"), ctx));
@@ -126,25 +124,9 @@ public class PermissionEngineTest {
     }
 
     @Test
-    public void testModePlan_ReadAllow() {
+    public void testModeReadOnly_ReadAllow() {
         PermissionContext ctx = PermissionContext.create().withMode(PermissionMode.READ_ONLY);
         Assertions.assertEquals(PermissionDecision.ALLOW,
-            engine.evaluate("webfetch", args("https://example.com"), ctx));
-    }
-
-    @Test
-    public void testModeAcceptEdits_WriteAllow() {
-        PermissionContext ctx = PermissionContext.create().withMode(PermissionMode.ACCEPT_EDITS);
-        Assertions.assertEquals(PermissionDecision.ALLOW,
-            engine.evaluate("write", args("test.txt"), ctx));
-        Assertions.assertEquals(PermissionDecision.ALLOW,
-            engine.evaluate("edit", args("test.txt"), ctx));
-    }
-
-    @Test
-    public void testModeAcceptEdits_NonWriteAsk() {
-        PermissionContext ctx = PermissionContext.create().withMode(PermissionMode.ACCEPT_EDITS);
-        Assertions.assertEquals(PermissionDecision.ASK,
             engine.evaluate("webfetch", args("https://example.com"), ctx));
     }
 

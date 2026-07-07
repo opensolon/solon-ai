@@ -95,18 +95,18 @@ public class WebToolStrategyTest {
 
 
     @Test
-    public void testSafeUrl_Bypass_Pass() {
+    public void testSafeUrl_Unlimited_Pass() {
         WebToolStrategy s = strategy("webfetch",
-                PermissionContext.create().withMode(PermissionMode.BYPASS));
+                PermissionContext.create().withMode(PermissionMode.UNLIMITED));
         Assertions.assertNull(s.evaluate(null, args("https://example.com")));
     }
 
-    // ========== 高风险域名即使在 BYPASS 模式也被拦截 ==========
+    // ========== 高风险域名即使在 UNLIMITED 模式也被拦截 ==========
 
     @Test
-    public void testRiskyUrl_Bypass_StillBlock() {
+    public void testRiskyUrl_Unlimited_StillBlock() {
         WebToolStrategy s = strategy("webfetch",
-                PermissionContext.create().withMode(PermissionMode.BYPASS));
+                PermissionContext.create().withMode(PermissionMode.UNLIMITED));
         // P0 黑名单优先于模式，始终拦截
         Assertions.assertNotNull(s.evaluate(null, args("https://facebook.com")));
     }
