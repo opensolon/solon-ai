@@ -29,6 +29,7 @@ import org.noear.solon.core.util.Assert;
 import org.yaml.snakeyaml.Yaml;
 
 import java.util.*;
+import java.util.function.Consumer;
 
 /**
  * 代理定义
@@ -49,6 +50,25 @@ public class AgentDefinition {
      * 所属挂载别名（用于按挂载批量移除），null 表示内置代理
      */
     private String mountAlias;
+
+    public AgentDefinition() {
+        //用于反序列化
+    }
+
+    public AgentDefinition(String name) {
+        getMetadata().setName(name);
+    }
+
+    public AgentDefinition systemPrompt(String systemPrompt){
+        setSystemPrompt(systemPrompt);
+        return this;
+    }
+
+    public AgentDefinition metadata(Consumer<Metadata> build){
+        build.accept(getMetadata());
+        return this;
+    }
+
 
     /**
      * 复制
@@ -320,6 +340,10 @@ public class AgentDefinition {
             }
         }
 
+        public void addTools(Collection<String> toolNames) {
+            tools.addAll(toolNames);
+        }
+
         public void addTools(String... toolNames) {
             tools.addAll(Arrays.asList(toolNames));
         }
@@ -332,7 +356,8 @@ public class AgentDefinition {
 
         /**
          * @deprecated 4.0.4
-         * */
+         *
+         */
         @Deprecated
         public void addTools(ToolPermission... toolNames) {
             for (ToolPermission p1 : toolNames) {

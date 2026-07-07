@@ -18,6 +18,7 @@
 * 添加 solon-ai-agent HITLStrategy 接口，替代 HITLInterceptor.InterventionStrategy（后者标为弃用）
 * 添加 solon-ai-harness 新的工具权限体系
 * 添加 solon-ai-harness ToolName 类，替代 ToolPermission（后者标为弃用）
+* 添加 solon-ai-harness AgentDefinition 链式构造方法
 * 调整 solon-ai-harness 重构 hitl 实现
 
 ### 4.0.3
