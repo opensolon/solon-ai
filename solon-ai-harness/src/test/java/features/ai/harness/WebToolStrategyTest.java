@@ -92,12 +92,7 @@ public class WebToolStrategyTest {
         Assertions.assertNotNull(s.evaluate(null, args("https://example.com")));
     }
 
-    @Test
-    public void testSafeUrl_DontAsk_Pass() {
-        WebToolStrategy s = strategy("webfetch",
-                PermissionContext.create().withMode(PermissionMode.DONT_ASK));
-        Assertions.assertNull(s.evaluate(null, args("https://example.com")));
-    }
+
 
     @Test
     public void testSafeUrl_Bypass_Pass() {

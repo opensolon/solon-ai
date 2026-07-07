@@ -118,7 +118,13 @@ public class AgentFactory {
         if (metadata.hasPermissionRules() || metadata.hasPermissionMode()) {
             PermissionContext agentCtx = PermissionContext.create();
             if (metadata.hasPermissionMode()) {
-                agentCtx = agentCtx.withMode(PermissionMode.valueOf(metadata.getPermissionMode().toUpperCase()));
+                String modeStr = metadata.getPermissionMode().toUpperCase();
+                // 兼容 claude-code-java 的 "plan" 映射到 READ_ONLY
+                if ("PLAN".equals(modeStr)) {
+                    agentCtx = agentCtx.withMode(PermissionMode.READ_ONLY);
+                } else {
+                    agentCtx = agentCtx.withMode(PermissionMode.valueOf(modeStr));
+                }
             }
             if (metadata.hasPermissionRules()) {
                 agentCtx = agentCtx.addRules(metadata.getPermissionRules());

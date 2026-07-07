@@ -24,16 +24,12 @@ package org.noear.solon.ai.harness.permission;
  * @since 4.0
  */
 public enum PermissionMode {
-    /** 默认模式 — 按规则评估，无规则时对写操作询问 */
+    /** 默认模式 — 按规则评估，无规则时询问用户 */
     DEFAULT,
     /** 只读模式，拒绝所有写操作 */
     READ_ONLY,
     /** 绕过模式 — 放行所有操作 */
     BYPASS,
     /** 接受文件编辑，写操作放行但读操作仍需确认 */
-    ACCEPT_EDITS,
-    /** 免打扰模式 — 自动放行所有操作，不弹出确认 */
-    DONT_ASK,
-    /** 自动模式 — 使用分类器自动决策 */
-    AUTO
+    ACCEPT_EDITS
 }

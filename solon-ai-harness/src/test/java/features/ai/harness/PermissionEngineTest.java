@@ -66,30 +66,7 @@ public class PermissionEngineTest {
             engine.evaluate("bash", args("ls"), ctx));
     }
 
-    // ========== PASSTHROUGH ==========
 
-    @Test
-    public void testPassthroughSkips() {
-        PermissionContext ctx = PermissionContext.create()
-            .addRule(PermissionRule.withPattern("bash", PermissionBehavior.PASSTHROUGH, "rm *"))
-            .addRule(PermissionRule.allow("bash"));
-
-        Map<String, Object> args = args("rm -rf /tmp");
-        // PASSTHROUGH 跳过，继续匹配 ALLOW -> 放行
-        Assertions.assertEquals(PermissionDecision.ALLOW,
-            engine.evaluate("bash", args, ctx));
-    }
-
-    @Test
-    public void testPassthroughAllSkips() {
-        PermissionContext ctx = PermissionContext.create()
-            .addRule(PermissionRule.withPattern("bash", PermissionBehavior.PASSTHROUGH, "rm *"))
-            .addRule(PermissionRule.withPattern("bash", PermissionBehavior.PASSTHROUGH, "git *"));
-
-        // 全部 PASSTHROUGH -> 无匹配规则 -> 模式降级 -> DEFAULT -> ASK
-        Assertions.assertEquals(PermissionDecision.ASK,
-            engine.evaluate("bash", args("rm -rf /tmp"), ctx));
-    }
 
     // ========== 通配符匹配 ==========
 
@@ -137,19 +114,7 @@ public class PermissionEngineTest {
             engine.evaluate("bash", args("rm -rf /"), ctx));
     }
 
-    @Test
-    public void testModeDontAsk() {
-        PermissionContext ctx = PermissionContext.create().withMode(PermissionMode.DONT_ASK);
-        Assertions.assertEquals(PermissionDecision.ALLOW,
-            engine.evaluate("bash", args("rm -rf /"), ctx));
-    }
 
-    @Test
-    public void testModeAuto() {
-        PermissionContext ctx = PermissionContext.create().withMode(PermissionMode.AUTO);
-        Assertions.assertEquals(PermissionDecision.ALLOW,
-            engine.evaluate("bash", args("rm -rf /"), ctx));
-    }
 
     @Test
     public void testModePlan_WriteDeny() {

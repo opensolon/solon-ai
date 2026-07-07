@@ -48,13 +48,12 @@ public class PermissionEngine {
     /**
      * 评估工具调用
      *
-     * <p>评估策略：
-     * <ol>
-     * <li><b>DENY 最高优先级</b>：遍历所有规则，任何匹配的 DENY 规则立即拒绝。</li>
-     * <li><b>ALLOW/ASK 按规则顺序</b>：首个匹配的非 DENY 规则决定结果。
-     *     PASSTHROUGH 规则匹配后跳过，继续评估下一条。</li>
-     * <li><b>模式降级</b>：无规则匹配时，按 PermissionMode 返回默认决策。</li>
-     * </ol>
+ * <p>评估策略：
+ * <ol>
+ * <li><b>DENY 最高优先级</b>：遍历所有规则，任何匹配的 DENY 规则立即拒绝。</li>
+ * <li><b>ALLOW/ASK 按规则顺序</b>：首个匹配的非 DENY 规则决定结果。</li>
+ * <li><b>模式降级</b>：无规则匹配时，按 PermissionMode 返回默认决策。</li>
+ * </ol>
      *
      * @param toolName 工具名称
      * @param args     工具参数
@@ -73,10 +72,9 @@ public class PermissionEngine {
             }
         }
 
-        // 2. 按规则顺序扫描：PASSTHROUGH 跳过，首个 ALLOW/ASK 匹配返回
+        // 2. 按规则顺序扫描，首个 ALLOW/ASK 匹配返回
         for (PermissionRule rule : rules) {
             if (rule.behavior() == PermissionBehavior.DENY) continue;    // DENY 已处理
-            if (rule.behavior() == PermissionBehavior.PASSTHROUGH) continue; // PASSTHROUGH 跳过
 
             if (matchesToolName(rule.toolName(), toolName) && matchesPattern(rule, args)) {
                 return rule.behavior() == PermissionBehavior.ALLOW
@@ -197,8 +195,6 @@ public class PermissionEngine {
     private PermissionDecision evaluateByMode(String toolName, PermissionMode mode) {
         switch (mode) {
             case BYPASS:
-            case DONT_ASK:
-            case AUTO:
                 return PermissionDecision.ALLOW;
             case ACCEPT_EDITS:
                 return isWriteTool(toolName) ? PermissionDecision.ALLOW : PermissionDecision.ASK;

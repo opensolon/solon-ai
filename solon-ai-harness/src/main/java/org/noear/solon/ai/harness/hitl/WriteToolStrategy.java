@@ -35,8 +35,9 @@ import java.util.function.Supplier;
  *
  * <p>无规则匹配时，按模式降级：
  * <ul>
- * <li>BYPASS_PERMISSIONS / DONT_ASK / AUTO / ACCEPT_EDITS — 放行</li>
- * <li>PLAN — 拒绝（写工具）</li>
+ * <li>BYPASS — 放行所有操作</li>
+ * <li>ACCEPT_EDITS — 放行写操作</li>
+ * <li>READ_ONLY — 拒绝写操作</li>
  * <li>DEFAULT — 人工确认</li>
  * </ul>
  * </p>

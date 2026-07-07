@@ -27,7 +27,5 @@ public enum PermissionBehavior {
     /** 拒绝工具执行 */
     DENY,
     /** 交给人工确认 */
-    ASK,
-    /** 跳过此规则，传递给下一条规则评估 */
-    PASSTHROUGH
+    ASK
 }
