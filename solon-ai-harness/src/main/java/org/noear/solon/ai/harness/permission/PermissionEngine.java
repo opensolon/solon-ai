@@ -63,7 +63,7 @@ public class PermissionEngine {
         Collections.sort(rules, RULE_COMPARATOR);
 
         for (PermissionRule rule : rules) {
-            if (matchesToolName(rule.toolName(), toolName) && matchesPattern(rule, args)) {
+            if (matchesToolName(rule.toolName(), toolName) && matchesPattern(rule, toolName, args)) {
                 return toDecision(rule.behavior());
             }
         }
@@ -122,9 +122,18 @@ public class PermissionEngine {
     }
 
     /**
-     * 检查规则的 glob 模式是否匹配参数
+     * 检查规则是否匹配参数
+     *
+     * <p>匹配顺序：先检查自定义匹配器（{@link PermissionRule#hasMatcher()}），
+     * 有则优先使用；否则走 glob 模式匹配。</p>
      */
-    private boolean matchesPattern(PermissionRule rule, Map<String, Object> args) {
+    private boolean matchesPattern(PermissionRule rule, String toolName, Map<String, Object> args) {
+        // 1. 自定义匹配器优先
+        if (rule.hasMatcher()) {
+            return rule.matcher().get().test(toolName, args);
+        }
+
+        // 2. glob 模式匹配
         Optional<String> patternOpt = rule.pattern();
         if (!patternOpt.isPresent()) {
             return true; // 无模式则匹配全部

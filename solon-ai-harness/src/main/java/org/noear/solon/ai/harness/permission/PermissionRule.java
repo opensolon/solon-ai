@@ -15,12 +15,21 @@
  */
 package org.noear.solon.ai.harness.permission;
 
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.BiPredicate;
 
 /**
  * 权限规则
  *
- * <p>将工具名（含可选 glob 模式）映射到一种权限行为，并支持优先级控制。</p>
+ * <p>将工具名映射到一种权限行为，并支持优先级控制。匹配方式二选一：
+ * <ul>
+ * <li><b>glob 模式</b>：通过 {@link #pattern()} 指定命令/路径的 glob 匹配</li>
+ * <li><b>自定义匹配器</b>：通过 {@link #matcher()} 指定 {@link BiPredicate}，实现复杂匹配逻辑</li>
+ * </ul>
+ * 两者互斥，不能同时设置。</p>
+ *
+ * <p>可通过 {@link #prompt()} 设置规则的提示信息，供策略类生成友好的拦截提示。</p>
  *
  * @author noear
  * @since 4.0
@@ -28,7 +37,9 @@ import java.util.Optional;
 public class PermissionRule {
     private final String toolName;
     private final PermissionBehavior behavior;
-    private final String pattern; // null 表示无模式，匹配全部
+    private final String pattern; // null 表示无模式，匹配全部（与 matcher 互斥）
+    private final BiPredicate<String, Map<String, Object>> matcher; // null 表示无自定义匹配器
+    private final String prompt; // 拦截时的提示信息
     private final int priority;
 
     /**
@@ -43,7 +54,7 @@ public class PermissionRule {
     }
 
     /**
-     * 构造函数
+     * 构造函数（glob 模式版）
      *
      * @param toolName 工具名称（如 "bash", "write", "*"）
      * @param behavior 匹配后的权限行为
@@ -54,6 +65,28 @@ public class PermissionRule {
         this.toolName = toolName;
         this.behavior = behavior;
         this.pattern = pattern;
+        this.matcher = null;
+        this.prompt = null;
+        this.priority = priority;
+    }
+
+    /**
+     * 构造函数（自定义匹配器版）
+     *
+     * @param toolName 工具名称（如 "bash", "write", "*"）
+     * @param behavior 匹配后的权限行为
+     * @param matcher  自定义匹配器（null 表示无自定义匹配器，使用默认的 glob 模式匹配）
+     * @param prompt   拦截时的提示信息（null 表示使用默认提示）
+     * @param priority 优先级，数值越大越优先
+     */
+    public PermissionRule(String toolName, PermissionBehavior behavior,
+                          BiPredicate<String, Map<String, Object>> matcher,
+                          String prompt, int priority) {
+        this.toolName = toolName;
+        this.behavior = behavior;
+        this.pattern = null;
+        this.matcher = matcher;
+        this.prompt = prompt;
         this.priority = priority;
     }
 
@@ -70,6 +103,27 @@ public class PermissionRule {
      */
     public Optional<String> pattern() {
         return pattern != null ? Optional.of(pattern) : Optional.empty();
+    }
+
+    /**
+     * 获取自定义匹配器
+     */
+    public Optional<BiPredicate<String, Map<String, Object>>> matcher() {
+        return matcher != null ? Optional.of(matcher) : Optional.empty();
+    }
+
+    /**
+     * 是否为自定义匹配器规则
+     */
+    public boolean hasMatcher() {
+        return matcher != null;
+    }
+
+    /**
+     * 获取提示信息
+     */
+    public String prompt() {
+        return prompt;
     }
 
     public int priority() {
@@ -109,6 +163,21 @@ public class PermissionRule {
      */
     public static PermissionRule withPattern(String toolName, PermissionBehavior behavior, String pattern, int priority) {
         return new PermissionRule(toolName, behavior, pattern, priority);
+    }
+
+    /**
+     * 创建带自定义匹配器和提示信息的规则
+     *
+     * @param toolName 工具名称
+     * @param behavior 匹配后的权限行为
+     * @param matcher  自定义匹配器（toolName + args → boolean）
+     * @param prompt   拦截时的提示信息，null 表示由策略生成动态提示
+     * @param priority 优先级，数值越大越优先
+     */
+    public static PermissionRule of(String toolName, PermissionBehavior behavior,
+                                    BiPredicate<String, Map<String, Object>> matcher,
+                                    String prompt, int priority) {
+        return new PermissionRule(toolName, behavior, matcher, prompt, priority);
     }
 
     // 便捷工厂：放行
@@ -161,7 +230,9 @@ public class PermissionRule {
         if (priority != that.priority) return false;
         if (!toolName.equals(that.toolName)) return false;
         if (behavior != that.behavior) return false;
-        return pattern != null ? pattern.equals(that.pattern) : that.pattern == null;
+        if (pattern != null ? !pattern.equals(that.pattern) : that.pattern != null) return false;
+        if (matcher != null ? !matcher.equals(that.matcher) : that.matcher != null) return false;
+        return prompt != null ? prompt.equals(that.prompt) : that.prompt == null;
     }
 
     @Override
@@ -169,6 +240,8 @@ public class PermissionRule {
         int result = toolName.hashCode();
         result = 31 * result + behavior.hashCode();
         result = 31 * result + (pattern != null ? pattern.hashCode() : 0);
+        result = 31 * result + (matcher != null ? matcher.hashCode() : 0);
+        result = 31 * result + (prompt != null ? prompt.hashCode() : 0);
         result = 31 * result + priority;
         return result;
     }
@@ -179,6 +252,8 @@ public class PermissionRule {
                 "toolName='" + toolName + '\'' +
                 ", behavior=" + behavior +
                 ", pattern=" + (pattern != null ? "'" + pattern + "'" : "null") +
+                ", matcher=" + (matcher != null ? "custom" : "null") +
+                ", prompt=" + (prompt != null ? "'" + prompt + "'" : "null") +
                 ", priority=" + priority +
                 '}';
     }

@@ -18,44 +18,38 @@ package org.noear.solon.ai.harness.hitl;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
+import org.noear.solon.ai.harness.permission.PermissionBehavior;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionDecision;
 import org.noear.solon.ai.harness.permission.PermissionEngine;
-
+import org.noear.solon.ai.harness.permission.PermissionRule;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Supplier;
 
 /**
  * Web 工具干预策略
  *
- * <p>适用于 webfetch、websearch 等网络访问工具。提供域名级权限控制：
-  * <ul>
-  * <li>内置高风险域名黑名单（社交媒体等）— 直接拒绝</li>
-  * <li>委托 {@link PermissionEngine} 按规则决策</li>
-  * <li>无规则匹配时返回 ASK</li>
-  * </ul>
-  * </p>
+ * <p>适用于 webfetch、websearch 等网络访问工具。内置高风险域名黑名单防御规则，
+ * 通过 {@link PermissionRule} 表达（含自定义匹配器）。
+ * 内置规则优先于用户配置规则执行。规则未命中时委托 {@link PermissionEngine} 按规则决策。</p>
  *
  * @author noear
  * @since 4.0
  */
 public class WebToolStrategy implements HITLInterceptor.InterventionStrategy {
 
+    private static final int INTERNAL_PRIORITY = 100;
+
     /** 高风险域名黑名单 */
-    private static final Set<String> RISKY_HOSTNAMES = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
-        "facebook.com", "twitter.com", "x.com",
-        "tiktok.com", "reddit.com", "linkedin.com"
-    )));
+    private final Set<String> riskyHostnames = new HashSet<String>();
 
     private final PermissionEngine permissionEngine = new PermissionEngine();
     private final String toolName;
+    private final List<PermissionRule> internalRules = new ArrayList<>();
+    private boolean internalRulesEnabled = true;
     private Supplier<PermissionContext> permissionContextSupplier = () -> PermissionContext.create();
     private PermissionDecision defaultDecision = PermissionDecision.ALLOW;
 
@@ -64,6 +58,20 @@ public class WebToolStrategy implements HITLInterceptor.InterventionStrategy {
      */
     public WebToolStrategy(String toolName) {
         this.toolName = toolName;
+
+        // 规则1：高风险域名黑名单
+        internalRules.add(PermissionRule.of(toolName, PermissionBehavior.DENY,
+                (tn, args) -> {
+                    String url = extractUrl(args);
+                    if (url != null) {
+                        String hostname = extractHostname(url);
+                        if (hostname != null && isRiskyHostname(hostname)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                },
+                null, INTERNAL_PRIORITY)); // prompt=null，由 toResult 动态生成含域名的消息
     }
 
     /**
@@ -73,6 +81,25 @@ public class WebToolStrategy implements HITLInterceptor.InterventionStrategy {
         if (supplier != null) {
             this.permissionContextSupplier = supplier;
         }
+        return this;
+    }
+
+    public WebToolStrategy riskyHostname(String hostName){
+        riskyHostnames.add(hostName);
+        return this;
+    }
+
+    public WebToolStrategy riskyHostnames(Collection<String> hostNames){
+        riskyHostnames.addAll(hostNames);
+        return this;
+    }
+
+    /**
+     * 启用/禁用内置安全规则（高风险域名黑名单）。默认启用。
+     * 禁用后仅保留用户配置的规则（通过 alwaysAllow/alwaysBlock 注册）。
+     */
+    public WebToolStrategy internalRulesEnabled(boolean enabled) {
+        this.internalRulesEnabled = enabled;
         return this;
     }
 
@@ -104,22 +131,53 @@ public class WebToolStrategy implements HITLInterceptor.InterventionStrategy {
 
     @Override
     public String evaluate(ReActTrace trace, Map<String, Object> args) {
-        // 1. 域名级风险检查
-        String url = extractUrl(args);
-        if (url != null) {
-            String hostname = extractHostname(url);
-            if (hostname != null && isRiskyHostname(hostname)) {
-                return "检测到高风险域名 [" + hostname + "]，拒绝访问。";
+        PermissionContext ctx = resolveContext(trace);
+
+        // 阶段1：内置规则优先匹配（仅在启用时生效）
+        if (internalRulesEnabled) {
+            for (PermissionRule rule : internalRules) {
+                if (rule.hasMatcher() && rule.matcher().get().test(toolName, args)) {
+                    return toResult(rule, args);
+                }
             }
         }
 
-        // 2. 委托 PermissionEngine 按规则决策
-        PermissionContext ctx = resolveContext(trace);
-        PermissionDecision decision = permissionEngine.evaluate(toolName, args, ctx, this.defaultDecision);
+        // 阶段2：用户配置规则 + 内置规则合并，委托引擎评估
+        PermissionContext merged = ctx.addRules(internalRules);
+        PermissionDecision decision = permissionEngine.evaluate(toolName, args, merged, this.defaultDecision);
 
+        return toDefaultResult(decision);
+    }
+
+    /**
+     * 将内置规则的匹配结果转换为策略返回值
+     */
+    private String toResult(PermissionRule rule, Map<String, Object> args) {
+        switch (rule.behavior()) {
+            case ALLOW:
+                return null;
+            case DENY:
+                if (rule.prompt() != null) {
+                    return rule.prompt();
+                }
+                // 无 prompt 时生成动态消息（包含域名信息）
+                String url = extractUrl(args);
+                String hostname = (url != null) ? extractHostname(url) : "未知";
+                return "检测到高风险域名 [" + hostname + "]，拒绝访问。";
+            case ASK:
+                return "网络访问操作，需要人工介入确认。";
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * 将引擎决策结果转换为策略返回值（使用通用提示）
+     */
+    private String toDefaultResult(PermissionDecision decision) {
         switch (decision) {
             case ALLOW:
-                return null;  // 放行
+                return null;
             case DENY:
                 return "网络访问操作被权限策略拒绝。";
             case ASK:
@@ -169,7 +227,7 @@ public class WebToolStrategy implements HITLInterceptor.InterventionStrategy {
      * 判断是否为高风险域名
      */
     private boolean isRiskyHostname(String hostname) {
-        for (String risky : RISKY_HOSTNAMES) {
+        for (String risky : riskyHostnames) {
             if (hostname.equals(risky) || hostname.endsWith("." + risky)) {
                 return true;
             }
