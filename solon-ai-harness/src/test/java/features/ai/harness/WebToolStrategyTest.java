@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.harness.hitl.WebToolStrategy;
 import org.noear.solon.ai.harness.permission.PermissionContext;
-import org.noear.solon.ai.harness.permission.PermissionMode;
+
 import org.noear.solon.ai.harness.permission.PermissionRule;
 
 import java.util.HashMap;
@@ -84,7 +84,7 @@ public class WebToolStrategyTest {
         Assertions.assertNotNull(s.evaluate(null, args("https://api.twitter.com/1.1")));
     }
 
-    // ========== 安全域名 — DEFAULT 模式 ASK ==========
+    // ========== 安全域名 — 无规则 ASK ==========
 
     @Test
     public void testSafeUrl_Default_Ask() {
@@ -95,19 +95,19 @@ public class WebToolStrategyTest {
 
 
     @Test
-    public void testSafeUrl_Unlimited_Pass() {
+    public void testSafeUrl_DefaultAllowRule_Pass() {
         WebToolStrategy s = strategy("webfetch",
-                PermissionContext.create().withMode(PermissionMode.UNLIMITED));
+                PermissionContext.create().addRule(PermissionRule.allow("*").priority(-100)));
         Assertions.assertNull(s.evaluate(null, args("https://example.com")));
     }
 
-    // ========== 高风险域名即使在 UNLIMITED 模式也被拦截 ==========
+    // ========== 高风险域名即使有放行规则也被拦截 ==========
 
     @Test
-    public void testRiskyUrl_Unlimited_StillBlock() {
+    public void testRiskyUrl_DefaultAllowRule_StillBlock() {
         WebToolStrategy s = strategy("webfetch",
-                PermissionContext.create().withMode(PermissionMode.UNLIMITED));
-        // P0 黑名单优先于模式，始终拦截
+                PermissionContext.create().addRule(PermissionRule.allow("*").priority(-100)));
+        // P0 黑名单优先于规则，始终拦截
         Assertions.assertNotNull(s.evaluate(null, args("https://facebook.com")));
     }
 

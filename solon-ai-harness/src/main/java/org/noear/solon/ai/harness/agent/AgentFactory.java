@@ -18,7 +18,7 @@ package org.noear.solon.ai.harness.agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.harness.permission.PermissionContext;
-import org.noear.solon.ai.harness.permission.PermissionMode;
+
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.talents.cli.TerminalTalentProxy;
@@ -113,22 +113,10 @@ public class AgentFactory {
             extension.configure(agentDefinition.getName(), builder);
         }
 
-        // 注入 Agent 级权限 delta（仅 agent 自身的规则和模式，不含全局规则）
+        // 注入 Agent 级权限 delta（仅 agent 自身的规则，不含全局规则）
         // HITL 策略在 evaluate 时会通过 trace.getExtraAs 读取并合并
-        if (metadata.hasPermissionRules() || metadata.hasPermissionMode()) {
-            PermissionContext agentCtx = PermissionContext.create();
-            if (metadata.hasPermissionMode()) {
-                String modeStr = metadata.getPermissionMode().toUpperCase();
-                // 兼容 claude-code-java 的 "plan" 映射到 READ_ONLY
-                if ("PLAN".equals(modeStr)) {
-                    agentCtx = agentCtx.withMode(PermissionMode.READ_ONLY);
-                } else {
-                    agentCtx = agentCtx.withMode(PermissionMode.valueOf(modeStr));
-                }
-            }
-            if (metadata.hasPermissionRules()) {
-                agentCtx = agentCtx.addRules(metadata.getPermissionRules());
-            }
+        if (metadata.hasPermissionRules()) {
+            PermissionContext agentCtx = PermissionContext.create().addRules(metadata.getPermissionRules());
             builder.attr(AgentDefinition.ATTR_PERMISSION_CONTEXT, agentCtx);
         }
 

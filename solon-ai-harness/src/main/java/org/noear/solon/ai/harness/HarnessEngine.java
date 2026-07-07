@@ -37,7 +37,7 @@ import org.noear.solon.ai.harness.hitl.BashToolStrategy;
 import org.noear.solon.ai.harness.hitl.WriteToolStrategy;
 import org.noear.solon.ai.harness.hitl.WebToolStrategy;
 import org.noear.solon.ai.harness.permission.PermissionContext;
-import org.noear.solon.ai.harness.permission.PermissionMode;
+
 import org.noear.solon.ai.harness.permission.PermissionRule;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
@@ -141,15 +141,6 @@ public class HarnessEngine {
      */
     public PermissionContext getPermissionContext() {
         return options.getPermissionContext();
-    }
-
-    /**
-     * 设置权限模式
-     */
-    public void setPermissionMode(PermissionMode mode) {
-        if (mode != null) {
-            options.setPermissionContext(options.getPermissionContext().withMode(mode));
-        }
     }
 
     /**
@@ -1164,14 +1155,6 @@ public class HarnessEngine {
         }
 
         // ========== 权限系统 ==========
-
-        /**
-         * 设置权限模式
-         */
-        public Builder permissionMode(PermissionMode mode) {
-            options.setPermissionContext(options.getPermissionContext().withMode(mode));
-            return this;
-        }
 
         /**
          * 添加权限规则

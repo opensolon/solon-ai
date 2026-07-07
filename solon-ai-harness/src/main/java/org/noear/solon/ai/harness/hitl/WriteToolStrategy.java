@@ -21,7 +21,7 @@ import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionDecision;
 import org.noear.solon.ai.harness.permission.PermissionEngine;
-import org.noear.solon.ai.harness.permission.PermissionMode;
+
 
 import java.util.Map;
 import java.util.function.Supplier;
@@ -31,15 +31,7 @@ import java.util.function.Supplier;
  *
  * <p>适用于 write、edit 等文件写入工具。与 {@link BashToolStrategy} 不同的是，
  * 本策略不含 P0 硬编码防御（那是 bash 专属），而是直接委托 {@link PermissionEngine}
- * 按规则 + 模式决策。</p>
- *
- * <p>无规则匹配时，按模式降级：
- * <ul>
- * <li>UNLIMITED — 放行所有操作</li>
- * <li>READ_ONLY — 只读，拒绝写操作</li>
- * <li>DEFAULT — 人工确认</li>
- * </ul>
- * </p>
+ * 按规则决策。</p>
  *
  * @author noear
  * @since 4.0
@@ -75,13 +67,8 @@ public class WriteToolStrategy implements HITLInterceptor.InterventionStrategy {
 
         if (trace != null) {
             PermissionContext agentCtx = trace.getOptions().getAttrAs(AgentDefinition.ATTR_PERMISSION_CONTEXT);
-            if (agentCtx != null) {
-                if (agentCtx.mode() != PermissionMode.DEFAULT) {
-                    global = global.withMode(agentCtx.mode());
-                }
-                if (!agentCtx.rules().isEmpty()) {
-                    global = global.addRules(agentCtx.rules());
-                }
+            if (agentCtx != null && !agentCtx.rules().isEmpty()) {
+                global = global.addRules(agentCtx.rules());
             }
         }
 

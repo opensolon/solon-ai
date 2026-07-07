@@ -15,8 +15,10 @@
  */
 package org.noear.solon.ai.harness.permission;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -26,19 +28,12 @@ import java.util.regex.Pattern;
  * 权限评估引擎
  *
  * <p>评估工具调用请求是否应被放行、拒绝或需要人工介入。
- * 评估优先级：DENY &gt; ALLOW &gt; ASK &gt; 模式默认。</p>
- *
- * <p>内部维护写工具白名单。</p>
+ * 评估优先级：规则 priority 越大越优先；同 priority 下 DENY &gt; ALLOW &gt; ASK。</p>
  *
  * @author noear
  * @since 4.0
  */
 public class PermissionEngine {
-
-    /** 写工具列表（用于 PLAN 模式自动拒绝） */
-    private static final List<String> WRITE_TOOLS = Collections.unmodifiableList(
-        Arrays.asList("bash", "write", "edit", "rm", "mv", "cp", "mkdir")
-    );
 
     /** 常见参数字段（用于模式匹配文本提取） */
     private static final List<String> ARG_FIELDS = Collections.unmodifiableList(
@@ -50,41 +45,58 @@ public class PermissionEngine {
      *
  * <p>评估策略：
  * <ol>
- * <li><b>DENY 最高优先级</b>：遍历所有规则，任何匹配的 DENY 规则立即拒绝。</li>
- * <li><b>ALLOW/ASK 按规则顺序</b>：首个匹配的非 DENY 规则决定结果。</li>
- * <li><b>模式降级</b>：无规则匹配时，按 PermissionMode 返回默认决策。</li>
+ * <li><b>规则优先级</b>：priority 越大越优先。</li>
+ * <li><b>同级安全兜底</b>：同 priority 下 DENY &gt; ALLOW &gt; ASK。</li>
+ * <li><b>默认询问</b>：无规则匹配时返回 ASK。</li>
  * </ol>
      *
      * @param toolName 工具名称
      * @param args     工具参数
-     * @param context  权限上下文（含模式 + 规则）
+     * @param context  权限上下文（含规则）
      * @return 决策结果
      */
     public PermissionDecision evaluate(String toolName, Map<String, Object> args,
                                         PermissionContext context) {
-        List<PermissionRule> rules = context.rules();
+        List<PermissionRule> rules = new ArrayList<>(context.rules());
+        Collections.sort(rules, RULE_COMPARATOR);
 
-        // 1. DENY 最高优先级：任何匹配的 DENY 规则立即拒绝
         for (PermissionRule rule : rules) {
-            if (rule.behavior() == PermissionBehavior.DENY &&
-                matchesToolName(rule.toolName(), toolName) && matchesPattern(rule, args)) {
-                return PermissionDecision.DENY;
-            }
-        }
-
-        // 2. 按规则顺序扫描，首个 ALLOW/ASK 匹配返回
-        for (PermissionRule rule : rules) {
-            if (rule.behavior() == PermissionBehavior.DENY) continue;    // DENY 已处理
-
             if (matchesToolName(rule.toolName(), toolName) && matchesPattern(rule, args)) {
-                return rule.behavior() == PermissionBehavior.ALLOW
-                    ? PermissionDecision.ALLOW
-                    : PermissionDecision.ASK;
+                return toDecision(rule.behavior());
             }
         }
 
-        // 3. 无规则匹配时，按模式降级
-        return evaluateByMode(toolName, context.mode());
+        return PermissionDecision.ASK;
+    }
+
+    private static final Comparator<PermissionRule> RULE_COMPARATOR = new Comparator<PermissionRule>() {
+        @Override
+        public int compare(PermissionRule o1, PermissionRule o2) {
+            int priorityCompare = Integer.compare(o2.priority(), o1.priority());
+            if (priorityCompare != 0) {
+                return priorityCompare;
+            }
+            return Integer.compare(behaviorWeight(o2.behavior()), behaviorWeight(o1.behavior()));
+        }
+    };
+
+    private static int behaviorWeight(PermissionBehavior behavior) {
+        switch (behavior) {
+            case DENY:
+                return 3;
+            case ALLOW:
+                return 2;
+            case ASK:
+                return 1;
+            default:
+                return 0;
+        }
+    }
+
+    private PermissionDecision toDecision(PermissionBehavior behavior) {
+        return behavior == PermissionBehavior.ALLOW
+                ? PermissionDecision.ALLOW
+                : behavior == PermissionBehavior.DENY ? PermissionDecision.DENY : PermissionDecision.ASK;
     }
 
     /**
@@ -189,30 +201,5 @@ public class PermissionEngine {
         return regex.toString();
     }
 
-    /**
-     * 按权限模式降级决策
-     */
-    private PermissionDecision evaluateByMode(String toolName, PermissionMode mode) {
-        switch (mode) {
-            case UNLIMITED:
-                return PermissionDecision.ALLOW;
-            case READ_ONLY:
-                return isWriteTool(toolName) ? PermissionDecision.DENY : PermissionDecision.ALLOW;
-            default:
-                return PermissionDecision.ASK; // 无规则时默认询问
-        }
-    }
 
-    /**
-     * 判断工具是否为写操作
-     */
-    private boolean isWriteTool(String toolName) {
-        String toolLower = toolName.toLowerCase();
-        for (String w : WRITE_TOOLS) {
-            if (w.equals(toolLower)) {
-                return true;
-            }
-        }
-        return false;
-    }
 }

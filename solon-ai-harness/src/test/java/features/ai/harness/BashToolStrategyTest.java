@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.harness.hitl.BashToolStrategy;
 import org.noear.solon.ai.harness.permission.PermissionContext;
-import org.noear.solon.ai.harness.permission.PermissionMode;
+
 import org.noear.solon.ai.harness.permission.PermissionRule;
 
 import java.util.HashMap;
@@ -175,8 +175,9 @@ public class BashToolStrategyTest {
     }
 
     @Test
-    public void testUnlimitedMode_Pass() {
-        PermissionContext ctx = PermissionContext.create().withMode(PermissionMode.UNLIMITED);
+    public void testDefaultAllowRule_Pass() {
+        PermissionContext ctx = PermissionContext.create()
+                .addRule(PermissionRule.allow("*").priority(-100));
         BashToolStrategy s = strategy(ctx);
         Assertions.assertNull(s.evaluate(null, args("rm -rf /tmp/test")));
     }

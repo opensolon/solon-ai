@@ -21,7 +21,7 @@ import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionDecision;
 import org.noear.solon.ai.harness.permission.PermissionEngine;
-import org.noear.solon.ai.harness.permission.PermissionMode;
+
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -36,12 +36,12 @@ import java.util.function.Supplier;
  * Web 工具干预策略
  *
  * <p>适用于 webfetch、websearch 等网络访问工具。提供域名级权限控制：
- * <ul>
- * <li>内置高风险域名黑名单（社交媒体等）— 直接拒绝</li>
- * <li>委托 {@link PermissionEngine} 按规则 + 模式决策</li>
- * <li>无规则匹配时，DEFAULT 模式返回 ASK</li>
- * </ul>
- * </p>
+  * <ul>
+  * <li>内置高风险域名黑名单（社交媒体等）— 直接拒绝</li>
+  * <li>委托 {@link PermissionEngine} 按规则决策</li>
+  * <li>无规则匹配时返回 ASK</li>
+  * </ul>
+  * </p>
  *
  * @author noear
  * @since 4.0
@@ -83,13 +83,8 @@ public class WebToolStrategy implements HITLInterceptor.InterventionStrategy {
 
         if (trace != null) {
             PermissionContext agentCtx = trace.getOptions().getAttrAs(AgentDefinition.ATTR_PERMISSION_CONTEXT);
-            if (agentCtx != null) {
-                if (agentCtx.mode() != PermissionMode.DEFAULT) {
-                    global = global.withMode(agentCtx.mode());
-                }
-                if (!agentCtx.rules().isEmpty()) {
-                    global = global.addRules(agentCtx.rules());
-                }
+            if (agentCtx != null && !agentCtx.rules().isEmpty()) {
+                global = global.addRules(agentCtx.rules());
             }
         }
 
@@ -107,7 +102,7 @@ public class WebToolStrategy implements HITLInterceptor.InterventionStrategy {
             }
         }
 
-        // 2. 委托 PermissionEngine 按规则 + 模式决策
+        // 2. 委托 PermissionEngine 按规则决策
         PermissionContext ctx = resolveContext(trace);
         PermissionDecision decision = permissionEngine.evaluate(toolName, args, ctx);
 

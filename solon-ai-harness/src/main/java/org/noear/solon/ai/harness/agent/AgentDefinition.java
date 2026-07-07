@@ -144,12 +144,13 @@ public class AgentDefinition {
                 if (behaviorStr == null) continue;
 
                 String pattern = ruleNode.get("pattern").getString();
+                int priority = ruleNode.get("priority").getInt();
                 PermissionBehavior behavior = PermissionBehavior.valueOf(behaviorStr.toUpperCase());
 
                 if (pattern != null && !pattern.isEmpty()) {
-                    rules.add(PermissionRule.withPattern(toolName, behavior, pattern));
+                    rules.add(PermissionRule.withPattern(toolName, behavior, pattern, priority));
                 } else {
-                    rules.add(PermissionRule.of(toolName, behavior));
+                    rules.add(PermissionRule.of(toolName, behavior, priority));
                 }
             }
             definition.metadata.setPermissionRules(rules);
@@ -188,12 +189,13 @@ public class AgentDefinition {
                 if (behaviorStr == null) continue;
 
                 String pattern = ruleNode.get("pattern").getString();
+                int priority = ruleNode.get("priority").getInt();
                 PermissionBehavior behavior = PermissionBehavior.valueOf(behaviorStr.toUpperCase());
 
                 if (pattern != null && !pattern.isEmpty()) {
-                    rules.add(PermissionRule.withPattern(toolName, behavior, pattern));
+                    rules.add(PermissionRule.withPattern(toolName, behavior, pattern, priority));
                 } else {
-                    rules.add(PermissionRule.of(toolName, behavior));
+                    rules.add(PermissionRule.of(toolName, behavior, priority));
                 }
             }
             definition.metadata.setPermissionRules(rules);
@@ -254,9 +256,6 @@ public class AgentDefinition {
         private List<String> disallowedTools = new ArrayList<>();
 
         // 权限配置
-        private String permissionMode;
-
-        // 细粒度权限规则
         private List<PermissionRule> permissionRules = new ArrayList<>();
 
         // Skills 配置
@@ -301,6 +300,9 @@ public class AgentDefinition {
                         buf.append("    behavior: ").append(rule.behavior().name().toLowerCase()).append("\n");
                         rule.pattern().ifPresent(p ->
                                 buf.append("    pattern: \"").append(p).append("\"\n"));
+                        if (rule.priority() != 0) {
+                            buf.append("    priority: ").append(rule.priority()).append("\n");
+                        }
                     }
                 }
 
@@ -342,10 +344,6 @@ public class AgentDefinition {
 
         public boolean hasModel() {
             return model != null && !model.isEmpty();
-        }
-
-        public boolean hasPermissionMode() {
-            return permissionMode != null && !permissionMode.isEmpty();
         }
 
         public boolean hasPermissionRules() {

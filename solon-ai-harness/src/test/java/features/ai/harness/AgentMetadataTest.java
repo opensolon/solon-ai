@@ -17,6 +17,7 @@ package features.ai.harness;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
+import org.noear.solon.ai.harness.permission.PermissionRule;
 
 import java.util.List;
 
@@ -241,18 +242,27 @@ public class AgentMetadataTest {
     }
 
     @Test
-    public void testParsePermissionMode() {
+    public void testParsePermissionRulePriority() {
         String prompt = "---\n" +
                 "name: test\n" +
-                "permissionMode: plan\n" +
+                "permissionRules:\n" +
+                "  - toolName: \"*\"\n" +
+                "    behavior: ask\n" +
+                "    priority: -100\n" +
+                "  - toolName: \"bash\"\n" +
+                "    behavior: deny\n" +
+                "    pattern: \"rm *\"\n" +
+                "    priority: 10\n" +
                 "---\n\n" +
                 "## 测试代理";
 
         AgentDefinition.Metadata metadata = AgentDefinition.fromMarkdown(prompt).getMetadata();
 
         assertEquals("test", metadata.getName());
-        assertEquals("plan", metadata.getPermissionMode());
-        assertTrue(metadata.hasPermissionMode());
+        assertTrue(metadata.hasPermissionRules());
+        assertEquals(2, metadata.getPermissionRules().size());
+        assertEquals(-100, metadata.getPermissionRules().get(0).priority());
+        assertEquals(10, metadata.getPermissionRules().get(1).priority());
     }
 
     @Test
@@ -354,7 +364,10 @@ public class AgentMetadataTest {
                 "tools: Read, Glob, Grep\n" +
                 "disallowedTools: Bash, Write\n" +
                 "model: glm-4.7\n" +
-                "permissionMode: plan\n" +
+                "permissionRules:\n" +
+                "  - toolName: \"*\"\n" +
+                "    behavior: ask\n" +
+                "    priority: -100\n" +
                 "skills: commit, review\n" +
                 "mcpServers: slack\n" +
                 "memory: user\n" +
@@ -368,12 +381,11 @@ public class AgentMetadataTest {
         assertEquals("comprehensive-test", metadata.getName());
         assertEquals("A comprehensive test with all metadata fields", metadata.getDescription());
         assertEquals("glm-4.7", metadata.getModel());
-        assertEquals("plan", metadata.getPermissionMode());
         assertEquals("user", metadata.getMemory());
         assertEquals("worktree", metadata.getIsolation());
 
         assertTrue(metadata.hasModel());
-        assertTrue(metadata.hasPermissionMode());
+        assertTrue(metadata.hasPermissionRules());
         assertTrue(metadata.hasSkills());
         assertTrue(metadata.hasMcpServers());
         assertTrue(metadata.hasDisallowedTools());
@@ -385,6 +397,10 @@ public class AgentMetadataTest {
         assertEquals(2, metadata.getDisallowedTools().size());
         assertEquals(2, metadata.getSkills().size());
         assertEquals(1, metadata.getMcpServers().size());
+        assertEquals(1, metadata.getPermissionRules().size());
+        PermissionRule rule = metadata.getPermissionRules().get(0);
+        assertEquals("*", rule.toolName());
+        assertEquals(-100, rule.priority());
     }
 
     @Test

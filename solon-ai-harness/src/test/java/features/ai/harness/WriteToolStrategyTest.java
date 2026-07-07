@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.harness.hitl.WriteToolStrategy;
 import org.noear.solon.ai.harness.permission.PermissionContext;
-import org.noear.solon.ai.harness.permission.PermissionMode;
+
 import org.noear.solon.ai.harness.permission.PermissionRule;
 
 import java.util.HashMap;
@@ -84,7 +84,7 @@ public class WriteToolStrategyTest {
         Assertions.assertNotNull(s.evaluate(null, args("~/.bashrc")));
     }
 
-    // ========== 正常路径 — DEFAULT 模式 ASK ==========
+    // ========== 正常路径 — 无规则 ASK ==========
 
     @Test
     public void testNormalPath_Default_Ask() {
@@ -92,21 +92,21 @@ public class WriteToolStrategyTest {
         Assertions.assertNotNull(s.evaluate(null, args("src/main/java/App.java")));
     }
 
-    // ========== UNLIMITED 模式放行 ==========
+    // ========== 默认规则放行 ==========
 
     @Test
-    public void testNormalPath_Unlimited_Pass() {
+    public void testNormalPath_DefaultAllowRule_Pass() {
         WriteToolStrategy s = strategy("write",
-                PermissionContext.create().withMode(PermissionMode.UNLIMITED));
+                PermissionContext.create().addRule(PermissionRule.allow("*").priority(-100)));
         Assertions.assertNull(s.evaluate(null, args("src/test.java")));
     }
 
-    // ========== READ_ONLY 模式拒绝 ==========
+    // ========== 拒绝规则拦截 ==========
 
     @Test
-    public void testNormalPath_Plan_Block() {
+    public void testNormalPath_DenyRule_Block() {
         WriteToolStrategy s = strategy("write",
-                PermissionContext.create().withMode(PermissionMode.READ_ONLY));
+                PermissionContext.create().addRule(PermissionRule.deny("write").priority(10)));
         Assertions.assertNotNull(s.evaluate(null, args("src/test.java")));
     }
 

@@ -20,7 +20,7 @@ import java.util.Optional;
 /**
  * 权限规则
  *
- * <p>将工具名（含可选 glob 模式）映射到一种权限行为。</p>
+ * <p>将工具名（含可选 glob 模式）映射到一种权限行为，并支持优先级控制。</p>
  *
  * @author noear
  * @since 4.0
@@ -29,18 +29,32 @@ public class PermissionRule {
     private final String toolName;
     private final PermissionBehavior behavior;
     private final String pattern; // null 表示无模式，匹配全部
+    private final int priority;
 
     /**
      * 构造函数
      *
-     * @param toolName  工具名称（如 "bash", "write", "*"）
-     * @param behavior  匹配后的权限行为
-     * @param pattern   glob 模式（如 "git *", "cat *"），null 表示无模式
+     * @param toolName 工具名称（如 "bash", "write", "*"）
+     * @param behavior 匹配后的权限行为
+     * @param pattern  glob 模式（如 "git *", "cat *"），null 表示无模式
      */
     public PermissionRule(String toolName, PermissionBehavior behavior, String pattern) {
+        this(toolName, behavior, pattern, 0);
+    }
+
+    /**
+     * 构造函数
+     *
+     * @param toolName 工具名称（如 "bash", "write", "*"）
+     * @param behavior 匹配后的权限行为
+     * @param pattern  glob 模式（如 "git *", "cat *"），null 表示无模式
+     * @param priority 优先级，数值越大越优先
+     */
+    public PermissionRule(String toolName, PermissionBehavior behavior, String pattern, int priority) {
         this.toolName = toolName;
         this.behavior = behavior;
         this.pattern = pattern;
+        this.priority = priority;
     }
 
     public String toolName() {
@@ -58,6 +72,17 @@ public class PermissionRule {
         return pattern != null ? Optional.of(pattern) : Optional.empty();
     }
 
+    public int priority() {
+        return priority;
+    }
+
+    /**
+     * 设置优先级，返回新规则实例
+     */
+    public PermissionRule priority(int priority) {
+        return new PermissionRule(toolName, behavior, pattern, priority);
+    }
+
     /**
      * 创建无模式规则
      */
@@ -70,6 +95,20 @@ public class PermissionRule {
      */
     public static PermissionRule withPattern(String toolName, PermissionBehavior behavior, String pattern) {
         return new PermissionRule(toolName, behavior, pattern);
+    }
+
+    /**
+     * 创建带优先级的规则
+     */
+    public static PermissionRule of(String toolName, PermissionBehavior behavior, int priority) {
+        return new PermissionRule(toolName, behavior, null, priority);
+    }
+
+    /**
+     * 创建带 glob 模式和优先级的规则
+     */
+    public static PermissionRule withPattern(String toolName, PermissionBehavior behavior, String pattern, int priority) {
+        return new PermissionRule(toolName, behavior, pattern, priority);
     }
 
     // 便捷工厂：放行
@@ -119,6 +158,7 @@ public class PermissionRule {
 
         PermissionRule that = (PermissionRule) o;
 
+        if (priority != that.priority) return false;
         if (!toolName.equals(that.toolName)) return false;
         if (behavior != that.behavior) return false;
         return pattern != null ? pattern.equals(that.pattern) : that.pattern == null;
@@ -129,6 +169,7 @@ public class PermissionRule {
         int result = toolName.hashCode();
         result = 31 * result + behavior.hashCode();
         result = 31 * result + (pattern != null ? pattern.hashCode() : 0);
+        result = 31 * result + priority;
         return result;
     }
 
@@ -138,6 +179,7 @@ public class PermissionRule {
                 "toolName='" + toolName + '\'' +
                 ", behavior=" + behavior +
                 ", pattern=" + (pattern != null ? "'" + pattern + "'" : "null") +
+                ", priority=" + priority +
                 '}';
     }
 }

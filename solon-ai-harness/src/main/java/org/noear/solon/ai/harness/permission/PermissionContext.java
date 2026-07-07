@@ -26,14 +26,13 @@ import java.util.stream.Collectors;
 /**
  * 权限上下文（不可变）
  *
- * <p>包含权限模式、活跃规则列表、工作目录和附加目录。所有变更方法返回新实例（不可变更新模式）。</p>
+ * <p>包含活跃规则列表、工作目录和附加目录。所有变更方法返回新实例（不可变更新模式）。</p>
  *
  * @author noear
  * @since 4.0
  */
 public class PermissionContext {
     private final Path workingDirectory;
-    private final PermissionMode mode;
     private final List<PermissionRule> rules;
     private final List<Path> additionalDirs;
 
@@ -41,24 +40,17 @@ public class PermissionContext {
      * 构造函数
      *
      * @param workingDirectory 工作目录
-     * @param mode  权限模式
      * @param rules 权限规则列表
      * @param additionalDirs 附加目录列表
      */
-    public PermissionContext(Path workingDirectory, PermissionMode mode,
-                              List<PermissionRule> rules, List<Path> additionalDirs) {
+    public PermissionContext(Path workingDirectory, List<PermissionRule> rules, List<Path> additionalDirs) {
         this.workingDirectory = workingDirectory;
-        this.mode = mode;
         this.rules = Collections.unmodifiableList(new ArrayList<>(rules));
         this.additionalDirs = Collections.unmodifiableList(new ArrayList<>(additionalDirs));
     }
 
     public Path workingDirectory() {
         return workingDirectory;
-    }
-
-    public PermissionMode mode() {
-        return mode;
     }
 
     public List<PermissionRule> rules() {
@@ -73,7 +65,7 @@ public class PermissionContext {
      * 创建默认上下文（工作目录为当前目录）
      */
     public static PermissionContext create() {
-        return new PermissionContext(Paths.get("."), PermissionMode.DEFAULT,
+        return new PermissionContext(Paths.get("."),
             Collections.<PermissionRule>emptyList(), Collections.<Path>emptyList());
     }
 
@@ -81,7 +73,7 @@ public class PermissionContext {
      * 创建最小上下文（只需工作目录）
      */
     public static PermissionContext of(Path workingDirectory) {
-        return new PermissionContext(workingDirectory, PermissionMode.DEFAULT,
+        return new PermissionContext(workingDirectory,
             Collections.<PermissionRule>emptyList(), Collections.<Path>emptyList());
     }
 
@@ -91,23 +83,15 @@ public class PermissionContext {
     public Builder toBuilder() {
         return new Builder()
             .workingDirectory(workingDirectory)
-            .mode(mode)
             .rules(rules)
             .additionalDirs(additionalDirs);
-    }
-
-    /**
-     * 设置新模式
-     */
-    public PermissionContext withMode(PermissionMode newMode) {
-        return new PermissionContext(workingDirectory, newMode, rules, additionalDirs);
     }
 
     /**
      * 设置工作目录
      */
     public PermissionContext withWorkingDirectory(Path newWorkingDirectory) {
-        return new PermissionContext(newWorkingDirectory, mode, rules, additionalDirs);
+        return new PermissionContext(newWorkingDirectory, rules, additionalDirs);
     }
 
     /**
@@ -116,7 +100,7 @@ public class PermissionContext {
     public PermissionContext addRule(PermissionRule rule) {
         List<PermissionRule> merged = new ArrayList<>(this.rules);
         merged.add(rule);
-        return new PermissionContext(workingDirectory, mode, merged, additionalDirs);
+        return new PermissionContext(workingDirectory, merged, additionalDirs);
     }
 
     /**
@@ -125,14 +109,14 @@ public class PermissionContext {
     public PermissionContext addRules(List<PermissionRule> newRules) {
         List<PermissionRule> merged = new ArrayList<>(this.rules);
         merged.addAll(newRules);
-        return new PermissionContext(workingDirectory, mode, merged, additionalDirs);
+        return new PermissionContext(workingDirectory, merged, additionalDirs);
     }
 
     /**
      * 替换全部规则
      */
     public PermissionContext replaceRules(List<PermissionRule> newRules) {
-        return new PermissionContext(workingDirectory, mode, newRules, additionalDirs);
+        return new PermissionContext(workingDirectory, newRules, additionalDirs);
     }
 
     /**
@@ -142,7 +126,7 @@ public class PermissionContext {
         List<PermissionRule> remaining = this.rules.stream()
             .filter(filter.negate())
             .collect(Collectors.toList());
-        return new PermissionContext(workingDirectory, mode, remaining, additionalDirs);
+        return new PermissionContext(workingDirectory, remaining, additionalDirs);
     }
 
     /**
@@ -151,7 +135,7 @@ public class PermissionContext {
     public PermissionContext addDirectories(List<Path> dirs) {
         List<Path> merged = new ArrayList<>(this.additionalDirs);
         merged.addAll(dirs);
-        return new PermissionContext(workingDirectory, mode, rules, merged);
+        return new PermissionContext(workingDirectory, rules, merged);
     }
 
     /**
@@ -161,7 +145,7 @@ public class PermissionContext {
         List<Path> remaining = this.additionalDirs.stream()
             .filter(d -> !dirs.contains(d))
             .collect(Collectors.toList());
-        return new PermissionContext(workingDirectory, mode, rules, remaining);
+        return new PermissionContext(workingDirectory, rules, remaining);
     }
 
     @Override
@@ -172,7 +156,6 @@ public class PermissionContext {
         PermissionContext that = (PermissionContext) o;
 
         if (!workingDirectory.equals(that.workingDirectory)) return false;
-        if (mode != that.mode) return false;
         if (!rules.equals(that.rules)) return false;
         return additionalDirs.equals(that.additionalDirs);
     }
@@ -180,7 +163,6 @@ public class PermissionContext {
     @Override
     public int hashCode() {
         int result = workingDirectory.hashCode();
-        result = 31 * result + mode.hashCode();
         result = 31 * result + rules.hashCode();
         result = 31 * result + additionalDirs.hashCode();
         return result;
@@ -190,7 +172,6 @@ public class PermissionContext {
     public String toString() {
         return "PermissionContext{" +
                 "workingDirectory=" + workingDirectory +
-                ", mode=" + mode +
                 ", rules=" + rules +
                 ", additionalDirs=" + additionalDirs +
                 '}';
@@ -200,17 +181,11 @@ public class PermissionContext {
 
     public static class Builder {
         private Path workingDirectory = Paths.get(".");
-        private PermissionMode mode = PermissionMode.DEFAULT;
         private List<PermissionRule> rules = new ArrayList<>();
         private List<Path> additionalDirs = new ArrayList<>();
 
         public Builder workingDirectory(Path workingDirectory) {
             this.workingDirectory = workingDirectory;
-            return this;
-        }
-
-        public Builder mode(PermissionMode mode) {
-            this.mode = mode;
             return this;
         }
 
@@ -235,7 +210,7 @@ public class PermissionContext {
         }
 
         public PermissionContext build() {
-            return new PermissionContext(workingDirectory, mode, rules, additionalDirs);
+            return new PermissionContext(workingDirectory, rules, additionalDirs);
         }
     }
 

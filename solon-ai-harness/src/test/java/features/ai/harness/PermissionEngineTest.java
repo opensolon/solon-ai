@@ -6,7 +6,7 @@ import org.noear.solon.ai.harness.permission.PermissionBehavior;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionDecision;
 import org.noear.solon.ai.harness.permission.PermissionEngine;
-import org.noear.solon.ai.harness.permission.PermissionMode;
+
 import org.noear.solon.ai.harness.permission.PermissionRule;
 
 import java.util.HashMap;
@@ -49,9 +49,7 @@ public class PermissionEngineTest {
             .addRule(PermissionRule.ask("bash"))
             .addRule(PermissionRule.allow("bash"));
 
-        // DENY 最高优先级，无 DENY 后按规则顺序扫描
-        // ask 在前 -> 先匹配到 ASK
-        Assertions.assertEquals(PermissionDecision.ASK,
+        Assertions.assertEquals(PermissionDecision.ALLOW,
             engine.evaluate("bash", args("ls"), ctx));
     }
 
@@ -105,33 +103,29 @@ public class PermissionEngineTest {
             engine.evaluate("bash", args("rm /tmp/test"), ctx));
     }
 
-    // ========== 模式降级 ==========
+    // ========== 默认规则 ==========
 
     @Test
-    public void testModeUnlimited() {
-        PermissionContext ctx = PermissionContext.create().withMode(PermissionMode.UNLIMITED);
+    public void testDefaultAllowRule() {
+        PermissionContext ctx = PermissionContext.create()
+            .addRule(PermissionRule.allow("*").priority(-100));
         Assertions.assertEquals(PermissionDecision.ALLOW,
             engine.evaluate("bash", args("rm -rf /"), ctx));
     }
 
     @Test
-    public void testModeReadOnly_WriteDeny() {
-        PermissionContext ctx = PermissionContext.create().withMode(PermissionMode.READ_ONLY);
+    public void testPriorityRuleOverridesDefault() {
+        PermissionContext ctx = PermissionContext.create()
+            .addRule(PermissionRule.allow("*").priority(-100))
+            .addRule(PermissionRule.deny("bash", "rm -rf *").priority(10));
         Assertions.assertEquals(PermissionDecision.DENY,
-            engine.evaluate("bash", args("rm -rf /"), ctx));
-        Assertions.assertEquals(PermissionDecision.DENY,
+            engine.evaluate("bash", args("rm -rf /tmp"), ctx));
+        Assertions.assertEquals(PermissionDecision.ALLOW,
             engine.evaluate("write", args("test.txt"), ctx));
     }
 
     @Test
-    public void testModeReadOnly_ReadAllow() {
-        PermissionContext ctx = PermissionContext.create().withMode(PermissionMode.READ_ONLY);
-        Assertions.assertEquals(PermissionDecision.ALLOW,
-            engine.evaluate("webfetch", args("https://example.com"), ctx));
-    }
-
-    @Test
-    public void testModeDefault_Ask() {
+    public void testNoRuleDefaultAsk() {
         PermissionContext ctx = PermissionContext.create();
         Assertions.assertEquals(PermissionDecision.ASK,
             engine.evaluate("bash", args("rm -rf /"), ctx));
