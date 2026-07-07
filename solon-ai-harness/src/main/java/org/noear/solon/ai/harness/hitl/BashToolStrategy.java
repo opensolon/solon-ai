@@ -17,6 +17,7 @@ package org.noear.solon.ai.harness.hitl;
 
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
+import org.noear.solon.ai.agent.react.intercept.HITLStrategy;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.permission.PermissionBehavior;
 import org.noear.solon.ai.harness.permission.PermissionContext;
@@ -48,7 +49,7 @@ import java.util.function.Supplier;
  * @author noear
  * @since 3.9.1
  */
-public class BashToolStrategy implements HITLInterceptor.InterventionStrategy {
+public class BashToolStrategy implements HITLStrategy {
 
     private static final int INTERNAL_PRIORITY = 100; // 内置规则优先级（高于用户配置规则）
 

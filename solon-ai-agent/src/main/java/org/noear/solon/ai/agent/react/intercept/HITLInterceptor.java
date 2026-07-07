@@ -43,13 +43,13 @@ import java.util.function.BiConsumer;
 @Preview("3.9.1")
 public class HITLInterceptor extends AbsReActInterceptor {
 
-    private final Map<String, InterventionStrategy> strategyMap = new ConcurrentHashMap<>();
+    private final Map<String, HITLStrategy> strategyMap = new ConcurrentHashMap<>();
     private volatile BiConsumer<String, Map<String, Object>> approvedCallback;
 
     /**
      * 注册工具介入策略
      */
-    public HITLInterceptor onTool(String toolName, InterventionStrategy strategy) {
+    public HITLInterceptor onTool(String toolName, HITLStrategy strategy) {
         strategyMap.put(toolName, strategy);
         return this;
     }
@@ -65,7 +65,7 @@ public class HITLInterceptor extends AbsReActInterceptor {
 
     @Override
     public void onAction(ReActTrace trace, ToolExchanger toolExchanger) {
-        InterventionStrategy strategy = strategyMap.get(toolExchanger.getToolName());
+        HITLStrategy strategy = strategyMap.get(toolExchanger.getToolName());
         if (strategy == null) {
             return;
         }
@@ -144,20 +144,7 @@ public class HITLInterceptor extends AbsReActInterceptor {
         return this;
     }
 
-    /**
-     * 介入判定策略接口
-     */
-    @FunctionalInterface
-    public interface InterventionStrategy {
-        /**
-         * 评估是否需要干预
-         *
-         * @return 拦截理由文案（触发拦截）；null（不拦截，直接执行）
-         */
-        String evaluate(ReActTrace trace, Map<String, Object> args);
-    }
-
-    public static class HITLSensitiveStrategy implements InterventionStrategy {
+    public static class HITLSensitiveStrategy implements HITLStrategy {
         private String comment;
 
         /**
@@ -176,5 +163,21 @@ public class HITLInterceptor extends AbsReActInterceptor {
                 return comment;
             }
         }
+    }
+
+    /**
+     * 介入判定策略接口
+     *
+     * @deprecated 4.0.4 {@link HITLStrategy}
+     */
+    @Deprecated
+    @FunctionalInterface
+    public interface InterventionStrategy extends HITLStrategy {
+        /**
+         * 评估是否需要干预
+         *
+         * @return 拦截理由文案（触发拦截）；null（不拦截，直接执行）
+         */
+        String evaluate(ReActTrace trace, Map<String, Object> args);
     }
 }
