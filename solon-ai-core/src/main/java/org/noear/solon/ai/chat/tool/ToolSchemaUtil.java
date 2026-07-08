@@ -204,9 +204,8 @@ public class ToolSchemaUtil {
             }
         });
 
-        if (requiredNode.getArrayUnsafe().size() > 0) {
-            rootNode.set("required", requiredNode);
-        }
+        //新的模型（严格的，必须要有）
+        rootNode.set("required", requiredNode);
 
         return rootNode.toJson();
     }
