@@ -23,6 +23,7 @@ import org.noear.solon.ai.sandbox.SandboxManager;
 import org.noear.solon.ai.sandbox.SandboxLog;
 import org.noear.solon.ai.sandbox.SandboxViolationStore;
 import org.noear.solon.ai.sandbox.config.FilesystemConfig;
+import org.noear.solon.ai.sandbox.config.NetworkConfig;
 import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
 import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.talents.mount.MountManager;
@@ -287,7 +288,7 @@ public class TerminalTalent extends AbsTalent {
                 allowRead.isEmpty() ? null : allowRead,
                 allowWrite.isEmpty() ? null : allowWrite,
                 null,                           // denyWrite
-                false                           // allowGitConfig
+                true                            // allowGitConfig — 构建工具（Maven git-commit-id-plugin、Gradle git 插件等）需要读取 .git/config
         );
     }
 
@@ -300,20 +301,38 @@ public class TerminalTalent extends AbsTalent {
         // 避免两份相同逻辑的维护成本
         FilesystemConfig fsConfig = buildDynamicFilesystemConfig();
 
+        // NetworkConfig：保持网络不受限（allowedDomains=null），
+        // 但允许 Unix domain socket（Gradle daemon 等构建工具需要 IPC）
+        // 和本地端口绑定（构建服务器、测试框架需要绑定 localhost）
+        NetworkConfig networkConfig = new NetworkConfig(
+                null,   // allowedDomains (null = 不限制网络)
+                null,   // deniedDomains
+                null,   // allowUnixSockets (特定 Unix socket 路径白名单)
+                true,   // allowAllUnixSockets (Gradle daemon IPC 需要)
+                true,   // allowLocalBinding (构建工具绑定 localhost 端口)
+                null,   // allowMachLookup
+                null,   // httpProxyPort
+                null,   // socksProxyPort
+                null,   // mitmProxy
+                null,   // parentProxy
+                null,   // tlsTerminate
+                null    // filterRequest
+        );
+
         return new SandboxRuntimeConfig(
-                null,   // network
+                networkConfig,
                 fsConfig,
-                null,   // ignoreViolations
-                null,   // enableWeakerNestedSandbox
-                null,   // enableWeakerNetworkIsolation
-                null,   // allowAppleEvents
-                null,   // ripgrep
-                null,   // mandatoryDenySearchDepth
-                null,   // allowPty
-                null,   // seccomp
-                null,   // bwrapPath
-                null,   // socatPath
-                null    // windows
+                null,                           // ignoreViolations
+                null,                           // enableWeakerNestedSandbox (保持默认，用户可按需配置)
+                null,                           // enableWeakerNetworkIsolation
+                null,                           // allowAppleEvents
+                null,                           // ripgrep
+                null,                           // mandatoryDenySearchDepth
+                true,                           // allowPty (测试框架交互需要伪终端)
+                null,                           // seccomp
+                null,                           // bwrapPath
+                null,                           // socatPath
+                null                            // windows
         );
     }
 
