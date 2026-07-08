@@ -26,6 +26,7 @@ import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.util.Markdown;
 import org.noear.solon.ai.util.MarkdownUtil;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Preview;
 import org.yaml.snakeyaml.Yaml;
 
 import java.util.*;
@@ -253,27 +254,35 @@ public class AgentDefinition {
         private List<String> disallowedTools = new ArrayList<>();
 
         // 权限配置
+        @Preview("4.0.4")
         private List<PermissionRule> permissionRules = new ArrayList<>();
 
         // Skills 配置
+        @Deprecated
         private List<String> skills;
 
         // MCP Servers 配置
+        @Deprecated
         private List<String> mcpServers;
 
         // Hooks 配置（暂不解析，保留字段）
+        @Deprecated
         private Object hooks;
 
         // 记忆配置
+        @Deprecated
         private String memory;  // user, project, local
 
         // 后台任务
+        @Deprecated
         private Boolean background;
 
         // 隔离配置
+        @Deprecated
         private String isolation;  // worktree
 
         // 团队配置
+        @Deprecated
         private String teamName;  // 所属团队名称（用于团队成员）
 
         protected void injectYamlFrontmatter(StringBuilder buf) {
