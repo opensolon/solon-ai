@@ -793,7 +793,7 @@ public class HarnessEngine {
         }
     }
 
-    private void initHitlDefault(){
+    private void initHitlDefault() {
         BashToolStrategy bashStrategy = new BashToolStrategy()
                 .permissionContextSupplier(options::getPermissionContext);
 
@@ -924,13 +924,14 @@ public class HarnessEngine {
     }
 
     protected ReActAgent createMainAgent() {
-        AgentDefinition agentDefinition = new AgentDefinition()
+        AgentDefinition agentDefinition = AgentDefinition.builder()
                 .primary(true) // 主代理
                 .name(AgentDefinition.AGENT_MAIN) // 名字
                 .toolsAdd(options.getTools()) // 工具权限
-                .systemPrompt(options.getSystemPrompt());// 系统提示词
+                .systemPrompt(options.getSystemPrompt())// 系统提示词
+                .build();
 
-        ReActAgent.Builder agentBuilder = AgentFactory.create(this, agentDefinition, null);
+        ReActAgent.Builder agentBuilder = getAgentBuilder(agentDefinition, null);
 
         return agentBuilder.build();
     }
@@ -995,6 +996,10 @@ public class HarnessEngine {
         } else {
             return getMainAgent();
         }
+    }
+
+    public ReActAgent.Builder getAgentBuilder(AgentDefinition agentDefinition, @Nullable String sessionModel) {
+        return AgentFactory.create(this, agentDefinition, sessionModel);
     }
 
     private ReActRequest promptDo(Prompt prompt) {

@@ -173,8 +173,7 @@ public class TaskTalent extends AbsTalent {
 
         String modelSelected = __parentSession.getContext().getAs(HarnessEngine.CTX_MODEL_SELECTED);
 
-
-        ReActAgent agent = agentDefinition.builder(engine, modelSelected).build();
+        ReActAgent agent = engine.getAgentBuilder(agentDefinition, modelSelected).build();
         final AgentSession session = InMemoryAgentSession.of(agent.name());
 
         String result = null;

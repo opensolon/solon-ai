@@ -55,57 +55,6 @@ public class AgentDefinition {
         //用于反序列化
     }
 
-    public AgentDefinition systemPrompt(String systemPrompt){
-        setSystemPrompt(systemPrompt);
-        return this;
-    }
-
-    public AgentDefinition primary(boolean primary){
-        getMetadata().setPrimary(primary);
-        return this;
-    }
-
-    public AgentDefinition hidden(boolean hidden){
-        getMetadata().setHidden(hidden);
-        return this;
-    }
-
-    public AgentDefinition name(String name) {
-        getMetadata().setName(name);
-        return this;
-    }
-
-    public AgentDefinition description(String description) {
-        getMetadata().setDescription(description);
-        return this;
-    }
-
-    public AgentDefinition toolsAdd(Collection<String> toolNames){
-        getMetadata().addTools(toolNames);
-        return this;
-    }
-
-    public AgentDefinition toolsAdd(String... toolNames){
-        getMetadata().addTools(toolNames);
-        return this;
-    }
-
-    public AgentDefinition disallowedToolsAdd(Collection<String> toolNames){
-        getMetadata().getDisallowedTools().addAll(toolNames);
-        return this;
-    }
-
-    public AgentDefinition disallowedToolsAdd(String... toolNames){
-        getMetadata().getDisallowedTools().addAll(Arrays.asList(toolNames));
-        return this;
-    }
-
-    public AgentDefinition metadata(Consumer<Metadata> build){
-        build.accept(getMetadata());
-        return this;
-    }
-
-
     /**
      * 复制
      */
@@ -272,14 +221,6 @@ public class AgentDefinition {
         return buf.toString();
     }
 
-    public ReActAgent.Builder builder(HarnessEngine agentRuntime) {
-        return AgentFactory.create(agentRuntime, this);
-    }
-
-    public ReActAgent.Builder builder(HarnessEngine agentRuntime, String sessionModel) {
-        return AgentFactory.create(agentRuntime, this, sessionModel);
-    }
-
 
     //-------------------------
 
@@ -437,6 +378,74 @@ public class AgentDefinition {
 
         public boolean hasTeamName() {
             return teamName != null && !teamName.isEmpty();
+        }
+    }
+
+    /**
+     * @since 4.0.4
+     */
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    /**
+     * @since 4.0.4
+     */
+    public static class Builder {
+        private AgentDefinition definition = new AgentDefinition();
+
+        public Builder systemPrompt(String systemPrompt) {
+            definition.setSystemPrompt(systemPrompt);
+            return this;
+        }
+
+        public Builder primary(boolean primary) {
+            definition.getMetadata().setPrimary(primary);
+            return this;
+        }
+
+        public Builder hidden(boolean hidden) {
+            definition.getMetadata().setHidden(hidden);
+            return this;
+        }
+
+        public Builder name(String name) {
+            definition.getMetadata().setName(name);
+            return this;
+        }
+
+        public Builder description(String description) {
+            definition.getMetadata().setDescription(description);
+            return this;
+        }
+
+        public Builder toolsAdd(Collection<String> toolNames) {
+            definition.getMetadata().addTools(toolNames);
+            return this;
+        }
+
+        public Builder toolsAdd(String... toolNames) {
+            definition.getMetadata().addTools(toolNames);
+            return this;
+        }
+
+        public Builder disallowedToolsAdd(Collection<String> toolNames) {
+            definition.getMetadata().getDisallowedTools().addAll(toolNames);
+            return this;
+        }
+
+        public Builder disallowedToolsAdd(String... toolNames) {
+            definition.getMetadata().getDisallowedTools().addAll(Arrays.asList(toolNames));
+            return this;
+        }
+
+        public Builder metadata(Consumer<Metadata> build) {
+            build.accept(definition.getMetadata());
+            return this;
+        }
+
+        public AgentDefinition build() {
+            return definition;
         }
     }
 }
