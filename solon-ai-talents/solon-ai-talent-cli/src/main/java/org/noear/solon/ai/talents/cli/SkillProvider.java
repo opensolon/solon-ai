@@ -32,6 +32,13 @@ public interface SkillProvider {
     void refresh();
 
     /**
+     * 刷新指定挂载的技能（用于与 FileWatchService 对接）
+     */
+    default void refreshByGroup(String groupName) {
+        refresh();
+    }
+
+    /**
      * 获取技能数
      */
     int getSkillCount();

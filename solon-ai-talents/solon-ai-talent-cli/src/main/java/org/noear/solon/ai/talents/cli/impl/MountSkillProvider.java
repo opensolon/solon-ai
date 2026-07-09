@@ -44,6 +44,11 @@ public class MountSkillProvider implements SkillProvider {
     }
 
     @Override
+    public void refreshByGroup(String groupName) {
+        mountManager.refresh(groupName);
+    }
+
+    @Override
     public int getSkillCount() {
         return mountManager.getSkillCount();
     }

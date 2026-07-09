@@ -151,6 +151,17 @@ public class AgentManager {
     }
 
     /**
+     * 刷新指定挂载（重新扫描 + 清除缓存），用于与 FileWatchService 对接
+     */
+    public synchronized void refreshByMountAlias(String mountAlias) {
+        if (mountAlias == null) {
+            return;
+        }
+        mountManager.refresh(mountAlias);
+        removeByMountAlias(mountAlias);
+    }
+
+    /**
      * 从 AgentMd 解析完整定义
      */
     private AgentDefinition loadFromAgentMd(AgentMd agentMd) {
