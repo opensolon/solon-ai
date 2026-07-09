@@ -249,14 +249,14 @@ public class ReActTrace implements AgentTrace {
 
     public String getCurrentReasonId() {
         if (currentReasonId == null) {
-            currentReasonId = Utils.guid();
+            currentReasonId = Utils.uuid();
         }
 
         return currentReasonId;
     }
 
     public String newCurrentReasonId(){
-        currentReasonId = Utils.guid();
+        currentReasonId = Utils.uuid();
         return currentReasonId;
     }
 
