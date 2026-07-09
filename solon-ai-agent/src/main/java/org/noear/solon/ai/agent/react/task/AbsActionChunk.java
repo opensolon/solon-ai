@@ -35,6 +35,7 @@ public abstract class AbsActionChunk extends AbsAgentChunk {
     private final transient ReActTrace trace;
     private final transient String toolName;
     private final transient Map<String, Object> args;
+    private final String reasonId;
 
     public AbsActionChunk(ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage message) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
@@ -46,6 +47,7 @@ public abstract class AbsActionChunk extends AbsAgentChunk {
         } else {
             this.args = Collections.unmodifiableMap(args);
         }
+        this.reasonId = trace.getCurrentReasonId();
     }
 
     public @Nullable String getToolName() {
@@ -58,5 +60,9 @@ public abstract class AbsActionChunk extends AbsAgentChunk {
 
     public ReActTrace getTrace() {
         return trace;
+    }
+
+    public String getReasonId() {
+        return reasonId;
     }
 }

@@ -38,6 +38,7 @@ public class ThoughtChunk extends AbsAgentChunk {
     private final transient @Nullable ChatResponse response;
     private final transient String thoughtContent;
     private final transient AssistantMessage assistantMessage;
+    private final String reasonId;
 
     public ThoughtChunk(ReActTrace trace, @Nullable ChatResponse response, AssistantMessage message, String thoughtContent) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
@@ -45,6 +46,7 @@ public class ThoughtChunk extends AbsAgentChunk {
         this.response = response;
         this.thoughtContent = thoughtContent;
         this.assistantMessage = message;
+        this.reasonId = trace.getCurrentReasonId();
     }
 
     public ReActTrace getTrace() {
@@ -55,12 +57,16 @@ public class ThoughtChunk extends AbsAgentChunk {
         return response;
     }
 
+    public String getThoughtContent() {
+        return thoughtContent;
+    }
+
     public AssistantMessage getAssistantMessage() {
         return assistantMessage;
     }
 
-    public String getThoughtContent() {
-        return thoughtContent;
+    public String getReasonId() {
+        return reasonId;
     }
 
     public boolean isToolCalls() {

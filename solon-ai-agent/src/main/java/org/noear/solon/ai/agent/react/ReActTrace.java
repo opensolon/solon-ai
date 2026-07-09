@@ -84,6 +84,11 @@ public class ReActTrace implements AgentTrace {
     private String runId;
 
     /**
+     * 当前思考Id
+     */
+    private String currentReasonId;
+
+    /**
      * 度量指标
      */
     private final Metrics metrics = new Metrics();
@@ -225,7 +230,8 @@ public class ReActTrace implements AgentTrace {
         // 5. 更新原始提示词
         this.originalPrompt = originalPrompt;
         this.beginTimeMs = System.currentTimeMillis();
-        this.runId = Utils.uuid();
+        this.runId = null;
+        this.currentReasonId = null;
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("Agent [{}] trace reset for a new task.", getAgentName());
@@ -239,6 +245,19 @@ public class ReActTrace implements AgentTrace {
         }
 
         return runId;
+    }
+
+    public String getCurrentReasonId() {
+        if (currentReasonId == null) {
+            currentReasonId = Utils.guid();
+        }
+
+        return currentReasonId;
+    }
+
+    public String newCurrentReasonId(){
+        currentReasonId = Utils.guid();
+        return currentReasonId;
     }
 
     @Override

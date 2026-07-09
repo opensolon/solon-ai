@@ -37,24 +37,31 @@ public class ReasonChunk extends AbsAgentChunk {
     private final transient ReActTrace trace;
     private final transient @Nullable ChatResponse response;
     private final transient AssistantMessage assistantMessage;
+    private final String reasonId;
 
     public ReasonChunk(ReActTrace trace, @Nullable ChatResponse response, AssistantMessage assistantMessage) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession(), assistantMessage);
         this.trace = trace;
         this.response = response;
         this.assistantMessage = assistantMessage;
+        this.reasonId = trace.getCurrentReasonId();
     }
 
     public ReActTrace getTrace() {
         return trace;
     }
 
+    @Nullable
     public ChatResponse getResponse() {
         return response;
     }
 
     public AssistantMessage getAssistantMessage() {
         return assistantMessage;
+    }
+
+    public String getReasonId() {
+        return reasonId;
     }
 
     /**
@@ -78,7 +85,7 @@ public class ReasonChunk extends AbsAgentChunk {
     /**
      * 是否为思考
      */
-    public boolean isThinking(){
+    public boolean isThinking() {
         return assistantMessage.isThinking();
     }
 

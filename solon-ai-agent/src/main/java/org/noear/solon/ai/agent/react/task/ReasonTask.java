@@ -196,6 +196,7 @@ public class ReasonTask {
             return;
         }
 
+        trace.newCurrentReasonId();
         String systemPromptStr = systemPromptBuf.toString();
 
         List<ChatMessage> messages = new ArrayList<>();
