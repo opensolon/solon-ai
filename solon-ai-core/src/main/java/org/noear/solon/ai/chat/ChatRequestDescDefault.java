@@ -29,7 +29,6 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.MimeType;
 import org.noear.solon.core.util.RankEntity;
-import org.noear.solon.net.http.HttpException;
 import org.noear.solon.net.http.HttpResponse;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.textstream.ServerSentEvent;
@@ -340,7 +339,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                         if (resp.code() < 400) {
                             return parseResp(req, resp);
                         } else {
-                            return Flux.error(createHttpException(resp));
+                            return Flux.error(resp.createError());
                         }
                     } catch (Throwable e) {
                         return Flux.error(e);
@@ -508,18 +507,6 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         } finally {
             //用完清掉
             resp.toolCallBuilders.clear();
-        }
-    }
-
-    private HttpException createHttpException(HttpResponse resp) {
-        try {
-            String message = resp.bodyAsString();
-            String description = Assert.isEmpty(message)
-                    ? "Error code:" + resp.code()
-                    : "Error code:" + resp.code() + ", message:" + message;
-            return new HttpException(description);
-        } catch (IOException e) {
-            return new HttpException("Error code:" + resp.code(), e);
         }
     }
 

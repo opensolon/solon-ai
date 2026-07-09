@@ -20,7 +20,6 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.exception.LlmNoReturnException;
 import org.noear.solon.ai.agent.react.*;
-import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -31,6 +30,7 @@ import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
+import org.noear.solon.net.http.HttpResponseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.FluxSink;
@@ -418,7 +418,7 @@ public class ReasonTask {
     }
 
     private ChatResponse handleLastException(ReActTrace trace, Throwable lastException) {
-        if(lastException.getMessage() == null && lastException.getCause() != null){
+        if (lastException.getMessage() == null && lastException.getCause() != null) {
             lastException = lastException.getCause();
         }
 
@@ -437,8 +437,12 @@ public class ReasonTask {
         } else if (lastException instanceof TimeoutException ||
                 lastException.getCause() instanceof TimeoutException) {
             trace.setFinalAnswer("抱歉，模型服务响应超时。请稍后重试。");
+        } else if (lastException instanceof HttpResponseException) {
+            HttpResponseException e2 = (HttpResponseException) lastException;
+            trace.setFinalAnswer("抱歉，模型服务响应出错（CODE: " + e2.code() + "）。请稍后重试。");
         } else {
-            trace.setFinalAnswer("抱歉，暂时无法使用模型服务 (" + lastException + ")。请稍后重试。");
+            // lastException 里可能有 html，不能直接展示
+            trace.setFinalAnswer("抱歉，暂时无法使用模型服务（具体参考日志）。请稍后重试。");
         }
 
         return null;
