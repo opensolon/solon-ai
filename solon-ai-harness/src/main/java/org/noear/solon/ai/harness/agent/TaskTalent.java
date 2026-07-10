@@ -16,6 +16,7 @@
 package org.noear.solon.ai.harness.agent;
 
 import org.noear.snack4.ONode;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
@@ -104,7 +105,7 @@ public class TaskTalent extends AbsTalent {
         taskOp.description = taskSpec.description;
         taskOp.prompt = taskSpec.prompt;
 
-        return taskDo(__parentTrace, __cwd, __sessionId, __parentSession, taskOp, 1, false);
+        return taskDo(__parentTrace, __cwd, __sessionId, __parentSession, taskOp, 1, false, Utils.uuid());
     }
 
     @ToolMapping(name = TOOL_MULTITASK, description =
@@ -137,7 +138,7 @@ public class TaskTalent extends AbsTalent {
 
         for (MultiTaskOp task : tasks) {
             CompletableFuture<String> future = CompletableFuture.supplyAsync(() ->
-                    taskDo(__parentTrace, __cwd, __sessionId, __parentSession, task, tasks.size(), true), RunUtil.io());
+                    taskDo(__parentTrace, __cwd, __sessionId, __parentSession, task, tasks.size(), true, Utils.uuid()), RunUtil.io());
             futures.add(future);
         }
 
@@ -161,7 +162,7 @@ public class TaskTalent extends AbsTalent {
         return result;
     }
 
-    private String taskDo(ReActTrace __parentTrace, String __cwd, String __sessionId, AgentSession __parentSession, MultiTaskOp task, int count, boolean isMultitask) {
+    private String taskDo(ReActTrace __parentTrace, String __cwd, String __sessionId, AgentSession __parentSession, MultiTaskOp task, int count, boolean isMultitask, String taskId) {
         AgentDefinition agentDefinition = engine.getAgentManager().getAgent(task.agent_name);
         if (agentDefinition == null) {
             return "ERROR: 未知的子代理类型 '" + task.agent_name + "'。";
@@ -220,24 +221,29 @@ public class TaskTalent extends AbsTalent {
                         .stream()
                         .takeUntil(r -> sink.isCancelled())
                         .doOnNext(chunk -> {
-                            if (chunk instanceof ContextSizeChunk) {
-                                sink.next(chunk);
-                            } else if (chunk instanceof ActionChunk) {
-                                sink.next(chunk);
-                            } else if (chunk instanceof ObservationChunk) {
-                                sink.next(chunk);
-                            } else {
-                                if (isMultitask) {
-                                    if (chunk instanceof ThoughtChunk) {
-                                        chunk.getMeta().put(TOOL_MULTITASK, 1);
-                                        sink.next(chunk);
-                                    }
-                                } else {
-                                    if (chunk instanceof ReasonChunk) {
-                                        sink.next(chunk);
-                                    }
-                                }
-                            }
+                            sink.next(new TaskWrapChuck(task.index, taskId, task.agent_name, isMultitask, chunk));
+
+                            /**
+                             // 选择性转发：ContextSizeChunk/ActionChunk/ObservationChunk 始终转发
+                             // + 多任务模式仅转发 ThoughtChunk（最终结果，避免推理文本交错）
+                             // + 单任务模式转发 ReasonChunk（推理过程）
+                             if (chunk instanceof ContextSizeChunk) {
+                             sink.next(new TaskWrapChuck(task.index, taskId, task.agent_name, isMultitask, chunk));
+                             } else if (chunk instanceof ActionChunk) {
+                             sink.next(new TaskWrapChuck(task.index, taskId, task.agent_name, isMultitask, chunk));
+                             } else if (chunk instanceof ObservationChunk) {
+                             sink.next(new TaskWrapChuck(task.index, taskId, task.agent_name, isMultitask, chunk));
+                             } else {
+                             if (isMultitask) {
+                             if (chunk instanceof ThoughtChunk) {
+                             sink.next(new TaskWrapChuck(task.index, taskId, task.agent_name, true, chunk));
+                             }
+                             } else {
+                             if (chunk instanceof ReasonChunk) {
+                             sink.next(new TaskWrapChuck(task.index, taskId, task.agent_name, false, chunk));
+                             }
+                             }
+                             }*/
                         })
                         .doOnError(err -> {
                             errRef.set(err);
