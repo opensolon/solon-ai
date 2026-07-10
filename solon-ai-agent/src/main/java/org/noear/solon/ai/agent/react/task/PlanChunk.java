@@ -32,12 +32,14 @@ import java.util.List;
 public class PlanChunk extends AbsAgentChunk {
     private final transient ReActTrace trace;
     private final transient PlanEvent event;
+    private final String reasonId;
 
     public PlanChunk(ReActTrace trace, PlanEvent event, AssistantMessage message) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
 
         this.trace = trace;
         this.event = event;
+        this.reasonId = trace.getCurrentReasonId();
     }
 
     public ReActTrace getTrace() {
@@ -54,5 +56,9 @@ public class PlanChunk extends AbsAgentChunk {
 
     public int getPlanIndex() {
         return trace.getPlanIndex();
+    }
+
+    public String getReasonId() {
+        return reasonId;
     }
 }
