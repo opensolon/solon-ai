@@ -21,7 +21,7 @@ import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 
 /**
- * 任务运行结束块
+ * 思考运行结束块
  *
  * @author noear
  * @since 4.0.4

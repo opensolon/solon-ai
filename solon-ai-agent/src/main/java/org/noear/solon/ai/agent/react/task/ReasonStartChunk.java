@@ -24,7 +24,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 任务运行开始块
+ * 思考运行开始块
  *
  * @author noear
  * @since 4.0.4
