@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.react.task;
 
 import org.noear.snack4.ONode;
 import org.noear.snack4.json.JsonReader;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.util.FeedbackTool;
@@ -96,12 +97,12 @@ public class ActionTask {
         }
     }
 
-    private ToolResult doAction(ReActTrace trace, String toolName, Map<String, Object> args, List<ChatMessage> toolResults, ToolCall call) {
+    private ToolResult doAction(ReActTrace trace, String callId, String toolName, Map<String, Object> args, List<ChatMessage> toolResults, ToolCall call) {
         if (LOG.isDebugEnabled()) {
             LOG.debug("Action for agent [{}], toolName:{}, args:{}", config.getName(), toolName, args);
         }
 
-        ToolExchanger toolExchanger = new ToolExchanger(toolName, args);
+        ToolExchanger toolExchanger = new ToolExchanger(callId, toolName, args);
 
         // 1. 触发前置生命周期
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
@@ -117,7 +118,7 @@ public class ActionTask {
 
         // 3. 推送流式动作片
         if (trace.getOptions().getStreamSink() != null) {
-            trace.getOptions().getStreamSink().next(new ActionChunk(trace, toolName, args));
+            trace.getOptions().getStreamSink().next(new ActionChunk(trace, callId, toolName, args));
         }
 
         long startMs = System.currentTimeMillis();
@@ -181,7 +182,8 @@ public class ActionTask {
             Map<String, Object> args = (call.getArguments() == null) ? new HashMap<>() : call.getArguments();
 
             // 触发 Action 生命周期拦截
-            ToolResult result = doAction(trace, call.getName(), args, toolResults, call);
+            String callId = Utils.uuid();
+            ToolResult result = doAction(trace, callId, call.getName(), args, toolResults, call);
             if (result == null) {
                 return;
             }
@@ -232,11 +234,13 @@ public class ActionTask {
                         }
 
                         foundAny = true;
+
+                        String callId = Utils.uuid();
                         String toolName = actionNode.get("name").getString();
                         ONode argsNode = actionNode.get("arguments");
                         Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : new HashMap<>();
 
-                        ToolResult result = doAction(trace, toolName, args, toolResults, null);
+                        ToolResult result = doAction(trace, callId, toolName, args, toolResults, null);
                         if (result == null) {
                             return;
                         }
@@ -253,9 +257,10 @@ public class ActionTask {
                 String toolName = lastContent.substring(actionLabelIndex + 7).trim();
                 if (trace.getOptions().getTool(toolName) != null || FeedbackTool.TOOL_NAME.equals(toolName)) {
                     foundAny = true;
+                    String callId = Utils.uuid();
                     Map<String, Object> args = new HashMap<>();
 
-                    ToolResult result = doAction(trace, toolName, args, toolResults, null);
+                    ToolResult result = doAction(trace, callId, toolName, args, toolResults, null);
                     if (result == null) {
                         return;
                     }
@@ -297,7 +302,7 @@ public class ActionTask {
         if (trace.getOptions().getStreamSink() != null) {
             try {
                 trace.getOptions().getStreamSink().next(
-                        new ObservationChunk(trace, toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
+                        new ObservationChunk(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
             } catch (Throwable e) {
                 LOG.error("Push ObservationChunk failed", e);
             }

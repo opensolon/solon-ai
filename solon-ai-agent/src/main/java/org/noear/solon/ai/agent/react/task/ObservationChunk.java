@@ -33,11 +33,16 @@ public class ObservationChunk extends AbsActionChunk {
     private final Throwable error;
     private final long durationMs;
 
-    public ObservationChunk(ReActTrace trace, String toolName, Map<String, Object> args, @Nullable ChatMessage observation, @Nullable Throwable error, long durationMs) {
-        super(trace, toolName, args, observation);
+    public ObservationChunk(ReActTrace trace, String callId, String toolName, Map<String, Object> args, @Nullable ChatMessage observation, @Nullable Throwable error, long durationMs) {
+        super(trace, callId, toolName, args, observation);
 
         this.error = error;
         this.durationMs = durationMs;
+    }
+
+    @Override
+    public String getCallId() {
+        return super.getCallId();
     }
 
     /**

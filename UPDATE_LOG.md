@@ -17,6 +17,7 @@
 * 添加 solon-ai-core ChatRequestDesc.role, instruction, systemPrompt 方法
 * 添加 solon-ai-agent HITLStrategy 接口，替代 HITLInterceptor.InterventionStrategy（后者标为弃用）
 * 添加 solon-ai-agent RunStartChunk, RunEndChunk, ReasonStartChunk, ReasonEndChunk 事件块
+* 添加 solon-ai-agent ActionChunk, ObservationChunk, ToolExchanger callId 属性
 * 添加 solon-ai-harness 新的工具权限体系
 * 添加 solon-ai-harness ToolName 类，替代 ToolPermission（后者标为弃用）
 * 添加 solon-ai-harness AgentDefinition 链式构造方法

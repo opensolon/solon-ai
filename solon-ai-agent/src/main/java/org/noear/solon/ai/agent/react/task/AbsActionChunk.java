@@ -36,11 +36,14 @@ public abstract class AbsActionChunk extends AbsAgentChunk {
     private final transient String toolName;
     private final transient Map<String, Object> args;
     private final String reasonId;
+    private final String callId;
 
-    public AbsActionChunk(ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage message) {
+    public AbsActionChunk(ReActTrace trace, String callId, String toolName, Map<String, Object> args, ChatMessage message) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
 
         this.trace = trace;
+        this.callId = callId;
+
         this.toolName = toolName;
         if (args == null) {
             this.args = Collections.EMPTY_MAP;
@@ -50,11 +53,15 @@ public abstract class AbsActionChunk extends AbsAgentChunk {
         this.reasonId = trace.getCurrentReasonId();
     }
 
-    public @Nullable String getToolName() {
+    public String getCallId() {
+        return callId;
+    }
+
+    public String getToolName() {
         return toolName;
     }
 
-    public @Nullable Map<String, Object> getArgs() {
+    public Map<String, Object> getArgs() {
         return args;
     }
 

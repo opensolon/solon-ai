@@ -24,13 +24,19 @@ import java.util.Map;
  * @since 3.11.0
  */
 public class ToolExchanger {
+    private final String callId;
     private final String toolName;
     private final Map<String, Object> args;
     private String result;
 
-    public ToolExchanger(String toolName, Map<String, Object> args) {
+    public ToolExchanger(String callId, String toolName, Map<String, Object> args) {
+        this.callId = callId;
         this.toolName = toolName;
         this.args = args;
+    }
+
+    public String getCallId() {
+        return callId;
     }
 
     public String getToolName() {

@@ -29,7 +29,7 @@ import java.util.Map;
  */
 @Preview("3.9.6")
 public class ActionChunk extends AbsActionChunk {
-    public ActionChunk(ReActTrace trace, String toolName, Map<String, Object> args) {
-        super(trace, toolName, args, ChatMessage.ofAssistant(""));
+    public ActionChunk(ReActTrace trace, String callId, String toolName, Map<String, Object> args) {
+        super(trace, callId, toolName, args, ChatMessage.ofAssistant(""));
     }
 }
