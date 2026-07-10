@@ -203,6 +203,10 @@ public class ReasonTask {
         messages.add(ChatMessage.ofSystem(systemPromptStr));
         messages.addAll(trace.getWorkingMemory().getMessages());
 
+        if (trace.getOptions().getStreamSink() != null) {
+            trace.getOptions().getStreamSink().next(new ReasonStartChunk(trace, systemPromptStr, messages));
+        }
+
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
         long startMs = System.currentTimeMillis();
         ChatResponse response = callWithRetry(trace, messages);
@@ -231,6 +235,10 @@ public class ReasonTask {
         long durationMs = System.currentTimeMillis() - startMs;
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onReasonEnd(trace, response, responseMessage, durationMs);
+        }
+
+        if (trace.getOptions().getStreamSink() != null) {
+            trace.getOptions().getStreamSink().next(new ReasonEndChunk(trace, response, responseMessage, durationMs));
         }
 
         if(trace.getSession().isPending()){

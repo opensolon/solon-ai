@@ -246,6 +246,10 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             }
         }
 
+        if (trace.getOptions().getStreamSink() != null) {
+            trace.getOptions().getStreamSink().next(new RunStartChunk(trace));
+        }
+
         if (trace.getSession().isPending() == false) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("ReActAgent [{}] start thinking... Prompt: {}", config.getName(), prompt.getUserContent());
@@ -301,6 +305,12 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
         session.updateSnapshot();
 
+        if (trace.isAbnormal()) {
+            if (trace.getOptions().getStreamSink() != null) {
+                trace.getOptions().getStreamSink().next(new ReasonChunk(trace, null, assistantMessage));
+            }
+        }
+
         // 拦截器：任务结束事件
         for (RankEntity<ReActInterceptor> item : options.getInterceptors()) {
             if (item.target.isEnabled()) {
@@ -308,14 +318,12 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             }
         }
 
-        if (LOG.isInfoEnabled()) {
-            LOG.info("ReActAgent [{}] finished, abnormal:{}, finalAnswer: {}", config.getName(), trace.isAbnormal(), assistantMessage.getContent());
+        if (trace.getOptions().getStreamSink() != null) {
+            trace.getOptions().getStreamSink().next(new RunEndChunk(trace, assistantMessage));
         }
 
-        if (trace.isAbnormal()) {
-            if (trace.getOptions().getStreamSink() != null) {
-                trace.getOptions().getStreamSink().next(new ReasonChunk(trace, null, assistantMessage));
-            }
+        if (LOG.isInfoEnabled()) {
+            LOG.info("ReActAgent [{}] finished, abnormal:{}, finalAnswer: {}", config.getName(), trace.isAbnormal(), assistantMessage.getContent());
         }
 
         return assistantMessage;
