@@ -81,8 +81,9 @@ public class GeminiChatDialect extends AbstractChatDialect {
     public boolean matched(ChatConfig config) {
         String standard = config.getStandardOrProvider();
 
-        if ("gemini".equalsIgnoreCase(standard)
-                || "gemini-models".equalsIgnoreCase(standard)) {
+        if ("google-models".equalsIgnoreCase(standard) ||
+                "gemini".equalsIgnoreCase(standard) || //弃用
+                "gemini-models".equalsIgnoreCase(standard)) { //弃用
             return true;
         }
 

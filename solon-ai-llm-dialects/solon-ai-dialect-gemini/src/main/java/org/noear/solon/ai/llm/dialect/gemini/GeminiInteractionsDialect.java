@@ -87,13 +87,14 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
     public boolean matched(ChatConfig config) {
         String standard = config.getStandardOrProvider();
 
-        if ("gemini-interactions".equalsIgnoreCase(standard) ||
-                "google".equalsIgnoreCase(standard)) {
+        if ("google-interactions".equalsIgnoreCase(standard) ||
+                "gemini-interactions".equalsIgnoreCase(standard) || //弃用
+                "google".equalsIgnoreCase(standard)) { //弃用
             return true;
         }
 
         if (Assert.isEmpty(standard)) {
-            if (config.getApiUrl().endsWith("/interactions") ) {
+            if (config.getApiUrl().endsWith("/interactions")) {
                 return true;
             }
         }
