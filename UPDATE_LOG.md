@@ -14,6 +14,11 @@
 
 ### 4.0.4
 
+* 添加 solon-ai-core ModelOptionsAmend.reasoning_effort 统一选项 API
+* 优化 solon-ai-dialect-anthropic：`reasoning_effort` 映射为 `thinking.budget_tokens`（保证 budget < max_tokens）
+* 优化 solon-ai-dialect-openai Responses：`reasoning_effort` 映射为 `reasoning.effort`（max → xhigh）
+* 优化 solon-ai-core AbstractChatDialect：Chat Completions 顶层 `reasoning_effort` 归一化（max → xhigh）
+* 优化 solon-ai-dialect-gemini：`reasoning_effort` 映射为 generationConfig.thinkingConfig（仅 budget，避免与 generationConfig 覆盖顺序冲突）/ interactions thinking_level
 * 添加 solon-ai-core ChatRequestDesc.role, instruction, systemPrompt 方法
 * 添加 solon-ai-agent HITLStrategy 接口，替代 HITLInterceptor.InterventionStrategy（后者标为弃用）
 * 添加 solon-ai-agent RunStartChunk, RunEndChunk, ReasonStartChunk, ReasonEndChunk 事件块

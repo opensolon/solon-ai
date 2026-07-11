@@ -90,6 +90,16 @@ public class OpenaiResponsesRequestBuilder {
                 root.set("max_output_tokens", kv.getValue());
                 continue;
             }
+            // 统一推理水平 → reasoning.effort（若尚未显式配置 reasoning）
+            if ("reasoning_effort".equals(key)) {
+                if (!options.options().containsKey("reasoning")) {
+                    String effort = normalizeResponsesEffort(kv.getValue(), false);
+                    if (effort != null) {
+                        root.getOrNew("reasoning").set("effort", effort);
+                    }
+                }
+                continue;
+            }
             // 处理思考级别配置
             if ("reasoning".equals(key)) {
                 buildReasoningNode(root, kv.getValue());
@@ -208,7 +218,11 @@ public class OpenaiResponsesRequestBuilder {
             Map<String, Object> reasoningMap = (Map<String, Object>) value;
             Object effort = reasoningMap.get("effort");
             if (effort != null) {
-                reasoningNode.set("effort", effort.toString());
+                // 用户显式 reasoning：已知档位归一化，未知值透传
+                String normalized = normalizeResponsesEffort(effort, true);
+                if (normalized != null) {
+                    reasoningNode.set("effort", normalized);
+                }
             }
             // 支持 summary 配置（reasoning summary）
             Object summary = reasoningMap.get("summary");
@@ -217,8 +231,49 @@ public class OpenaiResponsesRequestBuilder {
             }
         } else if (value instanceof String) {
             // 简化配置：reasoning: "high"
-            reasoningNode.set("effort", value.toString());
+            String normalized = normalizeResponsesEffort(value, true);
+            if (normalized != null) {
+                reasoningNode.set("effort", normalized);
+            }
         }
+    }
+
+    /**
+     * 规范化 Responses API reasoning.effort。
+     * <p>保留官方支持档位：none/minimal/low/medium/high/xhigh；
+     * 统一语义 {@code max} → {@code xhigh}，{@code min} → {@code low}。</p>
+     * <ul>
+     *   <li>统一 {@code reasoning_effort}：严格映射，null/auto/非法值返回 null（不写出）</li>
+     *   <li>用户显式 {@code reasoning}：未知值可透传（兼容厂商扩展）</li>
+     * </ul>
+     *
+     * @param passthroughUnknown 是否对未知值原样透传
+     * @since 4.0.4
+     */
+    private String normalizeResponsesEffort(Object value, boolean passthroughUnknown) {
+        if (value == null) {
+            return null;
+        }
+        String effort = String.valueOf(value).trim().toLowerCase();
+        if (effort.isEmpty() || "auto".equals(effort)) {
+            return null;
+        }
+        if ("none".equals(effort)
+                || "minimal".equals(effort)
+                || "low".equals(effort)
+                || "medium".equals(effort)
+                || "high".equals(effort)
+                || "xhigh".equals(effort)) {
+            return effort;
+        }
+        if ("max".equals(effort)) {
+            // 统一 max 档映射到 Responses 更高档 xhigh（不支持的模型由服务端报错/降级）
+            return "xhigh";
+        }
+        if ("min".equals(effort)) {
+            return "low";
+        }
+        return passthroughUnknown ? effort : null;
     }
 
     /**

@@ -121,6 +121,14 @@ public class AnthropicRequestBuilder {
                 continue;
             }
 
+            // 统一推理水平 → thinking.budget_tokens（若尚未显式配置 thinking）
+            if ("reasoning_effort".equals(key)) {
+                if (!options.options().containsKey("thinking")) {
+                    buildThinkingFromEffort(root, kv.getValue(), options);
+                }
+                continue;
+            }
+
             // 处理思考模式配置
             if ("thinking".equals(key)) {
                 buildThinkingNode(root, kv.getValue());
@@ -244,6 +252,60 @@ public class AnthropicRequestBuilder {
             thinkingNode.set("type", "enabled");
             thinkingNode.set("budget_tokens", ((Number) value).intValue());
         }
+    }
+
+    /**
+     * 将统一 reasoning_effort 映射为 Claude thinking.budget_tokens。
+     * <p>Anthropic 要求 budget_tokens 严格小于 max_tokens。
+     * 当档位预算不小于 max_tokens 时，压到 {@code max_tokens - 1}（至少为 1）；
+     * 若 max_tokens &lt;= 1，无法满足约束则跳过 thinking。
+     * 小 max_tokens 下语义从“档位预算”退化为“尽量占满输出预算”。</p>
+     *
+     * @since 4.0.4
+     */
+    private void buildThinkingFromEffort(ONode root, Object value, ChatOptions options) {
+        if (value == null) {
+            return;
+        }
+        String effort = String.valueOf(value).trim().toLowerCase();
+        int budget;
+        switch (effort) {
+            case "low":
+                budget = 4000;
+                break;
+            case "medium":
+                budget = 10000;
+                break;
+            case "high":
+                budget = 20000;
+                break;
+            case "max":
+                // 取较大预算；若默认 max_tokens=32000 会落到 31999
+                budget = 32000;
+                break;
+            default:
+                return;
+        }
+
+        int maxTokens = 32000;
+        Object maxTokensObj = options == null ? null : options.options().get("max_tokens");
+        if (maxTokensObj instanceof Number) {
+            maxTokens = ((Number) maxTokensObj).intValue();
+        } else if (root.hasKey("max_tokens")) {
+            maxTokens = root.get("max_tokens").getInt();
+        }
+        // Anthropic 要求 budget_tokens < max_tokens，且预算至少为 1 才有意义
+        if (maxTokens <= 1) {
+            return;
+        }
+        if (budget >= maxTokens) {
+            budget = maxTokens - 1;
+        }
+
+        Map<String, Object> thinking = new HashMap<String, Object>();
+        thinking.put("type", "enabled");
+        thinking.put("budget_tokens", budget);
+        buildThinkingNode(root, thinking);
     }
 
     /**

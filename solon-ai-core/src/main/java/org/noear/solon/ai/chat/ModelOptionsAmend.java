@@ -44,6 +44,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     static final String PRESENCE_PENALTY = "presence_penalty";
     static final String TOOL_CHOICE = "tool_choice";
     static final String RESPONSE_FORMAT = "response_format";
+    static final String REASONING_EFFORT = "reasoning_effort";
 
     protected final AtomicBoolean autoToolCall;
 
@@ -446,6 +447,38 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      */
     public T response_format(Map map) {
         return optionSet(RESPONSE_FORMAT, map);
+    }
+
+    /**
+     * 常用选项：推理水平（统一语义，由各方言映射到供应商字段）
+     * <p>取值：{@code low} / {@code medium} / {@code high} / {@code max}；
+     * 传空串、{@code auto} 或 {@code null} 时移除该选项。非法值忽略。</p>
+     * <p>方言映射（首批）：anthropic → thinking.budget_tokens；
+     * openai Responses → reasoning.effort；openai Chat Completions → reasoning_effort；
+     * gemini models → generationConfig.thinkingConfig；gemini interactions → thinking_level。</p>
+     *
+     * @since 4.0.4
+     */
+    public T reasoning_effort(String effort) {
+        if (effort == null) {
+            optionRemove(REASONING_EFFORT);
+            return (T) this;
+        }
+        String normalized = effort.trim().toLowerCase();
+        if (normalized.isEmpty() || "auto".equals(normalized)) {
+            optionRemove(REASONING_EFFORT);
+            return (T) this;
+        }
+                
+        if (!"low".equals(normalized)
+                && !"medium".equals(normalized)
+                && !"high".equals(normalized)
+                && !"max".equals(normalized)) {
+            // 非法值忽略，避免污染请求
+            return (T) this;
+        }
+    
+        return optionSet(REASONING_EFFORT, normalized);
     }
 
     /**

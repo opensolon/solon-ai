@@ -32,6 +32,7 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.llm.dialect.gemini.models.model.GenerationConfig;
+import org.noear.solon.ai.llm.dialect.gemini.models.model.ThinkingConfig;
 
 import java.util.Collection;
 import java.util.List;
@@ -71,14 +72,21 @@ public class GeminiRequestBuilder {
             }
         }
 
+        Object reasoningEffort = null;
         for (Map.Entry<String, Object> kv : options.options().entrySet()) {
             if ("stream".equals(kv.getKey())) {
                 continue;
             }
-
+            
             String key = kv.getKey();
             Object value = kv.getValue();
-
+            
+            // 统一推理水平延后应用，避免被后续 generationConfig 整段覆盖
+            if ("reasoning_effort".equals(key)) {
+                reasoningEffort = value;
+                continue;
+            }
+            
             if ("generationConfig".equals(key) && value instanceof Map) {
                 GenerationConfig generationConfig = toGenerationConfig((Map<String, Object>) value);
                 root.set("generationConfig", ONode.ofBean(generationConfig));
@@ -86,9 +94,14 @@ public class GeminiRequestBuilder {
                 root.set(key, ONode.ofBean(value));
             }
         }
-
+        
+        // 最后合并 reasoning_effort，确保不被 generationConfig 反覆盖
+        if (reasoningEffort != null) {
+            applyReasoningEffortToGenerationConfig(root, reasoningEffort, options);
+        }
+    
         buildToolsNode(root, config, options);
-
+    
         return root;
     }
 
@@ -349,6 +362,85 @@ public class GeminiRequestBuilder {
             }
         }
 
+        // 透传 thinkingConfig（若已存在）
+        if (configMap.containsKey("thinkingConfig") && configMap.get("thinkingConfig") instanceof Map) {
+            Map<String, Object> tcMap = (Map<String, Object>) configMap.get("thinkingConfig");
+            ThinkingConfig thinkingConfig = new ThinkingConfig();
+            Object includeThoughts = tcMap.get("includeThoughts");
+            if (includeThoughts instanceof Boolean) {
+                thinkingConfig.setIncludeThoughts((Boolean) includeThoughts);
+            }
+            Object budget = tcMap.get("thinkingBudget");
+            if (budget instanceof Number) {
+                thinkingConfig.setThinkingBudget(((Number) budget).intValue());
+            }
+            Object level = tcMap.get("thinkingLevel");
+            if (level != null) {
+                try {
+                    thinkingConfig.setThinkingLevel(ThinkingConfig.ThinkingLevel.valueOf(String.valueOf(level).toUpperCase()));
+                } catch (Exception ignored) {
+                }
+            }
+            config.setThinkingConfig(thinkingConfig);
+        }
+
         return config;
+    }
+
+    /**
+     * 将统一 reasoning_effort 映射到 generationConfig.thinkingConfig。
+     * <p>若用户已显式配置 thinkingConfig，则不覆盖。</p>
+     * <p>仅设置 thinkingBudget（兼容 2.5 系）；不与 thinkingLevel 双写，
+     * 避免部分模型拒识。Gemini 3.x 的 level 语义由 interactions 路径处理。</p>
+     *
+     * @since 4.0.4
+     */
+    @SuppressWarnings("unchecked")
+    private void applyReasoningEffortToGenerationConfig(ONode root, Object value, ChatOptions options) {
+        if (value == null) {
+            return;
+        }
+        
+        // 已有 generationConfig.thinkingConfig 时不覆盖
+        Object genCfg = options.options().get("generationConfig");
+        if (genCfg instanceof Map) {
+            Object existing = ((Map<?, ?>) genCfg).get("thinkingConfig");
+            if (existing != null) {
+                return;
+            }
+        }
+        if (root.hasKey("generationConfig")) {
+            ONode genNode = root.get("generationConfig");
+            if (genNode != null && genNode.hasKey("thinkingConfig")) {
+                return;
+            }
+        }
+        
+        String effort = String.valueOf(value).trim().toLowerCase();
+        int budget;
+        switch (effort) {
+            case "low":
+                budget = 1024;
+                break;
+            case "medium":
+                budget = 4096;
+                break;
+            case "high":
+                budget = 8192;
+                break;
+            case "max":
+                budget = 16384;
+                break;
+            default:
+                return;
+        }
+            
+        // 仅 budget：兼容 Gemini 2.5 thinkingBudget；避免与 thinkingLevel 双写冲突
+        ThinkingConfig thinkingConfig = new ThinkingConfig()
+                .setIncludeThoughts(true)
+                .setThinkingBudget(budget);
+                
+        ONode genNode = root.getOrNew("generationConfig");
+        genNode.set("thinkingConfig", ONode.ofBean(thinkingConfig));
     }
 }

@@ -110,7 +110,8 @@ public class GeminiInteractionsRequestBuilder {
             String key = kv.getKey();
             if ("stream".equals(key)
                     || "generationConfig".equals(key)
-                    || "response_format".equals(key)) {
+                    || "response_format".equals(key)
+                    || "reasoning_effort".equals(key)) {
                 continue;
             }
             if (!root.hasKey(key)) {
@@ -376,6 +377,22 @@ public class GeminiInteractionsRequestBuilder {
                         }
                     }
                 }
+            }
+        }
+
+        // 统一 reasoning_effort → thinking_level（无 thinkingConfig 时生效）
+        Object effortObj = opts.get("reasoning_effort");
+        if (effortObj != null && !config.hasKey("thinking_level")) {
+            String effort = String.valueOf(effortObj).trim().toLowerCase();
+            if ("low".equals(effort)) {
+                config.set("thinking_level", "low");
+            } else if ("medium".equals(effort)) {
+                config.set("thinking_level", "medium");
+            } else if ("high".equals(effort) || "max".equals(effort)) {
+                config.set("thinking_level", "high");
+            }
+            if (config.hasKey("thinking_level") && !config.hasKey("thinking_summaries")) {
+                config.set("thinking_summaries", true);
             }
         }
 
