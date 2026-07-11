@@ -221,7 +221,7 @@ public class TaskTalent extends AbsTalent {
                         .stream()
                         .takeUntil(r -> sink.isCancelled())
                         .doOnNext(chunk -> {
-                            sink.next(new TaskWrapChuck(taskId, task, isMultitask, chunk));
+                            sink.next(new TaskWrapChuck(__parentTrace, taskId, task, isMultitask, chunk));
 
                             /**
                              // 选择性转发：ContextSizeChunk/ActionChunk/ObservationChunk 始终转发
