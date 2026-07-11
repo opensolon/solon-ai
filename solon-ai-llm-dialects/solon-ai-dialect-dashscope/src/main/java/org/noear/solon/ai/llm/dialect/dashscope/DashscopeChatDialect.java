@@ -99,17 +99,39 @@ public class DashscopeChatDialect extends AbstractChatDialect {
             n.set("stream", isStream);
 
             n.getOrNew("parameters").then(n1 -> {
+                Object thinkingSwitch = null;
+                boolean hasReasoningEffort = false;
+                    
                 for (Map.Entry<String, Object> kv : options.options().entrySet()) {
                     String key = kv.getKey();
                     Object value = kv.getValue();
                     // 统一 thinking 开关 → DashScope 原生 parameters.enable_thinking
                     if ("thinking".equals(key) && value instanceof Boolean) {
+                        thinkingSwitch = value;
                         n1.set("enable_thinking", value);
+                        continue;
+                    }
+                    // 统一 reasoning_effort 不透传为 parameters 字段；仅作“开启思考”信号
+                    if ("reasoning_effort".equals(key)) {
+                        if (value != null) {
+                            String e = String.valueOf(value).trim().toLowerCase();
+                            if (!e.isEmpty() && !"auto".equals(e) && !"none".equals(e)) {
+                                hasReasoningEffort = true;
+                            }
+                        }
                         continue;
                     }
                     n1.set(key, ONode.ofBean(value));
                 }
-
+            
+                // 对齐 OpenCode：仅设 reasoning_effort 时隐式开启 enable_thinking；
+                // thinking(false) 优先；已写出 enable_thinking 不覆盖
+                if (hasReasoningEffort
+                        && !Boolean.FALSE.equals(thinkingSwitch)
+                        && !n1.hasKey("enable_thinking")) {
+                    n1.set("enable_thinking", true);
+                }
+            
                 n1.set("result_format", "message");
                 //buildReqToolsNodeDo(n1, config.getDefaultTools());
                 buildReqToolsNodeDo(n1, options.tools());

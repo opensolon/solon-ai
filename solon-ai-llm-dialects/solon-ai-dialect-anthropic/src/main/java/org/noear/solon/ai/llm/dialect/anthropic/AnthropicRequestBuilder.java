@@ -268,7 +268,7 @@ public class AnthropicRequestBuilder {
      * 统一 thinking 开关 + reasoning_effort 映射。
      * <p>优先级：供应商原生 Map/Number thinking &gt; Boolean thinking(false) 关闭
      * &gt; reasoning_effort 开启并设档 &gt; Boolean thinking(true) 默认开启。</p>
-     * <p>Claude 4.6/4.7：{@code thinking.type=adaptive} + 顶层 {@code effort}；
+     * <p>Claude adaptive（4.6 / 4.7+ / sonnet-5+）：{@code thinking.type=adaptive} + 顶层 {@code effort}；
      * 经典模型：{@code type=enabled} + {@code budget_tokens}。</p>
      *
      * @since 4.0.4
@@ -294,8 +294,8 @@ public class AnthropicRequestBuilder {
 
         if (Boolean.TRUE.equals(thinkingSwitch)) {
             if (isAnthropicAdaptiveModel(config)) {
-                // 4.6/4.7 默认 medium effort
-                buildAdaptiveThinking(root, "medium");
+                // adaptive 默认 medium effort
+                buildAdaptiveThinking(root, "medium", config);
             } else {
                 buildThinkingNode(root, Boolean.TRUE);
                 // 默认预算同样钳制到 max_tokens
@@ -306,7 +306,7 @@ public class AnthropicRequestBuilder {
 
     /**
      * 将统一 reasoning_effort 映射为 Claude thinking。
-     * <p>4.6/4.7 → adaptive + 顶层 effort；经典 → enabled + budget_tokens。</p>
+     * <p>adaptive 模型 → adaptive + 顶层 effort；经典 → enabled + budget_tokens。</p>
      * <p>Anthropic 经典路径要求 budget_tokens 严格小于 max_tokens。
      * 当档位预算不小于 max_tokens 时，压到 {@code max_tokens - 1}（至少为 1）；
      * 若 max_tokens &lt;= 1，无法满足约束则跳过 thinking。
@@ -325,7 +325,7 @@ public class AnthropicRequestBuilder {
             if (adaptiveEffort == null) {
                 return;
             }
-            buildAdaptiveThinking(root, adaptiveEffort);
+            buildAdaptiveThinking(root, adaptiveEffort, config);
             return;
         }
 
@@ -365,20 +365,27 @@ public class AnthropicRequestBuilder {
     }
 
     /**
-     * Claude 4.6/4.7 adaptive thinking：type=adaptive + 顶层 effort（无 budget_tokens）。
+     * Claude adaptive thinking：type=adaptive + 顶层 effort（无 budget_tokens）。
+     * <p>opus-4.7+ / sonnet-5+ 等默认 display=omitted，需强制 summarized 才能拿到思考摘要
+     * （对齐 OpenCode anthropicOmitsThinking）。</p>
      *
      * @since 4.0.4
      */
-    private void buildAdaptiveThinking(ONode root, String effort) {
+    private void buildAdaptiveThinking(ONode root, String effort, ChatConfig config) {
         ONode thinkingNode = root.getOrNew("thinking");
         thinkingNode.set("type", "adaptive");
-        // opus-4.7 常用 summarized 展示；其它 4.6 不强制
+        if (isAnthropicOmitsThinkingModel(config)) {
+            // 新模型默认 display=omitted 会返回空 thinking 块
+            thinkingNode.set("display", "summarized");
+        }
         // 顶层 effort 为 Anthropic adaptive 协议字段
         root.set("effort", effort);
     }
 
     /**
-     * 是否 Claude 4.6 / 4.7 adaptive 模型族（按 model 名启发，对齐 OpenCode）。
+     * 是否 Anthropic adaptive 模型族（按 model 名启发，对齐 OpenCode）。
+     * <p>覆盖：opus/sonnet 4.6；opus-4.7+；sonnet-5+；fable-5；
+     * 以及 SAP 等倒置命名 {@code claude-4.7-opus} / {@code claude-5-sonnet}。</p>
      *
      * @since 4.0.4
      */
@@ -387,18 +394,101 @@ public class AnthropicRequestBuilder {
             return false;
         }
         String model = config.getModel().toLowerCase();
-        return model.contains("opus-4-7") || model.contains("opus-4.7")
-                || model.contains("opus-4-6") || model.contains("opus-4.6")
-                || model.contains("sonnet-4-6") || model.contains("sonnet-4.6")
-                // 常见连字符/点号变体：claude-sonnet-4-6 / claude-4-sonnet-...
-                || model.contains("4-7") && model.contains("opus")
-                || model.contains("4.7") && model.contains("opus")
-                || model.contains("4-6") && (model.contains("opus") || model.contains("sonnet"))
-                || model.contains("4.6") && (model.contains("opus") || model.contains("sonnet"));
+        if (model.contains("fable-5")) {
+            return true;
+        }
+        if (isAnthropicOpus47OrLater(model) || isAnthropicSonnet5OrLater(model)) {
+            return true;
+        }
+        // 4.6 系列（含倒置 4.6-opus / 4.6-sonnet）
+        return containsAny(model,
+                "opus-4-6", "opus-4.6", "4-6-opus", "4.6-opus",
+                "sonnet-4-6", "sonnet-4.6", "4-6-sonnet", "4.6-sonnet");
     }
 
     /**
-     * adaptive 档位：4.6 为 low/medium/high/max；4.7 额外支持 xhigh。
+     * 新 adaptive 模型默认 display=omitted，需写 summarized（对齐 OpenCode）。
+     *
+     * @since 4.0.4
+     */
+    private boolean isAnthropicOmitsThinkingModel(ChatConfig config) {
+        if (config == null || config.getModel() == null) {
+            return false;
+        }
+        String model = config.getModel().toLowerCase();
+        return model.contains("fable-5")
+                || isAnthropicOpus47OrLater(model)
+                || isAnthropicSonnet5OrLater(model);
+    }
+
+    /**
+     * opus-4.7+ 或 claude-4.7-opus 倒置命名（对齐 OpenCode anthropicOpus47OrLater）。
+     *
+     * @since 4.0.4
+     */
+    private boolean isAnthropicOpus47OrLater(String model) {
+        if (model == null || model.isEmpty()) {
+            return false;
+        }
+        // opus-4.7 / opus-4-7 / opus-4.8 ...
+        java.util.regex.Matcher m1 = java.util.regex.Pattern
+                .compile("opus-(\\d+)[.-](\\d+)(?:[.@-]|$)", java.util.regex.Pattern.CASE_INSENSITIVE)
+                .matcher(model);
+        if (m1.find()) {
+            int major = Integer.parseInt(m1.group(1));
+            int minor = Integer.parseInt(m1.group(2));
+            return major > 4 || (major == 4 && minor >= 7);
+        }
+        // claude-4.7-opus / claude-4-7-opus（SAP 等倒置）
+        java.util.regex.Matcher m2 = java.util.regex.Pattern
+                .compile("claude-(\\d+)[.-](\\d+)-opus(?:[.@-]|$)", java.util.regex.Pattern.CASE_INSENSITIVE)
+                .matcher(model);
+        if (m2.find()) {
+            int major = Integer.parseInt(m2.group(1));
+            int minor = Integer.parseInt(m2.group(2));
+            return major > 4 || (major == 4 && minor >= 7);
+        }
+        return false;
+    }
+
+    /**
+     * sonnet-5+ 或 claude-5-sonnet 倒置命名（对齐 OpenCode anthropicSonnet5OrLater）。
+     *
+     * @since 4.0.4
+     */
+    private boolean isAnthropicSonnet5OrLater(String model) {
+        if (model == null || model.isEmpty()) {
+            return false;
+        }
+        java.util.regex.Matcher m1 = java.util.regex.Pattern
+                .compile("sonnet-(\\d+)(?:[.@-]|$)", java.util.regex.Pattern.CASE_INSENSITIVE)
+                .matcher(model);
+        if (m1.find()) {
+            return Integer.parseInt(m1.group(1)) >= 5;
+        }
+        java.util.regex.Matcher m2 = java.util.regex.Pattern
+                .compile("claude-(\\d+)-sonnet(?:[.@-]|$)", java.util.regex.Pattern.CASE_INSENSITIVE)
+                .matcher(model);
+        if (m2.find()) {
+            return Integer.parseInt(m2.group(1)) >= 5;
+        }
+        return false;
+    }
+
+    private static boolean containsAny(String text, String... tokens) {
+        if (text == null || text.isEmpty() || tokens == null) {
+            return false;
+        }
+        for (String token : tokens) {
+            if (token != null && !token.isEmpty() && text.contains(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * adaptive 档位：4.6 为 low/medium/high/max；4.7+/sonnet-5+ 额外支持 xhigh。
      * 统一 API 的 max 保持 max；非法值返回 null。
      *
      * @since 4.0.4
@@ -408,14 +498,16 @@ public class AnthropicRequestBuilder {
             return null;
         }
         String model = config == null || config.getModel() == null ? "" : config.getModel().toLowerCase();
-        boolean is47 = model.contains("4-7") || model.contains("4.7");
+        // 4.7+ / sonnet-5+ / fable-5 支持 xhigh
+        boolean supportsXhigh = isAnthropicOmitsThinkingModel(config)
+                || model.contains("4-7") || model.contains("4.7");
 
         if ("low".equals(effort) || "medium".equals(effort) || "high".equals(effort) || "max".equals(effort)) {
             return effort;
         }
         if ("xhigh".equals(effort) || "min".equals(effort) || "minimal".equals(effort)) {
             if ("xhigh".equals(effort)) {
-                return is47 ? "xhigh" : "max";
+                return supportsXhigh ? "xhigh" : "max";
             }
             // min/minimal → low
             return "low";

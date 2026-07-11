@@ -282,8 +282,9 @@ public abstract class AbstractChatDialect implements ChatDialect {
             
                 // 统一推理水平 → 顶层 reasoning_effort（Chat Completions / 兼容协议）
                 // 仅归一化本字段后写出；非法值不落库，避免污染请求
-                // 国产模型族（qwen/deepseek/kimi/glm/minimax）默认不写顶层 effort（对齐 OpenCode variants 空）
+                // 国产模型族（qwen/kimi/glm/minimax）默认不写顶层 effort（对齐 OpenCode variants 空）
                 // OpenRouter：嵌套 reasoning.effort
+                // 注意：effort 字段本身不在此开启 thinking；循环结束后按 OpenCode 语义隐式开启
                 if ("reasoning_effort".equals(key)) {
                     if (shouldSkipChatCompletionsReasoningEffort(config)) {
                         continue;
@@ -298,7 +299,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                     }
                     continue;
                 }
-            
+                
                 // 统一思考开关：按 model（辅以 provider/apiUrl）单写对应字段，避免双写触发严格网关 400
                 // 非 Boolean（Map 等）仍按原 key 透传，供供应商原生配置与逃生舱使用
                 if ("thinking".equals(key)) {
@@ -309,10 +310,14 @@ public abstract class AbstractChatDialect implements ChatDialect {
                     }
                     continue;
                 }
-                        
+                
                 n.set(key, ONode.ofBean(value));
             }
-
+            
+            // 对齐 OpenCode variants：选了 effort 档位时，对需要显式开关的模型隐式开启 thinking
+            // thinking(false) / 显式 Map thinking 优先，不覆盖
+            maybeEnableThinkingFromReasoningEffort(n, config, options);
+            
             ChatMessage lastMessage = messages.get(messages.size() - 1);
             buildReqToolsNode(n, config, options, lastMessage);
         });
@@ -676,9 +681,112 @@ public abstract class AbstractChatDialect implements ChatDialect {
     }
 
     /**
+     * 对齐 OpenCode：用户设置 {@code reasoning_effort} 时，对需要显式思考开关的模型隐式开启 thinking。
+     * <p>优先级：{@code thinking(false)} 关闭优先；显式 Map/对象 {@code thinking} 不覆盖；
+     * 已写出 {@code enable_thinking}/{@code thinking.type} 时不重复写。</p>
+     * <p>OpenAI 系（wire=NONE）effort 本身即推理控制，无需额外开关。</p>
+     *
+     * @since 4.0.4
+     */
+    protected void maybeEnableThinkingFromReasoningEffort(ONode n, ChatConfig config, ChatOptions options) {
+        if (n == null || options == null) {
+            return;
+        }
+        Object effortObj = options.options().get("reasoning_effort");
+        if (effortObj == null) {
+            return;
+        }
+        // 无有效 effort 档位时不隐式开启（auto/空/非法已被 API 层移除或 clamp 为 null）
+        String effort = String.valueOf(effortObj).trim().toLowerCase(Locale.ROOT);
+        if (effort.isEmpty() || "auto".equals(effort) || "none".equals(effort)) {
+            return;
+        }
+     
+        Object thinkingOpt = options.options().get("thinking");
+        // 显式关闭优先
+        if (Boolean.FALSE.equals(thinkingOpt)) {
+            return;
+        }
+        // 显式 Map/对象 thinking 逃生舱：不覆盖
+        if (thinkingOpt != null && !(thinkingOpt instanceof Boolean)) {
+            return;
+        }
+        // 已有开关字段则不重复写（thinking(true) 或 Map 已写出）
+        if (n.hasKey("enable_thinking")) {
+            return;
+        }
+        if (n.hasKey("thinking")) {
+            return;
+        }
+     
+        ThinkingSwitchWire wire = resolveThinkingSwitchWire(config);
+        if (wire == ThinkingSwitchWire.NONE) {
+            // OpenAI 等：reasoning_effort 本身即控制，无需 enable 位
+            return;
+        }
+        // 仅对需要显式开关的模型族开启（qwen/deepseek/kimi/glm/minimax/中转）
+        applyChatCompletionsThinkingSwitch(n, config, true);
+    }
+     
+    /**
+     * 是否抑制 Chat Completions 顶层 reasoning_effort。
+     * <p>对齐 OpenCode：qwen / deepseek / kimi / glm / minimax 等不做 effort 变体，
+     * 仅靠 thinking 开关；显式 optionSet 其它供应商字段仍可用。</p>
+     * <p>例外：DeepSeek 官方认 high/max，仍写出；GLM-5.2 支持 high/max effort 变体，仍写出；
+     * OpenRouter 走嵌套不走本抑制。</p>
+     *
+     * @since 4.0.4
+     */
+    protected boolean shouldSkipChatCompletionsReasoningEffort(ChatConfig config) {
+        if (config == null) {
+            return false;
+        }
+        // OpenRouter 单独嵌套写出，不在此抑制
+        if (isOpenRouterEndpoint(config)) {
+            return false;
+        }
+        // DeepSeek 官方支持 reasoning_effort high/max，保留
+        if (isDeepSeekOfficialEffort(config)) {
+            return false;
+        }
+        // GLM-5.2：OpenCode variants 有 high/max（openai-compatible / openrouter），不抑制
+        if (isGlm52EffortModel(config)) {
+            return false;
+        }
+
+        String model = config.getModel() == null ? "" : config.getModel().toLowerCase(Locale.ROOT);
+        String provider = config.getProvider() == null ? "" : config.getProvider().toLowerCase(Locale.ROOT);
+        String apiUrl = config.getApiUrl() == null ? "" : config.getApiUrl().toLowerCase(Locale.ROOT);
+        String hint = model + ' ' + provider + ' ' + apiUrl;
+
+        // 与 OpenCode variants() 空表一致：这些模型族不写顶层 effort（glm-5.2 已在上方豁免）
+        return containsAny(model, "qwen", "qwq", "minimax", "glm", "zhipu", "kimi", "moonshot", "k2p",
+                "deepseek", "doubao", "seed-")
+                || containsAny(provider, "qwen", "dashscope", "minimax", "zhipu", "zai", "glm",
+                "moonshot", "kimi", "deepseek", "volc", "doubao", "ark")
+                || containsAny(hint, "dashscope", "modelscope", "aliyuncs", "aliyun", "bailian",
+                "siliconflow");
+    }
+
+    /**
+     * GLM-5.2 支持 effort 变体（对齐 OpenCode：high/max 或 OpenRouter 的 high/xhigh）。
+     *
+     * @since 4.0.4
+     */
+    protected boolean isGlm52EffortModel(ChatConfig config) {
+        if (config == null) {
+            return false;
+        }
+        String model = config.getModel() == null ? "" : config.getModel().toLowerCase(Locale.ROOT);
+        // glm-5.2 / glm-5-2 / glm-5p2
+        return containsAny(model, "glm-5.2", "glm-5-2", "glm-5p2");
+    }
+
+    /**
      * 规范化 Chat Completions 顶层 reasoning_effort。
      * <p>默认保留官方常见档位；统一语义 {@code max} → {@code xhigh}，{@code min} → {@code low}。
      * DeepSeek 官方形态仅认 {@code high}/{@code max}（{@code max} 不转 xhigh）。
+     * GLM-5.2：high/max（OpenRouter 上将 max 映为 xhigh）。
      * 无法识别时返回 null（不写出，避免污染请求）。</p>
      *
      * @since 4.0.4
@@ -703,6 +811,22 @@ public abstract class AbstractChatDialect implements ChatDialect {
             }
             if ("none".equals(effort)) {
                 return null; // 关闭请用 thinking(false)
+            }
+            return null;
+        }
+
+        // GLM-5.2：openai-compatible 用 high/max；OpenRouter 用 high/xhigh
+        if (isGlm52EffortModel(config)) {
+            if ("high".equals(effort) || "medium".equals(effort) || "low".equals(effort)
+                    || "minimal".equals(effort) || "min".equals(effort)) {
+                return "high";
+            }
+            if ("max".equals(effort) || "xhigh".equals(effort)) {
+                // OpenRouter 将 xhigh 映射到 GLM-5.2 的 max；嵌套写出时用 xhigh
+                return isOpenRouterEndpoint(config) ? "xhigh" : "max";
+            }
+            if ("none".equals(effort)) {
+                return null;
             }
             return null;
         }
@@ -762,41 +886,6 @@ public abstract class AbstractChatDialect implements ChatDialect {
         String provider = config.getProvider() == null ? "" : config.getProvider().toLowerCase(Locale.ROOT);
         String apiUrl = config.getApiUrl() == null ? "" : config.getApiUrl().toLowerCase(Locale.ROOT);
         return containsAny(provider, "openrouter") || containsAny(apiUrl, "openrouter");
-    }
-
-    /**
-     * 是否抑制 Chat Completions 顶层 reasoning_effort。
-     * <p>对齐 OpenCode：qwen / deepseek / kimi / glm / minimax 等不做 effort 变体，
-     * 仅靠 thinking 开关；显式 optionSet 其它供应商字段仍可用。</p>
-     * <p>例外：DeepSeek 官方认 high/max，仍写出；OpenRouter 走嵌套不走本抑制。</p>
-     *
-     * @since 4.0.4
-     */
-    protected boolean shouldSkipChatCompletionsReasoningEffort(ChatConfig config) {
-        if (config == null) {
-            return false;
-        }
-        // OpenRouter 单独嵌套写出，不在此抑制
-        if (isOpenRouterEndpoint(config)) {
-            return false;
-        }
-        // DeepSeek 官方支持 reasoning_effort high/max，保留
-        if (isDeepSeekOfficialEffort(config)) {
-            return false;
-        }
-
-        String model = config.getModel() == null ? "" : config.getModel().toLowerCase(Locale.ROOT);
-        String provider = config.getProvider() == null ? "" : config.getProvider().toLowerCase(Locale.ROOT);
-        String apiUrl = config.getApiUrl() == null ? "" : config.getApiUrl().toLowerCase(Locale.ROOT);
-        String hint = model + ' ' + provider + ' ' + apiUrl;
-
-        // 与 OpenCode variants() 空表一致：这些模型族不写顶层 effort
-        return containsAny(model, "qwen", "qwq", "minimax", "glm", "zhipu", "kimi", "moonshot", "k2p",
-                "deepseek", "doubao", "seed-")
-                || containsAny(provider, "qwen", "dashscope", "minimax", "zhipu", "zai", "glm",
-                "moonshot", "kimi", "deepseek", "volc", "doubao", "ark")
-                || containsAny(hint, "dashscope", "modelscope", "aliyuncs", "aliyun", "bailian",
-                "siliconflow");
     }
 
     /**

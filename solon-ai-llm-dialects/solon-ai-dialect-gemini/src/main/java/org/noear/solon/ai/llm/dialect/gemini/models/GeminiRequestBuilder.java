@@ -430,8 +430,9 @@ public class GeminiRequestBuilder {
         }
 
         if (Boolean.TRUE.equals(thinkingSwitch)) {
-            // 开启且无 effort：2.5 用 medium 预算；3.x 用 medium/high 水平
-            applyReasoningEffortToGenerationConfig(root, config, "medium", options);
+            // 开启且无 effort：2.5 用 medium 预算；3.x 默认 high（对齐 OpenCode options）
+            String defaultEffort = useBudget ? "medium" : "high";
+            applyReasoningEffortToGenerationConfig(root, config, defaultEffort, options);
         }
     }
 
@@ -461,7 +462,7 @@ public class GeminiRequestBuilder {
         tc.set("includeThoughts", true);
 
         if (useBudget) {
-            Integer budget = mapEffortToThinkingBudget(effort);
+            Integer budget = mapEffortToThinkingBudget(effort, config);
             if (budget == null) {
                 return;
             }
@@ -509,9 +510,13 @@ public class GeminiRequestBuilder {
 
     /**
      * reasoning_effort → thinkingBudget（Gemini 2.5）。
-     * 档位略向 OpenCode 靠拢：high=16k、max=24576。
+     * <p>对齐 OpenCode：high=16k；max 对 2.5 pro=32768，其余 2.5（含 flash）=24576。</p>
      */
-    private Integer mapEffortToThinkingBudget(String effort) {
+    private Integer mapEffortToThinkingBudget(String effort, ChatConfig config) {
+        String model = config == null || config.getModel() == null ? "" : config.getModel().toLowerCase();
+        // 2.5 pro（非 flash）max 预算更高
+        boolean is25Pro = (model.contains("2.5") || model.contains("2-5"))
+                && model.contains("pro") && !model.contains("flash");
         switch (effort) {
             case "low":
                 return 1024;
@@ -520,7 +525,7 @@ public class GeminiRequestBuilder {
             case "high":
                 return 16000;
             case "max":
-                return 24576;
+                return is25Pro ? 32768 : 24576;
             default:
                 return null;
         }
@@ -528,15 +533,25 @@ public class GeminiRequestBuilder {
 
     /**
      * reasoning_effort → thinkingLevel 字符串（Gemini 3.x）。
-     * 3.1 支持 medium；其它 3.x 的 medium 落到 high（仅 low/high 时）。
+     * <p>对齐 OpenCode googleThinkingLevelEfforts：
+     * flash → minimal/low/medium/high；pro → low/medium/high；
+     * 统一 API 的 max → high；非 flash 的 minimal → low。</p>
      */
     private String mapEffortToThinkingLevelName(String effort, ChatConfig config) {
         String model = config == null || config.getModel() == null ? "" : config.getModel().toLowerCase();
-        boolean supportsMedium = model.contains("3.1") || model.contains("3-1");
+        boolean isFlash = model.contains("flash");
+        // Gemini 3 族（含 3.1）普遍支持 medium；非 3 的 google 模型仅 low/high
+        boolean isGemini3 = model.contains("gemini-3") || model.contains("gemini3")
+                || model.contains("3.1") || model.contains("3-1")
+                || (model.contains("gemini") && model.contains("3"));
+        boolean supportsMedium = isGemini3 || model.contains("3.1") || model.contains("3-1");
+        boolean supportsMinimal = isFlash; // flash 支持 minimal 关闭/极低
+
         switch (effort) {
-            case "low":
             case "minimal":
             case "min":
+                return supportsMinimal ? "minimal" : "low";
+            case "low":
                 return "low";
             case "medium":
                 return supportsMedium ? "medium" : "high";

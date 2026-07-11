@@ -167,14 +167,32 @@ public class ReasoningEffortMappingTest {
         Assertions.assertTrue(tcHigh.get("includeThoughts").getBoolean());
         Assertions.assertFalse(tcHigh.hasKey("thinkingBudget"));
 
-        // 3.x 非 3.1：medium 落到 high
+        // Gemini 3 pro 支持 medium（对齐 OpenCode）
         ChatOptions med = ChatOptions.of().reasoning_effort("medium");
         ONode rootMed = builder.build(config("gemini-3-pro"), med, userMsg(), false);
-        Assertions.assertEquals("high", rootMed.get("generationConfig").get("thinkingConfig").get("thinkingLevel").getString());
+        Assertions.assertEquals("medium", rootMed.get("generationConfig").get("thinkingConfig").get("thinkingLevel").getString());
 
-        // 3.1 支持 medium
+        // 3.1 同样支持 medium
         ONode root31 = builder.build(config("gemini-3.1-pro"), med, userMsg(), false);
         Assertions.assertEquals("medium", root31.get("generationConfig").get("thinkingConfig").get("thinkingLevel").getString());
+
+        // flash 支持 minimal
+        ChatOptions low = ChatOptions.of().reasoning_effort("low");
+        ONode rootFlash = builder.build(config("gemini-3-flash"), low, userMsg(), false);
+        Assertions.assertEquals("low", rootFlash.get("generationConfig").get("thinkingConfig").get("thinkingLevel").getString());
+    }
+
+    @Test
+    @DisplayName("Gemini models 2.5 pro: max budget=32768；flash max=24576")
+    public void testGeminiModels25ProMaxBudget() {
+        GeminiRequestBuilder builder = new GeminiRequestBuilder();
+        ChatOptions max = ChatOptions.of().reasoning_effort("max");
+
+        ONode pro = builder.build(config("gemini-2.5-pro"), max, userMsg(), false);
+        Assertions.assertEquals(32768, pro.get("generationConfig").get("thinkingConfig").get("thinkingBudget").getInt());
+
+        ONode flash = builder.build(config("gemini-2.5-flash"), max, userMsg(), false);
+        Assertions.assertEquals(24576, flash.get("generationConfig").get("thinkingConfig").get("thinkingBudget").getInt());
     }
 
     @Test
@@ -391,7 +409,7 @@ public class ReasoningEffortMappingTest {
     }
 
     @Test
-    @DisplayName("Anthropic adaptive(4.6/4.7): type=adaptive + 顶层 effort；false 优先")
+    @DisplayName("Anthropic adaptive(4.6/4.7+/sonnet-5+): type=adaptive + 顶层 effort；display:summarized")
     public void testAnthropicAdaptive() {
         AnthropicRequestBuilder builder = new AnthropicRequestBuilder();
 
@@ -400,12 +418,30 @@ public class ReasoningEffortMappingTest {
         Assertions.assertEquals("adaptive", rootMed.get("thinking").get("type").getString());
         Assertions.assertEquals("medium", rootMed.get("effort").getString());
         Assertions.assertFalse(rootMed.get("thinking").hasKey("budget_tokens"));
+        // 4.6 不强制 display
+        Assertions.assertFalse(rootMed.get("thinking").hasKey("display"));
         Assertions.assertFalse(rootMed.hasKey("reasoning_effort"));
 
         ChatOptions max47 = ChatOptions.of().reasoning_effort("max");
         ONode root47 = builder.build(config("claude-opus-4-7"), max47, userMsg(), false);
         Assertions.assertEquals("adaptive", root47.get("thinking").get("type").getString());
         Assertions.assertEquals("max", root47.get("effort").getString());
+        // 4.7+ 强制 display=summarized
+        Assertions.assertEquals("summarized", root47.get("thinking").get("display").getString());
+
+        // sonnet-5+ / 倒置命名
+        ONode rootSonnet5 = builder.build(config("claude-sonnet-5"), max47, userMsg(), false);
+        Assertions.assertEquals("adaptive", rootSonnet5.get("thinking").get("type").getString());
+        Assertions.assertEquals("summarized", rootSonnet5.get("thinking").get("display").getString());
+
+        ONode rootInverted = builder.build(config("claude-4.7-opus"), max47, userMsg(), false);
+        Assertions.assertEquals("adaptive", rootInverted.get("thinking").get("type").getString());
+        Assertions.assertEquals("summarized", rootInverted.get("thinking").get("display").getString());
+
+        // opus-4.8+
+        ONode root48 = builder.build(config("claude-opus-4-8"), max47, userMsg(), false);
+        Assertions.assertEquals("adaptive", root48.get("thinking").get("type").getString());
+        Assertions.assertEquals("summarized", root48.get("thinking").get("display").getString());
 
         ChatOptions on = ChatOptions.of().thinking(true);
         ONode rootOn = builder.build(config("claude-sonnet-4.6"), on, userMsg(), false);
@@ -416,6 +452,33 @@ public class ReasoningEffortMappingTest {
         ONode rootOff = builder.build(config("claude-sonnet-4-6"), off, userMsg(), false);
         Assertions.assertEquals("disabled", rootOff.get("thinking").get("type").getString());
         Assertions.assertFalse(rootOff.hasKey("effort"));
+    }
+
+    @Test
+    @DisplayName("Chat Completions: GLM-5.2 豁免 effort 抑制，写出 high/max")
+    public void testChatCompletionsGlm52Effort() {
+        AbstractChatDialect dialect = OpenaiChatDialect.getInstance();
+
+        ChatOptions high = ChatOptions.of().reasoning_effort("high");
+        ONode rootHigh = dialect.buildRequestJson(config("glm-5.2"), high, userMsg(), false);
+        Assertions.assertEquals("high", rootHigh.get("reasoning_effort").getString());
+        Assertions.assertEquals("enabled", rootHigh.get("thinking").get("type").getString());
+
+        ChatOptions max = ChatOptions.of().reasoning_effort("max");
+        ONode rootMax = dialect.buildRequestJson(config("glm-5-2"), max, userMsg(), false);
+        Assertions.assertEquals("max", rootMax.get("reasoning_effort").getString());
+
+        // 其它 glm 仍抑制
+        ONode glm45 = dialect.buildRequestJson(config("glm-4.5"), high, userMsg(), false);
+        Assertions.assertFalse(glm45.hasKey("reasoning_effort"));
+        Assertions.assertEquals("enabled", glm45.get("thinking").get("type").getString());
+
+        // OpenRouter + glm-5.2：max → xhigh 嵌套
+        ChatConfig or = config("glm-5.2");
+        or.setApiUrl("https://openrouter.ai/api/v1/chat/completions");
+        ONode rootOr = dialect.buildRequestJson(or, max, userMsg(), false);
+        Assertions.assertEquals("xhigh", rootOr.get("reasoning").get("effort").getString());
+        Assertions.assertFalse(rootOr.hasKey("reasoning_effort"));
     }
 
     @Test
@@ -450,6 +513,68 @@ public class ReasoningEffortMappingTest {
         Assertions.assertEquals("high", ds.get("reasoning_effort").getString());
     }
 
+    @Test
+    @DisplayName("Chat Completions: 仅 reasoning_effort 时隐式开启 thinking（对齐 OpenCode）")
+    public void testChatCompletionsEffortImpliesThinkingOn() {
+        AbstractChatDialect dialect = OpenaiChatDialect.getInstance();
+    
+        // qwen：effort 被抑制，但隐式 enable_thinking=true
+        ChatOptions qwenOpt = ChatOptions.of().reasoning_effort("high");
+        ONode qwen = dialect.buildRequestJson(config("qwen-plus"), qwenOpt, userMsg(), false);
+        Assertions.assertFalse(qwen.hasKey("reasoning_effort"));
+        Assertions.assertTrue(qwen.get("enable_thinking").getBoolean());
+        Assertions.assertFalse(qwen.hasKey("thinking"));
+    
+        // deepseek：effort + thinking.type=enabled
+        ChatOptions dsOpt = ChatOptions.of().reasoning_effort("max");
+        ONode ds = dialect.buildRequestJson(config("deepseek-chat"), dsOpt, userMsg(), false);
+        Assertions.assertEquals("max", ds.get("reasoning_effort").getString());
+        Assertions.assertEquals("enabled", ds.get("thinking").get("type").getString());
+        Assertions.assertFalse(ds.hasKey("enable_thinking"));
+    
+        // 智谱：thinking.type + clear_thinking
+        ONode glm = dialect.buildRequestJson(config("glm-4.5"), qwenOpt, userMsg(), false);
+        Assertions.assertEquals("enabled", glm.get("thinking").get("type").getString());
+        Assertions.assertFalse(glm.get("thinking").get("clear_thinking").getBoolean());
+    
+        // MiniMax：adaptive
+        ONode mm = dialect.buildRequestJson(config("minimax-m1"), qwenOpt, userMsg(), false);
+        Assertions.assertEquals("adaptive", mm.get("thinking").get("type").getString());
+    
+        // OpenAI 官方：仅 effort，无 enable 位
+        ChatOptions oaiOpt = ChatOptions.of().reasoning_effort("high");
+        ONode oai = dialect.buildRequestJson(config("o3"), oaiOpt, userMsg(), false);
+        Assertions.assertEquals("high", oai.get("reasoning_effort").getString());
+        Assertions.assertFalse(oai.hasKey("enable_thinking"));
+        Assertions.assertFalse(oai.hasKey("thinking"));
+    }
+    
+    @Test
+    @DisplayName("Chat Completions: thinking(false) 优先于 reasoning_effort 隐式开启")
+    public void testChatCompletionsThinkingFalseBeatsEffortEnable() {
+        AbstractChatDialect dialect = OpenaiChatDialect.getInstance();
+    
+        ChatOptions off = ChatOptions.of().thinking(false).reasoning_effort("high");
+        ONode qwen = dialect.buildRequestJson(config("qwen-plus"), off, userMsg(), false);
+        Assertions.assertFalse(qwen.get("enable_thinking").getBoolean());
+    
+        ONode ds = dialect.buildRequestJson(config("deepseek-chat"), off, userMsg(), false);
+        Assertions.assertEquals("disabled", ds.get("thinking").get("type").getString());
+        Assertions.assertEquals("high", ds.get("reasoning_effort").getString());
+    }
+    
+    @Test
+    @DisplayName("Chat Completions: 显式 Map thinking 不被 effort 隐式开启覆盖")
+    public void testChatCompletionsMapThinkingBeatsEffortEnable() {
+        AbstractChatDialect dialect = OpenaiChatDialect.getInstance();
+        ChatOptions o = ChatOptions.of()
+                .reasoning_effort("high")
+                .optionSet("thinking", Utils.asMap("type", "disabled"));
+        ONode root = dialect.buildRequestJson(config("deepseek-chat"), o, userMsg(), false);
+        Assertions.assertEquals("disabled", root.get("thinking").get("type").getString());
+        Assertions.assertEquals("high", root.get("reasoning_effort").getString());
+    }
+    
     @Test
     @DisplayName("Gemini interactions: thinking 开关")
     public void testGeminiInteractionsThinkingSwitch() {

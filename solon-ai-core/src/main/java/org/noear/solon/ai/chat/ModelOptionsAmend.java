@@ -455,13 +455,21 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      * <p>取值：{@code low} / {@code medium} / {@code high} / {@code max}；
      * 传空串、{@code auto} 或 {@code null} 时移除该选项。非法值忽略。</p>
      * <p>方言映射（首批）：anthropic 经典 → thinking.budget_tokens；
-     * anthropic 4.6/4.7 → thinking.type=adaptive + 顶层 effort；
+     * anthropic 4.6/4.7+/sonnet-5+ → thinking.type=adaptive + 顶层 effort
+     * （4.7+/sonnet-5+ 带 display=summarized）；
      * openai Responses → reasoning.effort；openai Chat Completions → reasoning_effort
-     * （OpenRouter → reasoning.effort；qwen/kimi/glm/minimax 等默认不写顶层 effort）；
+     * （OpenRouter → reasoning.effort；qwen/kimi/glm/minimax 等默认不写顶层 effort；
+     * GLM-5.2 例外写出 high/max）；
      * DeepSeek 官方 → high/max；
-     * gemini models 2.5 → thinkingBudget，3.x → thinkingLevel；gemini interactions → thinking_level。</p>
-     * <p>与 {@link #thinking(Boolean)} 配合：{@code thinking(false)} 关闭优先；
-     * 开启后可用本选项调节思考深度。</p>
+     * gemini models 2.5 → thinkingBudget（pro max=32768），3.x → thinkingLevel；gemini interactions → thinking_level。</p>
+     * <p>与 {@link #thinking(Boolean)} 配合：
+     * <ul>
+     *   <li>{@code thinking(false)} 关闭优先，压过本选项</li>
+     *   <li>仅设本选项时：对需要显式开关的模型（Anthropic / Gemini / Qwen / DeepSeek / Kimi / 智谱 / MiniMax 等）
+     *   <b>隐式开启 thinking</b>（对齐 OpenCode variants：选 effort 档位即带上 enabled/adaptive 等）；
+     *   OpenAI 系仅写 effort，无独立 enable 位</li>
+     *   <li>也可与 {@code thinking(true)} 并用：开关 + 深度</li>
+     * </ul></p>
      *
      * @since 4.0.4
      */
@@ -499,7 +507,8 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      *   <li>MiniMax → {@code thinking.type=adaptive|disabled}</li>
      *   <li>OpenAI 官方 / 未知模型 → 不写出布尔开关（用 optionSet 逃生舱）</li>
      * </ul>
-     * anthropic → {@code thinking.type}（enabled/disabled；4.6/4.7 为 adaptive + effort）；
+     * anthropic → {@code thinking.type}（enabled/disabled；4.6/4.7+/sonnet-5+ 为 adaptive + effort，
+     * 其中 4.7+/sonnet-5+ 带 display=summarized）；
      * openai Responses：{@code false} → {@code reasoning.effort=none}（{@code true} 不强制改 effort）；
      * gemini models → {@code generationConfig.thinkingConfig}
      * （2.5：budget=0 关闭；3.x：thinkingLevel=minimal 关闭）；
@@ -507,7 +516,8 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      * DashScope 原生协议 → {@code parameters.enable_thinking}。</p>
      * <p>供应商原生结构化配置仍可用 {@code optionSet("thinking", map)} 或
      * {@code generationConfig.thinkingConfig} / {@code reasoning}；显式供应商字段优先于本开关。</p>
-     * <p>与 {@link #reasoning_effort(String)} 配合：关闭优先；开启后可用 reasoning_effort 调节深度。</p>
+     * <p>与 {@link #reasoning_effort(String)} 配合：关闭优先；仅设 reasoning_effort 时多数方言会隐式开启思考
+     * （见 reasoning_effort 文档）；也可显式 thinking(true) 后再用 effort 调深度。</p>
      *
      * @since 4.0.4
      */
