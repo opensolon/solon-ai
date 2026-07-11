@@ -114,36 +114,44 @@ public class AnthropicRequestBuilder {
         }
 
         // 添加其他选项
+        Object thinkingSwitch = null;
         for (Map.Entry<String, Object> kv : options.options().entrySet()) {
             String key = kv.getKey();
             // 跳过Claude特有的字段，或已处理的字段
             if ("stream".equals(key) || "max_tokens".equals(key)) {
                 continue;
             }
-
-            // 统一推理水平 → thinking.budget_tokens（若尚未显式配置 thinking）
-            if ("reasoning_effort".equals(key)) {
-                if (!options.options().containsKey("thinking")) {
-                    buildThinkingFromEffort(root, kv.getValue(), options);
-                }
+            
+            // 统一思考开关（Boolean）延后与 reasoning_effort 一起处理
+            if ("thinking".equals(key) && kv.getValue() instanceof Boolean) {
+                thinkingSwitch = kv.getValue();
                 continue;
             }
-
-            // 处理思考模式配置
+            
+            // 统一推理水平 → thinking.budget_tokens（若尚未显式配置 thinking）
+            if ("reasoning_effort".equals(key)) {
+                // 与 Boolean thinking 一起在循环后处理，避免顺序依赖
+                continue;
+            }
+            
+            // 处理思考模式配置（Map / Number 等供应商原生形态）
             if ("thinking".equals(key)) {
                 buildThinkingNode(root, kv.getValue());
                 continue;
             }
-
+            
             // 处理tool_choice（需要从OpenAI格式转换为Anthropic格式）
             if ("tool_choice".equals(key)) {
                 buildToolChoiceNode(root, kv.getValue());
                 continue;
             }
-
+        
             root.set(key, ONode.ofBean(kv.getValue()));
         }
-
+        
+        // 统一 thinking 开关 + reasoning_effort（显式 Map/Number thinking 优先）
+        applyUnifiedThinkingOptions(root, config, options, thinkingSwitch);
+        
         // 如果用户未显式设置 tool_choice 但有 tools，默认使用 auto 语义（由API自行决定）
         if (!options.options().containsKey("tool_choice") && !Utils.isEmpty(options.tools())) {
             // Anthropic 默认行为等同于 auto，无需显式设置
@@ -242,10 +250,12 @@ public class AnthropicRequestBuilder {
                 thinkingNode.set("budget_tokens", ((Number) budgetTokens).intValue());
             }
         } else if (value instanceof Boolean) {
-            // 简化配置：thinking: true
+            // 统一开关 / 简化配置：thinking: true|false
             if (Boolean.TRUE.equals(value)) {
                 thinkingNode.set("type", "enabled");
                 thinkingNode.set("budget_tokens", 10000); // 默认预算必须要小于等于max_token
+            } else {
+                thinkingNode.set("type", "disabled");
             }
         } else if (value instanceof Number) {
             // 简化配置：thinking: 10000 (直接指定预算)
@@ -253,21 +263,72 @@ public class AnthropicRequestBuilder {
             thinkingNode.set("budget_tokens", ((Number) value).intValue());
         }
     }
+     
+    /**
+     * 统一 thinking 开关 + reasoning_effort 映射。
+     * <p>优先级：供应商原生 Map/Number thinking &gt; Boolean thinking(false) 关闭
+     * &gt; reasoning_effort 开启并设档 &gt; Boolean thinking(true) 默认开启。</p>
+     * <p>Claude 4.6/4.7：{@code thinking.type=adaptive} + 顶层 {@code effort}；
+     * 经典模型：{@code type=enabled} + {@code budget_tokens}。</p>
+     *
+     * @since 4.0.4
+     */
+    private void applyUnifiedThinkingOptions(ONode root, ChatConfig config, ChatOptions options, Object thinkingSwitch) {
+        // 已有显式 thinking 节点（Map/Number 路径）则不覆盖
+        if (root.hasKey("thinking")) {
+            return;
+        }
+
+        if (Boolean.FALSE.equals(thinkingSwitch)) {
+            buildThinkingNode(root, Boolean.FALSE);
+            return;
+        }
+
+        Object effortObj = options == null ? null : options.options().get("reasoning_effort");
+        if (effortObj != null) {
+            buildThinkingFromEffort(root, config, effortObj, options);
+            if (root.hasKey("thinking")) {
+                return;
+            }
+        }
+
+        if (Boolean.TRUE.equals(thinkingSwitch)) {
+            if (isAnthropicAdaptiveModel(config)) {
+                // 4.6/4.7 默认 medium effort
+                buildAdaptiveThinking(root, "medium");
+            } else {
+                buildThinkingNode(root, Boolean.TRUE);
+                // 默认预算同样钳制到 max_tokens
+                clampThinkingBudgetToMaxTokens(root, options);
+            }
+        }
+    }
 
     /**
-     * 将统一 reasoning_effort 映射为 Claude thinking.budget_tokens。
-     * <p>Anthropic 要求 budget_tokens 严格小于 max_tokens。
+     * 将统一 reasoning_effort 映射为 Claude thinking。
+     * <p>4.6/4.7 → adaptive + 顶层 effort；经典 → enabled + budget_tokens。</p>
+     * <p>Anthropic 经典路径要求 budget_tokens 严格小于 max_tokens。
      * 当档位预算不小于 max_tokens 时，压到 {@code max_tokens - 1}（至少为 1）；
      * 若 max_tokens &lt;= 1，无法满足约束则跳过 thinking。
      * 小 max_tokens 下语义从“档位预算”退化为“尽量占满输出预算”。</p>
      *
      * @since 4.0.4
      */
-    private void buildThinkingFromEffort(ONode root, Object value, ChatOptions options) {
+    private void buildThinkingFromEffort(ONode root, ChatConfig config, Object value, ChatOptions options) {
         if (value == null) {
             return;
         }
         String effort = String.valueOf(value).trim().toLowerCase();
+
+        if (isAnthropicAdaptiveModel(config)) {
+            String adaptiveEffort = clampAnthropicAdaptiveEffort(effort, config);
+            if (adaptiveEffort == null) {
+                return;
+            }
+            buildAdaptiveThinking(root, adaptiveEffort);
+            return;
+        }
+
         int budget;
         switch (effort) {
             case "low":
@@ -277,7 +338,8 @@ public class AnthropicRequestBuilder {
                 budget = 10000;
                 break;
             case "high":
-                budget = 20000;
+                // 向 OpenCode 靠拢：high≈16k
+                budget = 16000;
                 break;
             case "max":
                 // 取较大预算；若默认 max_tokens=32000 会落到 31999
@@ -287,13 +349,7 @@ public class AnthropicRequestBuilder {
                 return;
         }
 
-        int maxTokens = 32000;
-        Object maxTokensObj = options == null ? null : options.options().get("max_tokens");
-        if (maxTokensObj instanceof Number) {
-            maxTokens = ((Number) maxTokensObj).intValue();
-        } else if (root.hasKey("max_tokens")) {
-            maxTokens = root.get("max_tokens").getInt();
-        }
+        int maxTokens = resolveMaxTokens(root, options);
         // Anthropic 要求 budget_tokens < max_tokens，且预算至少为 1 才有意义
         if (maxTokens <= 1) {
             return;
@@ -306,6 +362,103 @@ public class AnthropicRequestBuilder {
         thinking.put("type", "enabled");
         thinking.put("budget_tokens", budget);
         buildThinkingNode(root, thinking);
+    }
+
+    /**
+     * Claude 4.6/4.7 adaptive thinking：type=adaptive + 顶层 effort（无 budget_tokens）。
+     *
+     * @since 4.0.4
+     */
+    private void buildAdaptiveThinking(ONode root, String effort) {
+        ONode thinkingNode = root.getOrNew("thinking");
+        thinkingNode.set("type", "adaptive");
+        // opus-4.7 常用 summarized 展示；其它 4.6 不强制
+        // 顶层 effort 为 Anthropic adaptive 协议字段
+        root.set("effort", effort);
+    }
+
+    /**
+     * 是否 Claude 4.6 / 4.7 adaptive 模型族（按 model 名启发，对齐 OpenCode）。
+     *
+     * @since 4.0.4
+     */
+    private boolean isAnthropicAdaptiveModel(ChatConfig config) {
+        if (config == null || config.getModel() == null) {
+            return false;
+        }
+        String model = config.getModel().toLowerCase();
+        return model.contains("opus-4-7") || model.contains("opus-4.7")
+                || model.contains("opus-4-6") || model.contains("opus-4.6")
+                || model.contains("sonnet-4-6") || model.contains("sonnet-4.6")
+                // 常见连字符/点号变体：claude-sonnet-4-6 / claude-4-sonnet-...
+                || model.contains("4-7") && model.contains("opus")
+                || model.contains("4.7") && model.contains("opus")
+                || model.contains("4-6") && (model.contains("opus") || model.contains("sonnet"))
+                || model.contains("4.6") && (model.contains("opus") || model.contains("sonnet"));
+    }
+
+    /**
+     * adaptive 档位：4.6 为 low/medium/high/max；4.7 额外支持 xhigh。
+     * 统一 API 的 max 保持 max；非法值返回 null。
+     *
+     * @since 4.0.4
+     */
+    private String clampAnthropicAdaptiveEffort(String effort, ChatConfig config) {
+        if (effort == null || effort.isEmpty() || "auto".equals(effort)) {
+            return null;
+        }
+        String model = config == null || config.getModel() == null ? "" : config.getModel().toLowerCase();
+        boolean is47 = model.contains("4-7") || model.contains("4.7");
+
+        if ("low".equals(effort) || "medium".equals(effort) || "high".equals(effort) || "max".equals(effort)) {
+            return effort;
+        }
+        if ("xhigh".equals(effort) || "min".equals(effort) || "minimal".equals(effort)) {
+            if ("xhigh".equals(effort)) {
+                return is47 ? "xhigh" : "max";
+            }
+            // min/minimal → low
+            return "low";
+        }
+        if ("none".equals(effort)) {
+            return null;
+        }
+        return null;
+    }
+
+    /**
+     * 将已写出的 thinking.budget_tokens 钳制到 max_tokens - 1。
+     *
+     * @since 4.0.4
+     */
+    private void clampThinkingBudgetToMaxTokens(ONode root, ChatOptions options) {
+        if (root == null || !root.hasKey("thinking")) {
+            return;
+        }
+        ONode thinkingNode = root.get("thinking");
+        if (thinkingNode == null || !thinkingNode.hasKey("budget_tokens")) {
+            return;
+        }
+        int maxTokens = resolveMaxTokens(root, options);
+        if (maxTokens <= 1) {
+            root.remove("thinking");
+            return;
+        }
+        int budget = thinkingNode.get("budget_tokens").getInt();
+        if (budget >= maxTokens) {
+            thinkingNode.set("budget_tokens", maxTokens - 1);
+        }
+    }
+
+    private int resolveMaxTokens(ONode root, ChatOptions options) {
+        int maxTokens = 32000;
+        Object maxTokensObj = options == null ? null : options.options().get("max_tokens");
+        if (maxTokensObj instanceof Number) {
+            maxTokens = ((Number) maxTokensObj).intValue();
+        } else if (root != null && root.hasKey("max_tokens")) {
+            maxTokens = root.get("max_tokens").getInt();
+        }
+        return maxTokens;
     }
 
     /**

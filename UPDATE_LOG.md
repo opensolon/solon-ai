@@ -15,10 +15,11 @@
 ### 4.0.4
 
 * 添加 solon-ai-core ModelOptionsAmend.reasoning_effort 统一选项 API
-* 优化 solon-ai-dialect-anthropic：`reasoning_effort` 映射为 `thinking.budget_tokens`（保证 budget < max_tokens）
-* 优化 solon-ai-dialect-openai Responses：`reasoning_effort` 映射为 `reasoning.effort`（max → xhigh）
-* 优化 solon-ai-core AbstractChatDialect：Chat Completions 顶层 `reasoning_effort` 归一化（max → xhigh）
-* 优化 solon-ai-dialect-gemini：`reasoning_effort` 映射为 generationConfig.thinkingConfig（仅 budget，避免与 generationConfig 覆盖顺序冲突）/ interactions thinking_level
+* 添加 solon-ai-core ModelOptionsAmend.thinking 思考模式开关统一选项 API
+* 优化 solon-ai-dialect-anthropic：`reasoning_effort` 映射为 `thinking.budget_tokens`（保证 budget < max_tokens；high≈16k）；Claude 4.6/4.7 → `thinking.type=adaptive` + 顶层 `effort`；`thinking(Boolean)` → type enabled/disabled/adaptive
+* 优化 solon-ai-dialect-openai Responses：`reasoning_effort` 映射为 `reasoning.effort`（max → xhigh）；`thinking(false)` → effort=none
+* 优化 solon-ai-core AbstractChatDialect：Chat Completions 顶层 `reasoning_effort` 归一化（max → xhigh；DeepSeek 官方 high/max）；OpenRouter → `reasoning.effort`；qwen/kimi/glm/minimax 等抑制顶层 effort；`thinking(Boolean)` 按 model（辅以 provider/apiUrl）单写 enable_thinking / thinking.type 等，避免双写
+* 优化 solon-ai-dialect-gemini：models 按 model 分流——2.5 → thinkingBudget（关=0，high=16k/max=24576），3.x → thinkingLevel（关=minimal）；interactions → thinking_level
 * 添加 solon-ai-core ChatRequestDesc.role, instruction, systemPrompt 方法
 * 添加 solon-ai-agent HITLStrategy 接口，替代 HITLInterceptor.InterventionStrategy（后者标为弃用）
 * 添加 solon-ai-agent RunStartChunk, RunEndChunk, ReasonStartChunk, ReasonEndChunk 事件块

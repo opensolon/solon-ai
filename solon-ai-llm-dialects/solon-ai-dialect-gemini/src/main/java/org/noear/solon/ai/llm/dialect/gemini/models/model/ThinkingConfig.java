@@ -113,11 +113,21 @@ public class ThinkingConfig {
         THINKING_LEVEL_UNSPECIFIED,
 
         /**
+         * 最小思考级别（Gemini 3 关闭/极低思考）
+         */
+        MINIMAL,
+
+        /**
          * 低思考级别
          * <p>
          * 较浅的推理深度。
          */
         LOW,
+
+        /**
+         * 中等思考级别（Gemini 3.1 等）
+         */
+        MEDIUM,
 
         /**
          * 高思考级别

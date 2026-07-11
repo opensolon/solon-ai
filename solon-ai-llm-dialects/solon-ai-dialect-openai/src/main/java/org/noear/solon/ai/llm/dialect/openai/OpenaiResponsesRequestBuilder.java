@@ -79,6 +79,7 @@ public class OpenaiResponsesRequestBuilder {
         }
         root.set("stream", isStream);
         // 添加其他选项
+        Object thinkingSwitch = null;
         for (Map.Entry<String, Object> kv : options.options().entrySet()) {
             String key = kv.getKey();
             // 跳过已处理的字段（response_format 不适用于 Responses API，使用 text.format 替代）
@@ -90,14 +91,14 @@ public class OpenaiResponsesRequestBuilder {
                 root.set("max_output_tokens", kv.getValue());
                 continue;
             }
+            // 统一思考开关（Boolean）延后处理
+            if ("thinking".equals(key) && kv.getValue() instanceof Boolean) {
+                thinkingSwitch = kv.getValue();
+                continue;
+            }
             // 统一推理水平 → reasoning.effort（若尚未显式配置 reasoning）
             if ("reasoning_effort".equals(key)) {
-                if (!options.options().containsKey("reasoning")) {
-                    String effort = normalizeResponsesEffort(kv.getValue(), false);
-                    if (effort != null) {
-                        root.getOrNew("reasoning").set("effort", effort);
-                    }
-                }
+                // 与 Boolean thinking 一起在循环后处理
                 continue;
             }
             // 处理思考级别配置
@@ -105,9 +106,12 @@ public class OpenaiResponsesRequestBuilder {
                 buildReasoningNode(root, kv.getValue());
                 continue;
             }
-
+            
             root.set(key, ONode.ofBean(kv.getValue()));
         }
+        
+        // 统一 thinking 开关 + reasoning_effort（显式 reasoning 优先）
+        applyUnifiedReasoningOptions(root, options, thinkingSwitch);
 
         // ⭐ 支持 previous_response_id（OpenAI Responses API 上下文缓存）
         //    通过 ChatOptions.promptCacheKey() 传入
@@ -238,6 +242,35 @@ public class OpenaiResponsesRequestBuilder {
         }
     }
 
+    /**
+     * 统一 thinking 开关 + reasoning_effort。
+     * <p>显式 {@code reasoning} 优先；{@code thinking(false)} → effort=none；
+     * {@code reasoning_effort} 映射 effort；{@code thinking(true)} 不强制改 effort
+     *（由模型默认行为开启思考）。</p>
+     *
+     * @since 4.0.4
+     */
+    private void applyUnifiedReasoningOptions(ONode root, ChatOptions options, Object thinkingSwitch) {
+        // 已有显式 reasoning 则不覆盖
+        if (root.hasKey("reasoning")) {
+            return;
+        }
+     
+        if (Boolean.FALSE.equals(thinkingSwitch)) {
+            root.getOrNew("reasoning").set("effort", "none");
+            return;
+        }
+     
+        Object effortObj = options == null ? null : options.options().get("reasoning_effort");
+        if (effortObj != null) {
+            String effort = normalizeResponsesEffort(effortObj, false);
+            if (effort != null) {
+                root.getOrNew("reasoning").set("effort", effort);
+            }
+        }
+        // thinking(true) 仅表示开启意图，不强制写入 effort
+    }
+     
     /**
      * 规范化 Responses API reasoning.effort。
      * <p>保留官方支持档位：none/minimal/low/medium/high/xhigh；

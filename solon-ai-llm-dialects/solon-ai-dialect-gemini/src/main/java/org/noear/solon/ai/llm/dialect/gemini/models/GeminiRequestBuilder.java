@@ -73,6 +73,7 @@ public class GeminiRequestBuilder {
         }
 
         Object reasoningEffort = null;
+        Object thinkingSwitch = null;
         for (Map.Entry<String, Object> kv : options.options().entrySet()) {
             if ("stream".equals(kv.getKey())) {
                 continue;
@@ -81,12 +82,16 @@ public class GeminiRequestBuilder {
             String key = kv.getKey();
             Object value = kv.getValue();
             
-            // 统一推理水平延后应用，避免被后续 generationConfig 整段覆盖
+            // 统一推理水平 / 思考开关延后应用，避免被后续 generationConfig 整段覆盖
             if ("reasoning_effort".equals(key)) {
                 reasoningEffort = value;
                 continue;
             }
-            
+            if ("thinking".equals(key) && value instanceof Boolean) {
+                thinkingSwitch = value;
+                continue;
+            }
+                
             if ("generationConfig".equals(key) && value instanceof Map) {
                 GenerationConfig generationConfig = toGenerationConfig((Map<String, Object>) value);
                 root.set("generationConfig", ONode.ofBean(generationConfig));
@@ -95,10 +100,8 @@ public class GeminiRequestBuilder {
             }
         }
         
-        // 最后合并 reasoning_effort，确保不被 generationConfig 反覆盖
-        if (reasoningEffort != null) {
-            applyReasoningEffortToGenerationConfig(root, reasoningEffort, options);
-        }
+        // 最后合并 thinking / reasoning_effort，确保不被 generationConfig 反覆盖
+        applyUnifiedThinkingOptions(root, config, options, thinkingSwitch, reasoningEffort);
     
         buildToolsNode(root, config, options);
     
@@ -388,59 +391,160 @@ public class GeminiRequestBuilder {
     }
 
     /**
-     * 将统一 reasoning_effort 映射到 generationConfig.thinkingConfig。
-     * <p>若用户已显式配置 thinkingConfig，则不覆盖。</p>
-     * <p>仅设置 thinkingBudget（兼容 2.5 系）；不与 thinkingLevel 双写，
-     * 避免部分模型拒识。Gemini 3.x 的 level 语义由 interactions 路径处理。</p>
+     * 统一 thinking 开关 + reasoning_effort → generationConfig.thinkingConfig。
+     * <p>显式 thinkingConfig 优先；按 model 分流：
+     * Gemini 2.5 → {@code thinkingBudget}（关=0）；
+     * Gemini 3.x → {@code thinkingLevel}（关=minimal）。</p>
      *
      * @since 4.0.4
      */
     @SuppressWarnings("unchecked")
-    private void applyReasoningEffortToGenerationConfig(ONode root, Object value, ChatOptions options) {
+    private void applyUnifiedThinkingOptions(ONode root, ChatConfig config, ChatOptions options,
+                                             Object thinkingSwitch, Object reasoningEffort) {
+        // 已有 generationConfig.thinkingConfig 时不覆盖
+        if (hasExplicitThinkingConfig(root, options)) {
+            return;
+        }
+
+        boolean useBudget = usesThinkingBudget(config);
+
+        if (Boolean.FALSE.equals(thinkingSwitch)) {
+            ONode tc = new ONode();
+            tc.set("includeThoughts", false);
+            if (useBudget) {
+                tc.set("thinkingBudget", 0);
+            } else {
+                // Gemini 3.x：minimal 表示关闭/极低思考（对齐 OpenCode smallOptions）
+                tc.set("thinkingLevel", "minimal");
+            }
+            root.getOrNew("generationConfig").set("thinkingConfig", tc);
+            return;
+        }
+
+        if (reasoningEffort != null) {
+            applyReasoningEffortToGenerationConfig(root, config, reasoningEffort, options);
+            if (root.hasKey("generationConfig")
+                    && root.get("generationConfig").hasKey("thinkingConfig")) {
+                return;
+            }
+        }
+
+        if (Boolean.TRUE.equals(thinkingSwitch)) {
+            // 开启且无 effort：2.5 用 medium 预算；3.x 用 medium/high 水平
+            applyReasoningEffortToGenerationConfig(root, config, "medium", options);
+        }
+    }
+
+    /**
+     * 将统一 reasoning_effort 映射到 generationConfig.thinkingConfig。
+     * <p>若用户已显式配置 thinkingConfig，则不覆盖。</p>
+     * <p>Gemini 2.5 仅写 {@code thinkingBudget}；Gemini 3.x 仅写 {@code thinkingLevel}，
+     * 避免双写冲突（对齐 OpenCode ProviderTransform）。</p>
+     *
+     * @since 4.0.4
+     */
+    @SuppressWarnings("unchecked")
+    private void applyReasoningEffortToGenerationConfig(ONode root, ChatConfig config,
+                                                        Object value, ChatOptions options) {
         if (value == null) {
             return;
         }
-        
-        // 已有 generationConfig.thinkingConfig 时不覆盖
-        Object genCfg = options.options().get("generationConfig");
+
+        if (hasExplicitThinkingConfig(root, options)) {
+            return;
+        }
+
+        String effort = String.valueOf(value).trim().toLowerCase();
+        boolean useBudget = usesThinkingBudget(config);
+
+        ONode tc = new ONode();
+        tc.set("includeThoughts", true);
+
+        if (useBudget) {
+            Integer budget = mapEffortToThinkingBudget(effort);
+            if (budget == null) {
+                return;
+            }
+            tc.set("thinkingBudget", budget);
+        } else {
+            String level = mapEffortToThinkingLevelName(effort, config);
+            if (level == null) {
+                return;
+            }
+            // API 侧常用小写 level，避免 enum 名全大写序列化
+            tc.set("thinkingLevel", level);
+        }
+
+        ONode genNode = root.getOrNew("generationConfig");
+        genNode.set("thinkingConfig", tc);
+    }
+
+    /**
+     * Gemini 2.5 使用 thinkingBudget；其余（含 Gemini 3 / 3.1）使用 thinkingLevel。
+     *
+     * @since 4.0.4
+     */
+    private boolean usesThinkingBudget(ChatConfig config) {
+        String model = config == null || config.getModel() == null ? "" : config.getModel().toLowerCase();
+        // 2.5 / 2-5 → budget；其它默认 level（与 OpenCode 一致）
+        return model.contains("2.5") || model.contains("2-5");
+    }
+
+    private boolean hasExplicitThinkingConfig(ONode root, ChatOptions options) {
+        Object genCfg = options == null ? null : options.options().get("generationConfig");
         if (genCfg instanceof Map) {
             Object existing = ((Map<?, ?>) genCfg).get("thinkingConfig");
             if (existing != null) {
-                return;
+                return true;
             }
         }
-        if (root.hasKey("generationConfig")) {
+        if (root != null && root.hasKey("generationConfig")) {
             ONode genNode = root.get("generationConfig");
             if (genNode != null && genNode.hasKey("thinkingConfig")) {
-                return;
+                return true;
             }
         }
-        
-        String effort = String.valueOf(value).trim().toLowerCase();
-        int budget;
+        return false;
+    }
+
+    /**
+     * reasoning_effort → thinkingBudget（Gemini 2.5）。
+     * 档位略向 OpenCode 靠拢：high=16k、max=24576。
+     */
+    private Integer mapEffortToThinkingBudget(String effort) {
         switch (effort) {
             case "low":
-                budget = 1024;
-                break;
+                return 1024;
             case "medium":
-                budget = 4096;
-                break;
+                return 4096;
             case "high":
-                budget = 8192;
-                break;
+                return 16000;
             case "max":
-                budget = 16384;
-                break;
+                return 24576;
             default:
-                return;
+                return null;
         }
-            
-        // 仅 budget：兼容 Gemini 2.5 thinkingBudget；避免与 thinkingLevel 双写冲突
-        ThinkingConfig thinkingConfig = new ThinkingConfig()
-                .setIncludeThoughts(true)
-                .setThinkingBudget(budget);
-                
-        ONode genNode = root.getOrNew("generationConfig");
-        genNode.set("thinkingConfig", ONode.ofBean(thinkingConfig));
+    }
+
+    /**
+     * reasoning_effort → thinkingLevel 字符串（Gemini 3.x）。
+     * 3.1 支持 medium；其它 3.x 的 medium 落到 high（仅 low/high 时）。
+     */
+    private String mapEffortToThinkingLevelName(String effort, ChatConfig config) {
+        String model = config == null || config.getModel() == null ? "" : config.getModel().toLowerCase();
+        boolean supportsMedium = model.contains("3.1") || model.contains("3-1");
+        switch (effort) {
+            case "low":
+            case "minimal":
+            case "min":
+                return "low";
+            case "medium":
+                return supportsMedium ? "medium" : "high";
+            case "high":
+            case "max":
+                return "high";
+            default:
+                return null;
+        }
     }
 }

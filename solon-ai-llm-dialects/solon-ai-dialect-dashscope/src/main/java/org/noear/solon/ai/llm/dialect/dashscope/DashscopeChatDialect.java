@@ -100,7 +100,14 @@ public class DashscopeChatDialect extends AbstractChatDialect {
 
             n.getOrNew("parameters").then(n1 -> {
                 for (Map.Entry<String, Object> kv : options.options().entrySet()) {
-                    n1.set(kv.getKey(), ONode.ofBean(kv.getValue()));
+                    String key = kv.getKey();
+                    Object value = kv.getValue();
+                    // 统一 thinking 开关 → DashScope 原生 parameters.enable_thinking
+                    if ("thinking".equals(key) && value instanceof Boolean) {
+                        n1.set("enable_thinking", value);
+                        continue;
+                    }
+                    n1.set(key, ONode.ofBean(value));
                 }
 
                 n1.set("result_format", "message");

@@ -280,16 +280,36 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 String key = kv.getKey();
                 Object value = kv.getValue();
             
-            // 统一推理水平 → 顶层 reasoning_effort（Chat Completions / 兼容协议）
+                // 统一推理水平 → 顶层 reasoning_effort（Chat Completions / 兼容协议）
                 // 仅归一化本字段后写出；非法值不落库，避免污染请求
+                // 国产模型族（qwen/deepseek/kimi/glm/minimax）默认不写顶层 effort（对齐 OpenCode variants 空）
+                // OpenRouter：嵌套 reasoning.effort
                 if ("reasoning_effort".equals(key)) {
-                    String effort = clampChatCompletionsEffort(value);
+                    if (shouldSkipChatCompletionsReasoningEffort(config)) {
+                        continue;
+                    }
+                    String effort = clampChatCompletionsEffort(value, config);
                     if (effort != null) {
-                        n.set("reasoning_effort", effort);
+                        if (isOpenRouterEndpoint(config)) {
+                            n.getOrNew("reasoning").set("effort", effort);
+                        } else {
+                            n.set("reasoning_effort", effort);
+                        }
                     }
                     continue;
                 }
             
+                // 统一思考开关：按 model（辅以 provider/apiUrl）单写对应字段，避免双写触发严格网关 400
+                // 非 Boolean（Map 等）仍按原 key 透传，供供应商原生配置与逃生舱使用
+                if ("thinking".equals(key)) {
+                    if (value instanceof Boolean) {
+                        applyChatCompletionsThinkingSwitch(n, config, (Boolean) value);
+                    } else if (value != null) {
+                        n.set(key, ONode.ofBean(value));
+                    }
+                    continue;
+                }
+                        
                 n.set(key, ONode.ofBean(value));
             }
 
@@ -559,20 +579,134 @@ public abstract class AbstractChatDialect implements ChatDialect {
     }
 
     /**
+     * Chat Completions 思考开关写出形态（按模型族单写，避免多余字段）。
+     *
+     * @since 4.0.4
+     */
+    protected enum ThinkingSwitchWire {
+        /** Qwen / DashScope 兼容 / 多数中转：{@code enable_thinking} */
+        ENABLE_THINKING,
+        /** DeepSeek / Kimi / 火山等：{@code thinking.type=enabled|disabled} */
+        THINKING_TYPE,
+        /** 智谱：{@code thinking.type} + {@code clear_thinking=false}（开启时） */
+        THINKING_TYPE_CLEAR,
+        /** MiniMax：开启 {@code adaptive}，关闭 {@code disabled} */
+        THINKING_TYPE_ADAPTIVE,
+        /** 无标准布尔开关（如 OpenAI 官方）：不写出，仅保留 Map 逃生舱 */
+        NONE
+    }
+                
+    /**
+     * 按 model 为主、provider/apiUrl 为辅，解析思考开关写出形态。
+     * <p>中转站（DashScope / ModelScope / SiliconFlow 等）即使模型名是 deepseek，
+     * 也优先走 {@code enable_thinking}。</p>
+     *
+     * @since 4.0.4
+     */
+    protected ThinkingSwitchWire resolveThinkingSwitchWire(ChatConfig config) {
+        String model = config == null || config.getModel() == null ? "" : config.getModel().toLowerCase(Locale.ROOT);
+        String provider = config == null || config.getProvider() == null ? "" : config.getProvider().toLowerCase(Locale.ROOT);
+        String apiUrl = config == null || config.getApiUrl() == null ? "" : config.getApiUrl().toLowerCase(Locale.ROOT);
+        String hint = model + ' ' + provider + ' ' + apiUrl;
+        
+        // 已知“enable_thinking 中转站”：同一 deepseek 模型在中转口也走布尔开关
+        if (containsAny(hint, "dashscope", "modelscope", "aliyuncs", "aliyun", "bailian",
+                "siliconflow", "together.ai", "together.xyz")) {
+            if (containsAny(model, "minimax")) {
+                return ThinkingSwitchWire.THINKING_TYPE_ADAPTIVE;
+            }
+            return ThinkingSwitchWire.ENABLE_THINKING;
+        }
+
+        // 模型族（主信号）
+        if (containsAny(model, "minimax") || containsAny(provider, "minimax")) {
+            return ThinkingSwitchWire.THINKING_TYPE_ADAPTIVE;
+        }
+        if (containsAny(model, "glm", "zhipu", "zai-") || containsAny(provider, "zhipu", "zai", "glm")) {
+            return ThinkingSwitchWire.THINKING_TYPE_CLEAR;
+        }
+        if (containsAny(model, "deepseek", "kimi", "moonshot", "doubao", "seed-")
+                || containsAny(provider, "deepseek", "moonshot", "kimi", "volc", "doubao", "ark")) {
+            return ThinkingSwitchWire.THINKING_TYPE;
+        }
+        if (containsAny(model, "qwen", "qwq") || containsAny(provider, "qwen", "dashscope")) {
+            return ThinkingSwitchWire.ENABLE_THINKING;
+        }
+        // OpenAI 官方系列：无 enable_thinking / thinking.type 标准开关
+        if (containsAny(model, "gpt-", "gpt4", "gpt5", "chatgpt", "o1-", "o1", "o3-", "o3", "o4-", "o4")
+                || "openai".equals(provider)) {
+            return ThinkingSwitchWire.NONE;
+        }
+
+        // 未知模型：不臆造字段，避免严格网关 400；用户可用 optionSet 显式配置
+        return ThinkingSwitchWire.NONE;
+    }
+
+    /**
+     * 将统一 {@code thinking(Boolean)} 映射为 Chat Completions 供应商字段（单写）。
+     *
+     * @since 4.0.4
+     */
+    protected void applyChatCompletionsThinkingSwitch(ONode n, ChatConfig config, boolean enabled) {
+        ThinkingSwitchWire wire = resolveThinkingSwitchWire(config);
+        switch (wire) {
+            case ENABLE_THINKING:
+                n.set("enable_thinking", enabled);
+                break;
+            case THINKING_TYPE:
+                n.getOrNew("thinking").set("type", enabled ? "enabled" : "disabled");
+                break;
+            case THINKING_TYPE_CLEAR:
+                n.getOrNew("thinking").then(t -> {
+                    t.set("type", enabled ? "enabled" : "disabled");
+                    if (enabled) {
+                        // 智谱官方示例常带 clear_thinking=false
+                        t.set("clear_thinking", false);
+                    }
+                });
+                break;
+            case THINKING_TYPE_ADAPTIVE:
+                n.getOrNew("thinking").set("type", enabled ? "adaptive" : "disabled");
+                break;
+            case NONE:
+            default:
+                // 无标准布尔开关：不写出，保留 optionSet("thinking", map) 逃生舱
+                break;
+        }
+    }
+
+    /**
      * 规范化 Chat Completions 顶层 reasoning_effort。
-     * <p>保留官方常见档位；统一语义 {@code max} → {@code xhigh}，{@code min} → {@code low}。
+     * <p>默认保留官方常见档位；统一语义 {@code max} → {@code xhigh}，{@code min} → {@code low}。
+     * DeepSeek 官方形态仅认 {@code high}/{@code max}（{@code max} 不转 xhigh）。
      * 无法识别时返回 null（不写出，避免污染请求）。</p>
      *
      * @since 4.0.4
      */
-    protected String clampChatCompletionsEffort(Object value) {
+    protected String clampChatCompletionsEffort(Object value, ChatConfig config) {
         if (value == null) {
             return null;
         }
-        String effort = String.valueOf(value).trim().toLowerCase();
+        String effort = String.valueOf(value).trim().toLowerCase(Locale.ROOT);
         if (effort.isEmpty() || "auto".equals(effort)) {
             return null;
         }
+
+        // DeepSeek 官方：high / max；low/medium → high；xhigh → max
+        if (isDeepSeekOfficialEffort(config)) {
+            if ("max".equals(effort) || "xhigh".equals(effort)) {
+                return "max";
+            }
+            if ("high".equals(effort) || "medium".equals(effort) || "low".equals(effort)
+                    || "minimal".equals(effort) || "min".equals(effort)) {
+                return "high";
+            }
+            if ("none".equals(effort)) {
+                return null; // 关闭请用 thinking(false)
+            }
+            return null;
+        }
+
         if ("none".equals(effort)
                 || "minimal".equals(effort)
                 || "low".equals(effort)
@@ -589,5 +723,102 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
         // 非法值不写出
         return null;
+    }
+
+    /**
+     * DeepSeek 官方 effort 语义（非 DashScope/SiliconFlow 等 enable_thinking 中转）。
+     *
+     * @since 4.0.4
+     */
+    protected boolean isDeepSeekOfficialEffort(ChatConfig config) {
+        if (config == null) {
+            return false;
+        }
+        String model = config.getModel() == null ? "" : config.getModel().toLowerCase(Locale.ROOT);
+        String provider = config.getProvider() == null ? "" : config.getProvider().toLowerCase(Locale.ROOT);
+        String apiUrl = config.getApiUrl() == null ? "" : config.getApiUrl().toLowerCase(Locale.ROOT);
+        String hint = model + ' ' + provider + ' ' + apiUrl;
+
+        if (!containsAny(model, "deepseek") && !containsAny(provider, "deepseek") && !containsAny(apiUrl, "deepseek")) {
+            return false;
+        }
+        // 中转站走通用 OpenAI effort（或忽略），不按官方 high/max 改写
+        if (containsAny(hint, "dashscope", "modelscope", "aliyuncs", "aliyun", "bailian",
+                "siliconflow", "together.ai", "together.xyz")) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * OpenRouter：effort 应写在 {@code reasoning.effort} 嵌套对象，而非顶层 reasoning_effort。
+     *
+     * @since 4.0.4
+     */
+    protected boolean isOpenRouterEndpoint(ChatConfig config) {
+        if (config == null) {
+            return false;
+        }
+        String provider = config.getProvider() == null ? "" : config.getProvider().toLowerCase(Locale.ROOT);
+        String apiUrl = config.getApiUrl() == null ? "" : config.getApiUrl().toLowerCase(Locale.ROOT);
+        return containsAny(provider, "openrouter") || containsAny(apiUrl, "openrouter");
+    }
+
+    /**
+     * 是否抑制 Chat Completions 顶层 reasoning_effort。
+     * <p>对齐 OpenCode：qwen / deepseek / kimi / glm / minimax 等不做 effort 变体，
+     * 仅靠 thinking 开关；显式 optionSet 其它供应商字段仍可用。</p>
+     * <p>例外：DeepSeek 官方认 high/max，仍写出；OpenRouter 走嵌套不走本抑制。</p>
+     *
+     * @since 4.0.4
+     */
+    protected boolean shouldSkipChatCompletionsReasoningEffort(ChatConfig config) {
+        if (config == null) {
+            return false;
+        }
+        // OpenRouter 单独嵌套写出，不在此抑制
+        if (isOpenRouterEndpoint(config)) {
+            return false;
+        }
+        // DeepSeek 官方支持 reasoning_effort high/max，保留
+        if (isDeepSeekOfficialEffort(config)) {
+            return false;
+        }
+
+        String model = config.getModel() == null ? "" : config.getModel().toLowerCase(Locale.ROOT);
+        String provider = config.getProvider() == null ? "" : config.getProvider().toLowerCase(Locale.ROOT);
+        String apiUrl = config.getApiUrl() == null ? "" : config.getApiUrl().toLowerCase(Locale.ROOT);
+        String hint = model + ' ' + provider + ' ' + apiUrl;
+
+        // 与 OpenCode variants() 空表一致：这些模型族不写顶层 effort
+        return containsAny(model, "qwen", "qwq", "minimax", "glm", "zhipu", "kimi", "moonshot", "k2p",
+                "deepseek", "doubao", "seed-")
+                || containsAny(provider, "qwen", "dashscope", "minimax", "zhipu", "zai", "glm",
+                "moonshot", "kimi", "deepseek", "volc", "doubao", "ark")
+                || containsAny(hint, "dashscope", "modelscope", "aliyuncs", "aliyun", "bailian",
+                "siliconflow");
+    }
+
+    /**
+     * @since 4.0.4
+     */
+    protected static boolean containsAny(String text, String... tokens) {
+        if (text == null || text.isEmpty() || tokens == null) {
+            return false;
+        }
+        for (String token : tokens) {
+            if (token != null && !token.isEmpty() && text.contains(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @deprecated 使用 {@link #clampChatCompletionsEffort(Object, ChatConfig)}
+     * @since 4.0.4
+     */
+    protected String clampChatCompletionsEffort(Object value) {
+        return clampChatCompletionsEffort(value, null);
     }
 }

@@ -111,7 +111,8 @@ public class GeminiInteractionsRequestBuilder {
             if ("stream".equals(key)
                     || "generationConfig".equals(key)
                     || "response_format".equals(key)
-                    || "reasoning_effort".equals(key)) {
+                    || "reasoning_effort".equals(key)
+                    || "thinking".equals(key)) {
                 continue;
             }
             if (!root.hasKey(key)) {
@@ -380,23 +381,54 @@ public class GeminiInteractionsRequestBuilder {
             }
         }
 
-        // 统一 reasoning_effort → thinking_level（无 thinkingConfig 时生效）
-        Object effortObj = opts.get("reasoning_effort");
-        if (effortObj != null && !config.hasKey("thinking_level")) {
-            String effort = String.valueOf(effortObj).trim().toLowerCase();
-            if ("low".equals(effort)) {
-                config.set("thinking_level", "low");
-            } else if ("medium".equals(effort)) {
-                config.set("thinking_level", "medium");
-            } else if ("high".equals(effort) || "max".equals(effort)) {
-                config.set("thinking_level", "high");
+        // 统一 thinking 开关 + reasoning_effort（无 thinkingConfig 时生效）
+        Object thinkingSwitch = opts.get("thinking");
+        if (thinkingSwitch instanceof Boolean && !config.hasKey("thinking_level")) {
+            if (Boolean.FALSE.equals(thinkingSwitch)) {
+                config.set("thinking_summaries", false);
+                // 不设 thinking_level：关闭摘要即可；部分模型无真正的 off 档
+            } else if (Boolean.TRUE.equals(thinkingSwitch)) {
+                // 开启：默认 medium，可被 reasoning_effort 覆盖
+                Object effortObj = opts.get("reasoning_effort");
+                if (effortObj != null) {
+                    applyReasoningEffortToConfig(config, effortObj);
+                } else {
+                    config.set("thinking_level", "medium");
+                }
+                if (config.hasKey("thinking_level") && !config.hasKey("thinking_summaries")) {
+                    config.set("thinking_summaries", true);
+                }
             }
-            if (config.hasKey("thinking_level") && !config.hasKey("thinking_summaries")) {
-                config.set("thinking_summaries", true);
+        } else {
+            Object effortObj = opts.get("reasoning_effort");
+            if (effortObj != null && !config.hasKey("thinking_level")) {
+                applyReasoningEffortToConfig(config, effortObj);
+                if (config.hasKey("thinking_level") && !config.hasKey("thinking_summaries")) {
+                    config.set("thinking_summaries", true);
+                }
             }
         }
-
+    
         return config.size() > 0 ? config : null;
+    }
+    
+    /**
+     * reasoning_effort → thinking_level
+     *
+     * @since 4.0.4
+     */
+    private void applyReasoningEffortToConfig(ONode config, Object effortObj) {
+        if (effortObj == null || config == null) {
+            return;
+        }
+        String effort = String.valueOf(effortObj).trim().toLowerCase();
+        if ("low".equals(effort)) {
+            config.set("thinking_level", "low");
+        } else if ("medium".equals(effort)) {
+            config.set("thinking_level", "medium");
+        } else if ("high".equals(effort) || "max".equals(effort)) {
+            config.set("thinking_level", "high");
+        }
     }
 
     /**

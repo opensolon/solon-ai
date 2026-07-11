@@ -45,6 +45,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     static final String TOOL_CHOICE = "tool_choice";
     static final String RESPONSE_FORMAT = "response_format";
     static final String REASONING_EFFORT = "reasoning_effort";
+    static final String THINKING = "thinking";
 
     protected final AtomicBoolean autoToolCall;
 
@@ -453,9 +454,14 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      * 常用选项：推理水平（统一语义，由各方言映射到供应商字段）
      * <p>取值：{@code low} / {@code medium} / {@code high} / {@code max}；
      * 传空串、{@code auto} 或 {@code null} 时移除该选项。非法值忽略。</p>
-     * <p>方言映射（首批）：anthropic → thinking.budget_tokens；
-     * openai Responses → reasoning.effort；openai Chat Completions → reasoning_effort；
-     * gemini models → generationConfig.thinkingConfig；gemini interactions → thinking_level。</p>
+     * <p>方言映射（首批）：anthropic 经典 → thinking.budget_tokens；
+     * anthropic 4.6/4.7 → thinking.type=adaptive + 顶层 effort；
+     * openai Responses → reasoning.effort；openai Chat Completions → reasoning_effort
+     * （OpenRouter → reasoning.effort；qwen/kimi/glm/minimax 等默认不写顶层 effort）；
+     * DeepSeek 官方 → high/max；
+     * gemini models 2.5 → thinkingBudget，3.x → thinkingLevel；gemini interactions → thinking_level。</p>
+     * <p>与 {@link #thinking(Boolean)} 配合：{@code thinking(false)} 关闭优先；
+     * 开启后可用本选项调节思考深度。</p>
      *
      * @since 4.0.4
      */
@@ -479,6 +485,38 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
         }
     
         return optionSet(REASONING_EFFORT, normalized);
+    }
+    
+    /**
+     * 常用选项：思考模式开关（统一语义，由各方言映射到供应商字段）
+     * <p>{@code true} 开启思考；{@code false} 关闭思考；{@code null} 移除该选项。</p>
+     * <p>方言映射（首批）：openai 兼容 Chat Completions 按 {@code ChatConfig.model}
+     * （辅以 provider/apiUrl）单写，避免双写触发严格网关 400：
+     * <ul>
+     *   <li>Qwen / DashScope / ModelScope / SiliconFlow 等中转 → {@code enable_thinking}</li>
+     *   <li>DeepSeek / Kimi / 火山等 → {@code thinking.type=enabled|disabled}</li>
+     *   <li>智谱 → {@code thinking.type}（开启时带 clear_thinking=false）</li>
+     *   <li>MiniMax → {@code thinking.type=adaptive|disabled}</li>
+     *   <li>OpenAI 官方 / 未知模型 → 不写出布尔开关（用 optionSet 逃生舱）</li>
+     * </ul>
+     * anthropic → {@code thinking.type}（enabled/disabled；4.6/4.7 为 adaptive + effort）；
+     * openai Responses：{@code false} → {@code reasoning.effort=none}（{@code true} 不强制改 effort）；
+     * gemini models → {@code generationConfig.thinkingConfig}
+     * （2.5：budget=0 关闭；3.x：thinkingLevel=minimal 关闭）；
+     * gemini interactions → {@code thinking_summaries} / 默认开启水平；
+     * DashScope 原生协议 → {@code parameters.enable_thinking}。</p>
+     * <p>供应商原生结构化配置仍可用 {@code optionSet("thinking", map)} 或
+     * {@code generationConfig.thinkingConfig} / {@code reasoning}；显式供应商字段优先于本开关。</p>
+     * <p>与 {@link #reasoning_effort(String)} 配合：关闭优先；开启后可用 reasoning_effort 调节深度。</p>
+     *
+     * @since 4.0.4
+     */
+    public T thinking(Boolean enabled) {
+        if (enabled == null) {
+            optionRemove(THINKING);
+            return (T) this;
+        }
+        return optionSet(THINKING, enabled);
     }
 
     /**
