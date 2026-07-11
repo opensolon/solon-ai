@@ -277,7 +277,20 @@ public abstract class AbstractChatDialect implements ChatDialect {
             }
 
             for (Map.Entry<String, Object> kv : options.options().entrySet()) {
-                n.set(kv.getKey(), ONode.ofBean(kv.getValue()));
+                String key = kv.getKey();
+                Object value = kv.getValue();
+            
+            // 统一推理水平 → 顶层 reasoning_effort（Chat Completions / 兼容协议）
+                // 仅归一化本字段后写出；非法值不落库，避免污染请求
+                if ("reasoning_effort".equals(key)) {
+                    String effort = clampChatCompletionsEffort(value);
+                    if (effort != null) {
+                        n.set("reasoning_effort", effort);
+                    }
+                    continue;
+                }
+            
+                n.set(key, ONode.ofBean(value));
             }
 
             ChatMessage lastMessage = messages.get(messages.size() - 1);
@@ -543,5 +556,38 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
     protected boolean hasNestedJsonBlock(String str) {
         return FormatUtil.hasNestedJsonBlock(str);
+    }
+
+    /**
+     * 规范化 Chat Completions 顶层 reasoning_effort。
+     * <p>保留官方常见档位；统一语义 {@code max} → {@code xhigh}，{@code min} → {@code low}。
+     * 无法识别时返回 null（不写出，避免污染请求）。</p>
+     *
+     * @since 4.0.4
+     */
+    protected String clampChatCompletionsEffort(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String effort = String.valueOf(value).trim().toLowerCase();
+        if (effort.isEmpty() || "auto".equals(effort)) {
+            return null;
+        }
+        if ("none".equals(effort)
+                || "minimal".equals(effort)
+                || "low".equals(effort)
+                || "medium".equals(effort)
+                || "high".equals(effort)
+                || "xhigh".equals(effort)) {
+            return effort;
+        }
+        if ("max".equals(effort)) {
+            return "xhigh";
+        }
+        if ("min".equals(effort)) {
+            return "low";
+        }
+        // 非法值不写出
+        return null;
     }
 }
