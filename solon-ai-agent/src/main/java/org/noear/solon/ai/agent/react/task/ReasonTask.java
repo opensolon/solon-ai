@@ -402,13 +402,16 @@ public class ReasonTask {
                                         return null;
                                     }
 
+                                    // 复用 ChatConfig 的 timeout 作为 blockLast 的超时保护
+                                    java.time.Duration llmTimeout = trace.getOptions().getChatModel().getConfig().getTimeout();
                                     response = req.stream()
                                             .takeUntil(r -> sink.isCancelled())
                                             .doOnNext(resp -> {
                                                 if (!sink.isCancelled()) {
                                                     sink.next(new ReasonChunk(trace, resp, resp.getMessage()));
                                                 }
-                                            }).blockLast();
+                                            })
+                                            .blockLast(llmTimeout);
                                 } else {
                                     response = req.call();
                                 }
@@ -443,8 +446,9 @@ public class ReasonTask {
 
         if (lastException instanceof LlmNoReturnException) {
             trace.setFinalAnswer("抱歉，模型服务没有内容返回。请稍后重试。");
-        } else if (lastException instanceof TimeoutException ||
-                lastException.getCause() instanceof TimeoutException) {
+        } else if (isTimeoutException(lastException)) {
+            LOG.warn("ReActAgent [{}] LLM call timeout ({}s)", config.getName(),
+                    trace.getOptions().getChatModel().getConfig().getTimeout().getSeconds());
             trace.setFinalAnswer("抱歉，模型服务响应超时。请稍后重试。");
         } else if (lastException instanceof HttpResponseException) {
             HttpResponseException e2 = (HttpResponseException) lastException;
@@ -455,6 +459,18 @@ public class ReasonTask {
         }
 
         return null;
+    }
+
+    /**
+     * 判断是否为超时异常（覆盖 TimeoutException、blockLast 的 IllegalStateException 等）
+     */
+    private static boolean isTimeoutException(Throwable e) {
+        if (e instanceof TimeoutException) return true;
+        if (e.getCause() instanceof TimeoutException) return true;
+        // Reactor blockLast(Duration) 超时抛出 IllegalStateException("Timeout on blocking read")
+        if (e instanceof IllegalStateException && e.getMessage() != null
+                && e.getMessage().contains("Timeout")) return true;
+        return false;
     }
 
     /**
