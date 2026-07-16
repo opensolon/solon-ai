@@ -123,11 +123,11 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
         return httpCustomize;
     }
 
-    public ChatOptions httpCustomize(Consumer<HttpUtils> httpCustomize) {
-        if (this.httpCustomize == null) {
-            this.httpCustomize = httpCustomize;
+    public ChatOptions httpCustomize(Consumer<HttpUtils> customize) {
+        if (httpCustomize == null) {
+            httpCustomize = customize;
         } else {
-            this.httpCustomize.andThen(httpCustomize);
+            httpCustomize = httpCustomize.andThen(customize);
         }
 
         return this;
