@@ -141,10 +141,12 @@ public class ReActOptions implements NonSerializable {
         tmp.outputSchema = outputSchema;
 
         tmp.feedbackMode = feedbackMode;
+        tmp.feedbackDescriptionProvider = feedbackDescriptionProvider;
+        tmp.feedbackReasonDescriptionProvider = feedbackReasonDescriptionProvider;
         tmp.planningMode = planningMode;
         tmp.planningInstructionProvider = planningInstructionProvider;
-
-        //tmp.streamSink = streamSink;
+        //tmp.talentInstruction = talentInstruction;
+        // streamSink 为运行时注入字段，不参与配置拷贝
 
         return tmp;
     }

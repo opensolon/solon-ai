@@ -126,7 +126,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             options = config.getDefaultOptions().copy();
         }
 
-        if (parentTeamTrace != null) {
+        if (parentTeamTrace != null && parentTeamTrace.getOptions() != null) {
             //传递流控
             options.setStreamSink(parentTeamTrace.getOptions().getStreamSink());
         }
