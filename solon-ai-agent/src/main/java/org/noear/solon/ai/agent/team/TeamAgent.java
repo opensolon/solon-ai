@@ -170,7 +170,7 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
         final TeamTrace trace = getTrace(context);
 
         if (options == null) {
-            options = config.getDefaultOptions();
+            options = config.getDefaultOptions().copy();
         }
 
         if (parentTeamTrace != null) {
