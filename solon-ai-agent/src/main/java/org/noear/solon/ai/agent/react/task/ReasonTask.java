@@ -402,8 +402,6 @@ public class ReasonTask {
                                         return null;
                                     }
 
-                                    // 复用 ChatConfig 的 timeout 作为 blockLast 的超时保护
-                                    java.time.Duration llmTimeout = trace.getOptions().getChatModel().getConfig().getTimeout();
                                     response = req.stream()
                                             .takeUntil(r -> sink.isCancelled())
                                             .doOnNext(resp -> {
@@ -411,7 +409,7 @@ public class ReasonTask {
                                                     sink.next(new ReasonChunk(trace, resp, resp.getMessage()));
                                                 }
                                             })
-                                            .blockLast(llmTimeout);
+                                            .blockLast();
                                 } else {
                                     response = req.call();
                                 }
