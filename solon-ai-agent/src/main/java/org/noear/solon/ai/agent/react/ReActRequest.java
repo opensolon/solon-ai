@@ -69,7 +69,8 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
         if (optionsAdjustor == null) {
             optionsAdjustor = adjustor;
         } else {
-            optionsAdjustor.andThen(adjustor);
+            // andThen 返回新 Consumer，必须写回才能链式生效
+            optionsAdjustor = optionsAdjustor.andThen(adjustor);
         }
 
         return this;
@@ -88,8 +89,9 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
         }
 
         ReActTrace trace = agent.getTrace(session);
-        if (trace != null) {
-            options = trace.getOptions();
+        if (trace != null && trace.getOptions() != null) {
+            // 续跑时从上次 options 拷贝，避免在同一实例上叠加 interceptor/streamSink
+            options = trace.getOptions().copy();
         }
 
         if (options == null) {
