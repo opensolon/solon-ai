@@ -64,7 +64,7 @@ public class PromptImpl implements Prompt, Serializable {
 
     @Override
     public void removeLastMessage() {
-        if(messages.isEmpty() == false){
+        if (messages.isEmpty() == false) {
             messages.remove(messages.size() - 1);
             this.userContent = null;
             this.systemContent = null;
@@ -187,9 +187,17 @@ public class PromptImpl implements Prompt, Serializable {
 
     @Override
     public void clear() {
-        messages.clear();
+        this.messages.clear();
         this.userContent = null;
         this.systemContent = null;
+    }
+
+    @Override
+    public Prompt copy() {
+        PromptImpl tmp = new PromptImpl();
+        tmp.attrs.putAll(this.attrs);
+        tmp.messages.addAll(this.messages);
+        return tmp;
     }
 
     @Override

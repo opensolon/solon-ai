@@ -178,6 +178,11 @@ public interface Prompt extends Serializable {
     void clear();
 
     /**
+     * 复制
+     */
+    Prompt copy();
+
+    /**
      * 是否为空
      */
     static boolean isEmpty(Prompt prompt) {
