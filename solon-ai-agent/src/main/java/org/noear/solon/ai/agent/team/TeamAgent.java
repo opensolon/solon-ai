@@ -307,13 +307,6 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
 
             session.updateSnapshot();
 
-            // 触发完成拦截
-            for (RankEntity<TeamInterceptor> item : options.getInterceptors()) {
-                if (item.target.isEnabled()) {
-                    item.target.onTeamEnd(trace);
-                }
-            }
-
             if (LOG.isInfoEnabled()) {
                 LOG.info("TeamAgent [{}] completed: {}", config.getName(), assistantMessage.getContent());
             }
@@ -321,8 +314,17 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return assistantMessage;
 
         } finally {
-            // 5. 资源清理与协议后置处理
-            config.getProtocol().onTeamFinished(context, trace);
+            // 5. 触发完成拦截（成功/失败均触发，保证生命周期闭环）
+            try {
+                for (RankEntity<TeamInterceptor> item : options.getInterceptors()) {
+                    if (item.target.isEnabled()) {
+                        item.target.onTeamEnd(trace);
+                    }
+                }
+            } finally {
+                // 6. 资源清理与协议后置处理（不受 onTeamEnd 异常影响）
+                config.getProtocol().onTeamFinished(context, trace);
+            }
         }
     }
 

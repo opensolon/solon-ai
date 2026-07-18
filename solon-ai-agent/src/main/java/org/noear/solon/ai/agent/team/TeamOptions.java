@@ -100,10 +100,14 @@ public class TeamOptions implements NonSerializable {
         tmp.maxTurns = this.maxTurns;
         tmp.maxRetries = this.maxRetries;
         tmp.retryDelayMs = this.retryDelayMs;
+        tmp.sessionWindowSize = this.sessionWindowSize;
         tmp.recordWindowSize = this.recordWindowSize;
         tmp.talentInstruction = this.talentInstruction;
 
         tmp.feedbackMode = this.feedbackMode;
+        tmp.feedbackDescriptionProvider = this.feedbackDescriptionProvider;
+        tmp.feedbackReasonDescriptionProvider = this.feedbackReasonDescriptionProvider;
+        // streamSink 为运行时注入字段，不参与配置拷贝
 
         return tmp;
     }
