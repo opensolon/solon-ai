@@ -39,6 +39,14 @@ import java.util.Map;
 public class AnthropicRequestBuilder {
 
     /**
+     * Anthropic 每请求的 cache_control 断点上限。
+     * <p>静态前缀（system 或 tools）占 1 个，其余全部让给对话历史滚动断点。</p>
+     *
+     * @since 4.0.4
+     */
+    private static final int CACHE_BREAKPOINT_LIMIT = 4;
+
+    /**
      * 构建请求 JSON
      * @author oisin lu
      * @param config   聊天配置
@@ -58,17 +66,33 @@ public class AnthropicRequestBuilder {
         // 默认最大输出token数，AWS 32000，ANTHROPIC 64000
         root.set("max_tokens", options.options().getOrDefault("max_tokens", 32000));
 
-        // 提取系统消息
+        // 缓存控制：仅 Anthropic 风格（type 非空）才在请求体上打 cache_control 断点；
+        // prompt_cache_key（OpenAI/DeepSeek 风格）不适用于 Claude，忽略之。
+        CacheControl cacheControl = options.cacheControl();
+        boolean cacheEnabled = (cacheControl != null && Utils.isNotEmpty(cacheControl.getType()));
+
+        // 提取系统消息（供缓存预算判断与下方 system 节点构建复用，避免重复遍历）
         String systemMessage = extractSystemMessage(messages);
+        boolean hasSystem = Utils.isNotEmpty(systemMessage);
+        boolean hasTools = !Utils.isEmpty(options.tools());
+
+        // 缓存断点预算分配（Anthropic 每请求上限 CACHE_BREAKPOINT_LIMIT 个）：
+        // 渲染顺序为 tools -> system -> messages，打在 system 上的断点会连带缓存 tools。
+        // 因此静态前缀只需 1 个断点：有 system 就打 system（自动覆盖 tools），
+        // 没有 system 才退化为打最后一个 tool。省下的预算全部让给滚动历史断点，
+        // 增强对 20-block 回溯窗口的抗性（工具密集的 agent 循环里尤为关键）。
+        boolean cacheOnTools = cacheEnabled && !hasSystem && hasTools;
+        // 静态断点数：有 system 则落在 system；否则若有 tools 则落在 tools；两者皆无则为 0
+        int staticBreakpoints = (cacheEnabled && (hasSystem || hasTools)) ? 1 : 0;
+
         if (Utils.isNotEmpty(systemMessage)) {
-            CacheControl cacheControl = options.cacheControl();
-            if (cacheControl != null) {
+            if (cacheEnabled) {
                 // 启用 Prompt Caching：system prompt 作为 content blocks 数组，最后一块添加 cache_control
                 ONode systemNode = new ONode();
                 systemNode.addNew().then(contentBlock->{
                     contentBlock.set("type", "text");
                     contentBlock.set("text", systemMessage);
-                    contentBlock.getOrNew("cache_control").set("type", cacheControl.getType());
+                    writeCacheControl(contentBlock, cacheControl);
                 });
 
                 root.set("system", systemNode);
@@ -106,6 +130,13 @@ public class AnthropicRequestBuilder {
         }
         if (pendingToolResultNode != null) {
             messagesNode.add(pendingToolResultNode);
+        }
+
+        // 在最后若干条消息末尾补断点，让历史前缀随对话增量进入缓存。
+        // 配额 = 4 - 静态断点数，把预算尽量倾斜给历史，增强 20-block 窗口抗性。
+        if (cacheEnabled) {
+            int rollingQuota = CACHE_BREAKPOINT_LIMIT - staticBreakpoints;
+            applyMessageCacheBreakpoints(messagesNode, cacheControl, rollingQuota);
         }
 
         // 设置流式模式参数
@@ -157,7 +188,7 @@ public class AnthropicRequestBuilder {
             // Anthropic 默认行为等同于 auto，无需显式设置
         }
 
-        buildToolsNode(root, options);
+        buildToolsNode(root, options, cacheOnTools);
 
         return root;
     }
@@ -735,6 +766,21 @@ public class AnthropicRequestBuilder {
      * @param options 聊天选项
      */
     public void buildToolsNode(ONode root, ChatOptions options) {
+        // 向后兼容签名：默认在最后一个工具上打断点（无上层预算协调时的原有行为）
+        buildToolsNode(root, options, true);
+    }
+
+    /**
+     * 构建工具定义数组。
+     * @author oisin lu
+     * @param root        根节点
+     * @param options     聊天选项
+     * @param cacheOnTools 是否在最后一个工具上打 cache_control 断点。
+     *                     由 {@link #build} 统一协调：仅当没有 system（静态断点无处可落）时才为 true；
+     *                     有 system 时断点打在 system 上并连带缓存 tools，这里不再重复占用预算。
+     * @since 4.0.4
+     */
+    public void buildToolsNode(ONode root, ChatOptions options, boolean cacheOnTools) {
         Collection<FunctionTool> tools = options.tools();
 
         if (Utils.isEmpty(tools)) {
@@ -742,6 +788,9 @@ public class AnthropicRequestBuilder {
         }
 
         CacheControl cacheControl = options.cacheControl();
+        // 仅 Anthropic 风格（type 非空）且预算允许时，才在工具定义上打 cache_control 断点
+        boolean cacheEnabled = cacheOnTools
+                && (cacheControl != null && Utils.isNotEmpty(cacheControl.getType()));
 
         ONode toolsNode = root.getOrNew("tools").asArray();
         int toolCount = 0;
@@ -752,7 +801,6 @@ public class AnthropicRequestBuilder {
             toolsNode.addNew().then(toolNode -> {
                 toolNode.set("name", func.name());
                 toolNode.set("description", func.descriptionAndMeta());
-                
                 String inputSchema = func.inputSchema();
                 if (Utils.isNotEmpty(inputSchema)) {
                     try {
@@ -771,10 +819,93 @@ public class AnthropicRequestBuilder {
                 }
 
                 // ⭐ 在最后一个工具定义上添加 cache_control (Anthropic Prompt Caching)
-                if (isLast && cacheControl != null) {
-                    toolNode.getOrNew("cache_control").set("type", cacheControl.getType());
+                if (isLast && cacheEnabled) {
+                    writeCacheControl(toolNode, cacheControl);
                 }
             });
+        }
+    }
+
+    /**
+     * 在对话历史上放置滚动 cache_control 断点
+     * @author oisin lu
+     * @param messagesNode messages 数组节点
+     * @param cacheControl 缓存控制（已确保 type 非空）
+     * @param quota        滚动断点配额（= 上限 - 静态断点数）
+     * @since 4.0.4
+     */
+    private void applyMessageCacheBreakpoints(ONode messagesNode, CacheControl cacheControl, int quota) {
+        if (messagesNode == null || !messagesNode.isArray() || quota <= 0) {
+            return;
+        }
+
+        int total = messagesNode.size();
+        if (total == 0) {
+            return;
+        }
+
+        // 最后 quota 条消息（不足则只处理存在的那些）
+        int count = Math.min(quota, total);
+        int fromIndex = total - count;
+        for (int i = total - 1; i >= fromIndex; i--) {
+            ONode messageNode = messagesNode.get(i);
+            markMessageCacheBreakpoint(messageNode, cacheControl);
+        }
+    }
+
+    /**
+     * 给单条消息节点的最后一个 content block 挂 cache_control。
+     *
+     * <p>Claude 的 content 可能是字符串（单模态文本）或 content block 数组。字符串形态无法承载
+     * cache_control，需先转成 {@code [{"type":"text","text":<原文>,"cache_control":...}]}。</p>
+     *
+     * @since 4.0.4
+     */
+    private void markMessageCacheBreakpoint(ONode messageNode, CacheControl cacheControl) {
+        if (messageNode == null || !messageNode.isObject()) {
+            return;
+        }
+
+        ONode contentNode = messageNode.getOrNull("content");
+        if (contentNode == null) {
+            return;
+        }
+
+        if (contentNode.isArray()) {
+            int size = contentNode.size();
+            if (size == 0) {
+                return;
+            }
+            // 数组最后一个 block（get 支持负索引；返回的是元素引用，原地修改即生效）
+            ONode lastBlock = contentNode.get(-1);
+            if (lastBlock != null && lastBlock.isObject()) {
+                writeCacheControl(lastBlock, cacheControl);
+            }
+        } else if (contentNode.isString()) {
+            // 字符串 content 转成带断点的 text block 数组
+            String text = contentNode.getString();
+            ONode blocks = new ONode().asArray();
+            blocks.addNew().then(block -> {
+                block.set("type", "text");
+                block.set("text", text);
+                writeCacheControl(block, cacheControl);
+            });
+            messageNode.set("content", blocks);
+        }
+    }
+
+    /**
+     * 向指定节点写入 cache_control 标记（统一 type 与可选 ttl）。
+     *
+     * @param blockNode    要挂载 cache_control 的节点（system/tool/content block）
+     * @param cacheControl 缓存控制（type 已确保非空）
+     * @since 4.0.4
+     */
+    private void writeCacheControl(ONode blockNode, CacheControl cacheControl) {
+        ONode ccNode = blockNode.getOrNew("cache_control");
+        ccNode.set("type", cacheControl.getType());
+        if (Utils.isNotEmpty(cacheControl.getTtl())) {
+            ccNode.set("ttl", cacheControl.getTtl());
         }
     }
 
