@@ -12,6 +12,8 @@ import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -112,27 +114,35 @@ public class TeamAgentMarketTest {
     @Test
     @DisplayName("多阶段指派：设计 -> 编码")
     public void testMarketMultiStepProcurement() throws Throwable {
-        ChatModel chatModel = LlmUtil.getChatModel();
+        ChatModel supervisorModel = LlmUtil.getChatModel();
 
-        // 修改为 role().instruction() 风格并合并
-        Agent designer = ReActAgent.of(chatModel).name("designer")
-                .role("UI 设计师")
-                .instruction("描述登录框设计。" + SHORT_LIMIT).build();
+        Agent designer = fixedAgent("designer", "UI 设计师",
+                "登录框设计：用户名、密码和登录按钮。{\"design\":\"login form\",\"status\":\"done\"}");
+        Agent coder = fixedAgent("coder", "前端开发员",
+                "<form><input name=\"user\"><input type=\"password\"><button>登录</button></form>"
+                        + "{\"result\":\"html ready\",\"status\":\"done\"}");
 
-        Agent coder = ReActAgent.of(chatModel).name("coder")
-                .role("前端开发员")
-                .instruction("根据设计出 HTML。" + SHORT_LIMIT).build();
-
-        TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.MARKET_BASED).agentAdd(designer, coder).maxTurns(5).build();
+        TeamAgent team = TeamAgent.of(supervisorModel).protocol(TeamProtocols.MARKET_BASED)
+                .feedbackMode(false).agentAdd(designer, coder).maxTurns(5).build();
         AgentSession s = InMemoryAgentSession.of("m4");
 
-        // 修改调用风格
-        team.prompt(Prompt.of("先设计登录框，然后写出 HTML")).session(s).call();
+        String result = team.prompt(Prompt.of("先设计登录框，然后写出 HTML")).session(s).call().getContent();
 
         List<String> executors = team.getTrace(s).getRecords().stream()
                 .filter(r -> r.isAgent()).map(r -> r.getSource()).distinct().collect(Collectors.toList());
 
         System.out.println("市场协作路径: " + executors);
-        Assertions.assertTrue(executors.contains("designer") && executors.contains("coder"));
+        Assertions.assertEquals(java.util.Arrays.asList("designer", "coder"), executors);
+        Assertions.assertTrue(result.contains("HTML"));
+    }
+
+    private static Agent fixedAgent(String name, String role, String output) {
+        return new Agent() {
+            @Override public String name() { return name; }
+            @Override public String role() { return role; }
+            @Override public AssistantMessage call(Prompt prompt, AgentSession session) {
+                return ChatMessage.ofAssistant(output);
+            }
+        };
     }
 }

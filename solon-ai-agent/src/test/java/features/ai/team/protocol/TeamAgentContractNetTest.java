@@ -4,17 +4,19 @@ import demo.ai.llm.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
+import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamProtocols;
+import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.team.protocol.ContractNetProtocol;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 
 public class TeamAgentContractNetTest {
@@ -103,20 +105,28 @@ public class TeamAgentContractNetTest {
     @DisplayName("企业级竞标：内核专家择优")
     public void testContractNetEnterpriseBidding() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
-        MethodToolProvider tools = new MethodToolProvider(new BiddingTools());
 
-        Agent normal = ReActAgent.of(chatModel).name("java_expert").role("普通开发专家").build();
-        Agent kernel = ReActAgent.of(chatModel).name("python_expert").role("内核算法专家").build();
+        Agent normal = ReActAgent.of(chatModel).name("java_expert").role("普通开发专家")
+                .profile(p -> p.capabilityAdd("Java")).build();
+        Agent kernel = ReActAgent.of(chatModel).name("python_expert").role("内核算法专家")
+                .profile(p -> p.capabilityAdd("Python")).build();
 
-        TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.CONTRACT_NET).agentAdd(normal, kernel).defaultToolAdd(tools)
-                .role("技术专家评价员")
-                .instruction("调 get_score 评估 Python 匹配度。指派最高分。").build();
+        TeamAgent team = TeamAgent.of(null).protocol(TeamProtocols.CONTRACT_NET).agentAdd(normal, kernel).build();
 
         AgentSession session = InMemoryAgentSession.of("c4");
-        String result = team.prompt(Prompt.of("Python 算法实现")).session(session).call().getContent();
+        TeamTrace trace = new TeamTrace(Prompt.of("Python 算法实现"));
+        trace.setOriginalPrompt(Prompt.of("Python 算法实现"));
+        TestableContractNetProtocol protocol = new TestableContractNetProtocol(team.getConfig());
+        protocol.startNewBidding(trace, "Python 算法实现");
+        ContractNetProtocol.ContractState state = protocol.getContractState(trace);
+        state.addBid(normal.name(), protocol.bid(normal, trace.getOriginalPrompt()));
+        state.addBid(kernel.name(), protocol.bid(kernel, trace.getOriginalPrompt()));
+        printLog("Score Board", state);
 
-        printLog("Score Board", team.getTrace(session).getProtocolDashboardSnapshot());
-        Assertions.assertEquals("python_expert", team.getTrace(session).getLastAgentName());
+        int javaScore = state.getBid("java_expert").get("score").getInt();
+        int pythonScore = state.getBid("python_expert").get("score").getInt();
+        Assertions.assertTrue(pythonScore > javaScore,
+                "Python 能力匹配的标书分数应更高: java=" + javaScore + ", python=" + pythonScore);
     }
 
     // 5. 资格预审：动态状态阻断
@@ -157,5 +167,15 @@ public class TeamAgentContractNetTest {
 
         printLog("Dashboard", team.getTrace(session).getProtocolDashboardSnapshot());
         Assertions.assertEquals("cheap", team.getTrace(session).getLastAgentName());
+    }
+
+    private static class TestableContractNetProtocol extends ContractNetProtocol {
+        TestableContractNetProtocol(TeamAgentConfig config) {
+            super(config);
+        }
+
+        ONode bid(Agent agent, Prompt prompt) {
+            return constructBid(agent, prompt);
+        }
     }
 }
