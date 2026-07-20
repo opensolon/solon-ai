@@ -76,24 +76,28 @@ public abstract class TeamProtocolBase implements TeamProtocol {
     }
 
     /**
-     * 获取持有 Profile 定义的候选 Agent 列表
+     * 获取候选 Agent 列表（含无 profile 成员，与可路由集合对齐）。
+     * 无 profile 的专家仍可被调度，不应从候选提示中抹掉。
      */
     protected List<String> getCandidateAgents(TeamTrace trace) {
-        return config.getAgentMap().entrySet().stream()
-                .filter(e -> e.getValue().profile() != null)
-                .map(Map.Entry::getKey)
-                .collect(Collectors.toList());
+        return new ArrayList<>(config.getAgentMap().keySet());
     }
 
     /**
-     * SOP 完备性检查：默认保护最后一位 Agent 必须参与过（防止跳步）
+     * SOP 完备性检查。
+     * <p>默认：至少有一名专家产出记录且已发生过决策轮次；
+     * 不再强制「注册顺序末位 N 个 Agent 必须参与」——该规则对
+     * Hierarchical / Swarm 等非线性调度过硬，各协议可覆盖本方法。</p>
      */
     protected boolean isLogicFinished(TeamTrace trace) {
-        if (trace.getRecords().isEmpty()) return false;
-
-        if (trace.getTurnCount() < 1) return false;
-
-        return isLastNAgentsParticipated(trace, 1);
+        if (trace == null || trace.getRecords() == null || trace.getRecords().isEmpty()) {
+            return false;
+        }
+        if (trace.getTurnCount() < 1) {
+            return false;
+        }
+        // 至少一名成员专家产出过内容（排除纯系统/主管记录）
+        return trace.getRecords().stream().anyMatch(TeamTrace.TeamRecord::isAgent);
     }
 
     /**
@@ -121,20 +125,33 @@ public abstract class TeamProtocolBase implements TeamProtocol {
 
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         String profileDesc = (agent.profile() != null) ? agent.profile().toFormatString(locale) : "";
+        int windowSize = 5;
+        if (trace.getOptions() != null) {
+            windowSize = Math.max(1, trace.getOptions().getRecordWindowSize());
+        }
 
         if (isZh) {
             sb.append("## 任务上下文 (SYSTEM CONTEXT)\n");
             sb.append("### 你的身份\n").append(profileDesc).append("\n\n");
-            sb.append("### 协作进度 (最近 5 条)\n");
-            sb.append(trace.getFormattedHistory(5, false)).append("\n\n");
+            sb.append("### 协作进度 (最近 ").append(windowSize).append(" 条)\n");
+            sb.append(trace.getFormattedHistory(windowSize, false)).append("\n\n");
             sb.append("---\n请根据上述进度完成你的任务。");
         } else {
             sb.append("## SYSTEM CONTEXT\n");
             sb.append("### Your Identity\n").append(profileDesc).append("\n\n");
-            sb.append("### Collaboration Records (Last 5 entries)\n");
-            sb.append(trace.getFormattedHistory(5, false)).append("\n\n");
+            sb.append("### Collaboration Records (Last ").append(windowSize).append(" entries)\n");
+            sb.append(trace.getFormattedHistory(windowSize, false)).append("\n\n");
             sb.append("---\nPlease complete your task based on the progress.");
         }
+    }
+
+    /**
+     * 默认返回 {@link Prompt#copy()} 副本。
+     * 入参通常是共享 workingMemory；子类若要追加协议消息，请先 super 再增强，禁止原地修改。
+     */
+    @Override
+    public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
+        return originalPrompt == null ? Prompt.of() : originalPrompt.copy();
     }
 
     /**
@@ -147,7 +164,7 @@ public abstract class TeamProtocolBase implements TeamProtocol {
             if (config.getGraphAdjuster() != null) return true;
 
             if (!isLogicFinished(trace)) {
-                LOG.warn("Protocol [{}]: SOP requirements not met (Last agents skipped). Blocking [FINISH] signal.", name());
+                LOG.warn("Protocol [{}]: SOP requirements not met (no agent output yet). Blocking [FINISH] signal.", name());
                 return false; // 返回 false 强制 Supervisor 继续指派，不能结束
             }
         }

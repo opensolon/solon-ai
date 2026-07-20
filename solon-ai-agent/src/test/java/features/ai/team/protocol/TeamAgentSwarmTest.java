@@ -61,12 +61,13 @@ public class TeamAgentSwarmTest {
     }
 
     // 2. 任务涌现 (Task Emergence)
+    // 主路径为 __emerge_tasks__ 工具；同时兼容从输出中吸收 sub_tasks JSON
     @Test
-    @DisplayName("任务涌现：动态生成子任务 JSON")
+    @DisplayName("任务涌现：兼容 sub_tasks JSON 并激活 Worker")
     public void testSwarmTaskEmergence() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 使用 role().instruction() 风格
+        // 使用 role().instruction() 风格：文本 JSON 涌现（resolveAgentOutput 会吸收）
         Agent lead = ReActAgent.of(chatModel).name("Lead")
                 .role("任务拆解专家")
                 .instruction("分析输入并在末尾输出 JSON：{\"sub_tasks\": [{\"task\": \"work\", \"agent\": \"Worker\"}]}" + SHORT)
@@ -84,8 +85,8 @@ public class TeamAgentSwarmTest {
                 .filter(r -> r.isAgent()).map(r -> r.getSource()).collect(Collectors.toList());
 
         System.out.println("涌现路径: " + order);
-        // 验证：Worker 是否因为 Lead 的 JSON 输出而被激活
-        Assertions.assertTrue(order.contains("Worker"), "框架应解析 sub_tasks JSON 并激活 Worker");
+        // 验证：Worker 是否因为 Lead 的 JSON/工具涌现而被激活
+        Assertions.assertTrue(order.contains("Worker"), "框架应吸收 sub_tasks/涌现任务并激活 Worker");
     }
 
     // 3. 生产级博弈：死循环防御

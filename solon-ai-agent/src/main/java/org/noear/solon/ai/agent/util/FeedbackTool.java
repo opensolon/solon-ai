@@ -20,6 +20,8 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.core.util.Assert;
 
+import java.util.Collections;
+
 /**
  * 流程挂起工具（主要为 TeamAgent 传递 ctx.stop 信号）
  * 用于在缺失关键信息时，主动挂起当前推理逻辑，等待外部输入后再恢复执行。
@@ -53,5 +55,17 @@ public class FeedbackTool {
 
     public static boolean isSuspend(String text) {
         return text != null && text.contains("\"status\":\"suspended\"");
+    }
+
+    /**
+     * 构造可被 {@link #isSuspend(String)} 识别的挂起决策文本。
+     * 供 Supervisor 在自行处理 tool_calls 时统一出口。
+     */
+    public static String asSuspendDecision(String reason) {
+        ONode oNode = new ONode().asObject();
+        oNode.set("reason", reason == null ? "" : reason);
+        oNode.set("status", "suspended");
+
+        return oNode.toJson();
     }
 }

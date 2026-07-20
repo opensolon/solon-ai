@@ -13,6 +13,7 @@ import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.flow.FlowContext;
 
 /**
  * 状态持久化与断点续跑测试
@@ -26,8 +27,15 @@ public class TeamAgentPersistenceAndResumeTest {
         String teamName = "persistent_trip_manager";
 
         // 1. 构建一个带有自定义流程的团队
+        // planner 通过 agentAdd 注册进 agentMap，供 Supervisor 续跑后调度；
+        // searcher 已在快照中完成，仅通过 graphAdjuster 挂到 Start 之后。
         TeamAgent tripAgent = TeamAgent.of(chatModel)
                 .name(teamName)
+                .agentAdd(ReActAgent.of(chatModel)
+                        .name("planner")
+                        .role("资深行程规划专家")
+                        .instruction("根据天气数据与用户需求规划行程，并给出穿衣建议")
+                        .build())
                 .graphAdjuster(spec -> {
                     // 自定义流程：Start -> searcher -> Supervisor (决策后续)
                     spec.addStart(Agent.ID_START).linkAdd("searcher");
@@ -43,27 +51,31 @@ public class TeamAgentPersistenceAndResumeTest {
         // 假设我们在另一台机器上运行，执行完 searcher 后，我们将状态序列化到 DB
         InMemoryAgentSession session = InMemoryAgentSession.of("order_sn_998");
 
-        // 手动模拟 Trace 状态：已经完成了天气搜索
-        TeamTrace trace = new TeamTrace(); //Prompt.of("帮我规划上海行程并给穿衣建议")
+        // 手动模拟 Trace 状态：已经完成了天气搜索（必须绑定 originalPrompt，否则空 prompt 续跑无法恢复任务）
+        TeamTrace trace = new TeamTrace(Prompt.of("帮我规划上海行程并给穿衣建议"));
         trace.addRecord(ChatRole.ASSISTANT, "searcher", "上海明日天气：大雨转雷阵雨，气温 12 度。", 800L);
         // 设置当前路由断点为 Supervisor，准备让它恢复后进行决策
         trace.setRoute(TeamAgent.ID_SUPERVISOR);
 
         // 将轨迹存入上下文，key 遵循框架规范 "__" + teamName
         session.getContext().put("__" + teamName, trace);
-
+        // 记录断点位置，方便 Flow 引擎从 Supervisor 续跑
+        session.getContext().trace().recordNodeId(tripAgent.getGraph(), TeamAgent.ID_SUPERVISOR);
+        
         // 模拟落库序列化（JSON）
         String jsonState = session.getContext().toJson();
         System.out.println(">>> 阶段 A：初始状态已持久化至数据库。当前断点：" + trace.getRoute());
-
+        
         // --- 阶段 B：从持久化数据恢复并续跑 ---
         System.out.println("\n>>> 阶段 B：正在从 JSON 快照恢复任务...");
 
         // 从 JSON 重建 FlowContext，并包装成新的 AgentSession
-
+        FlowContext restoredContext = FlowContext.fromJson(jsonState);
+        AgentSession resumedSession = InMemoryAgentSession.of(restoredContext);
+                
         // 验证恢复：调用时不传 Prompt，触发“断点续跑”模式
         TeamResponse resp = tripAgent.prompt()
-                .session(session)
+                .session(resumedSession)
                 .call();
 
         // --- 阶段 C：核心验证 ---

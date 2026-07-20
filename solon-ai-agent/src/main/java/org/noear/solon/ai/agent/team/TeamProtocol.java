@@ -65,10 +65,14 @@ public interface TeamProtocol extends NonSerializable {
     default void injectAgentInstruction(FlowContext context, Agent agent, Locale locale, StringBuilder sb) { }
 
     /**
-     * 动态生成 Agent 提示词（在此处处理上下文衔接或状态同步）
+     * 动态生成 Agent 提示词（在此处处理上下文衔接或状态同步）。
+     *
+     * <p>入参通常是共享的 {@code TeamTrace.workingMemory}。
+     * 若需要追加协议消息，必须先 {@link Prompt#copy()} 再改，避免污染跨 Agent / 跨轮次上下文。
+     * 默认实现返回副本；子类增强时优先 {@code super.prepareAgentPrompt(...)} 后追加。</p>
      */
     default Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
-        return originalPrompt;
+        return originalPrompt == null ? Prompt.of() : originalPrompt.copy();
     }
 
     /**

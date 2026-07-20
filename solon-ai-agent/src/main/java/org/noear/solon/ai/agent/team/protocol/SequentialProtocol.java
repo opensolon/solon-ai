@@ -20,6 +20,8 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.chat.message.UserMessage;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
@@ -40,12 +42,21 @@ public class SequentialProtocol extends TeamProtocolBase {
     public final static String ID_ROUTING = "routing";
 
     private static final String KEY_SEQUENCE_STATE = "sequence_state_obj";
+    private static final int SUMMARY_MAX_LENGTH = 50;
     private int maxRetriesPerStage = 1;
 
+    public enum StageStatus {
+        PENDING, COMPLETED, RETRYING, FAILED, SKIPPED
+    }
+
     public static class StageInfo {
-        public String status = "PENDING";
+        public StageStatus status = StageStatus.PENDING;
         public int retries = 0;
         public String summary;
+    }
+
+    public void setMaxRetriesPerStage(int maxRetriesPerStage) {
+        this.maxRetriesPerStage = maxRetriesPerStage;
     }
 
     public static class SequenceState {
@@ -55,20 +66,52 @@ public class SequentialProtocol extends TeamProtocolBase {
 
         public void init(TeamTrace trace) {
             if (this.pipeline.size() > 0) return;
+            if (trace == null || trace.getConfig() == null) return;
 
             Collection<String> agentNames = trace.getConfig().getAgentMap().keySet();
             this.pipeline.addAll(agentNames);
             agentNames.forEach(name -> stages.put(name, new StageInfo()));
 
-            if (trace != null && trace.getRecords() != null) {
-                Set<String> finished = new HashSet<>();
+            // 按 pipeline 物理位置恢复索引：找到第一个尚未终态的阶段，
+            // 避免用 finished.size() 在 SKIPPED/乱序参与时错位
+            if (trace.getRecords() != null) {
+                Map<String, StageStatus> recovered = new LinkedHashMap<>();
                 for (TeamTrace.TeamRecord r : trace.getRecords()) {
-                    if (r.isAgent() && pipeline.contains(r.getSource())) {
-                        finished.add(r.getSource());
+                    if (r == null || !r.isAgent()) continue;
+                    String name = r.getSource();
+                    if (!pipeline.contains(name)) continue;
+
+                    String content = String.valueOf(r.getContent());
+                    if (content.contains("Incompatible modality") || content.contains("SKIPPED")) {
+                        recovered.put(name, StageStatus.SKIPPED);
+                    } else if (content.contains("Quality check failed") || content.contains("FAILED")) {
+                        recovered.put(name, StageStatus.FAILED);
+                    } else {
+                        recovered.put(name, StageStatus.COMPLETED);
                     }
                 }
 
-                this.currentIndex = finished.size();
+                recovered.forEach((name, status) -> {
+                    StageInfo info = stages.get(name);
+                    if (info != null) {
+                        info.status = status;
+                    }
+                });
+
+                this.currentIndex = 0;
+                while (this.currentIndex < pipeline.size()) {
+                    StageInfo info = stages.get(pipeline.get(this.currentIndex));
+                    if (info == null) {
+                        break;
+                    }
+                    if (info.status == StageStatus.COMPLETED
+                            || info.status == StageStatus.FAILED
+                            || info.status == StageStatus.SKIPPED) {
+                        this.currentIndex++;
+                    } else {
+                        break;
+                    }
+                }
             }
         }
 
@@ -76,29 +119,78 @@ public class SequentialProtocol extends TeamProtocolBase {
             return currentIndex < pipeline.size() ? pipeline.get(currentIndex) : Agent.ID_END;
         }
 
-        public void markCurrent(String status, String summary) {
+        public int getCurrentIndex() {
+            return currentIndex;
+        }
+
+        public List<String> getPipeline() {
+            return Collections.unmodifiableList(pipeline);
+        }
+
+        public Map<String, StageInfo> getStages() {
+            return Collections.unmodifiableMap(stages);
+        }
+
+        public void markCurrent(StageStatus status, String summary) {
             if (currentIndex < pipeline.size()) {
                 StageInfo info = stages.get(pipeline.get(currentIndex));
                 if (info != null) {
                     info.status = status;
                     if (Utils.isNotEmpty(summary)) {
-                        info.summary = summary.length() > 50 ? summary.substring(0, 50) + "..." : summary;
+                        info.summary = summary.length() > SUMMARY_MAX_LENGTH
+                                ? summary.substring(0, SUMMARY_MAX_LENGTH) + "..."
+                                : summary;
                     }
                 }
             }
         }
 
+        /**
+         * 按 agent 名标记阶段（用于 onAgentEnd 时 currentIndex 与 agent 对齐校验）
+         */
+        public void markAgent(String agentName, StageStatus status, String summary) {
+            StageInfo info = stages.get(agentName);
+            if (info == null) return;
+            info.status = status;
+            if (Utils.isNotEmpty(summary)) {
+                info.summary = summary.length() > SUMMARY_MAX_LENGTH
+                        ? summary.substring(0, SUMMARY_MAX_LENGTH) + "..."
+                        : summary;
+            }
+        }
+
         public void next() { currentIndex++; }
+
+        /**
+         * 将 currentIndex 推进到指定 agent 的下一位置（若 agent 不在 pipeline 则 next()）
+         */
+        public void advancePast(String agentName) {
+            int idx = pipeline.indexOf(agentName);
+            if (idx >= 0) {
+                currentIndex = Math.min(idx + 1, pipeline.size());
+            } else {
+                next();
+            }
+        }
+
+        /** 将 currentIndex 回退到指定 agent（用于阶段重试） */
+        public void rewindTo(String agentName) {
+            int idx = pipeline.indexOf(agentName);
+            if (idx >= 0) {
+                currentIndex = idx;
+            }
+        }
 
         @Override
         public String toString() {
             ONode root = new ONode().asObject();
-            root.set("progress", (currentIndex + 1) + "/" + pipeline.size());
+            int progress = Math.min(currentIndex + 1, pipeline.size());
+            root.set("progress", progress + "/" + pipeline.size());
             ONode stagesNode = root.getOrNew("stages").asArray();
             stages.forEach((k, v) -> {
                 stagesNode.add(new ONode().asObject()
                         .set("agent", k)
-                        .set("status", v.status)
+                        .set("status", v.status.name())
                         .set("retries", v.retries));
             });
             return root.toJson();
@@ -141,42 +233,96 @@ public class SequentialProtocol extends TeamProtocolBase {
         SequenceState state = getSequenceState(trace);
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
         sb.append(isZh ? "\n### 流水线进度 (Pipeline Progress)\n" : "\n### Pipeline Progress\n");
-        sb.append("```json\n").append(state.toString()).append("\n```\n");
+        sb.append("```json\n").append(ONode.serialize(state)).append("\n```\n");
     }
 
     @Override
     public void onAgentEnd(TeamTrace trace, Agent agent) {
         SequenceState state = getSequenceState(trace);
         String content = trace.getLastAgentContent();
-        boolean isSuccess = assessQuality(content) && trace.getSession().isPending() == false;
-        StageInfo info = state.stages.get(agent.name());
+        boolean isPending = trace.getSession() != null && trace.getSession().isPending();
+        StageInfo info = state.getStages().get(agent.name());
+
+        // HITL / 人工挂起：冻结当前阶段，不消耗质量重试额度，也不推进流水线
+        if (isPending) {
+            state.markAgent(agent.name(), StageStatus.RETRYING, "Pending human intervention");
+            state.rewindTo(agent.name());
+            trace.setRoute(agent.name());
+            super.onAgentEnd(trace, agent);
+            return;
+        }
+
+        boolean isSuccess = assessQuality(content);
 
         if (isSuccess) {
-            state.markCurrent("COMPLETED", content);
-            state.next();
+            state.markAgent(agent.name(), StageStatus.COMPLETED, content);
+            state.advancePast(agent.name());
             trace.setRoute(ID_ROUTING);
         } else {
             if (info != null && info.retries < maxRetriesPerStage) {
                 info.retries++;
-                state.markCurrent("RETRYING", "Quality check failed");
+                state.markAgent(agent.name(), StageStatus.RETRYING, "Quality check failed");
+                // 回退 currentIndex 到该 agent，确保重试时 getNextAgent 正确
+                state.rewindTo(agent.name());
                 trace.setRoute(agent.name());
             } else {
-                state.markCurrent("FAILED", "Quality check failed");
-                state.next();
+                state.markAgent(agent.name(), StageStatus.FAILED, "Quality check failed");
+                state.advancePast(agent.name());
                 trace.setRoute(ID_ROUTING);
             }
         }
         super.onAgentEnd(trace, agent);
     }
 
+    /**
+     * 检测上下文是否含多模态输入：优先看 originalPrompt 的 UserMessage，
+     * 再回退扫描最近专家产出中的 markdown 图片标记。
+     */
     public boolean detectMultiModalPresence(TeamTrace trace) {
+        if (trace == null) return false;
+
+        Prompt original = trace.getOriginalPrompt();
+        if (original != null && original.getMessages() != null) {
+            boolean fromPrompt = original.getMessages().stream()
+                    .filter(UserMessage.class::isInstance)
+                    .map(UserMessage.class::cast)
+                    .anyMatch(UserMessage::isMultiModal);
+            if (fromPrompt) {
+                return true;
+            }
+        }
+
         String content = trace.getLastAgentContent();
         if (content == null) return false;
         return content.contains("![image]") || content.matches("(?s).*\\[.*?\\]\\(data:image/.*\\).*");
     }
 
+    /**
+     * 专家是否支持图像模态（profile / inputModes 空安全）
+     */
+    public boolean supportsImage(Agent agent) {
+        if (agent == null || agent.profile() == null) {
+            return false;
+        }
+        List<String> modes = agent.profile().getInputModes();
+        if (modes == null || modes.isEmpty()) {
+            return false;
+        }
+        return modes.stream().anyMatch(m -> m != null && m.equalsIgnoreCase("image"));
+    }
+
     private boolean assessQuality(String content) {
         if (Utils.isEmpty(content)) return false;
-        return content.trim().length() > 2; // 降低门槛
+        // 基础质量检查：内容长度超过2个字符视为有效
+        return content.trim().length() > 2;
+    }
+
+    /**
+     * Sequential 以 pipeline 推进为准：至少走过最后一阶段（含 SKIPPED/FAILED）才允许逻辑完结
+     */
+    @Override
+    protected boolean isLogicFinished(TeamTrace trace) {
+        SequenceState state = getSequenceState(trace);
+        return state.getCurrentIndex() >= state.getPipeline().size() && !state.getPipeline().isEmpty();
     }
 }

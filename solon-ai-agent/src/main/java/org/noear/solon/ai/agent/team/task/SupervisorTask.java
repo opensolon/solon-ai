@@ -189,49 +189,104 @@ public class SupervisorTask implements NamedTaskComponent {
             return;
         }
 
+        // 优先从正文提取决策；若模型走 feedback 工具，仅在正文存在「显式指派成员名」时抢路由
         String clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : "";
-        String decision = clearContent.trim();
-        trace.setLastDecision(decision);
+        String decision = clearContent == null ? "" : clearContent.trim();
 
+        if (Assert.isNotEmpty(responseMessage.getToolCalls())) {
+            for (org.noear.solon.ai.chat.tool.ToolCall call : responseMessage.getToolCalls()) {
+                if (FeedbackTool.TOOL_NAME.equals(call.getName())) {
+                    Object reasonObj = call.getArguments() == null ? null : call.getArguments().get("reason");
+                    String reason = reasonObj == null ? "" : String.valueOf(reasonObj);
+                    
+                    // 模型常一边写「指派/派 天气专家」一边误调 feedback。
+                    // 正文或 reason 中若存在显式指派句式，优先继续协作。
+                    String assigned = extractAssignedAgentName(decision);
+                    if (Assert.isEmpty(assigned)) {
+                        assigned = extractAssignedAgentName(reason);
+                    }
+                    if (Assert.isNotEmpty(assigned)) {
+                        routeTo(context, trace, assigned);
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("TeamAgent [{}] feedback tool co-occurs with explicit agent assign [{}]; prefer routing",
+                                    config.getName(), assigned);
+                        }
+                        return;
+                    }
+                    
+                    // 真正需要外部反馈：挂起
+                    decision = FeedbackTool.asSuspendDecision(reason);
+                    break;
+                }
+            }
+        }
+    
+        trace.setLastDecision(decision);
+    
         for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
             if (item.target.isEnabled()) {
                 item.target.onSupervisorDecision(trace, decision);
             }
         }
-
+    
         if (trace.getSession().isPending()) {
             return;
         }
-
+    
         commitRoute(trace, decision, context);
     }
 
     /**
-     * 将决策文本解析为物理路由目标
+     * 将决策文本解析为物理路由目标。
+     *
+     * <p>状态机收口：</p>
+     * <ul>
+     *   <li>FINISH 且 {@code shouldSupervisorRoute=true} → END</li>
+     *   <li>FINISH 但被协议拒绝 → 禁止 fall-through 误入 END；尝试回派成员继续协作</li>
+     *   <li>无法解析的 decision → 不静默 END；优先回派可执行成员以重新进入循环</li>
+     * </ul>
      */
     protected void commitRoute(TeamTrace trace, String decision, FlowContext context) {
         if (FeedbackTool.isSuspend(decision)) {
             ONode oNode = ONode.ofJson(decision);
             String reason = oNode.get("reason").getString();
+            
+            // 仅当 reason 是「显式指派成员名」时才抢路由；
+            // 普通「请用户补充目的地」里顺带提到专家名不算路由。
+            String assigned = extractAssignedAgentName(Assert.isEmpty(reason) ? decision : reason);
+            if (Assert.isNotEmpty(assigned)) {
+                routeTo(context, trace, assigned);
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("TeamAgent [{}] feedback payload is explicit assign to [{}]", config.getName(), assigned);
+                }
+                return;
+            }
+            
+            // 真正需要外部反馈：挂起流程并记录原因
             trace.setFinalAnswer(reason);
+            if (trace.getSession() != null) {
+                trace.getSession().pending(true, reason);
+            }
             trace.setRoute(Agent.ID_END);
-            trace.getContext().interrupt();
+            if (trace.getContext() != null) {
+                trace.getContext().interrupt();
+            }
             return;
         }
 
         if (Assert.isEmpty(decision)) {
-            routeTo(context, trace, Agent.ID_END);
+            handleUnresolvableDecision(context, trace, decision, "empty supervisor decision");
             return;
         }
 
-        // 1. 优先尝试协议自定义路由解析
+        // 1. 优先尝试协议自定义路由解析（可含 FINISH 阻断时的硬回派）
         String protoRoute = config.getProtocol().resolveSupervisorRoute(context, trace, decision);
         if (Assert.isNotEmpty(protoRoute)) {
             routeTo(context, trace, protoRoute);
             return;
         }
 
-        // 2. 检查结束标记并提取最终答案
+        // 2. FINISH 分支：允许结束则 END；拒绝则必须 return，禁止 fall-through
         String finishMarker = config.getFinishMarker();
         if (decision.contains(finishMarker)) {
             if (config.getProtocol().shouldSupervisorRoute(context, trace, decision)) {
@@ -248,6 +303,29 @@ public class SupervisorTask implements NamedTaskComponent {
                 routeTo(context, trace, Agent.ID_END);
                 return;
             }
+
+            // FINISH 被协议拒绝：不得误入 END
+            if (matchAgentRoute(context, trace, decision)) {
+                return;
+            }
+            String fallback = resolveContinueFallback(trace);
+            if (Assert.isNotEmpty(fallback)) {
+                trace.addRecord(ChatRole.SYSTEM, TeamAgent.ID_SYSTEM,
+                        "[Routing] FINISH rejected by protocol; re-assign to [" + fallback + "]",
+                        0);
+                routeTo(context, trace, fallback);
+                return;
+            }
+
+            // 极端：无可回派成员（空团队）才允许 END，且必须留下原因
+            LOG.warn("TeamAgent [{}] FINISH rejected but no fallback agent available", config.getName());
+            if (Assert.isEmpty(trace.getFinalAnswer())) {
+                trace.setFinalAnswer(trace.getLastAgentContent());
+            }
+            trace.addRecord(ChatRole.SYSTEM, TeamAgent.ID_SYSTEM,
+                    "[Terminated] FINISH rejected and no agent available to continue", 0);
+            routeTo(context, trace, Agent.ID_END);
+            return;
         }
 
         // 3. 匹配成员 Agent 路由
@@ -255,45 +333,213 @@ public class SupervisorTask implements NamedTaskComponent {
             return;
         }
 
+        // 4. 无法解析：禁止静默 END
+        handleUnresolvableDecision(context, trace, decision, "unable to extract agent name");
+    }
+
+    /**
+     * 解析失败/空决策时的统一处置：优先回派可执行成员以重新进入协作循环，
+     * 避免 exclusive 默认边误入 END。仅在确实无法继续时带原因结束。
+     */
+    protected void handleUnresolvableDecision(FlowContext context, TeamTrace trace, String decision, String reason) {
         if (LOG.isDebugEnabled()) {
-            LOG.debug("TeamAgent [{}] unable to extract agent name from LLM response: [{}]", config.getName(), decision);
+            LOG.debug("TeamAgent [{}] {}: [{}]", config.getName(), reason, decision);
+        }
+
+        String fallback = resolveContinueFallback(trace);
+        if (Assert.isNotEmpty(fallback)
+                && trace.getTurnCount() < trace.getOptions().getMaxTurns()) {
+            trace.addRecord(ChatRole.SYSTEM, TeamAgent.ID_SYSTEM,
+                    "[Routing] " + reason + "; retry via [" + fallback + "]",
+                    0);
+            routeTo(context, trace, fallback);
+            return;
+        }
+
+        trace.addRecord(ChatRole.SYSTEM, TeamAgent.ID_SYSTEM,
+                "[Terminated] " + reason + (decision == null ? "" : ": " + truncate(decision, 200)),
+                0);
+        if (Assert.isEmpty(trace.getFinalAnswer())) {
+            String last = trace.getLastAgentContent();
+            trace.setFinalAnswer(Assert.isEmpty(last) ? ("Supervisor decision unresolved: " + reason) : last);
         }
         routeTo(context, trace, Agent.ID_END);
     }
 
     /**
-     * 模糊匹配文本中的 Agent 名称
+     * FINISH 被拒/解析失败时的继续执行回退：
+     * 上一位合法专家 → 队伍中第一位专家。
+     * 用于在 Supervisor 无自环边时，仍能通过 Agent→Supervisor 边回到决策循环。
+     */
+    protected String resolveContinueFallback(TeamTrace trace) {
+        String last = trace.getLastAgentName();
+        if (Assert.isNotEmpty(last) && config.getAgentMap().containsKey(last)) {
+            return last;
+        }
+        if (!config.getAgentMap().isEmpty()) {
+            return config.getAgentMap().keySet().iterator().next();
+        }
+        return null;
+    }
+
+    private static String truncate(String text, int max) {
+        if (text == null) {
+            return "";
+        }
+        String t = text.trim();
+        return t.length() <= max ? t : t.substring(0, max) + "...";
+    }
+
+    /**
+     * 模糊匹配文本中的 Agent 名称。
+     *
+     * <p>优先级：</p>
+     * <ol>
+     *   <li>全文恰为成员名</li>
+     *   <li>显式指派句式中的成员名（指派/派发/next/route to ...）</li>
+     *   <li>正文中最后出现的成员名（仅 agent name，不做宽泛角色匹配）</li>
+     * </ol>
+     * <p>注意：不在长文中按角色名（如「天气专家」）做 lastIndexOf 匹配——
+     * 主管决策/feedback 文案常复述成员角色，会导致误路由。</p>
      */
     protected boolean matchAgentRoute(FlowContext context, TeamTrace trace, String text) {
-        // 移除 Markdown 格式字符（加粗/斜体的 * 和代码的 `），保留下划线，避免agent 名称的合法字符被误删，如agent1_extractor
+        if (Assert.isEmpty(text)) {
+            return false;
+        }
+        
+        // 移除 Markdown 格式字符（加粗/斜体的 * 和代码的 `），保留下划线
         String cleanText = text.replaceAll("[\\*\\`]", "").trim();
-
+        if (Assert.isEmpty(cleanText)) {
+            return false;
+        }
+                    
+        // 1. 全文恰为成员名
         if (config.getAgentMap().containsKey(cleanText)) {
-            routeTo(context, trace, cleanText);
+            routeTo(context, trace, normalizeAgentName(cleanText));
             return true;
         }
+            
+        // 2. 显式指派句式中的成员名
+        String assigned = extractAssignedAgentName(cleanText);
+        if (Assert.isNotEmpty(assigned)) {
+            routeTo(context, trace, assigned);
+            return true;
+        }
+        
+        // 3. 成员名（agent name）最后一次出现
+        String byName = findLastAgentName(cleanText);
+        if (Assert.isNotEmpty(byName)) {
+            routeTo(context, trace, byName);
+            return true;
+        }
+        
+        return false;
+    }
+        
+    /**
+     * 从「指派/派发/派/next/route」类句式中提取目标 Agent 的规范名。
+     * <p>支持成员 name 以及角色 role（仅在显式指派句式中），避免长文复述误命中。</p>
+     */
+    protected String extractAssignedAgentName(String text) {
+        if (Assert.isEmpty(text)) {
+            return null;
+        }
+        String cleanText = text.replaceAll("[\\*\\`]", "").trim();
 
-        List<String> agentNames = new ArrayList<>(config.getAgentMap().keySet());
+        // 1) agent name：指派动词 + name（避免中文角色后吞掉整句）
+        String assignedByName = null;
+        int assignedByNameIdx = -1;
+        for (String name : config.getAgentMap().keySet()) {
+            Pattern nameAssign = Pattern.compile(
+                    "(?is)(?:指派(?:专家)?|派发|先派|再派|派|next(?:\\s+agent)?|route(?:\\s+to)?)\\s*[:：]?\\s*"
+                            + Pattern.quote(name) + "(?=[^a-zA-Z0-9_]|$)");
+            Matcher nm = nameAssign.matcher(cleanText);
+            while (nm.find()) {
+                if (nm.start() > assignedByNameIdx) {
+                    assignedByNameIdx = nm.start();
+                    assignedByName = name;
+                }
+            }
+        }
+        if (Assert.isNotEmpty(assignedByName)) {
+            return normalizeAgentName(assignedByName);
+        }
+
+        // 2) role：指派动词 + role（仅在显式指派句式中）
+        String assignedByRole = null;
+        int assignedByRoleIdx = -1;
+        for (Map.Entry<String, Agent> entry : config.getAgentMap().entrySet()) {
+            String role = entry.getValue().role();
+            if (Assert.isEmpty(role) || role.length() < 2) {
+                continue;
+            }
+            Pattern roleAssign = Pattern.compile(
+                    "(?is)(?:指派(?:专家)?|派发|先派|再派|派|next(?:\\s+agent)?|route(?:\\s+to)?)\\s*[:：]?\\s*"
+                            + Pattern.quote(role));
+            Matcher rm = roleAssign.matcher(cleanText);
+            while (rm.find()) {
+                if (rm.start() > assignedByRoleIdx) {
+                    assignedByRoleIdx = rm.start();
+                    assignedByRole = entry.getKey();
+                }
+            }
+        }
+        return assignedByRole;
+    }
+
+    /**
+     * 将角色称呼解析为 agentMap 规范名（仅用于显式指派上下文）。
+     */
+    protected String resolveAgentByRoleToken(String token) {
+        if (Assert.isEmpty(token) || token.length() < 2) {
+            return null;
+        }
+        String exact = null;
+        String partial = null;
+        for (Map.Entry<String, Agent> entry : config.getAgentMap().entrySet()) {
+            String role = entry.getValue().role();
+            if (Assert.isEmpty(role)) {
+                continue;
+            }
+            if (role.equals(token)) {
+                exact = entry.getKey();
+                break;
+            }
+            if (role.contains(token) || token.contains(role)) {
+                partial = entry.getKey();
+            }
+        }
+        return exact != null ? exact : partial;
+    }
+    
+    protected String findLastAgentName(String cleanText) {
+        if (Assert.isEmpty(cleanText)) {
+            return null;
+        }
         String lastFoundAgent = null;
         int lastIndex = -1;
-
-        for (String name : agentNames) {
-            Pattern p = Pattern.compile("(?i)(?<=^|[^a-zA-Z0-9])" + Pattern.quote(name) + "(?=[^a-zA-Z0-9]|$)");
-            Matcher m = p.matcher(cleanText);
-            while (m.find()) {
-                if (m.start() > lastIndex) {
-                    lastIndex = m.start();
+    
+        for (String name : config.getAgentMap().keySet()) {
+            Pattern p = Pattern.compile("(?i)(?<=^|[^a-zA-Z0-9_])" + Pattern.quote(name) + "(?=[^a-zA-Z0-9_]|$)");
+            Matcher matcher = p.matcher(cleanText);
+            while (matcher.find()) {
+                if (matcher.start() > lastIndex) {
+                    lastIndex = matcher.start();
                     lastFoundAgent = name;
                 }
             }
         }
-
-        if (lastFoundAgent != null) {
-            routeTo(context, trace, lastFoundAgent);
-            return true;
+        return lastFoundAgent;
+    }
+    
+    protected String normalizeAgentName(String name) {
+        // IgnoreCaseMap 下返回规范 key
+        for (String key : config.getAgentMap().keySet()) {
+            if (key.equalsIgnoreCase(name)) {
+                return key;
+            }
         }
-
-        return false;
+        return name;
     }
 
     /**
@@ -303,6 +549,9 @@ public class SupervisorTask implements NamedTaskComponent {
         ChatRequestDesc req = config.getChatModel().prompt(messages).options(o -> {
             o.agentName(trace.getAgentName());
 
+            // Supervisor 自行解析 tool_calls（尤其是 feedback），避免 returnDirect 抹掉正文中的路由意图
+            o.autoToolCall(false);
+                        
             if (trace.getOptions().isFeedbackMode()) {
                 o.toolAdd(FeedbackTool.getTool(
                         trace.getOptions().getFeedbackDescription(trace),
@@ -311,16 +560,18 @@ public class SupervisorTask implements NamedTaskComponent {
 
             o.toolAdd(trace.getOptions().getTools());
             config.getProtocol().injectSupervisorTools(trace.getContext(), o::toolAdd);
-
+            
             o.toolContextPut(trace.getOptions().getToolContext());
-
+                
             for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
                 //内部已支持启用控制
                 o.interceptorAdd(item.index, item.target);
             }
-
+            
             o.optionSet(trace.getOptions().getModelOptions().options());
-
+            // 覆盖 optionSet 可能带回的 autoToolCall=true
+            o.autoToolCall(false);
+            
             // 从 Agent 级选项复制缓存控制配置
             ModelOptionsAmend<?, ?> agentOptions = trace.getOptions().getModelOptions();
             if (agentOptions.cacheControl() != null) {

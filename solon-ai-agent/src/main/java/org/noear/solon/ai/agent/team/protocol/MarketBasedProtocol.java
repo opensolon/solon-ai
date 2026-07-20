@@ -26,6 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.Objects;
 
 /**
  * 市场机制协作协议 (Market-Based Protocol)
@@ -37,6 +38,8 @@ import java.util.*;
 public class MarketBasedProtocol extends HierarchicalProtocol {
     private static final Logger LOG = LoggerFactory.getLogger(MarketBasedProtocol.class);
     private static final String KEY_MARKET_STATE = "market_state_obj";
+    private static final double MIN_PRICE = 0.1;
+    private static final double PENALTY_DECLINE = 0.2;
 
     /**
      * 市场状态看板：存储各 Agent 的价格与能力画像
@@ -54,7 +57,7 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
             public double currentPrice = 1.0; // 实时市场价
 
             // 计算性价比：ROI = (质量 * 效率) / 价格
-            public double getROI() { return (quality * efficiency) / Math.max(0.1, currentPrice); }
+            public double getROI() { return (quality * efficiency) / Math.max(MIN_PRICE, currentPrice); }
         }
 
         /**
@@ -63,8 +66,13 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
         public void recordTransaction(String agentName, double q, double e, Agent agent) {
             AgentProfile profile = marketplace.computeIfAbsent(agentName, k -> {
                 AgentProfile p = new AgentProfile();
-                Object metaPrice = agent.profile().getMetadata().get("base_price");
-                p.basePrice = (metaPrice instanceof Number) ? ((Number) metaPrice).doubleValue() : 1.0;
+                p.basePrice = 1.0;
+                if (agent != null && agent.profile() != null) {
+                    Object metaPrice = agent.profile().getMetadata().get("base_price");
+                    if (metaPrice instanceof Number) {
+                        p.basePrice = ((Number) metaPrice).doubleValue();
+                    }
+                }
                 p.currentPrice = p.basePrice;
                 return p;
             });
@@ -77,7 +85,10 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
             // 综合定价逻辑：质量因子 * 对数经验溢价 * 模态权重
             double qualityFactor = 0.5 + profile.quality;
             double volumePremium = 1.0 + Math.log1p(profile.completedTasks) * 0.15;
-            double modalityMultiplier = agent.profile().getInputModes().contains("image") ? 1.5 : 1.0;
+            boolean hasImage = agent != null
+                    && agent.profile() != null
+                    && agent.profile().getInputModes().contains("image");
+            double modalityMultiplier = hasImage ? 1.5 : 1.0;
 
             profile.currentPrice = profile.basePrice * qualityFactor * volumePremium * modalityMultiplier;
         }
@@ -111,9 +122,9 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
         MarketState state = (MarketState) trace.getProtocolContext()
                 .computeIfAbsent(KEY_MARKET_STATE, k -> new MarketState());
 
-        boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
+        boolean isZh = isChinese(config.getLocale());
         sb.append(isZh ? "\n### 专家人才市场 (Expert Marketplace)\n" : "\n### Expert Marketplace\n");
-        sb.append("```json\n").append(state.toString()).append("\n```\n");
+        sb.append("```json\n").append(ONode.serialize(state)).append("\n```\n");
 
         if (isZh) {
             sb.append("> 策略指引：\n> - 攻坚任务指派 ROI > 1.0 的高价值专家。\n");
@@ -137,8 +148,13 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
      */
     @Override
     public void onAgentEnd(TeamTrace trace, Agent agent) {
-        MarketState state = (MarketState) trace.getProtocolContext()
-                .computeIfAbsent(KEY_MARKET_STATE, k -> new MarketState());
+        Objects.requireNonNull(agent, "agent must not be null");
+
+        MarketState state = (MarketState) trace.getProtocolContext().get(KEY_MARKET_STATE);
+        if (state == null) {
+            state = new MarketState();
+            trace.getProtocolContext().put(KEY_MARKET_STATE, state);
+        }
 
         String content = trace.getLastAgentContent();
         long duration = trace.getLastAgentDuration();
@@ -180,7 +196,7 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
         if (content.contains("```")) score += 0.2;
         if (content.contains("[Done]") || content.contains("SUCCESS")) score += 0.2;
         // 减分项：拒绝服务词汇
-        if (content.contains("I'm sorry") || content.contains("cannot fulfill")) score -= 0.4;
+        if (content.contains("I'm sorry") || content.contains("cannot fulfill")) score -= PENALTY_DECLINE;
 
         return Math.min(1.0, Math.max(0.1, score));
     }
@@ -188,7 +204,7 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
     @Override
     public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
         super.injectSupervisorInstruction(locale, sb);
-        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+        boolean isZh = isChinese(locale);
         if (isZh) {
             sb.append("\n### 调度准则：简单任务看价格(Price)，攻坚任务看信誉(Score)与性价比(ROI)。");
         } else {

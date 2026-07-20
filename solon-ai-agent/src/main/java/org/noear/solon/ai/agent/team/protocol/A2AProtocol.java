@@ -23,9 +23,7 @@ import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
 import org.noear.solon.ai.chat.ChatRole;
-import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
-import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.flow.FlowContext;
@@ -44,6 +42,10 @@ public class A2AProtocol extends TeamProtocolBase {
     private static final String KEY_A2A_STATE = "a2a_state_obj";
     private static final String TOOL_TRANSFER = "__transfer_to__";
     private final int maxTransferRounds = 5;
+
+    private boolean isZh(Locale locale) {
+        return Locale.CHINA.getLanguage().equals(locale.getLanguage());
+    }
 
     public A2AProtocol(TeamAgentConfig config) {
         super(config);
@@ -65,6 +67,11 @@ public class A2AProtocol extends TeamProtocolBase {
 
         public void confirmTransfer() {
             this.transferCount++;
+            this.lastTempTarget = "";
+        }
+
+        /** 失败移交：只清理 pending，不消耗额度 */
+        public void clearPendingTransfer() {
             this.lastTempTarget = "";
         }
 
@@ -125,7 +132,7 @@ public class A2AProtocol extends TeamProtocolBase {
         if (trace == null) return;
 
         A2AState stateObj = getA2AState(trace);
-        boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
+        boolean isZh = isZh(config.getLocale());
 
         ONode expertsNode = new ONode().asArray();
         config.getAgentMap().entrySet().stream()
@@ -141,9 +148,11 @@ public class A2AProtocol extends TeamProtocolBase {
         tool.doHandle(args -> {
             String target = (String) args.get("target");
             String state = (String) args.get("state");
+            // 交接内容由当前专家显式写入 memo。
+            // 不可在工具回调里读 getLastAgentContent()：此时当前专家尚未 addRecord。
+            String memo = args.get("memo") == null ? "" : String.valueOf(args.get("memo"));
 
-            String currentEffectiveContent = trace.getLastAgentContent();
-            stateObj.setTransferRequest(target, state, currentEffectiveContent);
+            stateObj.setTransferRequest(target, state, memo);
 
             if (isZh) {
                 return "已发起向 [" + target + "] 的接力请求。";
@@ -156,12 +165,14 @@ public class A2AProtocol extends TeamProtocolBase {
             tool.title("任务移交")
                     .description("当你无法完成当前任务时，将其移交给更合适的专家。")
                     .stringParamAdd("target", "目标专家名。必选范围: " + expertsNode.toJson())
-                    .stringParamAdd("state", "业务状态 JSON。");
+                    .stringParamAdd("state", "业务状态 JSON。")
+                    .stringParamAdd("memo", "交接备忘：把需要下游专家继续处理的关键产出/结论写在这里。");
         } else {
             tool.title("Transfer")
                     .description("When you are unable to complete the current task, hand it over to a more appropriate expert.")
                     .stringParamAdd("target", "Expert name. Options: " + expertsNode.toJson())
-                    .stringParamAdd("state", "Persistent JSON state.");
+                    .stringParamAdd("state", "Persistent JSON state.")
+                    .stringParamAdd("memo", "Handover memo: put key findings/output the next expert should continue with.");
         }
 
         receiver.accept(tool);
@@ -169,9 +180,12 @@ public class A2AProtocol extends TeamProtocolBase {
 
     @Override
     public void injectAgentInstruction(FlowContext context, Agent agent, Locale locale, StringBuilder sb) {
-        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+        // 1. 基类注入：身份描述 + 协作历史 (最近 5 条)
+        super.injectAgentInstruction(context, agent, locale, sb);
 
-        // 1. 注入基础协作准则 (System Level)
+        boolean isZh = isZh(locale);
+
+        // 2. 注入专家协作准则
         if (isZh) {
             sb.append("\n## 专家协作指引\n");
             sb.append("- 必须根据各专家的 [核心能力] 和 [模态] 标签精准选择目标，严禁向不支持相关模态的专家移交任务。\n");
@@ -182,9 +196,9 @@ public class A2AProtocol extends TeamProtocolBase {
 
         //---------
 
-        // 2. 提取接力数据断面
+        // 3. 提取接力数据断面
         TeamTrace trace = TeamTrace.getCurrent(context);
-        if(trace == null){
+        if (trace == null) {
             return;
         }
 
@@ -211,7 +225,7 @@ public class A2AProtocol extends TeamProtocolBase {
             return;
         }
 
-        // 3. 注入当前任务断面 (Session Level - 确保模型感知其处于接力状态)
+        // 4. 注入当前任务断面 (Session Level - 确保模型感知其处于接力状态)
 
         if (isZh) {
             sb.append("\n## 当前接力任务断面 (Active Session Context)\n");
@@ -255,8 +269,7 @@ public class A2AProtocol extends TeamProtocolBase {
         String target = stateObj.getLastTempTarget();
 
         if (Utils.isNotEmpty(target)) {
-            Locale locale = config.getLocale();
-            boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+            boolean isZh = isZh(config.getLocale());
 
             // 1. 熔断检查
             if (stateObj.getTransferCount() >= maxTransferRounds) {
@@ -270,7 +283,8 @@ public class A2AProtocol extends TeamProtocolBase {
 
             Agent targetAgent = config.getAgentMap().get(target);
             if (targetAgent == null || !checkModality(trace, target)) {
-                stateObj.confirmTransfer();
+                // 失败移交不计入 transferCount
+                stateObj.clearPendingTransfer();
 
                 String feedback;
                 if (isZh) {
@@ -279,11 +293,8 @@ public class A2AProtocol extends TeamProtocolBase {
                     feedback = "[System] Transfer failed: Expert [" + target + "] is invalid or lacks required capabilities. Please re-select or resolve yourself.";
                 }
 
+                // 失败反馈只记协作历史，不改写 originalPrompt（避免污染任务原始输入）
                 trace.addRecord(ChatRole.SYSTEM, "Supervisor", feedback, 0);
-
-                List<ChatMessage> messages = new ArrayList<>(trace.getOriginalPrompt().getMessages());
-                messages.add(ChatMessage.ofUser(feedback));
-                trace.setOriginalPrompt(Prompt.of(messages).attrPut(trace.getOriginalPrompt().attrs()));
 
                 return trace.getLastAgentName();
             }
@@ -301,9 +312,17 @@ public class A2AProtocol extends TeamProtocolBase {
         if (target == null) return false;
 
         boolean isMultiModal = trace.getOriginalPrompt().getMessages().stream()
-                .filter(m -> m.getRole() == ChatRole.USER)
-                .map(m -> (UserMessage) m)
+                .filter(UserMessage.class::isInstance)
+                .map(UserMessage.class::cast)
                 .anyMatch(UserMessage::isMultiModal);
+
+        // profile 为空时，多模态任务直接不通过，避免 NPE
+        if (target.profile() == null) {
+            return !isMultiModal;
+        }
+        if (target.profile().getInputModes() == null) {
+            return !isMultiModal;
+        }
 
         return !isMultiModal || target.profile().getInputModes().stream().anyMatch(m -> !m.equalsIgnoreCase("text"));
     }
@@ -311,7 +330,7 @@ public class A2AProtocol extends TeamProtocolBase {
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         A2AState stateObj = getA2AState(trace);
-        boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
+        boolean isZh = isZh(config.getLocale());
 
         if (stateObj != null) {
             if (isZh) {
@@ -333,16 +352,16 @@ public class A2AProtocol extends TeamProtocolBase {
     @Override
     public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
         super.injectSupervisorInstruction(locale, sb);
-        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+        boolean isZh = isZh(locale);
 
         if (isZh) {
             sb.append("\n### A2A 协作准则：\n");
             sb.append("1. **直接交付**：任务完成时请直接输出 `" + config.getFinishMarker() + "`，**禁止**对专家的内容进行二次总结或润色。\n");
-            sb.append("2. **流转审计**：若专家间接力流转超过 3 次仍无实质进展，请立即介入并强制收尾。");
+            sb.append("2. **流转审计**：若专家间接力流转超过 5 次仍无实质进展，请立即介入并强制收尾。");
         } else {
             sb.append("\n### A2A Collaboration Rules:\n");
             sb.append("1. **Direct Delivery**: Output `" + config.getFinishMarker() + "` directly. **DO NOT** summarize.\n");
-            sb.append("2. **Handover Audit**: Force termination if more than 3 handovers occur.");
+            sb.append("2. **Handover Audit**: Force termination if more than 5 handovers occur.");
         }
     }
 }

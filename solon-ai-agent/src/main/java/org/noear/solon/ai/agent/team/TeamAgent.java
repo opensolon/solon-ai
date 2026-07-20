@@ -76,8 +76,9 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
      */
     protected Graph buildGraph() {
         return Graph.create(config.getTraceKey(), spec -> {
-            // 1. 由协议构建基础拓扑结构（如生成 Supervisor 或指定顺序）
-            if (config.getChatModel() != null) {
+            // 1. 始终由协议构图。Sequential/A2A 等可不依赖 Supervisor LLM；
+            // 需要 ChatModel 的 Supervisor 节点在运行期再校验，避免 chatModel==null 时跳过整图。
+            if (config.getProtocol() != null) {
                 config.getProtocol().buildGraph(spec);
             }
 

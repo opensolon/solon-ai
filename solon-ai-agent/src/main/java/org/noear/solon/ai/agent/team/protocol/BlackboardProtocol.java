@@ -49,6 +49,14 @@ public class BlackboardProtocol extends HierarchicalProtocol {
 
     /**
      * 黑板状态机：管理共享数据与待办队列 (TODOs)
+     *
+     * <p>TODO 是自由文本任务描述，不是 Agent 名。完成语义：</p>
+     * <ul>
+     *   <li>显式字段 {@code completed_todo} / {@code done_todo} / {@code complete_todo}</li>
+     *   <li>result 文本中声明已完成项（包含匹配）</li>
+     *   <li>{@code status=COMPLETED} 时按 result 再尝试清理相关 TODO</li>
+     * </ul>
+     * 禁止用 agentName 删除 todo 文本。
      */
     public static class BoardState {
         private final ONode data = new ONode().asObject();
@@ -61,19 +69,36 @@ public class BlackboardProtocol extends HierarchicalProtocol {
         public void merge(String agentName, Object rawInput) {
             if (rawInput == null) return;
             this.lastUpdater = agentName;
-            this.todos.remove(agentName);
 
             try {
                 ONode node = ONode.ofBean(rawInput);
                 if (node.isObject()) {
+                    // 先处理完成声明，再增删 todo，避免同包内先后顺序歧义
+                    completeTodoNode(node.get("completed_todo"));
+                    completeTodoNode(node.get("done_todo"));
+                    completeTodoNode(node.get("complete_todo"));
+
                     node.getObjectUnsafe().forEach((k, v) -> {
                         if ("todo".equalsIgnoreCase(k)) {
                             addTodoNode(v);
+                        } else if ("completed_todo".equalsIgnoreCase(k)
+                                || "done_todo".equalsIgnoreCase(k)
+                                || "complete_todo".equalsIgnoreCase(k)) {
+                            // 已在上方处理
                         } else if ("status".equalsIgnoreCase(k)) {
-                            if (STATUS_FAILED.equalsIgnoreCase(v.getString())) {
-                                todos.add(agentName);
-                            }
+                            String status = v.getString();
+                            // FAILED 只标记状态；不再把 agentName 误塞进 todos
                             data.set(k, v);
+                            if (STATUS_COMPLETED.equalsIgnoreCase(status)) {
+                                // COMPLETED 时尝试用 result 字段清理相关 TODO
+                                ONode resultNode = node.get("result");
+                                if (resultNode != null && resultNode.isValue()) {
+                                    completeMatchingTodos(resultNode.getString());
+                                }
+                            }
+                        } else if ("result".equalsIgnoreCase(k) && v.isValue()) {
+                            data.set(k, v);
+                            completeMatchingTodos(v.getString());
                         } else {
                             data.set(k, v);
                         }
@@ -84,6 +109,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
                         merge(agentName, ONode.ofJson(str));
                     } else {
                         data.set("result_" + agentName, str);
+                        completeMatchingTodos(str);
                     }
                 }
             } catch (Throwable e) {
@@ -98,17 +124,91 @@ public class BlackboardProtocol extends HierarchicalProtocol {
             this.lastUpdater = agentName;
             if (Utils.isNotEmpty(result)) {
                 data.set("output_" + agentName, result);
+                // result 中声明完成项时同步清理 todo
+                completeMatchingTodos(result);
             }
             if (Utils.isNotEmpty(todo)) {
                 parseAndAddTodos(todo);
             }
         }
 
+        /**
+         * 显式完成一组 TODO（支持逗号/分号/换行分隔）
+         */
+        public void completeTodos(String rawCompleted) {
+            if (Utils.isEmpty(rawCompleted)) return;
+            String normalized = rawCompleted.replaceAll("[,;，；\n\r]+", ";");
+            Arrays.stream(normalized.split(";"))
+                    .map(String::trim)
+                    .filter(Utils::isNotEmpty)
+                    .forEach(this::completeTodoExactOrContains);
+        }
+
+        /**
+         * 根据自由文本（result / 完成说明）移除语义匹配的 TODO
+         */
+        public void completeMatchingTodos(String text) {
+            if (Utils.isEmpty(text) || todos.isEmpty()) return;
+
+            String lower = text.toLowerCase(Locale.ROOT);
+            // 若文本明确声明完成某 todo 关键词，或直接包含 todo 原文，则清理
+            List<String> toRemove = new ArrayList<>();
+            for (String todo : todos) {
+                if (Utils.isEmpty(todo)) {
+                    toRemove.add(todo);
+                    continue;
+                }
+                String t = todo.toLowerCase(Locale.ROOT);
+                if (lower.contains(t) || containsCompletedPhrase(lower, t)) {
+                    toRemove.add(todo);
+                }
+            }
+            toRemove.forEach(todos::remove);
+        }
+
+        private void completeTodoExactOrContains(String item) {
+            if (Utils.isEmpty(item)) return;
+            // 精确命中
+            if (todos.remove(item)) {
+                return;
+            }
+            String lower = item.toLowerCase(Locale.ROOT);
+            List<String> toRemove = new ArrayList<>();
+            for (String todo : todos) {
+                if (Utils.isEmpty(todo)) {
+                    toRemove.add(todo);
+                    continue;
+                }
+                String t = todo.toLowerCase(Locale.ROOT);
+                if (t.equals(lower) || t.contains(lower) || lower.contains(t)) {
+                    toRemove.add(todo);
+                }
+            }
+            toRemove.forEach(todos::remove);
+        }
+
+        private static boolean containsCompletedPhrase(String lowerText, String lowerTodo) {
+            // 兼容 “完成了完善接口文档” / "completed: xxx" / "done - xxx"
+            return lowerText.contains("完成") && lowerText.contains(lowerTodo)
+                    || lowerText.contains("completed") && lowerText.contains(lowerTodo)
+                    || lowerText.contains("done") && lowerText.contains(lowerTodo);
+        }
+
         private void addTodoNode(ONode v) {
+            if (v == null || v.isNull()) return;
             if (v.isArray()) {
                 v.getArrayUnsafe().forEach(i -> parseAndAddTodos(i.getString()));
             } else if (v.isValue()) {
                 parseAndAddTodos(v.getString());
+            }
+        }
+
+        private void completeTodoNode(ONode v) {
+            if (v == null || v.isNull()) return;
+            if (v.isArray()) {
+                v.getArrayUnsafe().forEach(i -> completeTodos(i.getString()));
+            } else if (v.isValue()) {
+                completeTodos(v.getString());
             }
         }
 
@@ -118,9 +218,11 @@ public class BlackboardProtocol extends HierarchicalProtocol {
             String normalized = rawTodo.replaceAll("[,;，；\n\r]+", ";");
             Arrays.stream(normalized.split(";"))
                     .map(String::trim)
-                    .forEach(t -> {
-                        todos.add(t);
-                    });
+                    .filter(Utils::isNotEmpty)
+                    // 去掉常见序号前缀：1. / 1) / - / *
+                    .map(t -> t.replaceFirst("^(?:\\d+[.)、]\\s*|[-*•]\\s+)", "").trim())
+                    .filter(Utils::isNotEmpty)
+                    .forEach(todos::add);
         }
 
         @Override
@@ -160,25 +262,36 @@ public class BlackboardProtocol extends HierarchicalProtocol {
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
         if (isZh) {
-            tool.title("同步黑板").description("同步你的结论和后续待办。建议在完成任务前调用。")
-                    .stringParamAdd("result", "本阶段的确切结论")
+            tool.title("同步黑板").description("同步你的结论、已完成待办和后续待办。建议在完成任务前调用。")
+                    .stringParamAdd("result", "本阶段的确切结论；若完成了某 TODO，请在此明确写出该 TODO 原文")
                     .stringParamAdd("todo", "建议后续协作回合的任务（TODOs）")
-                    .stringParamAdd("state", "JSON 格式的详细业务数据");
+                    .stringParamAdd("completed_todo", "已完成的待办原文（可多条，分号/逗号分隔）")
+                    .stringParamAdd("state", "JSON 格式的详细业务数据，可含 todo / completed_todo / status");
         } else {
-            tool.title("Sync Blackboard").description("Sync findings and future todos.")
-                    .stringParamAdd("result", "Key findings")
+            tool.title("Sync Blackboard").description("Sync findings, completed todos and future todos.")
+                    .stringParamAdd("result", "Key findings; mention completed TODO text if any")
                     .stringParamAdd("todo", "Suggested tasks for next turns")
-                    .stringParamAdd("state", "Detailed JSON state");
+                    .stringParamAdd("completed_todo", "Completed TODO text (semicolon/comma separated)")
+                    .stringParamAdd("state", "Detailed JSON state (todo/completed_todo/status)");
         }
 
         tool.doHandle(args -> {
             BoardState state = (BoardState) trace.getProtocolContext().computeIfAbsent(KEY_BOARD_DATA, k -> new BoardState());
             String res = (String) args.get("result");
             String todo = (String) args.get("todo");
+            String completedTodo = (String) args.get("completed_todo");
             Object rawState = args.get("state");
 
-            if (Utils.isNotEmpty(res) || Utils.isNotEmpty(todo)) state.addDirect(agent.name(), res, todo);
-            if (rawState != null) state.merge(agent.name(), rawState);
+            // 先清理已完成项，再写入新 todo，避免同一次同步中自相矛盾
+            if (Utils.isNotEmpty(completedTodo)) {
+                state.completeTodos(completedTodo);
+            }
+            if (Utils.isNotEmpty(res) || Utils.isNotEmpty(todo)) {
+                state.addDirect(agent.name(), res, todo);
+            }
+            if (rawState != null) {
+                state.merge(agent.name(), rawState);
+            }
 
             if (isZh) {
                 return "系统：黑板已更新。后续专家将基于此状态继续。";
@@ -192,50 +305,63 @@ public class BlackboardProtocol extends HierarchicalProtocol {
 
     @Override
     public void injectAgentInstruction(FlowContext context, Agent agent, Locale locale, StringBuilder sb) {
+        // 保留 Hierarchical 身份/历史 + 汇报规范，再追加黑板专属要求
+        super.injectAgentInstruction(context, agent, locale, sb);
+
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         if (isZh) {
             sb.append("\n## 黑板协作规范\n");
             sb.append("- **主动同步**：在得出阶段性结论或发现新待办（TODO）时，必须调用 `").append(TOOL_SYNC).append("` 工具。\n");
             sb.append("- **数据导向**：决策前请先查阅“当前协作黑板内容”，避免产生冗余的协作回合（Redundant Turns）。\n");
-            sb.append("- **闭环意识**：如果你完成了黑板上的某个 TODO，请在 result 中明确说明，以便 Supervisor 更新状态。\n");
+            sb.append("- **闭环意识**：完成黑板上某个 TODO 时，请通过 `completed_todo` 参数传入该 TODO 原文，或在 result 中完整写出该 TODO，系统会自动从待办列表移除。\n");
         } else {
             sb.append("\n## Blackboard Guidelines\n");
             sb.append("- **Proactive Sync**: You must call `").append(TOOL_SYNC).append("` when you reach a conclusion or identify new tasks (TODOs).\n");
-            sb.append("- **Data-Driven**: Check the \\\"Current blackboard content\\\" before acting to avoid redundant turns.\n");
-            sb.append("- **Closure**: If you complete a TODO from the board, clearly state it in your result for the Supervisor to update.\n");
+            sb.append("- **Data-Driven**: Check the \"Current blackboard content\" before acting to avoid redundant turns.\n");
+            sb.append("- **Closure**: When a board TODO is done, pass its exact text via `completed_todo` (or include it in result) so the system can remove it from the list.\n");
         }
     }
 
+    /**
+     * 先走 Hierarchical 增强（父类链路已 Prompt.copy()），再追加黑板快照。
+     * state==null 时也必须 super，避免丢掉父类 Pre-Context / 主管指令。
+     */
     @Override
     public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
+        // 父类已返回独立副本，可安全追加
+        Prompt finalPrompt = super.prepareAgentPrompt(trace, agent, originalPrompt, locale);
+
         BoardState state = (BoardState) trace.getProtocolContext().get(KEY_BOARD_DATA);
-        if (state == null) return originalPrompt;
+        if (state == null) {
+            return finalPrompt;
+        }
 
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
-        List<ChatMessage> messages = new ArrayList<>(originalPrompt.getMessages());
         String info = isZh ? "【协作黑板快照】" : "[Blackboard Snapshot]";
 
         // 注入到消息列表顶部，作为 Agent 的上下文感知
         String blackboardContext = info + "\n```json\n" + ONode.serialize(state) + "\n```";
-        messages.add(ChatMessage.ofUser(blackboardContext));
-        return Prompt.of(messages).attrPut(originalPrompt.attrs());
+        return finalPrompt.addMessage(ChatMessage.ofUser(blackboardContext));
     }
 
     @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
         BoardState state = (BoardState) trace.getProtocolContext().get(KEY_BOARD_DATA);
 
-        if (decision.contains(config.getFinishMarker()) && state != null) {
-            // 优先级 1：存在明确待办
+        if (decision != null && decision.contains(config.getFinishMarker()) && state != null) {
+            // 优先级 1：存在明确待办 —— 不得把 todo 自由文本当 Agent 名路由
             if (!state.todos.isEmpty()) {
-                String next = state.todos.iterator().next();
-                LOG.info("Blackboard: Intervention! Rerouting to [{}] to clear todos.", next);
-                return next;
+                LOG.info("Blackboard: Intervention! Pending todos exist, defer to supervisor re-assignment.");
+                return null;
             }
             // 优先级 2：状态为 FAILED 且未修复
             if (STATUS_FAILED.equalsIgnoreCase(state.data.get("status").getString())) {
                 LOG.warn("Blackboard: Intervention! Status is FAILED, blocking finish.");
-                return state.lastUpdater; // 尝试指回最后的更新者修复，或由主管自行选择（若返回 super）
+                // lastUpdater 可能是合法 Agent 名；非法时仍交 super/主管兜底
+                if (Utils.isNotEmpty(state.lastUpdater) && config.getAgentMap().containsKey(state.lastUpdater)) {
+                    return state.lastUpdater;
+                }
+                return null;
             }
         }
 
@@ -247,7 +373,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
         BoardState state = (BoardState) trace.getProtocolContext().get(KEY_BOARD_DATA);
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
         sb.append(isZh ? "\n### 全局黑板 (Blackboard Dashboard)\n" : "\n### Global Blackboard\n");
-        sb.append(state != null ? "```json\n" + state + "\n```\n" : "- Empty\n");
+        sb.append(state != null ? "```json\n" + ONode.serialize(state) + "\n```\n" : "- Empty\n");
         super.prepareSupervisorInstruction(context, trace, sb);
     }
 

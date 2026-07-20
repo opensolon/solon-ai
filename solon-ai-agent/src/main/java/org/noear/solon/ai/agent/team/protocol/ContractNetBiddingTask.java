@@ -68,22 +68,22 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
 
             ContractNetProtocol.ContractState state = protocol.getContractState(trace);
 
-            // 兜底：如果没有 rounds（说明是隐式路由进来的），补一次初始化
+            // 兜底：若未走 tryStartNewBidding（rounds==0），补一次完整初始化（归档/清空/递增）
             if (state.getRounds() == 0) {
-                state.incrementRound();
+                protocol.startNewBidding(trace, state.getRequirement());
+                state = protocol.getContractState(trace);
             }
 
             int manualBidCount = 0;
             int autoBidCount = 0;
+            String requirement = state.getRequirement();
 
-            // 迭代执行成员竞标逻辑
             for (Agent agent : config.getAgentMap().values()) {
-                // 排除主管节点
                 if (TeamAgent.ID_SUPERVISOR.equals(agent.name())) {
                     continue;
                 }
 
-                // 核心优化：检查该 Agent 是否已经通过工具 (Tool) 主动提交过标书
+                // 保留已通过工具主动提交的标书
                 if (state.hasAgentBid(agent.name())) {
                     manualBidCount++;
                     if (LOG.isDebugEnabled()) {
@@ -93,8 +93,8 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
                 }
 
                 try {
-                    // 调用协议内置的打分/估算逻辑生成保底标书 (算法代投)
-                    ONode bidProposal = protocol.constructBid(agent, trace.getOriginalPrompt());
+                    // 优先用本轮 requirement，回退 originalPrompt
+                    ONode bidProposal = protocol.constructBid(agent, trace.getOriginalPrompt(), requirement);
 
                     // 将保底标书持久化到协议状态中
                     state.addBid(agent.name(), bidProposal);

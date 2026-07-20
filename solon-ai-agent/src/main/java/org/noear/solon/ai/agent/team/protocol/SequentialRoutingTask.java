@@ -53,19 +53,22 @@ public class SequentialRoutingTask implements NamedTaskComponent {
         // 核心逻辑：获取下一个应该执行的 Agent
         String next = state.getNextAgent();
 
-        // 模态检查逻辑（保留旧代码细节）
+        // 模态检查：多模态输入时跳过不支持 image 的专家（profile / inputModes 空安全）
         while (!Agent.ID_END.equals(next)) {
             Agent nextAgent = config.getAgentMap().get(next);
-            boolean hasImage = protocol.detectMultiModalPresence(trace);
+            if (nextAgent == null) {
+                state.markCurrent(SequentialProtocol.StageStatus.SKIPPED, "Agent missing");
+                state.next();
+                next = state.getNextAgent();
+                continue;
+            }
 
-            if (hasImage && nextAgent.profile() != null) {
-                boolean supportImage = nextAgent.profile().getInputModes().contains("image");
-                if (!supportImage) {
-                    state.markCurrent("SKIPPED", "Incompatible modality");
-                    state.next();
-                    next = state.getNextAgent();
-                    continue;
-                }
+            boolean hasImage = protocol.detectMultiModalPresence(trace);
+            if (hasImage && !protocol.supportsImage(nextAgent)) {
+                state.markCurrent(SequentialProtocol.StageStatus.SKIPPED, "Incompatible modality");
+                state.next();
+                next = state.getNextAgent();
+                continue;
             }
             break;
         }
