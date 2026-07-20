@@ -47,12 +47,23 @@ public final class TerminalSessionManager {
 
     private final ConcurrentMap<String, CommandSession> sessions = new ConcurrentHashMap<>();
     private final Charset outputCharset;
-
+    private final ShellCommandFactory shellCommandFactory;
+    
     public TerminalSessionManager() {
-        this(StandardCharsets.UTF_8);
+        this(ShellCommandFactory.detect(), StandardCharsets.UTF_8);
     }
-
+    
+    public TerminalSessionManager(ShellCommandFactory shellCommandFactory) {
+        this(shellCommandFactory, StandardCharsets.UTF_8);
+    }
+    
     public TerminalSessionManager(Charset outputCharset) {
+        this(ShellCommandFactory.detect(), outputCharset);
+    }
+    
+    public TerminalSessionManager(ShellCommandFactory shellCommandFactory, Charset outputCharset) {
+        this.shellCommandFactory =
+                shellCommandFactory == null ? ShellCommandFactory.detect() : shellCommandFactory;
         this.outputCharset = outputCharset == null ? StandardCharsets.UTF_8 : outputCharset;
     }
 
@@ -67,7 +78,7 @@ public final class TerminalSessionManager {
         cleanupCompletedSessions();
         requireNonEmptyCommand(command);
         Path normalizedWorkdir = normalizeWorkdir(workdir);
-        ProcessBuilder builder = new ProcessBuilder(shellCommand(command));
+        ProcessBuilder builder = new ProcessBuilder(shellCommandFactory.build(command));
         builder.directory(normalizedWorkdir.toFile());
         builder.redirectErrorStream(true);
         if (env != null && env.isEmpty() == false) {
@@ -186,27 +197,6 @@ public final class TerminalSessionManager {
             return DEFAULT_MAX_OUTPUT_CHARS;
         }
         return maxOutputChars;
-    }
-
-    private static List<String> shellCommand(String command) {
-        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
-        if (isWindows) {
-            return Arrays.asList("cmd", "/c", command);
-        }
-        return Arrays.asList(probeUnixShell(), "-lc", command);
-    }
-
-    private static String probeUnixShell() {
-        try {
-            ProcessBuilder pb = new ProcessBuilder("bash", "--version");
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            boolean ok = p.waitFor(3, TimeUnit.SECONDS) && p.exitValue() == 0;
-            p.destroyForcibly();
-            return ok ? "bash" : "/bin/sh";
-        } catch (Throwable e) {
-            return "/bin/sh";
-        }
     }
 
     private static String newSessionId() {

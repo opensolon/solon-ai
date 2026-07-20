@@ -66,9 +66,9 @@ public class TerminalSupport {
 
     private final MountManager mountManager;
     private final Set<String> ignoreDirs;
-    private final TerminalTalent.ShellMode shellMode;
+    private final ShellMode shellMode;
 
-    TerminalSupport(MountManager mountManager, Set<String> ignoreDirs, TerminalTalent.ShellMode shellMode) {
+    TerminalSupport(MountManager mountManager, Set<String> ignoreDirs, ShellMode shellMode) {
         this.mountManager = mountManager;
         this.ignoreDirs = ignoreDirs;
         this.shellMode = shellMode;
@@ -859,10 +859,10 @@ public class TerminalSupport {
     }
 
     String getEnvPlaceholder(String envKey) {
-        if (this.shellMode == TerminalTalent.ShellMode.CMD) {
+        if (this.shellMode == ShellMode.CMD) {
             return "%" + envKey + "%";
         }
-        if (this.shellMode == TerminalTalent.ShellMode.POWERSHELL) {
+        if (this.shellMode == ShellMode.POWERSHELL) {
             return "$env:" + envKey;
         }
         return "$" + envKey;

@@ -40,7 +40,6 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.concurrent.locks.ReentrantLock;
@@ -63,13 +62,7 @@ public class TerminalTalent extends AbsTalent {
     public static final String PARAM_EDITS = "edits";
 
 
-    static enum ShellMode {
-        CMD, POWERSHELL, UNIX_SHELL
-    }
-
-
-    private final String shellCmd;
-    private final String extension;
+    private final ShellCommandFactory shellCommandFactory;
     private final ShellMode shellMode;
     private final TerminalSupport support;
 
@@ -96,7 +89,7 @@ public class TerminalTalent extends AbsTalent {
 
     protected Charset fileCharset = StandardCharsets.UTF_8;
     protected final ProcessExecutor executor = new ProcessExecutor();
-    protected final TerminalSessionManager bashSessionManager = new TerminalSessionManager();
+    protected final TerminalSessionManager bashSessionManager;
     //异步会话模式：启用后提供 bash_start/wait/stdin/stop 工具
     private boolean bashAsyncEnabled = false;
 
@@ -346,28 +339,13 @@ public class TerminalTalent extends AbsTalent {
     public TerminalTalent(MountManager mountManager) {
         this.mountManager = mountManager;
 
-        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
-
-        if (isWindows) {
-            String comspec = System.getenv("COMSPEC");
-            if (comspec != null && comspec.toLowerCase().contains("powershell")) {
-                this.shellCmd = "powershell -Command";
-                this.extension = ".ps1";
-                this.shellMode = ShellMode.POWERSHELL;
-            } else {
-                this.shellCmd = "cmd /c";
-                this.extension = ".bat";
-                this.shellMode = ShellMode.CMD;
-            }
-        } else {
-            this.shellCmd = probeUnixShell();
-            this.extension = ".sh";
-            this.shellMode = ShellMode.UNIX_SHELL;
-        }
-
+        this.shellCommandFactory = ShellCommandFactory.detect();
+        this.shellMode = shellCommandFactory.getShellMode();
+        this.bashSessionManager = new TerminalSessionManager(shellCommandFactory);
+            
         this.support = new TerminalSupport(mountManager, ignoreDirs, shellMode);
         this.support.setMaxCharacterLimit(this.maxCharacterLimit);
-
+                
         pythonCmd = executor.probePythonCommand();
         nodeCmd = executor.probeNodeCommand();
     }
@@ -529,7 +507,7 @@ public class TerminalTalent extends AbsTalent {
     // --- 1. 执行命令 ---
     @ToolMapping(
             name = "bash",
-            description = "在终端执行非交互式 Shell 指令。支持多行脚本，支持逻辑路径（如 @pool）自动转环境变量。"
+            description = "在终端执行非交互式 Shell 指令。支持多行命令与逻辑路径（如 @pool）自动转环境变量。"
     )
     public String bash(@Param(value = "command", description = "要执行的指令。") String command,
                        @Param(name = "timeout", required = false, defaultValue = "120000", description = "可选超时时间，单位为毫秒") Integer timeout,
@@ -571,7 +549,8 @@ public class TerminalTalent extends AbsTalent {
             }
         }
 
-        return executor.executeCode(workPath, finalCommand, shellCmd, extension, envs, timeout, maxOutputChars, null);
+        // 与 bash_start 共用 ShellCommandFactory：直接 shell -c 执行，不落临时脚本
+        return executor.executeCmd(workPath, shellCommandFactory.build(finalCommand), envs, timeout, maxOutputChars, null);
     }
 
     @ToolMapping(
@@ -1072,19 +1051,6 @@ public class TerminalTalent extends AbsTalent {
             sb.append(snapshot.output());
         }
         return sb.toString();
-    }
-
-    private static String probeUnixShell() {
-        try {
-            ProcessBuilder pb = new ProcessBuilder("bash", "--version");
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            boolean ok = p.waitFor(3, TimeUnit.SECONDS) && p.exitValue() == 0;
-            p.destroyForcibly();
-            return ok ? "bash" : "/bin/sh";
-        } catch (Throwable e) {
-            return "/bin/sh";
-        }
     }
 
     // ========== 沙盒相关桥接方法（供测试反射调用） ==========

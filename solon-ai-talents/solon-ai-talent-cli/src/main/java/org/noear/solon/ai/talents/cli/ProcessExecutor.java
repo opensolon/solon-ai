@@ -29,8 +29,11 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -139,7 +142,10 @@ public class ProcessExecutor {
     }
 
     /**
-     * 执行代码脚本（持久化为临时文件后执行）
+     * 执行代码脚本（持久化为系统临时文件后执行）。
+     *
+     * <p>临时脚本写入 {@code java.io.tmpdir}，避免污染工作区；
+     * 执行结束后立即删除，并注册 {@code deleteOnExit} 作为兜底。</p>
      */
     public String executeCode(Path rootPath, String code, String cmd, String ext, Map<String, String> envs, Integer timeoutMs, Integer maxOutputChars, Consumer<String> onOutput) {
         if (Assert.isEmpty(cmd)) {
@@ -148,12 +154,12 @@ public class ProcessExecutor {
 
         Path tempScript = null;
         try {
-            // 1. 持久化脚本（Windows .bat 文件需前置 chcp 65001 以确保 UTF-8 输出）
+            // 1. 持久化脚本到系统临时目录（Windows .bat 文件需前置 chcp 65001 以确保 UTF-8 输出）
             String finalCode = code;
             if (".bat".equals(ext)) {
                 finalCode = "@chcp 65001 > nul\r\n" + code;
             }
-            tempScript = Files.createTempFile(rootPath, "_script_", ext);
+            tempScript = createTempScript(ext);
             Files.write(tempScript, finalCode.getBytes(scriptCharset));
 
             // 2. 构建完整命令（处理带空格的命令字符串）
@@ -172,6 +178,25 @@ public class ProcessExecutor {
                 }
             }
         }
+    }
+
+    /**
+     * 在系统临时目录创建脚本文件：前缀 solon-ai-script-，Unix 尽量收紧为 600。
+     */
+    private static Path createTempScript(String ext) throws IOException {
+        Path tempScript = Files.createTempFile("solon-ai-script-", ext);
+        // JVM 异常退出时的兜底清理；正常路径仍由 finally 主动删除
+        tempScript.toFile().deleteOnExit();
+        try {
+            Set<PosixFilePermission> perms = EnumSet.of(
+                    PosixFilePermission.OWNER_READ,
+                    PosixFilePermission.OWNER_WRITE
+            );
+            Files.setPosixFilePermissions(tempScript, perms);
+        } catch (UnsupportedOperationException ignored) {
+            // 非 POSIX 文件系统（如 Windows）静默降级
+        }
+        return tempScript;
     }
 
     /**
