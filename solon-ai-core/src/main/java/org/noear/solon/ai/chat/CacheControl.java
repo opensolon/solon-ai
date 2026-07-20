@@ -35,6 +35,9 @@ import org.noear.solon.lang.Preview;
  * // Anthropic：设置 ephemeral 缓存断点（缓存系统提示词 + 工具定义）
  * o.cacheControl(CacheControl.ofEphemeral());
  *
+ * // Anthropic：使用 1 小时 TTL（跨较长间隔的会话保持缓存存活）
+ * o.cacheControl(CacheControl.ofEphemeral("1h"));
+ *
  * // DeepSeek：设置 prompt_cache_key 缓存键
  * o.cacheControl(CacheControl.ofPromptKey("session:abc123:v1"));
  * }</pre>
@@ -47,6 +50,9 @@ public class CacheControl {
     // 缓存控制（Anthropic 风格）
     private String type;
 
+    // 缓存存活时长（Anthropic 风格，如 "5m" / "1h"；为空则用供应商默认值 5m）
+    private String ttl;
+
     // 缓存键（OpenAI 风格）
     private String promptCacheKey;
 
@@ -54,8 +60,9 @@ public class CacheControl {
         // 用于反序列化
     }
 
-    private CacheControl(String type, String promptCacheKey) {
+    private CacheControl(String type, String ttl, String promptCacheKey) {
         this.type = type;
+        this.ttl = ttl;
         this.promptCacheKey = promptCacheKey;
     }
 
@@ -64,11 +71,32 @@ public class CacheControl {
      * <p>在系统提示词和工具定义末尾添加 cache_control 断点，缓存前缀上下文</p>
      */
     public static CacheControl ofEphemeral() {
-        return new CacheControl("ephemeral", null);
+        return new CacheControl("ephemeral", null, null);
+    }
+
+    /**
+     * Anthropic 风格：创建带 TTL 的 ephemeral 缓存控制
+     *
+     * @param ttl 缓存存活时长，如 "5m"（默认）或 "1h"
+     * @since 4.0.4
+     */
+    public static CacheControl ofEphemeral(String ttl) {
+        return new CacheControl("ephemeral", ttl, null);
     }
 
     public static CacheControl ofType(String type) {
-        return new CacheControl(type, null);
+        return new CacheControl(type, null, null);
+    }
+
+    /**
+     * Anthropic 风格：创建带 TTL 的指定类型缓存控制
+     *
+     * @param type 缓存类型（如 "ephemeral"）
+     * @param ttl  缓存存活时长，如 "5m"（默认）或 "1h"
+     * @since 4.0.4
+     */
+    public static CacheControl ofType(String type, String ttl) {
+        return new CacheControl(type, ttl, null);
     }
 
     /**
@@ -77,7 +105,7 @@ public class CacheControl {
      * @param promptCacheKey 缓存键，相同键的请求将复用缓存的前缀上下文
      */
     public static CacheControl ofPromptKey(String promptCacheKey) {
-        return new CacheControl(null, promptCacheKey);
+        return new CacheControl(null, null, promptCacheKey);
     }
 
     /**
@@ -85,6 +113,15 @@ public class CacheControl {
      */
     public String getType() {
         return type;
+    }
+
+    /**
+     * 获取缓存存活时长（Anthropic 风格，如 "5m" / "1h"；为空表示用供应商默认值）
+     *
+     * @since 4.0.4
+     */
+    public String getTtl() {
+        return ttl;
     }
 
     /**
