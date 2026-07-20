@@ -113,14 +113,16 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
 
     public String getReasoning() {
         if (reasoning == null) {
+            // 反序列化/纯 toolCalls 消息可能 content 为 null，需空安全
+            String src = content == null ? "" : content;
             if (isThinking) {
-                reasoning = content.replace("<think>", "").replace("</think>", "").trim();
-            } else if (content.contains("</think>")) {
-                int start = content.indexOf("<think>");
-                int end = content.indexOf("</think>");
+                reasoning = src.replace("<think>", "").replace("</think>", "").trim();
+            } else if (src.contains("</think>")) {
+                int start = src.indexOf("<think>");
+                int end = src.indexOf("</think>");
 
                 if (start > -1 && end > -1) {
-                    reasoning = content.substring(start + 7, end).trim();
+                    reasoning = src.substring(start + 7, end).trim();
                 } else {
                     reasoning = "";
                 }

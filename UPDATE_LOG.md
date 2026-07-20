@@ -17,6 +17,7 @@
 * 添加 solon-ai-core ModelOptionsAmend.reasoning_effort 统一选项 API
 * 添加 solon-ai-core ModelOptionsAmend.thinking 思考模式开关统一选项 API
 * 添加 solon-ai-core Prompt.copy 方法
+* 优化 solon-ai-agent TeamAgent 相关实现代码
 * 优化 solon-ai-dialect-anthropic：`reasoning_effort` 映射为 `thinking.budget_tokens`（保证 budget < max_tokens；high≈16k）；Claude adaptive（4.6 / 4.7+ / sonnet-5+ / 倒置命名）→ `thinking.type=adaptive` + 顶层 `effort`（4.7+/sonnet-5+ 带 `display=summarized`）；`thinking(Boolean)` → type enabled/disabled/adaptive
 * 优化 solon-ai-dialect-openai Responses：`reasoning_effort` 映射为 `reasoning.effort`（max → xhigh）；`thinking(false)` → effort=none
 * 优化 solon-ai-core AbstractChatDialect：Chat Completions 顶层 `reasoning_effort` 归一化（max → xhigh；DeepSeek 官方 high/max；GLM-5.2 豁免抑制写出 high/max）；OpenRouter → `reasoning.effort`；qwen/kimi/glm/minimax 等抑制顶层 effort；`thinking(Boolean)` 按 model（辅以 provider/apiUrl）单写 enable_thinking / thinking.type 等，避免双写；仅设 `reasoning_effort` 时对需显式开关的模型隐式开启 thinking（`thinking(false)` 优先，对齐 OpenCode variants）

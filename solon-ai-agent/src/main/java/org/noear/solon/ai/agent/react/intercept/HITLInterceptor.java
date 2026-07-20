@@ -122,14 +122,20 @@ public class HITLInterceptor extends AbsReActInterceptor {
                               @Nullable Throwable error, long durationMs) {
         HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + toolExchanger.getToolName());
 
+        // 尚无决策时可能处于挂起路径：保留 LAST_INTERVENED，供业务层读取 pending task
+        if (decision == null) {
+            return;
+        }
+
         // 成功时：注入人工备注
-        if (error == null && decision != null && decision.isApproved()) {
+        if (error == null && decision.isApproved()) {
             if (Assert.isNotEmpty(decision.getComment())) {
-                toolExchanger.setResult(toolExchanger.getResult() + " (Note: " + decision.getComment() + ")");
+                String base = toolExchanger.getResult() == null ? "" : toolExchanger.getResult();
+                toolExchanger.setResult(base + " (Note: " + decision.getComment() + ")");
             }
         }
 
-        // 100% 闭环：现场清理，确保 Session 状态幂等
+        // 仅在已完成决策处理后清理，确保 Session 状态幂等
         trace.getContext().remove(HITL.LAST_INTERVENED);
         trace.getContext().remove(HITL.DECISION_PREFIX + toolExchanger.getToolName());
     }
