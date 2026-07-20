@@ -314,6 +314,10 @@ public class HarnessEngine {
         return options.getCompressionMaxTokens();
     }
 
+    /**
+     * @deprecated 4.0.4
+     */
+    @Deprecated
     public String getCompressionModel() {
         return options.getCompressionModel();
     }
@@ -1120,6 +1124,10 @@ public class HarnessEngine {
             return this;
         }
 
+        /**
+         * @deprecated 4.0.4
+         */
+        @Deprecated
         public Builder compressionModel(String compressionModel) {
             options.setCompressionModel(compressionModel);
             return this;
