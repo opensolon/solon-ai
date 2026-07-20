@@ -18,6 +18,7 @@
 * 添加 solon-ai-core ModelOptionsAmend.thinking 思考模式开关统一选项 API
 * 添加 solon-ai-core Prompt.copy 方法
 * 优化 solon-ai-agent TeamAgent 相关实现代码
+* 优化 solon-ai-talent-cli bash 脚本处理
 * 优化 solon-ai-dialect-anthropic：`reasoning_effort` 映射为 `thinking.budget_tokens`（保证 budget < max_tokens；high≈16k）；Claude adaptive（4.6 / 4.7+ / sonnet-5+ / 倒置命名）→ `thinking.type=adaptive` + 顶层 `effort`（4.7+/sonnet-5+ 带 `display=summarized`）；`thinking(Boolean)` → type enabled/disabled/adaptive
 * 优化 solon-ai-dialect-openai Responses：`reasoning_effort` 映射为 `reasoning.effort`（max → xhigh）；`thinking(false)` → effort=none
 * 优化 solon-ai-core AbstractChatDialect：Chat Completions 顶层 `reasoning_effort` 归一化（max → xhigh；DeepSeek 官方 high/max；GLM-5.2 豁免抑制写出 high/max）；OpenRouter → `reasoning.effort`；qwen/kimi/glm/minimax 等抑制顶层 effort；`thinking(Boolean)` 按 model（辅以 provider/apiUrl）单写 enable_thinking / thinking.type 等，避免双写；仅设 `reasoning_effort` 时对需显式开关的模型隐式开启 thinking（`thinking(false)` 优先，对齐 OpenCode variants）
@@ -33,6 +34,8 @@
 * 添加 solon-ai-harness TaskWrapChuck 类，提高子代理调用的透明度
 * 优化 solon-ai-harness 增加 skills 和 agents 局部（分组）动态刷新能力
 * 调整 solon-ai-harness 重构 hitl 实现
+* 调整 solon-ai-harness getModelOrMain 标为弃用，由 getModelOrDefInstance 替代
+* 调整 solon-ai-agent ContextCompressionInterceptor 取消 chatModelSupplier 参数（标为弃用）
 
 ### 4.0.3
 

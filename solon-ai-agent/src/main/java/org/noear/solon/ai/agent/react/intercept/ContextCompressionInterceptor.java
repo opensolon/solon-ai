@@ -109,8 +109,6 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     private static final double COMPACT_THRESHOLD_RATIO = 0.75;
     // 压缩策略
     private final CompressionStrategy compressionStrategy;
-    // llm 动态提供者
-    private final Supplier<ChatModel> chatModelSupplier;
 
     public void setMaxMessages(int maxMessages) {
         this.maxMessages = Math.max(10, maxMessages);
@@ -139,25 +137,46 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         this.perMessageCap = Math.max(0, perMessageCap);
     }
 
+    public ContextCompressionInterceptor(int maxMessages, int maxTokens, CompressionStrategy compressionStrategy) {
+        this.maxMessages = Math.max(10, maxMessages);
+        this.maxTokens = Math.max(10_000, maxTokens);
+        this.minReservedMessages = Math.max(3, this.maxMessages / 3);
+        this.compressionStrategy = compressionStrategy;
+    }
+
+    public ContextCompressionInterceptor(int maxMessages, int maxTokens, int maxRetries, CompressionStrategy compressionStrategy) {
+        this.maxMessages = Math.max(10, maxMessages);
+        this.maxTokens = Math.max(10_000, maxTokens);
+        this.minReservedMessages = Math.max(3, this.maxMessages / 3);
+        this.maxRetries = maxRetries;
+        this.compressionStrategy = compressionStrategy;
+    }
+
+    /**
+     * @deprecated 4.0.4 {@link #ContextCompressionInterceptor(int, int, CompressionStrategy)}
+     */
+    @Deprecated
     public ContextCompressionInterceptor(int maxMessages, int maxTokens, Supplier<ChatModel> chatModelSupplier, CompressionStrategy compressionStrategy) {
         this.maxMessages = Math.max(10, maxMessages);
         this.maxTokens = Math.max(10_000, maxTokens);
         this.minReservedMessages = Math.max(3, this.maxMessages / 3);
-        this.chatModelSupplier = chatModelSupplier;
         this.compressionStrategy = compressionStrategy;
     }
 
+    /**
+     * @deprecated 4.0.4 {@link #ContextCompressionInterceptor(int, int, int, CompressionStrategy)}
+     */
+    @Deprecated
     public ContextCompressionInterceptor(int maxMessages, int maxTokens, int maxRetries, Supplier<ChatModel> chatModelSupplier, CompressionStrategy compressionStrategy) {
         this.maxMessages = Math.max(10, maxMessages);
         this.maxTokens = Math.max(10_000, maxTokens);
         this.minReservedMessages = Math.max(3, this.maxMessages / 3);
         this.maxRetries = maxRetries;
-        this.chatModelSupplier = chatModelSupplier;
         this.compressionStrategy = compressionStrategy;
     }
 
     public ContextCompressionInterceptor(){
-        this(15, 15_000, null, null);
+        this(15, 15_000, null);
     }
 
     /**
@@ -167,7 +186,6 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         ContextCompressionInterceptor tmp = new ContextCompressionInterceptor(
                 maxMessages,
                 maxTokens,
-                this.chatModelSupplier,
                 this.compressionStrategy);
 
         return tmp;
@@ -188,33 +206,32 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      *
      * <p>若未配置 contextLength 或 chatModelSupplier 不可用，回退到 this.maxTokens。
      */
-    private int resolveEffectiveMaxTokens() {
-        if (chatModelSupplier != null) {
-            try {
-                ChatModel model = chatModelSupplier.get();
-                if (model != null) {
-                    long contextLength = model.getConfig().getContextLength();
-                    if (contextLength > 0) {
-                        // 有效上下文窗口 = 模型窗口 - 系统提示词保留
-                        // 底线保护：若 SYSTEM_PROMPT_RESERVE 超过窗口的 20%，
-                        // 则至少保留 80% 的窗口给对话（针对小窗口模型）
-                        int effectiveWindow = (int) Math.max(contextLength - SYSTEM_PROMPT_RESERVE,
-                                contextLength * 8 / 10);
-                        // 取较小值：不超出模型物理能力，也不违背用户配置的预算意图
-                        return Math.min(this.maxTokens, effectiveWindow);
-                    }
-                }
-            } catch (Exception e) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Failed to resolve model context length, fallback to maxTokens={}", this.maxTokens, e);
+    private int resolveEffectiveMaxTokens(ChatModel model) {
+        try {
+            if (model != null) {
+                long contextLength = model.getConfig().getContextLength();
+                if (contextLength > 0) {
+                    // 有效上下文窗口 = 模型窗口 - 系统提示词保留
+                    // 底线保护：若 SYSTEM_PROMPT_RESERVE 超过窗口的 20%，
+                    // 则至少保留 80% 的窗口给对话（针对小窗口模型）
+                    int effectiveWindow = (int) Math.max(contextLength - SYSTEM_PROMPT_RESERVE,
+                            contextLength * 8 / 10);
+                    // 取较小值：不超出模型物理能力，也不违背用户配置的预算意图
+                    return Math.min(this.maxTokens, effectiveWindow);
                 }
             }
+        } catch (Exception e) {
+            if (log.isDebugEnabled()) {
+                log.debug("Failed to resolve model context length, fallback to maxTokens={}", this.maxTokens, e);
+            }
         }
+
         return this.maxTokens;
     }
 
     @Override
     public void onReasonStart(ReActTrace trace, StringBuilder systemPromptBuf) {
+        ChatModel chatModel = trace.getOptions().getChatModel();
         List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
         String systemPrompt = (systemPromptBuf == null ? null : systemPromptBuf.toString());
 
@@ -225,7 +242,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         // ⭐ 解析模型感知的有效 Token 阈值（仅用于触发判断和极端场景防御，
         //    不影响保留窗口预算——窗口预算始终使用用户配置的 maxTokens）
-        int effectiveMaxTokens = resolveEffectiveMaxTokens();
+        int effectiveMaxTokens = resolveEffectiveMaxTokens(chatModel);
 
         // 0. ⭐ 单条消息硬上限兜底（内容级截断）—— MicroCompact 守卫
         //    对应 claude-code 的 microcompactMessages()：在每次调用前
@@ -410,8 +427,6 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             if (!pureHistory.isEmpty()) {
                 boolean summaryAdded = false;
                 if (compressionStrategy != null) {
-                    ChatModel chatModel = chatModelSupplier.get();
-
                     ChatMessage summaryMsg = compressionStrategy.compress(chatModel, maxRetries, trace, pureHistory);
                     if (summaryMsg != null) {
                         compressed.add(summaryMsg);
@@ -470,7 +485,6 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             if (!pureProtected.isEmpty()) {
                 boolean protectedSummaryAdded = false;
                 if (compressionStrategy != null) {
-                    ChatModel chatModel = chatModelSupplier.get();
                     ChatMessage summaryMsg = compressionStrategy.compress(chatModel, maxRetries, trace, pureProtected);
                     if (summaryMsg != null) {
                         compressed.add(summaryMsg);

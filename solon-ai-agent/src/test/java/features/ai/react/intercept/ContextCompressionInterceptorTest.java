@@ -47,7 +47,7 @@ public class ContextCompressionInterceptorTest {
         chatModel = LlmUtil.getChatModel();
 
         // 阈值设为 6，消息超过 6 条时触发压缩
-        interceptor = new ContextCompressionInterceptor(6,8000, LlmUtil::getChatModel, null);
+        interceptor = new ContextCompressionInterceptor(6,8000, null);
     }
 
     /**
@@ -534,7 +534,7 @@ public class ContextCompressionInterceptorTest {
      */
     @Test
     public void testSetMinReservedMessages() {
-        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 8000, LlmUtil::getChatModel, null);
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 8000,  null);
         custom.setMinReservedMessages(5);
 
         // 构造初心

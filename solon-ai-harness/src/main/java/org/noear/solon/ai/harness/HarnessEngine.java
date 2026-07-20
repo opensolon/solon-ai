@@ -406,8 +406,28 @@ public class HarnessEngine {
         return options.getModelOrNil(name);
     }
 
+    public ChatModel getModelOrNilInstance(String name) {
+        ChatConfig tmp = options.getModelOrNil(name);
+
+        if (tmp == null) {
+            return null;
+        } else {
+            return tmp.toChatModel();
+        }
+    }
+
     public ChatConfig getModelOrDef(String name) {
         return options.getModelOrDef(name);
+    }
+
+    public ChatModel getModelOrDefInstance(String name) {
+        ChatConfig tmp =  options.getModelOrDef(name);
+
+        if (tmp == null) {
+            return null;
+        } else {
+            return tmp.toChatModel();
+        }
     }
 
     public String getDefaultModel() {
@@ -845,7 +865,6 @@ public class HarnessEngine {
                     options.getCompressionMaxMessages(),
                     options.getCompressionMaxTokens(),
                     options.getModelRetries(),
-                    () -> getModelOrMain(options.getCompressionModel()),
                     strategy));
         }
 
@@ -978,13 +997,12 @@ public class HarnessEngine {
         }
     }
 
+    /**
+     * @deprecated 4.0.4 {@link #getModelOrDefInstance(String)}
+     */
+    @Deprecated
     public ChatModel getModelOrMain(String modelName) {
-        ChatConfig config = getModelOrDef(modelName);
-        if (config == null) {
-            return null;
-        } else {
-            return config.toChatModel();
-        }
+        return getModelOrDefInstance(modelName);
     }
 
     public ReActAgent getAgentOrMain(String agentName) {

@@ -452,7 +452,7 @@ class HarnessOptions implements Serializable {
         }
 
         if (Assert.isEmpty(modelName)) {
-            return getDefaultModelConfig();
+            return null;
         }
 
         ChatConfig c = models.get(modelName);

@@ -40,7 +40,7 @@ public class ChatConfig extends AiConfig {
     private transient ChatOptions modelOptions;
 
 
-    public ChatConfig then(Consumer<ChatConfig> build){
+    public ChatConfig then(Consumer<ChatConfig> build) {
         build.accept(this);
         return this;
     }
