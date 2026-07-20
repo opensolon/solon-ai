@@ -261,18 +261,19 @@ public class BlackboardProtocol extends HierarchicalProtocol {
 
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
+        // 参数全部可选：避免 schema required 强迫模型编造空 todo/state，导致错误覆盖黑板
         if (isZh) {
-            tool.title("同步黑板").description("同步你的结论、已完成待办和后续待办。建议在完成任务前调用。")
-                    .stringParamAdd("result", "本阶段的确切结论；若完成了某 TODO，请在此明确写出该 TODO 原文")
-                    .stringParamAdd("todo", "建议后续协作回合的任务（TODOs）")
-                    .stringParamAdd("completed_todo", "已完成的待办原文（可多条，分号/逗号分隔）")
-                    .stringParamAdd("state", "JSON 格式的详细业务数据，可含 todo / completed_todo / status");
+            tool.title("同步黑板").description("同步你的结论、已完成待办和后续待办。至少提供 result 或 state 之一。")
+                    .paramAdd("result", String.class, false, "本阶段的确切结论；若完成了某 TODO，请在此明确写出该 TODO 原文")
+                    .paramAdd("todo", String.class, false, "建议后续协作回合的任务（TODOs），没有则省略")
+                    .paramAdd("completed_todo", String.class, false, "已完成的待办原文（可多条，分号/逗号分隔）")
+                    .paramAdd("state", String.class, false, "JSON 格式的详细业务数据，可含 todo / completed_todo / status");
         } else {
-            tool.title("Sync Blackboard").description("Sync findings, completed todos and future todos.")
-                    .stringParamAdd("result", "Key findings; mention completed TODO text if any")
-                    .stringParamAdd("todo", "Suggested tasks for next turns")
-                    .stringParamAdd("completed_todo", "Completed TODO text (semicolon/comma separated)")
-                    .stringParamAdd("state", "Detailed JSON state (todo/completed_todo/status)");
+            tool.title("Sync Blackboard").description("Sync findings, completed todos and future todos. Provide at least result or state.")
+                    .paramAdd("result", String.class, false, "Key findings; mention completed TODO text if any")
+                    .paramAdd("todo", String.class, false, "Suggested tasks for next turns; omit if none")
+                    .paramAdd("completed_todo", String.class, false, "Completed TODO text (semicolon/comma separated)")
+                    .paramAdd("state", String.class, false, "Detailed JSON state (todo/completed_todo/status)");
         }
 
         tool.doHandle(args -> {

@@ -66,13 +66,7 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
         public void recordTransaction(String agentName, double q, double e, Agent agent) {
             AgentProfile profile = marketplace.computeIfAbsent(agentName, k -> {
                 AgentProfile p = new AgentProfile();
-                p.basePrice = 1.0;
-                if (agent != null && agent.profile() != null) {
-                    Object metaPrice = agent.profile().getMetadata().get("base_price");
-                    if (metaPrice instanceof Number) {
-                        p.basePrice = ((Number) metaPrice).doubleValue();
-                    }
-                }
+                p.basePrice = resolveBasePrice(agent);
                 p.currentPrice = p.basePrice;
                 return p;
             });
@@ -115,22 +109,28 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
     public String name() { return "MARKET_BASED"; }
 
     /**
-     * 向主管注入“人才市场”状态，提供博弈参考
+     * 向主管注入“人才市场”状态，提供博弈参考。
+     * <p>首轮也会按成员 profile.base_price 播种画像，避免市场为空时只能靠角色名盲选。</p>
      */
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         MarketState state = (MarketState) trace.getProtocolContext()
                 .computeIfAbsent(KEY_MARKET_STATE, k -> new MarketState());
+        
+        // 首轮/空市场：把全部成员写入 marketplace，使 Price/ROI 从第 1 次决策就可见
+        seedMarketplace(state);
 
         boolean isZh = isChinese(config.getLocale());
         sb.append(isZh ? "\n### 专家人才市场 (Expert Marketplace)\n" : "\n### Expert Marketplace\n");
         sb.append("```json\n").append(ONode.serialize(state)).append("\n```\n");
-
+        
         if (isZh) {
-            sb.append("> 策略指引：\n> - 攻坚任务指派 ROI > 1.0 的高价值专家。\n");
+            sb.append("> 策略指引：\n> - 简单/轻量任务优先 Price 较低的专家。\n");
+            sb.append("> - 攻坚/深度任务优先 Score/ROI 更高的专家。\n");
             sb.append("> - 预算受限时，指派 Price 较低的专家完成基础工作。");
         } else {
-            sb.append("> Strategy Tips:\n> - Prioritize agents with ROI > 1.0 for critical tasks.\n");
+            sb.append("> Strategy Tips:\n> - Prefer lower Price agents for simple/light tasks.\n");
+            sb.append("> - Prefer higher Score/ROI agents for deep/critical tasks.\n");
             sb.append("> - Assign lower Price agents for routine tasks under budget constraints.");
         }
 
@@ -139,8 +139,54 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
                 .max(Comparator.comparingDouble(e -> e.getValue().getROI()))
                 .ifPresent(e -> sb.append(isZh ? "\n> **今日推荐 (ROI King)**：" : "\n> **Top ROI Agent**:")
                         .append(e.getKey()));
-
+    
+        // 价格最低专家（简单任务提示）
+        state.getMarketplace().entrySet().stream()
+                .min(Comparator.comparingDouble(e -> e.getValue().currentPrice))
+                .ifPresent(e -> sb.append(isZh ? "\n> **低价优选 (Budget Pick)**：" : "\n> **Budget Pick**:")
+                        .append(e.getKey()));
+    
         super.prepareSupervisorInstruction(context, trace, sb);
+    }
+    
+    /**
+     * 按配置成员播种市场画像（幂等：已有条目不覆盖交易后的实时价）
+     */
+    private void seedMarketplace(MarketState state) {
+        if (config == null || config.getAgentMap() == null || config.getAgentMap().isEmpty()) {
+            return;
+        }
+        config.getAgentMap().forEach((name, agent) -> {
+            if (state.getMarketplace().containsKey(name)) {
+                return;
+            }
+            MarketState.AgentProfile profile = new MarketState.AgentProfile();
+            profile.basePrice = resolveBasePrice(agent);
+            profile.currentPrice = profile.basePrice;
+            // 未成交前给中性分，避免空市场 ROI 全相等
+            profile.quality = 0.8;
+            profile.efficiency = 0.8;
+            profile.completedTasks = 0;
+            state.getMarketplace().put(name, profile);
+        });
+    }
+    
+    private static double resolveBasePrice(Agent agent) {
+        if (agent == null || agent.profile() == null || agent.profile().getMetadata() == null) {
+            return 1.0;
+        }
+        Object metaPrice = agent.profile().getMetadata().get("base_price");
+        if (metaPrice instanceof Number) {
+            return Math.max(MIN_PRICE, ((Number) metaPrice).doubleValue());
+        }
+        if (metaPrice != null) {
+            try {
+                return Math.max(MIN_PRICE, Double.parseDouble(String.valueOf(metaPrice)));
+            } catch (Exception ignore) {
+                // fall through
+            }
+        }
+        return 1.0;
     }
 
     /**
