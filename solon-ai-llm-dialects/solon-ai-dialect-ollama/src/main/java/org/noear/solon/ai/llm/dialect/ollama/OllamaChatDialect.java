@@ -234,17 +234,18 @@ public class OllamaChatDialect extends AbstractChatDialect {
 
             n.set("stream", isStream);
 
+            CacheControl cacheControl = options.cacheControl();
+
             // ⭐ Ollama 模型驻留时间控制（keep_alive 决定 KV Cache 的保留时间）
             //    默认 5 分钟，确保后续请求能复用缓存
             Object keepAlive = options.option("keep_alive");
             if (keepAlive != null) {
                 n.set("keep_alive", keepAlive);
             } else {
-                n.set("keep_alive", "5m");
+                n.set("keep_alive", cacheControl.getTtl()); // 5m
             }
 
             // ⭐ 支持 prompt_cache_key (OpenAI 兼容模式下的 Prompt Caching)
-            CacheControl cacheControl = options.cacheControl();
             if (cacheControl != null && Utils.isNotEmpty(cacheControl.getPromptCacheKey())) {
                 n.set("prompt_cache_key", cacheControl.getPromptCacheKey());
             }

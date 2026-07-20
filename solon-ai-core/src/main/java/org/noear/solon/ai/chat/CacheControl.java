@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat;
 
+import org.noear.solon.lang.NonNull;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -120,8 +121,12 @@ public class CacheControl {
      *
      * @since 4.0.4
      */
-    public String getTtl() {
-        return ttl;
+    public @NonNull String getTtl() {
+        if (ttl == null) {
+            return "5m";
+        } else {
+            return ttl;
+        }
     }
 
     /**

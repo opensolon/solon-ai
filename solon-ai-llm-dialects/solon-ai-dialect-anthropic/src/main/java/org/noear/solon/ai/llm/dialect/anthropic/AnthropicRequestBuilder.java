@@ -904,9 +904,7 @@ public class AnthropicRequestBuilder {
     private void writeCacheControl(ONode blockNode, CacheControl cacheControl) {
         ONode ccNode = blockNode.getOrNew("cache_control");
         ccNode.set("type", cacheControl.getType());
-        if (Utils.isNotEmpty(cacheControl.getTtl())) {
-            ccNode.set("ttl", cacheControl.getTtl());
-        }
+        ccNode.set("ttl", cacheControl.getTtl());
     }
 
     /**
