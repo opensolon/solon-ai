@@ -618,6 +618,31 @@ public class HarnessEngine {
     }
 
     /**
+     * 一次性重置工具白名单与黑名单，并只重建一次主 Agent。
+     * <p>避免连续调用 {@link #allowToolReset} + {@link #disallowToolReset} 导致双倍重建抖动。</p>
+     */
+    public void toolPermissionReset(Collection<String> tools, Collection<String> disallowedTools) {
+        options.getTools().clear();
+        if (tools != null) {
+            options.getTools().addAll(tools);
+        }
+    
+        options.getDisallowedTools().clear();
+        if (disallowedTools != null) {
+            options.getDisallowedTools().addAll(disallowedTools);
+        }
+    
+        agentLock.lock();
+        try {
+            if (this.mainAgent != null) {
+                this.mainAgent = createMainAgent();
+            }
+        } finally {
+            agentLock.unlock();
+        }
+    }
+    
+    /**
      * 动态撤销一个工具的权限（禁用）
      */
     public void disallowTool(String toolName) {
