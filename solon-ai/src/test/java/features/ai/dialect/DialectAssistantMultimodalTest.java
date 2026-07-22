@@ -939,6 +939,38 @@ public class DialectAssistantMultimodalTest {
         Assertions.assertTrue(foundSignature, "valid signature should be written back");
     }
 
+    @Test
+    public void anthropicParseNonStreamShouldAcceptPlainTextGatewayError() {
+        AnthropicChatDialect dialect = AnthropicChatDialect.getInstance();
+        ChatResponseDefault resp = newResp(false, dialect);
+    
+        // 网关常直接返回纯文本："error code: 502"（不是 JSON）
+        Assertions.assertTrue(dialect.parseResponseJson(new ChatConfig(), resp, "error code: 502"));
+        Assertions.assertNotNull(resp.getError());
+        Assertions.assertTrue(resp.getError().getMessage().contains("error code: 502"));
+        Assertions.assertFalse(resp.hasChoices());
+    }
+    
+    @Test
+    public void anthropicParseNonStreamShouldAcceptBadGatewayText() {
+        AnthropicChatDialect dialect = AnthropicChatDialect.getInstance();
+        ChatResponseDefault resp = newResp(false, dialect);
+    
+        Assertions.assertTrue(dialect.parseResponseJson(new ChatConfig(), resp, "error code: 502"));
+        Assertions.assertNotNull(resp.getError());
+        Assertions.assertTrue(resp.getError().getMessage().contains("502"));
+    }
+    
+    @Test
+    public void anthropicParseStreamShouldAcceptPlainTextGatewayError() {
+        AnthropicChatDialect dialect = AnthropicChatDialect.getInstance();
+        ChatResponseDefault resp = newResp(true, dialect);
+    
+        Assertions.assertTrue(dialect.parseResponseJson(new ChatConfig(), resp, "error code: 502"));
+        Assertions.assertNotNull(resp.getError());
+        Assertions.assertTrue(resp.getError().getMessage().contains("error code: 502"));
+    }
+    
     // ==================== 新增：Gemini Chat file_data 构建/解析 + audio/video inline_data ====================
 
     @Test

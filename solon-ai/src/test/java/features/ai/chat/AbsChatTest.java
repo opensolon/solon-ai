@@ -197,13 +197,13 @@ public abstract class AbsChatTest {
 
         chatModel.prompt("杭州天气和北京降雨量如何？")
                 .stream()
-                .subscribe(new SimpleSubscriber<ChatResponse>()
-                        .doOnNext(resp -> {
-                            respHolder.set(resp);
-                        })
-                        .doOnComplete(() -> {
-                            latch.countDown();
-                        }));
+                .doOnNext(resp -> {
+                    respHolder.set(resp);
+                })
+                .doFinally(s -> {
+                    latch.countDown();
+                })
+                .subscribe();
 
         latch.await();
 
@@ -409,7 +409,7 @@ public abstract class AbsChatTest {
                 .doOnNext(resp -> {
                     respHolder.set(resp);
                 })
-                .doOnComplete(() -> {
+                .doFinally((s) -> {
                     latch.countDown();
                 })
                 .subscribe();
@@ -444,7 +444,7 @@ public abstract class AbsChatTest {
                 .doOnNext(resp -> {
                     respHolder.set(resp);
                 })
-                .doOnComplete(() -> {
+                .doFinally((s) -> {
                     latch.countDown();
                 }).subscribe();
 

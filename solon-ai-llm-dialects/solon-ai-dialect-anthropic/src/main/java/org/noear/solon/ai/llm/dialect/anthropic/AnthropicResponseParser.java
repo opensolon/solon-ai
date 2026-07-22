@@ -143,7 +143,13 @@ public class AnthropicResponseParser {
                 }
                 return true;
             }
-            ONode oResp = ONode.ofJson(jsonData);
+
+            if(json.startsWith("error ")){
+                resp.setError(new ChatException(json));
+                return true;
+            }
+
+            ONode oResp = new JsonReader(json).readNext();
             if (oResp.isObject() == false) {
                 continue;
             }
@@ -365,10 +371,17 @@ public class AnthropicResponseParser {
             }
             return true;
         }
-        ONode oResp = ONode.ofJson(json);
+
+        if(json.startsWith("error ")){
+            resp.setError(new ChatException(json));
+            return true;
+        }
+
+        ONode oResp = new JsonReader(json).readNext();
         if (oResp.isObject() == false) {
             return false;
         }
+
         if (oResp.hasKey("error") && !oResp.get("error").isNull()) {
             ONode oError = oResp.get("error");
             String errorType = oError.get("type").getString();
