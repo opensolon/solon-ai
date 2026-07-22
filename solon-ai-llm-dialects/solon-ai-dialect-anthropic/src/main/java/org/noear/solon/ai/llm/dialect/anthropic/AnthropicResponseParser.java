@@ -391,11 +391,15 @@ public class AnthropicResponseParser {
         if (oResp.hasKey("created")) {
             created = new Date(oResp.get("created").getLong() * 1000);
         }
+        // 先解析 stop_reason，供 choice.finishReason 与 lastFinishReason 共用
+        String stopReason = oResp.get("stop_reason").getString();
+
         // 解析内容
         ONode contentArray = oResp.getOrNull("content");
         if (contentArray != null && contentArray.isArray()) {
             // 分离思考内容、普通内容、媒体与工具调用
             StringBuilder thinkingContent = new StringBuilder();
+            String thinkingSignature = null;
             StringBuilder normalContent = new StringBuilder();
             List<ContentBlock> mediaBlocks = new ArrayList<>();
             List<ToolCall> allToolCalls = new ArrayList<>();
@@ -410,6 +414,11 @@ public class AnthropicResponseParser {
                             thinkingContent.append("\n");
                         }
                         thinkingContent.append(thinking);
+                    }
+                    // 保留 thinking signature，供多轮回传（非流式此前会丢失）
+                    String signature = contentItem.get("signature").getString();
+                    if (Utils.isNotEmpty(signature)) {
+                        thinkingSignature = signature;
                     }
                 } else if ("text".equals(contentType)) {
                     String text = contentItem.get("text").getString();
@@ -453,11 +462,17 @@ public class AnthropicResponseParser {
                 textContent = "<think>\n\n" + thinkingContent.toString() + "</think>\n\n" + normalContent.toString();
                 contentRaw = new LinkedHashMap<>();
                 contentRaw.put("thinking", thinkingContent.toString());
+                if (Utils.isNotEmpty(thinkingSignature)) {
+                    contentRaw.put("thinkingSignature", thinkingSignature);
+                }
                 contentRaw.put("content", normalContent.toString());
             } else if (thinkingContent.length() > 0) {
                 textContent = "<think>\n\n" + thinkingContent.toString() + "</think>\n\n";
                 contentRaw = new LinkedHashMap<>();
                 contentRaw.put("thinking", thinkingContent.toString());
+                if (Utils.isNotEmpty(thinkingSignature)) {
+                    contentRaw.put("thinkingSignature", thinkingSignature);
+                }
             } else if (normalContent.length() > 0) {
                 textContent = normalContent.toString();
             } else {
@@ -475,22 +490,29 @@ public class AnthropicResponseParser {
                 blocksForMsg.addAll(mediaBlocks);
                 resp.addMediaBlocks(mediaBlocks);
             }
+
+            // finishReason：优先用真实 stop_reason；tool 场景兜底 tool_use
+            String choiceFinishReason = Utils.isNotEmpty(stopReason)
+                    ? stopReason
+                    : (!allToolCalls.isEmpty() ? "tool_use" : "stop");
         
             // 将所有工具调用合并到一个 AssistantMessage 中
             if (!allToolCalls.isEmpty()) {
                 AssistantMessage msg = new AssistantMessage(textContent,
                         false, contentRaw, allToolCallsRaw, allToolCalls, null, blocksForMsg);
-                resp.addChoice(new ChatChoice(0, created, "stop", msg));
+                resp.addChoice(new ChatChoice(0, created, choiceFinishReason, msg));
             } else if (Utils.isNotEmpty(textContent) || blocksForMsg != null) {
                 AssistantMessage msg = new AssistantMessage(textContent,
                         false, contentRaw, null, null, null, blocksForMsg);
-                resp.addChoice(new ChatChoice(0, created, "stop", msg));
+                resp.addChoice(new ChatChoice(0, created, choiceFinishReason, msg));
             }
         }
-        // 解析 stop_reason
-        String stopReason = oResp.get("stop_reason").getString();
+        // 同步 lastFinishReason（无 stop_reason 时若已有 tool 选择，归一化侧仍可识别）
         if (Utils.isNotEmpty(stopReason)) {
             resp.lastFinishReason = stopReason;
+        } else if (resp.hasChoices() && resp.getMessage() != null
+                && Utils.isNotEmpty(resp.getMessage().getToolCalls())) {
+            resp.lastFinishReason = "tool_use";
         }
 
         // 解析用量信息

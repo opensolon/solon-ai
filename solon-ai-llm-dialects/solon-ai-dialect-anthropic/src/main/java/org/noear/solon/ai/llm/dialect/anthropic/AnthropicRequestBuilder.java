@@ -670,24 +670,19 @@ public class AnthropicRequestBuilder {
             // 提取 reasoning（思考）内容，放入 thinking 块
             String reasoning = assistantMessage.getReasoning();
             if (Utils.isNotEmpty(reasoning)) {
-                // 尝试从 contentRaw 中获取 signature
-                String signature = "";
-                Object contentRaw = assistantMessage.getContentRaw();
-                if (contentRaw instanceof Map) {
-                    Object sig = ((Map<?, ?>) contentRaw).get("thinkingSignature");
-                    if (sig instanceof String && Utils.isNotEmpty((String) sig)) {
-                        signature = (String) sig;
-                    }
+                ONode thinkingBlock = contentArray.addNew()
+                        .set("type", "thinking")
+                        .set("thinking", reasoning);
+                // 仅在有有效 signature 时回传；空字符串会让官方 Claude / 兼容网关下一轮异常
+                String signature = resolveThinkingSignature(assistantMessage);
+                if (Utils.isNotEmpty(signature)) {
+                    thinkingBlock.set("signature", signature);
                 }
-                contentArray.addNew()
-                    .set("type", "thinking")
-                    .set("thinking", reasoning)
-                    .set("signature", signature);
             }
 
-            // 添加文本内容（如果有，排除 <think>...</think> 部分）
-            String resultContent = assistantMessage.getResultContent();
-            if (Utils.isNotEmpty(resultContent)) {
+            // 添加文本内容（如果有，排除 <think>...</think> 与纯空白）
+            String resultContent = trimToNull(assistantMessage.getResultContent());
+            if (resultContent != null) {
                 contentArray.addNew()
                     .set("type", "text")
                     .set("text", resultContent);
@@ -711,8 +706,8 @@ public class AnthropicRequestBuilder {
             if (Utils.isNotEmpty(assistantMessage.getBlocks())) {
                 for (ContentBlock block : assistantMessage.getBlocks()) {
                     if (block instanceof TextBlock) {
-                        String text = AssistantMessage.stripThinkTags(block.getContent());
-                        if (Utils.isNotEmpty(text)) {
+                        String text = trimToNull(AssistantMessage.stripThinkTags(block.getContent()));
+                        if (text != null) {
                             contentArray.addNew()
                                     .set("type", "text")
                                     .set("text", text);
@@ -723,20 +718,61 @@ public class AnthropicRequestBuilder {
                     }
                 }
             }
-            if (!hasText && Utils.isNotEmpty(assistantMessage.getResultContent())) {
-                contentArray.addNew()
-                        .set("type", "text")
-                        .set("text", assistantMessage.getResultContent());
+            if (!hasText) {
+                String fallbackText = trimToNull(assistantMessage.getResultContent());
+                if (fallbackText != null) {
+                    contentArray.addNew()
+                            .set("type", "text")
+                            .set("text", fallbackText);
+                }
             }
         } else {
-            // 纯文本回传剥离 think，与多模态 TextBlock 路径一致
-            String content = assistantMessage.getResultContent();
-            if (Utils.isNotEmpty(content)) {
+            // 纯文本回传剥离 think，与多模态 TextBlock 路径一致；空白不回传为 text
+            String content = trimToNull(assistantMessage.getResultContent());
+            if (content != null) {
                 node.set("content", content);
             } else {
-                node.getOrNew("content").asArray(); // Claude需要content字段，即使是空数组
+                // 若仅有思考内容（无正文、无 tool），尽量按 Claude 多轮要求回传 thinking 块
+                String reasoning = assistantMessage.getReasoning();
+                if (Utils.isNotEmpty(reasoning)) {
+                    ONode contentArray = node.getOrNew("content").asArray();
+                    ONode thinkingBlock = contentArray.addNew()
+                            .set("type", "thinking")
+                            .set("thinking", reasoning);
+                    String signature = resolveThinkingSignature(assistantMessage);
+                    if (Utils.isNotEmpty(signature)) {
+                        thinkingBlock.set("signature", signature);
+                    }
+                } else {
+                    node.getOrNew("content").asArray(); // Claude 需要 content 字段，即使是空数组
+                }
             }
         }
+    }
+
+    /**
+     * 从 contentRaw 提取 thinking signature（仅非空有效）。
+     */
+    private String resolveThinkingSignature(AssistantMessage assistantMessage) {
+        Object contentRaw = assistantMessage.getContentRaw();
+        if (contentRaw instanceof Map) {
+            Object sig = ((Map<?, ?>) contentRaw).get("thinkingSignature");
+            if (sig instanceof String && Utils.isNotEmpty((String) sig)) {
+                return (String) sig;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 去除首尾空白；空串或纯空白返回 null，避免回传无意义 text 块。
+     */
+    private static String trimToNull(String text) {
+        if (text == null) {
+            return null;
+        }
+        String trimmed = text.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
     
     /**

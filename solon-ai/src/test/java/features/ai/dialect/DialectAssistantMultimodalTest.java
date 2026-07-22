@@ -1,4 +1,4 @@
-package features.ai.chat;
+package features.ai.dialect;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -8,7 +8,6 @@ import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRequest;
 import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.content.AudioBlock;
-import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -808,6 +807,144 @@ public class DialectAssistantMultimodalTest {
         Assertions.assertTrue(hasText, "content should contain text block");
         Assertions.assertTrue(hasImage, "content should contain image block");
         Assertions.assertTrue(hasToolUse, "content should contain tool_use block");
+    }
+
+    @Test
+    public void anthropicParseThinkingToolUseShouldKeepSignatureAndStopReason() {
+        AnthropicChatDialect dialect = AnthropicChatDialect.getInstance();
+        ChatResponseDefault resp = newResp(false, dialect);
+
+        String json = "{"
+                + "\"model\":\"claude-test\","
+                + "\"content\":["
+                + "  {\"type\":\"thinking\",\"thinking\":\"need tool\",\"signature\":\"sig-abc\"},"
+                + "  {\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"spotIntro\",\"input\":{}}"
+                + "],"
+                + "\"stop_reason\":\"tool_use\""
+                + "}";
+
+        Assertions.assertTrue(dialect.parseResponseJson(new ChatConfig(), resp, json));
+        Assertions.assertTrue(resp.hasChoices());
+
+        AssistantMessage msg = resp.getMessage();
+        Assertions.assertNotNull(msg);
+        Assertions.assertEquals("tool_use", resp.getChoices().get(0).getFinishReason());
+        Assertions.assertEquals("tool_use", resp.lastFinishReason);
+        Assertions.assertEquals("need tool", msg.getReasoning());
+        Assertions.assertTrue(msg.getContentRaw() instanceof java.util.Map);
+        Assertions.assertEquals("sig-abc",
+                ((java.util.Map<?, ?>) msg.getContentRaw()).get("thinkingSignature"));
+        Assertions.assertFalse(msg.getToolCalls().isEmpty());
+        Assertions.assertEquals("spotIntro", msg.getToolCalls().get(0).getName());
+    }
+
+    @Test
+    public void anthropicBuildThinkingToolUseShouldSkipBlankTextAndEmptySignature() {
+        AnthropicChatDialect dialect = AnthropicChatDialect.getInstance();
+
+        java.util.List<org.noear.solon.ai.chat.tool.ToolCall> toolCalls = java.util.Collections.singletonList(
+                new org.noear.solon.ai.chat.tool.ToolCall("call_1", "call_1", "spotIntro", "{}", java.util.Collections.emptyMap()));
+        java.util.Map<String, Object> funcMap = new java.util.HashMap<>();
+        funcMap.put("name", "spotIntro");
+        funcMap.put("arguments", "{}");
+        java.util.Map<String, Object> rawMap = new java.util.HashMap<>();
+        rawMap.put("id", "call_1");
+        rawMap.put("type", "function");
+        rawMap.put("function", funcMap);
+        java.util.List<java.util.Map> toolCallsRaw = java.util.Collections.singletonList(rawMap);
+
+        // 模拟非流式：thinking 后无正文，stripThinkTags 会留下 "\n\n"
+        java.util.Map<String, Object> contentRaw = new java.util.LinkedHashMap<>();
+        contentRaw.put("thinking", "need tool");
+        // 不放 thinkingSignature，验证空 signature 不会写出
+
+        AssistantMessage msg = new AssistantMessage(
+                "<think>\n\nneed tool</think>\n\n",
+                false, contentRaw, toolCallsRaw, toolCalls, null, null);
+
+        ChatConfig config = new ChatConfig();
+        config.setModel("claude-test");
+        ONode root = dialect.buildRequestJson(
+                config, ChatOptions.of(),
+                java.util.Collections.singletonList(msg), false);
+
+        ONode assistant = root.get("messages").get(0);
+        Assertions.assertEquals("assistant", assistant.get("role").getString());
+        Assertions.assertTrue(assistant.get("content").isArray());
+
+        boolean hasThinking = false;
+        boolean hasBlankText = false;
+        boolean hasToolUse = false;
+        boolean hasEmptySignature = false;
+        for (ONode item : assistant.get("content").getArray()) {
+            String type = item.get("type").getString();
+            if ("thinking".equals(type)) {
+                hasThinking = true;
+                Assertions.assertEquals("need tool", item.get("thinking").getString());
+                if (item.hasKey("signature")) {
+                    String sig = item.get("signature").getString();
+                    if (sig == null || sig.isEmpty()) {
+                        hasEmptySignature = true;
+                    }
+                }
+            } else if ("text".equals(type)) {
+                String text = item.get("text").getString();
+                if (text == null || text.trim().isEmpty()) {
+                    hasBlankText = true;
+                }
+            } else if ("tool_use".equals(type)) {
+                hasToolUse = true;
+                Assertions.assertEquals("spotIntro", item.get("name").getString());
+            }
+        }
+
+        Assertions.assertTrue(hasThinking, "content should contain thinking block");
+        Assertions.assertTrue(hasToolUse, "content should contain tool_use block");
+        Assertions.assertFalse(hasBlankText, "blank text block must not be written");
+        Assertions.assertFalse(hasEmptySignature, "empty signature must not be written");
+    }
+
+    @Test
+    public void anthropicBuildThinkingToolUseShouldWriteValidSignature() {
+        AnthropicChatDialect dialect = AnthropicChatDialect.getInstance();
+
+        java.util.List<org.noear.solon.ai.chat.tool.ToolCall> toolCalls = java.util.Collections.singletonList(
+                new org.noear.solon.ai.chat.tool.ToolCall("call_2", "call_2", "currentTime", "{}", java.util.Collections.emptyMap()));
+        java.util.Map<String, Object> funcMap = new java.util.HashMap<>();
+        funcMap.put("name", "currentTime");
+        funcMap.put("arguments", "{}");
+        java.util.Map<String, Object> rawMap = new java.util.HashMap<>();
+        rawMap.put("id", "call_2");
+        rawMap.put("type", "function");
+        rawMap.put("function", funcMap);
+        java.util.List<java.util.Map> toolCallsRaw = java.util.Collections.singletonList(rawMap);
+
+        java.util.Map<String, Object> contentRaw = new java.util.LinkedHashMap<>();
+        contentRaw.put("thinking", "call time tool");
+        contentRaw.put("thinkingSignature", "sig-valid-001");
+
+        AssistantMessage msg = new AssistantMessage(
+                "<think>\n\ncall time tool</think>\n\n",
+                false, contentRaw, toolCallsRaw, toolCalls, null, null);
+
+        ChatConfig config = new ChatConfig();
+        config.setModel("claude-test");
+        ONode root = dialect.buildRequestJson(
+                config, ChatOptions.of(),
+                java.util.Collections.singletonList(msg), false);
+
+        ONode assistant = root.get("messages").get(0);
+        boolean foundSignature = false;
+        for (ONode item : assistant.get("content").getArray()) {
+            if ("thinking".equals(item.get("type").getString())) {
+                Assertions.assertEquals("sig-valid-001", item.get("signature").getString());
+                foundSignature = true;
+            }
+            if ("text".equals(item.get("type").getString())) {
+                Assertions.fail("blank text block must not be written when only thinking exists");
+            }
+        }
+        Assertions.assertTrue(foundSignature, "valid signature should be written back");
     }
 
     // ==================== 新增：Gemini Chat file_data 构建/解析 + audio/video inline_data ====================
