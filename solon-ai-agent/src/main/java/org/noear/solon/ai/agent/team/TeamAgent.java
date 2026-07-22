@@ -235,6 +235,10 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             }
         }
 
+        if(trace.getOptions().getStreamSink() != null){
+            trace.getOptions().getStreamSink().next(new TeamStartChunk(trace));
+        }
+
         try {
             if (trace.getSession().isPending() == false) {
                 // 3. 驱动 Flow 引擎：在协议上下文中求值执行图
@@ -312,20 +316,21 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
                 LOG.info("TeamAgent [{}] completed: {}", config.getName(), assistantMessage.getContent());
             }
 
-            return assistantMessage;
-
-        } finally {
-            // 5. 触发完成拦截（成功/失败均触发，保证生命周期闭环）
-            try {
-                for (RankEntity<TeamInterceptor> item : options.getInterceptors()) {
-                    if (item.target.isEnabled()) {
-                        item.target.onTeamEnd(trace);
-                    }
+            // 5. 触发完成拦截
+            for (RankEntity<TeamInterceptor> item : options.getInterceptors()) {
+                if (item.target.isEnabled()) {
+                    item.target.onTeamEnd(trace);
                 }
-            } finally {
-                // 6. 资源清理与协议后置处理（不受 onTeamEnd 异常影响）
-                config.getProtocol().onTeamFinished(context, trace);
             }
+
+            if(trace.getOptions().getStreamSink() != null){
+                trace.getOptions().getStreamSink().next(new TeamEndChunk(trace, assistantMessage));
+            }
+
+            return assistantMessage;
+        } finally {
+            // 6. 资源清理与协议后置处理（不受 onTeamEnd 异常影响）
+            config.getProtocol().onTeamFinished(context, trace);
         }
     }
 
