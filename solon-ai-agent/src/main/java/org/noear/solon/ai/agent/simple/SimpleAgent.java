@@ -23,6 +23,8 @@ import org.noear.solon.ai.agent.exception.LlmNoReturnException;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.*;
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -174,7 +176,8 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         }
 
         if (assistantMessage == null) {
-            return ChatMessage.ofAssistant(null);
+            // 显式 String，避免与 ofAssistant(Contents) 在 null 时重载歧义
+            return ChatMessage.ofAssistant("");
         }
 
         // 3. 状态回填：将输出结果自动映射到 FlowContext
@@ -397,14 +400,29 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                 trace.getMetrics().addUsage(response.getUsage());
             }
 
+            // 团队 Agent 工具 returnDirect：优先用 source 文本，但仍保留 tool 结果中的 media
+            String clearContent;
             if (responseMessage.hasContent() && responseMessage.getMetadata().containsKey(Agent.META_AGENT)) {
                 String source = responseMessage.getMetadataAs("source");
                 if (Assert.isNotEmpty(source)) {
-                    return ChatMessage.ofAssistant(source);
+                    clearContent = source;
+                } else {
+                    clearContent = responseMessage.getResultContent();
                 }
+            } else {
+                clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : "";
             }
-
-            String clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : "";
+            // 保留多模态 media blocks，避免生图/纯媒体响应被压成纯文本。
+            // 文本投影用 clearContent；blocks 只带非文本媒体，避免 TextBlock 重复。
+            if (responseMessage.hasMedia()) {
+                List<ContentBlock> mediaBlocks = new ArrayList<>();
+                for (ContentBlock block : responseMessage.getBlocks()) {
+                    if (!(block instanceof TextBlock)) {
+                        mediaBlocks.add(block);
+                    }
+                }
+                return ChatMessage.ofAssistant(clearContent, mediaBlocks);
+            }
             return ChatMessage.ofAssistant(clearContent);
         } else {
             // fallback 到自定义处理器

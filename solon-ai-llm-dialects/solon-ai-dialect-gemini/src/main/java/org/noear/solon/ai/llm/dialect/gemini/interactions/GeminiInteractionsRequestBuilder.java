@@ -20,9 +20,12 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.content.AbsMedia;
+import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.SystemMessage;
@@ -176,7 +179,11 @@ public class GeminiInteractionsRequestBuilder {
         ONode contentArr = step.getOrNew("content").asArray();
         if (msg.isMultiModal()) {
             for (ContentBlock block : msg.getBlocks()) {
-                contentArr.add(buildContentBlock(block));
+                ONode mediaNode = buildContentBlock(block);
+                // Session 截断后空媒体不追加
+                if (mediaNode != null && mediaNode.isObject() && mediaNode.getObject().size() > 0) {
+                    contentArr.add(mediaNode);
+                }
             }
         } else {
             String content = msg.getContent();
@@ -198,6 +205,17 @@ public class GeminiInteractionsRequestBuilder {
         List<ONode> steps = new ArrayList<>();
 
         if (Utils.isNotEmpty(msg.getToolCalls())) {
+            // 若有文本/媒体，先写 model_output
+            if (msg.isMultiModal() || Utils.isNotEmpty(msg.getContent())) {
+                ONode outputStep = new ONode();
+                outputStep.set("type", "model_output");
+                ONode contentArr = outputStep.getOrNew("content").asArray();
+                appendAssistantContent(contentArr, msg);
+                if (contentArr.getArray() != null && !contentArr.getArray().isEmpty()) {
+                    steps.add(outputStep);
+                }
+            }
+                
             boolean isFirst = true;
             for (ToolCall call : msg.getToolCalls()) {
                 ONode step = new ONode();
@@ -228,18 +246,52 @@ public class GeminiInteractionsRequestBuilder {
                 steps.add(step);
             }
         } else {
-            // 纯文本响应
+            // 文本 / 多模态响应
             ONode step = new ONode();
             step.set("type", "model_output");
-            String content = msg.getContent();
-            if (Utils.isNotEmpty(content)) {
-                ONode contentArr = step.getOrNew("content").asArray();
-                contentArr.addNew().set("type", "text").set("text", content);
+            ONode contentArr = step.getOrNew("content").asArray();
+            if (msg.isMultiModal()) {
+                appendAssistantContent(contentArr, msg);
+            } else {
+                // 纯文本也剥离 think，与多模态路径一致
+                String content = msg.getResultContent();
+                if (Utils.isNotEmpty(content)) {
+                    contentArr.addNew().set("type", "text").set("text", content);
+                }
             }
             steps.add(step);
         }
-
+    
         return steps;
+    }
+    
+    /**
+     * Assistant blocks → Interactions content 数组。
+     *
+     * @since 3.9
+     */
+    private void appendAssistantContent(ONode contentArr, AssistantMessage msg) {
+        boolean hasText = false;
+        if (Utils.isNotEmpty(msg.getBlocks())) {
+            for (ContentBlock block : msg.getBlocks()) {
+                if (block instanceof TextBlock) {
+                    String text = AssistantMessage.stripThinkTags(block.getContent());
+                    if (Utils.isNotEmpty(text)) {
+                        contentArr.addNew().set("type", "text").set("text", text);
+                        hasText = true;
+                    }
+                } else {
+                    ONode mediaNode = buildContentBlock(block);
+                    // Session 截断后空媒体不追加
+                    if (mediaNode != null && mediaNode.isObject() && mediaNode.getObject().size() > 0) {
+                        contentArr.add(mediaNode);
+                    }
+                }
+            }
+        }
+        if (!hasText && Utils.isNotEmpty(msg.getResultContent())) {
+            contentArr.addNew().set("type", "text").set("text", msg.getResultContent());
+        }
     }
 
     /**
@@ -271,21 +323,34 @@ public class GeminiInteractionsRequestBuilder {
         if (block instanceof TextBlock) {
             node.set("type", "text");
             node.set("text", block.getContent());
-        } else if (block instanceof ImageBlock) {
-            ImageBlock image = (ImageBlock) block;
-            if (Utils.isNotEmpty(image.getData())) {
-                // base64 内联数据
+        } else if (block instanceof AbsMedia) {
+            AbsMedia<?> media = (AbsMedia<?>) block;
+            // Session 截断后 data/url 皆空时返回空节点，调用方跳过
+            if (Utils.isEmpty(media.getData()) && Utils.isEmpty(media.getUrl())) {
+                return node;
+            }
+                
+            String mime = media.getMimeType();
+            if (Utils.isEmpty(mime)) {
+                if (media instanceof ImageBlock) {
+                    mime = "image/jpeg";
+                } else if (media instanceof AudioBlock) {
+                    mime = "audio/mpeg";
+                } else if (media instanceof VideoBlock) {
+                    mime = "video/mp4";
+                }
+            }
+            
+            if (Utils.isNotEmpty(media.getData())) {
                 node.set("type", "inline_data");
-                node.set("mime_type", image.getMimeType());
-                node.set("data", image.getData());
-            } else if (Utils.isNotEmpty(image.getUrl())) {
-                // 文件 URI
+                node.set("mime_type", mime);
+                node.set("data", media.getData());
+            } else {
                 node.set("type", "file_data");
-                node.set("mime_type", image.getMimeType());
-                node.set("file_uri", image.getUrl());
+                node.set("mime_type", mime);
+                node.set("file_uri", media.getUrl());
             }
         }
-        // AudioBlock, VideoBlock 等可根据需要扩展
         return node;
     }
 

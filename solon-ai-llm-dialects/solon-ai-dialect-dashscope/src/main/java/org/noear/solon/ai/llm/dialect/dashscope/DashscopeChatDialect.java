@@ -26,6 +26,8 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.net.http.HttpUtils;
 
 import java.util.Date;
@@ -213,27 +215,119 @@ public class DashscopeChatDialect extends AbstractChatDialect {
 
     @Override
     protected void buildUserMessageNodeDo(ChatConfig config, ONode oNode, UserMessage msg) {
-        ONode contentNode = new ONode().then(n -> {
-            for (ContentBlock block1 : msg.getBlocks()) {
+        oNode.set("role", msg.getRole().name().toLowerCase());
+
+        // 与 Assistant 对齐：多模态才用原生 content 数组；纯文本保持 string（兼容文本模型）
+        if (msg.isMultiModal()) {
+            ONode contentNode = new ONode().then(n -> {
+                appendDashscopeContentBlocks(n, msg.getBlocks(), msg.getContent());
+            });
+            // Session 截断后媒体全不可播时，避免写出空 content 数组
+            if (contentNode.getArray() != null && contentNode.getArray().isEmpty()) {
+                oNode.set("content", msg.getContent() != null ? msg.getContent() : "");
+            } else {
+                oNode.set("content", contentNode);
+            }
+        } else {
+            oNode.set("content", msg.getContent() != null ? msg.getContent() : "");
+        }
+    }
+
+    /**
+     * Assistant 回传对齐 DashScope 原生 content：
+     * 多模态用 [{image|audio|video|text}]；单模态保持 string（兼容文本模型）。
+     *
+     * @since 3.9
+     */
+    @Override
+    protected void buildAssistantMessageNodeDo(ChatConfig config, ONode oNode, AssistantMessage msg) {
+        oNode.set("role", msg.getRole().name().toLowerCase());
+
+        if (msg.isMultiModal()) {
+            ONode contentNode = new ONode().then(n -> {
+                appendDashscopeContentBlocks(n, msg.getBlocks(), msg.getResultContent());
+                // 若块全为空，补文本投影避免空 content
+                if (n.getArray() != null && n.getArray().isEmpty()
+                        && Utils.isNotEmpty(msg.getResultContent())) {
+                    n.addNew().set("text", msg.getResultContent());
+                }
+            });
+            oNode.set("content", contentNode);
+        } else {
+            // 单模态：保持原 string 行为
+            if (Utils.isNotEmpty(msg.getResultContent())) {
+                oNode.set("content", msg.getResultContent());
+            }
+        }
+
+        // 默认不回传 reasoning_content（百炼多轮建议）；
+        // 仅当 options 显式需要时由上层注入到消息 metadata。
+        // 这里不写 reasoning，与父类 OpenAI 风格区分。
+
+        if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
+            oNode.set("tool_calls", ONode.ofBean(msg.getToolCallsRaw()));
+        }
+    }
+
+    /**
+     * 按 DashScope 原生结构追加 content 块（image/audio/video/text）。
+     */
+    private void appendDashscopeContentBlocks(ONode contentArray, List<ContentBlock> blocks, String textFallback) {
+        boolean hasTextBlock = false;
+
+        if (Utils.isNotEmpty(blocks)) {
+            for (ContentBlock block1 : blocks) {
                 if (block1 instanceof ImageBlock) {
-                    n.add(new ONode().then(n1 -> {
-                        n1.set("image", block1.toDataString(true));
-                    }));
-                }else if (block1 instanceof AudioBlock) {
-                    n.add(new ONode().then(n1 -> {
-                        n1.set("audio", block1.toDataString(true));
-                    }));
+                    if (!isMediaBlockPlayable(block1)) {
+                        continue;
+                    }
+                    String image = block1.toDataString(true);
+                    if (Utils.isNotEmpty(image)) {
+                        contentArray.addNew().set("image", image);
+                    }
+                } else if (block1 instanceof AudioBlock) {
+                    if (!isMediaBlockPlayable(block1)) {
+                        continue;
+                    }
+                    String audio = block1.toDataString(true);
+                    if (Utils.isNotEmpty(audio)) {
+                        contentArray.addNew().set("audio", audio);
+                    }
+                } else if (block1 instanceof VideoBlock) {
+                    if (!isMediaBlockPlayable(block1)) {
+                        continue;
+                    }
+                    String video = block1.toDataString(true);
+                    if (Utils.isEmpty(video)) {
+                        continue;
+                    }
+                    ONode videoNode = contentArray.addNew();
+                    videoNode.set("video", video);
+                    // 可选 VL 参数
+                    if (block1.metas() != null) {
+                        Object fps = block1.metas().get("fps");
+                        if (fps != null) {
+                            videoNode.set("fps", ONode.ofBean(fps));
+                        }
+                        Object maxFrames = block1.metas().get("max_frames");
+                        if (maxFrames != null) {
+                            videoNode.set("max_frames", ONode.ofBean(maxFrames));
+                        }
+                    }
+                } else if (block1 instanceof TextBlock) {
+                    // Assistant 回传时剥离 think；User 一般无 think 标签，剥离也无侧作用
+                    String text = AssistantMessage.stripThinkTags(block1.getContent());
+                    if (Utils.isNotEmpty(text)) {
+                        contentArray.addNew().set("text", text);
+                        hasTextBlock = true;
+                    }
                 }
             }
+        }
 
-            if (Utils.isNotEmpty(msg.getContent())) {
-                n.add(new ONode().then(n1 -> {
-                    n1.set("text", msg.getContent());
-                }));
-            }
-        });
-
-        oNode.set("role", msg.getRole().name().toLowerCase());
-        oNode.set("content", contentNode);
+        // 文本投影：若 blocks 中无 TextBlock，补 fallback
+        if (!hasTextBlock && Utils.isNotEmpty(textFallback)) {
+            contentArray.addNew().set("text", textFallback);
+        }
     }
 }

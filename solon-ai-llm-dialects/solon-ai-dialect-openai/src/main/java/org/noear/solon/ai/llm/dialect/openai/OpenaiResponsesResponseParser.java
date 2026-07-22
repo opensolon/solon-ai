@@ -21,6 +21,9 @@ import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.ChatChoice;
 import org.noear.solon.ai.chat.ChatException;
 import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.slf4j.Logger;
@@ -93,6 +96,7 @@ public class OpenaiResponsesResponseParser {
         }
         String[] lines = json.split("\n");
         boolean hasChoices = false;
+        boolean hasMedia = false;
         for (String line : lines) {
             line = line.trim();
             if (line.isEmpty()) {
@@ -163,6 +167,23 @@ public class OpenaiResponsesResponseParser {
                         state.currentFunctionName = item.get("name").getString();
                         state.currentFunctionArguments = new StringBuilder();
                     }
+                }
+            } else if ("response.output_item.done".equals(eventType)) {
+                // 输出项完成：image_generation_call 仅收入 media 聚合，不再推空文本 choice（避免流式侧多一条空消息）
+                ONode item = oResp.get("item");
+                if (item != null && "image_generation_call".equals(item.get("type").getString())) {
+                    ContentBlock imageBlock = parseImageGenerationCall(item);
+                    if (imageBlock != null) {
+                        resp.addMediaBlocks(Collections.singletonList(imageBlock));
+                        hasMedia = true;
+                        // 不 addChoice：等待 response.completed / 文本 delta；media 由 getAggregationMessage 合并
+                    }
+                }
+                StreamState state = resp.attrAs(STREAM_STATE_KEY);
+                if (state != null) {
+                    state.currentItemId = null;
+                    state.currentItemType = null;
+                    state.currentTextContent = null;
                 }
             } else if ("response.content_part.added".equals(eventType)) {
                 // 内容部分添加
@@ -251,14 +272,6 @@ public class OpenaiResponsesResponseParser {
                         state.currentFunctionArguments = null;
                     }
                 }
-            } else if ("response.output_item.done".equals(eventType)) {
-                // 输出项完成
-                StreamState state = resp.attrAs(STREAM_STATE_KEY);
-                if (state != null) {
-                    state.currentItemId = null;
-                    state.currentItemType = null;
-                    state.currentTextContent = null;
-                }
             } else if ("response.output_text.done".equals(eventType) || "response.content_part.done".equals(eventType)) {
                 // 文本/内容部分完成
                 // 不需要特殊处理
@@ -295,7 +308,8 @@ public class OpenaiResponsesResponseParser {
                 resp.setFinished(true);
             }
         }
-        return hasChoices;
+        // 有效处理过 choice 或 media 均视为解析成功（纯 media 事件无 choice 时也要 true）
+        return hasChoices || hasMedia;
     }
 
     /**
@@ -355,17 +369,18 @@ public class OpenaiResponsesResponseParser {
         ONode outputArray = oResp.getOrNull("output");
         if (outputArray != null && outputArray.isArray()) {
             StringBuilder textContent = new StringBuilder();
+            List<ContentBlock> mediaBlocks = new ArrayList<>();
             List<ToolCall> allToolCalls = new ArrayList<>();
             List<Map> allToolCallsRaw = new ArrayList<>();
             for (ONode outputItem : outputArray.getArray()) {
                 String itemType = outputItem.get("type").getString();
                 if ("message".equals(itemType)) {
-                    // 解析消息内容
+                    // 解析消息内容：output_text / refusal / 兼容 image
                     ONode contentArray = outputItem.getOrNull("content");
                     if (contentArray != null && contentArray.isArray()) {
                         for (ONode contentItem : contentArray.getArray()) {
                             String contentType = contentItem.get("type").getString();
-                            if ("output_text".equals(contentType)) {
+                            if ("output_text".equals(contentType) || "text".equals(contentType)) {
                                 String text = contentItem.get("text").getString();
                                 if (Utils.isNotEmpty(text)) {
                                     if (textContent.length() > 0) {
@@ -373,8 +388,30 @@ public class OpenaiResponsesResponseParser {
                                     }
                                     textContent.append(text);
                                 }
+                            } else if ("refusal".equals(contentType)) {
+                                String refusal = contentItem.get("refusal").getString();
+                                if (Utils.isEmpty(refusal)) {
+                                    refusal = contentItem.get("text").getString();
+                                }
+                                if (Utils.isNotEmpty(refusal)) {
+                                    if (textContent.length() > 0) {
+                                        textContent.append("\n");
+                                    }
+                                    textContent.append(refusal);
+                                }
+                            } else if ("output_image".equals(contentType) || "image".equals(contentType)
+                                    || contentItem.hasKey("image_url")) {
+                                ContentBlock imageBlock = parseMessageImageContent(contentItem);
+                                if (imageBlock != null) {
+                                    mediaBlocks.add(imageBlock);
+                                }
                             }
                         }
+                    }
+                } else if ("image_generation_call".equals(itemType)) {
+                    ContentBlock imageBlock = parseImageGenerationCall(outputItem);
+                    if (imageBlock != null) {
+                        mediaBlocks.add(imageBlock);
                     }
                 } else if ("function_call".equals(itemType)) {
                     String callId = outputItem.get("call_id").getString();
@@ -391,7 +428,7 @@ public class OpenaiResponsesResponseParser {
                         }
                     }
                     allToolCalls.add(new ToolCall(callId, callId, functionName, arguments, argMap));
-
+                    
                     Map<String, Object> toolCallRaw = new HashMap<>();
                     toolCallRaw.put("id", callId);
                     toolCallRaw.put("type", "function");
@@ -402,14 +439,26 @@ public class OpenaiResponsesResponseParser {
                     allToolCallsRaw.add(toolCallRaw);
                 }
             }
-
+        
+            List<ContentBlock> blocksForMsg = null;
+            if (!mediaBlocks.isEmpty()) {
+                blocksForMsg = new ArrayList<>();
+                if (textContent.length() > 0) {
+                    blocksForMsg.add(TextBlock.of(textContent.toString()));
+                }
+                blocksForMsg.addAll(mediaBlocks);
+                resp.addMediaBlocks(mediaBlocks);
+            }
+        
             // 将所有工具调用合并到一个 AssistantMessage 中
             if (!allToolCalls.isEmpty()) {
                 AssistantMessage msg = new AssistantMessage(textContent.toString(),
-                        false, null, allToolCallsRaw, allToolCalls, null);
+                        false, null, allToolCallsRaw, allToolCalls, null, blocksForMsg);
                 resp.addChoice(new ChatChoice(0, created, "stop", msg));
-            } else if (textContent.length() > 0) {
-                resp.addChoice(new ChatChoice(0, created, "stop", new AssistantMessage(textContent.toString())));
+            } else if (textContent.length() > 0 || blocksForMsg != null) {
+                AssistantMessage msg = new AssistantMessage(textContent.toString(),
+                        false, null, null, null, null, blocksForMsg);
+                resp.addChoice(new ChatChoice(0, created, "stop", msg));
             } else {
                 // 如果有 output_text 便捷字段
                 String outputText = oResp.get("output_text").getString();
@@ -440,6 +489,104 @@ public class OpenaiResponsesResponseParser {
      * @author oisin lu
      * @date 2026年1月28日
      */
+    /**
+     * 解析 image_generation_call 输出项为 ImageBlock。
+     *
+     * @since 3.9
+     */
+    private ContentBlock parseImageGenerationCall(ONode outputItem) {
+        if (outputItem == null) {
+            return null;
+        }
+        String result = outputItem.get("result").getString();
+        String id = outputItem.get("id").getString();
+        String revisedPrompt = outputItem.get("revised_prompt").getString();
+        String status = outputItem.get("status").getString();
+    
+        ImageBlock block = null;
+        if (Utils.isNotEmpty(result)) {
+            // result 为 base64（可能带 data: 前缀）
+            if (result.startsWith("data:") && result.contains(";base64,")) {
+                int comma = result.indexOf(',');
+                String header = result.substring(5, result.indexOf(';'));
+                String b64 = result.substring(comma + 1);
+                block = ImageBlock.ofBase64(b64, header);
+            } else if (result.startsWith("http://") || result.startsWith("https://")) {
+                block = ImageBlock.ofUrl(result);
+            } else {
+                block = ImageBlock.ofBase64(result);
+            }
+        } else if (Utils.isNotEmpty(id)) {
+            // 仅 id：占位，便于多轮回传 image_generation_call
+            block = ImageBlock.ofUrl("image-generation://" + id);
+        }
+    
+        if (block == null) {
+            return null;
+        }
+    
+        if (Utils.isNotEmpty(id)) {
+            block.metaAdd("id", id);
+            block.metaAdd("image_generation_id", id);
+        }
+        block.metaAdd("source_type", "image_generation_call");
+        if (Utils.isNotEmpty(status)) {
+            block.metaAdd("status", status);
+        }
+        if (Utils.isNotEmpty(revisedPrompt)) {
+            block.metaAdd("revised_prompt", revisedPrompt);
+        }
+        return block;
+    }
+    
+    /**
+     * 解析 message content 中的图片项。
+     *
+     * @since 3.9
+     */
+    private ContentBlock parseMessageImageContent(ONode contentItem) {
+        if (contentItem == null) {
+            return null;
+        }
+        String url = null;
+        String data = null;
+        if (contentItem.hasKey("image_url")) {
+            ONode imageUrl = contentItem.get("image_url");
+            if (imageUrl.isValue()) {
+                url = imageUrl.getString();
+            } else if (imageUrl.isObject()) {
+                url = imageUrl.get("url").getString();
+                data = imageUrl.get("data").getString();
+                if (data == null) {
+                    data = imageUrl.get("b64_json").getString();
+                }
+            }
+        }
+        if (url == null && contentItem.hasKey("url")) {
+            url = contentItem.get("url").getString();
+        }
+        if (data == null && contentItem.hasKey("data")) {
+            data = contentItem.get("data").getString();
+        }
+        if (data == null && contentItem.hasKey("result")) {
+            data = contentItem.get("result").getString();
+        }
+    
+        if (Utils.isNotEmpty(data)) {
+            if (data.startsWith("data:") && data.contains(";base64,")) {
+                int comma = data.indexOf(',');
+                String header = data.substring(5, data.indexOf(';'));
+                String b64 = data.substring(comma + 1);
+                return ImageBlock.ofBase64(b64, header);
+            }
+            return ImageBlock.ofBase64(data);
+        }
+        if (Utils.isNotEmpty(url)) {
+            return ImageBlock.ofUrl(url);
+        }
+        return null;
+    }
+    
     private AiUsage parseUsage(ONode usageNode) {
         if (usageNode == null) {
             return null;

@@ -21,6 +21,11 @@ import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.ChatChoice;
 import org.noear.solon.ai.chat.ChatException;
 import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.content.AudioBlock;
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.slf4j.Logger;
@@ -150,9 +155,12 @@ public class GeminiInteractionsResponseParser {
                         break;
 
                     case "model_output":
-                        String outputText = extractStepContent(oStep);
-                        if (Utils.isNotEmpty(outputText)) {
-                            messages.add(new AssistantMessage(outputText, false));
+                        AssistantMessage modelMsg = extractModelOutputMessage(oStep);
+                        if (modelMsg != null) {
+                            if (modelMsg.hasMedia()) {
+                                resp.addMediaBlocks(modelMsg.getBlocks());
+                            }
+                            messages.add(modelMsg);
                         }
                         break;
 
@@ -578,25 +586,60 @@ public class GeminiInteractionsResponseParser {
     }
 
     /**
+     * 提取 model_output 为 AssistantMessage（含多模态 blocks）。
+     *
+     * @since 3.9
+     */
+    private AssistantMessage extractModelOutputMessage(ONode oStep) {
+        ONode content = oStep.getOrNull("content");
+        if (content == null) {
+            return null;
+        }
+                    
+        List<ContentBlock> blocks = extractContentBlocks(content);
+        if (blocks.isEmpty()) {
+            return null;
+        }
+
+        StringBuilder text = new StringBuilder();
+        List<ContentBlock> media = new ArrayList<>();
+        for (ContentBlock block : blocks) {
+            if (block instanceof TextBlock) {
+                if (text.length() > 0) {
+                    text.append("\n");
+                }
+                text.append(block.getContent());
+            } else {
+                media.add(block);
+            }
+        }
+        
+        if (media.isEmpty()) {
+            return new AssistantMessage(text.toString(), false);
+        }
+    
+        List<ContentBlock> blocksForMsg = new ArrayList<>();
+        if (text.length() > 0) {
+            blocksForMsg.add(TextBlock.of(text.toString()));
+        }
+        blocksForMsg.addAll(media);
+        return new AssistantMessage(text.toString(), false, null, null, null, null, blocksForMsg);
+    }
+    
+    /**
      * 从 Content[] 数组中提取文本
      * <p>
      * Content 数组结构：[{"type": "text", "text": "..."}, ...]
      */
     private String extractContentArrayText(ONode contentArr) {
-        if (contentArr == null || !contentArr.isArray()) {
-            // 可能是单个对象
-            if (contentArr != null && contentArr.isObject()) {
-                if (contentArr.hasKey("text")) {
-                    return contentArr.get("text").getString();
-                }
-            }
+        List<ContentBlock> blocks = extractContentBlocks(contentArr);
+        if (blocks.isEmpty()) {
             return null;
         }
-
         StringBuilder sb = new StringBuilder();
-        for (ONode item : contentArr.getArray()) {
-            if ("text".equals(item.get("type").getString())) {
-                String text = item.get("text").getString();
+        for (ContentBlock block : blocks) {
+            if (block instanceof TextBlock) {
+                String text = block.getContent();
                 if (Utils.isNotEmpty(text)) {
                     if (sb.length() > 0) {
                         sb.append("\n");
@@ -606,6 +649,130 @@ public class GeminiInteractionsResponseParser {
             }
         }
         return sb.length() > 0 ? sb.toString() : null;
+    }
+    
+    /**
+     * 从 Content[] 提取完整 blocks（text + media）。
+     *
+     * @since 3.9
+     */
+    private List<ContentBlock> extractContentBlocks(ONode contentArr) {
+        List<ContentBlock> blocks = new ArrayList<>();
+        if (contentArr == null) {
+            return blocks;
+        }
+    
+        if (contentArr.isObject()) {
+            ContentBlock block = parseInteractionContentItem(contentArr);
+            if (block != null) {
+                blocks.add(block);
+            }
+            return blocks;
+        }
+    
+        if (!contentArr.isArray()) {
+            return blocks;
+        }
+    
+        for (ONode item : contentArr.getArray()) {
+            ContentBlock block = parseInteractionContentItem(item);
+            if (block != null) {
+                blocks.add(block);
+            }
+        }
+        return blocks;
+    }
+    
+    private ContentBlock parseInteractionContentItem(ONode item) {
+        if (item == null || !item.isObject()) {
+            return null;
+        }
+    
+        String type = item.get("type").getString();
+        if ("text".equals(type) || item.hasKey("text")) {
+            String text = item.get("text").getString();
+            return Utils.isEmpty(text) ? null : TextBlock.of(text);
+        }
+    
+        if ("inline_data".equals(type) || item.hasKey("data") || item.hasKey("inline_data") || item.hasKey("inlineData")) {
+            String mime = item.get("mime_type").getString();
+            if (Utils.isEmpty(mime)) {
+                mime = item.get("mimeType").getString();
+            }
+            String data = item.get("data").getString();
+            if (Utils.isEmpty(data) && item.hasKey("inline_data")) {
+                ONode inline = item.get("inline_data");
+                if (inline.isObject()) {
+                    data = inline.get("data").getString();
+                    if (Utils.isEmpty(mime)) {
+                        mime = inline.get("mime_type").getString();
+                    }
+                }
+            }
+            return createMediaByMime(mime, null, data);
+        }
+    
+        if ("file_data".equals(type) || item.hasKey("file_uri") || item.hasKey("fileUri") || item.hasKey("file_data") || item.hasKey("fileData")) {
+            String mime = item.get("mime_type").getString();
+            if (Utils.isEmpty(mime)) {
+                mime = item.get("mimeType").getString();
+            }
+            String uri = item.get("file_uri").getString();
+            if (Utils.isEmpty(uri)) {
+                uri = item.get("fileUri").getString();
+            }
+            if (Utils.isEmpty(uri) && item.hasKey("file_data")) {
+                ONode fileData = item.get("file_data");
+                if (fileData.isObject()) {
+                    uri = fileData.get("file_uri").getString();
+                    if (Utils.isEmpty(uri)) {
+                        uri = fileData.get("fileUri").getString();
+                    }
+                    if (Utils.isEmpty(mime)) {
+                        mime = fileData.get("mime_type").getString();
+                    }
+                }
+            }
+            return createMediaByMime(mime, uri, null);
+        }
+    
+        return null;
+    }
+    
+    private ContentBlock createMediaByMime(String mime, String url, String data) {
+        boolean hasData = Utils.isNotEmpty(data);
+        boolean hasUrl = Utils.isNotEmpty(url);
+        if (!hasData && !hasUrl) {
+            return null;
+        }
+    
+        String mediaType = "image";
+        if (Utils.isNotEmpty(mime)) {
+            String lower = mime.toLowerCase();
+            if (lower.startsWith("audio/")) {
+                mediaType = "audio";
+            } else if (lower.startsWith("video/")) {
+                mediaType = "video";
+            }
+        }
+    
+        if ("audio".equals(mediaType)) {
+            if (hasData) {
+                return Utils.isEmpty(mime) ? AudioBlock.ofBase64(data) : AudioBlock.ofBase64(data, mime);
+            }
+            return Utils.isEmpty(mime) ? AudioBlock.ofUrl(url) : AudioBlock.ofUrl(url, mime);
+        }
+        if ("video".equals(mediaType)) {
+            if (hasData) {
+                return Utils.isEmpty(mime) ? VideoBlock.ofBase64(data) : VideoBlock.ofBase64(data, mime);
+            }
+            return Utils.isEmpty(mime) ? VideoBlock.ofUrl(url) : VideoBlock.ofUrl(url, mime);
+        }
+    
+        if (hasData) {
+            return Utils.isEmpty(mime) ? ImageBlock.ofBase64(data) : ImageBlock.ofBase64(data, mime);
+        }
+        return Utils.isEmpty(mime) ? ImageBlock.ofUrl(url) : ImageBlock.ofUrl(url, mime);
     }
 
     /**

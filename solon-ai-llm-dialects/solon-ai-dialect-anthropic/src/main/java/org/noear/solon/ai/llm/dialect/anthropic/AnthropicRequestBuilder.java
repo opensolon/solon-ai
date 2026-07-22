@@ -692,6 +692,10 @@ public class AnthropicRequestBuilder {
                     .set("type", "text")
                     .set("text", resultContent);
             }
+            
+            // 多模态媒体块（若有）
+            appendAssistantMediaBlocks(contentArray, assistantMessage);
+                    
             // 添加工具调用
             for (ToolCall call : assistantMessage.getToolCalls()) {
                 contentArray.addNew()
@@ -700,13 +704,82 @@ public class AnthropicRequestBuilder {
                     .set("name", call.getName())
                     .set("input", ONode.ofBean(call.getArguments()));
             }
+        } else if (assistantMessage.isMultiModal()) {
+            // 多模态助手消息：content 数组（text + image）
+            ONode contentArray = node.getOrNew("content").asArray();
+            boolean hasText = false;
+            if (Utils.isNotEmpty(assistantMessage.getBlocks())) {
+                for (ContentBlock block : assistantMessage.getBlocks()) {
+                    if (block instanceof TextBlock) {
+                        String text = AssistantMessage.stripThinkTags(block.getContent());
+                        if (Utils.isNotEmpty(text)) {
+                            contentArray.addNew()
+                                    .set("type", "text")
+                                    .set("text", text);
+                            hasText = true;
+                        }
+                    } else if (block instanceof ImageBlock) {
+                        appendClaudeImageBlock(contentArray, (ImageBlock) block);
+                    }
+                }
+            }
+            if (!hasText && Utils.isNotEmpty(assistantMessage.getResultContent())) {
+                contentArray.addNew()
+                        .set("type", "text")
+                        .set("text", assistantMessage.getResultContent());
+            }
         } else {
-            String content = assistantMessage.getContent();
+            // 纯文本回传剥离 think，与多模态 TextBlock 路径一致
+            String content = assistantMessage.getResultContent();
             if (Utils.isNotEmpty(content)) {
                 node.set("content", content);
             } else {
                 node.getOrNew("content").asArray(); // Claude需要content字段，即使是空数组
             }
+        }
+    }
+    
+    /**
+     * 将 Assistant 媒体块追加到 Claude content 数组（当前支持 image）。
+     *
+     * @since 3.9
+     */
+    private void appendAssistantMediaBlocks(ONode contentArray, AssistantMessage assistantMessage) {
+        if (!assistantMessage.hasMedia() || Utils.isEmpty(assistantMessage.getBlocks())) {
+            return;
+        }
+        for (ContentBlock block : assistantMessage.getBlocks()) {
+            if (block instanceof ImageBlock) {
+                appendClaudeImageBlock(contentArray, (ImageBlock) block);
+            }
+        }
+    }
+    
+    /**
+     * Claude image source 结构。
+     *
+     * @since 3.9
+     */
+    private void appendClaudeImageBlock(ONode contentArray, ImageBlock image) {
+        String mediaType = image.getMimeType();
+        if (Utils.isEmpty(mediaType)) {
+            mediaType = "image/jpeg";
+        }
+    
+        if (Utils.isNotEmpty(image.getData())) {
+            contentArray.addNew()
+                    .set("type", "image")
+                    .set("source", new ONode()
+                            .set("type", "base64")
+                            .set("media_type", mediaType)
+                            .set("data", image.toDataString(false)));
+        } else if (Utils.isNotEmpty(image.getUrl())) {
+            // 兼容 url 源（Claude 支持 source.type=url）
+            contentArray.addNew()
+                    .set("type", "image")
+                    .set("source", new ONode()
+                            .set("type", "url")
+                            .set("url", image.getUrl()));
         }
     }
 

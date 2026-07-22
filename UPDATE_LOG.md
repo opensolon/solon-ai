@@ -25,6 +25,7 @@
 * 优化 solon-ai-dialect-dashscope：仅设 `reasoning_effort` → `parameters.enable_thinking=true`（`thinking(false)` 优先）
 * 优化 solon-ai-dialect-gemini：models 按 model 分流——2.5 → thinkingBudget（关=0，high=16k；2.5 pro max=32768，flash max=24576），3.x → thinkingLevel（关=minimal；pro/flash 支持 medium 等）；interactions → thinking_level
 * 添加 solon-ai-core ChatRequestDesc.role, instruction, systemPrompt 方法
+* 添加 solon-ai-core AssistantMessage 多模态支持
 * 添加 solon-ai-agent HITLStrategy 接口，替代 HITLInterceptor.InterventionStrategy（后者标为弃用）
 * 添加 solon-ai-agent RunStartChunk, RunEndChunk, ReasonStartChunk, ReasonEndChunk 事件块
 * 添加 solon-ai-agent ActionChunk, ObservationChunk, ToolExchanger callId 属性

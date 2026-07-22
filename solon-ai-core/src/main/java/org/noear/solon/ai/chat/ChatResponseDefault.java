@@ -17,6 +17,8 @@ package org.noear.solon.ai.chat;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.lang.Nullable;
@@ -49,6 +51,12 @@ public class ChatResponseDefault implements ChatResponse {
 
     protected final StringBuilder contentBuilder = new StringBuilder();
     public final StringBuilder reasoningBuilder = new StringBuilder();
+    /**
+     * 流式聚合中的非文本媒体块（终态写入）
+     *
+     * @since 3.9
+     */
+    protected final List<ContentBlock> mediaBlocks = new ArrayList<>();
     protected final Map<String, ToolCallBuilder> toolCallBuilders = new LinkedHashMap<>();
 
     //附件属性
@@ -143,19 +151,75 @@ public class ChatResponseDefault implements ChatResponse {
 
     /**
      * 获取消息
+     * <p>流式仅 media、尚无 choice 时，回落聚合消息，避免中间帧 getMessage() 恒为 null。</p>
      */
     @Override
     public AssistantMessage getMessage() {
         if (hasChoices()) {
             //取最后条消息
             return lastChoice().getMessage();
-        } else {
-            return null;
         }
+        
+        // Responses 流式 image_generation_call 等：只收 mediaBlocks 不推 choice
+        if (stream && Utils.isNotEmpty(mediaBlocks)) {
+            return getAggregationMessage();
+        }
+    
+        return null;
     }
 
     public String getAggregationContent() {
         return contentBuilder.toString();
+    }
+
+    /**
+     * 追加流式聚合的媒体块（跳过 TextBlock，文本走 contentBuilder）
+     *
+     * @since 3.9
+     */
+    public void addMediaBlocks(List<ContentBlock> blocks) {
+        if (Utils.isEmpty(blocks)) {
+            return;
+        }
+
+        for (ContentBlock block : blocks) {
+            // 跳过文本；同一实例或同内容媒体避免方言 addMediaBlocks + publishResponse 双写
+            if (block != null && !(block instanceof TextBlock) && !containsEquivalentMedia(mediaBlocks, block)) {
+                mediaBlocks.add(block);
+            }
+        }
+    }
+    
+    /**
+     * 判断媒体块是否已存在（先引用相等，再按类型 + content 等价）。
+     *
+     * @since 3.9
+     */
+    protected boolean containsEquivalentMedia(List<ContentBlock> existing, ContentBlock candidate) {
+        if (Utils.isEmpty(existing) || candidate == null) {
+            return false;
+        }
+        for (ContentBlock block : existing) {
+            if (block == candidate) {
+                return true;
+            }
+            if (block != null
+                    && block.getClass() == candidate.getClass()
+                    && Utils.isNotEmpty(candidate.getContent())
+                    && candidate.getContent().equals(block.getContent())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 获取流式聚合的媒体块
+     *
+     * @since 3.9
+     */
+    public List<ContentBlock> getMediaBlocks() {
+        return mediaBlocks;
     }
 
     @Override
@@ -163,6 +227,7 @@ public class ChatResponseDefault implements ChatResponse {
         if (stream) {
             if (contentBuilder.length() == 0 &&
                     toolCallBuilders.isEmpty() &&
+                    mediaBlocks.isEmpty() &&
                     choices.isEmpty()) {
                 return true;
             }
@@ -183,19 +248,22 @@ public class ChatResponseDefault implements ChatResponse {
         if (hasChoices()) {
             if (stream) {
                 AssistantMessage last = lastChoice().getMessage();
+                List<ContentBlock> aggBlocks = buildAggregationBlocks(contentBuilder.toString(), last);
                 return new AssistantMessage(contentBuilder.toString(),
                         last.isThinking(),
                         last.getContentRaw(),
                         last.getToolCallsRaw(),
                         last.getToolCalls(),
-                        last.getSearchResultsRaw()
+                        last.getSearchResultsRaw(),
+                        aggBlocks
                 ).reasoningFieldName(last.getReasoningFieldName());
             } else {
                 return lastChoice().getMessage();
             }
         } else {
-            if (contentBuilder.length() > 0) {
-                return new AssistantMessage(contentBuilder.toString(), false)
+            if (contentBuilder.length() > 0 || Utils.isNotEmpty(mediaBlocks)) {
+                List<ContentBlock> aggBlocks = buildAggregationBlocks(contentBuilder.toString(), null);
+                return new AssistantMessage(contentBuilder.toString(), false, null, null, null, null, aggBlocks)
                         .reasoningFieldName(reasoning_field_name);
             } else {
                 return null;
@@ -204,39 +272,67 @@ public class ChatResponseDefault implements ChatResponse {
     }
 
     /**
+     * 构建聚合消息的 blocks：文本投影 + 流中媒体 + 最后一条消息媒体
+     *
+     * @since 3.9
+     */
+    protected List<ContentBlock> buildAggregationBlocks(String text, AssistantMessage last) {
+        List<ContentBlock> agg = new ArrayList<>();
+
+        // 优先使用流式过程中已收集的 mediaBlocks（publishResponse / 方言终态写入）。
+        // 不再与 last.blocks 叠加，避免同一媒体被聚合两次。
+        if (Utils.isNotEmpty(mediaBlocks)) {
+            agg.addAll(mediaBlocks);
+        } else if (last != null && last.hasMedia()) {
+            // 兜底：媒体只挂在最后一条消息、未进入 mediaBlocks 的路径
+            for (ContentBlock block : last.getBlocks()) {
+                if (!(block instanceof TextBlock)) {
+                    agg.add(block);
+                }
+            }
+        }
+
+        if (Utils.isEmpty(agg)) {
+            // 纯文本保持旧形态：不填充 blocks
+            return null;
+        }
+
+        List<ContentBlock> result = new ArrayList<>();
+        if (Utils.isNotEmpty(text)) {
+            result.add(TextBlock.of(text));
+        }
+        result.addAll(agg);
+        return result;
+    }
+
+    /**
      * 是否有消息内容
+     * <p>与 {@link #getMessage()} 对齐：流式仅 media 时也回落聚合消息。</p>
      */
     @Override
     public boolean hasContent() {
-        if (hasChoices()) {
-            return lastChoice().getMessage().hasContent();
-        } else {
-            return false;
-        }
+        AssistantMessage msg = getMessage();
+        return msg != null && msg.hasContent();
     }
-
+        
     /**
      * 获取消息原始内容
+     * <p>与 {@link #getMessage()} 对齐：流式仅 media 时也回落聚合消息。</p>
      */
     @Override
     public String getContent() {
-        if (hasChoices()) {
-            return lastChoice().getMessage().getContent();
-        } else {
-            return null;
-        }
+        AssistantMessage msg = getMessage();
+        return msg == null ? null : msg.getContent();
     }
-
+        
     /**
      * 获取消息结果内容（清理过思考）
+     * <p>与 {@link #getMessage()} 对齐：流式仅 media 时也回落聚合消息。</p>
      */
     @Override
     public String getResultContent() {
-        if (hasChoices()) {
-            return lastChoice().getMessage().getResultContent();
-        } else {
-            return null;
-        }
+        AssistantMessage msg = getMessage();
+        return msg == null ? null : msg.getResultContent();
     }
 
     /**

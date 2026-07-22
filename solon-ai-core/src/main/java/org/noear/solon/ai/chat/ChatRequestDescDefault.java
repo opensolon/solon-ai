@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat;
 
 import org.noear.snack4.ONode;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.interceptor.*;
 import org.noear.solon.ai.chat.message.SystemMessage;
@@ -435,7 +436,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
             if (resp.hasChoices()) {
                 AssistantMessage choiceMessage = resp.getMessage();
-                if (Assert.isNotEmpty(choiceMessage.getToolCalls())) {
+                if (choiceMessage != null && Assert.isNotEmpty(choiceMessage.getToolCalls())) {
                     buildToolCallBuilder(resp, choiceMessage);
                 }
 
@@ -446,6 +447,10 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                     resp.addChoice(choice);
                     publishResponse(sink, resp, choice);
                 }
+            } else if (Utils.isNotEmpty(resp.getMediaBlocks())) {
+                // Responses 流式仅 media（如 image_generation_call.done）：无 choice 也要推一帧
+                // 便于订阅侧通过 getMessage()/getAggregationMessage() 拿到媒体
+                sink.next(resp);
             } else if (resp.getUsage() != null) {
                 ChatChoice choice = new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage(""));
                 resp.addChoice(choice);
@@ -522,6 +527,11 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             if (Assert.isNotEmpty(acm.getReasoning())) {
                 resp.reasoningBuilder.append(acm.getReasoning());
             }
+
+            // 流式聚合媒体块（文本已走 contentBuilder）
+            if (acm.hasMedia()) {
+                resp.addMediaBlocks(acm.getBlocks());
+            }
         }
 
         sink.next(resp);
@@ -538,6 +548,11 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
         if (Assert.isNotEmpty(acm.getReasoning())) {
             resp.reasoningBuilder.append(acm.getReasoning());
+        }
+
+        // 工具调用消息中也可能附带媒体
+        if (acm.hasMedia()) {
+            resp.addMediaBlocks(acm.getBlocks());
         }
 
         for (ToolCall call : acm.getToolCalls()) {

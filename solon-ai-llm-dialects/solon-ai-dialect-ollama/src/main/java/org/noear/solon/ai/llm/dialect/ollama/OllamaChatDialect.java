@@ -35,12 +35,14 @@ import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.DateUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -102,17 +104,168 @@ public class OllamaChatDialect extends AbstractChatDialect {
             //单模态
             oNode.set("content", msg.getContent());
         } else {
-            //多模态
+            //多模态：content 为字符串，媒体走侧车数组
             oNode.set("content", msg.getContent());
+            appendOllamaMediaArrays(oNode, msg.getBlocks());
+        }
+    }
 
-            for (ContentBlock block1 : msg.getBlocks()) {
-                if (block1 instanceof ImageBlock) {
-                    oNode.getOrNew("images").add(block1.toDataString(false));
-                } else if (block1 instanceof AudioBlock) {
-                    oNode.getOrNew("audios").add(block1.toDataString(false));
-                } else if (block1 instanceof VideoBlock) {
-                    oNode.getOrNew("videos").add(block1.toDataString(false));
+    /**
+     * Assistant 回传对齐 Ollama：content 字符串 + images/audios/videos，而非 OpenAI content 数组。
+     *
+     * @since 3.9
+     */
+    @Override
+    protected void buildAssistantMessageNodeDo(ChatConfig config, ONode oNode, AssistantMessage msg) {
+        oNode.set("role", msg.getRole().name().toLowerCase());
+
+        if (Utils.isNotEmpty(msg.getResultContent())) {
+            oNode.set("content", msg.getResultContent());
+        } else {
+            oNode.set("content", "");
+        }
+
+        if (msg.isMultiModal()) {
+            appendOllamaMediaArrays(oNode, msg.getBlocks());
+        }
+
+        //兼容 r1 的 tool-call
+        if (Utils.isNotEmpty(msg.getReasoningFieldName())) {
+            oNode.set(msg.getReasoningFieldName(), msg.getReasoning());
+        }
+
+        if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
+            oNode.set("tool_calls", ONode.ofBean(msg.getToolCallsRaw()));
+        }
+    }
+
+    /**
+     * 解析 Assistant：补读 Ollama 侧车 images/audios/videos，以及 thinking 字段。
+     *
+     * @since 3.9
+     */
+    @Override
+    public List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
+        // Ollama think 模式字段为 thinking，映射到通用 reasoning 管线
+        if (oMessage != null
+                && !oMessage.hasKey("reasoning")
+                && !oMessage.hasKey("reasoning_content")
+                && oMessage.hasKey("thinking")) {
+            String thinking = oMessage.get("thinking").getString();
+            if (Utils.isNotEmpty(thinking)) {
+                oMessage.set("reasoning", thinking);
+            }
+        }
+
+        List<AssistantMessage> messageList = super.parseAssistantMessage(resp, oMessage);
+        List<ContentBlock> mediaBlocks = parseOllamaMediaSidecars(oMessage);
+        if (Utils.isEmpty(mediaBlocks)) {
+            return messageList;
+        }
+
+        resp.addMediaBlocks(mediaBlocks);
+
+        List<AssistantMessage> result = new ArrayList<>(messageList.size());
+        boolean mediaMerged = false;
+        for (AssistantMessage msg : messageList) {
+            // 仅将媒体合并到非 thinking、非纯 tool_calls 消息
+            if (!mediaMerged
+                    && !msg.isThinking()
+                    && Utils.isEmpty(msg.getToolCalls())) {
+                List<ContentBlock> blocks = new ArrayList<>();
+                if (Utils.isNotEmpty(msg.getContent())) {
+                    blocks.add(TextBlock.of(msg.getContent()));
                 }
+                // 保留已有 blocks （若有）再追加侧车媒体
+                if (Utils.isNotEmpty(msg.getBlocks())) {
+                    for (ContentBlock b : msg.getBlocks()) {
+                        if (!(b instanceof TextBlock)) {
+                            blocks.add(b);
+                        }
+                    }
+                }
+                blocks.addAll(mediaBlocks);
+                result.add(new AssistantMessage(
+                        msg.getContent(),
+                        msg.isThinking(),
+                        msg.getContentRaw(),
+                        msg.getToolCallsRaw(),
+                        msg.getToolCalls(),
+                        msg.getSearchResultsRaw(),
+                        blocks).reasoningFieldName(msg.getReasoningFieldName()));
+                mediaMerged = true;
+            } else {
+                result.add(msg);
+            }
+        }
+
+        // 若只有 thinking/tool 消息，补一条带媒体的空文本消息
+        if (!mediaMerged) {
+            result.add(new AssistantMessage("", false, null, null, null, null, mediaBlocks));
+        }
+
+        return result;
+    }
+
+    /**
+     * 将 blocks 拆为 Ollama images/audios/videos 侧车数组。
+     */
+    private void appendOllamaMediaArrays(ONode oNode, List<ContentBlock> blocks) {
+        if (Utils.isEmpty(blocks)) {
+            return;
+        }
+        for (ContentBlock block1 : blocks) {
+            // Session 截断后空媒体跳过，避免写出 null/空串侧车
+            if (!isMediaBlockPlayable(block1)) {
+                continue;
+            }
+            String data = block1.toDataString(false);
+            if (Utils.isEmpty(data)) {
+                continue;
+            }
+            if (block1 instanceof ImageBlock) {
+                oNode.getOrNew("images").add(data);
+            } else if (block1 instanceof AudioBlock) {
+                oNode.getOrNew("audios").add(data);
+            } else if (block1 instanceof VideoBlock) {
+                oNode.getOrNew("videos").add(data);
+            }
+        }
+    }
+
+    /**
+     * 解析 Ollama message 侧车媒体数组。
+     */
+    private List<ContentBlock> parseOllamaMediaSidecars(ONode oMessage) {
+        List<ContentBlock> mediaBlocks = new ArrayList<>();
+        if (oMessage == null) {
+            return mediaBlocks;
+        }
+
+        appendSidecarMedia(mediaBlocks, oMessage.getOrNull("images"), "image");
+        appendSidecarMedia(mediaBlocks, oMessage.getOrNull("audios"), "audio");
+        appendSidecarMedia(mediaBlocks, oMessage.getOrNull("videos"), "video");
+        return mediaBlocks;
+    }
+
+    private void appendSidecarMedia(List<ContentBlock> mediaBlocks, ONode arrayNode, String mediaType) {
+        if (arrayNode == null || !arrayNode.isArray()) {
+            return;
+        }
+        for (ONode item : arrayNode.getArray()) {
+            String value = item.getString();
+            if (Utils.isEmpty(value)) {
+                continue;
+            }
+            // value 可能是纯 base64、data URL 或 http(s) URL
+            ContentBlock block;
+            if (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("data:")) {
+                block = createMediaBlock(mediaType, value, null, null);
+            } else {
+                block = createMediaBlock(mediaType, null, value, null);
+            }
+            if (block != null) {
+                mediaBlocks.add(block);
             }
         }
     }

@@ -374,6 +374,41 @@ public class ReasonTaskTest {
     }
 
     @Test
+    @DisplayName("仅有媒体（无文本/无 toolCalls）：不算空响应，不注入自我反思")
+    public void testMediaOnly_notEmpty() throws Throwable {
+        AssistantMessage msg = ChatMessage.ofAssistant(
+                "",
+                org.noear.solon.ai.chat.content.ImageBlock.ofUrl("https://example.com/gen.png"));
+        ChatResponse resp = mockResponse(msg);
+        when(reqDesc.call()).thenReturn(resp);
+
+        emptyRetryCounter.set(2);
+        reasonTask.run(trace, context);
+
+        assertEquals(0, emptyRetryCounter.get(), "media-only 响应应重置空响应计数器");
+        assertTrue(workingMemory.getMessages().isEmpty(), "不应注入格式修正/自我反思提示");
+        verify(trace, never()).setRoute(ReActAgent.ID_REASON);
+    }
+
+    @Test
+    @DisplayName("NATIVE_TOOL 风格 media-only：路由到 END")
+    public void testMediaOnly_nativeTool_routesToEnd() throws Throwable {
+        when(config.getStyle()).thenReturn(ReActStyle.NATIVE_TOOL);
+
+        AssistantMessage msg = ChatMessage.ofAssistant(
+                "",
+                org.noear.solon.ai.chat.content.ImageBlock.ofUrl("https://example.com/gen2.png"));
+        ChatResponse resp = mockResponse(msg);
+        when(reqDesc.call()).thenReturn(resp);
+
+        reasonTask.run(trace, context);
+
+        assertEquals(0, emptyRetryCounter.get());
+        verify(trace).setRoute(Agent.ID_END);
+        verify(trace).setFinalAnswer(anyString(), eq(false));
+    }
+
+    @Test
     @DisplayName("响应为 null 提前返回，不触发空响应逻辑")
     public void testNullResponse_earlyReturn() throws Throwable {
         when(reqDesc.call()).thenThrow(new RuntimeException("模拟失败"));

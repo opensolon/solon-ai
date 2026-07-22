@@ -22,6 +22,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.content.Contents;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.NonNull;
@@ -98,6 +99,63 @@ public interface ChatMessage extends Serializable {
 
     static AssistantMessage ofAssistant(String content) {
         return new AssistantMessage(content);
+    }
+
+    /**
+     * 构建助理消息（多模态）
+     *
+     * @since 3.9
+     */
+    static AssistantMessage ofAssistant(Contents contents) {
+        if (contents == null) {
+            return new AssistantMessage("");
+        }
+
+        List<ContentBlock> blocks = contents.getBlocks();
+        return new AssistantMessage(contents.getContent(), false, null, null, null, null,
+                Utils.isEmpty(blocks) ? null : new ArrayList<>(blocks));
+    }
+
+    /**
+     * 构建助理消息（多模态）
+     * <p>若 {@code blocks} 中已含与 {@code content} 相同的 {@link TextBlock}，不再重复追加文本块。</p>
+     *
+     * @since 3.9
+     */
+    static AssistantMessage ofAssistant(String content, List<ContentBlock> blocks) {
+        if (Utils.isEmpty(blocks)) {
+            return ofAssistant(content == null ? "" : content);
+        }
+
+        List<ContentBlock> finalBlocks = new ArrayList<>(blocks.size() + 1);
+        boolean contentCovered = false;
+        for (ContentBlock block : blocks) {
+            if (block == null) {
+                continue;
+            }
+            if (block instanceof TextBlock
+                    && content != null
+                    && content.equals(block.getContent())) {
+                contentCovered = true;
+            }
+            finalBlocks.add(block);
+        }
+
+        // 文本投影优先放在块列表前面，便于各方言按序写出
+        if (Utils.isNotEmpty(content) && !contentCovered) {
+            finalBlocks.add(0, TextBlock.of(content));
+        }
+
+        return new AssistantMessage(content == null ? "" : content, false, null, null, null, null, finalBlocks);
+    }
+
+    /**
+     * 构建助理消息（多模态）
+     *
+     * @since 3.9
+     */
+    static AssistantMessage ofAssistant(String content, ContentBlock... blocks) {
+        return ofAssistant(content, Arrays.asList(blocks));
     }
 
     /**
@@ -197,10 +255,76 @@ public interface ChatMessage extends Serializable {
     /// /////////////////////////////////
 
     /**
+     * Session 持久化时，内联 base64 媒体的最大字符数（超过则截断并标记 external）。
+     * <p>默认 64KB 量级，避免 File/Redis Session 被大图撑爆。</p>
+     *
+     * @since 3.9
+     */
+    int SESSION_INLINE_BASE64_MAX_CHARS = 64 * 1024;
+    
+    /**
      * 序列化为 json
      */
     static String toJson(ChatMessage message) {
-        return ONode.ofBean(message, Feature.Write_EnumUsingName).toJson();
+        return toJson(message, true);
+    }
+    
+    /**
+     * 序列化为 json
+     *
+     * @param compactLargeMedia 是否压缩超大内联 base64（Session 路径默认 true）
+     * @since 3.9
+     */
+    static String toJson(ChatMessage message, boolean compactLargeMedia) {
+        ONode node = ONode.ofBean(message, Feature.Write_EnumUsingName);
+        if (compactLargeMedia) {
+            compactLargeMediaInNode(node);
+        }
+        return node.toJson();
+    }
+    
+    /**
+     * 递归压缩消息 JSON 中超大内联 base64 媒体字段。
+     * <p>策略：保留 url / mimeType / metas / @type；清空超大 data，并标记 storage=external。</p>
+     *
+     * @since 3.9
+     */
+    static void compactLargeMediaInNode(ONode node) {
+        if (node == null || node.isNull()) {
+            return;
+        }
+    
+        if (node.isArray()) {
+            for (ONode child : node.getArray()) {
+                compactLargeMediaInNode(child);
+            }
+            return;
+        }
+    
+        if (!node.isObject()) {
+            return;
+        }
+    
+        // ContentBlock / AbsMedia: data 为内联 base64
+        if (node.hasKey("data")) {
+            ONode dataNode = node.get("data");
+            if (dataNode != null && dataNode.isValue()) {
+                String data = dataNode.getString();
+                if (Utils.isNotEmpty(data) && data.length() > SESSION_INLINE_BASE64_MAX_CHARS) {
+                    int originalLen = data.length();
+                    node.set("data", null);
+                    ONode metas = node.getOrNew("metas").asObject();
+                    metas.set("storage", "external");
+                    metas.set("data_truncated", true);
+                    metas.set("original_data_length", originalLen);
+                    // 若已有 id/url 可回传；否则仅保留元信息，避免 Session 膨胀
+                }
+            }
+        }
+    
+        for (Map.Entry<String, ONode> entry : node.getObject().entrySet()) {
+            compactLargeMediaInNode(entry.getValue());
+        }
     }
 
     /**

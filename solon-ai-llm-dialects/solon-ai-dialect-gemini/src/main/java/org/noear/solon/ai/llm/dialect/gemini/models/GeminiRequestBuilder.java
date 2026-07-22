@@ -21,9 +21,12 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.chat.content.AbsMedia;
+import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
@@ -171,6 +174,9 @@ public class GeminiRequestBuilder {
     private void buildAssistantToolCallMessageNode(ONode node, AssistantMessage assistantMessage) {
         if (Utils.isNotEmpty(assistantMessage.getToolCalls())) {
             node.getOrNew("parts").asArray().then(n1 -> {
+                // 文本 / 媒体 parts（若有）
+                appendAssistantContentParts(n1, assistantMessage);
+                    
                 boolean[] isFirst = {true};
                 for (ToolCall call : assistantMessage.getToolCalls()) {
                     ONode partNode = n1.addNew();
@@ -194,11 +200,46 @@ public class GeminiRequestBuilder {
                     isFirst[0] = false;
                 }
             });
+        } else if (assistantMessage.isMultiModal()) {
+            ONode parts = node.getOrNew("parts").asArray();
+            appendAssistantContentParts(parts, assistantMessage);
+            if (parts.getArray() != null && parts.getArray().isEmpty()
+                    && Utils.isNotEmpty(assistantMessage.getResultContent())) {
+                parts.addNew().set("text", assistantMessage.getResultContent());
+            }
         } else {
-            String content = assistantMessage.getContent();
+            // 与多模态路径对齐：纯文本也剥离 think 标签
+            String content = assistantMessage.getResultContent();
             if (Utils.isNotEmpty(content)) {
                 node.getOrNew("parts").asArray().addNew().set("text", content);
             }
+        }
+    }
+    
+    /**
+     * 将 Assistant 文本/媒体写入 Gemini parts。
+     *
+     * @since 3.9
+     */
+    private void appendAssistantContentParts(ONode partsArr, AssistantMessage assistantMessage) {
+        if (Utils.isNotEmpty(assistantMessage.getBlocks())) {
+            boolean hasText = false;
+            for (ContentBlock block : assistantMessage.getBlocks()) {
+                if (block instanceof TextBlock) {
+                    String text = AssistantMessage.stripThinkTags(block.getContent());
+                    if (Utils.isNotEmpty(text)) {
+                        partsArr.addNew().set("text", text);
+                        hasText = true;
+                    }
+                } else if (block instanceof AbsMedia) {
+                    appendMediaPart(partsArr, (AbsMedia<?>) block);
+                }
+            }
+            if (!hasText && Utils.isNotEmpty(assistantMessage.getResultContent())) {
+                partsArr.addNew().set("text", assistantMessage.getResultContent());
+            }
+        } else if (Utils.isNotEmpty(assistantMessage.getResultContent())) {
+            partsArr.addNew().set("text", assistantMessage.getResultContent());
         }
     }
 
@@ -214,22 +255,8 @@ public class GeminiRequestBuilder {
             for (ContentBlock block : ((UserMessage) message).getBlocks()) {
                 if (block instanceof TextBlock) {
                     partsArr.addNew().set("text", block.getContent());
-                } else if (block instanceof ImageBlock) {
-                    ImageBlock image = (ImageBlock) block;
-                    ONode partNode = partsArr.addNew();
-                    if (Utils.isNotEmpty(image.getData())) {
-                        // base64 内联数据 → inline_data
-                        partNode.getOrNew("inline_data").then(n -> {
-                            n.set("mime_type", image.getMimeType());
-                            n.set("data", image.getData());
-                        });
-                    } else if (Utils.isNotEmpty(image.getUrl())) {
-                        // 文件 URI → file_data
-                        partNode.getOrNew("file_data").then(n -> {
-                            n.set("mime_type", image.getMimeType());
-                            n.set("file_uri", image.getUrl());
-                        });
-                    }
+                } else if (block instanceof AbsMedia) {
+                    appendMediaPart(partsArr, (AbsMedia<?>) block);
                 }
             }
         } else {
@@ -237,6 +264,48 @@ public class GeminiRequestBuilder {
             if (Utils.isNotEmpty(content)) {
                 node.getOrNew("parts").asArray().addNew().set("text", content);
             }
+        }
+    }
+                        
+    /**
+     * AbsMedia → Gemini part（inline_data / file_data），支持 image/audio/video。
+     *
+     * @since 3.9
+     */
+    private void appendMediaPart(ONode partsArr, AbsMedia<?> media) {
+        if (media == null) {
+            return;
+        }
+        
+        // Session 截断后 data/url 皆空时跳过，避免写出空 part
+        if (Utils.isEmpty(media.getData()) && Utils.isEmpty(media.getUrl())) {
+            return;
+        }
+            
+        String mime = media.getMimeType();
+        if (Utils.isEmpty(mime)) {
+            if (media instanceof ImageBlock) {
+                mime = "image/jpeg";
+            } else if (media instanceof AudioBlock) {
+                mime = "audio/mpeg";
+            } else if (media instanceof VideoBlock) {
+                mime = "video/mp4";
+            }
+        }
+                
+        ONode partNode = partsArr.addNew();
+        if (Utils.isNotEmpty(media.getData())) {
+            final String finalMime = mime;
+            partNode.getOrNew("inline_data").then(n -> {
+                n.set("mime_type", finalMime);
+                n.set("data", media.getData());
+            });
+        } else {
+            final String finalMime = mime;
+            partNode.getOrNew("file_data").then(n -> {
+                n.set("mime_type", finalMime);
+                n.set("file_uri", media.getUrl());
+            });
         }
     }
 

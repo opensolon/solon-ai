@@ -21,6 +21,7 @@ import org.noear.snack4.Options;
 import org.noear.snack4.json.JsonReader;
 import org.noear.snack4.json.util.FormatUtil;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.content.AbsMedia;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.*;
@@ -89,8 +90,76 @@ public abstract class AbstractChatDialect implements ChatDialect {
     protected void buildAssistantMessageNodeDo(ChatConfig config, ONode oNode, AssistantMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
 
-        if (Utils.isNotEmpty(msg.getResultContent())) {
-            oNode.set("content", msg.getResultContent());
+        if (msg.isMultiModal() == false) {
+            // 单模态：保持原有 string content 行为
+            if (Utils.isNotEmpty(msg.getResultContent())) {
+                oNode.set("content", msg.getResultContent());
+            } else if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
+                // 有 tool_calls 但无文本内容（如 reasoning-only 后调工具）时，显式设 content=null
+                // OpenAI 规范要求 assistant message 含 tool_calls 时 content 字段存在（可为 null）
+                oNode.set("content", (String) null);
+            }
+        } else {
+            // 多模态：OpenAI 兼容 content 数组
+            oNode.getOrNew("content").then(n1 -> {
+                for (ContentBlock block1 : msg.getBlocks()) {
+                    if (block1 instanceof TextBlock) {
+                        TextBlock m1Text = (TextBlock) block1;
+                        // 回传时与 getResultContent 对齐：剥离 think 标签
+                        String text = AssistantMessage.stripThinkTags(m1Text.getContent());
+                        if (Utils.isNotEmpty(text)) {
+                            n1.addNew().set("type", "text").set("text", text);
+                        }
+                    } else if (block1 instanceof ImageBlock) {
+                        // Session 截断后 data 为空且无 url/id 时跳过，避免写出空 media
+                        if (!isMediaBlockPlayable(block1)) {
+                            continue;
+                        }
+                        String imageData = block1.toDataString(true);
+                        if (Utils.isNotEmpty(imageData)) {
+                            ONode oNode1 = n1.addNew();
+                            oNode1.set("type", "image_url");
+                            oNode1.getOrNew("image_url").set("url", imageData);
+                        }
+                    } else if (block1 instanceof AudioBlock) {
+                        // OpenAI 多轮音频优先侧车 audio.id；无 id 时降级 audio_url
+                        Object audioId = getBlockMeta(block1, "audio_id");
+                        if (audioId == null) {
+                            audioId = getBlockMeta(block1, "id");
+                        }
+                        if (audioId != null && Utils.isNotEmpty(String.valueOf(audioId))) {
+                            oNode.getOrNew("audio").set("id", String.valueOf(audioId));
+                        } else if (isMediaBlockPlayable(block1)) {
+                            // 占位 audio://id 不应作为 url 回传
+                            String audioData = block1.toDataString(true);
+                            if (Utils.isNotEmpty(audioData) && !audioData.startsWith("audio://")) {
+                                ONode oNode1 = n1.addNew();
+                                oNode1.set("type", "audio_url");
+                                oNode1.getOrNew("audio_url").set("url", audioData);
+                            }
+                        }
+                    } else if (block1 instanceof VideoBlock) {
+                        if (!isMediaBlockPlayable(block1)) {
+                            continue;
+                        }
+                        String videoData = block1.toDataString(true);
+                        if (Utils.isNotEmpty(videoData)) {
+                            ONode oNode1 = n1.addNew();
+                            oNode1.set("type", "video_url");
+                            oNode1.getOrNew("video_url").set("url", videoData);
+                        }
+                    }
+        
+                    // 不再把内部 meta（audio_id/source_type 等）写入 OpenAI content item，避免协议污染
+                }
+            });
+        
+            // 若 content 数组为空（仅侧车 audio / 媒体已被截断），补文本投影避免协议缺 content
+            if (oNode.get("content").isArray() && oNode.get("content").getArray().isEmpty()) {
+                if (Utils.isNotEmpty(msg.getResultContent())) {
+                    oNode.set("content", msg.getResultContent());
+                }
+            }
         }
 
         //兼容 r1 的 tool-call(可以再优化，只在最后一条加)
@@ -124,40 +193,15 @@ public abstract class AbstractChatDialect implements ChatDialect {
         } else {
             oNode.getOrNew("content").then(n1 -> {
                 for (ContentBlock m1 : msg.getBlocks()) {
-                    ONode m1Node = null;
-
-                    if (m1 instanceof TextBlock) {
-                        TextBlock m1Text = (TextBlock) m1;
-                        n1.addNew().set("type", "text").set("text", m1Text.getContent());
-                    } else if (m1 instanceof ImageBlock) {
-                        m1Node = n1.addNew();
-
-                        m1Node.set("type", "image_url");
-                        m1Node.getOrNew("image_url").set("url", m1.toDataString(true));
-
-                    } else if (m1 instanceof AudioBlock) {
-                        m1Node = n1.addNew();
-
-                        m1Node.set("type", "audio_url");
-                        m1Node.getOrNew("audio_url").set("url", m1.toDataString(true));
-                    } else if (m1 instanceof VideoBlock) {
-                        m1Node = n1.addNew();
-
-                        m1Node.set("type", "video_url");
-                        m1Node.getOrNew("video_url").set("url", m1.toDataString(true));
-                    }
-
-                    if (m1Node != null) {
-                        if (Utils.isNotEmpty(m1.metas())) {
-                            for (Map.Entry<String, Object> entry : m1.metas().entrySet()) {
-                                if (m1Node.hasKey(entry.getKey()) == false) {
-                                    m1Node.set(entry.getKey(), ONode.ofBean(entry.getValue()));
-                                }
-                            }
-                        }
-                    }
+                    appendOpenAiCompatibleMediaOrText(n1, m1);
+                    // 与 Assistant 一致：不把内部 meta 写入 OpenAI content item，避免协议污染
                 }
             });
+
+            // Session 截断后媒体全不可播时，避免写出空 content 数组
+            if (oNode.get("content").isArray() && oNode.get("content").getArray().isEmpty()) {
+                oNode.set("content", msg.getContent() == null ? "" : msg.getContent());
+            }
         }
     }
 
@@ -171,41 +215,94 @@ public abstract class AbstractChatDialect implements ChatDialect {
             //多模态
             oNode.getOrNew("content").then(n1 -> {
                 for (ContentBlock block1 : msg.getBlocks()) {
-                    ONode oNode1 = null;
-
-                    if (block1 instanceof TextBlock) {
-                        TextBlock m1Text = (TextBlock) block1;
-                        n1.addNew().set("type", "text").set("text", m1Text.getContent());
-                    } else if (block1 instanceof ImageBlock) {
-                        oNode1 = n1.addNew();
-
-                        oNode1.set("type", "image_url");
-                        oNode1.getOrNew("image_url").set("url", block1.toDataString(true));
-
-                    } else if (block1 instanceof AudioBlock) {
-                        oNode1 = n1.addNew();
-
-                        oNode1.set("type", "audio_url");
-                        oNode1.getOrNew("audio_url").set("url", block1.toDataString(true));
-                    } else if (block1 instanceof VideoBlock) {
-                        oNode1 = n1.addNew();
-
-                        oNode1.set("type", "video_url");
-                        oNode1.getOrNew("video_url").set("url", block1.toDataString(true));
-                    }
-
-                    if (oNode1 != null) {
-                        if (Utils.isNotEmpty(block1.metas())) {
-                            for (Map.Entry<String, Object> entry : block1.metas().entrySet()) {
-                                if (oNode1.hasKey(entry.getKey()) == false) {
-                                    oNode1.set(entry.getKey(), ONode.ofBean(entry.getValue()));
-                                }
-                            }
-                        }
-                    }
+                    appendOpenAiCompatibleMediaOrText(n1, block1);
+                    // 与 Assistant 一致：不把内部 meta 写入 OpenAI content item，避免协议污染
                 }
             });
+
+            // Session 截断后媒体全不可播时，避免写出空 content 数组
+            if (oNode.get("content").isArray() && oNode.get("content").getArray().isEmpty()) {
+                oNode.set("content", msg.getContent() == null ? "" : msg.getContent());
+            }
         }
+    }
+        
+    /**
+     * 追加 OpenAI 兼容的 text/media content item；空/已截断媒体跳过。
+     *
+     * @since 3.9
+     */
+    protected void appendOpenAiCompatibleMediaOrText(ONode contentArray, ContentBlock block) {
+        if (block == null) {
+            return;
+        }
+                        
+        if (block instanceof TextBlock) {
+            TextBlock textBlock = (TextBlock) block;
+            if (Utils.isNotEmpty(textBlock.getContent())) {
+                contentArray.addNew().set("type", "text").set("text", textBlock.getContent());
+            }
+            return;
+        }
+                        
+        if (!isMediaBlockPlayable(block)) {
+            return;
+        }
+                        
+        String data = block.toDataString(true);
+        if (Utils.isEmpty(data)) {
+            return;
+        }
+            
+        if (block instanceof ImageBlock) {
+            ONode item = contentArray.addNew();
+            item.set("type", "image_url");
+            item.getOrNew("image_url").set("url", data);
+        } else if (block instanceof AudioBlock) {
+            // 占位 audio://id 不应作为 url 回传
+            if (data.startsWith("audio://")) {
+                return;
+            }
+            ONode item = contentArray.addNew();
+            item.set("type", "audio_url");
+            item.getOrNew("audio_url").set("url", data);
+        } else if (block instanceof VideoBlock) {
+            ONode item = contentArray.addNew();
+            item.set("type", "video_url");
+            item.getOrNew("video_url").set("url", data);
+        }
+    }
+    
+    /**
+     * 判断媒体块是否可回传。
+     * <p>Session 压缩后 data 为空且无 url/id 时不可播，应跳过避免写出空 media。</p>
+     *
+     * @since 3.9
+     */
+    protected boolean isMediaBlockPlayable(ContentBlock block) {
+        if (block == null) {
+            return false;
+        }
+        if (!(block instanceof AbsMedia)) {
+            return true;
+        }
+    
+        AbsMedia<?> media = (AbsMedia<?>) block;
+        if (Utils.isNotEmpty(media.getData()) || Utils.isNotEmpty(media.getUrl())) {
+            return true;
+        }
+    
+        // 仅侧车 id 也可回传（如 OpenAI audio.id / Responses image_generation_id）
+        if (media.metas() != null) {
+            for (String key : new String[]{"audio_id", "id", "image_generation_id"}) {
+                Object value = media.metas().get(key);
+                if (value != null && Utils.isNotEmpty(String.valueOf(value))) {
+                    return true;
+                }
+            }
+        }
+    
+        return false;
     }
 
 
@@ -352,15 +449,35 @@ public abstract class AbstractChatDialect implements ChatDialect {
     public AssistantMessage buildAssistantMessageByToolMessages(AssistantMessage toolCallMessage, List<ToolMessage> toolMessages) {
         //要求直接返回（转为新的响应消息）
         StringBuffer buf = new StringBuffer();
+        List<ContentBlock> mergedBlocks = new ArrayList<>();
+
         for (ToolMessage toolMessage : toolMessages) {
             if (buf.length() > 0) {
                 buf.append('\n');
             }
-            buf.append(toolMessage.getContent());
+            if (Utils.isNotEmpty(toolMessage.getContent())) {
+                buf.append(toolMessage.getContent());
+            }
+
+            // 合并工具结果中的多模态内容块（如截图）
+            // 注意：ToolMessage.blocks 常已含对应 TextBlock，勿再与 content 重复拼接
+            if (Utils.isNotEmpty(toolMessage.getBlocks())) {
+                for (ContentBlock block : toolMessage.getBlocks()) {
+                    if (block != null && !(block instanceof TextBlock)) {
+                        mergedBlocks.add(block);
+                    }
+                }
+            }
         }
 
-        AssistantMessage assistantMessage = ChatMessage.ofAssistant(buf.toString())
-                .addMetadata("reason", "tool")
+        AssistantMessage assistantMessage;
+        if (Utils.isEmpty(mergedBlocks)) {
+            assistantMessage = ChatMessage.ofAssistant(buf.toString());
+        } else {
+            assistantMessage = ChatMessage.ofAssistant(buf.toString(), mergedBlocks);
+        }
+
+        assistantMessage.addMetadata("reason", "tool")
                 .addMetadata("source", toolCallMessage.getResultContent());
 
         for (ToolMessage toolMessage : toolMessages) {
@@ -423,38 +540,313 @@ public abstract class AbstractChatDialect implements ChatDialect {
         return new ToolCall(index, callId, name, argStr, argMap);
     }
 
+    /**
+     * 解析助理消息 content 的文本投影（兼容旧逻辑）
+     */
     protected String parseAssistantMessageContent(ChatResponseDefault resp, ONode oContent) {
-        if (oContent.isValue()) {
-            //一般输出都是单值
-            return oContent.getValueAs();
-        } else {
-            ONode contentItem = null;
-            if (oContent.isArray()) {
-                //有些输出会是列表（取第一个）
-                if (oContent.getArrayUnsafe().size() > 0) {
-                    contentItem = oContent.get(0);
+        List<ContentBlock> blocks = parseAssistantContentBlocks(resp, oContent, null);
+        return projectTextContent(blocks);
+    }
+
+    /**
+     * 将内容块投影为文本（拼接所有 TextBlock）
+     *
+     * @since 3.9
+     */
+    protected String projectTextContent(List<ContentBlock> blocks) {
+        if (Utils.isEmpty(blocks)) {
+            return null;
+        }
+
+        StringBuilder buf = new StringBuilder();
+        for (ContentBlock block : blocks) {
+            if (block instanceof TextBlock) {
+                String text = block.getContent();
+                if (Utils.isNotEmpty(text)) {
+                    if (buf.length() > 0) {
+                        buf.append('\n');
+                    }
+                    buf.append(text);
+                }
+            }
+        }
+
+        // 纯媒体：不再把 base64/data 投影进 content，避免 Session/token/Agent 被污染。
+        // 仅在存在可展示的短 URL 时做轻量文本投影，便于日志与兼容旧消费方。
+        if (buf.length() == 0) {
+            for (ContentBlock block : blocks) {
+                if (block instanceof TextBlock) {
+                    continue;
+                }
+                if (block instanceof AbsMedia) {
+                    AbsMedia<?> media = (AbsMedia<?>) block;
+                    // 有 url 时优先用短 URL 投影；纯 base64 返回 null（媒体只在 blocks）
+                    if (Utils.isNotEmpty(media.getUrl())) {
+                        return media.getUrl();
+                    }
+                }
+            }
+            return null;
+        }
+
+        return buf.toString();
+    }
+
+    /**
+     * 解析助理消息 content 为内容块列表
+     *
+     * @param oMessage 可选，用于解析侧车字段（如 OpenAI message.audio）
+     * @since 3.9
+     */
+    protected List<ContentBlock> parseAssistantContentBlocks(ChatResponseDefault resp, ONode oContent, ONode oMessage) {
+        List<ContentBlock> blocks = new ArrayList<>();
+
+        if (oContent != null && !oContent.isNull()) {
+            if (oContent.isValue()) {
+                // 一般输出都是单值文本
+                String text = oContent.getValueAs();
+                if (text != null) {
+                    blocks.add(TextBlock.of(text));
+                }
+            } else if (oContent.isArray()) {
+                // 多模态 content 数组：遍历全部，避免只取第一项丢块
+                for (ONode contentItem : oContent.getArray()) {
+                    ContentBlock block = parseAssistantContentItem(contentItem);
+                    if (block != null) {
+                        blocks.add(block);
+                    }
                 }
             } else if (oContent.isObject()) {
-                //有些输出会是字典
-                contentItem = oContent;
-            }
-
-            if (contentItem != null) {
-                if (contentItem.isObject()) {
-                    //优先取文本
-                    if (contentItem.hasKey("text")) {
-                        return contentItem.get("text").getValueAs();
-                    } else if (contentItem.hasKey("image")) {
-                        return contentItem.get("image").getValueAs();
-                    } else if (contentItem.hasKey("audio")) {
-                        return contentItem.get("audio").getValueAs();
-                    } else if (contentItem.hasKey("video")) {
-                        return contentItem.get("video").getValueAs();
-                    }
-                } else if (contentItem.isValue()) {
-                    return contentItem.getValueAs();
+                ContentBlock block = parseAssistantContentItem(oContent);
+                if (block != null) {
+                    blocks.add(block);
                 }
             }
+        }
+
+        // OpenAI Chat Completions 侧车 audio 字段
+        if (oMessage != null && oMessage.hasKey("audio")) {
+            ONode oAudio = oMessage.get("audio");
+            if (oAudio != null && oAudio.isObject()) {
+                ContentBlock audioBlock = parseAssistantAudioSidecar(oAudio);
+                if (audioBlock != null) {
+                    blocks.add(audioBlock);
+
+                    // transcript 并入文本投影
+                    String transcript = oAudio.get("transcript").getString();
+                    if (Utils.isNotEmpty(transcript)) {
+                        boolean hasSameText = false;
+                        for (ContentBlock b : blocks) {
+                            if (b instanceof TextBlock && transcript.equals(b.getContent())) {
+                                hasSameText = true;
+                                break;
+                            }
+                        }
+                        if (!hasSameText) {
+                            blocks.add(0, TextBlock.of(transcript));
+                        }
+                    }
+                }
+            }
+        }
+
+        return blocks;
+    }
+
+    /**
+     * 解析单个 content item 为 ContentBlock
+     *
+     * @since 3.9
+     */
+    protected ContentBlock parseAssistantContentItem(ONode contentItem) {
+        if (contentItem == null || contentItem.isNull()) {
+            return null;
+        }
+
+        if (contentItem.isValue()) {
+            String text = contentItem.getValueAs();
+            return text == null ? null : TextBlock.of(text);
+        }
+
+        if (!contentItem.isObject()) {
+            return null;
+        }
+
+        String type = contentItem.get("type").getString();
+
+        // 文本类
+        if (contentItem.hasKey("text") || "text".equals(type) || "output_text".equals(type) || "refusal".equals(type)) {
+            String text = contentItem.get("text").getValueAs();
+            if (text == null && contentItem.hasKey("refusal")) {
+                text = contentItem.get("refusal").getValueAs();
+            }
+            if (text != null) {
+                return TextBlock.of(text);
+            }
+        }
+
+        // image / image_url
+        if (contentItem.hasKey("image") || contentItem.hasKey("image_url") || "image".equals(type) || "image_url".equals(type)) {
+            return parseMediaFromContentItem(contentItem, "image", "image_url");
+        }
+
+        // audio / audio_url / input_audio
+        if (contentItem.hasKey("audio") || contentItem.hasKey("audio_url") || contentItem.hasKey("input_audio")
+                || "audio".equals(type) || "audio_url".equals(type) || "input_audio".equals(type)) {
+            return parseMediaFromContentItem(contentItem, "audio", "audio_url", "input_audio");
+        }
+
+        // video / video_url
+        if (contentItem.hasKey("video") || contentItem.hasKey("video_url") || "video".equals(type) || "video_url".equals(type)) {
+            return parseMediaFromContentItem(contentItem, "video", "video_url");
+        }
+
+        return null;
+    }
+
+    /**
+     * 从 content item 解析媒体块（兼容字符串 / {url} / {data,format}）
+     *
+     * @since 3.9
+     */
+    protected ContentBlock parseMediaFromContentItem(ONode contentItem, String... mediaKeys) {
+        String mediaType = mediaKeys[0]; // image / audio / video
+
+        for (String key : mediaKeys) {
+            if (!contentItem.hasKey(key)) {
+                continue;
+            }
+
+            ONode mediaNode = contentItem.get(key);
+            if (mediaNode.isValue()) {
+                return createMediaBlock(mediaType, mediaNode.getValueAs(), null, null);
+            }
+
+            if (mediaNode.isObject()) {
+                String url = mediaNode.get("url").getString();
+                String data = mediaNode.get("data").getString();
+                if (data == null) {
+                    data = mediaNode.get("b64_json").getString();
+                }
+                String mime = mediaNode.get("mime_type").getString();
+                if (Utils.isEmpty(mime)) {
+                    mime = mediaNode.get("format").getString();
+                    if (Utils.isNotEmpty(mime) && !mime.contains("/")) {
+                        // OpenAI input_audio.format = wav/mp3
+                        mime = mediaType + "/" + mime;
+                    }
+                }
+
+                ContentBlock block = createMediaBlock(mediaType, url, data, mime);
+                if (block != null && mediaNode.hasKey("id")) {
+                    String id = mediaNode.get("id").getString();
+                    if (Utils.isNotEmpty(id) && block instanceof AbsMedia) {
+                        ((AbsMedia<?>) block).metaAdd("id", id);
+                        if ("audio".equals(mediaType)) {
+                            ((AbsMedia<?>) block).metaAdd("audio_id", id);
+                        }
+                    }
+                }
+                return block;
+            }
+        }
+
+        // type=image_url 但结构在根级 url
+        if (contentItem.hasKey("url")) {
+            return createMediaBlock(mediaType, contentItem.get("url").getString(), null, null);
+        }
+
+        return null;
+    }
+
+    /**
+     * 解析 OpenAI message.audio 侧车
+     *
+     * @since 3.9
+     */
+    protected ContentBlock parseAssistantAudioSidecar(ONode oAudio) {
+        String id = oAudio.get("id").getString();
+        String data = oAudio.get("data").getString();
+        String mime = oAudio.get("mime_type").getString();
+        if (Utils.isEmpty(mime)) {
+            String format = oAudio.get("format").getString();
+            if (Utils.isNotEmpty(format)) {
+                mime = format.contains("/") ? format : "audio/" + format;
+            }
+        }
+
+        AudioBlock block;
+        if (Utils.isNotEmpty(data)) {
+            block = Utils.isEmpty(mime) ? AudioBlock.ofBase64(data) : AudioBlock.ofBase64(data, mime);
+        } else if (Utils.isNotEmpty(id)) {
+            // 仅有 id：占位，回传时写 audio.id
+            block = AudioBlock.ofUrl("audio://" + id);
+        } else {
+            return null;
+        }
+
+        if (Utils.isNotEmpty(id)) {
+            block.metaAdd("id", id);
+            block.metaAdd("audio_id", id);
+        }
+        if (oAudio.hasKey("expires_at")) {
+            block.metaAdd("expires_at", oAudio.get("expires_at").getValue());
+        }
+        if (oAudio.hasKey("transcript")) {
+            String transcript = oAudio.get("transcript").getString();
+            if (Utils.isNotEmpty(transcript)) {
+                block.metaAdd("transcript", transcript);
+            }
+        }
+
+        return block;
+    }
+
+    /**
+     * 创建媒体块
+     *
+     * @since 3.9
+     */
+    protected ContentBlock createMediaBlock(String mediaType, String url, String data, String mime) {
+        boolean hasData = Utils.isNotEmpty(data);
+        boolean hasUrl = Utils.isNotEmpty(url);
+
+        if (!hasData && !hasUrl) {
+            return null;
+        }
+
+        // data:image/png;base64,xxxx
+        if (hasUrl && url.startsWith("data:") && url.contains(";base64,")) {
+            int comma = url.indexOf(',');
+            String header = url.substring(5, url.indexOf(';'));
+            String b64 = url.substring(comma + 1);
+            data = b64;
+            if (Utils.isEmpty(mime)) {
+                mime = header;
+            }
+            hasData = true;
+            hasUrl = false;
+        }
+
+        if ("image".equals(mediaType)) {
+            if (hasData) {
+                return Utils.isEmpty(mime) ? ImageBlock.ofBase64(data) : ImageBlock.ofBase64(data, mime);
+            }
+            return Utils.isEmpty(mime) ? ImageBlock.ofUrl(url) : ImageBlock.ofUrl(url, mime);
+        }
+
+        if ("audio".equals(mediaType)) {
+            if (hasData) {
+                return Utils.isEmpty(mime) ? AudioBlock.ofBase64(data) : AudioBlock.ofBase64(data, mime);
+            }
+            return Utils.isEmpty(mime) ? AudioBlock.ofUrl(url) : AudioBlock.ofUrl(url, mime);
+        }
+
+        if ("video".equals(mediaType)) {
+            if (hasData) {
+                return Utils.isEmpty(mime) ? VideoBlock.ofBase64(data) : VideoBlock.ofBase64(data, mime);
+            }
+            return Utils.isEmpty(mime) ? VideoBlock.ofUrl(url) : VideoBlock.ofUrl(url, mime);
         }
 
         return null;
@@ -465,7 +857,19 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
         ONode oContent = oMessage.get("content");
 
-        String content = parseAssistantMessageContent(resp, oContent);
+        List<ContentBlock> contentBlocks = parseAssistantContentBlocks(resp, oContent, oMessage);
+        String content = projectTextContent(contentBlocks);
+
+        // 纯文本且非多模态时，blocks 置空以保持旧序列化形态
+        List<ContentBlock> blocksForMsg = null;
+        if (Utils.isNotEmpty(contentBlocks)) {
+            boolean multi = contentBlocks.size() > 1
+                    || !(contentBlocks.get(0) instanceof TextBlock);
+            if (multi) {
+                blocksForMsg = contentBlocks;
+            }
+        }
+
         ONode toolCallsNode = oMessage.getOrNull("tool_calls");
         ONode searchResultsNode = oMessage.getOrNull("search_results");
 
@@ -567,9 +971,10 @@ public abstract class AbstractChatDialect implements ChatDialect {
             }
         }
 
-        if (content != null || toolCallsRaw != null) {
-            Object contentRaw = oContent.toBean();
-            AssistantMessage message = new AssistantMessage(content, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw)
+        // 有文本 / 工具调用 / 多模态媒体时都需要产出消息
+        if (content != null || toolCallsRaw != null || Utils.isNotEmpty(blocksForMsg)) {
+            Object contentRaw = oContent == null || oContent.isNull() ? content : oContent.toBean();
+            AssistantMessage message = new AssistantMessage(content, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw, blocksForMsg)
                     .reasoningFieldName(resp.reasoning_field_name);
 
             messageList.add(message);
@@ -578,6 +983,21 @@ public abstract class AbstractChatDialect implements ChatDialect {
         return messageList;
     }
 
+    /**
+     * 安全读取 ContentBlock meta（metas 未初始化时不强制创建）。
+     *
+     * @since 3.9
+     */
+    protected Object getBlockMeta(ContentBlock block, String key) {
+        if (block == null || Utils.isEmpty(key)) {
+            return null;
+        }
+        Map<String, Object> metas = block.metas();
+        if (Utils.isEmpty(metas)) {
+            return null;
+        }
+        return metas.get(key);
+    }
 
     protected boolean hasNestedJsonBlock(String str) {
         return FormatUtil.hasNestedJsonBlock(str);

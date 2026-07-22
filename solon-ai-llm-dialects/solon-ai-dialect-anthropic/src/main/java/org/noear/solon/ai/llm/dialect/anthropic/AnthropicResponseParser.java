@@ -25,13 +25,15 @@ import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.ChatChoice;
 import org.noear.solon.ai.chat.ChatException;
 import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Claude 响应解析器
@@ -392,12 +394,13 @@ public class AnthropicResponseParser {
         // 解析内容
         ONode contentArray = oResp.getOrNull("content");
         if (contentArray != null && contentArray.isArray()) {
-            // 分离思考内容、普通内容和工具调用
+            // 分离思考内容、普通内容、媒体与工具调用
             StringBuilder thinkingContent = new StringBuilder();
             StringBuilder normalContent = new StringBuilder();
+            List<ContentBlock> mediaBlocks = new ArrayList<>();
             List<ToolCall> allToolCalls = new ArrayList<>();
             List<Map> allToolCallsRaw = new ArrayList<>();
-
+            
             for (ONode contentItem : contentArray.getArray()) {
                 String contentType = contentItem.get("type").getString();
                 if ("thinking".equals(contentType)) {
@@ -416,6 +419,11 @@ public class AnthropicResponseParser {
                         }
                         normalContent.append(text);
                     }
+                } else if ("image".equals(contentType)) {
+                    ContentBlock imageBlock = parseClaudeImageBlock(contentItem);
+                    if (imageBlock != null) {
+                        mediaBlocks.add(imageBlock);
+                    }
                 } else if ("tool_use".equals(contentType)) {
                     String toolName = contentItem.get("name").getString();
                     String toolId = contentItem.get("id").getString();
@@ -424,9 +432,9 @@ public class AnthropicResponseParser {
                     if (inputNode != null && inputNode.isObject()) {
                         arguments = inputNode.toBean(Map.class);
                     }
-
+                    
                     allToolCalls.add(new ToolCall(toolId, toolId, toolName, inputNode.toJson(), arguments));
-
+                    
                     Map<String, Object> toolCallRaw = new HashMap<>();
                     toolCallRaw.put("id", toolId);
                     toolCallRaw.put("type", "function");
@@ -437,7 +445,7 @@ public class AnthropicResponseParser {
                     allToolCallsRaw.add(toolCallRaw);
                 }
             }
-
+                
             // 构建文本内容
             String textContent;
             Map<String, Object> contentRaw = null;
@@ -455,15 +463,27 @@ public class AnthropicResponseParser {
             } else {
                 textContent = "";
             }
-
+            
+            List<ContentBlock> blocksForMsg = null;
+            if (!mediaBlocks.isEmpty()) {
+                blocksForMsg = new ArrayList<>();
+                if (Utils.isNotEmpty(textContent)) {
+                    // 多模态时用 result 文本投影（不含 think 标签）
+                    String textProjection = normalContent.length() > 0 ? normalContent.toString() : textContent;
+                    blocksForMsg.add(TextBlock.of(textProjection));
+                }
+                blocksForMsg.addAll(mediaBlocks);
+                resp.addMediaBlocks(mediaBlocks);
+            }
+        
             // 将所有工具调用合并到一个 AssistantMessage 中
             if (!allToolCalls.isEmpty()) {
                 AssistantMessage msg = new AssistantMessage(textContent,
-                        false, contentRaw, allToolCallsRaw, allToolCalls, null);
+                        false, contentRaw, allToolCallsRaw, allToolCalls, null, blocksForMsg);
                 resp.addChoice(new ChatChoice(0, created, "stop", msg));
-            } else if (Utils.isNotEmpty(textContent)) {
+            } else if (Utils.isNotEmpty(textContent) || blocksForMsg != null) {
                 AssistantMessage msg = new AssistantMessage(textContent,
-                        false, contentRaw, null, null, null);
+                        false, contentRaw, null, null, null, blocksForMsg);
                 resp.addChoice(new ChatChoice(0, created, "stop", msg));
             }
         }
@@ -480,5 +500,53 @@ public class AnthropicResponseParser {
         }
         resp.setFinished(true);
         return true;
+    }
+
+    /**
+     * 解析 Claude content 中的 image 块。
+     *
+     * @since 3.9
+     */
+    ContentBlock parseClaudeImageBlock(ONode contentItem) {
+        if (contentItem == null) {
+            return null;
+        }
+        ONode source = contentItem.getOrNull("source");
+        if (source == null || !source.isObject()) {
+            // 兼容直接 url/data
+            String url = contentItem.get("url").getString();
+            String data = contentItem.get("data").getString();
+            if (Utils.isNotEmpty(data)) {
+                return ImageBlock.ofBase64(data);
+            }
+            if (Utils.isNotEmpty(url)) {
+                return ImageBlock.ofUrl(url);
+            }
+            return null;
+        }
+
+        String sourceType = source.get("type").getString();
+        String mediaType = source.get("media_type").getString();
+        if (Utils.isEmpty(mediaType)) {
+            mediaType = source.get("mediaType").getString();
+        }
+
+        if ("base64".equals(sourceType) || source.hasKey("data")) {
+            String data = source.get("data").getString();
+            if (Utils.isEmpty(data)) {
+                return null;
+            }
+            return Utils.isEmpty(mediaType) ? ImageBlock.ofBase64(data) : ImageBlock.ofBase64(data, mediaType);
+        }
+
+        if ("url".equals(sourceType) || source.hasKey("url")) {
+            String url = source.get("url").getString();
+            if (Utils.isEmpty(url)) {
+                return null;
+            }
+            return Utils.isEmpty(mediaType) ? ImageBlock.ofUrl(url) : ImageBlock.ofUrl(url, mediaType);
+        }
+
+        return null;
     }
 }

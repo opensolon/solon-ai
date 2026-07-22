@@ -17,9 +17,12 @@ package org.noear.solon.ai.chat.message;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 import java.lang.reflect.Type;
@@ -34,6 +37,7 @@ import java.util.*;
 @Preview("3.1")
 public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     private final ChatRole role = ChatRole.ASSISTANT;
+    private final List<ContentBlock> blocks = new ArrayList<>();
     private String content;
     //适配 r1 需要
     private transient String reasoning;
@@ -51,20 +55,36 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     public AssistantMessage(String content) {
-        this(content, false, null, null, null, null);
+        this(content, false, null, null, null, null, null);
     }
 
     public AssistantMessage(String content, boolean isThinking) {
-        this(content, isThinking, null, null, null, null);
+        this(content, isThinking, null, null, null, null, null);
     }
 
     public AssistantMessage(String content, boolean isThinking, List<Map> searchResultsRaw) {
-        this(content, isThinking, null, null, null, searchResultsRaw);
+        this(content, isThinking, null, null, null, searchResultsRaw, null);
     }
 
     public AssistantMessage(String content, boolean isThinking, Object contentRaw, List<Map> toolCallsRaw, List<ToolCall> toolCalls, List<Map> searchResultsRaw) {
-        if(content == null){
-           content = "";
+        this(content, isThinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw, null);
+    }
+
+    /**
+     * 支持多模态内容块的构造
+     *
+     * @param content          文本投影（兼容单模态 / thinking / toBean）
+     * @param isThinking       是否思考中
+     * @param contentRaw       厂商原始 content
+     * @param toolCallsRaw     工具调用原始数据
+     * @param toolCalls        工具调用
+     * @param searchResultsRaw 搜索结果原始数据
+     * @param blocks           多模态内容块（可为 null）
+     * @since 3.9
+     */
+    public AssistantMessage(String content, boolean isThinking, Object contentRaw, List<Map> toolCallsRaw, List<ToolCall> toolCalls, List<Map> searchResultsRaw, List<ContentBlock> blocks) {
+        if (content == null) {
+            content = "";
         }
 
         this.createdAt = System.currentTimeMillis();
@@ -78,6 +98,10 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
             this.contentRaw = content;
         } else {
             this.contentRaw = contentRaw;
+        }
+
+        if (blocks != null) {
+            this.blocks.addAll(blocks);
         }
     }
 
@@ -152,29 +176,77 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     /**
+     * 内容块集合（兼容多模态 LLM）
+     *
+     * @since 3.9
+     */
+    @Nullable
+    public List<ContentBlock> getBlocks() {
+        return blocks;
+    }
+
+    /**
+     * 是否为多模态
+     *
+     * @since 3.9
+     */
+    public boolean isMultiModal() {
+        int size = blocks.size();
+        if (size > 1) {
+            return true;
+        }
+
+        if (size == 1) {
+            return !(blocks.get(0) instanceof TextBlock);
+        }
+
+        return false;
+    }
+
+    /**
+     * 是否包含非文本媒体块
+     *
+     * @since 3.9
+     */
+    public boolean hasMedia() {
+        for (ContentBlock block : blocks) {
+            if (!(block instanceof TextBlock)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * 结果内容（没有推理标签的内容）
      */
     private transient String resultContent;
 
     public String getResultContent() {
         if (resultContent == null) {
-            if (content == null) {
-                resultContent = "";
-            } else {
-                int thinkEndIndex = content.indexOf("</think>");
-                if (thinkEndIndex > -1) {
-                    resultContent = content.substring(thinkEndIndex + 8);
-                } else {
-                    if (content.contains("<think>")) {
-                        resultContent = "";
-                    } else {
-                        resultContent = content;
-                    }
-                }
-            }
+            resultContent = stripThinkTags(content);
         }
 
         return resultContent;
+    }
+
+    /**
+     * 剥离 {@code <think>...</think>} 标签，供多模态回传 TextBlock 与文本投影复用。
+     *
+     * @since 4.0.4
+     */
+    public static String stripThinkTags(String text) {
+        if (text == null) {
+            return "";
+        }
+        int thinkEndIndex = text.indexOf("</think>");
+        if (thinkEndIndex > -1) {
+            return text.substring(thinkEndIndex + 8);
+        }
+        if (text.contains("<think>")) {
+            return "";
+        }
+        return text;
     }
 
     private transient String jsonContent;
@@ -263,6 +335,10 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
 
         if (Utils.isNotEmpty(content)) {
             buf.append(", content='").append(content).append('\'');
+        }
+
+        if (isMultiModal()) {
+            buf.append(", blocks=").append(blocks);
         }
 
         if (Utils.isNotEmpty(reasoning)) {

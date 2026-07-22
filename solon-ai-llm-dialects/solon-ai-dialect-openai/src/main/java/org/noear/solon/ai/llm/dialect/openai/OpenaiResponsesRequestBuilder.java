@@ -137,26 +137,7 @@ public class OpenaiResponsesRequestBuilder {
                     .set("call_id", toolMessage.getToolCallId())
                     .set("output", toolMessage.getContent());
         } else if (message instanceof AssistantMessage) {
-            AssistantMessage assistantMessage = (AssistantMessage) message;
-            if (Utils.isNotEmpty(assistantMessage.getToolCalls())) {
-                if (Utils.isNotEmpty(assistantMessage.getContent())) {
-                    inputArray.addNew()
-                            .set("role", "assistant")
-                            .set("content", assistantMessage.getContent());
-                }
-                // 添加工具调用
-                for (ToolCall call : assistantMessage.getToolCalls()) {
-                    inputArray.addNew()
-                            .set("type", "function_call")
-                            .set("call_id", call.getId())
-                            .set("name", call.getName())
-                            .set("arguments", call.getArgumentsStr());
-                }
-            } else {
-                inputArray.addNew()
-                        .set("role", "assistant")
-                        .set("content", assistantMessage.getContent() != null ? assistantMessage.getContent() : "");
-            }
+            buildAssistantInputItems(inputArray, (AssistantMessage) message);
         } else if (message instanceof UserMessage) {
             UserMessage userMessage = (UserMessage) message;
             ONode msgNode = inputArray.addNew()
@@ -175,19 +156,29 @@ public class OpenaiResponsesRequestBuilder {
                                 .set("text", text.getContent());
                     } else if (block1 instanceof ImageBlock) {
                         ImageBlock image = (ImageBlock) block1;
-                        contentArray.addNew()
-                                .set("type", "input_image")
-                                .set("image_url", image.toDataString(true));
+                        // Session 截断后 data/url 皆空时跳过
+                        String imageUrl = image.toDataString(true);
+                        if (Utils.isNotEmpty(imageUrl)) {
+                            contentArray.addNew()
+                                    .set("type", "input_image")
+                                    .set("image_url", imageUrl);
+                        }
                     } else if (block1 instanceof AudioBlock) {
                         AudioBlock audio = (AudioBlock) block1;
-                        ONode audioNode = contentArray.addNew()
-                                .set("type", "input_audio");
-                        // Responses API 音频格式：data (base64) 和 format
-                        audioNode.set("data", audio.getData());
-                        // 从 mimeType 提取格式，如 audio/mp3 -> mp3
-                        String mimeType = audio.getMimeType();
-                        if (Utils.isNotEmpty(mimeType) && mimeType.startsWith("audio/")) {
-                            audioNode.set("format", mimeType.substring(6));
+                        // 与 Assistant 路径一致：仅 base64 写 input_audio；URL 降级说明文本
+                        if (Utils.isNotEmpty(audio.getData())) {
+                            ONode audioNode = contentArray.addNew()
+                                    .set("type", "input_audio");
+                            audioNode.set("data", audio.getData());
+                            String mimeType = audio.getMimeType();
+                            if (Utils.isNotEmpty(mimeType) && mimeType.startsWith("audio/")) {
+                                audioNode.set("format", mimeType.substring(6));
+                            }
+                        } else if (Utils.isNotEmpty(audio.getUrl())
+                                && !audio.getUrl().startsWith("audio://")) {
+                            contentArray.addNew()
+                                    .set("type", "input_text")
+                                    .set("text", "[audio]" + audio.getUrl());
                         }
                     }
                 }
@@ -201,6 +192,125 @@ public class OpenaiResponsesRequestBuilder {
         }
     }
 
+    /**
+     * 构建 Assistant 历史 input items（含多模态与 image_generation_call 回传）。
+     *
+     * @since 3.9
+     */
+    private void buildAssistantInputItems(ONode inputArray, AssistantMessage assistantMessage) {
+        // 1) 先回传 image_generation_call 历史项（按官方多轮约定）
+        if (Utils.isNotEmpty(assistantMessage.getBlocks())) {
+            for (ContentBlock block : assistantMessage.getBlocks()) {
+                if (!(block instanceof ImageBlock)) {
+                    continue;
+                }
+                Object genId = block.metas() == null ? null : block.metas().get("image_generation_id");
+                if (genId == null && block.metas() != null) {
+                    genId = block.metas().get("id");
+                }
+                // 仅当标记为 image_generation_call 时回传 id item
+                Object sourceType = block.metas() == null ? null : block.metas().get("source_type");
+                if (genId != null && Utils.isNotEmpty(String.valueOf(genId))
+                        && ("image_generation_call".equals(sourceType) || sourceType == null && block.metas() != null && block.metas().containsKey("image_generation_id"))) {
+                    inputArray.addNew()
+                            .set("type", "image_generation_call")
+                            .set("id", String.valueOf(genId));
+                }
+            }
+        }
+     
+        // 2) 文本 / 多模态 content
+        boolean hasToolCalls = Utils.isNotEmpty(assistantMessage.getToolCalls());
+        boolean multiModal = assistantMessage.isMultiModal();
+     
+        if (multiModal) {
+            ONode msgNode = inputArray.addNew().set("role", "assistant");
+            ONode contentArray = msgNode.getOrNew("content").asArray();
+            boolean hasAny = false;
+     
+            for (ContentBlock block : assistantMessage.getBlocks()) {
+                if (block instanceof TextBlock) {
+                    String text = AssistantMessage.stripThinkTags(block.getContent());
+                    if (Utils.isNotEmpty(text)) {
+                        contentArray.addNew()
+                                .set("type", "output_text")
+                                .set("text", text);
+                        hasAny = true;
+                    }
+                } else if (block instanceof ImageBlock) {
+                    // 已以 image_generation_call id 回传的跳过 data 再写
+                    Object sourceType = block.metas() == null ? null : block.metas().get("source_type");
+                    Object genId = block.metas() == null ? null : block.metas().get("image_generation_id");
+                    if (genId == null && block.metas() != null) {
+                        genId = block.metas().get("id");
+                    }
+                    if ("image_generation_call".equals(sourceType)
+                            || (genId != null && block.metas() != null && block.metas().containsKey("image_generation_id"))) {
+                        continue;
+                    }
+                    String imageUrl = block.toDataString(true);
+                    if (Utils.isEmpty(imageUrl)) {
+                        // Session 截断后空媒体跳过
+                        continue;
+                    }
+                    contentArray.addNew()
+                            .set("type", "input_image")
+                            .set("image_url", imageUrl);
+                    hasAny = true;
+                } else if (block instanceof AudioBlock) {
+                    AudioBlock audio = (AudioBlock) block;
+                    // Responses 输入侧更稳妥：优先 input_audio(base64)；URL 降级 input_text 说明，避免把 URL 塞进 data
+                    if (Utils.isNotEmpty(audio.getData())) {
+                        ONode audioNode = contentArray.addNew().set("type", "input_audio");
+                        audioNode.set("data", audio.getData());
+                        String mimeType = audio.getMimeType();
+                        if (Utils.isNotEmpty(mimeType) && mimeType.startsWith("audio/")) {
+                            audioNode.set("format", mimeType.substring(6));
+                        }
+                        hasAny = true;
+                    } else if (Utils.isNotEmpty(audio.getUrl())
+                            && !audio.getUrl().startsWith("audio://")) {
+                        contentArray.addNew()
+                                .set("type", "input_text")
+                                .set("text", "[audio]" + audio.getUrl());
+                        hasAny = true;
+                    }
+                }
+            }
+     
+            if (!hasAny) {
+                // 兜底：用去 think 后的文本投影
+                String text = assistantMessage.getResultContent();
+                contentArray.addNew()
+                        .set("type", "output_text")
+                        .set("text", text != null ? text : "");
+            }
+        } else {
+            // 纯文本：与 getResultContent 对齐，剥离 think 标签；有 tool_calls 时仅非空才写
+            String plain = assistantMessage.getResultContent();
+            if (!hasToolCalls) {
+                inputArray.addNew()
+                        .set("role", "assistant")
+                        .set("content", plain != null ? plain : "");
+            } else if (Utils.isNotEmpty(plain)) {
+                inputArray.addNew()
+                        .set("role", "assistant")
+                        .set("content", plain);
+            }
+        }
+     
+        // 3) 工具调用 items
+        if (hasToolCalls) {
+            for (ToolCall call : assistantMessage.getToolCalls()) {
+                inputArray.addNew()
+                        .set("type", "function_call")
+                        .set("call_id", call.getId())
+                        .set("name", call.getName())
+                        .set("arguments", call.getArgumentsStr());
+            }
+        }
+    }
+     
     /**
      * 构建思考级别配置
      * @author oisin lu

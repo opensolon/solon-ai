@@ -46,6 +46,11 @@ public class ContextCompressionInterceptorTest {
 
         chatModel = LlmUtil.getChatModel();
 
+        // stub options，避免 onReasonStart 取 getOptions()/getChatModel() NPE
+        org.noear.solon.ai.agent.react.ReActOptions options =
+                new org.noear.solon.ai.agent.react.ReActOptions(chatModel);
+        when(trace.getOptions()).thenReturn(options);
+
         // 阈值设为 6，消息超过 6 条时触发压缩
         interceptor = new ContextCompressionInterceptor(6,8000, null);
     }
@@ -235,6 +240,32 @@ public class ContextCompressionInterceptorTest {
                 "Empty AssistantMessage (no content, no tool_calls) should be removed after compression");
     }
 
+    /**
+     * 验证仅 media 的 AssistantMessage 不会被空壳过滤误删（image_generation 等）。
+     */
+    @Test
+    public void testKeepMediaOnlyAssistantMessageAfterCompression() {
+        ChatMessage goal = ChatMessage.ofUser("Goal");
+        goal.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(goal);
+    
+        for (int i = 0; i < 12; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("History " + i));
+        }
+    
+        // 仅 media、无文本、无 tool_calls —— 不应被空壳过滤
+        AssistantMessage mediaOnly = ChatMessage.ofAssistant(
+                "",
+                org.noear.solon.ai.chat.content.ImageBlock.ofUrl("https://example.com/gen.png"));
+        workingMemory.addMessage(mediaOnly);
+        workingMemory.addMessage(ChatMessage.ofUser("continue"));
+    
+        interceptor.onReasonStart(trace, null);
+    
+        assertTrue(workingMemory.getMessages().contains(mediaOnly),
+                "Media-only AssistantMessage should be kept (not treated as empty shell)");
+    }
+    
     /**
      * 验证带内容的 Assistant thought 不会被误删（只有空壳才过滤）。
      */
@@ -917,5 +948,33 @@ public class ContextCompressionInterceptorTest {
         assertTrue(CompressionUtil.isPromptTooLong("prompt is too long, reduce to 5000 tokens"));
         assertTrue(CompressionUtil.isPromptTooLong("prompt is too long"));
         assertFalse(CompressionUtil.isPromptTooLong("正常摘要内容"));
+    }
+
+    /**
+     * media-only 消息 content 为空时，token 估算仍应计入媒体体积，避免被当成 0。
+     */
+    @Test
+    public void testMediaOnlyMessageTokenEstimateNotZero() throws Exception {
+        // 构造大 base64 媒体（content 投影为空）
+        StringBuilder b64 = new StringBuilder();
+        for (int i = 0; i < 4000; i++) {
+            b64.append('A');
+        }
+        AssistantMessage mediaOnly = ChatMessage.ofAssistant(
+                "",
+                org.noear.solon.ai.chat.content.ImageBlock.ofBase64(b64.toString(), "image/png"));
+
+        java.lang.reflect.Method method = ContextCompressionInterceptor.class
+                .getDeclaredMethod("estimateTokens", List.class, String.class);
+        method.setAccessible(true);
+
+        int tokens = (int) method.invoke(interceptor, Arrays.asList(mediaOnly), null);
+        assertTrue(tokens > 100,
+                "media-only message should estimate non-trivial tokens, got: " + tokens);
+
+        // 元数据应缓存估算结果（key 与实现一致）
+        Integer cached = mediaOnly.getMetadataAs("token_size");
+        assertNotNull(cached);
+        assertTrue(cached > 100);
     }
 }

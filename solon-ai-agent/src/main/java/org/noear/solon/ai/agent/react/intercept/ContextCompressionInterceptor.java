@@ -33,6 +33,8 @@ import org.noear.solon.ai.agent.react.intercept.compress.VectorStoreCompressionS
 import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.ai.chat.content.AbsMedia;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
@@ -654,14 +656,16 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 continue;
             }
 
-            // 过滤空壳 AssistantMessage：既无结果内容也无工具调用
+            // 过滤空壳 AssistantMessage：既无结果内容也无工具调用，且无媒体块
             // 这类消息通常来自 LLM 的纯思考响应（thinking 标签包裹但无实际输出），
             // 序列化后为 {"role":"assistant"}，缺少 content 或 tool_calls，
             // 会被 DeepSeek / OpenAI 等模型 API 拒绝（400 错误）
+            // 注意：仅 media 的 Assistant（如 image_generation）必须保留
             if (msg instanceof AssistantMessage) {
                 AssistantMessage am = (AssistantMessage) msg;
                 if (Assert.isEmpty(am.getResultContent())
-                        && Assert.isEmpty(am.getToolCalls())) {
+                        && Assert.isEmpty(am.getToolCalls())
+                        && !am.hasMedia()) {
                     continue;
                 }
             }
@@ -717,7 +721,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
             // 多模态消息跳过（避免破坏图片等非文本块）
             if ((msg instanceof ToolMessage && ((ToolMessage) msg).isMultiModal())
-                    || (msg instanceof UserMessage && ((UserMessage) msg).isMultiModal())) {
+                    || (msg instanceof UserMessage && ((UserMessage) msg).isMultiModal())
+                    || (msg instanceof AssistantMessage && ((AssistantMessage) msg).isMultiModal())) {
                 result.add(msg);
                 continue;
             }
@@ -880,6 +885,12 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                             cachedCount += 10; // id + JSON 结构开销
                         }
                     }
+                    // 媒体块：base64/URL 不进 content 投影时仍会占请求体积，按长度保守估算
+                    cachedCount += estimateMediaTokens(am.getBlocks());
+                } else if (m instanceof UserMessage) {
+                    cachedCount += estimateMediaTokens(((UserMessage) m).getBlocks());
+                } else if (m instanceof ToolMessage) {
+                    cachedCount += estimateMediaTokens(((ToolMessage) m).getBlocks());
                 }
 
                 // 将计算结果回填到消息元数据中
@@ -895,6 +906,34 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         }
 
         return totalTokens + 3;
+    }
+
+    /**
+     * 估算消息中媒体块的 Token 开销。
+     * <p>纯 base64 media 的 content 投影为空，但仍会随请求发送；按 data/url 字符长度
+     * 保守换算（约 4 chars/token），避免 media-only 被记为 0 导致压缩误判。</p>
+     */
+    private int estimateMediaTokens(List<ContentBlock> blocks) {
+        if (Assert.isEmpty(blocks)) {
+            return 0;
+        }
+        int tokens = 0;
+        for (ContentBlock block : blocks) {
+            if (!(block instanceof AbsMedia)) {
+                continue;
+            }
+            AbsMedia<?> media = (AbsMedia<?>) block;
+            String data = media.getData();
+            if (Utils.isNotEmpty(data)) {
+                // base64 体积大，按 4 chars ≈ 1 token 估算，并加 MIME 结构开销
+                tokens += Math.max(1, data.length() / 4) + 20;
+            } else if (Utils.isNotEmpty(media.getUrl())) {
+                tokens += encoding.countTokens(media.getUrl()) + 10;
+            } else {
+                tokens += 8; // 空/截断媒体的占位开销
+            }
+        }
+        return tokens;
     }
 
     /**

@@ -22,11 +22,6 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.agent.react.intercept.ContextSizeChunk;
-import org.noear.solon.ai.agent.react.task.ActionChunk;
-import org.noear.solon.ai.agent.react.task.ObservationChunk;
-import org.noear.solon.ai.agent.react.task.ReasonChunk;
-import org.noear.solon.ai.agent.react.task.ThoughtChunk;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatSession;
@@ -221,29 +216,12 @@ public class TaskTalent extends AbsTalent {
                         .stream()
                         .takeUntil(r -> sink.isCancelled())
                         .doOnNext(chunk -> {
-                            sink.next(new TaskWrapChuck(__parentTrace, taskId, task, isMultitask, chunk));
-
-                            /**
-                             // 选择性转发：ContextSizeChunk/ActionChunk/ObservationChunk 始终转发
-                             // + 多任务模式仅转发 ThoughtChunk（最终结果，避免推理文本交错）
-                             // + 单任务模式转发 ReasonChunk（推理过程）
-                             if (chunk instanceof ContextSizeChunk) {
-                             sink.next(new TaskWrapChuck(task.index, taskId, task.agent_name, isMultitask, chunk));
-                             } else if (chunk instanceof ActionChunk) {
-                             sink.next(new TaskWrapChuck(task.index, taskId, task.agent_name, isMultitask, chunk));
-                             } else if (chunk instanceof ObservationChunk) {
-                             sink.next(new TaskWrapChuck(task.index, taskId, task.agent_name, isMultitask, chunk));
-                             } else {
-                             if (isMultitask) {
-                             if (chunk instanceof ThoughtChunk) {
-                             sink.next(new TaskWrapChuck(task.index, taskId, task.agent_name, true, chunk));
-                             }
-                             } else {
-                             if (chunk instanceof ReasonChunk) {
-                             sink.next(new TaskWrapChuck(task.index, taskId, task.agent_name, false, chunk));
-                             }
-                             }
-                             }*/
+                            // 父流已取消时停止向主会话灌 chunk，避免取消后仍重复输出
+                            if (sink.isCancelled()) {
+                                return;
+                            }
+                            // multitask 并发时串行化 sink.next，避免非线程安全的 FluxSink 丢事件/乱序
+                            emitTaskChunk(sink, new TaskWrapChuck(__parentTrace, taskId, task, isMultitask, chunk));
                         })
                         .doOnError(err -> {
                             errRef.set(err);
@@ -254,8 +232,13 @@ public class TaskTalent extends AbsTalent {
                     throw errRef.get();
                 }
 
-                __parentTrace.getMetrics().addMetrics(response.getMetrics());
-                result = response.getContent();
+                // 取消或流被提前截断时 blockLast 可能为 null
+                if (response != null) {
+                    __parentTrace.getMetrics().addMetrics(response.getMetrics());
+                    result = response.getContent();
+                } else {
+                    result = "";
+                }
             }
 
 
@@ -270,6 +253,18 @@ public class TaskTalent extends AbsTalent {
             result = String.format("ERROR: 任务执行失败: %s", e.getMessage());
 
             return formatTaskResp(task, false, result, isMultitask);
+        }
+    }
+
+    /**
+     * 向父会话 sink 推送子代理 chunk。
+     * multitask 并发时对同一 sink 加锁，保证 next 串行。
+     */
+    private void emitTaskChunk(FluxSink<AgentChunk> sink, TaskWrapChuck wrapChuck) {
+        synchronized (sink) {
+            if (!sink.isCancelled()) {
+                sink.next(wrapChuck);
+            }
         }
     }
 

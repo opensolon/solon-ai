@@ -21,6 +21,7 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
@@ -205,6 +206,7 @@ public class AnthropicChatDialect extends AbstractChatDialect {
         StringBuilder textContent = new StringBuilder();
         List<ToolCall> toolCalls = new ArrayList<>();
         List<Map> toolCallsRaw = new ArrayList<>();
+        List<ContentBlock> mediaBlocks = new ArrayList<>();
 
         for (ONode item : oContent.getArray()) {
             String type = item.get("type").getString();
@@ -224,6 +226,11 @@ public class AnthropicChatDialect extends AbstractChatDialect {
                         textContent.append("\n");
                     }
                     textContent.append(text);
+                }
+            } else if ("image".equals(type)) {
+                ContentBlock imageBlock = responseParser.parseClaudeImageBlock(item);
+                if (imageBlock != null) {
+                    mediaBlocks.add(imageBlock);
                 }
             } else if ("tool_use".equals(type)) {
                 String toolId = item.get("id").getString();
@@ -275,7 +282,7 @@ public class AnthropicChatDialect extends AbstractChatDialect {
         }
 
         AssistantMessage message = new AssistantMessage(content,
-                false, contentRaw, toolCallsRaw, toolCalls, null);
+                false, contentRaw, toolCallsRaw, toolCalls, null, mediaBlocks.isEmpty() ? null : mediaBlocks);
         messageList.add(message);
 
         return messageList;

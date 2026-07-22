@@ -24,6 +24,8 @@ import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -40,7 +42,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -293,10 +297,12 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             context.put(config.getOutputKey(), result);
         }
 
-        AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
+        // 终态保留 lastReason 的 media（生图 / media-only），避免 finalAnswer 纯字符串把图丢掉
+        AssistantMessage assistantMessage = buildFinalAssistantMessage(result, trace.getLastReasonMessage());
         assistantMessage.addMetadata(AgentTrace.META_RUN_ID, trace.getRunId());
 
-        if (Assert.isNotEmpty(result)) {
+        // media-only 时 result 可能为空，仍需落 Session / WorkingMemory
+        if (Assert.isNotEmpty(result) || assistantMessage.hasMedia()) {
             if (parentTeamTrace == null) {
                 session.addMessage(assistantMessage);
             }
@@ -327,6 +333,25 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         return assistantMessage;
+    }
+
+    /**
+     * 构造终态 AssistantMessage：文本用 finalAnswer；若 lastReason 带 media 则一并保留。
+     */
+    private AssistantMessage buildFinalAssistantMessage(String result, AssistantMessage lastReason) {
+        String text = result == null ? "" : result;
+        if (lastReason != null && lastReason.hasMedia()) {
+            List<ContentBlock> mediaBlocks = new ArrayList<>();
+            for (ContentBlock block : lastReason.getBlocks()) {
+                if (!(block instanceof TextBlock)) {
+                    mediaBlocks.add(block);
+                }
+            }
+            if (!mediaBlocks.isEmpty()) {
+                return ChatMessage.ofAssistant(text, mediaBlocks);
+            }
+        }
+        return ChatMessage.ofAssistant(text);
     }
 
     /**

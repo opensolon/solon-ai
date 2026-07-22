@@ -18,6 +18,11 @@ package org.noear.solon.ai.llm.dialect.gemini.models;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.content.AudioBlock;
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 
@@ -63,27 +68,38 @@ public class GeminiThoughtProcessor {
         if (oParts != null && oParts.isArray()) {
             boolean hasThoughtPart = false;
             boolean hasNormalPart = false;
-
+            boolean hasMediaPart = false;
+            
             List<ToolCall> toolCalls = new ArrayList<>();
-
+            List<ContentBlock> mediaBlocks = new ArrayList<>();
+                
             for (ONode oPart : oParts.getArray()) {
                 ONode thoughtNode = oPart.getOrNull("thought");
                 boolean isThought = thoughtNode != null && thoughtNode.getBoolean();
-
+                
                 ONode functionCallNode = oPart.getOrNull("functionCall");
+                if (functionCallNode == null) {
+                    functionCallNode = oPart.getOrNull("function_call");
+                }
                 boolean isFunctionCall = functionCallNode != null && functionCallNode.isObject();
-
+                    
                 if (isFunctionCall) {
                     String functionName = functionCallNode.get("name").getString();
                     ONode argsNode = functionCallNode.get("args");
-                    String argsJson = argsNode.toJson();
-                    Map<String, Object> argsMap = argsNode.toBean(Map.class);
-
+                    if (argsNode == null || argsNode.isNull()) {
+                        argsNode = functionCallNode.get("arguments");
+                    }
+                    String argsJson = argsNode == null ? "{}" : argsNode.toJson();
+                    Map<String, Object> argsMap = argsNode == null ? new LinkedHashMap<>() : argsNode.toBean(Map.class);
+                            
                     ToolCall toolCall = new ToolCall(functionName, null, functionName, argsJson, argsMap);
-
+                                
                     // 仅第一个 functionCall part 携带 thoughtSignature（并行调用时后续 part 没有）
                     if (toolCalls.isEmpty()) {
                         ONode thoughtSigNode = oPart.getOrNull("thoughtSignature");
+                        if (thoughtSigNode == null) {
+                            thoughtSigNode = oPart.getOrNull("thought_signature");
+                        }
                         if (thoughtSigNode != null) {
                             String thoughtSignature = thoughtSigNode.getString();
                             if (Utils.isNotEmpty(thoughtSignature)) {
@@ -92,37 +108,48 @@ public class GeminiThoughtProcessor {
                             }
                         }
                     }
-
+                    
                     toolCalls.add(toolCall);
                 } else if (isThought) {
                     hasThoughtPart = true;
                 } else if (oPart.hasKey("text")) {
                     hasNormalPart = true;
+                } else {
+                    ContentBlock media = parseMediaPart(oPart);
+                    if (media != null) {
+                        mediaBlocks.add(media);
+                        hasMediaPart = true;
+                    }
                 }
             }
-
+                    
             if (!toolCalls.isEmpty()) {
                 if (resp.in_thinking && resp.isStream()) {
                     messageList.add(new AssistantMessage("</think>", true));
                 }
                 resp.in_thinking = false;
-
-                AssistantMessage msg = new AssistantMessage("", false, null, null, toolCalls, null);
+                        
+                List<ContentBlock> blocksForMsg = null;
+                if (!mediaBlocks.isEmpty()) {
+                    blocksForMsg = new ArrayList<>(mediaBlocks);
+                    resp.addMediaBlocks(mediaBlocks);
+                }
+                AssistantMessage msg = new AssistantMessage("", false, null, null, toolCalls, null, blocksForMsg);
                 messageList.add(msg);
                 return messageList;
             }
-
+                        
             if (resp.isStream()) {
-                if (hasThoughtPart && !hasNormalPart) {
+                if (hasThoughtPart && !hasNormalPart && !hasMediaPart) {
                     if (!resp.in_thinking) {
                         messageList.add(new AssistantMessage("\n\n", true));
                         resp.in_thinking = true;
                     }
-
+                        
                     for (ONode oPart : oParts.getArray()) {
                         ONode thoughtNode = oPart.getOrNull("thought");
                         boolean isThought = thoughtNode != null && thoughtNode.getBoolean();
-
+                            
                         if (isThought) {
                             String text = oPart.get("text").getString();
                             if (Utils.isNotEmpty(text)) {
@@ -130,12 +157,15 @@ public class GeminiThoughtProcessor {
                             }
                         }
                     }
-                } else if (!hasThoughtPart && hasNormalPart) {
+                } else if (!hasThoughtPart && (hasNormalPart || hasMediaPart)) {
                     if (resp.in_thinking) {
                         messageList.add(new AssistantMessage("</think>", true));
                         resp.in_thinking = false;
                     }
 
+                    // 有媒体时：合并为单条消息（文本 + media blocks），避免文本先 delta 再整段重复
+                    // 无媒体时：保持旧行为，按 part 增量推送文本
+                    StringBuilder normalContent = new StringBuilder();
                     for (ONode oPart : oParts.getArray()) {
                         ONode thoughtNode = oPart.getOrNull("thought");
                         boolean isThought = thoughtNode != null && thoughtNode.getBoolean();
@@ -143,11 +173,24 @@ public class GeminiThoughtProcessor {
                         if (!isThought && oPart.hasKey("text")) {
                             String text = oPart.get("text").getString();
                             if (Utils.isNotEmpty(text)) {
-                                messageList.add(new AssistantMessage(text, false));
+                                normalContent.append(text);
+                                if (mediaBlocks.isEmpty()) {
+                                    messageList.add(new AssistantMessage(text, false));
+                                }
                             }
                         }
                     }
-                } else if (hasThoughtPart && hasNormalPart) {
+
+                    if (!mediaBlocks.isEmpty()) {
+                        resp.addMediaBlocks(mediaBlocks);
+                        List<ContentBlock> blocks = new ArrayList<>();
+                        if (normalContent.length() > 0) {
+                            blocks.add(TextBlock.of(normalContent.toString()));
+                        }
+                        blocks.addAll(mediaBlocks);
+                        messageList.add(new AssistantMessage(normalContent.toString(), false, null, null, null, null, blocks));
+                    }
+                } else if (hasThoughtPart && (hasNormalPart || hasMediaPart)) {
                     if (!resp.in_thinking) {
                         messageList.add(new AssistantMessage("\n\n", true));
                     }
@@ -167,6 +210,8 @@ public class GeminiThoughtProcessor {
                     messageList.add(new AssistantMessage("</think>", true));
                     resp.in_thinking = false;
 
+                    // 有媒体时：合并为单条消息；无媒体时按 part 增量推送
+                    StringBuilder normalContent = new StringBuilder();
                     for (ONode oPart : oParts.getArray()) {
                         ONode thoughtNode = oPart.getOrNull("thought");
                         boolean isThought = thoughtNode != null && thoughtNode.getBoolean();
@@ -174,19 +219,32 @@ public class GeminiThoughtProcessor {
                         if (!isThought && oPart.hasKey("text")) {
                             String text = oPart.get("text").getString();
                             if (Utils.isNotEmpty(text)) {
-                                messageList.add(new AssistantMessage(text, false));
+                                normalContent.append(text);
+                                if (mediaBlocks.isEmpty()) {
+                                    messageList.add(new AssistantMessage(text, false));
+                                }
                             }
                         }
+                    }
+
+                    if (!mediaBlocks.isEmpty()) {
+                        resp.addMediaBlocks(mediaBlocks);
+                        List<ContentBlock> blocks = new ArrayList<>();
+                        if (normalContent.length() > 0) {
+                            blocks.add(TextBlock.of(normalContent.toString()));
+                        }
+                        blocks.addAll(mediaBlocks);
+                        messageList.add(new AssistantMessage(normalContent.toString(), false, null, null, null, null, blocks));
                     }
                 }
             } else {
                 StringBuilder thoughtContent = new StringBuilder();
                 StringBuilder normalContent = new StringBuilder();
-
+        
                 for (ONode oPart : oParts.getArray()) {
                     ONode thoughtNode = oPart.getOrNull("thought");
                     boolean isThought = thoughtNode != null && thoughtNode.getBoolean();
-
+    
                     if (oPart.hasKey("text")) {
                         String text = oPart.get("text").getString();
                         if (Utils.isNotEmpty(text)) {
@@ -204,33 +262,123 @@ public class GeminiThoughtProcessor {
                         }
                     }
                 }
-
+    
+                List<ContentBlock> blocksForMsg = null;
+                if (!mediaBlocks.isEmpty()) {
+                    blocksForMsg = new ArrayList<>();
+                    if (normalContent.length() > 0) {
+                        blocksForMsg.add(TextBlock.of(normalContent.toString()));
+                    }
+                    blocksForMsg.addAll(mediaBlocks);
+                    resp.addMediaBlocks(mediaBlocks);
+                }
+    
                 if (thoughtContent.length() > 0 && normalContent.length() > 0) {
                     String cleanedThought = cleanThoughtContent(thoughtContent.toString());
-
+    
                     String fullContent = "\n\n" + cleanedThought + "\n\n" + normalContent.toString();
-
+    
                     Map<String, Object> contentRaw = new LinkedHashMap<>();
                     contentRaw.put("thought", cleanedThought);
                     contentRaw.put("content", normalContent.toString());
-
-                    messageList.add(new AssistantMessage(fullContent, false, contentRaw, null, null, null));
+    
+                    messageList.add(new AssistantMessage(fullContent, false, contentRaw, null, null, null, blocksForMsg));
                 } else if (thoughtContent.length() > 0) {
                     String cleanedThought = cleanThoughtContent(thoughtContent.toString());
-
+    
                     String fullContent = "\n\n" + cleanedThought + "\n\n";
-
+    
                     Map<String, Object> contentRaw = new LinkedHashMap<>();
                     contentRaw.put("thought", cleanedThought);
-
-                    messageList.add(new AssistantMessage(fullContent, false, contentRaw, null, null, null));
-                } else if (normalContent.length() > 0) {
-                    messageList.add(new AssistantMessage(normalContent.toString()));
+    
+                    messageList.add(new AssistantMessage(fullContent, false, contentRaw, null, null, null, blocksForMsg));
+                } else if (normalContent.length() > 0 || blocksForMsg != null) {
+                    messageList.add(new AssistantMessage(normalContent.toString(), false, null, null, null, null, blocksForMsg));
                 }
             }
         }
-
+    
         return messageList;
+    }
+    
+    /**
+     * 解析 Gemini part 中的媒体（inline_data / file_data，兼容 camelCase）。
+     *
+     * @since 3.9
+     */
+    private ContentBlock parseMediaPart(ONode oPart) {
+        if (oPart == null || !oPart.isObject()) {
+            return null;
+        }
+    
+        ONode inline = oPart.getOrNull("inline_data");
+        if (inline == null) {
+            inline = oPart.getOrNull("inlineData");
+        }
+        if (inline != null && inline.isObject()) {
+            String mime = inline.get("mime_type").getString();
+            if (Utils.isEmpty(mime)) {
+                mime = inline.get("mimeType").getString();
+            }
+            String data = inline.get("data").getString();
+            return createMediaByMime(mime, null, data);
+        }
+    
+        ONode fileData = oPart.getOrNull("file_data");
+        if (fileData == null) {
+            fileData = oPart.getOrNull("fileData");
+        }
+        if (fileData != null && fileData.isObject()) {
+            String mime = fileData.get("mime_type").getString();
+            if (Utils.isEmpty(mime)) {
+                mime = fileData.get("mimeType").getString();
+            }
+            String uri = fileData.get("file_uri").getString();
+            if (Utils.isEmpty(uri)) {
+                uri = fileData.get("fileUri").getString();
+            }
+            return createMediaByMime(mime, uri, null);
+        }
+    
+        return null;
+    }
+    
+    private ContentBlock createMediaByMime(String mime, String url, String data) {
+        boolean hasData = Utils.isNotEmpty(data);
+        boolean hasUrl = Utils.isNotEmpty(url);
+        if (!hasData && !hasUrl) {
+            return null;
+        }
+    
+        String mediaType = "image";
+        if (Utils.isNotEmpty(mime)) {
+            String lower = mime.toLowerCase();
+            if (lower.startsWith("audio/")) {
+                mediaType = "audio";
+            } else if (lower.startsWith("video/")) {
+                mediaType = "video";
+            } else if (lower.startsWith("image/")) {
+                mediaType = "image";
+            }
+        }
+    
+        if ("audio".equals(mediaType)) {
+            if (hasData) {
+                return Utils.isEmpty(mime) ? AudioBlock.ofBase64(data) : AudioBlock.ofBase64(data, mime);
+            }
+            return Utils.isEmpty(mime) ? AudioBlock.ofUrl(url) : AudioBlock.ofUrl(url, mime);
+        }
+        if ("video".equals(mediaType)) {
+            if (hasData) {
+                return Utils.isEmpty(mime) ? VideoBlock.ofBase64(data) : VideoBlock.ofBase64(data, mime);
+            }
+            return Utils.isEmpty(mime) ? VideoBlock.ofUrl(url) : VideoBlock.ofUrl(url, mime);
+        }
+    
+        if (hasData) {
+            return Utils.isEmpty(mime) ? ImageBlock.ofBase64(data) : ImageBlock.ofBase64(data, mime);
+        }
+        return Utils.isEmpty(mime) ? ImageBlock.ofUrl(url) : ImageBlock.ofUrl(url, mime);
     }
 
     /**

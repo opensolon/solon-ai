@@ -245,8 +245,11 @@ public class ReasonTask {
             return;
         }
 
-        // 容错处理：模型响应内容及工具调用均为空时，引导其重新生成
-        if (Assert.isEmpty(responseMessage.getResultContent()) && Assert.isEmpty(responseMessage.getToolCalls())) {
+        // 容错处理：模型响应内容、工具调用与媒体均为空时，引导其重新生成
+        // 纯生图等 media-only 响应不算空，避免被当成空响应重试
+        if (Assert.isEmpty(responseMessage.getResultContent())
+                && Assert.isEmpty(responseMessage.getToolCalls())
+                && !responseMessage.hasMedia()) {
             if (trace.getEmptyRetryCounter().incrementAndGet() < 3) {
                 //做3次重复
                 LOG.warn("ReActAgent[{}] choices size:{}, responseMessage is empty: {}", trace.getAgentName(), response.getChoices().size(), responseMessage);
@@ -320,7 +323,8 @@ public class ReasonTask {
 
         // [逻辑 5: 路由判断 - 文本 ReAct 协议解析]
         if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
-            if (Assert.isNotEmpty(clearContent)) {
+            // 有文本，或仅有媒体（如生图）时，均视为有效最终输出
+            if (Assert.isNotEmpty(clearContent) || responseMessage.hasMedia()) {
                 trace.setRoute(Agent.ID_END);
                 trace.setFinalAnswer(clearContent, false);
                 return;
