@@ -667,17 +667,16 @@ public class AnthropicRequestBuilder {
         if (Utils.isNotEmpty(assistantMessage.getToolCalls())) {
             ONode contentArray = node.getOrNew("content").asArray();
 
-            // 提取 reasoning（思考）内容，放入 thinking 块
+            // 仅当 thinkingSignature 有效时回传 thinking 块。
+            // 兼容网关（如 DeepSeek claude_chat）在 tool 多轮回传无 signature 的 thinking，常触发 EMPTY_RESPONSE。
+            // 官方 Claude 也要求 thinking 块带有效 signature 才能继续多轮。
             String reasoning = assistantMessage.getReasoning();
-            if (Utils.isNotEmpty(reasoning)) {
-                ONode thinkingBlock = contentArray.addNew()
+            String signature = resolveThinkingSignature(assistantMessage);
+            if (Utils.isNotEmpty(reasoning) && Utils.isNotEmpty(signature)) {
+                contentArray.addNew()
                         .set("type", "thinking")
-                        .set("thinking", reasoning);
-                // 仅在有有效 signature 时回传；空字符串会让官方 Claude / 兼容网关下一轮异常
-                String signature = resolveThinkingSignature(assistantMessage);
-                if (Utils.isNotEmpty(signature)) {
-                    thinkingBlock.set("signature", signature);
-                }
+                        .set("thinking", reasoning)
+                        .set("signature", signature);
             }
 
             // 添加文本内容（如果有，排除 <think>...</think> 与纯空白）
@@ -732,17 +731,16 @@ public class AnthropicRequestBuilder {
             if (content != null) {
                 node.set("content", content);
             } else {
-                // 若仅有思考内容（无正文、无 tool），尽量按 Claude 多轮要求回传 thinking 块
+                // 若仅有思考内容（无正文、无 tool）：仅在 signature 有效时回传 thinking；
+                // 否则只保留空 content，避免兼容网关因无 signature thinking 拒绝下一轮
                 String reasoning = assistantMessage.getReasoning();
-                if (Utils.isNotEmpty(reasoning)) {
+                String signature = resolveThinkingSignature(assistantMessage);
+                if (Utils.isNotEmpty(reasoning) && Utils.isNotEmpty(signature)) {
                     ONode contentArray = node.getOrNew("content").asArray();
-                    ONode thinkingBlock = contentArray.addNew()
+                    contentArray.addNew()
                             .set("type", "thinking")
-                            .set("thinking", reasoning);
-                    String signature = resolveThinkingSignature(assistantMessage);
-                    if (Utils.isNotEmpty(signature)) {
-                        thinkingBlock.set("signature", signature);
-                    }
+                            .set("thinking", reasoning)
+                            .set("signature", signature);
                 } else {
                     node.getOrNew("content").asArray(); // Claude 需要 content 字段，即使是空数组
                 }
@@ -1029,16 +1027,14 @@ public class AnthropicRequestBuilder {
 
         ONode contentArray = node.getOrNew("content").asArray();
 
-        // 当开启思考模式时，需要在 tool_use 之前添加 thinking 块
+        // 仅当 thinkingSignature 有效时回传 thinking；无 signature 的 thinking 不回传，
+        // 避免 tool 多轮在兼容网关上触发 EMPTY_RESPONSE
         String thinkingContent = resp.reasoningBuilder.toString();
-        if (Utils.isNotEmpty(thinkingContent)) {
-            ONode thinkingBlock = contentArray.addNew();
-            thinkingBlock.set("type", "thinking");
-            thinkingBlock.set("thinking", thinkingContent);
-            // signature 是 Claude 思考签名，某些兼容接口要求回传
-            if (Utils.isNotEmpty(resp.thinkingSignature)) {
-                thinkingBlock.set("signature", resp.thinkingSignature);
-            }
+        if (Utils.isNotEmpty(thinkingContent) && Utils.isNotEmpty(resp.thinkingSignature)) {
+            contentArray.addNew()
+                    .set("type", "thinking")
+                    .set("thinking", thinkingContent)
+                    .set("signature", resp.thinkingSignature);
         }
 
         for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {

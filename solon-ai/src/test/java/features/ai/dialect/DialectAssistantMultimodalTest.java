@@ -854,9 +854,10 @@ public class DialectAssistantMultimodalTest {
         java.util.List<java.util.Map> toolCallsRaw = java.util.Collections.singletonList(rawMap);
 
         // 模拟非流式：thinking 后无正文，stripThinkTags 会留下 "\n\n"
+        // 无有效 signature 时，tool 多轮不应回传 thinking（兼容网关 EMPTY_RESPONSE）
         java.util.Map<String, Object> contentRaw = new java.util.LinkedHashMap<>();
         contentRaw.put("thinking", "need tool");
-        // 不放 thinkingSignature，验证空 signature 不会写出
+        contentRaw.put("thinkingSignature", ""); // 空 signature 视为无效
 
         AssistantMessage msg = new AssistantMessage(
                 "<think>\n\nneed tool</think>\n\n",
@@ -875,18 +876,10 @@ public class DialectAssistantMultimodalTest {
         boolean hasThinking = false;
         boolean hasBlankText = false;
         boolean hasToolUse = false;
-        boolean hasEmptySignature = false;
         for (ONode item : assistant.get("content").getArray()) {
             String type = item.get("type").getString();
             if ("thinking".equals(type)) {
                 hasThinking = true;
-                Assertions.assertEquals("need tool", item.get("thinking").getString());
-                if (item.hasKey("signature")) {
-                    String sig = item.get("signature").getString();
-                    if (sig == null || sig.isEmpty()) {
-                        hasEmptySignature = true;
-                    }
-                }
             } else if ("text".equals(type)) {
                 String text = item.get("text").getString();
                 if (text == null || text.trim().isEmpty()) {
@@ -898,10 +891,9 @@ public class DialectAssistantMultimodalTest {
             }
         }
 
-        Assertions.assertTrue(hasThinking, "content should contain thinking block");
+        Assertions.assertFalse(hasThinking, "thinking without valid signature must not be written back");
         Assertions.assertTrue(hasToolUse, "content should contain tool_use block");
         Assertions.assertFalse(hasBlankText, "blank text block must not be written");
-        Assertions.assertFalse(hasEmptySignature, "empty signature must not be written");
     }
 
     @Test
