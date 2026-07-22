@@ -37,6 +37,7 @@ import org.noear.solon.net.http.textstream.TextStreamUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Disposable;
+import reactor.core.Disposables;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
@@ -358,10 +359,13 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                     ? TextStreamUtil.parseSseStream(httpResp)
                     : TextStreamUtil.parseLineStream(httpResp);
 
-            // 使用原子引用管理订阅，以便内部控制终止
-            final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
+            // 用 CompositeDisposable 统一管理本轮 SSE 订阅与 tool 递归流订阅。
+            // FluxSink.onDispose 只能注册一次；第二次会立刻 dispose 新订阅，
+            // 导致第二次 internalStream 的 Mono.fromFuture 在 future.complete 后因 cancelled 丢弃回调。
+            final Disposable.Composite resources = Disposables.composite();
+            final AtomicReference<Disposable> sourceRef = new AtomicReference<>();
 
-            Disposable disposable = source.subscribe(
+            Disposable sourceDisposable = source.subscribe(
                     data -> {
                         // [对接点]：检查 sink 状态，如果已经完成或取消，不再处理
                         if (sink.isCancelled() == false) {
@@ -372,7 +376,10 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                                 // [对接点]：利用 onEventStream 的返回值
                                 if (!onEventStream(respDesc, sse, sink)) {
                                     // 返回 false 说明内部要求终止（如报错或逻辑中断）
-                                    disposableRef.get().dispose();
+                                    Disposable d = sourceRef.get();
+                                    if (d != null) {
+                                        d.dispose();
+                                    }
                                 }
                             } catch (Throwable e) {
                                 sink.error(e);
@@ -384,7 +391,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                         // 只有在没有被手动 dispose 的情况下才执行 End 逻辑
                         if (sink.isCancelled() == false) {
                             try {
-                                onEventEnd(respDesc, sink);
+                                onEventEnd(respDesc, sink, resources);
                             } catch (Throwable e) {
                                 sink.error(e);
                             }
@@ -392,14 +399,15 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                     }
             );
 
-            disposableRef.set(disposable);
-            sink.onDispose(disposable);
+            sourceRef.set(sourceDisposable);
+            resources.add(sourceDisposable);
+            sink.onDispose(resources);
         }, FluxSink.OverflowStrategy.BUFFER);
     }
 
-    private void onEventEnd(ChatResponseDefault resp, FluxSink<? super ChatResponse> sink) {
+    private void onEventEnd(ChatResponseDefault resp, FluxSink<? super ChatResponse> sink, Disposable.Composite resources) {
         if (resp.toolCallBuilders.size() > 0) {
-            if (buildStreamToolCallMessage(resp, sink) == false) {
+            if (buildStreamToolCallMessage(resp, sink, resources) == false) {
                 return; // 进入了内部递归流处理，不执行 complete
             }
         }
@@ -464,7 +472,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     /**
      * @return 是否结束流
      */
-    private boolean buildStreamToolCallMessage(ChatResponseDefault resp, FluxSink<? super ChatResponse> sink) {
+    private boolean buildStreamToolCallMessage(ChatResponseDefault resp, FluxSink<? super ChatResponse> sink,
+                                               Disposable.Composite resources) {
         try {
             ONode oNode = dialect.buildAssistantToolCallMessageNode(resp, resp.toolCallBuilders);
             List<AssistantMessage> assistantMessages = dialect.parseAssistantMessage(resp, oNode);
@@ -482,12 +491,13 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 List<ToolMessage> returnDirectMessages = buildToolMessage(resp, choiceMessage);
 
                 if (Assert.isEmpty(returnDirectMessages)) {
+                    // 加入同一个 CompositeDisposable，避免再次 sink.onDispose 导致立即 dispose
                     Disposable disposable = internalStream().subscribe(
                             sink::next,
                             sink::error,
                             sink::complete
                     );
-                    sink.onDispose(disposable);
+                    resources.add(disposable);
 
                     return false; //不触发外层的完成事件
                 } else {

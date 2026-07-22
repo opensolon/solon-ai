@@ -37,6 +37,7 @@
 * 调整 solon-ai-harness 重构 hitl 实现
 * 调整 solon-ai-harness getModelOrMain 标为弃用，由 getModelOrDefInstance 替代
 * 调整 solon-ai-agent ContextCompressionInterceptor 取消 chatModelSupplier 参数（标为弃用）
+* 修复 solon-ai-core ChatModel.stream 内部多次请求可能卡死的问题（使用 CompositeDisposable 统一管理 SSE 订阅与 tool 递归流订阅，避免多次 dispose） 
 
 ### 4.0.3
 
