@@ -86,8 +86,8 @@ public class HitlWebController {
             decision = HITLDecision.reject("风险操作，已被管理员驳回");
         }
 
-        // 提交决策
-        HITL.submit(session, task.getToolName(), decision);
+        // 提交决策（主路径：按 HITLTask）
+        HITL.submit(session, task, decision);
 
         // 提交后，通常自动触发一次“静默续传”，让 AI 完成后续动作
         try {

@@ -65,16 +65,16 @@ public class HITLBatchUnitTest {
         List<HITLTask> tasks = HITL.getPendingTasks(session);
         Assertions.assertEquals(2, tasks.size());
 
-        // toolName API 在同名多实例时应失败
+        // toolName 查找在同名多实例时应失败
         try {
-            HITL.approve(session, "transfer");
-            Assertions.fail("同名多实例应禁止 toolName 决策");
+            HITL.getPendingTaskByToolName(session, "transfer");
+            Assertions.fail("同名多实例应禁止 toolName 查找");
         } catch (IllegalStateException expected) {
             // ok
         }
 
-        HITL.approveByCallUuid(session, "uuid-a");
-        HITL.rejectByCallUuid(session, "uuid-b", "拒 B");
+        HITL.approve(session, HITL.getPendingTaskByCallUuid(session, "uuid-a"));
+        HITL.reject(session, HITL.getPendingTaskByCallUuid(session, "uuid-b"), "拒 B");
 
         // 模拟 resume：清 pending 标志（与 ReActTrace.prepare 一致）
         session.pending(false, null);
@@ -103,7 +103,7 @@ public class HITLBatchUnitTest {
         hitl.onActionStart(trace, batch);
         Assertions.assertTrue(session.isPending());
 
-        HITL.reject(session, "transfer", "管理员拒绝");
+        HITL.reject(session, HITL.getPendingTaskByToolName(session, "transfer"), "管理员拒绝");
         session.pending(false, null);
 
         ReActTrace trace2 = newTrace(session);
@@ -163,8 +163,8 @@ public class HITLBatchUnitTest {
         hitl.onActionStart(trace, batch);
         Assertions.assertTrue(session.isPending());
 
-        HITL.approveByCallUuid(session, "uuid-a", true);
-        HITL.rejectByCallUuid(session, "uuid-b", "拒 B");
+        HITL.approve(session, HITL.getPendingTaskByCallUuid(session, "uuid-a"), true);
+        HITL.reject(session, HITL.getPendingTaskByCallUuid(session, "uuid-b"), "拒 B");
         session.pending(false, null);
 
         ReActTrace trace2 = newTrace(session);
@@ -199,6 +199,73 @@ public class HITLBatchUnitTest {
         Assertions.assertEquals("transfer", task.getToolName());
         Assertions.assertNull(task.getCallUuid());
         Assertions.assertEquals("need", task.getComment());
+    }
+
+    /**
+     * 主路径：getPendingTaskByCallUuid / getPendingTaskByToolName + submit(task)。
+     */
+    @Test
+    public void getPendingTaskAndSubmitByTask() {
+        AgentSession session = InMemoryAgentSession.of("batch_find");
+        session.getContext().put(HITL.PENDING_TASKS, new ArrayList<>(Arrays.asList(
+                new HITLTask("c1", "transfer", mapOf("a", 1), "need"),
+                new HITLTask("c2", "delete", mapOf("b", 2), "need"),
+                new HITLTask("c3", "transfer", mapOf("a", 3), "need")
+        )));
+
+        HITLTask byUuid = HITL.getPendingTaskByCallUuid(session, "c2");
+        Assertions.assertNotNull(byUuid);
+        Assertions.assertEquals("delete", byUuid.getToolName());
+
+        Assertions.assertNull(HITL.getPendingTaskByCallUuid(session, "missing"));
+
+        HITLTask byName = HITL.getPendingTaskByToolName(session, "delete");
+        Assertions.assertNotNull(byName);
+        Assertions.assertEquals("c2", byName.getCallUuid());
+
+        try {
+            HITL.getPendingTaskByToolName(session, "transfer");
+            Assertions.fail("同名多实例应抛 IllegalStateException");
+        } catch (IllegalStateException expected) {
+            // ok
+        }
+
+        List<HITLTask> allTransfer = HITL.getPendingTasksByToolName(session, "transfer");
+        Assertions.assertEquals(2, allTransfer.size());
+
+        HITL.submit(session, byUuid, HITLDecision.approve().comment("ok"));
+        HITLDecision d = HITL.getDecision(session, byUuid);
+        Assertions.assertNotNull(d);
+        Assertions.assertTrue(d.isApproved());
+        // delete 批内唯一，应双写 toolName 键
+        Assertions.assertNotNull(HITL.getDecision(session, "delete"));
+
+        HITL.approve(session, HITL.getPendingTaskByCallUuid(session, "c1"));
+        Assertions.assertTrue(HITL.getDecision(session, "c1").isApproved());
+        // transfer 非唯一，不应双写 toolName
+        Assertions.assertNull(HITL.getDecision(session, "transfer"));
+    }
+
+    /**
+     * 兼容旧 toolName / ByCallUuid API 仍可用。
+     */
+    @Test
+    @SuppressWarnings("deprecation")
+    public void deprecatedStringApisStillWork() {
+        AgentSession session = InMemoryAgentSession.of("batch_dep");
+        session.getContext().put(HITL.PENDING_TASKS, new ArrayList<>(Collections.singletonList(
+                new HITLTask("only-1", "transfer", mapOf("a", 1), "need")
+        )));
+
+        HITL.approve(session, "transfer");
+        Assertions.assertTrue(HITL.getDecision(session, "only-1").isApproved());
+
+        HITL.clear(session);
+        session.getContext().put(HITL.PENDING_TASKS, new ArrayList<>(Collections.singletonList(
+                new HITLTask("only-2", "delete", mapOf("b", 2), "need")
+        )));
+        HITL.approve(session, "delete", "no");
+        Assertions.assertTrue(HITL.getDecision(session, "only-2").isRejected());
     }
 
     /**

@@ -267,6 +267,7 @@ public class HITLInterceptor extends AbsReActInterceptor {
             trace.getContext().remove(HITL.DECISION_PREFIX + callUuid);
             trace.getContext().remove(APPLIED_PREFIX + callUuid);
         }
+
         if (Assert.isNotEmpty(toolName)) {
             trace.getContext().remove(HITL.DECISION_PREFIX + toolName);
         }
@@ -310,6 +311,7 @@ public class HITLInterceptor extends AbsReActInterceptor {
                 return d;
             }
         }
+
         if (Assert.isNotEmpty(toolName)) {
             // 兼容：toolName 键；批内同名多实例时不读 toolName（避免撞车）
             if (nameCount != null && nameCount.getOrDefault(toolName, 0L) > 1) {

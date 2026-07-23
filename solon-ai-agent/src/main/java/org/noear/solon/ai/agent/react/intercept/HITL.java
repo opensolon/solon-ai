@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -26,14 +27,16 @@ import java.util.Map;
 /**
  * HITL (Human-in-the-Loop) 交互助手
  *
- * <p>提供面向业务层（如 Controller 或 Service）的便捷 API。主要用于：</p>
- * <ul>
- * <li><b>任务探知</b>：通过 {@link #getPendingTasks} / {@link #getPendingTask} 获取挂起任务。</li>
- * <li><b>决策回填</b>：通过 {@code approve/reject/skip}（推荐按 callUuid）提交人工干预指令，驱动 Agent 恢复执行。</li>
- * </ul>
+ * <p>提供面向业务层（如 Controller 或 Service）的便捷 API。推荐用法：</p>
+ * <ol>
+ * <li><b>定位任务</b>：{@link #getPendingTasks} / {@link #getPendingTask} /
+ * {@link #getPendingTaskByCallUuid} / {@link #getPendingTaskByToolName}</li>
+ * <li><b>提交决策</b>：{@link #submit(AgentSession, HITLTask, HITLDecision)} 或
+ * {@code approve/reject/skip(session, task, ...)}</li>
+ * </ol>
  *
- * <p>批 HITL 场景下，决策主键为 {@code callUuid}（= ToolCall.uuid）。
- * 旧的 toolName API 在批内该工具名唯一时仍可用。</p>
+ * <p>批 HITL 场景下，决策主键为 {@code callUuid}（= ToolCall.uuid / 文本模式稳定 callId）。
+ * 当批内 toolName 唯一时，会双写 toolName 兼容键。</p>
  *
  * @author noear
  * @since 3.9.1
@@ -86,10 +89,77 @@ public class HITL {
         return session.getContext().getAs(LAST_INTERVENED);
     }
 
+    /**
+     * 是否存在挂起的 HITL 任务
+     */
     public static boolean isHitl(AgentSession session) {
         return getPendingTask(session) != null;
     }
 
+    /**
+     * 按 callUuid 获取挂起任务
+     *
+     * @return 命中则返回任务，否则 null
+     */
+    public static HITLTask getPendingTaskByCallUuid(AgentSession session, String callUuid) {
+        if (Assert.isEmpty(callUuid)) {
+            return null;
+        }
+        for (HITLTask t : getPendingTasks(session)) {
+            if (callUuid.equals(t.getCallUuid())) {
+                return t;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 按 toolName 获取挂起任务（批内该名须唯一）
+     *
+     * @return 唯一命中则返回任务；无命中返回 null
+     * @throws IllegalStateException 批内同名多实例
+     */
+    public static HITLTask getPendingTaskByToolName(AgentSession session, String toolName) {
+        if (Assert.isEmpty(toolName)) {
+            return null;
+        }
+        HITLTask unique = null;
+        int count = 0;
+        for (HITLTask t : getPendingTasks(session)) {
+            if (toolName.equals(t.getToolName())) {
+                count++;
+                unique = t;
+            }
+        }
+        if (count > 1) {
+            throw new IllegalStateException(
+                    "Multiple pending HITL tasks share toolName='" + toolName
+                            + "'; use getPendingTaskByCallUuid(callUuid) instead");
+        }
+        return unique;
+    }
+
+    /**
+     * 按 toolName 获取全部挂起任务（同名多实例场景）
+     *
+     * @return 匹配列表；无则 emptyList
+     */
+    public static List<HITLTask> getPendingTasksByToolName(AgentSession session, String toolName) {
+        if (Assert.isEmpty(toolName)) {
+            return Collections.emptyList();
+        }
+        List<HITLTask> matched = new ArrayList<>();
+        for (HITLTask t : getPendingTasks(session)) {
+            if (toolName.equals(t.getToolName())) {
+                matched.add(t);
+            }
+        }
+        return matched.isEmpty() ? Collections.emptyList() : Collections.unmodifiableList(matched);
+    }
+
+    /**
+     * 获取指定任务的决策（优先 callUuid，回落 toolName）
+     */
     public static HITLDecision getDecision(AgentSession session, HITLTask task) {
         if (task == null) {
             return null;
@@ -100,58 +170,109 @@ public class HITL {
                 return d;
             }
         }
-        return session.getContext().getAs(DECISION_PREFIX + task.getToolName());
+        if (Assert.isNotEmpty(task.getToolName())) {
+            return session.getContext().getAs(DECISION_PREFIX + task.getToolName());
+        }
+        return null;
     }
 
+    /**
+     * 按存储键获取决策（callUuid 或 toolName）
+     */
     public static HITLDecision getDecision(AgentSession session, String key) {
+        if (Assert.isEmpty(key)) {
+            return null;
+        }
         return session.getContext().getAs(DECISION_PREFIX + key);
     }
 
-    // ---------- 按 callUuid 决策（批 HITL 主路径） ----------
+    // ---------- 决策（主路径：面向 HITLTask） ----------
 
     /**
-     * 按 callUuid 提交人工决策
+     * 提交人工决策（主路径）
+     * <p>优先按 callUuid 写入；批内 toolName 唯一时双写 toolName 兼容键。
+     * 无 callUuid 时回落 toolName（须唯一）。</p>
      */
-    public static void submitByCallUuid(AgentSession session, String callUuid, HITLDecision decision) {
-        if (Assert.isEmpty(callUuid)) {
-            throw new IllegalArgumentException("callUuid is empty");
+    public static void submit(AgentSession session, HITLTask task, HITLDecision decision) {
+        if (task == null) {
+            throw new IllegalArgumentException("task is null");
         }
-        session.getContext().put(DECISION_PREFIX + callUuid, decision);
-
-        // 若批内该 callUuid 对应工具名唯一，双写 toolName 兼容键，便于文本 resume 等场景
-        HITLTask matched = findPendingByCallUuid(session, callUuid);
-        if (matched != null && Assert.isNotEmpty(matched.getToolName())
-                && countPendingByToolName(session, matched.getToolName()) == 1) {
-            session.getContext().put(DECISION_PREFIX + matched.getToolName(), decision);
+        if (decision == null) {
+            throw new IllegalArgumentException("decision is null");
         }
+
+        String callUuid = task.getCallUuid();
+        String toolName = task.getToolName();
+
+        if (Assert.isNotEmpty(callUuid)) {
+            session.getContext().put(DECISION_PREFIX + callUuid, decision);
+            // 批内该工具名唯一时双写，兼容旧 resume / 文本模式
+            if (Assert.isNotEmpty(toolName) && countPendingByToolName(session, toolName) == 1) {
+                session.getContext().put(DECISION_PREFIX + toolName, decision);
+            }
+            return;
+        }
+
+        if (Assert.isNotEmpty(toolName)) {
+            // 无 callUuid 的极老数据：按名唯一校验后写入
+            HITLTask unique = getPendingTaskByToolName(session, toolName);
+            if (unique != null && Assert.isNotEmpty(unique.getCallUuid())) {
+                session.getContext().put(DECISION_PREFIX + unique.getCallUuid(), decision);
+            }
+            session.getContext().put(DECISION_PREFIX + toolName, decision);
+            return;
+        }
+
+        throw new IllegalArgumentException("task.callUuid and task.toolName are both empty");
     }
 
-    public static void approveByCallUuid(AgentSession session, String callUuid) {
-        submitByCallUuid(session, callUuid, HITLDecision.approve());
+    /**
+     * 快捷批准
+     */
+    public static void approve(AgentSession session, HITLTask task) {
+        submit(session, task, HITLDecision.approve());
     }
 
-    public static void approveByCallUuid(AgentSession session, String callUuid, boolean alwaysAllow) {
-        submitByCallUuid(session, callUuid, HITLDecision.approve(alwaysAllow));
+    /**
+     * 快捷批准（带 alwaysAllow）
+     */
+    public static void approve(AgentSession session, HITLTask task, boolean alwaysAllow) {
+        submit(session, task, HITLDecision.approve(alwaysAllow));
     }
 
-    public static void approveByCallUuid(AgentSession session, String callUuid, String comment) {
-        submitByCallUuid(session, callUuid, HITLDecision.approve().comment(comment));
+    /**
+     * 快捷批准（带备注）
+     */
+    public static void approve(AgentSession session, HITLTask task, String comment) {
+        submit(session, task, HITLDecision.approve().comment(comment));
     }
 
-    public static void rejectByCallUuid(AgentSession session, String callUuid) {
-        submitByCallUuid(session, callUuid, HITLDecision.reject(null));
+    /**
+     * 快捷拒绝
+     */
+    public static void reject(AgentSession session, HITLTask task) {
+        submit(session, task, HITLDecision.reject(null));
     }
 
-    public static void rejectByCallUuid(AgentSession session, String callUuid, String comment) {
-        submitByCallUuid(session, callUuid, HITLDecision.reject(comment));
+    /**
+     * 快捷拒绝（带理由）
+     */
+    public static void reject(AgentSession session, HITLTask task, String comment) {
+        submit(session, task, HITLDecision.reject(comment));
     }
 
-    public static void skipByCallUuid(AgentSession session, String callUuid) {
-        submitByCallUuid(session, callUuid, HITLDecision.skip(null));
+    /**
+     * 快捷跳过
+     */
+    public static void skip(AgentSession session, HITLTask task) {
+        submit(session, task, HITLDecision.skip(null));
     }
 
-    public static void skipByCallUuid(AgentSession session, String callUuid, String comment) {
-        submitByCallUuid(session, callUuid, HITLDecision.skip(comment));
+    /**
+     * 快捷跳过（带原因）
+     */
+    public static void skip(AgentSession session, HITLTask task, String comment) {
+        submit(session, task, HITLDecision.skip(comment));
     }
 
     /**
@@ -162,7 +283,18 @@ public class HITL {
             return;
         }
         for (Map.Entry<String, HITLDecision> e : decisions.entrySet()) {
-            submitByCallUuid(session, e.getKey(), e.getValue());
+            String callUuid = e.getKey();
+            HITLDecision decision = e.getValue();
+            HITLTask task = getPendingTaskByCallUuid(session, callUuid);
+            if (task != null) {
+                submit(session, task, decision);
+            } else {
+                // 宽松：允许直接按 callUuid 写键（任务列表尚未同步等）
+                if (Assert.isEmpty(callUuid)) {
+                    throw new IllegalArgumentException("callUuid is empty");
+                }
+                session.getContext().put(DECISION_PREFIX + callUuid, decision);
+            }
         }
     }
 
@@ -171,11 +303,7 @@ public class HITL {
      */
     public static void approveAll(AgentSession session) {
         for (HITLTask task : getPendingTasks(session)) {
-            if (Assert.isNotEmpty(task.getCallUuid())) {
-                approveByCallUuid(session, task.getCallUuid());
-            } else if (Assert.isNotEmpty(task.getToolName())) {
-                approve(session, task.getToolName());
-            }
+            approve(session, task);
         }
     }
 
@@ -184,99 +312,90 @@ public class HITL {
      */
     public static void rejectAll(AgentSession session, String comment) {
         for (HITLTask task : getPendingTasks(session)) {
-            if (Assert.isNotEmpty(task.getCallUuid())) {
-                rejectByCallUuid(session, task.getCallUuid(), comment);
-            } else if (Assert.isNotEmpty(task.getToolName())) {
-                reject(session, task.getToolName(), comment);
-            }
+            reject(session, task, comment);
         }
     }
 
-    // ---------- 按 toolName 决策（兼容旧 API；批内同名唯一时可用） ----------
+    // ---------- 兼容：按 toolName 决策 ----------
 
     /**
-     * 提交人工决策
+     * 按 toolName 提交决策（批内该名须唯一）
      *
-     * @param session  Agent 会话
-     * @param toolName 工具名称（批内该名须唯一；多实例请用 callUuid API）
-     * @param decision 决策实体（包含同意、拒绝理由或修正参数）
+     * @deprecated 4.0.4 使用 {@link #getPendingTaskByToolName} + {@link #submit(AgentSession, HITLTask, HITLDecision)}
+     *             或直接 {@link #submit(AgentSession, HITLTask, HITLDecision)}
      */
+    @Deprecated
     public static void submit(AgentSession session, String toolName, HITLDecision decision) {
         if (Assert.isEmpty(toolName)) {
             throw new IllegalArgumentException("toolName is empty");
         }
-        
-        List<HITLTask> tasks = getPendingTasks(session);
-        if (!tasks.isEmpty()) {
-            HITLTask unique = null;
-            int count = 0;
-            for (HITLTask t : tasks) {
-                if (toolName.equals(t.getToolName())) {
-                    count++;
-                    unique = t;
-                }
-            }
-            if (count > 1) {
-                throw new IllegalStateException(
-                        "Multiple pending HITL tasks share toolName='" + toolName
-                                + "'; use submitByCallUuid(callUuid, decision) instead");
-            }
-            if (count == 1 && Assert.isNotEmpty(unique.getCallUuid())) {
-                // 主写 callUuid，并双写 toolName
-                session.getContext().put(DECISION_PREFIX + unique.getCallUuid(), decision);
+        List<HITLTask> pending = getPendingTasks(session);
+        if (!pending.isEmpty()) {
+            HITLTask task = getPendingTaskByToolName(session, toolName);
+            if (task != null) {
+                submit(session, task, decision);
+                return;
             }
         }
-
+        // 无 pending 时仍写 toolName 键（兼容旧调用时机）
+        if (decision == null) {
+            throw new IllegalArgumentException("decision is null");
+        }
         session.getContext().put(DECISION_PREFIX + toolName, decision);
     }
 
     /**
-     * 快捷批准工具执行
+     * @deprecated 4.0.4 使用 {@link #approve(AgentSession, HITLTask)}
      */
+    @Deprecated
     public static void approve(AgentSession session, String toolName) {
         submit(session, toolName, HITLDecision.approve());
     }
 
     /**
-     * 快捷批准工具执行（带 alwaysAllow 标志）
-     *
-     * @param alwaysAllow true 表示后续同类操作自动放行，不再弹确认
+     * @deprecated 4.0.4 使用 {@link #approve(AgentSession, HITLTask, boolean)}
      */
+    @Deprecated
     public static void approve(AgentSession session, String toolName, boolean alwaysAllow) {
         submit(session, toolName, HITLDecision.approve(alwaysAllow));
     }
 
     /**
-     * 快捷批准工具执行
+     * @deprecated 4.0.4 使用 {@link #approve(AgentSession, HITLTask, String)}
      */
+    @Deprecated
     public static void approve(AgentSession session, String toolName, String comment) {
         submit(session, toolName, HITLDecision.approve().comment(comment));
     }
 
     /**
-     * 快捷拒绝工具执行（使用默认拒绝意见）
+     * @deprecated 4.0.4 使用 {@link #reject(AgentSession, HITLTask)}
      */
+    @Deprecated
     public static void reject(AgentSession session, String toolName) {
         submit(session, toolName, HITLDecision.reject(null));
     }
 
     /**
-     * 快捷拒绝工具执行（带具体意见）
+     * @deprecated 4.0.4 使用 {@link #reject(AgentSession, HITLTask, String)}
      */
+    @Deprecated
     public static void reject(AgentSession session, String toolName, String comment) {
         submit(session, toolName, HITLDecision.reject(comment));
     }
 
     /**
-     * 快捷跳过工具执行（使用默认拒绝意见）
+     * @deprecated 4.0.4 使用 {@link #skip(AgentSession, HITLTask)}
      */
+    @Deprecated
     public static void skip(AgentSession session, String toolName) {
         submit(session, toolName, HITLDecision.skip(null));
     }
 
     /**
-     * 快捷跳过工具执行（带具体意见）
+     * @deprecated 4.0.4 使用 {@link #skip(AgentSession, HITLTask, String)}
      */
+    @Deprecated
     public static void skip(AgentSession session, String toolName, String comment) {
         submit(session, toolName, HITLDecision.skip(comment));
     }
@@ -329,15 +448,6 @@ public class HITL {
     }
 
     // ---------- internal ----------
-
-    private static HITLTask findPendingByCallUuid(AgentSession session, String callUuid) {
-        for (HITLTask t : getPendingTasks(session)) {
-            if (callUuid.equals(t.getCallUuid())) {
-                return t;
-            }
-        }
-        return null;
-    }
 
     private static int countPendingByToolName(AgentSession session, String toolName) {
         int n = 0;

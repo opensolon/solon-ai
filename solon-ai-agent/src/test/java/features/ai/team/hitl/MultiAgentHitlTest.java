@@ -104,7 +104,7 @@ public class MultiAgentHitlTest {
                 .comment("主管审批：金额过大，先转 1000 元测试")
                 .modifiedArgs(newArgs);
 
-        HITL.submit(session, task.getToolName(), decision);
+        HITL.submit(session, task, decision);
 
         // --- 第三步：恢复执行 ---
         System.out.println(">>> 任务恢复...");

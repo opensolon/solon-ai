@@ -53,7 +53,7 @@ public class HITLIndustrialTest {
 
         System.out.println(">>> 人工介入：拒绝该操作并给出理由");
         String rejectMsg = "抱歉，由于风险控制，此操作已被管理员拒绝。";
-        HITL.reject(session, pendingTask.getToolName(), rejectMsg);
+        HITL.reject(session, pendingTask, rejectMsg);
 
         // 3. 恢复执行
         System.out.println(">>> 第二次调用：恢复执行（验证拒绝逻辑）");
@@ -103,7 +103,7 @@ public class HITLIndustrialTest {
 
         System.out.println(">>> 人工介入：跳过该转账，并告知理由");
         String skipMsg = "财务系统正在维护，暂时跳过该笔转账，请先告知用户稍后再试。";
-        HITL.skip(session, pendingTask.getToolName(), skipMsg);
+        HITL.skip(session, pendingTask, skipMsg);
 
         // 3. 恢复执行（验证 Agent 接收到 Observation 后继续思考）
         System.out.println(">>> 第二次调用：恢复执行（验证跳过逻辑）");
@@ -157,7 +157,7 @@ public class HITLIndustrialTest {
                 .comment("同意转账，但修正了金额")
                 .modifiedArgs(Utils.asMap("to", "张三", "amount", 800.0));
 
-        HITL.submit(session, pendingTask.getToolName(), decision);
+        HITL.submit(session, pendingTask, decision);
 
         // 3. 恢复执行
         System.out.println(">>> 第二次调用：恢复执行");
@@ -207,7 +207,7 @@ public class HITLIndustrialTest {
                 .comment("同意转账，但修正了金额")
                 .modifiedArgs(Utils.asMap("to", "张三", "amount", 800.0));
 
-        HITL.submit(session, pendingTask.getToolName(), decision);
+        HITL.submit(session, pendingTask, decision);
 
         // 3. 恢复执行（空 prompt = 从挂起点 resume，勿再传业务 prompt 以免 reset 掉 lastReason）
         System.out.println(">>> 第二次调用：恢复执行");
