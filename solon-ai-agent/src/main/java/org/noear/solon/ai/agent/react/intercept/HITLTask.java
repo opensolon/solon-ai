@@ -18,6 +18,8 @@ package org.noear.solon.ai.agent.react.intercept;
 import org.noear.solon.lang.Preview;
 
 import java.io.Serializable;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -42,9 +44,13 @@ public class HITLTask implements Serializable {
 
     public HITLTask(String toolName, Map<String, Object> args, String comment) {
         this.toolName = toolName;
-        this.args = args;
+        // 参数快照：浅拷贝后只读，避免与 toolExchanger.args 或调用方 Map 共享可变状态
+        if (args == null || args.isEmpty()) {
+            this.args = Collections.emptyMap();
+        } else {
+            this.args = Collections.unmodifiableMap(new LinkedHashMap<>(args));
+        }
         this.comment = comment;
-
     }
 
     /**

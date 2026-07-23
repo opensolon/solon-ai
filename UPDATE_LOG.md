@@ -23,10 +23,11 @@
 * 添加 solon-ai-agent RunStartChunk, RunEndChunk, ReasonStartChunk, ReasonEndChunk 事件块
 * 添加 solon-ai-agent ActionChunk, ObservationChunk, ToolExchanger callId 属性
 * 添加 solon-ai-agent 新流块 ToolStartChunk、ToolEndChunk、TeamStartChunk、TeamEndChunk
+* 添加 solon-ai-agent 新流块 HITLPendingChunk、HITLDecidedChunk
 * 添加 solon-ai-harness 新的工具权限体系
 * 添加 solon-ai-harness ToolName 类，替代 ToolPermission（后者标为弃用）
 * 添加 solon-ai-harness AgentDefinition 链式构造方法
-* 添加 solon-ai-harness TaskWrapChuck 类，提高子代理调用的透明度
+* 添加 solon-ai-harness TaskWrapChuck 类，包装子代理的流块，提高子代理调用的透明度
 * 优化 solon-ai-core AbstractChatDialect 方言适配
 * 优化 solon-ai-agent TeamAgent 相关实现代码
 * 优化 solon-ai-talent-cli bash 脚本处理

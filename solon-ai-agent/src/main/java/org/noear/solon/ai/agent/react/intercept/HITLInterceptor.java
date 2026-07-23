@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.react.intercept;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.react.AbsReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.task.ToolExchanger;
@@ -23,6 +24,9 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.FluxSink;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,8 +37,14 @@ import java.util.function.BiConsumer;
  *
  * <p>该拦截器通过 ReAct 协议的生命周期钩子实现流程管控：</p>
  * <ul>
- * <li><b>onAction 阶段</b>：判定拦截逻辑。若无决策则抛出中断异常挂起任务；若已有决策则执行修正、跳过或拒绝。</li>
+ * <li><b>onAction 阶段</b>：判定拦截逻辑。若无决策则挂起任务；若已有决策则执行修正、跳过或拒绝。</li>
  * <li><b>onObservation 阶段</b>：增强反馈逻辑。在工具执行成功后，将人工备注（Comment）注入观测结果，修正 AI 的下一轮认知。</li>
+ * </ul>
+ *
+ * <p>流式输出时会推送 HITL 审查块，便于前端按类型渲染：</p>
+ * <ul>
+ * <li>{@link HITLPendingChunk} —— 首次拦截挂起，携带 {@link HITLTask}，用于展示审批卡片</li>
+ * <li>{@link HITLDecidedChunk} —— 决策生效，携带 {@link HITLDecision}，用于关闭/更新审批卡片</li>
  * </ul>
  *
  * @author noear
@@ -42,6 +52,7 @@ import java.util.function.BiConsumer;
  */
 @Preview("3.9.1")
 public class HITLInterceptor extends AbsReActInterceptor {
+    private static final Logger log = LoggerFactory.getLogger(HITLInterceptor.class);
 
     private final Map<String, HITLStrategy> strategyMap = new ConcurrentHashMap<>();
     private volatile BiConsumer<String, Map<String, Object>> approvedCallback;
@@ -81,10 +92,14 @@ public class HITLInterceptor extends AbsReActInterceptor {
 
         // 1. 阶段：暂无决策 —— 挂起任务
         if (decision == null) {
-            trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(toolExchanger.getToolName(), new LinkedHashMap<>(toolExchanger.getArgs()), comment));
+            // HITLTask 构造内会做参数浅拷贝快照，与 toolExchanger.args 解耦
+            HITLTask task = new HITLTask(toolExchanger.getToolName(), toolExchanger.getArgs(), comment);
+            trace.getContext().put(HITL.LAST_INTERVENED, task);
             trace.getSession().pending(true, comment);
             trace.setFinalAnswer(comment);
 
+            // ⭐ 推送挂起审查块，便于前端渲染审批卡片
+            pushHitlChunk(trace, new HITLPendingChunk(trace, toolExchanger.getCallId(), task));
             return;
         }
 
@@ -114,6 +129,13 @@ public class HITLInterceptor extends AbsReActInterceptor {
             trace.setFinalAnswer(msg);
             trace.setRoute(Agent.ID_END);
         }
+
+        // ⭐ 推送决策生效块，便于前端展示审批结果
+        pushHitlChunk(trace, new HITLDecidedChunk(trace,
+                toolExchanger.getCallId(),
+                toolExchanger.getToolName(),
+                toolExchanger.getArgs(),
+                decision));
     }
 
     @Override
@@ -148,6 +170,23 @@ public class HITLInterceptor extends AbsReActInterceptor {
     public HITLInterceptor onApproved(BiConsumer<String, Map<String, Object>> callback) {
         this.approvedCallback = callback;
         return this;
+    }
+
+    /**
+     * 推送 HITL 审查块到流式输出（与 {@link ContextCompressionInterceptor} 的 ContextSizeChunk 对齐）
+     */
+    private void pushHitlChunk(ReActTrace trace, AgentChunk chunk) {
+        try {
+            FluxSink<AgentChunk> sink = trace.getOptions().getStreamSink();
+            if (sink != null && !sink.isCancelled()) {
+                sink.next(chunk);
+            }
+        } catch (Exception e) {
+            if (log.isDebugEnabled()) {
+                log.debug("ReActAgent [{}] failed to push HITL chunk: {}",
+                        trace.getAgentName(), e.getMessage());
+            }
+        }
     }
 
     public static class HITLSensitiveStrategy implements HITLStrategy {
