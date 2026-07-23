@@ -84,7 +84,7 @@ public class HITLIndustrialTest {
                 .style(ReActStyle.STRUCTURED_TEXT)
                 .role("银行专员（使用工具给账号转钱）")
                 .instruction("不要做多余的确认")
-                .defaultToolAdd(new features.ai.react.hitl.HITLIndustrialTest.BankTools())
+                .defaultToolAdd(new BankTools())
                 .defaultInterceptorAdd(hitlInterceptor)
                 .build();
 

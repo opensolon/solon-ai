@@ -197,7 +197,7 @@ public class HITLBatchUnitTest {
     public void deprecatedThreeArgConstructorStillWorks() {
         HITLTask task = new HITLTask("a1","transfer", mapOf("a", 1), "need");
         Assertions.assertEquals("transfer", task.getToolName());
-        Assertions.assertNull(task.getCallUuid());
+        Assertions.assertNotNull(task.getCallUuid());
         Assertions.assertEquals("need", task.getComment());
     }
 
