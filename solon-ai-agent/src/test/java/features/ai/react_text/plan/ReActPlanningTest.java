@@ -116,11 +116,11 @@ public class ReActPlanningTest {
         ReActResponse resp = agent.prompt(question).session(session).call();
         ReActTrace trace = resp.getTrace();
 
-        System.out.println("订单流回复: " + resp.getContent());
+        System.out.println("订单流回复: " + resp.getMessage().getContent());
 
         // 核心断言：逻辑分支任务应触发计划
         Assertions.assertTrue(trace.hasPlans(), "涉及多步核对和逻辑分支的任务应生成计划");
-        Assertions.assertTrue(resp.getContent().contains("成功"), "执行结果应反馈成功");
+        Assertions.assertTrue(resp.getMessage().getContent().contains("成功"), "执行结果应反馈成功");
     }
 
     // --- 模拟工具类 ---

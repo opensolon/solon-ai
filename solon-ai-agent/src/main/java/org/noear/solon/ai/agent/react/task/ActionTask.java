@@ -257,10 +257,7 @@ public class ActionTask {
 
     /**
      * 解析并执行文本模式下的 Action 指令
-     */
-    /**
-     * 解析并执行文本模式下的 Action 指令
-     * 核心逻辑优化：从“全执行后拼接”改为“逐个执行并即时回填与反馈”
+     * <p>核心逻辑：从"全执行后拼接"改为"逐个执行并即时回填与反馈"</p>
      */
     private void processTextModeAction(AssistantMessage lastReason, ReActTrace trace, TeamTrace parentTeamTrace) throws Throwable {
         String lastContent = lastReason.getResultContent();
@@ -272,7 +269,7 @@ public class ActionTask {
             LOG.debug("Processing text mode action for agent [{}].", config.getName());
         }
 
-        // key = callId（独立 uuid），禁止用 toolName 作 map key，否则同名多 Action 会被覆盖
+        // key = callId（toolName + 解析序位，同文本可复现）；禁止仅用 toolName，否则同名多 Action 会被覆盖
         Map<String, ToolExchanger> toolExchangerMap = new LinkedHashMap<>();
         List<ChatMessage> toolResults = new ArrayList<>();
         int actionLabelIndex = lastContent.indexOf("Action:");
@@ -328,7 +325,18 @@ public class ActionTask {
         }
 
         //----------
-        //todo: 如果 toolExchangerMap 为空，要不要直接返回？
+        if (toolExchangerMap.isEmpty()) {
+            // 模型声明了 Action 但未解析成功，或无 Action 声明
+            if (actionLabelIndex >= 0) {
+                toolResults.add(ChatMessage.ofUser(
+                        "Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}"));
+            }
+            if (toolResults.size() > 0) {
+                trace.getWorkingMemory().addMessage(lastReason);
+                trace.getWorkingMemory().addMessage(toolResults);
+            }
+            return;
+        }
 
         for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
             if (entity.target.isEnabled()) {
@@ -349,12 +357,6 @@ public class ActionTask {
             if (result == null) {
                 return;
             }
-        }
-
-        // 容错处理：如果声明了 Action 但没解析成功，或模型说话不规整 (优化点 3)
-        if (!foundAny && actionLabelIndex >= 0) {
-            ChatMessage chatMessage = ChatMessage.ofUser("Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}");
-            toolResults.add(chatMessage);
         }
 
         if (toolResults.size() > 0) {
