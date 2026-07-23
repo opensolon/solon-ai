@@ -28,8 +28,8 @@ import java.util.Map;
  * @since 4.0.4
  */
 @Preview("4.0.4")
-public class ToolStartChunk extends AbsActionChunk {
-    public ToolStartChunk(ReActTrace trace, String callId, String toolName, Map<String, Object> args) {
+public class ToolCallStartChunk extends AbsActionChunk {
+    public ToolCallStartChunk(ReActTrace trace, String callId, String toolName, Map<String, Object> args) {
         super(trace, callId, toolName, args, ChatMessage.ofAssistant(""));
     }
 }

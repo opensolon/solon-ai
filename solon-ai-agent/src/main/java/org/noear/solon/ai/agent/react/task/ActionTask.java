@@ -97,17 +97,18 @@ public class ActionTask {
         }
     }
 
-    private ToolResult doAction(ReActTrace trace, String callId, String toolName, Map<String, Object> args, List<ChatMessage> toolResults, ToolCall call) {
+    private ToolResult doAction(ReActTrace trace, ToolCall call, ToolExchanger exchanger, List<ChatMessage> toolResults) {
         if (LOG.isDebugEnabled()) {
-            LOG.debug("Action for agent [{}], toolName:{}, args:{}", config.getName(), toolName, args);
+            LOG.debug("Action for agent [{}], toolName:{}, args:{}", config.getName(), exchanger.getToolName(), exchanger.getArgs());
         }
-
-        ToolExchanger toolExchanger = new ToolExchanger(callId, toolName, args);
 
         // 1. 触发前置生命周期
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             if (item.target.isEnabled()) {
-                item.target.onAction(trace, toolExchanger);
+                item.target.onToolCallStart(trace, exchanger);
+
+                //@deprecated 4.0.4
+                item.target.onAction(trace, exchanger);
             }
         }
 
@@ -118,8 +119,8 @@ public class ActionTask {
 
         // 3. 推送流式动作片
         if (trace.hasStreamSink()) {
-            trace.pushAgentChunk(new ActionChunk(trace, callId, toolName, args));
-            trace.pushAgentChunk(new ToolStartChunk(trace, callId, toolName, args));
+            trace.pushAgentChunk(new ToolCallStartChunk(trace, exchanger.getCallId(), exchanger.getToolName(), exchanger.getArgs()));
+            trace.pushAgentChunk(new ActionChunk(trace, exchanger.getCallId(), exchanger.getToolName(), exchanger.getArgs()));
         }
 
         long startMs = System.currentTimeMillis();
@@ -128,18 +129,18 @@ public class ActionTask {
 
         try {
             // 4. 执行工具调用
-            if (Assert.isEmpty(toolExchanger.getResult())) {
-                result = executeTool(trace, toolName, args);
+            if (Assert.isEmpty(exchanger.getResult())) {
+                result = executeTool(trace, exchanger.getToolName(), exchanger.getArgs());
             } else {
-                result = ToolResult.success(toolExchanger.getResult());
+                result = ToolResult.success(exchanger.getResult());
             }
 
             if (result != null && !trace.getSession().isPending() && !Agent.ID_END.equals(trace.getRoute())) {
-                toolExchanger.setResult(result.getContent());
+                exchanger.setResult(result.getContent());
             }
 
             // 最终返回当前轮次处理后的最新观测值
-            return toolExchanger.getResult() != null ? ToolResult.success(toolExchanger.getResult()) : null;
+            return exchanger.getResult() != null ? ToolResult.success(exchanger.getResult()) : null;
 
         } catch (Throwable e) {
             thrownError = e;
@@ -160,16 +161,16 @@ public class ActionTask {
                             false
                     );
                 }
-            } else if (toolExchanger.getResult() != null) {
+            } else if (exchanger.getResult() != null) {
                 if (call == null) {
-                    observationMessage = ChatMessage.ofUser("Observation: " + toolExchanger.getResult());
+                    observationMessage = ChatMessage.ofUser("Observation: " + exchanger.getResult());
                 } else {
-                    observationMessage = ChatMessage.ofTool(ToolResult.success(toolExchanger.getResult()), call.getName(), call.getId(), false);
+                    observationMessage = ChatMessage.ofTool(ToolResult.success(exchanger.getResult()), call.getName(), call.getId(), false);
                 }
             }
 
             // 无论正常结束、挂起退出、还是中途抛出 critical error，100% 走统一清理与下发逻辑
-            handleSingleObservation(trace, toolExchanger, observationMessage, durationMs, thrownError, toolResults);
+            handleSingleObservation(trace, exchanger, observationMessage, durationMs, thrownError, toolResults);
         }
     }
 
@@ -177,14 +178,28 @@ public class ActionTask {
      * 处理标准 ToolCall 协议调用
      */
     private void processNativeToolCall(AssistantMessage lastReason, ReActTrace trace, TeamTrace parentTeamTrace) throws Throwable {
-        List<ChatMessage> toolResults = new ArrayList<>();
+        Map<ToolCall, ToolExchanger> toolExchangerMap = new LinkedHashMap<>();
 
         for (ToolCall call : lastReason.getToolCalls()) {
             Map<String, Object> args = (call.getArguments() == null) ? new HashMap<>() : call.getArguments();
+            ToolExchanger exchanger = new ToolExchanger(call.getUuid(), call.getName(), args);
+            toolExchangerMap.put(call, exchanger);
+        }
 
-            // 触发 Action 生命周期拦截
-            String callId = call.getUuid();
-            ToolResult result = doAction(trace, callId, call.getName(), args, toolResults, call);
+        for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
+            if (entity.target.isEnabled()) {
+                entity.target.onActionStart(trace, toolExchangerMap.values());
+            }
+        }
+
+        if (trace.getSession().isPending() || Agent.ID_END.equals(trace.getRoute())) {
+            return;
+        }
+
+        List<ChatMessage> toolResults = new ArrayList<>();
+
+        for (Map.Entry<ToolCall, ToolExchanger> entry : toolExchangerMap.entrySet()) {
+            ToolResult result = doAction(trace, entry.getKey(), entry.getValue(), toolResults);
             if (result == null) {
                 return;
             }
@@ -214,6 +229,7 @@ public class ActionTask {
             LOG.debug("Processing text mode action for agent [{}].", config.getName());
         }
 
+        Map<String, ToolExchanger> toolExchangerMap = new LinkedHashMap<>();
         List<ChatMessage> toolResults = new ArrayList<>();
         int actionLabelIndex = lastContent.indexOf("Action:");
         boolean foundAny = false;
@@ -241,10 +257,9 @@ public class ActionTask {
                         ONode argsNode = actionNode.get("arguments");
                         Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : new HashMap<>();
 
-                        ToolResult result = doAction(trace, callId, toolName, args, toolResults, null);
-                        if (result == null) {
-                            return;
-                        }
+                        ToolExchanger exchanger = new ToolExchanger(callId, toolName, args);
+                        toolExchangerMap.put(callId, exchanger);
+
                     } catch (Throwable e) {
                         // 解析异常回传 (优化点 2)
                         ChatMessage observationMessage = ChatMessage.ofUser("Observation: Error parsing Action JSON: " + e.getMessage());
@@ -261,11 +276,28 @@ public class ActionTask {
                     String callId = Utils.uuid();
                     Map<String, Object> args = new HashMap<>();
 
-                    ToolResult result = doAction(trace, callId, toolName, args, toolResults, null);
-                    if (result == null) {
-                        return;
-                    }
+                    ToolExchanger exchanger = new ToolExchanger(callId, toolName, args);
+                    toolExchangerMap.put(callId, exchanger);
                 }
+            }
+        }
+
+        //----------
+
+        for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
+            if (entity.target.isEnabled()) {
+                entity.target.onActionStart(trace, toolExchangerMap.values());
+            }
+        }
+
+        if (trace.getSession().isPending() || Agent.ID_END.equals(trace.getRoute())) {
+            return;
+        }
+
+        for(ToolExchanger exchanger : toolExchangerMap.values()){
+            ToolResult result = doAction(trace, null, exchanger, toolResults);
+            if (result == null) {
+                return;
             }
         }
 
@@ -301,14 +333,19 @@ public class ActionTask {
 
         // 1. 流式客户端通知闭环
         if (trace.hasStreamSink()) {
+            trace.pushAgentChunk(new ToolCallEndChunk(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
+
+            //@deprecated 4.0.4
             trace.pushAgentChunk(new ObservationChunk(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
-            trace.pushAgentChunk(new ToolEndChunk(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
         }
 
         // 2. 拦截器现场清理闭环
         for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
             if (entity.target.isEnabled()) {
                 try {
+                    entity.target.onToolCallEnd(trace, toolExchanger, observationMessage, error, durationMs);
+
+                    //@deprecated 4.0.4
                     entity.target.onObservation(trace, toolExchanger, observationMessage, error, durationMs);
                 } catch (Throwable e) {
                     LOG.error("Interceptor onObservation execution failed", e);

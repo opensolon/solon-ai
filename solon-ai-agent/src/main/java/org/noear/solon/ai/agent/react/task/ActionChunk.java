@@ -26,7 +26,9 @@ import java.util.Map;
  *
  * @author noear
  * @since 3.9.6
+ * @deprecated 4.0.4 {@link ToolCallStartChunk}
  */
+@Deprecated
 @Preview("3.9.6")
 public class ActionChunk extends AbsActionChunk {
     public ActionChunk(ReActTrace trace, String callId, String toolName, Map<String, Object> args) {

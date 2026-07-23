@@ -69,7 +69,7 @@ public class HITLInterceptor extends AbsReActInterceptor {
     }
 
     @Override
-    public void onAction(ReActTrace trace, ToolExchanger toolExchanger) {
+    public void onToolCallStart(ReActTrace trace, ToolExchanger toolExchanger) {
         HITLStrategy strategy = strategyMap.get(toolExchanger.getToolName());
         if (strategy == null) {
             return;
@@ -137,7 +137,7 @@ public class HITLInterceptor extends AbsReActInterceptor {
     }
 
     @Override
-    public void onObservation(ReActTrace trace, ToolExchanger toolExchanger,
+    public void onToolCallEnd(ReActTrace trace, ToolExchanger toolExchanger,
                               @Nullable ChatMessage observation,
                               @Nullable Throwable error, long durationMs) {
         HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + toolExchanger.getToolName());

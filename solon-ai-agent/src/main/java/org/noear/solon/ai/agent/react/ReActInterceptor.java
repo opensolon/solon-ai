@@ -21,8 +21,12 @@ import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
+
+import java.util.Collection;
+import java.util.List;
 
 /**
  * ReAct 智能体拦截器
@@ -73,10 +77,17 @@ public interface ReActInterceptor extends AgentInterceptor, ChatInterceptor {
     }
 
     /**
+     * @since 4.0.4
+     */
+    default void onActionStart(ReActTrace trace, Collection<ToolExchanger> toolCalls) {
+
+    }
+
+    /**
      * 动作节点：调用功能工具 (Action) 前触发
      * <p>可用于权限控制、参数合法性预检</p>
      */
-    default void onAction(ReActTrace trace, ToolExchanger toolExchanger) {
+    default void onToolCallStart(ReActTrace trace, ToolExchanger toolExchanger) {
     }
 
     /**
@@ -89,15 +100,52 @@ public interface ReActInterceptor extends AgentInterceptor, ChatInterceptor {
      * @param durationMs    工具执行耗时（毫秒）
      * @param error         执行异常（成功时为 null）
      */
-    default void onObservation(ReActTrace trace, ToolExchanger toolExchanger,
+    default void onToolCallEnd(ReActTrace trace, ToolExchanger toolExchanger,
                                @Nullable ChatMessage observation,
                                @Nullable Throwable error,
                                long durationMs) {
     }
 
     /**
+     * @since 4.0.4
+     */
+    default void onActionEnd(ReActTrace trace) {
+
+    }
+
+    /**
      * 智能体生命周期：任务结束（成功或异常中止）时触发
      */
     default void onAgentEnd(ReActTrace trace) {
+    }
+
+    //-------------------
+
+    /**
+     * 动作节点：调用功能工具 (Action) 前触发
+     * <p>可用于权限控制、参数合法性预检</p>
+     *
+     * @deprecated 4.0.4 {@link #onToolCallStart(ReActTrace, ToolExchanger)}
+     */
+    @Deprecated
+    default void onAction(ReActTrace trace, ToolExchanger toolExchanger) {
+    }
+
+    /**
+     * 观察节点：工具执行完成后触发（100% 强闭环，放在 finally 块中）
+     * <p>无论成功、失败、挂起、中断，此方法保证被调用</p>
+     *
+     * @param trace         ReAct 追踪上下文
+     * @param toolExchanger 工具交换器（含 toolName、args、result）
+     * @param observation   观察结果消息（成功时为工具输出，失败时为错误描述；挂起/中断时为空消息）
+     * @param durationMs    工具执行耗时（毫秒）
+     * @param error         执行异常（成功时为 null）
+     * @deprecated 4.0.4 {@link #onToolCallEnd(ReActTrace, ToolExchanger, ChatMessage, Throwable, long)}
+     */
+    @Deprecated
+    default void onObservation(ReActTrace trace, ToolExchanger toolExchanger,
+                               @Nullable ChatMessage observation,
+                               @Nullable Throwable error,
+                               long durationMs) {
     }
 }

@@ -29,11 +29,11 @@ import java.util.Map;
  * @since 4.0.4
  */
 @Preview("4.0.4")
-public class ToolEndChunk extends AbsActionChunk {
+public class ToolCallEndChunk extends AbsActionChunk {
     private final Throwable error;
     private final long durationMs;
 
-    public ToolEndChunk(ReActTrace trace, String callId, String toolName, Map<String, Object> args, @Nullable ChatMessage observation, @Nullable Throwable error, long durationMs) {
+    public ToolCallEndChunk(ReActTrace trace, String callId, String toolName, Map<String, Object> args, @Nullable ChatMessage observation, @Nullable Throwable error, long durationMs) {
         super(trace, callId, toolName, args, observation);
 
         this.error = error;

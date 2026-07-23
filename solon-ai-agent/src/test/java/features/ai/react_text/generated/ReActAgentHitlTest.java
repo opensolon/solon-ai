@@ -43,7 +43,7 @@ public class ReActAgentHitlTest {
         // 1. 定义更简单的业务拦截器
         ReActInterceptor hitlInterceptor = new ReActInterceptor() {
             @Override
-            public void onAction(ReActTrace trace, ToolExchanger toolExchanger) {
+            public void onToolCallStart(ReActTrace trace, ToolExchanger toolExchanger) {
                 // 针对特定工具进行拦截
                 if ("do_refund".equals(toolExchanger.getToolName())) {
                     Boolean approved = trace.getContext().getAs("is_approved");
@@ -138,13 +138,13 @@ public class ReActAgentHitlTest {
             }
 
             @Override
-            public void onAction(ReActTrace trace, ToolExchanger toolExchanger) {
+            public void onToolCallStart(ReActTrace trace, ToolExchanger toolExchanger) {
                 log.append("[onAction:").append(toolExchanger.getToolName()).append("] ");
             }
 
             @Override
-            public void onObservation(ReActTrace trace, ToolExchanger toolExchanger,
-                                     ChatMessage observation, Throwable error, long durationMs) {
+            public void onToolCallEnd(ReActTrace trace, ToolExchanger toolExchanger,
+                                      ChatMessage observation, Throwable error, long durationMs) {
                 log.append("[onObservation] ");
             }
         };
