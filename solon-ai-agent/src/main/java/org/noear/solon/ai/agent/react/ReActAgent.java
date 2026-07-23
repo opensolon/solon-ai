@@ -250,8 +250,8 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             }
         }
 
-        if (trace.getOptions().getStreamSink() != null) {
-            trace.getOptions().getStreamSink().next(new RunStartChunk(trace));
+        if (trace.hasStreamSink()) {
+            trace.pushAgentChunk(new RunStartChunk(trace));
         }
 
         if (trace.getSession().isPending() == false) {
@@ -312,8 +312,8 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         session.updateSnapshot();
 
         if (trace.isAbnormal()) {
-            if (trace.getOptions().getStreamSink() != null) {
-                trace.getOptions().getStreamSink().next(new ReasonChunk(trace, null, assistantMessage));
+            if (trace.hasStreamSink()) {
+                trace.pushAgentChunk(new ReasonChunk(trace, null, assistantMessage));
             }
         }
 
@@ -323,9 +323,8 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
                 item.target.onAgentEnd(trace);
             }
         }
-
-        if (trace.getOptions().getStreamSink() != null) {
-            trace.getOptions().getStreamSink().next(new RunEndChunk(trace, assistantMessage));
+        if (trace.hasStreamSink()) {
+            trace.pushAgentChunk(new RunEndChunk(trace, assistantMessage));
         }
 
         if (LOG.isInfoEnabled()) {

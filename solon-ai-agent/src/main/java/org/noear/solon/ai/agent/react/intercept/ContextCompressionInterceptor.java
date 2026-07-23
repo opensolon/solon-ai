@@ -20,7 +20,6 @@ import com.knuddels.jtokkit.api.Encoding;
 import com.knuddels.jtokkit.api.EncodingRegistry;
 import com.knuddels.jtokkit.api.ModelType;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActOptions;
@@ -42,7 +41,6 @@ import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.publisher.FluxSink;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -1016,18 +1014,11 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                                   boolean compressed,
                                   int beforeMessageCount, int afterMessageCount,
                                   int beforeTokenCount, int afterTokenCount) {
-        try {
-            FluxSink<AgentChunk> sink = trace.getOptions().getStreamSink();
-            if (sink != null && !sink.isCancelled()) {
-                sink.next(new ContextSizeChunk(trace, msgCount, tokenCount, compressed,
-                        beforeMessageCount, afterMessageCount,
-                        beforeTokenCount, afterTokenCount));
-            }
-        } catch (Exception e) {
-            if (log.isDebugEnabled()) {
-                log.debug("ReActAgent [{}] failed to push ContextChunk: {}",
-                        trace.getAgentName(), e.getMessage());
-            }
+
+        if (trace.hasStreamSink()) {
+            trace.pushAgentChunk(new ContextSizeChunk(trace, msgCount, tokenCount, compressed,
+                    beforeMessageCount, afterMessageCount,
+                    beforeTokenCount, afterTokenCount));
         }
     }
 }

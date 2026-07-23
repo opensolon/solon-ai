@@ -117,9 +117,9 @@ public class ActionTask {
         }
 
         // 3. 推送流式动作片
-        if (trace.getOptions().getStreamSink() != null) {
-            trace.getOptions().getStreamSink().next(new ActionChunk(trace, callId, toolName, args));
-            trace.getOptions().getStreamSink().next(new ToolStartChunk(trace, callId, toolName, args));
+        if (trace.hasStreamSink()) {
+            trace.pushAgentChunk(new ActionChunk(trace, callId, toolName, args));
+            trace.pushAgentChunk(new ToolStartChunk(trace, callId, toolName, args));
         }
 
         long startMs = System.currentTimeMillis();
@@ -300,13 +300,9 @@ public class ActionTask {
         }
 
         // 1. 流式客户端通知闭环
-        if (trace.getOptions().getStreamSink() != null) {
-            try {
-                trace.getOptions().getStreamSink().next(new ObservationChunk(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
-                trace.getOptions().getStreamSink().next(new ToolEndChunk(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
-            } catch (Throwable e) {
-                LOG.error("Push ObservationChunk failed", e);
-            }
+        if (trace.hasStreamSink()) {
+            trace.pushAgentChunk(new ObservationChunk(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
+            trace.pushAgentChunk(new ToolEndChunk(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
         }
 
         // 2. 拦截器现场清理闭环

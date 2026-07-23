@@ -17,7 +17,6 @@ package org.noear.solon.ai.agent.react.task;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.exception.LlmNoReturnException;
 import org.noear.solon.ai.agent.react.*;
 import org.noear.solon.ai.chat.ChatRequestDesc;
@@ -33,7 +32,6 @@ import org.noear.solon.lang.Preview;
 import org.noear.solon.net.http.HttpResponseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.publisher.FluxSink;
 
 import java.util.*;
 import java.util.concurrent.TimeoutException;
@@ -203,8 +201,8 @@ public class ReasonTask {
         messages.add(ChatMessage.ofSystem(systemPromptStr));
         messages.addAll(trace.getWorkingMemory().getMessages());
 
-        if (trace.getOptions().getStreamSink() != null) {
-            trace.getOptions().getStreamSink().next(new ReasonStartChunk(trace, systemPromptStr, messages));
+        if (trace.hasStreamSink()) {
+            trace.pushAgentChunk(new ReasonStartChunk(trace, systemPromptStr, messages));
         }
 
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
@@ -237,8 +235,8 @@ public class ReasonTask {
             item.target.onReasonEnd(trace, response, responseMessage, durationMs);
         }
 
-        if (trace.getOptions().getStreamSink() != null) {
-            trace.getOptions().getStreamSink().next(new ReasonEndChunk(trace, response, responseMessage, durationMs));
+        if (trace.hasStreamSink()) {
+            trace.pushAgentChunk(new ReasonEndChunk(trace, response, responseMessage, durationMs));
         }
 
         if(trace.getSession().isPending()){
@@ -309,8 +307,8 @@ public class ReasonTask {
             return;
         }
 
-        if(trace.getOptions().getStreamSink() != null){
-            trace.getOptions().getStreamSink().next(new ThoughtChunk(trace, response, responseMessage, thoughtContent));
+        if (trace.hasStreamSink()) {
+            trace.pushAgentChunk(new ThoughtChunk(trace, response, responseMessage, thoughtContent));
         }
 
         trace.setLastReasonMessage(responseMessage);
@@ -399,20 +397,15 @@ public class ReasonTask {
                     })
                     .callWithRetry(() -> {
                                 final ChatResponse response;
-                                if (trace.getOptions().getStreamSink() != null) {
-                                    final FluxSink<AgentChunk> sink = trace.getOptions().getStreamSink();
-
-                                    if (sink.isCancelled()) {
+                                if (trace.hasStreamSink()) {
+                                    if (trace.isStreamCancelled()) {
                                         return null;
                                     }
 
                                     response = req.stream()
-                                            .takeUntil(r -> sink.isCancelled())
-                                            .doOnNext(resp -> {
-                                                if (!sink.isCancelled()) {
-                                                    sink.next(new ReasonChunk(trace, resp, resp.getMessage()));
-                                                }
-                                            })
+                                            .takeUntil(r -> trace.isStreamCancelled())
+                                            .doOnNext(resp -> trace.pushAgentChunk(
+                                                    new ReasonChunk(trace, resp, resp.getMessage())))
                                             .blockLast();
                                 } else {
                                     response = req.call();

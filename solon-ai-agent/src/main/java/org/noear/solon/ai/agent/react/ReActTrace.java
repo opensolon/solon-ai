@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.team.TeamProtocol;
@@ -301,6 +302,35 @@ public class ReActTrace implements AgentTrace {
 
     public TeamProtocol getProtocol() {
         return protocol;
+    }
+
+    /**
+     * 是否存在流式 sink（业务侧优先用此方法，避免直接触碰 {@link ReActOptions#getStreamSink()}）
+     */
+    public boolean hasStreamSink() {
+        return options != null && options.getStreamSink() != null;
+    }
+
+    /**
+     * 流式订阅是否已取消（无 sink 时视为 false）
+     */
+    public boolean isStreamCancelled() {
+        return hasStreamSink() && options.getStreamSink().isCancelled();
+    }
+
+    /**
+     * 推送流块（统一安全投递：判空 / cancelled / 异常吞掉）
+     */
+    public void pushAgentChunk(AgentChunk chunk) {
+        try {
+            if (hasStreamSink() == false || isStreamCancelled()) {
+                return;
+            }
+
+            options.getStreamSink().next(chunk);
+        } catch (Throwable e) {
+            //乎略...
+        }
     }
 
     /**

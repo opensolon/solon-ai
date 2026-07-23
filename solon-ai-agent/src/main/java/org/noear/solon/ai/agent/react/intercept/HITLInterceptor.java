@@ -16,7 +16,6 @@
 package org.noear.solon.ai.agent.react.intercept;
 
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.react.AbsReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.task.ToolExchanger;
@@ -24,9 +23,6 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import reactor.core.publisher.FluxSink;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -52,8 +48,6 @@ import java.util.function.BiConsumer;
  */
 @Preview("3.9.1")
 public class HITLInterceptor extends AbsReActInterceptor {
-    private static final Logger log = LoggerFactory.getLogger(HITLInterceptor.class);
-
     private final Map<String, HITLStrategy> strategyMap = new ConcurrentHashMap<>();
     private volatile BiConsumer<String, Map<String, Object>> approvedCallback;
 
@@ -99,7 +93,9 @@ public class HITLInterceptor extends AbsReActInterceptor {
             trace.setFinalAnswer(comment);
 
             // ⭐ 推送挂起审查块，便于前端渲染审批卡片
-            pushHitlChunk(trace, new HITLPendingChunk(trace, toolExchanger.getCallId(), task));
+            if (trace.hasStreamSink()) {
+                trace.pushAgentChunk(new HITLPendingChunk(trace, toolExchanger.getCallId(), task));
+            }
             return;
         }
 
@@ -131,11 +127,13 @@ public class HITLInterceptor extends AbsReActInterceptor {
         }
 
         // ⭐ 推送决策生效块，便于前端展示审批结果
-        pushHitlChunk(trace, new HITLDecidedChunk(trace,
-                toolExchanger.getCallId(),
-                toolExchanger.getToolName(),
-                toolExchanger.getArgs(),
-                decision));
+        if (trace.hasStreamSink()) {
+            trace.pushAgentChunk(new HITLDecidedChunk(trace,
+                    toolExchanger.getCallId(),
+                    toolExchanger.getToolName(),
+                    toolExchanger.getArgs(),
+                    decision));
+        }
     }
 
     @Override
@@ -170,23 +168,6 @@ public class HITLInterceptor extends AbsReActInterceptor {
     public HITLInterceptor onApproved(BiConsumer<String, Map<String, Object>> callback) {
         this.approvedCallback = callback;
         return this;
-    }
-
-    /**
-     * 推送 HITL 审查块到流式输出（与 {@link ContextCompressionInterceptor} 的 ContextSizeChunk 对齐）
-     */
-    private void pushHitlChunk(ReActTrace trace, AgentChunk chunk) {
-        try {
-            FluxSink<AgentChunk> sink = trace.getOptions().getStreamSink();
-            if (sink != null && !sink.isCancelled()) {
-                sink.next(chunk);
-            }
-        } catch (Exception e) {
-            if (log.isDebugEnabled()) {
-                log.debug("ReActAgent [{}] failed to push HITL chunk: {}",
-                        trace.getAgentName(), e.getMessage());
-            }
-        }
     }
 
     public static class HITLSensitiveStrategy implements HITLStrategy {
