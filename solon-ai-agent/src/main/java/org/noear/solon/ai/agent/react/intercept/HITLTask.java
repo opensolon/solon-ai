@@ -24,25 +24,37 @@ import java.util.Map;
 
 /**
  * HITL 挂起任务实体
- * <p>承载被拦截瞬间的工具调用上下文快照，供前端或 UI 层渲染审批界面</p>
+ * <p>承载被拦截瞬间的工具调用上下文快照，供前端或 UI 层渲染审批界面。
+ * 批 HITL 场景下以 {@link #callUuid} 区分同一工具的多个调用实例。</p>
  *
  * @author noear
  * @since 3.9.1
  */
 @Preview("3.9.1")
 public class HITLTask implements Serializable {
-    /** 拟调用的工具名称 */
+    /**
+     * 工具调用实例主键（= ToolCall.uuid / ToolExchanger.callId）
+     */
+    private String callUuid;
+    /**
+     * 拟调用的工具名称
+     */
     private String toolName;
-    /** 拟调用的原始参数快照 */
+    /**
+     * 拟调用的原始参数快照
+     */
     private Map<String, Object> args;
-    /** 触发拦截的系统理由/备注 */
+    /**
+     * 触发拦截的系统理由/备注
+     */
     private String comment;
 
     public HITLTask() {
         //用于反序列化
     }
 
-    public HITLTask(String toolName, Map<String, Object> args, String comment) {
+    public HITLTask(String callUuid, String toolName, Map<String, Object> args, String comment) {
+        this.callUuid = callUuid;
         this.toolName = toolName;
         // 参数快照：浅拷贝后只读，避免与 toolExchanger.args 或调用方 Map 共享可变状态
         if (args == null || args.isEmpty()) {
@@ -51,6 +63,13 @@ public class HITLTask implements Serializable {
             this.args = Collections.unmodifiableMap(new LinkedHashMap<>(args));
         }
         this.comment = comment;
+    }
+
+    /**
+     * 获取工具调用实例主键（= ToolCall.uuid）
+     */
+    public String getCallUuid() {
+        return callUuid;
     }
 
     /**
@@ -74,7 +93,8 @@ public class HITLTask implements Serializable {
     @Override
     public String toString() {
         return "HITLTask{" +
-                "toolName='" + toolName + '\'' +
+                "callUuid='" + callUuid + '\'' +
+                ", toolName='" + toolName + '\'' +
                 ", args=" + args +
                 ", comment='" + comment + '\'' +
                 '}';

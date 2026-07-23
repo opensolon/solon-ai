@@ -204,9 +204,9 @@ public class HITLIndustrialTest {
 
         HITL.submit(session, pendingTask.getToolName(), decision);
 
-        // 3. 恢复执行
+        // 3. 恢复执行（空 prompt = 从挂起点 resume，勿再传业务 prompt 以免 reset 掉 lastReason）
         System.out.println(">>> 第二次调用：恢复执行");
-        ReActResponse resp2 = agent.prompt(prompt).session(session).call();
+        ReActResponse resp2 = agent.prompt().session(session).call();
 
         String finalContent = resp2.getContent();
         System.out.println("最终回复: " + finalContent);

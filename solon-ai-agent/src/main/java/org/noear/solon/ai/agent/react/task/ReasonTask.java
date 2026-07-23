@@ -333,20 +333,20 @@ public class ReasonTask {
 
         // 决策基准采用 clearContent，确保不受 <think> 标签内干扰词影响
 
-        // 1. 优先判断任务是否结束（Finish）
-        if (clearContent.contains(config.getFinishMarker())) {
-            trace.setRoute(Agent.ID_END);
-            trace.setFinalAnswer(extractFinalAnswer(clearContent), false);
-            return;
-        }
-
-        // 2. 其次判断文本形式的工具执行意图（Action: { ... }）
+        // 1. 优先 Action：模型偶发同轮输出 Action + Final Answer 时，必须先执行工具（HITL 也依赖进 Action）
         if (clearContent.contains("Action:")) {
             String actionPart = clearContent.substring(clearContent.indexOf("Action:"));
             if (actionPart.length() > 7) {
                 trace.setRoute(ReActAgent.ID_ACTION);
                 return;
             }
+        }
+        
+        // 2. 任务结束（Finish）
+        if (clearContent.contains(config.getFinishMarker())) {
+            trace.setRoute(Agent.ID_END);
+            trace.setFinalAnswer(extractFinalAnswer(clearContent), false);
+            return;
         }
 
         // 3. 兜底逻辑：既无明确工具调用也无完成标识，视为直接回复 Final Answer

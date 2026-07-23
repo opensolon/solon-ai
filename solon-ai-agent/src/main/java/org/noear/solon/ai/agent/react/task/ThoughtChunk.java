@@ -31,7 +31,9 @@ import java.util.List;
  *
  * @author noear
  * @since 3.9.7
+ * @deprecated 4.0.4 {@link ReasonEndChunk}
  */
+@Deprecated
 @Preview("3.9.7")
 public class ThoughtChunk extends AbsAgentChunk {
     private final transient ReActTrace trace;

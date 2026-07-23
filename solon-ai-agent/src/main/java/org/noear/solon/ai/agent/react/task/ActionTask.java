@@ -92,6 +92,20 @@ public class ActionTask {
                 processTextModeAction(lastReason, trace, parentTeamTrace);
             }
         } finally {
+            for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
+                if (entity.target.isEnabled()) {
+                    try {
+                        entity.target.onActionEnd(trace);
+                    } catch (Throwable e) {
+                        LOG.error("Interceptor onActionEnd execution failed", e);
+                    }
+                }
+            }
+
+            if (trace.hasStreamSink()) {
+                trace.pushAgentChunk(new ActionEndChunk(trace));
+            }
+
             //刷新快照
             trace.getSession().updateSnapshot();
         }
@@ -196,6 +210,10 @@ public class ActionTask {
             return;
         }
 
+        if(trace.hasStreamSink()){
+            trace.pushAgentChunk(new ActionStartChunk(trace, toolExchangerMap.values()));
+        }
+
         List<ChatMessage> toolResults = new ArrayList<>();
 
         for (Map.Entry<ToolCall, ToolExchanger> entry : toolExchangerMap.entrySet()) {
@@ -252,13 +270,12 @@ public class ActionTask {
 
                         foundAny = true;
 
-                        String callId = Utils.uuid();
                         String toolName = actionNode.get("name").getString();
                         ONode argsNode = actionNode.get("arguments");
                         Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : new HashMap<>();
 
-                        ToolExchanger exchanger = new ToolExchanger(callId, toolName, args);
-                        toolExchangerMap.put(callId, exchanger);
+                        ToolExchanger exchanger = new ToolExchanger(toolName, toolName, args);
+                        toolExchangerMap.put(toolName, exchanger);
 
                     } catch (Throwable e) {
                         // 解析异常回传 (优化点 2)
@@ -273,11 +290,10 @@ public class ActionTask {
                 String toolName = lastContent.substring(actionLabelIndex + 7).trim();
                 if (trace.getOptions().getTool(toolName) != null || FeedbackTool.TOOL_NAME.equals(toolName)) {
                     foundAny = true;
-                    String callId = Utils.uuid();
                     Map<String, Object> args = new HashMap<>();
 
-                    ToolExchanger exchanger = new ToolExchanger(callId, toolName, args);
-                    toolExchangerMap.put(callId, exchanger);
+                    ToolExchanger exchanger = new ToolExchanger(toolName, toolName, args);
+                    toolExchangerMap.put(toolName, exchanger);
                 }
             }
         }
@@ -294,7 +310,11 @@ public class ActionTask {
             return;
         }
 
-        for(ToolExchanger exchanger : toolExchangerMap.values()){
+        if(trace.hasStreamSink()){
+            trace.pushAgentChunk(new ActionStartChunk(trace, toolExchangerMap.values()));
+        }
+
+        for (ToolExchanger exchanger : toolExchangerMap.values()) {
             ToolResult result = doAction(trace, null, exchanger, toolResults);
             if (result == null) {
                 return;

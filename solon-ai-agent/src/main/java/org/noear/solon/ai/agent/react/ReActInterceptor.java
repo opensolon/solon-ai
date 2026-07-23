@@ -66,17 +66,6 @@ public interface ReActInterceptor extends AgentInterceptor, ChatInterceptor {
     }
 
     /**
-     * 思考节点：Reason 阶段完成后触发
-     * <p>无论是否解析出有效的 thoughtContent，此方法都会被调用</p>
-     *
-     * @param trace            ReAct 追踪上下文
-     * @param thoughtContent   提取后的思考内容（可能为空字符串）
-     * @param assistantMessage 原始 LLM 响应消息（含 toolCalls、content、reasoning 等完整信息）
-     */
-    default void onThought(ReActTrace trace, String thoughtContent, AssistantMessage assistantMessage) {
-    }
-
-    /**
      * @since 4.0.4
      */
     default void onActionStart(ReActTrace trace, Collection<ToolExchanger> toolCalls) {
@@ -120,6 +109,21 @@ public interface ReActInterceptor extends AgentInterceptor, ChatInterceptor {
     }
 
     //-------------------
+
+
+
+    /**
+     * 思考节点：Reason 阶段完成后触发
+     * <p>无论是否解析出有效的 thoughtContent，此方法都会被调用</p>
+     *
+     * @param trace            ReAct 追踪上下文
+     * @param thoughtContent   提取后的思考内容（可能为空字符串）
+     * @param assistantMessage 原始 LLM 响应消息（含 toolCalls、content、reasoning 等完整信息）
+     * @deprecated 4.0.4 {@link #onReasonEnd(ReActTrace, ChatResponse, AssistantMessage, long)}
+     */
+    @Deprecated
+    default void onThought(ReActTrace trace, String thoughtContent, AssistantMessage assistantMessage) {
+    }
 
     /**
      * 动作节点：调用功能工具 (Action) 前触发

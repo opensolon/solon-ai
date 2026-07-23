@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.react.intercept;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.AbsReActInterceptor;
+import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.task.ToolExchanger;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -32,10 +33,6 @@ import java.util.function.BiConsumer;
  * 人工介入拦截器 (Human-in-the-Loop Interceptor)
  *
  * <p>该拦截器通过 ReAct 协议的生命周期钩子实现流程管控：</p>
- * <ul>
- * <li><b>onAction 阶段</b>：判定拦截逻辑。若无决策则挂起任务；若已有决策则执行修正、跳过或拒绝。</li>
- * <li><b>onObservation 阶段</b>：增强反馈逻辑。在工具执行成功后，将人工备注（Comment）注入观测结果，修正 AI 的下一轮认知。</li>
- * </ul>
  *
  * <p>流式输出时会推送 HITL 审查块，便于前端按类型渲染：</p>
  * <ul>
@@ -68,6 +65,97 @@ public class HITLInterceptor extends AbsReActInterceptor {
         return this;
     }
 
+    /**
+     * 恢复执行时：若批挂起任务均已有决策，且仍保留 lastReason，则强制回到 ACTION，
+     * 避免再次 Reason 导致 tool call uuid 漂移、决策无法命中、PENDING_TASKS 无法清理。
+     */
+    @Override
+    public void onAgentStart(ReActTrace trace) {
+        if (trace.getSession() == null || trace.getLastReasonMessage() == null) {
+            return;
+        }
+
+        List<HITLTask> pending = HITL.getPendingTasks(trace.getSession());
+        if (pending.isEmpty()) {
+            return;
+        }
+
+        for (HITLTask t : pending) {
+            if (HITL.getDecision(trace.getSession(), t) == null) {
+                return; // 尚有未决策项，保持默认 Reason 路由
+            }
+        }
+        // 全部已决策：复用挂起前的 tool_calls 进入 Action 应用决策
+        trace.setRoute(ReActAgent.ID_ACTION);
+    }
+    
+    /**
+     * 批级预检：扫全量 tool call。
+     * <ul>
+     * <li>存在未决策的敏感 call → 整批挂起（零执行）</li>
+     * <li>全部已有决策 → 应用改参 / skip / reject</li>
+     * </ul>
+     * <p>ActionTask 在此之后若 session.pending 则不进入任何 doAction。</p>
+     */
+    @Override
+    public void onActionStart(ReActTrace trace, Collection<ToolExchanger> toolCalls) {
+        if (toolCalls == null || toolCalls.isEmpty() || strategyMap.isEmpty()) {
+            return;
+        }
+
+        Map<String, Long> nameCount = new HashMap<>();
+        for (ToolExchanger ex : toolCalls) {
+            if (ex.getToolName() != null) {
+                nameCount.merge(ex.getToolName(), 1L, Long::sum);
+            }
+        }
+
+        // Phase-1: 评估，区分 pending / ready
+        List<HITLTask> pending = new ArrayList<>();
+        List<Object[]> ready = new ArrayList<>(); // [ex, decision]
+        int hitlTargetCount = 0;
+
+        for (ToolExchanger ex : toolCalls) {
+            HITLStrategy strategy = strategyMap.get(ex.getToolName());
+            if (strategy == null) {
+                continue;
+            }
+
+            String comment = strategy.evaluate(trace, ex.getArgs());
+            if (comment == null) {
+                continue;
+            }
+
+            hitlTargetCount++;
+            HITLDecision decision = resolveDecision(trace, ex.getCallId(), ex.getToolName(), nameCount);
+            if (decision == null) {
+                pending.add(new HITLTask(ex.getCallId(), ex.getToolName(), ex.getArgs(), comment));
+            } else {
+                ready.add(new Object[]{ex, decision});
+            }
+        }
+
+        // Phase-2a: 有未决 → 整批挂起，不 apply（避免半批副作用）
+        if (!pending.isEmpty()) {
+            suspendBatch(trace, pending);
+            return;
+        }
+
+        // Phase-2b: 全部有决策 → 清挂起列表后应用
+        // （上一轮 suspend 写入的 PENDING_TASKS 必须在此清掉，否则 getPendingTask 仍非空）
+        if (!ready.isEmpty()) {
+            trace.getContext().remove(HITL.PENDING_TASKS);
+            trace.getContext().remove(HITL.LAST_INTERVENED);
+            for (Object[] pair : ready) {
+                applyDecision(trace, (ToolExchanger) pair[0], (HITLDecision) pair[1], hitlTargetCount);
+            }
+        }
+    }
+
+    /**
+     * 单工具执行前：批逻辑已在 onActionStart。
+     * 保留薄 fallback，兼容未走批 Start 的路径。
+     */
     @Override
     public void onToolCallStart(ReActTrace trace, ToolExchanger toolExchanger) {
         HITLStrategy strategy = strategyMap.get(toolExchanger.getToolName());
@@ -75,74 +163,38 @@ public class HITLInterceptor extends AbsReActInterceptor {
             return;
         }
 
-        // 评估当前环境与参数是否触发拦截（返回 null 表示放行，返回文案表示拦截理由）
+        // 若批挂起列表已存在，说明本轮应在 onActionStart 处理过，此处不再挂起
+        List<HITLTask> batchPending = trace.getContext().getAs(HITL.PENDING_TASKS);
+        if (batchPending != null && !batchPending.isEmpty()) {
+            return;
+        }
+
+        // 已有决策：onActionStart 应已 apply；此处再幂等 apply 一次（防御）
+        HITLDecision decision = resolveDecision(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), null);
+        if (decision != null) {
+            applyDecision(trace, toolExchanger, decision, 1);
+            return;
+        }
+
         String comment = strategy.evaluate(trace, toolExchanger.getArgs());
         if (comment == null) {
             return;
         }
 
-        // 获取会话上下文中的决策实体
-        HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + toolExchanger.getToolName());
-
-        // 1. 阶段：暂无决策 —— 挂起任务
-        if (decision == null) {
-            // HITLTask 构造内会做参数浅拷贝快照，与 toolExchanger.args 解耦
-            HITLTask task = new HITLTask(toolExchanger.getToolName(), toolExchanger.getArgs(), comment);
-            trace.getContext().put(HITL.LAST_INTERVENED, task);
-            trace.getSession().pending(true, comment);
-            trace.setFinalAnswer(comment);
-
-            // ⭐ 推送挂起审查块，便于前端渲染审批卡片
-            if (trace.hasStreamSink()) {
-                trace.pushAgentChunk(new HITLPendingChunk(trace, toolExchanger.getCallId(), task));
-            }
-            return;
-        }
-
-        // 2. 阶段：已有决策 —— 执行决策指令
-
-        // 既然已经到了这一步，说明已经有决策了，立即清理“挂起”标识，防止下一轮推理误判
-        trace.getContext().remove(HITL.LAST_INTERVENED); //挂起可以删了
-        //trace.getContext().remove(HITL.DECISION_PREFIX + toolName); //决策还不能删，要留到 onObservation
-
-        if (decision.isApproved()) {
-            // 情况：批准执行 —— 处理参数修正
-            if (decision.getModifiedArgs() != null) {
-                toolExchanger.getArgs().putAll(decision.getModifiedArgs());
-            }
-            // 情况：批准执行 —— 如果标记了 alwaysAllow，触发回调注入会话级规则
-            if (decision.isAlwaysAllow() && approvedCallback != null) {
-                approvedCallback.accept(toolExchanger.getToolName(), toolExchanger.getArgs());
-            }
-        } else if (decision.isSkipped()) {
-            String msg = decision.getCommentOrDefault("操作跳过：请继续下一步。");
-            toolExchanger.setResult(msg);
-        } else {
-            // 拒绝：直接结束或给 Observation
-            String msg = decision.getCommentOrDefault("操作拒绝：人工审批未通过。");
-
-            // 方案：设为 FinalAnswer 并结束，不执行工具
-            trace.setFinalAnswer(msg);
-            trace.setRoute(Agent.ID_END);
-        }
-
-        // ⭐ 推送决策生效块，便于前端展示审批结果
-        if (trace.hasStreamSink()) {
-            trace.pushAgentChunk(new HITLDecidedChunk(trace,
-                    toolExchanger.getCallId(),
-                    toolExchanger.getToolName(),
-                    toolExchanger.getArgs(),
-                    decision));
-        }
+        // Fallback：单工具挂起（旧路径 / 异常路径）
+        HITLTask task = new HITLTask(toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), comment);
+        List<HITLTask> single = new ArrayList<>(1);
+        single.add(task);
+        suspendBatch(trace, single);
     }
 
     @Override
     public void onToolCallEnd(ReActTrace trace, ToolExchanger toolExchanger,
                               @Nullable ChatMessage observation,
                               @Nullable Throwable error, long durationMs) {
-        HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + toolExchanger.getToolName());
+        HITLDecision decision = resolveDecision(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), null);
 
-        // 尚无决策时可能处于挂起路径：保留 LAST_INTERVENED，供业务层读取 pending task
+        // 尚无决策时可能处于挂起路径：保留 PENDING_TASKS / LAST_INTERVENED
         if (decision == null) {
             return;
         }
@@ -151,13 +203,52 @@ public class HITLInterceptor extends AbsReActInterceptor {
         if (error == null && decision.isApproved()) {
             if (Assert.isNotEmpty(decision.getComment())) {
                 String base = toolExchanger.getResult() == null ? "" : toolExchanger.getResult();
-                toolExchanger.setResult(base + " (Note: " + decision.getComment() + ")");
+                if (!base.contains("(Note: ")) {
+                    toolExchanger.setResult(base + " (Note: " + decision.getComment() + ")");
+                }
             }
         }
 
-        // 仅在已完成决策处理后清理，确保 Session 状态幂等
+        // 清理本 call 的决策键
+        if (Assert.isNotEmpty(toolExchanger.getCallId())) {
+            trace.getContext().remove(HITL.DECISION_PREFIX + toolExchanger.getCallId());
+        }
+        if (Assert.isNotEmpty(toolExchanger.getToolName())) {
+            trace.getContext().remove(HITL.DECISION_PREFIX + toolExchanger.getToolName());
+        }
         trace.getContext().remove(HITL.LAST_INTERVENED);
-        trace.getContext().remove(HITL.DECISION_PREFIX + toolExchanger.getToolName());
+    }
+
+    @Override
+    public void onActionEnd(ReActTrace trace) {
+        // 挂起中：保留 PENDING_TASKS 供业务 getPendingTasks
+        if (trace.getSession() != null && trace.getSession().isPending()) {
+            return;
+        }
+
+        // 正常跑完 / 决策后执行完 / reject→END：清理批挂起与残留决策
+        List<HITLTask> tasks = trace.getContext().getAs(HITL.PENDING_TASKS);
+        if (tasks != null) {
+            for (HITLTask t : tasks) {
+                if (Assert.isNotEmpty(t.getCallUuid())) {
+                    trace.getContext().remove(HITL.DECISION_PREFIX + t.getCallUuid());
+                }
+                if (Assert.isNotEmpty(t.getToolName())) {
+                    trace.getContext().remove(HITL.DECISION_PREFIX + t.getToolName());
+                }
+            }
+        }
+        HITLTask last = trace.getContext().getAs(HITL.LAST_INTERVENED);
+        if (last != null) {
+            if (Assert.isNotEmpty(last.getCallUuid())) {
+                trace.getContext().remove(HITL.DECISION_PREFIX + last.getCallUuid());
+            }
+            if (Assert.isNotEmpty(last.getToolName())) {
+                trace.getContext().remove(HITL.DECISION_PREFIX + last.getToolName());
+            }
+        }
+        trace.getContext().remove(HITL.PENDING_TASKS);
+        trace.getContext().remove(HITL.LAST_INTERVENED);
     }
 
     /**
@@ -168,6 +259,115 @@ public class HITLInterceptor extends AbsReActInterceptor {
     public HITLInterceptor onApproved(BiConsumer<String, Map<String, Object>> callback) {
         this.approvedCallback = callback;
         return this;
+    }
+
+    // ---------- internal ----------
+
+    /** 清理批挂起与决策键（reject END 等不经 onToolCallEnd 的路径） */
+    private void clearAllHitlState(ReActTrace trace) {
+        List<HITLTask> tasks = trace.getContext().getAs(HITL.PENDING_TASKS);
+        if (tasks != null) {
+            for (HITLTask t : tasks) {
+                if (Assert.isNotEmpty(t.getCallUuid())) {
+                    trace.getContext().remove(HITL.DECISION_PREFIX + t.getCallUuid());
+                }
+                if (Assert.isNotEmpty(t.getToolName())) {
+                    trace.getContext().remove(HITL.DECISION_PREFIX + t.getToolName());
+                }
+            }
+        }
+        HITLTask last = trace.getContext().getAs(HITL.LAST_INTERVENED);
+        if (last != null) {
+            if (Assert.isNotEmpty(last.getCallUuid())) {
+                trace.getContext().remove(HITL.DECISION_PREFIX + last.getCallUuid());
+            }
+            if (Assert.isNotEmpty(last.getToolName())) {
+                trace.getContext().remove(HITL.DECISION_PREFIX + last.getToolName());
+            }
+        }
+        trace.getContext().remove(HITL.PENDING_TASKS);
+        trace.getContext().remove(HITL.LAST_INTERVENED);
+    }
+    
+    private void suspendBatch(ReActTrace trace, List<HITLTask> pending) {
+        // 有未决审批时不应保持 END（以 pending 为准）
+        if (Agent.ID_END.equals(trace.getRoute())) {
+            trace.setRoute(ReActAgent.ID_REASON);
+        }
+
+        trace.getContext().put(HITL.PENDING_TASKS, pending);
+        trace.getContext().put(HITL.LAST_INTERVENED, pending.get(0));
+
+        String summary = pending.size() == 1
+                ? pending.get(0).getComment()
+                : ("有 " + pending.size() + " 项操作待人工确认");
+        if (trace.getSession() != null) {
+            trace.getSession().pending(true, summary);
+        }
+        trace.setFinalAnswer(summary);
+
+        if (trace.hasStreamSink()) {
+            for (HITLTask t : pending) {
+                String callId = Assert.isNotEmpty(t.getCallUuid()) ? t.getCallUuid() : null;
+                trace.pushAgentChunk(new HITLPendingChunk(trace, callId, t));
+            }
+        }
+    }
+
+    private HITLDecision resolveDecision(ReActTrace trace, String callUuid, String toolName,
+                                         Map<String, Long> nameCount) {
+        if (Assert.isNotEmpty(callUuid)) {
+            HITLDecision d = trace.getContext().getAs(HITL.DECISION_PREFIX + callUuid);
+            if (d != null) {
+                return d;
+            }
+        }
+        if (Assert.isNotEmpty(toolName)) {
+            // 兼容：toolName 键；批内同名多实例时不读 toolName（避免撞车）
+            if (nameCount != null && nameCount.getOrDefault(toolName, 0L) > 1) {
+                return null;
+            }
+            return trace.getContext().getAs(HITL.DECISION_PREFIX + toolName);
+        }
+        return null;
+    }
+
+    private void applyDecision(ReActTrace trace, ToolExchanger ex, HITLDecision decision, int hitlTargetCount) {
+        // 清理挂起标识（决策已到）
+        trace.getContext().remove(HITL.LAST_INTERVENED);
+        // decision 留到 onToolCallEnd 再删
+
+        if (decision.isApproved()) {
+            if (decision.getModifiedArgs() != null) {
+                ex.getArgs().putAll(decision.getModifiedArgs());
+            }
+            if (decision.isAlwaysAllow() && approvedCallback != null) {
+                approvedCallback.accept(ex.getToolName(), ex.getArgs());
+            }
+        } else if (decision.isSkipped()) {
+            String msg = decision.getCommentOrDefault("操作跳过：请继续下一步。");
+            ex.setResult(msg);
+        } else {
+            // REJECT
+            String msg = decision.getCommentOrDefault("操作拒绝：人工审批未通过。");
+            if (hitlTargetCount <= 1) {
+                // 单敏感工具：兼容旧语义，整 run END（不进 doAction，立即清全部 HITL 状态）
+                trace.setFinalAnswer(msg);
+                trace.setRoute(Agent.ID_END);
+                clearAllHitlState(trace);
+            } else {
+                // 批内多敏感：写拒绝 observation，不整批 END
+                ex.setResult(msg);
+            }
+        }
+
+        if (trace.hasStreamSink()) {
+            trace.pushAgentChunk(new HITLDecidedChunk(trace,
+                    ex.getCallId(),
+                    ex.getToolName(),
+                    ex.getArgs(),
+                    decision));
+        }
     }
 
     public static class HITLSensitiveStrategy implements HITLStrategy {

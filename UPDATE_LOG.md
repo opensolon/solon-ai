@@ -24,13 +24,16 @@
 * 添加 solon-ai-agent ActionChunk, ObservationChunk, ToolExchanger callId 属性
 * 添加 solon-ai-agent 新流块 ToolStartChunk、ToolEndChunk、TeamStartChunk、TeamEndChunk
 * 添加 solon-ai-agent 新流块 HITLPendingChunk、HITLDecidedChunk
-* 添加 solon-ai-agent ReActInterceptor onActionStart, onActionEnd
+* 添加 solon-ai-agent 新流块 ActionStartChunk、ActionEndChunk
+* 添加 solon-ai-agent ReActInterceptor onActionStart, onActionEnd 事件
+* 添加 solon-ai-agent ReActInterceptor onToolCallStart, onToolCallEnd 事件
 * 添加 solon-ai-harness 新的工具权限体系
 * 添加 solon-ai-harness ToolName 类，替代 ToolPermission（后者标为弃用）
 * 添加 solon-ai-harness AgentDefinition 链式构造方法
 * 添加 solon-ai-harness TaskWrapChuck 类，包装子代理的流块，提高子代理调用的透明度
 * 优化 solon-ai-core AbstractChatDialect 方言适配
 * 优化 solon-ai-agent TeamAgent 相关实现代码
+* 优化 solon-ai-agent htil 实现（以持多工具批量）
 * 优化 solon-ai-talent-cli bash 脚本处理
 * 优化 solon-ai-dialect-anthropic 方言适配
 * 优化 solon-ai-dialect-openai Responses 方言适配
@@ -38,7 +41,7 @@
 * 优化 solon-ai-dialect-gemini 方言适配
 * 优化 solon-ai-harness 增加 skills 和 agents 局部（分组）动态刷新能力
 * 调整 solon-ai-agent ToolCallEndChunk 替代 ObservationChunk, ToolCallStartChunk 替代 ActionChunk（后者标为弃用）
-* 调整 solon-ai-agent ReActInterceptor onToolCallEnd 替代 onObservation，onToolCallEnd 替代 onAction（后者标为弃用）
+* 调整 solon-ai-agent ReActInterceptor onToolCallEnd 替代 onObservation，onToolCallStart 替代 onAction（后者标为弃用）
 * 调整 solon-ai-harness 重构 hitl 实现
 * 调整 solon-ai-harness getModelOrMain 标为弃用，由 getModelOrDefInstance 替代
 * 调整 solon-ai-agent ContextCompressionInterceptor 取消 chatModelSupplier 参数（标为弃用）
