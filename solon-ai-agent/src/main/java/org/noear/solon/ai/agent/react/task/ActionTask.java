@@ -92,18 +92,21 @@ public class ActionTask {
                 processTextModeAction(lastReason, trace, parentTeamTrace);
             }
         } finally {
-            for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
-                if (entity.target.isEnabled()) {
-                    try {
-                        entity.target.onActionEnd(trace);
-                    } catch (Throwable e) {
-                        LOG.error("Interceptor onActionEnd execution failed", e);
+            if(trace.getSession().isPending() == false) {
+                // 不挂起时才推 ActionEnd，避免前端误判本轮 Action 已执行完毕
+                for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
+                    if (entity.target.isEnabled()) {
+                        try {
+                            entity.target.onActionEnd(trace);
+                        } catch (Throwable e) {
+                            LOG.error("Interceptor onActionEnd execution failed", e);
+                        }
                     }
                 }
-            }
 
-            if (trace.hasStreamSink()) {
-                trace.pushAgentChunk(new ActionEndChunk(trace));
+                if (trace.hasStreamSink()) {
+                    trace.pushAgentChunk(new ActionEndChunk(trace));
+                }
             }
 
             //刷新快照
@@ -162,29 +165,49 @@ public class ActionTask {
         } finally {
             // ================== 【100% 强物理闭环】 ==================
             long durationMs = System.currentTimeMillis() - startMs;
-            ChatMessage observationMessage = null;
 
-            if (thrownError != null) {
-                if (call == null) {
-                    observationMessage = ChatMessage.ofUser("Observation: Execution critical error: " + thrownError.getMessage());
-                } else {
-                    observationMessage = ChatMessage.ofTool(
-                            ToolResult.error("Execution critical error: " + thrownError.getMessage()),
-                            call.getName(),
-                            call.getId(),
-                            false
-                    );
+            // Fallback 单工具挂起：不进执行、不推假 ToolCallEnd；仅调拦截器清理
+            boolean pendingWithoutResult = thrownError == null
+                    && exchanger.getResult() == null
+                    && trace.getSession() != null
+                    && trace.getSession().isPending();
+
+            if (pendingWithoutResult) {
+                for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
+                    if (entity.target.isEnabled()) {
+                        try {
+                            entity.target.onToolCallEnd(trace, exchanger, null, null, durationMs);
+                            entity.target.onObservation(trace, exchanger, null, null, durationMs);
+                        } catch (Throwable e) {
+                            LOG.error("Interceptor onToolCallEnd execution failed", e);
+                        }
+                    }
                 }
-            } else if (exchanger.getResult() != null) {
-                if (call == null) {
-                    observationMessage = ChatMessage.ofUser("Observation: " + exchanger.getResult());
-                } else {
-                    observationMessage = ChatMessage.ofTool(ToolResult.success(exchanger.getResult()), call.getName(), call.getId(), false);
+            } else {
+                ChatMessage observationMessage = null;
+
+                if (thrownError != null) {
+                    if (call == null) {
+                        observationMessage = ChatMessage.ofUser("Observation: Execution critical error: " + thrownError.getMessage());
+                    } else {
+                        observationMessage = ChatMessage.ofTool(
+                                ToolResult.error("Execution critical error: " + thrownError.getMessage()),
+                                call.getName(),
+                                call.getId(),
+                                false
+                        );
+                    }
+                } else if (exchanger.getResult() != null) {
+                    if (call == null) {
+                        observationMessage = ChatMessage.ofUser("Observation: " + exchanger.getResult());
+                    } else {
+                        observationMessage = ChatMessage.ofTool(ToolResult.success(exchanger.getResult()), call.getName(), call.getId(), false);
+                    }
                 }
+
+                // 无论正常结束还是中途抛出 critical error，走统一清理与下发逻辑
+                handleSingleObservation(trace, exchanger, observationMessage, durationMs, thrownError, toolResults);
             }
-
-            // 无论正常结束、挂起退出、还是中途抛出 critical error，100% 走统一清理与下发逻辑
-            handleSingleObservation(trace, exchanger, observationMessage, durationMs, thrownError, toolResults);
         }
     }
 
@@ -195,7 +218,9 @@ public class ActionTask {
         Map<ToolCall, ToolExchanger> toolExchangerMap = new LinkedHashMap<>();
 
         for (ToolCall call : lastReason.getToolCalls()) {
-            Map<String, Object> args = (call.getArguments() == null) ? new HashMap<>() : call.getArguments();
+            // 拷贝参数，避免 HITL 改参加污染 ToolCall.arguments（会话/审计看到的是模型原始参数）
+            Map<String, Object> args = new HashMap<>(
+                    call.getArguments() == null ? Collections.emptyMap() : call.getArguments());
             ToolExchanger exchanger = new ToolExchanger(call.getUuid(), call.getName(), args);
             toolExchangerMap.put(call, exchanger);
         }
@@ -247,6 +272,7 @@ public class ActionTask {
             LOG.debug("Processing text mode action for agent [{}].", config.getName());
         }
 
+        // key = callId（独立 uuid），禁止用 toolName 作 map key，否则同名多 Action 会被覆盖
         Map<String, ToolExchanger> toolExchangerMap = new LinkedHashMap<>();
         List<ChatMessage> toolResults = new ArrayList<>();
         int actionLabelIndex = lastContent.indexOf("Action:");
@@ -255,7 +281,7 @@ public class ActionTask {
         if (actionLabelIndex >= 0) {
             // 尝试寻找 JSON 起始位置
             int jsonStart = lastContent.indexOf('{', actionLabelIndex + 7);
-
+            int index = 0;
             if (jsonStart >= 0) {
                 // 情况 A：JSON 模式流式解析
                 StringReader sr = new StringReader(lastContent.substring(jsonStart));
@@ -272,10 +298,12 @@ public class ActionTask {
 
                         String toolName = actionNode.get("name").getString();
                         ONode argsNode = actionNode.get("arguments");
-                        Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : new HashMap<>();
+                        Map<String, Object> rawArgs = argsNode.isObject() ? argsNode.toBean(Map.class) : null;
+                        Map<String, Object> args = new HashMap<>(rawArgs == null ? Collections.emptyMap() : rawArgs);
 
-                        ToolExchanger exchanger = new ToolExchanger(toolName, toolName, args);
-                        toolExchangerMap.put(toolName, exchanger);
+                        String callId = toolName + "-" + (index++);
+                        ToolExchanger exchanger = new ToolExchanger(callId, toolName, args);
+                        toolExchangerMap.put(callId, exchanger);
 
                     } catch (Throwable e) {
                         // 解析异常回传 (优化点 2)
@@ -292,13 +320,15 @@ public class ActionTask {
                     foundAny = true;
                     Map<String, Object> args = new HashMap<>();
 
-                    ToolExchanger exchanger = new ToolExchanger(toolName, toolName, args);
-                    toolExchangerMap.put(toolName, exchanger);
+                    String callId = toolName + "-" + (index++);
+                    ToolExchanger exchanger = new ToolExchanger(callId, toolName, args);
+                    toolExchangerMap.put(callId, exchanger);
                 }
             }
         }
 
         //----------
+        //todo: 如果 toolExchangerMap 为空，要不要直接返回？
 
         for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
             if (entity.target.isEnabled()) {
@@ -310,7 +340,7 @@ public class ActionTask {
             return;
         }
 
-        if(trace.hasStreamSink()){
+        if (trace.hasStreamSink()) {
             trace.pushAgentChunk(new ActionStartChunk(trace, toolExchangerMap.values()));
         }
 
@@ -342,24 +372,7 @@ public class ActionTask {
                                          ChatMessage observationMessage, long durationMs,
                                          Throwable error, List<ChatMessage> toolResults) {
 
-        if (observationMessage == null) {
-            if (error == null) {
-                error = new RuntimeException("The tool task has been interrupted or pending.");
-            }
-            observationMessage = ChatMessage.ofAssistant("");
-        } else if (toolResults != null) {
-            toolResults.add(observationMessage);
-        }
-
-        // 1. 流式客户端通知闭环
-        if (trace.hasStreamSink()) {
-            trace.pushAgentChunk(new ToolCallEndChunk(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
-
-            //@deprecated 4.0.4
-            trace.pushAgentChunk(new ObservationChunk(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
-        }
-
-        // 2. 拦截器现场清理闭环
+        // 先走拦截器（HITL 可在 onToolCallEnd 注入批准 Note 到 exchanger.result）
         for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
             if (entity.target.isEnabled()) {
                 try {
@@ -372,6 +385,64 @@ public class ActionTask {
                 }
             }
         }
+
+        // 拦截器可能改写了 result（如批准 Note）：按最终 result 重建 observation，确保进 WM / 流式
+        if (error == null && toolExchanger.getResult() != null) {
+            observationMessage = rebuildObservationIfNeeded(observationMessage, toolExchanger);
+        }
+
+        if (observationMessage == null) {
+            if (error == null) {
+                error = new RuntimeException("The tool task has been interrupted or pending.");
+            }
+            observationMessage = ChatMessage.ofAssistant("");
+        } else if (toolResults != null) {
+            toolResults.add(observationMessage);
+        }
+
+        // 流式客户端通知闭环（使用最终 observation）
+        if (trace.hasStreamSink()) {
+            trace.pushAgentChunk(new ToolCallEndChunk(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
+
+            //@deprecated 4.0.4
+            trace.pushAgentChunk(new ObservationChunk(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
+        }
+    }
+
+    /**
+     * 若 interceptor 改写了 exchanger.result，则按最终内容重建 observation。
+     */
+    private ChatMessage rebuildObservationIfNeeded(ChatMessage observationMessage, ToolExchanger toolExchanger) {
+        String finalContent = toolExchanger.getResult();
+        if (finalContent == null) {
+            return observationMessage;
+        }
+
+        boolean textMode = observationMessage == null
+                || (observationMessage.getContent() != null
+                && observationMessage.getContent().startsWith("Observation: "));
+
+        if (textMode) {
+            String expected = "Observation: " + finalContent;
+            if (observationMessage != null && expected.equals(observationMessage.getContent())) {
+                return observationMessage;
+            }
+            return ChatMessage.ofUser(expected);
+        }
+
+        // native ToolMessage
+        if (observationMessage != null && finalContent.equals(observationMessage.getContent())) {
+            return observationMessage;
+        }
+        String toolCallId = null;
+        if (observationMessage instanceof org.noear.solon.ai.chat.message.ToolMessage) {
+            toolCallId = ((org.noear.solon.ai.chat.message.ToolMessage) observationMessage).getToolCallId();
+        }
+        return ChatMessage.ofTool(
+                ToolResult.success(finalContent),
+                toolExchanger.getToolName(),
+                toolCallId,
+                false);
     }
 
     /**

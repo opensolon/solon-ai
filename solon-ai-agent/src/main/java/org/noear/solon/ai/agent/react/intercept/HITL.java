@@ -69,7 +69,8 @@ public class HITL {
             }
             return Collections.emptyList();
         }
-        return tasks;
+        // 返回只读视图，避免业务 clear/add 污染 session 内列表
+        return Collections.unmodifiableList(tasks);
     }
 
     /**

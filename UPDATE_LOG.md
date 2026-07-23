@@ -33,7 +33,7 @@
 * 添加 solon-ai-harness TaskWrapChuck 类，包装子代理的流块，提高子代理调用的透明度
 * 优化 solon-ai-core AbstractChatDialect 方言适配
 * 优化 solon-ai-agent TeamAgent 相关实现代码
-* 优化 solon-ai-agent htil 实现（以持多工具批量）
+* 优化 solon-ai-agent hitl 实现（以支持多工具批量）
 * 优化 solon-ai-talent-cli bash 脚本处理
 * 优化 solon-ai-dialect-anthropic 方言适配
 * 优化 solon-ai-dialect-openai Responses 方言适配

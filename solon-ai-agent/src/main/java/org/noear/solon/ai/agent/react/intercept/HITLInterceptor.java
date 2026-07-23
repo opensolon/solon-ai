@@ -45,6 +45,9 @@ import java.util.function.BiConsumer;
  */
 @Preview("3.9.1")
 public class HITLInterceptor extends AbsReActInterceptor {
+    /** 已在 onActionStart 应用过决策的 callId 标记前缀，防止 onToolCallStart 二次 apply */
+    private static final String APPLIED_PREFIX = "_hitl_applied_";
+
     private final Map<String, HITLStrategy> strategyMap = new ConcurrentHashMap<>();
     private volatile BiConsumer<String, Map<String, Object>> approvedCallback;
 
@@ -154,7 +157,8 @@ public class HITLInterceptor extends AbsReActInterceptor {
 
     /**
      * 单工具执行前：批逻辑已在 onActionStart。
-     * 保留薄 fallback，兼容未走批 Start 的路径。
+     * 保留薄 fallback，兼容未走批 Start 的路径；
+     * 已在 onActionStart apply 过的 call 严禁二次 apply（否则 hitlTargetCount=1 会打穿批 reject）。
      */
     @Override
     public void onToolCallStart(ReActTrace trace, ToolExchanger toolExchanger) {
@@ -169,9 +173,14 @@ public class HITLInterceptor extends AbsReActInterceptor {
             return;
         }
 
-        // 已有决策：onActionStart 应已 apply；此处再幂等 apply 一次（防御）
+        // 已在批 Start 应用过：禁止二次 apply（避免 reject 被升级为 END / alwaysAllow 双触发 / DecidedChunk 双推）
+        if (isDecisionApplied(trace, toolExchanger.getCallId())) {
+            return;
+        }
+
         HITLDecision decision = resolveDecision(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), null);
         if (decision != null) {
+            // Fallback：仅当未走 onActionStart apply 时（旧路径）才在此应用，按单工具语义
             applyDecision(trace, toolExchanger, decision, 1);
             return;
         }
@@ -209,13 +218,8 @@ public class HITLInterceptor extends AbsReActInterceptor {
             }
         }
 
-        // 清理本 call 的决策键
-        if (Assert.isNotEmpty(toolExchanger.getCallId())) {
-            trace.getContext().remove(HITL.DECISION_PREFIX + toolExchanger.getCallId());
-        }
-        if (Assert.isNotEmpty(toolExchanger.getToolName())) {
-            trace.getContext().remove(HITL.DECISION_PREFIX + toolExchanger.getToolName());
-        }
+        // 清理本 call 的决策键与 applied 标记
+        clearDecisionKeys(trace, toolExchanger.getCallId(), toolExchanger.getToolName());
         trace.getContext().remove(HITL.LAST_INTERVENED);
     }
 
@@ -227,28 +231,7 @@ public class HITLInterceptor extends AbsReActInterceptor {
         }
 
         // 正常跑完 / 决策后执行完 / reject→END：清理批挂起与残留决策
-        List<HITLTask> tasks = trace.getContext().getAs(HITL.PENDING_TASKS);
-        if (tasks != null) {
-            for (HITLTask t : tasks) {
-                if (Assert.isNotEmpty(t.getCallUuid())) {
-                    trace.getContext().remove(HITL.DECISION_PREFIX + t.getCallUuid());
-                }
-                if (Assert.isNotEmpty(t.getToolName())) {
-                    trace.getContext().remove(HITL.DECISION_PREFIX + t.getToolName());
-                }
-            }
-        }
-        HITLTask last = trace.getContext().getAs(HITL.LAST_INTERVENED);
-        if (last != null) {
-            if (Assert.isNotEmpty(last.getCallUuid())) {
-                trace.getContext().remove(HITL.DECISION_PREFIX + last.getCallUuid());
-            }
-            if (Assert.isNotEmpty(last.getToolName())) {
-                trace.getContext().remove(HITL.DECISION_PREFIX + last.getToolName());
-            }
-        }
-        trace.getContext().remove(HITL.PENDING_TASKS);
-        trace.getContext().remove(HITL.LAST_INTERVENED);
+        clearAllHitlState(trace);
     }
 
     /**
@@ -268,25 +251,30 @@ public class HITLInterceptor extends AbsReActInterceptor {
         List<HITLTask> tasks = trace.getContext().getAs(HITL.PENDING_TASKS);
         if (tasks != null) {
             for (HITLTask t : tasks) {
-                if (Assert.isNotEmpty(t.getCallUuid())) {
-                    trace.getContext().remove(HITL.DECISION_PREFIX + t.getCallUuid());
-                }
-                if (Assert.isNotEmpty(t.getToolName())) {
-                    trace.getContext().remove(HITL.DECISION_PREFIX + t.getToolName());
-                }
+                clearDecisionKeys(trace, t.getCallUuid(), t.getToolName());
             }
         }
         HITLTask last = trace.getContext().getAs(HITL.LAST_INTERVENED);
         if (last != null) {
-            if (Assert.isNotEmpty(last.getCallUuid())) {
-                trace.getContext().remove(HITL.DECISION_PREFIX + last.getCallUuid());
-            }
-            if (Assert.isNotEmpty(last.getToolName())) {
-                trace.getContext().remove(HITL.DECISION_PREFIX + last.getToolName());
-            }
+            clearDecisionKeys(trace, last.getCallUuid(), last.getToolName());
         }
         trace.getContext().remove(HITL.PENDING_TASKS);
         trace.getContext().remove(HITL.LAST_INTERVENED);
+    }
+
+    private void clearDecisionKeys(ReActTrace trace, String callUuid, String toolName) {
+        if (Assert.isNotEmpty(callUuid)) {
+            trace.getContext().remove(HITL.DECISION_PREFIX + callUuid);
+            trace.getContext().remove(APPLIED_PREFIX + callUuid);
+        }
+        if (Assert.isNotEmpty(toolName)) {
+            trace.getContext().remove(HITL.DECISION_PREFIX + toolName);
+        }
+    }
+
+    private boolean isDecisionApplied(ReActTrace trace, String callUuid) {
+        return Assert.isNotEmpty(callUuid)
+                && Boolean.TRUE.equals(trace.getContext().get(APPLIED_PREFIX + callUuid));
     }
     
     private void suspendBatch(ReActTrace trace, List<HITLTask> pending) {
@@ -335,7 +323,10 @@ public class HITLInterceptor extends AbsReActInterceptor {
     private void applyDecision(ReActTrace trace, ToolExchanger ex, HITLDecision decision, int hitlTargetCount) {
         // 清理挂起标识（决策已到）
         trace.getContext().remove(HITL.LAST_INTERVENED);
-        // decision 留到 onToolCallEnd 再删
+        // decision 留到 onToolCallEnd 再删；标记已 apply，防止 onToolCallStart 二次应用
+        if (Assert.isNotEmpty(ex.getCallId())) {
+            trace.getContext().put(APPLIED_PREFIX + ex.getCallId(), Boolean.TRUE);
+        }
 
         if (decision.isApproved()) {
             if (decision.getModifiedArgs() != null) {

@@ -14,6 +14,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 
 import java.lang.reflect.Field;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 批 HITL 纯单测：不依赖真实 LLM，直接驱动 HITLInterceptor 生命周期。
@@ -118,10 +119,10 @@ public class HITLBatchUnitTest {
     @Test
     public void approveAllAndSubmitAll() {
         AgentSession session = InMemoryAgentSession.of("batch_4");
-        session.getContext().put(HITL.PENDING_TASKS, Arrays.asList(
+        session.getContext().put(HITL.PENDING_TASKS, new ArrayList<>(Arrays.asList(
                 new HITLTask("c1", "transfer", mapOf("a", 1), "need"),
                 new HITLTask("c2", "delete", mapOf("b", 2), "need")
-        ));
+        )));
 
         HITL.approveAll(session);
         Assertions.assertNotNull(HITL.getDecision(session, "c1"));
@@ -129,16 +130,94 @@ public class HITLBatchUnitTest {
         Assertions.assertTrue(HITL.getDecision(session, "c1").isApproved());
 
         HITL.clear(session);
-        session.getContext().put(HITL.PENDING_TASKS, Arrays.asList(
+        session.getContext().put(HITL.PENDING_TASKS, new ArrayList<>(Arrays.asList(
                 new HITLTask("c1", "transfer", mapOf("a", 1), "need"),
                 new HITLTask("c2", "delete", mapOf("b", 2), "need")
-        ));
+        )));
         Map<String, HITLDecision> map = new LinkedHashMap<>();
         map.put("c1", HITLDecision.skip("s1"));
         map.put("c2", HITLDecision.reject("r2"));
         HITL.submitAll(session, map);
         Assertions.assertTrue(HITL.getDecision(session, "c1").isSkipped());
         Assertions.assertTrue(HITL.getDecision(session, "c2").isRejected());
+    }
+
+    /**
+     * 审查 P0：onActionStart 已 apply 后，onToolCallStart 不得二次 apply（hitlTargetCount=1 会把批 reject 升级为 END）。
+     */
+    @Test
+    public void toolCallStartMustNotReapplyAfterActionStart() {
+        AtomicInteger approvedCb = new AtomicInteger();
+        HITLInterceptor hitl = new HITLInterceptor()
+                .onSensitiveTool("transfer")
+                .onApproved((name, args) -> approvedCb.incrementAndGet());
+
+        AgentSession session = InMemoryAgentSession.of("batch_reapply");
+        ReActTrace trace = newTrace(session);
+
+        List<ToolExchanger> batch = Arrays.asList(
+                new ToolExchanger("uuid-a", "transfer", mapOf("to", "A", "amount", 1)),
+                new ToolExchanger("uuid-b", "transfer", mapOf("to", "B", "amount", 2))
+        );
+
+        hitl.onActionStart(trace, batch);
+        Assertions.assertTrue(session.isPending());
+
+        HITL.approveByCallUuid(session, "uuid-a", true);
+        HITL.rejectByCallUuid(session, "uuid-b", "拒 B");
+        session.pending(false, null);
+
+        ReActTrace trace2 = newTrace(session);
+        List<ToolExchanger> batch2 = Arrays.asList(
+                new ToolExchanger("uuid-a", "transfer", mapOf("to", "A", "amount", 1)),
+                new ToolExchanger("uuid-b", "transfer", mapOf("to", "B", "amount", 2))
+        );
+        hitl.onActionStart(trace2, batch2);
+
+        Assertions.assertFalse(session.isPending());
+        Assertions.assertNotEquals(Agent.ID_END, trace2.getRoute(), "批内 partial reject 不应 END");
+        Assertions.assertNull(batch2.get(0).getResult());
+        Assertions.assertNotNull(batch2.get(1).getResult());
+        Assertions.assertEquals(1, approvedCb.get(), "alwaysAllow 回调应只触发一次（ActionStart）");
+
+        // 模拟 doAction 进入 onToolCallStart：不得二次 apply
+        hitl.onToolCallStart(trace2, batch2.get(0));
+        hitl.onToolCallStart(trace2, batch2.get(1));
+
+        Assertions.assertNotEquals(Agent.ID_END, trace2.getRoute(), "二次 onToolCallStart 不得把 reject 升级为 END");
+        Assertions.assertEquals(1, approvedCb.get(), "二次 onToolCallStart 不得再触发 alwaysAllow");
+        Assertions.assertTrue(batch2.get(1).getResult().contains("拒 B"));
+    }
+
+    /**
+     * 兼容旧 3 参构造仍可编译使用。
+     */
+    @Test
+    @SuppressWarnings("deprecation")
+    public void deprecatedThreeArgConstructorStillWorks() {
+        HITLTask task = new HITLTask("transfer", mapOf("a", 1), "need");
+        Assertions.assertEquals("transfer", task.getToolName());
+        Assertions.assertNull(task.getCallUuid());
+        Assertions.assertEquals("need", task.getComment());
+    }
+
+    /**
+     * getPendingTasks 返回只读视图，业务 clear 不应污染 session。
+     */
+    @Test
+    public void getPendingTasksIsUnmodifiable() {
+        AgentSession session = InMemoryAgentSession.of("batch_ro");
+        session.getContext().put(HITL.PENDING_TASKS, new ArrayList<>(Collections.singletonList(
+                new HITLTask("c1", "transfer", mapOf("a", 1), "need")
+        )));
+        List<HITLTask> view = HITL.getPendingTasks(session);
+        try {
+            view.clear();
+            Assertions.fail("应抛出 UnsupportedOperationException");
+        } catch (UnsupportedOperationException expected) {
+            // ok
+        }
+        Assertions.assertEquals(1, HITL.getPendingTasks(session).size());
     }
 
     private static ReActTrace newTrace(AgentSession session) {

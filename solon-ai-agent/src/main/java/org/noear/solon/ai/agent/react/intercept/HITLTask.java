@@ -53,6 +53,16 @@ public class HITLTask implements Serializable {
         //用于反序列化
     }
 
+    /**
+     * 兼容旧构造（无 callUuid）。批 HITL 请使用带 callUuid 的构造。
+     *
+     * @deprecated 4.0.4 使用 {@link #HITLTask(String, String, Map, String)}
+     */
+    @Deprecated
+    public HITLTask(String toolName, Map<String, Object> args, String comment) {
+        this(null, toolName, args, comment);
+    }
+
     public HITLTask(String callUuid, String toolName, Map<String, Object> args, String comment) {
         this.callUuid = callUuid;
         this.toolName = toolName;
