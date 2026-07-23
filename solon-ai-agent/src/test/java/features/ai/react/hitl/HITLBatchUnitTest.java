@@ -195,7 +195,7 @@ public class HITLBatchUnitTest {
     @Test
     @SuppressWarnings("deprecation")
     public void deprecatedThreeArgConstructorStillWorks() {
-        HITLTask task = new HITLTask("transfer", mapOf("a", 1), "need");
+        HITLTask task = new HITLTask("a1","transfer", mapOf("a", 1), "need");
         Assertions.assertEquals("transfer", task.getToolName());
         Assertions.assertNull(task.getCallUuid());
         Assertions.assertEquals("need", task.getComment());
@@ -237,12 +237,12 @@ public class HITLBatchUnitTest {
         HITLDecision d = HITL.getDecision(session, byUuid);
         Assertions.assertNotNull(d);
         Assertions.assertTrue(d.isApproved());
-        // delete 批内唯一，应双写 toolName 键
-        Assertions.assertNotNull(HITL.getDecision(session, "delete"));
+        // 决策仅按 callUuid 存储，不再双写 toolName 键
+        Assertions.assertNull(HITL.getDecision(session, "delete"));
+        Assertions.assertNotNull(HITL.getDecision(session, "c2"));
 
         HITL.approve(session, HITL.getPendingTaskByCallUuid(session, "c1"));
         Assertions.assertTrue(HITL.getDecision(session, "c1").isApproved());
-        // transfer 非唯一，不应双写 toolName
         Assertions.assertNull(HITL.getDecision(session, "transfer"));
     }
 
@@ -264,7 +264,7 @@ public class HITLBatchUnitTest {
         session.getContext().put(HITL.PENDING_TASKS, new ArrayList<>(Collections.singletonList(
                 new HITLTask("only-2", "delete", mapOf("b", 2), "need")
         )));
-        HITL.approve(session, "delete", "no");
+        HITL.reject(session, "delete", "no");
         Assertions.assertTrue(HITL.getDecision(session, "only-2").isRejected());
     }
 
