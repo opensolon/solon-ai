@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.chat.tool;
 
+import org.noear.solon.Utils;
+
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
@@ -27,6 +29,7 @@ import java.util.Map;
  * @since 3.1
  */
 public class ToolCall implements Serializable {
+    private String uuid;
     private String index;
     private String id;
     private String name;
@@ -45,6 +48,7 @@ public class ToolCall implements Serializable {
 
     public ToolCall(String index, String id, String name, String argumentsStr, Map<String, Object> arguments) {
         //允许拦截器修改参数集合（不要只读）
+        this.uuid = Utils.uuid();
         this.index = index;
         this.id = id;
         this.name = name;
@@ -56,6 +60,10 @@ public class ToolCall implements Serializable {
         } else {
             this.arguments = arguments;
         }
+    }
+
+    public String getUuid() {
+        return uuid;
     }
 
     /**

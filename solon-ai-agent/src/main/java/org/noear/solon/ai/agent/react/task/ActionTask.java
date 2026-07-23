@@ -183,7 +183,7 @@ public class ActionTask {
             Map<String, Object> args = (call.getArguments() == null) ? new HashMap<>() : call.getArguments();
 
             // 触发 Action 生命周期拦截
-            String callId = Utils.uuid();
+            String callId = call.getUuid();
             ToolResult result = doAction(trace, callId, call.getName(), args, toolResults, call);
             if (result == null) {
                 return;
