@@ -13,42 +13,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.react;
+package org.noear.solon.ai.agent.simple;
 
 import org.noear.solon.ai.agent.AbsAgentChunk;
-import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.lang.Preview;
 
 /**
- * ReAct 最终汇总块：完成所有循环后的最终结果输出
+ * 简单智能体响应汇总块（流式结束块）
+ * <p>通常作为流式输出的最后一个元素，提供完整的响应结果、会话状态及最终的指标统计</p>
  *
  * @author noear
  * @since 3.9.1
- * @deprecated 4.0.4 {@link RunEndChunk}
+ * @since 4.0.4
  */
-@Deprecated
 @Preview("3.9.1")
-public class ReActChunk extends AbsAgentChunk {
-    private final transient ReActResponse response;
+public class SimpleEndChunk extends AbsAgentChunk {
+    private final transient SimpleResponse response;
 
-    public ReActChunk(ReActResponse resp) {
+    public SimpleEndChunk(SimpleResponse resp) {
         super(resp.getTrace().getRunId(), resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());
         this.response = resp;
     }
 
-    public ReActResponse getResponse() {
+    public SimpleResponse getResponse() {
         return response;
-    }
-
-    public ReActTrace getTrace() {
-        return response.getTrace();
-    }
-
-    public Metrics getMetrics() {
-        return response.getMetrics();
-    }
-
-    public boolean isAbnormal() {
-        return response.getTrace().isAbnormal();
     }
 }

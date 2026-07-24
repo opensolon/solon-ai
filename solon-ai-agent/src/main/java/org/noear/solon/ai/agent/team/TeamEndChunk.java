@@ -27,14 +27,18 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("4.0.4")
 public class TeamEndChunk extends AbsAgentChunk {
-    private final TeamTrace trace;
+    private final transient TeamResponse response;
 
-    public TeamEndChunk(TeamTrace trace, ChatMessage message) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
-        this.trace = trace;
+    public TeamEndChunk(TeamResponse resp) {
+        super(resp.getTrace().getRunId(), resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());
+        this.response = resp;
+    }
+
+    public TeamResponse getResponse() {
+        return response;
     }
 
     public TeamTrace getTrace() {
-        return trace;
+        return response.getTrace();
     }
 }

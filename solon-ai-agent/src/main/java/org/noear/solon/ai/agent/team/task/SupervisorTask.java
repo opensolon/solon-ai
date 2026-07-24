@@ -602,9 +602,7 @@ public class SupervisorTask implements NamedTaskComponent {
                     .callWithRetry(() -> {
                         final ChatResponse response;
 
-                        if (trace.getOptions().getStreamSink() == null) {
-                            response = req.call();
-                        } else {
+                        if (trace.hasStreamSink()) {
                             FluxSink<AgentChunk> sink = trace.getOptions().getStreamSink();
 
                             if (sink.isCancelled()) {
@@ -614,9 +612,11 @@ public class SupervisorTask implements NamedTaskComponent {
                             response = req.stream()
                                     .takeUntil(r -> sink.isCancelled())
                                     .doOnNext(resp -> {
-                                        sink.next(new SupervisorChunk(node, trace, resp));
+                                        trace.pushAgentChunk(new SupervisorChunk(node, trace, resp));
                                     })
                                     .blockLast();
+                        } else {
+                            response = req.call();
                         }
 
                         if (response.isEmpty()) {

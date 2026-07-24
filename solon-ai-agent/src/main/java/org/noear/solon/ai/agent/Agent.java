@@ -179,8 +179,8 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
         // 4. 同步执行轨迹与结果处理
         if (trace != null) {
             //状态实时化
-            if (trace.getOptions().getStreamSink() != null) {
-                trace.getOptions().getStreamSink().next(new NodeChunk(node, trace, msg));
+            if (trace.hasStreamSink()) {
+                trace.pushAgentChunk(new NodeChunk(node, trace, msg));
             }
 
             //协议后处理集成

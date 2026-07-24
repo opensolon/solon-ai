@@ -326,9 +326,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
                 item.target.onAgentEnd(trace);
             }
         }
-        if (trace.hasStreamSink()) {
-            trace.pushAgentChunk(new RunEndChunk(trace, assistantMessage));
-        }
 
         if (LOG.isInfoEnabled()) {
             LOG.info("ReActAgent [{}] finished, abnormal:{}, finalAnswer: {}", config.getName(), trace.isAbnormal(), assistantMessage.getContent());

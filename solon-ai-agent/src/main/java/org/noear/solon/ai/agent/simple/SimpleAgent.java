@@ -20,6 +20,8 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.*;
 import org.noear.solon.ai.agent.exception.LlmNoReturnException;
+import org.noear.solon.ai.agent.react.ReActInterceptor;
+import org.noear.solon.ai.agent.react.RunStartChunk;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.*;
@@ -152,6 +154,17 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
             //更新下快照（记录上面的数据）
             session.updateSnapshot();
+        }
+
+        // 拦截器：任务开始事件
+        for (RankEntity<SimpleInterceptor> item : options.interceptors()) {
+            if (item.target.isEnabled()) {
+                item.target.onSimpleStart(trace);
+            }
+        }
+
+        if (trace.hasStreamSink()) {
+            trace.pushAgentChunk(new SimpleStartChunk(trace));
         }
 
         // 1. 构建请求消息
@@ -343,7 +356,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                     })
                     .callWithRetry(() -> {
                         // 运行中检查：如果流已被取消，直接跳出重试
-                        if (trace.getOptions().getStreamSink() != null && trace.getOptions().getStreamSink().isCancelled()) {
+                        if (trace.isStreamCancelled()) {
                             return null;
                         }
 
@@ -373,15 +386,14 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             // chatModel 处理
             final ChatResponse response;
 
-            if (trace.getOptions().getStreamSink() == null) {
-                response = chatReq.call();
-            } else {
+            if (trace.hasStreamSink()) {
                 response = chatReq.stream()
                         .doOnNext(resp -> {
-                            trace.getOptions().getStreamSink().next(
-                                    new ChatChunk(trace, resp));
+                            trace.pushAgentChunk(new ChatChunk(trace, resp));
                         })
                         .blockLast();
+            } else {
+                response = chatReq.call();
             }
 
             if (response.isEmpty()) {

@@ -113,8 +113,11 @@ public class SimpleRequest implements AgentRequest<SimpleRequest, SimpleResponse
 
                 SimpleResponse resp = new SimpleResponse(session, trace, message);
 
-                sink.next(new SimpleChunk(resp));
-                sink.complete();
+                if (sink.isCancelled() == false) {
+                    sink.next(new SimpleEndChunk(resp));
+                    sink.next(new SimpleChunk(resp));
+                    sink.complete();
+                }
             } catch (Throwable e) {
                 if (!sink.isCancelled()) {
                     sink.error(e);

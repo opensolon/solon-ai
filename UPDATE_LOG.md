@@ -25,6 +25,8 @@
 * 添加 solon-ai-agent 新流块 ToolStartChunk、ToolEndChunk、TeamStartChunk、TeamEndChunk
 * 添加 solon-ai-agent 新流块 HITLPendingChunk、HITLDecidedChunk
 * 添加 solon-ai-agent 新流块 ActionStartChunk、ActionEndChunk、ReasonDeltaChunk（替代 ReasonChunk）
+* 添加 solon-ai-agent 新流块 TeamStartChunk、TeamEndChunk（替代 TeamChunk）
+* 添加 solon-ai-agent 新流块 SimpleStartChunk、SimpleEndChunk（替代 SimpleChunk）
 * 添加 solon-ai-agent ReActInterceptor onActionStart, onActionEnd 事件
 * 添加 solon-ai-agent ReActInterceptor onToolCallStart, onToolCallEnd 事件
 * 添加 solon-ai-harness 新的工具权限体系

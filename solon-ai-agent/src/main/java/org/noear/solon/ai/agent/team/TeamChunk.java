@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.AbsAgentChunk;
+import org.noear.solon.lang.Preview;
 
 /**
  * 团队智能体响应汇总块（协作结束块）
@@ -23,7 +24,10 @@ import org.noear.solon.ai.agent.AbsAgentChunk;
  *
  * @author noear
  * @since 3.9.1
+ * @deprecated 4.0.4 {@link TeamEndChunk}
  */
+@Deprecated
+@Preview("3.9.1")
 public class TeamChunk extends AbsAgentChunk {
     private final transient TeamResponse response;
 

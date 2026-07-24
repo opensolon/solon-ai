@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.simple;
 
 import org.noear.solon.ai.agent.AgentInterceptor;
+import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.lang.Preview;
 
@@ -27,4 +28,14 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.8.4")
 public interface SimpleInterceptor extends AgentInterceptor, ChatInterceptor {
+    /**
+     * 团队协作开始
+     */
+    default void onSimpleStart(SimpleTrace trace) {}
+
+    /**
+     * 团队协作结束
+     */
+    default void onSimpleEnd(SimpleTrace trace) {}
+
 }

@@ -235,8 +235,8 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             }
         }
 
-        if(trace.getOptions().getStreamSink() != null){
-            trace.getOptions().getStreamSink().next(new TeamStartChunk(trace));
+        if(trace.hasStreamSink()){
+            trace.pushAgentChunk(new TeamStartChunk(trace));
         }
 
         try {
@@ -321,10 +321,6 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
                 if (item.target.isEnabled()) {
                     item.target.onTeamEnd(trace);
                 }
-            }
-
-            if(trace.getOptions().getStreamSink() != null){
-                trace.getOptions().getStreamSink().next(new TeamEndChunk(trace, assistantMessage));
             }
 
             return assistantMessage;

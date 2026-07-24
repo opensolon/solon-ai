@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.simple;
 
 import org.noear.solon.ai.agent.AbsAgentChunk;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -23,20 +24,18 @@ import org.noear.solon.lang.Preview;
  * <p>通常作为流式输出的最后一个元素，提供完整的响应结果、会话状态及最终的指标统计</p>
  *
  * @author noear
- * @since 3.9.1
- * @deprecated 4.0.4 {@link SimpleEndChunk}
+ * @since 4.0.4
  */
-@Deprecated
-@Preview("3.9.1")
-public class SimpleChunk extends AbsAgentChunk {
-    private final transient SimpleResponse response;
+@Preview("4.0.4")
+public class SimpleStartChunk extends AbsAgentChunk {
+    private final transient SimpleTrace trace;
 
-    public SimpleChunk(SimpleResponse resp) {
-        super(resp.getTrace().getRunId(), resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());
-        this.response = resp;
+    public SimpleStartChunk(SimpleTrace trace) {
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), ChatMessage.ofAssistant(""));
+        this.trace = trace;
     }
 
-    public SimpleResponse getResponse() {
-        return response;
+    public SimpleTrace getTrace() {
+        return trace;
     }
 }

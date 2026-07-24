@@ -19,6 +19,10 @@ import org.noear.solon.ai.agent.AbsAgentChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.core.util.Assert;
+
+import java.util.List;
 
 /**
  * 思考运行结束块
@@ -29,6 +33,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 public class ReasonEndChunk extends AbsAgentChunk {
     private final ReActTrace trace;
     private final ChatResponse response;
+    private final AssistantMessage assistantMessage;
     private final long durationMs;
     private final String reasonId;
 
@@ -37,6 +42,7 @@ public class ReasonEndChunk extends AbsAgentChunk {
 
         this.trace = trace;
         this.response = response;
+        this.assistantMessage = message;
         this.durationMs = durationMs;
         this.reasonId = trace.getCurrentReasonId();
     }
@@ -49,11 +55,23 @@ public class ReasonEndChunk extends AbsAgentChunk {
         return response;
     }
 
+    public AssistantMessage getAssistantMessage() {
+        return assistantMessage;
+    }
+
     public long getDurationMs() {
         return durationMs;
     }
 
     public String getReasonId() {
         return reasonId;
+    }
+
+    public boolean isToolCalls() {
+        return Assert.isNotEmpty(assistantMessage.getToolCalls());
+    }
+
+    public List<ToolCall> getToolCalls() {
+        return assistantMessage.getToolCalls();
     }
 }

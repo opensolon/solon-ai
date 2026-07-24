@@ -140,8 +140,11 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
 
                 ReActResponse resp = new ReActResponse(session, trace, message);
 
-                sink.next(new ReActChunk(resp));
-                sink.complete();
+                if (sink.isCancelled() == false) {
+                    trace.pushAgentChunkDo(new RunEndChunk(resp));
+                    trace.pushAgentChunkDo(new ReActChunk(resp));
+                    sink.complete();
+                }
             } catch (Throwable e) {
                 if (!sink.isCancelled()) {
                     sink.error(e);

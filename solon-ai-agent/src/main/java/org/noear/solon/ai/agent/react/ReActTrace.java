@@ -305,35 +305,6 @@ public class ReActTrace implements AgentTrace {
     }
 
     /**
-     * 是否存在流式 sink（业务侧优先用此方法，避免直接触碰 {@link ReActOptions#getStreamSink()}）
-     */
-    public boolean hasStreamSink() {
-        return options != null && options.getStreamSink() != null;
-    }
-
-    /**
-     * 流式订阅是否已取消（无 sink 时视为 false）
-     */
-    public boolean isStreamCancelled() {
-        return hasStreamSink() && options.getStreamSink().isCancelled();
-    }
-
-    /**
-     * 推送流块（统一安全投递：判空 / cancelled / 异常吞掉）
-     */
-    public void pushAgentChunk(AgentChunk chunk) {
-        try {
-            if (hasStreamSink() == false || isStreamCancelled()) {
-                return;
-            }
-
-            options.getStreamSink().next(chunk);
-        } catch (Throwable e) {
-            //乎略...
-        }
-    }
-
-    /**
      * 注册协议内置工具
      */
     public void addProtocolTool(FunctionTool tool) {
@@ -557,5 +528,44 @@ public class ReActTrace implements AgentTrace {
         }
         // 基于当前已执行的回合数推测进度（仅作为模型参考）
         return String.format("Total Plans: %d, Current Turn: %d", plans.size(), getTurnCount());
+    }
+
+    //--------------
+
+    /**
+     * 是否存在流式 sink（业务侧优先用此方法，避免直接触碰 {@link ReActOptions#getStreamSink()}）
+     */
+    public boolean hasStreamSink() {
+        return options != null && options.getStreamSink() != null;
+    }
+
+    /**
+     * 流式订阅是否已取消（无 sink 时视为 false）
+     */
+    public boolean isStreamCancelled() {
+        return hasStreamSink() && options.getStreamSink().isCancelled();
+    }
+
+    /**
+     * 推送流块（统一安全投递：判空 / cancelled / 异常吞掉）
+     */
+    public void pushAgentChunk(AgentChunk chunk) {
+        try {
+            if (hasStreamSink() == false || isStreamCancelled()) {
+                return;
+            }
+
+            options.getStreamSink().next(chunk);
+        } catch (Throwable e) {
+            //乎略...
+        }
+    }
+
+    public void pushAgentChunkDo(AgentChunk chunk) {
+        try {
+            options.getStreamSink().next(chunk);
+        } catch (Throwable e) {
+            //乎略...
+        }
     }
 }

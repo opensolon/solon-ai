@@ -308,6 +308,7 @@ public class ReasonTask {
         }
 
         if (trace.hasStreamSink()) {
+            //@deprecated 4.0.4
             trace.pushAgentChunk(new ThoughtChunk(trace, response, responseMessage, thoughtContent));
         }
 

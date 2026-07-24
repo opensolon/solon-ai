@@ -16,7 +16,7 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.AbsAgentChunk;
-import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.agent.trace.Metrics;
 
 /**
  * 任务运行结束块
@@ -25,14 +25,26 @@ import org.noear.solon.ai.chat.message.ChatMessage;
  * @since 4.0.4
  */
 public class RunEndChunk extends AbsAgentChunk {
-    private final ReActTrace trace;
+    private final transient ReActResponse response;
 
-    public RunEndChunk(ReActTrace trace, ChatMessage message) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
-        this.trace = trace;
+    public RunEndChunk(ReActResponse resp) {
+        super(resp.getTrace().getRunId(), resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());
+        this.response = resp;
+    }
+
+    public ReActResponse getResponse() {
+        return response;
     }
 
     public ReActTrace getTrace() {
-        return trace;
+        return response.getTrace();
+    }
+
+    public Metrics getMetrics() {
+        return response.getMetrics();
+    }
+
+    public boolean isAbnormal() {
+        return response.getTrace().isAbnormal();
     }
 }
