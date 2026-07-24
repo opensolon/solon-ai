@@ -950,9 +950,18 @@ public class ContextCompressionInterceptorTest {
         assertFalse(CompressionUtil.isPromptTooLong("正常摘要内容"));
     }
 
-    /**
-     * media-only 消息 content 为空时，token 估算仍应计入媒体体积，避免被当成 0。
-     */
+    @Test
+    public void testCompressionUtil_PromptTooLongErrorCodesAndCause() {
+        assertTrue(CompressionUtil.isPromptTooLongError(
+                new RuntimeException("context_length_exceeded")));
+        assertTrue(CompressionUtil.isPromptTooLongError(
+                new RuntimeException("outer", new IllegalArgumentException("input_too_long"))));
+        assertTrue(CompressionUtil.isPromptTooLongError(
+                new RuntimeException("request_too_large")));
+        assertFalse(CompressionUtil.isPromptTooLongError(
+                new RuntimeException("rate_limit_exceeded")));
+    }
+
     @Test
     public void testMediaOnlyMessageTokenEstimateNotZero() throws Exception {
         // 构造大 base64 媒体（content 投影为空）

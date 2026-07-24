@@ -52,11 +52,27 @@ public interface ReActInterceptor extends AgentInterceptor, ChatInterceptor {
     }
 
     /**
+     * 推理节点：Reason 请求失败且即将再次尝试时触发。
+     * <p>拦截器可以在此根据异常调整 WorkingMemory。返回 true 表示已为下一次请求
+     * 修改了请求上下文；ReasonTask 会在下一次尝试中重新组装消息和请求。</p>
+     *
+     * @param trace        当前推理追踪
+     * @param error        本次请求异常
+     * @param attempt      即将进行的尝试序号（从 1 开始）
+     * @param systemPrompt 当前 Reason 使用的系统提示词
+     * @return 是否修改了下一次请求所依赖的上下文
+     * @since 4.0.4
+     */
+    default boolean onReasonRetry(ReActTrace trace, Throwable error, int attempt, String systemPrompt) {
+        return false;
+    }
+
+
+    /**
      * 推理节点：接收 LLM 返回的原始推理消息
      */
     default void onReasonEnd(ReActTrace trace, ChatResponse resp, AssistantMessage message, long durationMs) {
     }
-
 
     /**
      * 计划节点：接收 LLM 返回的原始推理消息

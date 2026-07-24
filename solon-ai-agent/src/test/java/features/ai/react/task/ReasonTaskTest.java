@@ -19,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.*;
 import org.noear.solon.ai.agent.react.task.ReasonTask;
@@ -31,11 +32,10 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.prompt.PromptImpl;
 import org.noear.solon.flow.FlowContext;
-
-import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
+import java.util.*;
 
+import java.util.function.Consumer;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -125,7 +125,43 @@ public class ReasonTaskTest {
         return (AssistantMessage) ChatMessage.fromJson(json);
     }
 
-    // ==================== 正常响应场景 ====================
+    @Test
+    @DisplayName("context_length_exceeded 后压缩并基于新消息重建请求")
+    public void testContextLengthExceeded_compressesAndRebuildsRequest() throws Throwable {
+        org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor compression =
+                new org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor(10, 10000, null);
+        ReActOptions options = new ReActOptions(chatModel);
+        options.getModelOptions().interceptorAdd(compression);
+        when(trace.getOptions()).thenReturn(options);
+
+        ChatRequestDesc first = mock(ChatRequestDesc.class);
+        ChatRequestDesc second = mock(ChatRequestDesc.class);
+        when(first.options(any(Consumer.class))).thenReturn(first);
+        when(second.options(any(Consumer.class))).thenReturn(second);
+        when(first.call()).thenThrow(new RuntimeException("context_length_exceeded"));
+        ChatResponse success = mockResponse(msgFromJson("{\"role\":\"assistant\",\"content\":\"done\"}"));
+        when(second.call()).thenReturn(success);
+
+        List<List<ChatMessage>> snapshots = new ArrayList<>();
+        when(chatModel.prompt(anyList())).thenAnswer(invocation -> {
+            List<ChatMessage> input = invocation.getArgument(0);
+            snapshots.add(new ArrayList<>(input));
+            return snapshots.size() == 1 ? first : second;
+        });
+
+        workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
+        for (int i = 0; i < 12; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("history-" + i));
+        }
+
+        reasonTask.run(trace, context);
+
+        assertEquals(2, snapshots.size());
+        assertTrue(snapshots.get(1).size() < snapshots.get(0).size());
+        verify(first).call();
+        verify(second).call();
+    }
+
 
     @Test
     @DisplayName("正常响应（有结果内容）：重置空响应计数器为 0")

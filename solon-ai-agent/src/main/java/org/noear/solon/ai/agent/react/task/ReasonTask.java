@@ -207,7 +207,7 @@ public class ReasonTask {
 
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
         long startMs = System.currentTimeMillis();
-        ChatResponse response = callWithRetry(trace, messages);
+        ChatResponse response = callWithRetry(trace, systemPromptStr);
         if(response == null || trace.getSession().isPending()){
             trace.setRoute(Agent.ID_END);
             return;
@@ -355,78 +355,97 @@ public class ReasonTask {
         trace.setFinalAnswer(extractFinalAnswer(clearContent), false);
     }
 
-    private @Nullable ChatResponse callWithRetry(ReActTrace trace, List<ChatMessage> messages) throws RuntimeException {
-        ChatRequestDesc req = trace.getOptions().getChatModel()
-                .prompt(messages)
-                .options(o -> {
-                    o.agentName(trace.getAgentName());
-
-                    if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
-                        o.toolAdd(trace.getOptions().getTools());
-                        o.toolAdd(trace.getProtocolTools());
-                    }
-
-                    o.autoToolCall(false); // 强制由 Agent 框架接管工具链路管理
-                    o.toolContextPut(trace.getOptions().getToolContext());
-
-                    for(RankEntity<ReActInterceptor> entity :  trace.getOptions().getInterceptors()) {
-                        //内部已支持启用控制
-                        o.interceptorAdd(entity.index, entity.target);
-                    }
-
-                    if (trace.getOptions().getOutputSchema() != null) {
-                        trace.getOptions().getChatModel().getDialect().prepareOutputFormatOptions(o);
-                    }
-
-                    o.optionSet(trace.getOptions().getModelOptions().options());
-
-                    // 缓存配置：Agent 级优先，ChatModel 级次之
-                    if(trace.getOptions().getCacheControl() != null) {
-                        o.cacheControl(trace.getOptions().getCacheControl());
-                    }
-                });
-
+    private @Nullable ChatResponse callWithRetry(ReActTrace trace, String systemPrompt) throws RuntimeException {
         int maxRetries = trace.getOptions().getMaxRetries();
+        final boolean[] streamEmitted = {false};
 
         try {
             return new RetryTask()
                     .maxRetries(maxRetries)
                     .initialDelayMs(trace.getOptions().getRetryDelayMs())
-                    .onRetry((attempt,e)->{
-                        LOG.warn("ReActAgent [{}] retry {}/{} due to: {}",
-                                config.getName(), attempt, maxRetries, e.toString());
+                    .onRetry((attempt, e) -> {
+                        if (streamEmitted[0]) {
+                            // 流式响应已部分输出，重试会导致内容重复。
+                            // 不做压缩，supplier 会快速失败终止重试。
+                            LOG.warn("ReActAgent [{}] stream failed after output; skip compression retry: {}",
+                                    config.getName(), e.toString());
+                            return;
+                        }
+                        boolean rebuilt = false;
+                        for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
+                            if (entity.target.isEnabled()
+                                    && entity.target.onReasonRetry(trace, e, attempt, systemPrompt)) {
+                                rebuilt = true;
+                            }
+                        }
+                        if (rebuilt) {
+                            LOG.info("ReActAgent [{}] context rebuilt before retry {}/{}", config.getName(), attempt, maxRetries);
+                        } else {
+                            LOG.warn("ReActAgent [{}] retry {}/{} due to: {}",
+                                    config.getName(), attempt, maxRetries, e.toString());
+                        }
                     })
                     .callWithRetry(() -> {
-                                final ChatResponse response;
-                                if (trace.hasStreamSink()) {
-                                    if (trace.isStreamCancelled()) {
-                                        return null;
-                                    }
+                        // 流式响应已部分输出后不允许重试，否则会从头产生重复内容。
+                        // 抛出 LlmNoReturnException 让 RetryTask 快速耗尽重试后终止。
+                        if (streamEmitted[0]) {
+                            throw new LlmNoReturnException("Stream already emitted, cannot safely retry");
+                        }
 
-                                    response = req.stream()
-                                            .takeUntil(r -> trace.isStreamCancelled())
-                                            .doOnNext(resp -> {
-                                                trace.pushAgentChunk(new ReasonDeltaChunk(trace, resp, resp.getMessage()));
+                        List<ChatMessage> messages = new ArrayList<>();
+                        messages.add(ChatMessage.ofSystem(systemPrompt));
+                        messages.addAll(trace.getWorkingMemory().getMessages());
 
-                                                //@deprecated 4.0.4
-                                                trace.pushAgentChunk(new ReasonChunk(trace, resp, resp.getMessage()));
-                                            })
-                                            .blockLast();
-                                } else {
-                                    response = req.call();
-                                }
-
-                                if (response == null || response.isEmpty()) {
-                                    throw new LlmNoReturnException("The LLM did not return");
-                                }
-
-                                return response;
+                        ChatRequestDesc req = buildRequest(trace, messages);
+                        final ChatResponse response;
+                        if (trace.hasStreamSink()) {
+                            if (trace.isStreamCancelled()) {
+                                return null;
                             }
-                    );
+                            response = req.stream()
+                                    .takeUntil(r -> trace.isStreamCancelled())
+                                    .doOnNext(resp -> {
+                                        streamEmitted[0] = true;
+                                        trace.pushAgentChunk(new ReasonDeltaChunk(trace, resp, resp.getMessage()));
+                                        trace.pushAgentChunk(new ReasonChunk(trace, resp, resp.getMessage()));
+                                    })
+                                    .blockLast();
+                        } else {
+                            response = req.call();
+                        }
+
+                        if (response == null || response.isEmpty()) {
+                            throw new LlmNoReturnException("The LLM did not return");
+                        }
+                        return response;
+                    });
         } catch (Throwable e) {
-            // 4. 异常后续处理（保留原有的文案逻辑）
             return handleLastException(trace, e);
         }
+    }
+
+    private ChatRequestDesc buildRequest(ReActTrace trace, List<ChatMessage> messages) {
+        return trace.getOptions().getChatModel()
+                .prompt(messages)
+                .options(o -> {
+                    o.agentName(trace.getAgentName());
+                    if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
+                        o.toolAdd(trace.getOptions().getTools());
+                        o.toolAdd(trace.getProtocolTools());
+                    }
+                    o.autoToolCall(false);
+                    o.toolContextPut(trace.getOptions().getToolContext());
+                    for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
+                        o.interceptorAdd(entity.index, entity.target);
+                    }
+                    if (trace.getOptions().getOutputSchema() != null) {
+                        trace.getOptions().getChatModel().getDialect().prepareOutputFormatOptions(o);
+                    }
+                    o.optionSet(trace.getOptions().getModelOptions().options());
+                    if (trace.getOptions().getCacheControl() != null) {
+                        o.cacheControl(trace.getOptions().getCacheControl());
+                    }
+                });
     }
 
     private ChatResponse handleLastException(ReActTrace trace, Throwable lastException) {

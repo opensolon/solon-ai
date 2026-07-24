@@ -26,7 +26,7 @@ import org.noear.solon.ai.agent.react.ReActOptions;
 import org.noear.solon.ai.agent.react.ReActStyle;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.compress.CompositeCompressionStrategy;
-import org.noear.solon.ai.agent.react.intercept.compress.HierarchicalCompressionStrategy;
+import org.noear.solon.ai.agent.react.intercept.compress.CompressionUtil;
 import org.noear.solon.ai.agent.react.intercept.compress.LLMCompressionStrategy;
 import org.noear.solon.ai.agent.react.intercept.compress.VectorStoreCompressionStrategy;
 import org.noear.solon.ai.chat.CacheControl;
@@ -231,9 +231,33 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
     @Override
     public void onReasonStart(ReActTrace trace, StringBuilder systemPromptBuf) {
-        ChatModel chatModel = trace.getOptions().getChatModel();
-        List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
-        String systemPrompt = (systemPromptBuf == null ? null : systemPromptBuf.toString());
+        compressContext(trace,
+                systemPromptBuf == null ? null : systemPromptBuf.toString(),
+                false,
+                0);
+    }
+
+    @Override
+    public boolean onReasonRetry(ReActTrace trace, Throwable error, int attempt, String systemPrompt) {
+        if (!CompressionUtil.isPromptTooLongError(error)) {
+            return false;
+        }
+        return compressContext(trace, systemPrompt, true, attempt);
+    }
+
+    /**
+     * 执行上下文压缩。强制模式用于服务端返回上下文超限后收紧工作记忆。
+     */
+    private boolean compressContext(ReActTrace trace, String systemPrompt,
+                                    boolean force, int forceLevel) {
+        ReActOptions options = trace.getOptions();
+        if (options == null || trace.getWorkingMemory() == null) {
+            return false;
+        }
+        ChatModel chatModel = options.getChatModel();
+        List<ChatMessage> originalMessages = trace.getWorkingMemory().getMessages();
+        List<ChatMessage> messages = enforcePerMessageCap(trace, originalMessages, this.maxTokens);
+        boolean microCompacted = messages != originalMessages;
 
         // ⭐ 标记静态上下文边界（为 Dialect 层的 cache_control 提供依据）
         //    当配置了 CacheControl 时，确保系统提示词和工具定义作为一个完整的
@@ -249,7 +273,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         //    无条件截断超大的工具输出，防止单条消息撑爆上下文。
         //    perMessageCap 自动推导基于用户配置的 maxTokens（而非模型窗口），
         //    确保单条消息不会占满整个滑动窗口预算。
-        messages = enforcePerMessageCap(trace, messages, this.maxTokens);
+        // enforcePerMessageCap 已在上面完成 MicroCompact；这里仅保留其变更状态。
 
         // 收集 tools 元信息（仅 NATIVE_TOOL 模式下 LLM 会接收 tools 定义）
         int toolsTokens = 0;
@@ -269,10 +293,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         int currentTokens = estimateTokens(messages, systemPrompt) + toolsTokens;
 
-        // 预留缓冲，避免频繁重构
-        if (messageSize <= maxMessages && currentTokens <= (effectiveMaxTokens * COMPACT_THRESHOLD_RATIO)) {
+        // 预留缓冲，避免频繁重构；强制模式不受本地阈值限制
+        if (!force && messageSize <= maxMessages && currentTokens <= (effectiveMaxTokens * COMPACT_THRESHOLD_RATIO)) {
             pushContextChunk(trace, messages.size(), currentTokens, false, 0, 0, 0, 0);
-            return;
+            return false;
         }
 
         // 1. 提取“初心链”
@@ -324,23 +348,41 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             if (firstList.size() < messages.size()) {
                 trace.getWorkingMemory().replaceMessages(new ArrayList<>(firstList));
             }
-            return;
+            return firstList.size() < messages.size();
         }
 
-        // 3. 为压缩消息预留空间
-        //    窗口预算始终使用用户配置的 maxTokens，不受模型上下文窗口膨胀。
-        //    模型感知阈值（effectiveMaxTokens）仅用于触发判断（是否需要压缩），
-        //    不用于决定保留多少消息——否则大上下文模型（如 200K）会导致
-        //    窗口预算膨胀到 180K，使压缩形同虚设。
-        int availableTokens = this.maxTokens - fixedTokens;
+        // 3. 为压缩消息预留空间。强制模式按失败次数逐步收紧预算。
+        int compressionBudget = Math.min(this.maxTokens, effectiveMaxTokens);
+        if (force) {
+            int level = Math.max(1, forceLevel);
+            compressionBudget = Math.max(1_000, compressionBudget >> Math.min(level, 4));
+        }
+        int availableTokens = compressionBudget - fixedTokens;
+        if (availableTokens <= 0) {
+            // 固定上下文无法进一步压缩时，仍删除所有可变历史，尽可能恢复请求。
+            if (firstList.size() < messages.size()) {
+                trace.getWorkingMemory().replaceMessages(new ArrayList<>(firstList));
+                return true;
+            }
+            log.warn("ReActAgent [{}] fixed context ({} tokens) exceeds compression budget ({}), " +
+                            "cannot recover context-length error", trace.getAgentName(), fixedTokens, compressionBudget);
+            return microCompacted;
+        }
         int summaryReserve = Math.max(200, (int) (availableTokens * 0.1));
-        int windowBudget = availableTokens - summaryReserve;
+        int windowBudget = Math.max(0, availableTokens - summaryReserve);
 
         // 4. 双维度确定截断点
         //    - targetByCount ：按消息数量维度的截断位置
         //    - targetByTokens：按 Token 预算维度的截断位置（从尾向前累加）
         //    - minReservedIdx：保留窗口的绝对下限，防止 Token 维度过度截断
-        int targetByCount = Math.max(lastFirstIdx + 1, messages.size() - maxMessages);
+        int targetByCount;
+        if (force) {
+            int forceMessageBudget = Math.max(1,
+                    ((int) messageSize) >> Math.min(Math.max(1, forceLevel), 4));
+            targetByCount = Math.max(lastFirstIdx + 1, messages.size() - forceMessageBudget);
+        } else {
+            targetByCount = Math.max(lastFirstIdx + 1, messages.size() - maxMessages);
+        }
 
         int targetByTokens = lastFirstIdx + 1;
         int runningTokens = 0;
@@ -358,7 +400,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         //    无论 Token 预算多紧张，保留窗口至少保留 minReservedMessages 条消息。
         //    这样可以避免单条大消息（如文件读取结果）占满预算后，
         //    Agent 的历史上下文被压缩到只剩 1~2 条消息，导致之前的工作白费。
-        int minReservedIdx = Math.max(lastFirstIdx + 1, messages.size() - minReservedMessages);
+        int minReservedIdx = Math.max(lastFirstIdx + 1,
+                messages.size() - (force ? 0 : minReservedMessages));
 
         int rawTargetByTokens = targetByTokens;  // 保存原始Token截断位置，供步骤6.1使用
         int targetIdx = Math.max(targetByCount, Math.min(targetByTokens, minReservedIdx));
@@ -523,7 +566,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         // 8. 更新工作区
         int beforeSize = messages.size();
         compressed = removeDanglingToolOutputs(compressed);
-        if (!compressed.equals(messages)) {
+        int afterTokens = estimateTokens(compressed, systemPrompt) + toolsTokens;
+        boolean changed = microCompacted || (!compressed.equals(messages)
+                && (compressed.size() < beforeSize || afterTokens < currentTokens));
+        if (changed) {
             trace.getWorkingMemory().replaceMessages(compressed);
 
             if (log.isDebugEnabled()) {
@@ -543,7 +589,6 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 }
             }
 
-            int afterTokens = estimateTokens(compressed, null) + toolsTokens;
             pushContextChunk(trace, compressed.size(), afterTokens, true,
                             beforeSize, compressed.size(),
                             currentTokens, afterTokens);
@@ -551,6 +596,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             // 压缩条件触发但实际未变更（兜底），仍推送当前状态
             pushContextChunk(trace, messages.size(), currentTokens, false, 0, 0, 0, 0);
         }
+        return changed;
     }
 
     private int alignStartToToolCallGroup(List<ChatMessage> messages, int startIdx, int minIdx) {
@@ -992,7 +1038,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             return;
         }
         ChatModel chatModel = options.getChatModel();
-        if (chatModel == null) {
+        if (chatModel == null || chatModel.getConfig() == null) {
             return;
         }
         CacheControl cacheControl = chatModel.getConfig().getCacheControl();

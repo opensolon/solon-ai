@@ -180,8 +180,12 @@ public class CompressionUtil {
      * <ul>
      *     <li>{@code prompt is too long}</li>
      *     <li>{@code context length}</li>
+     *     <li>{@code context_length_exceeded}</li>
      *     <li>{@code maximum context}</li>
+     *     <li>{@code maximum input length}</li>
      *     <li>{@code too many tokens}</li>
+     *     <li>{@code input_too_long}</li>
+     *     <li>{@code request_too_large}</li>
      *     <li>{@code context window}</li>
      * </ul>
      *
@@ -198,8 +202,12 @@ public class CompressionUtil {
                 String lower = msg.toLowerCase();
                 if (lower.contains("prompt is too long")
                         || lower.contains("context length")
+                        || lower.contains("context_length_exceeded")
                         || lower.contains("maximum context")
+                        || lower.contains("maximum input length")
                         || lower.contains("too many tokens")
+                        || lower.contains("input_too_long")
+                        || lower.contains("request_too_large")
                         || lower.contains("context window")) {
                     return true;
                 }
