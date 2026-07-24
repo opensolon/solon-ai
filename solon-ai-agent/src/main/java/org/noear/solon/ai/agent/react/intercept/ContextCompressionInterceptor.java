@@ -208,7 +208,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      */
     private int resolveEffectiveMaxTokens(ChatModel model) {
         try {
-            if (model != null) {
+            if (model != null && model.getConfig() != null) {
                 long contextLength = model.getConfig().getContextLength();
                 if (contextLength > 0) {
                     // 有效上下文窗口 = 模型窗口 - 系统提示词保留
@@ -264,16 +264,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         //    可缓存块被保留，不被压缩逻辑破坏其结构性完整性。
         markStaticContextBoundary(trace, systemPrompt);
 
-        // ⭐ 解析模型感知的有效 Token 阈值（仅用于触发判断和极端场景防御，
-        //    不影响保留窗口预算——窗口预算始终使用用户配置的 maxTokens）
+        // ⭐ 解析模型感知的有效 Token 阈值，同时用于触发判断和压缩目标预算。
         int effectiveMaxTokens = resolveEffectiveMaxTokens(chatModel);
-
-        // 0. ⭐ 单条消息硬上限兜底（内容级截断）—— MicroCompact 守卫
-        //    对应 claude-code 的 microcompactMessages()：在每次调用前
-        //    无条件截断超大的工具输出，防止单条消息撑爆上下文。
-        //    perMessageCap 自动推导基于用户配置的 maxTokens（而非模型窗口），
-        //    确保单条消息不会占满整个滑动窗口预算。
-        // enforcePerMessageCap 已在上面完成 MicroCompact；这里仅保留其变更状态。
 
         // 收集 tools 元信息（仅 NATIVE_TOOL 模式下 LLM 会接收 tools 定义）
         int toolsTokens = 0;
@@ -351,11 +343,14 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             return firstList.size() < messages.size();
         }
 
-        // 3. 为压缩消息预留空间。强制模式按失败次数逐步收紧预算。
+        // 3. 为压缩消息预留空间。强制模式按失败次数逐步收紧预算，
+        // 避免首次 PTL 就丢失一半历史。
         int compressionBudget = Math.min(this.maxTokens, effectiveMaxTokens);
         if (force) {
-            int level = Math.max(1, forceLevel);
-            compressionBudget = Math.max(1_000, compressionBudget >> Math.min(level, 4));
+            double[] forceRatios = {0.8D, 0.6D, 0.4D, 0.25D};
+            int level = Math.min(Math.max(1, forceLevel), forceRatios.length);
+            compressionBudget = Math.max(1_000,
+                    (int) (compressionBudget * forceRatios[level - 1]));
         }
         int availableTokens = compressionBudget - fixedTokens;
         if (availableTokens <= 0) {
@@ -566,9 +561,9 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         // 8. 更新工作区
         int beforeSize = messages.size();
         compressed = removeDanglingToolOutputs(compressed);
+        compressed = convergeToBudget(compressed, systemPrompt, toolsTokens, compressionBudget);
         int afterTokens = estimateTokens(compressed, systemPrompt) + toolsTokens;
-        boolean changed = microCompacted || (!compressed.equals(messages)
-                && (compressed.size() < beforeSize || afterTokens < currentTokens));
+        boolean changed = microCompacted || !compressed.equals(messages);
         if (changed) {
             trace.getWorkingMemory().replaceMessages(compressed);
 
@@ -597,6 +592,47 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             pushContextChunk(trace, messages.size(), currentTokens, false, 0, 0, 0, 0);
         }
         return changed;
+    }
+
+    /**
+     * 将压缩结果硬收敛到目标预算。按最早的完整语义单元删除可变历史：
+     * Assistant(tool_calls) 与其连续工具结果始终整组删除，避免产生错位消息。
+     * META_FIRST 属于固定上下文，不参与删除；若固定上下文本身超限则保留并告警。
+     */
+    private List<ChatMessage> convergeToBudget(List<ChatMessage> messages, String systemPrompt,
+                                               int toolsTokens, int budget) {
+        List<ChatMessage> result = new ArrayList<>(messages);
+        while (estimateTokens(result, systemPrompt) + toolsTokens > budget) {
+            int removableIdx = -1;
+            for (int i = 0; i < result.size(); i++) {
+                if (!result.get(i).hasMetadata(AgentTrace.META_FIRST)) {
+                    removableIdx = i;
+                    break;
+                }
+            }
+
+            if (removableIdx < 0) {
+                log.warn("Fixed context exceeds compression budget ({} tokens)", budget);
+                break;
+            }
+
+            int removeEnd = removableIdx + 1;
+            ChatMessage first = result.get(removableIdx);
+            if (first instanceof AssistantMessage
+                    && Assert.isNotEmpty(((AssistantMessage) first).getToolCalls())) {
+                while (removeEnd < result.size()) {
+                    ChatMessage next = result.get(removeEnd);
+                    if (next instanceof ToolMessage || isObservation(next)) {
+                        removeEnd++;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            result.subList(removableIdx, removeEnd).clear();
+            result = removeDanglingToolOutputs(result);
+        }
+        return result;
     }
 
     private int alignStartToToolCallGroup(List<ChatMessage> messages, int startIdx, int minIdx) {

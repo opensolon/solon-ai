@@ -18,6 +18,7 @@ package org.noear.solon.ai.util;
 import org.noear.solon.util.CallableTx;
 
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Predicate;
 
 /**
  * 重试任务
@@ -42,6 +43,8 @@ public class RetryTask {
     private long maxDelayMs = DEFAULT_MAX_DELAY_MS;
     //重试监听
     private RetryListener retryListener;
+    //异常是否允许重试
+    private Predicate<Throwable> retryPredicate = e -> true;
 
     public RetryTask maxRetries(int maxRetries) {
         this.maxRetries = maxRetries;
@@ -61,6 +64,14 @@ public class RetryTask {
 
     public RetryTask onRetry(RetryListener retryListener) {
         this.retryListener = retryListener;
+        return this;
+    }
+
+    /**
+     * 设置异常重试条件。返回 false 时立即抛出原始异常，不再通知监听器或退避等待。
+     */
+    public RetryTask retryIf(Predicate<Throwable> retryPredicate) {
+        this.retryPredicate = retryPredicate == null ? e -> true : retryPredicate;
         return this;
     }
 
@@ -92,6 +103,10 @@ public class RetryTask {
 
                 if (e.getCause() instanceof InterruptedException) {
                     throw (InterruptedException) e.getCause();
+                }
+
+                if (!retryPredicate.test(e)) {
+                    throwThrowable(e);
                 }
 
                 // 如果还没到最后一次，执行等待逻辑
@@ -128,12 +143,12 @@ public class RetryTask {
             throw new InterruptedException("Retry aborted: thread interrupted before any attempt");
         }
 
-        if (lastException instanceof RuntimeException) {
-            throw (RuntimeException) lastException;
-        } else if (lastException instanceof Error) {
-            throw (Error) lastException;
-        } else {
-            throw (X) lastException;
-        }
+        throwThrowable(lastException);
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <X extends Throwable> void throwThrowable(Throwable exception) throws X {
+        throw (X) exception;
     }
 }

@@ -744,10 +744,19 @@ public class ContextCompressionInterceptorTest {
                 .filter(m -> m.getToolCalls() != null && !m.getToolCalls().isEmpty())
                 .findFirst()
                 .orElse(null);
+        ToolMessage toolAfter = workingMemory.getMessages().stream()
+                .filter(m -> m instanceof ToolMessage)
+                .map(m -> (ToolMessage) m)
+                .findFirst()
+                .orElse(null);
 
-        assertNotNull(after, "含 toolCalls 的 Assistant 应保留");
-        assertEquals(thought, after.getContent(),
-                "含 toolCalls 的 Assistant 正文不应被截断");
+        // 含 toolCalls 的 Assistant 不允许只截正文；若整组超过硬预算，应连同结果原子删除。
+        assertEquals(after == null, toolAfter == null,
+                "工具调用及结果必须同时保留或同时删除");
+        if (after != null) {
+            assertEquals(thought, after.getContent(),
+                    "保留工具组时，含 toolCalls 的 Assistant 正文不应被截断");
+        }
     }
 
     // ============================================================
@@ -960,6 +969,48 @@ public class ContextCompressionInterceptorTest {
                 new RuntimeException("request_too_large")));
         assertFalse(CompressionUtil.isPromptTooLongError(
                 new RuntimeException("rate_limit_exceeded")));
+    }
+
+    @Test
+    public void testForceCompressionHardBudgetKeepsToolGroupAtomic() throws Exception {
+        ChatMessage goal = ChatMessage.ofUser("Goal");
+        goal.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(goal);
+
+        for (int i = 0; i < 8; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant(repeat("history ", 500)));
+        }
+
+        List<ToolCall> calls = Arrays.asList(
+                new ToolCall("0", "call_1", "t1", "{}", Utils.asMap()),
+                new ToolCall("1", "call_2", "t2", "{}", Utils.asMap()));
+        AssistantMessage action = new AssistantMessage("call", false, null, null, calls, null);
+        ToolMessage result1 = ChatMessage.ofTool(repeat("result1 ", 1000), "t1", "call_1");
+        ToolMessage result2 = ChatMessage.ofTool(repeat("result2 ", 1000), "t2", "call_2");
+        workingMemory.addMessage(action);
+        workingMemory.addMessage(result1);
+        workingMemory.addMessage(result2);
+        workingMemory.addMessage(ChatMessage.ofUser("continue"));
+
+        assertTrue(interceptor.onReasonRetry(trace,
+                new RuntimeException("context_length_exceeded"), 1, "system"));
+
+        List<ChatMessage> result = workingMemory.getMessages();
+        boolean hasAction = result.contains(action);
+        assertEquals(hasAction, result.contains(result1));
+        assertEquals(hasAction, result.contains(result2));
+        if (hasAction) {
+            assertTrue(result.indexOf(action) < result.indexOf(result1));
+            assertTrue(result.indexOf(result1) < result.indexOf(result2));
+        }
+    }
+
+    private String repeat(String value, int count) {
+        StringBuilder buf = new StringBuilder(value.length() * count);
+        for (int i = 0; i < count; i++) {
+            buf.append(value);
+        }
+        return buf.toString();
     }
 
     @Test

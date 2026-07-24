@@ -126,6 +126,67 @@ public class ReasonTaskTest {
     }
 
     @Test
+    @DisplayName("连续 PTL 会逐次压缩并重建请求")
+    public void testRepeatedContextLengthExceeded_compressesAgain() throws Throwable {
+        org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor compression =
+                new org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor(10, 10000, null);
+        ReActOptions options = new ReActOptions(chatModel);
+        options.getModelOptions().interceptorAdd(compression);
+        when(trace.getOptions()).thenReturn(options);
+
+        ChatRequestDesc first = mock(ChatRequestDesc.class);
+        ChatRequestDesc second = mock(ChatRequestDesc.class);
+        ChatRequestDesc third = mock(ChatRequestDesc.class);
+        when(first.options(any(Consumer.class))).thenReturn(first);
+        when(second.options(any(Consumer.class))).thenReturn(second);
+        when(third.options(any(Consumer.class))).thenReturn(third);
+        when(first.call()).thenThrow(new RuntimeException("context_length_exceeded"));
+        when(second.call()).thenThrow(new RuntimeException("context_length_exceeded"));
+        ChatResponse success = mockResponse(msgFromJson("{\"role\":\"assistant\",\"content\":\"done\"}"));
+        when(third.call()).thenReturn(success);
+
+        List<List<ChatMessage>> snapshots = new ArrayList<>();
+        when(chatModel.prompt(anyList())).thenAnswer(invocation -> {
+            snapshots.add(new ArrayList<>(invocation.getArgument(0)));
+            if (snapshots.size() == 1) return first;
+            if (snapshots.size() == 2) return second;
+            return third;
+        });
+
+        workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
+        for (int i = 0; i < 30; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("history-" + i));
+        }
+
+        reasonTask.run(trace, context);
+
+        assertEquals(3, snapshots.size());
+        assertTrue(snapshots.get(1).size() < snapshots.get(0).size());
+        assertTrue(snapshots.get(2).size() <= snapshots.get(1).size());
+    }
+
+    @Test
+    @DisplayName("重试拦截器异常不会覆盖原始请求并允许后续重试")
+    public void testReasonRetryInterceptorFailureIsIsolated() throws Throwable {
+        ReActInterceptor broken = new ReActInterceptor() {
+            @Override
+            public boolean onReasonRetry(ReActTrace trace, Throwable error, int attempt, String systemPrompt) {
+                throw new IllegalStateException("interceptor failed");
+            }
+        };
+        ReActOptions options = new ReActOptions(chatModel);
+        options.getModelOptions().interceptorAdd(broken);
+        when(trace.getOptions()).thenReturn(options);
+
+        ChatResponse success = mockResponse(msgFromJson("{\"role\":\"assistant\",\"content\":\"done\"}"));
+        when(reqDesc.call()).thenThrow(new RuntimeException("temporary failure")).thenReturn(success);
+
+        reasonTask.run(trace, context);
+
+        verify(reqDesc, times(2)).call();
+    }
+
+    @Test
     @DisplayName("context_length_exceeded 后压缩并基于新消息重建请求")
     public void testContextLengthExceeded_compressesAndRebuildsRequest() throws Throwable {
         org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor compression =

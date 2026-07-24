@@ -197,11 +197,10 @@ public class ReasonTask {
         trace.newCurrentReasonId();
         String systemPromptStr = systemPromptBuf.toString();
 
-        List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.ofSystem(systemPromptStr));
-        messages.addAll(trace.getWorkingMemory().getMessages());
-
         if (trace.hasStreamSink()) {
+            List<ChatMessage> messages = new ArrayList<>();
+            messages.add(ChatMessage.ofSystem(systemPromptStr));
+            messages.addAll(trace.getWorkingMemory().getMessages());
             trace.pushAgentChunk(new ReasonStartChunk(trace, systemPromptStr, messages));
         }
 
@@ -363,19 +362,22 @@ public class ReasonTask {
             return new RetryTask()
                     .maxRetries(maxRetries)
                     .initialDelayMs(trace.getOptions().getRetryDelayMs())
+                    // 流式响应已经对外输出后，重试会造成重复内容；直接保留并抛出原始异常。
+                    .retryIf(e -> !streamEmitted[0])
                     .onRetry((attempt, e) -> {
-                        if (streamEmitted[0]) {
-                            // 流式响应已部分输出，重试会导致内容重复。
-                            // 不做压缩，supplier 会快速失败终止重试。
-                            LOG.warn("ReActAgent [{}] stream failed after output; skip compression retry: {}",
-                                    config.getName(), e.toString());
-                            return;
-                        }
                         boolean rebuilt = false;
                         for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
-                            if (entity.target.isEnabled()
-                                    && entity.target.onReasonRetry(trace, e, attempt, systemPrompt)) {
-                                rebuilt = true;
+                            if (!entity.target.isEnabled()) {
+                                continue;
+                            }
+                            try {
+                                if (entity.target.onReasonRetry(trace, e, attempt, systemPrompt)) {
+                                    rebuilt = true;
+                                }
+                            } catch (Throwable interceptorError) {
+                                LOG.warn("ReActAgent [{}] interceptor [{}] failed during reason retry; " +
+                                                "continue with original retry flow",
+                                        config.getName(), entity.target.getClass().getName(), interceptorError);
                             }
                         }
                         if (rebuilt) {
@@ -386,12 +388,6 @@ public class ReasonTask {
                         }
                     })
                     .callWithRetry(() -> {
-                        // 流式响应已部分输出后不允许重试，否则会从头产生重复内容。
-                        // 抛出 LlmNoReturnException 让 RetryTask 快速耗尽重试后终止。
-                        if (streamEmitted[0]) {
-                            throw new LlmNoReturnException("Stream already emitted, cannot safely retry");
-                        }
-
                         List<ChatMessage> messages = new ArrayList<>();
                         messages.add(ChatMessage.ofSystem(systemPrompt));
                         messages.addAll(trace.getWorkingMemory().getMessages());
