@@ -313,6 +313,9 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
         if (trace.isAbnormal()) {
             if (trace.hasStreamSink()) {
+                trace.pushAgentChunk(new ReasonDeltaChunk(trace, null, assistantMessage));
+
+                //@deprecated 4.0.4
                 trace.pushAgentChunk(new ReasonChunk(trace, null, assistantMessage));
             }
         }

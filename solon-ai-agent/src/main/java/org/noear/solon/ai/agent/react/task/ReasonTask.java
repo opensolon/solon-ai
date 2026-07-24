@@ -404,8 +404,12 @@ public class ReasonTask {
 
                                     response = req.stream()
                                             .takeUntil(r -> trace.isStreamCancelled())
-                                            .doOnNext(resp -> trace.pushAgentChunk(
-                                                    new ReasonChunk(trace, resp, resp.getMessage())))
+                                            .doOnNext(resp -> {
+                                                trace.pushAgentChunk(new ReasonDeltaChunk(trace, resp, resp.getMessage()));
+
+                                                //@deprecated 4.0.4
+                                                trace.pushAgentChunk(new ReasonChunk(trace, resp, resp.getMessage()));
+                                            })
                                             .blockLast();
                                 } else {
                                     response = req.call();
