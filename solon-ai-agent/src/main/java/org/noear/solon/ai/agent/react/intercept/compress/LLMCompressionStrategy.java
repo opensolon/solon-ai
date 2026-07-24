@@ -156,22 +156,19 @@ public class LLMCompressionStrategy implements CompressionStrategy {
             // PTL 检测：若返回 PTL 错误（内容文本或异常转译），缩小范围重试
             if (CompressionUtil.isPromptTooLong(summary)) {
                 int currentSize = currentBatch.size();
-                int targetStart = currentSize / 2;
-                int reducedStart = alignToConversationBoundary(currentBatch, targetStart);
-                if (reducedStart <= 0 || reducedStart >= currentSize) {
+                List<ChatMessage> reduced = reduceBatchPreservingSummaries(currentBatch);
+                if (reduced == null || reduced.size() >= currentSize) {
                     // 已经缩减到最小了还是不行，放弃
                     log.warn("PTL retry exhausted (attempt {}/{}), batch has no safe boundary",
                             ptlAttempt + 1, MAX_PTL_RETRIES);
                     return null;
                 }
 
-                // 丢弃最旧部分，但从完整对话轮次/工具调用组开始，避免把 ToolMessage
-                // 与对应的 Assistant(tool_calls) 拆开后交给摘要模型。
-                List<ChatMessage> reduced = new ArrayList<>(currentBatch.subList(reducedStart, currentSize));
+                // 旧摘要承载更早历史，PTL 缩批只能淘汰新增历史，不能把滚动摘要一起丢掉。
                 currentBatch = reduced;
 
-                log.warn("PTL detected, reduced batch from {} to {} messages at boundary {} (attempt {}/{})",
-                        currentSize, reduced.size(), reducedStart, ptlAttempt + 1, MAX_PTL_RETRIES);
+                log.warn("PTL detected, reduced batch from {} to {} messages (attempt {}/{})",
+                        currentSize, reduced.size(), ptlAttempt + 1, MAX_PTL_RETRIES);
                 continue;
             }
 
@@ -179,6 +176,33 @@ public class LLMCompressionStrategy implements CompressionStrategy {
         }
 
         return null;
+    }
+
+    private List<ChatMessage> reduceBatchPreservingSummaries(List<ChatMessage> messages) {
+        List<ChatMessage> summaries = new ArrayList<>();
+        List<ChatMessage> history = new ArrayList<>();
+        for (ChatMessage message : messages) {
+            if (message.hasMetadata(ContextCompressionInterceptor.META_COMPRESSED)) {
+                summaries.add(message);
+            } else {
+                history.add(message);
+            }
+        }
+
+        if (history.size() <= 1) {
+            return null;
+        }
+
+        int targetStart = history.size() / 2;
+        int reducedStart = alignToConversationBoundary(history, targetStart);
+        if (reducedStart <= 0 || reducedStart >= history.size()) {
+            return null;
+        }
+
+        List<ChatMessage> reduced = new ArrayList<>(summaries.size() + history.size() - reducedStart);
+        reduced.addAll(summaries);
+        reduced.addAll(history.subList(reducedStart, history.size()));
+        return reduced;
     }
 
     /**

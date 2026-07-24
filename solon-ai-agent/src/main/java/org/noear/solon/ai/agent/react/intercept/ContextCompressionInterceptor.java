@@ -44,8 +44,10 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -290,49 +292,27 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         // 预留缓冲，避免频繁重构；强制模式不受本地阈值限制
         if (!force && messageSize <= maxMessages && currentTokens <= (effectiveMaxTokens * COMPACT_THRESHOLD_RATIO)) {
-            pushContextChunk(trace, messages.size(), currentTokens, false, 0, 0, 0, 0);
-            return false;
+            pushContextChunk(trace, messages.size(), currentTokens, microCompacted,
+                    originalMessages.size(), messages.size(),
+                    microCompacted ? estimateTokens(originalMessages, systemPrompt) + toolsTokens : currentTokens,
+                    currentTokens);
+            return microCompacted;
         }
 
-        // 1. 提取“初心链”
-        List<ChatMessage> firstList = new ArrayList<>();
+        // 1. 提取固定前缀。META_FIRST 理论上连续出现在工作记忆开头；若出现非连续标记，
+        // 将最后一个 META_FIRST 之前的所有消息一并视为固定前缀，保持原始顺序并避免中间历史无声丢失。
         int lastFirstIdx = -1;
         for (int i = 0; i < messages.size(); i++) {
-            ChatMessage msg = messages.get(i);
-            if (msg.hasMetadata(AgentTrace.META_FIRST)) {
-                firstList.add(msg);
+            if (messages.get(i).hasMetadata(AgentTrace.META_FIRST)) {
                 lastFirstIdx = i;
             }
         }
+        List<ChatMessage> firstList = lastFirstIdx < 0
+                ? new ArrayList<>()
+                : new ArrayList<>(messages.subList(0, lastFirstIdx + 1));
 
-        // 2. 计算固定开销（不可压缩部分：systemPrompt + 初心链 + tools定义） —— 【已引入完备兜底】
-        int fixedTokens = 0;
-        if (!Assert.isEmpty(systemPrompt)) {
-            fixedTokens += encoding.countTokens(systemPrompt) + 4;
-        }
-        fixedTokens += toolsTokens;
-
-        for (ChatMessage firstMsg : firstList) {
-            Integer cachedSize = firstMsg.getMetadataAs(META_TOKEN_SIZE);
-            if (cachedSize == null) {
-                cachedSize = 0;
-                if (firstMsg.getContent() != null) {
-                    cachedSize += encoding.countTokens(firstMsg.getContent());
-                }
-                if (firstMsg instanceof AssistantMessage) {
-                    AssistantMessage am = (AssistantMessage) firstMsg;
-                    if (Assert.isNotEmpty(am.getToolCalls())) {
-                        for (ToolCall tc : am.getToolCalls()) {
-                            String name = tc.getName() != null ? tc.getName() : "";
-                            String args = tc.getArgumentsStr() != null ? tc.getArgumentsStr() : "";
-                            cachedSize += encoding.countTokens(name + args) + 10;
-                        }
-                    }
-                }
-                firstMsg.addMetadata(META_TOKEN_SIZE, cachedSize);
-            }
-            fixedTokens += cachedSize + 4;
-        }
+        // 2. 计算固定开销（systemPrompt + 固定前缀 + tools 定义），统一复用完整估算公式。
+        int fixedTokens = estimateTokens(firstList, systemPrompt) + toolsTokens;
 
         // 极端场景防御：固定开销超过模型与用户配置共同决定的有效预算
         int baseBudget = Math.min(this.maxTokens, effectiveMaxTokens);
@@ -379,22 +359,21 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         //    - minReservedIdx：保留窗口的绝对下限，防止 Token 维度过度截断
         int targetByCount;
         if (force) {
-            int variableSize = Math.max(0, messages.size() - (lastFirstIdx + 1));
+            int variableSize = Math.max(0, messages.size() - firstList.size());
             int forceMessageBudget = Math.max(1,
                     (int) Math.ceil(variableSize * forceRatio));
-            targetByCount = Math.max(lastFirstIdx + 1, messages.size() - forceMessageBudget);
+            targetByCount = Math.max(firstList.size(), messages.size() - forceMessageBudget);
         } else {
-            targetByCount = Math.max(lastFirstIdx + 1, messages.size() - maxMessages);
+            targetByCount = Math.max(firstList.size(), messages.size() - maxMessages);
         }
 
-        int targetByTokens = lastFirstIdx + 1;
+        int targetByTokens = firstList.size();
         int runningTokens = 0;
-        for (int i = messages.size() - 1; i > lastFirstIdx; i--) {
-            ChatMessage msg = messages.get(i);
-            Integer cachedSize = msg.getMetadataAs(META_TOKEN_SIZE);
-            runningTokens += (cachedSize != null ? cachedSize : 0) + 4;
+        for (int i = messages.size() - 1; i >= firstList.size(); i--) {
+            runningTokens += estimateMessageTokens(messages.get(i)) + 4;
             if (runningTokens > windowBudget) {
-                targetByTokens = Math.max(lastFirstIdx + 1, i);
+                // 当前消息是首条导致超预算的消息，应进入过期区参与摘要。
+                targetByTokens = i + 1;
                 break;
             }
         }
@@ -403,18 +382,18 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         //    无论 Token 预算多紧张，保留窗口至少保留 minReservedMessages 条消息。
         //    这样可以避免单条大消息（如文件读取结果）占满预算后，
         //    Agent 的历史上下文被压缩到只剩 1~2 条消息，导致之前的工作白费。
-        int minReservedIdx = Math.max(lastFirstIdx + 1,
+        int minReservedIdx = Math.max(firstList.size(),
                 messages.size() - (force ? 0 : minReservedMessages));
 
         int rawTargetByTokens = targetByTokens;  // 保存原始Token截断位置，供步骤6.1使用
         int targetIdx = Math.max(targetByCount, Math.min(targetByTokens, minReservedIdx));
-        targetIdx = alignStartToToolCallGroup(messages, targetIdx, lastFirstIdx + 1);
+        targetIdx = alignStartToToolCallGroup(messages, targetIdx, firstList.size());
 
         // 5. ⭐ 原子对对齐（防止 tool-use 原子对被截断为两段）
         //    若 targetIdx 落在 ToolMessage 或 Observation 上，向前回退至配套的 Assistant(with tool_calls)
         //    若落在 Assistant(with tool_calls) 上，保留（这是原子对的正确起点）
         //    若落在普通消息上（User / Assistant thought），保留（不存在配对问题）
-        while (targetIdx > (lastFirstIdx + 1) && targetIdx < messages.size()) {
+        while (targetIdx > firstList.size() && targetIdx < messages.size()) {
             ChatMessage msg = messages.get(targetIdx);
             if (msg instanceof ToolMessage || isObservation(msg)) {
                 targetIdx--; // 向前追溯匹配的源头 Assistant(with tool_calls)
@@ -427,7 +406,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         // 6. 语义连贯补齐：若截断点前一条为带思考内容的 Assistant thought，一并纳入保留区
         //    使 LLM 获得完整的推理上下文（排除空壳消息：既无 content 也无 tool_calls 的不应纳入）
-        if (targetIdx > (lastFirstIdx + 1)) {
+        if (targetIdx > firstList.size()) {
             ChatMessage prev = messages.get(targetIdx - 1);
             if (prev instanceof AssistantMessage
                     && Assert.isEmpty(((AssistantMessage) prev).getToolCalls())
@@ -446,8 +425,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         boolean protectedSummaryApplied = false;
         int actualWindowTokens = 0;
         for (int i = targetIdx; i < messages.size(); i++) {
-            Integer cachedSize = messages.get(i).getMetadataAs(META_TOKEN_SIZE);
-            actualWindowTokens += (cachedSize != null ? cachedSize : 0) + 4;
+            actualWindowTokens += estimateMessageTokens(messages.get(i)) + 4;
         }
         if (actualWindowTokens > windowBudget) {
             if (rawTargetByTokens > minReservedIdx) {
@@ -456,7 +434,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 rawTargetByTokens = alignStartToToolCallGroup(messages, rawTargetByTokens, targetIdx);
             } else {
                 // 保护没起效 → 回退到预算截断点，并按 tool-use 原子组向前补齐
-                targetIdx = alignStartToToolCallGroup(messages, Math.max(lastFirstIdx + 1, targetByTokens), lastFirstIdx + 1);
+                targetIdx = alignStartToToolCallGroup(messages, Math.max(firstList.size(), targetByTokens), firstList.size());
             }
         }
 
@@ -464,8 +442,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         List<ChatMessage> compressed = new ArrayList<>();
         compressed.addAll(firstList);
 
-        if (targetIdx > (lastFirstIdx + 1) && targetIdx <= messages.size()) {
-            List<ChatMessage> expired = new ArrayList<>(messages.subList(lastFirstIdx + 1, targetIdx));
+        if (targetIdx > firstList.size() && targetIdx <= messages.size()) {
+            List<ChatMessage> expired = new ArrayList<>(messages.subList(firstList.size(), targetIdx));
             // 旧摘要不能无声丢失：与新增过期历史一起交给策略，形成滚动摘要。
             // 策略可以据此合并上一代摘要和本轮新增内容，避免摘要链被截断。
             List<ChatMessage> historyToCompress = new ArrayList<>(expired);
@@ -476,7 +454,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             if (!historyToCompress.isEmpty()) {
                 boolean summaryAdded = false;
                 if (compressionStrategy != null) {
-                    ChatMessage summaryMsg = compressionStrategy.compress(chatModel, maxRetries, trace, historyToCompress);
+                    ChatMessage summaryMsg = safeCompress(chatModel, trace, historyToCompress);
                     if (summaryMsg != null) {
                         compressed.add(summaryMsg);
                         summaryAdded = true;
@@ -543,7 +521,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             if (!protectedToCompress.isEmpty()) {
                 boolean protectedSummaryAdded = false;
                 if (compressionStrategy != null) {
-                    ChatMessage summaryMsg = compressionStrategy.compress(chatModel, maxRetries, trace, protectedToCompress);
+                    ChatMessage summaryMsg = safeCompress(chatModel, trace, protectedToCompress);
                     if (summaryMsg != null) {
                         compressed.add(summaryMsg);
                         protectedSummaryAdded = true;
@@ -588,8 +566,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         // 8. 更新工作区
         int beforeSize = messages.size();
-        compressed = removeDanglingToolOutputs(compressed);
-        compressed = convergeToBudget(compressed, systemPrompt, toolsTokens, compressionBudget);
+        boolean nativeToolMode = trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL;
+        compressed = removeDanglingToolOutputs(compressed, nativeToolMode);
+        compressed = convergeToBudget(compressed, systemPrompt, toolsTokens, compressionBudget,
+                nativeToolMode, firstList.size());
         int afterTokens = estimateTokens(compressed, systemPrompt) + toolsTokens;
         boolean changed = microCompacted || !compressed.equals(messages);
         if (changed) {
@@ -627,8 +607,19 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      * Assistant(tool_calls) 与其连续工具结果始终整组删除，避免产生错位消息。
      * META_FIRST 属于固定上下文，不参与删除；若固定上下文本身超限则保留并告警。
      */
+    private ChatMessage safeCompress(ChatModel chatModel, ReActTrace trace, List<ChatMessage> messages) {
+        try {
+            return compressionStrategy.compress(chatModel, maxRetries, trace, messages);
+        } catch (Exception e) {
+            log.warn("ReActAgent [{}] compression strategy failed, fallback to safe trimming",
+                    trace.getAgentName(), e);
+            return null;
+        }
+    }
+
     private List<ChatMessage> convergeToBudget(List<ChatMessage> messages, String systemPrompt,
-                                               int toolsTokens, int budget) {
+                                               int toolsTokens, int budget, boolean nativeToolMode,
+                                               int protectedPrefixSize) {
         List<ChatMessage> result = new ArrayList<>(messages);
         while (estimateTokens(result, systemPrompt) + toolsTokens > budget) {
             int latestSummaryIdx = -1;
@@ -641,7 +632,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
             // 摘要承载了已删除历史的信息，优先淘汰普通历史。
             int removableIdx = -1;
-            for (int i = 0; i < result.size(); i++) {
+            for (int i = protectedPrefixSize; i < result.size(); i++) {
                 ChatMessage message = result.get(i);
                 if (!message.hasMetadata(AgentTrace.META_FIRST)
                         && !message.hasMetadata(META_COMPRESSED)) {
@@ -652,7 +643,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
             // 普通历史已清空后，先删除旧摘要，最新摘要作为最后兜底。
             if (removableIdx < 0) {
-                for (int i = 0; i < result.size(); i++) {
+                for (int i = protectedPrefixSize; i < result.size(); i++) {
                     if (i != latestSummaryIdx
                             && !result.get(i).hasMetadata(AgentTrace.META_FIRST)) {
                         removableIdx = i;
@@ -683,9 +674,15 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 }
             }
             result.subList(removableIdx, removeEnd).clear();
-            result = removeDanglingToolOutputs(result);
+            result = removeDanglingToolOutputs(result, nativeToolMode);
         }
         return result;
+    }
+
+    /** 兼容内部测试及旧反射调用。 */
+    private List<ChatMessage> convergeToBudget(List<ChatMessage> messages, String systemPrompt,
+                                               int toolsTokens, int budget) {
+        return convergeToBudget(messages, systemPrompt, toolsTokens, budget, true, 0);
     }
 
     private int alignStartToToolCallGroup(List<ChatMessage> messages, int startIdx, int minIdx) {
@@ -724,7 +721,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         return startIdx;
     }
 
-    private List<ChatMessage> removeDanglingToolOutputs(List<ChatMessage> messages) {
+    private List<ChatMessage> removeDanglingToolOutputs(List<ChatMessage> messages, boolean nativeToolMode) {
         List<ChatMessage> result = new ArrayList<>(messages.size());
 
         for (int i = 0; i < messages.size(); i++) {
@@ -733,51 +730,46 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             if (msg instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls())) {
                 AssistantMessage assistant = (AssistantMessage) msg;
                 List<ChatMessage> toolOutputs = new ArrayList<>();
-                List<String> requiredCallIds = new ArrayList<>();
-
-                for (ToolCall tc : assistant.getToolCalls()) {
-                    if (tc.getId() != null) {
-                        requiredCallIds.add(tc.getId());
-                    }
-                }
-
                 int j = i + 1;
                 for (; j < messages.size(); j++) {
                     ChatMessage next = messages.get(j);
-                    if (next instanceof ToolMessage || isObservation(next)) {
+                    if (next instanceof ToolMessage || (nativeToolMode && isTextObservation(next))) {
                         toolOutputs.add(next);
                     } else {
                         break;
                     }
                 }
 
-                boolean completed = false;
-                if (Assert.isNotEmpty(requiredCallIds)) {
-                    List<String> remainingCallIds = new ArrayList<>(requiredCallIds);
-                    for (ChatMessage toolOutput : toolOutputs) {
-                        if (toolOutput instanceof ToolMessage) {
-                            String toolCallId = ((ToolMessage) toolOutput).getToolCallId();
-                            if (toolCallId != null) {
-                                remainingCallIds.remove(toolCallId);
-                            }
-                        }
+                Set<String> requiredCallIds = new LinkedHashSet<>();
+                boolean validCalls = true;
+                for (ToolCall tc : assistant.getToolCalls()) {
+                    String id = normalizeToolCallId(tc.getId());
+                    if (id == null || !requiredCallIds.add(id)) {
+                        validCalls = false;
+                        break;
                     }
-                    completed = remainingCallIds.isEmpty();
-                } else {
-                    completed = Assert.isNotEmpty(toolOutputs);
                 }
 
-                if (completed) {
-                    result.add(msg);
-                    for (ChatMessage toolOutput : toolOutputs) {
-                        if (toolOutput instanceof ToolMessage) {
-                            String toolCallId = ((ToolMessage) toolOutput).getToolCallId();
-                            if (toolCallId == null || requiredCallIds.isEmpty() || requiredCallIds.contains(toolCallId)) {
-                                result.add(toolOutput);
-                            }
-                        } else {
-                            result.add(toolOutput);
+                Map<String, ToolMessage> matchedOutputs = new java.util.LinkedHashMap<>();
+                boolean duplicateOutput = false;
+                for (ChatMessage toolOutput : toolOutputs) {
+                    if (!(toolOutput instanceof ToolMessage)) {
+                        continue;
+                    }
+                    ToolMessage output = (ToolMessage) toolOutput;
+                    String id = normalizeToolCallId(output.getToolCallId());
+                    if (id != null && requiredCallIds.contains(id)) {
+                        if (matchedOutputs.put(id, output) != null) {
+                            duplicateOutput = true;
                         }
+                    }
+                }
+
+                if (validCalls && !duplicateOutput
+                        && matchedOutputs.keySet().containsAll(requiredCallIds)) {
+                    result.add(msg);
+                    for (String id : requiredCallIds) {
+                        result.add(matchedOutputs.get(id));
                     }
                 }
 
@@ -785,7 +777,11 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 continue;
             }
 
-            if (msg instanceof ToolMessage || isObservation(msg)) {
+            if (msg instanceof ToolMessage) {
+                // 原生 ToolMessage 必须依附于前一条 Assistant(tool_calls)。
+                continue;
+            }
+            if (nativeToolMode && isTextObservation(msg)) {
                 continue;
             }
 
@@ -807,6 +803,13 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         }
 
         return result;
+    }
+
+    private String normalizeToolCallId(String id) {
+        if (id == null || id.trim().isEmpty()) {
+            return null;
+        }
+        return id;
     }
 
     private boolean hasToolCallId(AssistantMessage assistantMessage, String toolCallId) {
@@ -856,16 +859,6 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             if ((msg instanceof ToolMessage && ((ToolMessage) msg).isMultiModal())
                     || (msg instanceof UserMessage && ((UserMessage) msg).isMultiModal())
                     || (msg instanceof AssistantMessage && ((AssistantMessage) msg).isMultiModal())) {
-                result.add(msg);
-                continue;
-            }
-
-            // ⭐ 性能：优先用缓存初筛，避免每轮对全部消息做全量 BPE 编码。
-            //    缓存值（含 toolCalls 开销）可能略大于纯 content token，作为“是否超限”的
-            //    初筛是安全方向（宁可多检一条，不会漏检超限消息）。仅在缓存缺失或疑似
-            //    超限时才精确 countTokens 确认。
-            Integer cachedTokens = msg.getMetadataAs(META_TOKEN_SIZE);
-            if (cachedTokens != null && cachedTokens <= cap) {
                 result.add(msg);
                 continue;
             }
@@ -971,7 +964,14 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         String marker = "\n... [内容过大已截断：单条消息超过上下文预算，省略中间部分，仅保留首尾。"
                 + "如需完整内容，请用分页方式重新获取] ...\n";
         int markerTokens = encoding.countTokens(marker);
-        int budget = Math.max(0, maxTokens - markerTokens);
+        if (markerTokens > maxTokens) {
+            String shortMarker = "[内容已截断]";
+            while (!shortMarker.isEmpty() && encoding.countTokens(shortMarker) > maxTokens) {
+                shortMarker = shortMarker.substring(0, shortMarker.length() - 1);
+            }
+            return shortMarker;
+        }
+        int budget = maxTokens - markerTokens;
         int headTokens = budget / 2;
         int tailTokens = budget - headTokens;
 
@@ -996,49 +996,45 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
     private int estimateTokens(List<ChatMessage> messages, String systemPrompt) {
         int totalTokens = 0;
-        for (ChatMessage m : messages) {
-            // 尝试从元数据获取缓存值
-            Integer cachedCount = m.getMetadataAs(META_TOKEN_SIZE);
-
-            if (cachedCount == null) {
-                cachedCount = 0;
-                if (m.getContent() != null) {
-                    cachedCount += encoding.countTokens(m.getContent());
-                }
-
-                // 补算 AssistantMessage 的 toolCalls 序列化开销
-                if (m instanceof AssistantMessage) {
-                    AssistantMessage am = (AssistantMessage) m;
-                    if (Assert.isNotEmpty(am.getToolCalls())) {
-                        for (ToolCall tc : am.getToolCalls()) {
-                            String name = tc.getName() != null ? tc.getName() : "";
-                            String args = tc.getArgumentsStr() != null ? tc.getArgumentsStr() : "";
-
-                            cachedCount += encoding.countTokens(name + args);
-                            cachedCount += 10; // id + JSON 结构开销
-                        }
-                    }
-                    // 媒体块：base64/URL 不进 content 投影时仍会占请求体积，按长度保守估算
-                    cachedCount += estimateMediaTokens(am.getBlocks());
-                } else if (m instanceof UserMessage) {
-                    cachedCount += estimateMediaTokens(((UserMessage) m).getBlocks());
-                } else if (m instanceof ToolMessage) {
-                    cachedCount += estimateMediaTokens(((ToolMessage) m).getBlocks());
-                }
-
-                // 将计算结果回填到消息元数据中
-                m.addMetadata(META_TOKEN_SIZE, cachedCount);
-            }
-
-            totalTokens += cachedCount + 4; // Overhead
+        for (ChatMessage message : messages) {
+            totalTokens += estimateMessageTokens(message) + 4;
         }
 
-        // systemPrompt 的 token 开销
         if (systemPrompt != null && !systemPrompt.isEmpty()) {
             totalTokens += encoding.countTokens(systemPrompt) + 4;
         }
 
         return totalTokens + 3;
+    }
+
+    /**
+     * 每次按消息当前内容重新估算，metadata 仅作为可观测结果回填，不能作为可信输入。
+     * 消息内容块和工具调用集合可变，复用持久缓存可能造成陈旧或被外部 metadata 污染。
+     */
+    private int estimateMessageTokens(ChatMessage message) {
+        int count = 0;
+        if (message.getContent() != null) {
+            count += encoding.countTokens(message.getContent());
+        }
+
+        if (message instanceof AssistantMessage) {
+            AssistantMessage assistant = (AssistantMessage) message;
+            if (Assert.isNotEmpty(assistant.getToolCalls())) {
+                for (ToolCall tc : assistant.getToolCalls()) {
+                    String name = tc.getName() != null ? tc.getName() : "";
+                    String args = tc.getArgumentsStr() != null ? tc.getArgumentsStr() : "";
+                    count += encoding.countTokens(name + args) + 10;
+                }
+            }
+            count += estimateMediaTokens(assistant.getBlocks());
+        } else if (message instanceof UserMessage) {
+            count += estimateMediaTokens(((UserMessage) message).getBlocks());
+        } else if (message instanceof ToolMessage) {
+            count += estimateMediaTokens(((ToolMessage) message).getBlocks());
+        }
+
+        message.addMetadata(META_TOKEN_SIZE, count);
+        return count;
     }
 
     /**
@@ -1094,8 +1090,13 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     }
 
     private boolean isObservation(ChatMessage msg) {
-        return (msg instanceof ToolMessage) ||
-                (msg instanceof UserMessage && msg.getContent() != null && msg.getContent().startsWith("Observation:"));
+        return msg instanceof ToolMessage || isTextObservation(msg);
+    }
+
+    private boolean isTextObservation(ChatMessage msg) {
+        return msg instanceof UserMessage
+                && msg.getContent() != null
+                && msg.getContent().startsWith("Observation:");
     }
 
     /**

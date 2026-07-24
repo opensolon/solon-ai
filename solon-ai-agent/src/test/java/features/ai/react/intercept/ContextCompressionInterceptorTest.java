@@ -1067,6 +1067,133 @@ public class ContextCompressionInterceptorTest {
         assertFalse(result.contains(recent), "预算不足时应先删除普通历史");
     }
 
+    @Test
+    public void testNonContiguousFirstDoesNotDropMessagesBetweenMarkers() {
+        ChatMessage first = ChatMessage.ofUser("first").addMetadata(AgentTrace.META_FIRST, 1);
+        ChatMessage between = ChatMessage.ofAssistant("must survive");
+        ChatMessage laterFirst = ChatMessage.ofUser("later first").addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(first);
+        workingMemory.addMessage(between);
+        workingMemory.addMessage(laterFirst);
+        for (int i = 0; i < 20; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("history " + i));
+        }
+
+        interceptor.onReasonStart(trace, null);
+
+        List<ChatMessage> result = workingMemory.getMessages();
+        assertTrue(result.contains(between));
+        assertTrue(result.indexOf(first) < result.indexOf(between));
+        assertTrue(result.indexOf(between) < result.indexOf(laterFirst));
+    }
+
+    @Test
+    public void testCompressionStrategyFailureFallsBack() {
+        CompressionStrategy failing = (model, retries, currentTrace, messages) -> {
+            throw new RuntimeException("compression failed");
+        };
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 10_000, failing);
+        workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
+        for (int i = 0; i < 20; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("history " + i));
+        }
+
+        assertDoesNotThrow(() -> custom.onReasonStart(trace, null));
+        assertFalse(workingMemory.getMessages().isEmpty());
+    }
+
+    @Test
+    public void testForgedTokenSizeCannotBypassSingleMessageCap() {
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 10_000, null);
+        custom.setPerMessageCap(200);
+        workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
+        ChatMessage huge = ChatMessage.ofUser(repeat("large-data ", 5_000));
+        huge.addMetadata("token_size", 1);
+        workingMemory.addMessage(huge);
+
+        custom.onReasonStart(trace, null);
+
+        ChatMessage truncated = workingMemory.getMessages().stream()
+                .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
+                .findFirst().orElse(null);
+        assertNotNull(truncated);
+        assertTrue(truncated.getContent().contains("内容过大已截断"));
+    }
+
+    @Test
+    public void testStructuredTextObservationIsNotRemoved() {
+        AssistantMessage action = ChatMessage.ofAssistant("Action: bash");
+        UserMessage observation = (UserMessage) ChatMessage.ofUser("Observation: ok");
+        workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
+        for (int i = 0; i < 12; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("history " + i));
+        }
+        workingMemory.addMessage(action);
+        workingMemory.addMessage(observation);
+
+        interceptor.onReasonStart(trace, null);
+
+        assertTrue(workingMemory.getMessages().contains(observation));
+    }
+
+    @Test
+    public void testInvalidOrDuplicateNativeToolIdsAreRemoved() {
+        org.noear.solon.ai.agent.react.ReActAgentConfig cfg = mock(org.noear.solon.ai.agent.react.ReActAgentConfig.class);
+        when(cfg.getStyle()).thenReturn(org.noear.solon.ai.agent.react.ReActStyle.NATIVE_TOOL);
+        when(trace.getConfig()).thenReturn(cfg);
+
+        AssistantMessage nullIdAction = new AssistantMessage("call", false, null, null,
+                Arrays.asList(new ToolCall("0", null, "t1", "{}", Utils.asMap())), null);
+        ToolMessage nullIdResult = ChatMessage.ofTool("result", "t1", null);
+        AssistantMessage duplicateIdAction = new AssistantMessage("call", false, null, null,
+                Arrays.asList(new ToolCall("0", "same", "t1", "{}", Utils.asMap()),
+                        new ToolCall("1", "same", "t2", "{}", Utils.asMap())), null);
+        ToolMessage duplicateIdResult = ChatMessage.ofTool("result", "t1", "same");
+
+        workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
+        for (int i = 0; i < 12; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("history " + i));
+        }
+        workingMemory.addMessage(nullIdAction);
+        workingMemory.addMessage(nullIdResult);
+        workingMemory.addMessage(duplicateIdAction);
+        workingMemory.addMessage(duplicateIdResult);
+        workingMemory.addMessage(ChatMessage.ofUser("continue"));
+
+        interceptor.onReasonStart(trace, null);
+
+        assertFalse(workingMemory.getMessages().contains(nullIdAction));
+        assertFalse(workingMemory.getMessages().contains(nullIdResult));
+        assertFalse(workingMemory.getMessages().contains(duplicateIdAction));
+        assertFalse(workingMemory.getMessages().contains(duplicateIdResult));
+    }
+
+    @Test
+    public void testDuplicateNativeToolResultsAreRemovedAsInvalidGroup() {
+        org.noear.solon.ai.agent.react.ReActAgentConfig cfg = mock(org.noear.solon.ai.agent.react.ReActAgentConfig.class);
+        when(cfg.getStyle()).thenReturn(org.noear.solon.ai.agent.react.ReActStyle.NATIVE_TOOL);
+        when(trace.getConfig()).thenReturn(cfg);
+
+        AssistantMessage action = new AssistantMessage("call", false, null, null,
+                Arrays.asList(new ToolCall("0", "call_1", "t1", "{}", Utils.asMap())), null);
+        ToolMessage result1 = ChatMessage.ofTool("result1", "t1", "call_1");
+        ToolMessage result2 = ChatMessage.ofTool("result2", "t1", "call_1");
+        workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
+        for (int i = 0; i < 12; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("history " + i));
+        }
+        workingMemory.addMessage(action);
+        workingMemory.addMessage(result1);
+        workingMemory.addMessage(result2);
+        workingMemory.addMessage(ChatMessage.ofUser("continue"));
+
+        interceptor.onReasonStart(trace, null);
+
+        assertFalse(workingMemory.getMessages().contains(action));
+        assertFalse(workingMemory.getMessages().contains(result1));
+        assertFalse(workingMemory.getMessages().contains(result2));
+    }
+
     private int readIntField(ContextCompressionInterceptor target, String name) throws Exception {
         java.lang.reflect.Field field = ContextCompressionInterceptor.class.getDeclaredField(name);
         field.setAccessible(true);
