@@ -399,6 +399,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     private boolean isTransportError(Throwable ex) {
         String msg = ex.toString();
         return ex instanceof io.modelcontextprotocol.spec.McpTransportException ||
+                ex instanceof java.util.concurrent.TimeoutException ||
                 msg.contains("HttpResponseException") ||
                 msg.contains("Connection refused") ||
                 msg.contains("500 Internal Server Error");
