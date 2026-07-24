@@ -22,7 +22,9 @@ import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -154,20 +156,22 @@ public class LLMCompressionStrategy implements CompressionStrategy {
             // PTL 检测：若返回 PTL 错误（内容文本或异常转译），缩小范围重试
             if (CompressionUtil.isPromptTooLong(summary)) {
                 int currentSize = currentBatch.size();
-                int newSize = currentSize / 2;
-                if (newSize < 1) {
+                int targetStart = currentSize / 2;
+                int reducedStart = alignToConversationBoundary(currentBatch, targetStart);
+                if (reducedStart <= 0 || reducedStart >= currentSize) {
                     // 已经缩减到最小了还是不行，放弃
-                    log.warn("PTL retry exhausted (attempt {}/{}), batch size too small to continue",
+                    log.warn("PTL retry exhausted (attempt {}/{}), batch has no safe boundary",
                             ptlAttempt + 1, MAX_PTL_RETRIES);
                     return null;
                 }
 
-                // 丢弃最旧的一半消息（保留最近的消息，它们最相关）
-                List<ChatMessage> reduced = new ArrayList<>(currentBatch.subList(currentSize - newSize, currentSize));
+                // 丢弃最旧部分，但从完整对话轮次/工具调用组开始，避免把 ToolMessage
+                // 与对应的 Assistant(tool_calls) 拆开后交给摘要模型。
+                List<ChatMessage> reduced = new ArrayList<>(currentBatch.subList(reducedStart, currentSize));
                 currentBatch = reduced;
 
-                log.warn("PTL detected, reduced batch from {} to {} messages for retry (attempt {}/{})",
-                        currentSize, newSize, ptlAttempt + 1, MAX_PTL_RETRIES);
+                log.warn("PTL detected, reduced batch from {} to {} messages at boundary {} (attempt {}/{})",
+                        currentSize, reduced.size(), reducedStart, ptlAttempt + 1, MAX_PTL_RETRIES);
                 continue;
             }
 
@@ -175,5 +179,42 @@ public class LLMCompressionStrategy implements CompressionStrategy {
         }
 
         return null;
+    }
+
+    /**
+     * 将摘要输入的裁剪点对齐到工具调用组边界。
+     * 当裁剪点落在连续 ToolMessage/Observation 中时，向前找到其源头 Assistant(tool_calls)。
+     * 普通消息不需要额外调整，保留最近半段历史的策略不变。
+     */
+    private int alignToConversationBoundary(List<ChatMessage> messages, int start) {
+        if (start <= 0 || start >= messages.size()) {
+            return start;
+        }
+
+        ChatMessage atStart = messages.get(start);
+        if (!(atStart instanceof ToolMessage) && !isObservation(atStart)) {
+            return start;
+        }
+
+        for (int i = start - 1; i >= 0; i--) {
+            ChatMessage previous = messages.get(i);
+            if (previous instanceof AssistantMessage
+                    && Assert.isNotEmpty(((AssistantMessage) previous).getToolCalls())) {
+                return i;
+            }
+            if (!(previous instanceof ToolMessage) && !isObservation(previous)) {
+                break;
+            }
+        }
+
+        // 没有可配对的 Assistant 时，保持原边界；主压缩器会在写回前清理孤立工具结果。
+        return start;
+    }
+
+    private boolean isObservation(ChatMessage message) {
+        return message instanceof ToolMessage
+                || (message instanceof org.noear.solon.ai.chat.message.UserMessage
+                && message.getContent() != null
+                && message.getContent().startsWith("Observation:"));
     }
 }

@@ -256,16 +256,16 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         }
         ChatModel chatModel = options.getChatModel();
         List<ChatMessage> originalMessages = trace.getWorkingMemory().getMessages();
-        List<ChatMessage> messages = enforcePerMessageCap(trace, originalMessages, this.maxTokens);
+
+        // ⭐ 解析模型感知的有效 Token 阈值，同时用于单消息守卫、触发判断和压缩目标预算。
+        int effectiveMaxTokens = resolveEffectiveMaxTokens(chatModel);
+        List<ChatMessage> messages = enforcePerMessageCap(trace, originalMessages, effectiveMaxTokens);
         boolean microCompacted = messages != originalMessages;
 
         // ⭐ 标记静态上下文边界（为 Dialect 层的 cache_control 提供依据）
         //    当配置了 CacheControl 时，确保系统提示词和工具定义作为一个完整的
         //    可缓存块被保留，不被压缩逻辑破坏其结构性完整性。
         markStaticContextBoundary(trace, systemPrompt);
-
-        // ⭐ 解析模型感知的有效 Token 阈值，同时用于触发判断和压缩目标预算。
-        int effectiveMaxTokens = resolveEffectiveMaxTokens(chatModel);
 
         // 收集 tools 元信息（仅 NATIVE_TOOL 模式下 LLM 会接收 tools 定义）
         int toolsTokens = 0;
@@ -331,11 +331,12 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             fixedTokens += cachedSize + 4;
         }
 
-        // 极端场景防御：固定开销超过用户配置的窗口预算
-        if (fixedTokens >= this.maxTokens) {
+        // 极端场景防御：固定开销超过模型与用户配置共同决定的有效预算
+        int baseBudget = Math.min(this.maxTokens, effectiveMaxTokens);
+        if (fixedTokens >= baseBudget) {
             if (log.isWarnEnabled()) {
                 log.warn("ReActAgent [{}] first chain + systemPrompt ({} tokens) exceeds budget ({}), keep first chain only",
-                        trace.getAgentName(), fixedTokens, this.maxTokens);
+                        trace.getAgentName(), fixedTokens, baseBudget);
             }
             if (firstList.size() < messages.size()) {
                 trace.getWorkingMemory().replaceMessages(new ArrayList<>(firstList));
@@ -345,7 +346,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         // 3. 为压缩消息预留空间。强制模式按失败次数逐步收紧预算，
         // 避免首次 PTL 就丢失一半历史。
-        int compressionBudget = Math.min(this.maxTokens, effectiveMaxTokens);
+        int compressionBudget = baseBudget;
         if (force) {
             double[] forceRatios = {0.8D, 0.6D, 0.4D, 0.25D};
             int level = Math.min(Math.max(1, forceLevel), forceRatios.length);
@@ -458,24 +459,34 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         if (targetIdx > (lastFirstIdx + 1) && targetIdx <= messages.size()) {
             List<ChatMessage> expired = new ArrayList<>(messages.subList(lastFirstIdx + 1, targetIdx));
+            // 旧摘要不能无声丢失：与新增过期历史一起交给策略，形成滚动摘要。
+            // 策略可以据此合并上一代摘要和本轮新增内容，避免摘要链被截断。
+            List<ChatMessage> historyToCompress = new ArrayList<>(expired);
             List<ChatMessage> pureHistory = expired.stream()
                     .filter(m -> !m.hasMetadata(META_COMPRESSED))
                     .collect(Collectors.toList());
 
-            if (!pureHistory.isEmpty()) {
+            if (!historyToCompress.isEmpty()) {
                 boolean summaryAdded = false;
                 if (compressionStrategy != null) {
-                    ChatMessage summaryMsg = compressionStrategy.compress(chatModel, maxRetries, trace, pureHistory);
+                    ChatMessage summaryMsg = compressionStrategy.compress(chatModel, maxRetries, trace, historyToCompress);
                     if (summaryMsg != null) {
                         compressed.add(summaryMsg);
                         summaryAdded = true;
                     }
                 }
                 if (!summaryAdded) {
-                    // ⭐ fallback 原子序列追溯（零成本裁剪路径，不调用 LLM 生成摘要）
-                    //    当无压缩策略、或策略返回 null（LLM 调用失败/返回无效摘要）时走此分支。
-                    //
-                    // 问题背景：过期区（expired）可能包含不完整的 tool-use 原子对。
+                    // 策略失败时至少保留最近的旧摘要；它已经是压缩后的有效状态，不能被静默丢弃。
+                    for (ChatMessage oldSummary : expired) {
+                        if (oldSummary.hasMetadata(META_COMPRESSED)) {
+                            compressed.add(oldSummary);
+                        }
+                    }
+                    if (!pureHistory.isEmpty()) {
+                        // ⭐ fallback 原子序列追溯（零成本裁剪路径，不调用 LLM 生成摘要）
+                        //    当无压缩策略、或策略返回 null（LLM 调用失败/返回无效摘要）时走此分支。
+                        //
+                        // 问题背景：过期区（expired）可能包含不完整的 tool-use 原子对。
                     // 例如 [Assistant(tc=[search]), Tool(res)] 被整体移入过期区，
                     // 若直接丢弃、仅保留保留窗口内的后续轮次，恢复后的上下文会变成：
                     //   [Tool(res)] → [下一个 Assistant(tc=...)]
@@ -505,6 +516,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
                     for (int i = captureStart; i < pureHistory.size(); i++) {
                         compressed.add(pureHistory.get(i));
+                        }
                     }
                 }
             }
@@ -516,22 +528,30 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         //    做摘要压缩，而非简单丢弃。这样代码 Agent 之前读取的文件内容可以通过摘要保留关键信息。
         if (protectedSummaryApplied) {
             List<ChatMessage> protectedSegment = new ArrayList<>(messages.subList(targetIdx, rawTargetByTokens));
+            List<ChatMessage> protectedToCompress = new ArrayList<>(protectedSegment);
             List<ChatMessage> pureProtected = protectedSegment.stream()
                     .filter(m -> !m.hasMetadata(META_COMPRESSED))
                     .collect(Collectors.toList());
 
-            if (!pureProtected.isEmpty()) {
+            if (!protectedToCompress.isEmpty()) {
                 boolean protectedSummaryAdded = false;
                 if (compressionStrategy != null) {
-                    ChatMessage summaryMsg = compressionStrategy.compress(chatModel, maxRetries, trace, pureProtected);
+                    ChatMessage summaryMsg = compressionStrategy.compress(chatModel, maxRetries, trace, protectedToCompress);
                     if (summaryMsg != null) {
                         compressed.add(summaryMsg);
                         protectedSummaryAdded = true;
                     }
                 }
                 if (!protectedSummaryAdded) {
-                    // fallback：原子序列追溯（零成本裁剪路径，不调用 LLM）
-                    int captureStart = pureProtected.size() - 1;
+                    // 策略失败时保留已有摘要，避免滚动压缩过程中丢失状态。
+                    for (ChatMessage oldSummary : protectedSegment) {
+                        if (oldSummary.hasMetadata(META_COMPRESSED)) {
+                            compressed.add(oldSummary);
+                        }
+                    }
+                    if (!pureProtected.isEmpty()) {
+                        // fallback：原子序列追溯（零成本裁剪路径，不调用 LLM）
+                        int captureStart = pureProtected.size() - 1;
                     while (captureStart > 0) {
                         ChatMessage msg = pureProtected.get(captureStart);
                         if (msg instanceof ToolMessage || isObservation(msg)) {
@@ -548,6 +568,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                     }
                     for (int i = captureStart; i < pureProtected.size(); i++) {
                         compressed.add(pureProtected.get(i));
+                        }
                     }
                 }
             }
