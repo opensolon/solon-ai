@@ -1005,6 +1005,74 @@ public class ContextCompressionInterceptorTest {
         }
     }
 
+    @Test
+    public void testCopyWithPreservesRuntimeConfiguration() throws Exception {
+        ContextCompressionInterceptor source = new ContextCompressionInterceptor(20, 20_000, 2, null);
+        source.setMinReservedMessages(7);
+        source.setPerMessageCap(1_500);
+
+        ContextCompressionInterceptor copied = source.copyWith(30, 30_000);
+
+        assertEquals(2, readIntField(copied, "maxRetries"));
+        assertEquals(7, readIntField(copied, "minReservedMessages"));
+        assertEquals(1_500, readIntField(copied, "perMessageCap"));
+        assertEquals(30, readIntField(copied, "maxMessages"));
+        assertEquals(30_000, readIntField(copied, "maxTokens"));
+    }
+
+    @Test
+    public void testFirstForceCompressionUsesEightyPercentMessageWindow() {
+        ChatMessage goal = ChatMessage.ofUser("Goal");
+        goal.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(goal);
+
+        ChatMessage earlyRetained = null;
+        for (int i = 0; i < 20; i++) {
+            ChatMessage message = ChatMessage.ofAssistant("Step " + i);
+            workingMemory.addMessage(message);
+            if (i == 4) {
+                earlyRetained = message;
+            }
+        }
+
+        assertTrue(interceptor.onReasonRetry(trace,
+                new RuntimeException("context_length_exceeded"), 1, null));
+
+        assertTrue(workingMemory.getMessages().contains(earlyRetained),
+                "第一次 PTL 应按 80% 消息窗口温和收紧，而不是直接减半");
+    }
+
+    @Test
+    public void testConvergeToBudgetKeepsLatestSummaryBeforeRecentHistory() throws Exception {
+        ChatMessage goal = ChatMessage.ofUser("Goal");
+        goal.addMetadata(AgentTrace.META_FIRST, 1);
+        ChatMessage summary = ChatMessage.ofUser(repeat("summary ", 300));
+        summary.addMetadata(ContextCompressionInterceptor.META_COMPRESSED, 1);
+        ChatMessage recent = ChatMessage.ofAssistant(repeat("recent ", 300));
+
+        List<ChatMessage> summaryOnly = Arrays.asList(goal, summary);
+        java.lang.reflect.Method estimateMethod = ContextCompressionInterceptor.class
+                .getDeclaredMethod("estimateTokens", List.class, String.class);
+        estimateMethod.setAccessible(true);
+        int summaryBudget = (int) estimateMethod.invoke(interceptor, summaryOnly, null);
+
+        java.lang.reflect.Method convergeMethod = ContextCompressionInterceptor.class
+                .getDeclaredMethod("convergeToBudget", List.class, String.class, int.class, int.class);
+        convergeMethod.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<ChatMessage> result = (List<ChatMessage>) convergeMethod.invoke(
+                interceptor, Arrays.asList(goal, summary, recent), null, 0, summaryBudget);
+
+        assertTrue(result.contains(summary), "最新摘要应比普通近期历史更晚删除");
+        assertFalse(result.contains(recent), "预算不足时应先删除普通历史");
+    }
+
+    private int readIntField(ContextCompressionInterceptor target, String name) throws Exception {
+        java.lang.reflect.Field field = ContextCompressionInterceptor.class.getDeclaredField(name);
+        field.setAccessible(true);
+        return field.getInt(target);
+    }
+
     private String repeat(String value, int count) {
         StringBuilder buf = new StringBuilder(value.length() * count);
         for (int i = 0; i < count; i++) {

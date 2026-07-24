@@ -186,7 +186,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         ContextCompressionInterceptor tmp = new ContextCompressionInterceptor(
                 maxMessages,
                 maxTokens,
+                this.maxRetries,
                 this.compressionStrategy);
+        tmp.minReservedMessages = this.minReservedMessages;
+        tmp.perMessageCap = this.perMessageCap;
 
         return tmp;
     }
@@ -347,11 +350,14 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         // 3. 为压缩消息预留空间。强制模式按失败次数逐步收紧预算，
         // 避免首次 PTL 就丢失一半历史。
         int compressionBudget = baseBudget;
+        double forceRatio = 1D;
         if (force) {
             double[] forceRatios = {0.8D, 0.6D, 0.4D, 0.25D};
             int level = Math.min(Math.max(1, forceLevel), forceRatios.length);
-            compressionBudget = Math.max(1_000,
-                    (int) (compressionBudget * forceRatios[level - 1]));
+            forceRatio = forceRatios[level - 1];
+            int minimumBudget = Math.min(1_000, baseBudget);
+            compressionBudget = Math.min(baseBudget,
+                    Math.max(minimumBudget, (int) (baseBudget * forceRatio)));
         }
         int availableTokens = compressionBudget - fixedTokens;
         if (availableTokens <= 0) {
@@ -373,8 +379,9 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         //    - minReservedIdx：保留窗口的绝对下限，防止 Token 维度过度截断
         int targetByCount;
         if (force) {
+            int variableSize = Math.max(0, messages.size() - (lastFirstIdx + 1));
             int forceMessageBudget = Math.max(1,
-                    ((int) messageSize) >> Math.min(Math.max(1, forceLevel), 4));
+                    (int) Math.ceil(variableSize * forceRatio));
             targetByCount = Math.max(lastFirstIdx + 1, messages.size() - forceMessageBudget);
         } else {
             targetByCount = Math.max(lastFirstIdx + 1, messages.size() - maxMessages);
@@ -616,7 +623,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     }
 
     /**
-     * 将压缩结果硬收敛到目标预算。按最早的完整语义单元删除可变历史：
+     * 将压缩结果硬收敛到目标预算。优先删除普通可变历史，再删除旧摘要，最新摘要最后处理：
      * Assistant(tool_calls) 与其连续工具结果始终整组删除，避免产生错位消息。
      * META_FIRST 属于固定上下文，不参与删除；若固定上下文本身超限则保留并告警。
      */
@@ -624,12 +631,37 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                                                int toolsTokens, int budget) {
         List<ChatMessage> result = new ArrayList<>(messages);
         while (estimateTokens(result, systemPrompt) + toolsTokens > budget) {
+            int latestSummaryIdx = -1;
+            for (int i = result.size() - 1; i >= 0; i--) {
+                if (result.get(i).hasMetadata(META_COMPRESSED)) {
+                    latestSummaryIdx = i;
+                    break;
+                }
+            }
+
+            // 摘要承载了已删除历史的信息，优先淘汰普通历史。
             int removableIdx = -1;
             for (int i = 0; i < result.size(); i++) {
-                if (!result.get(i).hasMetadata(AgentTrace.META_FIRST)) {
+                ChatMessage message = result.get(i);
+                if (!message.hasMetadata(AgentTrace.META_FIRST)
+                        && !message.hasMetadata(META_COMPRESSED)) {
                     removableIdx = i;
                     break;
                 }
+            }
+
+            // 普通历史已清空后，先删除旧摘要，最新摘要作为最后兜底。
+            if (removableIdx < 0) {
+                for (int i = 0; i < result.size(); i++) {
+                    if (i != latestSummaryIdx
+                            && !result.get(i).hasMetadata(AgentTrace.META_FIRST)) {
+                        removableIdx = i;
+                        break;
+                    }
+                }
+            }
+            if (removableIdx < 0 && latestSummaryIdx >= 0) {
+                removableIdx = latestSummaryIdx;
             }
 
             if (removableIdx < 0) {
