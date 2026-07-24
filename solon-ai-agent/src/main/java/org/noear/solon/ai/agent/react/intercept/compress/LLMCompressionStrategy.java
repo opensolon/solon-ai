@@ -19,7 +19,7 @@ import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
-import org.noear.solon.ai.util.RetryUtil;
+import org.noear.solon.ai.util.RetryTask;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -86,7 +86,7 @@ public class LLMCompressionStrategy implements CompressionStrategy {
 
         try {
             // PTL 重试循环
-            String summary = compressWithPTLRetry(chatModel, maxRetries, filtered);
+            String summary = compressWithPTLRetry(chatModel, Math.max(1, maxRetries), filtered);
 
             // 模糊匹配“无显著进度”，防大模型胡乱加标点或 Markdown 样式
             if (CompressionUtil.isEmptySummary(summary)) {
@@ -97,7 +97,11 @@ public class LLMCompressionStrategy implements CompressionStrategy {
             return ChatMessage.ofUser("--- [执行进度总结] ---\n" + summary)
                     .addMetadata(ContextCompressionInterceptor.META_COMPRESSED, 1);
 
-        } catch (Throwable e) {
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("LLM compression interrupted");
+            return null;
+        } catch (Exception e) {
             log.error("Failed to generate LLM compression", e);
             return null;
         }
@@ -109,7 +113,8 @@ public class LLMCompressionStrategy implements CompressionStrategy {
      * 逐步丢弃最旧的消息缩小范围后重试，最多重试 {@link #MAX_PTL_RETRIES} 次。
      * 对应 claude-code-java 的 CompactService.PTL 重试机制。
      */
-    private String compressWithPTLRetry(ChatModel chatModel, int maxRetries, List<ChatMessage> filtered) throws Throwable {
+    private String compressWithPTLRetry(ChatModel chatModel, int maxRetries,
+                                        List<ChatMessage> filtered) throws InterruptedException {
         List<ChatMessage> currentBatch = filtered;
 
         for (int ptlAttempt = 0; ptlAttempt <= MAX_PTL_RETRIES; ptlAttempt++) {
@@ -127,7 +132,14 @@ public class LLMCompressionStrategy implements CompressionStrategy {
 
             String summary;
             try {
-                summary = RetryUtil.callWithRetry(maxRetries, () -> {
+                summary = new RetryTask()
+                        .maxRetries(Math.max(1, maxRetries))
+                        // PTL 是确定性的输入超限，必须立刻进入外层缩批，不能对同一批次退避重试。
+                        .retryIf(e -> !(CompressionUtil.isPromptTooLongError(e)
+                                || e instanceof Error
+                                || e instanceof InterruptedException
+                                || e.getCause() instanceof InterruptedException))
+                        .callWithRetry(() -> {
                     ChatResponse resp = chatModel.prompt(userData)
                             .options(o -> {
                                 o.agentName(LLMCompressionStrategy.class.getSimpleName());
@@ -140,7 +152,7 @@ public class LLMCompressionStrategy implements CompressionStrategy {
                     } else {
                         throw new IllegalStateException("The LLM did not return");
                     }
-                });
+                        });
             } catch (Throwable e) {
                 // PTL 可能以 API 异常形式抛出（而非 LLM 返回内容文本）
                 if (CompressionUtil.isPromptTooLongError(e)) {
@@ -148,8 +160,16 @@ public class LLMCompressionStrategy implements CompressionStrategy {
                             ptlAttempt + 1, MAX_PTL_RETRIES, e);
                     // 转入统一 PTL 缩小重试路径
                     summary = "prompt is too long";
+                } else if (e instanceof InterruptedException) {
+                    throw (InterruptedException) e;
+                } else if (e.getCause() instanceof InterruptedException) {
+                    throw (InterruptedException) e.getCause();
+                } else if (e instanceof Error) {
+                    throw (Error) e;
+                } else if (e instanceof RuntimeException) {
+                    throw (RuntimeException) e;
                 } else {
-                    throw e; // 非 PTL 异常，向上抛出
+                    throw new IllegalStateException(e); // 非 PTL checked 异常按普通压缩失败上抛
                 }
             }
 

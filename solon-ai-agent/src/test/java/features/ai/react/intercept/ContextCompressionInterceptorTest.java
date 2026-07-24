@@ -5,10 +5,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
+import org.noear.solon.ai.agent.react.intercept.ContextSizeChunk;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.agent.react.intercept.compress.*;
 import org.noear.solon.ai.chat.ChatModel;
@@ -16,11 +18,13 @@ import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryStorable;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -1281,6 +1285,131 @@ public class ContextCompressionInterceptorTest {
         assertFalse(workingMemory.getMessages().contains(action));
         assertFalse(workingMemory.getMessages().contains(result1));
         assertFalse(workingMemory.getMessages().contains(result2));
+    }
+
+    @Test
+    public void testEffectiveToolBudgetIncludesDefaultsAndUsesRequestOverrideOrder() throws Exception {
+        org.noear.solon.ai.agent.react.ReActAgentConfig cfg = mock(org.noear.solon.ai.agent.react.ReActAgentConfig.class);
+        when(cfg.getStyle()).thenReturn(org.noear.solon.ai.agent.react.ReActStyle.NATIVE_TOOL);
+        when(trace.getConfig()).thenReturn(cfg);
+
+        FunctionTool defaultShared = mockTool("shared", "default");
+        FunctionTool defaultOnly = mockTool("defaultOnly", "default-only");
+        FunctionTool agentShared = mockTool("shared", "agent");
+        FunctionTool protocolShared = mockTool("shared", "protocol");
+        FunctionTool protocolOnly = mockTool("protocolOnly", "protocol-only");
+
+        ChatModel model = mock(ChatModel.class);
+        org.noear.solon.ai.chat.ChatConfigReadonly readonly = mock(org.noear.solon.ai.chat.ChatConfigReadonly.class);
+        when(model.getConfig()).thenReturn(readonly);
+        when(readonly.getDefaultTools()).thenReturn(Arrays.asList(defaultShared, defaultOnly));
+        org.noear.solon.ai.agent.react.ReActOptions options =
+                new org.noear.solon.ai.agent.react.ReActOptions(model);
+        options.getModelOptions().toolAdd(agentShared);
+        when(trace.getOptions()).thenReturn(options);
+        when(trace.getProtocolTools()).thenReturn(Arrays.asList(protocolShared, protocolOnly));
+
+        java.lang.reflect.Method method = ContextCompressionInterceptor.class.getDeclaredMethod(
+                "collectEffectiveTools", ChatModel.class, ReActTrace.class);
+        method.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Collection<FunctionTool> tools = (Collection<FunctionTool>) method.invoke(interceptor, model, trace);
+
+        assertEquals(3, tools.size());
+        assertEquals(Arrays.asList(protocolShared, defaultOnly, protocolOnly), new java.util.ArrayList<>(tools));
+    }
+
+    @Test
+    public void testOversizedCustomSummaryIsBounded() {
+        String oversized = repeat("summary-detail ", 8_000);
+        CompressionStrategy strategy = (model, retries, currentTrace, messages) -> ChatMessage.ofUser(oversized);
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 10_000, strategy);
+        workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
+        for (int i = 0; i < 20; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("history " + i));
+        }
+
+        custom.onReasonStart(trace, null);
+
+        ChatMessage summary = workingMemory.getMessages().stream()
+                .filter(m -> m.hasMetadata(ContextCompressionInterceptor.META_COMPRESSED))
+                .findFirst().orElse(null);
+        assertNotNull(summary);
+        assertTrue(summary.getContent().length() < oversized.length());
+        assertTrue(summary.getContent().contains("内容过大已截断"));
+    }
+
+    @Test
+    public void testUnsafeAssistantExtensionsAreNotRebuiltDuringTruncation() throws Exception {
+        List<java.util.Map> searchRaw = Arrays.asList(Utils.asMap("query", "important"));
+        AssistantMessage extended = new AssistantMessage("large content", false, "vendor-raw",
+                null, null, searchRaw, null).reasoningFieldName("reasoning_content");
+
+        java.lang.reflect.Method method = ContextCompressionInterceptor.class.getDeclaredMethod(
+                "rebuildWithContent", ChatMessage.class, String.class);
+        method.setAccessible(true);
+        assertNull(method.invoke(interceptor, extended, "truncated"),
+                "带厂商扩展字段的消息不得通过有损重建截断");
+    }
+
+    @Test
+    public void testLLMCompressionPTLExceptionReducesBatchWithoutGenericRetry() throws Exception {
+        ChatModel compressionModel = mock(ChatModel.class);
+        ChatRequestDesc request = mock(ChatRequestDesc.class);
+        ChatResponse response = mock(ChatResponse.class);
+        when(compressionModel.prompt(anyString())).thenReturn(request);
+        when(request.options(any(java.util.function.Consumer.class))).thenReturn(request);
+        when(request.call())
+                .thenThrow(new RuntimeException("context_length_exceeded"))
+                .thenReturn(response);
+        when(response.hasContent()).thenReturn(true);
+        when(response.getContent()).thenReturn("有效摘要");
+
+        LLMCompressionStrategy strategy = new LLMCompressionStrategy();
+        ChatMessage result = strategy.compress(compressionModel, 3, trace, Arrays.asList(
+                ChatMessage.ofAssistant("one"), ChatMessage.ofAssistant("two"),
+                ChatMessage.ofAssistant("three"), ChatMessage.ofAssistant("four")));
+
+        assertNotNull(result);
+        verify(request, times(2)).call();
+    }
+
+    @Test
+    public void testLLMCompressionDoesNotSwallowError() {
+        ChatModel compressionModel = mock(ChatModel.class);
+        when(compressionModel.prompt(anyString())).thenThrow(new AssertionError("fatal"));
+
+        assertThrows(AssertionError.class, () -> new LLMCompressionStrategy().compress(
+                compressionModel, 1, trace, Arrays.asList(ChatMessage.ofAssistant("history"))));
+    }
+
+    @Test
+    public void testFixedContextEarlyReturnPublishesConsistentChunk() {
+        when(trace.hasStreamSink()).thenReturn(true);
+        String huge = repeat("fixed-context ", 20_000);
+        workingMemory.addMessage(ChatMessage.ofUser(huge).addMetadata(AgentTrace.META_FIRST, 1));
+        workingMemory.addMessage(ChatMessage.ofAssistant("discarded"));
+
+        assertTrue(interceptor.onReasonRetry(trace,
+                new RuntimeException("context_length_exceeded"), 1, null));
+
+        ArgumentCaptor<AgentChunk> captor = ArgumentCaptor.forClass(AgentChunk.class);
+        verify(trace).pushAgentChunk(captor.capture());
+        assertTrue(captor.getValue() instanceof ContextSizeChunk);
+        ContextSizeChunk chunk = (ContextSizeChunk) captor.getValue();
+        assertTrue(chunk.isCompressed());
+        assertEquals(2, chunk.getBeforeMessageCount());
+        assertEquals(1, chunk.getAfterMessageCount());
+        assertEquals(1, chunk.getMessageCount());
+        assertTrue(chunk.getBeforeTokenCount() > chunk.getAfterTokenCount());
+    }
+
+    private FunctionTool mockTool(String name, String description) {
+        FunctionTool tool = mock(FunctionTool.class);
+        when(tool.name()).thenReturn(name);
+        when(tool.descriptionAndMeta()).thenReturn(description);
+        when(tool.inputSchema()).thenReturn("{}");
+        return tool;
     }
 
     private int readIntField(ContextCompressionInterceptor target, String name) throws Exception {

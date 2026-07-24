@@ -44,6 +44,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -272,17 +273,20 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         //    可缓存块被保留，不被压缩逻辑破坏其结构性完整性。
         markStaticContextBoundary(trace, systemPrompt);
 
-        // 收集 tools 元信息（仅 NATIVE_TOOL 模式下 LLM 会接收 tools 定义）
+        // 收集 tools 元信息（仅 NATIVE_TOOL 模式下 LLM 会接收 tools 定义）。
+        // 合并顺序必须与 ChatRequestDescDefault + ReasonTask 一致：模型默认工具先进入，
+        // Agent 工具及协议工具随后按名称覆盖，避免漏算默认工具或重复计算同名工具。
         int toolsTokens = 0;
         if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
-            List<FunctionTool> toolsDef = new ArrayList<>();
-            toolsDef.addAll(trace.getOptions().getTools());
-            toolsDef.addAll(trace.getProtocolTools());
-
+            Collection<FunctionTool> toolsDef = collectEffectiveTools(chatModel, trace);
             if (Assert.isNotEmpty(toolsDef)) {
                 toolsTokens = estimateToolsTokens(toolsDef);
             }
         }
+
+        // 事件的 before 口径始终指进入拦截器时的原始工作记忆，不能因 MicroCompact 先发生而漂移。
+        int originalMessageCount = originalMessages.size();
+        int originalTokenCount = estimateTokens(originalMessages, systemPrompt) + toolsTokens;
 
         long messageSize = messages.stream()
                 .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
@@ -293,9 +297,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         // 预留缓冲，避免频繁重构；强制模式不受本地阈值限制
         if (!force && messageSize <= maxMessages && currentTokens <= (effectiveMaxTokens * COMPACT_THRESHOLD_RATIO)) {
             pushContextChunk(trace, messages.size(), currentTokens, microCompacted,
-                    originalMessages.size(), messages.size(),
-                    microCompacted ? estimateTokens(originalMessages, systemPrompt) + toolsTokens : currentTokens,
-                    currentTokens);
+                    originalMessageCount, messages.size(), originalTokenCount, currentTokens);
             return microCompacted;
         }
 
@@ -321,10 +323,14 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 log.warn("ReActAgent [{}] first chain + systemPrompt ({} tokens) exceeds budget ({}), keep first chain only",
                         trace.getAgentName(), fixedTokens, baseBudget);
             }
+            boolean changed = firstList.size() < messages.size() || microCompacted;
             if (firstList.size() < messages.size()) {
                 trace.getWorkingMemory().replaceMessages(new ArrayList<>(firstList));
             }
-            return firstList.size() < messages.size();
+            int afterTokens = estimateTokens(firstList, systemPrompt) + toolsTokens;
+            pushContextChunk(trace, firstList.size(), afterTokens, changed,
+                    originalMessageCount, firstList.size(), originalTokenCount, afterTokens);
+            return changed;
         }
 
         // 3. 为压缩消息预留空间。强制模式按失败次数逐步收紧预算，
@@ -344,10 +350,15 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             // 固定上下文无法进一步压缩时，仍删除所有可变历史，尽可能恢复请求。
             if (firstList.size() < messages.size()) {
                 trace.getWorkingMemory().replaceMessages(new ArrayList<>(firstList));
+                int afterTokens = estimateTokens(firstList, systemPrompt) + toolsTokens;
+                pushContextChunk(trace, firstList.size(), afterTokens, true,
+                        originalMessageCount, firstList.size(), originalTokenCount, afterTokens);
                 return true;
             }
             log.warn("ReActAgent [{}] fixed context ({} tokens) exceeds compression budget ({}), " +
                             "cannot recover context-length error", trace.getAgentName(), fixedTokens, compressionBudget);
+            pushContextChunk(trace, messages.size(), currentTokens, microCompacted,
+                    originalMessageCount, messages.size(), originalTokenCount, currentTokens);
             return microCompacted;
         }
         int summaryReserve = Math.max(200, (int) (availableTokens * 0.1));
@@ -468,7 +479,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             if (!historyToCompress.isEmpty()) {
                 boolean summaryAdded = false;
                 if (compressionStrategy != null) {
-                    ChatMessage summaryMsg = safeCompress(chatModel, trace, historyToCompress);
+                    ChatMessage summaryMsg = safeCompress(chatModel, trace, historyToCompress,
+                            Math.min(summaryReserve, availableTokens));
                     if (summaryMsg != null) {
                         compressed.add(summaryMsg);
                         summaryAdded = true;
@@ -518,7 +530,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             if (!protectedToCompress.isEmpty()) {
                 boolean protectedSummaryAdded = false;
                 if (compressionStrategy != null) {
-                    ChatMessage summaryMsg = safeCompress(chatModel, trace, protectedToCompress);
+                    ChatMessage summaryMsg = safeCompress(chatModel, trace, protectedToCompress,
+                            Math.min(summaryReserve, availableTokens));
                     if (summaryMsg != null) {
                         compressed.add(summaryMsg);
                         protectedSummaryAdded = true;
@@ -575,8 +588,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             }
 
             pushContextChunk(trace, compressed.size(), afterTokens, true,
-                            beforeSize, compressed.size(),
-                            currentTokens, afterTokens);
+                            originalMessageCount, compressed.size(),
+                            originalTokenCount, afterTokens);
         } else {
             // 压缩条件触发但实际未变更（兜底），仍推送当前状态
             pushContextChunk(trace, messages.size(), currentTokens, false, 0, 0, 0, 0);
@@ -589,14 +602,40 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      * Assistant(tool_calls) 与其连续工具结果始终整组删除，避免产生错位消息。
      * META_FIRST 属于固定上下文，不参与删除；若固定上下文本身超限则保留并告警。
      */
-    private ChatMessage safeCompress(ChatModel chatModel, ReActTrace trace, List<ChatMessage> messages) {
+    private ChatMessage safeCompress(ChatModel chatModel, ReActTrace trace, List<ChatMessage> messages,
+                                     int summaryTokenBudget) {
         try {
-            ChatMessage summary = compressionStrategy.compress(chatModel, maxRetries, trace, messages);
-            if (summary != null && !summary.hasMetadata(META_COMPRESSED)) {
-                // 策略接口不要求实现方添加标记；由编排器统一标准化，确保后续预算收敛优先保护摘要。
-                summary.addMetadata(META_COMPRESSED, 1);
+            ChatMessage summary = compressionStrategy.compress(chatModel, Math.max(1, maxRetries), trace, messages);
+            if (summary == null) {
+                return null;
             }
-            return summary;
+
+            // 策略接口不要求实现方添加标记；由编排器统一写入规范值。
+            summary.addMetadata(META_COMPRESSED, 1);
+
+            int effectiveSummaryBudget = Math.max(1, Math.min(summaryTokenBudget,
+                    this.perMessageCap > 0 ? this.perMessageCap : summaryTokenBudget));
+            if (estimateMessageTokens(summary) <= effectiveSummaryBudget) {
+                return summary;
+            }
+
+            String content = summary.getContent();
+            if (content == null || content.isEmpty()) {
+                log.warn("ReActAgent [{}] oversized compression result has no trimmable text, fallback to safe trimming",
+                        trace.getAgentName());
+                return null;
+            }
+
+            ChatMessage bounded = rebuildWithContent(summary,
+                    truncateTextToTokens(content, effectiveSummaryBudget));
+            if (bounded == null) {
+                // 自定义策略可能返回带厂商扩展字段或多模态块的消息；宁可回退，也不做有损重建。
+                log.warn("ReActAgent [{}] oversized compression result cannot be safely rebuilt, fallback to safe trimming",
+                        trace.getAgentName());
+                return null;
+            }
+            bounded.addMetadata(META_COMPRESSED, 1);
+            return bounded;
         } catch (Exception e) {
             log.warn("ReActAgent [{}] compression strategy failed, fallback to safe trimming",
                     trace.getAgentName(), e);
@@ -1008,6 +1047,9 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     private ChatMessage rebuildWithContent(ChatMessage origin, String newContent) {
         if (origin instanceof ToolMessage) {
             ToolMessage tm = (ToolMessage) origin;
+            if (!hasOnlyPlainTextBlock(tm.getBlocks(), origin.getContent())) {
+                return null;
+            }
             ToolMessage rebuilt = new ToolMessage(
                     new org.noear.solon.ai.chat.tool.ToolResult(newContent),
                     tm.getName(),
@@ -1019,7 +1061,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         }
 
         if (origin instanceof UserMessage) {
-            // 用户粘贴的超长文本。多模态已在调用前跳过，这里按纯文本重建。
+            UserMessage user = (UserMessage) origin;
+            if (!hasOnlyPlainTextBlock(user.getBlocks(), origin.getContent())) {
+                return null;
+            }
             UserMessage rebuilt = (UserMessage) ChatMessage.ofUser(newContent);
             copyMetadataExceptTokenSize(origin, rebuilt);
             return rebuilt;
@@ -1027,8 +1072,14 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         if (origin instanceof AssistantMessage) {
             AssistantMessage am = (AssistantMessage) origin;
-            // 含 toolCalls 的不截断 content（体积主要在 args，截断正文可能损坏推理链/原子对）
-            if (Assert.isNotEmpty(am.getToolCalls())) {
+            // 仅允许没有厂商 raw/搜索/块扩展的纯文本 Assistant，避免截断时静默丢字段。
+            if (Assert.isNotEmpty(am.getToolCalls())
+                    || Assert.isNotEmpty(am.getToolCallsRaw())
+                    || Assert.isNotEmpty(am.getSearchResultsRaw())
+                    || Assert.isNotEmpty(am.getBlocks())
+                    || am.getReasoningFieldName() != null
+                    || !(am.getContentRaw() == null || am.getContentRaw() instanceof String
+                    && am.getContent().equals(am.getContentRaw()))) {
                 return null;
             }
             AssistantMessage rebuilt = new AssistantMessage(newContent, am.isThinking());
@@ -1037,6 +1088,16 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         }
 
         return null;
+    }
+
+    /** 仅接受空块或由普通字符串工厂生成的单一同内容 TextBlock。 */
+    private boolean hasOnlyPlainTextBlock(List<ContentBlock> blocks, String content) {
+        if (Assert.isEmpty(blocks)) {
+            return true;
+        }
+        return blocks.size() == 1
+                && blocks.get(0) instanceof org.noear.solon.ai.chat.content.TextBlock
+                && java.util.Objects.equals(content, blocks.get(0).getContent());
     }
 
     /**
@@ -1177,6 +1238,27 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             }
         }
         return tokens;
+    }
+
+    private Collection<FunctionTool> collectEffectiveTools(ChatModel chatModel, ReActTrace trace) {
+        Map<String, FunctionTool> effective = new LinkedHashMap<>();
+        if (chatModel != null && chatModel.getConfig() != null) {
+            putToolsByName(effective, chatModel.getConfig().getDefaultTools());
+        }
+        putToolsByName(effective, trace.getOptions().getTools());
+        putToolsByName(effective, trace.getProtocolTools());
+        return effective.values();
+    }
+
+    private void putToolsByName(Map<String, FunctionTool> target, Collection<FunctionTool> tools) {
+        if (Assert.isEmpty(tools)) {
+            return;
+        }
+        for (FunctionTool tool : tools) {
+            if (tool != null) {
+                target.put(tool.name(), tool);
+            }
+        }
     }
 
     /**
