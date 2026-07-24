@@ -12,6 +12,8 @@ import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.agent.react.intercept.compress.*;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatRequestDesc;
+import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.ToolCall;
@@ -394,22 +396,34 @@ public class ContextCompressionInterceptorTest {
     }
 
     /**
-     * 验证 LLMCompressionStrategy 真实集成
+     * 验证 LLMCompressionStrategy 的压缩结果构建。
+     * 使用可控 ChatModel，避免真实模型把简单输入判定为“无显著进度”或受网络波动影响。
      */
     @Test
     public void testLLMCompressionStrategy_Real() throws Exception {
+        ChatModel compressionModel = mock(ChatModel.class);
+        ChatRequestDesc request = mock(ChatRequestDesc.class);
+        ChatResponse response = mock(ChatResponse.class);
+        when(compressionModel.prompt(anyString())).thenReturn(request);
+        when(request.options(any(java.util.function.Consumer.class))).thenReturn(request);
+        when(request.call()).thenReturn(response);
+        when(response.hasContent()).thenReturn(true);
+        when(response.getContent()).thenReturn("已完成执行细节分析，当前等待下一步操作。");
+
         LLMCompressionStrategy strategy = new LLMCompressionStrategy();
 
         ChatMessage m1 = ChatMessage.ofUser("我是初心任务");
         m1.addMetadata(AgentTrace.META_FIRST, 1);
         ChatMessage m2 = ChatMessage.ofAssistant("我是需要被总结的执行细节。");
 
-        ChatMessage result = strategy.compress(chatModel, 3, trace, Arrays.asList(m1, m2));
+        ChatMessage result = strategy.compress(compressionModel, 3, trace, Arrays.asList(m1, m2));
 
         assertNotNull(result);
-        // 验证返回了有效的压缩结果
         assertNotNull(result.getContent());
         assertFalse(result.getContent().isEmpty());
+        assertTrue(result.hasMetadata(ContextCompressionInterceptor.META_COMPRESSED));
+        verify(compressionModel).prompt(argThat((String prompt) ->
+                prompt.contains("我是需要被总结的执行细节") && !prompt.contains("我是初心任务")));
     }
 
     @Test
@@ -1137,7 +1151,7 @@ public class ContextCompressionInterceptorTest {
     }
 
     @Test
-    public void testInvalidOrDuplicateNativeToolIdsAreRemoved() {
+    public void testNativeToolPairingSupportsIdAndGeminiNameOrder() {
         org.noear.solon.ai.agent.react.ReActAgentConfig cfg = mock(org.noear.solon.ai.agent.react.ReActAgentConfig.class);
         when(cfg.getStyle()).thenReturn(org.noear.solon.ai.agent.react.ReActStyle.NATIVE_TOOL);
         when(trace.getConfig()).thenReturn(cfg);
@@ -1162,10 +1176,85 @@ public class ContextCompressionInterceptorTest {
 
         interceptor.onReasonStart(trace, null);
 
-        assertFalse(workingMemory.getMessages().contains(nullIdAction));
-        assertFalse(workingMemory.getMessages().contains(nullIdResult));
+        assertTrue(workingMemory.getMessages().contains(nullIdAction));
+        assertTrue(workingMemory.getMessages().contains(nullIdResult));
         assertFalse(workingMemory.getMessages().contains(duplicateIdAction));
         assertFalse(workingMemory.getMessages().contains(duplicateIdResult));
+    }
+
+    @Test
+    public void testGeminiNullIdResultsMustMatchNameAndOrder() {
+        org.noear.solon.ai.agent.react.ReActAgentConfig cfg = mock(org.noear.solon.ai.agent.react.ReActAgentConfig.class);
+        when(cfg.getStyle()).thenReturn(org.noear.solon.ai.agent.react.ReActStyle.NATIVE_TOOL);
+        when(trace.getConfig()).thenReturn(cfg);
+
+        AssistantMessage action = new AssistantMessage("call", false, null, null,
+                Arrays.asList(new ToolCall("0", null, "read", "{}", Utils.asMap()),
+                        new ToolCall("1", null, "grep", "{}", Utils.asMap())), null);
+        ToolMessage wrongFirst = ChatMessage.ofTool("result1", "grep", null);
+        ToolMessage wrongSecond = ChatMessage.ofTool("result2", "read", null);
+        workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
+        for (int i = 0; i < 12; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("history " + i));
+        }
+        workingMemory.addMessage(action);
+        workingMemory.addMessage(wrongFirst);
+        workingMemory.addMessage(wrongSecond);
+
+        interceptor.onReasonStart(trace, null);
+
+        assertFalse(workingMemory.getMessages().contains(action));
+        assertFalse(workingMemory.getMessages().contains(wrongFirst));
+        assertFalse(workingMemory.getMessages().contains(wrongSecond));
+    }
+
+    @Test
+    public void testCustomStrategyResultIsStandardizedAsSummary() {
+        ChatMessage customSummary = ChatMessage.ofUser("custom summary");
+        CompressionStrategy strategy = (model, retries, currentTrace, messages) -> customSummary;
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 10_000, strategy);
+        workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
+        for (int i = 0; i < 20; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("history " + i));
+        }
+
+        custom.onReasonStart(trace, null);
+
+        assertEquals(Integer.valueOf(1), customSummary.getMetadataAs(ContextCompressionInterceptor.META_COMPRESSED));
+        assertTrue(workingMemory.getMessages().contains(customSummary));
+    }
+
+    @Test
+    public void testStructuredTextAtomicRemovalRange() throws Exception {
+        AssistantMessage action = ChatMessage.ofAssistant("Thought: run\nAction: {\"name\":\"bash\",\"arguments\":{}}");
+        UserMessage observation1 = (UserMessage) ChatMessage.ofUser("Observation: one");
+        UserMessage observation2 = (UserMessage) ChatMessage.ofUser("Observation: two");
+        List<ChatMessage> messages = Arrays.asList(ChatMessage.ofUser("prefix"), action, observation1, observation2,
+                ChatMessage.ofAssistant("next"));
+
+        java.lang.reflect.Method method = ContextCompressionInterceptor.class.getDeclaredMethod(
+                "findAtomicRemovalRange", List.class, int.class, boolean.class, int.class);
+        method.setAccessible(true);
+        int[] fromAction = (int[]) method.invoke(interceptor, messages, 1, false, 0);
+        int[] fromObservation = (int[]) method.invoke(interceptor, messages, 2, false, 0);
+
+        assertArrayEquals(new int[]{1, 4}, fromAction);
+        assertArrayEquals(new int[]{1, 4}, fromObservation);
+    }
+
+    @Test
+    public void testFinalMessageCountConvergesWithoutStrategy() {
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 100_000, null);
+        workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
+        for (int i = 0; i < 20; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("short " + i));
+        }
+
+        custom.onReasonStart(trace, null);
+
+        long variableCount = workingMemory.getMessages().stream()
+                .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST)).count();
+        assertTrue(variableCount <= 10, "最终可变消息数应收敛到 maxMessages");
     }
 
     @Test

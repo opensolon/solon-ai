@@ -219,10 +219,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                     // 有效上下文窗口 = 模型窗口 - 系统提示词保留
                     // 底线保护：若 SYSTEM_PROMPT_RESERVE 超过窗口的 20%，
                     // 则至少保留 80% 的窗口给对话（针对小窗口模型）
-                    int effectiveWindow = (int) Math.max(contextLength - SYSTEM_PROMPT_RESERVE,
+                    long effectiveWindow = Math.max(contextLength - SYSTEM_PROMPT_RESERVE,
                             contextLength * 8 / 10);
-                    // 取较小值：不超出模型物理能力，也不违背用户配置的预算意图
-                    return Math.min(this.maxTokens, effectiveWindow);
+                    // 取较小值：不超出模型物理能力，也不违背用户配置的预算意图；防止异常配置强转溢出
+                    return (int) Math.min(this.maxTokens, Math.min(Integer.MAX_VALUE, effectiveWindow));
                 }
             }
         } catch (Exception e) {
@@ -358,12 +358,15 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         //    - targetByTokens：按 Token 预算维度的截断位置（从尾向前累加）
         //    - minReservedIdx：保留窗口的绝对下限，防止 Token 维度过度截断
         int targetByCount;
+        int messageBudget;
         if (force) {
             int variableSize = Math.max(0, messages.size() - firstList.size());
             int forceMessageBudget = Math.max(1,
                     (int) Math.ceil(variableSize * forceRatio));
+            messageBudget = forceMessageBudget;
             targetByCount = Math.max(firstList.size(), messages.size() - forceMessageBudget);
         } else {
+            messageBudget = maxMessages;
             targetByCount = Math.max(firstList.size(), messages.size() - maxMessages);
         }
 
@@ -386,8 +389,9 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 messages.size() - (force ? 0 : minReservedMessages));
 
         int rawTargetByTokens = targetByTokens;  // 保存原始Token截断位置，供步骤6.1使用
+        boolean nativeToolMode = trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL;
         int targetIdx = Math.max(targetByCount, Math.min(targetByTokens, minReservedIdx));
-        targetIdx = alignStartToToolCallGroup(messages, targetIdx, firstList.size());
+        targetIdx = alignStartToToolCallGroup(messages, targetIdx, firstList.size(), nativeToolMode);
 
         // 5. ⭐ 原子对对齐（防止 tool-use 原子对被截断为两段）
         //    若 targetIdx 落在 ToolMessage 或 Observation 上，向前回退至配套的 Assistant(with tool_calls)
@@ -395,23 +399,33 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         //    若落在普通消息上（User / Assistant thought），保留（不存在配对问题）
         while (targetIdx > firstList.size() && targetIdx < messages.size()) {
             ChatMessage msg = messages.get(targetIdx);
-            if (msg instanceof ToolMessage || isObservation(msg)) {
-                targetIdx--; // 向前追溯匹配的源头 Assistant(with tool_calls)
-            } else if (msg instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls())) {
-                break; // 已定位到源头，停止回退
+            if (isToolOutputForMode(msg, nativeToolMode)) {
+                int aligned = alignStartToToolCallGroup(messages, targetIdx, firstList.size(), nativeToolMode);
+                if (aligned < targetIdx) {
+                    targetIdx = aligned;
+                }
+                break;
+            } else if (msg instanceof AssistantMessage
+                    && (nativeToolMode
+                    ? Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls())
+                    : isTextAction((AssistantMessage) msg))) {
+                break;
             } else {
-                break; // 无关消息，无需处理
+                break;
             }
         }
 
         // 6. 语义连贯补齐：若截断点前一条为带思考内容的 Assistant thought，一并纳入保留区
         //    使 LLM 获得完整的推理上下文（排除空壳消息：既无 content 也无 tool_calls 的不应纳入）
-        if (targetIdx > firstList.size()) {
+        //    强制 PTL 收敛时不额外扩张窗口，避免语义补齐抵消按失败级别计算出的缩减比例。
+        ChatMessage semanticAnchor = null;
+        if (!force && targetIdx > firstList.size()) {
             ChatMessage prev = messages.get(targetIdx - 1);
             if (prev instanceof AssistantMessage
                     && Assert.isEmpty(((AssistantMessage) prev).getToolCalls())
                     && Assert.isNotEmpty(((AssistantMessage) prev).getResultContent())) {
                 targetIdx--;
+                semanticAnchor = prev;
             }
         }
 
@@ -431,10 +445,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             if (rawTargetByTokens > minReservedIdx) {
                 // 保护起效但预算超了 → 标记后续对保护段做摘要压缩，不调整 targetIdx
                 protectedSummaryApplied = true;
-                rawTargetByTokens = alignStartToToolCallGroup(messages, rawTargetByTokens, targetIdx);
+                rawTargetByTokens = alignStartToToolCallGroup(messages, rawTargetByTokens, targetIdx, nativeToolMode);
             } else {
                 // 保护没起效 → 回退到预算截断点，并按 tool-use 原子组向前补齐
-                targetIdx = alignStartToToolCallGroup(messages, Math.max(firstList.size(), targetByTokens), firstList.size());
+                targetIdx = alignStartToToolCallGroup(messages, Math.max(firstList.size(), targetByTokens), firstList.size(), nativeToolMode);
             }
         }
 
@@ -481,27 +495,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                     // 一条 Assistant(with tool_calls) 可能触发多个 ToolMessage，
                     // 甚至多轮交错调用如 [Assistant(tc=A), Tool(A1), Assistant(tc=B), Tool(B)]。
                     // 需要保留从最后一个源头 Assistant(with tc) 到末尾的全部消息。
-                    int captureStart = pureHistory.size() - 1;
-                    while (captureStart > 0) {
-                        ChatMessage msg = pureHistory.get(captureStart);
-                        if (msg instanceof ToolMessage || isObservation(msg)) {
-                            captureStart--; // ToolMessage → 继续向前追溯源头
-                        } else if (msg instanceof AssistantMessage
-                                && Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls())) {
-                            break; // 找到源头 Assistant(with tc)，保留[captureStart..末尾]序列
-                        } else {
-                            // 遇到无关消息（User、普通 Assistant thought），
-                            // 回退一步，至少保留一个 ToolMessage（宁可保留畸形的，不送孤立 ToolMessage）
-                            if (captureStart < pureHistory.size() - 1) {
-                                captureStart++;
-                            }
-                            break;
-                        }
-                    }
-
+                    int captureStart = findFallbackStart(pureHistory, nativeToolMode);
                     for (int i = captureStart; i < pureHistory.size(); i++) {
                         compressed.add(pureHistory.get(i));
-                        }
+                    }
                     }
                 }
             }
@@ -536,23 +533,9 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                     }
                     if (!pureProtected.isEmpty()) {
                         // fallback：原子序列追溯（零成本裁剪路径，不调用 LLM）
-                        int captureStart = pureProtected.size() - 1;
-                    while (captureStart > 0) {
-                        ChatMessage msg = pureProtected.get(captureStart);
-                        if (msg instanceof ToolMessage || isObservation(msg)) {
-                            captureStart--;
-                        } else if (msg instanceof AssistantMessage
-                                && Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls())) {
-                            break;
-                        } else {
-                            if (captureStart < pureProtected.size() - 1) {
-                                captureStart++;
-                            }
-                            break;
-                        }
-                    }
-                    for (int i = captureStart; i < pureProtected.size(); i++) {
-                        compressed.add(pureProtected.get(i));
+                        int captureStart = findFallbackStart(pureProtected, nativeToolMode);
+                        for (int i = captureStart; i < pureProtected.size(); i++) {
+                            compressed.add(pureProtected.get(i));
                         }
                     }
                 }
@@ -566,10 +549,9 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         // 8. 更新工作区
         int beforeSize = messages.size();
-        boolean nativeToolMode = trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL;
         compressed = removeDanglingToolOutputs(compressed, nativeToolMode);
         compressed = convergeToBudget(compressed, systemPrompt, toolsTokens, compressionBudget,
-                nativeToolMode, firstList.size());
+                messageBudget, nativeToolMode, firstList.size(), semanticAnchor);
         int afterTokens = estimateTokens(compressed, systemPrompt) + toolsTokens;
         boolean changed = microCompacted || !compressed.equals(messages);
         if (changed) {
@@ -609,7 +591,12 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      */
     private ChatMessage safeCompress(ChatModel chatModel, ReActTrace trace, List<ChatMessage> messages) {
         try {
-            return compressionStrategy.compress(chatModel, maxRetries, trace, messages);
+            ChatMessage summary = compressionStrategy.compress(chatModel, maxRetries, trace, messages);
+            if (summary != null && !summary.hasMetadata(META_COMPRESSED)) {
+                // 策略接口不要求实现方添加标记；由编排器统一标准化，确保后续预算收敛优先保护摘要。
+                summary.addMetadata(META_COMPRESSED, 1);
+            }
+            return summary;
         } catch (Exception e) {
             log.warn("ReActAgent [{}] compression strategy failed, fallback to safe trimming",
                     trace.getAgentName(), e);
@@ -617,11 +604,37 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         }
     }
 
+    /** fallback 至少保留最后一条普通消息；若尾部属于工具结果，则保留完整 Action/结果组。 */
+    private int findFallbackStart(List<ChatMessage> messages, boolean nativeToolMode) {
+        int last = messages.size() - 1;
+        if (last <= 0 || !isToolOutputForMode(messages.get(last), nativeToolMode)) {
+            return Math.max(0, last);
+        }
+
+        int cursor = last;
+        while (cursor > 0 && isToolOutputForMode(messages.get(cursor), nativeToolMode)) {
+            cursor--;
+        }
+        if (messages.get(cursor) instanceof AssistantMessage) {
+            AssistantMessage assistant = (AssistantMessage) messages.get(cursor);
+            boolean action = nativeToolMode
+                    ? Assert.isNotEmpty(assistant.getToolCalls())
+                    : isTextAction(assistant);
+            if (action) {
+                return cursor;
+            }
+        }
+        // 不返回孤立结果；退化为保留结果组之前最近的可独立消息。
+        return Math.max(0, cursor);
+    }
+
     private List<ChatMessage> convergeToBudget(List<ChatMessage> messages, String systemPrompt,
-                                               int toolsTokens, int budget, boolean nativeToolMode,
-                                               int protectedPrefixSize) {
+                                               int toolsTokens, int budget, int messageBudget,
+                                               boolean nativeToolMode, int protectedPrefixSize,
+                                               ChatMessage semanticAnchor) {
         List<ChatMessage> result = new ArrayList<>(messages);
-        while (estimateTokens(result, systemPrompt) + toolsTokens > budget) {
+        while (estimateTokens(result, systemPrompt) + toolsTokens > budget
+                || countVariableMessages(result, protectedPrefixSize) > messageBudget) {
             int latestSummaryIdx = -1;
             for (int i = result.size() - 1; i >= 0; i--) {
                 if (result.get(i).hasMetadata(META_COMPRESSED)) {
@@ -635,7 +648,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             for (int i = protectedPrefixSize; i < result.size(); i++) {
                 ChatMessage message = result.get(i);
                 if (!message.hasMetadata(AgentTrace.META_FIRST)
-                        && !message.hasMetadata(META_COMPRESSED)) {
+                        && !message.hasMetadata(META_COMPRESSED)
+                        && message != semanticAnchor) {
                     removableIdx = i;
                     break;
                 }
@@ -660,20 +674,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 break;
             }
 
-            int removeEnd = removableIdx + 1;
-            ChatMessage first = result.get(removableIdx);
-            if (first instanceof AssistantMessage
-                    && Assert.isNotEmpty(((AssistantMessage) first).getToolCalls())) {
-                while (removeEnd < result.size()) {
-                    ChatMessage next = result.get(removeEnd);
-                    if (next instanceof ToolMessage || isObservation(next)) {
-                        removeEnd++;
-                    } else {
-                        break;
-                    }
-                }
-            }
-            result.subList(removableIdx, removeEnd).clear();
+            int[] removeRange = findAtomicRemovalRange(result, removableIdx, nativeToolMode, protectedPrefixSize);
+            result.subList(removeRange[0], removeRange[1]).clear();
             result = removeDanglingToolOutputs(result, nativeToolMode);
         }
         return result;
@@ -682,16 +684,76 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     /** 兼容内部测试及旧反射调用。 */
     private List<ChatMessage> convergeToBudget(List<ChatMessage> messages, String systemPrompt,
                                                int toolsTokens, int budget) {
-        return convergeToBudget(messages, systemPrompt, toolsTokens, budget, true, 0);
+        return convergeToBudget(messages, systemPrompt, toolsTokens, budget,
+                Integer.MAX_VALUE, true, 0, null);
     }
 
-    private int alignStartToToolCallGroup(List<ChatMessage> messages, int startIdx, int minIdx) {
+    private int countVariableMessages(List<ChatMessage> messages, int protectedPrefixSize) {
+        return Math.max(0, messages.size() - Math.min(protectedPrefixSize, messages.size()));
+    }
+
+    /** 返回原子消息组的 [start, end) 删除区间。 */
+    private int[] findAtomicRemovalRange(List<ChatMessage> messages, int index,
+                                         boolean nativeToolMode, int protectedPrefixSize) {
+        int start = index;
+        int end = index + 1;
+        ChatMessage selected = messages.get(index);
+
+        if (selected instanceof AssistantMessage) {
+            AssistantMessage assistant = (AssistantMessage) selected;
+            boolean action = nativeToolMode
+                    ? Assert.isNotEmpty(assistant.getToolCalls())
+                    : isTextAction(assistant);
+            if (action) {
+                while (end < messages.size() && isToolOutputForMode(messages.get(end), nativeToolMode)) {
+                    end++;
+                }
+            }
+        } else if (isToolOutputForMode(selected, nativeToolMode)) {
+            // 若命中结果消息，回溯到紧邻的源 Action，并删除完整组。
+            int cursor = index - 1;
+            while (cursor >= protectedPrefixSize && isToolOutputForMode(messages.get(cursor), nativeToolMode)) {
+                cursor--;
+            }
+            if (cursor >= protectedPrefixSize && messages.get(cursor) instanceof AssistantMessage) {
+                AssistantMessage assistant = (AssistantMessage) messages.get(cursor);
+                boolean action = nativeToolMode
+                        ? Assert.isNotEmpty(assistant.getToolCalls())
+                        : isTextAction(assistant);
+                if (action) {
+                    start = cursor;
+                    end = index + 1;
+                    while (end < messages.size() && isToolOutputForMode(messages.get(end), nativeToolMode)) {
+                        end++;
+                    }
+                }
+            }
+        }
+        return new int[]{start, end};
+    }
+
+    private boolean isToolOutputForMode(ChatMessage message, boolean nativeToolMode) {
+        return nativeToolMode ? message instanceof ToolMessage : isTextObservation(message);
+    }
+
+    private int alignStartToToolCallGroup(List<ChatMessage> messages, int startIdx, int minIdx,
+                                          boolean nativeToolMode) {
         if (startIdx <= minIdx || startIdx >= messages.size()) {
             return startIdx;
         }
 
         ChatMessage msg = messages.get(startIdx);
-        if (msg instanceof ToolMessage) {
+        if (!nativeToolMode && isTextObservation(msg)) {
+            for (int i = startIdx - 1; i >= minIdx; i--) {
+                ChatMessage prev = messages.get(i);
+                if (prev instanceof AssistantMessage && isTextAction((AssistantMessage) prev)) {
+                    return i;
+                }
+                if (!isTextObservation(prev)) {
+                    break;
+                }
+            }
+        } else if (msg instanceof ToolMessage) {
             String toolCallId = ((ToolMessage) msg).getToolCallId();
             for (int i = startIdx - 1; i >= minIdx; i--) {
                 ChatMessage prev = messages.get(i);
@@ -740,37 +802,64 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                     }
                 }
 
+                List<ToolCall> calls = assistant.getToolCalls();
+                boolean allWithIds = true;
+                boolean allWithoutIds = true;
                 Set<String> requiredCallIds = new LinkedHashSet<>();
-                boolean validCalls = true;
-                for (ToolCall tc : assistant.getToolCalls()) {
+                for (ToolCall tc : calls) {
                     String id = normalizeToolCallId(tc.getId());
-                    if (id == null || !requiredCallIds.add(id)) {
-                        validCalls = false;
-                        break;
+                    allWithIds &= id != null;
+                    allWithoutIds &= id == null;
+                    if (id != null && !requiredCallIds.add(id)) {
+                        allWithIds = false; // 重复 ID 不能可靠配对
                     }
                 }
 
-                Map<String, ToolMessage> matchedOutputs = new java.util.LinkedHashMap<>();
-                boolean duplicateOutput = false;
-                for (ChatMessage toolOutput : toolOutputs) {
-                    if (!(toolOutput instanceof ToolMessage)) {
-                        continue;
-                    }
-                    ToolMessage output = (ToolMessage) toolOutput;
-                    String id = normalizeToolCallId(output.getToolCallId());
-                    if (id != null && requiredCallIds.contains(id)) {
-                        if (matchedOutputs.put(id, output) != null) {
-                            duplicateOutput = true;
+                List<ToolMessage> nativeOutputs = toolOutputs.stream()
+                        .filter(m -> m instanceof ToolMessage)
+                        .map(m -> (ToolMessage) m)
+                        .collect(Collectors.toList());
+                List<ToolMessage> matched = new ArrayList<>();
+                boolean validGroup = false;
+
+                if (allWithIds) {
+                    Map<String, ToolMessage> byId = new java.util.LinkedHashMap<>();
+                    boolean duplicate = false;
+                    for (ToolMessage output : nativeOutputs) {
+                        String id = normalizeToolCallId(output.getToolCallId());
+                        // 兼容历史行为：无关结果由合法化阶段清理，不使完整调用组整体失效。
+                        if (id == null || !requiredCallIds.contains(id)) {
+                            continue;
+                        }
+                        if (byId.put(id, output) != null) {
+                            duplicate = true;
+                            break;
                         }
                     }
+                    validGroup = !duplicate && byId.size() == requiredCallIds.size();
+                    if (validGroup) {
+                        for (String id : requiredCallIds) {
+                            matched.add(byId.get(id));
+                        }
+                    }
+                } else if (allWithoutIds && nativeOutputs.size() == calls.size()) {
+                    // Gemini 等方言不提供 call id：按函数名与出现顺序配对，不改变原始顺序。
+                    validGroup = true;
+                    for (int k = 0; k < calls.size(); k++) {
+                        ToolCall call = calls.get(k);
+                        ToolMessage output = nativeOutputs.get(k);
+                        if (normalizeToolCallId(output.getToolCallId()) != null
+                                || !sameToolName(call.getName(), output.getName())) {
+                            validGroup = false;
+                            break;
+                        }
+                        matched.add(output);
+                    }
                 }
 
-                if (validCalls && !duplicateOutput
-                        && matchedOutputs.keySet().containsAll(requiredCallIds)) {
+                if (validGroup) {
                     result.add(msg);
-                    for (String id : requiredCallIds) {
-                        result.add(matchedOutputs.get(id));
-                    }
+                    result.addAll(matched);
                 }
 
                 i = j - 1;
@@ -803,6 +892,19 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         }
 
         return result;
+    }
+
+    private boolean sameToolName(String callName, String outputName) {
+        return callName != null && callName.equals(outputName);
+    }
+
+    private boolean isTextAction(AssistantMessage message) {
+        String content = message.getResultContent();
+        if (content == null) {
+            return false;
+        }
+        int actionIdx = content.indexOf("Action:");
+        return actionIdx >= 0 && actionIdx + "Action:".length() < content.length();
     }
 
     private String normalizeToolCallId(String id) {
@@ -1024,17 +1126,29 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                     String name = tc.getName() != null ? tc.getName() : "";
                     String args = tc.getArgumentsStr() != null ? tc.getArgumentsStr() : "";
                     count += encoding.countTokens(name + args) + 10;
+                    count += countTextTokens(tc.getId());
+                    count += countTextTokens(tc.getThoughtSignature());
                 }
+            }
+            if (Assert.isNotEmpty(assistant.getToolCallsRaw())) {
+                count += encoding.countTokens(String.valueOf(assistant.getToolCallsRaw()));
             }
             count += estimateMediaTokens(assistant.getBlocks());
         } else if (message instanceof UserMessage) {
             count += estimateMediaTokens(((UserMessage) message).getBlocks());
         } else if (message instanceof ToolMessage) {
-            count += estimateMediaTokens(((ToolMessage) message).getBlocks());
+            ToolMessage toolMessage = (ToolMessage) message;
+            count += estimateMediaTokens(toolMessage.getBlocks());
+            count += countTextTokens(toolMessage.getName());
+            count += countTextTokens(toolMessage.getToolCallId());
         }
 
         message.addMetadata(META_TOKEN_SIZE, count);
         return count;
+    }
+
+    private int countTextTokens(String text) {
+        return text == null || text.isEmpty() ? 0 : encoding.countTokens(text);
     }
 
     /**
