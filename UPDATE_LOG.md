@@ -36,6 +36,7 @@
 * 优化 solon-ai-core AbstractChatDialect 方言适配
 * 优化 solon-ai-agent TeamAgent 相关实现代码
 * 优化 solon-ai-agent hitl 实现（以支持多工具批量）
+* 优化 solon-ai-agent ContextCompressionInterceptor 压缩算法
 * 优化 solon-ai-talent-cli bash 脚本处理
 * 优化 solon-ai-dialect-anthropic 方言适配
 * 优化 solon-ai-dialect-openai Responses 方言适配
