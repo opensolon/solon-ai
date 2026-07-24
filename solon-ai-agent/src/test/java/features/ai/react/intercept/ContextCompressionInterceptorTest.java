@@ -1,6 +1,5 @@
 package features.ai.react.intercept;
 
-import demo.ai.llm.LlmUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -50,7 +49,7 @@ public class ContextCompressionInterceptorTest {
         when(cfg.getStyle()).thenReturn(org.noear.solon.ai.agent.react.ReActStyle.STRUCTURED_TEXT);
         when(trace.getConfig()).thenReturn(cfg);
 
-        chatModel = LlmUtil.getChatModel();
+        chatModel = mock(ChatModel.class);
 
         // stub options，避免 onReasonStart 取 getOptions()/getChatModel() NPE
         org.noear.solon.ai.agent.react.ReActOptions options =
@@ -470,7 +469,16 @@ public class ContextCompressionInterceptorTest {
     }
 
     @Test
-    public void testHierarchicalStrategy_StateRolling() {
+    public void testHierarchicalStrategy_StateRolling() throws Exception {
+        ChatModel hierarchyModel = mock(ChatModel.class);
+        ChatRequestDesc request = mock(ChatRequestDesc.class);
+        ChatResponse response = mock(ChatResponse.class);
+        when(hierarchyModel.prompt(anyString())).thenReturn(request);
+        when(request.options(any(java.util.function.Consumer.class))).thenReturn(request);
+        when(request.call()).thenReturn(response);
+        when(response.hasContent()).thenReturn(true);
+        when(response.getContent()).thenReturn("Previous summary content; New event completed.");
+
         HierarchicalCompressionStrategy strategy = new HierarchicalCompressionStrategy();
         String lastSummaryKey = "agent:summary:hierarchical";
 
@@ -479,7 +487,7 @@ public class ContextCompressionInterceptorTest {
         when(trace.getExtraAs(lastSummaryKey)).thenReturn(oldSummary);
 
         // 触发新的总结
-        strategy.compress(chatModel,3, trace, Arrays.asList(ChatMessage.ofAssistant("New event.")));
+        strategy.compress(hierarchyModel,3, trace, Arrays.asList(ChatMessage.ofAssistant("New event.")));
 
         // 验证：trace.setExtra 被调用了，且存入了新的摘要（由于 mock 模型，这里主要看调用）
         verify(trace).setExtra(eq(lastSummaryKey), anyString());
@@ -1402,6 +1410,77 @@ public class ContextCompressionInterceptorTest {
         assertEquals(1, chunk.getAfterMessageCount());
         assertEquals(1, chunk.getMessageCount());
         assertTrue(chunk.getBeforeTokenCount() > chunk.getAfterTokenCount());
+    }
+
+    @Test
+    public void testProtocolCleanupDoesNotProtectShiftedVariableMessage() throws Exception {
+        ChatMessage fixed = ChatMessage.ofUser("fixed").addMetadata(AgentTrace.META_FIRST, 1);
+        AssistantMessage invalidFixed = new AssistantMessage("", false, null, null, null, null);
+        invalidFixed.addMetadata(AgentTrace.META_FIRST, 1);
+        ChatMessage shiftedVariable = ChatMessage.ofAssistant("shifted variable");
+        ChatMessage recent = ChatMessage.ofAssistant("recent");
+
+        workingMemory.addMessage(fixed);
+        workingMemory.addMessage(invalidFixed);
+        workingMemory.addMessage(shiftedVariable);
+        workingMemory.addMessage(recent);
+        for (int i = 0; i < 12; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("tail " + i));
+        }
+
+        interceptor.onReasonStart(trace, null);
+
+        assertFalse(workingMemory.getMessages().contains(invalidFixed));
+        assertFalse(workingMemory.getMessages().contains(shiftedVariable),
+                "协议清理后左移的可变消息不能因旧前缀索引被误保护");
+    }
+
+    @Test
+    public void testRequestPreparationReserveIsBounded() throws Exception {
+        java.lang.reflect.Method method = ContextCompressionInterceptor.class.getDeclaredMethod(
+                "estimateRequestPreparationReserve", ChatModel.class, int.class);
+        method.setAccessible(true);
+
+        assertEquals(500, method.invoke(interceptor, chatModel, 10_000));
+        assertEquals(2_000, method.invoke(interceptor, chatModel, 100_000));
+    }
+
+    @Test
+    public void testTinySummaryBudgetSkipsCompressionStrategy() throws Exception {
+        CompressionStrategy strategy = mock(CompressionStrategy.class);
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 10_000, strategy);
+        java.lang.reflect.Method method = ContextCompressionInterceptor.class.getDeclaredMethod(
+                "safeCompress", ChatModel.class, ReActTrace.class, List.class, int.class);
+        method.setAccessible(true);
+
+        assertNull(method.invoke(custom, chatModel, trace,
+                Arrays.asList(ChatMessage.ofAssistant("history")), 31));
+        verifyNoInteractions(strategy);
+    }
+
+    @Test
+    public void testLLMCompressionPTLCanDropCompleteFirstToolGroup() throws Exception {
+        ChatModel compressionModel = mock(ChatModel.class);
+        ChatRequestDesc request = mock(ChatRequestDesc.class);
+        ChatResponse response = mock(ChatResponse.class);
+        when(compressionModel.prompt(anyString())).thenReturn(request);
+        when(request.options(any(java.util.function.Consumer.class))).thenReturn(request);
+        when(request.call())
+                .thenThrow(new RuntimeException("context_length_exceeded"))
+                .thenReturn(response);
+        when(response.hasContent()).thenReturn(true);
+        when(response.getContent()).thenReturn("有效摘要");
+
+        AssistantMessage action = new AssistantMessage("call", false, null, null,
+                Arrays.asList(new ToolCall("0", "call_1", "read", "{}", Utils.asMap())), null);
+        ToolMessage output = ChatMessage.ofTool("result", "read", "call_1");
+        ChatMessage recent = ChatMessage.ofAssistant("recent");
+
+        ChatMessage result = new LLMCompressionStrategy().compress(
+                compressionModel, 1, trace, Arrays.asList(action, output, recent));
+
+        assertNotNull(result);
+        verify(request, times(2)).call();
     }
 
     private FunctionTool mockTool(String name, String description) {

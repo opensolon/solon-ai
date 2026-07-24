@@ -44,6 +44,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -107,9 +109,15 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     private int perMessageCap;
     // 系统提示词保留缓冲（用于模型感知阈值，对应 claude-code 的 SYSTEM_PROMPT_RESERVE=20000）
     private static final int SYSTEM_PROMPT_RESERVE = 20_000;
-    // 压缩触发比例（claude-code 使用 0.93；本框架使用 0.75，为用户配置的 maxTokens 预留 25% 缓冲，
-    // 因为框架场景下 maxTokens 是用户显式设定的上下文预算，比 CLI 工具需要更多安全余量）
-    private static final double COMPACT_THRESHOLD_RATIO = 0.75;
+    // 压缩触发比例（为用户配置的 maxTokens 预留 25% 缓冲）
+    private static final double COMPACT_THRESHOLD_RATIO = 0.75D;
+    // 请求在 ChatRequestDesc.prepare() 阶段仍可能被默认指令、Talent 和 ChatInterceptor 扩展。
+    // 这里保留有限安全余量，不提前执行这些有副作用的扩展逻辑。
+    private static final double REQUEST_PREPARATION_RESERVE_RATIO = 0.05D;
+    private static final int MIN_REQUEST_PREPARATION_RESERVE = 256;
+    private static final int MAX_REQUEST_PREPARATION_RESERVE = 2_000;
+    // 摘要预算过小时不生成只有标点/截断标记的无意义摘要。
+    private static final int MIN_SUMMARY_TOKENS = 32;
     // 压缩策略
     private final CompressionStrategy compressionStrategy;
 
@@ -284,15 +292,17 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             }
         }
 
+        int requestPreparationTokens = estimateRequestPreparationReserve(chatModel, effectiveMaxTokens);
+
         // 事件的 before 口径始终指进入拦截器时的原始工作记忆，不能因 MicroCompact 先发生而漂移。
         int originalMessageCount = originalMessages.size();
-        int originalTokenCount = estimateTokens(originalMessages, systemPrompt) + toolsTokens;
+        int originalTokenCount = estimateTokens(originalMessages, systemPrompt) + toolsTokens + requestPreparationTokens;
 
         long messageSize = messages.stream()
                 .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
                 .count();
 
-        int currentTokens = estimateTokens(messages, systemPrompt) + toolsTokens;
+        int currentTokens = estimateTokens(messages, systemPrompt) + toolsTokens + requestPreparationTokens;
 
         // 预留缓冲，避免频繁重构；强制模式不受本地阈值限制
         if (!force && messageSize <= maxMessages && currentTokens <= (effectiveMaxTokens * COMPACT_THRESHOLD_RATIO)) {
@@ -313,8 +323,11 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 ? new ArrayList<>()
                 : new ArrayList<>(messages.subList(0, lastFirstIdx + 1));
 
-        // 2. 计算固定开销（systemPrompt + 固定前缀 + tools 定义），统一复用完整估算公式。
-        int fixedTokens = estimateTokens(firstList, systemPrompt) + toolsTokens;
+        Set<ChatMessage> protectedMessages = Collections.newSetFromMap(new IdentityHashMap<>());
+        protectedMessages.addAll(firstList);
+
+        // 2. 计算固定开销（systemPrompt + 固定前缀 + tools 定义 + 请求准备缓冲），统一复用完整估算公式。
+        int fixedTokens = estimateTokens(firstList, systemPrompt) + toolsTokens + requestPreparationTokens;
 
         // 极端场景防御：固定开销超过模型与用户配置共同决定的有效预算
         int baseBudget = Math.min(this.maxTokens, effectiveMaxTokens);
@@ -327,7 +340,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             if (firstList.size() < messages.size()) {
                 trace.getWorkingMemory().replaceMessages(new ArrayList<>(firstList));
             }
-            int afterTokens = estimateTokens(firstList, systemPrompt) + toolsTokens;
+            int afterTokens = estimateTokens(firstList, systemPrompt) + toolsTokens + requestPreparationTokens;
             pushContextChunk(trace, firstList.size(), afterTokens, changed,
                     originalMessageCount, firstList.size(), originalTokenCount, afterTokens);
             return changed;
@@ -350,7 +363,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             // 固定上下文无法进一步压缩时，仍删除所有可变历史，尽可能恢复请求。
             if (firstList.size() < messages.size()) {
                 trace.getWorkingMemory().replaceMessages(new ArrayList<>(firstList));
-                int afterTokens = estimateTokens(firstList, systemPrompt) + toolsTokens;
+                int afterTokens = estimateTokens(firstList, systemPrompt) + toolsTokens + requestPreparationTokens;
                 pushContextChunk(trace, firstList.size(), afterTokens, true,
                         originalMessageCount, firstList.size(), originalTokenCount, afterTokens);
                 return true;
@@ -361,7 +374,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                     originalMessageCount, messages.size(), originalTokenCount, currentTokens);
             return microCompacted;
         }
-        int summaryReserve = Math.max(200, (int) (availableTokens * 0.1));
+        int summaryReserve = Math.min(availableTokens,
+                Math.max(200, (int) (availableTokens * 0.1)));
         int windowBudget = Math.max(0, availableTokens - summaryReserve);
 
         // 4. 双维度确定截断点
@@ -463,6 +477,16 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             }
         }
 
+        int summarySegmentsRemaining = 0;
+        if (compressionStrategy != null && targetIdx > firstList.size()) {
+            summarySegmentsRemaining++;
+        }
+        if (compressionStrategy != null && protectedSummaryApplied
+                && rawTargetByTokens > targetIdx) {
+            summarySegmentsRemaining++;
+        }
+        int summaryBudgetRemaining = summaryReserve;
+
         // 7. 重构 WorkingMemory
         List<ChatMessage> compressed = new ArrayList<>();
         compressed.addAll(firstList);
@@ -479,10 +503,14 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             if (!historyToCompress.isEmpty()) {
                 boolean summaryAdded = false;
                 if (compressionStrategy != null) {
-                    ChatMessage summaryMsg = safeCompress(chatModel, trace, historyToCompress,
-                            Math.min(summaryReserve, availableTokens));
+                    int segmentBudget = summarySegmentsRemaining > 0
+                            ? summaryBudgetRemaining / summarySegmentsRemaining : 0;
+                    summarySegmentsRemaining = Math.max(0, summarySegmentsRemaining - 1);
+                    ChatMessage summaryMsg = safeCompress(chatModel, trace, historyToCompress, segmentBudget);
                     if (summaryMsg != null) {
                         compressed.add(summaryMsg);
+                        summaryBudgetRemaining = Math.max(0,
+                                summaryBudgetRemaining - estimateMessageTokens(summaryMsg));
                         summaryAdded = true;
                     }
                 }
@@ -530,10 +558,14 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             if (!protectedToCompress.isEmpty()) {
                 boolean protectedSummaryAdded = false;
                 if (compressionStrategy != null) {
-                    ChatMessage summaryMsg = safeCompress(chatModel, trace, protectedToCompress,
-                            Math.min(summaryReserve, availableTokens));
+                    int segmentBudget = summarySegmentsRemaining > 0
+                            ? summaryBudgetRemaining / summarySegmentsRemaining : 0;
+                    summarySegmentsRemaining = Math.max(0, summarySegmentsRemaining - 1);
+                    ChatMessage summaryMsg = safeCompress(chatModel, trace, protectedToCompress, segmentBudget);
                     if (summaryMsg != null) {
                         compressed.add(summaryMsg);
+                        summaryBudgetRemaining = Math.max(0,
+                                summaryBudgetRemaining - estimateMessageTokens(summaryMsg));
                         protectedSummaryAdded = true;
                     }
                 }
@@ -563,9 +595,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         // 8. 更新工作区
         int beforeSize = messages.size();
         compressed = removeDanglingToolOutputs(compressed, nativeToolMode);
-        compressed = convergeToBudget(compressed, systemPrompt, toolsTokens, compressionBudget,
-                messageBudget, nativeToolMode, firstList.size(), semanticAnchor);
-        int afterTokens = estimateTokens(compressed, systemPrompt) + toolsTokens;
+        compressed = convergeToBudget(compressed, systemPrompt,
+                toolsTokens + requestPreparationTokens, compressionBudget,
+                messageBudget, nativeToolMode, protectedMessages, semanticAnchor);
+        int afterTokens = estimateTokens(compressed, systemPrompt) + toolsTokens + requestPreparationTokens;
         boolean changed = microCompacted || !compressed.equals(messages);
         if (changed) {
             trace.getWorkingMemory().replaceMessages(compressed);
@@ -604,6 +637,9 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      */
     private ChatMessage safeCompress(ChatModel chatModel, ReActTrace trace, List<ChatMessage> messages,
                                      int summaryTokenBudget) {
+        if (summaryTokenBudget < MIN_SUMMARY_TOKENS) {
+            return null;
+        }
         try {
             ChatMessage summary = compressionStrategy.compress(chatModel, Math.max(1, maxRetries), trace, messages);
             if (summary == null) {
@@ -669,11 +705,11 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
     private List<ChatMessage> convergeToBudget(List<ChatMessage> messages, String systemPrompt,
                                                int toolsTokens, int budget, int messageBudget,
-                                               boolean nativeToolMode, int protectedPrefixSize,
+                                               boolean nativeToolMode, Set<ChatMessage> protectedMessages,
                                                ChatMessage semanticAnchor) {
         List<ChatMessage> result = new ArrayList<>(messages);
         while (estimateTokens(result, systemPrompt) + toolsTokens > budget
-                || countVariableMessages(result, protectedPrefixSize) > messageBudget) {
+                || countVariableMessages(result, protectedMessages) > messageBudget) {
             int latestSummaryIdx = -1;
             for (int i = result.size() - 1; i >= 0; i--) {
                 if (result.get(i).hasMetadata(META_COMPRESSED)) {
@@ -684,9 +720,9 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
             // 摘要承载了已删除历史的信息，优先淘汰普通历史。
             int removableIdx = -1;
-            for (int i = protectedPrefixSize; i < result.size(); i++) {
+            for (int i = 0; i < result.size(); i++) {
                 ChatMessage message = result.get(i);
-                if (!message.hasMetadata(AgentTrace.META_FIRST)
+                if (!isProtectedMessage(message, protectedMessages)
                         && !message.hasMetadata(META_COMPRESSED)
                         && message != semanticAnchor) {
                     removableIdx = i;
@@ -696,15 +732,16 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
             // 普通历史已清空后，先删除旧摘要，最新摘要作为最后兜底。
             if (removableIdx < 0) {
-                for (int i = protectedPrefixSize; i < result.size(); i++) {
+                for (int i = 0; i < result.size(); i++) {
                     if (i != latestSummaryIdx
-                            && !result.get(i).hasMetadata(AgentTrace.META_FIRST)) {
+                            && !isProtectedMessage(result.get(i), protectedMessages)) {
                         removableIdx = i;
                         break;
                     }
                 }
             }
-            if (removableIdx < 0 && latestSummaryIdx >= 0) {
+            if (removableIdx < 0 && latestSummaryIdx >= 0
+                    && !isProtectedMessage(result.get(latestSummaryIdx), protectedMessages)) {
                 removableIdx = latestSummaryIdx;
             }
 
@@ -713,7 +750,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 break;
             }
 
-            int[] removeRange = findAtomicRemovalRange(result, removableIdx, nativeToolMode, protectedPrefixSize);
+            int[] removeRange = findAtomicRemovalRange(result, removableIdx, nativeToolMode, protectedMessages);
             result.subList(removeRange[0], removeRange[1]).clear();
             result = removeDanglingToolOutputs(result, nativeToolMode);
         }
@@ -724,16 +761,26 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     private List<ChatMessage> convergeToBudget(List<ChatMessage> messages, String systemPrompt,
                                                int toolsTokens, int budget) {
         return convergeToBudget(messages, systemPrompt, toolsTokens, budget,
-                Integer.MAX_VALUE, true, 0, null);
+                Integer.MAX_VALUE, true, Collections.emptySet(), null);
     }
 
-    private int countVariableMessages(List<ChatMessage> messages, int protectedPrefixSize) {
-        return Math.max(0, messages.size() - Math.min(protectedPrefixSize, messages.size()));
+    private int countVariableMessages(List<ChatMessage> messages, Set<ChatMessage> protectedMessages) {
+        int count = 0;
+        for (ChatMessage message : messages) {
+            if (!isProtectedMessage(message, protectedMessages)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private boolean isProtectedMessage(ChatMessage message, Set<ChatMessage> protectedMessages) {
+        return message.hasMetadata(AgentTrace.META_FIRST) || protectedMessages.contains(message);
     }
 
     /** 返回原子消息组的 [start, end) 删除区间。 */
     private int[] findAtomicRemovalRange(List<ChatMessage> messages, int index,
-                                         boolean nativeToolMode, int protectedPrefixSize) {
+                                         boolean nativeToolMode, Set<ChatMessage> protectedMessages) {
         int start = index;
         int end = index + 1;
         ChatMessage selected = messages.get(index);
@@ -744,17 +791,23 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                     ? Assert.isNotEmpty(assistant.getToolCalls())
                     : isTextAction(assistant);
             if (action) {
-                while (end < messages.size() && isToolOutputForMode(messages.get(end), nativeToolMode)) {
+                while (end < messages.size()
+                        && !isProtectedMessage(messages.get(end), protectedMessages)
+                        && isToolOutputForMode(messages.get(end), nativeToolMode)) {
                     end++;
                 }
             }
         } else if (isToolOutputForMode(selected, nativeToolMode)) {
             // 若命中结果消息，回溯到紧邻的源 Action，并删除完整组。
             int cursor = index - 1;
-            while (cursor >= protectedPrefixSize && isToolOutputForMode(messages.get(cursor), nativeToolMode)) {
+            while (cursor >= 0
+                    && !isProtectedMessage(messages.get(cursor), protectedMessages)
+                    && isToolOutputForMode(messages.get(cursor), nativeToolMode)) {
                 cursor--;
             }
-            if (cursor >= protectedPrefixSize && messages.get(cursor) instanceof AssistantMessage) {
+            if (cursor >= 0
+                    && !isProtectedMessage(messages.get(cursor), protectedMessages)
+                    && messages.get(cursor) instanceof AssistantMessage) {
                 AssistantMessage assistant = (AssistantMessage) messages.get(cursor);
                 boolean action = nativeToolMode
                         ? Assert.isNotEmpty(assistant.getToolCalls())
@@ -762,13 +815,25 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 if (action) {
                     start = cursor;
                     end = index + 1;
-                    while (end < messages.size() && isToolOutputForMode(messages.get(end), nativeToolMode)) {
+                    while (end < messages.size()
+                            && !isProtectedMessage(messages.get(end), protectedMessages)
+                            && isToolOutputForMode(messages.get(end), nativeToolMode)) {
                         end++;
                     }
                 }
             }
         }
         return new int[]{start, end};
+    }
+
+    /** 兼容内部测试及旧反射调用。 */
+    private int[] findAtomicRemovalRange(List<ChatMessage> messages, int index,
+                                         boolean nativeToolMode, int protectedPrefixSize) {
+        Set<ChatMessage> protectedMessages = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (int i = 0; i < Math.min(protectedPrefixSize, messages.size()); i++) {
+            protectedMessages.add(messages.get(i));
+        }
+        return findAtomicRemovalRange(messages, index, nativeToolMode, protectedMessages);
     }
 
     private boolean isToolOutputForMode(ChatMessage message, boolean nativeToolMode) {
@@ -1238,6 +1303,16 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             }
         }
         return tokens;
+    }
+
+    /**
+     * 为请求 prepare 阶段的默认指令、Talent 与 ChatInterceptor 动态扩展保留安全余量。
+     * 不在此处提前运行扩展逻辑，避免重复激活或产生副作用。
+     */
+    private int estimateRequestPreparationReserve(ChatModel chatModel, int effectiveMaxTokens) {
+        int proportional = (int) Math.ceil(effectiveMaxTokens * REQUEST_PREPARATION_RESERVE_RATIO);
+        return Math.max(MIN_REQUEST_PREPARATION_RESERVE,
+                Math.min(MAX_REQUEST_PREPARATION_RESERVE, proportional));
     }
 
     private Collection<FunctionTool> collectEffectiveTools(ChatModel chatModel, ReActTrace trace) {

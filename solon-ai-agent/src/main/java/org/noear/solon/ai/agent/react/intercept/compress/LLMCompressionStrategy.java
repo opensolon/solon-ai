@@ -215,6 +215,11 @@ public class LLMCompressionStrategy implements CompressionStrategy {
 
         int targetStart = history.size() / 2;
         int reducedStart = alignToConversationBoundary(history, targetStart);
+        if (reducedStart <= 0) {
+            // 中点落在首个工具组内时，向前对齐会得到 0；此时应删除完整首组，
+            // 而不是误判为没有安全边界。
+            reducedStart = findFirstAtomicGroupEnd(history);
+        }
         if (reducedStart <= 0 || reducedStart >= history.size()) {
             return null;
         }
@@ -253,6 +258,20 @@ public class LLMCompressionStrategy implements CompressionStrategy {
 
         // 没有可配对的 Assistant 时，保持原边界；主压缩器会在写回前清理孤立工具结果。
         return start;
+    }
+
+    private int findFirstAtomicGroupEnd(List<ChatMessage> messages) {
+        if (messages.isEmpty() || !(messages.get(0) instanceof AssistantMessage)
+                || Assert.isEmpty(((AssistantMessage) messages.get(0)).getToolCalls())) {
+            return -1;
+        }
+
+        int end = 1;
+        while (end < messages.size()
+                && (messages.get(end) instanceof ToolMessage || isObservation(messages.get(end)))) {
+            end++;
+        }
+        return end;
     }
 
     private boolean isObservation(ChatMessage message) {
