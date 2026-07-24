@@ -21,7 +21,6 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
-import org.noear.solon.ai.agent.react.ReActOptions;
 import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -435,7 +434,7 @@ public class TeamTrace implements AgentTrace {
     //---------------
 
     /**
-     * 是否存在流式 sink（业务侧优先用此方法，避免直接触碰 {@link ReActOptions#getStreamSink()}）
+     * 是否存在流式 sink（业务侧优先用此方法，避免直接触碰 {@link TeamOptions#getStreamSink()}）
      */
     public boolean hasStreamSink() {
         return options != null && options.getStreamSink() != null;
@@ -459,15 +458,24 @@ public class TeamTrace implements AgentTrace {
 
             options.getStreamSink().next(chunk);
         } catch (Throwable e) {
-            //乎略...
+            // 忽略投递异常，避免影响主流程；debug 便于排查订阅端问题
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Failed to push agent chunk: {}", chunk != null ? chunk.getClass().getSimpleName() : null, e);
+            }
         }
     }
 
+    /**
+     * 直接推送流块（调用方已完成 cancelled 判定；仅吞掉投递异常）
+     */
     public void pushAgentChunkDo(AgentChunk chunk) {
         try {
             options.getStreamSink().next(chunk);
         } catch (Throwable e) {
-            //乎略...
+            // 忽略投递异常，避免影响主流程；debug 便于排查订阅端问题
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Failed to push agent chunk: {}", chunk != null ? chunk.getClass().getSimpleName() : null, e);
+            }
         }
     }
 

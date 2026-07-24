@@ -38,4 +38,8 @@ public class SimpleEndChunk extends AbsAgentChunk {
     public SimpleResponse getResponse() {
         return response;
     }
+
+    public SimpleTrace getTrace() {
+        return response.getTrace();
+    }
 }

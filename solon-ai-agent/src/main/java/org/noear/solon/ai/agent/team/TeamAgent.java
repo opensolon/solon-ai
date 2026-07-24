@@ -235,7 +235,7 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             }
         }
 
-        if(trace.hasStreamSink()){
+        if (trace.hasStreamSink()) {
             trace.pushAgentChunk(new TeamStartChunk(trace));
         }
 

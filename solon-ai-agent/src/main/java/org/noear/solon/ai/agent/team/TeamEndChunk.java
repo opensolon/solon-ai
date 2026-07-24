@@ -16,7 +16,6 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.AbsAgentChunk;
-import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
 /**

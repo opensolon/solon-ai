@@ -20,8 +20,6 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.*;
 import org.noear.solon.ai.agent.exception.LlmNoReturnException;
-import org.noear.solon.ai.agent.react.ReActInterceptor;
-import org.noear.solon.ai.agent.react.RunStartChunk;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.*;
@@ -190,7 +188,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
         if (assistantMessage == null) {
             // 显式 String，避免与 ofAssistant(Contents) 在 null 时重载歧义
-            return ChatMessage.ofAssistant("");
+            assistantMessage = ChatMessage.ofAssistant("");
         }
 
         // 3. 状态回填：将输出结果自动映射到 FlowContext
@@ -207,6 +205,13 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         }
 
         session.updateSnapshot();
+
+        // 拦截器：任务结束事件
+        for (RankEntity<SimpleInterceptor> item : options.interceptors()) {
+            if (item.target.isEnabled()) {
+                item.target.onSimpleEnd(trace);
+            }
+        }
 
         if (LOG.isInfoEnabled()) {
             LOG.info("SimpleAgent [{}] finished: {}", config.getName(), assistantMessage.getContent());

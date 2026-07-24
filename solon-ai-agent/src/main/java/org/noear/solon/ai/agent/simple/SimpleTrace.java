@@ -19,12 +19,13 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
-import org.noear.solon.ai.agent.react.ReActOptions;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.prompt.PromptImpl;
 import org.noear.solon.flow.FlowContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Simple 运行轨迹记录器 (状态机上下文)
@@ -34,6 +35,8 @@ import org.noear.solon.flow.FlowContext;
  * @since 3.8.4
  */
 public class SimpleTrace implements AgentTrace {
+    private static final Logger LOG = LoggerFactory.getLogger(SimpleTrace.class);
+
     private transient SimpleAgentConfig config;
     private transient SimpleOptions options;
     private transient AgentSession session;
@@ -143,7 +146,7 @@ public class SimpleTrace implements AgentTrace {
     //----------------
 
     /**
-     * 是否存在流式 sink（业务侧优先用此方法，避免直接触碰 {@link ReActOptions#getStreamSink()}）
+     * 是否存在流式 sink（业务侧优先用此方法，避免直接触碰 {@link SimpleOptions#getStreamSink()}）
      */
     public boolean hasStreamSink() {
         return options != null && options.getStreamSink() != null;
@@ -167,15 +170,24 @@ public class SimpleTrace implements AgentTrace {
 
             options.getStreamSink().next(chunk);
         } catch (Throwable e) {
-            //乎略...
+            // 忽略投递异常，避免影响主流程；debug 便于排查订阅端问题
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Failed to push agent chunk: {}", chunk != null ? chunk.getClass().getSimpleName() : null, e);
+            }
         }
     }
 
+    /**
+     * 直接推送流块（调用方已完成 cancelled 判定；仅吞掉投递异常）
+     */
     public void pushAgentChunkDo(AgentChunk chunk) {
         try {
             options.getStreamSink().next(chunk);
         } catch (Throwable e) {
-            //乎略...
+            // 忽略投递异常，避免影响主流程；debug 便于排查订阅端问题
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Failed to push agent chunk: {}", chunk != null ? chunk.getClass().getSimpleName() : null, e);
+            }
         }
     }
 }

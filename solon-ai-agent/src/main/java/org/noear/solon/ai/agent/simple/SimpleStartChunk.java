@@ -20,8 +20,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
 /**
- * 简单智能体响应汇总块（流式结束块）
- * <p>通常作为流式输出的最后一个元素，提供完整的响应结果、会话状态及最终的指标统计</p>
+ * 简单智能体运行开始块
  *
  * @author noear
  * @since 4.0.4
