@@ -17,7 +17,6 @@ package org.noear.solon.ai.agent.react.intercept.compress;
 
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
@@ -72,8 +71,10 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
             return "请提供具体的关键词以进行历史回溯。";
         }
 
+        // 转义 sessionId 中的单引号，防止 SnEL 表达式注入
+        String safeSessionId = __sessionId.replace("'", "''");
         QueryCondition condition = new QueryCondition(query)
-                .filterExpression("sessionId = '" + __sessionId + "'")
+                .filterExpression("sessionId = '" + safeSessionId + "'")
                 .limit(limit);
 
         try {
@@ -114,15 +115,14 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
             // 封装为高质量 Document
             Document doc = new Document(archivedContent);
             doc.metadata("sessionId", trace.getSession().getSessionId());
-            doc.metadata("timestamp_long", System.currentTimeMillis());
+            doc.metadata("timestamp", System.currentTimeMillis());
             doc.metadata("type", "execution_log");
 
             // 同步保存到向量库
             vectorRepository.save(doc);
 
             // 返回一个紧凑的系统通知
-            return ChatMessage.ofUser("--- [历史细节已归档，必要时请使用 recall_history 工具回溯] ---")
-                    .addMetadata(ContextCompressionInterceptor.META_COMPRESSED, 1);
+            return ChatMessage.ofUser("--- [历史细节已归档，必要时请使用 recall_history 工具回溯] ---");
 
         } catch (Throwable e) {
             log.error("Failed to archive to vector store", e);

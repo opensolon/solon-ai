@@ -16,11 +16,19 @@
 package org.noear.solon.ai.agent.react.intercept.compress;
 
 import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
+import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.ai.util.RetryTask;
 import org.noear.solon.core.util.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 压缩策略公用工具类
@@ -32,6 +40,9 @@ import org.noear.solon.core.util.Assert;
  * @since 4.0.0
  */
 public class CompressionUtil {
+    private static final Logger log = LoggerFactory.getLogger(CompressionUtil.class);
+
+    private static final int MAX_PTL_RETRIES = 3;
 
     /**
      * 默认 ToolMessage 内容截断长度（对齐 claude-code-java 的 TRUNCATION_THRESHOLD = 10,000 字符）
@@ -141,7 +152,7 @@ public class CompressionUtil {
 
     /**
      * 检查压缩策略的 LLM 返回结果是否标记为"无显著增量"。
-     * <p>当前支持以下标记（模糊匹配）：
+     * <p>当前支持以下标记（trim 后完全匹配）：
      * <ul>
      *     <li>{@code (无显著进度)} — LLMCompressionStrategy 使用</li>
      *     <li>{@code (无关键增量)} — KeyInfoExtractionStrategy 使用</li>
@@ -151,9 +162,11 @@ public class CompressionUtil {
      * @return true 表示无显著增量，应丢弃该结果
      */
     public static boolean isEmptySummary(String summary) {
-        return Assert.isEmpty(summary)
-                || summary.contains("无显著进度")
-                || summary.contains("无关键增量");
+        if (Assert.isEmpty(summary)) {
+            return true;
+        }
+        String trimmed = summary.trim();
+        return trimmed.equals("(无显著进度)") || trimmed.equals("(无关键增量)");
     }
 
     /**
@@ -281,6 +294,107 @@ public class CompressionUtil {
                 && msg.getContent().startsWith("Observation:");
     }
 
+    /**
+     * PTL 缩批时保留 META_COMPRESSED 摘要消息，仅裁剪普通历史，并执行工具原子对边界对齐。
+     *
+     * <p>旧摘要承载更早历史，PTL 缩批只能淘汰新增历史，不能把滚动摘要一起丢掉。
+     * 裁剪点会通过 {@link #alignToConversationBoundary} 对齐到工具调用组边界，
+     * 避免拆散 Assistant(tool_calls) 与其 ToolMessage 结果。
+     *
+     * @param messages 待缩减的消息列表
+     * @return 缩减后的消息列表，若无法进一步缩减则返回 null
+     * @since 4.0.0
+     */
+    public static List<ChatMessage> reduceBatchPreservingSummaries(List<ChatMessage> messages) {
+        List<ChatMessage> summaries = new ArrayList<>();
+        List<ChatMessage> history = new ArrayList<>();
+        for (ChatMessage message : messages) {
+            if (message.hasMetadata(ContextCompressionInterceptor.META_COMPRESSED)) {
+                summaries.add(message);
+            } else {
+                history.add(message);
+            }
+        }
+
+        if (history.size() <= 1) {
+            return null;
+        }
+
+        int targetStart = history.size() / 2;
+        int reducedStart = alignToConversationBoundary(history, targetStart);
+        if (reducedStart <= 0) {
+            // 中点落在首个工具组内时，向前对齐会得到 0；此时应删除完整首组，
+            // 而不是误判为没有安全边界。
+            reducedStart = findFirstAtomicGroupEnd(history);
+        }
+        if (reducedStart <= 0 || reducedStart >= history.size()) {
+            return null;
+        }
+
+        List<ChatMessage> reduced = new ArrayList<>(summaries.size() + history.size() - reducedStart);
+        reduced.addAll(summaries);
+        reduced.addAll(history.subList(reducedStart, history.size()));
+        return reduced;
+    }
+
+    /**
+     * 将摘要输入的裁剪点对齐到工具调用组边界。
+     * 当裁剪点落在连续 ToolMessage/Observation 中时，向前找到其源头 Assistant(tool_calls)。
+     * 普通消息不需要额外调整，保留最近半段历史的策略不变。
+     *
+     * @param messages 消息列表
+     * @param start    裁剪点
+     * @return 对齐后的裁剪点
+     * @since 4.0.0
+     */
+    public static int alignToConversationBoundary(List<ChatMessage> messages, int start) {
+        if (start <= 0 || start >= messages.size()) {
+            return start;
+        }
+
+        ChatMessage atStart = messages.get(start);
+        if (!(atStart instanceof ToolMessage) && !isObservation(atStart)) {
+            return start;
+        }
+
+        for (int i = start - 1; i >= 0; i--) {
+            ChatMessage previous = messages.get(i);
+            if (previous instanceof AssistantMessage
+                    && Assert.isNotEmpty(((AssistantMessage) previous).getToolCalls())) {
+                return i;
+            }
+            if (!(previous instanceof ToolMessage) && !isObservation(previous)) {
+                break;
+            }
+        }
+
+        // 没有可配对的 Assistant 时，保持原边界；主压缩器会在写回前清理孤立工具结果。
+        return start;
+    }
+
+    /**
+     * 查找第一个完整的工具调用原子组的结束位置。
+     * <p>从消息列表开头开始，找到第一个 Assistant(tool_calls) 及其后续连续
+     * ToolMessage/Observation 的结束位置。
+     *
+     * @param messages 消息列表
+     * @return 结束位置；若头部不是工具调用则返回 -1
+     * @since 4.0.0
+     */
+    public static int findFirstAtomicGroupEnd(List<ChatMessage> messages) {
+        if (messages.isEmpty() || !(messages.get(0) instanceof AssistantMessage)
+                || Assert.isEmpty(((AssistantMessage) messages.get(0)).getToolCalls())) {
+            return -1;
+        }
+
+        int end = 1;
+        while (end < messages.size()
+                && (messages.get(end) instanceof ToolMessage || isObservation(messages.get(end)))) {
+            end++;
+        }
+        return end;
+    }
+
     private static final com.knuddels.jtokkit.api.Encoding ENCODING =
             com.knuddels.jtokkit.Encodings.newDefaultEncodingRegistry()
                     .getEncodingForModel(com.knuddels.jtokkit.api.ModelType.GPT_4O);
@@ -308,5 +422,110 @@ public class CompressionUtil {
             return 0;
         }
         return ENCODING.countTokens(text);
+    }
+
+    /**
+     * PTL 重试循环模板方法。
+     *
+     * <p>将 {@link org.noear.solon.ai.agent.react.intercept.compress.LLMCompressionStrategy}
+     * 和 {@link org.noear.solon.ai.agent.react.intercept.compress.KeyInfoExtractionStrategy}
+     * 中重复的 compressWithPTLRetry 逻辑抽取为公用方法。差异部分（用户数据模板、
+     * 系统指令、代理名称）通过参数传入。
+     *
+     * <p>当待压缩历史过大导致 LLM 调用失败（返回 prompt is too long）时，
+     * 逐步丢弃最旧的消息缩小范围后重试，最多重试 {@value #MAX_PTL_RETRIES} 次。
+     *
+     * @param chatModel            聊天模型
+     * @param maxRetries           普通调用重试次数
+     * @param filtered             待压缩的消息列表（已过滤初心）
+     * @param systemInstruction    系统指令
+     * @param agentName            代理名称（用于 options）
+     * @param maxToolResultLength  ToolMessage 截断长度
+     * @param userDataPrefix       用户数据前缀（位于格式化历史之前）
+     * @param userDataSuffix       用户数据后缀（位于格式化历史之后，含最终指令）
+     * @return LLM 返回的汇总文本；PTL 重试耗尽或其他失败时返回 null
+     * @throws InterruptedException 线程中断
+     * @since 4.0.0
+     */
+    public static String compressWithPTLRetry(ChatModel chatModel, int maxRetries,
+                                               List<ChatMessage> filtered,
+                                               String systemInstruction,
+                                               String agentName,
+                                               int maxToolResultLength,
+                                               String userDataPrefix,
+                                               String userDataSuffix) throws InterruptedException {
+        List<ChatMessage> currentBatch = filtered;
+
+        for (int ptlAttempt = 0; ptlAttempt <= MAX_PTL_RETRIES; ptlAttempt++) {
+            final List<ChatMessage> batch = currentBatch;
+
+            String newHistoryText = formatMessages(batch, maxToolResultLength);
+            if (Assert.isEmpty(newHistoryText)) return null;
+
+            String userData = userDataPrefix + newHistoryText + userDataSuffix;
+
+            String summary;
+            try {
+                summary = new RetryTask()
+                        .maxRetries(Math.max(1, maxRetries))
+                        .retryIf(e -> !(isPromptTooLongError(e)
+                                || e instanceof Error
+                                || e instanceof InterruptedException
+                                || e.getCause() instanceof InterruptedException))
+                        .callWithRetry(() -> {
+                            ChatResponse resp = chatModel.prompt(userData)
+                                    .options(o -> {
+                                        o.agentName(agentName);
+                                        o.systemPrompt(systemInstruction);
+                                    })
+                                    .call();
+
+                            if (resp.hasContent()) {
+                                return resp.getContent();
+                            } else {
+                                throw new IllegalStateException("The LLM did not return");
+                            }
+                        });
+            } catch (Throwable e) {
+                // PTL 可能以 API 异常形式抛出（而非 LLM 返回内容文本）
+                if (isPromptTooLongError(e)) {
+                    log.warn("PTL detected via exception, will reduce batch (attempt {}/{})",
+                            ptlAttempt + 1, MAX_PTL_RETRIES, e);
+                    // 转入统一 PTL 缩小重试路径
+                    summary = "prompt is too long";
+                } else if (e instanceof InterruptedException) {
+                    throw (InterruptedException) e;
+                } else if (e.getCause() instanceof InterruptedException) {
+                    throw (InterruptedException) e.getCause();
+                } else if (e instanceof Error) {
+                    throw (Error) e;
+                } else if (e instanceof RuntimeException) {
+                    throw (RuntimeException) e;
+                } else {
+                    throw new IllegalStateException(e);
+                }
+            }
+
+            // PTL 检测：若返回 PTL 错误（内容文本或异常转译），缩小范围重试
+            if (isPromptTooLong(summary)) {
+                int currentSize = currentBatch.size();
+                List<ChatMessage> reduced = reduceBatchPreservingSummaries(currentBatch);
+                if (reduced == null || reduced.size() >= currentSize) {
+                    log.warn("PTL retry exhausted (attempt {}/{}), batch has no safe boundary",
+                            ptlAttempt + 1, MAX_PTL_RETRIES);
+                    return null;
+                }
+
+                currentBatch = reduced;
+
+                log.warn("PTL detected, reduced batch from {} to {} messages (attempt {}/{})",
+                        currentSize, reduced.size(), ptlAttempt + 1, MAX_PTL_RETRIES);
+                continue;
+            }
+
+            return summary;
+        }
+
+        return null;
     }
 }

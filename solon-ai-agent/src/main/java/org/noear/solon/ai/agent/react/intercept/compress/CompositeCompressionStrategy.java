@@ -17,7 +17,6 @@ package org.noear.solon.ai.agent.react.intercept.compress;
 
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
-import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
@@ -91,7 +90,6 @@ public class CompositeCompressionStrategy implements CompressionStrategy {
             return null;
         }
 
-        return ChatMessage.ofUser(buf.toString())
-                .addMetadata(ContextCompressionInterceptor.META_COMPRESSED, 1);
+        return ChatMessage.ofUser(buf.toString());
     }
 }
