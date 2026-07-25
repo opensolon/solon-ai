@@ -154,14 +154,21 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
     /** 构造器。 */
     public ContextCompressionInterceptor(int maxMessages, CompressionStrategy compressionStrategy) {
+       this(maxMessages,0.75D, compressionStrategy);
+    }
+
+    /** 构造器。 */
+    public ContextCompressionInterceptor(int maxMessages, double maxContextRatio, CompressionStrategy compressionStrategy) {
         this.maxMessages = Math.max(10, maxMessages);
+        this.maxContextLengthRatio = maxContextRatio;
         this.minReservedMessages = Math.max(3, this.maxMessages / 3);
         this.compressionStrategy = compressionStrategy;
     }
 
     /** 构造器。 */
-    public ContextCompressionInterceptor(int maxMessages, int maxRetries, CompressionStrategy compressionStrategy) {
+    public ContextCompressionInterceptor(int maxMessages, double maxContextRatio,int maxRetries, CompressionStrategy compressionStrategy) {
         this.maxMessages = Math.max(10, maxMessages);
+        this.maxContextLengthRatio = maxContextRatio;
         this.minReservedMessages = Math.max(3, this.maxMessages / 3);
         this.maxRetries = maxRetries;
         this.compressionStrategy = compressionStrategy;
@@ -169,7 +176,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
     /** 无参构造器（maxMessages 默认为 15）。 */
     public ContextCompressionInterceptor(){
-        this(15, null);
+        this(15, 0.75D, null);
     }
 
     /**

@@ -311,8 +311,8 @@ public class HarnessEngine {
         return options.getCompressionMaxMessages();
     }
 
-    public int getCompressionMaxTokens() {
-        return options.getCompressionMaxTokens();
+    public double getCompressionMaxContextRatio() {
+        return options.getCompressionMaxContextRatio();
     }
 
     /**
@@ -516,17 +516,15 @@ public class HarnessEngine {
         options.setSessionWindowSize(sessionWindowSize);
     }
 
-    public void setCompressionThreshold(Integer maxMessages, Integer maxTokens) {
+    public void setCompressionThreshold(Integer maxMessages, Double maxContextRatio) {
         if (maxMessages != null) {
             options.setCompressionMaxMessages(maxMessages);
             options.getCompressionInterceptor().setMaxMessages(maxMessages);
         }
 
-        if (maxTokens != null) {
-            options.setCompressionMaxTokens(maxTokens);
-            options.getCompressionInterceptor().setMaxTokens(maxTokens);
-
-            terminalTalent.setMaxCharacterLimit(maxTokens);
+        if (maxContextRatio != null) {
+            options.setCompressionMaxContextRatio(maxContextRatio);
+            options.getCompressionInterceptor().setMaxContextLengthRatio(maxContextRatio);
         }
     }
 
@@ -893,7 +891,7 @@ public class HarnessEngine {
 
             options.setCompressionInterceptor(new ContextCompressionInterceptor(
                     options.getCompressionMaxMessages(),
-                    options.getCompressionMaxTokens(),
+                    options.getCompressionMaxContextRatio(),
                     options.getModelRetries(),
                     strategy));
         }
@@ -967,7 +965,6 @@ public class HarnessEngine {
         terminalTalent.setSandboxEnabled(options.isSandboxEnabled());
         terminalTalent.setSandboxAllowUserHome(options.isSandboxAllowUserHome());
         terminalTalent.setSandboxSystemRestrict(options.isSandboxSystemRestrict());
-        terminalTalent.setMaxCharacterLimit(options.getCompressionMaxTokens());
 
         //mainAgent = createMainAgent(); //改为懒加载
     }
@@ -1144,9 +1141,9 @@ public class HarnessEngine {
             return this;
         }
 
-        public Builder compressionThreshold(Integer maxMessages, Integer maxTokens) {
+        public Builder compressionThreshold(Integer maxMessages, Double maxContextRatio) {
             options.setCompressionMaxMessages(maxMessages);
-            options.setCompressionMaxTokens(maxTokens);
+            options.setCompressionMaxContextRatio(maxContextRatio);
             return this;
         }
 
