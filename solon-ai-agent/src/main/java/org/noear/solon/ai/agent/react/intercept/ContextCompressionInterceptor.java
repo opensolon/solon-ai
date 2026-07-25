@@ -73,10 +73,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
     public final static String META_COMPRESSED = "_compressed";
 
-    // 在类中预加载注册表
-    private static final EncodingRegistry ENCODING_REGISTRY = Encodings.newDefaultEncodingRegistry();
-    // 适配 GPT-4o (o200k_base)，对 DeepSeek 等使用 cl100k_base 的模型有微小偏差（通常 <5%）
-    private static final Encoding ENCODING_FOR_MODEL = ENCODING_REGISTRY.getEncodingForModel(ModelType.GPT_4O);
+    // 复用 CompressionUtil 的 Encoding 实例，避免重复加载编码注册表（~2MB 内存开销）
+    private static final Encoding ENCODING_FOR_MODEL = CompressionUtil.getEncoding();
     private static final String META_TOKEN_SIZE = "token_size";
     // 请求在 ChatRequestDesc.prepare() 阶段仍可能被默认指令、Talent 和 ChatInterceptor 扩展。
     // 这里保留有限安全余量，不提前执行这些有副作用的扩展逻辑。

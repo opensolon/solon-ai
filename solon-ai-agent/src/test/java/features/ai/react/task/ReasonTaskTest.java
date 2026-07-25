@@ -129,7 +129,7 @@ public class ReasonTaskTest {
     @DisplayName("连续 PTL 会逐次压缩并重建请求")
     public void testRepeatedContextLengthExceeded_compressesAgain() throws Throwable {
         org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor compression =
-                new org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor(10, 10000, null);
+                new org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor(10, 0.75D, null);
         ReActOptions options = new ReActOptions(chatModel);
         options.getModelOptions().interceptorAdd(compression);
         when(trace.getOptions()).thenReturn(options);
@@ -190,7 +190,7 @@ public class ReasonTaskTest {
     @DisplayName("context_length_exceeded 后压缩并基于新消息重建请求")
     public void testContextLengthExceeded_compressesAndRebuildsRequest() throws Throwable {
         org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor compression =
-                new org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor(10, 10000, null);
+                new org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor(10, 0.75D, null);
         ReActOptions options = new ReActOptions(chatModel);
         options.getModelOptions().interceptorAdd(compression);
         when(trace.getOptions()).thenReturn(options);

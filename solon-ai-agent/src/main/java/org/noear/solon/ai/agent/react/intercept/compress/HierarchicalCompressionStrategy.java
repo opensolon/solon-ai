@@ -262,8 +262,8 @@ public class HierarchicalCompressionStrategy implements CompressionStrategy {
             return summary;
         }
 
-        // 按字符逐步收窄至 Token 预算内
-        int chars = summary.length();
+        // 保守取 3 字符/Token 做初始估计，减少迭代次数
+        int chars = Math.min(summary.length(), maxSummaryLength * 3);
         while (chars > 0 && CompressionUtil.countTokens(summary.substring(0, chars)) > maxSummaryLength) {
             chars = chars * 9 / 10;
         }

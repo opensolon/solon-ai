@@ -268,6 +268,17 @@ public class CompressionUtil {
                     .getEncodingForModel(com.knuddels.jtokkit.api.ModelType.GPT_4O);
 
     /**
+     * 获取共享的 Encoding 实例（GPT-4o 编码器）。
+     * <p>供拦截器及其他需要直接调用 {@code countTokens} 的类复用，避免重复加载编码注册表。
+     *
+     * @return 共享的 Encoding 实例
+     * @since 4.0.0
+     */
+    public static com.knuddels.jtokkit.api.Encoding getEncoding() {
+        return ENCODING;
+    }
+
+    /**
      * 估算文本的 Token 数量（使用 GPT-4o 编码器，对主流模型偏差 <5%）。
      *
      * @param text 待估算的文本

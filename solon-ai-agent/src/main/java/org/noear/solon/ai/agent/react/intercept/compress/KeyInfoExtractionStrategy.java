@@ -149,7 +149,7 @@ public class KeyInfoExtractionStrategy implements CompressionStrategy {
                 } else if (e instanceof RuntimeException) {
                     throw (RuntimeException) e;
                 } else {
-                    throw e;
+                    throw new IllegalStateException(e); // 非 PTL checked 异常按普通压缩失败上抛
                 }
             }
 

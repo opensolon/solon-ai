@@ -32,7 +32,7 @@
 
 ```java
 // 创建拦截器，使用默认配置
-// 默认: maxMessages=15, maxTokens=15000, 无压缩策略
+// 默认: maxMessages=15, maxContextLengthRatio=0.75, 无压缩策略
 ContextCompressionInterceptor interceptor = new ContextCompressionInterceptor();
 
 // 注册到 ReActAgent
@@ -44,14 +44,13 @@ ReActAgent agent = ReActAgent.builder(model)
 ### 2.2 带 LLM 摘要的标准用法
 
 ```java
-// 1. 创建压缩策略（LLM 语义摘要）
+// 1. 创建压缩策略（LLM 语义摘要），策略直接接收 ChatModel 实例
 LLMCompressionStrategy strategy = new LLMCompressionStrategy();
 
 // 2. 创建拦截器
 ContextCompressionInterceptor interceptor = new ContextCompressionInterceptor(
         20,                    // maxMessages: 保留窗口最大消息数
-        20000,                 // maxTokens: 保留窗口最大 Token 数
-        () -> chatModel,       // chatModelSupplier: 提供 LLM 实例
+        0.75D,                 // maxContextLengthRatio: 模型上下文窗口比例 (0, 1]
         strategy               // 压缩策略
 );
 
@@ -67,7 +66,7 @@ Solon AI Harness 已内置默认压缩配置，无需手动创建：
 
 ```java
 HarnessEngine engine = HarnessEngine.of(workspace, harnessHome)
-        .compressionThreshold(20, 20000)  // maxMessages, maxTokens
+        .compressionThreshold(20)    // maxMessages
         .compressionModel("deepseek-chat") // 指定压缩用的模型（可选，默认用主模型）
         .build();
 ```
@@ -81,26 +80,27 @@ Harness 默认使用 `CompositeCompressionStrategy`，组合了 `KeyInfoExtracti
 ### 3.1 构造函数
 
 ```java
-// 构造函数 1：标准四参数
+// 构造函数 1：两参数（ratio 默认 0.75）
+public ContextCompressionInterceptor(int maxMessages, CompressionStrategy compressionStrategy)
+
+// 构造函数 2：三参数（标准）
 public ContextCompressionInterceptor(
         int maxMessages,                        // 保留窗口最大消息数（最低 10）
-        int maxTokens,                          // 保留窗口最大 Token 数（最低 10,000）
-        Supplier<ChatModel> chatModelSupplier,  // LLM 提供者（可为 null）
+        double maxContextRatio,                 // 模型上下文窗口比例 (0, 1]
         CompressionStrategy compressionStrategy  // 压缩策略（可为 null）
 )
 
-// 构造函数 2：含重试次数
+// 构造函数 3：四参数（含重试次数）
 public ContextCompressionInterceptor(
         int maxMessages,
-        int maxTokens,
+        double maxContextRatio,                 // 模型上下文窗口比例 (0, 1]
         int maxRetries,                         // LLM 调用重试次数
-        Supplier<ChatModel> chatModelSupplier,
         CompressionStrategy compressionStrategy
 )
 
-// 构造函数 3：无参默认
+// 构造函数 4：无参默认
 public ContextCompressionInterceptor()
-// 等价于 new ContextCompressionInterceptor(15, 15000, null, null)
+// 等价于 new ContextCompressionInterceptor(15, 0.75D, null)
 ```
 
 ### 3.2 可调参数（Setter）
@@ -108,17 +108,23 @@ public ContextCompressionInterceptor()
 | 参数 | Setter | 默认值 | 说明 |
 |------|--------|--------|------|
 | `maxMessages` | `setMaxMessages(int)` | 15 | 保留窗口最大消息数，最低强制为 10 |
-| `maxTokens` | `setMaxTokens(int)` | 15,000 | 保留窗口最大 Token 数，最低强制为 10,000 |
+| `maxContextLengthRatio` | `setMaxContextLengthRatio(double)` | 0.75 | 模型上下文窗口使用比例，范围 (0, 1]，用于计算最终 Token 阈值：`contextLength × maxContextLengthRatio` |
 | `minReservedMessages` | `setMinReservedMessages(int)` | `maxMessages / 3`（最低 3） | 保留窗口的绝对下限，防止 Token 维度过度截断 |
 | `maxRetries` | `setMaxRetries(int)` | 3 | LLM 调用网络重试次数 |
-| `perMessageCap` | `setPerMessageCap(int)` | 0（自动推导） | 单条消息 Token 硬上限。0 = 自动推导为 `max(2000, maxTokens/2)` |
+| `perMessageCap` | `setPerMessageCap(int)` | 0（自动推导） | 单条消息 Token 硬上限。0 = 自动推导为 `max(2000, 最终Token阈值/2)` |
+| `defaultContextWindow` | `setDefaultContextWindow(long)` | 128,000 | 模型上下文窗口默认值（当 ChatModel 未提供 contextLength 时回退使用） |
 
-### 3.3 内部常量
+### 3.3 最终 Token 阈值计算
 
-| 常量 | 值 | 说明 |
-|------|----|------|
-| `COMPACT_THRESHOLD_RATIO` | 0.75 | 压缩触发比例：当前 Token <= `effectiveMaxTokens * 0.75` 且消息数 <= `maxMessages` 时不触发 |
-| `SYSTEM_PROMPT_RESERVE` | 20,000 | 系统提示词保留缓冲（用于模型感知阈值计算） |
+拦截器不使用固定的 `maxTokens` 参数，而是根据模型上下文窗口动态计算：
+
+```
+finalTokenThreshold = contextLength × maxContextLengthRatio
+```
+
+- 优先使用 `ChatModel.getConfig().getContextLength()`
+- 若模型未提供 contextLength，回退到 `defaultContextWindow`（默认 128,000）
+- 例如：contextLength=128K, ratio=0.75 → 阈值 96,000 tokens
 
 ---
 
@@ -142,7 +148,7 @@ public interface CompressionStrategy {
 |------|------|----------|------|----------|
 | 纯裁剪 | `null` | 否 | 零成本，仅保留最近的原子序列 | 轻量 Agent、对摘要质量无要求 |
 | LLM 语义摘要 | `LLMCompressionStrategy` | 是 | 调用 LLM 生成执行进度总结，支持 PTL 重试 | 通用场景 |
-| 关键信息提取 | `KeyInfoExtractionStrategy` | 是 | 提取事实/参数/结论，过滤思考过程 | 需要精确保留关键数据的场景 |
+| 关键信息提取 | `KeyInfoExtractionStrategy` | 是 | 提取事实/参数/结论，过滤思考过程，支持 PTL 重试 | 需要精确保留关键数据的场景 |
 | 层级滚动摘要 | `HierarchicalCompressionStrategy` | 是 | 旧摘要 + 新增量递归合并，记忆链不断裂 | 超长对话、需要无限续航的场景 |
 | 向量存储归档 | `VectorStoreCompressionStrategy` | 否 | 消息持久化到向量库，Agent 可通过 `recall_history` 工具回溯 | 需要冷热记忆分离的场景 |
 | 组合策略 | `CompositeCompressionStrategy` | 取决于子策略 | 多策略级联，结果按顺序以 Markdown 分割线合并 | 需要多层处理的复杂场景 |
@@ -158,14 +164,14 @@ LLMCompressionStrategy strategy = new LLMCompressionStrategy();
 strategy.systemInstruction("请用 200 字总结执行历史，重点保留关键决策和当前状态。");
 
 ContextCompressionInterceptor interceptor = new ContextCompressionInterceptor(
-        20, 20000, () -> chatModel, strategy);
+        20, 0.75D, strategy);
 ```
 
 **PTL 重试机制**：当待压缩历史本身过大导致 LLM 调用失败（返回 "prompt is too long" 或抛出 context length 异常）时，自动丢弃最旧的一半消息缩小范围后重试，最多重试 3 次。
 
 ### 4.4 KeyInfoExtractionStrategy
 
-侧重提取"事实、参数、结论"，过滤掉无用的思考过程。输出格式为 Markdown 列表。
+侧重提取"事实、参数、结论"，过滤掉无用的思考过程。输出格式为 Markdown 列表。支持与 LLMCompressionStrategy 相同的 PTL 重试机制。
 
 ```java
 KeyInfoExtractionStrategy strategy = new KeyInfoExtractionStrategy();
@@ -174,7 +180,7 @@ KeyInfoExtractionStrategy strategy = new KeyInfoExtractionStrategy();
 strategy.systemInstruction("提取所有用户 ID、订单号和操作结果。");
 
 ContextCompressionInterceptor interceptor = new ContextCompressionInterceptor(
-        20, 20000, () -> chatModel, strategy);
+        20, 0.75D, strategy);
 ```
 
 ### 4.5 HierarchicalCompressionStrategy
@@ -184,14 +190,14 @@ ContextCompressionInterceptor interceptor = new ContextCompressionInterceptor(
 ```java
 HierarchicalCompressionStrategy strategy = new HierarchicalCompressionStrategy();
 
-// 可选：配置摘要最大长度
+// 可选：配置摘要最大长度（单位：Token，默认 500）
 strategy.maxSummaryLength(500);
 
 // 可选：自定义系统指令
-strategy.systemInstruction("合并旧摘要和新历史，保持 500 字以内。");
+strategy.systemInstruction("合并旧摘要和新历史，保持 500 token 以内。");
 
 ContextCompressionInterceptor interceptor = new ContextCompressionInterceptor(
-        20, 20000, () -> chatModel, strategy);
+        20, 0.75D, strategy);
 ```
 
 ### 4.6 VectorStoreCompressionStrategy
@@ -206,7 +212,7 @@ VectorStoreCompressionStrategy strategy = new VectorStoreCompressionStrategy(rep
 
 // strategy 同时也是 AbsTalent，需注册为 Agent 的 Talent
 ReActAgent agent = ReActAgent.builder(model)
-        .defaultInterceptorAdd(new ContextCompressionInterceptor(20, 20000, () -> model, strategy))
+        .defaultInterceptorAdd(new ContextCompressionInterceptor(20, 0.75D, strategy))
         .talent(strategy)  // 注册 recall_history 工具
         .build();
 ```
@@ -232,7 +238,7 @@ CompositeCompressionStrategy composite = new CompositeCompressionStrategy()
         .addStrategy(new HierarchicalCompressionStrategy());          // 后滚动摘要
 
 ContextCompressionInterceptor interceptor = new ContextCompressionInterceptor(
-        20, 20000, () -> chatModel, composite);
+        20, 0.75D, composite);
 ```
 
 ### 4.8 自定义策略
@@ -275,14 +281,14 @@ public class MyStrategy implements CompressionStrategy {
     │   初心链消息跳过，多模态消息跳过。
     │
     ├── 1. 模型感知阈值判断 ────────────────────────────────────
-    │   effectiveMaxTokens = min(maxTokens, max(contextLength - 20000, contextLength * 0.8))
-    │   若 消息数 <= maxMessages 且 Token <= effectiveMaxTokens * 0.75 → 不压缩，返回
+    │   finalTokenThreshold = contextLength × maxContextLengthRatio
+    │   若 消息数 <= maxMessages 且 Token <= finalTokenThreshold → 不压缩，返回
     │
     ├── 2. 提取初心链 ──────────────────────────────────────────
     │   收集所有 META_FIRST 标记的消息，计算固定 Token 开销
     │
     ├── 3. 计算窗口预算 ────────────────────────────────────────
-    │   availableTokens = maxTokens - fixedTokens
+    │   availableTokens = finalTokenThreshold - fixedTokens
     │   summaryReserve = max(200, availableTokens * 10%)
     │   windowBudget = availableTokens - summaryReserve
     │
@@ -349,7 +355,7 @@ interceptor.setMinReservedMessages(5); // 至少保留 5 条非初心消息
 ### 6.4 MicroCompact 单条消息守卫
 
 在所有裁剪逻辑之前执行，截断超大单条消息：
-- 自动推导：`perMessageCap = max(2000, maxTokens / 2)`
+- 自动推导：`perMessageCap = max(2000, finalTokenThreshold/2)`
 - 手动设置：`interceptor.setPerMessageCap(4000)`
 - 截断方式：保留首尾各一半 Token，中间插入占位标记
 - 跳过初心链消息和多模态消息
@@ -359,11 +365,11 @@ interceptor.setMinReservedMessages(5); // 至少保留 5 条非初心消息
 当 `ChatModel` 配置了 `contextLength` 时，压缩触发阈值自动感知模型上下文窗口：
 
 ```
-effectiveMaxTokens = min(maxTokens, max(contextLength - 20000, contextLength * 0.8))
-触发条件: Token > effectiveMaxTokens * 0.75
+finalTokenThreshold = contextLength × maxContextLengthRatio
+触发条件: Token > finalTokenThreshold 或 消息数 > maxMessages
 ```
 
-**注意**：模型感知阈值仅用于**触发判断**，保留窗口预算始终使用用户配置的 `maxTokens`，避免大上下文模型导致压缩形同虚设。
+**注意**：模型感知阈值用于触发判断和压缩目标预算。`maxContextLengthRatio` 默认 0.75，表示使用模型上下文窗口的 75%。
 
 ### 6.6 PTL (Prompt-Too-Long) 重试
 
@@ -406,6 +412,10 @@ Error from provider (DeepSeek): Invalid assistant message: content or tool_calls
 | `isPromptTooLong(response)` | 检测 LLM 返回文本是否为 PTL 错误 |
 | `isPromptTooLongError(throwable)` | 检测异常链是否包含 PTL 关键词 |
 | `buildCompressedMessage(prefix, content)` | 创建带 `META_COMPRESSED` 标记的压缩结果消息 |
+| `isObservation(msg)` | 判断消息是否为工具结果或 Observation |
+| `isTextObservation(msg)` | 判断 UserMessage 是否为 Observation 文本 |
+| `countTokens(text)` | 估算文本 Token 数量（GPT-4o 编码器） |
+| `getEncoding()` | 获取共享的 Encoding 实例，供拦截器复用，避免重复加载编码注册表 |
 
 ### 自定义策略推荐用法
 
@@ -472,7 +482,7 @@ agent.prompt("帮我分析这段代码")
 
 ## 九、Token 估算机制
 
-拦截器使用 `jtokkit` 库（GPT-4o 编码器）进行 Token 估算。
+拦截器使用 `jtokkit` 库（GPT-4o 编码器）进行 Token 估算。Encoding 实例由 `CompressionUtil` 统一管理，拦截器通过 `CompressionUtil.getEncoding()` 复用，避免重复加载编码注册表。
 
 ### 估算范围
 
@@ -494,19 +504,19 @@ Token 计算结果缓存在消息元数据 `META_TOKEN_SIZE` 中，避免每轮�
 
 ### 10.1 参数调优建议
 
-| 场景 | maxMessages | maxTokens | 推荐策略 |
-|------|-------------|-----------|----------|
-| 轻量 Agent（快速问答） | 10-15 | 8,000-15,000 | `null`（纯裁剪） |
-| 通用 Agent（工具调用） | 15-25 | 15,000-30,000 | `LLMCompressionStrategy` |
-| 代码 Agent（长文件操作） | 20-30 | 20,000-40,000 | `CompositeCompressionStrategy` |
-| 超长对话（客服/陪聊） | 15-20 | 15,000-20,000 | `HierarchicalCompressionStrategy` |
-| 冷热记忆分离 | 15-20 | 15,000-20,000 | `VectorStoreCompressionStrategy` |
+| 场景 | maxMessages | maxContextLengthRatio | 推荐策略 |
+|------|-------------|----------------------|----------|
+| 轻量 Agent（快速问答） | 10-15 | 0.75 | `null`（纯裁剪） |
+| 通用 Agent（工具调用） | 15-25 | 0.75 | `LLMCompressionStrategy` |
+| 代码 Agent（长文件操作） | 20-30 | 0.75 | `CompositeCompressionStrategy` |
+| 超长对话（客服/陪聊） | 15-20 | 0.75 | `HierarchicalCompressionStrategy` |
+| 冷热记忆分离 | 15-20 | 0.75 | `VectorStoreCompressionStrategy` |
 
 ### 10.2 perMessageCap 调优
 
 | 场景 | 建议 | 原因 |
 |------|------|------|
-| 默认 | 0（自动推导） | 自动适配 maxTokens |
+| 默认 | 0（自动推导） | 自动适配 finalTokenThreshold |
 | 代码 Agent（读大文件） | 3000-5000 | 工具输出可能超大，需要控制单条上限 |
 | 精确问答 | 0 | 工具输出通常不大，无需额外限制 |
 
@@ -551,12 +561,12 @@ LLMCompressionStrategy strategy = new LLMCompressionStrategy()
 
 ## 十二、注意事项
 
-1. **chatModelSupplier 为 null 时**：拦截器不调用 LLM，仅执行物理裁剪。即使配置了压缩策略也不会触发。
+1. **压缩策略为 null 时**：拦截器不调用 LLM，仅执行物理裁剪。即使配置了压缩策略，当拦截器内部的 `compressionStrategy` 为 null 时也不会触发 LLM 调用。
 2. **压缩策略返回 null 时**：自动回退到原子序列追溯的零成本裁剪路径，不会丢失最近一轮的完整 tool-use 序列。
 3. **多模态消息**：`MicroCompact` 守卫跳过多模态消息（含图片块等），不做内容截断。
 4. **含 toolCalls 的 AssistantMessage**：不做 content 截断，避免损坏推理链/原子对。
-5. **模型感知阈值**：需要 `ChatModel.getConfig().getContextLength()` 返回大于 0 的值才生效，否则回退到 `maxTokens`。
-6. **`copyWith` 方法**：用于创建带有新参数的拦截器副本，共享相同的 `chatModelSupplier` 和 `compressionStrategy`。
+5. **模型感知阈值**：需要 `ChatModel.getConfig().getContextLength()` 返回大于 0 的值才生效，否则回退到 `defaultContextWindow`（默认 128,000）。
+6. **`copyWith` 方法**：用于创建带有新参数的拦截器副本，共享相同的 `compressionStrategy`。
 7. **Harness 默认配置**：如果未通过 Builder 显式设置 `compressionInterceptor`，Harness 会自动创建 `CompositeCompressionStrategy(KeyInfo + Hierarchical)` 的默认配置。
 
 ---
@@ -569,13 +579,13 @@ ContextCompressionInterceptor (implements ReActInterceptor)
     ├── 压缩策略接口
     │   └── CompressionStrategy (@FunctionalInterface)
     │       ├── LLMCompressionStrategy         ── LLM 语义摘要 + PTL 重试
-    │       ├── KeyInfoExtractionStrategy      ── 关键信息提取
+    │       ├── KeyInfoExtractionStrategy      ── 关键信息提取 + PTL 重试
     │       ├── HierarchicalCompressionStrategy ── 层级滚动摘要
     │       ├── VectorStoreCompressionStrategy ── 向量存储归档 + recall_history 工具
     │       └── CompositeCompressionStrategy   ── 组合策略 (级联合并)
     │
     ├── 工具类
-    │   └── CompressionUtil                    ── 消息格式化、截断、PTL 检测、结果构建
+    │   └── CompressionUtil                    ── 消息格式化、截断、PTL 检测、Token 估算、结果构建
     │
     ├── 事件输出
     │   └── ContextSizeChunk                   ── 上下文大小状态块
