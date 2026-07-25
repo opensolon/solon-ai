@@ -1162,24 +1162,24 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
     /**
      * 将文本按 Token 预算做头尾保留截断（中间插入显式占位）。
-     * 以字符切分逼近，再用编码器精确收敛，确保结果不超过 maxTokens。
+     * 以字符切分逼近，再用编码器精确收敛，确保结果不超过 tokenThreshold。
      */
-    private String truncateTextToTokens(String text, int maxTokens) {
-        if (text == null || encoding.countTokens(text) <= maxTokens) {
+    private String truncateTextToTokens(String text, int tokenThreshold) {
+        if (text == null || encoding.countTokens(text) <= tokenThreshold) {
             return text;
         }
 
         String marker = "\n... [内容过大已截断：单条消息超过上下文预算，省略中间部分，仅保留首尾。"
                 + "如需完整内容，请用分页方式重新获取] ...\n";
         int markerTokens = encoding.countTokens(marker);
-        if (markerTokens > maxTokens) {
+        if (markerTokens > tokenThreshold) {
             String shortMarker = "[内容已截断]";
-            while (!shortMarker.isEmpty() && encoding.countTokens(shortMarker) > maxTokens) {
+            while (!shortMarker.isEmpty() && encoding.countTokens(shortMarker) > tokenThreshold) {
                 shortMarker = shortMarker.substring(0, shortMarker.length() - 1);
             }
             return shortMarker;
         }
-        int budget = maxTokens - markerTokens;
+        int budget = tokenThreshold - markerTokens;
         int headTokens = budget / 2;
         int tailTokens = budget - headTokens;
 
