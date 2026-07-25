@@ -226,7 +226,7 @@ class HarnessOptions implements Serializable {
         }
     }
 
-    public double getCompressionMaxContextRatio() {
+    double getCompressionMaxContextRatio() {
         return compressionMaxContextRatio;
     }
 

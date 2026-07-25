@@ -185,6 +185,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     public ContextCompressionInterceptor copyWith(int maxMessages) {
         ContextCompressionInterceptor tmp = new ContextCompressionInterceptor(
                 maxMessages,
+                this.maxContextLengthRatio,
                 this.maxRetries,
                 this.compressionStrategy);
         tmp.minReservedMessages = this.minReservedMessages;

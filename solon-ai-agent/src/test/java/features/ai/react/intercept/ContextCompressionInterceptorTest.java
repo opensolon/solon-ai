@@ -1113,7 +1113,7 @@ public class ContextCompressionInterceptorTest {
 
     @Test
     public void testCopyWithPreservesRuntimeConfiguration() throws Exception {
-        ContextCompressionInterceptor source = new ContextCompressionInterceptor(20, 2, null);
+        ContextCompressionInterceptor source = new ContextCompressionInterceptor(20, 0.75D, 2, null);
         source.setMinReservedMessages(7);
         source.setPerMessageCap(1_500);
         source.setMaxContextLengthRatio(0.8D);
@@ -1208,6 +1208,31 @@ public class ContextCompressionInterceptorTest {
 
         assertDoesNotThrow(() -> custom.onReasonStart(trace, null));
         assertFalse(workingMemory.getMessages().isEmpty());
+    }
+
+    @Test
+    public void testHierarchicalFailureReturnsNullAndTriggersFallback() throws Exception {
+        ChatRequestDesc request = mock(ChatRequestDesc.class);
+        when(request.options(any(java.util.function.Consumer.class))).thenReturn(request);
+        when(request.call()).thenThrow(new RuntimeException("network failed"));
+        when(chatModel.prompt(anyString())).thenReturn(request);
+
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(
+                10, new HierarchicalCompressionStrategy());
+        workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
+        for (int i = 0; i < 20; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("history " + i));
+        }
+
+        assertDoesNotThrow(() -> custom.onReasonStart(trace, null));
+
+        List<ChatMessage> result = workingMemory.getMessages();
+        assertFalse(result.isEmpty());
+        assertFalse(result.stream().anyMatch(
+                m -> m.hasMetadata(ContextCompressionInterceptor.META_COMPRESSED)));
+        assertTrue(result.stream().anyMatch(m -> "history 9".equals(m.getContent())),
+                "策略失败后应通过 fallback 保留过期区的最近历史，而不能把旧摘要误当作本轮成功结果");
+        verify(trace, never()).setExtra(eq("agent:summary:hierarchical"), anyString());
     }
 
     @Test
