@@ -87,7 +87,14 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     private static final int MIN_SUMMARY_TOKENS = 32;
 
     // 模型上下文窗口默认值（当 ChatModel 未提供 contextLength 时使用）
-    private static final long DEFAULT_CONTEXT_WINDOW = 128_000L;
+    private long defaultContextWindow = 128_000L;
+
+    public void setDefaultContextWindow(long defaultContextWindow) {
+        if (defaultContextWindow <= 0) {
+            throw new IllegalArgumentException("defaultContextWindow must be positive: " + defaultContextWindow);
+        }
+        this.defaultContextWindow = defaultContextWindow;
+    }
 
     // 保留窗口的最大消息数（默认 15）
     private int maxMessages;
@@ -167,6 +174,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         tmp.minReservedMessages = this.minReservedMessages;
         tmp.perMessageCap = this.perMessageCap;
         tmp.maxContextLengthRatio = this.maxContextLengthRatio;
+        tmp.defaultContextWindow = this.defaultContextWindow;
 
         return tmp;
     }
@@ -175,10 +183,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      * 计算最终 Token 阈值为上下文压缩提供依据。
      *
      * <p>优先使用模型配置的 {@code contextLength} 与 {@link #maxContextLengthRatio}
-     * 的乘积；当模型未提供 contextLength 时，回退到 {@link #DEFAULT_CONTEXT_WINDOW}。</p>
+     * 的乘积；当模型未提供 contextLength 时，回退到 {@link #defaultContextWindow}。</p>
      */
     private int finalTokenThreshold(ChatModel model) {
-        long contextLength = DEFAULT_CONTEXT_WINDOW;
+        long contextLength = this.defaultContextWindow;
         try {
             if (model != null && model.getConfig() != null) {
                 long modelContext = model.getConfig().getContextLength();
@@ -188,7 +196,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             }
         } catch (Exception e) {
             if (log.isDebugEnabled()) {
-                log.debug("Failed to resolve model context length, using default context window={}", DEFAULT_CONTEXT_WINDOW, e);
+                log.debug("Failed to resolve model context length, using default context window={}", this.defaultContextWindow, e);
             }
         }
 

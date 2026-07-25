@@ -1069,6 +1069,31 @@ public class ContextCompressionInterceptorTest {
     }
 
     @Test
+    public void testCustomDefaultContextWindow() throws Exception {
+        ChatModel model = mock(ChatModel.class);
+        org.noear.solon.ai.chat.ChatConfigReadonly readonly = mock(org.noear.solon.ai.chat.ChatConfigReadonly.class);
+        when(model.getConfig()).thenReturn(readonly);
+        when(readonly.getContextLength()).thenReturn(0L);
+
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(20, null);
+        custom.setDefaultContextWindow(64_000L);
+        custom.setMaxContextLengthRatio(0.5D);
+
+        assertEquals(32_000, invokeFinalTokenThreshold(custom, model),
+                "自定义 defaultContextWindow × ratio 应正确生效");
+    }
+
+    @Test
+    public void testDefaultContextWindowValidation() {
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor();
+        assertThrows(IllegalArgumentException.class,
+                () -> custom.setDefaultContextWindow(0L));
+        assertThrows(IllegalArgumentException.class,
+                () -> custom.setDefaultContextWindow(-1L));
+        assertDoesNotThrow(() -> custom.setDefaultContextWindow(128_000L));
+    }
+
+    @Test
     public void testContextLengthThresholdRatioValidation() {
         ContextCompressionInterceptor custom = new ContextCompressionInterceptor();
 
@@ -1099,6 +1124,7 @@ public class ContextCompressionInterceptorTest {
         assertEquals(7, readIntField(copied, "minReservedMessages"));
         assertEquals(1_500, readIntField(copied, "perMessageCap"));
         assertEquals(0.8D, readDoubleField(copied, "maxContextLengthRatio"), 0.000001D);
+        assertEquals(128_000L, readLongField(copied, "defaultContextWindow"));
         assertEquals(30, readIntField(copied, "maxMessages"));
     }
 
@@ -1576,6 +1602,12 @@ public class ContextCompressionInterceptorTest {
         java.lang.reflect.Field field = ContextCompressionInterceptor.class.getDeclaredField(name);
         field.setAccessible(true);
         return field.getDouble(target);
+    }
+
+    private long readLongField(ContextCompressionInterceptor target, String name) throws Exception {
+        java.lang.reflect.Field field = ContextCompressionInterceptor.class.getDeclaredField(name);
+        field.setAccessible(true);
+        return field.getLong(target);
     }
 
     private int invokeFinalTokenThreshold(ContextCompressionInterceptor target, ChatModel model) throws Exception {
