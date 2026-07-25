@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.react.intercept.compress;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
+import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.util.RetryTask;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -28,7 +29,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.ArrayList;
-import java.util.stream.Collectors;
 
 /**
  * 基于 LLM 的关键信息提取策略实现
@@ -100,9 +100,7 @@ public class KeyInfoExtractionStrategy implements CompressionStrategy {
         for (int ptlAttempt = 0; ptlAttempt <= MAX_PTL_RETRIES; ptlAttempt++) {
             final List<ChatMessage> batch = currentBatch;
 
-            String newHistoryText = batch.stream()
-                    .map(CompressionUtil::formatMessageForCompression)
-                    .collect(Collectors.joining("\n"));
+            String newHistoryText = CompressionUtil.formatMessages(batch);
 
             if (Assert.isEmpty(newHistoryText)) return null;
 
@@ -154,17 +152,17 @@ public class KeyInfoExtractionStrategy implements CompressionStrategy {
             }
 
             if (CompressionUtil.isPromptTooLong(keyInfo)) {
-                int currentSize = currentBatch.size();
-                int newSize = currentSize / 2;
-                if (newSize < 1) {
-                    log.warn("PTL retry exhausted (attempt {}/{}), batch size too small to continue",
+                List<ChatMessage> reduced = reduceBatchPreservingSummaries(currentBatch);
+                if (reduced == null || reduced.size() >= currentBatch.size()) {
+                    log.warn("PTL retry exhausted (attempt {}/{}), batch too small to continue",
                             ptlAttempt + 1, MAX_PTL_RETRIES);
                     return null;
                 }
 
-                currentBatch = new ArrayList<>(currentBatch.subList(currentSize - newSize, currentSize));
+                int currentSize = currentBatch.size();
+                currentBatch = reduced;
                 log.warn("PTL detected, reduced batch from {} to {} messages for retry (attempt {}/{})",
-                        currentSize, newSize, ptlAttempt + 1, MAX_PTL_RETRIES);
+                        currentSize, reduced.size(), ptlAttempt + 1, MAX_PTL_RETRIES);
                 continue;
             }
 
@@ -172,5 +170,35 @@ public class KeyInfoExtractionStrategy implements CompressionStrategy {
         }
 
         return null;
+    }
+
+    /**
+     * PTL 缩批时保留 META_COMPRESSED 摘要消息，仅裁剪普通历史。
+     * <p>旧摘要承载更早历史，PTL 缩批只能淘汰新增历史，不能把滚动摘要一起丢掉。
+     */
+    private List<ChatMessage> reduceBatchPreservingSummaries(List<ChatMessage> messages) {
+        List<ChatMessage> summaries = new ArrayList<>();
+        List<ChatMessage> history = new ArrayList<>();
+        for (ChatMessage message : messages) {
+            if (message.hasMetadata(ContextCompressionInterceptor.META_COMPRESSED)) {
+                summaries.add(message);
+            } else {
+                history.add(message);
+            }
+        }
+
+        if (history.size() <= 1) {
+            return null;
+        }
+
+        int newSize = history.size() / 2;
+        if (newSize < 1) {
+            return null;
+        }
+
+        List<ChatMessage> reduced = new ArrayList<>(summaries.size() + newSize);
+        reduced.addAll(summaries);
+        reduced.addAll(history.subList(history.size() - newSize, history.size()));
+        return reduced;
     }
 }

@@ -39,8 +39,8 @@ import java.util.List;
  * // 1. 构建级联策略
  * CompressionStrategy composite = new CompositeCompressionStrategy()
  *     .addStrategy(new VectorStoreCompressionStrategy(myRepo)) // 先存档
- *     .addStrategy(new KeyInfoExtractionStrategy(chatModel))     // 再提纯
- *     .addStrategy(new HierarchicalCompressionStrategy(chatModel)); // 后压缩
+ *     .addStrategy(new KeyInfoExtractionStrategy())     // 再提纯
+ *     .addStrategy(new HierarchicalCompressionStrategy()); // 后压缩
  *
  * // 2. 注入拦截器
  * ContextCompressionInterceptor interceptor = new ContextCompressionInterceptor(12, 0.75D, composite);

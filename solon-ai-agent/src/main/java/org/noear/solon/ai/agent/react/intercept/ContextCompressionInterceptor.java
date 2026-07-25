@@ -15,10 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.intercept;
 
-import com.knuddels.jtokkit.Encodings;
 import com.knuddels.jtokkit.api.Encoding;
-import com.knuddels.jtokkit.api.EncodingRegistry;
-import com.knuddels.jtokkit.api.ModelType;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
@@ -99,7 +96,6 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     private int maxMessages;
     // maxContextLengthRatio: 模型上下文窗口比例（默认 75%），用于计算最终 Token 阈值：contextLength × maxContextLengthRatio
     private double maxContextLengthRatio = 0.75D;
-    // 重试次数
     // 重试次数（默认 3）
     private int maxRetries = 3;
 
@@ -987,12 +983,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
     /** 判断 AssistantMessage 是否包含 ReAct Action 文本。 */
     private boolean isTextAction(AssistantMessage message) {
-        String content = message.getResultContent();
-        if (content == null) {
-            return false;
-        }
-        int actionIdx = content.indexOf("Action:");
-        return actionIdx >= 0 && actionIdx + "Action:".length() < content.length();
+        return CompressionUtil.isTextAction(message);
     }
 
     /** 规范化 tool_call_id（空串转 null）。 */

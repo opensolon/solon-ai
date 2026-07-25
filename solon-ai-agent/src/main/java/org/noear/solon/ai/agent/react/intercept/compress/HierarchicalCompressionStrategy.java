@@ -240,13 +240,7 @@ public class HierarchicalCompressionStrategy implements CompressionStrategy {
         if (Assert.isNotEmpty(message.getToolCalls())) {
             return true;
         }
-
-        String content = message.getResultContent();
-        if (content == null) {
-            return false;
-        }
-        int actionIdx = content.indexOf("Action:");
-        return actionIdx >= 0 && actionIdx + "Action:".length() < content.length();
+        return CompressionUtil.isTextAction(message);
     }
 
     private boolean isObservation(ChatMessage message) {

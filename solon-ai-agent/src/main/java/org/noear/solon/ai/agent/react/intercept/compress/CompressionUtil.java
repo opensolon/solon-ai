@@ -218,6 +218,24 @@ public class CompressionUtil {
     }
 
     /**
+     * 判断 AssistantMessage 是否包含 ReAct 文本格式的 Action（即内容中包含 "Action:" 标记）。
+     * <p>统一 {@link HierarchicalCompressionStrategy} 与 {@link ContextCompressionInterceptor} 中的重复判断逻辑。
+     * 注意：此方法仅检查文本内容，不检查 {@code toolCalls}。
+     *
+     * @param message 待判断的消息
+     * @return true 表示消息文本中包含 Action 标记
+     * @since 4.0.0
+     */
+    public static boolean isTextAction(AssistantMessage message) {
+        String content = message.getResultContent();
+        if (content == null) {
+            return false;
+        }
+        int actionIdx = content.indexOf("Action:");
+        return actionIdx >= 0 && actionIdx + "Action:".length() < content.length();
+    }
+
+    /**
      * 创建压缩结果消息（带 {@code META_COMPRESSED} 标记）。
      *
      * @param prefix  消息前缀（如 "--- [执行进度总结] ---"）
