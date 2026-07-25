@@ -237,4 +237,47 @@ public class CompressionUtil {
         return ChatMessage.ofUser(text)
                 .addMetadata(ContextCompressionInterceptor.META_COMPRESSED, 1);
     }
+
+    /**
+     * 判断消息是否为工具结果或 Observation。
+     * <p>统一各策略实现和拦截器中的重复判断逻辑。
+     *
+     * @param msg 待判断的消息
+     * @return true 表示是工具输出消息
+     * @since 4.0.0
+     */
+    public static boolean isObservation(ChatMessage msg) {
+        return msg instanceof ToolMessage || isTextObservation(msg);
+    }
+
+    /**
+     * 判断 UserMessage 是否为 Observation 文本（以 "Observation:" 开头）。
+     *
+     * @param msg 待判断的消息
+     * @return true 表示是文本格式的 Observation
+     * @since 4.0.0
+     */
+    public static boolean isTextObservation(ChatMessage msg) {
+        return msg instanceof org.noear.solon.ai.chat.message.UserMessage
+                && msg.getContent() != null
+                && msg.getContent().startsWith("Observation:");
+    }
+
+    private static final com.knuddels.jtokkit.api.Encoding ENCODING =
+            com.knuddels.jtokkit.Encodings.newDefaultEncodingRegistry()
+                    .getEncodingForModel(com.knuddels.jtokkit.api.ModelType.GPT_4O);
+
+    /**
+     * 估算文本的 Token 数量（使用 GPT-4o 编码器，对主流模型偏差 <5%）。
+     *
+     * @param text 待估算的文本
+     * @return Token 数量；null 或空文本返回 0
+     * @since 4.0.0
+     */
+    public static int countTokens(String text) {
+        if (text == null || text.isEmpty()) {
+            return 0;
+        }
+        return ENCODING.countTokens(text);
+    }
 }

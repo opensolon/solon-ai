@@ -22,8 +22,6 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.message.ToolMessage;
-import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,7 +54,7 @@ public class HierarchicalCompressionStrategy implements CompressionStrategy {
             "直接输出摘要正文，不要包含\"好的\"、\"明白\"或\"根据您的要求\"等废话。";
 
 
-    private int maxSummaryLength = 800;    // 压缩结果长度硬性保护
+    private int maxSummaryLength = 500;    // 压缩结果 Token 长度硬性保护（按 Token 计量，与拦截器一致）
 
     private static final String SUMMARY_PREFIX = "--- [全局进度滚动摘要 (层级压缩)] ---";
     private static final String STRATEGY_LASTSUMMARY_KEY = "agent:summary:hierarchical";
@@ -252,21 +250,30 @@ public class HierarchicalCompressionStrategy implements CompressionStrategy {
     }
 
     private boolean isObservation(ChatMessage message) {
-        return message instanceof ToolMessage
-                || (message instanceof UserMessage
-                && message.getContent() != null
-                && message.getContent().startsWith("Observation:"));
+        return CompressionUtil.isObservation(message);
     }
 
     private String limitSummary(String summary) {
-        if (summary == null || summary.length() <= maxSummaryLength) {
+        if (summary == null) {
+            return null;
+        }
+        // 使用 Token 计量而非字符长度，与拦截器保持一致
+        if (CompressionUtil.countTokens(summary) <= maxSummaryLength) {
             return summary;
         }
 
-        if (maxSummaryLength <= TRUNCATED_SUFFIX.length()) {
-            return summary.substring(0, maxSummaryLength);
+        // 按字符逐步收窄至 Token 预算内
+        int chars = summary.length();
+        while (chars > 0 && CompressionUtil.countTokens(summary.substring(0, chars)) > maxSummaryLength) {
+            chars = chars * 9 / 10;
         }
-        return summary.substring(0, maxSummaryLength - TRUNCATED_SUFFIX.length()) + TRUNCATED_SUFFIX;
+        if (chars <= 0) {
+            return TRUNCATED_SUFFIX;
+        }
+        if (chars <= TRUNCATED_SUFFIX.length()) {
+            return summary.substring(0, chars);
+        }
+        return summary.substring(0, chars - TRUNCATED_SUFFIX.length()) + TRUNCATED_SUFFIX;
     }
 
     private static class CallBudget {

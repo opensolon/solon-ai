@@ -159,16 +159,16 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
     /** 构造器。 */
     public ContextCompressionInterceptor(int maxMessages, double maxContextRatio, CompressionStrategy compressionStrategy) {
+        setMaxContextLengthRatio(maxContextRatio);
         this.maxMessages = Math.max(10, maxMessages);
-        this.maxContextLengthRatio = maxContextRatio;
         this.minReservedMessages = Math.max(3, this.maxMessages / 3);
         this.compressionStrategy = compressionStrategy;
     }
 
     /** 构造器。 */
     public ContextCompressionInterceptor(int maxMessages, double maxContextRatio,int maxRetries, CompressionStrategy compressionStrategy) {
+        setMaxContextLengthRatio(maxContextRatio);
         this.maxMessages = Math.max(10, maxMessages);
-        this.maxContextLengthRatio = maxContextRatio;
         this.minReservedMessages = Math.max(3, this.maxMessages / 3);
         this.maxRetries = maxRetries;
         this.compressionStrategy = compressionStrategy;
@@ -190,7 +190,6 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 this.compressionStrategy);
         tmp.minReservedMessages = this.minReservedMessages;
         tmp.perMessageCap = this.perMessageCap;
-        tmp.maxContextLengthRatio = this.maxContextLengthRatio;
         tmp.defaultContextWindow = this.defaultContextWindow;
 
         return tmp;
@@ -1355,40 +1354,22 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
     /** 判断消息是否为工具结果或 Observation。 */
     private boolean isObservation(ChatMessage msg) {
-        return msg instanceof ToolMessage || isTextObservation(msg);
+        return CompressionUtil.isObservation(msg);
     }
 
     /** 判断 UserMessage 是否为 Observation 文本。 */
     private boolean isTextObservation(ChatMessage msg) {
-        return msg instanceof UserMessage
-                && msg.getContent() != null
-                && msg.getContent().startsWith("Observation:");
+        return CompressionUtil.isTextObservation(msg);
     }
 
     /**
-     * ⭐ 标记静态上下文的边界，为 Dialect 层的 cache_control 提供依据。
+     * 标记静态上下文的边界，为 Dialect 层的 cache_control 提供依据。
      *
-     * <p>静态上下文包含系统提示词（systemPrompt）和工具定义（tool definitions），
-     * 这些内容在会话中不会频繁变化，最适合 LLM 提供商的原生 Prompt Caching。</p>
-     *
-     * <p>当用户在 ChatOptions 中配置了 cacheControl（Anthropic 风格）或
-     * promptCacheKey（OpenAI 风格）时，此方法确保静态上下文在压缩过程中
-     * 保持结构完整性，不会被摘要或裁剪破坏其内容边界。</p>
-     *
-     * <p>当前设计：
-     * <ul>
-     *   <li>系统提示词通过 systemPromptBuf 维护，不在消息列表中压缩</li>
-     *   <li>工具定义由 Dialect 层（如 AnthropicRequestBuilder）在构建请求时添加 cache_control</li>
-     *   <li>此方法仅在开启缓存时输出调试日志，帮助验证缓存策略是否正确生效</li>
-     * </ul>
-     * </p>
-     *
-     * @param trace        当前 ReAct 追踪
-     * @param systemPrompt 系统提示词内容（可能为 null）
+     * <p>静态上下文（systemPrompt + tool definitions）在会话中不频繁变化，适合 LLM 原生 Prompt Caching。
+     * Dialect 层在构建 HTTP 请求时会根据 ChatOptions 中的 cacheControl/promptCacheKey
+     * 自动在系统提示词和工具定义上添加 cache_control 标记。此方法仅输出调试日志辅助验证。</p>
      */
     private void markStaticContextBoundary(ReActTrace trace, String systemPrompt) {
-        // 通过 ChatModel -> ChatConfigReadonly -> ChatOptions 获取缓存配置
-        // 增加空安全防护（测试环境中可能为 mock）
         ReActOptions options = trace.getOptions();
         if (options == null) {
             return;
@@ -1398,17 +1379,12 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             return;
         }
         CacheControl cacheControl = chatModel.getConfig().getCacheControl();
-        if (cacheControl != null) {
-            // 静态上下文就绪：不修改消息内容，仅输出调试信息
-            // Dialect 层在构建 HTTP 请求时会根据 ChatOptions 中的 cacheControl/promptCacheKey
-            // 自动在系统提示词和工具定义上添加 cache_control 标记
-            if (log.isDebugEnabled()) {
-                String cacheType = cacheControl.getType() != null
-                        ? "Anthropic cache_control=" + cacheControl.getType()
-                        : "OpenAI prompt_cache_key=" + cacheControl.getPromptCacheKey();
-                log.debug("ReActAgent [{}] static context boundary marked for LLM prompt caching ({})",
-                        trace.getAgentName(), cacheType);
-            }
+        if (cacheControl != null && log.isDebugEnabled()) {
+            String cacheType = cacheControl.getType() != null
+                    ? "Anthropic cache_control=" + cacheControl.getType()
+                    : "OpenAI prompt_cache_key=" + cacheControl.getPromptCacheKey();
+            log.debug("ReActAgent [{}] static context boundary marked for LLM prompt caching ({})",
+                    trace.getAgentName(), cacheType);
         }
     }
 

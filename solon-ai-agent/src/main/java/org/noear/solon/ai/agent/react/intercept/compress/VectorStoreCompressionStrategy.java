@@ -117,7 +117,7 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
             doc.metadata("timestamp_long", System.currentTimeMillis());
             doc.metadata("type", "execution_log");
 
-            // 异步保存 (假设 vectorRepository 实现支持异步或环境允许同步)
+            // 同步保存到向量库
             vectorRepository.save(doc);
 
             // 返回一个紧凑的系统通知

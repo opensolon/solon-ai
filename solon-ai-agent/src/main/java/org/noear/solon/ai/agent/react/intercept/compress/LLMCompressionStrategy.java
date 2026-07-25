@@ -275,9 +275,6 @@ public class LLMCompressionStrategy implements CompressionStrategy {
     }
 
     private boolean isObservation(ChatMessage message) {
-        return message instanceof ToolMessage
-                || (message instanceof org.noear.solon.ai.chat.message.UserMessage
-                && message.getContent() != null
-                && message.getContent().startsWith("Observation:"));
+        return CompressionUtil.isObservation(message);
     }
 }

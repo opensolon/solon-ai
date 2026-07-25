@@ -17,9 +17,8 @@ package org.noear.solon.ai.agent.react.intercept.compress;
 
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
-import org.noear.solon.ai.util.RetryUtil;
+import org.noear.solon.ai.util.RetryTask;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -28,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.ArrayList;
 import java.util.stream.Collectors;
 
 /**
@@ -64,48 +64,113 @@ public class KeyInfoExtractionStrategy implements CompressionStrategy {
             return null;
         }
 
+        // 过滤初心
+        List<ChatMessage> filtered = new ArrayList<>();
+        for (ChatMessage m : messagesToCompress) {
+            if (!m.hasMetadata(AgentTrace.META_FIRST)) {
+                filtered.add(m);
+            }
+        }
+        if (filtered.isEmpty()) return null;
+
         try {
-            // 1. 过滤初心 + 格式化（使用 CompressionUtil 统一处理截断逻辑）
-            String newHistoryText = messagesToCompress.stream()
-                    .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
-                    .map(CompressionUtil::formatMessageForCompression)
-                    .collect(Collectors.joining("\n"));
-
-            if (Assert.isEmpty(newHistoryText)) return null;
-
-            // 2. 调用模型提取关键信息
-            String userData = "### 待处理历史片段\n" +
-                    newHistoryText +
-                    "\n\n" +
-                    "### 审计要求\n" +
-                    "请根据系统指令，提取上述片段中的关键信息。";
-
-            String keyInfo = RetryUtil.callWithRetry(maxRetries, () -> {
-                ChatResponse resp = chatModel.prompt(userData)
-                        .options(o -> {
-                            o.agentName(KeyInfoExtractionStrategy.class.getSimpleName());
-                            o.systemPrompt(systemInstruction);
-                        })
-                        .call();
-
-                if (resp.hasContent()) {
-                    return resp.getContent();
-                } else {
-                    //触发重试
-                    throw new IllegalStateException("The LLM did not return");
-                }
-            });
+            String keyInfo = compressWithPTLRetry(chatModel, maxRetries, filtered);
 
             if (CompressionUtil.isEmptySummary(keyInfo)) {
-                return null; // 如果没有新干货，就不产生这次摘要注入，节省上下文
+                return null;
             }
 
-            // 3. 将提取到的"干货"作为系统信息注入
             return CompressionUtil.buildCompressedMessage("--- [已确认的关键信息] ---", keyInfo);
 
         } catch (Throwable e) {
             log.error("Failed to extract key info", e);
             return null;
         }
+    }
+
+    /**
+     * 带 PTL 重试的关键信息提取调用。
+     * <p>当待压缩历史过大导致 LLM 调用失败时，逐步丢弃最旧的消息缩小范围后重试。
+     * 复用 {@link CompressionUtil#isPromptTooLongError} 检测 PTL 异常。
+     */
+    private String compressWithPTLRetry(ChatModel chatModel, int maxRetries, List<ChatMessage> filtered) throws Throwable {
+        final int MAX_PTL_RETRIES = 3;
+        List<ChatMessage> currentBatch = filtered;
+
+        for (int ptlAttempt = 0; ptlAttempt <= MAX_PTL_RETRIES; ptlAttempt++) {
+            final List<ChatMessage> batch = currentBatch;
+
+            String newHistoryText = batch.stream()
+                    .map(CompressionUtil::formatMessageForCompression)
+                    .collect(Collectors.joining("\n"));
+
+            if (Assert.isEmpty(newHistoryText)) return null;
+
+            String userData = "### 待处理历史片段\n" +
+                    newHistoryText +
+                    "\n\n" +
+                    "### 审计要求\n" +
+                    "请根据系统指令，提取上述片段中的关键信息。";
+
+            String keyInfo;
+            try {
+                keyInfo = new RetryTask()
+                        .maxRetries(Math.max(1, maxRetries))
+                        // PTL 是确定性的输入超限，必须立刻进入外层缩批，不能对同一批次退避重试。
+                        .retryIf(e -> !(CompressionUtil.isPromptTooLongError(e)
+                                || e instanceof Error
+                                || e instanceof InterruptedException
+                                || e.getCause() instanceof InterruptedException))
+                        .callWithRetry(() -> {
+                    ChatResponse resp = chatModel.prompt(userData)
+                            .options(o -> {
+                                o.agentName(KeyInfoExtractionStrategy.class.getSimpleName());
+                                o.systemPrompt(systemInstruction);
+                            })
+                            .call();
+
+                    if (resp.hasContent()) {
+                        return resp.getContent();
+                    } else {
+                        throw new IllegalStateException("The LLM did not return");
+                    }
+                        });
+            } catch (Throwable e) {
+                if (CompressionUtil.isPromptTooLongError(e)) {
+                    log.warn("PTL detected via exception, will reduce batch (attempt {}/{})",
+                            ptlAttempt + 1, MAX_PTL_RETRIES, e);
+                    keyInfo = "prompt is too long";
+                } else if (e instanceof InterruptedException) {
+                    throw (InterruptedException) e;
+                } else if (e.getCause() instanceof InterruptedException) {
+                    throw (InterruptedException) e.getCause();
+                } else if (e instanceof Error) {
+                    throw (Error) e;
+                } else if (e instanceof RuntimeException) {
+                    throw (RuntimeException) e;
+                } else {
+                    throw e;
+                }
+            }
+
+            if (CompressionUtil.isPromptTooLong(keyInfo)) {
+                int currentSize = currentBatch.size();
+                int newSize = currentSize / 2;
+                if (newSize < 1) {
+                    log.warn("PTL retry exhausted (attempt {}/{}), batch size too small to continue",
+                            ptlAttempt + 1, MAX_PTL_RETRIES);
+                    return null;
+                }
+
+                currentBatch = new ArrayList<>(currentBatch.subList(currentSize - newSize, currentSize));
+                log.warn("PTL detected, reduced batch from {} to {} messages for retry (attempt {}/{})",
+                        currentSize, newSize, ptlAttempt + 1, MAX_PTL_RETRIES);
+                continue;
+            }
+
+            return keyInfo;
+        }
+
+        return null;
     }
 }
