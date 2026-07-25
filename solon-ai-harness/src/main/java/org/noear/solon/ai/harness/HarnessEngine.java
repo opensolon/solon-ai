@@ -77,6 +77,7 @@ import java.util.concurrent.locks.ReentrantLock;
 public class HarnessEngine {
     public final static String ATTR_CWD = "__cwd";
     public final static String CTX_MODEL_SELECTED = "_model_selected";
+    public final static String CTX_AGENT_SELECTED = "_agent_selected";
 
     private final ReentrantLock agentLock = new ReentrantLock();
 
