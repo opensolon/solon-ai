@@ -1041,7 +1041,7 @@ public class ContextCompressionInterceptorTest {
         ContextCompressionInterceptor custom = new ContextCompressionInterceptor(20, 15_000, null);
         custom.setMaxContextLengthRatio(0.8D);
 
-        assertEquals(80_000, resolveCompressionTokenThreshold(custom, model),
+        assertEquals(80_000, invokeFinalTokenThreshold(custom, model),
                 "配置 contextLength 后应按比例计算，不再与 maxTokens 取最小值");
     }
 
@@ -1055,7 +1055,7 @@ public class ContextCompressionInterceptorTest {
         ContextCompressionInterceptor custom = new ContextCompressionInterceptor(20, 30_000, null);
         custom.setMaxContextLengthRatio(0.8D);
 
-        assertEquals(30_000, resolveCompressionTokenThreshold(custom, model),
+        assertEquals(30_000, invokeFinalTokenThreshold(custom, model),
                 "未配置 contextLength 时应直接使用 maxTokens，不应再乘比例");
     }
 
@@ -1066,7 +1066,7 @@ public class ContextCompressionInterceptorTest {
 
         ContextCompressionInterceptor custom = new ContextCompressionInterceptor(20, 30_000, null);
 
-        assertEquals(30_000, resolveCompressionTokenThreshold(custom, model));
+        assertEquals(30_000, invokeFinalTokenThreshold(custom, model));
     }
 
     @Test
@@ -1099,7 +1099,7 @@ public class ContextCompressionInterceptorTest {
         assertEquals(2, readIntField(copied, "maxRetries"));
         assertEquals(7, readIntField(copied, "minReservedMessages"));
         assertEquals(1_500, readIntField(copied, "perMessageCap"));
-        assertEquals(0.8D, readDoubleField(copied, "contextLengthThresholdRatio"), 0.000001D);
+        assertEquals(0.8D, readDoubleField(copied, "maxContextLengthRatio"), 0.000001D);
         assertEquals(30, readIntField(copied, "maxMessages"));
         assertEquals(30_000, readIntField(copied, "maxTokens"));
     }
@@ -1580,9 +1580,9 @@ public class ContextCompressionInterceptorTest {
         return field.getDouble(target);
     }
 
-    private int resolveCompressionTokenThreshold(ContextCompressionInterceptor target, ChatModel model) throws Exception {
+    private int invokeFinalTokenThreshold(ContextCompressionInterceptor target, ChatModel model) throws Exception {
         java.lang.reflect.Method method = ContextCompressionInterceptor.class.getDeclaredMethod(
-                "resolveCompressionTokenThreshold", ChatModel.class);
+                "finalTokenThreshold", ChatModel.class);
         method.setAccessible(true);
         return (int) method.invoke(target, model);
     }

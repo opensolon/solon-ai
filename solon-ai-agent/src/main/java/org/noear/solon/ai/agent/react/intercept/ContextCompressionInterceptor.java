@@ -84,7 +84,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     private int maxMessages;
     // 保留窗口的最大 Token 数（默认 15_000）；模型未配置 contextLength 时作为压缩阈值
     private int maxTokens;
-    // 模型上下文窗口的压缩触发比例（默认 75%）；仅在配置 contextLength 时生效
+    // maxContextLengthRatio: 模型上下文窗口比例（默认 75%），用于结合 contextLength 计算最终 Token 阈值；无 contextLength 时回退到 maxTokens
     private double maxContextLengthRatio = 0.75D;
 
     // 保留窗口的最小消息数下限（默认 maxMessages / 3，最低 3）
@@ -115,7 +115,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     }
 
     public void setMaxContextLengthRatio(double maxContextLengthRatio) {
-        if (maxContextLengthRatio <= 0D || maxContextLengthRatio > 1D) {
+        if (Double.isNaN(maxContextLengthRatio) || Double.isInfinite(maxContextLengthRatio)
+                || maxContextLengthRatio <= 0D || maxContextLengthRatio > 1D) {
             throw new IllegalArgumentException("maxContextLengthRatio must be greater than 0 and less than or equal to 1");
         }
 
@@ -133,7 +134,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     /**
      * 设置单条消息 Token 硬上限（MicroCompact 守卫）。
      * <p>当一条消息的 Token 数超过此值时，其内容将被头尾截断。
-     * 设置为 0 表示由系统自动推导为 {@code max(2000, maxTokens/2)}。
+     * 设置为 0 表示由系统自动推导为 {@code max(2000, 最终Token阈值/2)}。
      *
      * @param perMessageCap Token 上限，0 表示自动推导
      */
@@ -200,12 +201,12 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     }
 
     /**
-     * 解析上下文压缩 Token 阈值。
+     * 计算最终 Token 阈值为上下文压缩提供依据。
      *
      * <p>当模型配置了 {@code contextLength} 时，按模型上下文窗口与
      * {@link #maxContextLengthRatio} 的乘积计算；否则回退到 {@link #maxTokens}。</p>
      */
-    private int resolveCompressionTokenThreshold(ChatModel model) {
+    private int finalTokenThreshold(ChatModel model) {
         try {
             if (model != null && model.getConfig() != null) {
                 long contextLength = model.getConfig().getContextLength();
@@ -251,8 +252,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         ChatModel chatModel = options.getChatModel();
         List<ChatMessage> originalMessages = trace.getWorkingMemory().getMessages();
 
-        // ⭐ 解析模型感知的 Token 压缩阈值，同时用于单消息守卫、触发判断和压缩目标预算。
-        int compressionTokenThreshold = resolveCompressionTokenThreshold(chatModel);
+        // ⭐ 最终 Token 阈值，同时用于单消息守卫、触发判断和压缩目标预算。
+        int compressionTokenThreshold = finalTokenThreshold(chatModel);
         List<ChatMessage> messages = enforcePerMessageCap(trace, originalMessages, compressionTokenThreshold);
         boolean microCompacted = messages != originalMessages;
 
