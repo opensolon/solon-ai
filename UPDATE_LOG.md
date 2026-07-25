@@ -22,7 +22,7 @@
 * 添加 solon-ai-agent HITLStrategy 接口，替代 HITLInterceptor.InterventionStrategy（后者标为弃用）
 * 添加 solon-ai-agent RunStartChunk, RunEndChunk, ReasonStartChunk, ReasonEndChunk 事件块
 * 添加 solon-ai-agent ActionChunk, ObservationChunk, ToolExchanger callId 属性
-* 添加 solon-ai-agent 新流块 ToolStartChunk、ToolEndChunk、TeamStartChunk、TeamEndChunk
+* 添加 solon-ai-agent 新流块 ToolStartChunk、ToolEndChunk
 * 添加 solon-ai-agent 新流块 HITLPendingChunk、HITLDecidedChunk
 * 添加 solon-ai-agent 新流块 ActionStartChunk、ActionEndChunk、ReasonDeltaChunk（替代 ReasonChunk）
 * 添加 solon-ai-agent 新流块 TeamStartChunk、TeamEndChunk（替代 TeamChunk）

@@ -25,13 +25,9 @@ import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActOptions;
 import org.noear.solon.ai.agent.react.ReActStyle;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.agent.react.intercept.compress.CompositeCompressionStrategy;
 import org.noear.solon.ai.agent.react.intercept.compress.CompressionUtil;
-import org.noear.solon.ai.agent.react.intercept.compress.LLMCompressionStrategy;
-import org.noear.solon.ai.agent.react.intercept.compress.VectorStoreCompressionStrategy;
 import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.content.AbsMedia;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.message.*;
@@ -68,16 +64,6 @@ import java.util.stream.Collectors;
  *       预留摘要空间后按双维度（数量+Token）确定保留窗口</li>
  * </ul>
  *
- * <p>支持四种压缩策略（通过 {@link CompressionStrategy} 注入）：
- * <ul>
- *   <li>{@code null}（默认）—— 不调用 LLM，仅执行原子对齐的纯裁剪（fallback 零成本路径）</li>
- *   <li>{@link LLMCompressionStrategy} —— LLM 生成摘要</li>
- *   <li>{@link org.noear.solon.ai.agent.react.intercept.compress.KeyInfoExtractionStrategy} —— 关键信息提取</li>
- *   <li>{@link HierarchicalCompressionStrategy} —— 分层摘要</li>
- *   <li>{@link VectorStoreCompressionStrategy} —— 向量存储检索</li>
- *   <li>{@link CompositeCompressionStrategy} —— 组合策略</li>
- * </ul>
- *
  * @author noear
  * @since 3.9.4
  * @since 4.0.0
@@ -96,21 +82,20 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
     // 保留窗口的最大消息数（默认 15）
     private int maxMessages;
-    // 保留窗口的最大 Token 数（默认 15_000）
+    // 保留窗口的最大 Token 数（默认 15_000）；模型未配置 contextLength 时作为压缩阈值
     private int maxTokens;
+    // 模型上下文窗口的压缩触发比例（默认 75%）；仅在配置 contextLength 时生效
+    private double maxContextLengthRatio = 0.75D;
+
     // 保留窗口的最小消息数下限（默认 maxMessages / 3，最低 3）
     // 防止 Token 维度截断导致保留窗口被压缩到只剩 1~2 条消息
     private int minReservedMessages;
     // 重试次数
     private int maxRetries = 3;
-    // 单条消息硬上限（0 表示由系统自动推导：max(2000, maxTokens/2)）
+    // 单条消息硬上限（0 表示由系统自动推导：max(2000, Token 压缩阈值/2)）
     // ⭐ 对应 claude-code 的 MicroCompact TRUNCATION_THRESHOLD（10000 chars）
     //    与 claude-code 按字符数不同，此处按 Token 数截断，更精确。
     private int perMessageCap;
-    // 系统提示词保留缓冲（用于模型感知阈值，对应 claude-code 的 SYSTEM_PROMPT_RESERVE=20000）
-    private static final int SYSTEM_PROMPT_RESERVE = 20_000;
-    // 压缩触发比例（为用户配置的 maxTokens 预留 25% 缓冲）
-    private static final double COMPACT_THRESHOLD_RATIO = 0.75D;
     // 请求在 ChatRequestDesc.prepare() 阶段仍可能被默认指令、Talent 和 ChatInterceptor 扩展。
     // 这里保留有限安全余量，不提前执行这些有副作用的扩展逻辑。
     private static final double REQUEST_PREPARATION_RESERVE_RATIO = 0.05D;
@@ -127,6 +112,14 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
     public void setMaxTokens(int maxTokens) {
         this.maxTokens = Math.max(10_000, maxTokens);
+    }
+
+    public void setMaxContextLengthRatio(double maxContextLengthRatio) {
+        if (maxContextLengthRatio <= 0D || maxContextLengthRatio > 1D) {
+            throw new IllegalArgumentException("maxContextLengthRatio must be greater than 0 and less than or equal to 1");
+        }
+
+        this.maxContextLengthRatio = maxContextLengthRatio;
     }
 
     public void setMinReservedMessages(int minReservedMessages) {
@@ -201,37 +194,24 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 this.compressionStrategy);
         tmp.minReservedMessages = this.minReservedMessages;
         tmp.perMessageCap = this.perMessageCap;
+        tmp.maxContextLengthRatio = this.maxContextLengthRatio;
 
         return tmp;
     }
 
     /**
-     * 解析有效的 Token 阈值（模型感知）。
+     * 解析上下文压缩 Token 阈值。
      *
-     * <p>对应 claude-code 的模型上下文窗口感知逻辑：
-     * 当 ChatModel 配置了 {@code contextLength} 时，用其推导有效的 maxTokens：
-     * <pre>
-     * effectiveMaxTokens = min(this.maxTokens, contextLength - SYSTEM_PROMPT_RESERVE)
-     * </pre>
-     * 其中 SYSTEM_PROMPT_RESERVE = 20000 保留给系统提示词（与 claude-code 一致）。
-     *
-     * <p>取 min 的语义：用户配置的 maxTokens 是上下文预算上限，模型窗口是物理上限，
-     * 实际有效阈值取两者中较小者——既不超出模型能力，也不违背用户意图。
-     *
-     * <p>若未配置 contextLength 或 chatModelSupplier 不可用，回退到 this.maxTokens。
+     * <p>当模型配置了 {@code contextLength} 时，按模型上下文窗口与
+     * {@link #maxContextLengthRatio} 的乘积计算；否则回退到 {@link #maxTokens}。</p>
      */
-    private int resolveEffectiveMaxTokens(ChatModel model) {
+    private int resolveCompressionTokenThreshold(ChatModel model) {
         try {
             if (model != null && model.getConfig() != null) {
                 long contextLength = model.getConfig().getContextLength();
                 if (contextLength > 0) {
-                    // 有效上下文窗口 = 模型窗口 - 系统提示词保留
-                    // 底线保护：若 SYSTEM_PROMPT_RESERVE 超过窗口的 20%，
-                    // 则至少保留 80% 的窗口给对话（针对小窗口模型）
-                    long effectiveWindow = Math.max(contextLength - SYSTEM_PROMPT_RESERVE,
-                            contextLength * 8 / 10);
-                    // 取较小值：不超出模型物理能力，也不违背用户配置的预算意图；防止异常配置强转溢出
-                    return (int) Math.min(this.maxTokens, Math.min(Integer.MAX_VALUE, effectiveWindow));
+                    double threshold = Math.floor(contextLength * maxContextLengthRatio);
+                    return (int) Math.max(1D, Math.min(Integer.MAX_VALUE, threshold));
                 }
             }
         } catch (Exception e) {
@@ -271,9 +251,9 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         ChatModel chatModel = options.getChatModel();
         List<ChatMessage> originalMessages = trace.getWorkingMemory().getMessages();
 
-        // ⭐ 解析模型感知的有效 Token 阈值，同时用于单消息守卫、触发判断和压缩目标预算。
-        int effectiveMaxTokens = resolveEffectiveMaxTokens(chatModel);
-        List<ChatMessage> messages = enforcePerMessageCap(trace, originalMessages, effectiveMaxTokens);
+        // ⭐ 解析模型感知的 Token 压缩阈值，同时用于单消息守卫、触发判断和压缩目标预算。
+        int compressionTokenThreshold = resolveCompressionTokenThreshold(chatModel);
+        List<ChatMessage> messages = enforcePerMessageCap(trace, originalMessages, compressionTokenThreshold);
         boolean microCompacted = messages != originalMessages;
 
         // ⭐ 标记静态上下文边界（为 Dialect 层的 cache_control 提供依据）
@@ -292,7 +272,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             }
         }
 
-        int requestPreparationTokens = estimateRequestPreparationReserve(chatModel, effectiveMaxTokens);
+        int requestPreparationTokens = estimateRequestPreparationReserve(chatModel, compressionTokenThreshold);
 
         // 事件的 before 口径始终指进入拦截器时的原始工作记忆，不能因 MicroCompact 先发生而漂移。
         int originalMessageCount = originalMessages.size();
@@ -304,8 +284,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         int currentTokens = estimateTokens(messages, systemPrompt) + toolsTokens + requestPreparationTokens;
 
-        // 预留缓冲，避免频繁重构；强制模式不受本地阈值限制
-        if (!force && messageSize <= maxMessages && currentTokens <= (effectiveMaxTokens * COMPACT_THRESHOLD_RATIO)) {
+        // 消息数量与 Token 任一维度超过阈值即触发；强制模式不受本地阈值限制
+        if (!force && messageSize <= maxMessages && currentTokens <= compressionTokenThreshold) {
             pushContextChunk(trace, messages.size(), currentTokens, microCompacted,
                     originalMessageCount, messages.size(), originalTokenCount, currentTokens);
             return microCompacted;
@@ -329,8 +309,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         // 2. 计算固定开销（systemPrompt + 固定前缀 + tools 定义 + 请求准备缓冲），统一复用完整估算公式。
         int fixedTokens = estimateTokens(firstList, systemPrompt) + toolsTokens + requestPreparationTokens;
 
-        // 极端场景防御：固定开销超过模型与用户配置共同决定的有效预算
-        int baseBudget = Math.min(this.maxTokens, effectiveMaxTokens);
+        // 极端场景防御：固定开销超过模型上下文比例或 maxTokens fallback 决定的预算
+        int baseBudget = compressionTokenThreshold;
         if (fixedTokens >= baseBudget) {
             if (log.isWarnEnabled()) {
                 log.warn("ReActAgent [{}] first chain + systemPrompt ({} tokens) exceeds budget ({}), keep first chain only",
@@ -1309,8 +1289,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      * 为请求 prepare 阶段的默认指令、Talent 与 ChatInterceptor 动态扩展保留安全余量。
      * 不在此处提前运行扩展逻辑，避免重复激活或产生副作用。
      */
-    private int estimateRequestPreparationReserve(ChatModel chatModel, int effectiveMaxTokens) {
-        int proportional = (int) Math.ceil(effectiveMaxTokens * REQUEST_PREPARATION_RESERVE_RATIO);
+    private int estimateRequestPreparationReserve(ChatModel chatModel, int compressionTokenThreshold) {
+        int proportional = (int) Math.ceil(compressionTokenThreshold * REQUEST_PREPARATION_RESERVE_RATIO);
         return Math.max(MIN_REQUEST_PREPARATION_RESERVE,
                 Math.min(MAX_REQUEST_PREPARATION_RESERVE, proportional));
     }

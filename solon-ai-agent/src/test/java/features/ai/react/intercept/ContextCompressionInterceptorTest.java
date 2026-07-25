@@ -1032,16 +1032,74 @@ public class ContextCompressionInterceptorTest {
     }
 
     @Test
+    public void testContextLengthThresholdUsesConfiguredRatio() throws Exception {
+        ChatModel model = mock(ChatModel.class);
+        org.noear.solon.ai.chat.ChatConfigReadonly readonly = mock(org.noear.solon.ai.chat.ChatConfigReadonly.class);
+        when(model.getConfig()).thenReturn(readonly);
+        when(readonly.getContextLength()).thenReturn(100_000L);
+
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(20, 15_000, null);
+        custom.setMaxContextLengthRatio(0.8D);
+
+        assertEquals(80_000, resolveCompressionTokenThreshold(custom, model),
+                "配置 contextLength 后应按比例计算，不再与 maxTokens 取最小值");
+    }
+
+    @Test
+    public void testMissingContextLengthFallsBackToMaxTokens() throws Exception {
+        ChatModel model = mock(ChatModel.class);
+        org.noear.solon.ai.chat.ChatConfigReadonly readonly = mock(org.noear.solon.ai.chat.ChatConfigReadonly.class);
+        when(model.getConfig()).thenReturn(readonly);
+        when(readonly.getContextLength()).thenReturn(0L);
+
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(20, 30_000, null);
+        custom.setMaxContextLengthRatio(0.8D);
+
+        assertEquals(30_000, resolveCompressionTokenThreshold(custom, model),
+                "未配置 contextLength 时应直接使用 maxTokens，不应再乘比例");
+    }
+
+    @Test
+    public void testContextLengthResolutionFailureFallsBackToMaxTokens() throws Exception {
+        ChatModel model = mock(ChatModel.class);
+        when(model.getConfig()).thenThrow(new RuntimeException("broken config"));
+
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(20, 30_000, null);
+
+        assertEquals(30_000, resolveCompressionTokenThreshold(custom, model));
+    }
+
+    @Test
+    public void testContextLengthThresholdRatioValidation() {
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> custom.setMaxContextLengthRatio(0D));
+        assertThrows(IllegalArgumentException.class,
+                () -> custom.setMaxContextLengthRatio(-0.1D));
+        assertThrows(IllegalArgumentException.class,
+                () -> custom.setMaxContextLengthRatio(1.01D));
+        assertThrows(IllegalArgumentException.class,
+                () -> custom.setMaxContextLengthRatio(Double.NaN));
+        assertThrows(IllegalArgumentException.class,
+                () -> custom.setMaxContextLengthRatio(Double.POSITIVE_INFINITY));
+        assertDoesNotThrow(() -> custom.setMaxContextLengthRatio(0.75D));
+        assertDoesNotThrow(() -> custom.setMaxContextLengthRatio(1D));
+    }
+
+    @Test
     public void testCopyWithPreservesRuntimeConfiguration() throws Exception {
         ContextCompressionInterceptor source = new ContextCompressionInterceptor(20, 20_000, 2, null);
         source.setMinReservedMessages(7);
         source.setPerMessageCap(1_500);
+        source.setMaxContextLengthRatio(0.8D);
 
         ContextCompressionInterceptor copied = source.copyWith(30, 30_000);
 
         assertEquals(2, readIntField(copied, "maxRetries"));
         assertEquals(7, readIntField(copied, "minReservedMessages"));
         assertEquals(1_500, readIntField(copied, "perMessageCap"));
+        assertEquals(0.8D, readDoubleField(copied, "contextLengthThresholdRatio"), 0.000001D);
         assertEquals(30, readIntField(copied, "maxMessages"));
         assertEquals(30_000, readIntField(copied, "maxTokens"));
     }
@@ -1270,6 +1328,25 @@ public class ContextCompressionInterceptorTest {
     }
 
     @Test
+    public void testMaxMessagesStillTriggersWithLargeModelContext() {
+        org.noear.solon.ai.chat.ChatConfigReadonly readonly = mock(org.noear.solon.ai.chat.ChatConfigReadonly.class);
+        when(chatModel.getConfig()).thenReturn(readonly);
+        when(readonly.getContextLength()).thenReturn(1_000_000L);
+
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 10_000, null);
+        workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
+        for (int i = 0; i < 20; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("short " + i));
+        }
+
+        custom.onReasonStart(trace, null);
+
+        long variableCount = workingMemory.getMessages().stream()
+                .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST)).count();
+        assertTrue(variableCount <= 10, "大模型上下文下 maxMessages 仍应独立触发并收敛");
+    }
+
+    @Test
     public void testDuplicateNativeToolResultsAreRemovedAsInvalidGroup() {
         org.noear.solon.ai.agent.react.ReActAgentConfig cfg = mock(org.noear.solon.ai.agent.react.ReActAgentConfig.class);
         when(cfg.getStyle()).thenReturn(org.noear.solon.ai.agent.react.ReActStyle.NATIVE_TOOL);
@@ -1495,6 +1572,19 @@ public class ContextCompressionInterceptorTest {
         java.lang.reflect.Field field = ContextCompressionInterceptor.class.getDeclaredField(name);
         field.setAccessible(true);
         return field.getInt(target);
+    }
+
+    private double readDoubleField(ContextCompressionInterceptor target, String name) throws Exception {
+        java.lang.reflect.Field field = ContextCompressionInterceptor.class.getDeclaredField(name);
+        field.setAccessible(true);
+        return field.getDouble(target);
+    }
+
+    private int resolveCompressionTokenThreshold(ContextCompressionInterceptor target, ChatModel model) throws Exception {
+        java.lang.reflect.Method method = ContextCompressionInterceptor.class.getDeclaredMethod(
+                "resolveCompressionTokenThreshold", ChatModel.class);
+        method.setAccessible(true);
+        return (int) method.invoke(target, model);
     }
 
     private String repeat(String value, int count) {
