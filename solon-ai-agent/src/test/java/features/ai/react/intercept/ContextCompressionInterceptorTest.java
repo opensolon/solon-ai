@@ -57,7 +57,7 @@ public class ContextCompressionInterceptorTest {
         when(trace.getOptions()).thenReturn(options);
 
         // 阈值设为 6，消息超过 6 条时触发压缩
-        interceptor = new ContextCompressionInterceptor(6,8000, null);
+        interceptor = new ContextCompressionInterceptor(6, null);
     }
 
     /**
@@ -591,7 +591,7 @@ public class ContextCompressionInterceptorTest {
      */
     @Test
     public void testSetMinReservedMessages() {
-        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 8000,  null);
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, null);
         custom.setMinReservedMessages(5);
 
         // 构造初心
@@ -1038,35 +1038,34 @@ public class ContextCompressionInterceptorTest {
         when(model.getConfig()).thenReturn(readonly);
         when(readonly.getContextLength()).thenReturn(100_000L);
 
-        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(20, 15_000, null);
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(20, null);
         custom.setMaxContextLengthRatio(0.8D);
 
-        assertEquals(80_000, invokeFinalTokenThreshold(custom, model),
-                "配置 contextLength 后应按比例计算，不再与 maxTokens 取最小值");
+        assertEquals(80_000, invokeFinalTokenThreshold(custom, model), "配置 contextLength 后应按比例计算");
     }
 
     @Test
-    public void testMissingContextLengthFallsBackToMaxTokens() throws Exception {
+    public void testMissingContextLengthFallsBackToDefaultWindow() throws Exception {
         ChatModel model = mock(ChatModel.class);
         org.noear.solon.ai.chat.ChatConfigReadonly readonly = mock(org.noear.solon.ai.chat.ChatConfigReadonly.class);
         when(model.getConfig()).thenReturn(readonly);
         when(readonly.getContextLength()).thenReturn(0L);
 
-        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(20, 30_000, null);
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(20, null);
         custom.setMaxContextLengthRatio(0.8D);
 
-        assertEquals(30_000, invokeFinalTokenThreshold(custom, model),
-                "未配置 contextLength 时应直接使用 maxTokens，不应再乘比例");
+        assertEquals(102_400, invokeFinalTokenThreshold(custom, model),
+                "未配置 contextLength 时应回退到 DEFAULT_CONTEXT_WINDOW × ratio");
     }
 
     @Test
-    public void testContextLengthResolutionFailureFallsBackToMaxTokens() throws Exception {
+    public void testContextLengthResolutionFailureFallsBackToDefaultWindow() throws Exception {
         ChatModel model = mock(ChatModel.class);
         when(model.getConfig()).thenThrow(new RuntimeException("broken config"));
 
-        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(20, 30_000, null);
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(20, null);
 
-        assertEquals(30_000, invokeFinalTokenThreshold(custom, model));
+        assertEquals(96_000, invokeFinalTokenThreshold(custom, model));
     }
 
     @Test
@@ -1089,19 +1088,18 @@ public class ContextCompressionInterceptorTest {
 
     @Test
     public void testCopyWithPreservesRuntimeConfiguration() throws Exception {
-        ContextCompressionInterceptor source = new ContextCompressionInterceptor(20, 20_000, 2, null);
+        ContextCompressionInterceptor source = new ContextCompressionInterceptor(20, 2, null);
         source.setMinReservedMessages(7);
         source.setPerMessageCap(1_500);
         source.setMaxContextLengthRatio(0.8D);
 
-        ContextCompressionInterceptor copied = source.copyWith(30, 30_000);
+        ContextCompressionInterceptor copied = source.copyWith(30);
 
         assertEquals(2, readIntField(copied, "maxRetries"));
         assertEquals(7, readIntField(copied, "minReservedMessages"));
         assertEquals(1_500, readIntField(copied, "perMessageCap"));
         assertEquals(0.8D, readDoubleField(copied, "maxContextLengthRatio"), 0.000001D);
         assertEquals(30, readIntField(copied, "maxMessages"));
-        assertEquals(30_000, readIntField(copied, "maxTokens"));
     }
 
     @Test
@@ -1176,7 +1174,7 @@ public class ContextCompressionInterceptorTest {
         CompressionStrategy failing = (model, retries, currentTrace, messages) -> {
             throw new RuntimeException("compression failed");
         };
-        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 10_000, failing);
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, failing);
         workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
         for (int i = 0; i < 20; i++) {
             workingMemory.addMessage(ChatMessage.ofAssistant("history " + i));
@@ -1188,7 +1186,7 @@ public class ContextCompressionInterceptorTest {
 
     @Test
     public void testForgedTokenSizeCannotBypassSingleMessageCap() {
-        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 10_000, null);
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, null);
         custom.setPerMessageCap(200);
         workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
         ChatMessage huge = ChatMessage.ofUser(repeat("large-data ", 5_000));
@@ -1282,7 +1280,7 @@ public class ContextCompressionInterceptorTest {
     public void testCustomStrategyResultIsStandardizedAsSummary() {
         ChatMessage customSummary = ChatMessage.ofUser("custom summary");
         CompressionStrategy strategy = (model, retries, currentTrace, messages) -> customSummary;
-        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 10_000, strategy);
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, strategy);
         workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
         for (int i = 0; i < 20; i++) {
             workingMemory.addMessage(ChatMessage.ofAssistant("history " + i));
@@ -1314,7 +1312,7 @@ public class ContextCompressionInterceptorTest {
 
     @Test
     public void testFinalMessageCountConvergesWithoutStrategy() {
-        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 100_000, null);
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, null);
         workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
         for (int i = 0; i < 20; i++) {
             workingMemory.addMessage(ChatMessage.ofAssistant("short " + i));
@@ -1333,7 +1331,7 @@ public class ContextCompressionInterceptorTest {
         when(chatModel.getConfig()).thenReturn(readonly);
         when(readonly.getContextLength()).thenReturn(1_000_000L);
 
-        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 10_000, null);
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, null);
         workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
         for (int i = 0; i < 20; i++) {
             workingMemory.addMessage(ChatMessage.ofAssistant("short " + i));
@@ -1408,7 +1406,7 @@ public class ContextCompressionInterceptorTest {
     public void testOversizedCustomSummaryIsBounded() {
         String oversized = repeat("summary-detail ", 8_000);
         CompressionStrategy strategy = (model, retries, currentTrace, messages) -> ChatMessage.ofUser(oversized);
-        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 10_000, strategy);
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, strategy);
         workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
         for (int i = 0; i < 20; i++) {
             workingMemory.addMessage(ChatMessage.ofAssistant("history " + i));
@@ -1471,7 +1469,7 @@ public class ContextCompressionInterceptorTest {
     @Test
     public void testFixedContextEarlyReturnPublishesConsistentChunk() {
         when(trace.hasStreamSink()).thenReturn(true);
-        String huge = repeat("fixed-context ", 20_000);
+        String huge = repeat("fixed-context ", 50_000);
         workingMemory.addMessage(ChatMessage.ofUser(huge).addMetadata(AgentTrace.META_FIRST, 1));
         workingMemory.addMessage(ChatMessage.ofAssistant("discarded"));
 
@@ -1525,7 +1523,7 @@ public class ContextCompressionInterceptorTest {
     @Test
     public void testTinySummaryBudgetSkipsCompressionStrategy() throws Exception {
         CompressionStrategy strategy = mock(CompressionStrategy.class);
-        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, 10_000, strategy);
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, strategy);
         java.lang.reflect.Method method = ContextCompressionInterceptor.class.getDeclaredMethod(
                 "safeCompress", ChatModel.class, ReActTrace.class, List.class, int.class);
         method.setAccessible(true);

@@ -47,7 +47,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -75,27 +74,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     public final static String META_COMPRESSED = "_compressed";
 
     // 在类中预加载注册表
-    private static final EncodingRegistry registry = Encodings.newDefaultEncodingRegistry();
+    private static final EncodingRegistry ENCODING_REGISTRY = Encodings.newDefaultEncodingRegistry();
     // 适配 GPT-4o (o200k_base)，对 DeepSeek 等使用 cl100k_base 的模型有微小偏差（通常 <5%）
-    private static final Encoding encoding = registry.getEncodingForModel(ModelType.GPT_4O);
+    private static final Encoding ENCODING_FOR_MODEL = ENCODING_REGISTRY.getEncodingForModel(ModelType.GPT_4O);
     private static final String META_TOKEN_SIZE = "token_size";
-
-    // 保留窗口的最大消息数（默认 15）
-    private int maxMessages;
-    // 保留窗口的最大 Token 数（默认 15_000）；模型未配置 contextLength 时作为压缩阈值
-    private int maxTokens;
-    // maxContextLengthRatio: 模型上下文窗口比例（默认 75%），用于结合 contextLength 计算最终 Token 阈值；无 contextLength 时回退到 maxTokens
-    private double maxContextLengthRatio = 0.75D;
-
-    // 保留窗口的最小消息数下限（默认 maxMessages / 3，最低 3）
-    // 防止 Token 维度截断导致保留窗口被压缩到只剩 1~2 条消息
-    private int minReservedMessages;
-    // 重试次数
-    private int maxRetries = 3;
-    // 单条消息硬上限（0 表示由系统自动推导：max(2000, Token 压缩阈值/2)）
-    // ⭐ 对应 claude-code 的 MicroCompact TRUNCATION_THRESHOLD（10000 chars）
-    //    与 claude-code 按字符数不同，此处按 Token 数截断，更精确。
-    private int perMessageCap;
     // 请求在 ChatRequestDesc.prepare() 阶段仍可能被默认指令、Talent 和 ChatInterceptor 扩展。
     // 这里保留有限安全余量，不提前执行这些有副作用的扩展逻辑。
     private static final double REQUEST_PREPARATION_RESERVE_RATIO = 0.05D;
@@ -103,15 +85,30 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     private static final int MAX_REQUEST_PREPARATION_RESERVE = 2_000;
     // 摘要预算过小时不生成只有标点/截断标记的无意义摘要。
     private static final int MIN_SUMMARY_TOKENS = 32;
+
+    // 模型上下文窗口默认值（当 ChatModel 未提供 contextLength 时使用）
+    private static final long DEFAULT_CONTEXT_WINDOW = 128_000L;
+
+    // 保留窗口的最大消息数（默认 15）
+    private int maxMessages;
+    // maxContextLengthRatio: 模型上下文窗口比例（默认 75%），用于计算最终 Token 阈值：contextLength × maxContextLengthRatio
+    private double maxContextLengthRatio = 0.75D;
+    // 重试次数
+    private int maxRetries = 3;
+
+    // 保留窗口的最小消息数下限（默认 maxMessages / 3，最低 3）
+    // 防止 Token 维度截断导致保留窗口被压缩到只剩 1~2 条消息
+    private int minReservedMessages;
+    // 单条消息硬上限（0 表示由系统自动推导：max(2000, Token 压缩阈值/2)）
+    // ⭐ 对应 claude-code 的 MicroCompact TRUNCATION_THRESHOLD（10000 chars）
+    //    与 claude-code 按字符数不同，此处按 Token 数截断，更精确。
+    private int perMessageCap;
+
     // 压缩策略
     private final CompressionStrategy compressionStrategy;
 
     public void setMaxMessages(int maxMessages) {
         this.maxMessages = Math.max(10, maxMessages);
-    }
-
-    public void setMaxTokens(int maxTokens) {
-        this.maxTokens = Math.max(10_000, maxTokens);
     }
 
     public void setMaxContextLengthRatio(double maxContextLengthRatio) {
@@ -122,13 +119,13 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         this.maxContextLengthRatio = maxContextLengthRatio;
     }
+    
+    public void setMaxRetries(int maxRetries) {
+        this.maxRetries = maxRetries;
+    }
 
     public void setMinReservedMessages(int minReservedMessages) {
         this.minReservedMessages = Math.max(3, minReservedMessages);
-    }
-
-    public void setMaxRetries(int maxRetries) {
-        this.maxRetries = maxRetries;
     }
 
     /**
@@ -142,55 +139,29 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         this.perMessageCap = Math.max(0, perMessageCap);
     }
 
-    public ContextCompressionInterceptor(int maxMessages, int maxTokens, CompressionStrategy compressionStrategy) {
+    public ContextCompressionInterceptor(int maxMessages, CompressionStrategy compressionStrategy) {
         this.maxMessages = Math.max(10, maxMessages);
-        this.maxTokens = Math.max(10_000, maxTokens);
         this.minReservedMessages = Math.max(3, this.maxMessages / 3);
         this.compressionStrategy = compressionStrategy;
     }
 
-    public ContextCompressionInterceptor(int maxMessages, int maxTokens, int maxRetries, CompressionStrategy compressionStrategy) {
+    public ContextCompressionInterceptor(int maxMessages, int maxRetries, CompressionStrategy compressionStrategy) {
         this.maxMessages = Math.max(10, maxMessages);
-        this.maxTokens = Math.max(10_000, maxTokens);
-        this.minReservedMessages = Math.max(3, this.maxMessages / 3);
-        this.maxRetries = maxRetries;
-        this.compressionStrategy = compressionStrategy;
-    }
-
-    /**
-     * @deprecated 4.0.4 {@link #ContextCompressionInterceptor(int, int, CompressionStrategy)}
-     */
-    @Deprecated
-    public ContextCompressionInterceptor(int maxMessages, int maxTokens, Supplier<ChatModel> chatModelSupplier, CompressionStrategy compressionStrategy) {
-        this.maxMessages = Math.max(10, maxMessages);
-        this.maxTokens = Math.max(10_000, maxTokens);
-        this.minReservedMessages = Math.max(3, this.maxMessages / 3);
-        this.compressionStrategy = compressionStrategy;
-    }
-
-    /**
-     * @deprecated 4.0.4 {@link #ContextCompressionInterceptor(int, int, int, CompressionStrategy)}
-     */
-    @Deprecated
-    public ContextCompressionInterceptor(int maxMessages, int maxTokens, int maxRetries, Supplier<ChatModel> chatModelSupplier, CompressionStrategy compressionStrategy) {
-        this.maxMessages = Math.max(10, maxMessages);
-        this.maxTokens = Math.max(10_000, maxTokens);
         this.minReservedMessages = Math.max(3, this.maxMessages / 3);
         this.maxRetries = maxRetries;
         this.compressionStrategy = compressionStrategy;
     }
 
     public ContextCompressionInterceptor(){
-        this(15, 15_000, null);
+        this(15, null);
     }
 
     /**
      * 复制实例，并使用新的限制
      */
-    public ContextCompressionInterceptor copyWith(int maxMessages, int maxTokens) {
+    public ContextCompressionInterceptor copyWith(int maxMessages) {
         ContextCompressionInterceptor tmp = new ContextCompressionInterceptor(
                 maxMessages,
-                maxTokens,
                 this.maxRetries,
                 this.compressionStrategy);
         tmp.minReservedMessages = this.minReservedMessages;
@@ -203,25 +174,26 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     /**
      * 计算最终 Token 阈值为上下文压缩提供依据。
      *
-     * <p>当模型配置了 {@code contextLength} 时，按模型上下文窗口与
-     * {@link #maxContextLengthRatio} 的乘积计算；否则回退到 {@link #maxTokens}。</p>
+     * <p>优先使用模型配置的 {@code contextLength} 与 {@link #maxContextLengthRatio}
+     * 的乘积；当模型未提供 contextLength 时，回退到 {@link #DEFAULT_CONTEXT_WINDOW}。</p>
      */
     private int finalTokenThreshold(ChatModel model) {
+        long contextLength = DEFAULT_CONTEXT_WINDOW;
         try {
             if (model != null && model.getConfig() != null) {
-                long contextLength = model.getConfig().getContextLength();
-                if (contextLength > 0) {
-                    double threshold = Math.floor(contextLength * maxContextLengthRatio);
-                    return (int) Math.max(1D, Math.min(Integer.MAX_VALUE, threshold));
+                long modelContext = model.getConfig().getContextLength();
+                if (modelContext > 0) {
+                    contextLength = modelContext;
                 }
             }
         } catch (Exception e) {
             if (log.isDebugEnabled()) {
-                log.debug("Failed to resolve model context length, fallback to maxTokens={}", this.maxTokens, e);
+                log.debug("Failed to resolve model context length, using default context window={}", DEFAULT_CONTEXT_WINDOW, e);
             }
         }
 
-        return this.maxTokens;
+        double threshold = Math.floor(contextLength * maxContextLengthRatio);
+        return (int) Math.max(1D, Math.min(Integer.MAX_VALUE, threshold));
     }
 
     @Override
@@ -1050,7 +1022,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 continue;
             }
 
-            int contentTokens = encoding.countTokens(content);
+            int contentTokens = ENCODING_FOR_MODEL.countTokens(content);
             if (contentTokens <= cap) {
                 result.add(msg);
                 continue;
@@ -1166,16 +1138,16 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      * 以字符切分逼近，再用编码器精确收敛，确保结果不超过 tokenThreshold。
      */
     private String truncateTextToTokens(String text, int tokenThreshold) {
-        if (text == null || encoding.countTokens(text) <= tokenThreshold) {
+        if (text == null || ENCODING_FOR_MODEL.countTokens(text) <= tokenThreshold) {
             return text;
         }
 
         String marker = "\n... [内容过大已截断：单条消息超过上下文预算，省略中间部分，仅保留首尾。"
                 + "如需完整内容，请用分页方式重新获取] ...\n";
-        int markerTokens = encoding.countTokens(marker);
+        int markerTokens = ENCODING_FOR_MODEL.countTokens(marker);
         if (markerTokens > tokenThreshold) {
             String shortMarker = "[内容已截断]";
-            while (!shortMarker.isEmpty() && encoding.countTokens(shortMarker) > tokenThreshold) {
+            while (!shortMarker.isEmpty() && ENCODING_FOR_MODEL.countTokens(shortMarker) > tokenThreshold) {
                 shortMarker = shortMarker.substring(0, shortMarker.length() - 1);
             }
             return shortMarker;
@@ -1189,13 +1161,13 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         int tailChars = Math.min(text.length() - headChars, tailTokens * 3);
 
         String head = text.substring(0, headChars);
-        while (encoding.countTokens(head) > headTokens && head.length() > 0) {
+        while (ENCODING_FOR_MODEL.countTokens(head) > headTokens && head.length() > 0) {
             int newLen = Math.min(head.length() - 1, head.length() * 9 / 10);
             head = head.substring(0, Math.max(0, newLen));
         }
 
         String tail = text.substring(text.length() - tailChars);
-        while (encoding.countTokens(tail) > tailTokens && tail.length() > 0) {
+        while (ENCODING_FOR_MODEL.countTokens(tail) > tailTokens && tail.length() > 0) {
             int cut = Math.max(1, tail.length() / 10);
             tail = tail.substring(cut);
         }
@@ -1210,7 +1182,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         }
 
         if (systemPrompt != null && !systemPrompt.isEmpty()) {
-            totalTokens += encoding.countTokens(systemPrompt) + 4;
+            totalTokens += ENCODING_FOR_MODEL.countTokens(systemPrompt) + 4;
         }
 
         return totalTokens + 3;
@@ -1223,7 +1195,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     private int estimateMessageTokens(ChatMessage message) {
         int count = 0;
         if (message.getContent() != null) {
-            count += encoding.countTokens(message.getContent());
+            count += ENCODING_FOR_MODEL.countTokens(message.getContent());
         }
 
         if (message instanceof AssistantMessage) {
@@ -1232,13 +1204,13 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 for (ToolCall tc : assistant.getToolCalls()) {
                     String name = tc.getName() != null ? tc.getName() : "";
                     String args = tc.getArgumentsStr() != null ? tc.getArgumentsStr() : "";
-                    count += encoding.countTokens(name + args) + 10;
+                    count += ENCODING_FOR_MODEL.countTokens(name + args) + 10;
                     count += countTextTokens(tc.getId());
                     count += countTextTokens(tc.getThoughtSignature());
                 }
             }
             if (Assert.isNotEmpty(assistant.getToolCallsRaw())) {
-                count += encoding.countTokens(String.valueOf(assistant.getToolCallsRaw()));
+                count += ENCODING_FOR_MODEL.countTokens(String.valueOf(assistant.getToolCallsRaw()));
             }
             count += estimateMediaTokens(assistant.getBlocks());
         } else if (message instanceof UserMessage) {
@@ -1255,7 +1227,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     }
 
     private int countTextTokens(String text) {
-        return text == null || text.isEmpty() ? 0 : encoding.countTokens(text);
+        return text == null || text.isEmpty() ? 0 : ENCODING_FOR_MODEL.countTokens(text);
     }
 
     /**
@@ -1278,7 +1250,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 // base64 体积大，按 4 chars ≈ 1 token 估算，并加 MIME 结构开销
                 tokens += Math.max(1, data.length() / 4) + 20;
             } else if (Utils.isNotEmpty(media.getUrl())) {
-                tokens += encoding.countTokens(media.getUrl()) + 10;
+                tokens += ENCODING_FOR_MODEL.countTokens(media.getUrl()) + 10;
             } else {
                 tokens += 8; // 空/截断媒体的占位开销
             }
@@ -1326,15 +1298,15 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         for (FunctionTool tool : tools) {
             // name
             if (tool.name() != null) {
-                tokens += encoding.countTokens(tool.name());
+                tokens += ENCODING_FOR_MODEL.countTokens(tool.name());
             }
             // description（含 meta 信息）
             if (tool.descriptionAndMeta() != null) {
-                tokens += encoding.countTokens(tool.descriptionAndMeta());
+                tokens += ENCODING_FOR_MODEL.countTokens(tool.descriptionAndMeta());
             }
             // inputSchema（JSON Schema 定义）
             if (tool.inputSchema() != null) {
-                tokens += encoding.countTokens(tool.inputSchema());
+                tokens += ENCODING_FOR_MODEL.countTokens(tool.inputSchema());
             }
             tokens += 15; // JSON 结构开销（type, function, parameters 等字段）
         }
