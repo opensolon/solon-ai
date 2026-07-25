@@ -89,6 +89,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     // 模型上下文窗口默认值（当 ChatModel 未提供 contextLength 时使用）
     private long defaultContextWindow = 128_000L;
 
+    /** 设置上下文窗口默认值。 */
     public void setDefaultContextWindow(long defaultContextWindow) {
         if (defaultContextWindow <= 0) {
             throw new IllegalArgumentException("defaultContextWindow must be positive: " + defaultContextWindow);
@@ -101,6 +102,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     // maxContextLengthRatio: 模型上下文窗口比例（默认 75%），用于计算最终 Token 阈值：contextLength × maxContextLengthRatio
     private double maxContextLengthRatio = 0.75D;
     // 重试次数
+    // 重试次数（默认 3）
     private int maxRetries = 3;
 
     // 保留窗口的最小消息数下限（默认 maxMessages / 3，最低 3）
@@ -114,10 +116,12 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     // 压缩策略
     private final CompressionStrategy compressionStrategy;
 
+    /** 设置消息数量阈值（下限 10）。 */
     public void setMaxMessages(int maxMessages) {
         this.maxMessages = Math.max(10, maxMessages);
     }
 
+    /** 设置上下文窗口使用比例（(0, 1]）。 */
     public void setMaxContextLengthRatio(double maxContextLengthRatio) {
         if (Double.isNaN(maxContextLengthRatio) || Double.isInfinite(maxContextLengthRatio)
                 || maxContextLengthRatio <= 0D || maxContextLengthRatio > 1D) {
@@ -127,10 +131,12 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         this.maxContextLengthRatio = maxContextLengthRatio;
     }
     
+    /** 设置压缩策略重试次数。 */
     public void setMaxRetries(int maxRetries) {
         this.maxRetries = maxRetries;
     }
 
+    /** 设置保留窗口最小消息数（最低 3）。 */
     public void setMinReservedMessages(int minReservedMessages) {
         this.minReservedMessages = Math.max(3, minReservedMessages);
     }
@@ -146,12 +152,14 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         this.perMessageCap = Math.max(0, perMessageCap);
     }
 
+    /** 构造器。 */
     public ContextCompressionInterceptor(int maxMessages, CompressionStrategy compressionStrategy) {
         this.maxMessages = Math.max(10, maxMessages);
         this.minReservedMessages = Math.max(3, this.maxMessages / 3);
         this.compressionStrategy = compressionStrategy;
     }
 
+    /** 构造器。 */
     public ContextCompressionInterceptor(int maxMessages, int maxRetries, CompressionStrategy compressionStrategy) {
         this.maxMessages = Math.max(10, maxMessages);
         this.minReservedMessages = Math.max(3, this.maxMessages / 3);
@@ -159,6 +167,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         this.compressionStrategy = compressionStrategy;
     }
 
+    /** 无参构造器（maxMessages 默认为 15）。 */
     public ContextCompressionInterceptor(){
         this(15, null);
     }
@@ -205,6 +214,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     }
 
     @Override
+    /** 推理开始前执行上下文压缩。 */
     public void onReasonStart(ReActTrace trace, StringBuilder systemPromptBuf) {
         compressContext(trace,
                 systemPromptBuf == null ? null : systemPromptBuf.toString(),
@@ -213,6 +223,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     }
 
     @Override
+    /** 重试时因上下文超限触发强制压缩。 */
     public boolean onReasonRetry(ReActTrace trace, Throwable error, int attempt, String systemPrompt) {
         if (!CompressionUtil.isPromptTooLongError(error)) {
             return false;
@@ -725,6 +736,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 Integer.MAX_VALUE, true, Collections.emptySet(), null);
     }
 
+    /** 统计可变消息数（排除受保护消息）。 */
     private int countVariableMessages(List<ChatMessage> messages, Set<ChatMessage> protectedMessages) {
         int count = 0;
         for (ChatMessage message : messages) {
@@ -735,6 +747,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         return count;
     }
 
+    /** 判断消息是否受保护（不参与压缩删除）。 */
     private boolean isProtectedMessage(ChatMessage message, Set<ChatMessage> protectedMessages) {
         return message.hasMetadata(AgentTrace.META_FIRST) || protectedMessages.contains(message);
     }
@@ -797,12 +810,14 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         return findAtomicRemovalRange(messages, index, nativeToolMode, protectedMessages);
     }
 
+    /** 判断是否为当前模式下的工具输出消息。 */
     private boolean isToolOutputForMode(ChatMessage message, boolean nativeToolMode) {
         return nativeToolMode ? message instanceof ToolMessage : isTextObservation(message);
     }
 
+    /** 将截断起点对齐到 tool-use 原子组边界。 */
     private int alignStartToToolCallGroup(List<ChatMessage> messages, int startIdx, int minIdx,
-                                          boolean nativeToolMode) {
+                                           boolean nativeToolMode) {
         if (startIdx <= minIdx || startIdx >= messages.size()) {
             return startIdx;
         }
@@ -848,6 +863,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         return startIdx;
     }
 
+    /** 移除无配对源头的孤立工具输出。 */
     private List<ChatMessage> removeDanglingToolOutputs(List<ChatMessage> messages, boolean nativeToolMode) {
         List<ChatMessage> result = new ArrayList<>(messages.size());
 
@@ -959,10 +975,12 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         return result;
     }
 
+    /** 比较工具调用名与输出名是否一致。 */
     private boolean sameToolName(String callName, String outputName) {
         return callName != null && callName.equals(outputName);
     }
 
+    /** 判断 AssistantMessage 是否包含 ReAct Action 文本。 */
     private boolean isTextAction(AssistantMessage message) {
         String content = message.getResultContent();
         if (content == null) {
@@ -972,6 +990,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         return actionIdx >= 0 && actionIdx + "Action:".length() < content.length();
     }
 
+    /** 规范化 tool_call_id（空串转 null）。 */
     private String normalizeToolCallId(String id) {
         if (id == null || id.trim().isEmpty()) {
             return null;
@@ -979,6 +998,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         return id;
     }
 
+    /** 检查 AssistantMessage 的 tool_calls 中是否存在指定 ID。 */
     private boolean hasToolCallId(AssistantMessage assistantMessage, String toolCallId) {
         for (ToolCall tc : assistantMessage.getToolCalls()) {
             if (toolCallId.equals(tc.getId())) {
@@ -1183,6 +1203,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         return head + marker + tail;
     }
 
+    /** 估算消息列表（含 systemPrompt）的总 Token 数。 */
     private int estimateTokens(List<ChatMessage> messages, String systemPrompt) {
         int totalTokens = 0;
         for (ChatMessage message : messages) {
@@ -1234,6 +1255,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         return count;
     }
 
+    /** 估算文本 Token 数（null/空返回 0）。 */
     private int countTextTokens(String text) {
         return text == null || text.isEmpty() ? 0 : ENCODING_FOR_MODEL.countTokens(text);
     }
@@ -1276,6 +1298,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 Math.min(MAX_REQUEST_PREPARATION_RESERVE, proportional));
     }
 
+    /** 收集生效工具：模型默认工具 + Agent 工具 + 协议工具。 */
     private Collection<FunctionTool> collectEffectiveTools(ChatModel chatModel, ReActTrace trace) {
         Map<String, FunctionTool> effective = new LinkedHashMap<>();
         if (chatModel != null && chatModel.getConfig() != null) {
@@ -1286,6 +1309,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         return effective.values();
     }
 
+    /** 按名称将工具合并到目标 Map。 */
     private void putToolsByName(Map<String, FunctionTool> target, Collection<FunctionTool> tools) {
         if (Assert.isEmpty(tools)) {
             return;
@@ -1321,10 +1345,12 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         return tokens;
     }
 
+    /** 判断消息是否为工具结果或 Observation。 */
     private boolean isObservation(ChatMessage msg) {
         return msg instanceof ToolMessage || isTextObservation(msg);
     }
 
+    /** 判断 UserMessage 是否为 Observation 文本。 */
     private boolean isTextObservation(ChatMessage msg) {
         return msg instanceof UserMessage
                 && msg.getContent() != null
@@ -1378,6 +1404,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         }
     }
 
+    /** 推送上下文压缩事件到流式接收端。 */
     private void pushContextChunk(ReActTrace trace, int msgCount, int tokenCount,
                                   boolean compressed,
                                   int beforeMessageCount, int afterMessageCount,
