@@ -90,7 +90,7 @@ public class LLMCompressionStrategy implements CompressionStrategy {
                 return null;
             }
 
-            return ChatMessage.ofUser("--- [执行进度总结] ---\n" + summary);
+            return CompressionUtil.buildCompressedMessage("--- [执行进度总结] ---", summary);
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

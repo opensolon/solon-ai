@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.react.intercept.compress.CompressionUtil;
 import org.noear.solon.ai.agent.react.intercept.compress.HierarchicalCompressionStrategy;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatRequestDesc;
@@ -235,14 +236,16 @@ public class HierarchicalCompressionStrategyTest {
                 () -> new HierarchicalCompressionStrategy().maxSummaryLength(0));
 
         ReActTrace trace = mock(ReActTrace.class);
-        ChatModel model = mockModel(response("12345678901234567890"));
+        // 使用足够长的中文文本确保 Token 数超过 maxSummaryLength
+        ChatModel model = mockModel(response("这是一段需要被压缩的长文本内容包含了大量的信息需要被总结和精简以确保摘要长度限制能够被正确触发和执行从而验证硬性限制的功能"));
         ChatMessage result = new HierarchicalCompressionStrategy()
                 .maxSummaryLength(12)
                 .compress(model, 1, trace, Arrays.asList(ChatMessage.ofAssistant("A")));
 
         ArgumentCaptor<String> summary = ArgumentCaptor.forClass(String.class);
         verify(trace).setExtra(eq(SUMMARY_KEY), summary.capture());
-        assertEquals(12, summary.getValue().length());
+        // 验证 Token 数不超过硬性限制（maxSummaryLength 按 Token 计量）
+        assertTrue(CompressionUtil.countTokens(summary.getValue()) <= 12);
         assertTrue(result.getContent().contains(summary.getValue()));
     }
 
