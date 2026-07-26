@@ -185,6 +185,10 @@ public class MemoryTalent extends AbsTalent {
                           String __sessionId) {
         String userId = getUserId(__sessionId);
 
+        // 重要度约束到声明的 1-10 区间：LLM 可能传入 0/负数/超界值，
+        // 若不约束会错误影响碎片分类（Imp<5）与 TTL 分档（>=10 永久）。
+        importance = Math.max(1, Math.min(10, importance));
+
         MemorySolution memorySolution = solutionProvider.get(__cwd);
         MemoryStorer storeProvider = memorySolution.getStorer();
         MemorySearcher searchProvider = memorySolution.getSearcher();
@@ -385,38 +389,64 @@ public class MemoryTalent extends AbsTalent {
                               String __sessionId) {
         // 原论文精神：通过整合减少上下文占用，提高信噪比
         String userId = getUserId(__sessionId);
+
+        if (Utils.isEmpty(newKey)) {
+            return "【合并异常】new_key 为空，无法写入洞察，旧碎片已保留。";
+        }
+        if (Utils.isEmpty(insight)) {
+            return "【合并异常】evolved_insight 为空，无法升维为洞察，旧碎片已保留。";
+        }
         String fact = "[Evolved Insight] " + insight;
 
-        // 步骤1：写入新的合并洞察
+        // 步骤1：写入新的合并洞察（核心洞察赋予最高重要度）
+        // 注意：extract 内部已吞掉异常并返回字符串，不会抛出；因此不能依赖 try/catch，
+        // 必须回读校验新洞察确已落库，否则一旦写入失败仍去删旧碎片将导致数据彻底丢失。
+        extract(newKey, fact, 10, __cwd, __sessionId);
+
+        // 同一次 consolidate 复用一个 solution 实例，避免回读校验与逐碎片删除重复获取
+        MemorySolution memorySolution = solutionProvider.get(__cwd);
+
+        boolean written = false;
         try {
-            extract(newKey, fact, 10, __cwd, __sessionId); // 核心洞察赋予最高重要度
+            String writtenJson = memorySolution.getStorer().get(userId, newKey);
+            if (Utils.isNotEmpty(writtenJson)) {
+                // 回读解析 content 字段与预期 fact 比对（避免 JSON 转义造成的字面匹配误判）
+                String storedContent = ONode.ofJson(writtenJson).get("content").getString();
+                written = fact.equals(storedContent);
+            }
         } catch (Exception e) {
-            LOG.error("MemoryTalent consolidate extract error, newKey={}", newKey, e);
-            return "【合并异常】新洞察写入失败，旧碎片保留：" + e.getMessage();
+            LOG.error("MemoryTalent consolidate verify error, newKey={}", newKey, e);
+        }
+        if (!written) {
+            LOG.error("MemoryTalent consolidate verify failed, newKey={}", newKey);
+            return "【合并异常】新洞察写入校验失败，旧碎片已保留，未做任何清理。请稍后重试。";
         }
 
         // 步骤2：逐个清理旧碎片（即使某个失败也不影响其余）
+        // 依据 pruneInternal 的真实返回值判断成败；prune 内部吞异常，无法靠 try/catch 感知删除失败
         List<String> failedKeys = new ArrayList<>();
         int removed = 0;
-        for (String k : oldKeys) {
-            // 若 newKey 包含在待清理列表中（同名复用），跳过，否则会误删刚写入的新洞察
-            if (k == null || k.equals(newKey)) {
-                continue;
-            }
-            try {
-                prune(k, __cwd, __sessionId); // 彻底清理旧碎片，防止语义干扰
-                removed++;
-                LOG.info("MemoryTalent consolidate prune ok, userId={}, key={}", userId, k);
-            } catch (Exception e) {
-                LOG.error("MemoryTalent consolidate prune error, userId={}, key={}", userId, k, e);
-                failedKeys.add(k);
+        if (oldKeys != null) {
+            for (String k : oldKeys) {
+                // 若 newKey 包含在待清理列表中（同名复用），跳过，否则会误删刚写入的新洞察
+                if (k == null || k.equals(newKey)) {
+                    continue;
+                }
+                if (pruneInternal(memorySolution, userId, k)) {
+                    removed++;
+                    LOG.info("MemoryTalent consolidate prune ok, userId={}, key={}", userId, k);
+                } else {
+                    failedKeys.add(k);
+                }
             }
         }
 
-        if (failedKeys.isEmpty()) {
-            return "【心智进化成功】已将碎片认知升维为核心洞察，删除了" + removed + "条冗余记录。";
+        if (!failedKeys.isEmpty()) {
+            return "【心智进化部分成功】新洞察已写入（已清理 " + removed + " 条），但以下碎片清理失败：" + failedKeys + "。可再次调用 memory_prune 清理。";
+        } else if (removed == 0) {
+            return "【心智进化成功】已写入核心洞察，无冗余碎片需清理。";
         } else {
-            return "【心智进化部分成功】新洞察已写入，但以下碎片清理失败：" + failedKeys + "。可再次调用 memory_prune 清理。";
+            return "【心智进化成功】已将碎片认知升维为核心洞察，删除了 " + removed + " 条冗余记录。";
         }
     }
 
@@ -429,25 +459,39 @@ public class MemoryTalent extends AbsTalent {
                         String __sessionId) {
         String userId = getUserId(__sessionId);
         MemorySolution memorySolution = solutionProvider.get(__cwd);
-        MemoryStorer storeProvider = memorySolution.getStorer();
-        MemorySearcher searchProvider = memorySolution.getSearcher();
 
+        if (pruneInternal(memorySolution, userId, key)) {
+            return "已从模型中清理 Key: " + key;
+        } else {
+            return "清理失败 Key: " + key + "（主体删除失败，条目仍保留）。";
+        }
+    }
+
+    /**
+     * 内部清理：删除存储主体与检索索引。
+     *
+     * <p>返回值表示主体（storer）是否删除成功，供 consolidate 等调用方据此判断，
+     * 而非依赖“内部吞异常 + 外层 try/catch”这类捕获不到的死逻辑。
+     * 索引（searcher）清理失败不影响主体删除结论，仅记录日志（可能残留幽灵索引）。
+     */
+    private boolean pruneInternal(MemorySolution memorySolution, String userId, String key) {
         try {
-            storeProvider.remove(userId, key);
+            memorySolution.getStorer().remove(userId, key);
         } catch (Exception e) {
             LOG.error("MemoryTalent prune remove error, userId={}, key={}", userId, key, e);
-            return "清理失败 Key: " + key + "，原因：" + e.getMessage();
+            return false;
         }
 
+        MemorySearcher searchProvider = memorySolution.getSearcher();
         if (searchProvider != null) {
             try {
                 searchProvider.removeIndex(userId, key);
             } catch (Exception e) {
-                LOG.error("MemoryTalent prune removeIndex error, userId={}, key={}", userId, key, e);
+                LOG.error("MemoryTalent prune removeIndex error (幽灵索引可能残留), userId={}, key={}", userId, key, e);
             }
         }
 
-        return "已从模型中清理 Key: " + key;
+        return true;
     }
 
     public static boolean isMemoryTool(String toolName) {
