@@ -784,8 +784,11 @@ public class TerminalSupport {
 
     String formatDisplayPath(Path workPath, String inputPath, Path targetDir, Path file, boolean sandboxEnabled) {
         if (inputPath != null && inputPath.startsWith("@")) {
-            String prefix = inputPath.split("[/\\\\]")[0];
-            return prefix + "/" + targetDir.relativize(file).toString().replace("\\", "/");
+            String alias = inputPath.split("[/\\\\]")[0];
+            // 以挂载根为 relativize 基准，避免 inputPath 带子目录时中间层级丢失
+            MountDir mount = mountManager.getMount(alias);
+            Path base = (mount != null && mount.getRealPath() != null) ? mount.getRealPath() : targetDir;
+            return alias + "/" + base.relativize(file).toString().replace("\\", "/");
         }
 
 
