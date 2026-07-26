@@ -597,16 +597,22 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                             originalMessageCount, compressed.size(),
                             originalTokenCount, afterTokens);
         } else {
-            // 压缩条件触发但实际未变更（兜底），仍推送当前状态
-            pushContextChunk(trace, messages.size(), currentTokens, false, 0, 0, 0, 0);
+            // 压缩条件触发但实际未变更（兜底），仍推送当前状态（前后值一致，表示未发生改变）
+            pushContextChunk(trace, messages.size(), currentTokens, false,
+                    originalMessageCount, messages.size(), originalTokenCount, currentTokens);
         }
         return changed;
     }
 
     /**
-     * 将压缩结果硬收敛到目标预算。优先删除普通可变历史，再删除旧摘要，最新摘要最后处理：
-     * Assistant(tool_calls) 与其连续工具结果始终整组删除，避免产生错位消息。
-     * META_FIRST 属于固定上下文，不参与删除；若固定上下文本身超限则保留并告警。
+     * 安全执行压缩策略并校验摘要 Token 预算。
+     * <p>调用压缩策略生成摘要，统一写入 {@code META_COMPRESSED} 标记，
+     * 并在摘要 Token 超预算时做头尾截断重建。策略失败或结果无效时返回 null。</p>
+     *
+     * <p>注意：将摘要硬收敛到目标预算的逻辑由 {@link #convergeToBudget} 负责，
+     * 该方法优先删除普通可变历史，再删除旧摘要，最新摘要最后处理；
+     * Assistant(tool_calls) 与其连续工具结果始终整组删除，避免产生错位消息；
+     * META_FIRST 属于固定上下文，不参与删除；若固定上下文本身超限则保留并告警。</p>
      */
     private ChatMessage safeCompress(ChatModel chatModel, ReActTrace trace, List<ChatMessage> messages,
                                      int summaryTokenBudget) {
@@ -730,11 +736,11 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         return result;
     }
 
-    /** 兼容内部测试及旧反射调用。 */
+    /** 兼容内部测试及旧反射调用。使用 STRUCTURED_TEXT 模式（nativeToolMode=false）作为默认值，避免误判工具输出类型。 */
     private List<ChatMessage> convergeToBudget(List<ChatMessage> messages, String systemPrompt,
                                                int toolsTokens, int budget) {
         return convergeToBudget(messages, systemPrompt, toolsTokens, budget,
-                Integer.MAX_VALUE, true, Collections.emptySet(), null);
+                Integer.MAX_VALUE, false, Collections.emptySet(), null);
     }
 
     /** 统计可变消息数（排除受保护消息）。 */
@@ -942,6 +948,15 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 if (validGroup) {
                     result.add(msg);
                     result.addAll(matched);
+                    // native 模式下可能存在文本格式的 Observation（模式切换遗留或协议层注入），
+                    // 它们被收集到 toolOutputs 但不在 matched 中，需追加保留，避免上下文信息丢失。
+                    if (nativeToolMode) {
+                        for (ChatMessage output : toolOutputs) {
+                            if (output instanceof UserMessage && isTextObservation(output)) {
+                                result.add(output);
+                            }
+                        }
+                    }
                 }
 
                 i = j - 1;
@@ -952,9 +967,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 // 原生 ToolMessage 必须依附于前一条 Assistant(tool_calls)。
                 continue;
             }
-            if (nativeToolMode && isTextObservation(msg)) {
-                continue;
-            }
+            // native 模式下独立的文本 Observation（非连续于 Assistant(tool_calls) 的）
+            // 仍需保留：它们可能携带有效信息，不应静默丢弃。
 
             // 过滤空壳 AssistantMessage：既无结果内容也无工具调用，且无媒体块
             // 这类消息通常来自 LLM 的纯思考响应（thinking 标签包裹但无实际输出），
@@ -996,6 +1010,9 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
     /** 检查 AssistantMessage 的 tool_calls 中是否存在指定 ID。 */
     private boolean hasToolCallId(AssistantMessage assistantMessage, String toolCallId) {
+        if (toolCallId == null) {
+            return false;
+        }
         for (ToolCall tc : assistantMessage.getToolCalls()) {
             if (toolCallId.equals(tc.getId())) {
                 return true;
@@ -1115,13 +1132,15 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         if (origin instanceof AssistantMessage) {
             AssistantMessage am = (AssistantMessage) origin;
             // 仅允许没有厂商 raw/搜索/块扩展的纯文本 Assistant，避免截断时静默丢字段。
+            // 注意：am.getContent() 可能为 null（无文本内容时），需独立判空后再调用 equals。
+            String amContent = am.getContent();
             if (Assert.isNotEmpty(am.getToolCalls())
                     || Assert.isNotEmpty(am.getToolCallsRaw())
                     || Assert.isNotEmpty(am.getSearchResultsRaw())
                     || Assert.isNotEmpty(am.getBlocks())
                     || am.getReasoningFieldName() != null
                     || !(am.getContentRaw() == null || am.getContentRaw() instanceof String
-                    && am.getContent().equals(am.getContentRaw()))) {
+                    && amContent != null && amContent.equals(am.getContentRaw()))) {
                 return null;
             }
             AssistantMessage rebuilt = new AssistantMessage(newContent, am.isThinking());
@@ -1216,6 +1235,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     /**
      * 每次按消息当前内容重新估算，metadata 仅作为可观测结果回填，不能作为可信输入。
      * 消息内容块和工具调用集合可变，复用持久缓存可能造成陈旧或被外部 metadata 污染。
+     *
+     * <p><b>线程安全提示</b>：此方法会向消息对象写入 {@code META_TOKEN_SIZE} 元数据，
+     * 当前设计为单线程调用。若未来工作记忆区被多线程并发访问，
+     * 需改为局部变量计算或使用线程安全容器，避免竞态写入。</p>
      */
     private int estimateMessageTokens(ChatMessage message) {
         int count = 0;

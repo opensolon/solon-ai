@@ -24,7 +24,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 多策略级联压缩策略 (Composite Compression Strategy)
@@ -71,6 +73,7 @@ public class CompositeCompressionStrategy implements CompressionStrategy {
         if (messagesToCompress == null || messagesToCompress.isEmpty()) return null;
 
         StringBuilder buf = new StringBuilder(1024);
+        Map<String, Object> mergedMetadata = null;
         for (CompressionStrategy strategy : strategies) {
             try {
                 ChatMessage result = strategy.compress(chatModel, maxRetries, trace, messagesToCompress);
@@ -80,6 +83,17 @@ public class CompositeCompressionStrategy implements CompressionStrategy {
                     }
 
                     buf.append(result.getContent());
+
+                    // 保留子策略的 metadata，后策略不覆盖先策略的同名键
+                    Map<String, Object> subMeta = result.getMetadata();
+                    if (subMeta != null && !subMeta.isEmpty()) {
+                        if (mergedMetadata == null) {
+                            mergedMetadata = new LinkedHashMap<>();
+                        }
+                        for (Map.Entry<String, Object> e : subMeta.entrySet()) {
+                            mergedMetadata.putIfAbsent(e.getKey(), e.getValue());
+                        }
+                    }
                 }
             } catch (Throwable e) { // 捕获 Throwable 确保绝对不崩溃
                 LOG.error("Strategy [{}] execution failed", strategy.getClass().getSimpleName(), e);
@@ -90,6 +104,13 @@ public class CompositeCompressionStrategy implements CompressionStrategy {
             return null;
         }
 
-        return ChatMessage.ofUser(buf.toString());
+        ChatMessage merged = ChatMessage.ofUser(buf.toString());
+        // 将子策略的 metadata 传递给合并后的消息
+        if (mergedMetadata != null) {
+            for (Map.Entry<String, Object> e : mergedMetadata.entrySet()) {
+                merged.addMetadata(e.getKey(), e.getValue());
+            }
+        }
+        return merged;
     }
 }
