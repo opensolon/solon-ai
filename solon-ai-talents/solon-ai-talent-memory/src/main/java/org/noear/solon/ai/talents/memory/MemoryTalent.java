@@ -163,10 +163,10 @@ public class MemoryTalent extends AbsTalent {
                 "- **1-3 (琐碎事实)**：临时的任务细节、单次提及的背景（如：当前处理的文件名）。\n" +
                 "- **4-6 (行为偏好)**：用户展现出的习惯、常用的工具偏好、反复提及的关注点。\n" +
                 "- **7-9 (核心规约)**：项目的架构定义、长期的技术选型、用户明确要求的行为准则。\n" +
-                "- **10 (生命周期关键点)**：足以改变后续所有对话逻辑的重大发现或用户身份定论。\n\n" +
+                "- **10 (重大身份定论)**：足以改变后续所有对话逻辑的长期定论或用户身份定论。\n\n" +
                 "### 3. 认知维护指令：\n" +
                 "- **发现冲突时**：若新事实与“核心认知预览”冲突，必须调用 `memory_extract` 更新，并根据返回的 `[认知对比]` 向用户确认或在回复中体现认知的修正。\n" +
-                "- **碎片过多时**：当你发现检索到多个关于同一主题的低分记录（Imp < 5），应主动调用 `memory_consolidate` 将其升维为一条高分偏好（Imp >= 7）。\n" +
+                "- **碎片过多时**：当你发现检索到多个关于同一主题的低分记录（Imp < 5），应主动调用 `memory_consolidate` 将其升维为一条永久核心洞察（系统自动赋予最高重要度）。\n" +
                 "- **列出全部时**：当用户问“记住了哪些/有哪些记忆”时，调用 `memory_search('*')` 获取全部条目索引（Key + 摘要），需要细节再用 `memory_recall` 按 Key 召回。\n" +
                 "- **时效性原则**：永远以时间戳（Time）最近的认知记录为准。";
     }
@@ -177,9 +177,9 @@ public class MemoryTalent extends AbsTalent {
      * 解决了记忆冲突与反思逻辑
      */
     @ToolMapping(name = "memory_extract",
-            description = "将事实、偏好或进度存入用户心智模型（或者用户要求记住时）。若存在同名 Key，系统将返回旧记录以供你对比反思。")
-    public String extract(@Param("key") String key,
-                          @Param("fact") String fact,
+            description = "存入事实/偏好/进度（或用户要求记住时）。同名 Key 会返回旧记录供对比，信息有变则覆盖写入。")
+    public String extract(@Param(value = "key", description = "唯一语义标识（如 user-tech-stack）。同主题复用同一 Key 而非新建，以防碎片化。") String key,
+                          @Param(value = "fact", description = "完整自包含的陈述句，不依赖上下文指代，便于独立召回。") String fact,
                           @Param(value = "importance", description = "权重(1-10)：1-3琐碎事实, 4-6偏好习惯, 7-9核心规约, 10重大身份定论") int importance,
                           String __cwd,
                           String __sessionId) {
@@ -243,7 +243,7 @@ public class MemoryTalent extends AbsTalent {
      * SEARCH: 语义搜索
      */
     @ToolMapping(name = "memory_search",
-            description = "语义检索：通过自然语言描述在心智模型中寻找相关的记忆碎片，辅助找回背景信息。传入 '*' 可列出全部记忆条目的索引（Key + 摘要），用于回答“记住了哪些”。")
+            description = "语义检索：用自然语言找回相关记忆。传入 '*' 列出全部条目索引（Key + 摘要），用于回答“记住了哪些”。")
     public String search(@Param("query") String query,
                          @Param(value = "topK", required = false, defaultValue = "5", description = "返回条数上限（默认 5）。需要更全面的召回可适当调高。") Integer topK,
                          String __cwd,
@@ -348,8 +348,8 @@ public class MemoryTalent extends AbsTalent {
     /**
      * RECALL: 精确召回
      */
-    @ToolMapping(name = "memory_recall", description = "精确召回：通过 Key 获取该认知条目的完整细节。")
-    public String recall(@Param("key") String key,
+    @ToolMapping(name = "memory_recall", description = "精确召回：通过 Key 获取该条目的完整细节。")
+    public String recall(@Param(value = "key", description = "唯一语义标识（如 user-tech-stack）。") String key,
                          String __cwd,
                          String __sessionId) {
         String userId = getUserId(__sessionId);
@@ -381,10 +381,10 @@ public class MemoryTalent extends AbsTalent {
      * 对齐 MemoryTalent 的“压缩”思想，将事实进化为经验
      */
     @ToolMapping(name = "memory_consolidate",
-            description = "认知升维：将多个低层事实碎片整合为高层偏好模型，并清理冗余碎片。")
-    public String consolidate(@Param("keys_to_merge") List<String> oldKeys,
-                              @Param("new_key") String newKey,
-                              @Param("evolved_insight") String insight,
+            description = "认知升维：将多个碎片整合为高层洞察并清理冗余。新洞察自动赋最高重要度（永久保留）。")
+    public String consolidate(@Param(value = "keys_to_merge", description = "待合并的旧碎片 Key 列表，写入成功后删除；含 new_key 时自动跳过不删（原地升维）。") List<String> oldKeys,
+                              @Param(value = "new_key", description = "整合后的目标 Key（英文短语+连字符），可复用 keys_to_merge 中的 Key 实现原地升维。") String newKey,
+                              @Param(value = "evolved_insight", description = "升维后的高层洞察，概括碎片共性，完整自包含。") String insight,
                               String __cwd,
                               String __sessionId) {
         // 原论文精神：通过整合减少上下文占用，提高信噪比
@@ -454,7 +454,7 @@ public class MemoryTalent extends AbsTalent {
      * PRUNE: 记忆修剪
      */
     @ToolMapping(name = "memory_prune", description = "认知修正：删除错误、重复或过时的认知。")
-    public String prune(@Param("key") String key,
+    public String prune(@Param("key", description = "唯一语义标识（如 user-tech-stack）。") String key,
                         String __cwd,
                         String __sessionId) {
         String userId = getUserId(__sessionId);
