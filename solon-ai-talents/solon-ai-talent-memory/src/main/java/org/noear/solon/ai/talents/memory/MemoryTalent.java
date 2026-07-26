@@ -54,10 +54,15 @@ public class MemoryTalent extends AbsTalent {
     private static final int INJECT_HOT = 3;
     /** 默认搜索返回条数 */
     private static final int SEARCH_TOPK_DEFAULT = 5;
+    /** 搜索返回条数上限，避免 LLM 传入过大值导致上下文膨胀 */
+    private static final int SEARCH_TOPK_MAX = LIST_ALL_LIMIT;
     /** 近似 Key 探测：相似条目提示阈值 */
     private static final int NEAR_KEY_PROBE = 3;
     /** 碎片密度检测：同类低分(Imp<5)碎片数超此值时提示整合 */
     private static final int FRAGMENT_HINT_THRESHOLD = 5;
+
+    /** 时间格式器：线程安全且不可变，复用避免每次重建 */
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final MemorySolutionProvider solutionProvider;
     private boolean sessionIsolation = false; // 默认会话不隔离
@@ -95,7 +100,7 @@ public class MemoryTalent extends AbsTalent {
     }
 
     private String getNow() {
-        return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        return LocalDateTime.now().format(TIME_FORMATTER);
     }
 
     @Override
@@ -240,6 +245,11 @@ public class MemoryTalent extends AbsTalent {
                          String __cwd,
                          String __sessionId) {
         String userId = getUserId(__sessionId);
+
+        if (Utils.isEmpty(query)) {
+            return "检索 query 为空，请提供自然语言描述，或传入 '*' 列出全部条目。";
+        }
+
         MemorySearcher searchProvider = solutionProvider.get(__cwd).getSearcher();
 
         if (searchProvider == null) {
@@ -265,7 +275,7 @@ public class MemoryTalent extends AbsTalent {
             return sb.toString();
         }
 
-        int limit = (topK == null || topK <= 0) ? SEARCH_TOPK_DEFAULT : topK;
+        int limit = (topK == null || topK <= 0) ? SEARCH_TOPK_DEFAULT : Math.min(topK, SEARCH_TOPK_MAX);
         List<MemorySearchResult> results = searchProvider.search(userId, query, limit);
         if (results.isEmpty()) {
             return "未发现相关认知片段。";
@@ -349,9 +359,15 @@ public class MemoryTalent extends AbsTalent {
             }
 
             ONode node = ONode.ofJson(val);
+            String content = node.get("content").getString();
+            String time = node.get("time").getString();
+            String importance = node.get("importance").getString();
             return String.format("【认知详情】内容：%s | 记录时间：%s | 重要度：%s",
-                    node.get("content").getString(), node.get("time").getString(), node.get("importance").getString());
+                    content == null ? "" : content,
+                    Utils.isEmpty(time) ? "未知时间" : time,
+                    Utils.isEmpty(importance) ? "未知" : importance);
         } catch (Exception e) {
+            LOG.error("MemoryTalent recall error, userId={}, key={}", userId, key, e);
             return "读取异常。";
         }
     }
@@ -381,9 +397,15 @@ public class MemoryTalent extends AbsTalent {
 
         // 步骤2：逐个清理旧碎片（即使某个失败也不影响其余）
         List<String> failedKeys = new ArrayList<>();
+        int removed = 0;
         for (String k : oldKeys) {
+            // 若 newKey 包含在待清理列表中（同名复用），跳过，否则会误删刚写入的新洞察
+            if (k == null || k.equals(newKey)) {
+                continue;
+            }
             try {
                 prune(k, __cwd, __sessionId); // 彻底清理旧碎片，防止语义干扰
+                removed++;
                 LOG.info("MemoryTalent consolidate prune ok, userId={}, key={}", userId, k);
             } catch (Exception e) {
                 LOG.error("MemoryTalent consolidate prune error, userId={}, key={}", userId, k, e);
@@ -392,7 +414,7 @@ public class MemoryTalent extends AbsTalent {
         }
 
         if (failedKeys.isEmpty()) {
-            return "【心智进化成功】已将碎片认知升维为核心洞察，删除了" + oldKeys.size() + "条冗余记录。";
+            return "【心智进化成功】已将碎片认知升维为核心洞察，删除了" + removed + "条冗余记录。";
         } else {
             return "【心智进化部分成功】新洞察已写入，但以下碎片清理失败：" + failedKeys + "。可再次调用 memory_prune 清理。";
         }
@@ -406,8 +428,9 @@ public class MemoryTalent extends AbsTalent {
                         String __cwd,
                         String __sessionId) {
         String userId = getUserId(__sessionId);
-        MemoryStorer storeProvider = solutionProvider.get(__cwd).getStorer();
-        MemorySearcher searchProvider = solutionProvider.get(__cwd).getSearcher();
+        MemorySolution memorySolution = solutionProvider.get(__cwd);
+        MemoryStorer storeProvider = memorySolution.getStorer();
+        MemorySearcher searchProvider = memorySolution.getSearcher();
 
         try {
             storeProvider.remove(userId, key);

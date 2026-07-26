@@ -109,6 +109,42 @@ public class MemoryTalentOptTest {
         assertTrue(last.contains("memory_consolidate"), "应提示整合碎片: " + last);
     }
 
+    @Test
+    public void consolidate_should_keep_new_key_when_it_is_reused_from_old_keys() {
+        // 先写入两条碎片，其中一个 Key 将被复用为 newKey
+        talent.extract("user_pref", "用户偏好 A", 4, CWD, SID);
+        talent.extract("user_pref_tmp", "用户偏好 B", 4, CWD, SID);
+
+        // newKey 恰好包含在 oldKeys 中（同名合并回主键）
+        String result = talent.consolidate(
+                java.util.Arrays.asList("user_pref", "user_pref_tmp"),
+                "user_pref",
+                "用户的综合偏好洞察",
+                CWD, SID);
+        assertTrue(result.contains("进化成功"), "合并应成功: " + result);
+
+        // 新洞察必须仍可召回（不得因自删而丢失）
+        String recalled = talent.recall("user_pref", CWD, SID);
+        assertTrue(recalled.contains("综合偏好洞察"), "newKey 不得被误删: " + recalled);
+    }
+
+    @Test
+    public void search_topK_should_be_capped_at_upper_bound() {
+        for (int i = 0; i < 8; i++) {
+            talent.extract("cap_note_" + i, "Solon 缓存相关 " + i, 6, CWD, SID);
+        }
+        // 传入超大 topK，不应因无上限而崩溃，且不超过实际条数
+        String r = talent.search("Solon", 100000, CWD, SID);
+        int lines = countItemLines(r);
+        assertTrue(lines <= 100, "topK 应被上限约束: " + lines);
+    }
+
+    @Test
+    public void search_should_guard_empty_query() {
+        String r = talent.search(null, 5, CWD, SID);
+        assertTrue(r.contains("query") || r.contains("为空"), "空 query 应得到友好提示: " + r);
+    }
+
     private static int countItemLines(String text) {
         int count = 0;
         for (String line : text.split("\n")) {
