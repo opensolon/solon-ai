@@ -1669,9 +1669,7 @@ public class ContextCompressionInterceptorTest {
         assertTrue(tokens > 100,
                 "media-only message should estimate non-trivial tokens, got: " + tokens);
 
-        // 元数据应缓存估算结果（key 与实现一致）
-        Integer cached = mediaOnly.getMetadataAs("token_size");
-        assertNotNull(cached);
-        assertTrue(cached > 100);
+        // 注：estimateMessageTokens 已改为纯计算（无副作用），不再回写 token_size 元数据，
+        //       以避免高频循环中的无谓写入与并发竞态。此处不再断言 metadata 缓存。
     }
 }

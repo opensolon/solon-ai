@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.react.intercept.compress;
 
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
+import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
@@ -105,9 +106,17 @@ public class CompositeCompressionStrategy implements CompressionStrategy {
         }
 
         ChatMessage merged = ChatMessage.ofUser(buf.toString());
-        // 将子策略的 metadata 传递给合并后的消息
+        // ⭐ 强制标记 META_COMPRESSED：
+        //    子策略（如 VectorStore）可能返回不带标记的消息，若仅配单一此类策略，
+        //    merged 会缺失 META_COMPRESSED，导致后续 convergeToBudget/滚动摧要把它当普通历史优先删除
+        //    （归档提示消息被误删）。merged 作为压缩产物，必须统一携带该标记。
+        merged.addMetadata(ContextCompressionInterceptor.META_COMPRESSED, 1);
+        // 将子策略的其余 metadata 传递给合并后的消息（不覆盖已写入的 META_COMPRESSED）
         if (mergedMetadata != null) {
             for (Map.Entry<String, Object> e : mergedMetadata.entrySet()) {
+                if (ContextCompressionInterceptor.META_COMPRESSED.equals(e.getKey())) {
+                    continue;
+                }
                 merged.addMetadata(e.getKey(), e.getValue());
             }
         }

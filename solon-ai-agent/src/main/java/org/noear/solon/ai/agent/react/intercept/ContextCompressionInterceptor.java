@@ -94,6 +94,11 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
     // 保留窗口的最大消息数（默认 15）
     private int maxMessages;
+    // ⭐ 消息数量维度的触发滞后系数（hysteresis）。
+    //    触发阈值 = maxMessages × messageTriggerFactor；而压缩后保留窗口仍为 maxMessages。
+    //    两者解耦后，可通过调高本系数引入滞后带，避免在临界点反复抖动（每多一条就触发一次压缩）。
+    //    默认 1.0（无滞后，保持向后兼容；需要滞后时显式调高，如 1.5）。
+    private double messageTriggerFactor = 1.0D;
     // maxContextLengthRatio: 模型上下文窗口比例（默认 75%），用于计算最终 Token 阈值：contextLength × maxContextLengthRatio
     private double maxContextLengthRatio = 0.75D;
     // 重试次数（默认 3）
@@ -113,6 +118,19 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     /** 设置消息数量阈值（下限 10）。 */
     public void setMaxMessages(int maxMessages) {
         this.maxMessages = Math.max(10, maxMessages);
+    }
+
+    /**
+     * 设置消息数量维度的触发滞后系数（下限 1.0）。
+     * <p>触发压缩的消息数阈值为 {@code maxMessages × factor}，压缩后仍收敛到 {@code maxMessages}。
+     * 系数越大，滞后带越宽，压缩触发越不频繁。设为 1.0 表示无滞后（等同旧行为）。
+     */
+    public void setMessageTriggerFactor(double messageTriggerFactor) {
+        if (Double.isNaN(messageTriggerFactor) || Double.isInfinite(messageTriggerFactor)
+                || messageTriggerFactor < 1.0D) {
+            throw new IllegalArgumentException("messageTriggerFactor must be greater than or equal to 1.0");
+        }
+        this.messageTriggerFactor = messageTriggerFactor;
     }
 
     /** 设置上下文窗口使用比例（(0, 1]）。 */
@@ -185,6 +203,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         tmp.minReservedMessages = this.minReservedMessages;
         tmp.perMessageCap = this.perMessageCap;
         tmp.defaultContextWindow = this.defaultContextWindow;
+        tmp.messageTriggerFactor = this.messageTriggerFactor;
 
         return tmp;
     }
@@ -234,6 +253,12 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
     /**
      * 执行上下文压缩。强制模式用于服务端返回上下文超限后收紧工作记忆。
+     *
+     * @param force      是否为强制收紧模式（PTL 触发）
+     * @param forceLevel 强制收紧级别。语义与 {@link ReActInterceptor#onReasonRetry} 的
+     *                   {@code attempt} 一致，采用 <b>1-based</b>（首次 PTL 收紧为 1）。
+     *                   非强制路径（onReasonStart）传 0 即可，方法内部会统一归一化，
+     *                   不依赖调用方保证具体基准值。
      */
     private boolean compressContext(ReActTrace trace, String systemPrompt,
                                     boolean force, int forceLevel) {
@@ -277,8 +302,13 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         int currentTokens = estimateTokens(messages, systemPrompt) + toolsTokens + requestPreparationTokens;
 
+        // ⭐ 触发阈值与保留窗口解耦：
+        //    触发阈值 = maxMessages × messageTriggerFactor（滞后带），而压缩目标保留窗口仍为 maxMessages。
+        //    避免“非初心消息数刚好超过 maxMessages 就反复触发压缩”的临界抖动。
+        long messageTriggerThreshold = (long) Math.ceil(maxMessages * messageTriggerFactor);
+
         // 消息数量与 Token 任一维度超过阈值即触发；强制模式不受本地阈值限制
-        if (!force && messageSize <= maxMessages && currentTokens <= compressionTokenThreshold) {
+        if (!force && messageSize <= messageTriggerThreshold && currentTokens <= compressionTokenThreshold) {
             pushContextChunk(trace, messages.size(), currentTokens, microCompacted,
                     originalMessageCount, messages.size(), originalTokenCount, currentTokens);
             return microCompacted;
@@ -325,6 +355,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         double forceRatio = 1D;
         if (force) {
             double[] forceRatios = {0.8D, 0.6D, 0.4D, 0.25D};
+            // forceLevel 为 1-based（与 onReasonRetry 的 attempt 对齐）：
+            // 首次 PTL(=1) 取 0.8，逐次收紧至 0.25；非法值(≤0)归一化到首档，超出上限钉在末档。
             int level = Math.min(Math.max(1, forceLevel), forceRatios.length);
             forceRatio = forceRatios[level - 1];
             int minimumBudget = Math.min(1_000, baseBudget);
@@ -392,24 +424,17 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         targetIdx = alignStartToToolCallGroup(messages, targetIdx, firstList.size(), nativeToolMode);
 
         // 5. ⭐ 原子对对齐（防止 tool-use 原子对被截断为两段）
-        //    若 targetIdx 落在 ToolMessage 或 Observation 上，向前回退至配套的 Assistant(with tool_calls)
-        //    若落在 Assistant(with tool_calls) 上，保留（这是原子对的正确起点）
-        //    若落在普通消息上（User / Assistant thought），保留（不存在配对问题）
-        while (targetIdx > firstList.size() && targetIdx < messages.size()) {
+        //    若 targetIdx 落在 ToolMessage 或 Observation 上，向前回退至配套的 Assistant(with tool_calls)；
+        //    若落在 Assistant(with tool_calls) 上，保留（这是原子对的正确起点）；
+        //    若落在普通消息上（User / Assistant thought），保留（不存在配对问题）。
+        //    注：真正的回溯迭代由 alignStartToToolCallGroup 内部完成，此处仅需判定一次，故用 if 而非循环。
+        if (targetIdx > firstList.size() && targetIdx < messages.size()) {
             ChatMessage msg = messages.get(targetIdx);
             if (isToolOutputForMode(msg, nativeToolMode)) {
                 int aligned = alignStartToToolCallGroup(messages, targetIdx, firstList.size(), nativeToolMode);
                 if (aligned < targetIdx) {
                     targetIdx = aligned;
                 }
-                break;
-            } else if (msg instanceof AssistantMessage
-                    && (nativeToolMode
-                    ? Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls())
-                    : isTextAction((AssistantMessage) msg))) {
-                break;
-            } else {
-                break;
             }
         }
 
@@ -628,6 +653,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             // 策略接口不要求实现方添加标记；由编排器统一写入规范值。
             summary.addMetadata(META_COMPRESSED, 1);
 
+            // ⭐ 统一 Token 口径：摧要预算校验一律用拦截器口径 estimateMessageTokens（与 windowBudget/
+            // summaryReserve 同源）。策略内部可能另用 CompressionUtil.countTokens 做自保限长（如 maxSummaryLength），
+            // 两者对纯文本 UserMessage 数值一致（estimateMessageTokens 对 UserMessage 仅计 content+media，
+            // 无额外结构开销）；即使不一致，本处的拦截器口径也是最终权威判定，避免口径漂移。
             int effectiveSummaryBudget = Math.max(1, Math.min(summaryTokenBudget,
                     this.perMessageCap > 0 ? this.perMessageCap : summaryTokenBudget));
             if (estimateMessageTokens(summary) <= effectiveSummaryBudget) {
@@ -1035,9 +1064,22 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      * @return 处理后的消息列表（若发生截断会写回 WorkingMemory）
      */
     private List<ChatMessage> enforcePerMessageCap(ReActTrace trace, List<ChatMessage> messages, int tokenBudget) {
-        // 单条消息硬上限：优先使用用户配置的 perMessageCap，否则自动推导
-        // 自动推导逻辑：max(2000, tokenBudget/2)，确保不会超过半个窗口
-        int cap = (this.perMessageCap > 0) ? this.perMessageCap : Math.max(2_000, tokenBudget / 2);
+        // 单条消息硬上限：优先使用用户配置的 perMessageCap，否则自动推导。
+        // 自动推导：在 max(2000, budget/2) 的基础上，再受 budget/minReservedMessages 约束。
+        // 原因：小上下文模型（如 4k）budget 很小时，budget/2 会让单条占据过大比例，
+        // 叠加 minReservedMessages 保留多条后极易顶爆预算。取两者较大值作为下限（至少 2000），
+        // 确保小模型下 cap 不会大到单条占满保留窗口预算。
+        int cap;
+        if (this.perMessageCap > 0) {
+            cap = this.perMessageCap;
+        } else {
+            int reserved = Math.max(3, minReservedMessages);
+            int fairShare = tokenBudget / reserved;      // 保留窗口内每条“公平分额”
+            int halfWindow = tokenBudget / 2;
+            // 上限取 min(半窗口, 公平分额×2)，既不超过半个窗口，又不会挤卡多条保留消息；
+            // 下限 2000 保障大上下文模型下不会把单条截得过碎。
+            cap = Math.max(2_000, Math.min(halfWindow, fairShare * 2));
+        }
 
         boolean changed = false;
         List<ChatMessage> result = new ArrayList<>(messages.size());
@@ -1199,23 +1241,35 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         int headTokens = budget / 2;
         int tailTokens = budget - headTokens;
 
-        // 字符与 Token 的经验比例（保守取 3 字符/Token），逐步收敛避免超限
-        int headChars = Math.min(text.length(), headTokens * 3);
-        int tailChars = Math.min(text.length() - headChars, tailTokens * 3);
+        // 字符与 Token 的经验比例因语言而异（英文约 4、CJK 接近 1~2），
+        // 故初始字符上界取较宽的 4 倍估算作为起点，再由编码器精确收敛。
+        // head 与 tail 采用完全对称的“保留0%”节奏逐步逐近，避免首尾保留量因语言失衡。
+        int headChars = Math.min(text.length(), headTokens * 4);
+        int tailChars = Math.min(text.length() - headChars, tailTokens * 4);
 
-        String head = text.substring(0, headChars);
-        while (ENCODING_FOR_MODEL.countTokens(head) > headTokens && head.length() > 0) {
-            int newLen = Math.min(head.length() - 1, head.length() * 9 / 10);
-            head = head.substring(0, Math.max(0, newLen));
-        }
-
-        String tail = text.substring(text.length() - tailChars);
-        while (ENCODING_FOR_MODEL.countTokens(tail) > tailTokens && tail.length() > 0) {
-            int cut = Math.max(1, tail.length() / 10);
-            tail = tail.substring(cut);
-        }
+        String head = shrinkToTokenBudget(text.substring(0, headChars), headTokens, true);
+        String tail = shrinkToTokenBudget(text.substring(text.length() - tailChars), tailTokens, false);
 
         return head + marker + tail;
+    }
+
+    /**
+     * 将文本按“每次保留 90%”的对称节奏逐步收敛至不超过 tokenBudget。
+     *
+     * @param text       待收敛文本
+     * @param tokenBudget 目标 Token 上限
+     * @param keepHead   true 保留头部（从尾部裁剪），false 保留尾部（从头部裁剪）
+     * @return 收敛后的文本
+     */
+    private String shrinkToTokenBudget(String text, int tokenBudget, boolean keepHead) {
+        while (text.length() > 0 && ENCODING_FOR_MODEL.countTokens(text) > tokenBudget) {
+            // 对称节奏：每次保留 90%（至少裁剪 1 字符），防止陆陆无法前进。
+            int newLen = Math.min(text.length() - 1, text.length() * 9 / 10);
+            newLen = Math.max(0, newLen);
+            text = keepHead ? text.substring(0, newLen)
+                    : text.substring(text.length() - newLen);
+        }
+        return text;
     }
 
     /** 估算消息列表（含 systemPrompt）的总 Token 数。 */
@@ -1233,12 +1287,11 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     }
 
     /**
-     * 每次按消息当前内容重新估算，metadata 仅作为可观测结果回填，不能作为可信输入。
-     * 消息内容块和工具调用集合可变，复用持久缓存可能造成陈旧或被外部 metadata 污染。
+     * 每次按消息当前内容重新估算 Token 数。
+     * 消息内容块和工具调用集合可变，因此不依赖任何持久缓存。
      *
-     * <p><b>线程安全提示</b>：此方法会向消息对象写入 {@code META_TOKEN_SIZE} 元数据，
-     * 当前设计为单线程调用。若未来工作记忆区被多线程并发访问，
-     * 需改为局部变量计算或使用线程安全容器，避免竞态写入。</p>
+     * <p><b>无副作用</b>：本方法为纯计算，不向消息对象回写任何 metadata，
+     * 避免在高频收敛循环中产生无谓写入，以及多线程共享工作记忆时的竞态写入风险。</p>
      */
     private int estimateMessageTokens(ChatMessage message) {
         int count = 0;
@@ -1270,7 +1323,6 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             count += countTextTokens(toolMessage.getToolCallId());
         }
 
-        message.addMetadata(META_TOKEN_SIZE, count);
         return count;
     }
 

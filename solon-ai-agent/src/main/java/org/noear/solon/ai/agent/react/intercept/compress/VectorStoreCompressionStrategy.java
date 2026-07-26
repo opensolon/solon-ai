@@ -71,10 +71,16 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
             return "请提供具体的关键词以进行历史回溯。";
         }
 
-        // 转义 sessionId 中的单引号，防止 SnEL 表达式注入
-        String safeSessionId = __sessionId.replace("'", "''");
+        // sessionId 防护：白名单校验优于转义。不同向量库的 filterExpression 方言对元字符
+        // （\ ; # $ {} 等）处理不一，仅转义单引号不够鲁棒。系统生成的 sessionId
+        // 本就仅包含字母、数字、-_。不符合白名单则拒绝查询，从根本上消除表达式注入面。
+        if (__sessionId == null || !isSafeSessionId(__sessionId)) {
+            log.warn("Recall history rejected: invalid sessionId format: {}", __sessionId);
+            return "[系统通知] 当前会话标识异常，无法进行历史回溯。请基于当前已知对话继续执行。";
+        }
+
         QueryCondition condition = new QueryCondition(query)
-                .filterExpression("sessionId = '" + safeSessionId + "'")
+                .filterExpression("sessionId = '" + __sessionId + "'")
                 .limit(limit);
 
         try {
@@ -95,6 +101,27 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
             log.error("Recall history failed. SessionId: {}, Query: {}", __sessionId, query, e);
             return "[系统通知] 历史记忆访问受阻。请尝试基于当前已知对话继续执行。";
         }
+    }
+
+    /**
+     * 校验 sessionId 是否为安全白名单格式（仅允许字母、数字、连字符、下划线、点、冒号）。
+     * <p>系统生成的会话标识（如 UUID / 雪花算法 ID）均落在此集合内；任何含引号、
+     * 反斜杠、分号、{@code #$\{}} 等表达式元字符的输入均被拒绝，从根本上消除注入面。
+     */
+    private boolean isSafeSessionId(String sessionId) {
+        if (Assert.isEmpty(sessionId) || sessionId.length() > 128) {
+            return false;
+        }
+        for (int i = 0; i < sessionId.length(); i++) {
+            char c = sessionId.charAt(i);
+            boolean ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9')
+                    || c == '-' || c == '_' || c == '.' || c == ':';
+            if (!ok) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
