@@ -109,7 +109,7 @@ public ContextCompressionInterceptor()
 |------|--------|--------|------|
 | `maxMessages` | `setMaxMessages(int)` | 15 | 保留窗口最大消息数，最低强制为 10 |
 | `maxContextLengthRatio` | `setMaxContextLengthRatio(double)` | 0.75 | 模型上下文窗口使用比例，范围 (0, 1]，用于计算最终 Token 阈值：`contextLength × maxContextLengthRatio` |
-| `minReservedMessages` | `setMinReservedMessages(int)` | `maxMessages / 3`（最低 3） | 保留窗口的绝对下限，防止 Token 维度过度截断 |
+| `minReservedMessages` | `setMinReservedMessages(int)` | 动态推导（未显式设置时按 Token 预算现算，clamp 到 [3, 20]） | 保留窗口的绝对下限，防止 Token 维度过度截断。显式设置正数即固定为该值（最低 3）；设 ≤0 恢复动态 |
 | `maxRetries` | `setMaxRetries(int)` | 3 | LLM 调用网络重试次数 |
 | `perMessageCap` | `setPerMessageCap(int)` | 0（自动推导） | 单条消息 Token 硬上限。0 = 自动推导为 `max(2000, 最终Token阈值/2)` |
 | `defaultContextWindow` | `setDefaultContextWindow(long)` | 128,000 | 模型上下文窗口默认值（当 ChatModel 未提供 contextLength 时回退使用） |
@@ -343,14 +343,22 @@ userGoal.addMetadata(AgentTrace.META_FIRST, 1);
 - 截断点落在 `ToolMessage` 上 → 向前回退至配套的 `Assistant(with tool_calls)`
 - 截断点落在 `Assistant(with tool_calls)` 上 → 保留（这是原子对的正确起点）
 
-### 6.3 minReservedMessages 下限保护
+### 6.3 minReservedMessages 下限保护（动态推导）
 
-防止 Token 维度截断过度压缩保留窗口：
+防止 Token 维度截断过度压缩保留窗口。**该下限默认按每次压缩的实际 Token 预算动态推导，无需手工调参**：
+
+- **未显式设置时**：从尾部向前累加消息 Token，取能装进 `windowBudget × 0.25` 的最近条数，再 clamp 到 `[3, 20]`。因此保留条数随模型上下文长度自适应，且保护段永远不会显著超出 Token 预算。
+- **显式设置时**：`setMinReservedMessages(n)` 传正数即固定为该值（最低 3），优先级高于动态推导；传 ≤0 恢复动态。
 
 ```java
-// 默认: maxMessages / 3，最低 3
-interceptor.setMinReservedMessages(5); // 至少保留 5 条非初心消息
+// 保持默认 = 动态推导（推荐）
+// interceptor.setMinReservedMessages(...) 不调用即可
+
+// 显式锁定：至少保留 5 条非初心消息（覆盖动态推导）
+interceptor.setMinReservedMessages(5);
 ```
+
+> **为什么要动态化**：静态的 `maxMessages/3` 在“单条巨型消息”场景下会撑爆保护段，导致连续压缩抖动，进而连续击穿 Anthropic 前缀缓存（详见 §十四 决策记录 DR-1）。动态推导按 Token 预算收敛保护段，一次压缩即收敛，消除抖动。
 
 ### 6.4 MicroCompact 单条消息守卫
 
@@ -594,3 +602,44 @@ ContextCompressionInterceptor (implements ReActInterceptor)
         ├── HarnessOptions                     ── 配置持有
         └── HarnessEngine                      ── 默认配置创建 + Builder 模式接入
 ```
+
+---
+
+## 十四、设计决策记录 (ADR)
+
+本章记录若干关键设计决策及其论证过程，避免同类问题被反复提出与重新论证。
+
+### DR-1：minReservedMessages 采用 Token 预算动态推导（已落地）
+
+**决策**：`minReservedMessages` 默认不再取静态 `max(3, maxMessages/3)`，改为每次压缩时按当次 Token 预算现算——从尾部向前累加消息 Token，取能装进 `windowBudget × 0.25` 的最近条数，clamp 到 `[3, 20]`；`setMinReservedMessages(正数)` 仍可显式覆盖。
+
+**动机（故障模式）**：静态值在“单条巨型消息（如大文件工具输出）”场景下会撑爆保护段——保护段按条数固定，但一条消息就可能超出整个窗口预算，导致压缩后仍超阈值 → 下一轮立即再次压缩 → **连续压缩抖动**。而每次压缩都会在 Anthropic 前缀缓存中段插入摘要形成变化点，**连续抖动 = 连续击穿前缀缓存**，全价重算。
+
+**收益（三重）**：
+1. 省去抖动带来的重复摘要 LLM 调用；
+2. 保护段随模型上下文长度自适应（大窗口模型不再被 `maxMessages/3` 卡死）；
+3. 消除连续压缩，避免连续击穿前缀缓存。
+
+**边界**：仅改这一项。`maxMessages` 未动、未加禁用开关、未在拦截器补缓存标记、未改摘要插入位置（理由见 DR-2 / DR-3）。
+
+### DR-2：不允许 maxMessages 为 0（不提供“禁用条数限制”）
+
+**决策**：`maxMessages` 维持最低强制为 10，**不允许设 0 以禁用条数维度限制**。
+
+**论证**：
+
+1. **“固定值不适配不同模型”是伪需求**——token 维度早已由 `contextLength × maxContextLengthRatio → windowBudget` 随模型自动伸缩。`maxMessages` 剩下的唯一职责是“token 远未触顶时主动限制携带条数”，用于成本 / 延迟 / 注意力控制。禁用它不是“更适配”，而是关掉一个正在干活的保护。
+
+2. **与现有 caching 架构冲突**——Anthropic 方言采用“静态前缀 + 历史滚动断点”的**前缀严格匹配**缓存，命中依赖前缀逐字节稳定。禁用 `maxMessages` 会让历史一路涨到 `windowBudget`（75%）才压缩：历史 token 每轮全价重发，且压缩来得更晚更剧烈、一次击穿的前缀更长。**维持历史窗口稳定（即保留 maxMessages）恰恰是让 caching 持续命中的必要条件。**
+
+3. **工程成本不划算**——允许 0 要在触发判断、`targetByCount`、`messageBudget`、`convergeToBudget` 等多处铺 ≤0 特判；而真正会设 0 的仅极少数深度用户，零配置用户默认 15、无感知。收益覆盖面小、维护面散、还可能损缓存，性价比为负。
+
+**结论**：`maxMessages` 的固定值不是缺陷，而是当前 caching 架构下维持前缀稳定的**特性**。
+
+### DR-3：缓存标记归 Dialect 层，不在压缩拦截器内实现（不做）
+
+**决策**：不在 `ContextCompressionInterceptor` 内为消息补打缓存标记。`markStaticContextBoundary` 只打 debug 日志、不做标记，是**正确的分层**而非缺陷。
+
+**论证**：`cache_control` 是协议细节，只有 Dialect 层知道各家差异——Anthropic 用 `cache_control` block、DeepSeek 用 `prompt_cache_key`、OpenAI Responses 用 `previous_response_id`。拦截器操作的是 `ChatMessage` 抽象、拿不到也不该拿 HTTP JSON 节点。让拦截器打缓存标记会把协议知识泄露到通用层，且对非 Anthropic 方言毫无意义。此外，Anthropic 方言的“静态前缀 + 历史滚动断点（`applyMessageCacheBreakpoints`）”已实现完整增量缓存，历史消息缓存**已是既成事实，无需在拦截器补做**。
+
+**若未来确需“用满上下文”**：正确的前置改造不是放开 `maxMessages`，而是在压缩策略侧把“摘要替换中段”改为“摘要追加尾部”，将前缀变化点后移以减少缓存失效范围——这是另一个量级的工程，且只对前缀严格匹配类缓存有收益，应先用真实的缓存命中率指标证明现状不足再动手。

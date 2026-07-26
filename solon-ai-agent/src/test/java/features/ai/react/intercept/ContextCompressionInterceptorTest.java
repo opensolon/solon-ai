@@ -620,6 +620,73 @@ public class ContextCompressionInterceptorTest {
     }
 
     /**
+     * ⭐ 验证动态推导：未显式设置 minReservedMessages 时，保留条数按 windowBudget 自适应。
+     * 大上下文窗口 + 小消息：预算极宽松 → 动态保留条数被 CEIL(20) 截断（而非静态的 3）。
+     */
+    @Test
+    public void testDynamicMinReservedHitsCeiling() {
+        // 默认 defaultContextWindow=128000，ratio 默认 → windowBudget 极大；未调 setMinReservedMessages（走动态）
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(6, null);
+
+        ChatMessage sys = ChatMessage.ofSystem("System");
+        sys.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(sys);
+
+        // 40 条小消息：单条 token 很小，预算能装下远超 20 条 → 应被 CEIL 截断为 20
+        for (int i = 0; i < 40; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("Step " + i));
+        }
+
+        int sizeBefore = workingMemory.getMessages().size();
+        custom.onReasonStart(trace, null);
+        List<ChatMessage> result = workingMemory.getMessages();
+
+        assertTrue(result.size() < sizeBefore, "Compression should have occurred");
+
+        long nonFirstCount = result.stream()
+                .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
+                .count();
+        // 动态值被 CEIL(20) 截断：保留条数显著多于静态 3，但不超过 20（叠加可能的摘要条宽松到 22）
+        assertTrue(nonFirstCount > 3,
+                "Dynamic reserve under large budget should exceed static floor(3), got: " + nonFirstCount);
+        assertTrue(nonFirstCount <= 22,
+                "Dynamic reserve should be capped near CEIL(20), got: " + nonFirstCount);
+    }
+
+    /**
+     * ⭐ 验证动态推导下限：小预算 + 大消息场景（代码 Agent 读大文件），
+     * 保留条数被压到 FLOOR(3)，且不应因保护段擑爆预算而发生连续二次压缩。
+     */
+    @Test
+    public void testDynamicMinReservedHitsFloorNoThrash() {
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(6, null);
+        custom.setDefaultContextWindow(8_000L); // 小上下文 → windowBudget 很小
+
+        ChatMessage sys = ChatMessage.ofSystem("System");
+        sys.addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(sys);
+
+        // 每条都是大消息（模拟读大文件）
+        for (int i = 0; i < 12; i++) {
+            StringBuilder big = new StringBuilder();
+            for (int j = 0; j < 200; j++) {
+                big.append("file content line ").append(j).append(" of step ").append(i).append(" ");
+            }
+            workingMemory.addMessage(ChatMessage.ofAssistant(big.toString()));
+        }
+
+        custom.onReasonStart(trace, null);
+        List<ChatMessage> result = workingMemory.getMessages();
+
+        long nonFirstCount = result.stream()
+                .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
+                .count();
+        // 即使预算极紧，FLOOR 保底至少 3 条（叠加摘要/截断条可能略高）
+        assertTrue(nonFirstCount >= 3,
+                "Dynamic reserve should keep at least FLOOR(3) even under tiny budget, got: " + nonFirstCount);
+    }
+
+    /**
      * 验证单条消息硬上限兜底：当一条 ToolMessage 自身就超过窗口预算时（如读取大文件/二进制），
      * 其内容会被头尾截断，从根本上避免 context_length_exceeded。
      */

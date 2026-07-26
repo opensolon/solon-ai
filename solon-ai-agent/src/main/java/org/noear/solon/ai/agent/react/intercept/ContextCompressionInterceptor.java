@@ -81,6 +81,14 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     // 摘要预算过小时不生成只有标点/截断标记的无意义摘要。
     private static final int MIN_SUMMARY_TOKENS = 32;
 
+    // ⭐ minReservedMessages 动态推导参数（仅当未显式设置时生效）。
+    //    保护段目标占 windowBudget 的比例：从保留窗口尾部向前累加，能装进该预算的最近条数即为动态下限。
+    private static final double MIN_RESERVED_BUDGET_RATIO = 0.25D;
+    //    动态保留条数绝对下限（保住最近一轮 user/assistant/tool 交互的连贯性）。
+    private static final int MIN_RESERVED_FLOOR = 3;
+    //    动态保留条数绝对上限（防止大上下文模型下保护段无节制膨胀）。
+    private static final int MIN_RESERVED_CEIL = 20;
+
     // 模型上下文窗口默认值（当 ChatModel 未提供 contextLength 时使用）
     private long defaultContextWindow = 128_000L;
 
@@ -104,8 +112,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     // 重试次数（默认 3）
     private int maxRetries = 3;
 
-    // 保留窗口的最小消息数下限（默认 maxMessages / 3，最低 3）
-    // 防止 Token 维度截断导致保留窗口被压缩到只剩 1~2 条消息
+    // 保留窗口的最小消息数下限。
+    // ⭐ 语义：0（哨兵，默认）表示未显式设置 → 按 windowBudget 动态推导（见 resolveMinReserved），
+    //    随模型上下文长度自适应；> 0 表示用户显式覆盖，直接采用该值（下限 3）。
+    // 作用：防止 Token 维度截断导致保留窗口被压缩到只剩 1~2 条消息。
     private int minReservedMessages;
     // 单条消息硬上限（0 表示由系统自动推导：max(2000, Token 压缩阈值/2)）
     // ⭐ 对应 claude-code 的 MicroCompact TRUNCATION_THRESHOLD（10000 chars）
@@ -148,9 +158,13 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         this.maxRetries = maxRetries;
     }
 
-    /** 设置保留窗口最小消息数（最低 3）。 */
+    /**
+     * 设置保留窗口最小消息数（显式覆盖）。
+     * <p>传入正数视为显式覆盖，存为 {@code max(3, v)}；传入 {@code <= 0} 表示恢复动态推导
+     * （按 windowBudget 随模型上下文长度自适应，见 {@link #resolveMinReserved}）。
+     */
     public void setMinReservedMessages(int minReservedMessages) {
-        this.minReservedMessages = Math.max(3, minReservedMessages);
+        this.minReservedMessages = (minReservedMessages <= 0) ? 0 : Math.max(3, minReservedMessages);
     }
 
     /**
@@ -173,7 +187,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     public ContextCompressionInterceptor(int maxMessages, double maxContextRatio, CompressionStrategy compressionStrategy) {
         setMaxContextLengthRatio(maxContextRatio);
         this.maxMessages = Math.max(10, maxMessages);
-        this.minReservedMessages = Math.max(3, this.maxMessages / 3);
+        // minReservedMessages 保持哨兵 0 → 默认走动态推导（见 resolveMinReserved）；显式 setter 可覆盖。
         this.compressionStrategy = compressionStrategy;
     }
 
@@ -181,7 +195,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     public ContextCompressionInterceptor(int maxMessages, double maxContextRatio,int maxRetries, CompressionStrategy compressionStrategy) {
         setMaxContextLengthRatio(maxContextRatio);
         this.maxMessages = Math.max(10, maxMessages);
-        this.minReservedMessages = Math.max(3, this.maxMessages / 3);
+        // minReservedMessages 保持哨兵 0 → 默认走动态推导（见 resolveMinReserved）；显式 setter 可覆盖。
         this.maxRetries = maxRetries;
         this.compressionStrategy = compressionStrategy;
     }
@@ -231,6 +245,39 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         double threshold = Math.floor(contextLength * maxContextLengthRatio);
         return (int) Math.max(1D, Math.min(Integer.MAX_VALUE, threshold));
+    }
+
+    /**
+     * 动态推导压缩后至少保留的近期消息条数。
+     *
+     * <p>该方法在每次压缩执行时现算（消息大小每次不同，不可缓存）：
+     * <ul>
+     *   <li>显式设置（{@code minReservedMessages > 0}）时直接返回用户值；</li>
+     *   <li>否则从尾部向前累加 Token，取能装进 {@code windowBudget × RATIO} 的最近条数，
+     *       clamp 到 {@code [FLOOR, CEIL]}。</li>
+     * </ul>
+     * 该值随模型上下文长度自适应，且保护段永远不会显著超出 Token 预算，
+     * 从而避免单条巨型消息撑爆保护段导致的连续压缩抖动。</p>
+     *
+     * @param messages      当前（已经 MicroCompact 后的）完整消息列表
+     * @param firstListSize 固定前缀（初心链）大小，不纳入保留窗口统计
+     * @param windowBudget  本次压缩的保留窗口 Token 预算
+     */
+    private int resolveMinReserved(List<ChatMessage> messages, int firstListSize, int windowBudget) {
+        if (this.minReservedMessages > 0) {
+            return this.minReservedMessages; // 显式覆盖优先
+        }
+        int reservedBudget = (int) (windowBudget * MIN_RESERVED_BUDGET_RATIO);
+        int count = 0;
+        int running = 0;
+        for (int i = messages.size() - 1; i >= firstListSize; i--) {
+            running += estimateMessageTokens(messages.get(i)) + 4; // +4 与 estimateTokens 每条 overhead 同口径
+            if (count > 0 && running > reservedBudget) {
+                break; // 至少纳入 1 条后才允许因超预算中断
+            }
+            count++;
+        }
+        return Math.min(MIN_RESERVED_CEIL, Math.max(MIN_RESERVED_FLOOR, count));
     }
 
     @Override
@@ -412,11 +459,13 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         }
 
         // ⭐ 保留窗口绝对下限保护
-        //    无论 Token 预算多紧张，保留窗口至少保留 minReservedMessages 条消息。
+        //    无论 Token 预算多紧张，保留窗口至少保留 minReserved 条消息。
+        //    minReserved 优先取用户显式值，否则按 windowBudget 动态推导（随模型上下文长度自适应）。
         //    这样可以避免单条大消息（如文件读取结果）占满预算后，
         //    Agent 的历史上下文被压缩到只剩 1~2 条消息，导致之前的工作白费。
+        int minReserved = resolveMinReserved(messages, firstList.size(), windowBudget);
         int minReservedIdx = Math.max(firstList.size(),
-                messages.size() - (force ? 0 : minReservedMessages));
+                messages.size() - (force ? 0 : minReserved));
 
         int rawTargetByTokens = targetByTokens;  // 保存原始Token截断位置，供步骤6.1使用
         boolean nativeToolMode = trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL;
@@ -1065,15 +1114,15 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      */
     private List<ChatMessage> enforcePerMessageCap(ReActTrace trace, List<ChatMessage> messages, int tokenBudget) {
         // 单条消息硬上限：优先使用用户配置的 perMessageCap，否则自动推导。
-        // 自动推导：在 max(2000, budget/2) 的基础上，再受 budget/minReservedMessages 约束。
-        // 原因：小上下文模型（如 4k）budget 很小时，budget/2 会让单条占据过大比例，
-        // 叠加 minReservedMessages 保留多条后极易顶爆预算。取两者较大值作为下限（至少 2000），
-        // 确保小模型下 cap 不会大到单条占满保留窗口预算。
+        // 自动推导：在 max(2000, budget/2) 的基础上，再受 budget/reserved 约束。
+        // 注：此处早于 windowBudget 计算，拿不到动态保留值；cap 本为防御性估算，
+        // 故采用与 resolveMinReserved 同口径的保守下限：显式值优先，否则回落 MIN_RESERVED_FLOOR，
+        // 避免引入对 windowBudget 的循环依赖。
         int cap;
         if (this.perMessageCap > 0) {
             cap = this.perMessageCap;
         } else {
-            int reserved = Math.max(3, minReservedMessages);
+            int reserved = (this.minReservedMessages > 0) ? this.minReservedMessages : MIN_RESERVED_FLOOR;
             int fairShare = tokenBudget / reserved;      // 保留窗口内每条“公平分额”
             int halfWindow = tokenBudget / 2;
             // 上限取 min(半窗口, 公平分额×2)，既不超过半个窗口，又不会挤卡多条保留消息；
