@@ -46,8 +46,10 @@ public class TeamAgentConfig implements NonSerializable {
     private String name = "team_agent";
     /** 状态跟踪键（用于隔离 Session 中的轨迹数据） */
     private volatile String traceKey;
-    /** 职能描述（供上层团队调度识别） */
+    /** 智能体角色描述（供上层团队调度识别） */
     private String role;
+    /** 智能体指令描述（供上层团队调度识别） */
+    private String instruction;
     /** 档案信息（能力与边界定义） */
     private AgentProfile profile;
 
@@ -79,6 +81,7 @@ public class TeamAgentConfig implements NonSerializable {
 
     protected void setName(String name) { this.name = name; }
     protected void setRole(String role) { this.role = role; }
+    protected void setInstruction(String instruction) { this.instruction = instruction; }
     protected void setProfile(AgentProfile profile) { this.profile = profile; }
     protected void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) { this.graphAdjuster = graphAdjuster; }
     protected void setFinishMarker(String finishMarker) { this.finishMarker = finishMarker; }
@@ -129,6 +132,10 @@ public class TeamAgentConfig implements NonSerializable {
     }
 
     public String getRole() { return role; }
+
+    public String getInstruction() {
+        return instruction;
+    }
 
     public AgentProfile getProfile() {
         if (profile == null) profile = new AgentProfile();

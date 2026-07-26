@@ -480,7 +480,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         }
 
         public Builder instruction(String instruction) {
-            config.setSystemPrompt(SimpleSystemPrompt.builder().instruction(instruction).build());
+            config.setInstruction(instruction);
             return this;
         }
 

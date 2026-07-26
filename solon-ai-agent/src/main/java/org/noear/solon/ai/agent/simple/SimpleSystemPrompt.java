@@ -89,7 +89,15 @@ public class SimpleSystemPrompt implements AgentSystemPrompt<SimpleTrace> {
      * 获取指令文本
      */
     public String getInstruction(SimpleTrace trace) {
-        return instructionProvider != null ? instructionProvider.apply(trace) : null;
+        if (instructionProvider != null) {
+            return instructionProvider.apply(trace);
+        }
+
+        if (trace.getConfig().getInstruction() != null) {
+            return trace.getConfig().getInstruction();
+        }
+
+        return null;
     }
 
     public static Builder builder() {

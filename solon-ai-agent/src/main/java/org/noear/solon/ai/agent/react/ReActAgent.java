@@ -421,7 +421,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         public Builder instruction(String instruction) {
-            config.setSystemPrompt(ReActSystemPrompt.builder().instruction(instruction).build());
+            config.setInstruction(instruction);
             return this;
         }
 

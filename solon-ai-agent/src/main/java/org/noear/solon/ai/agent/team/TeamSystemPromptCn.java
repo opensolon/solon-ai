@@ -125,6 +125,11 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
             // Agent 级指令
             sb.append(instructionProvider.apply(trace)).append("\n");
             sb.append("\n");
+        } else if (trace.getConfig().getInstruction() != null) {
+            sb.append("\n## 核心任务指令\n");
+            // Agent 级指令
+            sb.append(trace.getConfig().getInstruction()).append("\n");
+            sb.append("\n");
         }
 
         return sb.toString();

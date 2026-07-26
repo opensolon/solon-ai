@@ -192,6 +192,11 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
             // Agent-level instructions
             sb.append(instructionProvider.apply(trace)).append("\n");
             sb.append("\n");
+        } else if(trace.getConfig().getInstruction() != null){
+            sb.append("## Core Task Instructions\n");
+            // Agent-level instructions
+            sb.append(trace.getConfig().getInstruction()).append("\n");
+            sb.append("\n");
         }
     }
 

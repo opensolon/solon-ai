@@ -41,10 +41,10 @@ public class SimpleAgentConfig {
     private String name = "simple_agent";
     /** 链路追踪 Key (用于在 FlowContext 中存储 Trace 状态) */
     private volatile String traceKey;
-    /**
-     * 功能描述
-     */
+    /** 智能体职责描述（用于模型识别角色） */
     private String role;
+    /** 智能体指令描述（用于模型识别指令） */
+    private String instruction;
     /**
      * 智能体画像（能力、模态支持等）
      */
@@ -96,6 +96,10 @@ public class SimpleAgentConfig {
 
     protected void setRole(String role) {
         this.role = role;
+    }
+
+    protected void setInstruction(String instruction) {
+        this.instruction = instruction;
     }
 
     protected void setProfile(AgentProfile profile) {
@@ -152,6 +156,10 @@ public class SimpleAgentConfig {
 
     public String getRole() {
         return role;
+    }
+
+    public String getInstruction() {
+        return instruction;
     }
 
     public AgentProfile getProfile() {

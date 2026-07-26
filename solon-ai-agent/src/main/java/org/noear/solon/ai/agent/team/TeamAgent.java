@@ -369,7 +369,7 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
         }
 
         public Builder instruction(String instruction) {
-            config.setSystemPrompt(TeamSystemPrompt.builder().instruction(instruction).build());
+            config.setInstruction(instruction);
             return this;
         }
 
