@@ -49,9 +49,9 @@ public class MemoryTalent extends AbsTalent {
     private static final int BRIEF_LEN = 50;
 
     /** 画像注入：相关性检索条数 */
-    private static final int INJECT_RELEVANT = 5;
+    private static final int INJECT_RELEVANT = 8;
     /** 画像注入：热记忆兜底条数 */
-    private static final int INJECT_HOT = 3;
+    private static final int INJECT_HOT = 5;
     /** 默认搜索返回条数 */
     private static final int SEARCH_TOPK_DEFAULT = 5;
     /** 搜索返回条数上限，避免 LLM 传入过大值导致上下文膨胀 */
@@ -454,7 +454,7 @@ public class MemoryTalent extends AbsTalent {
      * PRUNE: 记忆修剪
      */
     @ToolMapping(name = "memory_prune", description = "认知修正：删除错误、重复或过时的认知。")
-    public String prune(@Param("key", description = "唯一语义标识（如 user-tech-stack）。") String key,
+    public String prune(@Param(value = "key", description = "唯一语义标识（如 user-tech-stack）。") String key,
                         String __cwd,
                         String __sessionId) {
         String userId = getUserId(__sessionId);
