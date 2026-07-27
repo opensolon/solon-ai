@@ -36,7 +36,7 @@ import java.util.function.BiConsumer;
  *
  * <p>流式输出时会推送 HITL 审查块，便于前端按类型渲染：</p>
  * <ul>
- * <li>{@link HITLPendingChunk} —— 首次拦截挂起，携带 {@link HITLTask}，用于展示审批卡片</li>
+ * <li>{@link HITLPendingChunk} —— 首次拦截挂起，携带 {@link HITLTask} 列表，用于展示审批卡片</li>
  * <li>{@link HITLDecidedChunk} —— 决策生效，携带 {@link HITLDecision}，用于关闭/更新审批卡片</li>
  * </ul>
  *
@@ -267,28 +267,25 @@ public class HITLInterceptor extends AbsReActInterceptor {
                 && Boolean.TRUE.equals(trace.getContext().get(APPLIED_PREFIX + callUuid));
     }
     
-    private void suspendBatch(ReActTrace trace, List<HITLTask> pending) {
+    private void suspendBatch(ReActTrace trace, List<HITLTask> pendingTasks) {
         // 有未决审批时不应保持 END（以 pending 为准）
         if (Agent.ID_END.equals(trace.getRoute())) {
             trace.setRoute(ReActAgent.ID_REASON);
         }
 
-        trace.getContext().put(HITL.PENDING_TASKS, pending);
-        trace.getContext().put(HITL.LAST_INTERVENED, pending.get(0));
+        trace.getContext().put(HITL.PENDING_TASKS, pendingTasks);
+        trace.getContext().put(HITL.LAST_INTERVENED, pendingTasks.get(0));
 
-        String summary = pending.size() == 1
-                ? pending.get(0).getComment()
-                : ("有 " + pending.size() + " 项操作待人工确认");
+        String summary = pendingTasks.size() == 1
+                ? pendingTasks.get(0).getComment()
+                : ("有 " + pendingTasks.size() + " 项操作待人工确认");
         if (trace.getSession() != null) {
             trace.getSession().pending(true, summary);
         }
         trace.setFinalAnswer(summary);
 
         if (trace.hasStreamSink()) {
-            for (HITLTask t : pending) {
-                String callId = Assert.isNotEmpty(t.getCallUuid()) ? t.getCallUuid() : null;
-                trace.pushAgentChunk(new HITLPendingChunk(trace, callId, t));
-            }
+            trace.pushAgentChunk(new HITLPendingChunk(trace, pendingTasks));
         }
     }
 

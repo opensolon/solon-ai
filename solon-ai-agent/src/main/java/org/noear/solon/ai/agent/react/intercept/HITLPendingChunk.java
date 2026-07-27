@@ -18,18 +18,17 @@ package org.noear.solon.ai.agent.react.intercept;
 import org.noear.solon.ai.agent.AbsAgentChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.List;
 
 /**
  * HITL 挂起审查块：工具调用被拦截、会话进入 pending，等待人工决策
  *
  * <p>由 {@link HITLInterceptor} 在首次拦截挂起时推送，
- * 方便前端通过类型直接渲染审批卡片（工具名、参数、拦截理由）。
+ * 携带本批次全部挂起任务（{@link HITLTask} 列表），方便前端通过类型直接渲染审批卡片。
  *
  * @author noear
  * @since 4.0.4
@@ -38,81 +37,25 @@ import java.util.Map;
 public class HITLPendingChunk extends AbsAgentChunk {
     private final transient ReActTrace trace;
     /**
-     * 关联的工具调用 ID（可与 ActionChunk/ToolStartChunk 对齐）
-     */
-    private final @Nullable String callId;
-    /**
-     * 拟调用的工具名
-     */
-    private final String toolName;
-    /**
-     * 拟调用的参数快照
-     */
-    private final Map<String, Object> args;
-    /**
-     * 拦截理由
-     */
-    private final @Nullable String comment;
-    /**
      * 挂起任务快照（非空）
      */
-    private final HITLTask task;
+    private final List<HITLTask> pendingTasks;
 
-    public HITLPendingChunk(ReActTrace trace, @Nullable String callId, HITLTask task) {
+    public HITLPendingChunk(ReActTrace trace, List<HITLTask> pendingTasks) {
         super(trace.getRunId(),
                 trace.getAgentName(),
                 trace.getSession(),
                 ChatMessage.ofAssistant(""));
 
         this.trace = trace;
-        this.callId = callId;
-        this.toolName = task.getToolName();
-        // 独立浅拷贝：与 task.args 解耦，避免业务改 task 时污染 chunk 快照
-        if (task.getArgs() == null || task.getArgs().isEmpty()) {
-            this.args = Collections.emptyMap();
-        } else {
-            this.args = Collections.unmodifiableMap(new LinkedHashMap<>(task.getArgs()));
-        }
-        this.comment = task.getComment();
-        this.task = task;
+        this.pendingTasks = Collections.unmodifiableList(new ArrayList<>(pendingTasks));
     }
 
     public ReActTrace getTrace() {
         return trace;
     }
 
-    /**
-     * 获取关联的工具调用 ID
-     */
-    public @Nullable String getCallId() {
-        return callId;
-    }
-
-    /**
-     * 获取工具名
-     */
-    public String getToolName() {
-        return toolName;
-    }
-
-    /**
-     * 获取参数快照
-     */
-    public Map<String, Object> getArgs() {
-        return args;
-    }
-
-    /**
-     * 获取拦截理由
-     */
-    public @Nullable String getComment() {
-        return comment;
-    }
-
-    /**
-     * 获取挂起任务快照
-     */
-    public HITLTask getTask() {
-        return task;
+    public List<HITLTask> getPendingTasks() {
+        return pendingTasks;
     }
 }
