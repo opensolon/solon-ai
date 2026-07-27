@@ -134,10 +134,11 @@ public class MemoryMdData implements AutoCloseable {
 
         if (entry == null) {
             // 缓存未命中，尝试从磁盘加载（可能是外部写入的 MD 文件）
+            // 遍历所有作用域，后加载的覆盖先加载的（与 init() 行为一致，确保工作区覆盖全局）
             for(Map.Entry<String, Path> scopeEntry : scopeDirMap.entrySet()) {
-                entry = loadFromMdFile(storeKey, scopeEntry.getKey(), scopeEntry.getValue());
-                if(entry != null){
-                    break;
+                MemoryEntry found = loadFromMdFile(storeKey, scopeEntry.getKey(), scopeEntry.getValue());
+                if(found != null){
+                    entry = found;
                 }
             }
 
