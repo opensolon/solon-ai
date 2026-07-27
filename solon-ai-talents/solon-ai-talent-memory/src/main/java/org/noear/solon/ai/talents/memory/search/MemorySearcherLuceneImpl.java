@@ -162,7 +162,10 @@ public class MemorySearcherLuceneImpl implements MemorySearcher, AutoCloseable {
 
     @Override
     public void close() throws Exception {
-        if (writer != null) writer.close();
-        if (directory != null) directory.close();
+        try {
+            if (writer != null) writer.close();
+        } finally {
+            if (directory != null) directory.close();
+        }
     }
 }

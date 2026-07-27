@@ -148,7 +148,7 @@ public class MemoryMdData implements AutoCloseable {
 
             // 同步到搜索索引
             indexByUser.computeIfAbsent(userId, k -> new ConcurrentHashMap<>())
-                    .putIfAbsent(buildDocId(userId, key),
+                    .put(buildDocId(userId, key),
                             new IndexEntry(userId, key, entry.content, entry.importance, entry.time, entry.scope));
         }
 
@@ -172,7 +172,7 @@ public class MemoryMdData implements AutoCloseable {
             try {
                 boolean deleted = Files.deleteIfExists(file);
                 if (!deleted) {
-                    LOG.warn("MdMemoryData remove: file not found, userId={}, key={}, file={}", userId, key, file);
+                    LOG.debug("MdMemoryData remove: file not found (normal for multi-scope), userId={}, key={}, file={}", userId, key, file);
                 } else {
                     LOG.debug("MdMemoryData remove: file deleted, userId={}, key={}", userId, key);
                 }
@@ -288,6 +288,9 @@ public class MemoryMdData implements AutoCloseable {
         Map<String, IndexEntry> userIndex = indexByUser.get(userId);
         if (userIndex != null) {
             userIndex.remove(buildDocId(userId, key));
+            if (userIndex.isEmpty()) {
+                indexByUser.remove(userId);
+            }
         }
     }
 

@@ -46,9 +46,8 @@ public class MemorySearcherRepositoryImpl implements MemorySearcher {
     @Override
     public List<MemorySearchResult> search(String userId, String query, int limit) {
         try {
-            // 使用更严谨的表达式，并根据需要处理引号
             QueryCondition condition = new QueryCondition(query)
-                    .filterExpression(String.format("user_id = '%s'", userId))
+                    .filterExpression(String.format("user_id = '%s'", escapeFilterValue(userId)))
                     .limit(limit);
 
             List<Document> docs = repository.search(condition);
@@ -66,7 +65,7 @@ public class MemorySearcherRepositoryImpl implements MemorySearcher {
         try {
             // 筛选重要度高且属于当前用户的认知
             QueryCondition condition = new QueryCondition("")
-                    .filterExpression(String.format("user_id = '%s' && importance >= 5", userId))
+                    .filterExpression(String.format("user_id = '%s' && importance >= 5", escapeFilterValue(userId)))
                     .limit(limit);
 
             // 注意：如果底层支持，这里可以增加 .orderByDescending("time")
@@ -86,7 +85,7 @@ public class MemorySearcherRepositoryImpl implements MemorySearcher {
         try {
             // 全量列举：仅按用户过滤，不限重要度，避免漏掉低分条目
             QueryCondition condition = new QueryCondition("")
-                    .filterExpression(String.format("user_id = '%s'", userId))
+                    .filterExpression(String.format("user_id = '%s'", escapeFilterValue(userId)))
                     .limit(limit);
 
             List<Document> docs = repository.search(condition);
@@ -124,6 +123,14 @@ public class MemorySearcherRepositoryImpl implements MemorySearcher {
         } catch (Exception e) {
             log.error("MemSearchProvider removeIndex error: {}", e.getMessage());
         }
+    }
+
+    /**
+     * 转义过滤表达式中的单引号，防止注入风险
+     */
+    private String escapeFilterValue(String val) {
+        if (val == null) return "";
+        return val.replace("'", "''");
     }
 
     protected String getDocId(String userId, String key) {
