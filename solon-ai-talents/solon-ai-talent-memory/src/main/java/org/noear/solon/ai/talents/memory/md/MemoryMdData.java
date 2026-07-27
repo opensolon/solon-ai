@@ -331,6 +331,7 @@ public class MemoryMdData implements AutoCloseable {
      */
     private void loadFromDisk(Path baseDir, String scope) {
         int expiredCount = 0;
+        int loadedCount = 0;
         try (Stream<Path> files = Files.list(baseDir)) {
             List<Path> mdFiles = files.filter(p -> p.getFileName().toString().endsWith(".md"))
                                       .collect(Collectors.toList());
@@ -339,15 +340,17 @@ public class MemoryMdData implements AutoCloseable {
                 LoadResult lr = loadSingleFile(file, scope);
                 if (lr == LoadResult.EXPIRED) {
                     expiredCount++;
+                } else if (lr == LoadResult.LOADED) {
+                    loadedCount++;
                 }
             }
         } catch (IOException e) {
             LOG.error("MdMemoryData loadFromDisk error", e);
         }
 
-        if (!cache.isEmpty()) {
+        if (loadedCount > 0 || expiredCount > 0) {
             LOG.info("MdMemoryData loaded {} entries from {} ({} expired cleaned)",
-                    cache.size(), baseDir, expiredCount);
+                    loadedCount, baseDir, expiredCount);
         }
     }
 
@@ -538,7 +541,8 @@ public class MemoryMdData implements AutoCloseable {
      */
     private String[] splitStoreKey(String storeKey) {
         if (storeKey == null) return null;
-        int sepIdx = storeKey.indexOf("__");
+        // 使用 lastIndexOf 防止 userId 含 "__" 时产生歧义拆分
+        int sepIdx = storeKey.lastIndexOf("__");
         if (sepIdx < 0) return null;
         String userId = storeKey.substring(0, sepIdx);
         String key = storeKey.substring(sepIdx + 2);

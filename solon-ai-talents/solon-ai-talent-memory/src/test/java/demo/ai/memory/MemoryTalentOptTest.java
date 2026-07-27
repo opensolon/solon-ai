@@ -41,6 +41,11 @@ public class MemoryTalentOptTest {
             public MemorySolution get(String __cwd) {
                 return solution;
             }
+
+            @Override
+            public String getScopesDefault() {
+                return MemorySolutionProvider.SCOPE_USER;
+            }
         };
         talent = new MemoryTalent(provider);
     }
@@ -191,6 +196,11 @@ public class MemoryTalentOptTest {
             public MemorySolution get(String __cwd) {
                 return droppingSolution;
             }
+
+            @Override
+            public String getScopesDefault() {
+                return MemorySolutionProvider.SCOPE_USER;
+            }
         });
 
         String result = guarded.consolidate(
@@ -249,6 +259,11 @@ public class MemoryTalentOptTest {
             @Override
             public MemorySolution get(String __cwd) {
                 return wrapped;
+            }
+
+            @Override
+            public String getScopesDefault() {
+                return MemorySolutionProvider.SCOPE_USER;
             }
         });
 

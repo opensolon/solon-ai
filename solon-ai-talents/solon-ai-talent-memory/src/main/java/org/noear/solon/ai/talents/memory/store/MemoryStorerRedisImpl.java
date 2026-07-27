@@ -28,22 +28,22 @@ import java.util.List;
  * @author noear 2026/3/4 created
  *
  */
-public class MemoryStorerReadisImpl implements MemoryStorer {
+public class MemoryStorerRedisImpl implements MemoryStorer {
     private final RedisClient redis;
     private final List<String> scopeOrder;
     private String basePrefix;
 
-    public MemoryStorerReadisImpl(RedisClient redis) {
+    public MemoryStorerRedisImpl(RedisClient redis) {
         this.redis = redis;
         this.scopeOrder = Arrays.asList(MemorySolutionProvider.SCOPE_USER);
     }
 
-    public MemoryStorerReadisImpl(RedisClient redis, List<String> scopeOrder) {
+    public MemoryStorerRedisImpl(RedisClient redis, List<String> scopeOrder) {
         this.redis = redis;
         this.scopeOrder = scopeOrder;
     }
 
-    public MemoryStorerReadisImpl basePrefix(String basePrefix) {
+    public MemoryStorerRedisImpl basePrefix(String basePrefix) {
         this.basePrefix = basePrefix;
         return this;
     }
@@ -55,7 +55,12 @@ public class MemoryStorerReadisImpl implements MemoryStorer {
 
     @Override
     public void put(String userId, String key, String val, int ttl, String scope) {
-        redis.getBucket().store(getFinalKey(userId, key, scope), val, ttl);
+        if (ttl < 0) {
+            // ttl=-1 表示永久存储，不设置过期时间
+            redis.getBucket().store(getFinalKey(userId, key, scope), val);
+        } else {
+            redis.getBucket().store(getFinalKey(userId, key, scope), val, ttl);
+        }
     }
 
     @Override

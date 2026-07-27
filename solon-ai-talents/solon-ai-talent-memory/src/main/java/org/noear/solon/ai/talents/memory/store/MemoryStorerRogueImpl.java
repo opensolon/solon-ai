@@ -71,7 +71,12 @@ public class MemoryStorerRogueImpl implements MemoryStorer {
 
     @Override
     public void put(String userId, String key, String val, int ttl, String scope) {
-        rogueMap.put(getFinalKey(userId, key, scope), val, ttl, TimeUnit.SECONDS);
+        if (ttl < 0) {
+            // ttl=-1 表示永久存储，不设置过期时间
+            rogueMap.put(getFinalKey(userId, key, scope), val);
+        } else {
+            rogueMap.put(getFinalKey(userId, key, scope), val, ttl, TimeUnit.SECONDS);
+        }
         rogueMap.checkpoint();
     }
 

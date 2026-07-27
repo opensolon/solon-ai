@@ -68,4 +68,20 @@ public class MemorySearchResult {
     public void setScope(String scope) {
         this.scope = scope;
     }
+
+    public void setKey(String key) {
+        this.key = key;
+    }
+
+    public void setContent(String content) {
+        this.content = content;
+    }
+
+    public void setImportance(double importance) {
+        this.importance = importance;
+    }
+
+    public void setTime(String time) {
+        this.time = time;
+    }
 }

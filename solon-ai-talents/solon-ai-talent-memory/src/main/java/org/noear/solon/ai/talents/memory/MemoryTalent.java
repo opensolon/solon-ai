@@ -28,6 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
@@ -217,6 +218,9 @@ public class MemoryTalent extends AbsTalent {
         importance = Math.max(1, Math.min(10, importance));
 
         MemorySolution memorySolution = solutionProvider.get(__cwd);
+        if (memorySolution == null || memorySolution.getStorer() == null) {
+            return "【操作失败】未找到记忆存储方案，无法保存认知。";
+        }
         MemoryStorer storeProvider = memorySolution.getStorer();
         MemorySearcher searchProvider = memorySolution.getSearcher();
 
@@ -248,6 +252,11 @@ public class MemoryTalent extends AbsTalent {
             // scope 透传给方案，由方案按域路由（单域实现忽略 scope）
             storeProvider.put(userId, key, ONode.serialize(data), ttl, scope);
 
+            // 低分条目写入时递增碎片计数缓存（仅新增条目时递增）
+            if (importance < 5 && Utils.isEmpty(oldJson) && !skipFragmentHint) {
+                fragmentCountCache.merge(userId, 1, Integer::sum);
+            }
+
             if (searchProvider != null) {
                 searchProvider.updateIndex(userId, key, fact, importance, now, scope);
 
@@ -265,7 +274,7 @@ public class MemoryTalent extends AbsTalent {
             return feedback.toString();
         } catch (Exception e) {
             LOG.error("MemoryTalent extract error", e);
-            return "存储异常。";
+            return "【存储异常】心智模型更新失败：" + e.getMessage() + "。请稍后重试。";
         }
     }
 
@@ -379,14 +388,27 @@ public class MemoryTalent extends AbsTalent {
     /**
      * M4.1：统计低分（Imp<5）碎片数，超阈值时在 feedback 附加整合建议，把被动变半主动。
      */
+    /**
+     * 碎片计数缓存：避免每次 extract 都做全量 listAll 遍历。
+     * key=userId, value=低分碎片数。consolidate/prune 后置为 -1 触发下次重算。
+     */
+    private final Map<String, Integer> fragmentCountCache = new ConcurrentHashMap<>();
+
     private void appendFragmentHint(StringBuilder feedback, MemorySearcher searchProvider, String userId) {
         try {
-            List<MemorySearchResult> all = searchProvider.listAll(userId, LIST_ALL_LIMIT);
-            int fragments = 0;
-            for (MemorySearchResult r : all) {
-                if (r.getImportance() < 5) {
-                    fragments++;
+            Integer cached = fragmentCountCache.get(userId);
+            int fragments;
+            if (cached != null && cached >= 0) {
+                fragments = cached;
+            } else {
+                List<MemorySearchResult> all = searchProvider.listAll(userId, LIST_ALL_LIMIT);
+                fragments = 0;
+                for (MemorySearchResult r : all) {
+                    if (r.getImportance() < 5) {
+                        fragments++;
+                    }
                 }
+                fragmentCountCache.put(userId, fragments);
             }
             if (fragments >= FRAGMENT_HINT_THRESHOLD) {
                 feedback.append("\n[维护建议] 当前累计 ").append(fragments)
@@ -462,11 +484,17 @@ public class MemoryTalent extends AbsTalent {
         }
         String fact = "[Evolved Insight] " + insight;
 
-        // 步骤1：写入新的合并洞察（核心洞察赋予最高重要度，跳过碎片检测避免 O(n^2)）
+        // 步骤1：获取 solution 实例（整次 consolidate 复用同一个实例，避免重复调用）
+        MemorySolution memorySolution = solutionProvider.get(__cwd);
+        if (memorySolution == null || memorySolution.getStorer() == null) {
+            return "【合并异常】未找到记忆存储方案，无法写入洞察，旧碎片已保留。";
+        }
+
+        // 写入新的合并洞察（核心洞察赋予最高重要度，跳过碎片检测避免 O(n^2)）
         extractInternal(newKey, fact, 10, scope, __cwd, __sessionId, true);
 
-        // 同一次 consolidate 复用一个 solution 实例
-        MemorySolution memorySolution = solutionProvider.get(__cwd);
+        // 碎片整合后缓存失效，下次 extract 时重算
+        fragmentCountCache.put(userId, -1);
 
         boolean written = false;
         try {
@@ -524,6 +552,8 @@ public class MemoryTalent extends AbsTalent {
         }
 
         if (pruneInternal(solution, userId, key)) {
+            // 碎片缓存失效，下次 extract 时重算
+            fragmentCountCache.put(userId, -1);
             return "已清理 Key: " + key;
         } else {
             return "清理失败 Key: " + key + "（主体删除失败，条目仍保留）。";

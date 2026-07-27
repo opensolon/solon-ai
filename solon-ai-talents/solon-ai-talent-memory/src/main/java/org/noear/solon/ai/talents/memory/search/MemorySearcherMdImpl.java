@@ -24,6 +24,10 @@ import java.util.List;
 /**
  * 基于 MD 文件的记忆搜索供应商（方案 A：纯 MD，零外部依赖）
  *
+ * <p><b>注意：本实现基于关键词匹配（bi-gram 分词 + 子串匹配 + 重要性权重评分），
+ * 非向量语义搜索。</b>对于同义词、语义近似但字面不同的查询可能无法命中。
+ * 若需真正的语义检索能力，请使用 {@link MemorySearcherRepositoryImpl}（基于 RAG 向量库）。
+ *
  * <p>委托给 {@link MemoryMdData} 共享数据层，享受：
  * <ul>
  *   <li>启动时自动加载已有 MD 文件到搜索索引</li>
