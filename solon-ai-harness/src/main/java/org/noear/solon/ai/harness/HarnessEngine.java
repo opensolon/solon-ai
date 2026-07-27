@@ -472,6 +472,21 @@ public class HarnessEngine {
         memoryTalent.setEnabled(memoryEnabled);
     }
 
+    public void setMemoryRelevanceCount(int n) {
+        options.setMemoryRelevanceCount(n);
+        if (memoryTalent != null) { memoryTalent.relevanceCount(n); }
+    }
+
+    public void setMemoryPriorityCount(int n) {
+        options.setMemoryPriorityCount(n);
+        if (memoryTalent != null) { memoryTalent.priorityCount(n); }
+    }
+
+    public void setMemorySummaryLength(int n) {
+        options.setMemorySummaryLength(n);
+        if (memoryTalent != null) { memoryTalent.summaryLength(n); }
+    }
+
     public void setSandboxEnabled(Boolean sandboxEnabled) {
         options.setSandboxEnabled(sandboxEnabled);
         terminalTalent.setSandboxEnabled(sandboxEnabled);
