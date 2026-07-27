@@ -97,7 +97,7 @@ public class MemoryTalent extends AbsTalent {
         if (sessionIsolation) {
             return __sessionId == null ? "tmp" : __sessionId;
         } else {
-            return "shared";
+            return MemorySolutionProvider.SHARED_USER_ID;
         }
     }
 
