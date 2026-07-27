@@ -59,8 +59,8 @@ public class MemoryStorerMdImpl implements MemoryStorer {
     }
 
     @Override
-    public void put(String userId, String key, String val, int ttl) {
-        data.put(userId, key, val, ttl);
+    public void put(String userId, String key, String val, int ttl, String scope) {
+        data.put(userId, key, val, ttl, scope);
     }
 
     @Override

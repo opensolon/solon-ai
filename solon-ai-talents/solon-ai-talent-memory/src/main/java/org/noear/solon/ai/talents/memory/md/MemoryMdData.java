@@ -34,6 +34,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -59,7 +61,7 @@ public class MemoryMdData implements AutoCloseable {
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final String FRONT_MATTER_DELIMITER = "---";
 
-    private final Path baseDir;
+    private final Map<String,Path> scopeDirMap;
 
     /**
      * 内存缓存：storeKey → MemoryEntry
@@ -78,19 +80,21 @@ public class MemoryMdData implements AutoCloseable {
      */
     private ScheduledExecutorService cleanupScheduler;
 
-    public MemoryMdData(Path baseDir) {
-        this.baseDir = baseDir;
+    public MemoryMdData(Map<String,Path> scopeDirMap) {
+        this.scopeDirMap = scopeDirMap;
         init();
     }
 
     private void init() {
-        try {
-            Files.createDirectories(baseDir);
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to create memory storage directory: " + baseDir, e);
+        for (Map.Entry<String, Path> entry : scopeDirMap.entrySet()) {
+            try {
+                Files.createDirectories(entry.getValue());
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to create memory storage directory: " + entry.getValue(), e);
+            }
+            loadFromDisk(entry.getValue());
+            cleanupTmpFiles(entry.getValue());
         }
-        loadFromDisk(baseDir);
-        cleanupTmpFiles(baseDir);
     }
 
     // ==================== Store 操作 ====================
@@ -101,7 +105,7 @@ public class MemoryMdData implements AutoCloseable {
      * <p>注意：搜索索引的更新由 MemoryTalent 统一调用 updateIndex() 完成，
      * 保持与其他方案（Lucene/Repository/Rogue）的调用约定一致，避免双写冗余。
      */
-    public void put(String userId, String key, String val, int ttl) {
+    public void put(String userId, String key, String val, int ttl, String scope) {
         String storeKey = buildStoreKey(userId, key);
         try {
             ONode node = ONode.ofJson(val);
@@ -111,11 +115,11 @@ public class MemoryMdData implements AutoCloseable {
             String storedTime = getNow();
 
             // 1. 写 MD 文件（Front Matter 中保存完整 storeKey，消除还原歧义）
-            Path file = resolveFile(storeKey);
+            Path file = resolveFile(storeKey, scopeDirMap.get(scope));
             writeMdFile(file, storeKey, time, importance, ttl, storedTime, content);
 
             // 2. 更新内存缓存
-            cache.put(storeKey, new MemoryEntry(content, time, importance, ttl, storedTime));
+            cache.put(storeKey, new MemoryEntry(content, time, importance, ttl, storedTime, scope));
         } catch (Exception e) {
             LOG.error("MdMemoryData put error, userId={}, key={}", userId, key, e);
         }
@@ -130,7 +134,13 @@ public class MemoryMdData implements AutoCloseable {
 
         if (entry == null) {
             // 缓存未命中，尝试从磁盘加载（可能是外部写入的 MD 文件）
-            entry = loadFromMdFile(storeKey);
+            for(Map.Entry<String, Path> scopeEntry : scopeDirMap.entrySet()) {
+                entry = loadFromMdFile(storeKey, scopeEntry.getValue());
+                if(entry != null){
+                    break;
+                }
+            }
+
             if (entry == null) {
                 return null;
             }
@@ -139,7 +149,7 @@ public class MemoryMdData implements AutoCloseable {
             // 同步到搜索索引
             indexByUser.computeIfAbsent(userId, k -> new ConcurrentHashMap<>())
                     .putIfAbsent(buildDocId(userId, key),
-                            new IndexEntry(userId, key, entry.content, entry.importance, entry.time));
+                            new IndexEntry(userId, key, entry.content, entry.importance, entry.time, entry.scope));
         }
 
         // TTL 过期检查
@@ -156,16 +166,19 @@ public class MemoryMdData implements AutoCloseable {
      */
     public void remove(String userId, String key) {
         String storeKey = buildStoreKey(userId, key);
-        Path file = resolveFile(storeKey);
-        try {
-            boolean deleted = Files.deleteIfExists(file);
-            if (!deleted) {
-                LOG.warn("MdMemoryData remove: file not found, userId={}, key={}, file={}", userId, key, file);
-            } else {
-                LOG.debug("MdMemoryData remove: file deleted, userId={}, key={}", userId, key);
+
+        for(Map.Entry<String,Path> entry : scopeDirMap.entrySet()) {
+            Path file = resolveFile(storeKey, entry.getValue());
+            try {
+                boolean deleted = Files.deleteIfExists(file);
+                if (!deleted) {
+                    LOG.warn("MdMemoryData remove: file not found, userId={}, key={}, file={}", userId, key, file);
+                } else {
+                    LOG.debug("MdMemoryData remove: file deleted, userId={}, key={}", userId, key);
+                }
+            } catch (IOException e) {
+                LOG.error("MdMemoryData remove error (file may be locked), userId={}, key={}, file={}", userId, key, file, e);
             }
-        } catch (IOException e) {
-            LOG.error("MdMemoryData remove error (file may be locked), userId={}, key={}, file={}", userId, key, file, e);
         }
 
         cache.remove(storeKey);
@@ -208,7 +221,7 @@ public class MemoryMdData implements AutoCloseable {
         return scored.stream()
                 .sorted(Comparator.comparingDouble((ScoredEntry se) -> se.score).reversed())
                 .limit(limit)
-                .map(se -> new MemorySearchResult(se.entry.userKey, se.entry.content, se.entry.importance, se.entry.time))
+                .map(se -> new MemorySearchResult(se.entry.userKey, se.entry.content, se.entry.importance, se.entry.time, se.entry.scope))
                 .collect(Collectors.toList());
     }
 
@@ -226,7 +239,7 @@ public class MemoryMdData implements AutoCloseable {
                 .sorted(Comparator.comparingInt((IndexEntry e) -> e.importance).reversed()
                         .thenComparing((IndexEntry e) -> e.time, Comparator.reverseOrder()))
                 .limit(limit)
-                .map(e -> new MemorySearchResult(e.userKey, e.content, e.importance, e.time))
+                .map(e -> new MemorySearchResult(e.userKey, e.content, e.importance, e.time, e.scope))
                 .collect(Collectors.toList());
     }
 
@@ -243,7 +256,7 @@ public class MemoryMdData implements AutoCloseable {
                 .sorted(Comparator.comparingInt((IndexEntry e) -> e.importance).reversed()
                         .thenComparing((IndexEntry e) -> e.time, Comparator.reverseOrder()))
                 .limit(limit)
-                .map(e -> new MemorySearchResult(e.userKey, e.content, e.importance, e.time))
+                .map(e -> new MemorySearchResult(e.userKey, e.content, e.importance, e.time, e.scope))
                 .collect(Collectors.toList());
     }
 
@@ -263,9 +276,9 @@ public class MemoryMdData implements AutoCloseable {
     /**
      * 手动更新搜索索引（由 MemoryTalent 统一调用，兼容 MemorySearchProvider.updateIndex 接口）
      */
-    public void updateIndex(String userId, String key, String fact, int importance, String time) {
+    public void updateIndex(String userId, String key, String fact, int importance, String time, String scope) {
         Map<String, IndexEntry> userIndex = indexByUser.computeIfAbsent(userId, k -> new ConcurrentHashMap<>());
-        userIndex.put(buildDocId(userId, key), new IndexEntry(userId, key, fact, importance, time));
+        userIndex.put(buildDocId(userId, key), new IndexEntry(userId, key, fact, importance, time, scope));
     }
 
     /**
@@ -339,13 +352,13 @@ public class MemoryMdData implements AutoCloseable {
                 return LoadResult.SKIPPED;
             }
 
-            cache.put(storeKey, new MemoryEntry(fm.content, fm.time, fm.importance, fm.ttl, fm.storedTime));
+            cache.put(storeKey, new MemoryEntry(fm.content, fm.time, fm.importance, fm.ttl, fm.storedTime, fm.scope));
 
             String[] parts = splitStoreKey(storeKey);
             if (parts != null) {
                 indexByUser.computeIfAbsent(parts[0], k -> new ConcurrentHashMap<>())
                         .put(buildDocId(parts[0], parts[1]),
-                                new IndexEntry(parts[0], parts[1], fm.content, fm.importance, fm.time));
+                                new IndexEntry(parts[0], parts[1], fm.content, fm.importance, fm.time, fm.scope));
             }
 
             return LoadResult.LOADED;
@@ -379,8 +392,8 @@ public class MemoryMdData implements AutoCloseable {
     /**
      * 从 MD 文件加载单条记忆（缓存未命中时调用）
      */
-    private MemoryEntry loadFromMdFile(String storeKey) {
-        Path file = resolveFile(storeKey);
+    private MemoryEntry loadFromMdFile(String storeKey, Path scopeBaseDir) {
+        Path file = resolveFile(storeKey, scopeBaseDir);
         if (!Files.exists(file)) {
             return null;
         }
@@ -391,7 +404,7 @@ public class MemoryMdData implements AutoCloseable {
                 return null;
             }
 
-            MemoryEntry tempEntry = new MemoryEntry(fm.content, fm.time, fm.importance, fm.ttl, fm.storedTime);
+            MemoryEntry tempEntry = new MemoryEntry(fm.content, fm.time, fm.importance, fm.ttl, fm.storedTime, fm.scope);
 
             // 先检查 TTL，过期的直接删除文件返回 null，避免无意义的补写 I/O
             if (isExpired(tempEntry)) {
@@ -435,8 +448,8 @@ public class MemoryMdData implements AutoCloseable {
         return userId + ":" + key;
     }
 
-    private Path resolveFile(String storeKey) {
-        return baseDir.resolve(storeKey + ".md");
+    private Path resolveFile(String storeKey, Path scopeBaseDir) {
+        return scopeBaseDir.resolve(storeKey + ".md");
     }
 
     /**
@@ -755,13 +768,15 @@ public class MemoryMdData implements AutoCloseable {
         int importance;
         int ttl;
         String storedTime;
+        String scope;
 
-        MemoryEntry(String content, String time, int importance, int ttl, String storedTime) {
+        MemoryEntry(String content, String time, int importance, int ttl, String storedTime, String scope) {
             this.content = content;
             this.time = time;
             this.importance = importance;
             this.ttl = ttl;
             this.storedTime = storedTime;
+            this.scope = scope;
         }
     }
 
@@ -771,17 +786,19 @@ public class MemoryMdData implements AutoCloseable {
         String content;
         int importance;
         String time;
+        String scope;
         /**
          * 分词结果内联缓存（lazy init，随 IndexEntry 生命周期自动释放）
          */
         volatile Set<String> tokens;
 
-        IndexEntry(String userId, String userKey, String content, int importance, String time) {
+        IndexEntry(String userId, String userKey, String content, int importance, String time, String scope) {
             this.userId = userId;
             this.userKey = userKey;
             this.content = content;
             this.importance = importance;
             this.time = time;
+            this.scope = scope;
         }
     }
 
@@ -792,6 +809,7 @@ public class MemoryMdData implements AutoCloseable {
         int ttl = -1;
         String storedTime = "";
         String content = "";
+        String scope = "";
     }
 
     static class ScoredEntry {

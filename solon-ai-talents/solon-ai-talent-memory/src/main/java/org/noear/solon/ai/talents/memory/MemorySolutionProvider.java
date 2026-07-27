@@ -15,6 +15,9 @@
  */
 package org.noear.solon.ai.talents.memory;
 
+import java.util.Collections;
+import java.util.List;
+
 /**
  * 记忆方案提供者
  *
@@ -27,8 +30,20 @@ public interface MemorySolutionProvider {
     /**
      * 根据当前上下文标识获取记忆方案
      *
+     * <p>返回的方案可以是单域方案，也可以是内部聚合了多个作用域的复合方案
+     * （由实现自行封装读合并、写路由）。调用方只面向这一个方案，无需感知作用域细节。
+     *
      * @param __cwd 当前工作区
      * @return 匹配的记忆方案实例
      */
     MemorySolution get(String __cwd);
+
+
+    default String getScopeDefault(){
+        return "user";
+    }
+
+    default String getScopesDescription(){
+        return "存储作用域: workspace(工作区,默认) 或 user(用户全局)。跨项目的通用认知用 user 域。";
+    }
 }

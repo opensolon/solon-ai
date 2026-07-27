@@ -47,7 +47,8 @@ public class MemoryStorerReadisImpl implements MemoryStorer {
     }
 
     @Override
-    public void put(String userId, String key, String val, int ttl) {
+    public void put(String userId, String key, String val, int ttl, String scope) {
+        //ps: 不用管 scope
         redis.getBucket().store(getFinalKey(userId, key), val, ttl);
     }
 

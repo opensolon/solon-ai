@@ -22,6 +22,7 @@ import org.noear.solon.ai.talents.memory.search.MemorySearcherMdImpl;
 import org.noear.solon.ai.talents.memory.store.MemoryStorerMdImpl;
 
 import java.nio.file.Path;
+import java.util.Map;
 
 /**
  * 基于 MD 文件的记忆方案实现（方案 A：纯 MD，零外部依赖，开箱即用）
@@ -47,8 +48,8 @@ public class MemorySolutionMdImpl implements MemorySolution, AutoCloseable {
     private final MemorySearcher searchProvider;
     private final MemoryStorer storeProvider;
 
-    public MemorySolutionMdImpl(Path mdPath) {
-        data = new MemoryMdData(mdPath).enableAutoCleanup(3600);
+    public MemorySolutionMdImpl(Map<String,Path> scopeDirMap) {
+        data = new MemoryMdData(scopeDirMap).enableAutoCleanup(3600);
 
         storeProvider = new MemoryStorerMdImpl(data);
         searchProvider = new MemorySearcherMdImpl(data);

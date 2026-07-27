@@ -25,17 +25,19 @@ public class MemorySearchResult {
     private String key;
     private String content;
     private double importance;
-    private String time; // 新增：记录时间，用于时序冲突判断
+    private String time; // 记录时间，用于时序冲突判断
+    private String scope; // 记忆作用域："workspace" | "user"
 
     public MemorySearchResult() {
         //用于反序列化
     }
 
-    public MemorySearchResult(String key, String content, double importance, String time) {
+    public MemorySearchResult(String key, String content, double importance, String time, String scope) {
         this.key = key;
         this.content = content;
         this.importance = importance;
         this.time = time;
+        this.scope = scope;
     }
 
     public String getKey() {
@@ -52,5 +54,9 @@ public class MemorySearchResult {
 
     public String getTime() {
         return time;
+    }
+
+    public String getScope() {
+        return scope;
     }
 }

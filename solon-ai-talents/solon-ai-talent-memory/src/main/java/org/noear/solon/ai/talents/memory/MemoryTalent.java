@@ -66,9 +66,10 @@ public class MemoryTalent extends AbsTalent {
 
     private final MemorySolutionProvider solutionProvider;
     private boolean sessionIsolation = false; // 默认会话不隔离
-    private boolean relevanceInjection = true; // 默认按“相关性+热度”混合注入画像
+    private boolean relevanceInjection = true; // 默认按"相关性+热度"混合注入画像
 
     public MemoryTalent(MemorySolutionProvider solutionProvider) {
+        super(Utils.asMap("ScopesDescription", solutionProvider.getScopesDescription()));
         this.solutionProvider = solutionProvider;
     }
 
@@ -103,59 +104,56 @@ public class MemoryTalent extends AbsTalent {
         return LocalDateTime.now().format(TIME_FORMATTER);
     }
 
+
     @Override
     public String description() {
         return "长期记忆专家：负责用户心智模型的提取、演进、冲突消解与深度检索。";
     }
 
     /**
-     * 充当 Designer 引导逻辑，动态加载心智模型
+     * 充当 Designer 引导逻辑，动态加载心智模型。
+     *
+     * <p>作用域合并由方案内部完成，本方法只对单一方案取「相关 + 热记忆」并去重注入。
      */
     @Override
     public String getInstruction(Prompt prompt) {
         String __cwd = prompt.attrAs("__cwd");
+        String __sessionId = prompt.attrAs(ChatSession.ATTR_SESSIONID);
+        String userId = getUserId(__sessionId);
 
-        MemorySearcher searchProvider = solutionProvider.get(__cwd).getSearcher();
-
-        String mentalModel = "";
-
-        if (searchProvider != null) {
-            String __sessionId = prompt.attrAs(ChatSession.ATTR_SESSIONID);
-            String userId = getUserId(__sessionId);
-
-            // 混合注入：先按当前用户输入取语义相关记忆，再用热记忆兜底，按 Key 去重
-            // （相关性优先，避免高重要度但与当前话题无关的记忆挤占上下文）
-            Map<String, MemorySearchResult> merged = new LinkedHashMap<>();
+        // 混合注入：先按当前用户输入取语义相关记忆，再用热记忆兜底，按 Key 去重
+        Map<String, MemorySearchResult> merged = new LinkedHashMap<>();
+        MemorySolution solution = solutionProvider.get(__cwd);
+        if (solution != null && solution.getSearcher() != null) {
+            MemorySearcher searcher = solution.getSearcher();
             try {
                 if (relevanceInjection) {
                     String userContent = prompt.getUserContent();
                     if (Utils.isNotEmpty(userContent)) {
-                        // 当前用户输入仅作为检索 query，不拼接进任何可执行上下文
-                        for (MemorySearchResult r : searchProvider.search(userId, userContent, INJECT_RELEVANT)) {
+                        for (MemorySearchResult r : searcher.search(userId, userContent, INJECT_RELEVANT)) {
                             merged.putIfAbsent(r.getKey(), r);
                         }
                     }
                 }
-                for (MemorySearchResult r : searchProvider.getHotMemories(userId, INJECT_HOT)) {
+                for (MemorySearchResult r : searcher.getHotMemories(userId, INJECT_HOT)) {
                     merged.putIfAbsent(r.getKey(), r);
                 }
             } catch (Exception e) {
                 LOG.warn("MemoryTalent getInstruction inject error", e);
             }
-
-            if (!merged.isEmpty()) {
-                StringBuilder sb = new StringBuilder();
-                for (MemorySearchResult r : merged.values()) {
-                    sb.append(String.format("- [%s] %s: %s (Imp: %.2f)\n",
-                            r.getTime(), r.getKey(), r.getContent(), r.getImportance()));
-                }
-                mentalModel = sb.toString();
-            }
         }
 
-        String scope = sessionIsolation ? "当前会话私有空间" : "全局公共知识库";
+        String mentalModel = "";
+        if (!merged.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            for (MemorySearchResult r : merged.values()) {
+                sb.append(String.format("- [%s] %s%s: %s (Imp: %.2f)\n",
+                        r.getTime(), scopeTag(r.getScope()), r.getKey(), r.getContent(), r.getImportance()));
+            }
+            mentalModel = sb.toString();
+        }
 
-        return "## 长期记忆与心智演进指南 (存储域: " + scope + ")\n" +
+        return "## 长期记忆与心智演进指南\n" +
                 "你拥有自主维护用户心智模型的能力。请实时提取对话中的价值点，并维持认知的一致性。\n\n" +
                 "### 1. 当前核心认知预览：\n" +
                 (Assert.isEmpty(mentalModel) ? "- (暂无核心认知，请通过交流逐步构建用户画像)" : mentalModel) +
@@ -165,12 +163,28 @@ public class MemoryTalent extends AbsTalent {
                 "- **7-9 (核心规约)**：项目的架构定义、长期的技术选型、用户明确要求的行为准则。\n" +
                 "- **10 (重大身份定论)**：足以改变后续所有对话逻辑的长期定论或用户身份定论。\n\n" +
                 "### 3. 认知维护指令：\n" +
-                "- **发现冲突时**：若新事实与“核心认知预览”冲突，必须调用 `memory_extract` 更新，并根据返回的 `[认知对比]` 向用户确认或在回复中体现认知的修正。\n" +
+                "- **发现冲突时**：若新事实与「核心认知预览」冲突，必须调用 `memory_extract` 更新，并根据返回的 `[认知对比]` 向用户确认或在回复中体现认知的修正。\n" +
                 "- **碎片过多时**：当你发现检索到多个关于同一主题的低分记录（Imp < 5），应主动调用 `memory_consolidate` 将其升维为一条永久核心洞察（系统自动赋予最高重要度）。\n" +
-                "- **列出全部时**：当用户问“记住了哪些/有哪些记忆”时，调用 `memory_search('*')` 获取全部条目索引（Key + 摘要），需要细节再用 `memory_recall` 按 Key 召回。\n" +
-                "- **时效性原则**：永远以时间戳（Time）最近的认知记录为准。";
+                "- **列出全部时**：当用户问「记住了哪些/有哪些记忆」时，调用 `memory_search('*')` 获取全部条目索引（Key + 摘要），需要细节再用 `memory_recall` 按 Key 召回。\n" +
+                "- **时效性原则**：永远以时间戳（Time）最近的认知记录为准。\n";
     }
 
+    /**
+     * 作用域标签（用于展示）。方案未提供 scope 时返回空串，退化为无域展示。
+     */
+    private String scopeTag(String scope) {
+        if (Utils.isEmpty(scope)) {
+            return "";
+        }
+        return "[" + scope + "] ";
+    }
+
+    /**
+     * EXTRACT & UPDATE: 提取与覆盖（不带 scope 的重载，使用默认域）
+     */
+    public String extract(String key, String fact, int importance, String __cwd, String __sessionId) {
+        return extract(key, fact, importance, null, __cwd, __sessionId);
+    }
 
     /**
      * EXTRACT & UPDATE: 提取与覆盖
@@ -181,12 +195,17 @@ public class MemoryTalent extends AbsTalent {
     public String extract(@Param(value = "key", description = "唯一语义标识（如 user-tech-stack）。同主题复用同一 Key 而非新建，以防碎片化。") String key,
                           @Param(value = "fact", description = "完整自包含的陈述句，不依赖上下文指代，便于独立召回。") String fact,
                           @Param(value = "importance", description = "权重(1-10)：1-3琐碎事实, 4-6偏好习惯, 7-9核心规约, 10重大身份定论") int importance,
+                          @Param(value = "scope", required = false, description = "#{ScopesDescription}") String scope,
                           String __cwd,
                           String __sessionId) {
         String userId = getUserId(__sessionId);
 
-        // 重要度约束到声明的 1-10 区间：LLM 可能传入 0/负数/超界值，
-        // 若不约束会错误影响碎片分类（Imp<5）与 TTL 分档（>=10 永久）。
+        // scope 为空时交由方案自定默认域（透传 null 即可）
+        if (Assert.isEmpty(scope)) {
+            scope = solutionProvider.getScopeDefault();
+        }
+
+        // 重要度约束到声明的 1-10 区间
         importance = Math.max(1, Math.min(10, importance));
 
         MemorySolution memorySolution = solutionProvider.get(__cwd);
@@ -198,6 +217,10 @@ public class MemoryTalent extends AbsTalent {
             String now = getNow();
 
             StringBuilder feedback = new StringBuilder("【操作成功】心智模型已更新。");
+            if (Utils.isNotEmpty(scope)) {
+                feedback.append("\n[存储域: ").append(scope).append("]");
+            }
+
             if (Utils.isNotEmpty(oldJson)) {
                 ONode old = ONode.ofJson(oldJson);
                 feedback.append("\n[认知对比] 发现历史记录：")
@@ -217,13 +240,13 @@ public class MemoryTalent extends AbsTalent {
             else if (importance >= 5) ttl = 2592000;
             else ttl = 604800;
 
-            storeProvider.put(userId, key, ONode.serialize(data), ttl);
+            // scope 透传给方案，由方案按域路由（单域实现忽略 scope）
+            storeProvider.put(userId, key, ONode.serialize(data), ttl, scope);
 
             if (searchProvider != null) {
                 searchProvider.updateIndex(userId, key, fact, importance, now);
 
                 // M3.1 近似 Key 探测：用 fact 检索是否已存在同主题但不同 Key 的条目，抑制碎片化
-                // （只在新建 Key 时提示；同名覆盖已由上方认知对比处理）
                 if (Utils.isEmpty(oldJson)) {
                     appendNearKeyHint(feedback, searchProvider, userId, key, fact);
                 }
@@ -240,10 +263,10 @@ public class MemoryTalent extends AbsTalent {
     }
 
     /**
-     * SEARCH: 语义搜索
+     * SEARCH: 语义搜索（作用域合并由方案内部完成）
      */
     @ToolMapping(name = "memory_search",
-            description = "语义检索：用自然语言找回相关记忆。传入 '*' 列出全部条目索引（Key + 摘要），用于回答“记住了哪些”。")
+            description = "语义检索：用自然语言找回相关记忆。传入 '*' 列出全部条目索引（Key + 摘要），用于回答「记住了哪些」。")
     public String search(@Param("query") String query,
                          @Param(value = "topK", required = false, defaultValue = "5", description = "返回条数上限（默认 5）。需要更全面的召回可适当调高。") Integer topK,
                          String __cwd,
@@ -254,24 +277,37 @@ public class MemoryTalent extends AbsTalent {
             return "检索 query 为空，请提供自然语言描述，或传入 '*' 列出全部条目。";
         }
 
-        MemorySearcher searchProvider = solutionProvider.get(__cwd).getSearcher();
+        int limit = (topK == null || topK <= 0) ? SEARCH_TOPK_DEFAULT : Math.min(topK, SEARCH_TOPK_MAX);
 
-        if (searchProvider == null) {
-            return "搜索适配器未配置。";
+        MemorySolution solution = solutionProvider.get(__cwd);
+        if (solution == null || solution.getSearcher() == null) {
+            return "当前心智模型为空，尚未记录任何认知。";
         }
+        MemorySearcher searcher = solution.getSearcher();
 
-        // 约定符 '*'：列出全部记忆条目索引（走 listAll，不做重要度过滤，低分碎片也能列出）
+        // 约定符 '*'：列出全部记忆条目索引
         if ("*".equals(query.trim())) {
-            List<MemorySearchResult> all = searchProvider.listAll(userId, LIST_ALL_LIMIT);
+            List<MemorySearchResult> all;
+            try {
+                all = searcher.listAll(userId, LIST_ALL_LIMIT);
+            } catch (Exception e) {
+                LOG.warn("MemoryTalent search listAll error", e);
+                all = Collections.emptyList();
+            }
+
             if (all.isEmpty()) {
                 return "当前心智模型为空，尚未记录任何认知。";
             }
 
             StringBuilder sb = new StringBuilder("当前共记录以下认知条目（如需完整细节，请用 memory_recall 按 Key 召回）：\n");
+            int count = 0;
             for (MemorySearchResult res : all) {
-                sb.append(String.format("- [%s] (Key: %s) Imp:%.2f: %s\n",
+                if (count >= LIST_ALL_LIMIT) break;
+                sb.append(String.format("- [%s] %s(Key: %s) Imp:%.2f: %s\n",
                         Utils.isNotEmpty(res.getTime()) ? res.getTime() : "未知时间",
+                        scopeTag(res.getScope()),
                         res.getKey(), res.getImportance(), briefOf(res.getContent())));
+                count++;
             }
             if (all.size() >= LIST_ALL_LIMIT) {
                 sb.append("（仅展示前 ").append(LIST_ALL_LIMIT).append(" 条，更多请按主题检索）\n");
@@ -279,16 +315,25 @@ public class MemoryTalent extends AbsTalent {
             return sb.toString();
         }
 
-        int limit = (topK == null || topK <= 0) ? SEARCH_TOPK_DEFAULT : Math.min(topK, SEARCH_TOPK_MAX);
-        List<MemorySearchResult> results = searchProvider.search(userId, query, limit);
+        // 普通语义搜索
+        List<MemorySearchResult> results;
+        try {
+            results = searcher.search(userId, query, limit);
+        } catch (Exception e) {
+            LOG.warn("MemoryTalent search error", e);
+            results = Collections.emptyList();
+        }
+
         if (results.isEmpty()) {
             return "未发现相关认知片段。";
         }
 
         StringBuilder sb = new StringBuilder("匹配到以下认知参考（建议优先参考时间戳较近的记录）：\n");
         for (MemorySearchResult res : results) {
-            sb.append(String.format("- [%s] (Key: %s): %s\n",
-                    Utils.isNotEmpty(res.getTime()) ? res.getTime() : "未知时间", res.getKey(), res.getContent()));
+            sb.append(String.format("- [%s] %s(Key: %s): %s\n",
+                    Utils.isNotEmpty(res.getTime()) ? res.getTime() : "未知时间",
+                    scopeTag(res.getScope()),
+                    res.getKey(), res.getContent()));
         }
         return sb.toString();
     }
@@ -303,7 +348,7 @@ public class MemoryTalent extends AbsTalent {
 
     /**
      * M3.1：探测是否存在与新 fact 语义高度相似、但 Key 不同的已存条目，
-     * 命中时在 feedback 附加“疑似已存 Key”提示，引导 LLM 复用 Key 而非新建。
+     * 命中时在 feedback 附加"疑似已存 Key"提示，引导 LLM 复用 Key 而非新建。
      */
     private void appendNearKeyHint(StringBuilder feedback, MemorySearcher searchProvider,
                                    String userId, String currentKey, String fact) {
@@ -346,49 +391,61 @@ public class MemoryTalent extends AbsTalent {
     }
 
     /**
-     * RECALL: 精确召回
+     * RECALL: 精确召回（作用域探测由方案内部完成）
      */
     @ToolMapping(name = "memory_recall", description = "精确召回：通过 Key 获取该条目的完整细节。")
     public String recall(@Param(value = "key", description = "唯一语义标识（如 user-tech-stack）。") String key,
                          String __cwd,
                          String __sessionId) {
         String userId = getUserId(__sessionId);
-        MemoryStorer storeProvider = solutionProvider.get(__cwd).getStorer();
+
+        MemorySolution solution = solutionProvider.get(__cwd);
+        if (solution == null || solution.getStorer() == null) {
+            return "未找到认知条目 [" + key + "]。";
+        }
 
         try {
-            String val = storeProvider.get(userId, key);
-
-            if (Utils.isEmpty(val)) {
-                return "未找到认知条目 [" + key + "]。";
+            String val = solution.getStorer().get(userId, key);
+            if (Utils.isNotEmpty(val)) {
+                ONode node = ONode.ofJson(val);
+                String content = node.get("content").getString();
+                String time = node.get("time").getString();
+                String importance = node.get("importance").getString();
+                return String.format("【认知详情】内容：%s | 记录时间：%s | 重要度：%s",
+                        content == null ? "" : content,
+                        Utils.isEmpty(time) ? "未知时间" : time,
+                        Utils.isEmpty(importance) ? "未知" : importance);
             }
-
-            ONode node = ONode.ofJson(val);
-            String content = node.get("content").getString();
-            String time = node.get("time").getString();
-            String importance = node.get("importance").getString();
-            return String.format("【认知详情】内容：%s | 记录时间：%s | 重要度：%s",
-                    content == null ? "" : content,
-                    Utils.isEmpty(time) ? "未知时间" : time,
-                    Utils.isEmpty(importance) ? "未知" : importance);
         } catch (Exception e) {
-            LOG.error("MemoryTalent recall error, userId={}, key={}", userId, key, e);
-            return "读取异常。";
+            LOG.warn("MemoryTalent recall error, key={}", key, e);
         }
+        return "未找到认知条目 [" + key + "]。";
+    }
+
+    /**
+     * CONSOLIDATE: 知识整合（不带 scope 的重载，使用默认域）
+     */
+    public String consolidate(List<String> oldKeys, String newKey, String insight, String __cwd, String __sessionId) {
+        return consolidate(oldKeys, newKey, insight, null, __cwd, __sessionId);
     }
 
     /**
      * CONSOLIDATE: 知识整合
-     * 对齐 MemoryTalent 的“压缩”思想，将事实进化为经验
+     * 对齐 MemoryTalent 的"压缩"思想，将事实进化为经验
      */
     @ToolMapping(name = "memory_consolidate",
             description = "认知升维：将多个碎片整合为高层洞察并清理冗余。新洞察自动赋最高重要度（永久保留）。")
     public String consolidate(@Param(value = "keys_to_merge", description = "待合并的旧碎片 Key 列表，写入成功后删除；含 new_key 时自动跳过不删（原地升维）。") List<String> oldKeys,
                               @Param(value = "new_key", description = "整合后的目标 Key（英文短语+连字符），可复用 keys_to_merge 中的 Key 实现原地升维。") String newKey,
                               @Param(value = "evolved_insight", description = "升维后的高层洞察，概括碎片共性，完整自包含。") String insight,
+                              @Param(value = "scope", required = false, description = "#{ScopesDescription}") String scope,
                               String __cwd,
                               String __sessionId) {
-        // 原论文精神：通过整合减少上下文占用，提高信噪比
         String userId = getUserId(__sessionId);
+
+        if (Assert.isEmpty(scope)) {
+            scope = solutionProvider.getScopeDefault();
+        }
 
         if (Utils.isEmpty(newKey)) {
             return "【合并异常】new_key 为空，无法写入洞察，旧碎片已保留。";
@@ -399,18 +456,15 @@ public class MemoryTalent extends AbsTalent {
         String fact = "[Evolved Insight] " + insight;
 
         // 步骤1：写入新的合并洞察（核心洞察赋予最高重要度）
-        // 注意：extract 内部已吞掉异常并返回字符串，不会抛出；因此不能依赖 try/catch，
-        // 必须回读校验新洞察确已落库，否则一旦写入失败仍去删旧碎片将导致数据彻底丢失。
-        extract(newKey, fact, 10, __cwd, __sessionId);
+        extract(newKey, fact, 10, scope, __cwd, __sessionId);
 
-        // 同一次 consolidate 复用一个 solution 实例，避免回读校验与逐碎片删除重复获取
+        // 同一次 consolidate 复用一个 solution 实例
         MemorySolution memorySolution = solutionProvider.get(__cwd);
 
         boolean written = false;
         try {
             String writtenJson = memorySolution.getStorer().get(userId, newKey);
             if (Utils.isNotEmpty(writtenJson)) {
-                // 回读解析 content 字段与预期 fact 比对（避免 JSON 转义造成的字面匹配误判）
                 String storedContent = ONode.ofJson(writtenJson).get("content").getString();
                 written = fact.equals(storedContent);
             }
@@ -422,13 +476,11 @@ public class MemoryTalent extends AbsTalent {
             return "【合并异常】新洞察写入校验失败，旧碎片已保留，未做任何清理。请稍后重试。";
         }
 
-        // 步骤2：逐个清理旧碎片（即使某个失败也不影响其余）
-        // 依据 pruneInternal 的真实返回值判断成败；prune 内部吞异常，无法靠 try/catch 感知删除失败
+        // 步骤2：逐个清理旧碎片
         List<String> failedKeys = new ArrayList<>();
         int removed = 0;
         if (oldKeys != null) {
             for (String k : oldKeys) {
-                // 若 newKey 包含在待清理列表中（同名复用），跳过，否则会误删刚写入的新洞察
                 if (k == null || k.equals(newKey)) {
                     continue;
                 }
@@ -451,17 +503,21 @@ public class MemoryTalent extends AbsTalent {
     }
 
     /**
-     * PRUNE: 记忆修剪
+     * PRUNE: 记忆修剪（作用域全删由方案内部完成）
      */
     @ToolMapping(name = "memory_prune", description = "认知修正：删除错误、重复或过时的认知。")
     public String prune(@Param(value = "key", description = "唯一语义标识（如 user-tech-stack）。") String key,
                         String __cwd,
                         String __sessionId) {
         String userId = getUserId(__sessionId);
-        MemorySolution memorySolution = solutionProvider.get(__cwd);
 
-        if (pruneInternal(memorySolution, userId, key)) {
-            return "已从模型中清理 Key: " + key;
+        MemorySolution solution = solutionProvider.get(__cwd);
+        if (solution == null || solution.getStorer() == null) {
+            return "清理失败 Key: " + key + "（未找到存储方案）。";
+        }
+
+        if (pruneInternal(solution, userId, key)) {
+            return "已清理 Key: " + key;
         } else {
             return "清理失败 Key: " + key + "（主体删除失败，条目仍保留）。";
         }
@@ -470,9 +526,7 @@ public class MemoryTalent extends AbsTalent {
     /**
      * 内部清理：删除存储主体与检索索引。
      *
-     * <p>返回值表示主体（storer）是否删除成功，供 consolidate 等调用方据此判断，
-     * 而非依赖“内部吞异常 + 外层 try/catch”这类捕获不到的死逻辑。
-     * 索引（searcher）清理失败不影响主体删除结论，仅记录日志（可能残留幽灵索引）。
+     * <p>返回值表示主体（storer）是否删除成功，供 consolidate 等调用方据此判断。
      */
     private boolean pruneInternal(MemorySolution memorySolution, String userId, String key) {
         try {
@@ -498,7 +552,6 @@ public class MemoryTalent extends AbsTalent {
         if (toolName != null && toolName.startsWith("memory_")) {
             return true;
         }
-
         return false;
     }
 }

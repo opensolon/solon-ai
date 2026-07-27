@@ -48,7 +48,8 @@ public class MemoryStorerRogueImpl implements MemoryStorer {
     }
 
     @Override
-    public void put(String userId, String key, String val, int ttl) {
+    public void put(String userId, String key, String val, int ttl, String scope) {
+        //ps: 不用管 scope
         rogueMap.put(getFinalKey(userId, key), val, ttl, TimeUnit.SECONDS);
         rogueMap.checkpoint();
     }

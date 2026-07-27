@@ -25,13 +25,15 @@ package org.noear.solon.ai.talents.memory;
  */
 public interface MemoryStorer {
     /**
-     * 存入记忆条目
+     * 存入记忆条目（带作用域）
      *
      * @param key   完整存储键（包含前缀与会话标识）
      * @param val   序列化后的记忆 JSON 内容
      * @param ttl   存活时间，单位：秒（-1 表示永久存储）
+     * @param scope 存储作用域（如 workspace / user）；为空时由实现自行决定默认域
+     * @since 4.0.0
      */
-    void put(String userId, String key, String val, int ttl);
+    void put(String userId, String key, String val, int ttl, String scope);
 
     /**
      * 获取记忆条目
