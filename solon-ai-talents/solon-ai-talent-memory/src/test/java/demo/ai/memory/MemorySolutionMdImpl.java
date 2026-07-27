@@ -25,6 +25,8 @@ import java.nio.file.Paths;
  * @author noear 2026/5/8 created
  */
 public class MemorySolutionMdImpl implements MemorySolution {
+    static final String SCOPE_USER = "user";
+
     private final MemoryMdData data;
     private final MemorySearcher searchProvider;
     private final MemoryStorer storeProvider;
@@ -34,7 +36,7 @@ public class MemorySolutionMdImpl implements MemorySolution {
 
         // 创建共享数据层（启动时自动加载已有 MD 文件，启用后台过期清理）
         data = new MemoryMdData(
-                Utils.asMap(MemorySolutionProvider.SCOPE_USER, mdPath)
+                Utils.asMap(SCOPE_USER, mdPath)
         )
                 .enableAutoCleanup(3600);
 

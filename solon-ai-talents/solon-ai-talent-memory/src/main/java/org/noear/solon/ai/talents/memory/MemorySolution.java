@@ -32,4 +32,19 @@ public interface MemorySolution {
      * 获取存储器（负责物理持久化与 TTL 管理）
      */
     MemoryStorer getStorer();
+
+    /**
+     * 根据重要度计算 TTL（秒），统一 TTL 策略避免消费端与框架端重复硬编码。
+     *
+     * <ul>
+     *   <li>importance >= 10: 永久 (-1)</li>
+     *   <li>importance >= 5: 30 天 (2592000)</li>
+     *   <li>else: 7 天 (604800)</li>
+     * </ul>
+     */
+    default int computeTtl(int importance) {
+        if (importance >= 10) return -1;
+        if (importance >= 5) return 2592000;
+        return 604800;
+    }
 }

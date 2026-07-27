@@ -246,8 +246,8 @@ public class MemoryTalent extends AbsTalent {
             data.put("time", now);
             data.put("importance", importance);
 
-            // 动态 TTL：统一使用 MemorySolutionProvider.computeTtl 策略
-            int ttl = solutionProvider.computeTtl(importance);
+            // 动态 TTL：统一使用 memorySolution.computeTtl 策略
+            int ttl = memorySolution.computeTtl(importance);
 
             // scope 透传给方案，由方案按域路由（单域实现忽略 scope）
             storeProvider.put(userId, key, ONode.serialize(data), ttl, scope);

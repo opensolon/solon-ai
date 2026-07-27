@@ -44,7 +44,7 @@ public class MemoryTalentOptTest {
 
             @Override
             public String getScopesDefault() {
-                return MemorySolutionProvider.SCOPE_USER;
+                return "user";
             }
         };
         talent = new MemoryTalent(provider);
@@ -199,7 +199,7 @@ public class MemoryTalentOptTest {
 
             @Override
             public String getScopesDefault() {
-                return MemorySolutionProvider.SCOPE_USER;
+                return "user";
             }
         });
 
@@ -263,7 +263,7 @@ public class MemoryTalentOptTest {
 
             @Override
             public String getScopesDefault() {
-                return MemorySolutionProvider.SCOPE_USER;
+                return "user";
             }
         });
 
