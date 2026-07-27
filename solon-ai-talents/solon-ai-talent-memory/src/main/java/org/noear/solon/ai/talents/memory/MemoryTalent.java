@@ -358,7 +358,7 @@ public class MemoryTalent extends AbsTalent {
                 sb.append(String.format("- [%s] %s(Key: %s) Imp:%.2f: %s\n",
                         Utils.isNotEmpty(res.getTime()) ? res.getTime() : "未知时间",
                         scopeTag(res.getScope()),
-                        res.getKey(), res.getImportance(), briefOf(res.getContent())));
+                        res.getKey(), res.getImportance(), summaryOf(res.getContent())));
                 count++;
             }
             if (all.size() >= LIST_ALL_LIMIT) {
@@ -390,7 +390,7 @@ public class MemoryTalent extends AbsTalent {
         return sb.toString();
     }
 
-    private String briefOf(String content) {
+    private String summaryOf(String content) {
         if (content == null) {
             return "";
         }
