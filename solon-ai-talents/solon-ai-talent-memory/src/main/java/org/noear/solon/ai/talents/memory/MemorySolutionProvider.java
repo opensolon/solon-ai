@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.talents.memory;
 
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -28,7 +28,6 @@ import java.util.List;
  */
 public interface MemorySolutionProvider {
     String SCOPE_USER = "user";
-    String SCOPE_WORKSPACE = "workspace";
 
     /**
      * 根据当前上下文标识获取记忆方案
@@ -41,12 +40,30 @@ public interface MemorySolutionProvider {
      */
     MemorySolution get(String __cwd);
 
+    default List<String> getScopesSorted(){
+        return Arrays.asList("workspace", "user");
+    }
 
-    default String getScopeDefault(){
+    default String getScopesDefault(){
         return "workspace";
     }
 
     default String getScopesDescription(){
         return "存储作用域: workspace(工作区,默认) 或 user(用户全局)。跨项目的通用认知用 user 域。";
+    }
+
+    /**
+     * 根据重要度计算 TTL（秒），统一 TTL 策略避免消费端与框架端重复硬编码。
+     *
+     * <ul>
+     *   <li>importance >= 10: 永久 (-1)</li>
+     *   <li>importance >= 5: 30 天 (2592000)</li>
+     *   <li>else: 7 天 (604800)</li>
+     * </ul>
+     */
+     default int computeTtl(int importance) {
+        if (importance >= 10) return -1;
+        if (importance >= 5) return 2592000;
+        return 604800;
     }
 }

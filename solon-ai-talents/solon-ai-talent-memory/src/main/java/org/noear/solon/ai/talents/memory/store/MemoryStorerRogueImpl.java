@@ -18,7 +18,10 @@ package org.noear.solon.ai.talents.memory.store;
 import com.yomahub.roguemap.RogueMap;
 import com.yomahub.roguemap.serialization.StringCodec;
 import org.noear.solon.ai.talents.memory.MemoryStorer;
+import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -28,6 +31,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class MemoryStorerRogueImpl implements MemoryStorer {
     private final RogueMap<String, String> rogueMap;
+    private final List<String> scopeOrder;
 
     public MemoryStorerRogueImpl(String filePath) {
         this.rogueMap = RogueMap.<String, String>mmap()
@@ -37,18 +41,32 @@ public class MemoryStorerRogueImpl implements MemoryStorer {
                 .keyCodec(StringCodec.INSTANCE)
                 .valueCodec(StringCodec.INSTANCE)
                 .build();
+        this.scopeOrder = Arrays.asList(MemorySolutionProvider.SCOPE_USER);
+    }
+
+    public MemoryStorerRogueImpl(String filePath, List<String> scopeOrder) {
+        this.rogueMap = RogueMap.<String, String>mmap()
+                .persistent(filePath)
+                .autoExpand(true)
+                .allocateSize(64 * 1024 * 1024L)
+                .keyCodec(StringCodec.INSTANCE)
+                .valueCodec(StringCodec.INSTANCE)
+                .build();
+        this.scopeOrder = scopeOrder;
     }
 
     public MemoryStorerRogueImpl(RogueMap<String, String> rogueMap) {
         this.rogueMap = rogueMap;
+        this.scopeOrder = Arrays.asList(MemorySolutionProvider.SCOPE_USER);
+    }
+
+    public MemoryStorerRogueImpl(RogueMap<String, String> rogueMap,  List<String> scopeOrder) {
+        this.rogueMap = rogueMap;
+        this.scopeOrder = scopeOrder;
     }
 
     private String getFinalKey(String bucketKey, String key, String scope) {
         return (scope != null && !scope.isEmpty() ? scope + ":" : "") + bucketKey + ":" + key;
-    }
-
-    private String getFinalKey(String bucketKey, String key) {
-        return getFinalKey(bucketKey, key, "");
     }
 
     @Override
@@ -59,12 +77,21 @@ public class MemoryStorerRogueImpl implements MemoryStorer {
 
     @Override
     public String get(String userId, String key) {
-        return rogueMap.get(getFinalKey(userId, key));
+        String result = null;
+        for (String scope : scopeOrder) {
+            String val = rogueMap.get(getFinalKey(userId, key, scope));
+            if (val != null) {
+                result = val; // 后遍历的 scope 覆盖先遍历的（workspace 优先级最高）
+            }
+        }
+        return result;
     }
 
     @Override
     public void remove(String userId, String key) {
-        rogueMap.remove(getFinalKey(userId, key));
+        for (String scope : scopeOrder) {
+            rogueMap.remove(getFinalKey(userId, key, scope));
+        }
         rogueMap.checkpoint();
     }
 }

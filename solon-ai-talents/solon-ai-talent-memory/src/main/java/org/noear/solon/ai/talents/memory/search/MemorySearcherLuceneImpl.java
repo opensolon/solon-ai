@@ -24,6 +24,7 @@ import org.apache.lucene.search.*;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.ByteBuffersDirectory;
+import org.apache.lucene.util.BytesRef;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.talents.memory.MemorySearcher;
 import org.noear.solon.ai.talents.memory.MemorySearchResult;
@@ -103,10 +104,12 @@ public class MemorySearcherLuceneImpl implements MemorySearcher, AutoCloseable {
                 mainQuery.add(IntPoint.newRangeQuery("importance", 5, Integer.MAX_VALUE), BooleanClause.Occur.MUST);
             }
 
-            // 热记忆与全量列举都按重要度倒序；语义检索按相关性
+            // 热记忆与全量列举按重要度倒序 + scope 降序（workspace 优先）；语义检索按相关性 + scope 降序
             Sort sort = (mode == QueryMode.SEARCH)
-                    ? Sort.RELEVANCE
-                    : new Sort(new SortField("importance", SortField.Type.INT, true));
+                    ? new Sort(SortField.FIELD_SCORE, new SortField("scope", SortField.Type.STRING, true))
+                    : new Sort(
+                            new SortField("importance", SortField.Type.INT, true),
+                            new SortField("scope", SortField.Type.STRING, true));
             TopDocs topDocs = searcher.search(mainQuery.build(), limit, sort);
 
             for (ScoreDoc sd : topDocs.scoreDocs) {
@@ -142,6 +145,7 @@ public class MemorySearcherLuceneImpl implements MemorySearcher, AutoCloseable {
             doc.add(new NumericDocValuesField("importance", importance));
             doc.add(new StringField("time", time, Field.Store.YES));
             doc.add(new StringField("scope", scope == null ? "" : scope, Field.Store.YES));
+            doc.add(new SortedDocValuesField("scope", new BytesRef(scope == null ? "" : scope)));
 
             writer.updateDocument(new Term("id", docId), doc);
             writer.commit(); // 显式提交

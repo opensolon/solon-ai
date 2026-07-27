@@ -198,11 +198,19 @@ public class MemoryTalent extends AbsTalent {
                           @Param(value = "scope", required = false, description = "#{ScopesDescription}") String scope,
                           String __cwd,
                           String __sessionId) {
+        return extractInternal(key, fact, importance, scope, __cwd, __sessionId, false);
+    }
+
+    /**
+     * 内部提取方法，支持跳过碎片检测（consolidate 调用时跳过，避免 O(n^2) 全量扫描）。
+     */
+    private String extractInternal(String key, String fact, int importance, String scope,
+                                   String __cwd, String __sessionId, boolean skipFragmentHint) {
         String userId = getUserId(__sessionId);
 
         // scope 为空时交由方案自定默认域（透传 null 即可）
         if (Assert.isEmpty(scope)) {
-            scope = solutionProvider.getScopeDefault();
+            scope = solutionProvider.getScopesDefault();
         }
 
         // 重要度约束到声明的 1-10 区间
@@ -234,11 +242,8 @@ public class MemoryTalent extends AbsTalent {
             data.put("time", now);
             data.put("importance", importance);
 
-            // 动态 TTL：重要信息（>=5）保留 30 天，核心总结（>=10）永久或极长，普通信息 7 天
-            int ttl;
-            if (importance >= 10) ttl = -1; // 核心经验永不过期
-            else if (importance >= 5) ttl = 2592000;
-            else ttl = 604800;
+            // 动态 TTL：统一使用 MemorySolutionProvider.computeTtl 策略
+            int ttl = solutionProvider.computeTtl(importance);
 
             // scope 透传给方案，由方案按域路由（单域实现忽略 scope）
             storeProvider.put(userId, key, ONode.serialize(data), ttl, scope);
@@ -251,8 +256,10 @@ public class MemoryTalent extends AbsTalent {
                     appendNearKeyHint(feedback, searchProvider, userId, key, fact);
                 }
 
-                // M4.1 碎片密度检测：低分碎片过多时提示整合
-                appendFragmentHint(feedback, searchProvider, userId);
+                // M4.1 碎片密度检测：低分碎片过多时提示整合（consolidate 调用时跳过，避免 O(n^2)）
+                if (!skipFragmentHint) {
+                    appendFragmentHint(feedback, searchProvider, userId);
+                }
             }
 
             return feedback.toString();
@@ -444,7 +451,7 @@ public class MemoryTalent extends AbsTalent {
         String userId = getUserId(__sessionId);
 
         if (Assert.isEmpty(scope)) {
-            scope = solutionProvider.getScopeDefault();
+            scope = solutionProvider.getScopesDefault();
         }
 
         if (Utils.isEmpty(newKey)) {
@@ -455,8 +462,8 @@ public class MemoryTalent extends AbsTalent {
         }
         String fact = "[Evolved Insight] " + insight;
 
-        // 步骤1：写入新的合并洞察（核心洞察赋予最高重要度）
-        extract(newKey, fact, 10, scope, __cwd, __sessionId);
+        // 步骤1：写入新的合并洞察（核心洞察赋予最高重要度，跳过碎片检测避免 O(n^2)）
+        extractInternal(newKey, fact, 10, scope, __cwd, __sessionId, true);
 
         // 同一次 consolidate 复用一个 solution 实例
         MemorySolution memorySolution = solutionProvider.get(__cwd);

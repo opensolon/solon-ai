@@ -16,8 +16,12 @@
 package org.noear.solon.ai.talents.memory.store;
 
 import org.noear.redisx.RedisClient;
+import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 import org.noear.solon.ai.talents.memory.MemoryStorer;
 import org.noear.solon.core.util.Assert;
+
+import java.util.Arrays;
+import java.util.List;
 
 /**
  *
@@ -26,12 +30,18 @@ import org.noear.solon.core.util.Assert;
  */
 public class MemoryStorerReadisImpl implements MemoryStorer {
     private final RedisClient redis;
+    private final List<String> scopeOrder;
     private String basePrefix;
 
     public MemoryStorerReadisImpl(RedisClient redis) {
         this.redis = redis;
+        this.scopeOrder = Arrays.asList(MemorySolutionProvider.SCOPE_USER);
     }
 
+    public MemoryStorerReadisImpl(RedisClient redis, List<String> scopeOrder) {
+        this.redis = redis;
+        this.scopeOrder = scopeOrder;
+    }
 
     public MemoryStorerReadisImpl basePrefix(String basePrefix) {
         this.basePrefix = basePrefix;
@@ -43,10 +53,6 @@ public class MemoryStorerReadisImpl implements MemoryStorer {
         return base + (scope != null && !scope.isEmpty() ? scope + ":" : "") + userId + ":" + key;
     }
 
-    private String getFinalKey(String userId, String key) {
-        return getFinalKey(userId, key, "");
-    }
-
     @Override
     public void put(String userId, String key, String val, int ttl, String scope) {
         redis.getBucket().store(getFinalKey(userId, key, scope), val, ttl);
@@ -54,11 +60,20 @@ public class MemoryStorerReadisImpl implements MemoryStorer {
 
     @Override
     public String get(String userId, String key) {
-        return redis.getBucket().get(getFinalKey(userId, key));
+        String result = null;
+        for (String scope : scopeOrder) {
+            String val = redis.getBucket().get(getFinalKey(userId, key, scope));
+            if (val != null) {
+                result = val; // 后遍历的 scope 覆盖先遍历的（workspace 优先级最高）
+            }
+        }
+        return result;
     }
 
     @Override
     public void remove(String userId, String key) {
-        redis.getBucket().remove(getFinalKey(userId, key));
+        for (String scope : scopeOrder) {
+            redis.getBucket().remove(getFinalKey(userId, key, scope));
+        }
     }
 }

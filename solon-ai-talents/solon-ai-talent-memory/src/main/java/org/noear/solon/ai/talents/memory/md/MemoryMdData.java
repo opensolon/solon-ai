@@ -64,8 +64,14 @@ public class MemoryMdData implements AutoCloseable {
     private final Map<String,Path> scopeDirMap;
 
     /**
-     * 内存缓存：storeKey → MemoryEntry
-     * storeKey 格式："{userId}__{key}"
+     * 作用域优先级顺序（低→高），高优先级域覆盖低优先级域的同 key 条目。
+     * 固定顺序：user → 其他 → workspace，消除 HashMap 迭代序不确定性。
+     */
+    private final List<String> scopeOrder;
+
+    /**
+     * 内存缓存：cacheKey → MemoryEntry
+     * cacheKey 格式："{userId}__{key}@{scope}"（含 scope 维度，避免跨域同 key 覆盖）
      */
     private final Map<String, MemoryEntry> cache = new ConcurrentHashMap<>();
 
@@ -80,20 +86,22 @@ public class MemoryMdData implements AutoCloseable {
      */
     private ScheduledExecutorService cleanupScheduler;
 
-    public MemoryMdData(Map<String,Path> scopeDirMap) {
+    public MemoryMdData(Map<String,Path> scopeDirMap, List<String> scopeOrder) {
         this.scopeDirMap = scopeDirMap;
+        this.scopeOrder = scopeOrder;
         init();
     }
 
     private void init() {
-        for (Map.Entry<String, Path> entry : scopeDirMap.entrySet()) {
+        for (String scope : scopeOrder) {
+            Path dir = scopeDirMap.get(scope);
             try {
-                Files.createDirectories(entry.getValue());
+                Files.createDirectories(dir);
             } catch (IOException e) {
-                throw new RuntimeException("Failed to create memory storage directory: " + entry.getValue(), e);
+                throw new RuntimeException("Failed to create memory storage directory: " + dir, e);
             }
-            loadFromDisk(entry.getValue());
-            cleanupTmpFiles(entry.getValue());
+            loadFromDisk(dir, scope);
+            cleanupTmpFiles(dir);
         }
     }
 
@@ -118,8 +126,8 @@ public class MemoryMdData implements AutoCloseable {
             Path file = resolveFile(storeKey, scopeDirMap.get(scope));
             writeMdFile(file, storeKey, scope, time, importance, ttl, storedTime, content);
 
-            // 2. 更新内存缓存
-            cache.put(storeKey, new MemoryEntry(content, time, importance, ttl, storedTime, scope));
+            // 2. 更新内存缓存（scope 维度隔离，避免跨域同 key 覆盖）
+            cache.put(buildCacheKey(userId, key, scope), new MemoryEntry(content, time, importance, ttl, storedTime, scope));
         } catch (Exception e) {
             LOG.error("MdMemoryData put error, userId={}, key={}", userId, key, e);
         }
@@ -130,22 +138,34 @@ public class MemoryMdData implements AutoCloseable {
      */
     public String get(String userId, String key) {
         String storeKey = buildStoreKey(userId, key);
-        MemoryEntry entry = cache.get(storeKey);
+
+        // 按优先级顺序探测缓存（workspace 最后 = 最高优先级）
+        MemoryEntry entry = null;
+        String foundScope = null;
+        for (String scope : scopeOrder) {
+            MemoryEntry cached = cache.get(buildCacheKey(userId, key, scope));
+            if (cached != null) {
+                entry = cached;
+                foundScope = scope;
+            }
+        }
 
         if (entry == null) {
-            // 缓存未命中，尝试从磁盘加载（可能是外部写入的 MD 文件）
-            // 遍历所有作用域，后加载的覆盖先加载的（与 init() 行为一致，确保工作区覆盖全局）
-            for(Map.Entry<String, Path> scopeEntry : scopeDirMap.entrySet()) {
-                MemoryEntry found = loadFromMdFile(storeKey, scopeEntry.getKey(), scopeEntry.getValue());
-                if(found != null){
+            // 缓存未命中，按优先级顺序从磁盘加载
+            // Note: 并发 get() 可能在 put() 的 updateIndex() 之前短暂加载旧数据并写入索引，
+            // 属于最终一致性可接受范围——put() 的 updateIndex() 随后会覆盖为最新值。
+            for (String scope : scopeOrder) {
+                MemoryEntry found = loadFromMdFile(storeKey, scope, scopeDirMap.get(scope));
+                if (found != null) {
                     entry = found;
+                    foundScope = scope;
                 }
             }
 
             if (entry == null) {
                 return null;
             }
-            cache.put(storeKey, entry);
+            cache.put(buildCacheKey(userId, key, foundScope), entry);
 
             // 同步到搜索索引
             indexByUser.computeIfAbsent(userId, k -> new ConcurrentHashMap<>())
@@ -188,7 +208,10 @@ public class MemoryMdData implements AutoCloseable {
             }
         }
 
-        cache.remove(storeKey);
+        // 清除所有作用域的缓存条目
+        for (String scope : scopeDirMap.keySet()) {
+            cache.remove(buildCacheKey(userId, key, scope));
+        }
 
         Map<String, IndexEntry> userMap = indexByUser.get(userId);
         if (userMap != null) {
@@ -306,14 +329,14 @@ public class MemoryMdData implements AutoCloseable {
     /**
      * 从磁盘全量加载 MD 文件到缓存和搜索索引
      */
-    private void loadFromDisk(Path baseDir) {
+    private void loadFromDisk(Path baseDir, String scope) {
         int expiredCount = 0;
         try (Stream<Path> files = Files.list(baseDir)) {
             List<Path> mdFiles = files.filter(p -> p.getFileName().toString().endsWith(".md"))
                                       .collect(Collectors.toList());
 
             for (Path file : mdFiles) {
-                LoadResult lr = loadSingleFile(file);
+                LoadResult lr = loadSingleFile(file, scope);
                 if (lr == LoadResult.EXPIRED) {
                     expiredCount++;
                 }
@@ -330,7 +353,7 @@ public class MemoryMdData implements AutoCloseable {
 
     private enum LoadResult { LOADED, EXPIRED, SKIPPED }
 
-    private LoadResult loadSingleFile(Path file) {
+    private LoadResult loadSingleFile(Path file, String dirScope) {
         try {
             FrontMatter fm = parseFrontMatter(Files.readAllLines(file, StandardCharsets.UTF_8));
             if (fm == null) {
@@ -340,7 +363,7 @@ public class MemoryMdData implements AutoCloseable {
             // 优先从 Front Matter 读取 storeKey（可靠还原）
             String storeKey = fm.storeKey;
             if (storeKey == null || storeKey.isEmpty()) {
-                // 兼容旧格式文件：从文件名启发式还原
+                // 兼容旧格式文件：文件名即 storeKey（当前格式 storeKey + ".md"）
                 storeKey = fileNameToStoreKey(file.getFileName().toString());
                 LOG.warn("MdMemoryData: file has no name field, heuristic restore may be inaccurate: {}", file);
             }
@@ -362,13 +385,17 @@ public class MemoryMdData implements AutoCloseable {
                 return LoadResult.SKIPPED;
             }
 
-            cache.put(storeKey, new MemoryEntry(fm.content, fm.time, fm.importance, fm.ttl, fm.storedTime, fm.scope));
+            // 有效 scope：优先 Front Matter，其次目录归属
+            String effectiveScope = (fm.scope != null && !fm.scope.isEmpty()) ? fm.scope : dirScope;
 
             String[] parts = splitStoreKey(storeKey);
             if (parts != null) {
+                cache.put(buildCacheKey(parts[0], parts[1], effectiveScope),
+                        new MemoryEntry(fm.content, fm.time, fm.importance, fm.ttl, fm.storedTime, effectiveScope));
+
                 indexByUser.computeIfAbsent(parts[0], k -> new ConcurrentHashMap<>())
                         .put(buildDocId(parts[0], parts[1]),
-                                new IndexEntry(parts[0], parts[1], fm.content, fm.importance, fm.time, fm.scope));
+                                new IndexEntry(parts[0], parts[1], fm.content, fm.importance, fm.time, effectiveScope));
             }
 
             return LoadResult.LOADED;
@@ -414,7 +441,9 @@ public class MemoryMdData implements AutoCloseable {
                 return null;
             }
 
-            MemoryEntry tempEntry = new MemoryEntry(fm.content, fm.time, fm.importance, fm.ttl, fm.storedTime, fm.scope);
+            // 有效 scope：优先 Front Matter，其次参数传入的目录归属
+            String effectiveScope = (fm.scope != null && !fm.scope.isEmpty()) ? fm.scope : scope;
+            MemoryEntry tempEntry = new MemoryEntry(fm.content, fm.time, fm.importance, fm.ttl, fm.storedTime, effectiveScope);
 
             // 先检查 TTL，过期的直接删除文件返回 null，避免无意义的补写 I/O
             if (isExpired(tempEntry)) {
@@ -476,19 +505,31 @@ public class MemoryMdData implements AutoCloseable {
     }
 
     /**
-     * 从文件名启发式还原 storeKey（仅用于兼容不含 storeKey 字段的旧格式文件）
+     * 从文件名还原 storeKey（仅用于兼容不含 name 字段的旧格式文件）
      * <p>
-     * 注意：此还原将 _ 替换为 : ，如果 key 本身含 _ 还原会不准确。
-     * 建议新文件都通过 Front Matter 中的 name 字段精确还原。
+     * 当前文件名格式为 "{storeKey}.md"，去掉 .md 后缀即为 storeKey。
+     * 对于极旧格式（hash 前缀）的文件，还原可能不准确，会通过 splitStoreKey 返回 null 跳过索引。
      */
     private String fileNameToStoreKey(String fileName) {
-        String name = fileName.endsWith(".md") ? fileName.substring(0, fileName.length() - 3) : fileName;
-        // 去掉 hash 前缀（格式：{hash}_xxx）
-        int underscoreIdx = name.indexOf('_');
-        if (underscoreIdx > 0) {
-            name = name.substring(underscoreIdx + 1);
-        }
-        return name.replace("_", ":");
+        return fileName.endsWith(".md") ? fileName.substring(0, fileName.length() - 3) : fileName;
+    }
+
+    /**
+     * 构建含 scope 维度的缓存键："{userId}__{key}@{scope}"
+     */
+    private String buildCacheKey(String userId, String key, String scope) {
+        return buildStoreKey(userId, key) + "@" + (scope != null ? scope : "");
+    }
+
+    /**
+     * 拆分缓存键为 userId 和 key（丢弃 scope 维度）
+     * "{userId}__{key}@{scope}" → ["{userId}", "{key}"]
+     */
+    private String[] splitCacheKey(String cacheKey) {
+        if (cacheKey == null) return null;
+        int atIdx = cacheKey.indexOf('@');
+        String storeKey = atIdx > 0 ? cacheKey.substring(0, atIdx) : cacheKey;
+        return splitStoreKey(storeKey);
     }
 
     /**
@@ -622,7 +663,7 @@ public class MemoryMdData implements AutoCloseable {
         List<String[]> expiredKeys = new ArrayList<>();
         for (Map.Entry<String, MemoryEntry> e : cache.entrySet()) {
             if (isExpired(e.getValue())) {
-                String[] parts = splitStoreKey(e.getKey());
+                String[] parts = splitCacheKey(e.getKey());
                 if (parts != null) {
                     expiredKeys.add(parts);
                 }

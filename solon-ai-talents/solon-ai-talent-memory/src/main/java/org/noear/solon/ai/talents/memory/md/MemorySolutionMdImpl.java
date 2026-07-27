@@ -22,6 +22,7 @@ import org.noear.solon.ai.talents.memory.search.MemorySearcherMdImpl;
 import org.noear.solon.ai.talents.memory.store.MemoryStorerMdImpl;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -48,8 +49,8 @@ public class MemorySolutionMdImpl implements MemorySolution, AutoCloseable {
     private final MemorySearcher searchProvider;
     private final MemoryStorer storeProvider;
 
-    public MemorySolutionMdImpl(Map<String,Path> scopeDirMap) {
-        data = new MemoryMdData(scopeDirMap).enableAutoCleanup(3600);
+    public MemorySolutionMdImpl(Map<String, Path> scopeDirMap, List<String> scopeOrder) {
+        data = new MemoryMdData(scopeDirMap, scopeOrder).enableAutoCleanup(3600);
 
         storeProvider = new MemoryStorerMdImpl(data);
         searchProvider = new MemorySearcherMdImpl(data);
