@@ -46,13 +46,7 @@ public class MemoryTalent extends AbsTalent {
 
     /** 列出全部时的最大返回条数，避免上下文膨胀 */
     private static final int LIST_ALL_LIMIT = 100;
-    /** 列目录摘要长度，控制单条占用 */
-    private static final int BRIEF_LEN = 50;
 
-    /** 画像注入：相关性检索条数 */
-    private static final int INJECT_RELEVANT = 8;
-    /** 画像注入：热记忆兜底条数 */
-    private static final int INJECT_HOT = 5;
     /** 默认搜索返回条数 */
     private static final int SEARCH_TOPK_DEFAULT = 5;
     /** 搜索返回条数上限，避免 LLM 传入过大值导致上下文膨胀 */
@@ -68,6 +62,13 @@ public class MemoryTalent extends AbsTalent {
     private final MemorySolutionProvider solutionProvider;
     private boolean sessionIsolation = false; // 默认会话不隔离
     private boolean relevanceInjection = true; // 默认按"相关性+热度"混合注入画像
+
+    /** 画像注入：语义相关检索条数（默认 5，CLI 编程辅助场景精简弱相关噪声） */
+    private int injectRelevant = 5;
+    /** 画像注入：热记忆兜底条数（默认 5，importance>=5 的高质量条目） */
+    private int injectHot = 5;
+    /** 列目录摘要长度（默认 80，覆盖大多数单句记忆的完整内容，截断只影响 listAll 视图） */
+    private int briefLen = 80;
 
     public MemoryTalent(MemorySolutionProvider solutionProvider) {
         super(Utils.asMap("ScopesDescription", solutionProvider.getScopesDescription()));
@@ -90,6 +91,35 @@ public class MemoryTalent extends AbsTalent {
      */
     public MemoryTalent relevanceInjection(boolean relevanceInjection) {
         this.relevanceInjection = relevanceInjection;
+        return this;
+    }
+
+    /**
+     * 设置语义相关检索注入条数（默认 6）。
+     * <p>总注入预算 = injectRelevant + injectHot，search 未用完的预算自动流转给 hot。
+     * <p>小窗口模型建议 4，大窗口模型建议 8-10。
+     */
+    public MemoryTalent injectRelevant(int n) {
+        this.injectRelevant = Math.max(0, n);
+        return this;
+    }
+
+    /**
+     * 设置热记忆兜底注入条数（默认 5）。
+     * <p>热记忆为 importance>=5 的高质量条目，在语义匹配不足时保证核心认知不丢。
+     */
+    public MemoryTalent injectHot(int n) {
+        this.injectHot = Math.max(0, n);
+        return this;
+    }
+
+    /**
+     * 设置 listAll 视图的摘要截断长度（默认 80）。
+     * <p>仅影响 memory_search('*') 的列表展示，注入路径使用完整内容不受此限制。
+     * <p>80 可覆盖大多数单句记忆的完整内容；记忆普遍较长时可适当调大。
+     */
+    public MemoryTalent briefLen(int n) {
+        this.briefLen = Math.max(10, n);
         return this;
     }
 
@@ -123,21 +153,31 @@ public class MemoryTalent extends AbsTalent {
         String userId = getUserId(__sessionId);
 
         // 混合注入：先按当前用户输入取语义相关记忆，再用热记忆兜底，按 Key 去重
+        // 动态预算：search 未用完的配额自动流转给 hot，避免弱匹配/空 content 时认知上下文骤降
         Map<String, MemorySearchResult> merged = new LinkedHashMap<>();
         MemorySolution solution = solutionProvider.get(__cwd);
         if (solution != null && solution.getSearcher() != null) {
             MemorySearcher searcher = solution.getSearcher();
             try {
+                // 总预算 = injectRelevant + injectHot
+                int budget = injectRelevant + injectHot;
+
+                // 步骤 A：语义检索（userContent 为空时跳过，预算自动流转给 hot）
                 if (relevanceInjection) {
                     String userContent = prompt.getUserContent();
                     if (Utils.isNotEmpty(userContent)) {
-                        for (MemorySearchResult r : searcher.search(userId, userContent, INJECT_RELEVANT)) {
+                        for (MemorySearchResult r : searcher.search(userId, userContent, injectRelevant)) {
                             merged.putIfAbsent(r.getKey(), r);
                         }
                     }
                 }
-                for (MemorySearchResult r : searcher.getHotMemories(userId, INJECT_HOT)) {
-                    merged.putIfAbsent(r.getKey(), r);
+
+                // 步骤 B：热记忆兜底，取剩余预算
+                int hotLimit = budget - merged.size();
+                if (hotLimit > 0) {
+                    for (MemorySearchResult r : searcher.getHotMemories(userId, hotLimit)) {
+                        merged.putIfAbsent(r.getKey(), r);
+                    }
                 }
             } catch (Exception e) {
                 LOG.warn("MemoryTalent getInstruction inject error", e);
@@ -158,11 +198,7 @@ public class MemoryTalent extends AbsTalent {
                 "你拥有自主维护用户心智模型的能力。请实时提取对话中的价值点，并维持认知的一致性。\n\n" +
                 "### 1. 当前核心认知预览：\n" +
                 (Assert.isEmpty(mentalModel) ? "- (暂无核心认知，请通过交流逐步构建用户画像)" : mentalModel) +
-                "\n\n### 2. 记忆提取评分标准 (importance)：\n" +
-                "- **1-3 (琐碎事实)**：临时的任务细节、单次提及的背景（如：当前处理的文件名）。\n" +
-                "- **4-6 (行为偏好)**：用户展现出的习惯、常用的工具偏好、反复提及的关注点。\n" +
-                "- **7-9 (核心规约)**：项目的架构定义、长期的技术选型、用户明确要求的行为准则。\n" +
-                "- **10 (重大身份定论)**：足以改变后续所有对话逻辑的长期定论或用户身份定论。\n\n" +
+                "\n\n### 2. 评分标准 (importance: 1-3琐碎事实, 4-6偏好习惯, 7-9核心规约, 10重大身份定论)\n\n" +
                 "### 3. 认知维护指令：\n" +
                 "- **发现冲突时**：若新事实与「核心认知预览」冲突，必须调用 `memory_extract` 更新，并根据返回的 `[认知对比]` 向用户确认或在回复中体现认知的修正。\n" +
                 "- **碎片过多时**：当你发现检索到多个关于同一主题的低分记录（Imp < 5），应主动调用 `memory_consolidate` 将其升维为一条永久核心洞察（系统自动赋予最高重要度）。\n" +
@@ -354,12 +390,12 @@ public class MemoryTalent extends AbsTalent {
         return sb.toString();
     }
 
-    private static String briefOf(String content) {
+    private String briefOf(String content) {
         if (content == null) {
             return "";
         }
         String s = content.replace("\n", " ").trim();
-        return s.length() > BRIEF_LEN ? s.substring(0, BRIEF_LEN) + "…" : s;
+        return s.length() > briefLen ? s.substring(0, briefLen) + "…" : s;
     }
 
     /**

@@ -74,6 +74,9 @@ class HarnessOptions implements Serializable {
 
     // ========== 记忆 ==========
     private volatile boolean memoryEnabled = true;
+    private volatile int memoryInjectRelevant = 6;
+    private volatile int memoryInjectHot = 5;
+    private volatile int memoryBriefLen = 80;
 
     // ========== 安全与模式 ==========
     private volatile boolean sandboxEnabled = true;
@@ -252,6 +255,30 @@ class HarnessOptions implements Serializable {
         if (memoryEnabled != null) {
             this.memoryEnabled = memoryEnabled;
         }
+    }
+
+    int getMemoryInjectRelevant() {
+        return memoryInjectRelevant;
+    }
+
+    void setMemoryInjectRelevant(int n) {
+        this.memoryInjectRelevant = n;
+    }
+
+    int getMemoryInjectHot() {
+        return memoryInjectHot;
+    }
+
+    void setMemoryInjectHot(int n) {
+        this.memoryInjectHot = n;
+    }
+
+    int getMemoryBriefLen() {
+        return memoryBriefLen;
+    }
+
+    void setMemoryBriefLen(int n) {
+        this.memoryBriefLen = n;
     }
 
     boolean isSandboxEnabled() {

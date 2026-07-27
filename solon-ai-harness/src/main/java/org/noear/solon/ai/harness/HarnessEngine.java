@@ -928,7 +928,11 @@ public class HarnessEngine {
         this.lspManager.setDiagnosticsCallback(lspTalent::updateDiagnostics);
 
         if (options.getMemoryProvider() != null) {
-            this.memoryTalent = new MemoryTalent(options.getMemoryProvider()).sessionIsolation(false);
+            this.memoryTalent = new MemoryTalent(options.getMemoryProvider())
+                    .sessionIsolation(false)
+                    .injectRelevant(options.getMemoryInjectRelevant())
+                    .injectHot(options.getMemoryInjectHot())
+                    .briefLen(options.getMemoryBriefLen());
             this.memoryTalent.setEnabled(options.isMemoryEnabled());
         } else {
             this.memoryTalent = null;
@@ -1173,6 +1177,30 @@ public class HarnessEngine {
 
         public Builder memoryEnabled(Boolean memoryEnabled) {
             options.setMemoryEnabled(memoryEnabled);
+            return this;
+        }
+
+        /**
+         * 记忆注入：语义相关检索条数（默认 6）。小窗口模型建议 4，大窗口建议 8-10。
+         */
+        public Builder memoryInjectRelevant(int n) {
+            options.setMemoryInjectRelevant(n);
+            return this;
+        }
+
+        /**
+         * 记忆注入：热记忆兜底条数（默认 5）。
+         */
+        public Builder memoryInjectHot(int n) {
+            options.setMemoryInjectHot(n);
+            return this;
+        }
+
+        /**
+         * 记忆 listAll 视图的摘要截断长度（默认 80）。
+         */
+        public Builder memoryBriefLen(int n) {
+            options.setMemoryBriefLen(n);
             return this;
         }
 
