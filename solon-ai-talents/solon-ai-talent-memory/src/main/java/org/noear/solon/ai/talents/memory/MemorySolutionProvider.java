@@ -28,6 +28,7 @@ import java.util.List;
  */
 public interface MemorySolutionProvider {
     String SCOPE_USER = "user";
+    String SHARED_USER_ID = "shared";
 
     /**
      * 根据当前上下文标识获取记忆方案
