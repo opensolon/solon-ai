@@ -16,31 +16,25 @@
 package org.noear.solon.ai.talents.memory.store;
 
 import org.noear.redisx.RedisClient;
-import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 import org.noear.solon.ai.talents.memory.MemoryStorer;
 import org.noear.solon.core.util.Assert;
 
-import java.util.Arrays;
-import java.util.List;
-
 /**
+ * Redis 存储实现。
+ *
+ * <p>Redis 是扁平 K/V 存储，所有数据都在同一个键空间内，
+ * 不像 MD 方案那样按作用域分目录存放。因此本实现不支持作用域（scope），
+ * {@code put} 的 scope 参数将被忽略。
  *
  * @author noear 2026/3/4 created
  *
  */
 public class MemoryStorerRedisImpl implements MemoryStorer {
     private final RedisClient redis;
-    private final List<String> scopeOrder;
     private String basePrefix;
 
     public MemoryStorerRedisImpl(RedisClient redis) {
         this.redis = redis;
-        this.scopeOrder = Arrays.asList(MemorySolutionProvider.SCOPE_USER);
-    }
-
-    public MemoryStorerRedisImpl(RedisClient redis, List<String> scopeOrder) {
-        this.redis = redis;
-        this.scopeOrder = scopeOrder;
     }
 
     public MemoryStorerRedisImpl basePrefix(String basePrefix) {
@@ -48,37 +42,29 @@ public class MemoryStorerRedisImpl implements MemoryStorer {
         return this;
     }
 
-    private String getFinalKey(String userId, String key, String scope) {
+    private String getFinalKey(String userId, String key) {
         String base = Assert.isEmpty(basePrefix) ? "" : basePrefix;
-        return base + (scope != null && !scope.isEmpty() ? scope + ":" : "") + userId + ":" + key;
+        return base + userId + ":" + key;
     }
 
     @Override
     public void put(String userId, String key, String val, int ttl, String scope) {
+        // scope 在扁平 K/V 存储中无物理意义，忽略
         if (ttl < 0) {
             // ttl=-1 表示永久存储，不设置过期时间
-            redis.getBucket().store(getFinalKey(userId, key, scope), val);
+            redis.getBucket().store(getFinalKey(userId, key), val);
         } else {
-            redis.getBucket().store(getFinalKey(userId, key, scope), val, ttl);
+            redis.getBucket().store(getFinalKey(userId, key), val, ttl);
         }
     }
 
     @Override
     public String get(String userId, String key) {
-        String result = null;
-        for (String scope : scopeOrder) {
-            String val = redis.getBucket().get(getFinalKey(userId, key, scope));
-            if (val != null) {
-                result = val; // 后遍历的 scope 覆盖先遍历的（workspace 优先级最高）
-            }
-        }
-        return result;
+        return redis.getBucket().get(getFinalKey(userId, key));
     }
 
     @Override
     public void remove(String userId, String key) {
-        for (String scope : scopeOrder) {
-            redis.getBucket().remove(getFinalKey(userId, key, scope));
-        }
+        redis.getBucket().remove(getFinalKey(userId, key));
     }
 }

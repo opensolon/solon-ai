@@ -18,20 +18,21 @@ package org.noear.solon.ai.talents.memory.store;
 import com.yomahub.roguemap.RogueMap;
 import com.yomahub.roguemap.serialization.StringCodec;
 import org.noear.solon.ai.talents.memory.MemoryStorer;
-import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 
-import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
+ * RogueMap 存储实现。
+ *
+ * <p>RogueMap 是扁平 K/V 存储，所有数据都在同一个文件内，
+ * 不像 MD 方案那样按作用域分目录存放。因此本实现不支持作用域（scope），
+ * {@code put} 的 scope 参数将被忽略。
  *
  * @author noear 2026/3/4 created
  *
  */
 public class MemoryStorerRogueImpl implements MemoryStorer {
     private final RogueMap<String, String> rogueMap;
-    private final List<String> scopeOrder;
 
     public MemoryStorerRogueImpl(String filePath) {
         this.rogueMap = RogueMap.<String, String>mmap()
@@ -41,62 +42,36 @@ public class MemoryStorerRogueImpl implements MemoryStorer {
                 .keyCodec(StringCodec.INSTANCE)
                 .valueCodec(StringCodec.INSTANCE)
                 .build();
-        this.scopeOrder = Arrays.asList(MemorySolutionProvider.SCOPE_USER);
-    }
-
-    public MemoryStorerRogueImpl(String filePath, List<String> scopeOrder) {
-        this.rogueMap = RogueMap.<String, String>mmap()
-                .persistent(filePath)
-                .autoExpand(true)
-                .allocateSize(64 * 1024 * 1024L)
-                .keyCodec(StringCodec.INSTANCE)
-                .valueCodec(StringCodec.INSTANCE)
-                .build();
-        this.scopeOrder = scopeOrder;
     }
 
     public MemoryStorerRogueImpl(RogueMap<String, String> rogueMap) {
         this.rogueMap = rogueMap;
-        this.scopeOrder = Arrays.asList(MemorySolutionProvider.SCOPE_USER);
     }
 
-    public MemoryStorerRogueImpl(RogueMap<String, String> rogueMap,  List<String> scopeOrder) {
-        this.rogueMap = rogueMap;
-        this.scopeOrder = scopeOrder;
-    }
-
-    private String getFinalKey(String bucketKey, String key, String scope) {
-        return (scope != null && !scope.isEmpty() ? scope + ":" : "") + bucketKey + ":" + key;
+    private String getFinalKey(String userId, String key) {
+        return userId + ":" + key;
     }
 
     @Override
     public void put(String userId, String key, String val, int ttl, String scope) {
+        // scope 在扁平 K/V 存储中无物理意义，忽略
         if (ttl < 0) {
             // ttl=-1 表示永久存储，不设置过期时间
-            rogueMap.put(getFinalKey(userId, key, scope), val);
+            rogueMap.put(getFinalKey(userId, key), val);
         } else {
-            rogueMap.put(getFinalKey(userId, key, scope), val, ttl, TimeUnit.SECONDS);
+            rogueMap.put(getFinalKey(userId, key), val, ttl, TimeUnit.SECONDS);
         }
         rogueMap.checkpoint();
     }
 
     @Override
     public String get(String userId, String key) {
-        String result = null;
-        for (String scope : scopeOrder) {
-            String val = rogueMap.get(getFinalKey(userId, key, scope));
-            if (val != null) {
-                result = val; // 后遍历的 scope 覆盖先遍历的（workspace 优先级最高）
-            }
-        }
-        return result;
+        return rogueMap.get(getFinalKey(userId, key));
     }
 
     @Override
     public void remove(String userId, String key) {
-        for (String scope : scopeOrder) {
-            rogueMap.remove(getFinalKey(userId, key, scope));
-        }
+        rogueMap.remove(getFinalKey(userId, key));
         rogueMap.checkpoint();
     }
 }
