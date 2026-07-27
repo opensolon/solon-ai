@@ -159,7 +159,13 @@ public class MemoryMdData implements AutoCloseable {
             return null;
         }
 
-        return buildJson(entry.content, entry.time, entry.importance);
+        ONode oNode = new ONode();
+        oNode.set("content", entry.content);
+        oNode.set("time", entry.time);
+        oNode.set("importance", entry.importance);
+        oNode.set("scope", entry.scope);
+
+        return oNode.toJson();
     }
 
     /**
@@ -573,12 +579,6 @@ public class MemoryMdData implements AutoCloseable {
         } catch (Exception e) {
             return false;
         }
-    }
-
-    private String buildJson(String content, String time, int importance) {
-        return "{\"content\":" + ONode.serialize(content)
-                + ",\"time\":" + ONode.serialize(time)
-                + ",\"importance\":" + importance + "}";
     }
 
     private String getNow() {
