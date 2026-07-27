@@ -63,12 +63,12 @@ public class MemoryTalent extends AbsTalent {
     private boolean sessionIsolation = false; // 默认会话不隔离
     private boolean relevanceInjection = true; // 默认按"相关性+热度"混合注入画像
 
-    /** 画像注入：语义相关检索条数（默认 5，CLI 编程辅助场景精简弱相关噪声） */
-    private int injectRelevant = 5;
-    /** 画像注入：热记忆兜底条数（默认 5，importance>=5 的高质量条目） */
-    private int injectHot = 5;
+    /** 画像注入：按当前对话语义匹配的记忆条数（默认 5，CLI 编程辅助场景精简弱相关噪声） */
+    private int relevanceCount = 5;
+    /** 画像注入：按重要度兜底的记忆条数（默认 5，importance>=5 的高质量条目） */
+    private int priorityCount = 5;
     /** 列目录摘要长度（默认 80，覆盖大多数单句记忆的完整内容，截断只影响 listAll 视图） */
-    private int briefLen = 80;
+    private int summaryLength = 80;
 
     public MemoryTalent(MemorySolutionProvider solutionProvider) {
         super(Utils.asMap("ScopesDescription", solutionProvider.getScopesDescription()));
@@ -95,21 +95,21 @@ public class MemoryTalent extends AbsTalent {
     }
 
     /**
-     * 设置语义相关检索注入条数（默认 6）。
-     * <p>总注入预算 = injectRelevant + injectHot，search 未用完的预算自动流转给 hot。
-     * <p>小窗口模型建议 4，大窗口模型建议 8-10。
+     * 设置按对话内容语义匹配的记忆条数（默认 5）。
+     * <p>总注入预算 = relevanceCount + priorityCount，search 未用完的预算自动流转给 priorityCount。
+     * <p>小窗口模型建议 3-4，大窗口模型建议 8-10。
      */
-    public MemoryTalent injectRelevant(int n) {
-        this.injectRelevant = Math.max(0, n);
+    public MemoryTalent relevanceCount(int n) {
+        this.relevanceCount = Math.max(0, n);
         return this;
     }
 
     /**
-     * 设置热记忆兜底注入条数（默认 5）。
-     * <p>热记忆为 importance>=5 的高质量条目，在语义匹配不足时保证核心认知不丢。
+     * 设置按重要度兜底的记忆条数（默认 5）。
+     * <p>兜底记忆为 importance>=5 的高质量条目，在语义匹配不足时保证核心认知不丢。
      */
-    public MemoryTalent injectHot(int n) {
-        this.injectHot = Math.max(0, n);
+    public MemoryTalent priorityCount(int n) {
+        this.priorityCount = Math.max(0, n);
         return this;
     }
 
@@ -118,8 +118,8 @@ public class MemoryTalent extends AbsTalent {
      * <p>仅影响 memory_search('*') 的列表展示，注入路径使用完整内容不受此限制。
      * <p>80 可覆盖大多数单句记忆的完整内容；记忆普遍较长时可适当调大。
      */
-    public MemoryTalent briefLen(int n) {
-        this.briefLen = Math.max(10, n);
+    public MemoryTalent summaryLength(int n) {
+        this.summaryLength = Math.max(10, n);
         return this;
     }
 
@@ -159,14 +159,14 @@ public class MemoryTalent extends AbsTalent {
         if (solution != null && solution.getSearcher() != null) {
             MemorySearcher searcher = solution.getSearcher();
             try {
-                // 总预算 = injectRelevant + injectHot
-                int budget = injectRelevant + injectHot;
+                // 总预算 = relevanceCount + priorityCount
+                int budget = relevanceCount + priorityCount;
 
-                // 步骤 A：语义检索（userContent 为空时跳过，预算自动流转给 hot）
+                // 步骤 A：语义检索（userContent 为空时跳过，预算自动流转给 priorityCount）
                 if (relevanceInjection) {
                     String userContent = prompt.getUserContent();
                     if (Utils.isNotEmpty(userContent)) {
-                        for (MemorySearchResult r : searcher.search(userId, userContent, injectRelevant)) {
+                        for (MemorySearchResult r : searcher.search(userId, userContent, relevanceCount)) {
                             merged.putIfAbsent(r.getKey(), r);
                         }
                     }
@@ -395,7 +395,7 @@ public class MemoryTalent extends AbsTalent {
             return "";
         }
         String s = content.replace("\n", " ").trim();
-        return s.length() > briefLen ? s.substring(0, briefLen) + "…" : s;
+        return s.length() > summaryLength ? s.substring(0, summaryLength) + "…" : s;
     }
 
     /**

@@ -930,9 +930,9 @@ public class HarnessEngine {
         if (options.getMemoryProvider() != null) {
             this.memoryTalent = new MemoryTalent(options.getMemoryProvider())
                     .sessionIsolation(false)
-                    .injectRelevant(options.getMemoryInjectRelevant())
-                    .injectHot(options.getMemoryInjectHot())
-                    .briefLen(options.getMemoryBriefLen());
+                    .relevanceCount(options.getMemoryRelevanceCount())
+                    .priorityCount(options.getMemoryPriorityCount())
+                    .summaryLength(options.getMemorySummaryLength());
             this.memoryTalent.setEnabled(options.isMemoryEnabled());
         } else {
             this.memoryTalent = null;
@@ -1181,26 +1181,26 @@ public class HarnessEngine {
         }
 
         /**
-         * 记忆注入：语义相关检索条数（默认 6）。小窗口模型建议 4，大窗口建议 8-10。
+         * 记忆注入：按对话内容语义匹配的条数（默认 6）。小窗口模型建议 3-4，大窗口建议 8-10。
          */
-        public Builder memoryInjectRelevant(int n) {
-            options.setMemoryInjectRelevant(n);
+        public Builder memoryRelevanceCount(int n) {
+            options.setMemoryRelevanceCount(n);
             return this;
         }
 
         /**
-         * 记忆注入：热记忆兜底条数（默认 5）。
+         * 记忆注入：按重要度兜底的条数（默认 5）。
          */
-        public Builder memoryInjectHot(int n) {
-            options.setMemoryInjectHot(n);
+        public Builder memoryPriorityCount(int n) {
+            options.setMemoryPriorityCount(n);
             return this;
         }
 
         /**
          * 记忆 listAll 视图的摘要截断长度（默认 80）。
          */
-        public Builder memoryBriefLen(int n) {
-            options.setMemoryBriefLen(n);
+        public Builder memorySummaryLength(int n) {
+            options.setMemorySummaryLength(n);
             return this;
         }
 
