@@ -11,7 +11,6 @@ import org.noear.solon.ai.talents.memory.store.MemoryStorerMdImpl;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
 
 /**
  * 基于 MD 文件的记忆方案实现（方案 A：纯 MD，零外部依赖）
@@ -35,8 +34,8 @@ public class MemorySolutionMdImpl implements MemorySolution {
 
         // 创建共享数据层（启动时自动加载已有 MD 文件，启用后台过期清理）
         data = new MemoryMdData(
-                Utils.asMap(MemorySolutionProvider.SCOPE_USER, mdPath),
-                Arrays.asList(MemorySolutionProvider.SCOPE_USER))
+                Utils.asMap(MemorySolutionProvider.SCOPE_USER, mdPath)
+        )
                 .enableAutoCleanup(3600);
 
         // Store 和 Search 共享同一个 data 实例

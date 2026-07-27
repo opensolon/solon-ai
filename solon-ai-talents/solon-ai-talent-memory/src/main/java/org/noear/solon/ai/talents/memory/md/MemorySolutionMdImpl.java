@@ -22,7 +22,6 @@ import org.noear.solon.ai.talents.memory.search.MemorySearcherMdImpl;
 import org.noear.solon.ai.talents.memory.store.MemoryStorerMdImpl;
 
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -36,11 +35,6 @@ import java.util.Map;
  *   <li>后台定期清理过期条目</li>
  * </ul>
  *
- * <p>用法：
- * <pre>
- * MemorySolution solution = new MemorySolutionMdImpl(__cwd);
- * </pre>
- *
  * @author noear
  * @since 3.10.5
  */
@@ -49,8 +43,16 @@ public class MemorySolutionMdImpl implements MemorySolution, AutoCloseable {
     private final MemorySearcher searchProvider;
     private final MemoryStorer storeProvider;
 
-    public MemorySolutionMdImpl(Map<String, Path> scopeDirMap, List<String> scopeOrder) {
-        data = new MemoryMdData(scopeDirMap, scopeOrder).enableAutoCleanup(3600);
+    /**
+     * 高级构造器：自定义作用域目录映射。
+     *
+     * <p>需使用 LinkedHashMap 保证迭代顺序（低→高优先级），
+     * 例如 {@code user → workspace}，后者覆盖前者。
+     *
+     * @param scopeDirMap 作用域目录映射
+     */
+    public MemorySolutionMdImpl(Map<String, Path> scopeDirMap) {
+        data = new MemoryMdData(scopeDirMap).enableAutoCleanup(3600);
 
         storeProvider = new MemoryStorerMdImpl(data);
         searchProvider = new MemorySearcherMdImpl(data);

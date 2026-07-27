@@ -61,13 +61,12 @@ public class MemoryMdData implements AutoCloseable {
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final String FRONT_MATTER_DELIMITER = "---";
 
-    private final Map<String,Path> scopeDirMap;
-
     /**
-     * 作用域优先级顺序（低→高），高优先级域覆盖低优先级域的同 key 条目。
-     * 固定顺序：user → 其他 → workspace，消除 HashMap 迭代序不确定性。
+     * 作用域目录映射（scope → 物理目录）。
+     * 使用 LinkedHashMap 保证迭代顺序（低→高），高优先级域覆盖低优先级域的同 key 条目。
+     * 建议插入顺序：user → workspace。
      */
-    private final List<String> scopeOrder;
+    private final Map<String, Path> scopeDirMap;
 
     /**
      * 内存缓存：cacheKey → MemoryEntry
@@ -86,14 +85,22 @@ public class MemoryMdData implements AutoCloseable {
      */
     private ScheduledExecutorService cleanupScheduler;
 
-    public MemoryMdData(Map<String,Path> scopeDirMap, List<String> scopeOrder) {
-        this.scopeDirMap = scopeDirMap;
-        this.scopeOrder = scopeOrder;
+    /**
+     * @param scopeDirMap 作用域目录映射，需使用 LinkedHashMap 保证迭代顺序（低→高优先级）
+     */
+    public MemoryMdData(Map<String, Path> scopeDirMap) {
+        // 用 LinkedHashMap 保序，消除 HashMap 迭代序不确定性
+        if (scopeDirMap instanceof LinkedHashMap) {
+            this.scopeDirMap = scopeDirMap;
+        } else {
+            this.scopeDirMap = new LinkedHashMap<>(scopeDirMap);
+        }
+
         init();
     }
 
     private void init() {
-        for (String scope : scopeOrder) {
+        for (String scope : scopeDirMap.keySet()) {
             Path dir = scopeDirMap.get(scope);
             try {
                 Files.createDirectories(dir);
@@ -139,10 +146,10 @@ public class MemoryMdData implements AutoCloseable {
     public String get(String userId, String key) {
         String storeKey = buildStoreKey(userId, key);
 
-        // 按优先级顺序探测缓存（workspace 最后 = 最高优先级）
+        // 按优先级顺序探测缓存（scopeDirMap 迭代序 = 低→高，后者覆盖前者）
         MemoryEntry entry = null;
         String foundScope = null;
-        for (String scope : scopeOrder) {
+        for (String scope : scopeDirMap.keySet()) {
             MemoryEntry cached = cache.get(buildCacheKey(userId, key, scope));
             if (cached != null) {
                 entry = cached;
@@ -154,7 +161,7 @@ public class MemoryMdData implements AutoCloseable {
             // 缓存未命中，按优先级顺序从磁盘加载
             // Note: 并发 get() 可能在 put() 的 updateIndex() 之前短暂加载旧数据并写入索引，
             // 属于最终一致性可接受范围——put() 的 updateIndex() 随后会覆盖为最新值。
-            for (String scope : scopeOrder) {
+            for (String scope : scopeDirMap.keySet()) {
                 MemoryEntry found = loadFromMdFile(storeKey, scope, scopeDirMap.get(scope));
                 if (found != null) {
                     entry = found;

@@ -40,10 +40,6 @@ public interface MemorySolutionProvider {
      */
     MemorySolution get(String __cwd);
 
-    default List<String> getScopesSorted(){
-        return Arrays.asList("workspace", "user");
-    }
-
     default String getScopesDefault(){
         return "workspace";
     }
