@@ -1,7 +1,9 @@
 package demo.ai.memory;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.talents.memory.MemorySearcher;
 import org.noear.solon.ai.talents.memory.MemorySolution;
+import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 import org.noear.solon.ai.talents.memory.MemoryStorer;
 import org.noear.solon.ai.talents.memory.md.MemoryMdData;
 import org.noear.solon.ai.talents.memory.search.MemorySearcherMdImpl;
@@ -31,7 +33,7 @@ public class MemorySolutionMdImpl implements MemorySolution {
         Path mdPath = Paths.get(__cwd, "memory_md").toAbsolutePath();
 
         // 创建共享数据层（启动时自动加载已有 MD 文件，启用后台过期清理）
-        data = new MemoryMdData(mdPath).enableAutoCleanup(3600);
+        data = new MemoryMdData(Utils.asMap(MemorySolutionProvider.SCOPE_WORKSPACE, mdPath)).enableAutoCleanup(3600);
 
         // Store 和 Search 共享同一个 data 实例
         storeProvider = new MemoryStorerMdImpl(data);

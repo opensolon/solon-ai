@@ -118,7 +118,8 @@ public class MemorySearcherLuceneImpl implements MemorySearcher, AutoCloseable {
                         d.get("mem_key"),
                         d.get("content"),
                         importance,
-                        d.get("time")
+                        d.get("time"),
+                        d.get("scope")
                 ));
             }
         } catch (Exception e) {
@@ -128,7 +129,7 @@ public class MemorySearcherLuceneImpl implements MemorySearcher, AutoCloseable {
     }
 
     @Override
-    public void updateIndex(String userId, String key, String fact, int importance, String time) {
+    public void updateIndex(String userId, String key, String fact, int importance, String time, String scope) {
         try {
             String docId = userId + ":" + key;
             Document doc = new Document();
@@ -140,6 +141,7 @@ public class MemorySearcherLuceneImpl implements MemorySearcher, AutoCloseable {
             doc.add(new StoredField("importance", importance));
             doc.add(new NumericDocValuesField("importance", importance));
             doc.add(new StringField("time", time, Field.Store.YES));
+            doc.add(new StringField("scope", scope == null ? "" : scope, Field.Store.YES));
 
             writer.updateDocument(new Term("id", docId), doc);
             writer.commit(); // 显式提交

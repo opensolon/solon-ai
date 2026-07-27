@@ -43,14 +43,17 @@ public class MemoryStorerRogueImpl implements MemoryStorer {
         this.rogueMap = rogueMap;
     }
 
+    private String getFinalKey(String bucketKey, String key, String scope) {
+        return (scope != null && !scope.isEmpty() ? scope + ":" : "") + bucketKey + ":" + key;
+    }
+
     private String getFinalKey(String bucketKey, String key) {
-        return bucketKey + ":" + key;
+        return getFinalKey(bucketKey, key, "");
     }
 
     @Override
     public void put(String userId, String key, String val, int ttl, String scope) {
-        //ps: 不用管 scope
-        rogueMap.put(getFinalKey(userId, key), val, ttl, TimeUnit.SECONDS);
+        rogueMap.put(getFinalKey(userId, key, scope), val, ttl, TimeUnit.SECONDS);
         rogueMap.checkpoint();
     }
 

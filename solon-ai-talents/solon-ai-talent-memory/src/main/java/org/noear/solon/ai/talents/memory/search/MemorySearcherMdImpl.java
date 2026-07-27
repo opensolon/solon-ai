@@ -64,8 +64,8 @@ public class MemorySearcherMdImpl implements MemorySearcher {
     }
 
     @Override
-    public void updateIndex(String userId, String key, String fact, int importance, String time) {
-        data.updateIndex(userId, key, fact, importance, time);
+    public void updateIndex(String userId, String key, String fact, int importance, String time, String scope) {
+        data.updateIndex(userId, key, fact, importance, time, scope);
     }
 
     @Override

@@ -37,7 +37,12 @@ public class MemorySearchResult {
         this.content = content;
         this.importance = importance;
         this.time = time;
-        this.scope = scope;
+
+        if (scope == null) {
+            this.scope = "";
+        } else {
+            this.scope = scope;
+        }
     }
 
     public String getKey() {
@@ -58,5 +63,9 @@ public class MemorySearchResult {
 
     public String getScope() {
         return scope;
+    }
+
+    public void setScope(String scope) {
+        this.scope = scope;
     }
 }

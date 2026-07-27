@@ -244,7 +244,7 @@ public class MemoryTalent extends AbsTalent {
             storeProvider.put(userId, key, ONode.serialize(data), ttl, scope);
 
             if (searchProvider != null) {
-                searchProvider.updateIndex(userId, key, fact, importance, now);
+                searchProvider.updateIndex(userId, key, fact, importance, now, scope);
 
                 // M3.1 近似 Key 探测：用 fact 检索是否已存在同主题但不同 Key 的条目，抑制碎片化
                 if (Utils.isEmpty(oldJson)) {

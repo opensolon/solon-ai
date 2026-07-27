@@ -101,7 +101,7 @@ public class MemorySearcherRepositoryImpl implements MemorySearcher {
     }
 
     @Override
-    public void updateIndex(String userId, String key, String fact, int importance, String time) {
+    public void updateIndex(String userId, String key, String fact, int importance, String time, String scope) {
         try {
             Document doc = new Document(fact);
             doc.id(getDocId(userId, key));
@@ -109,6 +109,7 @@ public class MemorySearcherRepositoryImpl implements MemorySearcher {
             doc.metadata("mem_key", key);
             doc.metadata("importance", importance);
             doc.metadata("time", time);
+            doc.metadata("scope", scope == null ? "" : scope);
 
             repository.save(doc);
         } catch (Exception e) {
@@ -132,6 +133,7 @@ public class MemorySearcherRepositoryImpl implements MemorySearcher {
     protected MemorySearchResult mapToResult(Document doc) {
         String key = doc.getMetadataAs("mem_key");
         String time = doc.getMetadataAs("time");
+        String scope = doc.getMetadataAs("scope");
 
         int importance = 0;
         Object impObj = doc.getMetadata("importance");
@@ -141,6 +143,6 @@ public class MemorySearcherRepositoryImpl implements MemorySearcher {
             importance = Integer.parseInt((String) impObj);
         }
 
-        return new MemorySearchResult(key, doc.getContent(), importance, time);
+        return new MemorySearchResult(key, doc.getContent(), importance, time, scope == null ? "" : scope);
     }
 }

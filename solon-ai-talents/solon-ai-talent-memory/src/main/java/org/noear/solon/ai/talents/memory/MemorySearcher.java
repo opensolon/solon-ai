@@ -41,7 +41,7 @@ public interface MemorySearcher {
         return getHotMemories(userId, limit);
     }
     /** 同步索引 */
-    void updateIndex(String userId, String key, String fact, int importance, String time);
+    void updateIndex(String userId, String key, String fact, int importance, String time, String scope);
     /** 移除索引 */
     void removeIndex(String userId, String key);
 }

@@ -114,9 +114,9 @@ public class MemoryMdData implements AutoCloseable {
             int importance = node.get("importance").getInt();
             String storedTime = getNow();
 
-            // 1. 写 MD 文件（Front Matter 中保存完整 storeKey，消除还原歧义）
+            // 1. 写 MD 文件（Front Matter 中保存完整 storeKey 和 scope，消除还原歧义）
             Path file = resolveFile(storeKey, scopeDirMap.get(scope));
-            writeMdFile(file, storeKey, time, importance, ttl, storedTime, content);
+            writeMdFile(file, storeKey, scope, time, importance, ttl, storedTime, content);
 
             // 2. 更新内存缓存
             cache.put(storeKey, new MemoryEntry(content, time, importance, ttl, storedTime, scope));
@@ -135,7 +135,7 @@ public class MemoryMdData implements AutoCloseable {
         if (entry == null) {
             // 缓存未命中，尝试从磁盘加载（可能是外部写入的 MD 文件）
             for(Map.Entry<String, Path> scopeEntry : scopeDirMap.entrySet()) {
-                entry = loadFromMdFile(storeKey, scopeEntry.getValue());
+                entry = loadFromMdFile(storeKey, scopeEntry.getKey(), scopeEntry.getValue());
                 if(entry != null){
                     break;
                 }
@@ -373,9 +373,9 @@ public class MemoryMdData implements AutoCloseable {
     /**
      * 写入 MD 文件（原子写入 + 自动降级）
      */
-    private void writeMdFile(Path file, String storeKey, String time, int importance, int ttl,
+    private void writeMdFile(Path file, String storeKey, String scope, String time, int importance, int ttl,
                              String storedTime, String content) throws IOException {
-        String md = buildMdContent(storeKey, time, importance, ttl, storedTime, content);
+        String md = buildMdContent(storeKey, scope, time, importance, ttl, storedTime, content);
 
         Files.createDirectories(file.getParent());
         Path tmpFile = file.resolveSibling(file.getFileName() + ".tmp");
@@ -392,7 +392,7 @@ public class MemoryMdData implements AutoCloseable {
     /**
      * 从 MD 文件加载单条记忆（缓存未命中时调用）
      */
-    private MemoryEntry loadFromMdFile(String storeKey, Path scopeBaseDir) {
+    private MemoryEntry loadFromMdFile(String storeKey, String scope, Path scopeBaseDir) {
         Path file = resolveFile(storeKey, scopeBaseDir);
         if (!Files.exists(file)) {
             return null;
@@ -412,10 +412,10 @@ public class MemoryMdData implements AutoCloseable {
                 return null;
             }
 
-            // 未过期且 Front Matter 中缺少 storeKey 时补写
-            if (fm.storeKey == null || fm.storeKey.isEmpty()) {
+            // 未过期且 Front Matter 中缺少 storeKey 或 scope 时补写（兼容旧文件）
+            if (fm.storeKey == null || fm.storeKey.isEmpty() || fm.scope == null || fm.scope.isEmpty()) {
                 try {
-                    writeMdFile(file, storeKey, fm.time, fm.importance, fm.ttl, fm.storedTime, fm.content);
+                    writeMdFile(file, storeKey, scope, fm.time, fm.importance, fm.ttl, fm.storedTime, fm.content);
                 } catch (IOException ignored) {
                 }
             }
@@ -494,7 +494,7 @@ public class MemoryMdData implements AutoCloseable {
         return new String[]{userId, key};
     }
 
-    private String buildMdContent(String storeKey, String time, int importance, int ttl,
+    private String buildMdContent(String storeKey, String scope, String time, int importance, int ttl,
                                   String storedTime, String content) {
         StringBuilder sb = new StringBuilder();
         sb.append(FRONT_MATTER_DELIMITER).append("\n");
@@ -503,6 +503,9 @@ public class MemoryMdData implements AutoCloseable {
         sb.append("importance: ").append(importance).append("\n");
         sb.append("ttl: ").append(ttl).append("\n");
         sb.append("stored_at: \"").append(storedTime).append("\"\n");
+        if (scope != null && !scope.isEmpty()) {
+            sb.append("scope: \"").append(escapeYaml(scope)).append("\"\n");
+        }
         sb.append(FRONT_MATTER_DELIMITER).append("\n\n");
         sb.append(content).append("\n");
         return sb.toString();
@@ -548,6 +551,9 @@ public class MemoryMdData implements AutoCloseable {
         }
         if (meta.hasKey("stored_at")) {
             fm.storedTime = meta.get("stored_at").getString();
+        }
+        if (meta.hasKey("scope")) {
+            fm.scope = meta.get("scope").getString();
         }
 
         return fm;

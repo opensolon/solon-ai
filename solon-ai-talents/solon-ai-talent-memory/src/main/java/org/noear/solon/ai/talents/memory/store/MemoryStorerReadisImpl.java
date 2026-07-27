@@ -38,18 +38,18 @@ public class MemoryStorerReadisImpl implements MemoryStorer {
         return this;
     }
 
+    private String getFinalKey(String userId, String key, String scope) {
+        String base = Assert.isEmpty(basePrefix) ? "" : basePrefix;
+        return base + (scope != null && !scope.isEmpty() ? scope + ":" : "") + userId + ":" + key;
+    }
+
     private String getFinalKey(String userId, String key) {
-        if (Assert.isEmpty(basePrefix)) {
-            return userId + ":" + key;
-        } else {
-            return basePrefix + userId + ":" + key;
-        }
+        return getFinalKey(userId, key, "");
     }
 
     @Override
     public void put(String userId, String key, String val, int ttl, String scope) {
-        //ps: 不用管 scope
-        redis.getBucket().store(getFinalKey(userId, key), val, ttl);
+        redis.getBucket().store(getFinalKey(userId, key, scope), val, ttl);
     }
 
     @Override

@@ -27,6 +27,9 @@ import java.util.List;
  * @since 4.0.0
  */
 public interface MemorySolutionProvider {
+    String SCOPE_USER = "user";
+    String SCOPE_WORKSPACE = "workspace";
+
     /**
      * 根据当前上下文标识获取记忆方案
      *
@@ -40,7 +43,7 @@ public interface MemorySolutionProvider {
 
 
     default String getScopeDefault(){
-        return "user";
+        return "workspace";
     }
 
     default String getScopesDescription(){

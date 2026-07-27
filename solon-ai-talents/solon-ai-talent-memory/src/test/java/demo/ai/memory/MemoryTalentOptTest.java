@@ -158,10 +158,10 @@ public class MemoryTalentOptTest {
         MemorySearcher realSearcher = solution.getSearcher();
         MemoryStorer droppingStorer = new MemoryStorer() {
             @Override
-            public void put(String userId, String key, String val, int ttl) {
+            public void put(String userId, String key, String val, int ttl, String scope) {
                 // 丢弃新写入（仅对新 newKey），旧碎片保持可读
                 if (!"merged_insight".equals(key)) {
-                    realStorer.put(userId, key, val, ttl);
+                    realStorer.put(userId, key, val, ttl, scope);
                 }
             }
 
@@ -217,8 +217,8 @@ public class MemoryTalentOptTest {
         // 对 pf_b 的删除故意抛异常，模拟底层删除失败
         MemoryStorer failingRemoveStorer = new MemoryStorer() {
             @Override
-            public void put(String userId, String key, String val, int ttl) {
-                realStorer.put(userId, key, val, ttl);
+            public void put(String userId, String key, String val, int ttl, String scope) {
+                realStorer.put(userId, key, val, ttl, scope);
             }
 
             @Override
