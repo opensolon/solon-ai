@@ -15,10 +15,17 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.ai.chat.tool.ToolResult;
+import org.noear.solon.core.util.Assert;
+
 import java.util.Map;
 
 /**
  * Action 工具执行交换器
+ * <p>承载工具参数与完整 {@link ToolResult}（文本 / media / isError / metas），
+ * 避免 returnDirect 与 observation 路径把富结果压成纯字符串。</p>
  *
  * @author noear
  * @since 3.11.0
@@ -29,7 +36,8 @@ public class ToolExchanger {
     private final Map<String, Object> args;
     private boolean returnDirect;
 
-    private String result;
+    /** 完整工具结果；拦截器改写文本时通过 {@link #setResult(String)} 更新 */
+    private ToolResult toolResult;
 
     public ToolExchanger(String callId, String toolName, Map<String, Object> args) {
         this.callId = callId;
@@ -50,21 +58,63 @@ public class ToolExchanger {
     }
 
     /**
-     * 是否可直接返回给调用者（对齐 FunctionTool.returnDirect）
+     * 是否可直接返回给调用者（对齐 FunctionTool.returnDirect，仅真实成功后标记）
      */
     public boolean isReturnDirect() {
         return returnDirect;
     }
 
-    public String getResult() {
-        return result;
-    }
-
-    public void setResult(String result) {
-        this.result = result;
-    }
-
     public void setReturnDirect(boolean returnDirect) {
         this.returnDirect = returnDirect;
+    }
+
+    /**
+     * 文本投影（兼容 HITL / 拦截器既有 API）
+     */
+    public String getResult() {
+        return toolResult == null ? null : toolResult.getContent();
+    }
+
+    /**
+     * 完整工具结果（含 blocks / isError / metas）
+     */
+    public ToolResult getToolResult() {
+        return toolResult;
+    }
+
+    /**
+     * 写入完整工具结果（执行成功 / 失败 / HITL 预填后统一入口）
+     */
+    public void setToolResult(ToolResult toolResult) {
+        this.toolResult = toolResult;
+    }
+
+    /**
+     * 按文本写入或改写结果。
+     * <p>HITL reject/skip 预填、批准 Note 等场景使用。若已有富结果，仅替换文本投影，
+     * 保留非文本 media blocks 与 isError / metas，避免 Note 注入把图冲掉。</p>
+     */
+    public void setResult(String result) {
+        if (toolResult == null) {
+            this.toolResult = ToolResult.success(result);
+            return;
+        }
+
+        // 保留 media / error / metas，仅更新文本
+        ToolResult rebuilt = new ToolResult();
+        rebuilt.setError(toolResult.isError());
+        if (Assert.isNotEmpty(toolResult.metas())) {
+            rebuilt.metas().putAll(toolResult.metas());
+        }
+
+        if (result != null) {
+            rebuilt.addText(result);
+        }
+        for (ContentBlock block : toolResult.getBlocks()) {
+            if (!(block instanceof TextBlock)) {
+                rebuilt.addBlock(block);
+            }
+        }
+        this.toolResult = rebuilt;
     }
 }

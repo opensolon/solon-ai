@@ -26,12 +26,16 @@ import org.noear.solon.ai.agent.react.ReActOptions;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.task.ActionTask;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.prompt.PromptImpl;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.flow.FlowContext;
 
 import java.util.Collections;
@@ -39,6 +43,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -47,7 +52,8 @@ import static org.mockito.Mockito.*;
  * ActionTask returnDirect 语义单元测试
  *
  * <p>验证：工具声明 returnDirect=true 且成功时，结果直接作为 FinalAnswer 结束；
- * 混合/失败/未声明时，继续 Observation → Reason 循环。</p>
+ * 混合/失败/未声明时，继续 Observation → Reason 循环。
+ * 富结果（media / isError）在 observation 与终态路径上不被压扁。</p>
  */
 public class ActionTaskReturnDirectTest {
 
@@ -59,6 +65,9 @@ public class ActionTaskReturnDirectTest {
     private AgentSession session;
     private ReActOptions options;
     private AtomicInteger toolCallCount;
+    /** null=未调用 setFinalAnswer；true/false=abnormal 标记 */
+    private AtomicReference<Boolean> finalAnswerAbnormal;
+    private AtomicReference<AssistantMessage> lastReasonHolder;
 
     @BeforeEach
     public void setUp() {
@@ -74,6 +83,8 @@ public class ActionTaskReturnDirectTest {
 
         context = mock(FlowContext.class);
         toolCallCount = new AtomicInteger(0);
+        finalAnswerAbnormal = new AtomicReference<>(null);
+        lastReasonHolder = new AtomicReference<>(null);
 
         trace = mock(ReActTrace.class);
         when(trace.getOptions()).thenReturn(options);
@@ -96,20 +107,26 @@ public class ActionTaskReturnDirectTest {
             return null;
         }).when(trace).setRoute(anyString());
 
-        // finalAnswer 可变状态
+        // finalAnswer 可变状态（对齐 ReActTrace：单参→abnormal=true；双参→显式 abnormal）
         final String[] answerHolder = {null};
-        final Boolean[] abnormalHolder = {null};
         when(trace.getFinalAnswer()).thenAnswer(inv -> answerHolder[0]);
         doAnswer(inv -> {
             answerHolder[0] = inv.getArgument(0);
-            abnormalHolder[0] = true;
+            finalAnswerAbnormal.set(true);
             return null;
         }).when(trace).setFinalAnswer(anyString());
         doAnswer(inv -> {
             answerHolder[0] = inv.getArgument(0);
-            abnormalHolder[0] = inv.getArgument(1);
+            finalAnswerAbnormal.set(inv.getArgument(1));
             return null;
         }).when(trace).setFinalAnswer(anyString(), anyBoolean());
+
+        // lastReason 可变：returnDirect media 会 setLastReasonMessage 上浮
+        when(trace.getLastReasonMessage()).thenAnswer(inv -> lastReasonHolder.get());
+        doAnswer(inv -> {
+            lastReasonHolder.set(inv.getArgument(0));
+            return null;
+        }).when(trace).setLastReasonMessage(any());
     }
 
     private void chatModelSetup() {
@@ -147,8 +164,12 @@ public class ActionTaskReturnDirectTest {
         return new AssistantMessage(content);
     }
 
+    private void setLastReason(AssistantMessage reason) {
+        lastReasonHolder.set(reason);
+    }
+
     @Test
-    @DisplayName("单工具 returnDirect=true 成功：直接 FinalAnswer 并 END")
+    @DisplayName("单工具 returnDirect=true 成功：直接 FinalAnswer 并 END，且 abnormal=false")
     public void testSingleReturnDirect_native() throws Throwable {
         options.getModelOptions().toolAdd(new FunctionToolDesc("getWeather")
                 .returnDirect(true)
@@ -159,12 +180,16 @@ public class ActionTaskReturnDirectTest {
         Map<String, Object> args = new HashMap<>();
         args.put("city", "杭州");
         AssistantMessage reason = nativeToolCallMessage("getWeather", args);
-        when(trace.getLastReasonMessage()).thenReturn(reason);
+        setLastReason(reason);
 
         actionTask.run(trace, context);
 
         assertEquals(Agent.ID_END, trace.getRoute());
         assertEquals("晴天 25℃", trace.getFinalAnswer());
+        // 业务直返必须走双参 setFinalAnswer(content, false)，不能误标 abnormal
+        assertEquals(Boolean.FALSE, finalAnswerAbnormal.get(), "业务 returnDirect 成功应为 abnormal=false");
+        verify(trace, times(1)).setFinalAnswer(eq("晴天 25℃"), eq(false));
+        verify(trace, never()).setFinalAnswer(anyString()); // 单参会强制 abnormal=true
         assertEquals(1, toolCallCount.get());
         assertTrue(workingMemory.getMessages().size() >= 2, "应写入 assistant + tool 成套消息");
         assertTrue(workingMemory.getMessages().stream().anyMatch(m -> m instanceof ToolMessage));
@@ -187,7 +212,7 @@ public class ActionTaskReturnDirectTest {
 
         Map<String, Object> args = new HashMap<>();
         args.put("city", "杭州");
-        when(trace.getLastReasonMessage()).thenReturn(nativeToolCallMessage("getWeather", args));
+        setLastReason(nativeToolCallMessage("getWeather", args));
 
         actionTask.run(trace, context);
 
@@ -208,7 +233,7 @@ public class ActionTaskReturnDirectTest {
 
         Map<String, Object> args = new HashMap<>();
         args.put("city", "上海");
-        when(trace.getLastReasonMessage()).thenReturn(textActionMessage("getWeather", args));
+        setLastReason(textActionMessage("getWeather", args));
 
         actionTask.run(trace, context);
 
@@ -218,7 +243,7 @@ public class ActionTaskReturnDirectTest {
     }
 
     @Test
-    @DisplayName("多工具全部 returnDirect=true：拼接结果并 END")
+    @DisplayName("多工具全部 returnDirect=true：拼接结果并 END，abnormal=false")
     public void testMultiAllReturnDirect() throws Throwable {
         options.getModelOptions().toolAdd(new FunctionToolDesc("getWeather")
                 .returnDirect(true)
@@ -233,12 +258,14 @@ public class ActionTaskReturnDirectTest {
                 new ToolCall("0", "c1", "getWeather", null, Collections.emptyMap()),
                 new ToolCall("1", "c2", "getTemp", null, Collections.emptyMap())
         );
-        when(trace.getLastReasonMessage()).thenReturn(nativeMultiToolCallMessage(calls));
+        setLastReason(nativeMultiToolCallMessage(calls));
 
         actionTask.run(trace, context);
 
         assertEquals(Agent.ID_END, trace.getRoute());
         assertEquals("晴\n25℃", trace.getFinalAnswer());
+        assertEquals(Boolean.FALSE, finalAnswerAbnormal.get());
+        verify(trace).setFinalAnswer(eq("晴\n25℃"), eq(false));
         assertEquals(2, toolCallCount.get());
     }
 
@@ -258,7 +285,7 @@ public class ActionTaskReturnDirectTest {
                 new ToolCall("0", "c1", "getWeather", null, Collections.emptyMap()),
                 new ToolCall("1", "c2", "analyze", null, Collections.emptyMap())
         );
-        when(trace.getLastReasonMessage()).thenReturn(nativeMultiToolCallMessage(calls));
+        setLastReason(nativeMultiToolCallMessage(calls));
 
         actionTask.run(trace, context);
 
@@ -277,8 +304,7 @@ public class ActionTaskReturnDirectTest {
                     throw new RuntimeException("upstream timeout");
                 }));
 
-        when(trace.getLastReasonMessage()).thenReturn(
-                nativeToolCallMessage("getWeather", Collections.emptyMap()));
+        setLastReason(nativeToolCallMessage("getWeather", Collections.emptyMap()));
 
         actionTask.run(trace, context);
 
@@ -293,8 +319,7 @@ public class ActionTaskReturnDirectTest {
     @Test
     @DisplayName("工具不存在：不直返")
     public void testToolNotFound_notEnd() throws Throwable {
-        when(trace.getLastReasonMessage()).thenReturn(
-                nativeToolCallMessage("missing_tool", Collections.emptyMap()));
+        setLastReason(nativeToolCallMessage("missing_tool", Collections.emptyMap()));
 
         actionTask.run(trace, context);
 
@@ -308,13 +333,133 @@ public class ActionTaskReturnDirectTest {
     public void testFeedbackTool_stillEnds() throws Throwable {
         Map<String, Object> args = new HashMap<>();
         args.put("reason", "缺少用户手机号");
-        when(trace.getLastReasonMessage()).thenReturn(
-                nativeToolCallMessage(org.noear.solon.ai.agent.util.FeedbackTool.TOOL_NAME, args));
+        setLastReason(nativeToolCallMessage(org.noear.solon.ai.agent.util.FeedbackTool.TOOL_NAME, args));
 
         actionTask.run(trace, context);
 
         assertEquals(Agent.ID_END, trace.getRoute());
         assertEquals("缺少用户手机号", trace.getFinalAnswer());
+        // Feedback 走单参 setFinalAnswer → abnormal=true
+        assertEquals(Boolean.TRUE, finalAnswerAbnormal.get(), "Feedback 应为 abnormal=true");
+        verify(trace, times(1)).setFinalAnswer(eq("缺少用户手机号"));
         verify(context, times(1)).interrupt();
+    }
+
+    @Test
+    @DisplayName("returnDirect=true 但 handler 返回 ToolResult.error：不直返，ToolMessage 不 mark")
+    public void testReturnDirect_toolResultError_notEnd() throws Throwable {
+        options.getModelOptions().toolAdd(new FunctionToolDesc("getWeather")
+                .returnDirect(true)
+                .description("天气")
+                .doHandle(args -> ToolResult.error("upstream unavailable")));
+
+        setLastReason(nativeToolCallMessage("getWeather", Collections.emptyMap()));
+
+        actionTask.run(trace, context);
+
+        assertEquals(ReActAgent.ID_REASON, trace.getRoute());
+        assertNull(trace.getFinalAnswer());
+        assertNull(finalAnswerAbnormal.get());
+        assertEquals(1, toolCallCount.get()); // call 成功返回，只是 isError
+        // 错误结果仍应进入 WM 作为 observation，供模型自愈
+        assertTrue(workingMemory.getMessages().stream()
+                .anyMatch(m -> m.getContent() != null && m.getContent().contains("upstream unavailable")));
+        // ToolMessage.returnDirect 不应为 true（未 mark）
+        workingMemory.getMessages().stream()
+                .filter(m -> m instanceof ToolMessage)
+                .map(m -> (ToolMessage) m)
+                .forEach(tm -> assertFalse(tm.isReturnDirect(), "error 结果不应标记 returnDirect"));
+    }
+
+    @Test
+    @DisplayName("returnDirect=true 但结果为空串：不 mark、不直返")
+    public void testReturnDirect_emptyResult_notEnd() throws Throwable {
+        options.getModelOptions().toolAdd(new FunctionToolDesc("getWeather")
+                .returnDirect(true)
+                .description("天气")
+                .doHandle(args -> ""));
+
+        setLastReason(nativeToolCallMessage("getWeather", Collections.emptyMap()));
+
+        actionTask.run(trace, context);
+
+        assertEquals(ReActAgent.ID_REASON, trace.getRoute());
+        assertNull(trace.getFinalAnswer());
+        assertEquals(1, toolCallCount.get());
+        ToolMessage tm = (ToolMessage) workingMemory.getMessages().stream()
+                .filter(m -> m instanceof ToolMessage)
+                .findFirst()
+                .orElse(null);
+        assertNotNull(tm);
+        // 与 apply 对齐：空串不可交付，执行成功时也不 mark
+        assertFalse(tm.isReturnDirect(), "空串结果不应标记 returnDirect");
+    }
+
+    @Test
+    @DisplayName("returnDirect=true 且结果含 media：ToolMessage 保留 blocks，media 上浮 lastReason")
+    public void testReturnDirect_withMedia_preservesBlocks() throws Throwable {
+        ImageBlock image = ImageBlock.ofUrl("https://example.com/weather.png", "image/png");
+        options.getModelOptions().toolAdd(new FunctionToolDesc("drawWeather")
+                .returnDirect(true)
+                .description("画天气图")
+                .doHandle(args -> new ToolResult()
+                        .addText("杭州晴")
+                        .addBlock(image)));
+
+        setLastReason(nativeToolCallMessage("drawWeather", Collections.emptyMap()));
+
+        actionTask.run(trace, context);
+
+        assertEquals(Agent.ID_END, trace.getRoute());
+        assertEquals("杭州晴", trace.getFinalAnswer());
+        assertEquals(Boolean.FALSE, finalAnswerAbnormal.get());
+
+        ToolMessage tm = (ToolMessage) workingMemory.getMessages().stream()
+                .filter(m -> m instanceof ToolMessage)
+                .findFirst()
+                .orElseThrow(AssertionError::new);
+        assertTrue(tm.isReturnDirect());
+        assertEquals("杭州晴", tm.getContent());
+        assertNotNull(tm.getBlocks());
+        assertTrue(tm.getBlocks().stream().anyMatch(b -> b instanceof ImageBlock),
+                "ToolMessage 应保留 ImageBlock，不能被 String 压扁");
+        assertTrue(tm.getBlocks().stream().anyMatch(b -> b instanceof TextBlock));
+
+        // media 上浮到 lastReason，供 ReActAgent 终态收口
+        AssistantMessage last = lastReasonHolder.get();
+        assertNotNull(last);
+        assertTrue(last.hasMedia(), "lastReason 应带 media");
+        assertTrue(last.getBlocks().stream().anyMatch(b -> b instanceof ImageBlock));
+    }
+
+    @Test
+    @DisplayName("returnDirect=true 纯 media（无文本）：仍 END，FinalAnswer 可为空，media 上浮")
+    public void testReturnDirect_mediaOnly() throws Throwable {
+        ImageBlock image = ImageBlock.ofUrl("https://example.com/art.png");
+        options.getModelOptions().toolAdd(new FunctionToolDesc("generateImage")
+                .returnDirect(true)
+                .description("生图")
+                .doHandle(args -> new ToolResult().addBlock(image)));
+
+        setLastReason(nativeToolCallMessage("generateImage", Collections.emptyMap()));
+
+        actionTask.run(trace, context);
+
+        assertEquals(Agent.ID_END, trace.getRoute());
+        assertEquals(Boolean.FALSE, finalAnswerAbnormal.get());
+        // 纯 media：finalAnswer 文本为空串
+        assertEquals("", trace.getFinalAnswer());
+        verify(trace).setFinalAnswer(eq(""), eq(false));
+
+        ToolMessage tm = (ToolMessage) workingMemory.getMessages().stream()
+                .filter(m -> m instanceof ToolMessage)
+                .findFirst()
+                .orElseThrow(AssertionError::new);
+        assertTrue(tm.isReturnDirect());
+        assertTrue(tm.getBlocks().stream().anyMatch(b -> b instanceof ImageBlock));
+
+        AssistantMessage last = lastReasonHolder.get();
+        assertNotNull(last);
+        assertTrue(last.hasMedia());
     }
 }
