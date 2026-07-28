@@ -29,6 +29,7 @@ import org.noear.solon.ai.chat.interceptor.ToolChain;
 import org.noear.solon.ai.chat.interceptor.ToolRequest;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolResult;
@@ -92,7 +93,7 @@ public class ActionTask {
                 processTextModeAction(lastReason, trace, parentTeamTrace);
             }
         } finally {
-            if(trace.getSession().isPending() == false) {
+            if (trace.getSession().isPending() == false) {
                 // 不挂起时才推 ActionEnd，避免前端误判本轮 Action 已执行完毕
                 for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
                     if (entity.target.isEnabled()) {
@@ -147,12 +148,12 @@ public class ActionTask {
         try {
             // 4. 执行工具调用
             if (Assert.isEmpty(exchanger.getResult())) {
-                result = executeTool(trace, exchanger.getToolName(), exchanger.getArgs());
+                result = executeTool(trace, exchanger);
             } else {
                 result = ToolResult.success(exchanger.getResult());
             }
 
-            if (result != null && !trace.getSession().isPending() && !Agent.ID_END.equals(trace.getRoute())) {
+            if (result != null && !trace.getSession().isPending()) {
                 exchanger.setResult(result.getContent());
             }
 
@@ -201,7 +202,11 @@ public class ActionTask {
                     if (call == null) {
                         observationMessage = ChatMessage.ofUser("Observation: " + exchanger.getResult());
                     } else {
-                        observationMessage = ChatMessage.ofTool(ToolResult.success(exchanger.getResult()), call.getName(), call.getId(), false);
+                        observationMessage = ChatMessage.ofTool(
+                                ToolResult.success(exchanger.getResult()),
+                                call.getName(),
+                                call.getId(),
+                                exchanger.isReturnDirect());
                     }
                 }
 
@@ -235,7 +240,7 @@ public class ActionTask {
             return;
         }
 
-        if(trace.hasStreamSink()){
+        if (trace.hasStreamSink()) {
             trace.pushAgentChunk(new ActionStartChunk(trace, toolExchangerMap.values()));
         }
 
@@ -244,7 +249,12 @@ public class ActionTask {
         for (Map.Entry<ToolCall, ToolExchanger> entry : toolExchangerMap.entrySet()) {
             ToolResult result = doAction(trace, entry.getKey(), entry.getValue(), toolResults);
             if (result == null) {
+                // pending / critical：不写不完整的成套 WM，交给上层
                 return;
+            }
+            // Feedback 等已终止路径：停止后续工具，但仍要落库已执行部分
+            if (Agent.ID_END.equals(trace.getRoute())) {
+                break;
             }
         }
 
@@ -253,6 +263,9 @@ public class ActionTask {
             trace.getWorkingMemory().addMessage(lastReason);
             trace.getWorkingMemory().addMessage(toolResults);
         }
+
+        // 本轮全部 returnDirect 且成功时直接结束（对齐 Chat 层）
+        applyReturnDirectIfEligible(trace, toolExchangerMap.values());
     }
 
     /**
@@ -273,7 +286,6 @@ public class ActionTask {
         Map<String, ToolExchanger> toolExchangerMap = new LinkedHashMap<>();
         List<ChatMessage> toolResults = new ArrayList<>();
         int actionLabelIndex = lastContent.indexOf("Action:");
-        boolean foundAny = false;
 
         if (actionLabelIndex >= 0) {
             // 尝试寻找 JSON 起始位置
@@ -291,8 +303,6 @@ public class ActionTask {
                             break;
                         }
 
-                        foundAny = true;
-
                         String toolName = actionNode.get("name").getString();
                         ONode argsNode = actionNode.get("arguments");
                         Map<String, Object> rawArgs = argsNode.isObject() ? argsNode.toBean(Map.class) : null;
@@ -306,7 +316,6 @@ public class ActionTask {
                         // 解析异常回传 (优化点 2)
                         ChatMessage observationMessage = ChatMessage.ofUser("Observation: Error parsing Action JSON: " + e.getMessage());
                         toolResults.add(observationMessage);
-                        foundAny = true;
                         break;
                     }
                 }
@@ -314,7 +323,6 @@ public class ActionTask {
                 // 情况 B：纯文本模式 Action: toolName
                 String toolName = lastContent.substring(actionLabelIndex + 7).trim();
                 if (trace.getOptions().getTool(toolName) != null || FeedbackTool.TOOL_NAME.equals(toolName)) {
-                    foundAny = true;
                     Map<String, Object> args = new HashMap<>();
 
                     String callId = toolName + "-" + (index++);
@@ -357,6 +365,9 @@ public class ActionTask {
             if (result == null) {
                 return;
             }
+            if (Agent.ID_END.equals(trace.getRoute())) {
+                break;
+            }
         }
 
         if (toolResults.size() > 0) {
@@ -364,6 +375,8 @@ public class ActionTask {
             trace.getWorkingMemory().addMessage(lastReason);
             trace.getWorkingMemory().addMessage(toolResults);
         }
+
+        applyReturnDirectIfEligible(trace, toolExchangerMap.values());
     }
 
     /**
@@ -437,43 +450,44 @@ public class ActionTask {
             return observationMessage;
         }
         String toolCallId = null;
-        if (observationMessage instanceof org.noear.solon.ai.chat.message.ToolMessage) {
-            toolCallId = ((org.noear.solon.ai.chat.message.ToolMessage) observationMessage).getToolCallId();
+        if (observationMessage instanceof ToolMessage) {
+            toolCallId = ((ToolMessage) observationMessage).getToolCallId();
         }
         return ChatMessage.ofTool(
                 ToolResult.success(finalContent),
                 toolExchanger.getToolName(),
                 toolCallId,
-                false);
+                toolExchanger.isReturnDirect());
     }
 
     /**
-     * 查找并执行工具
-     *
-     * @return 工具输出的字符串结果
+     * 查找并执行工具。
+     * <p>returnDirect 仅在真实成功后标记到 exchanger；不在此处结束 ReAct 循环，
+     * 由 {@link #applyReturnDirectIfEligible} 在本轮全部工具执行完毕后统一判定（对齐 Chat 层）。</p>
      */
-    private ToolResult executeTool(ReActTrace trace, String name, Map<String, Object> args) {
-        if (FeedbackTool.TOOL_NAME.equals(name)) {
-            String reason = (String) args.get("reason");
+    private ToolResult executeTool(ReActTrace trace, ToolExchanger exchanger) {
+        if (FeedbackTool.TOOL_NAME.equals(exchanger.getToolName())) {
+            // Feedback：保留独立结束语义（interrupt + abnormal FinalAnswer），不走通用 returnDirect 汇总
+            String reason = (String) exchanger.getArgs().get("reason");
             trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer(reason);
             trace.getContext().interrupt();
             return ToolResult.success(reason);
         }
 
-        FunctionTool tool = trace.getOptions().getTool(name);
+        FunctionTool tool = trace.getOptions().getTool(exchanger.getToolName());
         if (tool == null) {
-            tool = trace.getProtocolTool(name);
+            tool = trace.getProtocolTool(exchanger.getToolName());
         }
 
         if (tool != null) {
             try {
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("Agent [{}] invoking tool start [{}], args: {}", config.getName(), name, args);
+                    LOG.debug("Agent [{}] invoking tool start [{}], args: {}", config.getName(), exchanger.getToolName(), exchanger.getArgs());
                 }
 
-                //合并工具上个文和参数，形成请求
-                final ToolRequest toolReq = new ToolRequest(null, trace.getOptions().getToolContext(), args);
+                //合并工具上下文和参数，形成请求
+                final ToolRequest toolReq = new ToolRequest(null, trace.getOptions().getToolContext(), exchanger.getArgs());
                 final ToolResult result;
                 if (trace.getOptions().getInterceptors().isEmpty()) {
                     result = tool.call(toolReq.getArgs());
@@ -483,23 +497,57 @@ public class ActionTask {
                 trace.incrementToolCallCount();
 
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("Agent [{}] invoking tool end [{}], args: {}", config.getName(), name, args);
+                    LOG.debug("Agent [{}] invoking tool end [{}], args: {}", config.getName(), exchanger.getToolName(), exchanger.getArgs());
+                }
+
+                // 仅成功路径标记；Schema/执行异常不置 returnDirect，避免错误 observation 被当成 FinalAnswer
+                if (tool.returnDirect()) {
+                    exchanger.setReturnDirect(true);
                 }
 
                 return result;
             } catch (IllegalArgumentException | StatusException e) {
-                // 引导模型自愈：返回 Schema 错误提示
-                return ToolResult.success("Invalid arguments for [" + name + "]. Expected Schema: " + tool.inputSchema() + ". Error: " + e.getMessage());
+                // 引导模型自愈：返回 Schema 错误提示（不直返）
+                return ToolResult.success("Invalid arguments for [" + exchanger.getToolName() + "]. Expected Schema: " + tool.inputSchema() + ". Error: " + e.getMessage());
             } catch (Throwable e) {
-                LOG.error("Agent [" + config.getName() + "] tool [" + name + "] execution failed", e);
-                return ToolResult.success("Execution error in tool [" + name + "]: " + e.getMessage());
+                LOG.error("Agent [" + config.getName() + "] tool [" + exchanger.getToolName() + "] execution failed", e);
+                return ToolResult.success("Execution error in tool [" + exchanger.getToolName() + "]: " + e.getMessage());
             }
         }
 
         if (LOG.isWarnEnabled()) {
-            LOG.warn("Agent [{}] tool [{}] not found", config.getName(), name);
+            LOG.warn("Agent [{}] tool [{}] not found", config.getName(), exchanger.getToolName());
         }
 
-        return ToolResult.success("Tool [" + name + "] not found.");
+        return ToolResult.success("Tool [" + exchanger.getToolName() + "] not found.");
+    }
+
+    /**
+     * 本轮工具全部 returnDirect 且均成功时，将结果拼接为 FinalAnswer 并 END。
+     * <p>对齐 {@code ChatRequestDescDefault#buildToolMessage}：仅当全员 isReturnDirect 时才直返；
+     * 任一 false/失败/无结果 则保持 Observation → Reason。Feedback 已设 END 时跳过。</p>
+     */
+    private void applyReturnDirectIfEligible(ReActTrace trace, Collection<ToolExchanger> exchangers) {
+        if (trace.getSession().isPending() || Agent.ID_END.equals(trace.getRoute())) {
+            return;
+        }
+        if (exchangers == null || exchangers.isEmpty()) {
+            return;
+        }
+
+        StringBuilder joined = new StringBuilder();
+        for (ToolExchanger exchanger : exchangers) {
+            if (!exchanger.isReturnDirect() || Assert.isEmpty(exchanger.getResult())) {
+                return;
+            }
+            if (joined.length() > 0) {
+                joined.append('\n');
+            }
+            joined.append(exchanger.getResult());
+        }
+
+        // 业务工具正常直返：abnormal=false
+        trace.setFinalAnswer(joined.toString(), false);
+        trace.setRoute(Agent.ID_END);
     }
 }

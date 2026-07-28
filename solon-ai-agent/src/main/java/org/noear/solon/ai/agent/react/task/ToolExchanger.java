@@ -27,6 +27,8 @@ public class ToolExchanger {
     private final String callId;
     private final String toolName;
     private final Map<String, Object> args;
+    private boolean returnDirect;
+
     private String result;
 
     public ToolExchanger(String callId, String toolName, Map<String, Object> args) {
@@ -47,11 +49,22 @@ public class ToolExchanger {
         return args;
     }
 
+    /**
+     * 是否可直接返回给调用者（对齐 FunctionTool.returnDirect）
+     */
+    public boolean isReturnDirect() {
+        return returnDirect;
+    }
+
     public String getResult() {
         return result;
     }
 
     public void setResult(String result) {
         this.result = result;
+    }
+
+    public void setReturnDirect(boolean returnDirect) {
+        this.returnDirect = returnDirect;
     }
 }
