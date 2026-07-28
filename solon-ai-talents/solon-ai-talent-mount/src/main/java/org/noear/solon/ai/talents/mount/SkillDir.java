@@ -38,12 +38,18 @@ public class SkillDir {
         this.mountAlias = mountAlias;
         this.aliasPath = aliasPath;
         this.realPath = realPath;
+
         if (Assert.isEmpty(description)) {
             this.description = "技能规约。";
         } else {
             this.description = description;
         }
-        this.version = version;
+
+        if (version == null) {
+            this.version = "";
+        } else {
+            this.version = version;
+        }
     }
 
     public String getName() {
