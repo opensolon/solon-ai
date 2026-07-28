@@ -377,7 +377,7 @@ public class ReasonTaskTest {
     // ==================== 空响应 + 重试耗尽 ====================
 
     @Test
-    @DisplayName("空响应（有内容）达到重试上限：不再注入提示，静默返回")
+    @DisplayName("空响应（有内容）达到重试上限：不再注入提示，软上限变硬直接 END")
     public void testEmptyResponse_withContent_retriesExhausted() throws Throwable {
         AssistantMessage msg = msgFromJson("{\"role\":\"assistant\",\"content\":\"<think>Still thinking</think>\"}");
         ChatResponse resp = mockResponse(msg);
@@ -388,14 +388,17 @@ public class ReasonTaskTest {
 
         assertEquals(3, emptyRetryCounter.get());
 
-        // 不应注入任何新消息
+        // 不应注入任何新提示消息
         assertTrue(workingMemory.getMessages().isEmpty(),
-                "重试耗尽后不应注入任何消息");
-        verify(trace, never()).setRoute(anyString());
+                "重试耗尽后不应注入任何提示消息");
+        // 软上限变硬：不再保持 REASON 空转，而是直接 END + 兑底 FinalAnswer
+        verify(trace).setRoute(Agent.ID_END);
+        verify(trace, never()).setRoute(ReActAgent.ID_REASON);
+        verify(trace).setFinalAnswer(anyString());
     }
 
     @Test
-    @DisplayName("空响应（无内容）达到重试上限：静默返回")
+    @DisplayName("空响应（无内容）达到重试上限：软上限变硬直接 END")
     public void testEmptyResponse_withoutContent_retriesExhausted() throws Throwable {
         AssistantMessage msg = msgFromJson("{\"role\":\"assistant\"}");
         ChatResponse resp = mockResponse(msg);
@@ -406,8 +409,10 @@ public class ReasonTaskTest {
 
         assertEquals(3, emptyRetryCounter.get());
         assertTrue(workingMemory.getMessages().isEmpty(),
-                "重试耗尽后不应注入任何消息");
-        verify(trace, never()).setRoute(anyString());
+                "重试耗尽后不应注入任何提示消息");
+        verify(trace).setRoute(Agent.ID_END);
+        verify(trace, never()).setRoute(ReActAgent.ID_REASON);
+        verify(trace).setFinalAnswer(anyString());
     }
 
     // ==================== 计数器恢复 ====================

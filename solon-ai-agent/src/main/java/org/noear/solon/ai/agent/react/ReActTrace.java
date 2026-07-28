@@ -22,6 +22,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.trace.Metrics;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
@@ -139,6 +140,12 @@ public class ReActTrace implements AgentTrace {
     private AssistantMessage lastReasonMessage;
 
     /**
+     * returnDirect 工具产出的终态 media（供 {@link ReActAgent} 收口时合并进最终 AssistantMessage）。
+     * <p>不挂到 lastReason，避免污染已入库的 tool_call 推理消息，也避免 media 在 WorkingMemory 中重复落库。</p>
+     */
+    private transient List<ContentBlock> finalMediaBlocks;
+
+    /**
      * 计划
      */
     private final List<String> plans = new CopyOnWriteArrayList<>();
@@ -218,6 +225,7 @@ public class ReActTrace implements AgentTrace {
         this.route = ReActAgent.ID_REASON;
         this.finalAnswer = null;
         this.lastReasonMessage = null;
+        this.finalMediaBlocks = null;
 
         // 3. 结构化数据重置
         plans.clear();
@@ -403,6 +411,14 @@ public class ReActTrace implements AgentTrace {
 
     public void setLastReasonMessage(AssistantMessage lastReasonMessage) {
         this.lastReasonMessage = lastReasonMessage;
+    }
+
+    public List<ContentBlock> getFinalMediaBlocks() {
+        return finalMediaBlocks;
+    }
+
+    public void setFinalMediaBlocks(List<ContentBlock> finalMediaBlocks) {
+        this.finalMediaBlocks = finalMediaBlocks;
     }
 
     /**

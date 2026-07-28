@@ -297,8 +297,8 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             context.put(config.getOutputKey(), result);
         }
 
-        // 终态保留 lastReason 的 media（生图 / media-only），避免 finalAnswer 纯字符串把图丢掉
-        AssistantMessage assistantMessage = buildFinalAssistantMessage(result, trace.getLastReasonMessage());
+        // 终态保留 media（生图 / media-only / returnDirect 工具产出），避免 finalAnswer 纯字符串把图丢掉
+        AssistantMessage assistantMessage = buildFinalAssistantMessage(result, trace);
         assistantMessage.addMetadata(AgentTrace.META_RUN_ID, trace.getRunId());
 
         // media-only 时 result 可能为空，仍需落 Session / WorkingMemory
@@ -335,20 +335,37 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
     }
 
     /**
-     * 构造终态 AssistantMessage：文本用 finalAnswer；若 lastReason 带 media 则一并保留。
+     * 构造终态 AssistantMessage：文本用 finalAnswer；并合并两类终态 media：
+     * <ul>
+     *   <li>lastReason 自带 media（ReasonTask 生图 / media-only 终态）；</li>
+     *   <li>trace.finalMediaBlocks（ActionTask returnDirect 工具产出的 media）。</li>
+     * </ul>
      */
-    private AssistantMessage buildFinalAssistantMessage(String result, AssistantMessage lastReason) {
+    private AssistantMessage buildFinalAssistantMessage(String result, ReActTrace trace) {
         String text = result == null ? "" : result;
+
+        List<ContentBlock> mediaBlocks = new ArrayList<>();
+
+        AssistantMessage lastReason = trace.getLastReasonMessage();
         if (lastReason != null && lastReason.hasMedia()) {
-            List<ContentBlock> mediaBlocks = new ArrayList<>();
             for (ContentBlock block : lastReason.getBlocks()) {
                 if (!(block instanceof TextBlock)) {
                     mediaBlocks.add(block);
                 }
             }
-            if (!mediaBlocks.isEmpty()) {
-                return ChatMessage.ofAssistant(text, mediaBlocks);
+        }
+
+        List<ContentBlock> directMedia = trace.getFinalMediaBlocks();
+        if (directMedia != null) {
+            for (ContentBlock block : directMedia) {
+                if (!(block instanceof TextBlock) && !mediaBlocks.contains(block)) {
+                    mediaBlocks.add(block);
+                }
             }
+        }
+
+        if (!mediaBlocks.isEmpty()) {
+            return ChatMessage.ofAssistant(text, mediaBlocks);
         }
         return ChatMessage.ofAssistant(text);
     }

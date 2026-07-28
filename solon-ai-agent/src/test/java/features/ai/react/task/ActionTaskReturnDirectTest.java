@@ -68,6 +68,7 @@ public class ActionTaskReturnDirectTest {
     /** null=未调用 setFinalAnswer；true/false=abnormal 标记 */
     private AtomicReference<Boolean> finalAnswerAbnormal;
     private AtomicReference<AssistantMessage> lastReasonHolder;
+    private AtomicReference<List<ContentBlock>> finalMediaHolder;
 
     @BeforeEach
     public void setUp() {
@@ -85,6 +86,7 @@ public class ActionTaskReturnDirectTest {
         toolCallCount = new AtomicInteger(0);
         finalAnswerAbnormal = new AtomicReference<>(null);
         lastReasonHolder = new AtomicReference<>(null);
+        finalMediaHolder = new AtomicReference<>(null);
 
         trace = mock(ReActTrace.class);
         when(trace.getOptions()).thenReturn(options);
@@ -121,12 +123,19 @@ public class ActionTaskReturnDirectTest {
             return null;
         }).when(trace).setFinalAnswer(anyString(), anyBoolean());
 
-        // lastReason 可变：returnDirect media 会 setLastReasonMessage 上浮
+        // lastReason 可变
         when(trace.getLastReasonMessage()).thenAnswer(inv -> lastReasonHolder.get());
         doAnswer(inv -> {
             lastReasonHolder.set(inv.getArgument(0));
             return null;
         }).when(trace).setLastReasonMessage(any());
+
+        // finalMediaBlocks 可变：returnDirect 工具 media 写到这里（不再挂 lastReason）
+        when(trace.getFinalMediaBlocks()).thenAnswer(inv -> finalMediaHolder.get());
+        doAnswer(inv -> {
+            finalMediaHolder.set(inv.getArgument(0));
+            return null;
+        }).when(trace).setFinalMediaBlocks(any());
     }
 
     private void chatModelSetup() {
@@ -425,11 +434,17 @@ public class ActionTaskReturnDirectTest {
                 "ToolMessage 应保留 ImageBlock，不能被 String 压扁");
         assertTrue(tm.getBlocks().stream().anyMatch(b -> b instanceof TextBlock));
 
-        // media 上浮到 lastReason，供 ReActAgent 终态收口
+        // A1：media 写到 trace.finalMediaBlocks，供 ReActAgent 终态收口；不挂回 lastReason
+        List<ContentBlock> finalMedia = finalMediaHolder.get();
+        assertNotNull(finalMedia, "returnDirect media 应写到 trace.finalMediaBlocks");
+        assertTrue(finalMedia.stream().anyMatch(b -> b instanceof ImageBlock));
+        // lastReason 保持原样（带 tool_call 的推理消息），不被 media 污染
         AssistantMessage last = lastReasonHolder.get();
         assertNotNull(last);
-        assertTrue(last.hasMedia(), "lastReason 应带 media");
-        assertTrue(last.getBlocks().stream().anyMatch(b -> b instanceof ImageBlock));
+        assertFalse(last.hasMedia(), "lastReason 不应被挂上 tool media");
+        assertNotNull(last.getToolCalls(), "lastReason.toolCalls 不应丢失");
+        assertEquals(1, last.getToolCalls().size());
+        assertEquals("drawWeather", last.getToolCalls().get(0).getName());
     }
 
     @Test
@@ -458,8 +473,38 @@ public class ActionTaskReturnDirectTest {
         assertTrue(tm.isReturnDirect());
         assertTrue(tm.getBlocks().stream().anyMatch(b -> b instanceof ImageBlock));
 
-        AssistantMessage last = lastReasonHolder.get();
-        assertNotNull(last);
-        assertTrue(last.hasMedia());
+        // 纯 media 写到 trace.finalMediaBlocks
+        List<ContentBlock> finalMedia = finalMediaHolder.get();
+        assertNotNull(finalMedia);
+        assertTrue(finalMedia.stream().anyMatch(b -> b instanceof ImageBlock));
+    }
+
+    @Test
+    @DisplayName("拦截器在 onToolCallEnd 改写结果（block 数量不变）：observation 按最终结果重建")
+    public void testInterceptorRewritesResult_observationRebuilt() throws Throwable {
+        options.getModelOptions().toolAdd(new FunctionToolDesc("getWeather")
+                .returnDirect(false)
+                .description("天气")
+                .doHandle(args -> "原始天气"));
+
+        // 拦截器：文本变了但 block 数量同为 1（旧 sameBlockSize 会误判为无需重建）
+        options.getModelOptions().interceptorAdd(new org.noear.solon.ai.agent.react.ReActInterceptor() {
+            @Override
+            public void onToolCallEnd(ReActTrace t, org.noear.solon.ai.agent.react.task.ToolExchanger ex,
+                                      ChatMessage obs, Throwable err, long ms) {
+                ex.setToolResult(ToolResult.success("审批后的天气"));
+            }
+        });
+
+        setLastReason(nativeToolCallMessage("getWeather", Collections.emptyMap()));
+
+        actionTask.run(trace, context);
+
+        ToolMessage tm = (ToolMessage) workingMemory.getMessages().stream()
+                .filter(m -> m instanceof ToolMessage)
+                .findFirst()
+                .orElseThrow(AssertionError::new);
+        // observation 应反映拦截器改写后的内容，而非旧值
+        assertEquals("审批后的天气", tm.getContent());
     }
 }

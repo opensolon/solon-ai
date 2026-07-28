@@ -17,9 +17,7 @@ package org.noear.solon.ai.agent.react.task;
 
 import org.noear.snack4.ONode;
 import org.noear.snack4.json.JsonReader;
-import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActAgentConfig;
@@ -80,7 +78,6 @@ public class ActionTask {
             }
         }
 
-        final TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
         AssistantMessage lastReason = trace.getLastReasonMessage();
         if (lastReason == null) {
             return;
@@ -89,10 +86,10 @@ public class ActionTask {
         try {
             if (Assert.isNotEmpty(lastReason.getToolCalls())) {
                 // 1. 优先处理原生工具调用（Native Tool Calls）
-                processNativeToolCall(lastReason, trace, parentTeamTrace);
+                processNativeToolCall(lastReason, trace);
             } else {
                 // 2. 文本模式：解析模型输出中的 Action 块
-                processTextModeAction(lastReason, trace, parentTeamTrace);
+                processTextModeAction(lastReason, trace);
             }
         } finally {
             if (trace.getSession().isPending() == false) {
@@ -235,7 +232,7 @@ public class ActionTask {
     /**
      * 处理标准 ToolCall 协议调用
      */
-    private void processNativeToolCall(AssistantMessage lastReason, ReActTrace trace, TeamTrace parentTeamTrace) throws Throwable {
+    private void processNativeToolCall(AssistantMessage lastReason, ReActTrace trace) throws Throwable {
         Map<ToolCall, ToolExchanger> toolExchangerMap = new LinkedHashMap<>();
 
         for (ToolCall call : lastReason.getToolCalls()) {
@@ -288,7 +285,7 @@ public class ActionTask {
      * 解析并执行文本模式下的 Action 指令
      * <p>核心逻辑：从"全执行后拼接"改为"逐个执行并即时回填与反馈"</p>
      */
-    private void processTextModeAction(AssistantMessage lastReason, ReActTrace trace, TeamTrace parentTeamTrace) throws Throwable {
+    private void processTextModeAction(AssistantMessage lastReason, ReActTrace trace) throws Throwable {
         String lastContent = lastReason.getResultContent();
         if (Assert.isEmpty(lastContent)) {
             return;
@@ -466,14 +463,13 @@ public class ActionTask {
             return ChatMessage.ofUser(expected);
         }
 
-        // native ToolMessage：content 一致且无 media 差异时复用
+        // native ToolMessage：content 与 returnDirect 均未变则复用（拦截器未改写）；
+        // 任一变化则按最终 toolResult 重建，保留 media / isError。
         if (observationMessage instanceof ToolMessage) {
             ToolMessage tm = (ToolMessage) observationMessage;
-            boolean sameContent = Objects.equals(finalContent, tm.getContent());
-            boolean sameReturnDirect = tm.isReturnDirect() == toolExchanger.isReturnDirect();
-            boolean sameBlockSize = tm.getBlocks() != null
-                    && tm.getBlocks().size() == toolResult.getBlocks().size();
-            if (sameContent && sameReturnDirect && sameBlockSize) {
+            boolean unchanged = Objects.equals(finalContent, tm.getContent())
+                    && tm.isReturnDirect() == toolExchanger.isReturnDirect();
+            if (unchanged) {
                 return observationMessage;
             }
             return ChatMessage.ofTool(
@@ -532,6 +528,7 @@ public class ActionTask {
 
                 // 仅「真实成功」标记：声明 returnDirect、非 error、且有可交付内容（文本非空或含 media）。
                 // Schema/执行异常走 catch 不标记；空串无 media 不标记，避免元数据「可直返却未直返」。
+                // 不区分 native / 文本模式：两者均支持 returnDirect 直接 END（文本模式 observation 为 User 投影）。
                 if (tool.returnDirect() && isSuccessfulDeliverable(result)) {
                     exchanger.setReturnDirect(true);
                 }
@@ -565,11 +562,16 @@ public class ActionTask {
             return true;
         }
         // media-only：有非文本 block 也算可交付
-        if (result.getBlocks() != null) {
-            for (ContentBlock block : result.getBlocks()) {
-                if (!(block instanceof TextBlock)) {
-                    return true;
-                }
+        return hasMedia(result.getBlocks());
+    }
+
+    /**
+     * blocks 中是否含非文本 media。
+     */
+    private static boolean hasMedia(List<ContentBlock> blocks) {
+        for (ContentBlock block : blocks) {
+            if (!(block instanceof TextBlock)) {
+                return true;
             }
         }
         return false;
@@ -611,49 +613,23 @@ public class ActionTask {
             }
 
             // 收集非文本 media，供终态 AssistantMessage 保留（对齐 SimpleAgent / ReActAgent 收口）
-            if (tr.getBlocks() != null) {
-                for (ContentBlock block : tr.getBlocks()) {
-                    if (!(block instanceof TextBlock)) {
-                        mediaBlocks.add(block);
-                    }
+            for (ContentBlock block : tr.getBlocks()) {
+                if (!(block instanceof TextBlock)) {
+                    mediaBlocks.add(block);
                 }
             }
         }
 
         // 业务工具正常直返：abnormal=false（与 Feedback 单参 setFinalAnswer→abnormal 区分）
-        // 纯 media 时 finalAnswer 可为 ""，ReActAgent.buildFinalAssistantMessage 靠 lastReason.media 收口
-        String finalText = joined.toString();
-        trace.setFinalAnswer(finalText, false);
+        // 纯 media 时 finalAnswer 可为 ""，ReActAgent.buildFinalAssistantMessage 靠 trace.finalMediaBlocks 收口
+        trace.setFinalAnswer(joined.toString(), false);
         trace.setRoute(Agent.ID_END);
 
         if (!mediaBlocks.isEmpty()) {
-            // 把 tool media 挂到 lastReason，复用 ReActAgent 终态 media 保留逻辑
-            attachMediaToLastReason(trace, finalText, mediaBlocks);
+            // 记到 trace 专用字段，由 ReActAgent 终态收口合并。
+            // 不挂回 lastReason：那条是带 tool_call 的推理消息且已入 WorkingMemory，
+            // 挂 media 会造成语义错位（assistant 同时发起 tool_call 又自带图）及 WM 重复落库。
+            trace.setFinalMediaBlocks(mediaBlocks);
         }
-    }
-
-    /**
-     * returnDirect 工具的 media 上浮到 lastReason，供 {@code ReActAgent#buildFinalAssistantMessage} 保留。
-     */
-    private void attachMediaToLastReason(ReActTrace trace, String finalText, List<ContentBlock> mediaBlocks) {
-        AssistantMessage last = trace.getLastReasonMessage();
-        List<ContentBlock> merged = new ArrayList<>(mediaBlocks);
-        if (last != null && last.getBlocks() != null) {
-            for (ContentBlock block : last.getBlocks()) {
-                if (!(block instanceof TextBlock) && !merged.contains(block)) {
-                    merged.add(block);
-                }
-            }
-        }
-        // 文本用 finalAnswer；blocks 只带非文本 media，避免 TextBlock 重复
-        // lastReason 此处仅作 media 载体；完整 tool_calls 仍以 WM 成套消息为准
-        String text = Assert.isEmpty(finalText)
-                ? (last != null && last.getContent() != null ? last.getContent() : "")
-                : finalText;
-        AssistantMessage withMedia = ChatMessage.ofAssistant(text, merged);
-        if (last != null && Utils.isNotEmpty(last.getMetadata())) {
-            withMedia.addMetadata(last.getMetadata());
-        }
-        trace.setLastReasonMessage(withMedia);
     }
 }

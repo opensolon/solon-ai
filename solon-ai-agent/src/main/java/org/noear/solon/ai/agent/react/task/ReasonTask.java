@@ -276,6 +276,12 @@ public class ReasonTask {
                 }
 
                 trace.setRoute(ReActAgent.ID_REASON);
+            } else {
+                // 软上限变硬：重试耗尽仍空，直接 END，避免 route 保持 REASON 而每回合空转调模型直到 maxTurns。
+                LOG.warn("ReActAgent[{}] empty response persists after {} retries, ending.",
+                        trace.getAgentName(), trace.getEmptyRetryCounter().get());
+                trace.setRoute(Agent.ID_END);
+                trace.setFinalAnswer("抱歉，模型多次未返回有效内容。请稍后重试。");
             }
 
             return;
