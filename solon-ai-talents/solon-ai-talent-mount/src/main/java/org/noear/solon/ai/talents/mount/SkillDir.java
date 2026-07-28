@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.talents.mount;
 
+import org.noear.solon.core.util.Assert;
+
 import java.nio.file.Path;
 
 /**
@@ -29,13 +31,19 @@ public class SkillDir {
     private final String aliasPath;
     private final Path realPath;
     private final String description;
+    private final String version;
 
-    SkillDir(String name, String mountAlias, String aliasPath, Path realPath, String description) {
+    SkillDir(String name, String mountAlias, String aliasPath, Path realPath, String description, String version) {
         this.name = name;
         this.mountAlias = mountAlias;
         this.aliasPath = aliasPath;
         this.realPath = realPath;
-        this.description = description;
+        if (Assert.isEmpty(description)) {
+            this.description = "技能规约。";
+        } else {
+            this.description = description;
+        }
+        this.version = version;
     }
 
     public String getName() {
@@ -59,5 +67,9 @@ public class SkillDir {
 
     public String getDescription() {
         return description;
+    }
+
+    public String getVersion() {
+        return version;
     }
 }

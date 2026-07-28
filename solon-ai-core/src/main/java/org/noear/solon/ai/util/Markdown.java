@@ -55,6 +55,10 @@ public class Markdown {
         return metadata.get("description").getString();
     }
 
+    public String getVersion() {
+        return metadata.get("version").getString();
+    }
+
     public String getContent() {
         return content;
     }

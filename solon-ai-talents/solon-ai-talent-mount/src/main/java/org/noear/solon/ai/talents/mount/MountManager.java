@@ -251,7 +251,11 @@ public class MountManager {
                         String name = mountDir.getRealPath().relativize(dir).toString().replace("\\", "/");
                         String aliasPath = mountDir.getAlias() + (name.isEmpty() ? "" : "/" + name);
 
-                        map.put(name, new SkillDir(name, mountDir.getAlias(), aliasPath, dir, parseDescription(dir)));
+                        Markdown markdown = parseMarkdown(dir);
+                        String description = markdown.getDescription();
+                        String version = markdown.getVersion();
+
+                        map.put(name, new SkillDir(name, mountDir.getAlias(), aliasPath, dir, description, version));
                         return FileVisitResult.SKIP_SUBTREE;
                     }
                     if (dir.getFileName().toString().startsWith(".")) return FileVisitResult.SKIP_SUBTREE;
@@ -301,7 +305,7 @@ public class MountManager {
         }
     }
 
-    private static String parseDescription(Path dir) {
+    private static Markdown parseMarkdown(Path dir) {
         Path md = dir.resolve("SKILL.md");
         if (!Files.exists(md)) {
             md = dir.resolve("skill.md");
@@ -310,17 +314,9 @@ public class MountManager {
         try {
             List<String> lines = Files.readAllLines(md, StandardCharsets.UTF_8);
             Markdown markdown = MarkdownUtil.resolve(lines, true);
-
-            String desc = markdown.getDescription();
-
-            if (Assert.isEmpty(desc)) {
-                return "技能规约。";
-            } else {
-                // 增加长度到 150，确保 LLM 能看到足够的语义信息
-                return desc.length() > 150 ? desc.substring(0, 147) + "..." : desc;
-            }
+            return markdown;
         } catch (Throwable e) {
-            return "技能规约。";
+            return new Markdown();
         }
     }
 
