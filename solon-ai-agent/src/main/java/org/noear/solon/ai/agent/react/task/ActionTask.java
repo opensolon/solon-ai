@@ -624,7 +624,7 @@ public class ActionTask {
 
         // 业务工具正常直返：abnormal=false（与 Feedback 单参 setFinalAnswer→abnormal 区分）
         // 纯 media 时 finalAnswer 可为 ""，ReActAgent.buildFinalAssistantMessage 靠 trace.finalMediaBlocks 收口
-        trace.setFinalAnswer(joined.toString(), false);
+        trace.setFinalAnswer(joined.toString());
         trace.setRoute(Agent.ID_END);
 
         if (!mediaBlocks.isEmpty()) {
