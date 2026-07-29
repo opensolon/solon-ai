@@ -28,6 +28,7 @@ public class DemoApp {
                     slf.setApiUrl("https://api.deepseek.com");
                     slf.setApiKey("sk-***");
                     slf.setModel("deepseek-v4-flash");
+                    slf.setContextLength(128_000);
                 })) //设定大模型配置
                 .extensionAdd((name, builder) -> {
                     //...

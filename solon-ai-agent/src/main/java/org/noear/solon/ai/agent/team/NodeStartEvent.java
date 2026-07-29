@@ -25,15 +25,13 @@ import org.noear.solon.flow.Node;
  *
  * @author noear
  * @since 3.9.1
- * @deprecated 4.0.4
  */
-@Deprecated
-public class NodeChunk extends AbsAgentEvent {
+public class NodeStartEvent extends AbsAgentEvent {
     private final transient TeamTrace trace;
     private final transient Node node;
 
-    public NodeChunk(Node node, TeamTrace trace, ChatMessage message) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
+    public NodeStartEvent(Node node, TeamTrace trace) {
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), ChatMessage.ofAssistant(""));
         this.trace = trace;
         this.node = node;
     }

@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.agent.AbsAgentChunk;
+import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.lang.Preview;
 
@@ -24,11 +24,11 @@ import org.noear.solon.lang.Preview;
  *
  * @author noear
  * @since 3.9.1
- * @deprecated 4.0.4 {@link RunEndChunk}
+ * @deprecated 4.0.4 {@link RunEndEvent}
  */
 @Deprecated
 @Preview("3.9.1")
-public class ReActChunk extends AbsAgentChunk {
+public class ReActChunk extends AbsAgentEvent {
     private final transient ReActResponse response;
 
     public ReActChunk(ReActResponse resp) {

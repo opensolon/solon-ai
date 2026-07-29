@@ -16,7 +16,7 @@
 package org.noear.solon.ai.agent.simple;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.agent.AgentChunk;
+import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.team.TeamProtocol;
@@ -162,17 +162,17 @@ public class SimpleTrace implements AgentTrace {
     /**
      * 推送流块（统一安全投递：判空 / cancelled / 异常吞掉）
      */
-    public void pushAgentChunk(AgentChunk chunk) {
+    public void pushAgentEvent(AgentEvent event) {
         try {
             if (hasStreamSink() == false || isStreamCancelled()) {
                 return;
             }
 
-            options.getStreamSink().next(chunk);
+            options.getStreamSink().next(event);
         } catch (Throwable e) {
             // 忽略投递异常，避免影响主流程；debug 便于排查订阅端问题
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Failed to push agent chunk: {}", chunk != null ? chunk.getClass().getSimpleName() : null, e);
+                LOG.debug("Failed to push agent chunk: {}", event != null ? event.getClass().getSimpleName() : null, e);
             }
         }
     }
@@ -180,7 +180,7 @@ public class SimpleTrace implements AgentTrace {
     /**
      * 直接推送流块（调用方已完成 cancelled 判定；仅吞掉投递异常）
      */
-    public void pushAgentChunkDo(AgentChunk chunk) {
+    public void pushAgentChunkDo(AgentEvent chunk) {
         try {
             options.getStreamSink().next(chunk);
         } catch (Throwable e) {

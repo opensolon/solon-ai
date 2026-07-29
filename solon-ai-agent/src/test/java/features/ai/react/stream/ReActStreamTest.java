@@ -3,7 +3,7 @@ package features.ai.react.stream;
 import demo.ai.llm.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.noear.solon.ai.agent.AgentChunk;
+import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActChunk;
@@ -34,7 +34,7 @@ public class ReActStreamTest {
         ReActAgent agent = ReActAgent.of(chatModel).build();
         AgentSession session = InMemoryAgentSession.of("stream_001");
 
-        Flux<AgentChunk> stream = agent.prompt("你好，请问你是谁？")
+        Flux<AgentEvent> stream = agent.prompt("你好，请问你是谁？")
                 .session(session)
                 .stream();
 
@@ -103,7 +103,7 @@ public class ReActStreamTest {
 
         ReActAgent agent = ReActAgent.of(chatModel).build();
 
-        Flux<AgentChunk> stream = agent.prompt("hello").stream();
+        Flux<AgentEvent> stream = agent.prompt("hello").stream();
 
         assert stream.blockLast().getContent().contains("暂时无法使用模型服务");
     }

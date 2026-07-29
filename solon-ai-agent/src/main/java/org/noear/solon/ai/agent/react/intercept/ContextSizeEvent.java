@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.intercept;
 
-import org.noear.solon.ai.agent.AbsAgentChunk;
+import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.lang.Preview;
 
@@ -29,7 +29,7 @@ import org.noear.solon.lang.Preview;
  * @since 4.0.0
  */
 @Preview("4.0.0")
-public class ContextSizeChunk extends AbsAgentChunk {
+public class ContextSizeEvent extends AbsAgentEvent {
     private final ReActTrace trace;
     /**
      * 当前上下文的总消息数
@@ -60,7 +60,7 @@ public class ContextSizeChunk extends AbsAgentChunk {
      */
     private final int afterTokenCount;
 
-    public ContextSizeChunk(ReActTrace trace, int messageCount, int tokenCount,
+    public ContextSizeEvent(ReActTrace trace, int messageCount, int tokenCount,
                             boolean compressed,
                             int beforeMessageCount, int afterMessageCount,
                             int beforeTokenCount, int afterTokenCount) {

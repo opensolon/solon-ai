@@ -15,8 +15,8 @@
  */
 package org.noear.solon.ai.harness.agent;
 
-import org.noear.solon.ai.agent.AbsAgentChunk;
-import org.noear.solon.ai.agent.AgentChunk;
+import org.noear.solon.ai.agent.AbsAgentEvent;
+import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 
 /**
@@ -24,14 +24,14 @@ import org.noear.solon.ai.agent.react.ReActTrace;
  * @author noear
  * @since 4.0.4
  */
-public class TaskWrapChuck extends AbsAgentChunk {
+public class TaskWrapEvent extends AbsAgentEvent {
     private final ReActTrace parentTrace;
     private final String taskId;
     private final TaskTalent.MultiTaskOp taskOp;
     private final boolean isMultitask;
-    private final AgentChunk realChunk;
+    private final AgentEvent realChunk;
 
-    public TaskWrapChuck(ReActTrace parentTrace, String taskId, TaskTalent.MultiTaskOp taskOp, boolean isMultitask, AgentChunk realChunk) {
+    public TaskWrapEvent(ReActTrace parentTrace, String taskId, TaskTalent.MultiTaskOp taskOp, boolean isMultitask, AgentEvent realChunk) {
         super(realChunk.getRunId(), realChunk.getAgentName(), realChunk.getSession(), realChunk.getMessage());
         this.parentTrace = parentTrace;
         this.taskId = taskId;
@@ -64,7 +64,7 @@ public class TaskWrapChuck extends AbsAgentChunk {
         return isMultitask;
     }
 
-    public AgentChunk getRealChunk() {
+    public AgentEvent getRealChunk() {
         return realChunk;
     }
 }

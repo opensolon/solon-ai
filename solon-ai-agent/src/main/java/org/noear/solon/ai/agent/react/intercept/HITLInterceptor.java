@@ -36,8 +36,8 @@ import java.util.function.BiConsumer;
  *
  * <p>流式输出时会推送 HITL 审查块，便于前端按类型渲染：</p>
  * <ul>
- * <li>{@link HITLPendingChunk} —— 首次拦截挂起，携带 {@link HITLTask} 列表，用于展示审批卡片</li>
- * <li>{@link HITLDecidedChunk} —— 决策生效，携带 {@link HITLDecision}，用于关闭/更新审批卡片</li>
+ * <li>{@link HITLPendingEvent} —— 首次拦截挂起，携带 {@link HITLTask} 列表，用于展示审批卡片</li>
+ * <li>{@link HITLDecidedEvent} —— 决策生效，携带 {@link HITLDecision}，用于关闭/更新审批卡片</li>
  * </ul>
  *
  * @author noear
@@ -285,7 +285,7 @@ public class HITLInterceptor extends AbsReActInterceptor {
         trace.setFinalAnswer(summary);
 
         if (trace.hasStreamSink()) {
-            trace.pushAgentChunk(new HITLPendingChunk(trace, pendingTasks));
+            trace.pushAgentEvent(new HITLPendingEvent(trace, pendingTasks));
         }
     }
 
@@ -330,7 +330,7 @@ public class HITLInterceptor extends AbsReActInterceptor {
         }
 
         if (trace.hasStreamSink()) {
-            trace.pushAgentChunk(new HITLDecidedChunk(trace,
+            trace.pushAgentEvent(new HITLDecidedEvent(trace,
                     ex.getCallId(),
                     ex.getToolName(),
                     ex.getArgs(),

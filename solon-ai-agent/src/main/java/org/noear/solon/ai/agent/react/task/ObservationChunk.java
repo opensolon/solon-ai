@@ -27,11 +27,11 @@ import java.util.Map;
  *
  * @author noear
  * @since 3.9.1
- * @deprecated 4.0.4 {@link ToolCallEndChunk}
+ * @deprecated 4.0.4 {@link ToolCallEndEvent}
  */
 @Deprecated
 @Preview("3.9.1")
-public class ObservationChunk extends AbsActionChunk {
+public class ObservationChunk extends AbsActionEvent {
     private final Throwable error;
     private final long durationMs;
 

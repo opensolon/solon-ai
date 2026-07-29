@@ -6,12 +6,11 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
-import org.noear.solon.ai.agent.simple.ChatChunk;
+import org.noear.solon.ai.agent.simple.ChatDeltaChunk;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.simple.SimpleChunk;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
-import org.noear.solon.ai.chat.prompt.Prompt;
 import reactor.test.StepVerifier;
 
 import java.util.ArrayList;
@@ -74,7 +73,7 @@ public class SimpleAgentTest {
                 .thenConsumeWhile(c -> true)
                 .consumeRecordedWith(chunks -> {
                     // 验证中间块
-                    boolean hasChatChunks = chunks.stream().anyMatch(c -> c instanceof ChatChunk);
+                    boolean hasChatChunks = chunks.stream().anyMatch(c -> c instanceof ChatDeltaChunk);
                     // 验证结束块
                     boolean hasSimpleChunk = chunks.stream().anyMatch(c -> c instanceof SimpleChunk);
 

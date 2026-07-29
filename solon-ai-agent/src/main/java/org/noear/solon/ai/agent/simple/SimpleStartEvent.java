@@ -13,23 +13,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.react.task;
+package org.noear.solon.ai.agent.simple;
 
-import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
-import java.util.Map;
-
 /**
- * ReAct 动作块（Action）：标识智能体正在调用外部工具或执行特定指令
+ * 简单智能体运行开始块
  *
  * @author noear
  * @since 4.0.4
  */
 @Preview("4.0.4")
-public class ToolCallStartChunk extends AbsActionChunk {
-    public ToolCallStartChunk(ReActTrace trace, String callId, String toolName, Map<String, Object> args) {
-        super(trace, callId, toolName, args, ChatMessage.ofAssistant(""));
+public class SimpleStartEvent extends AbsAgentEvent {
+    private final transient SimpleTrace trace;
+
+    public SimpleStartEvent(SimpleTrace trace) {
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), ChatMessage.ofAssistant(""));
+        this.trace = trace;
+    }
+
+    public SimpleTrace getTrace() {
+        return trace;
     }
 }

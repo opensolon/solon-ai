@@ -15,10 +15,9 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
-import org.noear.solon.ai.agent.AbsAgentChunk;
+import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 import java.util.Collections;
@@ -31,14 +30,14 @@ import java.util.Map;
  * @since 3.9.6
  */
 @Preview("3.9.6")
-public abstract class AbsActionChunk extends AbsAgentChunk {
+public abstract class AbsActionEvent extends AbsAgentEvent {
     private final transient ReActTrace trace;
     private final transient String toolName;
     private final transient Map<String, Object> args;
     private final String reasonId;
     private final String callId;
 
-    public AbsActionChunk(ReActTrace trace, String callId, String toolName, Map<String, Object> args, ChatMessage message) {
+    public AbsActionEvent(ReActTrace trace, String callId, String toolName, Map<String, Object> args, ChatMessage message) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
 
         this.trace = trace;

@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,29 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.team;
+package org.noear.solon.ai.agent.react.task;
 
-import org.noear.solon.ai.agent.AbsAgentChunk;
-import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
 /**
- * 任务运行开始块
+ * ReAct 计划事件
  *
  * @author noear
- * @since 4.0.4
+ * @since 3.9.3
  */
-@Preview("4.0.4")
-public class TeamStartChunk extends AbsAgentChunk {
-    private final TeamTrace trace;
-
-    public TeamStartChunk(TeamTrace trace) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), ChatMessage.ofAssistant(""));
-
-        this.trace = trace;
-    }
-
-    public TeamTrace getTrace() {
-        return trace;
-    }
+@Preview("3.9.3")
+public enum PlanStage {
+    CREATE,
+    PROGRESS,
+    REVISE
 }

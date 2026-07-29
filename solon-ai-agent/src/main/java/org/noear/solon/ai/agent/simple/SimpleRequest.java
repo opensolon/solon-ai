@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.simple;
 
-import org.noear.solon.ai.agent.AgentChunk;
+import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
@@ -90,7 +90,7 @@ public class SimpleRequest implements AgentRequest<SimpleRequest, SimpleResponse
         return new SimpleResponse(session, trace, message);
     }
 
-    public Flux<AgentChunk> stream() {
+    public Flux<AgentEvent> stream() {
         if (session == null) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("No session provided for SimpleRequest, using temporary InMemoryAgentSession.");
@@ -99,7 +99,7 @@ public class SimpleRequest implements AgentRequest<SimpleRequest, SimpleResponse
             session = InMemoryAgentSession.of();
         }
 
-        return Flux.<AgentChunk>create(sink -> {
+        return Flux.<AgentEvent>create(sink -> {
             try {
                 Thread currentThread = Thread.currentThread();
                 sink.onCancel(() -> {
@@ -114,7 +114,7 @@ public class SimpleRequest implements AgentRequest<SimpleRequest, SimpleResponse
                 SimpleResponse resp = new SimpleResponse(session, trace, message);
 
                 if (sink.isCancelled() == false) {
-                    trace.pushAgentChunkDo(new SimpleEndChunk(resp));
+                    trace.pushAgentChunkDo(new SimpleEndEvent(resp));
                     trace.pushAgentChunkDo(new SimpleChunk(resp));
                     sink.complete();
                 }

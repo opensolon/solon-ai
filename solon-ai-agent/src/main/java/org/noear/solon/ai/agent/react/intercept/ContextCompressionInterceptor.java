@@ -90,14 +90,14 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
     private static final int MIN_RESERVED_CEIL = 20;
 
     // 模型上下文窗口默认值（当 ChatModel 未提供 contextLength 时使用）
-    private long defaultContextWindow = 128_000L;
+    private long defaultContextLength = 128_000L;
 
     /** 设置上下文窗口默认值。 */
-    public void setDefaultContextWindow(long defaultContextWindow) {
-        if (defaultContextWindow <= 0) {
-            throw new IllegalArgumentException("defaultContextWindow must be positive: " + defaultContextWindow);
+    public void setDefaultContextLength(long defaultContextLength) {
+        if (defaultContextLength <= 0) {
+            throw new IllegalArgumentException("defaultContextLength must be positive: " + defaultContextLength);
         }
-        this.defaultContextWindow = defaultContextWindow;
+        this.defaultContextLength = defaultContextLength;
     }
 
     // 保留窗口的最大消息数（默认 15）
@@ -216,7 +216,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 this.compressionStrategy);
         tmp.minReservedMessages = this.minReservedMessages;
         tmp.perMessageCap = this.perMessageCap;
-        tmp.defaultContextWindow = this.defaultContextWindow;
+        tmp.defaultContextLength = this.defaultContextLength;
         tmp.messageTriggerFactor = this.messageTriggerFactor;
 
         return tmp;
@@ -226,10 +226,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      * 计算最终 Token 阈值为上下文压缩提供依据。
      *
      * <p>优先使用模型配置的 {@code contextLength} 与 {@link #maxContextLengthRatio}
-     * 的乘积；当模型未提供 contextLength 时，回退到 {@link #defaultContextWindow}。</p>
+     * 的乘积；当模型未提供 contextLength 时，回退到 {@link #defaultContextLength}。</p>
      */
     private int finalTokenThreshold(ChatModel model) {
-        long contextLength = this.defaultContextWindow;
+        long contextLength = this.defaultContextLength;
         try {
             if (model != null && model.getConfig() != null) {
                 long modelContext = model.getConfig().getContextLength();
@@ -239,7 +239,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             }
         } catch (Exception e) {
             if (log.isDebugEnabled()) {
-                log.debug("Failed to resolve model context length, using default context window={}", this.defaultContextWindow, e);
+                log.debug("Failed to resolve model context length, using default context window={}", this.defaultContextLength, e);
             }
         }
 
@@ -1508,7 +1508,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                                   int beforeTokenCount, int afterTokenCount) {
 
         if (trace.hasStreamSink()) {
-            trace.pushAgentChunk(new ContextSizeChunk(trace, msgCount, tokenCount, compressed,
+            trace.pushAgentEvent(new ContextSizeEvent(trace, msgCount, tokenCount, compressed,
                     beforeMessageCount, afterMessageCount,
                     beforeTokenCount, afterTokenCount));
         }

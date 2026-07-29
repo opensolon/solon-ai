@@ -15,12 +15,11 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
-import org.noear.solon.ai.agent.AbsAgentChunk;
+import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
-import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
@@ -31,11 +30,11 @@ import java.util.List;
  *
  * @author noear
  * @since 3.9.1
- * @deprecated 4.0.4 {@link ReasonDeltaChunk}
+ * @deprecated 4.0.4 {@link ReasonDeltaEvent}
  */
 @Deprecated
 @Preview("3.9.1")
-public class ReasonChunk extends AbsAgentChunk {
+public class ReasonChunk extends AbsAgentEvent {
     private final transient ReActTrace trace;
     private final transient @Nullable ChatResponse response;
     private final transient AssistantMessage assistantMessage;

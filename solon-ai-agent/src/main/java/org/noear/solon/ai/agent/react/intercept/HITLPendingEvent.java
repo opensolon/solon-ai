@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.intercept;
 
-import org.noear.solon.ai.agent.AbsAgentChunk;
+import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
@@ -34,14 +34,14 @@ import java.util.List;
  * @since 4.0.4
  */
 @Preview("4.0.4")
-public class HITLPendingChunk extends AbsAgentChunk {
+public class HITLPendingEvent extends AbsAgentEvent {
     private final transient ReActTrace trace;
     /**
      * 挂起任务快照（非空）
      */
     private final List<HITLTask> pendingTasks;
 
-    public HITLPendingChunk(ReActTrace trace, List<HITLTask> pendingTasks) {
+    public HITLPendingEvent(ReActTrace trace, List<HITLTask> pendingTasks) {
         super(trace.getRunId(),
                 trace.getAgentName(),
                 trace.getSession(),

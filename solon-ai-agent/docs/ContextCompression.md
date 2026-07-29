@@ -454,7 +454,7 @@ public class MyStrategy implements CompressionStrategy {
 
 ## 八、ContextSizeChunk 事件
 
-压缩时通过流式输出推送 `ContextSizeChunk`，让用户侧感知上下文状态。
+压缩时通过流式输出推送 `ContextSizeEvent`，让用户侧感知上下文状态。
 
 ### 字段说明
 

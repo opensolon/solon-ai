@@ -25,13 +25,11 @@ import java.util.Map;
  * ReAct 动作块（Action）：标识智能体正在调用外部工具或执行特定指令
  *
  * @author noear
- * @since 3.9.6
- * @deprecated 4.0.4 {@link ToolCallStartEvent}
+ * @since 4.0.4
  */
-@Deprecated
-@Preview("3.9.6")
-public class ActionChunk extends AbsActionEvent {
-    public ActionChunk(ReActTrace trace, String callId, String toolName, Map<String, Object> args) {
+@Preview("4.0.4")
+public class ToolCallStartEvent extends AbsActionEvent {
+    public ToolCallStartEvent(ReActTrace trace, String callId, String toolName, Map<String, Object> args) {
         super(trace, callId, toolName, args, ChatMessage.ofAssistant(""));
     }
 }

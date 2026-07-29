@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.team;
 
-import org.noear.solon.ai.agent.AbsAgentChunk;
+import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -24,11 +24,11 @@ import org.noear.solon.lang.Preview;
  *
  * @author noear
  * @since 3.9.1
- * @deprecated 4.0.4 {@link TeamEndChunk}
+ * @deprecated 4.0.4 {@link TeamEndEvent}
  */
 @Deprecated
 @Preview("3.9.1")
-public class TeamChunk extends AbsAgentChunk {
+public class TeamChunk extends AbsAgentEvent {
     private final transient TeamResponse response;
 
     public TeamChunk(TeamResponse resp) {

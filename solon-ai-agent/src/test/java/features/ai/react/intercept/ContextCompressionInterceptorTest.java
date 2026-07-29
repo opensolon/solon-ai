@@ -4,12 +4,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.agent.AgentChunk;
+import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
-import org.noear.solon.ai.agent.react.intercept.ContextSizeChunk;
+import org.noear.solon.ai.agent.react.intercept.ContextSizeEvent;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.agent.react.intercept.compress.*;
 import org.noear.solon.ai.chat.ChatModel;
@@ -660,7 +660,7 @@ public class ContextCompressionInterceptorTest {
     @Test
     public void testDynamicMinReservedHitsFloorNoThrash() {
         ContextCompressionInterceptor custom = new ContextCompressionInterceptor(6, null);
-        custom.setDefaultContextWindow(8_000L); // 小上下文 → windowBudget 很小
+        custom.setDefaultContextLength(8_000L); // 小上下文 → windowBudget 很小
 
         ChatMessage sys = ChatMessage.ofSystem("System");
         sys.addMetadata(AgentTrace.META_FIRST, 1);
@@ -1143,7 +1143,7 @@ public class ContextCompressionInterceptorTest {
         when(readonly.getContextLength()).thenReturn(0L);
 
         ContextCompressionInterceptor custom = new ContextCompressionInterceptor(20, null);
-        custom.setDefaultContextWindow(64_000L);
+        custom.setDefaultContextLength(64_000L);
         custom.setMaxContextLengthRatio(0.5D);
 
         assertEquals(32_000, invokeFinalTokenThreshold(custom, model),
@@ -1154,10 +1154,10 @@ public class ContextCompressionInterceptorTest {
     public void testDefaultContextWindowValidation() {
         ContextCompressionInterceptor custom = new ContextCompressionInterceptor();
         assertThrows(IllegalArgumentException.class,
-                () -> custom.setDefaultContextWindow(0L));
+                () -> custom.setDefaultContextLength(0L));
         assertThrows(IllegalArgumentException.class,
-                () -> custom.setDefaultContextWindow(-1L));
-        assertDoesNotThrow(() -> custom.setDefaultContextWindow(128_000L));
+                () -> custom.setDefaultContextLength(-1L));
+        assertDoesNotThrow(() -> custom.setDefaultContextLength(128_000L));
     }
 
     @Test
@@ -1594,10 +1594,10 @@ public class ContextCompressionInterceptorTest {
         assertTrue(interceptor.onReasonRetry(trace,
                 new RuntimeException("context_length_exceeded"), 1, null));
 
-        ArgumentCaptor<AgentChunk> captor = ArgumentCaptor.forClass(AgentChunk.class);
-        verify(trace).pushAgentChunk(captor.capture());
-        assertTrue(captor.getValue() instanceof ContextSizeChunk);
-        ContextSizeChunk chunk = (ContextSizeChunk) captor.getValue();
+        ArgumentCaptor<AgentEvent> captor = ArgumentCaptor.forClass(AgentEvent.class);
+        verify(trace).pushAgentEvent(captor.capture());
+        assertTrue(captor.getValue() instanceof ContextSizeEvent);
+        ContextSizeEvent chunk = (ContextSizeEvent) captor.getValue();
         assertTrue(chunk.isCompressed());
         assertEquals(2, chunk.getBeforeMessageCount());
         assertEquals(1, chunk.getAfterMessageCount());

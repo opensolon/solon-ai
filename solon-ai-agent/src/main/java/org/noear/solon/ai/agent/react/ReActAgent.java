@@ -251,7 +251,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         if (trace.hasStreamSink()) {
-            trace.pushAgentChunk(new RunStartChunk(trace));
+            trace.pushAgentEvent(new RunStartEvent(trace));
         }
 
         if (trace.getSession().isPending() == false) {
@@ -313,10 +313,10 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
         if (trace.isAbnormal()) {
             if (trace.hasStreamSink()) {
-                trace.pushAgentChunk(new ReasonDeltaChunk(trace, null, assistantMessage));
+                trace.pushAgentEvent(new ReasonDeltaEvent(trace, null, assistantMessage));
 
                 //@deprecated 4.0.4
-                trace.pushAgentChunk(new ReasonChunk(trace, null, assistantMessage));
+                trace.pushAgentEvent(new ReasonChunk(trace, null, assistantMessage));
             }
         }
 

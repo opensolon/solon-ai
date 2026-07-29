@@ -11,7 +11,7 @@ package org.noear.solon.ai.agent.team.task;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.AgentChunk;
+import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.exception.LlmNoReturnException;
 import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.agent.team.TeamAgent;
@@ -603,7 +603,7 @@ public class SupervisorTask implements NamedTaskComponent {
                         final ChatResponse response;
 
                         if (trace.hasStreamSink()) {
-                            FluxSink<AgentChunk> sink = trace.getOptions().getStreamSink();
+                            FluxSink<AgentEvent> sink = trace.getOptions().getStreamSink();
 
                             if (sink.isCancelled()) {
                                 return null;
@@ -612,7 +612,10 @@ public class SupervisorTask implements NamedTaskComponent {
                             response = req.stream()
                                     .takeUntil(r -> sink.isCancelled())
                                     .doOnNext(resp -> {
-                                        trace.pushAgentChunk(new SupervisorChunk(node, trace, resp));
+                                        trace.pushAgentEvent(new SupervisorDeltaEvent(node, trace, resp));
+
+                                        //@deprecated 4.0.4
+                                        trace.pushAgentEvent(new SupervisorChunk(node, trace, resp));
                                     })
                                     .blockLast();
                         } else {

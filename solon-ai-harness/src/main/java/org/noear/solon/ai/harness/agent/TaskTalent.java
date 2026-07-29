@@ -17,7 +17,7 @@ package org.noear.solon.ai.harness.agent;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.agent.AgentChunk;
+import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActChunk;
@@ -205,7 +205,7 @@ public class TaskTalent extends AbsTalent {
                 result = agentChunk.getContent();
             } else {
                 // 流式模式
-                final FluxSink<AgentChunk> sink = __parentTrace.getOptions().getStreamSink();
+                final FluxSink<AgentEvent> sink = __parentTrace.getOptions().getStreamSink();
 
                 ReActChunk response = (ReActChunk) agent.prompt(originalPrompt)
                         .session(session)
@@ -221,7 +221,7 @@ public class TaskTalent extends AbsTalent {
                                 return;
                             }
                             // multitask 并发时串行化 sink.next，避免非线程安全的 FluxSink 丢事件/乱序
-                            emitTaskChunk(sink, new TaskWrapChuck(__parentTrace, taskId, task, isMultitask, chunk));
+                            emitTaskChunk(sink, new TaskWrapEvent(__parentTrace, taskId, task, isMultitask, chunk));
                         })
                         .doOnError(err -> {
                             errRef.set(err);
@@ -260,7 +260,7 @@ public class TaskTalent extends AbsTalent {
      * 向父会话 sink 推送子代理 chunk。
      * multitask 并发时对同一 sink 加锁，保证 next 串行。
      */
-    private void emitTaskChunk(FluxSink<AgentChunk> sink, TaskWrapChuck wrapChuck) {
+    private void emitTaskChunk(FluxSink<AgentEvent> sink, TaskWrapEvent wrapChuck) {
         synchronized (sink) {
             if (!sink.isCancelled()) {
                 sink.next(wrapChuck);

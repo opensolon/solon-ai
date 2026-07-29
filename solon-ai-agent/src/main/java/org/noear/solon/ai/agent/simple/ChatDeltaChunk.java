@@ -15,26 +15,33 @@
  */
 package org.noear.solon.ai.agent.simple;
 
-import org.noear.solon.ai.agent.AbsAgentChunk;
-import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.agent.AbsAgentEvent;
+import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.lang.Preview;
 
 /**
- * 简单智能体运行开始块
+ * 智能体对话片段块（流式中间块）
+ * <p>用于在流式生成过程中，实时传递底层的对话增量内容及其关联的轨迹信息</p>
  *
  * @author noear
- * @since 4.0.4
+ * @since 3.9.1
  */
-@Preview("4.0.4")
-public class SimpleStartChunk extends AbsAgentChunk {
+@Preview("3.9.1")
+public class ChatDeltaChunk extends AbsAgentEvent {
     private final transient SimpleTrace trace;
+    private final transient ChatResponse response;
 
-    public SimpleStartChunk(SimpleTrace trace) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), ChatMessage.ofAssistant(""));
+    public ChatDeltaChunk(SimpleTrace trace, ChatResponse response) {
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), response.getMessage());
         this.trace = trace;
+        this.response = response;
     }
 
     public SimpleTrace getTrace() {
         return trace;
+    }
+
+    public ChatResponse getResponse() {
+        return response;
     }
 }

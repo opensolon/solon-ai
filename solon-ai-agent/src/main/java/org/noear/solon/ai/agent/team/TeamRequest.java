@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.team;
 
-import org.noear.solon.ai.agent.AgentChunk;
+import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
@@ -114,10 +114,10 @@ public class TeamRequest implements AgentRequest<TeamRequest, TeamResponse> {
         return new TeamResponse(session, trace, message);
     }
 
-    public Flux<AgentChunk> stream() {
+    public Flux<AgentEvent> stream() {
         init();
 
-        return Flux.<AgentChunk>create(sink -> {
+        return Flux.<AgentEvent>create(sink -> {
             try {
                 Thread currentThread = Thread.currentThread();
                 sink.onCancel(() -> {
@@ -132,8 +132,8 @@ public class TeamRequest implements AgentRequest<TeamRequest, TeamResponse> {
                 TeamResponse resp = new TeamResponse(session, trace, message);
 
                 if (sink.isCancelled() == false) {
-                    trace.pushAgentChunkDo(new TeamEndChunk(resp));
-                    trace.pushAgentChunkDo(new TeamChunk(resp));
+                    trace.pushAgentEventDo(new TeamEndEvent(resp));
+                    trace.pushAgentEventDo(new TeamChunk(resp));
                     sink.complete();
                 }
             } catch (Throwable e) {

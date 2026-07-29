@@ -29,7 +29,7 @@ import java.util.Map;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public interface AgentChunk extends NonSerializable {
+public interface AgentEvent extends NonSerializable {
     /**
      * 获取运行 Id
      */
@@ -46,12 +46,6 @@ public interface AgentChunk extends NonSerializable {
     AgentSession getSession();
 
     /**
-     * 获取当前块的消息
-     */
-    @Nullable
-    ChatMessage getMessage();
-
-    /**
      * 获取当前块的元数据
      */
     Map<String, Object> getMeta();
@@ -60,6 +54,12 @@ public interface AgentChunk extends NonSerializable {
      * 是否当前块有元数据
      */
     boolean hasMeta(String name);
+
+    /**
+     * 获取当前块的消息
+     */
+    @Nullable
+    ChatMessage getMessage();
 
     /**
      * 是否有当前块内容

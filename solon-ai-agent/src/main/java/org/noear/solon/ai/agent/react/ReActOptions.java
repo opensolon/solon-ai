@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.agent.AgentChunk;
+import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
@@ -61,7 +61,7 @@ public class ReActOptions implements NonSerializable {
 
     //------------
 
-    private transient FluxSink<AgentChunk> streamSink;
+    private transient FluxSink<AgentEvent> streamSink;
 
     /**
      * 执行推理的基础模型
@@ -151,11 +151,11 @@ public class ReActOptions implements NonSerializable {
         return tmp;
     }
 
-    protected void setStreamSink(FluxSink<AgentChunk> streamSink) {
+    protected void setStreamSink(FluxSink<AgentEvent> streamSink) {
         this.streamSink = streamSink;
     }
 
-    public FluxSink<AgentChunk> getStreamSink() {
+    public FluxSink<AgentEvent> getStreamSink() {
         return streamSink;
     }
 

@@ -107,7 +107,7 @@ public class ActionTask {
                 }
 
                 if (trace.hasStreamSink()) {
-                    trace.pushAgentChunk(new ActionEndChunk(trace));
+                    trace.pushAgentEvent(new ActionEndEvent(trace));
                 }
             }
 
@@ -138,8 +138,8 @@ public class ActionTask {
 
         // 3. 推送流式动作片
         if (trace.hasStreamSink()) {
-            trace.pushAgentChunk(new ToolCallStartChunk(trace, exchanger.getCallId(), exchanger.getToolName(), exchanger.getArgs()));
-            trace.pushAgentChunk(new ActionChunk(trace, exchanger.getCallId(), exchanger.getToolName(), exchanger.getArgs()));
+            trace.pushAgentEvent(new ToolCallStartEvent(trace, exchanger.getCallId(), exchanger.getToolName(), exchanger.getArgs()));
+            trace.pushAgentEvent(new ActionChunk(trace, exchanger.getCallId(), exchanger.getToolName(), exchanger.getArgs()));
         }
 
         long startMs = System.currentTimeMillis();
@@ -257,7 +257,7 @@ public class ActionTask {
         }
 
         if (trace.hasStreamSink()) {
-            trace.pushAgentChunk(new ActionStartChunk(trace, toolExchangerMap.values()));
+            trace.pushAgentEvent(new ActionStartEvent(trace, toolExchangerMap.values()));
         }
 
         List<ChatMessage> toolResults = new ArrayList<>();
@@ -372,7 +372,7 @@ public class ActionTask {
         }
 
         if (trace.hasStreamSink()) {
-            trace.pushAgentChunk(new ActionStartChunk(trace, toolExchangerMap.values()));
+            trace.pushAgentEvent(new ActionStartEvent(trace, toolExchangerMap.values()));
         }
 
         for (ToolExchanger exchanger : toolExchangerMap.values()) {
@@ -432,10 +432,10 @@ public class ActionTask {
 
         // 流式客户端通知闭环（使用最终 observation）
         if (trace.hasStreamSink()) {
-            trace.pushAgentChunk(new ToolCallEndChunk(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
+            trace.pushAgentEvent(new ToolCallEndEvent(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
 
             //@deprecated 4.0.4
-            trace.pushAgentChunk(new ObservationChunk(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
+            trace.pushAgentEvent(new ObservationChunk(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
         }
     }
 

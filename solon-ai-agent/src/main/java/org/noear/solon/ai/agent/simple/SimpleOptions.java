@@ -1,6 +1,6 @@
 package org.noear.solon.ai.agent.simple;
 
-import org.noear.solon.ai.agent.AgentChunk;
+import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.lang.Preview;
 import reactor.core.publisher.FluxSink;
@@ -39,13 +39,13 @@ public class SimpleOptions extends ModelOptionsAmend<SimpleOptions, SimpleInterc
 
     //------------
 
-    private transient FluxSink<AgentChunk> streamSink;
+    private transient FluxSink<AgentEvent> streamSink;
 
-    protected void setStreamSink(FluxSink<AgentChunk> streamSink) {
+    protected void setStreamSink(FluxSink<AgentEvent> streamSink) {
         this.streamSink = streamSink;
     }
 
-    public FluxSink<AgentChunk> getStreamSink() {
+    public FluxSink<AgentEvent> getStreamSink() {
         return streamSink;
     }
 

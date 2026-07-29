@@ -162,7 +162,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         }
 
         if (trace.hasStreamSink()) {
-            trace.pushAgentChunk(new SimpleStartChunk(trace));
+            trace.pushAgentEvent(new SimpleStartEvent(trace));
         }
 
         // 1. 构建请求消息
@@ -394,7 +394,10 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             if (trace.hasStreamSink()) {
                 response = chatReq.stream()
                         .doOnNext(resp -> {
-                            trace.pushAgentChunk(new ChatChunk(trace, resp));
+                            trace.pushAgentEvent(new ChatDeltaChunk(trace, resp));
+
+                            //@deprecated 4.0.4
+                            trace.pushAgentEvent(new ChatChunk(trace, resp));
                         })
                         .blockLast();
             } else {

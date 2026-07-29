@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.agent.AbsAgentChunk;
+import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.chat.message.ChatMessage;
 
 /**
@@ -24,10 +24,10 @@ import org.noear.solon.ai.chat.message.ChatMessage;
  * @author noear
  * @since 4.0.4
  */
-public class RunStartChunk extends AbsAgentChunk {
+public class RunStartEvent extends AbsAgentEvent {
     private final ReActTrace trace;
 
-    public RunStartChunk(ReActTrace trace) {
+    public RunStartEvent(ReActTrace trace) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession(), ChatMessage.ofAssistant(""));
 
         this.trace = trace;

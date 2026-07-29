@@ -21,16 +21,15 @@ import org.noear.solon.lang.Preview;
  *
  * @author noear
  * @since 3.9.1
- * @deprecated 4.0.4 {@link  SupervisorDeltaEvent}
+ * @since 4.0.4
  */
-@Deprecated
-@Preview("3.9.1")
-public class SupervisorChunk extends AbsAgentEvent {
+@Preview("4.0.4")
+public class SupervisorDeltaEvent extends AbsAgentEvent {
     private final transient Node node;
     private final transient TeamTrace trace;
     private final transient ChatResponse response;
 
-    public SupervisorChunk(Node node, TeamTrace trace, ChatResponse response) {
+    public SupervisorDeltaEvent(Node node, TeamTrace trace, ChatResponse response) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession(), response.getMessage());
 
         this.node = node;

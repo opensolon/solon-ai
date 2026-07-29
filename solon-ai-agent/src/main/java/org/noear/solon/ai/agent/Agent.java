@@ -18,9 +18,7 @@ package org.noear.solon.ai.agent;
 import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
-import org.noear.solon.ai.agent.team.NodeChunk;
-import org.noear.solon.ai.agent.team.TeamInterceptor;
-import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.agent.team.*;
 import org.noear.solon.ai.agent.util.AgentUtil;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -148,6 +146,11 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
                     }
                 }
             }
+
+            //状态实时化
+            if (trace.hasStreamSink()) {
+                trace.pushAgentEvent(new NodeStartEvent(node, trace));
+            }
         }
 
         // 3. 准备提示词并执行推理
@@ -180,7 +183,10 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
         if (trace != null) {
             //状态实时化
             if (trace.hasStreamSink()) {
-                trace.pushAgentChunk(new NodeChunk(node, trace, msg));
+                trace.pushAgentEvent(new NodeEndEvent(node, trace, msg));
+
+                //@deprecated 4.0.4
+                trace.pushAgentEvent(new NodeChunk(node, trace, msg));
             }
 
             //协议后处理集成

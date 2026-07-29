@@ -201,7 +201,7 @@ public class ReasonTask {
             List<ChatMessage> messages = new ArrayList<>();
             messages.add(ChatMessage.ofSystem(systemPromptStr));
             messages.addAll(trace.getWorkingMemory().getMessages());
-            trace.pushAgentChunk(new ReasonStartChunk(trace, systemPromptStr, messages));
+            trace.pushAgentEvent(new ReasonStartEvent(trace, systemPromptStr, messages));
         }
 
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
@@ -235,7 +235,7 @@ public class ReasonTask {
         }
 
         if (trace.hasStreamSink()) {
-            trace.pushAgentChunk(new ReasonEndChunk(trace, response, responseMessage, durationMs));
+            trace.pushAgentEvent(new ReasonEndEvent(trace, response, responseMessage, durationMs));
         }
 
         if(trace.getSession().isPending()){
@@ -314,7 +314,7 @@ public class ReasonTask {
 
         if (trace.hasStreamSink()) {
             //@deprecated 4.0.4
-            trace.pushAgentChunk(new ThoughtChunk(trace, response, responseMessage, thoughtContent));
+            trace.pushAgentEvent(new ThoughtChunk(trace, response, responseMessage, thoughtContent));
         }
 
         trace.setLastReasonMessage(responseMessage);
@@ -408,8 +408,8 @@ public class ReasonTask {
                                     .takeUntil(r -> trace.isStreamCancelled())
                                     .doOnNext(resp -> {
                                         streamEmitted[0] = true;
-                                        trace.pushAgentChunk(new ReasonDeltaChunk(trace, resp, resp.getMessage()));
-                                        trace.pushAgentChunk(new ReasonChunk(trace, resp, resp.getMessage()));
+                                        trace.pushAgentEvent(new ReasonDeltaEvent(trace, resp, resp.getMessage()));
+                                        trace.pushAgentEvent(new ReasonChunk(trace, resp, resp.getMessage()));
                                     })
                                     .blockLast();
                         } else {

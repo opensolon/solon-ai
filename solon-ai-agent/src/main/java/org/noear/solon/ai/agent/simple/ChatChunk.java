@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.simple;
 
-import org.noear.solon.ai.agent.AbsAgentChunk;
+import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.lang.Preview;
 
@@ -25,9 +25,11 @@ import org.noear.solon.lang.Preview;
  *
  * @author noear
  * @since 3.9.1
+ * @deprecated 4.0.4 {@link ChatDeltaChunk}
  */
+@Deprecated
 @Preview("3.9.1")
-public class ChatChunk extends AbsAgentChunk {
+public class ChatChunk extends AbsAgentEvent {
     private final transient SimpleTrace trace;
     private final transient ChatResponse response;
 

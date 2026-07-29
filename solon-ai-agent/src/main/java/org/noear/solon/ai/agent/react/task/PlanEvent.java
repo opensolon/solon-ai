@@ -15,17 +15,50 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
+import org.noear.solon.ai.agent.AbsAgentEvent;
+import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.lang.Preview;
 
+import java.util.List;
+
 /**
- * ReAct 计划事件
+ * ReAct 计划块（Planning）：包含智能体生成的任务拆解或步骤规划
  *
  * @author noear
- * @since 3.9.3
+ * @since 3.9.1
  */
-@Preview("3.9.3")
-public enum PlanEvent {
-    CREATE,
-    PROGRESS,
-    REVISE
+@Preview("3.9.1")
+public class PlanEvent extends AbsAgentEvent {
+    private final transient ReActTrace trace;
+    private final transient PlanStage event;
+    private final String reasonId;
+
+    public PlanEvent(ReActTrace trace, PlanStage event, AssistantMessage message) {
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
+
+        this.trace = trace;
+        this.event = event;
+        this.reasonId = trace.getCurrentReasonId();
+    }
+
+    public ReActTrace getTrace() {
+        return trace;
+    }
+
+    public PlanStage getEvent() {
+        return event;
+    }
+
+    public List<String> getPlans() {
+        return trace.getPlans();
+    }
+
+    public int getPlanIndex() {
+        return trace.getPlanIndex();
+    }
+
+    public String getReasonId() {
+        return reasonId;
+    }
 }

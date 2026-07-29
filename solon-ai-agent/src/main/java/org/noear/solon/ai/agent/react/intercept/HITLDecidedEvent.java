@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.intercept;
 
-import org.noear.solon.ai.agent.AbsAgentChunk;
+import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Nullable;
@@ -35,7 +35,7 @@ import java.util.Map;
  * @since 4.0.4
  */
 @Preview("4.0.4")
-public class HITLDecidedChunk extends AbsAgentChunk {
+public class HITLDecidedEvent extends AbsAgentEvent {
     private final transient ReActTrace trace;
     /**
      * 关联的工具调用 ID（可与 ActionChunk/ToolStartChunk 对齐）
@@ -58,7 +58,7 @@ public class HITLDecidedChunk extends AbsAgentChunk {
      */
     private final HITLDecision decision;
 
-    public HITLDecidedChunk(ReActTrace trace,
+    public HITLDecidedEvent(ReActTrace trace,
                             @Nullable String callId,
                             String toolName,
                             Map<String, Object> args,

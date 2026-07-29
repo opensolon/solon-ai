@@ -29,14 +29,14 @@ import java.util.Map;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public abstract class AbsAgentChunk implements AgentChunk {
+public abstract class AbsAgentEvent implements AgentEvent {
     protected final String runId;
     protected final String agentName;
     protected final @Nullable ChatMessage message;
     protected final transient AgentSession session;
     protected Map<String, Object> meta;
 
-    public AbsAgentChunk(String runId, String agentName, AgentSession session, ChatMessage message) {
+    public AbsAgentEvent(String runId, String agentName, AgentSession session, ChatMessage message) {
         this.runId = runId;
         this.agentName = agentName;
         this.session = session;
@@ -59,7 +59,7 @@ public abstract class AbsAgentChunk implements AgentChunk {
     }
 
     @Override
-    public ChatMessage getMessage() {
+    public @Nullable ChatMessage getMessage() {
         return message;
     }
 

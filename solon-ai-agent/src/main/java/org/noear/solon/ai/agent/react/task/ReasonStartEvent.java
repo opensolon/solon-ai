@@ -15,11 +15,10 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
-import org.noear.solon.ai.agent.AbsAgentChunk;
+import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;
 
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -29,13 +28,13 @@ import java.util.List;
  * @author noear
  * @since 4.0.4
  */
-public class ReasonStartChunk extends AbsAgentChunk {
+public class ReasonStartEvent extends AbsAgentEvent {
     private final ReActTrace trace;
     private final String systemPrompt;
     private final List<ChatMessage> messages;
     private final String reasonId;
 
-    public ReasonStartChunk(ReActTrace trace, String systemPrompt, List<ChatMessage> messages) {
+    public ReasonStartEvent(ReActTrace trace, String systemPrompt, List<ChatMessage> messages) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession(), ChatMessage.ofAssistant(""));
 
         this.trace = trace;

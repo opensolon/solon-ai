@@ -15,29 +15,27 @@
  */
 package org.noear.solon.ai.agent.team;
 
-import org.noear.solon.ai.agent.AbsAgentChunk;
+import org.noear.solon.ai.agent.AbsAgentEvent;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
 /**
- * 任务运行结束块
+ * 任务运行开始块
  *
  * @author noear
  * @since 4.0.4
  */
 @Preview("4.0.4")
-public class TeamEndChunk extends AbsAgentChunk {
-    private final transient TeamResponse response;
+public class TeamStartEvent extends AbsAgentEvent {
+    private final TeamTrace trace;
 
-    public TeamEndChunk(TeamResponse resp) {
-        super(resp.getTrace().getRunId(), resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());
-        this.response = resp;
-    }
+    public TeamStartEvent(TeamTrace trace) {
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), ChatMessage.ofAssistant(""));
 
-    public TeamResponse getResponse() {
-        return response;
+        this.trace = trace;
     }
 
     public TeamTrace getTrace() {
-        return response.getTrace();
+        return trace;
     }
 }

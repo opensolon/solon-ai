@@ -15,13 +15,12 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.agent.AgentChunk;
+import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -122,10 +121,10 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
      * 响应式流输出：实时推送推理过程中的 Chunk（如 ReasonChunk, ActionChunk）
      * 适用于 Web 端 SSE 或 WebSocket 实时展示思考过程
      */
-    public Flux<AgentChunk> stream() {
+    public Flux<AgentEvent> stream() {
         init();
 
-        return Flux.<AgentChunk>create(sink -> {
+        return Flux.<AgentEvent>create(sink -> {
             try {
                 Thread currentThread = Thread.currentThread();
                 sink.onCancel(() -> {
@@ -141,8 +140,8 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
                 ReActResponse resp = new ReActResponse(session, trace, message);
 
                 if (sink.isCancelled() == false) {
-                    trace.pushAgentChunkDo(new RunEndChunk(resp));
-                    trace.pushAgentChunkDo(new ReActChunk(resp));
+                    trace.pushAgentEventDo(new RunEndEvent(resp));
+                    trace.pushAgentEventDo(new ReActChunk(resp));
                     sink.complete();
                 }
             } catch (Throwable e) {

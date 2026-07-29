@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,35 +15,35 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
-import org.noear.solon.ai.agent.AbsAgentChunk;
+import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
-import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Nullable;
+import org.noear.solon.lang.Preview;
 
 import java.util.List;
 
 /**
- * 思考运行结束块
+ * ReAct 思考流块
  *
  * @author noear
+ * @since 3.9.1
  * @since 4.0.4
  */
-public class ReasonEndChunk extends AbsAgentChunk {
-    private final ReActTrace trace;
-    private final ChatResponse response;
-    private final AssistantMessage assistantMessage;
-    private final long durationMs;
+@Preview("4.0.4")
+public class ReasonDeltaEvent extends AbsAgentEvent {
+    private final transient ReActTrace trace;
+    private final transient @Nullable ChatResponse response;
+    private final transient AssistantMessage assistantMessage;
     private final String reasonId;
 
-    public ReasonEndChunk(ReActTrace trace, ChatResponse response, AssistantMessage message, long durationMs) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
-
+    public ReasonDeltaEvent(ReActTrace trace, @Nullable ChatResponse response, AssistantMessage assistantMessage) {
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), assistantMessage);
         this.trace = trace;
         this.response = response;
-        this.assistantMessage = message;
-        this.durationMs = durationMs;
+        this.assistantMessage = assistantMessage;
         this.reasonId = trace.getCurrentReasonId();
     }
 
@@ -51,6 +51,7 @@ public class ReasonEndChunk extends AbsAgentChunk {
         return trace;
     }
 
+    @Nullable
     public ChatResponse getResponse() {
         return response;
     }
@@ -59,18 +60,45 @@ public class ReasonEndChunk extends AbsAgentChunk {
         return assistantMessage;
     }
 
-    public long getDurationMs() {
-        return durationMs;
-    }
-
     public String getReasonId() {
         return reasonId;
     }
 
-    public boolean isToolCalls() {
-        return Assert.isNotEmpty(assistantMessage.getToolCalls());
+    /**
+     * 是否已完成
+     */
+    public boolean isFinished() {
+        if (response == null) {
+            return true;
+        } else {
+            return response.isFinished();
+        }
     }
 
+    /**
+     * 是否异常结束
+     */
+    public boolean isError() {
+        return response == null;
+    }
+
+    /**
+     * 是否为思考
+     */
+    public boolean isThinking() {
+        return assistantMessage.isThinking();
+    }
+
+    /**
+     * 是否为工具调用
+     */
+    public boolean isToolCalls() {
+        return assistantMessage.isToolCalls();
+    }
+
+    /**
+     * 获取工具调用
+     */
     public List<ToolCall> getToolCalls() {
         return assistantMessage.getToolCalls();
     }
