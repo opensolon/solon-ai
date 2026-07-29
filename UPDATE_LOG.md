@@ -14,6 +14,7 @@
 
 ### 4.0.4
 
+* 升级 acp-sdk 为 0.14
 * 添加 solon-ai-core ModelOptionsAmend.reasoning_effort 统一选项 API
 * 添加 solon-ai-core ModelOptionsAmend.thinking 思考模式开关统一选项 API
 * 添加 solon-ai-core Prompt.copy 方法

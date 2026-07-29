@@ -62,7 +62,19 @@
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>acp-sdk</artifactId>
+                <artifactId>acp-agent-support</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
+                <artifactId>acp-annotations</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
+                <artifactId>acp-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

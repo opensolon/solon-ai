@@ -17,7 +17,10 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>../../acp-sdk</module>
+        <module>../../acp-agent-support</module>
+        <module>../../acp-annotations</module>
+        <module>../../acp-core</module>
+
         <module>../../mcp-core</module>
         <module>../../mcp-json-jackson2</module>
 
