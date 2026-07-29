@@ -114,8 +114,10 @@ public class SimpleRequest implements AgentRequest<SimpleRequest, SimpleResponse
                 SimpleResponse resp = new SimpleResponse(session, trace, message);
 
                 if (sink.isCancelled() == false) {
-                    trace.pushAgentChunkDo(new SimpleEndEvent(resp));
-                    trace.pushAgentChunkDo(new SimpleChunk(resp));
+                    trace.pushAgentEvent(new SimpleEndEvent(resp));
+
+                    //@deprecated 4.0.4
+                    trace.pushAgentEvent(new SimpleChunk(resp));
                     sink.complete();
                 }
             } catch (Throwable e) {

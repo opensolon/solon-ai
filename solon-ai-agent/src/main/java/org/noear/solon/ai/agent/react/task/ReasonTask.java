@@ -401,9 +401,6 @@ public class ReasonTask {
                         ChatRequestDesc req = buildRequest(trace, messages);
                         final ChatResponse response;
                         if (trace.hasStreamSink()) {
-                            if (trace.isStreamCancelled()) {
-                                return null;
-                            }
                             response = req.stream()
                                     .takeUntil(r -> trace.isStreamCancelled())
                                     .doOnNext(resp -> {

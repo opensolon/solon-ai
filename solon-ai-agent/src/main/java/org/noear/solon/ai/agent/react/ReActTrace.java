@@ -559,7 +559,7 @@ public class ReActTrace implements AgentTrace {
      * 流式订阅是否已取消（无 sink 时视为 false）
      */
     public boolean isStreamCancelled() {
-        return hasStreamSink() && options.getStreamSink().isCancelled();
+        return options.getStreamSink().isCancelled();
     }
 
     /**
@@ -571,20 +571,6 @@ public class ReActTrace implements AgentTrace {
                 return;
             }
 
-            options.getStreamSink().next(event);
-        } catch (Throwable e) {
-            // 忽略投递异常，避免影响主流程；debug 便于排查订阅端问题
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Failed to push agent chunk: {}", event != null ? event.getClass().getSimpleName() : null, e);
-            }
-        }
-    }
-
-    /**
-     * 直接推送流块（调用方已完成 cancelled 判定；仅吞掉投递异常）
-     */
-    public void pushAgentEventDo(AgentEvent event) {
-        try {
             options.getStreamSink().next(event);
         } catch (Throwable e) {
             // 忽略投递异常，避免影响主流程；debug 便于排查订阅端问题

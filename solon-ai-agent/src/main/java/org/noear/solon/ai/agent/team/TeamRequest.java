@@ -132,8 +132,10 @@ public class TeamRequest implements AgentRequest<TeamRequest, TeamResponse> {
                 TeamResponse resp = new TeamResponse(session, trace, message);
 
                 if (sink.isCancelled() == false) {
-                    trace.pushAgentEventDo(new TeamEndEvent(resp));
-                    trace.pushAgentEventDo(new TeamChunk(resp));
+                    trace.pushAgentEvent(new TeamEndEvent(resp));
+
+                    //@deprecated 4.0.4
+                    trace.pushAgentEvent(new TeamChunk(resp));
                     sink.complete();
                 }
             } catch (Throwable e) {

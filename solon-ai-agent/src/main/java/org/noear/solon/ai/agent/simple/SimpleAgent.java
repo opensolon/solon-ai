@@ -393,6 +393,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
             if (trace.hasStreamSink()) {
                 response = chatReq.stream()
+                        .takeUntil(r -> trace.isStreamCancelled())
                         .doOnNext(resp -> {
                             trace.pushAgentEvent(new ChatDeltaChunk(trace, resp));
 

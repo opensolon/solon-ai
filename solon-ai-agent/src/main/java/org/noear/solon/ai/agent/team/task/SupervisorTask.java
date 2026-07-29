@@ -603,14 +603,8 @@ public class SupervisorTask implements NamedTaskComponent {
                         final ChatResponse response;
 
                         if (trace.hasStreamSink()) {
-                            FluxSink<AgentEvent> sink = trace.getOptions().getStreamSink();
-
-                            if (sink.isCancelled()) {
-                                return null;
-                            }
-
                             response = req.stream()
-                                    .takeUntil(r -> sink.isCancelled())
+                                    .takeUntil(r -> trace.isStreamCancelled())
                                     .doOnNext(resp -> {
                                         trace.pushAgentEvent(new SupervisorDeltaEvent(node, trace, resp));
 
