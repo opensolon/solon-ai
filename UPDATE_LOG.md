@@ -47,10 +47,11 @@
 * 调整 solon-ai-agent ToolCallEndChunk 替代 ObservationChunk, ToolCallStartChunk 替代 ActionChunk（后者标为弃用）
 * 调整 solon-ai-agent ReActInterceptor onToolCallEnd 替代 onObservation，onToolCallStart 替代 onAction（后者标为弃用）
 * 调整 solon-ai-agent ContextCompressionInterceptor 取消 maxTokens，由 maxContextLengthRatio 替代
+* 调整 solon-ai-agent ContextCompressionInterceptor 取消 chatModelSupplier 参数（标为弃用）
+* 调整 solon-ai-agent AgentChunk 更名为 AgentEvent
 * 调整 solon-ai-harness 重构 hitl 实现
 * 调整 solon-ai-harness getModelOrMain 标为弃用，由 getModelOrDefInstance 替代
 * 调整 solon-ai-harness 取消 compressionMaxTokens，由 compressionMaxContextRatio 替代
-* 调整 solon-ai-agent ContextCompressionInterceptor 取消 chatModelSupplier 参数（标为弃用）
 * 修复 solon-ai-core ChatModel.stream 内部多次请求可能卡死的问题 
 
 ### 4.0.3
