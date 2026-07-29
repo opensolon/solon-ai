@@ -29,15 +29,15 @@ public class TaskWrapEvent extends AbsAgentEvent {
     private final String taskId;
     private final TaskTalent.MultiTaskOp taskOp;
     private final boolean isMultitask;
-    private final AgentEvent realChunk;
+    private final AgentEvent realEvent;
 
-    public TaskWrapEvent(ReActTrace parentTrace, String taskId, TaskTalent.MultiTaskOp taskOp, boolean isMultitask, AgentEvent realChunk) {
-        super(realChunk.getRunId(), realChunk.getAgentName(), realChunk.getSession(), realChunk.getMessage());
+    public TaskWrapEvent(ReActTrace parentTrace, String taskId, TaskTalent.MultiTaskOp taskOp, boolean isMultitask, AgentEvent realEvent) {
+        super(realEvent.getRunId(), realEvent.getAgentName(), realEvent.getSession(), realEvent.getMessage());
         this.parentTrace = parentTrace;
         this.taskId = taskId;
         this.taskOp = taskOp;
         this.isMultitask = isMultitask;
-        this.realChunk = realChunk;
+        this.realEvent = realEvent;
     }
 
     public String getParentRunId(){
@@ -64,7 +64,7 @@ public class TaskWrapEvent extends AbsAgentEvent {
         return isMultitask;
     }
 
-    public AgentEvent getRealChunk() {
-        return realChunk;
+    public AgentEvent getRealEvent() {
+        return realEvent;
     }
 }

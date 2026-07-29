@@ -25,7 +25,7 @@ import org.noear.solon.lang.Preview;
  *
  * @author noear
  * @since 3.9.1
- * @deprecated 4.0.4 {@link ChatDeltaChunk}
+ * @deprecated 4.0.4 {@link ChatDeltaEvent}
  */
 @Deprecated
 @Preview("3.9.1")

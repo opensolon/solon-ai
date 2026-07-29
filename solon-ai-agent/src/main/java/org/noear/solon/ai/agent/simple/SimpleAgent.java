@@ -395,7 +395,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                 response = chatReq.stream()
                         .takeUntil(r -> trace.isStreamCancelled())
                         .doOnNext(resp -> {
-                            trace.pushAgentEvent(new ChatDeltaChunk(trace, resp));
+                            trace.pushAgentEvent(new ChatDeltaEvent(trace, resp));
 
                             //@deprecated 4.0.4
                             trace.pushAgentEvent(new ChatChunk(trace, resp));

@@ -27,11 +27,11 @@ import org.noear.solon.lang.Preview;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class ChatDeltaChunk extends AbsAgentEvent {
+public class ChatDeltaEvent extends AbsAgentEvent {
     private final transient SimpleTrace trace;
     private final transient ChatResponse response;
 
-    public ChatDeltaChunk(SimpleTrace trace, ChatResponse response) {
+    public ChatDeltaEvent(SimpleTrace trace, ChatResponse response) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession(), response.getMessage());
         this.trace = trace;
         this.response = response;
