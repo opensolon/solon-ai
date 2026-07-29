@@ -10,8 +10,7 @@ import com.agentclientprotocol.sdk.spec.AcpSchema;
 import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCMessage;
 import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCRequest;
 import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCResponse;
-import io.modelcontextprotocol.json.McpJsonDefaults;
-import io.modelcontextprotocol.json.McpJsonMapper;
+import com.agentclientprotocol.sdk.json.AcpJsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -41,7 +40,7 @@ class AcpTransportIntegrationTest {
     private static final int TEST_PORT = 18080;
     private static final String TEST_WS_URL = "ws://" + TEST_HOST + ":" + TEST_PORT;
 
-    private McpJsonMapper jsonMapper;
+    private AcpJsonMapper jsonMapper;
     private WebSocketSolonAcpAgentTransport agentTransport;
     private WebSocketSolonAcpClientTransport clientTransport;
     private AtomicReference<JSONRPCMessage> receivedByAgent;
@@ -50,7 +49,7 @@ class AcpTransportIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        jsonMapper = McpJsonDefaults.getMapper();
+        jsonMapper = AcpJsonMapper.createDefault();
         receivedByAgent = new AtomicReference<>();
         receivedByClient = new AtomicReference<>();
 

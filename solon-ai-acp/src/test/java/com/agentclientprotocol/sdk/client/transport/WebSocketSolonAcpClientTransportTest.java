@@ -5,8 +5,7 @@
 package com.agentclientprotocol.sdk.client.transport;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
-import io.modelcontextprotocol.json.McpJsonDefaults;
-import io.modelcontextprotocol.json.McpJsonMapper;
+import com.agentclientprotocol.sdk.json.AcpJsonMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,11 +22,11 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class WebSocketSolonAcpClientTransportTest {
 
-    private McpJsonMapper jsonMapper;
+    private AcpJsonMapper jsonMapper;
 
     @BeforeEach
     void setUp() {
-        jsonMapper = McpJsonDefaults.getMapper();
+        jsonMapper = AcpJsonMapper.createDefault();
     }
 
     @Test

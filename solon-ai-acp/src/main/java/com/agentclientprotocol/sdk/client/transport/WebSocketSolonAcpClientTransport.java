@@ -16,8 +16,8 @@ import com.agentclientprotocol.sdk.spec.AcpClientTransport;
 import com.agentclientprotocol.sdk.spec.AcpSchema;
 import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCMessage;
 import com.agentclientprotocol.sdk.util.Assert;
-import io.modelcontextprotocol.json.McpJsonMapper;
-import io.modelcontextprotocol.json.TypeRef;
+import com.agentclientprotocol.sdk.json.AcpJsonMapper;
+import com.agentclientprotocol.sdk.json.TypeRef;
 import org.java_websocket.handshake.ServerHandshake;
 import org.noear.java_websocket.client.SimpleWebSocketClient;
 import org.slf4j.Logger;
@@ -38,7 +38,7 @@ import reactor.core.scheduler.Schedulers;
  * <p>
  * Key features:
  * <ul>
- * <li>Zero external dependencies (uses JDK built-in WebSocket)</li>
+ * <li>Solon WebSocket client integration via java-websocket-ns</li>
  * <li>Thread-safe message processing with dedicated schedulers</li>
  * <li>Proper resource management and graceful shutdown</li>
  * <li>Backpressure support via Reactor Sinks</li>
@@ -57,7 +57,7 @@ public class WebSocketSolonAcpClientTransport implements AcpClientTransport {
 
 	private final URI serverUri;
 
-	private final McpJsonMapper jsonMapper;
+	private final AcpJsonMapper jsonMapper;
 
 	private final SimpleWebSocketClient websocketClient;
 
@@ -78,12 +78,12 @@ public class WebSocketSolonAcpClientTransport implements AcpClientTransport {
 	private Duration connectTimeout = Duration.ofSeconds(30);
 
 	/**
-	 * Creates a new WebSocketAcpClientTransport with the specified server URI and JsonMapper.
+	 * Creates a new WebSocketSolonAcpClientTransport with the specified server URI and JsonMapper.
 	 *
 	 * @param serverUri  The WebSocket URI to connect to (e.g., "ws://localhost:8080/acp")
 	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
 	 */
-	public WebSocketSolonAcpClientTransport(URI serverUri, McpJsonMapper jsonMapper) {
+	public WebSocketSolonAcpClientTransport(URI serverUri, AcpJsonMapper jsonMapper) {
 		Assert.notNull(serverUri, "The serverUri can not be null");
 		Assert.notNull(jsonMapper, "The JsonMapper can not be null");
 
@@ -185,31 +185,27 @@ public class WebSocketSolonAcpClientTransport implements AcpClientTransport {
 	@Override
 	public Mono<Void> sendMessage(JSONRPCMessage message) {
 		return connectionReady.asMono().then(Mono.defer(() -> {
-			if (outboundSink.tryEmitNext(message).isSuccess()) {
-				return Mono.empty();
-			} else {
-				return Mono.error(new RuntimeException("Failed to enqueue message"));
-			}
+			outboundSink.emitNext(message,
+					Sinks.EmitFailureHandler.busyLooping(Duration.ofMillis(100)));
+			return Mono.empty();
 		}));
 	}
 
 	@Override
 	public Mono<Void> closeGracefully() {
 		return Mono.fromRunnable(() -> {
-			logger.debug("WebSocket transport closing gracefully");
+			logger.debug("WebSocket client transport closing gracefully");
 			isClosing.set(true);
 			inboundSink.tryEmitComplete();
 			outboundSink.tryEmitComplete();
-		}).then(Mono.defer(() -> {
+		}).then(Mono.fromRunnable(() -> {
 			if (websocketClient.isOpen()) {
 				websocketClient.close();
-				return Mono.empty();
 			}
-			return Mono.empty();
 		})).then(Mono.fromRunnable(() -> {
 			try {
 				outboundScheduler.dispose();
-				logger.debug("WebSocket transport closed");
+				logger.debug("WebSocket client transport closed");
 			} catch (Exception e) {
 				logger.error("Error during graceful shutdown", e);
 			}
@@ -227,7 +223,7 @@ public class WebSocketSolonAcpClientTransport implements AcpClientTransport {
 	}
 
 	/**
-	 * WebSocket.Listener implementation for handling incoming messages.
+	 * WebSocket listener implementation for handling incoming messages.
 	 */
 	private class AcpWebSocketListener extends SimpleWebSocketClient {
 
@@ -235,14 +231,9 @@ public class WebSocketSolonAcpClientTransport implements AcpClientTransport {
 			super(serverUri);
 		}
 
-		public AcpWebSocketListener(String serverUri) {
-			super(serverUri);
-		}
-
 		@Override
 		public void onOpen(ServerHandshake webSocket) {
 			logger.debug("WebSocket connection opened");
-			//webSocket.request(1);
 		}
 
 		@Override
@@ -281,4 +272,5 @@ public class WebSocketSolonAcpClientTransport implements AcpClientTransport {
 			inboundSink.tryEmitComplete();
 		}
 	}
+
 }

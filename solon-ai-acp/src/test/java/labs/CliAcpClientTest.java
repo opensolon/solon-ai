@@ -8,8 +8,7 @@ import com.agentclientprotocol.sdk.client.AcpClient;
 import com.agentclientprotocol.sdk.client.AcpSyncClient;
 import com.agentclientprotocol.sdk.client.transport.WebSocketSolonAcpClientTransport;
 import com.agentclientprotocol.sdk.spec.AcpSchema;
-import io.modelcontextprotocol.json.McpJsonDefaults;
-import io.modelcontextprotocol.json.McpJsonMapper;
+import com.agentclientprotocol.sdk.json.AcpJsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -48,7 +47,7 @@ class CliAcpClientTest {
         // 创建客户端
         WebSocketSolonAcpClientTransport transport = new WebSocketSolonAcpClientTransport(
                 URI.create(TEST_WS_URL),
-                McpJsonDefaults.getMapper());
+                AcpJsonMapper.createDefault());
 
         client = AcpClient.sync(transport)
                 .requestTimeout(Duration.ofSeconds(60))
@@ -181,7 +180,7 @@ class CliAcpClientTest {
         // 重新创建客户端，带有自定义的更新处理器
         WebSocketSolonAcpClientTransport transport = new WebSocketSolonAcpClientTransport(
                 URI.create(TEST_WS_URL),
-                McpJsonDefaults.getMapper());
+                AcpJsonMapper.createDefault());
 
         AcpSyncClient clientWithCallback = AcpClient.sync(transport)
                 .requestTimeout(Duration.ofSeconds(60))

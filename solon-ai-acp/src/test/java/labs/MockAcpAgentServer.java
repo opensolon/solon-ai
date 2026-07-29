@@ -10,8 +10,7 @@ import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCMessage;
 import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCNotification;
 import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCRequest;
 import com.agentclientprotocol.sdk.spec.AcpSchema.JSONRPCResponse;
-import io.modelcontextprotocol.json.McpJsonDefaults;
-import io.modelcontextprotocol.json.McpJsonMapper;
+import com.agentclientprotocol.sdk.json.AcpJsonMapper;
 import org.noear.solon.Solon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,7 +39,7 @@ public class MockAcpAgentServer {
     private final String host;
     private final int port;
     private final String path;
-    private final McpJsonMapper jsonMapper;
+    private final AcpJsonMapper jsonMapper;
     private WebSocketSolonAcpAgentTransport agentTransport;
     private final Map<String, SessionInfo> sessions = new ConcurrentHashMap<>();
     private final AtomicInteger requestCounter = new AtomicInteger(0);
@@ -56,7 +55,7 @@ public class MockAcpAgentServer {
         this.host = host;
         this.port = port;
         this.path = path;
-        this.jsonMapper = McpJsonDefaults.getMapper();
+        this.jsonMapper = AcpJsonMapper.createDefault();
     }
 
     /**
