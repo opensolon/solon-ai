@@ -14,7 +14,6 @@
 
 ### 4.0.4
 
-* 升级 acp-sdk 为 0.14
 * 添加 solon-ai-core ModelOptionsAmend.reasoning_effort 统一选项 API
 * 添加 solon-ai-core ModelOptionsAmend.thinking 思考模式开关统一选项 API
 * 添加 solon-ai-core Prompt.copy 方法
@@ -52,7 +51,8 @@
 * 调整 solon-ai-harness 重构 hitl 实现
 * 调整 solon-ai-harness getModelOrMain 标为弃用，由 getModelOrDefInstance 替代
 * 调整 solon-ai-harness 取消 compressionMaxTokens，由 compressionMaxContextRatio 替代
-* 修复 solon-ai-core ChatModel.stream 内部多次请求可能卡死的问题 
+* 修复 solon-ai-core ChatModel.stream 内部多次请求可能卡死的问题
+* acp-sdk 升为 0.14
 
 ### 4.0.3
 
