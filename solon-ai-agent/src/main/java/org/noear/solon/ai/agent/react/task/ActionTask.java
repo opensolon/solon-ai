@@ -83,13 +83,15 @@ public class ActionTask {
             return;
         }
 
+        Map<String, ToolExchanger> toolExchangerMap = new LinkedHashMap<>();
+
         try {
             if (Assert.isNotEmpty(lastReason.getToolCalls())) {
                 // 1. 优先处理原生工具调用（Native Tool Calls）
-                processNativeToolCall(lastReason, trace);
+                processNativeToolCall(lastReason, trace, toolExchangerMap);
             } else {
                 // 2. 文本模式：解析模型输出中的 Action 块
-                processTextModeAction(lastReason, trace);
+                processTextModeAction(lastReason, trace, toolExchangerMap);
             }
         } finally {
             if (trace.getSession().isPending() == false) {
@@ -97,7 +99,7 @@ public class ActionTask {
                 for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
                     if (entity.target.isEnabled()) {
                         try {
-                            entity.target.onActionEnd(trace);
+                            entity.target.onActionEnd(trace, toolExchangerMap.values());
                         } catch (Throwable e) {
                             LOG.error("Interceptor onActionEnd execution failed", e);
                         }
@@ -114,7 +116,7 @@ public class ActionTask {
         }
     }
 
-    private ToolResult doAction(ReActTrace trace, ToolCall call, ToolExchanger exchanger, List<ChatMessage> toolResults) {
+    private ToolResult doAction(ReActTrace trace, ToolExchanger exchanger, List<ChatMessage> toolResults) {
         if (LOG.isDebugEnabled()) {
             LOG.debug("Action for agent [{}], toolName:{}, args:{}", config.getName(), exchanger.getToolName(), exchanger.getArgs());
         }
@@ -187,6 +189,7 @@ public class ActionTask {
                 }
             } else {
                 ChatMessage observationMessage = null;
+                ToolCall call = exchanger.getToolCall();
 
                 if (thrownError != null) {
                     if (call == null) {
@@ -232,15 +235,15 @@ public class ActionTask {
     /**
      * 处理标准 ToolCall 协议调用
      */
-    private void processNativeToolCall(AssistantMessage lastReason, ReActTrace trace) throws Throwable {
-        Map<ToolCall, ToolExchanger> toolExchangerMap = new LinkedHashMap<>();
-
+    private void processNativeToolCall(AssistantMessage lastReason, ReActTrace trace, Map<String, ToolExchanger> toolExchangerMap) throws Throwable {
         for (ToolCall call : lastReason.getToolCalls()) {
             // 拷贝参数，避免 HITL 改参加污染 ToolCall.arguments（会话/审计看到的是模型原始参数）
             Map<String, Object> args = new HashMap<>(
                     call.getArguments() == null ? Collections.emptyMap() : call.getArguments());
             ToolExchanger exchanger = new ToolExchanger(call.getUuid(), call.getName(), args);
-            toolExchangerMap.put(call, exchanger);
+            exchanger.setToolCall(call);
+
+            toolExchangerMap.put(call.getUuid(), exchanger);
         }
 
         for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
@@ -259,8 +262,8 @@ public class ActionTask {
 
         List<ChatMessage> toolResults = new ArrayList<>();
 
-        for (Map.Entry<ToolCall, ToolExchanger> entry : toolExchangerMap.entrySet()) {
-            ToolResult result = doAction(trace, entry.getKey(), entry.getValue(), toolResults);
+        for (ToolExchanger exchanger : toolExchangerMap.values()) {
+            ToolResult result = doAction(trace, exchanger, toolResults);
             if (result == null) {
                 // pending / critical：不写不完整的成套 WM，交给上层
                 return;
@@ -285,7 +288,7 @@ public class ActionTask {
      * 解析并执行文本模式下的 Action 指令
      * <p>核心逻辑：从"全执行后拼接"改为"逐个执行并即时回填与反馈"</p>
      */
-    private void processTextModeAction(AssistantMessage lastReason, ReActTrace trace) throws Throwable {
+    private void processTextModeAction(AssistantMessage lastReason, ReActTrace trace, Map<String, ToolExchanger> toolExchangerMap) throws Throwable {
         String lastContent = lastReason.getResultContent();
         if (Assert.isEmpty(lastContent)) {
             return;
@@ -296,7 +299,6 @@ public class ActionTask {
         }
 
         // key = callId（toolName + 解析序位，同文本可复现）；禁止仅用 toolName，否则同名多 Action 会被覆盖
-        Map<String, ToolExchanger> toolExchangerMap = new LinkedHashMap<>();
         List<ChatMessage> toolResults = new ArrayList<>();
         int actionLabelIndex = lastContent.indexOf("Action:");
 
@@ -374,7 +376,7 @@ public class ActionTask {
         }
 
         for (ToolExchanger exchanger : toolExchangerMap.values()) {
-            ToolResult result = doAction(trace, null, exchanger, toolResults);
+            ToolResult result = doAction(trace, exchanger, toolResults);
             if (result == null) {
                 return;
             }

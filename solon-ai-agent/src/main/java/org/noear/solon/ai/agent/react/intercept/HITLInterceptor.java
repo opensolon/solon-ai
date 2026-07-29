@@ -217,7 +217,7 @@ public class HITLInterceptor extends AbsReActInterceptor {
     }
 
     @Override
-    public void onActionEnd(ReActTrace trace) {
+    public void onActionEnd(ReActTrace trace, Collection<ToolExchanger> toolCalls) {
         // 挂起中：保留 PENDING_TASKS 供业务 getPendingTasks
         if (trace.getSession() != null && trace.getSession().isPending()) {
             return;

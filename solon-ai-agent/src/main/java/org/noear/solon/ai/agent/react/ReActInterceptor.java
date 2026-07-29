@@ -114,7 +114,7 @@ public interface ReActInterceptor extends AgentInterceptor, ChatInterceptor {
     /**
      * @since 4.0.4
      */
-    default void onActionEnd(ReActTrace trace) {
+    default void onActionEnd(ReActTrace trace, Collection<ToolExchanger> toolCalls) {
 
     }
 

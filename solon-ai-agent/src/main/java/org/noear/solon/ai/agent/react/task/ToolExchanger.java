@@ -17,8 +17,10 @@ package org.noear.solon.ai.agent.react.task;
 
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Nullable;
 
 import java.util.Map;
 
@@ -37,6 +39,7 @@ public class ToolExchanger {
     private boolean returnDirect;
 
     /** 完整工具结果；拦截器改写文本时通过 {@link #setResult(String)} 更新 */
+    private @Nullable ToolCall toolCall;
     private ToolResult toolResult;
 
     public ToolExchanger(String callId, String toolName, Map<String, Object> args) {
@@ -44,6 +47,20 @@ public class ToolExchanger {
         this.toolName = toolName;
         this.args = args;
     }
+
+    protected @Nullable ToolCall getToolCall() {
+        return toolCall;
+    }
+
+    protected void setToolCall(ToolCall toolCall) {
+        this.toolCall = toolCall;
+    }
+
+    protected void setReturnDirect(boolean returnDirect) {
+        this.returnDirect = returnDirect;
+    }
+
+    //---------------
 
     public String getCallId() {
         return callId;
@@ -62,10 +79,6 @@ public class ToolExchanger {
      */
     public boolean isReturnDirect() {
         return returnDirect;
-    }
-
-    public void setReturnDirect(boolean returnDirect) {
-        this.returnDirect = returnDirect;
     }
 
     /**
