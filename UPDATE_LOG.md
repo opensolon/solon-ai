@@ -11,6 +11,9 @@
 *  mcp channel 概念改为 transport （并保持兼容）???
 
 
+### 4.0.5
+
+* 优化 solon-ai-mcp 兼容处理无事件类型的SSE消息
 
 ### 4.0.4
 
