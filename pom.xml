@@ -10,6 +10,7 @@
     <packaging>pom</packaging>
 
     <modules>
+        <module>solon-ai-parent</module>
         <module>__release</module>
     </modules>
 

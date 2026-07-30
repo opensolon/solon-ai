@@ -24,8 +24,6 @@
         <module>../../mcp-core</module>
         <module>../../mcp-json-jackson2</module>
 
-        <module>../../solon-ai-parent</module>
-
         <module>../../solon-ai</module>
         <module>../../solon-ai-core</module>
         <module>../../solon-ai-agent</module>
