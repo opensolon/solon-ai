@@ -194,7 +194,7 @@ public class WebRxSseClientTransport implements McpClientTransport {
 							// received
 							s.error(new RuntimeException("Failed to handle SSE endpoint event"));
 						}
-					} else if (MESSAGE_EVENT_TYPE.equals(event.getEvent())) {
+					} else if (MESSAGE_EVENT_TYPE.equals(event.getEvent()) || event.getEvent() == null || event.getEvent().isEmpty()) {
 						try {
 							JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.jsonMapper, event.getData());
 							s.next(message);
