@@ -20,13 +20,13 @@
 * 添加 solon-ai-core ChatRequestDesc.role, instruction, systemPrompt 方法
 * 添加 solon-ai-core AssistantMessage 多模态支持
 * 添加 solon-ai-agent HITLStrategy 接口，替代 HITLInterceptor.InterventionStrategy（后者标为弃用）
-* 添加 solon-ai-agent RunStartChunk, RunEndChunk, ReasonStartChunk, ReasonEndChunk 事件块
 * 添加 solon-ai-agent ActionChunk, ObservationChunk, ToolExchanger callId 属性
-* 添加 solon-ai-agent 新流块 ToolStartChunk、ToolEndChunk
-* 添加 solon-ai-agent 新流块 HITLPendingChunk、HITLDecidedChunk
-* 添加 solon-ai-agent 新流块 ActionStartChunk、ActionEndChunk、ReasonDeltaChunk（替代 ReasonChunk）
-* 添加 solon-ai-agent 新流块 TeamStartChunk、TeamEndChunk（替代 TeamChunk）
-* 添加 solon-ai-agent 新流块 SimpleStartChunk、SimpleEndChunk（替代 SimpleChunk）
+* 添加 solon-ai-agent 新流块 RunStartEvent, RunEndEvent, ReasonStartEvent, ReasonEndEvent 事件块
+* 添加 solon-ai-agent 新流块 ToolStartEvent、ToolEndEvent
+* 添加 solon-ai-agent 新流块 HITLPendingEvent、HITLDecidedEvent
+* 添加 solon-ai-agent 新流块 ActionStartEvent、ActionEndEvent、ReasonDeltaEvent（替代 ReasonChunk）
+* 添加 solon-ai-agent 新流块 TeamStartEvent、TeamEndEvent（替代 TeamChunk）
+* 添加 solon-ai-agent 新流块 SimpleStartEvent、SimpleEndEvent（替代 SimpleChunk）
 * 添加 solon-ai-agent ReActInterceptor onActionStart, onActionEnd 事件
 * 添加 solon-ai-agent ReActInterceptor onToolCallStart, onToolCallEnd 事件
 * 添加 solon-ai-harness 新的工具权限体系
@@ -43,7 +43,7 @@
 * 优化 solon-ai-dialect-dashscope 方言适配
 * 优化 solon-ai-dialect-gemini 方言适配
 * 优化 solon-ai-harness 增加 skills 和 agents 局部（分组）动态刷新能力
-* 调整 solon-ai-agent ToolCallEndChunk 替代 ObservationChunk, ToolCallStartChunk 替代 ActionChunk（后者标为弃用）
+* 调整 solon-ai-agent ToolCallEndEvent 替代 ObservationChunk, ToolCallStartEvent 替代 ActionChunk（后者标为弃用）
 * 调整 solon-ai-agent ReActInterceptor onToolCallEnd 替代 onObservation，onToolCallStart 替代 onAction（后者标为弃用）
 * 调整 solon-ai-agent ContextCompressionInterceptor 取消 maxTokens，由 maxContextLengthRatio 替代
 * 调整 solon-ai-agent ContextCompressionInterceptor 取消 chatModelSupplier 参数（标为弃用）
