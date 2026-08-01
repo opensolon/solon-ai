@@ -355,6 +355,19 @@ public class HarnessEngine {
         return options.getModelRetries();
     }
 
+    /**
+     * multitask 单次最大并行任务数，0 表示不限制
+     */
+    public int getMultitaskMaxTasks() {
+        return options.getMultitaskMaxTasks();
+    }
+
+    public void setMultitaskMaxTasks(Integer multitaskMaxTasks) {
+        if (multitaskMaxTasks != null) {
+            options.setMultitaskMaxTasks(multitaskMaxTasks);
+        }
+    }
+
     public Collection<String> getTools() {
         return Collections.unmodifiableCollection(options.getTools());
     }
@@ -1271,6 +1284,14 @@ public class HarnessEngine {
 
         public Builder modelRetries(Integer modelRetries) {
             options.setModelRetries(modelRetries);
+            return this;
+        }
+
+        /**
+         * multitask 单次最大并行任务数（默认 5，0 表示不限制）
+         */
+        public Builder multitaskMaxTasks(Integer multitaskMaxTasks) {
+            options.setMultitaskMaxTasks(multitaskMaxTasks);
             return this;
         }
 

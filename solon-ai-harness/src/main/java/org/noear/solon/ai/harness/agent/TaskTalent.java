@@ -77,10 +77,12 @@ public class TaskTalent extends AbsTalent {
         }
         sb.append("</available_agents>\n\n");
 
+        int maxTasks = engine.getMultitaskMaxTasks();
         sb.append("## 任务分配策略：\n");
-        sb.append("1. **优先并行**: 当任务可以被拆分为互不干扰的独立单元（如：同时分析 A 文件和 B 文件）时，**必须**使用 `multitask` 以节省时间。\n");
+        sb.append("1. **优先并行**: 当任务可以被拆分为互不干扰的独立单元（例如：不同的模块开发、多路搜索）时，**必须**使用 `multitask` 以节省时间。单次建议 2-" + maxTasks + " 个单元。\n");
         sb.append("2. **原子性**: 每个子任务应具备明确的边界。\n");
         sb.append("3. **上下文感知**: 必须在 prompt 中提供任务所需的全部背景，子代理无法看到主会话的完整历史。\n");
+        sb.append("4. **分批执行**: 如需处理超过 " + maxTasks + " 个任务，请分批调用 `multitask`（每批最多 " + maxTasks + " 个），避免 API 限流与结果过长。\n");
 
         return sb.toString();
     }

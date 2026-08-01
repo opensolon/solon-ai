@@ -93,6 +93,10 @@ class HarnessOptions implements Serializable {
     private volatile int mcpRetries = 3;
     private volatile int modelRetries = 3;
 
+    // ========== 并行任务控制 ==========
+    /** multitask 单次最大并行任务数，0 表示不限制 */
+    private volatile int multitaskMaxTasks = 5;
+
     // ========== 缓存控制 ==========
     private volatile CacheControl cacheControl;
 
@@ -378,6 +382,16 @@ class HarnessOptions implements Serializable {
     void setModelRetries(Integer modelRetries) {
         if (modelRetries != null) {
             this.modelRetries = modelRetries;
+        }
+    }
+
+    int getMultitaskMaxTasks() {
+        return multitaskMaxTasks;
+    }
+
+    void setMultitaskMaxTasks(Integer multitaskMaxTasks) {
+        if (multitaskMaxTasks != null) {
+            this.multitaskMaxTasks = multitaskMaxTasks;
         }
     }
 
