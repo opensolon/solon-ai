@@ -3,7 +3,6 @@ package org.noear.solon.ai.talents.gateway.openapi.resolver;
 import io.swagger.models.*;
 import io.swagger.models.parameters.BodyParameter;
 import io.swagger.models.parameters.Parameter;
-import io.swagger.models.properties.*;
 import io.swagger.parser.SwaggerParser;
 import io.swagger.util.Json;
 import org.noear.snack4.ONode;
@@ -45,12 +44,15 @@ public class OpenApiV2Resolver implements ApiResolver {
 
         String baseUrl = extractBaseUrl(swagger);
 
+        // 定义表只序列化一次，供所有 operation 共享（只读，不会被改写）
+        SchemaRefFlattener flattener = buildFlattener(swagger.getDefinitions());
+
         swagger.getPaths().forEach((path, pathItem) -> {
             // PathItem 级别的公共参数（可被各 operation 共享，常见于 path 变量）
             List<Parameter> sharedParams = pathItem.getParameters();
             pathItem.getOperationMap().forEach((method, operation) -> {
                 if (operation != null) {
-                    tools.add(convertToTool(swagger, path, method.name(), operation, baseUrl, sharedParams));
+                    tools.add(convertToTool(flattener, path, method.name(), operation, baseUrl, sharedParams));
                 }
             });
         });
@@ -58,7 +60,15 @@ public class OpenApiV2Resolver implements ApiResolver {
         return tools;
     }
 
-    private ApiTool convertToTool(Swagger swagger, String path, String method, Operation op, String baseUrl, List<Parameter> sharedParams) {
+    private SchemaRefFlattener buildFlattener(Map<String, Model> definitions) {
+        if (definitions == null || definitions.isEmpty()) {
+            return SchemaRefFlattener.of(null);
+        }
+
+        return SchemaRefFlattener.of(ONode.ofJson(Json.pretty(definitions)));
+    }
+
+    private ApiTool convertToTool(SchemaRefFlattener flattener, String path, String method, Operation op, String baseUrl, List<Parameter> sharedParams) {
         ApiTool tool = new ApiTool();
         tool.setBaseUrl(baseUrl);
         tool.setPath(path);
@@ -113,9 +123,7 @@ public class OpenApiV2Resolver implements ApiResolver {
                 if ("body".equals(in) && p instanceof BodyParameter) {
                     Model model = ((BodyParameter) p).getSchema();
                     if (model != null) {
-                        model = resolveModel(swagger.getDefinitions(), model, new ArrayList<>());
-
-                        ONode modelNode = ONode.ofJson(Json.pretty(model));
+                        ONode modelNode = flattener.flatten(ONode.ofJson(Json.pretty(model)));
                         if ("object".equals(modelNode.get("type").getString()) && modelNode.hasKey("properties")) {
                             bodyProps.setAll(modelNode.get("properties").getObject());
                             if (modelNode.hasKey("required")) {
@@ -131,6 +139,8 @@ public class OpenApiV2Resolver implements ApiResolver {
                     pNode.remove("in");
                     pNode.remove("name");
                     pNode.remove("required");
+                    // 非 body 参数自身不会是 $ref，但其 items 可能引用定义
+                    pNode = flattener.flatten(pNode);
 
                     if ("header".equals(in)) {
                         headerProps.set(name, pNode);
@@ -154,9 +164,9 @@ public class OpenApiV2Resolver implements ApiResolver {
             if (ok == null) ok = op.getResponses().get("201");
             if (ok == null) ok = op.getResponses().get("default");
             if (ok != null && ok.getResponseSchema() != null) {
-                Model model = resolveModel(swagger.getDefinitions(), ok.getResponseSchema(), new ArrayList<>());
+                ONode modelNode = flattener.flatten(ONode.ofJson(Json.pretty(ok.getResponseSchema())));
 
-                tool.setOutputSchema(ONode.ofJson(Json.pretty(model)).toJson());
+                tool.setOutputSchema(modelNode.toJson());
             }
         }
 
@@ -180,86 +190,6 @@ public class OpenApiV2Resolver implements ApiResolver {
 
         return tool;
     }
-
-    private Model resolveModel(Map<String, Model> definitions, Model model, List<String> refs) {
-        if (model instanceof RefModel) {
-            String refName = ((RefModel) model).getSimpleRef();
-            if (refs.contains(refName)) {
-                ModelImpl loopModel = new ModelImpl();
-                loopModel.setDescription("_Circular_Reference_");
-                return loopModel;
-            }
-
-            refs.add(refName);
-            Model realModel = (definitions == null) ? null : definitions.get(refName);
-            return resolveModel(definitions, realModel, refs);
-        }
-
-        if (model instanceof ArrayModel) {
-            ArrayModel arrayModel = (ArrayModel) model;
-            if (arrayModel.getItems() != null) {
-                // 深度解析数组项的属性
-                arrayModel.setItems(resolveProperty(definitions, arrayModel.getItems(), new ArrayList<>(refs)));
-            }
-        }
-
-        if (model instanceof ModelImpl) {
-            ModelImpl modelImpl = (ModelImpl) model;
-            if (modelImpl.getProperties() != null) {
-                Map<String, Property> newProps = new LinkedHashMap<>();
-                for (Map.Entry<String, Property> entry : modelImpl.getProperties().entrySet()) {
-                    newProps.put(entry.getKey(), resolveProperty(definitions, entry.getValue(), new ArrayList<>(refs)));
-                }
-                modelImpl.setProperties(newProps);
-            }
-        }
-
-        return model;
-    }
-
-    /**
-     * 辅助方法：深度解析属性中的引用
-     */
-    private Property resolveProperty(Map<String, Model> definitions, Property prop, List<String> refs) {
-        // A. 处理属性引用 (RefProperty)
-        if (prop instanceof RefProperty) {
-            String refName = ((RefProperty) prop).getSimpleRef();
-
-            if (refs.contains(refName)) {
-                StringProperty loopProp = new StringProperty();
-                loopProp.setDescription("_Circular_Reference_");
-                return loopProp;
-            }
-
-            Model realModel = (definitions == null) ? null : definitions.get(refName);
-            if (realModel != null) {
-                // 将 Model 转换为 Property 以便嵌入属性列表
-                // 这里使用特殊的扩展逻辑或转换为 ObjectProperty
-                Model resolved = resolveModel(definitions, realModel, refs);
-
-                ObjectProperty objProp = new ObjectProperty();
-                if (resolved instanceof ModelImpl) {
-                    ModelImpl mi = (ModelImpl) resolved;
-                    objProp.setProperties(mi.getProperties());
-                    objProp.setDescription(mi.getDescription());
-                }
-                return objProp;
-            }
-        }
-
-        // B. 处理数组中的引用 (ArrayProperty)
-        if (prop instanceof ArrayProperty) {
-            ArrayProperty arrayProp = (ArrayProperty) prop;
-            if (arrayProp.getItems() != null) {
-                arrayProp.setItems(resolveProperty(definitions, arrayProp.getItems(), refs));
-            }
-            return arrayProp;
-        }
-
-        return prop;
-    }
-
-
 
     private String extractBaseUrl(Swagger swagger) {
         StringBuilder sb = new StringBuilder();

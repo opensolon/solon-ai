@@ -4,7 +4,6 @@ import io.swagger.parser.OpenAPIParser;
 import io.swagger.v3.core.util.Json;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Operation;
-import io.swagger.v3.oas.models.media.ArraySchema;
 import io.swagger.v3.oas.models.media.Content;
 import io.swagger.v3.oas.models.media.MediaType;
 import io.swagger.v3.oas.models.media.Schema;
@@ -45,17 +44,29 @@ public class OpenApiV3Resolver implements ApiResolver {
         // 1. 修复 BaseUrl 逻辑：如果是相对路径且提供 URL，则拼接；否则取 Server
         String baseUrl = extractBaseUrl(definitionUrl, openAPI);
 
+        // 组件表只序列化一次，供所有 operation 共享（只读，不会被改写）
+        SchemaRefFlattener flattener = buildFlattener(openAPI);
+
         openAPI.getPaths().forEach((path, pathItem) -> {
             // PathItem 级别的公共参数（可被各 operation 共享，常见于 path 变量）
             List<Parameter> sharedParams = pathItem.getParameters();
             pathItem.readOperationsMap().forEach((method, operation) -> {
                 if (operation != null) {
-                    tools.add(convertToTool(openAPI, path, method.name(), operation, baseUrl, sharedParams));
+                    tools.add(convertToTool(flattener, path, method.name(), operation, baseUrl, sharedParams));
                 }
             });
         });
 
         return tools;
+    }
+
+    private SchemaRefFlattener buildFlattener(OpenAPI openAPI) {
+        if (openAPI.getComponents() == null || openAPI.getComponents().getSchemas() == null
+                || openAPI.getComponents().getSchemas().isEmpty()) {
+            return SchemaRefFlattener.of(null);
+        }
+
+        return SchemaRefFlattener.of(ONode.ofJson(Json.pretty(openAPI.getComponents().getSchemas())));
     }
 
     private String extractBaseUrl(String definitionUrl, OpenAPI openAPI) {
@@ -80,7 +91,7 @@ public class OpenApiV3Resolver implements ApiResolver {
         return baseUrl;
     }
 
-    private ApiTool convertToTool(OpenAPI openAPI, String path, String method, Operation op, String baseUrl, List<Parameter> sharedParams) {
+    private ApiTool convertToTool(SchemaRefFlattener flattener, String path, String method, Operation op, String baseUrl, List<Parameter> sharedParams) {
         ApiTool tool = new ApiTool();
         tool.setBaseUrl(baseUrl);
         tool.setPath(path);
@@ -110,8 +121,7 @@ public class OpenApiV3Resolver implements ApiResolver {
         // --- 参数解析 ---
         // 合并 PathItem 级别（公共）与 Operation 级别参数；同名同位置时 operation 优先
         for (Parameter p : mergeParameters(sharedParams, op.getParameters())) {
-            Schema<?> resolvedSchema = resolveSchema(openAPI, p.getSchema(), new ArrayList<>());
-            ONode pNode = ONode.ofJson(Json.pretty(resolvedSchema));
+            ONode pNode = flattenSchema(flattener, p.getSchema());
 
             if ("query".equals(p.getIn())) {
                 queryProps.set(p.getName(), pNode);
@@ -128,8 +138,7 @@ public class OpenApiV3Resolver implements ApiResolver {
         if (rb != null && rb.getContent() != null) {
             MediaType mt = selectMediaType(rb.getContent(), tool);
             if (mt != null && mt.getSchema() != null) {
-                Schema<?> resolvedSchema = resolveSchema(openAPI, mt.getSchema(), new ArrayList<>());
-                ONode tempBody = ONode.ofJson(Json.pretty(resolvedSchema));
+                ONode tempBody = flattenSchema(flattener, mt.getSchema());
 
                 if ("object".equals(tempBody.get("type").getString())) {
                     if (tempBody.hasKey("properties")) bodyProps.setAll(tempBody.get("properties").getObject());
@@ -150,8 +159,7 @@ public class OpenApiV3Resolver implements ApiResolver {
                 MediaType resMt = selectMediaType(res.getContent(), null);
                 if (resMt != null && resMt.getSchema() != null) {
                     // 深度解析响应结构
-                    Schema<?> resolved = resolveSchema(openAPI, resMt.getSchema(), new ArrayList<>());
-                    tool.setOutputSchema(ONode.ofJson(Json.pretty(resolved)).toJson());
+                    tool.setOutputSchema(flattenSchema(flattener, resMt.getSchema()).toJson());
                 }
             }
         }
@@ -200,44 +208,15 @@ public class OpenApiV3Resolver implements ApiResolver {
         return new ArrayList<>(merged.values());
     }
 
-    // 【核心修复点】递归解析 $ref
-    private Schema<?> resolveSchema(OpenAPI openAPI, Schema<?> schema, List<String> refs) {
-        if (schema == null) return null;
-
-        // 1. 处理引用 $ref
-        if (Utils.isNotEmpty(schema.get$ref())) {
-            String refName = schema.get$ref().replace("#/components/schemas/", "");
-            if (refs.contains(refName)) {
-                Schema<?> loop = new Schema<>();
-                loop.setDescription("_Circular_Reference_");
-                return loop;
-            }
-            refs.add(refName);
-            Schema<?> realSchema = openAPI.getComponents().getSchemas().get(refName);
-            // 递归解析引用的真实模型，并继承原有的描述等信息
-            return resolveSchema(openAPI, realSchema, refs);
+    /**
+     * 深度展开 Schema 中的 $ref（在 JSON 视图上进行，不改写 components 中的原始模型）
+     */
+    private ONode flattenSchema(SchemaRefFlattener flattener, Schema<?> schema) {
+        if (schema == null) {
+            return new ONode().asObject();
         }
 
-        // 2. 处理数组 Array (对应 testV3ResponseArrayFlattening 的核心修复)
-        if (schema instanceof ArraySchema) {
-            ArraySchema as = (ArraySchema) schema;
-            if (as.getItems() != null) {
-                // 这里必须递归解析 items，并将解析后的 Schema 对象重新设置回去
-                Schema<?> resolvedItems = resolveSchema(openAPI, as.getItems(), new ArrayList<>(refs));
-                as.setItems(resolvedItems);
-            }
-        }
-
-        // 3. 处理对象属性 Object
-        if (schema.getProperties() != null) {
-            Map<String, Schema> resolvedProps = new LinkedHashMap<>();
-            schema.getProperties().forEach((k, v) -> {
-                resolvedProps.put(k, resolveSchema(openAPI, v, new ArrayList<>(refs)));
-            });
-            schema.setProperties(resolvedProps);
-        }
-
-        return schema;
+        return flattener.flatten(ONode.ofJson(Json.pretty(schema)));
     }
 
     private MediaType selectMediaType(Content content, ApiTool tool) {

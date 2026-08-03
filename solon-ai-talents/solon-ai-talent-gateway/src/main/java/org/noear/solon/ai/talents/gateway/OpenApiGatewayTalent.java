@@ -564,7 +564,8 @@ public class OpenApiGatewayTalent extends AbsTalent {
             try {
                 provider.reloadApi();
                 syncToolsToGlobalIndex(provider);
-            } catch (Exception e) {
+            } catch (Throwable e) {
+                // 与 addApi 一致：单个源的解析失败（含 Error）不应打断整个网关
                 LOG.error("OpenApiTalent: Failed to refresh API from {}", docUrl, e);
             }
         } else {

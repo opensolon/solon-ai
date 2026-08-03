@@ -302,4 +302,77 @@ public class OpenApiV3ResolverTest {
         // 只要能解析出结果且不报错，说明 refs 链条起到了截断作用
         assertNotNull(petTool);
     }
+
+    /**
+     * gitee #IK65KY：嵌套引用模型未进入 refs 集合，导致环检测失效、无限递归
+     */
+    @Test
+    @DisplayName("OpenAPI V3：嵌套自引用模型不应导致无限递归")
+    void testV3NestedSelfReferenceNoStackOverflow() {
+        String json = "{"
+                + "\"openapi\":\"3.0.1\","
+                + "\"info\":{\"title\":\"test\",\"version\":\"1.0\"},"
+                + "\"paths\":{\"/tree\":{\"post\":{\"operationId\":\"saveTree\","
+                + "\"requestBody\":{\"content\":{\"application/json\":{\"schema\":{\"$ref\":\"#/components/schemas/A\"}}}},"
+                + "\"responses\":{\"200\":{\"description\":\"ok\"}}}}},"
+                + "\"components\":{\"schemas\":{"
+                + "\"A\":{\"type\":\"object\",\"properties\":{"
+                + "\"b\":{\"$ref\":\"#/components/schemas/B\"},"
+                + "\"c\":{\"$ref\":\"#/components/schemas/B\"}}},"
+                + "\"B\":{\"type\":\"object\",\"properties\":{"
+                + "\"name\":{\"type\":\"string\"},"
+                + "\"child\":{\"$ref\":\"#/components/schemas/B\"}}}"
+                + "}}}";
+
+        List<ApiTool> tools = assertDoesNotThrow(() -> resolver.resolve(null, json));
+
+        ApiTool tool = tools.stream()
+                .filter(t -> "saveTree".equals(t.getName()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        String bodySchema = tool.getBodySchema();
+
+        // b、c 两个兄弟属性都应完整展开一层 B（兄弟分支互不影响）
+        assertTrue(bodySchema.contains("\"b\":"));
+        assertTrue(bodySchema.contains("\"c\":"));
+        assertTrue(bodySchema.contains("\"name\":{\"type\":\"string\"}"));
+        // B 的自引用被截断为环占位
+        assertTrue(bodySchema.contains("_Circular_Reference_"));
+    }
+
+    @Test
+    @DisplayName("OpenAPI V3：解析不应污染 components（operation 之间互不影响）")
+    void testV3ComponentsNotPolluted() {
+        String json = "{"
+                + "\"openapi\":\"3.0.1\","
+                + "\"info\":{\"title\":\"test\",\"version\":\"1.0\"},"
+                + "\"paths\":{"
+                + "\"/a\":{\"post\":{\"operationId\":\"saveA\","
+                + "\"requestBody\":{\"content\":{\"application/json\":{\"schema\":{\"$ref\":\"#/components/schemas/A\"}}}},"
+                + "\"responses\":{\"200\":{\"description\":\"ok\"}}}},"
+                + "\"/b\":{\"post\":{\"operationId\":\"saveB\","
+                + "\"requestBody\":{\"content\":{\"application/json\":{\"schema\":{\"$ref\":\"#/components/schemas/B\"}}}},"
+                + "\"responses\":{\"200\":{\"description\":\"ok\"}}}}"
+                + "},"
+                + "\"components\":{\"schemas\":{"
+                + "\"A\":{\"type\":\"object\",\"properties\":{\"peer\":{\"$ref\":\"#/components/schemas/B\"}}},"
+                + "\"B\":{\"type\":\"object\",\"properties\":{"
+                + "\"title\":{\"type\":\"string\"},"
+                + "\"backref\":{\"$ref\":\"#/components/schemas/A\"}}}"
+                + "}}}";
+
+        List<ApiTool> tools = resolver.resolve(null, json);
+
+        ApiTool toolB = tools.stream()
+                .filter(t -> "saveB".equals(t.getName()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(toolB);
+        // 解析 A 时曾把 B.backref 截断为环占位；若原始定义被改写，这里就拿不到展开后的 A
+        assertTrue(toolB.getBodySchema().contains("peer"),
+                "B 独立解析时 backref 应展开出 A 的属性，说明 components 未被上一个 operation 改写");
+    }
 }

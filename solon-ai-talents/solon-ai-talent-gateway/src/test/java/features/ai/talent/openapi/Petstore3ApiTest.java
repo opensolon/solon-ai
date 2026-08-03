@@ -9,6 +9,7 @@ import org.noear.solon.ai.talents.gateway.OpenApiGatewayTalent;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 
 /**
@@ -254,8 +255,8 @@ public class Petstore3ApiTest {
 
         ApiSourceClient sourceClient = openApiTalent.getApiSource(docUrl);
 
-        // 初始时 client 从 source 复制了白名单
-        Assertions.assertEquals(Arrays.asList("getPetById"), sourceClient.getAllowedTools());
+        // 初始时 client 从 source 复制了白名单（allowedTools 以 Set 存储，去重且无序）
+        Assertions.assertEquals(new HashSet<>(Arrays.asList("getPetById")), sourceClient.getAllowedTools());
 
         // 通过 client 覆盖白名单
         sourceClient.setAllowedTools(Arrays.asList("findPetsByStatus", "findPetsByTags"));
@@ -272,7 +273,7 @@ public class Petstore3ApiTest {
 
     @Test
     public void case12_disabledSource() {
-        // 禁用的源不应被加载
+        // 禁用的源：注册到管理表（便于管理端查看/恢复），但不激活任何工具
         ApiSource source = new ApiSource();
         source.setDocUrl(docUrl);
         source.setApiBaseUrl(baseUrl);
@@ -281,6 +282,11 @@ public class Petstore3ApiTest {
         OpenApiGatewayTalent openApiTalent = new OpenApiGatewayTalent();
         openApiTalent.addApi(source);
 
-        Assertions.assertFalse(openApiTalent.hasApiSource(docUrl), "禁用的源不应被注册");
+        // 1. 注册到管理表，管理端可见（设计：无论 enabled 与否都注册到 sourceProviderMap）
+        Assertions.assertTrue(openApiTalent.hasApiSource(docUrl), "禁用的源应注册到管理表");
+
+        // 2. 但工具不进入全局索引：搜索不到该源的工具
+        Object result = openApiTalent.searchApis("getPetById");
+        Assertions.assertFalse(result.toString().contains("getPetById"), "禁用的源工具不应被激活");
     }
 }

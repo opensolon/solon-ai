@@ -15,6 +15,7 @@
 
 * 优化 solon-ai-mcp 兼容处理无事件类型的SSE消息
 * 优化 solon-ai-harness TaskTalent 增加 maxTasks 限制
+* 修复 solon-ai-talent-gateway OpenApiV2Resolver 可能无限递归解析的问题
 
 ### 4.0.4
 
