@@ -99,6 +99,8 @@ public class ProcessExecutor {
         try {
             ProcessBuilder pb = new ProcessBuilder(cmd, "--version");
             pb.redirectErrorStream(true);
+            // 注入实时 PATH（Windows），使新安装的运行时能被探测到，无需重启 JVM
+            EnvironmentResolver.applyTo(pb, null);
             process = pb.start();
 
             try (java.io.InputStream in = process.getInputStream()) {
@@ -215,9 +217,9 @@ public class ProcessExecutor {
             pb.directory(rootPath.toFile());
             pb.redirectErrorStream(true);
 
-            if (envs != null) {
-                pb.environment().putAll(envs);
-            }
+            // 注入实时系统 PATH（Windows：修复 JVM 环境快照不刷新导致新装命令不可见）；
+            // 显式 envs（如 PYTHON/NODE）优先级更高
+            EnvironmentResolver.applyTo(pb, envs);
 
             Process process = pb.start();
 

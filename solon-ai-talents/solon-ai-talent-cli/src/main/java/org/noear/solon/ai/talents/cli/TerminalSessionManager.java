@@ -81,9 +81,9 @@ public final class TerminalSessionManager {
         ProcessBuilder builder = new ProcessBuilder(shellCommandFactory.build(command));
         builder.directory(normalizedWorkdir.toFile());
         builder.redirectErrorStream(true);
-        if (env != null && env.isEmpty() == false) {
-            builder.environment().putAll(env);
-        }
+        // 注入实时系统 PATH（Windows：修复 JVM 环境快照不刷新导致新装命令不可见）；
+        // 显式 env（如 PYTHON/NODE）优先级更高
+        EnvironmentResolver.applyTo(builder, env);
 
         Process process = builder.start();
         String sessionId = newSessionId();

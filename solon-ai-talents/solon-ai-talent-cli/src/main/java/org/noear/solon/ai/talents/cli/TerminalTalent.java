@@ -84,8 +84,15 @@ public class TerminalTalent extends AbsTalent {
     private final ReentrantLock sandboxInitLock = new ReentrantLock();
     private final SandboxViolationStore violationStore = new SandboxViolationStore(Collections.emptyMap());
 
-    private final String pythonCmd;
-    private final String nodeCmd;
+    /** 运行时探测失败后的重试间隔：失败结果在窗口期内直接返回 null，避免每次对话都 fork 探测（最长等 2s 超时） */
+    private static final long PROBE_RETRY_INTERVAL_MS = 60_000;
+
+    private volatile String pythonCmd;
+    private volatile String nodeCmd;
+    /** 上次 python 探测失败时间（0 表示无失败记录） */
+    private volatile long pythonProbeFailedAt;
+    /** 上次 node 探测失败时间（0 表示无失败记录） */
+    private volatile long nodeProbeFailedAt;
 
     protected Charset fileCharset = StandardCharsets.UTF_8;
     protected final ProcessExecutor executor = new ProcessExecutor();
@@ -345,13 +352,66 @@ public class TerminalTalent extends AbsTalent {
             
         this.support = new TerminalSupport(mountManager, ignoreDirs, shellMode);
         this.support.setMaxCharacterLimit(this.maxCharacterLimit);
-                
-        pythonCmd = executor.probePythonCommand();
-        nodeCmd = executor.probeNodeCommand();
+        // python/node 探测延迟到首次使用时（惰性），
+        // 确保用户在运行期间新安装的运行时也能被识别（配合实时 PATH 注入）
     }
 
     public ProcessExecutor getExecutor() {
         return executor;
+    }
+
+    /**
+     * 惰性探测 Python 命令（线程安全）。
+     *
+     * <p>未找到时进入失败时间窗缓存（{@link #PROBE_RETRY_INTERVAL_MS}）：窗口期内
+     * 直接返回 {@code null}，避免每次对话都 fork 探测进程（单次最长等 2s 超时）；
+     * 窗口过期后重试，以便运行期间新安装的运行时能被自动识别。</p>
+     */
+    private String pythonCmd() {
+        String cmd = pythonCmd;
+        if (cmd == null) {
+            if (System.currentTimeMillis() - pythonProbeFailedAt < PROBE_RETRY_INTERVAL_MS) {
+                return null;
+            }
+            synchronized (this) {
+                cmd = pythonCmd;
+                if (cmd == null) {
+                    cmd = executor.probePythonCommand();
+                    if (cmd != null) {
+                        pythonCmd = cmd;
+                        pythonProbeFailedAt = 0;
+                    } else {
+                        pythonProbeFailedAt = System.currentTimeMillis();
+                    }
+                }
+            }
+        }
+        return cmd;
+    }
+
+    /**
+     * 惰性探测 Node 命令（线程安全）。失败时间窗缓存策略同 {@link #pythonCmd()}。
+     */
+    private String nodeCmd() {
+        String cmd = nodeCmd;
+        if (cmd == null) {
+            if (System.currentTimeMillis() - nodeProbeFailedAt < PROBE_RETRY_INTERVAL_MS) {
+                return null;
+            }
+            synchronized (this) {
+                cmd = nodeCmd;
+                if (cmd == null) {
+                    cmd = executor.probeNodeCommand();
+                    if (cmd != null) {
+                        nodeCmd = cmd;
+                        nodeProbeFailedAt = 0;
+                    } else {
+                        nodeProbeFailedAt = System.currentTimeMillis();
+                    }
+                }
+            }
+        }
+        return cmd;
     }
 
     @Override
@@ -384,11 +444,13 @@ public class TerminalTalent extends AbsTalent {
         sb.append("  - 严禁执行任何可能改变宿主系统状态的命令（如修改网络配置、安装系统驱动等）。\n");
 
         sb.append("- **执行环境**: \n");
-        if(Assert.isNotEmpty(pythonCmd)) {
-            sb.append("  - Python 命令: `").append(pythonCmd).append("` (系统已预置变量 `$PYTHON`)\n");
+        String pyCmd = pythonCmd();
+        String ndCmd = nodeCmd();
+        if(Assert.isNotEmpty(pyCmd)) {
+            sb.append("  - Python 命令: `").append(pyCmd).append("` (系统已预置变量 `$PYTHON`)\n");
         }
-        if(Assert.isNotEmpty(nodeCmd)) {
-            sb.append("  - Node.js 命令: `").append(nodeCmd).append("` (系统已预置变量 `$NODE`)\n");
+        if(Assert.isNotEmpty(ndCmd)) {
+            sb.append("  - Node.js 命令: `").append(ndCmd).append("` (系统已预置变量 `$NODE`)\n");
         }
 
         // 动态判断是否有可写挂载点
@@ -521,12 +583,14 @@ public class TerminalTalent extends AbsTalent {
         Path workPath = getWorkPath(__cwd);
         Map<String, String> envs = new HashMap<>();
 
-        if(Assert.isNotEmpty(pythonCmd)) {
-            envs.put("PYTHON", pythonCmd);
+        String pyCmd = pythonCmd();
+        String ndCmd = nodeCmd();
+        if(Assert.isNotEmpty(pyCmd)) {
+            envs.put("PYTHON", pyCmd);
         }
 
-        if(Assert.isNotEmpty(nodeCmd)) {
-            envs.put("NODE", nodeCmd);
+        if(Assert.isNotEmpty(ndCmd)) {
+            envs.put("NODE", ndCmd);
         }
 
         String finalCommand;
@@ -572,11 +636,13 @@ public class TerminalTalent extends AbsTalent {
         Path targetWorkPath = support.resolveCommandWorkPath(workPath, workdir, sandboxEnabled, sandboxAllowUserHome);
         Map<String, String> envs = new HashMap<>();
 
-        if(Assert.isNotEmpty(pythonCmd)) {
-            envs.put("PYTHON", pythonCmd);
+        String pyCmd = pythonCmd();
+        String ndCmd = nodeCmd();
+        if(Assert.isNotEmpty(pyCmd)) {
+            envs.put("PYTHON", pyCmd);
         }
-        if(Assert.isNotEmpty(nodeCmd)) {
-            envs.put("NODE", nodeCmd);
+        if(Assert.isNotEmpty(ndCmd)) {
+            envs.put("NODE", ndCmd);
         }
 
         String finalCommand;
