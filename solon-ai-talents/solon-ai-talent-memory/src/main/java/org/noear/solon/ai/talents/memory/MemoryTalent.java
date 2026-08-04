@@ -138,7 +138,7 @@ public class MemoryTalent extends AbsTalent {
 
     @Override
     public String description() {
-        return "长期记忆专家：负责用户心智模型的提取、演进、冲突消解与深度检索。";
+        return "长期记忆专家：负责用户心智模型的提取、演进、冲突消解与深度检索，并沉淀可复用的经验、教训与最佳实践。";
     }
 
     /**
@@ -197,11 +197,12 @@ public class MemoryTalent extends AbsTalent {
         return "## 长期记忆与心智演进指南\n" +
                 "你拥有自主维护用户心智模型的能力。请实时提取对话中的价值点，并维持认知的一致性。\n\n" +
                 "### 1. 当前核心认知预览：\n" +
-                (Assert.isEmpty(mentalModel) ? "- (暂无核心认知，请通过交流逐步构建用户画像)" : mentalModel) +
-                "\n\n### 2. 评分标准 (importance: 1-3琐碎事实, 4-6偏好习惯, 7-9核心规约, 10重大身份定论)\n\n" +
+                (Assert.isEmpty(mentalModel) ? "- (暂无核心认知，请通过交流逐步构建用户画像与经验库)" : mentalModel) +
+                "\n\n### 2. 评分标准 (importance: 1-3琐碎事实, 4-6偏好习惯, 7-9核心经验/规约, 10重大身份定论/永久核心洞察)\n\n" +
                 "### 3. 认知维护指令：\n" +
+                "- **发现经验时**：当对话中产生了可复用的经验总结、踩坑教训或最佳实践，应主动调用 `memory_extract` 记录，importance 建议设为 7-9，Key 用经验主题命名（如 lesson-xxx-xxx）；同类经验积累多条后可用 `memory_consolidate` 整合为更高层洞察。\n" +
                 "- **发现冲突时**：若新事实与「核心认知预览」冲突，必须调用 `memory_extract` 更新，并根据返回的 `[认知对比]` 向用户确认或在回复中体现认知的修正。\n" +
-                "- **碎片过多时**：当你发现检索到多个关于同一主题的低分记录（Imp < 5），应主动调用 `memory_consolidate` 将其升维为一条永久核心洞察（系统自动赋予最高重要度）。\n" +
+                "- **碎片过多时**：当你发现检索到多个关于同一主题的记录（尤其是低分碎片 Imp < 5），应主动调用 `memory_consolidate` 将其升维为一条永久核心洞察（系统自动赋予最高重要度）。\n" +
                 "- **列出全部时**：当用户问「记住了哪些/有哪些记忆」时，调用 `memory_search('*')` 获取全部条目索引（Key + 摘要），需要细节再用 `memory_recall` 按 Key 召回。\n" +
                 "- **时效性原则**：永远以时间戳（Time）最近的认知记录为准。\n";
     }
@@ -228,10 +229,10 @@ public class MemoryTalent extends AbsTalent {
      * 解决了记忆冲突与反思逻辑
      */
     @ToolMapping(name = "memory_extract",
-            description = "存入事实/偏好/进度（或用户要求记住时）。同名 Key 会返回旧记录供对比，信息有变则覆盖写入。")
+            description = "存入事实/偏好/经验/进度（或用户要求记住时）。当对话中产生了可复用的经验、教训或最佳实践时，应主动存入。同名 Key 会返回旧记录供对比，信息有变则覆盖写入。")
     public String extract(@Param(value = "key", description = "唯一语义标识（如 user-tech-stack）。同主题复用同一 Key 而非新建，以防碎片化。") String key,
                           @Param(value = "fact", description = "完整自包含的陈述句，不依赖上下文指代，便于独立召回。") String fact,
-                          @Param(value = "importance", description = "权重(1-10)：1-3琐碎事实, 4-6偏好习惯, 7-9核心规约, 10重大身份定论") int importance,
+                          @Param(value = "importance", description = "权重(1-10)：1-3琐碎事实, 4-6偏好习惯, 7-9核心经验/规约, 10重大身份定论") int importance,
                           @Param(value = "scope", required = false, description = "#{ScopesDescription}") String scope,
                           String __cwd,
                           String __sessionId) {
@@ -318,7 +319,7 @@ public class MemoryTalent extends AbsTalent {
      * SEARCH: 语义搜索（作用域合并由方案内部完成）
      */
     @ToolMapping(name = "memory_search",
-            description = "语义检索：用自然语言找回相关记忆。传入 '*' 列出全部条目索引（Key + 摘要），用于回答「记住了哪些」。")
+            description = "语义检索：用自然语言找回相关记忆（含历史经验/教训）。遇到新问题时，可先检索是否有过往经验可复用。传入 '*' 列出全部条目索引（Key + 摘要），用于回答「记住了哪些」。")
     public String search(@Param("query") String query,
                          @Param(value = "topK", required = false, defaultValue = "5", description = "返回条数上限（默认 5）。需要更全面的召回可适当调高。") Integer topK,
                          String __cwd,
