@@ -232,8 +232,10 @@ public class MemoryMdData implements AutoCloseable {
     // ==================== Search 操作 ====================
 
     /**
-     * 搜索：基于缓存的关键词匹配 + 重要性权重评分
-     * 按 userId 直接定位索引，避免全量遍历
+     * 搜索：BM25 风格的关键词匹配 + 确定性排序
+     * 按 userId 直接定位索引，避免全量遍历。
+     * 已过期条目（TTL 已到但尚未被后台清理）不参与检索。
+     * 排序：相关性得分降序 → 同分按重要性降序 → 再同分按时间倒序（新→旧）。
      */
     public List<MemorySearchResult> search(String userId, String query, int limit) {
         if (query == null || query.trim().isEmpty()) {
@@ -247,23 +249,42 @@ public class MemoryMdData implements AutoCloseable {
 
         Set<String> queryTokens = tokenize(query.toLowerCase());
 
+        // 统计词频（df：token 出现在多少条记忆中），供 IDF 加权评分使用。
+        // 记忆库规模小（通常几十~几百条），每次搜索遍历一次索引成本可接受，且天然语言无关。
+        Map<String, Integer> df = new HashMap<>();
+        int total = 0;
+        for (IndexEntry entry : userIndex.values()) {
+            if (isIndexExpired(entry)) {
+                continue; // 已过期条目（TTL 已到但尚未被后台清理）不参与检索
+            }
+            total++;
+            for (String token : getTokens(entry)) {
+                df.merge(token, 1, Integer::sum);
+            }
+        }
+
         List<ScoredEntry> scored = new ArrayList<>();
         for (IndexEntry entry : userIndex.values()) {
-            double score = computeScore(entry, queryTokens);
+            if (isIndexExpired(entry)) {
+                continue; // 已过期条目（TTL 已到但尚未被后台清理）不参与检索
+            }
+            double score = computeScore(entry, queryTokens, df, total);
             if (score > 0) {
                 scored.add(new ScoredEntry(entry, score));
             }
         }
 
         return scored.stream()
-                .sorted(Comparator.comparingDouble((ScoredEntry se) -> se.score).reversed())
+                .sorted(Comparator.comparingDouble((ScoredEntry se) -> se.score).reversed()
+                        .thenComparing(Comparator.comparingInt((ScoredEntry se) -> se.entry.importance).reversed())
+                        .thenComparing(Comparator.comparing((ScoredEntry se) -> se.entry.time).reversed()))
                 .limit(limit)
                 .map(se -> new MemorySearchResult(se.entry.userKey, se.entry.content, se.entry.importance, se.entry.time, se.entry.scope))
                 .collect(Collectors.toList());
     }
 
     /**
-     * 获取高价值热记忆
+     * 获取高价值热记忆（已过期条目不参与）
      */
     public List<MemorySearchResult> getHotMemories(String userId, int limit) {
         Map<String, IndexEntry> userIndex = indexByUser.get(userId);
@@ -272,6 +293,7 @@ public class MemoryMdData implements AutoCloseable {
         }
 
         return userIndex.values().stream()
+                .filter(e -> !isIndexExpired(e))
                 .filter(e -> e.importance >= 5)
                 .sorted(Comparator.comparingInt((IndexEntry e) -> e.importance).reversed()
                         .thenComparing((IndexEntry e) -> e.time, Comparator.reverseOrder()))
@@ -281,7 +303,8 @@ public class MemoryMdData implements AutoCloseable {
     }
 
     /**
-     * 列举全部记忆条目（不做重要度过滤），按重要度倒序、时间倒序返回
+     * 列举全部记忆条目（不做重要度过滤），按重要度倒序、时间倒序返回。
+     * 已过期（TTL 已到但尚未被后台清理）的条目不展示。
      */
     public List<MemorySearchResult> listAll(String userId, int limit) {
         Map<String, IndexEntry> userIndex = indexByUser.get(userId);
@@ -290,6 +313,7 @@ public class MemoryMdData implements AutoCloseable {
         }
 
         return userIndex.values().stream()
+                .filter(e -> !isIndexExpired(e))
                 .sorted(Comparator.comparingInt((IndexEntry e) -> e.importance).reversed()
                         .thenComparing((IndexEntry e) -> e.time, Comparator.reverseOrder()))
                 .limit(limit)
@@ -633,6 +657,17 @@ public class MemoryMdData implements AutoCloseable {
         }
     }
 
+    /**
+     * 判断索引条目是否已过期（反查缓存中的 TTL 信息）
+     *
+     * <p>索引条目不携带 TTL（接口签名未含），故反查 cache 中同 key 的 MemoryEntry。
+     * 缓存无对应条目时按未过期处理（保守降级，保持原有行为）。
+     */
+    private boolean isIndexExpired(IndexEntry entry) {
+        MemoryEntry cached = cache.get(buildCacheKey(entry.userId, entry.userKey, entry.scope));
+        return cached != null && isExpired(cached);
+    }
+
     private String getNow() {
         return LocalDateTime.now().format(FORMATTER);
     }
@@ -690,6 +725,7 @@ public class MemoryMdData implements AutoCloseable {
 
     // ==================== 搜索评分 ====================
 
+
     /**
      * 获取索引条目的分词结果（内联缓存，随条目生命周期自动释放）
      *
@@ -711,11 +747,13 @@ public class MemoryMdData implements AutoCloseable {
     }
 
     /**
-     * 分词：支持英文单词切分 + 中文 bi-gram
+     * 分词：支持英文单词切分 + 中文 bi-gram（语言无关，不依赖停用词表）
      *
-     * <p>英文：按非字母数字字符分割，长度 >1 的 token 保留。
-     * <p>中文：对连续中文字符做 bi-gram（每两个相邻字组成一个 token），
+     * <p>英文/日文假名/韩文等连续字母数字：整段作为 token（长度 >1 保留）。
+     * <p>中文：对连续中文字符做 bi-gram（每两个相邻字组成一个 token）并保留完整短语，
      * 提升"用户偏好使用Solon框架"这类混合文本的搜索命中率。
+     * <p>"的""户的""what"等低区分度 token 不在此过滤，统一交由搜索评分的
+     * IDF 逆文档频率加权压制（数据驱动、语言无关，见 {@link #computeScore}）。
      */
     private Set<String> tokenize(String text) {
         Set<String> tokens = new HashSet<>();
@@ -772,31 +810,41 @@ public class MemoryMdData implements AutoCloseable {
     }
 
     /**
-     * 搜索评分：token 命中率 + 重要性权重
+     * 搜索评分：BM25 风格的求和式 IDF + 子串兜底
      *
-     * <p>评分策略：
+     * <p>评分策略（数据驱动、语言无关，替代硬编码停用词表）：
      * <ul>
-     *   <li>精确 token 命中：按命中比率计分（权重 0.7）+ 重要性加权（权重 0.3）</li>
-     *   <li>子串兜底命中：仅当精确 token 命中为 0 时触发，降权计分（权重 0.3）+ 重要性加权（权重 0.2）</li>
+     *   <li>精确 token 命中：对命中的 token 累加 IDF（求和式，未命中词完全不进入得分，
+     *       不会像比率式那样被查询中的常见词整体缩放），再除以理论最大 IDF 和归一化到 [0,1]。
+     *       IDF 使高区分度 token（如专有名词 "Solon"）主导排序，而 "的""户的""what" 等
+     *       df 高的低区分度 token 自动被压制，对中文 bi-gram、英文及日韩等其他语言一视同仁</li>
+     *   <li>子串兜底命中：仅当精确 token 命中为 0 时触发，按命中 token 数占比计分（降权）</li>
+     *   <li>重要性（importance）不再线性混入分数，而是作为同分时的次级排序依据（见 {@link #search}），
+     *       保证排序由相关性主导、元数据次级，语义与 Lucene 的 BM25 一致，且排序完全确定</li>
      * </ul>
+     *
+     * @param df 每个 token 在库内出现的记忆条数（由 search 统计）
+     * @param n  参与评分的总记忆条数（未过期）
      */
-    private double computeScore(IndexEntry entry, Set<String> queryTokens) {
-        String contentLower = entry.content.toLowerCase();
+    private double computeScore(IndexEntry entry, Set<String> queryTokens, Map<String, Integer> df, int n) {
         Set<String> contentTokens = getTokens(entry);
 
-        // 阶段一：精确 token 命中
-        long tokenHits = queryTokens.stream()
-                .filter(contentTokens::contains)
-                .count();
+        // 阶段一：IDF 求和式精确命中（未命中词不进入得分）
+        double hitScore = 0;
+        for (String token : queryTokens) {
+            if (contentTokens.contains(token)) {
+                hitScore += idf(df.getOrDefault(token, 0), n);
+            }
+        }
 
-        if (tokenHits > 0) {
-            double hitRate = (double) tokenHits / queryTokens.size();
-            double impWeight = entry.importance / 10.0;
-
-            return hitRate * 0.7 + impWeight * 0.3;
+        if (hitScore > 0) {
+            // 归一化到 [0,1]：除以理论最大 IDF 和（全部查询词均为最高区分度）
+            double maxScore = queryTokens.size() * (Math.log(n + 1.0) + 1.0);
+            return maxScore > 0 ? hitScore / maxScore : 0;
         }
 
         // 阶段二：子串兜底（降权）
+        String contentLower = entry.content.toLowerCase();
         long substrHits = 0;
         for (String token : queryTokens) {
             if (contentLower.contains(token)) {
@@ -806,10 +854,15 @@ public class MemoryMdData implements AutoCloseable {
 
         if (substrHits == 0) return 0;
 
-        double substrRate = (double) substrHits / queryTokens.size();
-        double impWeight = entry.importance / 10.0;
+        return (double) substrHits / queryTokens.size();
+    }
 
-        return substrRate * 0.3 + impWeight * 0.2;
+    /**
+     * IDF（逆文档频率）：token 出现的记忆条数越多，区分度越低。
+     * 平滑处理避免除零；df=0 的查询词权重最高，但零命中不贡献分子，无副作用。
+     */
+    private static double idf(int df, int n) {
+        return Math.log(((double) n + 1) / (df + 1)) + 1;
     }
 
     // ==================== 生命周期管理 ====================
