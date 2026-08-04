@@ -749,44 +749,67 @@ public class MemoryMdData implements AutoCloseable {
     /**
      * 分词：支持英文单词切分 + 中文 bi-gram（语言无关，不依赖停用词表）
      *
-     * <p>英文/日文假名/韩文等连续字母数字：整段作为 token（长度 >1 保留）。
-     * <p>中文：对连续中文字符做 bi-gram（每两个相邻字组成一个 token）并保留完整短语，
-     * 提升"用户偏好使用Solon框架"这类混合文本的搜索命中率。
+     * <p>按 Unicode 块将文本划分为三类连续段，段切换即产生分隔：
+     * <ul>
+     *   <li><b>ASCII 字母数字</b>（英文/数字）：整段作为 token（长度 &gt; 1 保留）。</li>
+     *   <li><b>非 CJK 字母</b>（日文假名、韩文谚文、全角字母等）：整段作为 token（长度 &gt; 1 保留）。
+     *       与 ASCII 段隔离，避免 "Solonフレームワーク" 这类日英混排坍缩成单个 token 导致检索失效。</li>
+     *   <li><b>CJK 统一表意文字</b>（中文/日文汉字）：bi-gram + 保留完整短语，
+     *       提升 "用户偏好使用Solon框架" 这类混合文本的搜索命中率。</li>
+     * </ul>
      * <p>"的""户的""what"等低区分度 token 不在此过滤，统一交由搜索评分的
      * IDF 逆文档频率加权压制（数据驱动、语言无关，见 {@link #computeScore}）。
      */
     private Set<String> tokenize(String text) {
         Set<String> tokens = new HashSet<>();
 
-        // 提取所有连续的英文片段和中文片段
-        StringBuilder englishBuf = new StringBuilder();
+        // 三类连续段：ASCII 字母数字 / 非 CJK 字母（假名·谚文·全角等）/ CJK 汉字
+        StringBuilder asciiBuf = new StringBuilder();
+        StringBuilder otherAlphaBuf = new StringBuilder();
         StringBuilder chineseBuf = new StringBuilder();
 
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
-            if (c >= '\u4e00' && c <= '\u9fff') {
-                // 先 flush 英文缓冲区
-                flushEnglish(englishBuf, tokens);
+            if (isCjkUnified(c)) {
+                // 汉字：先 flush 另两类缓冲区
+                flushAlpha(asciiBuf, tokens);
+                flushAlpha(otherAlphaBuf, tokens);
                 chineseBuf.append(c);
-            } else if (Character.isLetterOrDigit(c)) {
-                // 先 flush 中文缓冲区
+            } else if (isAsciiLetterOrDigit(c)) {
+                // ASCII 字母数字：先 flush 中文与非 CJK 字母缓冲区
                 flushChinese(chineseBuf, tokens);
-                englishBuf.append(c);
+                flushAlpha(otherAlphaBuf, tokens);
+                asciiBuf.append(c);
+            } else if (Character.isLetterOrDigit(c)) {
+                // 非 CJK 非 ASCII 的字母（日文假名、韩文谚文、全角字母、希腊/西里尔等）
+                flushChinese(chineseBuf, tokens);
+                flushAlpha(asciiBuf, tokens);
+                otherAlphaBuf.append(c);
             } else {
-                // 分隔符：flush 两个缓冲区
-                flushEnglish(englishBuf, tokens);
+                // 分隔符：flush 全部缓冲区
+                flushAlpha(asciiBuf, tokens);
+                flushAlpha(otherAlphaBuf, tokens);
                 flushChinese(chineseBuf, tokens);
             }
         }
 
         // flush 尾部
-        flushEnglish(englishBuf, tokens);
+        flushAlpha(asciiBuf, tokens);
+        flushAlpha(otherAlphaBuf, tokens);
         flushChinese(chineseBuf, tokens);
 
         return tokens;
     }
 
-    private void flushEnglish(StringBuilder buf, Set<String> tokens) {
+    private static boolean isAsciiLetterOrDigit(char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+    }
+
+    private static boolean isCjkUnified(char c) {
+        return c >= '\u4e00' && c <= '\u9fff';
+    }
+
+    private void flushAlpha(StringBuilder buf, Set<String> tokens) {
         if (buf.length() > 1) {
             tokens.add(buf.toString().toLowerCase());
         }
@@ -810,17 +833,31 @@ public class MemoryMdData implements AutoCloseable {
     }
 
     /**
-     * 搜索评分：BM25 风格的求和式 IDF + 子串兜底
+     * 精确命中阶段的得分下界（阶段一映射到 [EXACT_FLOOR, 1.0]）
+     */
+    private static final double EXACT_FLOOR = 0.5;
+
+    /**
+     * 子串兜底阶段的得分上界（严格小于 EXACT_FLOOR，保证不越过任何精确命中）
+     */
+    private static final double SUBSTR_CEIL = 0.45;
+
+    /**
+     * 搜索评分：BM25 风格的求和式 IDF（平方加权）+ 子串兜底，两阶段值域隔离
      *
-     * <p>评分策略（数据驱动、语言无关，替代硬编码停用词表）：
+     * <p>评分策略（数据驱动、语言无关，不依赖停用词表）：
      * <ul>
-     *   <li>精确 token 命中：对命中的 token 累加 IDF（求和式，未命中词完全不进入得分，
-     *       不会像比率式那样被查询中的常见词整体缩放），再除以理论最大 IDF 和归一化到 [0,1]。
-     *       IDF 使高区分度 token（如专有名词 "Solon"）主导排序，而 "的""户的""what" 等
-     *       df 高的低区分度 token 自动被压制，对中文 bi-gram、英文及日韩等其他语言一视同仁</li>
-     *   <li>子串兜底命中：仅当精确 token 命中为 0 时触发，按命中 token 数占比计分（降权）</li>
-     *   <li>重要性（importance）不再线性混入分数，而是作为同分时的次级排序依据（见 {@link #search}），
-     *       保证排序由相关性主导、元数据次级，语义与 Lucene 的 BM25 一致，且排序完全确定</li>
+     *   <li><b>阶段一 · 精确 token 命中</b>：对命中的 token 累加 IDF 的<b>平方</b>（求和式，
+     *       未命中词完全不进入得分）。平方是关键：线性求和下，命中 N 个中等区分度词的条目
+     *       会盖过命中 1 个高区分度词的条目（自然语言整句查询中，中文 bi-gram 噪声词数量占优），
+     *       平方放大稀有词优势，让专有名词（如 "Solon"）真正主导排序。
+     *       归一化后映射到 [{@value #EXACT_FLOOR}, 1.0]。</li>
+     *   <li><b>阶段二 · 子串兜底</b>：仅当精确命中为 0 时触发，按命中 token 数占比乘以
+     *       {@value #SUBSTR_CEIL} 封顶。<b>与阶段一值域隔离</b>——任何精确命中恒 &gt;= {@value #EXACT_FLOOR}，
+     *       任何子串兜底恒 &lt;= {@value #SUBSTR_CEIL}，故 "solon" 精确命中必排在 "solonx" 子串命中之前。
+     *       （注：不能用固定系数降权，因阶段一归一化后的下界随语料规模 n 变化，可能低于系数值。）</li>
+     *   <li><b>重要性（importance）</b>不线性混入分数，仅作为同分时的次级排序依据（见 {@link #search}），
+     *       保证排序由相关性主导、元数据次级，语义与 Lucene 的 BM25 一致，且排序完全确定。</li>
      * </ul>
      *
      * @param df 每个 token 在库内出现的记忆条数（由 search 统计）
@@ -829,21 +866,25 @@ public class MemoryMdData implements AutoCloseable {
     private double computeScore(IndexEntry entry, Set<String> queryTokens, Map<String, Integer> df, int n) {
         Set<String> contentTokens = getTokens(entry);
 
-        // 阶段一：IDF 求和式精确命中（未命中词不进入得分）
+        // 阶段一：IDF 平方求和式精确命中（未命中词不进入得分）
         double hitScore = 0;
         for (String token : queryTokens) {
             if (contentTokens.contains(token)) {
-                hitScore += idf(df.getOrDefault(token, 0), n);
+                double w = idf(df.getOrDefault(token, 0), n);
+                hitScore += w * w;
             }
         }
 
         if (hitScore > 0) {
-            // 归一化到 [0,1]：除以理论最大 IDF 和（全部查询词均为最高区分度）
-            double maxScore = queryTokens.size() * (Math.log(n + 1.0) + 1.0);
-            return maxScore > 0 ? hitScore / maxScore : 0;
+            // 归一化到 (0,1]：除以理论最大 IDF 平方和（全部查询词均为最高区分度）
+            double maxIdf = idf(0, n);
+            double maxScore = queryTokens.size() * maxIdf * maxIdf;
+            double norm = maxScore > 0 ? Math.min(1.0, hitScore / maxScore) : 0;
+            // 映射到 [EXACT_FLOOR, 1.0]，与子串兜底阶段值域隔离
+            return EXACT_FLOOR + (1.0 - EXACT_FLOOR) * norm;
         }
 
-        // 阶段二：子串兜底（降权）
+        // 阶段二：子串兜底（值域封顶在 SUBSTR_CEIL 以下）
         String contentLower = entry.content.toLowerCase();
         long substrHits = 0;
         for (String token : queryTokens) {
@@ -854,12 +895,12 @@ public class MemoryMdData implements AutoCloseable {
 
         if (substrHits == 0) return 0;
 
-        return (double) substrHits / queryTokens.size();
+        return SUBSTR_CEIL * substrHits / queryTokens.size();
     }
 
     /**
      * IDF（逆文档频率）：token 出现的记忆条数越多，区分度越低。
-     * 平滑处理避免除零；df=0 的查询词权重最高，但零命中不贡献分子，无副作用。
+     * 平滑处理避免除零；df=0 的查询词权重最高（即理论上界），但零命中不贡献分子，无副作用。
      */
     private static double idf(int df, int n) {
         return Math.log(((double) n + 1) / (df + 1)) + 1;
