@@ -59,12 +59,17 @@ public class MountSkillProvider implements SkillProvider {
     }
 
     @Override
+    public boolean isSkillAllowed(SkillDir s) {
+        return mountManager.getDisallowSkills().contains(s.getAliasPath()) == false;
+    }
+
+    @Override
     public Collection<SkillDir> searchSkill(String query) {
         Collection<SkillDir> skillList = mountManager.getSkills();
         String[] keys = query.toLowerCase().split("\\s+");
 
         List<SkillDir> matches = skillList.stream()
-                .filter(s -> s.isEnabled() && Arrays.stream(keys).anyMatch(k ->
+                .filter(s -> isSkillAllowed(s) && Arrays.stream(keys).anyMatch(k ->
                         s.getName().toLowerCase().contains(k) ||
                                 s.getDescription().toLowerCase().contains(k)))
                 .limit(15)

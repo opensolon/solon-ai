@@ -95,7 +95,7 @@ public class SkillTalent extends AbsTalent {
 
             sb.append("<skill_list>\n");
             for (SkillDir s : skillList) {
-                if (s.isEnabled()) {
+                if (skillProvider.isSkillAllowed(s)) {
                     sb.append("  <skill name=\"").append(s.getName()).append("\">").append(s.getDescription()).append("</skill>\n");
                 }
             }
@@ -107,7 +107,9 @@ public class SkillTalent extends AbsTalent {
 
             sb.append("<skill_list>\n");
             for (SkillDir s : skillList) {
-                sb.append("  <skill name=\"").append(s.getName()).append("\" />\n");
+                if (skillProvider.isSkillAllowed(s)) {
+                    sb.append("  <skill name=\"").append(s.getName()).append("\" />\n");
+                }
             }
             sb.append("</skill_list>");
         } else {
@@ -156,7 +158,7 @@ public class SkillTalent extends AbsTalent {
 
         sb.append("<skill_list>\n");
         for (SkillDir s : skillList) {
-            if (s.isEnabled()) {
+            if (skillProvider.isSkillAllowed(s)) {
                 sb.append("  <skill name=\"").append(s.getName()).append("\">").append(s.getDescription()).append("</skill>\n");
             }
         }
@@ -173,7 +175,7 @@ public class SkillTalent extends AbsTalent {
 
         StringBuilder sb = new StringBuilder("<skill_list>\n");
         for (SkillDir s : matches) {
-            if (s.isEnabled()) {
+            if (skillProvider.isSkillAllowed(s)) {
                 sb.append("  <skill name=\"").append(s.getName()).append("\">").append(s.getDescription()).append("</skill>\n");
             }
         }

@@ -400,6 +400,41 @@ public class HarnessEngine {
         return options.getMountManager().getSkillsByMount(alias);
     }
 
+    /**
+     * 获取被禁用的技能集合（按 aliasPath）
+     */
+    public Collection<String> getDisallowedSkills() {
+        return Collections.unmodifiableCollection(options.getMountManager().getDisallowSkills());
+    }
+
+    /**
+     * 判断技能是否被禁用（按 aliasPath）
+     */
+    public boolean isSkillDisallowed(String aliasPath) {
+        return options.getMountManager().getDisallowSkills().contains(aliasPath);
+    }
+
+    /**
+     * 动态禁用一个技能（按 aliasPath）
+     */
+    public void disallowSkill(String aliasPath) {
+        options.getMountManager().disallowSkill(aliasPath);
+    }
+
+    /**
+     * 动态允许一个技能（按 aliasPath）
+     */
+    public void allowSkill(String aliasPath) {
+        options.getMountManager().allowSkill(aliasPath);
+    }
+
+    /**
+     * 批量重置被禁用的技能集合（按 aliasPath）
+     */
+    public void disallowSkillReset(Collection<String> disallowedSkills) {
+        options.getMountManager().setDisallowSkills(disallowedSkills);
+    }
+
     public Collection<AgentMd> getAgents() {
         return options.getMountManager().getAgents();
     }

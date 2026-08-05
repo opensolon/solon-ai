@@ -62,4 +62,9 @@ public interface SkillProvider {
      * 读取 Skill 内容
      */
     String readSkill(String name);
+
+    /**
+     * 是否允许
+     */
+    boolean isSkillAllowed(SkillDir s);
 }

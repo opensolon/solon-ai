@@ -32,14 +32,12 @@ public class SkillDir {
     private final Path realPath;
     private final String description;
     private final String version;
-    private boolean enabled;
 
-    SkillDir(String name, String mountAlias, String aliasPath, Path realPath, String description, String version, boolean enabled) {
+    SkillDir(String name, String mountAlias, String aliasPath, Path realPath, String description, String version) {
         this.name = name;
         this.mountAlias = mountAlias;
         this.aliasPath = aliasPath;
         this.realPath = realPath;
-        this.enabled = enabled;
 
         if (Assert.isEmpty(description)) {
             this.description = "技能规约。";
@@ -79,13 +77,5 @@ public class SkillDir {
 
     public String getVersion() {
         return version;
-    }
-
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
     }
 }

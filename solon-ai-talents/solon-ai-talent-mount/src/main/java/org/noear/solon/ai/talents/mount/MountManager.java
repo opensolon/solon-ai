@@ -45,14 +45,56 @@ public class MountManager {
     // 逻辑路径前缀 -> 挂载目录信息 (如 "@shared" -> MountDir)
     private final Map<String, MountDir> mountMap = new ConcurrentHashMap<>();
 
+    private final Set<String> disallowSkills = Collections.newSetFromMap(new ConcurrentHashMap<>());
+
     // 逻辑全路径 -> 技能目录信息 (如 "video-creator" -> SkillDir)
     private volatile Map<String, SkillDir> skillMap = new ConcurrentHashMap<>();
 
     // 代理名 -> 代理文件信息 (如 "code-review" -> AgentMd)
     private volatile Map<String, AgentMd> agentMap = new ConcurrentHashMap<>();
 
+
     public MountManager(String workDir) {
         this.workDir = workDir;
+    }
+
+    public Set<String> getDisallowSkills() {
+        return disallowSkills;
+    }
+
+    /**
+     * 禁用技能（按 aliasPath）
+     */
+    public void disallowSkill(String aliasPath) {
+        if (Assert.isEmpty(aliasPath) == false) {
+            disallowSkills.add(aliasPath);
+        }
+    }
+
+    /**
+     * 允许技能（按 aliasPath）
+     */
+    public void allowSkill(String aliasPath) {
+        if (Assert.isEmpty(aliasPath) == false) {
+            disallowSkills.remove(aliasPath);
+        }
+    }
+
+    /**
+     * 批量设置禁用技能（按 aliasPath）
+     */
+    public void setDisallowSkills(Collection<String> aliasPaths) {
+        disallowSkills.clear();
+        if (aliasPaths != null) {
+            disallowSkills.addAll(aliasPaths);
+        }
+    }
+
+    /**
+     * 技能是否被禁用（按 aliasPath）
+     */
+    public boolean isSkillDisallowed(String aliasPath) {
+        return disallowSkills.contains(aliasPath);
     }
 
     public String getWorkDir() {
@@ -255,7 +297,7 @@ public class MountManager {
                         String description = markdown.getDescription();
                         String version = markdown.getVersion();
 
-                        map.put(name, new SkillDir(name, mountDir.getAlias(), aliasPath, dir, description, version, markdown.isEnabled()));
+                        map.put(name, new SkillDir(name, mountDir.getAlias(), aliasPath, dir, description, version));
                         return FileVisitResult.SKIP_SUBTREE;
                     }
                     if (dir.getFileName().toString().startsWith(".")) return FileVisitResult.SKIP_SUBTREE;
