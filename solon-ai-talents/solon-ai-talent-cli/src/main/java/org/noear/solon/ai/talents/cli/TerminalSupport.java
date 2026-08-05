@@ -17,6 +17,7 @@ package org.noear.solon.ai.talents.cli;
 
 import org.noear.solon.Utils;
 
+import org.noear.solon.ai.sandbox.config.FilesystemConfig;
 import org.noear.solon.ai.talents.mount.MountDir;
 import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.core.util.Assert;
@@ -627,7 +628,12 @@ public class TerminalSupport {
     }
 
     Path resolveSafePath(Path workPath, String pStr, boolean writeMode, boolean sandboxEnabled, boolean sandboxAllowUserHome) throws IOException {
+        return resolveSafePath(workPath, pStr, writeMode, sandboxEnabled, sandboxAllowUserHome, null);
+    }
+
+    Path resolveSafePath(Path workPath, String pStr, boolean writeMode, boolean sandboxEnabled, boolean sandboxAllowUserHome, FilesystemConfig fsConfig) throws IOException {
         if (Assert.isEmpty(pStr) || ".".equals(pStr)) {
+            enforceFilesystemPolicy(workPath, workPath, writeMode, sandboxEnabled, fsConfig);
             return workPath;
         }
 
@@ -664,6 +670,7 @@ public class TerminalSupport {
                 }
             }
 
+            enforceFilesystemPolicy(mount.getRealPath(), target, writeMode, sandboxEnabled, fsConfig);
             return target;
         }
 
@@ -711,10 +718,118 @@ public class TerminalSupport {
             }
         }
 
+        enforceFilesystemPolicy(workPath, target, writeMode, sandboxEnabled, fsConfig);
         return target;
     }
 
+    /**
+     * 文件系统策略校验：在沙盒模式下按相对策略根的路径判定 mandatoryDeny / denyRead / allowWrite。
+     *
+     * <p>判定顺序：
+     * <ol>
+     *   <li>mandatoryDeny：始终拦截受保护路径（.bashrc/.vscode 等），与 fsConfig 是否为 null 无关；</li>
+     *   <li>denyRead：命中 denyRead 且未命中 allowRead 白名单 → 拒绝；</li>
+     *   <li>allowWrite：仅写模式，配置了白名单时必须命中，否则拒绝。</li>
+     * </ol>
+     * relPath 基于符号链接 resolve 后的真实路径计算，确保 symlink 指向受保护文件时也能拦截。</p>
+     */
+    private void enforceFilesystemPolicy(Path policyRoot, Path target, boolean writeMode, boolean sandboxEnabled, FilesystemConfig fs) {
+        if (!sandboxEnabled) {
+            return;
+        }
+        String rel = toPolicyRelative(policyRoot, target);
+        if (isMandatoryDenyRelativePath(rel)) {
+            throw new SecurityException("权限拒绝：路径受保护 " + rel);
+        }
+        if (fs == null) {
+            return;
+        }
+        if (matchesAny(rel, fs.getDenyRead()) && !matchesAny(rel, fs.getAllowRead())) {
+            throw new SecurityException("权限拒绝：读取拒绝 " + rel);
+        }
+        if (writeMode && fs.getAllowWrite() != null
+                && !matchesAny(rel, fs.getAllowWrite())) {
+            throw new SecurityException("权限拒绝：可写白名单 " + rel);
+        }
+    }
 
+    /**
+     * 计算 target 相对 policyRoot 的路径（统一用 / 分隔）。
+     * 优先解析符号链接后的真实路径；目标不存在时回退到已存在祖先 + 逻辑相对；
+     * 仍失败时回退到 normalize 后的逻辑相对。
+     */
+    private String toPolicyRelative(Path policyRoot, Path target) {
+        try {
+            Path realRoot = policyRoot.toRealPath();
+            Path realTarget;
+            try {
+                realTarget = target.toRealPath();
+            } catch (IOException e) {
+                Path ancestor = resolveExistingAncestor(target);
+                Path relative = ancestor.relativize(target.normalize());
+                realTarget = ancestor.toRealPath().resolve(relative).normalize();
+            }
+            return realRoot.relativize(realTarget).toString().replace("\\", "/");
+        } catch (IOException | IllegalArgumentException e) {
+            try {
+                return policyRoot.relativize(target.normalize()).toString().replace("\\", "/");
+            } catch (IllegalArgumentException e2) {
+                return target.normalize().toString().replace("\\", "/");
+            }
+        }
+    }
+
+    /**
+     * 前缀匹配：rel 等于某个 pattern 或位于其子路径下（pattern 为 "." 时匹配根自身及任意路径）。
+     */
+    private boolean matchesAny(String rel, List<String> patterns) {
+        if (patterns == null) {
+            return false;
+        }
+        String n = rel.replace("\\", "/");
+        if (n.startsWith("./")) {
+            n = n.substring(2);
+        }
+        for (String p : patterns) {
+            if (p == null) {
+                continue;
+            }
+            String pp = p.replace("\\", "/");
+            if (pp.startsWith("./")) {
+                pp = pp.substring(2);
+            }
+            if (".".equals(pp)) {
+                return true;
+            }
+            if (n.equals(pp) || n.startsWith(pp + "/")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
+
+    /**
+     * 在物理越界判定基础上叠加 mandatoryDeny / denyRead 策略过滤，
+     * 用于 glob/ls/grep 遍历时跳过受保护或拒绝读取的子树。
+     */
+    boolean isReadDenied(Path policyRoot, Path target, boolean sandboxEnabled, FilesystemConfig fs) {
+        if (isSandboxBoundaryDenied(policyRoot, target, sandboxEnabled)) {
+            return true;
+        }
+        if (!sandboxEnabled) {
+            return false;
+        }
+        String rel = toPolicyRelative(policyRoot, target);
+        if (isMandatoryDenyRelativePath(rel)) {
+            return true;
+        }
+        if (fs == null) {
+            return false;
+        }
+        return matchesAny(rel, fs.getDenyRead()) && !matchesAny(rel, fs.getAllowRead());
+    }
 
     boolean isSandboxBoundaryDenied(Path rootPath, Path target, boolean sandboxEnabled) {
         if (!sandboxEnabled) {
@@ -893,12 +1008,12 @@ public class TerminalSupport {
         return workPath;
     }
 
-    void generateTreeInternal(Path workPath, Path current, int depth, int maxDepth, String indent, StringBuilder sb, boolean showHidden, boolean sandboxEnabled) throws IOException {
+    void generateTreeInternal(Path workPath, Path current, int depth, int maxDepth, String indent, StringBuilder sb, boolean showHidden, boolean sandboxEnabled, FilesystemConfig fs) throws IOException {
         if (depth >= maxDepth) return;
         try (Stream<Path> stream = Files.list(current)) {
             List<Path> children = stream
                     .filter(p -> !isIgnored(workPath, p))
-                    .filter(p -> !isSandboxBoundaryDenied(workPath, p, sandboxEnabled))
+                    .filter(p -> !isReadDenied(workPath, p, sandboxEnabled, fs))
                     .filter(p -> showHidden || !p.getFileName().toString().startsWith("."))
                     .sorted((a, b) -> {
                         boolean aDir = Files.isDirectory(a);
@@ -911,23 +1026,23 @@ public class TerminalSupport {
                 Path child = children.get(i);
                 boolean isLast = (i == children.size() - 1);
                 boolean isDir = Files.isDirectory(child);
-                if (isSandboxBoundaryDenied(workPath, child, sandboxEnabled)) {
+                if (isReadDenied(workPath, child, sandboxEnabled, fs)) {
                     continue;
                 }
                 sb.append(indent).append(isLast ? "└── " : "├── ").append(child.getFileName()).append("\n");
                 if (isDir)
-                    generateTreeInternal(workPath, child, depth + 1, maxDepth, indent + (isLast ? "    " : "│   "), sb, showHidden, sandboxEnabled);
+                    generateTreeInternal(workPath, child, depth + 1, maxDepth, indent + (isLast ? "    " : "│   "), sb, showHidden, sandboxEnabled, fs);
             }
         } catch (AccessDeniedException e) {
             sb.append(indent).append("└── [拒绝访问]\n");
         }
     }
 
-    String flatListLogic(Path workPath, Path policyRoot, Path target, String inputPath, boolean showHidden, boolean sandboxEnabled) throws IOException {
+    String flatListLogic(Path workPath, Path policyRoot, Path target, String inputPath, boolean showHidden, boolean sandboxEnabled, FilesystemConfig fs) throws IOException {
         try (Stream<Path> stream = Files.list(target)) {
             List<String> lines = stream
                     .filter(p -> !isIgnored(workPath, p))
-                    .filter(p -> !isSandboxBoundaryDenied(policyRoot, p, sandboxEnabled))
+                    .filter(p -> !isReadDenied(policyRoot, p, sandboxEnabled, fs))
                     .filter(p -> showHidden || !p.getFileName().toString().startsWith("."))
                     .map(p -> {
                         boolean isDir = Files.isDirectory(p);
