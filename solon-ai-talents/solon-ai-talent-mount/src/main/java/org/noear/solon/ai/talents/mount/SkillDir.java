@@ -32,7 +32,7 @@ public class SkillDir {
     private final Path realPath;
     private final String description;
     private final String version;
-    private final boolean enabled;
+    private boolean enabled;
 
     SkillDir(String name, String mountAlias, String aliasPath, Path realPath, String description, String version, boolean enabled) {
         this.name = name;
@@ -83,5 +83,9 @@ public class SkillDir {
 
     public boolean isEnabled() {
         return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
     }
 }
