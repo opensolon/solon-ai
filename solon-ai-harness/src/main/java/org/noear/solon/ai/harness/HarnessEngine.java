@@ -388,6 +388,10 @@ public class HarnessEngine {
         return options.getMountManager().getMount(alias);
     }
 
+    public SkillDir getSkill(String name){
+        return options.getMountManager().getSkill(name);
+    }
+
     public Collection<SkillDir> getSkills() {
         return options.getMountManager().getSkills();
     }
