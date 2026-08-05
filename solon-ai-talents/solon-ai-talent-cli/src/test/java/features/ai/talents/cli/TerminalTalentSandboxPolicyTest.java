@@ -34,103 +34,6 @@ public class TerminalTalentSandboxPolicyTest {
         }
     }
 
-    @Test
-    public void writeRejectsPathOutsideAllowWriteWhenSandboxConfigEnabled() throws Exception {
-        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
-        try {
-            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            FilesystemConfig fs = new FilesystemConfig(null, null, Collections.singletonList("src"), null, null);
-            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
-            talent.setSandboxConfig(config);
-
-            talent.write("src/App.java", "class App {}", workDir.toString());
-            SecurityException ex = assertThrows(SecurityException.class,
-                    () -> talent.write("README.md", "blocked", workDir.toString()));
-            assertTrue(ex.getMessage().contains("可写白名单"), ex.getMessage());
-        } finally {
-            deleteRecursively(workDir);
-        }
-    }
-
-    @Test
-    public void readRejectsConfiguredDenyReadUnlessAllowed() throws Exception {
-        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
-        try {
-            Files.createDirectories(workDir.resolve("secret/public"));
-            Files.write(workDir.resolve("secret/private.txt"), Collections.singletonList("hidden"));
-            Files.write(workDir.resolve("secret/public/visible.txt"), Collections.singletonList("visible"));
-
-            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            FilesystemConfig fs = new FilesystemConfig(Collections.singletonList("secret"), Collections.singletonList("secret/public"), null, null, null);
-            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
-            talent.setSandboxConfig(config);
-
-            SecurityException ex = assertThrows(SecurityException.class,
-                    () -> talent.read("secret/private.txt", 1, null, workDir.toString()));
-            assertTrue(ex.getMessage().contains("读取拒绝"), ex.getMessage());
-            assertTrue(talent.read("secret/public/visible.txt", 1, null, workDir.toString()).contains("visible"));
-        } finally {
-            deleteRecursively(workDir);
-        }
-    }
-
-    @Test
-    public void globSkipsConfiguredDenyReadSubtrees() throws Exception {
-        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
-        try {
-            Files.createDirectories(workDir.resolve("secret"));
-            Files.write(workDir.resolve("secret/private.txt"), Collections.singletonList("hidden"));
-            Files.write(workDir.resolve("visible.txt"), Collections.singletonList("visible"));
-
-            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            FilesystemConfig fs = new FilesystemConfig(Collections.singletonList("secret"), null, null, null, null);
-            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
-            talent.setSandboxConfig(config);
-
-            String result = talent.glob("**/*.txt", ".", workDir.toString());
-            assertTrue(result.contains("visible.txt"), result);
-            assertTrue(!result.contains("private.txt"), result);
-        } finally {
-            deleteRecursively(workDir);
-        }
-    }
-
-    @Test
-    public void rootPathHonorsDenyReadPolicy() throws Exception {
-        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
-        try {
-            Files.write(workDir.resolve("visible.txt"), Collections.singletonList("visible"));
-
-            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            FilesystemConfig fs = new FilesystemConfig(Collections.singletonList("."), null, null, null, null);
-            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
-            talent.setSandboxConfig(config);
-
-            SecurityException ex = assertThrows(SecurityException.class,
-                    () -> talent.ls(".", false, true, workDir.toString()));
-            assertTrue(ex.getMessage().contains("读取拒绝"), ex.getMessage());
-        } finally {
-            deleteRecursively(workDir);
-        }
-    }
-
-    @Test
-    public void rootPathHonorsAllowWritePolicy() throws Exception {
-        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
-        try {
-            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            FilesystemConfig fs = new FilesystemConfig(null, null, Collections.emptyList(), null, null);
-            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
-            talent.setSandboxConfig(config);
-
-            SecurityException ex = assertThrows(SecurityException.class,
-                    () -> talent.write(".", "blocked", workDir.toString()));
-            assertTrue(ex.getMessage().contains("可写白名单"), ex.getMessage());
-        } finally {
-            deleteRecursively(workDir);
-        }
-    }
-
 
     @Test
     public void readWriteMountHonorsMountWritableFlag() throws Exception {
@@ -179,37 +82,6 @@ public class TerminalTalentSandboxPolicyTest {
 
             talent.write("@pool/new.txt", "mounted write", workDir.toString());
             assertTrue(new String(Files.readAllBytes(mountDir.resolve("new.txt"))).contains("mounted write"));
-        } finally {
-            deleteRecursively(workDir);
-            deleteRecursively(mountDir);
-        }
-    }
-
-    @Test
-    public void globOnMountUsesMountRootForDenyReadPolicy() throws Exception {
-        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
-        Path mountDir = Files.createTempDirectory("solon-ai-terminal-mount-");
-        try {
-            Files.createDirectories(mountDir.resolve("secret"));
-            Files.write(mountDir.resolve("secret/private.txt"), Collections.singletonList("hidden"));
-            Files.write(mountDir.resolve("visible.txt"), Collections.singletonList("visible"));
-
-            MountManager mountManager = new MountManager(workDir.toString());
-            mountManager.register(MountDir.builder()
-                    .alias("@pool")
-                    .path(mountDir.toString())
-                    .type(MountType.SKILLS)
-                    .writeable(false)
-                    .build());
-
-            TerminalTalent talent = new TerminalTalent(mountManager);
-            FilesystemConfig fs = new FilesystemConfig(Collections.singletonList("secret"), null, null, null, null);
-            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
-            talent.setSandboxConfig(config);
-
-            String result = talent.glob("**/*.txt", "@pool", workDir.toString());
-            assertTrue(result.contains("visible.txt"), result);
-            assertTrue(!result.contains("private.txt"), result);
         } finally {
             deleteRecursively(workDir);
             deleteRecursively(mountDir);
@@ -318,34 +190,6 @@ public class TerminalTalentSandboxPolicyTest {
     }
 
     @Test
-    public void writableMountRejectsWriteWhenSandboxConfigDisallowsMountRoot() throws Exception {
-        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
-        Path mountDir = Files.createTempDirectory("solon-ai-terminal-mount-");
-        try {
-            MountManager mountManager = new MountManager(workDir.toString());
-            mountManager.register(MountDir.builder()
-                    .alias("@pool")
-                    .path(mountDir.toString())
-                    .type(MountType.SKILLS)
-                    .writeable(true)
-                    .build());
-
-            TerminalTalent talent = new TerminalTalent(mountManager);
-            FilesystemConfig fs = new FilesystemConfig(null, null, Collections.singletonList("allowed"), null, null);
-            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
-            talent.setSandboxConfig(config);
-
-            SecurityException ex = assertThrows(SecurityException.class,
-                    () -> talent.write("@pool/new.txt", "blocked", workDir.toString()));
-            assertTrue(ex.getMessage().contains("可写白名单"), ex.getMessage());
-            assertTrue(!Files.exists(mountDir.resolve("new.txt")));
-        } finally {
-            deleteRecursively(workDir);
-            deleteRecursively(mountDir);
-        }
-    }
-
-    @Test
     public void writeThroughWorkspaceSymlinkParentOutsideIsRejected() throws Exception {
         Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
         Path outsideDir = Files.createTempDirectory("solon-ai-terminal-outside-");
@@ -367,42 +211,6 @@ public class TerminalTalentSandboxPolicyTest {
         } finally {
             deleteRecursively(workDir);
             deleteRecursively(outsideDir);
-        }
-    }
-
-    @Test
-    public void readThroughMountSymlinkOutsideIsDeniedByMountRelativePolicy() throws Exception {
-        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
-        Path mountDir = Files.createTempDirectory("solon-ai-terminal-mount-");
-        try {
-            Files.createDirectories(mountDir.resolve("secret"));
-            Files.write(mountDir.resolve("secret/private.txt"), Collections.singletonList("hidden"));
-            Path link = mountDir.resolve("visible-link");
-            try {
-                Files.createSymbolicLink(link, mountDir.resolve("secret/private.txt"));
-            } catch (UnsupportedOperationException | SecurityException | java.nio.file.FileSystemException e) {
-                assumeTrue(false, "Symbolic links are not available in this environment: " + e.getMessage());
-            }
-
-            MountManager mountManager = new MountManager(workDir.toString());
-            mountManager.register(MountDir.builder()
-                    .alias("@pool")
-                    .path(mountDir.toString())
-                    .type(MountType.SKILLS)
-                    .writeable(false)
-                    .build());
-
-            TerminalTalent talent = new TerminalTalent(mountManager);
-            FilesystemConfig fs = new FilesystemConfig(Collections.singletonList("secret"), null, null, null, null);
-            SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
-            talent.setSandboxConfig(config);
-
-            SecurityException ex = assertThrows(SecurityException.class,
-                    () -> talent.read("@pool/visible-link", 1, null, workDir.toString()));
-            assertTrue(ex.getMessage().contains("读取拒绝"), ex.getMessage());
-        } finally {
-            deleteRecursively(workDir);
-            deleteRecursively(mountDir);
         }
     }
 

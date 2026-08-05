@@ -174,11 +174,15 @@ public class TerminalTalent extends AbsTalent {
     }
 
     /**
-     * 获取当前生效的文件系统策略配置（供 resolveSafePath / 遍历过滤器使用）。
-     * 未设置 sandboxConfig 时返回 null，此时仅 mandatoryDeny 自保护生效。
+     * 文件工具层（read/write/ls 等）的用户级路径策略。
+     *
+     * <p>恒返回 null：文件系统的可访问范围只由挂载生成（唯一正向来源），
+     * 用户不再通过 FilesystemConfig 叠加相对路径黑白名单。文件工具层的边界
+     * 完全由 resolveSafePath 的物理判定保底（工作区/挂载点/symlink 越界拦截），
+     * 敏感文件由 mandatoryDeny 兜底。需要放行新区域时，请添加挂载配置。
      */
     private FilesystemConfig fs() {
-        return sandboxConfig != null ? sandboxConfig.getFilesystem() : null;
+        return null;
     }
 
     /**
@@ -218,13 +222,9 @@ public class TerminalTalent extends AbsTalent {
         // 1) 从 mountManager 构建当前最新的文件系统白名单
         FilesystemConfig dynamicFs = buildDynamicFilesystemConfig();
 
-        // 2) 用户已显式设置 FilesystemConfig → 直接返回用户配置，不做动态叠加
-        //    此时用户精确管理白名单，挂载点权限由 resolveSafePath 中的逻辑路径分支独立保障
-        if (sandboxConfig != null && sandboxConfig.getFilesystem() != null) {
-            return sandboxConfig;
-        }
-
-        // 3) 用户设置了 sandboxConfig 但无 FilesystemConfig → 保留用户配置，filesystem 用动态的
+        // 2) 文件系统可访问范围只由挂载生成（唯一正向来源）：用户配置的 filesystem 字段
+        //    一律忽略，filesystem 始终使用动态挂载点白名单。用户其他配置（网络、seccomp 等）
+        //    仍然保留。需要放行新区域时，请添加挂载配置。
         if (sandboxConfig != null) {
             return new SandboxRuntimeConfig(
                     sandboxConfig.getNetwork(),
@@ -243,7 +243,7 @@ public class TerminalTalent extends AbsTalent {
             );
         }
 
-        // 4) 无用户配置，返回纯动态配置
+        // 3) 无用户配置，返回纯动态配置
         return new SandboxRuntimeConfig(
                 null, dynamicFs, null,
                 null, null, null, null,
