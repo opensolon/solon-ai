@@ -59,6 +59,10 @@ public class Markdown {
         return metadata.get("version").getString();
     }
 
+    public boolean isEnabled() {
+        return metadata.get("enabled").getBoolean(true);
+    }
+
     public String getContent() {
         return content;
     }

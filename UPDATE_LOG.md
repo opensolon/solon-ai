@@ -16,6 +16,8 @@
 * 优化 solon-ai-mcp 兼容处理无事件类型的SSE消息
 * 优化 solon-ai-harness TaskTalent 增加 maxTasks 限制
 * 优化 solon-ai-talent-memory 引导词及搜索能力
+* 优化 solon-ai-talent-mount SkillDir 添加是否启用控制
+* 修复 solon-ai-talent-cli Windows 环境变量可能识别失误的问题
 * 修复 solon-ai-talent-gateway OpenApiV2Resolver 可能无限递归解析的问题
 
 ### 4.0.4

@@ -95,7 +95,9 @@ public class SkillTalent extends AbsTalent {
 
             sb.append("<skill_list>\n");
             for (SkillDir s : skillList) {
-                sb.append("  <skill name=\"").append(s.getName()).append("\">").append(s.getDescription()).append("</skill>\n");
+                if (s.isEnabled()) {
+                    sb.append("  <skill name=\"").append(s.getName()).append("\">").append(s.getDescription()).append("</skill>\n");
+                }
             }
             sb.append("</skill_list>");
         } else if (total <= searchThreshold) {
@@ -154,7 +156,9 @@ public class SkillTalent extends AbsTalent {
 
         sb.append("<skill_list>\n");
         for (SkillDir s : skillList) {
-            sb.append("  <skill name=\"").append(s.getName()).append("\">").append(s.getDescription()).append("</skill>\n");
+            if (s.isEnabled()) {
+                sb.append("  <skill name=\"").append(s.getName()).append("\">").append(s.getDescription()).append("</skill>\n");
+            }
         }
         sb.append("</skill_list>");
 
@@ -169,7 +173,9 @@ public class SkillTalent extends AbsTalent {
 
         StringBuilder sb = new StringBuilder("<skill_list>\n");
         for (SkillDir s : matches) {
-            sb.append("  <skill name=\"").append(s.getName()).append("\">").append(s.getDescription()).append("</skill>\n");
+            if (s.isEnabled()) {
+                sb.append("  <skill name=\"").append(s.getName()).append("\">").append(s.getDescription()).append("</skill>\n");
+            }
         }
         sb.append("</skill_list>");
 

@@ -64,7 +64,7 @@ public class MountSkillProvider implements SkillProvider {
         String[] keys = query.toLowerCase().split("\\s+");
 
         List<SkillDir> matches = skillList.stream()
-                .filter(s -> Arrays.stream(keys).anyMatch(k ->
+                .filter(s -> s.isEnabled() && Arrays.stream(keys).anyMatch(k ->
                         s.getName().toLowerCase().contains(k) ||
                                 s.getDescription().toLowerCase().contains(k)))
                 .limit(15)

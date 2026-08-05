@@ -255,7 +255,7 @@ public class MountManager {
                         String description = markdown.getDescription();
                         String version = markdown.getVersion();
 
-                        map.put(name, new SkillDir(name, mountDir.getAlias(), aliasPath, dir, description, version));
+                        map.put(name, new SkillDir(name, mountDir.getAlias(), aliasPath, dir, description, version, markdown.isEnabled()));
                         return FileVisitResult.SKIP_SUBTREE;
                     }
                     if (dir.getFileName().toString().startsWith(".")) return FileVisitResult.SKIP_SUBTREE;
