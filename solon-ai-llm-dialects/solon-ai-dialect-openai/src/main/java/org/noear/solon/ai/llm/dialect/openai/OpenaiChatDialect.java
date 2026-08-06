@@ -146,15 +146,27 @@ public class OpenaiChatDialect extends AbstractChatDialect {
             ONode oUsage = oResp.getOrNull("usage");
             if (oUsage != null) {
                 long promptTokens = oUsage.get("prompt_tokens").getLong();
-                long thinkTokens = oUsage.get("think_tokens").getLong();
                 long completionTokens = oUsage.get("completion_tokens").getLong();
                 long totalTokens = oUsage.get("total_tokens").getLong();
 
-                // 读取缓存 token 统计（OpenAI: prompt_tokens_details.cached_tokens）
+                // 思考 token 统计：优先 DeepSeek 形态 completion_tokens_details.reasoning_tokens，兜底 think_tokens
+                long thinkTokens = 0L;
+                ONode completionTokensDetails = oUsage.getOrNull("completion_tokens_details");
+                if (completionTokensDetails != null) {
+                    thinkTokens = completionTokensDetails.get("reasoning_tokens").getLong();
+                }
+                if (thinkTokens == 0L) {
+                    thinkTokens = oUsage.get("think_tokens").getLong();
+                }
+
+                // 缓存命中 token：OpenAI 形态 prompt_tokens_details.cached_tokens，兜底 DeepSeek 形态 prompt_cache_hit_tokens
                 long cacheReadInputTokens = 0L;
                 ONode promptTokensDetails = oUsage.getOrNull("prompt_tokens_details");
                 if (promptTokensDetails != null) {
                     cacheReadInputTokens = promptTokensDetails.get("cached_tokens").getLong();
+                }
+                if (cacheReadInputTokens == 0L) {
+                    cacheReadInputTokens = oUsage.get("prompt_cache_hit_tokens").getLong();
                 }
 
                 resp.setUsage(new AiUsage(promptTokens, thinkTokens, completionTokens, totalTokens,
