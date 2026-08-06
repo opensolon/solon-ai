@@ -72,7 +72,7 @@ public class OpenaiResponsesRequestBuilder {
         // 构建 input（将消息转为 input 数组，SystemMessage 已提取到 instructions）
         ONode inputArray = root.getOrNew("input").asArray();
         for (ChatMessage msg : messages) {
-            if (msg.isThinking() || msg instanceof SystemMessage) {
+            if (msg instanceof SystemMessage) {
                 continue;
             }
             buildInputItem(inputArray, msg);
@@ -115,6 +115,7 @@ public class OpenaiResponsesRequestBuilder {
 
         // ⭐ 支持 previous_response_id（OpenAI Responses API 上下文缓存）
         //    通过 ChatOptions.promptCacheKey() 传入
+        //    注意：DeepSeek Responses 为无状态 API，不支持该字段（会被服务端静默忽略）
         CacheControl cacheControl = options.cacheControl();
         if (cacheControl != null && Utils.isNotEmpty(cacheControl.getPromptCacheKey())) {
             root.set("previous_response_id", cacheControl.getPromptCacheKey());
@@ -130,6 +131,24 @@ public class OpenaiResponsesRequestBuilder {
      * @date 2026年1月28日
      */
     private void buildInputItem(ONode inputArray, ChatMessage message) {
+        if (message.isThinking()) {
+            // 回传思维链为 reasoning item（DeepSeek Responses：reasoning 类型输入项）
+            String thinkText = message.getContent();
+            if (message instanceof AssistantMessage) {
+                AssistantMessage am = (AssistantMessage) message;
+                String stripped = AssistantMessage.stripThinkTags(thinkText);
+                if (Utils.isEmpty(stripped)) {
+                    stripped = am.getReasoning();
+                }
+                thinkText = stripped;
+            }
+            if (Utils.isNotEmpty(thinkText)) {
+                ONode reasoningItem = inputArray.addNew().set("type", "reasoning");
+                ONode contentArray = reasoningItem.getOrNew("content").asArray();
+                contentArray.addNew().set("type", "reasoning_text").set("text", thinkText);
+            }
+            return;
+        }
         if (message instanceof ToolMessage) {
             ToolMessage toolMessage = (ToolMessage) message;
             inputArray.addNew()

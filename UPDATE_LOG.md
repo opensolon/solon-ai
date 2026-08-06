@@ -14,6 +14,7 @@
 ### 4.0.5
 
 * 优化 solon-ai-mcp 兼容处理无事件类型的SSE消息
+* 优化 solon-ai-dialect-openai openai-responses 方言适配
 * 优化 solon-ai-harness TaskTalent 增加 maxTasks 限制
 * 优化 solon-ai-talent-memory 引导词及搜索能力
 * 优化 solon-ai-talent-mount MountManager 添加 disallowSkills

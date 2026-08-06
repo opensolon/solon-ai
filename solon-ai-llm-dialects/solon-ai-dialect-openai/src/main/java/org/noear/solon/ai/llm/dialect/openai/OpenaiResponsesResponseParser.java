@@ -47,6 +47,7 @@ public class OpenaiResponsesResponseParser {
         String currentItemId;
         String currentItemType;
         StringBuilder currentTextContent;
+        StringBuilder currentReasoningContent;
         String currentFunctionCallId;
         String currentFunctionName;
         StringBuilder currentFunctionArguments;
@@ -162,6 +163,8 @@ public class OpenaiResponsesResponseParser {
 
                     if ("message".equals(state.currentItemType)) {
                         state.currentTextContent = new StringBuilder();
+                    } else if ("reasoning".equals(state.currentItemType)) {
+                        state.currentReasoningContent = new StringBuilder();
                     } else if ("function_call".equals(state.currentItemType)) {
                         state.currentFunctionCallId = item.get("call_id").getString();
                         state.currentFunctionName = item.get("name").getString();
@@ -184,6 +187,7 @@ public class OpenaiResponsesResponseParser {
                     state.currentItemId = null;
                     state.currentItemType = null;
                     state.currentTextContent = null;
+                    state.currentReasoningContent = null;
                 }
             } else if ("response.content_part.added".equals(eventType)) {
                 // 内容部分添加
@@ -193,8 +197,24 @@ public class OpenaiResponsesResponseParser {
                     if ("output_text".equals(partType)) {
                         StreamState state = getOrCreateState(resp);
                         state.currentTextContent = new StringBuilder();
+                    } else if ("reasoning_text".equals(partType)) {
+                        StreamState state = getOrCreateState(resp);
+                        state.currentReasoningContent = new StringBuilder();
                     }
                 }
+            } else if ("response.reasoning_text.delta".equals(eventType)) {
+                // 思考增量（DeepSeek Responses：思维链回传为 thinking 消息）
+                String delta = oResp.get("delta").getString();
+                if (Utils.isNotEmpty(delta)) {
+                    StreamState state = resp.attrAs(STREAM_STATE_KEY);
+                    if (state != null && state.currentReasoningContent != null) {
+                        state.currentReasoningContent.append(delta);
+                    }
+                    resp.addChoice(new ChatChoice(0, new Date(), null, new AssistantMessage(delta, true)));
+                    hasChoices = true;
+                }
+            } else if ("response.reasoning_text.done".equals(eventType)) {
+                // 思考完成：增量已通过 delta 事件推送，此处无需额外处理
             } else if ("response.output_text.delta".equals(eventType)) {
                 // 文本增量
                 String delta = oResp.get("delta").getString();
@@ -294,6 +314,24 @@ public class OpenaiResponsesResponseParser {
 
                 resp.setFinished(true);
                 hasChoices = true;
+            } else if ("response.incomplete".equals(eventType)) {
+                // 响应未完成（如 max_output_tokens 截断等）：同样结束流，避免悬挂
+                resp.attrRemove(STREAM_STATE_KEY);
+                ONode response = oResp.get("response");
+                if (response != null) {
+                    resp.setModel(response.get("model").getString());
+                    AiUsage usage = parseUsage(response.getOrNull("usage"));
+                    if (usage != null) {
+                        resp.setUsage(usage);
+                    }
+                }
+
+                if (resp.hasChoices() == false) {
+                    resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
+                }
+
+                resp.setFinished(true);
+                hasChoices = true;
             } else if ("response.failed".equals(eventType)) {
                 // 响应失败，清理状态
                 resp.attrRemove(STREAM_STATE_KEY);
@@ -369,12 +407,45 @@ public class OpenaiResponsesResponseParser {
         ONode outputArray = oResp.getOrNull("output");
         if (outputArray != null && outputArray.isArray()) {
             StringBuilder textContent = new StringBuilder();
+            StringBuilder reasoningContent = new StringBuilder();
             List<ContentBlock> mediaBlocks = new ArrayList<>();
             List<ToolCall> allToolCalls = new ArrayList<>();
             List<Map> allToolCallsRaw = new ArrayList<>();
             for (ONode outputItem : outputArray.getArray()) {
                 String itemType = outputItem.get("type").getString();
-                if ("message".equals(itemType)) {
+                if ("reasoning".equals(itemType)) {
+                    // 思考内容（DeepSeek Responses：reasoning item）
+                    ONode contentArray = outputItem.getOrNull("content");
+                    if (contentArray != null && contentArray.isArray()) {
+                        for (ONode contentItem : contentArray.getArray()) {
+                            String contentType = contentItem.get("type").getString();
+                            if ("reasoning_text".equals(contentType) || "text".equals(contentType)) {
+                                String text = contentItem.get("text").getString();
+                                if (Utils.isNotEmpty(text)) {
+                                    if (reasoningContent.length() > 0) {
+                                        reasoningContent.append("\n");
+                                    }
+                                    reasoningContent.append(text);
+                                }
+                            }
+                        }
+                    }
+                    // 兼容仅 summary 的响应（DeepSeek 可能只给摘要）
+                    if (reasoningContent.length() == 0) {
+                        ONode summaryArray = outputItem.getOrNull("summary");
+                        if (summaryArray != null && summaryArray.isArray()) {
+                            for (ONode summaryItem : summaryArray.getArray()) {
+                                String text = summaryItem.get("text").getString();
+                                if (Utils.isNotEmpty(text)) {
+                                    if (reasoningContent.length() > 0) {
+                                        reasoningContent.append("\n");
+                                    }
+                                    reasoningContent.append(text);
+                                }
+                            }
+                        }
+                    }
+                } else if ("message".equals(itemType)) {
                     // 解析消息内容：output_text / refusal / 兼容 image
                     ONode contentArray = outputItem.getOrNull("content");
                     if (contentArray != null && contentArray.isArray()) {
@@ -450,6 +521,12 @@ public class OpenaiResponsesResponseParser {
                 resp.addMediaBlocks(mediaBlocks);
             }
         
+            // 思考内容优先输出为 thinking 消息（DeepSeek Responses 思维链回传）
+            if (reasoningContent.length() > 0) {
+                resp.addChoice(new ChatChoice(0, created, null,
+                        new AssistantMessage(reasoningContent.toString(), true)));
+            }
+
             // 将所有工具调用合并到一个 AssistantMessage 中
             if (!allToolCalls.isEmpty()) {
                 AssistantMessage msg = new AssistantMessage(textContent.toString(),
@@ -467,7 +544,12 @@ public class OpenaiResponsesResponseParser {
                 }
             }
         } else {
-            // 如果没有 output 数组，尝试使用 output_text
+            // 如果没有 output 数组，尝试使用便捷字段 output_text / reasoning_text（DeepSeek 顶层字段）
+            String reasoningText = oResp.get("reasoning_text").getString();
+            if (Utils.isNotEmpty(reasoningText)) {
+                resp.addChoice(new ChatChoice(0, created, null,
+                        new AssistantMessage(reasoningText, true)));
+            }
             String outputText = oResp.get("output_text").getString();
             if (Utils.isNotEmpty(outputText)) {
                 resp.addChoice(new ChatChoice(0, created, "stop", new AssistantMessage(outputText)));
@@ -603,8 +685,15 @@ public class OpenaiResponsesResponseParser {
             cacheReadInputTokens = inputTokensDetails.get("cached_tokens").getLong();
         }
 
-        if (inputTokens > 0 || outputTokens > 0 || cacheReadInputTokens > 0) {
-            return new AiUsage(inputTokens, 0L, outputTokens, totalTokens,
+        // 读取思考 token 统计（DeepSeek Responses: output_tokens_details.reasoning_tokens）
+        long thinkTokens = 0L;
+        ONode outputTokensDetails = usageNode.getOrNull("output_tokens_details");
+        if (outputTokensDetails != null) {
+            thinkTokens = outputTokensDetails.get("reasoning_tokens").getLong();
+        }
+
+        if (inputTokens > 0 || outputTokens > 0 || cacheReadInputTokens > 0 || thinkTokens > 0) {
+            return new AiUsage(inputTokens, thinkTokens, outputTokens, totalTokens,
                     0L, cacheReadInputTokens, usageNode);
         }
 
