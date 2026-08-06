@@ -112,7 +112,7 @@ public class HierarchicalCompressionStrategy implements CompressionStrategy {
         try {
             // 正常路径仅调用一次；确认 PTL 后只执行一次两段式降级。
             CallBudget callBudget = new CallBudget(MAX_MODEL_CALLS);
-            String candidate = mergeWithSingleSplit(chatModel,
+            String candidate = mergeWithSingleSplit(chatModel, trace,
                     lastSummary, pureExpired, callBudget);
             candidate = limitSummary(candidate);
 
@@ -132,10 +132,10 @@ public class HierarchicalCompressionStrategy implements CompressionStrategy {
         }
     }
 
-    private String mergeWithSingleSplit(ChatModel chatModel, String baseSummary,
+    private String mergeWithSingleSplit(ChatModel chatModel, ReActTrace trace, String baseSummary,
                                         List<ChatMessage> history, CallBudget callBudget) throws Throwable {
         try {
-            return mergeOnce(chatModel, baseSummary, history, callBudget);
+            return mergeOnce(chatModel, trace, baseSummary, history, callBudget);
         } catch (Throwable e) {
             if (e instanceof Error) {
                 throw e;
@@ -155,14 +155,14 @@ public class HierarchicalCompressionStrategy implements CompressionStrategy {
 
             // 固定两段式降级：先合并较旧分块，再以中间摘要合并较新分块；分块仍 PTL 时直接失败。
             // 中间摘要需 limitSummary 防止过长导致第二块 PTL；最终结果由 compress 统一截断。
-            String intermediate = limitSummary(mergeOnce(chatModel, baseSummary,
+            String intermediate = limitSummary(mergeOnce(chatModel, trace, baseSummary,
                     new ArrayList<>(history.subList(0, splitAt)), callBudget));
-            return mergeOnce(chatModel, intermediate,
+            return mergeOnce(chatModel, trace, intermediate,
                     new ArrayList<>(history.subList(splitAt, history.size())), callBudget);
         }
     }
 
-    private String mergeOnce(ChatModel chatModel, String baseSummary,
+    private String mergeOnce(ChatModel chatModel, ReActTrace trace, String baseSummary,
                              List<ChatMessage> history, CallBudget callBudget) throws Throwable {
         String newHistoryText = CompressionUtil.formatMessages(
                 history, CompressionUtil.DEFAULT_MAX_TOOL_RESULT_LENGTH);
@@ -182,6 +182,7 @@ public class HierarchicalCompressionStrategy implements CompressionStrategy {
         callBudget.acquire();
         ChatResponse resp = chatModel.prompt(userData)
                 .options(o -> {
+                    o.httpCustomizeAdd(trace.getOptions().getModelOptions().httpCustomize());
                     o.agentName(HierarchicalCompressionStrategy.class.getSimpleName());
                     o.systemPrompt(systemInstruction);
                 })

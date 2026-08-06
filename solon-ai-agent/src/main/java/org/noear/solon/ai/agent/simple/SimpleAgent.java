@@ -311,7 +311,9 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                     .prompt(finalPrompt)
                     .session(chatSession)
                     .options(o -> {
+                        o.httpCustomizeAdd(trace.getOptions().httpCustomize());
                         o.agentName(trace.getAgentName());
+                        o.toolContextPut(options.toolContext());
 
                         //配置工具
                         o.toolAdd(options.tools());
@@ -321,10 +323,10 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                             trace.getProtocol().injectAgentTools(session.getContext(), this, o::toolAdd);
                         }
 
-                        o.toolContextPut(options.toolContext());
+
                         o.talentAdd(options.talents());
 
-                        for(RankEntity<SimpleInterceptor> item : options.interceptors()) {
+                        for (RankEntity<SimpleInterceptor> item : options.interceptors()) {
                             //内部已支持启用控制
                             o.interceptorAdd(item.index, item.target);
                         }
@@ -519,7 +521,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         }
 
         public Builder attrs(Map<String, Object> vals) {
-            if(Utils.isNotEmpty(vals)) {
+            if (Utils.isNotEmpty(vals)) {
                 config.getDefaultOptions().getAttrs().putAll(vals);
             }
             return this;

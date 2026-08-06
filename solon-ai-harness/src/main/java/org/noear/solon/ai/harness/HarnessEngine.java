@@ -34,8 +34,6 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.hitl.BashToolStrategy;
-import org.noear.solon.ai.harness.hitl.WriteToolStrategy;
-import org.noear.solon.ai.harness.hitl.WebToolStrategy;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 
 import org.noear.solon.ai.harness.permission.PermissionRule;
@@ -63,9 +61,13 @@ import org.noear.solon.ai.talents.web.WebsearchTalent;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
+import org.noear.solon.net.http.HttpUtils;
 
+import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 
 /**
  * 马具引擎
@@ -388,7 +390,7 @@ public class HarnessEngine {
         return options.getMountManager().getMount(alias);
     }
 
-    public SkillDir getSkill(String name){
+    public SkillDir getSkill(String name) {
         return options.getMountManager().getSkill(name);
     }
 
@@ -478,7 +480,7 @@ public class HarnessEngine {
     }
 
     public ChatModel getModelOrDefInstance(String name) {
-        ChatConfig tmp =  options.getModelOrDef(name);
+        ChatConfig tmp = options.getModelOrDef(name);
 
         if (tmp == null) {
             return null;
@@ -526,17 +528,23 @@ public class HarnessEngine {
 
     public void setMemoryRelevanceCount(int n) {
         options.setMemoryRelevanceCount(n);
-        if (memoryTalent != null) { memoryTalent.relevanceCount(n); }
+        if (memoryTalent != null) {
+            memoryTalent.relevanceCount(n);
+        }
     }
 
     public void setMemoryPriorityCount(int n) {
         options.setMemoryPriorityCount(n);
-        if (memoryTalent != null) { memoryTalent.priorityCount(n); }
+        if (memoryTalent != null) {
+            memoryTalent.priorityCount(n);
+        }
     }
 
     public void setMemorySummaryLength(int n) {
         options.setMemorySummaryLength(n);
-        if (memoryTalent != null) { memoryTalent.summaryLength(n); }
+        if (memoryTalent != null) {
+            memoryTalent.summaryLength(n);
+        }
     }
 
     public void setSandboxEnabled(Boolean sandboxEnabled) {
@@ -607,6 +615,47 @@ public class HarnessEngine {
         }
     }
 
+    // ========== 引擎级 http 定制（运行时动态切换） ==========
+
+    /**
+     * 动态切换引擎级代理（host/port 形式）。O(1) 生效，无需重建 Agent/模型。
+     *
+     * @since 4.0.5
+     */
+    public void setHttpProxy(String host, int port) {
+        options.setHttpProxy(new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port)));
+    }
+
+    /**
+     * 动态切换引擎级代理（java.net.Proxy 形式）；传 null 恢复直连。
+     *
+     * @since 4.0.5
+     */
+    public void setHttpProxy(Proxy proxy) {
+        options.setHttpProxy(proxy);
+    }
+
+    public Proxy getHttpProxy() {
+        return options.getHttpProxy();
+    }
+
+    /**
+     * 动态设置引擎级 http 定制钩子（每次 LLM 请求创建 HttpUtils 后执行）。
+     *
+     * @since 4.0.5
+     */
+    public void addHttpCustomize(Consumer<HttpUtils> httpCustomize) {
+        options.addHttpCustomize(httpCustomize);
+    }
+
+    public void setHttpCustomize(Consumer<HttpUtils> httpCustomize) {
+        options.setHttpCustomize(httpCustomize);
+    }
+
+    public Consumer<HttpUtils> getHttpCustomize() {
+        return options.getHttpCustomize();
+    }
+
     // ========== 动态模型管理 ==========
 
     public void setDefaultModel(String defaultModel) {
@@ -621,10 +670,6 @@ public class HarnessEngine {
     }
 
     public void addModel(ChatConfig config) {
-        if (Assert.isEmpty(config.getUserAgent())) {
-            config.setUserAgent(options.getUserAgent());
-        }
-
         options.addModel(config);
 
         if (mainAgent != null && mainAgent.getModel().getNameOrModel().equals(config.getNameOrModel())) {
@@ -692,12 +737,12 @@ public class HarnessEngine {
         if (tools != null) {
             options.getTools().addAll(tools);
         }
-    
+
         options.getDisallowedTools().clear();
         if (disallowedTools != null) {
             options.getDisallowedTools().addAll(disallowedTools);
         }
-    
+
         agentLock.lock();
         try {
             if (this.mainAgent != null) {
@@ -707,7 +752,7 @@ public class HarnessEngine {
             agentLock.unlock();
         }
     }
-    
+
     /**
      * 动态撤销一个工具的权限（禁用）
      */
@@ -1197,6 +1242,41 @@ public class HarnessEngine {
             return this;
         }
 
+        /**
+         * 引擎级代理（host/port 形式），构建期配置。
+         *
+         * @since 4.0.5
+         */
+        public Builder httpProxy(String host, int port) {
+            options.setHttpProxy(new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port)));
+            return this;
+        }
+
+        /**
+         * 引擎级代理（java.net.Proxy 形式），构建期配置；传 null 表示直连。
+         *
+         * @since 4.0.5
+         */
+        public Builder httpProxy(Proxy proxy) {
+            options.setHttpProxy(proxy);
+            return this;
+        }
+
+        /**
+         * 引擎级 http 定制钩子（每次 LLM 请求创建 HttpUtils 后执行，可覆盖/追加 proxy、header、timeout 等）。
+         *
+         * @since 4.0.5
+         */
+        public Builder httpCustomizeAdd(Consumer<HttpUtils> httpCustomize) {
+            options.addHttpCustomize(httpCustomize);
+            return this;
+        }
+
+        public Builder httpCustomizeSet(Consumer<HttpUtils> httpCustomize) {
+            options.setHttpCustomize(httpCustomize);
+            return this;
+        }
+
         public Builder maxTurns(Integer maxTurns) {
             options.setMaxTurns(maxTurns);
             return this;
@@ -1386,7 +1466,7 @@ public class HarnessEngine {
 
         public Builder modelAdd(Iterable<ChatConfig> models) {
             for (ChatConfig val : models) {
-                options.getModels().put(val.getNameOrModel(), val); //build 时再加 ua
+                options.addModel(val);
             }
             return this;
         }
@@ -1418,15 +1498,6 @@ public class HarnessEngine {
 
         public HarnessEngine build() {
             Objects.nonNull(options.getSessionProvider());
-
-            //缺省 userAgent 补尝
-            if (Assert.isNotEmpty(options.getUserAgent())) {
-                for (ChatConfig m1 : options.getModels().values()) {
-                    if (Assert.isEmpty(m1.getUserAgent())) {
-                        m1.setUserAgent(options.getUserAgent());
-                    }
-                }
-            }
 
             return new HarnessEngine(options);
         }

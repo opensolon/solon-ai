@@ -71,12 +71,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         this.session = session;
         this.originalPrompt = prompt;
 
-        this.options = new ChatOptions();
-        this.options.putAll(config.getModelOptions());
-        this.options.role(config.getModelOptions().role());
-        this.options.instruction(config.getModelOptions().instruction());
-        this.options.systemPrompt(config.getModelOptions().systemPrompt());
-        this.options.outputSchema(config.getModelOptions().outputSchema());
+        this.options = config.getModelOptions().copy();
     }
 
     public ChatRequestDesc session(ChatSession session) {

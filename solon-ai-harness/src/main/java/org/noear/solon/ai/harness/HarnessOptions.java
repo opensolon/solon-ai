@@ -31,13 +31,16 @@ import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.ai.talents.gateway.openapi.ApiSource;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
+import org.noear.solon.net.http.HttpUtils;
 
-import java.io.Serializable;
+import java.net.Proxy;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.function.Consumer;
 
 /**
  * 马具运行时配置（内部使用）
@@ -46,7 +49,7 @@ import java.util.concurrent.CopyOnWriteArraySet;
  * @since 4.0.0
  */
 @Preview("4.0")
-class HarnessOptions implements Serializable {
+class HarnessOptions implements NonSerializable {
 
     // ========== 基础路径 ==========
     private final String harnessHome;
@@ -55,6 +58,10 @@ class HarnessOptions implements Serializable {
     // ========== 提示词 ==========
     private volatile String systemPrompt;
     private volatile String userAgent;
+
+    // ========== 引擎级 http 定制（proxy 动态切换） ==========
+    private transient volatile Proxy httpProxy; //引擎级动态代理
+    private transient volatile Consumer<HttpUtils> httpCustomize; //引擎级通用 http 钩子
 
     // ========== 主代理工具权限 ==========
     private Set<String> tools = new CopyOnWriteArraySet<>();
@@ -94,7 +101,9 @@ class HarnessOptions implements Serializable {
     private volatile int modelRetries = 3;
 
     // ========== 并行任务控制 ==========
-    /** multitask 单次最大并行任务数，0 表示不限制 */
+    /**
+     * multitask 单次最大并行任务数，0 表示不限制
+     */
     private volatile int multitaskMaxTasks = 5;
 
     // ========== 缓存控制 ==========
@@ -183,6 +192,32 @@ class HarnessOptions implements Serializable {
 
     void setUserAgent(String userAgent) {
         this.userAgent = userAgent;
+    }
+
+    Proxy getHttpProxy() {
+        return httpProxy;
+    }
+
+    void setHttpProxy(Proxy httpProxy) {
+        this.httpProxy = httpProxy;
+    }
+
+    Consumer<HttpUtils> getHttpCustomize() {
+        return httpCustomize;
+    }
+
+    void addHttpCustomize(Consumer<HttpUtils> consumer) {
+        if (consumer != null) {
+            if (this.httpCustomize == null) {
+                this.httpCustomize = consumer;
+            } else {
+                this.httpCustomize = this.httpCustomize.andThen(consumer);
+            }
+        }
+    }
+
+    void setHttpCustomize(Consumer<HttpUtils> consumer) {
+        this.httpCustomize = consumer;
     }
 
     Set<String> getTools() {
@@ -472,10 +507,6 @@ class HarnessOptions implements Serializable {
     }
 
     void addModel(ChatConfig chatConfig) {
-        if (Assert.isEmpty(chatConfig.getUserAgent())) {
-            chatConfig.setUserAgent(this.userAgent);
-        }
-
         models.put(chatConfig.getNameOrModel(), chatConfig);
     }
 

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.intercept.compress;
 
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -447,13 +448,15 @@ public class CompressionUtil {
      * @throws InterruptedException 线程中断
      * @since 4.0.0
      */
-    public static String compressWithPTLRetry(ChatModel chatModel, int maxRetries,
-                                               List<ChatMessage> filtered,
-                                               String systemInstruction,
-                                               String agentName,
-                                               int maxToolResultLength,
-                                               String userDataPrefix,
-                                               String userDataSuffix) throws InterruptedException {
+    public static String compressWithPTLRetry(ChatModel chatModel,
+                                              int maxRetries,
+                                              ReActTrace trace,
+                                              List<ChatMessage> filtered,
+                                              String systemInstruction,
+                                              String agentName,
+                                              int maxToolResultLength,
+                                              String userDataPrefix,
+                                              String userDataSuffix) throws InterruptedException {
         List<ChatMessage> currentBatch = filtered;
 
         for (int ptlAttempt = 0; ptlAttempt <= MAX_PTL_RETRIES; ptlAttempt++) {
@@ -475,6 +478,7 @@ public class CompressionUtil {
                         .callWithRetry(() -> {
                             ChatResponse resp = chatModel.prompt(userData)
                                     .options(o -> {
+                                        o.httpCustomizeAdd(trace.getOptions().getModelOptions().httpCustomize());
                                         o.agentName(agentName);
                                         o.systemPrompt(systemInstruction);
                                     })

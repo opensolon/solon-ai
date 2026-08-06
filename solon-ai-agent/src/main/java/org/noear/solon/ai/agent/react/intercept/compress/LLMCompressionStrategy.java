@@ -78,7 +78,7 @@ public class LLMCompressionStrategy implements CompressionStrategy {
         try {
             // PTL 重试循环
             String summary = CompressionUtil.compressWithPTLRetry(
-                    chatModel, Math.max(1, maxRetries), filtered,
+                    chatModel, Math.max(1, maxRetries), trace, filtered,
                     systemInstruction,
                     LLMCompressionStrategy.class.getSimpleName(),
                     CompressionUtil.DEFAULT_MAX_TOOL_RESULT_LENGTH,

@@ -11,7 +11,6 @@ package org.noear.solon.ai.agent.team.task;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.exception.LlmNoReturnException;
 import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.agent.team.TeamAgent;
@@ -33,7 +32,6 @@ import org.noear.solon.flow.Node;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.publisher.FluxSink;
 
 import java.util.*;
 import java.util.regex.Matcher;
@@ -198,7 +196,7 @@ public class SupervisorTask implements NamedTaskComponent {
                 if (FeedbackTool.TOOL_NAME.equals(call.getName())) {
                     Object reasonObj = call.getArguments() == null ? null : call.getArguments().get("reason");
                     String reason = reasonObj == null ? "" : String.valueOf(reasonObj);
-                    
+
                     // 模型常一边写「指派/派 天气专家」一边误调 feedback。
                     // 正文或 reason 中若存在显式指派句式，优先继续协作。
                     String assigned = extractAssignedAgentName(decision);
@@ -213,26 +211,26 @@ public class SupervisorTask implements NamedTaskComponent {
                         }
                         return;
                     }
-                    
+
                     // 真正需要外部反馈：挂起
                     decision = FeedbackTool.asSuspendDecision(reason);
                     break;
                 }
             }
         }
-    
+
         trace.setLastDecision(decision);
-    
+
         for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
             if (item.target.isEnabled()) {
                 item.target.onSupervisorDecision(trace, decision);
             }
         }
-    
+
         if (trace.getSession().isPending()) {
             return;
         }
-    
+
         commitRoute(trace, decision, context);
     }
 
@@ -250,7 +248,7 @@ public class SupervisorTask implements NamedTaskComponent {
         if (FeedbackTool.isSuspend(decision)) {
             ONode oNode = ONode.ofJson(decision);
             String reason = oNode.get("reason").getString();
-            
+
             // 仅当 reason 是「显式指派成员名」时才抢路由；
             // 普通「请用户补充目的地」里顺带提到专家名不算路由。
             String assigned = extractAssignedAgentName(Assert.isEmpty(reason) ? decision : reason);
@@ -261,7 +259,7 @@ public class SupervisorTask implements NamedTaskComponent {
                 }
                 return;
             }
-            
+
             // 真正需要外部反馈：挂起流程并记录原因
             trace.setFinalAnswer(reason);
             if (trace.getSession() != null) {
@@ -406,36 +404,36 @@ public class SupervisorTask implements NamedTaskComponent {
         if (Assert.isEmpty(text)) {
             return false;
         }
-        
+
         // 移除 Markdown 格式字符（加粗/斜体的 * 和代码的 `），保留下划线
         String cleanText = text.replaceAll("[\\*\\`]", "").trim();
         if (Assert.isEmpty(cleanText)) {
             return false;
         }
-                    
+
         // 1. 全文恰为成员名
         if (config.getAgentMap().containsKey(cleanText)) {
             routeTo(context, trace, normalizeAgentName(cleanText));
             return true;
         }
-            
+
         // 2. 显式指派句式中的成员名
         String assigned = extractAssignedAgentName(cleanText);
         if (Assert.isNotEmpty(assigned)) {
             routeTo(context, trace, assigned);
             return true;
         }
-        
+
         // 3. 成员名（agent name）最后一次出现
         String byName = findLastAgentName(cleanText);
         if (Assert.isNotEmpty(byName)) {
             routeTo(context, trace, byName);
             return true;
         }
-        
+
         return false;
     }
-        
+
     /**
      * 从「指派/派发/派/next/route」类句式中提取目标 Agent 的规范名。
      * <p>支持成员 name 以及角色 role（仅在显式指派句式中），避免长文复述误命中。</p>
@@ -511,14 +509,14 @@ public class SupervisorTask implements NamedTaskComponent {
         }
         return exact != null ? exact : partial;
     }
-    
+
     protected String findLastAgentName(String cleanText) {
         if (Assert.isEmpty(cleanText)) {
             return null;
         }
         String lastFoundAgent = null;
         int lastIndex = -1;
-    
+
         for (String name : config.getAgentMap().keySet()) {
             Pattern p = Pattern.compile("(?i)(?<=^|[^a-zA-Z0-9_])" + Pattern.quote(name) + "(?=[^a-zA-Z0-9_]|$)");
             Matcher matcher = p.matcher(cleanText);
@@ -531,7 +529,7 @@ public class SupervisorTask implements NamedTaskComponent {
         }
         return lastFoundAgent;
     }
-    
+
     protected String normalizeAgentName(String name) {
         // IgnoreCaseMap 下返回规范 key
         for (String key : config.getAgentMap().keySet()) {
@@ -546,38 +544,41 @@ public class SupervisorTask implements NamedTaskComponent {
      * 带重试机制的模型调用
      */
     protected ChatResponse callWithRetry(Node node, TeamTrace trace, List<ChatMessage> messages) throws InterruptedException {
-        ChatRequestDesc req = config.getChatModel().prompt(messages).options(o -> {
-            o.agentName(trace.getAgentName());
+        ChatRequestDesc req = config.getChatModel()
+                .prompt(messages)
+                .options(o -> {
+                    o.httpCustomizeAdd(trace.getOptions().getModelOptions().httpCustomize());
+                    o.agentName(trace.getAgentName());
 
-            // Supervisor 自行解析 tool_calls（尤其是 feedback），避免 returnDirect 抹掉正文中的路由意图
-            o.autoToolCall(false);
-                        
-            if (trace.getOptions().isFeedbackMode()) {
-                o.toolAdd(FeedbackTool.getTool(
-                        trace.getOptions().getFeedbackDescription(trace),
-                        trace.getOptions().getFeedbackReasonDescription(trace)));
-            }
+                    // Supervisor 自行解析 tool_calls（尤其是 feedback），避免 returnDirect 抹掉正文中的路由意图
+                    o.autoToolCall(false);
 
-            o.toolAdd(trace.getOptions().getTools());
-            config.getProtocol().injectSupervisorTools(trace.getContext(), o::toolAdd);
-            
-            o.toolContextPut(trace.getOptions().getToolContext());
-                
-            for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
-                //内部已支持启用控制
-                o.interceptorAdd(item.index, item.target);
-            }
-            
-            o.optionSet(trace.getOptions().getModelOptions().options());
-            // 覆盖 optionSet 可能带回的 autoToolCall=true
-            o.autoToolCall(false);
-            
-            // 从 Agent 级选项复制缓存控制配置
-            ModelOptionsAmend<?, ?> agentOptions = trace.getOptions().getModelOptions();
-            if (agentOptions.cacheControl() != null) {
-                o.cacheControl(agentOptions.cacheControl());
-            }
-        });
+                    if (trace.getOptions().isFeedbackMode()) {
+                        o.toolAdd(FeedbackTool.getTool(
+                                trace.getOptions().getFeedbackDescription(trace),
+                                trace.getOptions().getFeedbackReasonDescription(trace)));
+                    }
+
+                    o.toolAdd(trace.getOptions().getTools());
+                    config.getProtocol().injectSupervisorTools(trace.getContext(), o::toolAdd);
+
+                    o.toolContextPut(trace.getOptions().getToolContext());
+
+                    for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
+                        //内部已支持启用控制
+                        o.interceptorAdd(item.index, item.target);
+                    }
+
+                    o.optionSet(trace.getOptions().getModelOptions().options());
+                    // 覆盖 optionSet 可能带回的 autoToolCall=true
+                    o.autoToolCall(false);
+
+                    // 从 Agent 级选项复制缓存控制配置
+                    ModelOptionsAmend<?, ?> agentOptions = trace.getOptions().getModelOptions();
+                    if (agentOptions.cacheControl() != null) {
+                        o.cacheControl(agentOptions.cacheControl());
+                    }
+                });
 
         for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
             if (item.target.isEnabled()) {

@@ -16,7 +16,6 @@
 package org.noear.solon.ai.harness.agent;
 
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 
@@ -125,6 +124,20 @@ public class AgentFactory {
             if (engine.getCacheControl() != null) {
                 o.cacheControl(engine.getCacheControl());
             }
+
+            o.httpCustomizeAdd(http -> {
+                if (Assert.isNotEmpty(engine.getUserAgent())) {
+                    http.userAgent(engine.getUserAgent());
+                }
+
+                if (engine.getHttpProxy() != null) {
+                    http.proxy(engine.getHttpProxy());
+                }
+
+                if (engine.getHttpCustomize() != null) {
+                    engine.getHttpCustomize().accept(http);
+                }
+            });
         });
 
         return builder;

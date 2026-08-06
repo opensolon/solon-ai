@@ -13,7 +13,7 @@ public class LlmDemo {
 
         chatModel.prompt("xxx")
                 .options(o -> {
-                    o.httpCustomize(http -> {
+                    o.httpCustomizeAdd(http -> {
                         http.userAgent("");
                     });
                 }).call();

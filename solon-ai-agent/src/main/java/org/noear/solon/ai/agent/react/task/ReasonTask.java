@@ -427,19 +427,24 @@ public class ReasonTask {
         return trace.getOptions().getChatModel()
                 .prompt(messages)
                 .options(o -> {
+                    o.httpCustomizeAdd(trace.getOptions().getModelOptions().httpCustomize());
                     o.agentName(trace.getAgentName());
+                    o.autoToolCall(false);
+                    o.toolContextPut(trace.getOptions().getToolContext());
+
                     if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
                         o.toolAdd(trace.getOptions().getTools());
                         o.toolAdd(trace.getProtocolTools());
                     }
-                    o.autoToolCall(false);
-                    o.toolContextPut(trace.getOptions().getToolContext());
+
                     for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
                         o.interceptorAdd(entity.index, entity.target);
                     }
+
                     if (trace.getOptions().getOutputSchema() != null) {
                         trace.getOptions().getChatModel().getDialect().prepareOutputFormatOptions(o);
                     }
+
                     o.optionSet(trace.getOptions().getModelOptions().options());
                     if (trace.getOptions().getCacheControl() != null) {
                         o.cacheControl(trace.getOptions().getCacheControl());

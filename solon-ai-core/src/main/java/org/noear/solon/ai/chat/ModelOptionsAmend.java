@@ -18,11 +18,11 @@ package org.noear.solon.ai.chat;
 import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.Nullable;
+import org.noear.solon.net.http.HttpUtils;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -46,6 +46,8 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     static final String RESPONSE_FORMAT = "response_format";
     static final String REASONING_EFFORT = "reasoning_effort";
     static final String THINKING = "thinking";
+
+    protected Consumer<HttpUtils> httpCustomize;
 
     protected final AtomicBoolean autoToolCall;
 
@@ -83,11 +85,13 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
 
     public void putAll(ModelOptionsAmend<?, X> from) {
         if (from != null) {
+            httpCustomize = from.httpCustomize;
+
             autoToolCall.set(from.autoToolCall.get());
 
             toolContext.putAll(from.toolContext);
 
-            if(Assert.isNotEmpty(from.options)) {
+            if (Assert.isNotEmpty(from.options)) {
                 //支持配置形态，转为旨类型（llm 需要强类型）
                 for (Map.Entry<String, Object> entry : from.options.entrySet()) {
                     if (entry.getValue() instanceof String) {
@@ -114,13 +118,34 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
             talents.putAll(from.talents);
             interceptors.putAll(from.interceptors);
 
-            if(from.cacheControl != null) {
+            if (from.cacheControl != null) {
                 this.cacheControl = from.cacheControl;
             }
         }
     }
 
     //===================
+    public Consumer<HttpUtils> httpCustomize() {
+        return httpCustomize;
+    }
+
+    public T httpCustomizeAdd(Consumer<HttpUtils> customize) {
+        if (customize != null) {
+            if (httpCustomize == null) {
+                httpCustomize = customize;
+            } else {
+                httpCustomize = httpCustomize.andThen(customize);
+            }
+        }
+
+        return (T) this;
+    }
+
+    public T httpCustomizeSet(Consumer<HttpUtils> customize) {
+        httpCustomize = customize;
+        return (T) this;
+    }
+
     public T autoToolCall(boolean autoToolCall) {
         this.autoToolCall.set(autoToolCall);
         return (T) this;
@@ -483,7 +508,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
             optionRemove(REASONING_EFFORT);
             return (T) this;
         }
-                
+
         if (!"low".equals(normalized)
                 && !"medium".equals(normalized)
                 && !"high".equals(normalized)
@@ -491,10 +516,10 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
             // 非法值忽略，避免污染请求
             return (T) this;
         }
-    
+
         return optionSet(REASONING_EFFORT, normalized);
     }
-    
+
     /**
      * 常用选项：思考模式开关（统一语义，由各方言映射到供应商字段）
      * <p>{@code true} 开启思考；{@code false} 关闭思考；{@code null} 移除该选项。</p>

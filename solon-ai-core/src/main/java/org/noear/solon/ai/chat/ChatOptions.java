@@ -43,7 +43,19 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
     private String instruction;
     private String systemPrompt;
     private String outputSchema;
-    private Consumer<HttpUtils> httpCustomize;
+
+    protected ChatOptions copy() {
+        ChatOptions tmp = new ChatOptions();
+        tmp.putAll(this);
+
+        tmp.agentName = this.agentName;
+        tmp.role = this.role;
+        tmp.instruction = this.instruction;
+        tmp.systemPrompt = this.systemPrompt;
+        tmp.outputSchema = this.outputSchema;
+
+        return tmp;
+    }
 
     /**
      * 代理名字（用于打印或管理）
@@ -119,17 +131,11 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
         return this;
     }
 
-    public Consumer<HttpUtils> httpCustomize() {
-        return httpCustomize;
-    }
-
+    /**
+     * @deprecated 4.0.5 {@link #httpCustomizeAdd(Consumer)}
+     */
+    @Deprecated
     public ChatOptions httpCustomize(Consumer<HttpUtils> customize) {
-        if (httpCustomize == null) {
-            httpCustomize = customize;
-        } else {
-            httpCustomize = httpCustomize.andThen(customize);
-        }
-
-        return this;
+        return httpCustomizeAdd(customize);
     }
 }

@@ -71,7 +71,7 @@ public class KeyInfoExtractionStrategy implements CompressionStrategy {
 
         try {
             String keyInfo = CompressionUtil.compressWithPTLRetry(
-                    chatModel, maxRetries, filtered,
+                    chatModel, maxRetries, trace, filtered,
                     systemInstruction,
                     KeyInfoExtractionStrategy.class.getSimpleName(),
                     CompressionUtil.DEFAULT_MAX_TOOL_RESULT_LENGTH,
