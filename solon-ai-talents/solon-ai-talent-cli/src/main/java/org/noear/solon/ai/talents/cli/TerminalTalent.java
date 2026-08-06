@@ -472,7 +472,7 @@ public class TerminalTalent extends AbsTalent {
         sb.append("  - **工作区（默认作用域）**: 你的主目录，支持读写。所有文件查找（ls/glob/grep/read）与路径解析默认都以工作区为根，使用相对路径访问（如 `src/app.java`）。\n");
 
         if(hasMount) {
-            sb.append("  - **挂载点（仅按需访问）**: 以 `@` 开头的逻辑路径（别名），对应一个真实的物理目录（通过环境变量引用）。见下方挂载点清单。**仅当用户的提示词中明确提及了具体的挂载点名时**（如 `@global-skills`、`@workspace-agents`），才去对应挂载点下查找。\n");
+            sb.append("  - **挂载点（仅按需访问）**: 以 `@` 开头的逻辑路径（如 `@pool1/bin/tool/`），对应一个真实的物理目录。见下方挂载点清单。**仅当用户的提示词中明确提及了具体的挂载点名时**（如 `@global-skills`、`@workspace-agents`），才去对应挂载点下查找。\n");
         }
 
         // 挂载点清单表格
@@ -498,7 +498,7 @@ public class TerminalTalent extends AbsTalent {
 
         if (sandboxEnabled) {
             if (hasMount) {
-                sb.append("  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`) 或逻辑路径 (@pool)。\n");
+                sb.append("  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`) 或逻辑路径 (`@pool1/src/app.java`)。\n");
             } else {
                 sb.append("  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`)。\n");
             }
@@ -524,13 +524,13 @@ public class TerminalTalent extends AbsTalent {
 
         if (sandboxEnabled) {
             if (hasMount) {
-                sb.append("- **命令执行**: 在 `bash` 中，直接使用逻辑路径（如 `@pool1/bin/tool`），系统会自动转换。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。\n");
+                sb.append("- **命令执行**: 在 `bash` 中，直接使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：`ls /users/`）。\n");
             } else {
                 sb.append("- **命令执行**: 在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。\n");
             }
         } else {
             if (hasMount) {
-                sb.append("- **命令执行**: 在 `bash` 中，直接使用逻辑路径（如 `@pool1/bin/tool`），系统会自动转换。支持绝对路径访问。\n");
+                sb.append("- **命令执行**: 在 `bash` 中，直接使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换。也支持绝对路径访问。\n");
             } else {
                 sb.append("- **命令执行**: 在 `bash` 中支持绝对路径访问。\n");
             }
@@ -577,7 +577,7 @@ public class TerminalTalent extends AbsTalent {
     // --- 1. 执行命令 ---
     @ToolMapping(
             name = "bash",
-            description = "在终端执行非交互式 Shell 指令。支持多行命令与逻辑路径（如 @pool）自动转环境变量。"
+            description = "在终端执行非交互式 Shell 指令。支持多行命令与逻辑路径（如 `cd @pool1/bin/tool/`）。"
     )
     public String bash(@Param(value = "command", description = "要执行的指令。") String command,
                        @Param(name = "timeout", required = false, defaultValue = "120000", description = "可选超时时间，单位为毫秒") Integer timeout,

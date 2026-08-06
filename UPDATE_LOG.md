@@ -18,6 +18,7 @@
 * 优化 solon-ai-dialect-openai openai-responses 方言适配
 * 优化 solon-ai-harness TaskTalent 增加 maxTasks 限制
 * 优化 solon-ai-talent-memory 引导词及搜索能力
+* 优化 solon-ai-talent-cli TerminalTalent 引导词
 * 优化 solon-ai-talent-mount MountManager 添加 disallowSkills
 * 修复 solon-ai-talent-cli Windows 环境变量可能识别失误的问题
 * 修复 solon-ai-talent-gateway OpenApiV2Resolver 可能无限递归解析的问题
