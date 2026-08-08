@@ -209,9 +209,13 @@ public class OpenaiResponsesResponseParser {
                     StreamState state = resp.attrAs(STREAM_STATE_KEY);
                     if (state != null && state.currentReasoningContent != null) {
                         state.currentReasoningContent.append(delta);
+                        resp.addChoice(new ChatChoice(0, new Date(), null, new AssistantMessage(delta, true)));
+                        hasChoices = true;
+                    } else {
+                        // 未处于 reasoning item 上下文（缺 output_item.added / content_part.added 前置事件）：
+                        // 拒绝输出为 thinking 消息，防止非思考内容被误标
+                        log.warn("OpenAI Responses stream: ignored reasoning_text.delta without reasoning context: {}", delta);
                     }
-                    resp.addChoice(new ChatChoice(0, new Date(), null, new AssistantMessage(delta, true)));
-                    hasChoices = true;
                 }
             } else if ("response.reasoning_text.done".equals(eventType)) {
                 // 思考完成：增量已通过 delta 事件推送，此处无需额外处理
@@ -227,17 +231,28 @@ public class OpenaiResponsesResponseParser {
                     hasChoices = true;
                 }
             } else if ("response.content_part.delta".equals(eventType)) {
-                // 内容部分增量（通用）
+                // 内容部分增量（通用，按 part 类型分流：output_text 普通文本 / reasoning_text 思考）
                 ONode delta = oResp.get("delta");
                 if (delta != null) {
                     String text = delta.get("text").getString();
                     if (Utils.isNotEmpty(text)) {
                         StreamState state = resp.attrAs(STREAM_STATE_KEY);
-                        if (state != null && state.currentTextContent != null) {
-                            state.currentTextContent.append(text);
+                        if ("reasoning_text".equals(delta.get("type").getString())) {
+                            // 思考增量经 content_part.delta 到达：按 thinking 消息处理，防止被当作普通文本输出
+                            if (state != null && state.currentReasoningContent != null) {
+                                state.currentReasoningContent.append(text);
+                                resp.addChoice(new ChatChoice(0, new Date(), null, new AssistantMessage(text, true)));
+                                hasChoices = true;
+                            } else {
+                                log.warn("OpenAI Responses stream: ignored content_part.delta(reasoning_text) without reasoning context: {}", text);
+                            }
+                        } else {
+                            if (state != null && state.currentTextContent != null) {
+                                state.currentTextContent.append(text);
+                            }
+                            resp.addChoice(new ChatChoice(0, new Date(), null, new AssistantMessage(text)));
+                            hasChoices = true;
                         }
-                        resp.addChoice(new ChatChoice(0, new Date(), null, new AssistantMessage(text)));
-                        hasChoices = true;
                     }
                 }
             } else if ("response.function_call_arguments.delta".equals(eventType)) {

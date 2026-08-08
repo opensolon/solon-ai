@@ -212,4 +212,54 @@ public class OpenaiResponsesThinkParseTest {
         Assertions.assertEquals("reasoning", first.get("type").getString());
         Assertions.assertEquals("内部思考", first.get("content").get(0).get("text").getString());
     }
+
+    /**
+     * 流式：无 reasoning 上下文（缺 output_item.added / content_part.added 前置事件）时，
+     * reasoning_text.delta 应被丢弃而非输出为 thinking 消息（防止非思考内容被误标）
+     */
+    @Test
+    public void streamShouldDropReasoningDeltaWithoutContext() {
+        ChatResponseDefault resp = newResp(true);
+        String[] sse = new String[]{
+                "data: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"孤立增量\"}",
+                "data: {\"type\":\"response.completed\",\"response\":{\"model\":\"m\"}}"
+        };
+
+        for (String line : sse) {
+            dialect.parseResponseJson(new ChatConfig(), resp, line);
+        }
+
+        Assertions.assertTrue(resp.isFinished());
+        // 不应产生任何 thinking 消息
+        Assertions.assertTrue(resp.getChoices().stream().noneMatch(c -> c.getMessage().isThinking()));
+    }
+
+    /**
+     * 流式：content_part.delta 携带 reasoning_text 类型时，应按 thinking 消息处理
+     * （防止思考增量经通用 content_part.delta 事件被当作普通文本输出）
+     */
+    @Test
+    public void streamShouldParseReasoningContentPartDeltaAsThinking() {
+        ChatResponseDefault resp = newResp(true);
+        String[] sse = new String[]{
+                "data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"r1\",\"type\":\"reasoning\"}}",
+                "data: {\"type\":\"response.content_part.added\",\"part\":{\"type\":\"reasoning_text\"}}",
+                "data: {\"type\":\"response.content_part.delta\",\"delta\":{\"type\":\"reasoning_text\",\"text\":\"思考中\"}}",
+                "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"r1\",\"type\":\"reasoning\"}}",
+                "data: {\"type\":\"response.completed\",\"response\":{\"model\":\"m\"}}"
+        };
+
+        for (String line : sse) {
+            dialect.parseResponseJson(new ChatConfig(), resp, line);
+        }
+
+        Assertions.assertTrue(resp.isFinished());
+        // 应产生 thinking 消息且内容正确
+        org.noear.solon.ai.chat.ChatChoice thinking = resp.getChoices().stream()
+                .filter(c -> c.getMessage().isThinking())
+                .findFirst()
+                .orElse(null);
+        Assertions.assertNotNull(thinking);
+        Assertions.assertEquals("思考中", thinking.getMessage().getContent());
+    }
 }
