@@ -39,9 +39,6 @@ public class WebsearchTalent extends AbsTalent {
     private static final int TIMEOUT_MS = 30_000;
 
     private static final int DEFAULT_NUM_RESULTS = 8;
-    private static final int DEFAULT_CONTEXT_CHARS = 10000;
-    private static final String DEFAULT_LIVECRAWL = "fallback";
-    private static final String DEFAULT_TYPE = "auto";
 
     private static McpClientProvider mcpClient;
 
@@ -80,24 +77,18 @@ public class WebsearchTalent extends AbsTalent {
     @ToolMapping(name = "websearch", description = "执行实时web搜索")
     public String websearch(
             @Param(name = "query", description = "查询关键字") String query,
-            @Param(name = "numResults", required = false, defaultValue = "8", description = "返回的结果数量") Integer numResults,
-            @Param(name = "livecrawl", required = false, defaultValue = "fallback", description = "实时爬行模式 (fallback/preferred)") String livecrawl,
-            @Param(name = "type", required = false, defaultValue = "auto", description = "搜索类型 (auto/fast/deep)") String type,
-            @Param(name = "contextMaxCharacters", required = false, defaultValue = "10000", description = "针对LLM优化的最大字符数") Integer contextMaxCharacters
+            @Param(name = "numResults", required = false, defaultValue = "8", description = "返回的结果数量") Integer numResults
     ) throws Exception {
-        // 1. 准备参数 (保持不变)
+        // 1. 准备参数 (对齐 Exa web_search_exa 的 schema: query + numResults)
         Map<String, Object> args = new HashMap<>();
         args.put("query", query);
         args.put("numResults", numResults != null ? numResults : DEFAULT_NUM_RESULTS);
-        args.put("livecrawl", livecrawl != null ? livecrawl : DEFAULT_LIVECRAWL);
-        args.put("type", type != null ? type : DEFAULT_TYPE);
-        args.put("contextMaxCharacters", contextMaxCharacters != null ? contextMaxCharacters : DEFAULT_CONTEXT_CHARS);
 
         // 2. 通过 MCP 协议调用工具
         ToolResult result;
 
         try {
-            result = RetryUtil.callWithRetry(maxRetries, ()->
+            result = RetryUtil.callWithRetry(maxRetries, () ->
                     getMcpClient().callTool("web_search_exa", args));
         } catch (Exception e) {
             // 如果是超时相关的异常，转换为与 opencode 一致的文案

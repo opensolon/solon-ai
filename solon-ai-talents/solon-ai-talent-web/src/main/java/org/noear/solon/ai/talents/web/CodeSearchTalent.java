@@ -37,7 +37,7 @@ import java.util.Map;
 public class CodeSearchTalent extends AbsTalent {
     private static final String BASE_URL = "https://mcp.exa.ai/mcp?tools=get_code_context_exa";
     private static final int TIMEOUT_MS = 30_000;
-    private static final int DEFAULT_TOKENS = 5000;
+    private static final int DEFAULT_NUM_RESULTS = 8;
 
     private static McpClientProvider mcpClient;
 
@@ -74,33 +74,33 @@ public class CodeSearchTalent extends AbsTalent {
     }
 
     @ToolMapping(name = "codesearch", description =
-            "使用 Exa Code API 搜索并获取任何编程任务的相关上下文\n" +
+            "搜索并获取任何编程任务的相关上下文\n" +
                     "- 为库、SDK 和 API 提供最高质量且最实时的上下文信息\n" +
                     "- 适用于任何与编程相关的疑问或任务\n" +
                     "- 返回详尽的代码示例、技术文档和 API 参考\n" +
                     "- 针对寻找特定编程模式和解决方案进行了优化\n\n" +
                     "使用说明：\n" +
-                    "- 可调节 Token 数量 (1000-50000) 以获得精确或详尽的结果\n" +
-                    "- 默认 5000 Token 为大多数查询提供均衡的上下文\n" +
+                    "- 可调节返回的结果数量 (1-20) 以获得精确或详尽的结果\n" +
+                    "- 默认 8 条结果为大多数查询提供均衡的上下文\n" +
                     "- 支持关于框架、库、API 以及编程概念的查询\n" +
                     "- 示例：'React 状态管理'、'Spring Boot 响应式编程'、'Solon 插件开发'")
     public String codesearch(@Param(name = "query", description = "搜索查询词，用于查找 API、库和 SDK 的相关上下文。 " +
-                                 "例如：'React useState 钩子示例'、'Python pandas 数据框过滤'、" +
-                                 "'Express.js 中间件'、'Next.js 局部预渲染配置'")
-                         String query,
-                                          @Param(name = "tokensNum", required = false, defaultValue = "5000", description = "返回的 Token 数量 (1000-50000)。默认为 5000。 " +
-                                 "根据需要的上下文量进行调整：针对特定问题使用较低值，针对全面文档使用较高值。")
-                         Integer tokensNumObj) throws Throwable {
-        Integer tokensNum = null;
-        if (tokensNumObj instanceof Number) {
-            tokensNum = ((Number) tokensNumObj).intValue();
+                                     "例如：'React useState 钩子示例'、'Python pandas 数据框过滤'、" +
+                                     "'Express.js 中间件'、'Next.js 局部预渲染配置'")
+                             String query,
+                             @Param(name = "numResults", required = false, defaultValue = "8", description = "返回的结果数量 (1-20)。默认为 8。 " +
+                                     "根据需要的上下文量进行调整：针对特定问题使用较低值，针对全面文档使用较高值。")
+                             Integer numResultsObj) throws Throwable {
+        Integer numResults = null;
+        if (numResultsObj instanceof Number) {
+            numResults = ((Number) numResultsObj).intValue();
         }
-        int finalTokens = (tokensNum == null) ? DEFAULT_TOKENS : tokensNum;
+        int finalNumResults = (numResults == null) ? DEFAULT_NUM_RESULTS : numResults;
 
 
         Map<String, Object> toolArgs = new HashMap<>();
         toolArgs.put("query", query);
-        toolArgs.put("tokensNum", finalTokens);
+        toolArgs.put("numResults", finalNumResults);
 
         ToolResult result;
         try {
@@ -119,7 +119,6 @@ public class CodeSearchTalent extends AbsTalent {
             throw new RuntimeException("代码搜索出错: " + errorText);
         }
 
-        String title = "Code search: " + query;
         String output;
         if (Utils.isNotEmpty(result.getContent())) {
             output = result.getContent();
