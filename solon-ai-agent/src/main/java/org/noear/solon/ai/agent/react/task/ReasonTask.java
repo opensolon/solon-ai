@@ -36,6 +36,7 @@ import org.slf4j.LoggerFactory;
 import java.net.ConnectException;
 import java.util.*;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * ReAct 推理任务 (Reasoning)
@@ -363,14 +364,42 @@ public class ReasonTask {
 
     private @Nullable ChatResponse callWithRetry(ReActTrace trace, String systemPrompt) throws RuntimeException {
         int maxRetries = trace.getOptions().getMaxRetries();
-        final boolean[] streamEmitted = {false};
+        final AtomicBoolean streamEmitted = new AtomicBoolean(false);
 
         try {
             return new RetryTask()
                     .maxRetries(maxRetries)
                     .initialDelayMs(trace.getOptions().getRetryDelayMs())
                     // 流式响应已经对外输出后，重试会造成重复内容；直接保留并抛出原始异常。
-                    .retryIf(e -> !streamEmitted[0])
+                    .retryIf(e -> {
+                        // 1. 已经有流输出了，绝对不能重试，避免重复内容
+                        if (streamEmitted.get()) {
+                            return false;
+                        }
+
+                        // 2. 深度遍历 Cause 链，寻找特定异常或 HttpResponseException
+                        Throwable cause = e;
+                        while (cause != null) {
+                            // 网络/超时/无返回：网络瞬态故障，安全重试
+                            if (cause instanceof ConnectException ||
+                                    cause instanceof TimeoutException ||
+                                    cause instanceof LlmNoReturnException) {
+                                return true;
+                            }
+
+                            // HTTP 状态码精准控制
+                            if (cause instanceof HttpResponseException) {
+                                int code = ((HttpResponseException) cause).code();
+                                // 429 限流 或 5xx 服务端故障：允许重试；4xx 客户端参数错误：不重试
+                                return code == 429 || code >= 500;
+                            }
+
+                            cause = cause.getCause();
+                        }
+
+                        // 3. 其他未知异常（如 IOException、SocketException 等），默认重试
+                        return true;
+                    })
                     .onRetry((attempt, e) -> {
                         boolean rebuilt = false;
                         for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
@@ -405,7 +434,7 @@ public class ReasonTask {
                             response = req.stream()
                                     .takeUntil(r -> trace.isStreamCancelled())
                                     .doOnNext(resp -> {
-                                        streamEmitted[0] = true;
+                                        streamEmitted.set(true);
                                         trace.pushAgentEvent(new ReasonDeltaEvent(trace, resp, resp.getMessage()));
                                         trace.pushAgentEvent(new ReasonChunk(trace, resp, resp.getMessage()));
                                     })
@@ -454,35 +483,31 @@ public class ReasonTask {
     }
 
     private ChatResponse handleLastException(ReActTrace trace, Throwable lastException) {
-        if (lastException.getMessage() == null && lastException.getCause() != null) {
-            lastException = lastException.getCause();
-        }
-
-        if (lastException instanceof InterruptedException || lastException.getCause() instanceof InterruptedException) {
-            LOG.debug("InterruptedException");
+        // 1. 深度优先判断中断信号
+        if (findCause(lastException, InterruptedException.class) != null) {
+            LOG.debug("InterruptedException caught, agent execution aborted.");
             return null;
-        } else {
-            LOG.warn("ReActAgent [{}] call failed", config.getName(), lastException);
         }
 
-        // 设置故障状态并终止路由
+        // 2. 打印完整异常堆栈
+        LOG.warn("ReActAgent [{}] call failed", config.getName(), lastException);
+
+        // 3. 设置终止状态
         trace.setRoute(Agent.ID_END);
 
-        if (lastException instanceof LlmNoReturnException) {
+        // 4. 精准提炼 Cause 并设置友好的用户提示
+        HttpResponseException httpRespEx = findCause(lastException, HttpResponseException.class);
+
+        if (findCause(lastException, LlmNoReturnException.class) != null) {
             trace.setFinalAnswer("抱歉，模型服务没有内容返回。请稍后重试。");
         } else if (isTimeoutException(lastException)) {
-            LOG.warn("ReActAgent [{}] LLM call timeout ({}s)", config.getName(),
-                    trace.getOptions().getChatModel().getConfig().getTimeout().getSeconds());
             trace.setFinalAnswer("抱歉，模型服务响应超时。请稍后重试。");
         } else if (isConnectException(lastException)) {
-            LOG.warn("ReActAgent [{}] LLM connect failed ({}s)", config.getName(),
-                    trace.getOptions().getChatModel().getConfig().getTimeout().getSeconds());
             trace.setFinalAnswer("抱歉，模型服务连接失败。请稍后重试。");
-        } else if (lastException instanceof HttpResponseException) {
-            HttpResponseException e2 = (HttpResponseException) lastException;
-            trace.setFinalAnswer("抱歉，模型服务响应出错（CODE: " + e2.code() + "）。请稍后重试。");
+        } else if (httpRespEx != null) {
+            trace.setFinalAnswer("抱歉，模型服务响应出错（CODE: " + httpRespEx.code() + "）。请稍后重试。");
         } else {
-            // lastException 里可能有 html，不能直接展示
+            // 兜底提示（防止敏感堆栈或 HTML 泄露给终端）
             trace.setFinalAnswer("抱歉，暂时无法使用模型服务（具体参考日志）。请稍后重试。");
         }
 
@@ -490,37 +515,33 @@ public class ReasonTask {
     }
 
     private static boolean isTimeoutException(Throwable e) {
-        if (e instanceof TimeoutException || e.getCause() instanceof TimeoutException) {
-            return true;
-        }
-
-        if (e instanceof ConnectException && e.getMessage() != null) {
-            if (e.getMessage().contains(" timed out")) {
+        Throwable cause = e;
+        while (cause != null) {
+            if (cause instanceof TimeoutException) {
                 return true;
             }
-        }
-
-        if (e.getCause() instanceof ConnectException && e.getCause().getMessage() != null) {
-            if (e.getCause().getMessage().contains(" timed out")) {
+            if (cause.getMessage() != null && cause.getMessage().toLowerCase(Locale.ROOT).contains("timeout")) {
                 return true;
             }
+            cause = cause.getCause();
         }
-
-        if (e.getMessage() != null) {
-            if (e.getMessage().contains("Timeout")) {
-                return true;
-            }
-        }
-
         return false;
     }
 
     private static boolean isConnectException(Throwable e) {
-        if (e instanceof ConnectException || e.getCause() instanceof ConnectException) {
-            return true;
-        }
+        return findCause(e, ConnectException.class) != null;
+    }
 
-        return false;
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> T findCause(Throwable e, Class<T> clazz) {
+        Throwable cause = e;
+        while (cause != null) {
+            if (clazz.isInstance(cause)) {
+                return (T) cause;
+            }
+            cause = cause.getCause();
+        }
+        return null;
     }
 
     /**
