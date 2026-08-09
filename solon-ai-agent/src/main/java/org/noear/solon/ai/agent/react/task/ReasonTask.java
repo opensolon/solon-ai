@@ -33,6 +33,7 @@ import org.noear.solon.net.http.HttpResponseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.ConnectException;
 import java.util.*;
 import java.util.concurrent.TimeoutException;
 
@@ -473,6 +474,10 @@ public class ReasonTask {
             LOG.warn("ReActAgent [{}] LLM call timeout ({}s)", config.getName(),
                     trace.getOptions().getChatModel().getConfig().getTimeout().getSeconds());
             trace.setFinalAnswer("抱歉，模型服务响应超时。请稍后重试。");
+        } else if (isConnectException(lastException)) {
+            LOG.warn("ReActAgent [{}] LLM connect failed ({}s)", config.getName(),
+                    trace.getOptions().getChatModel().getConfig().getTimeout().getSeconds());
+            trace.setFinalAnswer("抱歉，模型服务连接失败。请稍后重试。");
         } else if (lastException instanceof HttpResponseException) {
             HttpResponseException e2 = (HttpResponseException) lastException;
             trace.setFinalAnswer("抱歉，模型服务响应出错（CODE: " + e2.code() + "）。请稍后重试。");
@@ -484,15 +489,37 @@ public class ReasonTask {
         return null;
     }
 
-    /**
-     * 判断是否为超时异常（覆盖 TimeoutException、blockLast 的 IllegalStateException 等）
-     */
     private static boolean isTimeoutException(Throwable e) {
-        if (e instanceof TimeoutException) return true;
-        if (e.getCause() instanceof TimeoutException) return true;
-        // Reactor blockLast(Duration) 超时抛出 IllegalStateException("Timeout on blocking read")
-        if (e instanceof IllegalStateException && e.getMessage() != null
-                && e.getMessage().contains("Timeout")) return true;
+        if (e instanceof TimeoutException || e.getCause() instanceof TimeoutException) {
+            return true;
+        }
+
+        if (e instanceof ConnectException && e.getMessage() != null) {
+            if (e.getMessage().contains(" timed out")) {
+                return true;
+            }
+        }
+
+        if (e.getCause() instanceof ConnectException && e.getCause().getMessage() != null) {
+            if (e.getCause().getMessage().contains(" timed out")) {
+                return true;
+            }
+        }
+
+        if (e.getMessage() != null) {
+            if (e.getMessage().contains("Timeout")) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static boolean isConnectException(Throwable e) {
+        if (e instanceof ConnectException || e.getCause() instanceof ConnectException) {
+            return true;
+        }
+
         return false;
     }
 
