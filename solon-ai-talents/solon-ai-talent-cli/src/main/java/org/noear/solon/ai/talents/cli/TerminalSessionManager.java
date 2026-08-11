@@ -209,11 +209,19 @@ public final class TerminalSessionManager {
         }
         Long pid = processPid(process);
         if (pid != null) {
-            destroyProcessTreeByPid(pid.longValue(), false);
+            if (isWindows()) {
+                // Windows：taskkill /T 依赖"活着的树根 PID"才能向下清理子树。
+                // 必须在树根存活时先整树强杀，再销毁根进程；否则根进程先死，
+                // 子进程将孤儿化残留（如 node/vite 继续监听端口），且无法再按根定位。
+                destroyProcessTreeByPid(pid.longValue(), true);
+                waitForProcess(process, DESTROY_GRACE_MS);
+            } else {
+                destroyProcessTreeByPid(pid.longValue(), false);
+            }
         }
         process.destroy();
         waitForProcess(process, DESTROY_GRACE_MS);
-        if (pid != null) {
+        if (pid != null && isWindows() == false) {
             destroyProcessTreeByPid(pid.longValue(), true);
         }
         if (process.isAlive()) {
