@@ -65,10 +65,17 @@ public class WebRxStatelessServerTransport implements McpStatelessServerTranspor
 	}
 
 	@Override
-	public void toHttpHandler(SolonApp app) {
+	public void setupHttpHandlers(SolonApp app) {
 		if (app != null) {
 			app.router().get(this.mcpEndpoint, this::handleGet);
 			app.router().post(this.mcpEndpoint, this::handlePost);
+		}
+	}
+
+	@Override
+	public void cleanupHttpHandlers(SolonApp app) {
+		if (app != null) {
+			app.router().remove(this.mcpEndpoint);
 		}
 	}
 

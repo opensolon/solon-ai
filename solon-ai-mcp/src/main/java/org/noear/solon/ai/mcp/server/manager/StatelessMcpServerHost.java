@@ -133,7 +133,7 @@ public class StatelessMcpServerHost implements McpServerHost {
         //如果是 web 类的
         if (mcpTransportProvider instanceof IMcpHttpServerTransport) {
             IMcpHttpServerTransport tmp = (IMcpHttpServerTransport) mcpTransportProvider;
-            tmp.toHttpHandler(Solon.app());
+            tmp.setupHttpHandlers(Solon.app());
         }
     }
 
@@ -141,6 +141,11 @@ public class StatelessMcpServerHost implements McpServerHost {
     public void stop() {
         if (server != null) {
             server.close();
+
+            if (mcpTransportProvider instanceof IMcpHttpServerTransport) {
+                IMcpHttpServerTransport tmp = (IMcpHttpServerTransport) mcpTransportProvider;
+                tmp.cleanupHttpHandlers(Solon.app());
+            }
         }
     }
 
@@ -172,7 +177,7 @@ public class StatelessMcpServerHost implements McpServerHost {
 
             //如果没有注册
             if (Utils.isEmpty(Solon.app().router().findBy(tmp.getMcpEndpoint()))) {
-                tmp.toHttpHandler(Solon.app());
+                tmp.setupHttpHandlers(Solon.app());
                 return true;
             }
         }

@@ -11,6 +11,10 @@
 *  mcp channel 概念改为 transport （并保持兼容）???
 
 
+### 4.1.0
+
+* 调整 solon-ai-mcp IMcpHttpServerTransport 接口，完善生命周期（更方便动态增减）
+
 ### 4.0.5
 
 * 添加 solon-ai-core ModelOptionsAmend http 定制传递（HarnessEngine->ReActAgent->ChatRequest）
