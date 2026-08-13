@@ -11,7 +11,7 @@
 *  mcp channel 概念改为 transport （并保持兼容）???
 
 
-### 4.1.0
+### 4.0.6
 
 * 调整 solon-ai-mcp IMcpHttpServerTransport 接口，完善生命周期（更方便动态增减）
 
