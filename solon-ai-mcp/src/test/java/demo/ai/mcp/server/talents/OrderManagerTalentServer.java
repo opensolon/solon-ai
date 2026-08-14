@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 
-@McpServerEndpoint(channel = McpChannel.STREAMABLE_STATELESS, mcpEndpoint = "/skill/order")
+@McpServerEndpoint(channel = McpChannel.STREAMABLE_STATELESS, mcpEndpoint = "/talent/order")
 public class OrderManagerTalentServer extends McpTalentServer {
     @Override
     public String description() {
