@@ -26,12 +26,33 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.1")
 public class AiUsage {
+    /**
+     * 提示语（输入）消耗令牌数，对应 OpenAI prompt_tokens / Anthropic input_tokens / DashScope input_tokens
+     */
     private final long promptTokens;
+    /**
+     * 思考（思维链/推理）消耗令牌数，对应 OpenAI completion_tokens_details.reasoning_tokens / think_tokens / DashScope think_tokens
+     */
     private final long thinkTokens;
+    /**
+     * 完成（输出）消耗令牌数，对应 OpenAI completion_tokens / Anthropic output_tokens / DashScope output_tokens
+     */
     private final long completionTokens;
+    /**
+     * 总消耗令牌数，通常为输入 + 输出，对应 OpenAI total_tokens（Anthropic 为 input + output 之和）
+     */
     private final long totalTokens;
+    /**
+     * 缓存创建输入令牌数（Claude Prompt Caching），即首次写入缓存时消耗的输入令牌，对应 Anthropic cache_creation_input_tokens
+     */
     private final long cacheCreationInputTokens;
+    /**
+     * 缓存读取输入令牌数（Prompt Caching 命中），对应 OpenAI cached_tokens / DeepSeek prompt_cache_hit_tokens / Anthropic cache_read_input_tokens
+     */
     private final long cacheReadInputTokens;
+    /**
+     * 源数据：原始 usage JSON 节点，保留各模型返回的完整 usage 原始信息，便于排查与后续扩展
+     */
     private final ONode source;
 
     public AiUsage(long promptTokens, long thinkTokens, long completionTokens, long totalTokens, ONode source) {
@@ -89,6 +110,17 @@ public class AiUsage {
      */
     public long cacheReadInputTokens() {
         return cacheReadInputTokens;
+    }
+
+    /**
+     * 获取缓存率
+     */
+    public int getCacheRate() {
+        if (promptTokens <= 0)
+            return 0;
+
+        long rate = cacheReadInputTokens / promptTokens * 100;
+        return Math.min(100, Math.round(rate * 10) / 10); // 保留 1 位小数，上限 100
     }
 
     /**
