@@ -13,6 +13,7 @@
 
 ### 4.0.6
 
+* 添加 solon-ai-agent Metrics 缓存率计算支持
 * 调整 solon-ai-mcp IMcpHttpServerTransport 接口，完善生命周期（更方便动态增减）
 
 ### 4.0.5

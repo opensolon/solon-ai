@@ -113,14 +113,14 @@ public class AiUsage {
     }
 
     /**
-     * 获取缓存率
+     * 获取缓存命中率（0-100 整数百分比），即缓存读取输入令牌数占输入令牌数的比例
      */
     public int getCacheRate() {
         if (promptTokens <= 0)
             return 0;
 
-        long rate = cacheReadInputTokens / promptTokens * 100;
-        return Math.min(100, Math.round(rate * 10) / 10); // 保留 1 位小数，上限 100
+        double rate = (double) cacheReadInputTokens * 100.0D / promptTokens;
+        return (int) Math.min(100, Math.floor(rate));
     }
 
     /**
