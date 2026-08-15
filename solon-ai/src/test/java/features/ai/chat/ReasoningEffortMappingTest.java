@@ -589,4 +589,172 @@ public class ReasoningEffortMappingTest {
         Assertions.assertEquals("high", rootOn.get("config").get("thinking_level").getString());
         Assertions.assertTrue(rootOn.get("config").get("thinking_summaries").getBoolean());
     }
+
+    // ---------- Gemini 经 OpenAI 兼容端点（中转 / 官方兼容层 / OpenRouter） ----------
+
+    @Test
+    @DisplayName("Gemini OpenAI-compat: effort 收敛 Google 值域，max->high（非 xhigh）")
+    public void testGeminiCompatEffortClamp() {
+        AbstractChatDialect dialect = OpenaiChatDialect.getInstance();
+
+        ChatOptions max = ChatOptions.of().reasoning_effort("max");
+        ONode pro = dialect.buildRequestJson(config("gemini-2.5-pro"), max, userMsg(), false);
+        Assertions.assertEquals("high", pro.get("reasoning_effort").getString());
+        Assertions.assertFalse(pro.hasKey("enable_thinking"));
+        Assertions.assertFalse(pro.hasKey("thinking"));
+
+        // xhigh 不在统一 API 白名单，经 optionSet 逃生舱注入验证 clamp 层降级
+        ChatOptions xhigh = ChatOptions.of().optionSet("reasoning_effort", "xhigh");
+        ONode flash = dialect.buildRequestJson(config("gemini-2.5-flash"), xhigh, userMsg(), false);
+        Assertions.assertEquals("high", flash.get("reasoning_effort").getString());
+
+        // 常规档位原样保留
+        ChatOptions med = ChatOptions.of().reasoning_effort("medium");
+        ONode rootMed = dialect.buildRequestJson(config("gemini-2.5-pro"), med, userMsg(), false);
+        Assertions.assertEquals("medium", rootMed.get("reasoning_effort").getString());
+
+        // min -> minimal（min 不在统一 API 白名单，经 optionSet 逃生舱注入）
+        ChatOptions min = ChatOptions.of().optionSet("reasoning_effort", "min");
+        ONode rootMin = dialect.buildRequestJson(config("gemini-2.5-flash"), min, userMsg(), false);
+        Assertions.assertEquals("minimal", rootMin.get("reasoning_effort").getString());
+    }
+
+    @Test
+    @DisplayName("Gemini OpenAI-compat: 2.5 非 Pro 可关，thinking(false) -> reasoning_effort=none")
+    public void testGeminiCompatDisableThinking() {
+        AbstractChatDialect dialect = OpenaiChatDialect.getInstance();
+
+        ChatOptions off = ChatOptions.of().thinking(false);
+        ONode flash = dialect.buildRequestJson(config("gemini-2.5-flash"), off, userMsg(), false);
+        Assertions.assertEquals("none", flash.get("reasoning_effort").getString());
+        Assertions.assertFalse(flash.hasKey("enable_thinking"));
+        Assertions.assertFalse(flash.hasKey("thinking"));
+
+        // flash-lite 同样可关
+        ONode lite = dialect.buildRequestJson(config("gemini-2.5-flash-lite"), off, userMsg(), false);
+        Assertions.assertEquals("none", lite.get("reasoning_effort").getString());
+    }
+
+    @Test
+    @DisplayName("Gemini OpenAI-compat: 2.5 Pro / 3.x 不能关，thinking(false) 降级 effort=low")
+    public void testGeminiCompatDisableThinkingDegraded() {
+        AbstractChatDialect dialect = OpenaiChatDialect.getInstance();
+
+        ChatOptions off = ChatOptions.of().thinking(false);
+        ONode pro = dialect.buildRequestJson(config("gemini-2.5-pro"), off, userMsg(), false);
+        Assertions.assertEquals("low", pro.get("reasoning_effort").getString());
+
+        ONode g3 = dialect.buildRequestJson(config("gemini-3-pro"), off, userMsg(), false);
+        Assertions.assertEquals("low", g3.get("reasoning_effort").getString());
+        Assertions.assertFalse(g3.hasKey("thinking"));
+
+        // effort=none 同样降级（不可关模型；none 不在统一 API 白名单，经 optionSet 逃生舱注入）
+        ChatOptions noneEffort = ChatOptions.of().optionSet("reasoning_effort", "none");
+        ONode degraded = dialect.buildRequestJson(config("gemini-3-pro"), noneEffort, userMsg(), false);
+        Assertions.assertEquals("low", degraded.get("reasoning_effort").getString());
+
+        // 可关模型 effort=none 原样写出
+        ONode ok = dialect.buildRequestJson(config("gemini-2.5-flash"), noneEffort, userMsg(), false);
+        Assertions.assertEquals("none", ok.get("reasoning_effort").getString());
+    }
+
+    @Test
+    @DisplayName("Gemini OpenAI-compat: thinking(true) 不写开关字段（默认即思考）")
+    public void testGeminiCompatThinkingOnNoField() {
+        AbstractChatDialect dialect = OpenaiChatDialect.getInstance();
+
+        ChatOptions on = ChatOptions.of().thinking(true);
+        ONode root = dialect.buildRequestJson(config("gemini-2.5-pro"), on, userMsg(), false);
+        Assertions.assertFalse(root.hasKey("enable_thinking"));
+        Assertions.assertFalse(root.hasKey("thinking"));
+        Assertions.assertFalse(root.hasKey("reasoning_effort"));
+        Assertions.assertFalse(root.hasKey("reasoning"));
+    }
+
+    @Test
+    @DisplayName("Gemini OpenRouter: thinking(false) -> reasoning.enabled=false；effort=max -> reasoning.effort=high")
+    public void testGeminiOpenRouter() {
+        AbstractChatDialect dialect = OpenaiChatDialect.getInstance();
+
+        ChatConfig relay = config("gemini-2.5-flash");
+        relay.setApiUrl("https://openrouter.ai/api/v1/chat/completions");
+
+        ChatOptions off = ChatOptions.of().thinking(false);
+        ONode rootOff = dialect.buildRequestJson(relay, off, userMsg(), false);
+        Assertions.assertFalse(rootOff.get("reasoning").get("enabled").getBoolean());
+        Assertions.assertFalse(rootOff.hasKey("reasoning_effort"));
+
+        // 不可关模型降级 low 也走嵌套
+        ChatConfig relayPro = config("gemini-2.5-pro");
+        relayPro.setApiUrl("https://openrouter.ai/api/v1/chat/completions");
+        ONode rootPro = dialect.buildRequestJson(relayPro, off, userMsg(), false);
+        Assertions.assertEquals("low", rootPro.get("reasoning").get("effort").getString());
+        Assertions.assertFalse(rootPro.hasKey("reasoning_effort"));
+
+        ChatOptions max = ChatOptions.of().reasoning_effort("max");
+        ONode rootMax = dialect.buildRequestJson(relayPro, max, userMsg(), false);
+        Assertions.assertEquals("high", rootMax.get("reasoning").get("effort").getString());
+        Assertions.assertFalse(rootMax.hasKey("reasoning_effort"));
+    }
+
+    @Test
+    @DisplayName("Gemini OpenAI-compat: 显式 extra_body.thinking_config 互斥，effort 不双发")
+    public void testGeminiCompatExplicitThinkingConfigWins() {
+        AbstractChatDialect dialect = OpenaiChatDialect.getInstance();
+
+        ChatOptions o = ChatOptions.of()
+                .reasoning_effort("high")
+                .optionSet("extra_body", Utils.asMap("thinking_config",
+                        Utils.asMap("thinking_budget", 0)));
+        ONode root = dialect.buildRequestJson(config("gemini-2.5-flash"), o, userMsg(), false);
+        Assertions.assertFalse(root.hasKey("reasoning_effort"));
+        Assertions.assertFalse(root.hasKey("reasoning"));
+        Assertions.assertEquals(0, root.get("extra_body").get("thinking_config").get("thinking_budget").getInt());
+
+        // thinking(false) 与显式 thinking_config 并存时同样让位
+        ChatOptions both = ChatOptions.of()
+                .thinking(false)
+                .optionSet("extra_body", Utils.asMap("thinking_config",
+                        Utils.asMap("thinking_budget", 128)));
+        ONode rootBoth = dialect.buildRequestJson(config("gemini-2.5-flash"), both, userMsg(), false);
+        Assertions.assertFalse(rootBoth.hasKey("reasoning_effort"));
+        Assertions.assertEquals(128, rootBoth.get("extra_body").get("thinking_config").get("thinking_budget").getInt());
+    }
+
+    @Test
+    @DisplayName("Gemini OpenAI-compat: thinking(false) 优先，不受 options 迭代顺序影响")
+    public void testGeminiCompatThinkingFalseBeatsEffortOrder() {
+        AbstractChatDialect dialect = OpenaiChatDialect.getInstance();
+
+        // thinking 先写入
+        ChatOptions offFirst = ChatOptions.of().thinking(false).reasoning_effort("high");
+        ONode flashOff = dialect.buildRequestJson(config("gemini-2.5-flash"), offFirst, userMsg(), false);
+        Assertions.assertEquals("none", flashOff.get("reasoning_effort").getString());
+
+        // effort 先写入（会被 thinking(false) 覆盖为 none）
+        ChatOptions effortFirst = ChatOptions.of().reasoning_effort("high").thinking(false);
+        ONode flashEff = dialect.buildRequestJson(config("gemini-2.5-flash"), effortFirst, userMsg(), false);
+        Assertions.assertEquals("none", flashEff.get("reasoning_effort").getString());
+
+        // 不可关模型：降级 low 后不被后续 effort 覆盖
+        ONode proEff = dialect.buildRequestJson(config("gemini-2.5-pro"), effortFirst, userMsg(), false);
+        Assertions.assertEquals("low", proEff.get("reasoning_effort").getString());
+    }
+
+    @Test
+    @DisplayName("Gemini OpenAI-compat: 非 gemini 模型行为不变（回归）")
+    public void testGeminiCompatNoImpactOnOthers() {
+        AbstractChatDialect dialect = OpenaiChatDialect.getInstance();
+
+        // OpenAI 官方 max 仍转 xhigh
+        ChatOptions max = ChatOptions.of().reasoning_effort("max");
+        ONode oai = dialect.buildRequestJson(config("gpt-5"), max, userMsg(), false);
+        Assertions.assertEquals("xhigh", oai.get("reasoning_effort").getString());
+
+        // qwen 抑制 effort + enable_thinking 不变
+        ChatOptions o = ChatOptions.of().reasoning_effort("high").thinking(true);
+        ONode qwen = dialect.buildRequestJson(config("qwen-plus"), o, userMsg(), false);
+        Assertions.assertFalse(qwen.hasKey("reasoning_effort"));
+        Assertions.assertTrue(qwen.get("enable_thinking").getBoolean());
+    }
 }

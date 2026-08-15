@@ -387,6 +387,12 @@ public abstract class AbstractChatDialect implements ChatDialect {
                     if (shouldSkipChatCompletionsReasoningEffort(config)) {
                         continue;
                     }
+                    // Gemini：显式 thinking_config 互斥守卫（双发会 400）；
+                    // thinking(false) 已先行写出关闭/降级标记时不再覆盖（options 迭代顺序不定，关闭优先）
+                    if (isGeminiChatCompletionsModel(config)
+                            && (hasExplicitGeminiThinkingConfig(options) || hasGeminiThinkingDisableMark(n))) {
+                        continue;
+                    }
                     String effort = clampChatCompletionsEffort(value, config);
                     if (effort != null) {
                         if (isOpenRouterEndpoint(config)) {
@@ -402,7 +408,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 // 非 Boolean（Map 等）仍按原 key 透传，供供应商原生配置与逃生舱使用
                 if ("thinking".equals(key)) {
                     if (value instanceof Boolean) {
-                        applyChatCompletionsThinkingSwitch(n, config, (Boolean) value);
+                        applyChatCompletionsThinkingSwitch(n, config, options, (Boolean) value);
                     } else if (value != null) {
                         n.set(key, ONode.ofBean(value));
                     }
@@ -1057,6 +1063,11 @@ public abstract class AbstractChatDialect implements ChatDialect {
         if (containsAny(model, "qwen", "qwq") || containsAny(provider, "qwen", "dashscope")) {
             return ThinkingSwitchWire.ENABLE_THINKING;
         }
+        // Gemini 经 OpenAI 兼容端点（官方 / 中转站 / OpenRouter）：无布尔开关字段。
+        // 开启：默认即思考，无需写字段；关闭：由 {@link #applyGeminiChatCompletionsThinkingSwitch} 落地
+        if (isGeminiChatCompletionsModel(config)) {
+            return ThinkingSwitchWire.NONE;
+        }
         // OpenAI 官方系列：无 enable_thinking / thinking.type 标准开关
         if (containsAny(model, "gpt-", "gpt4", "gpt5", "chatgpt", "o1-", "o1", "o3-", "o3", "o4-", "o4")
                 || "openai".equals(provider)) {
@@ -1073,6 +1084,24 @@ public abstract class AbstractChatDialect implements ChatDialect {
      * @since 4.0.4
      */
     protected void applyChatCompletionsThinkingSwitch(ONode n, ChatConfig config, boolean enabled) {
+        applyChatCompletionsThinkingSwitch(n, config, null, enabled);
+    }
+
+    /**
+     * 带 options 的重载：Gemini 互斥守卫（显式 extra_body.thinking_config 优先，避免与 effort 双发 400）。
+     *
+     * @since 4.0.5
+     */
+    protected void applyChatCompletionsThinkingSwitch(ONode n, ChatConfig config, ChatOptions options, boolean enabled) {
+        // Gemini 经 OpenAI 兼容端点：无 enable_thinking/thinking.type 开关，单独落地
+        if (isGeminiChatCompletionsModel(config)) {
+            if (hasExplicitGeminiThinkingConfig(options)) {
+                return; // 显式 thinking_config 优先，不双发（Google 端点互斥会 400）
+            }
+            applyGeminiChatCompletionsThinkingSwitch(n, config, enabled);
+            return;
+        }
+
         ThinkingSwitchWire wire = resolveThinkingSwitchWire(config);
         switch (wire) {
             case ENABLE_THINKING:
@@ -1251,6 +1280,12 @@ public abstract class AbstractChatDialect implements ChatDialect {
             return null;
         }
 
+        // Gemini 经 OpenAI 兼容端点（官方 / 中转 / OpenRouter）：收敛到 Google 值域 minimal|low|medium|high；
+        // none 仅可关模型（2.5 非 Pro）；max/xhigh 不在值域，降级 high
+        if (isGeminiChatCompletionsModel(config)) {
+            return clampGeminiChatCompletionsEffort(effort, config);
+        }
+
         if ("none".equals(effort)
                 || "minimal".equals(effort)
                 || "low".equals(effort)
@@ -1267,6 +1302,147 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
         // 非法值不写出
         return null;
+    }
+
+    /**
+     * Gemini 模型经 OpenAI 兼容协议调用（非原生 Gemini 方言路径）。
+     * <p>原生 Gemini 方言已覆写 {@code buildRequestJson}，不会进入 Chat Completions 路径；
+     * 此处仅覆盖中转场景：model 含 gemini 或 provider 为 google/gemini。</p>
+     *
+     * @since 4.0.5
+     */
+    protected boolean isGeminiChatCompletionsModel(ChatConfig config) {
+        if (config == null) {
+            return false;
+        }
+        String model = config.getModel() == null ? "" : config.getModel().toLowerCase(Locale.ROOT);
+        String provider = config.getProvider() == null ? "" : config.getProvider().toLowerCase(Locale.ROOT);
+        return containsAny(model, "gemini") || containsAny(provider, "google", "gemini");
+    }
+
+    /**
+     * Gemini 2.5 非 Pro 系（flash / flash-lite）支持 {@code reasoning_effort=none} 关闭思考；
+     * 2.5 Pro 与 3.x 不能关闭（Google OpenAI 兼容官方文档约束）。
+     *
+     * @since 4.0.5
+     */
+    protected boolean canDisableGeminiThinking(ChatConfig config) {
+        String model = config == null || config.getModel() == null ? "" : config.getModel().toLowerCase(Locale.ROOT);
+        boolean is25 = model.contains("2.5") || model.contains("2-5");
+        if (!is25) {
+            return false; // 3.x 及其它：不能关
+        }
+        boolean isPro = model.contains("pro") && !model.contains("flash");
+        return !isPro;
+    }
+
+    /**
+     * Gemini Chat Completions 的 effort 值域收敛。
+     * <p>Google 官方 OpenAI 兼容值域：{@code minimal|low|medium|high}；
+     * {@code none} 仅可关模型（2.5 非 Pro）允许，其余降级 {@code low}；
+     * {@code max}/{@code xhigh} 不在值域，降级 {@code high}。</p>
+     *
+     * @since 4.0.5
+     */
+    protected String clampGeminiChatCompletionsEffort(String effort, ChatConfig config) {
+        if ("none".equals(effort)) {
+            if (canDisableGeminiThinking(config)) {
+                return "none"; // OpenRouter 嵌套与 Google 顶层均接受 none
+            }
+            LOG.warn("ai: gemini model '{}' cannot disable thinking via OpenAI-compat endpoint, effort degraded to low", config.getModel());
+            return "low";
+        }
+        if ("min".equals(effort) || "minimal".equals(effort)) {
+            return "minimal";
+        }
+        if ("low".equals(effort) || "medium".equals(effort) || "high".equals(effort)) {
+            return effort;
+        }
+        if ("max".equals(effort) || "xhigh".equals(effort)) {
+            LOG.warn("ai: gemini model '{}' does not accept effort '{}' via OpenAI-compat endpoint, degraded to high", config.getModel(), effort);
+            return "high";
+        }
+        // 非法值不写出
+        return null;
+    }
+
+    /**
+     * Gemini 经 OpenAI 兼容端点的思考开关落地（无 enable_thinking/thinking.type 字段）。
+     * <p>开启：默认即思考，无需写字段；
+     * 关闭（可关模型）：Google 顶层 {@code reasoning_effort=none}；OpenRouter 嵌套 {@code reasoning.enabled=false}；
+     * 关闭（不可关模型）：降级 {@code low} 并告警，不静默丢弃用户意图。</p>
+     *
+     * @since 4.0.5
+     */
+    protected void applyGeminiChatCompletionsThinkingSwitch(ONode n, ChatConfig config, boolean enabled) {
+        if (enabled) {
+            return;
+        }
+        if (canDisableGeminiThinking(config)) {
+            if (isOpenRouterEndpoint(config)) {
+                n.getOrNew("reasoning").set("enabled", false);
+            } else {
+                n.set("reasoning_effort", "none");
+            }
+            return;
+        }
+
+        LOG.warn("ai: gemini model '{}' cannot disable thinking via OpenAI-compat endpoint, fallback to effort=low", config.getModel());
+        if (isOpenRouterEndpoint(config)) {
+            n.getOrNew("reasoning").set("effort", "low");
+        } else {
+            n.set("reasoning_effort", "low");
+        }
+    }
+
+    /**
+     * 用户经 options 逃生舱显式配置了 Gemini 思考参数（Google OpenAI 兼容层与 effort 互斥，双发会 400）。
+     *
+     * @since 4.0.5
+     */
+    protected boolean hasExplicitGeminiThinkingConfig(ChatOptions options) {
+        if (options == null) {
+            return false;
+        }
+        Object extra = options.options().get("extra_body");
+        if (extra instanceof Map && ((Map<?, ?>) extra).get("thinking_config") != null) {
+            return true;
+        }
+        if (options.options().get("thinking_config") != null) {
+            return true;
+        }
+        Object gc = options.options().get("generationConfig");
+        if (gc instanceof Map && ((Map<?, ?>) gc).get("thinkingConfig") != null) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Gemini 关闭标记已先行写出（options 迭代顺序不定，thinking(false) 优先不被 effort 覆盖）。
+     *
+     * @since 4.0.5
+     */
+    protected boolean hasGeminiThinkingDisableMark(ONode n) {
+        if (n == null) {
+            return false;
+        }
+        if (n.hasKey("reasoning_effort")) {
+            String v = n.get("reasoning_effort").getString();
+            if ("none".equals(v) || "low".equals(v)) {
+                return true;
+            }
+        }
+        ONode r = n.get("reasoning");
+        if (r != null) {
+            if (r.hasKey("enabled") && !r.get("enabled").getBoolean()) {
+                return true;
+            }
+            if (r.hasKey("effort") && "low".equals(r.get("effort").getString())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
