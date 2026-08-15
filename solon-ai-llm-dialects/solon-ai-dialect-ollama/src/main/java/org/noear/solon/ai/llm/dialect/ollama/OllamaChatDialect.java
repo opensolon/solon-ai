@@ -34,6 +34,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
+import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.content.VideoBlock;
@@ -135,7 +136,8 @@ public class OllamaChatDialect extends AbstractChatDialect {
         }
 
         if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
-            oNode.set("tool_calls", ONode.ofBean(msg.getToolCallsRaw()));
+            // 出站兜底净化：截断损坏的 arguments 会被服务端拒绝，统一修复
+            oNode.set("tool_calls", ONode.ofBean(ToolCallJsonSanitizer.sanitizeToolCallsRaw(msg.getToolCallsRaw())));
         }
     }
 
@@ -282,7 +284,10 @@ public class OllamaChatDialect extends AbstractChatDialect {
                         .set("type", "function")
                         .getOrNew("function").then(n2 -> {
                             n2.set("name", kv.getValue().nameBuilder.toString());
-                            n2.set("arguments", ONode.ofJson(kv.getValue().argumentsBuilder.toString()));
+                            // 流式聚合出口净化：截断串会导致 ofJson 异常或非法节点，禁止原样入历史
+                            n2.set("arguments", ONode.ofJson(ToolCallJsonSanitizer.sanitizeArguments(
+                                    kv.getValue().argumentsBuilder.toString(),
+                                    kv.getValue().nameBuilder.toString())));
                         });
             }
         });

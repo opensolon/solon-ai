@@ -28,6 +28,7 @@ import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.content.VideoBlock;
+import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.noear.solon.net.http.HttpUtils;
 
 import java.util.Date;
@@ -265,7 +266,8 @@ public class DashscopeChatDialect extends AbstractChatDialect {
         // 这里不写 reasoning，与父类 OpenAI 风格区分。
 
         if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
-            oNode.set("tool_calls", ONode.ofBean(msg.getToolCallsRaw()));
+            // 出站兜底净化：截断损坏的 arguments 会被 OpenAI 兼容服务端 400 拒绝，统一修复
+            oNode.set("tool_calls", ONode.ofBean(ToolCallJsonSanitizer.sanitizeToolCallsRaw(msg.getToolCallsRaw())));
         }
     }
 

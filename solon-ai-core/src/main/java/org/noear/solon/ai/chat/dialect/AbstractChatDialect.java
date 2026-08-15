@@ -168,7 +168,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
 
         if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
-            oNode.set("tool_calls", ONode.ofBean(msg.getToolCallsRaw()));
+            // 出站兜底净化：历史中截断损坏的 arguments 会被 OpenAI 兼容服务端 400 拒绝（会话中毒），统一修复
+            oNode.set("tool_calls", ONode.ofBean(ToolCallJsonSanitizer.sanitizeToolCallsRaw(msg.getToolCallsRaw())));
         }
     }
 
@@ -432,12 +433,10 @@ public abstract class AbstractChatDialect implements ChatDialect {
                         .set("type", "function")
                         .getOrNew("function").then(n2 -> {
                             n2.set("name", kv.getValue().nameBuilder.toString());
-                            if (kv.getValue().argumentsBuilder.length() > 0) {
-                                n2.set("arguments", kv.getValue().argumentsBuilder.toString());
-                            } else {
-                                // vllm 不能传空
-                                n2.set("arguments", "{}");
-                            }
+                            // 流式聚合出口净化：输出被截断（finish_reason=length）时 arguments 可能是非法 JSON，禁止原样入历史
+                            n2.set("arguments", ToolCallJsonSanitizer.sanitizeArguments(
+                                    kv.getValue().argumentsBuilder.toString(),
+                                    kv.getValue().nameBuilder.toString()));
                         });
             }
         });
@@ -878,7 +877,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
         List<Map> searchResultsRaw = null;
 
         if (Utils.isNotEmpty(toolCalls)) {
-            toolCallsRaw = toolCallsNode.toBean(List.class);
+            // 非流式解析出口净化：截断损坏的 arguments 禁止入历史（vllm 空串语义已由净化器兜底为 "{}"）
+            toolCallsRaw = ToolCallJsonSanitizer.sanitizeToolCallsRaw(toolCallsNode.toBean(List.class));
             if (resp.in_thinking && resp.isStream()) {
                 //说明是思考结束立刻调用了工具，需要添加思考的结束标识
                 messageList.add(new AssistantMessage("</think>", true).reasoningFieldName(resp.reasoning_field_name));

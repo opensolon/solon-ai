@@ -27,6 +27,7 @@ import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
+import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
 
@@ -491,11 +492,9 @@ public class OpenaiResponsesRequestBuilder {
                         .set("type", "function")
                         .getOrNew("function").then(n2 -> {
                             n2.set("name", builder.nameBuilder.toString());
-                            if (Utils.isNotEmpty(argsStr)) {
-                                n2.set("arguments", argsStr);
-                            } else {
-                                n2.set("arguments", "{}");
-                            }
+                            // 流式聚合出口净化：截断损坏的 arguments 禁止原样入历史（空串也兜底为 "{}"）
+                            n2.set("arguments", ToolCallJsonSanitizer.sanitizeArguments(
+                                    argsStr, builder.nameBuilder.toString()));
                         });
             }
         });
