@@ -146,6 +146,14 @@ public class GeminiChatDialect extends AbstractChatDialect {
             baseUrl = baseUrl.substring(0, index);
         }
 
+        // 已含完整端点（:generateContent / :streamGenerateContent）时直接使用，避免重复拼接
+        if (baseUrl.contains(":generateContent") || baseUrl.contains(":streamGenerateContent")) {
+            if (isStream && !baseUrl.contains("alt=sse")) {
+                return baseUrl + (baseUrl.contains("?") ? "&" : "?") + "alt=sse";
+            }
+            return baseUrl;
+        }
+
         String normalizedUrl = baseUrl;
         if (normalizedUrl.endsWith("/")) {
             normalizedUrl = normalizedUrl.substring(0, normalizedUrl.length() - 1);

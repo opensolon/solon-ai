@@ -72,6 +72,8 @@ public class GeminiThoughtProcessor {
             
             List<ToolCall> toolCalls = new ArrayList<>();
             List<ContentBlock> mediaBlocks = new ArrayList<>();
+            // 同一 chunk 内同名函数并行调用去冲突：首个用 name，后续用 name#n 作为流式聚合 index
+            Map<String, Integer> nameCount = new LinkedHashMap<>();
 
             for (ONode oPart : oParts.getArray()) {
                 ONode thoughtNode = oPart.getOrNull("thought");
@@ -103,7 +105,15 @@ public class GeminiThoughtProcessor {
                         argsJson = "{}";
                     }
                             
-                    String callIndex = Utils.isNotEmpty(functionName) ? functionName : resp.lastToolCallId;
+                    String callIndex;
+                    if (Utils.isNotEmpty(functionName)) {
+                        // 跨 chunk 同名（同一 functionCall 续传）仍用 name 聚合（保持原行为）；
+                        // 同 chunk 并行同名（两个 getWeather 同时调用）用 name#n 区分，避免流式 builder 合并
+                        int seen = nameCount.merge(functionName, 1, Integer::sum);
+                        callIndex = seen == 1 ? functionName : functionName + "#" + (seen - 1);
+                    } else {
+                        callIndex = resp.lastToolCallId;
+                    }
                     if (Utils.isNotEmpty(functionName)) {
                         resp.lastToolCallId = functionName;
                     }
