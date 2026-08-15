@@ -89,8 +89,7 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
         String standard = config.getStandardOrProvider();
 
         if ("google-interactions".equalsIgnoreCase(standard) ||
-                "gemini-interactions".equalsIgnoreCase(standard) || //弃用
-                "google".equalsIgnoreCase(standard)) { //弃用
+                "gemini-interactions".equalsIgnoreCase(standard) ) { //弃用
             return true;
         }
 
