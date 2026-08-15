@@ -72,7 +72,7 @@ public class GeminiThoughtProcessor {
             
             List<ToolCall> toolCalls = new ArrayList<>();
             List<ContentBlock> mediaBlocks = new ArrayList<>();
-                
+
             for (ONode oPart : oParts.getArray()) {
                 ONode thoughtNode = oPart.getOrNull("thought");
                 boolean isThought = thoughtNode != null && thoughtNode.getBoolean();
@@ -91,14 +91,23 @@ public class GeminiThoughtProcessor {
                     }
                     // 解析出口净化：仅 object 形态的 args 采纳；字符串（可能内含截断 JSON）等一律归一为空对象，
                     // 避免非法 JSON 进入会话历史后毒化后续请求
-                    String argsJson = "{}";
+                    String argsJson = null;
                     Map<String, Object> argsMap = new LinkedHashMap<>();
                     if (argsNode != null && argsNode.isObject()) {
-                        argsJson = argsNode.toJson();
                         argsMap = argsNode.toBean(Map.class);
+                        if (!argsMap.isEmpty() || !resp.isStream()) {
+                            argsJson = argsNode.toJson();
+                        }
+                    }
+                    if (argsJson == null && !resp.isStream()) {
+                        argsJson = "{}";
                     }
                             
-                    ToolCall toolCall = new ToolCall(functionName, null, functionName, argsJson, argsMap);
+                    String callIndex = Utils.isNotEmpty(functionName) ? functionName : resp.lastToolCallId;
+                    if (Utils.isNotEmpty(functionName)) {
+                        resp.lastToolCallId = functionName;
+                    }
+                    ToolCall toolCall = new ToolCall(callIndex, callIndex, functionName, argsJson, argsMap);
                                 
                     // 仅第一个 functionCall part 携带 thoughtSignature（并行调用时后续 part 没有）
                     if (toolCalls.isEmpty()) {

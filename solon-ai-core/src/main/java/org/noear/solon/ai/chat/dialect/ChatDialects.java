@@ -22,12 +22,12 @@ package org.noear.solon.ai.chat.dialect;
  */
 public interface ChatDialects {
     static String OPENAI_RESPONSES = "openai-responses";
-    static String OPENAI_CHAT = "openai-chat";
+    static String OPENAI_COMPLETIONS = "openai-completions";
 
     static String ANTHROPIC = "anthropic";
 
     static String GOOGLE_MODELS = "google-models"; //old
-    static String GOOGLE_interactions = "google-interactions";
+    static String GOOGLE_INTERACTIONS = "google-interactions";
 
     static String OLLAMA = "ollama";
 

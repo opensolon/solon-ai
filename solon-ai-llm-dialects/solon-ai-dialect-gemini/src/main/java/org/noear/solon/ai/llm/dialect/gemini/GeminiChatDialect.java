@@ -92,7 +92,7 @@ public class GeminiChatDialect extends AbstractChatDialect {
 
     @Override
     public HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
-        String apiUrl = buildApiUrl(config.getApiUrl().toString(), config.getModel(), isStream);
+        String apiUrl = buildApiUrl(config.getApiUrl(), config.getModel(), isStream);
 
         HttpUtils httpUtils = HttpUtils.http(apiUrl)
                 .ssl(HttpSslSupplierAny.getInstance())
@@ -138,6 +138,12 @@ public class GeminiChatDialect extends AbstractChatDialect {
      * @return 完整的 API 请求 URL
      */
     private String buildApiUrl(String baseUrl, String model, boolean isStream) {
+        // 处理后缀#
+        int index = baseUrl.indexOf('#');
+        if (index > 0) {
+            baseUrl = baseUrl.substring(0, index);
+        }
+
         String normalizedUrl = baseUrl;
         if (normalizedUrl.endsWith("/")) {
             normalizedUrl = normalizedUrl.substring(0, normalizedUrl.length() - 1);
@@ -145,8 +151,12 @@ public class GeminiChatDialect extends AbstractChatDialect {
 
         StringBuilder urlBuilder = new StringBuilder(normalizedUrl);
 
-        if (!urlBuilder.toString().endsWith("/")) {
+        if (normalizedUrl.endsWith("/") == false) {
             urlBuilder.append("/");
+        }
+
+        if (normalizedUrl.contains("v1beta/") == false && normalizedUrl.contains("v1/") == false) {
+            urlBuilder.append("v1beta/");
         }
 
         urlBuilder.append("models/");
