@@ -87,7 +87,8 @@ public class GeminiChatDialect extends AbstractChatDialect {
             return true;
         }
 
-        return (Assert.isEmpty(standard) && config.getApiUrl().contains("/v1beta/models/") && config.getApiUrl().endsWith("generateContent"));
+        return (Assert.isEmpty(standard) && config.getApiUrl().contains("/v1beta/models/")
+                && (config.getApiUrl().endsWith("generateContent") || config.getApiUrl().endsWith("streamGenerateContent")));
     }
 
     @Override
