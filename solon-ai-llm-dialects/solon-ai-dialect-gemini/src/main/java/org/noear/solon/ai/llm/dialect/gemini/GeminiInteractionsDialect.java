@@ -25,6 +25,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
+import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.noear.solon.ai.llm.dialect.gemini.interactions.GeminiInteractionsRequestBuilder;
 import org.noear.solon.ai.llm.dialect.gemini.interactions.GeminiInteractionsResponseParser;
 import org.noear.solon.core.util.Assert;
@@ -206,16 +207,22 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
                         callId = name + "_" + System.currentTimeMillis();
                     }
 
-                    // 解析 arguments
+                    // 解析 arguments（净化：仅 object 采纳；字符串可能内含截断 JSON，归一为合法 JSON object）
                     ONode argsNode = step.getOrNull("arguments");
-                    String argsStr = "{}";
+                    String argsStr;
                     Map<String, Object> argsMap = null;
-                    if (argsNode != null) {
-                        if (argsNode.isObject()) {
-                            argsStr = argsNode.toJson();
-                            argsMap = argsNode.toBean(Map.class);
-                        } else {
-                            argsStr = argsNode.getString();
+                    if (argsNode != null && argsNode.isObject()) {
+                        argsStr = argsNode.toJson();
+                        argsMap = argsNode.toBean(Map.class);
+                    } else {
+                        argsStr = ToolCallJsonSanitizer.sanitizeArguments(
+                                argsNode == null ? null : argsNode.getString(), name);
+                        if (!"{}".equals(argsStr)) {
+                            try {
+                                argsMap = ONode.ofJson(argsStr).toBean(Map.class);
+                            } catch (Exception ignored) {
+                                argsMap = null;
+                            }
                         }
                     }
 

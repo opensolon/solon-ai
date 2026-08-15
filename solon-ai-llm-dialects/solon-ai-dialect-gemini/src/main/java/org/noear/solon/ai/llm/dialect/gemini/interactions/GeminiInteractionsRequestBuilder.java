@@ -34,6 +34,7 @@ import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
+import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -227,16 +228,13 @@ public class GeminiInteractionsRequestBuilder {
                 } else {
                     step.set("id", call.getName() + "_" + System.currentTimeMillis());
                 }
-                // arguments
-                if (call.getArgumentsStr() != null) {
-                    try {
-                        ONode argsNode = ONode.ofJson(call.getArgumentsStr());
-                        step.set("arguments", argsNode);
-                    } catch (Exception e) {
-                        step.set("arguments", call.getArgumentsStr());
-                    }
-                } else {
-                    step.set("arguments", new ONode());
+                // arguments（出站兜底净化：截断/双重编码的 arguments 禁止以字符串形态回传）
+                String safeArgs = ToolCallJsonSanitizer.sanitizeArguments(call.getArgumentsStr(), call.getName());
+                try {
+                    ONode argsNode = ONode.ofJson(safeArgs);
+                    step.set("arguments", argsNode.isObject() ? argsNode : new ONode().asObject());
+                } catch (Exception e) {
+                    step.set("arguments", ONode.ofBean(call.getArguments()));
                 }
                 // thought signature 仅放在第一个 function_call step
                 if (isFirst && Utils.isNotEmpty(call.getThoughtSignature())) {
@@ -581,15 +579,17 @@ public class GeminiInteractionsRequestBuilder {
             step.set("id", builder.idBuilder.toString());
 
             if (builder.argumentsBuilder.length() > 0) {
-                String argsStr = builder.argumentsBuilder.toString();
+                // 流式聚合出口净化：截断损坏的 arguments 禁止以字符串形态写入 step
+                String safeArgs = ToolCallJsonSanitizer.sanitizeArguments(
+                        builder.argumentsBuilder.toString(), builder.nameBuilder.toString());
                 try {
-                    ONode argsNode = ONode.ofJson(argsStr);
-                    step.set("arguments", argsNode);
+                    ONode argsNode = ONode.ofJson(safeArgs);
+                    step.set("arguments", argsNode.isObject() ? argsNode : new ONode().asObject());
                 } catch (Exception e) {
-                    step.set("arguments", argsStr);
+                    step.set("arguments", new ONode().asObject());
                 }
             } else {
-                step.set("arguments", new ONode());
+                step.set("arguments", new ONode().asObject());
             }
 
             // 仅第一个 step 回传 thoughtSignature

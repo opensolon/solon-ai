@@ -319,14 +319,15 @@ public class OpenaiResponsesRequestBuilder {
             }
         }
      
-        // 3) 工具调用 items
+        // 3) 工具调用 items（出站兜底净化：截断/双重编码的 arguments 禁止原样回传）
         if (hasToolCalls) {
             for (ToolCall call : assistantMessage.getToolCalls()) {
                 inputArray.addNew()
                         .set("type", "function_call")
                         .set("call_id", call.getId())
                         .set("name", call.getName())
-                        .set("arguments", call.getArgumentsStr());
+                        .set("arguments", ToolCallJsonSanitizer.sanitizeArguments(
+                                call.getArgumentsStr(), call.getName()));
             }
         }
     }

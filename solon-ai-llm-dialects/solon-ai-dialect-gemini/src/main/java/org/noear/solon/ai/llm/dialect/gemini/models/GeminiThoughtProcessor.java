@@ -89,8 +89,14 @@ public class GeminiThoughtProcessor {
                     if (argsNode == null || argsNode.isNull()) {
                         argsNode = functionCallNode.get("arguments");
                     }
-                    String argsJson = argsNode == null ? "{}" : argsNode.toJson();
-                    Map<String, Object> argsMap = argsNode == null ? new LinkedHashMap<>() : argsNode.toBean(Map.class);
+                    // 解析出口净化：仅 object 形态的 args 采纳；字符串（可能内含截断 JSON）等一律归一为空对象，
+                    // 避免非法 JSON 进入会话历史后毒化后续请求
+                    String argsJson = "{}";
+                    Map<String, Object> argsMap = new LinkedHashMap<>();
+                    if (argsNode != null && argsNode.isObject()) {
+                        argsJson = argsNode.toJson();
+                        argsMap = argsNode.toBean(Map.class);
+                    }
                             
                     ToolCall toolCall = new ToolCall(functionName, null, functionName, argsJson, argsMap);
                                 

@@ -26,6 +26,7 @@ import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -272,6 +273,8 @@ public class OpenaiResponsesResponseParser {
                     if (Utils.isEmpty(arguments) && state.currentFunctionArguments != null) {
                         arguments = state.currentFunctionArguments.toString();
                     }
+                    // 流式解析出口净化：截断损坏的 arguments 禁止入历史（会毒化会话）
+                    arguments = ToolCallJsonSanitizer.sanitizeArguments(arguments, state.currentFunctionName);
                     try {
                         Map<String, Object> argMap = new HashMap<>();
                         if (Utils.isNotEmpty(arguments)) {
@@ -502,7 +505,9 @@ public class OpenaiResponsesResponseParser {
                 } else if ("function_call".equals(itemType)) {
                     String callId = outputItem.get("call_id").getString();
                     String functionName = outputItem.get("name").getString();
-                    String arguments = outputItem.get("arguments").getString();
+                    // 非流式解析出口净化：截断损坏的 arguments 禁止入历史（会毒化会话）
+                    String arguments = ToolCallJsonSanitizer.sanitizeArguments(
+                            outputItem.get("arguments").getString(), functionName);
                     Map<String, Object> argMap = new HashMap<>();
                     if (Utils.isNotEmpty(arguments)) {
                         try {

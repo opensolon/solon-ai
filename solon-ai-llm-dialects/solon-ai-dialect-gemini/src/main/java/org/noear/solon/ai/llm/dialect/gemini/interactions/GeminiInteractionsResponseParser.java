@@ -28,6 +28,7 @@ import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -512,19 +513,22 @@ public class GeminiInteractionsResponseParser {
         }
 
         ONode argsNode = oStep.getOrNull("arguments");
-        String argsStr = null;
+        // 解析出口净化：仅 object 采纳；字符串可能内含截断 JSON，统一归一为合法 JSON object
+        String argsStr;
         Map<String, Object> argsMap = null;
-        if (argsNode != null) {
-            if (argsNode.isObject()) {
-                argsStr = argsNode.toJson();
-                argsMap = argsNode.toBean(Map.class);
-            } else {
-                argsStr = argsNode.getString();
+        if (argsNode != null && argsNode.isObject()) {
+            argsStr = argsNode.toJson();
+            argsMap = argsNode.toBean(Map.class);
+        } else {
+            argsStr = ToolCallJsonSanitizer.sanitizeArguments(
+                    argsNode == null ? null : argsNode.getString(), name);
+            if (!"{}".equals(argsStr)) {
+                try {
+                    argsMap = ONode.ofJson(argsStr).toBean(Map.class);
+                } catch (Exception ignored) {
+                    argsMap = null;
+                }
             }
-        }
-
-        if (argsStr == null) {
-            argsStr = "{}";
         }
 
         return new ToolCall(callId, callId, name, argsStr, argsMap);
@@ -541,9 +545,10 @@ public class GeminiInteractionsResponseParser {
             callId = acc.functionName + "_" + System.currentTimeMillis();
         }
 
-        String argsStr = acc.argumentsBuilder.length() > 0
-                ? acc.argumentsBuilder.toString()
-                : "{}";
+        // 流式解析出口净化：截断损坏的 arguments 禁止入历史（会毒化会话）
+        String argsStr = ToolCallJsonSanitizer.sanitizeArguments(
+                acc.argumentsBuilder.length() > 0 ? acc.argumentsBuilder.toString() : null,
+                acc.functionName);
 
         Map<String, Object> argsMap = null;
         try {

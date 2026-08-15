@@ -34,6 +34,7 @@ import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
+import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.noear.solon.ai.llm.dialect.gemini.models.model.GenerationConfig;
 import org.noear.solon.ai.llm.dialect.gemini.models.model.ThinkingConfig;
 
@@ -182,15 +183,13 @@ public class GeminiRequestBuilder {
                     ONode partNode = n1.addNew();
                     partNode.getOrNew("functionCall").then(n2 -> {
                         n2.set("name", call.getName());
-                        if (call.getArgumentsStr() != null) {
-                            try {
-                                ONode argsNode = ONode.ofJson(call.getArgumentsStr());
-                                n2.set("args", argsNode);
-                            } catch (Exception e) {
-                                n2.set("args", ONode.ofBean(call.getArguments()));
-                            }
-                        } else {
-                            n2.set("args", new ONode());
+                        // 出站兜底净化：截断/双重编码的 arguments 禁止原样回传（args 必须是 object）
+                        String safeArgs = ToolCallJsonSanitizer.sanitizeArguments(call.getArgumentsStr(), call.getName());
+                        try {
+                            ONode argsNode = ONode.ofJson(safeArgs);
+                            n2.set("args", argsNode.isObject() ? argsNode : new ONode().asObject());
+                        } catch (Exception e) {
+                            n2.set("args", ONode.ofBean(call.getArguments()));
                         }
                     });
                     // thoughtSignature 位于 part 级别（functionCall 的同级），仅第一个 part 需要
@@ -367,15 +366,17 @@ public class GeminiRequestBuilder {
                 partNode.getOrNew("functionCall").then(n2 -> {
                     n2.set("name", builder.nameBuilder.toString());
                     if (builder.argumentsBuilder.length() > 0) {
-                        String argsStr = builder.argumentsBuilder.toString();
+                        // 流式聚合出口净化：截断损坏的 arguments 禁止以字符串形态写入 args（会被服务端拒绝）
+                        String safeArgs = ToolCallJsonSanitizer.sanitizeArguments(
+                                builder.argumentsBuilder.toString(), builder.nameBuilder.toString());
                         try {
-                            ONode argsNode = ONode.ofJson(argsStr);
-                            n2.set("args", argsNode);
+                            ONode argsNode = ONode.ofJson(safeArgs);
+                            n2.set("args", argsNode.isObject() ? argsNode : new ONode().asObject());
                         } catch (Exception e) {
-                            n2.set("args", argsStr);
+                            n2.set("args", new ONode().asObject());
                         }
                     } else {
-                        n2.set("args", new ONode());
+                        n2.set("args", new ONode().asObject());
                     }
                 });
                 // 仅第一个 part 需要回传 thoughtSignature（并行调用时后续 part 不需要）

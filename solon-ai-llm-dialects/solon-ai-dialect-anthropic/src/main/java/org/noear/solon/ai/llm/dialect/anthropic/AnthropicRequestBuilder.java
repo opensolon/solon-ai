@@ -23,6 +23,7 @@ import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
+import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 
@@ -1040,13 +1041,14 @@ public class AnthropicRequestBuilder {
         for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
             ToolCallBuilder builder = kv.getValue();
 
-            // 解析参数 JSON 字符串为对象
+            // 解析参数 JSON 字符串为对象（流式聚合出口净化：截断损坏的 arguments 统一归一为空对象）
             Object inputObject;
-            String argsStr = builder.argumentsBuilder.toString();
+            String argsStr = ToolCallJsonSanitizer.sanitizeArguments(
+                    builder.argumentsBuilder.toString(), builder.nameBuilder.toString());
             try {
                 if (Utils.isNotEmpty(argsStr)) {
                     ONode argsNode = ONode.ofJson(argsStr);
-                    inputObject = argsNode.toBean(Map.class);
+                    inputObject = argsNode.isObject() ? argsNode.toBean(Map.class) : new HashMap<String, Object>();
                 } else {
                     inputObject = new HashMap<>();
                 }

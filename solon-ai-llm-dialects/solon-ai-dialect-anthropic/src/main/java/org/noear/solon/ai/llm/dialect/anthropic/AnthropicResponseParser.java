@@ -30,6 +30,7 @@ import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -282,7 +283,9 @@ public class AnthropicResponseParser {
                 StreamToolState state = resp.attrRemove(STREAM_TOOL_STATE_KEY);
                 if (state != null) {
                     try {
-                        String argStr = state.toolInput.toString();
+                        // 流式解析出口净化：截断损坏的 arguments 禁止入历史（input_json_delta 中断场景）
+                        String argStr = ToolCallJsonSanitizer.sanitizeArguments(
+                                state.toolInput.toString(), state.toolName);
                         Map<String, Object> arguments = new HashMap<>();
 
                         if (FormatUtil.hasNestedJsonBlock(argStr)) {
