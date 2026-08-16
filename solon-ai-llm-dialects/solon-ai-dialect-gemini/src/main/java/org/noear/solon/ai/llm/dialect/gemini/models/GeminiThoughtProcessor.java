@@ -87,6 +87,23 @@ public class GeminiThoughtProcessor {
                     
                 if (isFunctionCall) {
                     String functionName = functionCallNode.get("name").getString();
+                    // 续帧兼容：OpenAI 兼容网关（如 bearlab.ai）流式转 Gemini 时会把 functionCall 分帧发送
+                    // （帧1 带 name/空 args，帧2 带 args/空 name）。name 为空且已有调用上下文时，视为续帧，
+                    // 从 lastToolCallId 恢复函数名，避免生成 name 为空的无效 ToolCall。
+                    if (Utils.isEmpty(functionName) && Utils.isNotEmpty(resp.lastToolCallId)) {
+                        functionName = resp.lastToolCallId;
+                    }
+                    // Gemini 3+ 官方规范：functionCall 携带唯一调用 id，functionResponse 回传时必须带上相同 id。
+                    // 解析并保留该 id；服务端（含 OpenAI 兼容网关转 Gemini）不返回 id 时为 null ——
+                    // 此时完全按 Gemini 2.5 的 name 关联方式回传（不写 id），避免本地伪造 id 导致网关关联失败。
+                    String callId = null;
+                    ONode idNode = functionCallNode.get("id");
+                    if (idNode == null) {
+                        idNode = functionCallNode.get("call_id");
+                    }
+                    if (idNode != null && idNode.isString() && Utils.isNotEmpty(idNode.getString())) {
+                        callId = idNode.getString();
+                    }
                     ONode argsNode = functionCallNode.get("args");
                     if (argsNode == null || argsNode.isNull()) {
                         argsNode = functionCallNode.get("arguments");
@@ -117,7 +134,9 @@ public class GeminiThoughtProcessor {
                     if (Utils.isNotEmpty(functionName)) {
                         resp.lastToolCallId = functionName;
                     }
-                    ToolCall toolCall = new ToolCall(callIndex, callIndex, functionName, argsJson, argsMap);
+                    ToolCall toolCall = new ToolCall(callIndex,
+                            callId,
+                            functionName, argsJson, argsMap);
                                 
                     // 仅第一个 functionCall part 携带 thoughtSignature（并行调用时后续 part 没有）
                     if (toolCalls.isEmpty()) {

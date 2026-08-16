@@ -196,11 +196,24 @@ public class GeminiRequestBuilder {
     private void buildToolMessageNode(ONode node, ToolMessage toolMessage) {
         node.getOrNew("parts").asArray().addNew().getOrNew("functionResponse").then(n2 -> {
             n2.set("name", toolMessage.getName());
+            // Gemini 3+ 官方规范：functionResponse 需回传与 functionCall 相同的 id。
+            // 仅当 id 为服务端真实 id（即与 name 不同）时写出，兼容 Gemini 2.5 / 代理端（不识别 id 字段）。
+            String callId = toolMessage.getToolCallId();
+            if (Utils.isNotEmpty(callId) && !callId.equals(toolMessage.getName())) {
+                n2.set("id", callId);
+            }
+            // 官方规范：response 必须是键值对 JSON Object；数组/标量/纯文本一律包装为 {"result": ...}。
             try {
                 ONode responseNode = ONode.ofJson(toolMessage.getContent());
-                n2.set("response", responseNode);
+                if (responseNode.isObject()) {
+                    n2.set("response", responseNode);
+                } else {
+                    ONode wrapper = new ONode().asObject();
+                    wrapper.set("result", responseNode);
+                    n2.set("response", wrapper);
+                }
             } catch (Exception e) {
-                ONode responseNode = new ONode();
+                ONode responseNode = new ONode().asObject();
                 responseNode.set("result", toolMessage.getContent());
                 n2.set("response", responseNode);
             }
@@ -224,6 +237,10 @@ public class GeminiRequestBuilder {
                     ONode partNode = n1.addNew();
                     partNode.getOrNew("functionCall").then(n2 -> {
                         n2.set("name", call.getName());
+                        // Gemini 3+ 官方规范：回传的 functionCall 需携带服务端生成的 id（仅真实 id，fallback 的 name 不写）
+                        if (Utils.isNotEmpty(call.getId()) && !call.getId().equals(call.getName())) {
+                            n2.set("id", call.getId());
+                        }
                         // 出站兜底净化：截断/双重编码的 arguments 禁止原样回传（args 必须是 object）
                         String safeArgs = ToolCallJsonSanitizer.sanitizeArguments(call.getArgumentsStr(), call.getName());
                         try {
@@ -387,6 +404,35 @@ public class GeminiRequestBuilder {
                 }
             }
         });
+
+        // Gemini 官方规范：toolConfig.functionCallingConfig.mode 支持 AUTO/ANY/NONE。
+        // 对齐上层 tool_choice 配置：none→NONE、required→ANY、指定函数→ANY+allowedFunctionNames、auto→AUTO（默认值，省略）。
+        Object toolChoice = options == null ? null : options.options().get("tool_choice");
+        if (toolChoice != null) {
+            if ("none".equals(toolChoice)) {
+                ONode tc = new ONode();
+                tc.getOrNew("functionCallingConfig").set("mode", "NONE");
+                root.set("toolConfig", tc);
+            } else if ("required".equals(toolChoice)) {
+                ONode tc = new ONode();
+                tc.getOrNew("functionCallingConfig").set("mode", "ANY");
+                root.set("toolConfig", tc);
+            } else if (toolChoice instanceof Map) {
+                // 指定函数名：ANY + allowedFunctionNames
+                Object functionObj = ((Map<?, ?>) toolChoice).get("function");
+                if (functionObj instanceof Map) {
+                    Object name = ((Map<?, ?>) functionObj).get("name");
+                    if (name != null) {
+                        ONode tc = new ONode();
+                        ONode fcc = tc.getOrNew("functionCallingConfig");
+                        fcc.set("mode", "ANY");
+                        fcc.getOrNew("allowedFunctionNames").asArray().addNew().setValue(name.toString());
+                        root.set("toolConfig", tc);
+                    }
+                }
+            }
+            // "auto" 是 Gemini 默认模式，无需显式写出（保持请求简洁）
+        }
     }
 
     /**
@@ -406,6 +452,11 @@ public class GeminiRequestBuilder {
                 ONode partNode = n1.addNew();
                 partNode.getOrNew("functionCall").then(n2 -> {
                     n2.set("name", builder.nameBuilder.toString());
+                    // Gemini 3+ 官方规范：回传的 functionCall 需携带服务端生成的 id（仅真实 id，fallback 的 name 不写）
+                    if (builder.idBuilder.length() > 0
+                            && !builder.idBuilder.toString().contentEquals(builder.nameBuilder)) {
+                        n2.set("id", builder.idBuilder.toString());
+                    }
                     if (builder.argumentsBuilder.length() > 0) {
                         // Gemini 流式 functionCall.args 是累积完整 JSON（非 OpenAI 增量片段）：
                         // 同一 functionCall 跨 chunk 重复发送时 append 会产生 {..}{..} 拼接，
