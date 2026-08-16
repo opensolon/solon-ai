@@ -99,6 +99,9 @@ public class McpResultResponder {
                 //result = new McpSchema.CallToolResult(contentList, false, fun.meta());
             } else {
                 String rstStr = ToolSchemaUtil.resultConvert(fun, rst);
+                if (rstStr == null) {
+                    rstStr = "";
+                }
 
                 if (serverProps.isEnableOutputSchema() && Utils.isNotEmpty(fun.outputSchema())) {
                     Map<String, Object> map = ONode.ofBean(rst).toBean(Map.class);

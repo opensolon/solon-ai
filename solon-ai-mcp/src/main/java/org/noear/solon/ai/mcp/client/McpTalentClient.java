@@ -143,7 +143,12 @@ public class McpTalentClient implements Talent {
                         Utils.asMap("promptJson", promptJson))
                 .getContent();
 
-        List<String> toolsName = ONode.deserialize(toolsNameJson, List.class);
+        final List<String> toolsName;
+        if (Utils.isNotEmpty(toolsNameJson)) {
+            toolsName = ONode.deserialize(toolsNameJson, List.class);
+        } else {
+            toolsName = null;
+        }
 
         if(toolsName == null){
             return getToolsStream().collect(Collectors.toList());
