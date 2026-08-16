@@ -26,7 +26,7 @@ public interface ChatDialects {
 
     static String ANTHROPIC = "anthropic";
 
-    static String GOOGLE_MODELS = "google-models"; //old
+    static String GOOGLE_GENERATE = "google-generate"; //old
     static String GOOGLE_INTERACTIONS = "google-interactions";
 
     static String OLLAMA = "ollama";

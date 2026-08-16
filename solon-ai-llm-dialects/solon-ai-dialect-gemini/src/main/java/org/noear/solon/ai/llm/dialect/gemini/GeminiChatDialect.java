@@ -83,13 +83,17 @@ public class GeminiChatDialect extends AbstractChatDialect {
 
         if ("google".equalsIgnoreCase(standard) ||
                 "google-models".equalsIgnoreCase(standard) ||
+                "google-generate".equalsIgnoreCase(standard) ||
                 "gemini".equalsIgnoreCase(standard) || //弃用
                 "gemini-models".equalsIgnoreCase(standard)) { //弃用
             return true;
         }
 
-        return (Assert.isEmpty(standard) && config.getApiUrl().contains("/v1beta/models/")
-                && (config.getApiUrl().endsWith("generateContent") || config.getApiUrl().endsWith("streamGenerateContent")));
+        String apiUrl = config.getApiUrl();
+        return Assert.isEmpty(standard)
+                && Utils.isNotEmpty(apiUrl)
+                && apiUrl.contains("/v1beta/models/")
+                && (apiUrl.endsWith("generateContent") || apiUrl.endsWith("streamGenerateContent"));
     }
 
     @Override
@@ -140,13 +144,15 @@ public class GeminiChatDialect extends AbstractChatDialect {
      * @return 完整的 API 请求 URL
      */
     private String buildApiUrl(String baseUrl, String model, boolean isStream) {
-        // 处理后缀#
+        if (Utils.isEmpty(baseUrl)) {
+            return baseUrl;
+        }
+
         int index = baseUrl.indexOf('#');
         if (index > 0) {
             baseUrl = baseUrl.substring(0, index);
         }
 
-        // 已含完整端点（:generateContent / :streamGenerateContent）时直接使用，避免重复拼接
         if (baseUrl.contains(":generateContent") || baseUrl.contains(":streamGenerateContent")) {
             if (isStream && !baseUrl.contains("alt=sse")) {
                 return baseUrl + (baseUrl.contains("?") ? "&" : "?") + "alt=sse";
@@ -154,30 +160,19 @@ public class GeminiChatDialect extends AbstractChatDialect {
             return baseUrl;
         }
 
-        String normalizedUrl = baseUrl;
-        if (normalizedUrl.endsWith("/")) {
-            normalizedUrl = normalizedUrl.substring(0, normalizedUrl.length() - 1);
-        }
+        StringBuilder urlBuilder = new StringBuilder();
+        urlBuilder.append(baseUrl);
 
-        StringBuilder urlBuilder = new StringBuilder(normalizedUrl);
-
-        if (normalizedUrl.endsWith("/") == false) {
+        if (!baseUrl.endsWith("/")) {
             urlBuilder.append("/");
         }
 
-        if (normalizedUrl.contains("v1beta/") == false && normalizedUrl.contains("v1/") == false) {
+        if (!baseUrl.contains("v1beta/") && !baseUrl.contains("v1/")) {
             urlBuilder.append("v1beta/");
         }
 
-        urlBuilder.append("models/");
-        urlBuilder.append(model);
-
-        String endpoint = isStream ? ":streamGenerateContent" : ":generateContent";
-        urlBuilder.append(endpoint);
-
-        if (isStream) {
-            urlBuilder.append("?alt=sse");
-        }
+        urlBuilder.append("models/").append(model);
+        urlBuilder.append(isStream ? ":streamGenerateContent?alt=sse" : ":generateContent");
 
         return urlBuilder.toString();
     }
