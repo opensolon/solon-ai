@@ -36,14 +36,10 @@ import java.util.List;
  * @since 3.1
  */
 public class GeminiResponseParser {
-
     private final GeminiThoughtProcessor thoughtProcessor;
-    private final boolean logEnabled;
-    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(GeminiResponseParser.class);
 
     public GeminiResponseParser() {
         this.thoughtProcessor = new GeminiThoughtProcessor();
-        this.logEnabled = log.isDebugEnabled();
     }
 
     /**
@@ -71,10 +67,6 @@ public class GeminiResponseParser {
     public boolean parseStreamResponse(ChatResponseDefault resp, String json) {
         if (json == null || json.isEmpty()) {
             return false;
-        }
-
-        if (logEnabled) {
-            log.debug("Gemini stream raw response: {}", json);
         }
 
         String[] lines = json.split("\n");
