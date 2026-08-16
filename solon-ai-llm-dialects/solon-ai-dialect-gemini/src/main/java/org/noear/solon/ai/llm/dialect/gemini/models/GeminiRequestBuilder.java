@@ -70,8 +70,19 @@ public class GeminiRequestBuilder {
             root.set("model", config.getModel());
         }
 
+        // cachedContent: Google Gemini 显式 Context Caching（针对超长上下文/系统知识库）
+        // 允许通过 options.optionSet("cachedContent", "cachedContents/xxx") 或 context_cache_id 传入
+        Object cachedContent = options.options().get("cachedContent");
+        if (cachedContent == null) {
+            cachedContent = options.options().get("context_cache_id");
+        }
+        if (cachedContent != null && Utils.isNotEmpty(cachedContent.toString())) {
+            root.set("cachedContent", cachedContent.toString());
+        }
+
         // system_instruction：提取 SystemMessage 到顶层（Gemini 的 contents[].role 仅接受 user/model，
         // 写入 role="system" 会被 API 400 拒绝；官方格式为 system_instruction.parts[].text）
+        // 注：若已挂载 cachedContent，通常 system_instruction 已内嵌在缓存资源中，仍允许追加
         ONode sysInst = buildSystemInstructionNode(messages);
         if (sysInst != null) {
             root.set("system_instruction", sysInst);
