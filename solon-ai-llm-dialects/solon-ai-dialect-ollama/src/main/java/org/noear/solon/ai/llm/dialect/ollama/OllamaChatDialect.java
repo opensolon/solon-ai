@@ -400,7 +400,9 @@ public class OllamaChatDialect extends AbstractChatDialect {
             if (keepAlive != null) {
                 n.set("keep_alive", keepAlive);
             } else {
-                n.set("keep_alive", cacheControl.getTtl()); // 5m
+                if (cacheControl != null && cacheControl.getTtl() != null) {
+                    n.set("keep_alive", cacheControl.getTtl()); // 5m
+                }
             }
 
             // ⭐ 支持 prompt_cache_key (OpenAI 兼容模式下的 Prompt Caching)
