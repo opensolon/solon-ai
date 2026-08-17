@@ -14,8 +14,10 @@
 ### 4.0.6
 
 * 添加 solon-ai-agent Metrics 缓存率计算支持
-* 调整 solon-ai-mcp IMcpHttpServerTransport 接口，完善生命周期（更方便动态增减）
 * 优化 solon-ai-llm 方言工具调用的兼容性处理（有些 toolCalls 参数格式不完整）
+* 优化 solon-ai-llm gemini 方言兼容性处理
+* 优化 solon-ai-mcp McpTalent 兼容性
+* 调整 solon-ai-mcp IMcpHttpServerTransport 接口，完善生命周期（更方便动态增减）
 
 ### 4.0.5
 
