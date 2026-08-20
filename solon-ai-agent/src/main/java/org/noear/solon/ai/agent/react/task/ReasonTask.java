@@ -435,8 +435,12 @@ public class ReasonTask {
                                     .takeUntil(r -> trace.isStreamCancelled())
                                     .doOnNext(resp -> {
                                         streamEmitted.set(true);
-                                        trace.pushAgentEvent(new ReasonDeltaEvent(trace, resp, resp.getMessage()));
-                                        trace.pushAgentEvent(new ReasonChunk(trace, resp, resp.getMessage()));
+
+                                        if (resp.hasChoices() && resp.getMessage().isToolCalls() == false) {
+                                            //非工作调用才是 delta （工作时，已聚合内容）
+                                            trace.pushAgentEvent(new ReasonDeltaEvent(trace, resp, resp.getMessage()));
+                                            trace.pushAgentEvent(new ReasonChunk(trace, resp, resp.getMessage()));
+                                        }
                                     })
                                     .blockLast();
                         } else {
