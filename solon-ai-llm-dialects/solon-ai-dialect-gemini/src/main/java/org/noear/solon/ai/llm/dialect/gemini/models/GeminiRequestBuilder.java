@@ -142,25 +142,25 @@ public class GeminiRequestBuilder {
      * @return system_instruction 节点，无则 null
      */
     private ONode buildSystemInstructionNode(List<ChatMessage> messages) {
-        StringBuilder text = new StringBuilder();
+        StringBuilder systemPrompt = new StringBuilder();
         for (ChatMessage m1 : messages) {
             if (m1 instanceof SystemMessage) {
                 String content = m1.getContent();
                 if (Utils.isNotEmpty(content)) {
-                    if (text.length() > 0) {
-                        text.append("\n\n");
+                    if (systemPrompt.length() > 0) {
+                        systemPrompt.append("\n\n");
                     }
-                    text.append(content);
+                    systemPrompt.append(content);
                 }
             }
         }
 
-        if (text.length() == 0) {
+        if (systemPrompt.length() == 0) {
             return null;
         }
 
         ONode node = new ONode();
-        node.getOrNew("parts").asArray().addNew().set("text", text.toString());
+        node.getOrNew("parts").asArray().addNew().set("text", systemPrompt.toString());
         return node;
     }
 

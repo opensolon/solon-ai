@@ -492,9 +492,9 @@ public class OpenaiResponsesResponseParser {
                             if ("reasoning_text".equals(contentType) || "text".equals(contentType)) {
                                 String text = contentItem.get("text").getString();
                                 if (Utils.isNotEmpty(text)) {
-                                    if (reasoningContent.length() > 0) {
-                                        reasoningContent.append("\n");
-                                    }
+//                                    if (reasoningContent.length() > 0) {
+//                                        reasoningContent.append("\n");
+//                                    }
                                     reasoningContent.append(text);
                                 }
                             }
@@ -507,9 +507,9 @@ public class OpenaiResponsesResponseParser {
                             for (ONode summaryItem : summaryArray.getArray()) {
                                 String text = summaryItem.get("text").getString();
                                 if (Utils.isNotEmpty(text)) {
-                                    if (reasoningContent.length() > 0) {
-                                        reasoningContent.append("\n");
-                                    }
+//                                    if (reasoningContent.length() > 0) {
+//                                        reasoningContent.append("\n");
+//                                    }
                                     reasoningContent.append(text);
                                 }
                             }
@@ -524,9 +524,9 @@ public class OpenaiResponsesResponseParser {
                             if ("output_text".equals(contentType) || "text".equals(contentType)) {
                                 String text = contentItem.get("text").getString();
                                 if (Utils.isNotEmpty(text)) {
-                                    if (textContent.length() > 0) {
-                                        textContent.append("\n");
-                                    }
+//                                    if (textContent.length() > 0) {
+//                                        textContent.append("\n");
+//                                    }
                                     textContent.append(text);
                                 }
                             } else if ("refusal".equals(contentType)) {
@@ -535,9 +535,9 @@ public class OpenaiResponsesResponseParser {
                                     refusal = contentItem.get("text").getString();
                                 }
                                 if (Utils.isNotEmpty(refusal)) {
-                                    if (textContent.length() > 0) {
-                                        textContent.append("\n");
-                                    }
+//                                    if (textContent.length() > 0) {
+//                                        textContent.append("\n");
+//                                    }
                                     textContent.append(refusal);
                                 }
                             } else if ("output_image".equals(contentType) || "image".equals(contentType)

@@ -500,7 +500,6 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                     AssistantMessage message = dialect.buildAssistantMessageByToolMessages(choiceMessage, returnDirectMessages);
                     resp.reset();
                     resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
-                    //resp.aggregationMessageContent.setLength(0);
                     publishResponse(sink, resp, resp.lastChoice());
                     return true; //触发外层的完成事件
                 }
@@ -508,7 +507,6 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 AssistantMessage message = assistantMessages.get(0);
                 resp.reset();
                 resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
-                //resp.aggregationMessageContent.setLength(0);
 
                 publishResponse(sink, resp, resp.lastChoice());
                 return true; //触发外层的完成事件

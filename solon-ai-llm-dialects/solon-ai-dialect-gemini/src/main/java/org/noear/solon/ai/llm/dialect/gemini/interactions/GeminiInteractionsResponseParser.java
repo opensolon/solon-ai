@@ -610,9 +610,9 @@ public class GeminiInteractionsResponseParser {
         List<ContentBlock> media = new ArrayList<>();
         for (ContentBlock block : blocks) {
             if (block instanceof TextBlock) {
-                if (text.length() > 0) {
-                    text.append("\n");
-                }
+//                if (text.length() > 0) {
+//                    text.append("\n");
+//                }
                 text.append(block.getContent());
             } else {
                 media.add(block);
@@ -646,9 +646,9 @@ public class GeminiInteractionsResponseParser {
             if (block instanceof TextBlock) {
                 String text = block.getContent();
                 if (Utils.isNotEmpty(text)) {
-                    if (sb.length() > 0) {
-                        sb.append("\n");
-                    }
+//                    if (sb.length() > 0) {
+//                        sb.append("\n");
+//                    }
                     sb.append(text);
                 }
             }

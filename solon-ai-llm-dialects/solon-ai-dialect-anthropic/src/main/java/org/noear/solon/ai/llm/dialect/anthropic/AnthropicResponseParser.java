@@ -524,9 +524,9 @@ public class AnthropicResponseParser {
                 if ("thinking".equals(contentType)) {
                     String thinking = contentItem.get("thinking").getString();
                     if (Utils.isNotEmpty(thinking)) {
-                        if (thinkingContent.length() > 0) {
-                            thinkingContent.append("\n");
-                        }
+//                        if (thinkingContent.length() > 0) {
+//                            thinkingContent.append("\n");
+//                        }
                         thinkingContent.append(thinking);
                     }
                     // 保留 thinking signature，供多轮回传（非流式此前会丢失）
@@ -537,9 +537,9 @@ public class AnthropicResponseParser {
                 } else if ("text".equals(contentType)) {
                     String text = contentItem.get("text").getString();
                     if (Utils.isNotEmpty(text)) {
-                        if (normalContent.length() > 0) {
-                            normalContent.append("\n");
-                        }
+//                        if (normalContent.length() > 0) {
+//                            normalContent.append("\n");
+//                        }
                         normalContent.append(text);
                     }
                 } else if ("image".equals(contentType)) {
@@ -579,9 +579,9 @@ public class AnthropicResponseParser {
                 } else if ("server_tool_use".equals(contentType)) {
                     // server-side tool（web_search/code_execution 等）：降级为文本摘要，避免内容静默丢失
                     String name = contentItem.get("name").getString();
-                    if (normalContent.length() > 0) {
-                        normalContent.append("\n");
-                    }
+//                    if (normalContent.length() > 0) {
+//                        normalContent.append("\n");
+//                    }
                     normalContent.append("[server tool: ").append(name).append("]");
                 } else if (contentType != null && contentType.endsWith("_tool_result")) {
                     // web_search_tool_result / web_fetch_tool_result 等：提取其 content 内的文本
@@ -590,9 +590,9 @@ public class AnthropicResponseParser {
                         for (ONode rb : resultContent.getArray()) {
                             String text = rb.get("text").getString();
                             if (Utils.isNotEmpty(text)) {
-                                if (normalContent.length() > 0) {
-                                    normalContent.append("\n");
-                                }
+//                                if (normalContent.length() > 0) {
+//                                    normalContent.append("\n");
+//                                }
                                 normalContent.append(text);
                             }
                         }

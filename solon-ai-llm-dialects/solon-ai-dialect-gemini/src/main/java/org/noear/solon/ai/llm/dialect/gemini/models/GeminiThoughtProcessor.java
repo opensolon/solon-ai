@@ -293,14 +293,14 @@ public class GeminiThoughtProcessor {
                         String text = oPart.get("text").getString();
                         if (Utils.isNotEmpty(text)) {
                             if (isThought) {
-                                if (thoughtContent.length() > 0) {
-                                    thoughtContent.append("\n");
-                                }
+//                                if (thoughtContent.length() > 0) {
+//                                    thoughtContent.append("\n");
+//                                }
                                 thoughtContent.append(text);
                             } else {
-                                if (normalContent.length() > 0) {
-                                    normalContent.append("\n");
-                                }
+//                                if (normalContent.length() > 0) {
+//                                    normalContent.append("\n");
+//                                }
                                 normalContent.append(text);
                             }
                         }

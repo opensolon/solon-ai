@@ -227,9 +227,9 @@ public class AnthropicChatDialect extends AbstractChatDialect {
             } else if ("text".equals(type)) {
                 String text = item.get("text").getString();
                 if (Utils.isNotEmpty(text)) {
-                    if (textContent.length() > 0) {
-                        textContent.append("\n");
-                    }
+//                    if (textContent.length() > 0) {
+//                        textContent.append("\n");
+//                    }
                     textContent.append(text);
                 }
             } else if ("image".equals(type)) {

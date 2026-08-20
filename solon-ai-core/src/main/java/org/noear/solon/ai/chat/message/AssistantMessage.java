@@ -153,13 +153,13 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
             // 反序列化/纯 toolCalls 消息可能 content 为 null，需空安全
             String src = content == null ? "" : content;
             if (isThinking) {
-                thinking = src.replace("<think>", "").replace("</think>", "").trim();
+                thinking = src.replace("<think>", "").replace("</think>", "");
             } else if (src.contains("</think>")) {
                 int start = src.indexOf("<think>");
                 int end = src.indexOf("</think>");
 
                 if (start > -1 && end > -1) {
-                    thinking = src.substring(start + 7, end).trim();
+                    thinking = src.substring(start + 7, end);
                 } else {
                     thinking = "";
                 }

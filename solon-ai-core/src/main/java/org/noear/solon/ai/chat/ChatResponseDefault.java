@@ -439,6 +439,10 @@ public class ChatResponseDefault implements ChatResponse {
     public void reset() {
         this.error = null;
         this.choices.clear();
+
+        //总累积内容不能清
+        //this.contentBuilder.setLength(0);
+        //this.reasoningBuilder.setLength(0);
     }
 
     /**
