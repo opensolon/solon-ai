@@ -317,9 +317,12 @@ public class AnthropicResponseParser {
                     String deltaType = delta.get("type").getString();
                     if ("thinking_delta".equals(deltaType)) {
                         // 思考内容增量更新
+                        // 注意：不能在此处直接 append reasoningBuilder。core 的 publishResponse 会通过
+                        // AssistantMessage(thinking, true).getReasoning() 统一追加一次，若此处再追加，
+                        // 同一 chunk 会被写两次，导致推理内容逐块重复（如 "用户用户要求要求"、
+                        // "solsolononcodecode"），且换网关依旧复现（根因在解析器与 core 的交互）。
                         String thinking = delta.get("thinking").getString();
                         if (Utils.isNotEmpty(thinking)) {
-                            resp.reasoningBuilder.append(thinking);
                             resp.addChoice(new ChatChoice(0, new Date(), null,
                                     new AssistantMessage(thinking, true)));
                             hasChoices = true;

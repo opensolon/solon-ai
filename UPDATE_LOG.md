@@ -16,6 +16,7 @@
 * 优化 solon-ai-dialect-openai 方言适配
 * 优化 solon-ai-dialect-anthropic 方言适配
 * 修复 solon-ai-dialect-anthropic 缓存率计算错误的问题
+* 修复 solon-ai-dialect-anthropic 输出有叠字的问题
 
 ### 4.0.6
 
