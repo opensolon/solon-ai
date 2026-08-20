@@ -44,8 +44,6 @@ import java.util.*;
 public class AnthropicResponseParser {
     private static final Logger LOG = LoggerFactory.getLogger(AnthropicResponseParser.class);
 
-    private final boolean logEnabled;
-
     /**
      * 流式工具调用的按请求隔离状态
      */
@@ -62,6 +60,7 @@ public class AnthropicResponseParser {
      * 官方 SDK 即按 index 分别聚合每个块的 input_json_delta，因此这里必须用 Map 而非单值。</p>
      */
     private static final String STREAM_TOOL_STATE_KEY = "StreamToolStates";
+    private static final String REDACTED_THINKING_DATA_KEY = "redactedThinkingData";
 
     @SuppressWarnings("unchecked")
     static Map<Integer, StreamToolState> toolStates(ChatResponseDefault resp, boolean create) {
@@ -90,10 +89,6 @@ public class AnthropicResponseParser {
             resp.attrPut(REDACTED_BLOCKS_KEY, blocks);
         }
         return blocks;
-    }
-
-    public AnthropicResponseParser() {
-        this.logEnabled = LOG.isDebugEnabled();
     }
 
     /**
@@ -188,7 +183,7 @@ public class AnthropicResponseParser {
             return false;
         }
 
-        StringBuilder redactedThinkingData = resp.attrIfAbsent("redactedThinkingData", (k) -> new StringBuilder());
+        StringBuilder redactedThinkingData = resp.attrIfAbsent(REDACTED_THINKING_DATA_KEY, (k) -> new StringBuilder());
 
         String[] lines = json.split("\n");
         boolean hasChoices = false;
@@ -494,7 +489,7 @@ public class AnthropicResponseParser {
             return true;
         }
 
-        StringBuilder redactedThinkingData = resp.attrIfAbsent("redactedThinkingData", (k) -> new StringBuilder());
+        StringBuilder redactedThinkingData = resp.attrIfAbsent(REDACTED_THINKING_DATA_KEY, (k) -> new StringBuilder());
 
         // 设置模型信息
         resp.setModel(oResp.get("model").getString());

@@ -84,6 +84,11 @@ public class OpenaiChatDialect extends AbstractChatDialect {
             return true;
         }
 
+        //有些中转会直接输出："error xxx" 内容
+        if (tryParseErrorText(resp, json)) {
+            return true;
+        }
+
         //解析
         ONode oResp = ONode.ofJson(json);
 

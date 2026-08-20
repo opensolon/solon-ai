@@ -78,6 +78,11 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
      */
     @Override
     public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
+        //有些中转会直接输出："error xxx" 内容
+        if (tryParseErrorText(resp, json)) {
+            return true;
+        }
+
         return responseParser.parseResponse(resp, json);
     }
 

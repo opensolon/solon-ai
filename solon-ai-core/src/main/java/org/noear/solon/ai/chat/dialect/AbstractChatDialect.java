@@ -275,6 +275,20 @@ public abstract class AbstractChatDialect implements ChatDialect {
     }
     
     /**
+     * 尝试拦截中转网关直接输出的纯文本错误（如 "error xxx"，非 JSON）。
+     * <p>命中时设置错误并返回 true（表示已处理），避免后续 JSON 解析报出误导性格式错误。</p>
+     *
+     * @since 4.0.5
+     */
+    protected boolean tryParseErrorText(ChatResponseDefault resp, String json) {
+        if (json != null && json.startsWith("error ")) {
+            resp.setError(new ChatException(json));
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * 判断媒体块是否可回传。
      * <p>Session 压缩后 data 为空且无 url/id 时不可播，应跳过避免写出空 media。</p>
      *
