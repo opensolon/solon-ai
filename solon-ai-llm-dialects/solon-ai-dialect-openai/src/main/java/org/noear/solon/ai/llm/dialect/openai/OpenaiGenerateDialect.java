@@ -58,7 +58,7 @@ public class OpenaiGenerateDialect extends AbstractGenerateDialect {
         String model = oResp.get("model").getString();
 
         if (oResp.hasKey("error")) {
-            return new GenerateResponse(model, new GenerateException(oResp.get("error").getString()), null, null);
+            return new GenerateResponse(model, new GenerateException(OpenaiDialectSupport.extractErrorMessage(oResp.get("error"))), null, null);
         } else {
             List<GenerateContent> data = null;
 
@@ -76,9 +76,12 @@ public class OpenaiGenerateDialect extends AbstractGenerateDialect {
             if (oResp.hasKey("usage")) {
                 ONode oUsage = oResp.get("usage");
                 long prompt_tokens = oUsage.get("prompt_tokens").getLong();
-                long total_tokens = oUsage.get("total_tokens").getLong();
+                long completion_tokens = oUsage.get("completion_tokens").getLong();
+                // 官方 SDK 中 total_tokens 为 optional，缺省时用输入+输出兜底
+                long total_tokens = oUsage.hasKey("total_tokens")
+                        ? oUsage.get("total_tokens").getLong() : (prompt_tokens + completion_tokens);
 
-                usage = new AiUsage(prompt_tokens, 0L, 0L, total_tokens, oUsage);
+                usage = new AiUsage(prompt_tokens, 0L, completion_tokens, total_tokens, oUsage);
             }
 
             return new GenerateResponse(model, null, data, usage);

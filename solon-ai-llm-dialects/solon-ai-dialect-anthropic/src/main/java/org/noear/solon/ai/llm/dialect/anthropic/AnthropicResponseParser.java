@@ -55,7 +55,42 @@ public class AnthropicResponseParser {
         StringBuilder toolInput;
     }
 
-    private static final String STREAM_TOOL_STATE_KEY = "StreamToolState";
+    /**
+     * 流式工具调用状态容器：按 content_block 的 index 跟踪。
+     * <p>协议规范（RawMessageStreamEvent）：一次响应的 content[] 可包含多个并列/交错的
+     * tool_use 块，content_block_start/delta/stop 事件均携带 index 字段标识所属块。
+     * 官方 SDK 即按 index 分别聚合每个块的 input_json_delta，因此这里必须用 Map 而非单值。</p>
+     */
+    private static final String STREAM_TOOL_STATE_KEY = "StreamToolStates";
+
+    @SuppressWarnings("unchecked")
+    static Map<Integer, StreamToolState> toolStates(ChatResponseDefault resp, boolean create) {
+        Map<Integer, StreamToolState> states = resp.attrAs(STREAM_TOOL_STATE_KEY);
+        if (states == null && create) {
+            states = new HashMap<>();
+            resp.attrPut(STREAM_TOOL_STATE_KEY, states);
+        }
+        return states;
+    }
+
+    private Map<Integer, StreamToolState> getToolStates(ChatResponseDefault resp, boolean create) {
+        return toolStates(resp, create);
+    }
+
+    /**
+     * redacted_thinking 分块列表（协议要求逐块原样回传，不可拼接）。
+     */
+    static final String REDACTED_BLOCKS_KEY = "RedactedThinkingBlocks";
+
+    @SuppressWarnings("unchecked")
+    static List<String> getRedactedBlocks(ChatResponseDefault resp, boolean create) {
+        List<String> blocks = resp.attrAs(REDACTED_BLOCKS_KEY);
+        if (blocks == null && create) {
+            blocks = new ArrayList<>();
+            resp.attrPut(REDACTED_BLOCKS_KEY, blocks);
+        }
+        return blocks;
+    }
 
     public AnthropicResponseParser() {
         this.logEnabled = LOG.isDebugEnabled();
@@ -63,10 +98,11 @@ public class AnthropicResponseParser {
 
     /**
      * 解析 usage 信息（包含 Prompt Caching 统计）
-     * @author oisin lu
-     * @date 2026年1月27日
+     *
      * @param usageNode usage JSON 节点
      * @return AiUsage 对象
+     * @author oisin lu
+     * @date 2026年1月27日
      */
     private AiUsage parseUsage(ONode usageNode) {
         if (usageNode == null) {
@@ -83,9 +119,12 @@ public class AnthropicResponseParser {
         if (usageNode.hasKey("cache_read_input_tokens")) {
             cacheReadInputTokens = usageNode.get("cache_read_input_tokens").getLong();
         }
+        // Anthropic 的 input_tokens 不含缓存部分，需将 cache 两项并入，归一为“全部输入 token”语义（与 OpenAI prompt_tokens 对齐），
+        // 否则下游 cacheRate = cacheRead / promptTokens 会被高估并恒定 100%
+        long totalInputTokens = inputTokens + cacheCreationInputTokens + cacheReadInputTokens;
         // 只有在有实际 token 消耗时才返回 usage
         if (inputTokens > 0 || outputTokens > 0 || cacheCreationInputTokens > 0 || cacheReadInputTokens > 0) {
-            return new AiUsage(inputTokens, 0L, outputTokens, inputTokens + outputTokens,
+            return new AiUsage(totalInputTokens, 0L, outputTokens, totalInputTokens + outputTokens,
                     cacheCreationInputTokens, cacheReadInputTokens, usageNode);
         }
 
@@ -93,12 +132,39 @@ public class AnthropicResponseParser {
     }
 
     /**
+     * 深度合并两个 usage source 节点：数值字段取 max，对象字段递归合并，
+     * 保留 message_start 中的嵌套计费明细（cache_creation/server_tool_use/output_tokens_details）。
+     */
+    private static ONode mergeUsageSource(ONode prev, ONode curr) {
+        if (prev == null || !prev.isObject()) {
+            return curr;
+        }
+        if (curr == null || !curr.isObject()) {
+            return prev;
+        }
+        ONode merged = ONode.ofJson(prev.toJson());
+        for (Map.Entry<String, ONode> kv : curr.getObject().entrySet()) {
+            ONode oldValue = merged.getOrNull(kv.getKey());
+            ONode newValue = kv.getValue();
+            if (oldValue == null || oldValue.isNull()) {
+                merged.set(kv.getKey(), ONode.ofJson(newValue.toJson()));
+            } else if (oldValue.isObject() && newValue.isObject()) {
+                merged.set(kv.getKey(), mergeUsageSource(oldValue, newValue));
+            } else if (oldValue.isNumber() && newValue.isNumber()) {
+                merged.set(kv.getKey(), Math.max(oldValue.getLong(), newValue.getLong()));
+            }
+        }
+        return merged;
+    }
+
+    /**
      * 解析响应 JSON
+     *
+     * @param resp 聊天响应对象
+     * @param json 响应 JSON 字符串
+     * @return 是否有有效的选择
      * @author oisin lu
      * @date 2026年1月27日
-     * @param resp  聊天响应对象
-     * @param json  响应 JSON 字符串
-     * @return 是否有有效的选择
      */
     public boolean parseResponse(ChatResponseDefault resp, String json) {
         if (resp.isStream()) {
@@ -110,16 +176,19 @@ public class AnthropicResponseParser {
 
     /**
      * 解析流式响应
-     * @author oisin lu
-     * @date 2026年1月27日
+     *
      * @param resp 聊天响应对象
      * @param json 响应 JSON 字符串
      * @return 是否有有效的选择
+     * @author oisin lu
+     * @date 2026年1月27日
      */
     public boolean parseStreamResponse(ChatResponseDefault resp, String json) {
         if (json == null || json.isEmpty()) {
             return false;
         }
+
+        StringBuilder redactedThinkingData = resp.attrIfAbsent("redactedThinkingData", (k) -> new StringBuilder());
 
         String[] lines = json.split("\n");
         boolean hasChoices = false;
@@ -145,12 +214,7 @@ public class AnthropicResponseParser {
                 return true;
             }
 
-            if(json.startsWith("error ")){
-                resp.setError(new ChatException(json));
-                return true;
-            }
-
-            ONode oResp = new JsonReader(json).readNext();
+            ONode oResp = new JsonReader(jsonData).readNext();
             if (oResp.isObject() == false) {
                 continue;
             }
@@ -238,7 +302,17 @@ public class AnthropicResponseParser {
                         state.toolName = contentBlock.get("name").getString();
                         state.toolInput = new StringBuilder();
 
-                        resp.attrPut(STREAM_TOOL_STATE_KEY, state);
+                        // 按块 index 存储（协议：事件均携带 index，支持多块并行）
+                        int blockIdx = oResp.get("index").getInt();
+                        getToolStates(resp, true).put(blockIdx, state);
+                    } else if ("redacted_thinking".equals(blockType)) {
+                        // 安全过滤的推理内容块，原样保留供多轮回传（对齐 Anthropic SDK）
+                        String data = contentBlock.get("data").getString();
+                        if (Utils.isNotEmpty(data)) {
+                            redactedThinkingData.append(data);
+                            // opaque 数据块必须独立分块回传，拼接会损坏 base64（对齐 SDK：逐块保留）
+                            getRedactedBlocks(resp, true).add(data);
+                        }
                     }
                 }
             } else if ("content_block_delta".equals(eventType)) {
@@ -271,16 +345,24 @@ public class AnthropicResponseParser {
                         // 工具调用参数增量更新，按需从 map 获取状态
                         String partialJson = delta.get("partial_json").getString();
                         if (Utils.isNotEmpty(partialJson)) {
-                            StreamToolState state = resp.attrAs(STREAM_TOOL_STATE_KEY);
-                            if (state != null) {
-                                state.toolInput.append(partialJson);
+                            Map<Integer, StreamToolState> states = getToolStates(resp, false);
+                            if (states != null) {
+                                // 按事件携带的 index 定位所属工具块
+                                StreamToolState state = states.get(oResp.get("index").getInt());
+                                if (state != null) {
+                                    state.toolInput.append(partialJson);
+                                }
                             }
                         }
                     }
                 }
             } else if ("content_block_stop".equals(eventType)) {
-                // 内容块结束，按需从 map 获取并清理工具调用状态
-                StreamToolState state = resp.attrRemove(STREAM_TOOL_STATE_KEY);
+                // 内容块结束：按 index 精确定位并清理对应工具块状态
+                Map<Integer, StreamToolState> states = getToolStates(resp, false);
+                StreamToolState state = null;
+                if (states != null) {
+                    state = states.remove(oResp.get("index").getInt());
+                }
                 if (state != null) {
                     try {
                         // 流式解析出口净化：截断损坏的 arguments 禁止入历史（input_json_delta 中断场景）
@@ -326,8 +408,23 @@ public class AnthropicResponseParser {
                 }
             } else if ("message_delta".equals(eventType)) {
                 // 消息增量更新，包含停止原因和用量信息
+                // 协议规范（RawMessageStreamEvent）：message_delta.usage 仅携带累计的 output_tokens，
+                // input_tokens / cache_* 统计只在 message_start.usage 中出现，直接覆盖会丢失输入侧计费数据，
+                // 因此按字段取 max 合并（output_tokens 为累计值只会增大；input/cache 字段沿用 message_start 的值）
                 AiUsage usage = parseUsage(oResp.get("usage"));
                 if (usage != null) {
+                    AiUsage prev = resp.getUsage();
+                    if (prev != null) {
+                        usage = new AiUsage(
+                                Math.max(prev.promptTokens(), usage.promptTokens()),
+                                0L,
+                                Math.max(prev.completionTokens(), usage.completionTokens()),
+                                Math.max(prev.totalTokens(), usage.totalTokens()),
+                                Math.max(prev.cacheCreationInputTokens(), usage.cacheCreationInputTokens()),
+                                Math.max(prev.cacheReadInputTokens(), usage.cacheReadInputTokens()),
+                                // 保留 message_start 中的嵌套计费明细（cache_creation/server_tool_use/output_tokens_details）
+                                mergeUsageSource(prev.getSource(), usage.getSource()));
+                    }
                     resp.setUsage(usage);
                 }
 
@@ -360,11 +457,12 @@ public class AnthropicResponseParser {
 
     /**
      * 解析非流式响应
-     * @author oisin lu
-     * @date 2026年1月27日
+     *
      * @param resp 聊天响应对象
      * @param json 响应 JSON 字符串
      * @return 解析是否成功
+     * @author oisin lu
+     * @date 2026年1月27日
      */
     public boolean parseNonStreamResponse(ChatResponseDefault resp, String json) {
         if ("[DONE]".equals(json)) {
@@ -372,11 +470,6 @@ public class AnthropicResponseParser {
                 resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 resp.setFinished(true);
             }
-            return true;
-        }
-
-        if(json.startsWith("error ")){
-            resp.setError(new ChatException(json));
             return true;
         }
 
@@ -401,6 +494,8 @@ public class AnthropicResponseParser {
             return true;
         }
 
+        StringBuilder redactedThinkingData = resp.attrIfAbsent("redactedThinkingData", (k) -> new StringBuilder());
+
         // 设置模型信息
         resp.setModel(oResp.get("model").getString());
         Date created = new Date();
@@ -412,6 +507,10 @@ public class AnthropicResponseParser {
 
         // 解析内容
         ONode contentArray = oResp.getOrNull("content");
+        // finishReason 在外层作用域声明，供后续 lastFinishReason 同步使用
+        String choiceFinishReason = Utils.isNotEmpty(stopReason)
+                ? stopReason
+                : "stop";
         if (contentArray != null && contentArray.isArray()) {
             // 分离思考内容、普通内容、媒体与工具调用
             StringBuilder thinkingContent = new StringBuilder();
@@ -420,7 +519,8 @@ public class AnthropicResponseParser {
             List<ContentBlock> mediaBlocks = new ArrayList<>();
             List<ToolCall> allToolCalls = new ArrayList<>();
             List<Map> allToolCallsRaw = new ArrayList<>();
-            
+            List<String> redactedBlocks = new ArrayList<>();
+
             for (ONode contentItem : contentArray.getArray()) {
                 String contentType = contentItem.get("type").getString();
                 if ("thinking".equals(contentType)) {
@@ -454,23 +554,54 @@ public class AnthropicResponseParser {
                     String toolId = contentItem.get("id").getString();
                     ONode inputNode = contentItem.get("input");
                     Map<String, Object> arguments = new HashMap<>();
+                    // 网关/兼容实现可能缺省 input 字段，兜底空对象避免 NPE（对齐 SDK 的 Optional 语义）
+                    String inputJson = "{}";
                     if (inputNode != null && inputNode.isObject()) {
                         arguments = inputNode.toBean(Map.class);
+                        inputJson = inputNode.toJson();
                     }
-                    
-                    allToolCalls.add(new ToolCall(toolId, toolId, toolName, inputNode.toJson(), arguments));
-                    
+
+                    allToolCalls.add(new ToolCall(toolId, toolId, toolName, inputJson, arguments));
+
                     Map<String, Object> toolCallRaw = new HashMap<>();
                     toolCallRaw.put("id", toolId);
                     toolCallRaw.put("type", "function");
                     Map<String, Object> functionData = new HashMap<>();
                     functionData.put("name", toolName);
-                    functionData.put("arguments", inputNode.toJson());
+                    functionData.put("arguments", inputJson);
                     toolCallRaw.put("function", functionData);
                     allToolCallsRaw.add(toolCallRaw);
+                } else if ("redacted_thinking".equals(contentType)) {
+                    // 安全过滤的推理内容块：opaque data，逐块原样保留供多轮回传（对齐 Anthropic SDK）
+                    String data = contentItem.get("data").getString();
+                    if (Utils.isNotEmpty(data)) {
+                        redactedThinkingData.append(data);
+                        redactedBlocks.add(data);
+                    }
+                } else if ("server_tool_use".equals(contentType)) {
+                    // server-side tool（web_search/code_execution 等）：降级为文本摘要，避免内容静默丢失
+                    String name = contentItem.get("name").getString();
+                    if (normalContent.length() > 0) {
+                        normalContent.append("\n");
+                    }
+                    normalContent.append("[server tool: ").append(name).append("]");
+                } else if (contentType != null && contentType.endsWith("_tool_result")) {
+                    // web_search_tool_result / web_fetch_tool_result 等：提取其 content 内的文本
+                    ONode resultContent = contentItem.getOrNull("content");
+                    if (resultContent != null && resultContent.isArray()) {
+                        for (ONode rb : resultContent.getArray()) {
+                            String text = rb.get("text").getString();
+                            if (Utils.isNotEmpty(text)) {
+                                if (normalContent.length() > 0) {
+                                    normalContent.append("\n");
+                                }
+                                normalContent.append(text);
+                            }
+                        }
+                    }
                 }
             }
-                
+
             // 构建文本内容
             String textContent;
             Map<String, Object> contentRaw = null;
@@ -494,7 +625,15 @@ public class AnthropicResponseParser {
             } else {
                 textContent = "";
             }
-            
+
+            // redacted_thinking 分块列表透传到 contentRaw，供多轮逐块回传（拼接会损坏 opaque 数据）
+            if (!redactedBlocks.isEmpty()) {
+                if (contentRaw == null) {
+                    contentRaw = new LinkedHashMap<>();
+                }
+                contentRaw.put("redactedThinkingBlocks", redactedBlocks);
+            }
+
             List<ContentBlock> blocksForMsg = null;
             if (!mediaBlocks.isEmpty()) {
                 blocksForMsg = new ArrayList<>();
@@ -508,28 +647,23 @@ public class AnthropicResponseParser {
             }
 
             // finishReason：优先用真实 stop_reason；tool 场景兜底 tool_use
-            String choiceFinishReason = Utils.isNotEmpty(stopReason)
+            choiceFinishReason = Utils.isNotEmpty(stopReason)
                     ? stopReason
                     : (!allToolCalls.isEmpty() ? "tool_use" : "stop");
-        
+
             // 将所有工具调用合并到一个 AssistantMessage 中
             if (!allToolCalls.isEmpty()) {
                 AssistantMessage msg = new AssistantMessage(textContent,
                         false, contentRaw, allToolCallsRaw, allToolCalls, null, blocksForMsg);
                 resp.addChoice(new ChatChoice(0, created, choiceFinishReason, msg));
-            } else if (Utils.isNotEmpty(textContent) || blocksForMsg != null) {
+            } else if (Utils.isNotEmpty(textContent) || blocksForMsg != null || contentRaw != null) {
                 AssistantMessage msg = new AssistantMessage(textContent,
                         false, contentRaw, null, null, null, blocksForMsg);
                 resp.addChoice(new ChatChoice(0, created, choiceFinishReason, msg));
             }
         }
-        // 同步 lastFinishReason（无 stop_reason 时若已有 tool 选择，归一化侧仍可识别）
-        if (Utils.isNotEmpty(stopReason)) {
-            resp.lastFinishReason = stopReason;
-        } else if (resp.hasChoices() && resp.getMessage() != null
-                && Utils.isNotEmpty(resp.getMessage().getToolCalls())) {
-            resp.lastFinishReason = "tool_use";
-        }
+        // 同步 lastFinishReason（复用已算好的 choiceFinishReason，避免重复计算）
+        resp.lastFinishReason = choiceFinishReason;
 
         // 解析用量信息
         AiUsage usage = parseUsage(oResp.getOrNull("usage"));

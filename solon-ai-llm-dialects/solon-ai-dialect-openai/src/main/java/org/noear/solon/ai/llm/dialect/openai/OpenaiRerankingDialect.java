@@ -56,17 +56,32 @@ public class OpenaiRerankingDialect extends AbstractRerankingDialect {
         String model = oResp.get("model").getString();
 
         if (oResp.hasKey("error")) {
-            return new RerankingResponse(model, new RerankingException(oResp.get("error").getString()), null, null);
+            return new RerankingResponse(model, new RerankingException(OpenaiDialectSupport.extractErrorMessage(oResp.get("error"))), null, null);
         } else {
             List<Reranking> results = new ArrayList<>();
 
-            for(ONode n1 : oResp.get("results").getArray()){
-                Reranking r1 = new Reranking(
-                        n1.get("index").getInt(),
-                        n1.get("document").get("text").getString(),
-                        n1.get("relevance_score").getFloat());
+            // 防御：部分兼容端点异常形态可能缺失 results 数组，避免 NPE
+            ONode resultsNode = oResp.getOrNull("results");
+            if (resultsNode != null && resultsNode.isArray()) {
+                for (ONode n1 : resultsNode.getArray()) {
+                    // document 可能缺失或非对象形态（部分兼容端点），做空值防御
+                    String documentText = null;
+                    ONode document = n1.getOrNull("document");
+                    if (document != null) {
+                        if (document.isObject()) {
+                            documentText = document.get("text").getString();
+                        } else if (document.isValue()) {
+                            documentText = document.getString();
+                        }
+                    }
 
-                results.add(r1);
+                    Reranking r1 = new Reranking(
+                            n1.get("index").getInt(),
+                            documentText,
+                            n1.get("relevance_score").getFloat());
+
+                    results.add(r1);
+                }
             }
 
             AiUsage usage = null;
@@ -74,9 +89,12 @@ public class OpenaiRerankingDialect extends AbstractRerankingDialect {
             if (oResp.hasKey("usage")) {
                 ONode oUsage = oResp.get("usage");
                 long prompt_tokens = oUsage.get("prompt_tokens").getLong();
-                long total_tokens = oUsage.get("total_tokens").getLong();
+                long completion_tokens = oUsage.get("completion_tokens").getLong();
+                // 官方 SDK 中 total_tokens 为 optional，缺省时用输入+输出兜底
+                long total_tokens = oUsage.hasKey("total_tokens")
+                        ? oUsage.get("total_tokens").getLong() : (prompt_tokens + completion_tokens);
 
-                usage = new AiUsage(prompt_tokens, 0L, 0L, total_tokens, oUsage);
+                usage = new AiUsage(prompt_tokens, 0L, completion_tokens, total_tokens, oUsage);
             }
 
             return new RerankingResponse(model, null, results, usage);

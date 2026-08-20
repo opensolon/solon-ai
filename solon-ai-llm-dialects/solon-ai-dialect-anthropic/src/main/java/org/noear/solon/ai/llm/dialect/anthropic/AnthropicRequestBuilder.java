@@ -17,6 +17,9 @@ package org.noear.solon.ai.llm.dialect.anthropic;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.ChatConfig;
+import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.message.*;
@@ -117,10 +120,7 @@ public class AnthropicRequestBuilder {
                     pendingToolResultNode.getOrNew("content").asArray();
                 }
                 ToolMessage toolMessage = (ToolMessage) message;
-                pendingToolResultNode.get("content").addNew()
-                        .set("type", "tool_result")
-                        .set("tool_use_id", toolMessage.getToolCallId())
-                        .set("content", toolMessage.getContent());
+                pendingToolResultNode.get("content").add(buildToolResultBlock(toolMessage));
             } else {
                 if (pendingToolResultNode != null) {
                     messagesNode.add(pendingToolResultNode);
@@ -215,6 +215,13 @@ public class AnthropicRequestBuilder {
                 tcNode.set("type", "tool");
                 if (Utils.isNotEmpty(name)) {
                     tcNode.set("name", name);
+                }
+            } else if ("auto".equals(type) || "any".equals(type) || "none".equals(type) || "tool".equals(type)) {
+                // Anthropic 原生形态直接透传（协议 ToolChoice：auto/any/none/tool + name）
+                tcNode.set("type", type);
+                Object name = choiceMap.get("name");
+                if ("tool".equals(type) && name instanceof String && Utils.isNotEmpty((String) name)) {
+                    tcNode.set("name", (String) name);
                 }
             } else {
                 tcNode.set("type", "auto");
@@ -382,8 +389,8 @@ public class AnthropicRequestBuilder {
         }
 
         int maxTokens = resolveMaxTokens(root, options);
-        // Anthropic 要求 budget_tokens < max_tokens，且预算至少为 1 才有意义
-        if (maxTokens <= 1) {
+        // 协议要求：budget_tokens >= 1024 且 < max_tokens；无法同时满足时放弃 thinking（对齐 SDK 校验）
+        if (maxTokens <= 1025) {
             return;
         }
         if (budget >= maxTokens) {
@@ -570,8 +577,14 @@ public class AnthropicRequestBuilder {
         }
         int budget = thinkingNode.get("budget_tokens").getInt();
         if (budget >= maxTokens) {
-            thinkingNode.set("budget_tokens", maxTokens - 1);
+            budget = maxTokens - 1;
         }
+        // 协议下限：budget_tokens >= 1024，否则会被 API 拒绝
+        if (budget < 1024) {
+            root.remove("thinking");
+            return;
+        }
+        thinkingNode.set("budget_tokens", budget);
     }
 
     private int resolveMaxTokens(ONode root, ChatOptions options) {
@@ -650,11 +663,44 @@ public class AnthropicRequestBuilder {
      */
     private void buildToolMessageNode(ONode node, ToolMessage toolMessage) {
         // Claude使用tool_result格式
-        ONode contentArray = node.getOrNew("content").asArray();
-        contentArray.addNew()
-            .set("type", "tool_result")
-            .set("tool_use_id", toolMessage.getToolCallId())
-            .set("content", toolMessage.getContent());
+        node.getOrNew("content").asArray().add(buildToolResultBlock(toolMessage));
+    }
+
+    /**
+     * 构建单个 tool_result 块（协议：is_error 标记 + content 可为块数组）。
+     *
+     * @since 4.0.4
+     */
+    private ONode buildToolResultBlock(ToolMessage toolMessage) {
+        ONode block = new ONode()
+                .set("type", "tool_result")
+                .set("tool_use_id", toolMessage.getToolCallId());
+
+        // 协议：tool_result.is_error 标记失败结果，供模型前置纠错（经 ToolMessage.metadata 透传）
+        Object isError = toolMessage.getMetadataAs("is_error");
+        if (isError == null) {
+            isError = toolMessage.getMetadataAs("isError");
+        }
+        if (Boolean.TRUE.equals(isError) || "true".equals(String.valueOf(isError))) {
+            block.set("is_error", true);
+        }
+
+        // 协议：tool_result.content 可为 string 或 content block 数组（支持工具返回图片/多块结果）
+        if (toolMessage.isMultiModal() && Utils.isNotEmpty(toolMessage.getBlocks())) {
+            ONode resultBlocks = block.getOrNew("content").asArray();
+            for (ContentBlock cb : toolMessage.getBlocks()) {
+                if (cb instanceof TextBlock) {
+                    resultBlocks.addNew()
+                            .set("type", "text")
+                            .set("text", cb.getContent());
+                } else if (cb instanceof ImageBlock) {
+                    appendClaudeImageBlock(resultBlocks, (ImageBlock) cb);
+                }
+            }
+        } else {
+            block.set("content", toolMessage.getContent());
+        }
+        return block;
     }
 
     /**
@@ -680,7 +726,10 @@ public class AnthropicRequestBuilder {
                         .set("signature", signature);
             }
 
-            // 添加文本内容（如果有，排除 <think>...</think> 与纯空白）
+            // 回传 redacted_thinking 块（安全过滤的推理内容，原样保留供多轮，对齐 Anthropic SDK）
+            appendRedactedThinkingBlocks(contentArray, assistantMessage);
+
+            // 添加文本内容（如果有，排除  与纯空白）
             String resultContent = trimToNull(assistantMessage.getResultContent());
             if (resultContent != null) {
                 contentArray.addNew()
@@ -1012,7 +1061,10 @@ public class AnthropicRequestBuilder {
     private void writeCacheControl(ONode blockNode, CacheControl cacheControl) {
         ONode ccNode = blockNode.getOrNew("cache_control");
         ccNode.set("type", cacheControl.getType());
-        ccNode.set("ttl", cacheControl.getTtl());
+        // ttl 为空时不写出，避免 "ttl":null 触发 API 校验错误（协议：ttl 仅可取 5m/1h）
+        if (Utils.isNotEmpty(cacheControl.getTtl())) {
+            ccNode.set("ttl", cacheControl.getTtl());
+        }
     }
 
     /**
@@ -1037,6 +1089,9 @@ public class AnthropicRequestBuilder {
                     .set("thinking", thinkingContent)
                     .set("signature", resp.thinkingSignature);
         }
+
+        // 回传 redacted_thinking 块（安全过滤的推理内容，原样保留供多轮，对齐 Anthropic SDK）
+        appendRedactedThinkingBlocks(contentArray, resp);
 
         for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
             ToolCallBuilder builder = kv.getValue();
@@ -1065,5 +1120,60 @@ public class AnthropicRequestBuilder {
         }
 
         return node;
+    }
+
+    /**
+     * 将 redacted_thinking 内容块追加到 content 数组。
+     * <p>redacted_thinking 是 Anthropic API 对安全过滤推理内容的 opaque 加密块，
+     * 必须原样回传，否则多轮对话可能失败（对齐 Anthropic SDK 规范）。</p>
+     * <p>两种重载：从 {@link AssistantMessage}（contentRaw 路径）和从 {@link ChatResponseDefault}
+     * （流式聚合路径）获取 redactedThinkingData。</p>
+     *
+     * @since 4.0.4
+     */
+    private void appendRedactedThinkingBlocks(ONode contentArray, AssistantMessage assistantMessage) {
+        Object contentRaw = assistantMessage.getContentRaw();
+        if (!(contentRaw instanceof Map)) {
+            return;
+        }
+        // 优先分块列表（协议：redacted_thinking 必须逐块原样回传，拼接会损坏 opaque 数据）
+        Object blocks = ((Map<?, ?>) contentRaw).get("redactedThinkingBlocks");
+        if (blocks instanceof List) {
+            for (Object data : (List<?>) blocks) {
+                if (data instanceof String && Utils.isNotEmpty((String) data)) {
+                    contentArray.addNew()
+                            .set("type", "redacted_thinking")
+                            .set("data", (String) data);
+                }
+            }
+            return;
+        }
+        Object redacted = ((Map<?, ?>) contentRaw).get("redactedThinkingData");
+        if (!(redacted instanceof String) || Utils.isEmpty((String) redacted)) {
+            return;
+        }
+        contentArray.addNew()
+                .set("type", "redacted_thinking")
+                .set("data", (String) redacted);
+    }
+
+    private void appendRedactedThinkingBlocks(ONode contentArray, ChatResponseDefault resp) {
+        // 优先分块列表（协议：逐块原样回传）
+        java.util.List<String> blocks = AnthropicResponseParser.getRedactedBlocks(resp, false);
+        if (blocks != null && !blocks.isEmpty()) {
+            for (String data : blocks) {
+                contentArray.addNew()
+                        .set("type", "redacted_thinking")
+                        .set("data", data);
+            }
+            return;
+        }
+
+        String data = resp.attrIfAbsent("redactedThinkingData", k->new StringBuilder()).toString();
+        if (Utils.isNotEmpty(data)) {
+            contentArray.addNew()
+                    .set("type", "redacted_thinking")
+                    .set("data", data);
+        }
     }
 }

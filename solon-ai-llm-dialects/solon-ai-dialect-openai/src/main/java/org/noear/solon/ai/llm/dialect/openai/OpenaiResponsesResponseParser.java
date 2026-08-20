@@ -39,7 +39,6 @@ import java.util.*;
  */
 public class OpenaiResponsesResponseParser {
     private static final Logger log = LoggerFactory.getLogger(OpenaiResponsesResponseParser.class);
-    private final boolean logEnabled;
 
     /**
      * 流式工具调用的按请求隔离状态
@@ -52,11 +51,13 @@ public class OpenaiResponsesResponseParser {
         String currentFunctionCallId;
         String currentFunctionName;
         StringBuilder currentFunctionArguments;
+        // 官方 OpenAI：reasoning 项的 id/encrypted_content，用于多轮回放
+        String currentReasoningId;
+        String currentReasoningEncryptedContent;
     }
     private static final String STREAM_STATE_KEY = "StreamState";
 
     public OpenaiResponsesResponseParser() {
-        this.logEnabled = log.isDebugEnabled();
     }
 
     /**
@@ -93,7 +94,7 @@ public class OpenaiResponsesResponseParser {
         if (json == null || json.isEmpty()) {
             return false;
         }
-        if (logEnabled) {
+        if (log.isDebugEnabled()) {
             log.debug("OpenAI Responses stream raw response: {}", json);
         }
         String[] lines = json.split("\n");
@@ -123,12 +124,21 @@ public class OpenaiResponsesResponseParser {
                 }
                 continue;
             }
-            ONode oResp = ONode.ofJson(jsonData);
+            ONode oResp;
+            try {
+                oResp = ONode.ofJson(jsonData);
+            } catch (Exception e) {
+                // 单帧损坏不阻断整个流：跳过并告警
+                log.warn("OpenAI Responses stream: skip malformed frame: {}", jsonData, e);
+                continue;
+            }
             if (!oResp.isObject()) {
                 continue;
             }
 
             if(oResp.hasKey("error")){
+                // 顶层 error 帧：流已终止，先清理流式状态再返回
+                resp.attrRemove(STREAM_STATE_KEY);
                 resp.setError(new ChatException(oResp.get("error").getString()));
                 return true;
             }
@@ -148,8 +158,9 @@ public class OpenaiResponsesResponseParser {
                 }
                 resp.setError(new ChatException(detailedError));
                 return true;
-            } else if ("response.created".equals(eventType) || "response.in_progress".equals(eventType)) {
-                // 响应创建/进行中，可以设置模型信息
+            } else if ("response.created".equals(eventType) || "response.in_progress".equals(eventType)
+                    || "response.queued".equals(eventType)) {
+                // 响应创建/进行中/排队，可以设置模型信息
                 ONode response = oResp.get("response");
                 if (response != null) {
                     resp.setModel(response.get("model").getString());
@@ -166,6 +177,9 @@ public class OpenaiResponsesResponseParser {
                         state.currentTextContent = new StringBuilder();
                     } else if ("reasoning".equals(state.currentItemType)) {
                         state.currentReasoningContent = new StringBuilder();
+                        // 官方 OpenAI：捕获服务端返回的 reasoning 项 id/encrypted_content（多轮回放需要）
+                        state.currentReasoningId = Utils.isEmpty(item.get("id").getString()) ? null : item.get("id").getString();
+                        state.currentReasoningEncryptedContent = Utils.isEmpty(item.get("encrypted_content").getString()) ? null : item.get("encrypted_content").getString();
                     } else if ("function_call".equals(state.currentItemType)) {
                         state.currentFunctionCallId = item.get("call_id").getString();
                         state.currentFunctionName = item.get("name").getString();
@@ -185,10 +199,18 @@ public class OpenaiResponsesResponseParser {
                 }
                 StreamState state = resp.attrAs(STREAM_STATE_KEY);
                 if (state != null) {
+                    // 兼容只发 output_item.done（携带完整 item）而不发 function_call_arguments.done 的实现：
+                    // 兜底 flush，避免工具调用静默丢失
+                    if (item != null && "function_call".equals(item.get("type").getString())
+                            && state.currentFunctionCallId != null && state.currentFunctionName != null) {
+                        hasChoices |= flushFunctionCall(resp, state, item.get("arguments").getString());
+                    }
                     state.currentItemId = null;
                     state.currentItemType = null;
                     state.currentTextContent = null;
                     state.currentReasoningContent = null;
+                    state.currentReasoningId = null;
+                    state.currentReasoningEncryptedContent = null;
                 }
             } else if ("response.content_part.added".equals(eventType)) {
                 // 内容部分添加
@@ -203,6 +225,44 @@ public class OpenaiResponsesResponseParser {
                         state.currentReasoningContent = new StringBuilder();
                     }
                 }
+            } else if ("response.reasoning_summary_part.added".equals(eventType)) {
+                // 官方 OpenAI o 系列思维链摘要：part 类型为 reasoning_summary_text
+                // （SDK ResponseStreamEvent.kt: response.reasoning_summary_part.added）
+                StreamState state = getOrCreateState(resp);
+                if (state.currentReasoningContent == null) {
+                    state.currentReasoningContent = new StringBuilder();
+                }
+            } else if ("response.reasoning_summary_text.delta".equals(eventType)) {
+                // 官方 OpenAI o 系列思维链摘要增量
+                // （SDK ResponseStreamEvent.kt: response.reasoning_summary_text.delta）
+                String delta = oResp.get("delta").getString();
+                if (Utils.isNotEmpty(delta)) {
+                    StreamState state = getOrCreateState(resp);
+                    if (state.currentReasoningContent == null) {
+                        state.currentReasoningContent = new StringBuilder();
+                    }
+                    state.currentReasoningContent.append(delta);
+                    AssistantMessage thinkingMsg = new AssistantMessage(delta, true);
+                    attachReasoningMetadata(thinkingMsg, state);
+                    resp.addChoice(new ChatChoice(0, new Date(), null, thinkingMsg));
+                    hasChoices = true;
+                }
+            } else if ("response.reasoning_summary_text.done".equals(eventType)
+                    || "response.reasoning_summary_part.done".equals(eventType)) {
+                // 思维链摘要完成：增量已通过 delta 事件推送，无需额外处理
+            } else if ("response.refusal.delta".equals(eventType)) {
+                // 官方拒答流式增量（SDK ResponseStreamEvent.kt: response.refusal.delta）：
+                // 按普通文本输出，避免拒答内容丢失
+                String delta = oResp.get("delta").getString();
+                if (Utils.isNotEmpty(delta)) {
+                    StreamState state = getOrCreateState(resp);
+                    if (state.currentTextContent == null) {
+                        state.currentTextContent = new StringBuilder();
+                    }
+                    state.currentTextContent.append(delta);
+                    resp.addChoice(new ChatChoice(0, new Date(), null, new AssistantMessage(delta)));
+                    hasChoices = true;
+                }
             } else if ("response.reasoning_text.delta".equals(eventType)) {
                 // 思考增量（DeepSeek Responses：思维链回传为 thinking 消息）
                 String delta = oResp.get("delta").getString();
@@ -210,7 +270,9 @@ public class OpenaiResponsesResponseParser {
                     StreamState state = resp.attrAs(STREAM_STATE_KEY);
                     if (state != null && state.currentReasoningContent != null) {
                         state.currentReasoningContent.append(delta);
-                        resp.addChoice(new ChatChoice(0, new Date(), null, new AssistantMessage(delta, true)));
+                        AssistantMessage thinkingMsg = new AssistantMessage(delta, true);
+                        attachReasoningMetadata(thinkingMsg, state);
+                        resp.addChoice(new ChatChoice(0, new Date(), null, thinkingMsg));
                         hasChoices = true;
                     } else {
                         // 未处于 reasoning item 上下文（缺 output_item.added / content_part.added 前置事件）：
@@ -242,7 +304,9 @@ public class OpenaiResponsesResponseParser {
                             // 思考增量经 content_part.delta 到达：按 thinking 消息处理，防止被当作普通文本输出
                             if (state != null && state.currentReasoningContent != null) {
                                 state.currentReasoningContent.append(text);
-                                resp.addChoice(new ChatChoice(0, new Date(), null, new AssistantMessage(text, true)));
+                                AssistantMessage thinkingMsg = new AssistantMessage(text, true);
+                                attachReasoningMetadata(thinkingMsg, state);
+                                resp.addChoice(new ChatChoice(0, new Date(), null, thinkingMsg));
                                 hasChoices = true;
                             } else {
                                 log.warn("OpenAI Responses stream: ignored content_part.delta(reasoning_text) without reasoning context: {}", text);
@@ -269,46 +333,7 @@ public class OpenaiResponsesResponseParser {
                 // 函数调用参数完成
                 StreamState state = resp.attrAs(STREAM_STATE_KEY);
                 if (state != null && state.currentFunctionCallId != null && state.currentFunctionName != null) {
-                    String arguments = oResp.get("arguments").getString();
-                    if (Utils.isEmpty(arguments) && state.currentFunctionArguments != null) {
-                        arguments = state.currentFunctionArguments.toString();
-                    }
-                    // 流式解析出口净化：截断损坏的 arguments 禁止入历史（会毒化会话）
-                    arguments = ToolCallJsonSanitizer.sanitizeArguments(arguments, state.currentFunctionName);
-                    try {
-                        Map<String, Object> argMap = new HashMap<>();
-                        if (Utils.isNotEmpty(arguments)) {
-                            ONode argsNode = ONode.ofJson(arguments);
-                            if (argsNode.isObject()) {
-                                argMap = argsNode.toBean(Map.class);
-                            }
-                        }
-                        ToolCall toolCall = new ToolCall(state.currentFunctionCallId, state.currentFunctionCallId,
-                                state.currentFunctionName, arguments, argMap);
-                        List<Map> toolCallsRaw = new ArrayList<>();
-                        Map<String, Object> toolCallRaw = new HashMap<>();
-                        toolCallRaw.put("id", state.currentFunctionCallId);
-                        toolCallRaw.put("type", "function");
-                        Map<String, Object> functionData = new HashMap<>();
-                        functionData.put("name", state.currentFunctionName);
-                        functionData.put("arguments", arguments);
-                        toolCallRaw.put("function", functionData);
-                        toolCallsRaw.add(toolCallRaw);
-                        List<ToolCall> toolCalls = new ArrayList<>();
-                        toolCalls.add(toolCall);
-                        AssistantMessage assistantMessage = new AssistantMessage("",
-                                false, null,
-                                toolCallsRaw, toolCalls, null);
-                        resp.addChoice(new ChatChoice(0, new Date(), null, assistantMessage));
-                        hasChoices = true;
-                    } catch (Exception e) {
-                        log.warn("Failed to parse function call in stream mode", e);
-                    } finally {
-                        // 重置函数调用状态
-                        state.currentFunctionCallId = null;
-                        state.currentFunctionName = null;
-                        state.currentFunctionArguments = null;
-                    }
+                    hasChoices |= flushFunctionCall(resp, state, oResp.get("arguments").getString());
                 }
             } else if ("response.output_text.done".equals(eventType) || "response.content_part.done".equals(eventType)) {
                 // 文本/内容部分完成
@@ -342,6 +367,14 @@ public class OpenaiResponsesResponseParser {
                     if (usage != null) {
                         resp.setUsage(usage);
                     }
+                    // 回填 finishReason：incomplete_details.reason（如 max_output_tokens → length），便于上层区分截断
+                    ONode incompleteDetails = response.getOrNull("incomplete_details");
+                    if (incompleteDetails != null) {
+                        String reason = incompleteDetails.get("reason").getString();
+                        if (Utils.isNotEmpty(reason)) {
+                            resp.lastFinishReason = "max_output_tokens".equals(reason) ? "length" : reason;
+                        }
+                    }
                 }
 
                 if (resp.hasChoices() == false) {
@@ -355,13 +388,21 @@ public class OpenaiResponsesResponseParser {
                 resp.attrRemove(STREAM_STATE_KEY);
                 ONode response = oResp.get("response");
                 if (response != null) {
-                    ONode error = response.get("error");
-                    if (error != null) {
-                        String errorMsg = error.get("message").getString();
-                        resp.setError(new ChatException(errorMsg != null ? errorMsg : "Response failed"));
+                    resp.setModel(response.get("model").getString());
+                    AiUsage usage = parseUsage(response.getOrNull("usage"));
+                    if (usage != null) {
+                        resp.setUsage(usage);
                     }
+                    ONode error = response.get("error");
+                    // 与非流式 error 提取保持一致：格式化为 [type/code] message
+                    resp.setError(new ChatException(
+                            OpenaiDialectSupport.extractErrorMessage(error != null ? error : response)));
+                } else {
+                    resp.setError(new ChatException("Response failed"));
                 }
                 resp.setFinished(true);
+                // 失败也视为有效处理帧，防止错误被当作解析失败吞掉
+                hasChoices = true;
             }
         }
         // 有效处理过 choice 或 media 均视为解析成功（纯 media 事件无 choice 时也要 true）
@@ -426,13 +467,24 @@ public class OpenaiResponsesResponseParser {
         if (outputArray != null && outputArray.isArray()) {
             StringBuilder textContent = new StringBuilder();
             StringBuilder reasoningContent = new StringBuilder();
+            String reasoningItemId = null;
+            String reasoningEncryptedContent = null;
             List<ContentBlock> mediaBlocks = new ArrayList<>();
             List<ToolCall> allToolCalls = new ArrayList<>();
             List<Map> allToolCallsRaw = new ArrayList<>();
             for (ONode outputItem : outputArray.getArray()) {
                 String itemType = outputItem.get("type").getString();
                 if ("reasoning".equals(itemType)) {
-                    // 思考内容（DeepSeek Responses：reasoning item）
+                    // 思考内容：官方 OpenAI 的 reasoning item（多轮回放需携带 id/encrypted_content）；
+                    // DeepSeek Responses 为 reasoning_text 私有扩展
+                    String itemId = outputItem.get("id").getString();
+                    String encrypted = outputItem.get("encrypted_content").getString();
+                    if (Utils.isNotEmpty(itemId)) {
+                        reasoningItemId = itemId;
+                    }
+                    if (Utils.isNotEmpty(encrypted)) {
+                        reasoningEncryptedContent = encrypted;
+                    }
                     ONode contentArray = outputItem.getOrNull("content");
                     if (contentArray != null && contentArray.isArray()) {
                         for (ONode contentItem : contentArray.getArray()) {
@@ -541,10 +593,16 @@ public class OpenaiResponsesResponseParser {
                 resp.addMediaBlocks(mediaBlocks);
             }
         
-            // 思考内容优先输出为 thinking 消息（DeepSeek Responses 思维链回传）
+            // 思考内容优先输出为 thinking 消息（官方/DeepSeek Responses 思维链回传）
             if (reasoningContent.length() > 0) {
-                resp.addChoice(new ChatChoice(0, created, null,
-                        new AssistantMessage(reasoningContent.toString(), true)));
+                AssistantMessage thinkingMsg = new AssistantMessage(reasoningContent.toString(), true);
+                if (Utils.isNotEmpty(reasoningItemId)) {
+                    thinkingMsg.getMetadata().put("reasoning_item_id", reasoningItemId);
+                }
+                if (Utils.isNotEmpty(reasoningEncryptedContent)) {
+                    thinkingMsg.getMetadata().put("reasoning_encrypted_content", reasoningEncryptedContent);
+                }
+                resp.addChoice(new ChatChoice(0, created, null, thinkingMsg));
             }
 
             // 将所有工具调用合并到一个 AssistantMessage 中
@@ -585,12 +643,6 @@ public class OpenaiResponsesResponseParser {
         return true;
     }
 
-    /**
-     * 解析 usage 信息
-     *
-     * @author oisin lu
-     * @date 2026年1月28日
-     */
     /**
      * 解析 image_generation_call 输出项为 ImageBlock。
      *
@@ -689,6 +741,72 @@ public class OpenaiResponsesResponseParser {
         return null;
     }
     
+    private void attachReasoningMetadata(AssistantMessage thinkingMsg, StreamState state) {
+        if (state == null) {
+            return;
+        }
+        if (Utils.isNotEmpty(state.currentReasoningId)) {
+            thinkingMsg.getMetadata().put("reasoning_item_id", state.currentReasoningId);
+        }
+        if (Utils.isNotEmpty(state.currentReasoningEncryptedContent)) {
+            thinkingMsg.getMetadata().put("reasoning_encrypted_content", state.currentReasoningEncryptedContent);
+        }
+    }
+
+    /**
+     * 流式 function_call 落地：构建 ToolCall choice 并重置状态（供 arguments.done 与 output_item.done 兜底共用）。
+     *
+     * @return 是否添加了 choice
+     */
+    private boolean flushFunctionCall(ChatResponseDefault resp, StreamState state, String arguments) {
+        if (Utils.isEmpty(arguments) && state.currentFunctionArguments != null) {
+            arguments = state.currentFunctionArguments.toString();
+        }
+        // 流式解析出口净化：截断损坏的 arguments 禁止入历史（会毒化会话）
+        arguments = ToolCallJsonSanitizer.sanitizeArguments(arguments, state.currentFunctionName);
+        try {
+            Map<String, Object> argMap = new HashMap<>();
+            if (Utils.isNotEmpty(arguments)) {
+                ONode argsNode = ONode.ofJson(arguments);
+                if (argsNode.isObject()) {
+                    argMap = argsNode.toBean(Map.class);
+                }
+            }
+            ToolCall toolCall = new ToolCall(state.currentFunctionCallId, state.currentFunctionCallId,
+                    state.currentFunctionName, arguments, argMap);
+            List<Map> toolCallsRaw = new ArrayList<>();
+            Map<String, Object> toolCallRaw = new HashMap<>();
+            toolCallRaw.put("id", state.currentFunctionCallId);
+            toolCallRaw.put("type", "function");
+            Map<String, Object> functionData = new HashMap<>();
+            functionData.put("name", state.currentFunctionName);
+            functionData.put("arguments", arguments);
+            toolCallRaw.put("function", functionData);
+            toolCallsRaw.add(toolCallRaw);
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(toolCall);
+            AssistantMessage assistantMessage = new AssistantMessage("",
+                    false, null,
+                    toolCallsRaw, toolCalls, null);
+            resp.addChoice(new ChatChoice(0, new Date(), null, assistantMessage));
+            return true;
+        } catch (Exception e) {
+            log.warn("Failed to parse function call in stream mode", e);
+            return false;
+        } finally {
+            // 重置函数调用状态
+            state.currentFunctionCallId = null;
+            state.currentFunctionName = null;
+            state.currentFunctionArguments = null;
+        }
+    }
+
+    /**
+     * 解析 usage 信息
+     *
+     * @author oisin lu
+     * @date 2026年1月28日
+     */
     private AiUsage parseUsage(ONode usageNode) {
         if (usageNode == null) {
             return null;

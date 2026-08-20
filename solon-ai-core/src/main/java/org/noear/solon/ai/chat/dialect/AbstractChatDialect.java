@@ -512,11 +512,23 @@ public abstract class AbstractChatDialect implements ChatDialect {
     protected ToolCall parseToolCall(ChatResponseDefault resp, ONode n1) {
         String callId = n1.get("id").getString();
 
+        // 官方流式协议（ChatCompletionMessageToolCallChunk）：id 仅首分片携带，index 字段才是分片聚合主键
+        // 以 index 为主键可避免多个工具并行流式分片时串号；非流式/无 index 的端点退回 id 键
+        String chunkIndexKey = null;
+        ONode idxNode = n1.getOrNull("index");
+        if (idxNode != null && idxNode.isValue()) {
+            int idx = idxNode.getInt(-1);
+            if (idx >= 0) {
+                chunkIndexKey = "idx:" + idx;
+            }
+        }
+
         if (Utils.isNotEmpty(callId)) {
             resp.lastToolCallId = callId;
         }
 
-        String index = resp.lastToolCallId;
+        String index = chunkIndexKey != null ? chunkIndexKey
+                : (Utils.isNotEmpty(callId) ? callId : resp.lastToolCallId);
 
         ONode n1f = n1.get("function");
         String name = n1f.get("name").getString(); //可能是空的
@@ -651,6 +663,23 @@ public abstract class AbstractChatDialect implements ChatDialect {
                             blocks.add(0, TextBlock.of(transcript));
                         }
                     }
+                }
+            }
+        }
+
+        // OpenAI refusal 侧车字段（拒答时正文为空、refusal 有值）：作为文本投影，避免空消息难以定位
+        if (oMessage != null && oMessage.hasKey("refusal")) {
+            String refusal = oMessage.get("refusal").getString();
+            if (Utils.isNotEmpty(refusal)) {
+                boolean hasText = false;
+                for (ContentBlock b : blocks) {
+                    if (b instanceof TextBlock && Utils.isNotEmpty(b.getContent())) {
+                        hasText = true;
+                        break;
+                    }
+                }
+                if (!hasText) {
+                    blocks.add(TextBlock.of(refusal));
                 }
             }
         }
@@ -1295,7 +1324,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
             return effort;
         }
         if ("max".equals(effort)) {
-            return "xhigh";
+            // 官方 ReasoningEffort 枚举原生含 max（xhigh 仅部分模型接受），不再改写为 xhigh
+            return "max";
         }
         if ("min".equals(effort)) {
             return "low";

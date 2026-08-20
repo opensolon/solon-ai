@@ -59,18 +59,25 @@ public class OpenaiEmbeddingDialect extends AbstractEmbeddingDialect {
         String model = oResp.get("model").getString();
 
         if (oResp.hasKey("error")) {
-            return new EmbeddingResponse(model, new EmbeddingException(oResp.get("error").getString()), null, null);
+            return new EmbeddingResponse(model, new EmbeddingException(OpenaiDialectSupport.extractErrorMessage(oResp.get("error"))), null, null);
         } else {
-            List<Embedding> data = oResp.get("data").toBean(new TypeRef<List<Embedding>>() {
-            });
+            // 防御：部分兼容端点异常形态可能缺失 data 数组
+            ONode dataNode = oResp.getOrNull("data");
+            List<Embedding> data = (dataNode != null && dataNode.isArray())
+                    ? dataNode.toBean(new TypeRef<List<Embedding>>() {
+                    })
+                    : null;
             AiUsage usage = null;
 
             if (oResp.hasKey("usage")) {
                 ONode oUsage = oResp.get("usage");
                 long prompt_tokens = oUsage.get("prompt_tokens").getLong();
-                long total_tokens = oUsage.get("total_tokens").getLong();
+                long completion_tokens = oUsage.get("completion_tokens").getLong();
+                // 官方 SDK 中 total_tokens 为 optional，缺省时用输入+输出兜底
+                long total_tokens = oUsage.hasKey("total_tokens")
+                        ? oUsage.get("total_tokens").getLong() : (prompt_tokens + completion_tokens);
 
-                usage = new AiUsage(prompt_tokens, 0L, 0L, total_tokens, oUsage);
+                usage = new AiUsage(prompt_tokens, 0L, completion_tokens, total_tokens, oUsage);
             }
 
             return new EmbeddingResponse(model, null, data, usage);

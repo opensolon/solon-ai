@@ -11,6 +11,12 @@
 *  mcp channel 概念改为 transport （并保持兼容）???
 
 
+### 4.1.0
+
+* 优化 solon-ai-dialect-openai 方言适配
+* 优化 solon-ai-dialect-anthropic 方言适配
+* 修复 solon-ai-dialect-anthropic 缓存率计算错误的问题
+
 ### 4.0.6
 
 * 添加 solon-ai-agent Metrics 缓存率计算支持

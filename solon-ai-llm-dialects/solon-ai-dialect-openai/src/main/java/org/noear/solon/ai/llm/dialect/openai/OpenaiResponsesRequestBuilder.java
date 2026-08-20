@@ -114,12 +114,13 @@ public class OpenaiResponsesRequestBuilder {
         // 统一 thinking 开关 + reasoning_effort（显式 reasoning 优先）
         applyUnifiedReasoningOptions(root, options, thinkingSwitch);
 
-        // ⭐ 支持 previous_response_id（OpenAI Responses API 上下文缓存）
-        //    通过 ChatOptions.promptCacheKey() 传入
-        //    注意：DeepSeek Responses 为无状态 API，不支持该字段（会被服务端静默忽略）
+        // ⭐ prompt_cache_key（官方 Responses API 独立的缓存路由提示字段）
+        //    通过 ChatOptions.promptCacheKey() 传入，仅用于提升 KV cache 命中，不改变会话语义
+        //    注意：与 previous_response_id（服务端会话续接）是两个不同字段；
+        //    后者可经 options 直接透传（如 options.options().put("previous_response_id", ...)）
         CacheControl cacheControl = options.cacheControl();
         if (cacheControl != null && Utils.isNotEmpty(cacheControl.getPromptCacheKey())) {
-            root.set("previous_response_id", cacheControl.getPromptCacheKey());
+            root.set("prompt_cache_key", cacheControl.getPromptCacheKey());
         }
         // 构建 tools
         buildToolsNode(root, options);
@@ -133,7 +134,23 @@ public class OpenaiResponsesRequestBuilder {
      */
     private void buildInputItem(ONode inputArray, ChatMessage message) {
         if (message.isThinking()) {
-            // 回传思维链为 reasoning item（DeepSeek Responses：reasoning 类型输入项）
+            // 回传思维链为 reasoning item
+            // 官方 OpenAI：多轮回放 reasoning 项须携带服务端返回的 id 或 encrypted_content；
+            // 纯 reasoning_text 输入项是 DeepSeek Responses 的私有扩展（无状态回传）。
+            // 策略：消息元数据中带有官方 id/encrypted_content 时优先原样回传，否则退化为 reasoning_text。
+            Map<String, Object> metas = message.getMetadata();
+            Object reasoningId = metas == null ? null : metas.get("reasoning_item_id");
+            Object encryptedContent = metas == null ? null : metas.get("reasoning_encrypted_content");
+            if (reasoningId != null || encryptedContent != null) {
+                ONode reasoningItem = inputArray.addNew().set("type", "reasoning");
+                if (Utils.isNotEmpty(String.valueOf(reasoningId))) {
+                    reasoningItem.set("id", String.valueOf(reasoningId));
+                }
+                if (encryptedContent != null && Utils.isNotEmpty(String.valueOf(encryptedContent))) {
+                    reasoningItem.set("encrypted_content", String.valueOf(encryptedContent));
+                }
+                return;
+            }
             String thinkText = message.getContent();
             if (message instanceof AssistantMessage) {
                 AssistantMessage am = (AssistantMessage) message;
@@ -359,10 +376,40 @@ public class OpenaiResponsesRequestBuilder {
                     reasoningNode.set("effort", normalized);
                 }
             }
-            // 支持 summary 配置（reasoning summary）
+            // 支持 summary 配置（官方格式为数组，如 ["auto"]、["concise"]、["detailed"]）
             Object summary = reasoningMap.get("summary");
             if (summary != null) {
-                reasoningNode.set("summary", summary.toString());
+                ONode summaryNode = reasoningNode.getOrNew("summary").asArray();
+                if (summary instanceof Collection) {
+                    for (Object s : (Collection<?>) summary) {
+                        if (s != null && Utils.isNotEmpty(String.valueOf(s))) {
+                            summaryNode.add(String.valueOf(s));
+                        }
+                    }
+                } else if (summary.getClass().isArray()) {
+                    Object[] arr = (Object[]) summary;
+                    for (Object s : arr) {
+                        if (s != null && Utils.isNotEmpty(String.valueOf(s))) {
+                            summaryNode.add(String.valueOf(s));
+                        }
+                    }
+                } else {
+                    // 单值（如 "auto" 或 "[detailed]" 形式字符串）包装为单元素数组
+                    String s = String.valueOf(summary).trim();
+                    if (s.startsWith("[") && s.endsWith("]")) {
+                        for (String part : s.substring(1, s.length() - 1).split(",")) {
+                            String v = part.trim().replace("\"", "");
+                            if (Utils.isNotEmpty(v)) {
+                                summaryNode.add(v);
+                            }
+                        }
+                    } else if (Utils.isNotEmpty(s)) {
+                        summaryNode.add(s);
+                    }
+                }
+                if (summaryNode.size() == 0) {
+                    reasoningNode.remove("summary");
+                }
             }
         } else if (value instanceof String) {
             // 简化配置：reasoning: "high"
@@ -404,8 +451,8 @@ public class OpenaiResponsesRequestBuilder {
      
     /**
      * 规范化 Responses API reasoning.effort。
-     * <p>保留官方支持档位：none/minimal/low/medium/high/xhigh；
-     * 统一语义 {@code max} → {@code xhigh}，{@code min} → {@code low}。</p>
+     * <p>保留官方支持档位：none/minimal/low/medium/high/xhigh/max；
+     * 官方 ReasoningEffort 枚举原生含 {@code max}，{@code min} 统一为 {@code low}。</p>
      * <ul>
      *   <li>统一 {@code reasoning_effort}：严格映射，null/auto/非法值返回 null（不写出）</li>
      *   <li>用户显式 {@code reasoning}：未知值可透传（兼容厂商扩展）</li>
@@ -431,8 +478,8 @@ public class OpenaiResponsesRequestBuilder {
             return effort;
         }
         if ("max".equals(effort)) {
-            // 统一 max 档映射到 Responses 更高档 xhigh（不支持的模型由服务端报错/降级）
-            return "xhigh";
+            // 官方 ReasoningEffort 枚举原生含 max，不再改写为 xhigh（xhigh 仅部分模型接受，改写反而会 400）
+            return "max";
         }
         if ("min".equals(effort)) {
             return "low";

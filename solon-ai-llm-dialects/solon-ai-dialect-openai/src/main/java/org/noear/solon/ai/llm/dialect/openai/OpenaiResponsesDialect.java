@@ -29,7 +29,6 @@ import org.noear.solon.core.util.Assert;
 
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 /**
  * OpenAI Responses 接口方言
@@ -49,8 +48,6 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
     private final OpenaiResponsesResponseParser responseParser;
     private final OpenaiResponsesRequestBuilder requestBuilder;
 
-    private static final Pattern pattern =  Pattern.compile("/v\\d+/?$");
-
     public OpenaiResponsesDialect() {
         this.responseParser = new OpenaiResponsesResponseParser();
         this.requestBuilder = new OpenaiResponsesRequestBuilder();
@@ -58,32 +55,7 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
 
     @Override
     protected String getApiUrl(ChatConfig config) {
-        //处理后缀#
-        int index = config.getApiUrl().indexOf('#');
-        if (index > 0) {
-            return config.getApiUrl().substring(0, index);
-        }
-
-        //自动补全地址
-        if (config.getApiUrl().endsWith("/responses")) {
-            return config.getApiUrl();
-        } else {
-            if (pattern.matcher(config.getApiUrl()).find()) { //匹配 /v1,/v4/ 等
-                //已带版本
-                if (config.getApiUrl().endsWith("/")) {
-                    return config.getApiUrl() + "responses";
-                } else {
-                    return config.getApiUrl() + "/responses";
-                }
-            } else {
-                //未带版本
-                if (config.getApiUrl().endsWith("/")) {
-                    return config.getApiUrl() + "v1/responses";
-                } else {
-                    return config.getApiUrl() + "/v1/responses";
-                }
-            }
-        }
+        return OpenaiDialectSupport.buildApiUrl(config.getApiUrl(), "responses");
     }
 
     /**
@@ -95,8 +67,10 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
     public boolean matched(ChatConfig config) {
         String standard = config.getStandardOrProvider();
 
+        // 先规范化 URL（去尾斜杠/查询串/#后缀）再做 endsWith，避免 https://host/v1/responses/?x 失配
         return "openai-responses".equals(standard) ||
-                (Assert.isEmpty(standard) && config.getApiUrl().endsWith("/responses"));
+                (Assert.isEmpty(standard)
+                        && OpenaiDialectSupport.normalizeApiUrl(config.getApiUrl()).endsWith("/responses"));
     }
 
     /**
@@ -148,18 +122,13 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
 
             ONode propsNode = node.getOrNull("properties");
             if (propsNode != null && propsNode.isObject()) {
-                // 如果 required 为空数组，填充所有 properties 的 key
+                // 如果 required 为空数组，填充所有 properties 的 key（用 ONode 数组 API 构造，避免手拼 JSON 转义问题）
                 ONode requiredNode = node.getOrNull("required");
                 if (requiredNode == null || (requiredNode.isArray() && requiredNode.getArray().isEmpty())) {
-                    StringBuilder sb = new StringBuilder("[");
-                    boolean first = true;
+                    ONode newRequired = node.getOrNew("required").asArray();
                     for (String key : propsNode.getObject().keySet()) {
-                        if (!first) sb.append(",");
-                        sb.append("\"").append(key).append("\"");
-                        first = false;
+                        newRequired.add(key);
                     }
-                    sb.append("]");
-                    node.set("required", ONode.ofJson(sb.toString()));
                 }
 
                 // 递归处理嵌套的 properties
