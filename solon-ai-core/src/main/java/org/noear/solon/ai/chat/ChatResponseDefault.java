@@ -332,7 +332,7 @@ public class ChatResponseDefault implements ChatResponse {
     @Override
     public String getResultContent() {
         AssistantMessage msg = getMessage();
-        return msg == null ? null : msg.getResultContent();
+        return msg == null ? null : msg.getAnswer();
     }
 
     /**

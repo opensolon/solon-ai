@@ -90,6 +90,20 @@ public class ReasonDeltaEvent extends AbsAgentEvent {
     }
 
     /**
+     * 获取思考
+     */
+    public String getThinking() {
+        return assistantMessage.getThinking();
+    }
+
+    /**
+     * 获取答案
+     */
+    public String getAnswer() {
+        return assistantMessage.getAnswer();
+    }
+
+    /**
      * 是否为工具调用
      */
     public boolean isToolCalls() {

@@ -39,9 +39,6 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     private final ChatRole role = ChatRole.ASSISTANT;
     private final List<ContentBlock> blocks = new ArrayList<>();
     private String content;
-    //适配 r1 需要
-    private transient String reasoning;
-    private String reasoningFieldName;
     private List<ToolCall> toolCalls;
     private List<Map> toolCallsRaw;
     private List<Map> searchResultsRaw;
@@ -49,6 +46,10 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
 
     //纯思考；纯内容；混合内容
     private boolean isThinking;
+    private String reasoningFieldName; //推理字段
+
+    private transient String thinking; //想法
+    private transient String answer; //答案
 
     public AssistantMessage() {
         //用于序列化
@@ -132,36 +133,65 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
      */
     @Override
     public String getContent() {
+        //由 thinking + answer 组成的完整内容
         return content;
     }
 
-    public String getReasoning() {
-        if (reasoning == null) {
+    /**
+     * 是否思考中
+     */
+    @Override
+    public boolean isThinking() {
+        return isThinking;
+    }
+
+    /**
+     * 获取思考
+     */
+    public String getThinking() {
+        if (thinking == null) {
             // 反序列化/纯 toolCalls 消息可能 content 为 null，需空安全
             String src = content == null ? "" : content;
             if (isThinking) {
-                reasoning = src.replace("<think>", "").replace("</think>", "").trim();
+                thinking = src.replace("<think>", "").replace("</think>", "").trim();
             } else if (src.contains("</think>")) {
                 int start = src.indexOf("<think>");
                 int end = src.indexOf("</think>");
 
                 if (start > -1 && end > -1) {
-                    reasoning = src.substring(start + 7, end).trim();
+                    thinking = src.substring(start + 7, end).trim();
                 } else {
-                    reasoning = "";
+                    thinking = "";
                 }
             } else {
-                reasoning = "";
+                thinking = "";
             }
         }
 
-        return reasoning;
+        return thinking;
     }
 
+    /**
+     * 答案（没有推理标签的内容）
+     */
+    public String getAnswer() {
+        if (answer == null) {
+            answer = stripThinkTags(content);
+        }
+
+        return answer; //think
+    }
+
+    /**
+     * 获取推理字段名
+     */
     public String getReasoningFieldName() {
         return reasoningFieldName;
     }
 
+    /**
+     * 设置推理字段名
+     */
     public AssistantMessage reasoningFieldName(String reasoningFieldName) {
         this.reasoningFieldName = reasoningFieldName;
         return this;
@@ -218,16 +248,23 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     /**
-     * 结果内容（没有推理标签的内容）
+     * 获取答案
+     *
+     * @deprecated 4.1 {@link #getAnswer()}
      */
-    private transient String resultContent;
-
+    @Deprecated
     public String getResultContent() {
-        if (resultContent == null) {
-            resultContent = stripThinkTags(content);
-        }
+        return getAnswer();
+    }
 
-        return resultContent;
+    /**
+     * 获取思考
+     *
+     * @deprecated 4.1 {@link #getThinking()}
+     */
+    @Deprecated
+    public String getReasoning() {
+        return getThinking();
     }
 
     /**
@@ -250,9 +287,10 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     private transient String jsonContent;
+
     public String getJsonContent() {
         if (jsonContent == null) {
-            String txt = getResultContent();
+            String txt = getAnswer();
 
             if (Assert.isNotEmpty(txt)) {
                 txt = txt.trim();
@@ -285,16 +323,8 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
         return jsonContent;
     }
 
-    /**
-     * 是否思考中
-     */
     @Override
-    public boolean isThinking() {
-        return isThinking;
-    }
-
-    @Override
-    public boolean isToolCalls(){
+    public boolean isToolCalls() {
         return Assert.isNotEmpty(toolCalls);
     }
 
@@ -341,8 +371,8 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
             buf.append(", blocks=").append(blocks);
         }
 
-        if (Utils.isNotEmpty(reasoning)) {
-            buf.append(", reasoning='").append(reasoning).append('\'');
+        if (Utils.isNotEmpty(thinking)) {
+            buf.append(", reasoning='").append(thinking).append('\'');
         }
 
         if (contentRaw != null) {

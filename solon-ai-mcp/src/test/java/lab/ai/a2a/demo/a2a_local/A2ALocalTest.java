@@ -6,8 +6,6 @@ import lab.ai.a2a.demo.a2a.Tools2;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
-import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.test.SolonTest;
@@ -76,7 +74,7 @@ public class A2ALocalTest {
                 .stringParamAdd("message", "任务消息")
                 .doHandle(args -> {
                     String message = (String) args.get("message");
-                    return chatModel.prompt(message).call().getMessage().getResultContent();
+                    return chatModel.prompt(message).call().getMessage().getAnswer();
                 });
     }
 
@@ -93,7 +91,7 @@ public class A2ALocalTest {
                 .stringParamAdd("message", "任务消息")
                 .doHandle(args -> {
                     String message = (String) args.get("message");
-                    return chatModel.prompt(message).call().getMessage().getResultContent();
+                    return chatModel.prompt(message).call().getMessage().getAnswer();
                 });
     }
 }

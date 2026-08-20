@@ -54,9 +54,9 @@ public class SimpleAgentOutputSchemaTest {
         // 6. 获取结果
         // 方式 A：从返回值获取
         System.out.println("模型直接返回1: " + message.getContent());
-        System.out.println("模型直接返回2: " + message.getResultContent());
+        System.out.println("模型直接返回2: " + message.getAnswer());
 
-        Assertions.assertEquals(message.getContent(), message.getResultContent());
+        Assertions.assertEquals(message.getContent(), message.getAnswer());
 
         // 方式 B：从 Session 的 Snapshot 中获取（因为配置了 outputKey）
         String extractedData = (String) session.getContext().get("extracted_resume");

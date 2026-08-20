@@ -20,6 +20,6 @@ public class Server2 implements AgentTaskHandler {
     @ToolMapping(name = "spot_agent", description = "专业的景区推荐助手。主要任务是推荐景点信息")
     @Override
     public String handleTask(String message) throws Throwable {
-        return chatModel.prompt(message).call().getMessage().getResultContent();
+        return chatModel.prompt(message).call().getMessage().getAnswer();
     }
 }

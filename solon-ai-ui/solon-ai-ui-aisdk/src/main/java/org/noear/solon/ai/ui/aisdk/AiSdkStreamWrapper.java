@@ -18,7 +18,6 @@ package org.noear.solon.ai.ui.aisdk;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.ChatChoice;
 import org.noear.solon.ai.chat.ChatResponse;
-import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.ui.aisdk.part.*;
@@ -140,7 +139,7 @@ public class AiSdkStreamWrapper {
             AssistantMessage message = response.getMessage();
             if (message != null) {
                 // 3. reasoning（如有）
-                String reasoning = message.getReasoning();
+                String reasoning = message.getThinking();
                 if (reasoning != null && !reasoning.isEmpty()) {
                     emit(sink, new ReasoningStartPart(reasoningId));
                     emit(sink, new ReasoningDeltaPart(reasoningId, reasoning));
@@ -174,7 +173,7 @@ public class AiSdkStreamWrapper {
                 }
 
                 // 6. 正文内容（使用 getResultContent 获取去除思考标签的纯文本）
-                String content = message.getResultContent();
+                String content = message.getAnswer();
                 if (content != null && !content.isEmpty()) {
                     emit(sink, new TextStartPart(textId));
                     emit(sink, new TextDeltaPart(textId, content));

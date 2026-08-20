@@ -30,7 +30,6 @@ import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.content.VideoBlock;
-import org.noear.solon.core.util.Assert;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 import org.slf4j.Logger;
@@ -92,8 +91,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
         if (msg.isMultiModal() == false) {
             // 单模态：保持原有 string content 行为
-            if (Utils.isNotEmpty(msg.getResultContent())) {
-                oNode.set("content", msg.getResultContent());
+            if (Utils.isNotEmpty(msg.getAnswer())) {
+                oNode.set("content", msg.getAnswer());
             } else if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
                 // 有 tool_calls 但无文本内容（如 reasoning-only 后调工具）时，显式设 content=null
                 // OpenAI 规范要求 assistant message 含 tool_calls 时 content 字段存在（可为 null）
@@ -156,15 +155,15 @@ public abstract class AbstractChatDialect implements ChatDialect {
         
             // 若 content 数组为空（仅侧车 audio / 媒体已被截断），补文本投影避免协议缺 content
             if (oNode.get("content").isArray() && oNode.get("content").getArray().isEmpty()) {
-                if (Utils.isNotEmpty(msg.getResultContent())) {
-                    oNode.set("content", msg.getResultContent());
+                if (Utils.isNotEmpty(msg.getAnswer())) {
+                    oNode.set("content", msg.getAnswer());
                 }
             }
         }
 
         //兼容 r1 的 tool-call(可以再优化，只在最后一条加)
         if (Utils.isNotEmpty(msg.getReasoningFieldName())) {
-            oNode.set(msg.getReasoningFieldName(), msg.getReasoning());
+            oNode.set(msg.getReasoningFieldName(), msg.getThinking());
         }
 
         if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
@@ -497,7 +496,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
 
         assistantMessage.addMetadata("reason", "tool")
-                .addMetadata("source", toolCallMessage.getResultContent());
+                .addMetadata("source", toolCallMessage.getAnswer());
 
         for (ToolMessage toolMessage : toolMessages) {
             assistantMessage.addMetadata(toolMessage.getMetadata());

@@ -29,7 +29,7 @@ public class AssistantMessageTest {
     public void getReasoningShouldRemoveThinkTagsWhenThinking() {
         AssistantMessage message = new AssistantMessage("<think>analysis</think>", true);
 
-        Assertions.assertEquals("analysis", message.getReasoning());
+        Assertions.assertEquals("analysis", message.getThinking());
     }
 
     @Test

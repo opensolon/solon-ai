@@ -156,7 +156,7 @@ public class OpenaiResponsesRequestBuilder {
                 AssistantMessage am = (AssistantMessage) message;
                 String stripped = AssistantMessage.stripThinkTags(thinkText);
                 if (Utils.isEmpty(stripped)) {
-                    stripped = am.getReasoning();
+                    stripped = am.getThinking();
                 }
                 thinkText = stripped;
             }
@@ -317,14 +317,14 @@ public class OpenaiResponsesRequestBuilder {
      
             if (!hasAny) {
                 // 兜底：用去 think 后的文本投影
-                String text = assistantMessage.getResultContent();
+                String text = assistantMessage.getAnswer();
                 contentArray.addNew()
                         .set("type", "output_text")
                         .set("text", text != null ? text : "");
             }
         } else {
             // 纯文本：与 getResultContent 对齐，剥离 think 标签；有 tool_calls 时仅非空才写
-            String plain = assistantMessage.getResultContent();
+            String plain = assistantMessage.getAnswer();
             if (!hasToolCalls) {
                 inputArray.addNew()
                         .set("role", "assistant")

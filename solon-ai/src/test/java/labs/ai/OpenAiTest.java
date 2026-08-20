@@ -120,13 +120,13 @@ public class OpenAiTest {
         assertEquals(2, resp.getChoices().size());
         assertTrue(resp.getChoices().get(0).getMessage().isThinking());
         assertEquals("<think>", resp.getChoices().get(0).getMessage().getContent());
-        assertEquals("第一步思考", resp.getChoices().get(1).getMessage().getReasoning());
+        assertEquals("第一步思考", resp.getChoices().get(1).getMessage().getThinking());
 
         // Chunk 2：中间思考增量
         resp.reset();
         assertTrue(dialect.parseResponseJson(config, resp, chunks[1]));
         assertEquals(1, resp.getChoices().size());
-        assertEquals("第二步思考", resp.getChoices().get(0).getMessage().getReasoning());
+        assertEquals("第二步思考", resp.getChoices().get(0).getMessage().getThinking());
         assertTrue(resp.getChoices().get(0).getMessage().isThinking());
 
         // Chunk 3：思考结束 → 产出 </think> 标记消息 + 正文消息

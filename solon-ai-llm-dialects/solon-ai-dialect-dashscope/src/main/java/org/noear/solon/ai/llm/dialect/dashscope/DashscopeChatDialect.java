@@ -246,18 +246,18 @@ public class DashscopeChatDialect extends AbstractChatDialect {
 
         if (msg.isMultiModal()) {
             ONode contentNode = new ONode().then(n -> {
-                appendDashscopeContentBlocks(n, msg.getBlocks(), msg.getResultContent());
+                appendDashscopeContentBlocks(n, msg.getBlocks(), msg.getAnswer());
                 // 若块全为空，补文本投影避免空 content
                 if (n.getArray() != null && n.getArray().isEmpty()
-                        && Utils.isNotEmpty(msg.getResultContent())) {
-                    n.addNew().set("text", msg.getResultContent());
+                        && Utils.isNotEmpty(msg.getAnswer())) {
+                    n.addNew().set("text", msg.getAnswer());
                 }
             });
             oNode.set("content", contentNode);
         } else {
             // 单模态：保持原 string 行为
-            if (Utils.isNotEmpty(msg.getResultContent())) {
-                oNode.set("content", msg.getResultContent());
+            if (Utils.isNotEmpty(msg.getAnswer())) {
+                oNode.set("content", msg.getAnswer());
             }
         }
 

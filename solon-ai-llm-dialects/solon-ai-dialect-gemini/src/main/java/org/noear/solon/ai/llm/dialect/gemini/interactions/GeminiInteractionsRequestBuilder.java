@@ -252,7 +252,7 @@ public class GeminiInteractionsRequestBuilder {
                 appendAssistantContent(contentArr, msg);
             } else {
                 // 纯文本也剥离 think，与多模态路径一致
-                String content = msg.getResultContent();
+                String content = msg.getAnswer();
                 if (Utils.isNotEmpty(content)) {
                     contentArr.addNew().set("type", "text").set("text", content);
                 }
@@ -287,8 +287,8 @@ public class GeminiInteractionsRequestBuilder {
                 }
             }
         }
-        if (!hasText && Utils.isNotEmpty(msg.getResultContent())) {
-            contentArr.addNew().set("type", "text").set("text", msg.getResultContent());
+        if (!hasText && Utils.isNotEmpty(msg.getAnswer())) {
+            contentArr.addNew().set("type", "text").set("text", msg.getAnswer());
         }
     }
 

@@ -246,7 +246,7 @@ public class ReasonTask {
 
         // 容错处理：模型响应内容、工具调用与媒体均为空时，引导其重新生成
         // 纯生图等 media-only 响应不算空，避免被当成空响应重试
-        if (Assert.isEmpty(responseMessage.getResultContent())
+        if (Assert.isEmpty(responseMessage.getAnswer())
                 && Assert.isEmpty(responseMessage.getToolCalls())
                 && !responseMessage.hasMedia()) {
             if (trace.getEmptyRetryCounter().incrementAndGet() < 3) {
@@ -292,13 +292,13 @@ public class ReasonTask {
         }
 
         // [逻辑 3.5: 思考事件] 提取思考内容并触发 onThought 事件
-        final String clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : "";
+        final String clearContent = responseMessage.hasContent() ? responseMessage.getAnswer() : "";
         final String thoughtContent;
 
         if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
             // 原生工具模式：非思考模式 LLM 的 getReasoning 可能为空，需回退到 extractThought
-            thoughtContent = Utils.isNotEmpty(responseMessage.getReasoning())
-                    ? responseMessage.getReasoning()
+            thoughtContent = Utils.isNotEmpty(responseMessage.getThinking())
+                    ? responseMessage.getThinking()
                     : extractThought(trace, clearContent);
         } else {
             // 文本结构模式：按 ReAct 协议 "Thought:" 解析

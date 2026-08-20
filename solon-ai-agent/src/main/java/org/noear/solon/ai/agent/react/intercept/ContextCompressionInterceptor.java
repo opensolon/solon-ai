@@ -495,7 +495,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             ChatMessage prev = messages.get(targetIdx - 1);
             if (prev instanceof AssistantMessage
                     && Assert.isEmpty(((AssistantMessage) prev).getToolCalls())
-                    && Assert.isNotEmpty(((AssistantMessage) prev).getResultContent())) {
+                    && Assert.isNotEmpty(((AssistantMessage) prev).getAnswer())) {
                 targetIdx--;
                 semanticAnchor = prev;
             }
@@ -1055,7 +1055,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             // 注意：仅 media 的 Assistant（如 image_generation）必须保留
             if (msg instanceof AssistantMessage) {
                 AssistantMessage am = (AssistantMessage) msg;
-                if (Assert.isEmpty(am.getResultContent())
+                if (Assert.isEmpty(am.getAnswer())
                         && Assert.isEmpty(am.getToolCalls())
                         && !am.hasMedia()) {
                     continue;

@@ -717,7 +717,7 @@ public class AnthropicRequestBuilder {
             // 仅当 thinkingSignature 有效时回传 thinking 块。
             // 兼容网关（如 DeepSeek claude_chat）在 tool 多轮回传无 signature 的 thinking，常触发 EMPTY_RESPONSE。
             // 官方 Claude 也要求 thinking 块带有效 signature 才能继续多轮。
-            String reasoning = assistantMessage.getReasoning();
+            String reasoning = assistantMessage.getThinking();
             String signature = resolveThinkingSignature(assistantMessage);
             if (Utils.isNotEmpty(reasoning) && Utils.isNotEmpty(signature)) {
                 contentArray.addNew()
@@ -730,7 +730,7 @@ public class AnthropicRequestBuilder {
             appendRedactedThinkingBlocks(contentArray, assistantMessage);
 
             // 添加文本内容（如果有，排除  与纯空白）
-            String resultContent = trimToNull(assistantMessage.getResultContent());
+            String resultContent = trimToNull(assistantMessage.getAnswer());
             if (resultContent != null) {
                 contentArray.addNew()
                     .set("type", "text")
@@ -768,7 +768,7 @@ public class AnthropicRequestBuilder {
                 }
             }
             if (!hasText) {
-                String fallbackText = trimToNull(assistantMessage.getResultContent());
+                String fallbackText = trimToNull(assistantMessage.getAnswer());
                 if (fallbackText != null) {
                     contentArray.addNew()
                             .set("type", "text")
@@ -777,13 +777,13 @@ public class AnthropicRequestBuilder {
             }
         } else {
             // 纯文本回传剥离 think，与多模态 TextBlock 路径一致；空白不回传为 text
-            String content = trimToNull(assistantMessage.getResultContent());
+            String content = trimToNull(assistantMessage.getAnswer());
             if (content != null) {
                 node.set("content", content);
             } else {
                 // 若仅有思考内容（无正文、无 tool）：仅在 signature 有效时回传 thinking；
                 // 否则只保留空 content，避免兼容网关因无 signature thinking 拒绝下一轮
-                String reasoning = assistantMessage.getReasoning();
+                String reasoning = assistantMessage.getThinking();
                 String signature = resolveThinkingSignature(assistantMessage);
                 if (Utils.isNotEmpty(reasoning) && Utils.isNotEmpty(signature)) {
                     ONode contentArray = node.getOrNew("content").asArray();

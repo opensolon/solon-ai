@@ -830,7 +830,7 @@ public class DialectAssistantMultimodalTest {
         Assertions.assertNotNull(msg);
         Assertions.assertEquals("tool_use", resp.getChoices().get(0).getFinishReason());
         Assertions.assertEquals("tool_use", resp.lastFinishReason);
-        Assertions.assertEquals("need tool", msg.getReasoning());
+        Assertions.assertEquals("need tool", msg.getThinking());
         Assertions.assertTrue(msg.getContentRaw() instanceof java.util.Map);
         Assertions.assertEquals("sig-abc",
                 ((java.util.Map<?, ?>) msg.getContentRaw()).get("thinkingSignature"));

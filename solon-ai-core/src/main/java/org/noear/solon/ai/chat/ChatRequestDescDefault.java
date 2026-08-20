@@ -529,8 +529,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 resp.contentBuilder.append(acm.getContent());
             }
 
-            if (Assert.isNotEmpty(acm.getReasoning())) {
-                resp.reasoningBuilder.append(acm.getReasoning());
+            if (Assert.isNotEmpty(acm.getThinking())) {
+                resp.reasoningBuilder.append(acm.getThinking());
             }
 
             // 流式聚合媒体块（文本已走 contentBuilder）
@@ -551,8 +551,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             resp.contentBuilder.append(acm.getContent());
         }
 
-        if (Assert.isNotEmpty(acm.getReasoning())) {
-            resp.reasoningBuilder.append(acm.getReasoning());
+        if (Assert.isNotEmpty(acm.getThinking())) {
+            resp.reasoningBuilder.append(acm.getThinking());
         }
 
         // 工具调用消息中也可能附带媒体

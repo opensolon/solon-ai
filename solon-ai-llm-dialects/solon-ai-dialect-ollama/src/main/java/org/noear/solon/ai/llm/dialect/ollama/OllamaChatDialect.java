@@ -120,8 +120,8 @@ public class OllamaChatDialect extends AbstractChatDialect {
     protected void buildAssistantMessageNodeDo(ChatConfig config, ONode oNode, AssistantMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
 
-        if (Utils.isNotEmpty(msg.getResultContent())) {
-            oNode.set("content", msg.getResultContent());
+        if (Utils.isNotEmpty(msg.getAnswer())) {
+            oNode.set("content", msg.getAnswer());
         } else {
             oNode.set("content", "");
         }
@@ -132,7 +132,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
 
         //兼容 r1 的 tool-call
         if (Utils.isNotEmpty(msg.getReasoningFieldName())) {
-            oNode.set(msg.getReasoningFieldName(), msg.getReasoning());
+            oNode.set(msg.getReasoningFieldName(), msg.getThinking());
         }
 
         if (Utils.isNotEmpty(msg.getToolCallsRaw())) {

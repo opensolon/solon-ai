@@ -430,10 +430,10 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                 if (Assert.isNotEmpty(source)) {
                     clearContent = source;
                 } else {
-                    clearContent = responseMessage.getResultContent();
+                    clearContent = responseMessage.getAnswer();
                 }
             } else {
-                clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : "";
+                clearContent = responseMessage.hasContent() ? responseMessage.getAnswer() : "";
             }
             // 保留多模态 media blocks，避免生图/纯媒体响应被压成纯文本。
             // 文本投影用 clearContent；blocks 只带非文本媒体，避免 TextBlock 重复。
