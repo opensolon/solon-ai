@@ -110,7 +110,7 @@ public class AgentFactory {
         }
 
         for (HarnessExtension extension : engine.getExtensions()) {
-            extension.configure(agentDefinition.getName(), builder);
+            extension.configure(engine, agentDefinition.getName(), builder);
         }
 
         // 注入 Agent 级权限 delta（仅 agent 自身的规则，不含全局规则）

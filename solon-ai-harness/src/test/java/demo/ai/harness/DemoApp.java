@@ -30,7 +30,7 @@ public class DemoApp {
                     slf.setModel("deepseek-v4-flash");
                     slf.setContextLength(128_000);
                 })) //设定大模型配置
-                .extensionAdd((name, builder) -> {
+                .extensionAdd((e,name, builder) -> {
                     //...
                 })
                 .build();
