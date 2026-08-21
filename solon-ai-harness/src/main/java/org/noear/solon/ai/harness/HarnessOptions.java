@@ -74,8 +74,8 @@ class HarnessOptions implements NonSerializable {
     private volatile boolean autoRethink = true;
 
     // ========== 会话与压缩 ==========
-    private volatile int sessionWindowSize = 8;
-    private volatile int compressionMaxMessages = 40;
+    private volatile int sessionWindowSize = 12;
+    private volatile int compressionMaxMessages = 100;
     private volatile double compressionMaxContextRatio = 0.75D;
     private volatile String compressionModel; //压缩大模型
 
@@ -88,7 +88,7 @@ class HarnessOptions implements NonSerializable {
     // ========== 安全与模式 ==========
     private volatile boolean sandboxEnabled = true;
     private volatile boolean sandboxAllowUserHome = true;
-    private volatile boolean sandboxSystemRestrict = true;
+    private volatile boolean sandboxSystemRestrict = false;
 
     private volatile boolean hitlEnabled = false;
     private volatile PermissionContext permissionContext = PermissionContext.create();
