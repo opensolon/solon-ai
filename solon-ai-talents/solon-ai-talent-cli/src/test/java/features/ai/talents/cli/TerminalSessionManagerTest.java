@@ -74,7 +74,7 @@ public class TerminalSessionManagerTest {
                     manager.exec("sleep 30 & echo $! > child.pid; wait", workDir, null, 50, 1_000, 60_000);
             assertTrue(first.running(), first.output());
 
-            long childPid = Long.parseLong(readFile(marker).trim());
+            long childPid = Long.parseLong(waitUntilFileExists(marker).trim());
             TerminalSessionManager.CommandSnapshot terminated =
                     manager.terminate(first.sessionId(), "test", 1_000);
             assertFalse(terminated.running());
@@ -99,7 +99,8 @@ public class TerminalSessionManagerTest {
                     manager.exec("sleep 30 & echo $! > child.pid; wait", workDir, null, 20, 1_000, 200);
             assertTrue(first.running(), first.output());
 
-            long childPid = Long.parseLong(readFile(marker).trim());
+            // exec 可能在子进程写完 pid 文件前就返回（yield 时间窗内），等待文件落盘避免时序竞态
+            long childPid = Long.parseLong(waitUntilFileExists(marker).trim());
             waitUntilNotAlive(childPid);
             assertFalse(isProcessAlive(childPid));
 
@@ -143,6 +144,17 @@ public class TerminalSessionManagerTest {
     private static String readFile(Path path) throws Exception {
         byte[] bytes = Files.readAllBytes(path);
         return new String(bytes, StandardCharsets.UTF_8);
+    }
+
+    private static String waitUntilFileExists(Path path) throws Exception {
+        long deadline = System.currentTimeMillis() + 2_000;
+        while (System.currentTimeMillis() < deadline) {
+            if (Files.exists(path)) {
+                return readFile(path);
+            }
+            Thread.sleep(20);
+        }
+        throw new java.io.IOException("pid 文件未在超时内生成: " + path);
     }
 
     private static void deleteRecursively(Path root) throws Exception {

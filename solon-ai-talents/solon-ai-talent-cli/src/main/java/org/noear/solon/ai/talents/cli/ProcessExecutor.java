@@ -156,9 +156,9 @@ public class ProcessExecutor {
 
         Path tempScript = null;
         try {
-            // 1. 持久化脚本到系统临时目录（Windows .bat 文件需前置 chcp 65001 以确保 UTF-8 输出）
+            // 1. 持久化脚本到系统临时目录（Windows .bat：仅当脚本按 UTF-8 写入时才需 chcp 65001 切页）
             String finalCode = code;
-            if (".bat".equals(ext)) {
+            if (".bat".equals(ext) && StandardCharsets.UTF_8.equals(scriptCharset)) {
                 finalCode = "@chcp 65001 > nul\r\n" + code;
             }
             tempScript = createTempScript(ext);
@@ -185,10 +185,23 @@ public class ProcessExecutor {
     /**
      * 在系统临时目录创建脚本文件：前缀 solon-ai-script-，Unix 尽量收紧为 600。
      */
-    private static Path createTempScript(String ext) throws IOException {
+    static Path createTempScript(String ext) throws IOException {
+        return createTempScript(ext, true);
+    }
+
+    /**
+     * 在系统临时目录创建脚本文件。
+     *
+     * @param registerDeleteOnExit 是否注册 {@code deleteOnExit} 兜底。调用方能保证主动删除时应传
+     *                             {@code false}：{@code DeleteOnExitHook} 的集合只增不减，长驻进程里
+     *                             每次命令都注册会造成慢性内存增长。
+     */
+    static Path createTempScript(String ext, boolean registerDeleteOnExit) throws IOException {
         Path tempScript = Files.createTempFile("solon-ai-script-", ext);
-        // JVM 异常退出时的兜底清理；正常路径仍由 finally 主动删除
-        tempScript.toFile().deleteOnExit();
+        if (registerDeleteOnExit) {
+            // JVM 异常退出时的兜底清理；正常路径仍由 finally 主动删除
+            tempScript.toFile().deleteOnExit();
+        }
         try {
             Set<PosixFilePermission> perms = EnumSet.of(
                     PosixFilePermission.OWNER_READ,
@@ -224,6 +237,7 @@ public class ProcessExecutor {
             Process process = pb.start();
 
             // 1. 异步读取输出（在字节层收集，便于可靠的二进制探测）
+            final OutputDecoder streamDecoder = onOutput == null ? null : new OutputDecoder(outputCharset);
             CompletableFuture<byte[]> outputFuture = RunUtil.async(() -> {
                 ByteArrayOutputStream buf = new ByteArrayOutputStream();
                 try (InputStream in = process.getInputStream()) {
@@ -232,8 +246,11 @@ public class ProcessExecutor {
                     while ((n = in.read(buffer)) != -1) {
 
                         if (onOutput != null) {
-                            // 实时回调按 outputCharset 解码片段（流式场景）
-                            onOutput.accept(new String(buffer, 0, n, outputCharset));
+                            // 实时回调：增量解码，避免多字节字符被读取分块切断
+                            String piece = streamDecoder.decode(buffer, n);
+                            if (!piece.isEmpty()) {
+                                onOutput.accept(piece);
+                            }
                         }
 
                         if (buf.size() + n <= maxOutputSize) {
@@ -250,6 +267,12 @@ public class ProcessExecutor {
                     }
                 } catch (IOException e) {
                     LOG.debug("Stream reading interrupted: {}", e.getMessage());
+                }
+                if (streamDecoder != null) {
+                    String tail = streamDecoder.flush();
+                    if (!tail.isEmpty()) {
+                        onOutput.accept(tail);
+                    }
                 }
                 return buf.toByteArray();
             });
@@ -268,7 +291,10 @@ public class ProcessExecutor {
                 return summarizeBinaryOutput(raw);
             }
 
-            String result = new String(raw, outputCharset).trim();
+            // 流式回调已锁定过字符集时复用它：否则同一次执行里「实时输出」与「最终返回值」可能按不同
+            // 字符集解码（流式只能看到开头分块，而 decodeAll 看到全量字节），给出两份不一致的文本
+            Charset locked = streamDecoder == null ? null : streamDecoder.selectedCharset();
+            String result = (locked == null ? decodeSmartly(raw, outputCharset) : new String(raw, locked)).trim();
             if (result.isEmpty()) {
                 return "执行成功";
             }
@@ -287,6 +313,16 @@ public class ProcessExecutor {
             return DEFAULT_LLM_OUTPUT_CHARS;
         }
         return maxOutputChars;
+    }
+
+    /**
+     * 智能解码子进程输出（一次性完整字节）：委托 {@link OutputDecoder#decodeAll}。
+     *
+     * <p>期望字符集（{@code outputCharset}，默认 UTF-8）优先，严格校验不通过时按平台遗留代码页
+     * （Windows 中文系统为 GBK）重解，避免第三方工具按 ANSI 代码页输出导致乱码。</p>
+     */
+    static String decodeSmartly(byte[] raw, Charset primary) {
+        return OutputDecoder.decodeAll(raw, primary);
     }
 
     /**

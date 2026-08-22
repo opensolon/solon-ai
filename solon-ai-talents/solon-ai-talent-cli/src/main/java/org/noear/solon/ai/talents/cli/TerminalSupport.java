@@ -26,6 +26,8 @@ import java.io.IOException;
 import java.io.File;
 import java.nio.file.*;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -937,14 +939,24 @@ public class TerminalSupport {
 
                 // 仅注入命令中实际使用的环境变量（减少污染）
                 if (result.contains(alias)) {
-                    envs.put(envKey, mount.getRealPath().toString());
+                    String realPath = mount.getRealPath().toString();
+                    envs.put(envKey, realPath);
                     String placeholder = getEnvPlaceholder(envKey);
 
-                    // 精确替换：仅替换作为路径前缀出现的 @alias（后跟 / 或 \\ 或在行尾）
-                    result = result.replaceAll(
-                            java.util.regex.Pattern.quote(alias) + "(?=[/\\\\\\s]|$)",
-                            java.util.regex.Matcher.quoteReplacement(placeholder)
-                    );
+                    // 精确替换：仅替换作为路径前缀出现的 @alias（后跟 / 或 \ 或空白或在行尾）
+                    String aliasRegex = Pattern.quote(alias) + "(?=[/\\\\\\s]|$)";
+
+                    // 挂载物理路径含空格/制表符时，直接展开会按空白拆成多个参数（尤其 CMD 的 %VAR% 在解析后
+                    // 才展开，无法自行加引号）：给占位符补一层双引号。已处于引号内的（前一字符是引号）跳过，
+                    // 否则会往引号内插入字面双引号。
+                    // 已知边界：只看前一个字符，别名若处于一段更长的引号串中间（如 cat "dir @pool/f.txt"）
+                    // 仍会产生嵌套引号——要完整覆盖需跟踪整行引号状态，当前按主流用法（裸用或紧跟引号）近似处理。
+                    if (realPath.indexOf(' ') >= 0 || realPath.indexOf('\t') >= 0) {
+                        result = result.replaceAll("(?<![\"'])" + aliasRegex,
+                                Matcher.quoteReplacement('"' + placeholder + '"'));
+                    }
+                    // 剩余的（已在引号内）按裸占位符替换
+                    result = result.replaceAll(aliasRegex, Matcher.quoteReplacement(placeholder));
                 }
             }
         }

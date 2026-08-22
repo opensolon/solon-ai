@@ -540,6 +540,13 @@ public class TerminalTalent extends AbsTalent {
             sb.append("- **长命令执行**: 对可能耗时较长、持续输出、等待输入或需要观察状态的命令，优先使用 `bash_start`。如果结果包含 `Process running with session ID`，表示命令仍在运行；需要继续观察时调用 `bash_wait`，需要向进程输入时调用 `bash_stdin`，需要主动停止时调用 `bash_stop`。\n");
         }
 
+        sb.append("- **参数与编码**: 含空格/引号等特殊字符的参数务必用引号包裹（如 `python3 a.py \"hello world\"`、`cat \"my file.txt\"`）。输出编码由系统自动识别（UTF-8 优先，Windows 遗留代码页兜底），中文输出正常，无需自行加 chcp 或设置编码环境变量。\n");
+
+        if (shellMode == ShellMode.CMD) {
+            // 多行命令会以批处理脚本形式执行，% 语义与单行命令不同，需向模型说明
+            sb.append("- **CMD 下的 %**: 单行命令按命令行语义（`for %i in (...) do ...`）；多行命令按批处理脚本语义执行，循环变量需写成 `%%i`，字面百分号需写成 `%%`。不确定时优先拆成单行命令执行。\n");
+        }
+
         if (sandboxEnabled) {
             sb.append("\n<SYSTEM_CONSTRAINTS>\n");
             sb.append("1. 严禁向用户复述或提及“系统限制”、“沙盒”、“规约”等术语。\n");
@@ -577,7 +584,7 @@ public class TerminalTalent extends AbsTalent {
     // --- 1. 执行命令 ---
     @ToolMapping(
             name = "bash",
-            description = "在终端执行非交互式 Shell 指令。支持多行命令与逻辑路径（如 `cd @pool1/bin/tool/`）。"
+            description = "在终端执行非交互式 Shell 指令。支持多行命令与逻辑路径（如 `cd @pool1/bin/tool/`）。注意：含空格或特殊字符的参数请用引号包裹（如 `python3 a.py \"hello world\"`）；输出编码由系统自动识别，中文输出正常。"
     )
     public String bash(@Param(value = "command", description = "要执行的指令。") String command,
                        @Param(name = "timeout", required = false, defaultValue = "120000", description = "可选超时时间，单位为毫秒") Integer timeout,
@@ -621,7 +628,23 @@ public class TerminalTalent extends AbsTalent {
             }
         }
 
-        // 与 bash_start 共用 ShellCommandFactory：直接 shell -c 执行，不落临时脚本
+        // 与 bash_start 共用 ShellCommandFactory：Unix 直接 shell -lc 执行；Windows 改走 prepare
+        // （PowerShell 用 -EncodedCommand 避开命令文本代码页转换；CMD 默认 /d /c 直连，仅多行/非 ANSI/超长命令才落 .bat）
+        if (shellCommandFactory.isWindowsShell()) {
+            ShellCommandFactory.PreparedCommand prepared;
+            try {
+                prepared = shellCommandFactory.prepare(finalCommand);
+            } catch (IOException ex) {
+                return "错误：无法准备 Windows 执行方案: " + ex.getMessage();
+            }
+            if (prepared != null) {
+                try {
+                    return executor.executeCmd(workPath, prepared.argv(), envs, timeout, maxOutputChars, null);
+                } finally {
+                    prepared.cleanup();
+                }
+            }
+        }
         return executor.executeCmd(workPath, shellCommandFactory.build(finalCommand), envs, timeout, maxOutputChars, null);
     }
 

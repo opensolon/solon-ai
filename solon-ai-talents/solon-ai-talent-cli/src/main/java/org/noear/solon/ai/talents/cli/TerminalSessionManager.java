@@ -78,27 +78,46 @@ public final class TerminalSessionManager {
         cleanupCompletedSessions();
         requireNonEmptyCommand(command);
         Path normalizedWorkdir = normalizeWorkdir(workdir);
-        ProcessBuilder builder = new ProcessBuilder(shellCommandFactory.build(command));
-        builder.directory(normalizedWorkdir.toFile());
-        builder.redirectErrorStream(true);
-        // 注入实时系统 PATH（Windows：修复 JVM 环境快照不刷新导致新装命令不可见）；
-        // 显式 env（如 PYTHON/NODE）优先级更高
-        EnvironmentResolver.applyTo(builder, env);
 
-        Process process = builder.start();
-        String sessionId = newSessionId();
-        CommandSession session =
-                new CommandSession(
-                        sessionId,
-                        command,
-                        normalizedWorkdir,
-                        process,
-                        System.currentTimeMillis(),
-                        normalizeHardTimeoutMs(hardTimeoutMs),
-                        outputCharset);
-        sessions.put(sessionId, session);
-        session.start();
-        return waitAndSnapshot(session, yieldTimeMs, maxOutputChars);
+        ShellCommandFactory.PreparedCommand prepared = null;
+        try {
+            // Windows：改用 ShellCommandFactory 的可靠启动方案（PowerShell 用 -EncodedCommand；
+            // CMD 默认 /d /c 直连、仅多行/非 ANSI/超长命令才落 .bat），规避命令文本代码页转换问题；
+            // 若产生临时脚本，由会话结束回调清理（异步会话下进程可能在本方法返回后仍在运行，不能提前删除）。
+            // interactive=true：会话支持 bash_stdin，不能加 -NonInteractive，否则等待输入的命令会直接失败
+            if (shellCommandFactory.isWindowsShell()) {
+                prepared = shellCommandFactory.prepare(command, true);
+            }
+            List<String> argv = prepared != null ? prepared.argv() : shellCommandFactory.build(command);
+            ProcessBuilder builder = new ProcessBuilder(argv);
+            builder.directory(normalizedWorkdir.toFile());
+            builder.redirectErrorStream(true);
+            // 注入实时系统 PATH（Windows：修复 JVM 环境快照不刷新导致新装命令不可见）；
+            // 显式 env（如 PYTHON/NODE）优先级更高
+            EnvironmentResolver.applyTo(builder, env);
+
+            Process process = builder.start();
+            String sessionId = newSessionId();
+            Runnable cleanup = prepared != null ? prepared::cleanup : null;
+            CommandSession session =
+                    new CommandSession(
+                            sessionId,
+                            command,
+                            normalizedWorkdir,
+                            process,
+                            System.currentTimeMillis(),
+                            normalizeHardTimeoutMs(hardTimeoutMs),
+                            outputCharset,
+                            cleanup);
+            sessions.put(sessionId, session);
+            session.start();
+            return waitAndSnapshot(session, yieldTimeMs, maxOutputChars);
+        } catch (IOException e) {
+            if (prepared != null) {
+                prepared.cleanup();
+            }
+            throw e;
+        }
     }
 
     public CommandSnapshot writeStdin(
@@ -338,7 +357,7 @@ public final class TerminalSessionManager {
     }
 
     private static boolean isWindows() {
-        return System.getProperty("os.name").toLowerCase().contains("win");
+        return EnvironmentResolver.isWindows();
     }
 
     public static final class CommandSnapshot {
@@ -448,6 +467,7 @@ public final class TerminalSessionManager {
         private final long startedAt;
         private final int hardTimeoutMs;
         private final Charset outputCharset;
+        private final Runnable cleanup; // 会话结束后的临时脚本清理（Windows 脚本执行方案）
         private final Object lock = new Object();
         private final StringBuilder output = new StringBuilder();
         private final CompletableFuture<Integer> exitFuture = new CompletableFuture<>();
@@ -465,7 +485,8 @@ public final class TerminalSessionManager {
                 Process process,
                 long startedAt,
                 int hardTimeoutMs,
-                Charset outputCharset) {
+                Charset outputCharset,
+                Runnable cleanup) {
             this.sessionId = sessionId;
             this.command = command;
             this.workdir = workdir;
@@ -473,6 +494,7 @@ public final class TerminalSessionManager {
             this.startedAt = startedAt;
             this.hardTimeoutMs = hardTimeoutMs;
             this.outputCharset = outputCharset;
+            this.cleanup = cleanup;
         }
 
         void start() {
@@ -497,6 +519,18 @@ public final class TerminalSessionManager {
             } catch (Throwable e) {
                 completedAt = System.currentTimeMillis();
                 exitFuture.completeExceptionally(e);
+            } finally {
+                runCleanup();
+            }
+        }
+
+        private void runCleanup() {
+            if (cleanup != null) {
+                try {
+                    cleanup.run();
+                } catch (Throwable ignored) {
+                    // 清理失败仅残留一个临时脚本文件，不影响会话结果
+                }
             }
         }
 
@@ -542,6 +576,9 @@ public final class TerminalSessionManager {
         }
 
         CommandSnapshot snapshot(int maxOutputChars) {
+            // 解码由读取线程增量完成（O(n)，多字节字符跨分块由 OutputDecoder 保留残字节处理）；
+            // 这里只在锁内读取已解码文本并推进「已消费字符偏移」——偏移的读-改-写必须与读取同处一个
+            // 临界区，否则并发调用（如 bash_wait 与 bash_stop 同时发生）会重复返回或漏掉一段输出
             String outputText;
             int outputLength;
             boolean truncated = false;
@@ -597,19 +634,30 @@ public final class TerminalSessionManager {
         }
 
         private void readOutput() {
-            try (InputStream input = process.getInputStream();
-                    InputStreamReader reader = new InputStreamReader(input, outputCharset)) {
-                char[] buffer = new char[4096];
+            // 字节层读取 + 增量解码：解码器（仅本线程使用）内部保留不完整的多字节序列，
+            // 因此 UTF-8 中文不会被 4096 分块边界切断；同时具备 ANSI 代码页兜底能力
+            OutputDecoder decoder = new OutputDecoder(outputCharset);
+            try (InputStream input = process.getInputStream()) {
+                byte[] buffer = new byte[4096];
                 int n;
-                while ((n = reader.read(buffer)) != -1) {
-                    synchronized (lock) {
-                        output.append(buffer, 0, n);
+                while ((n = input.read(buffer)) != -1) {
+                    String text = decoder.decode(buffer, n);
+                    if (text.isEmpty() == false) {
+                        synchronized (lock) {
+                            output.append(text);
+                        }
                     }
                 }
             } catch (IOException e) {
                 LOG.debug("Command output reader stopped for {}: {}", sessionId, e.getMessage());
                 readerFuture.completeExceptionally(e);
             } finally {
+                String tail = decoder.flush();
+                if (tail.isEmpty() == false) {
+                    synchronized (lock) {
+                        output.append(tail);
+                    }
+                }
                 if (readerFuture.isDone() == false) {
                     readerFuture.complete(null);
                 }

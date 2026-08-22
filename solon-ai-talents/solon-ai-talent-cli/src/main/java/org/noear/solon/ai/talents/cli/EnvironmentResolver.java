@@ -109,8 +109,17 @@ public final class EnvironmentResolver {
      * <p>实时 PATH（注册表 Machine+User 合并）优先置顶，继承环境中未出现在注册表里的
      * 条目追加在后，保证 GPO/启动脚本等来源的路径不丢失；显式 {@code envs} 中的键
      * 优先级最高（若调用方显式指定 PATH 则以调用方为准）。</p>
+     *
+     * <p>Windows 下额外注入 {@code PYTHONIOENCODING=utf-8}：Python 在 stdout 被重定向（管道）时
+     * 默认按 ANSI 代码页（中文系统 GBK）输出，而 chcp 只影响控制台、不影响管道；不注入则 Java 侧
+     * 按 UTF-8 解码必现乱码。此处不注入 {@code PYTHONUTF8}：它会同时把 {@code open()} 的默认编码
+     * 改为 UTF-8，导致用户脚本读取本地 ANSI 编码文件时报 UnicodeDecodeError（超出修复输出乱码的范围）。</p>
      */
     public static void applyTo(ProcessBuilder pb, Map<String, String> envs) {
+        if (isWindows()) {
+            // 仅设默认值；显式 envs 会在下方 putAll 覆盖
+            pb.environment().putIfAbsent("PYTHONIOENCODING", "utf-8");
+        }
         String systemPath = resolvePath();
         if (systemPath != null) {
             // Windows 上 ProcessBuilder.environment() 返回大小写不敏感的 map，
@@ -250,7 +259,11 @@ public final class EnvironmentResolver {
         }
     }
 
-    private static boolean isWindows() {
-        return System.getProperty("os.name").toLowerCase().contains("win");
+    /**
+     * 是否 Windows 平台（模块内统一入口，避免多处重复定义）。
+     */
+    static boolean isWindows() {
+        String os = System.getProperty("os.name");
+        return os != null && os.toLowerCase().contains("win");
     }
 }
