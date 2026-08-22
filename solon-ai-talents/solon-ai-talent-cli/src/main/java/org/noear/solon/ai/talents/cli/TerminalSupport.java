@@ -526,12 +526,60 @@ public class TerminalSupport {
         return resolveSafePath(workPath, workdir, false, sandboxEnabled, sandboxAllowUserHome);
     }
 
+    /** 类 Unix 的进程终止动词（PowerShell 里 {@code kill} 也是 Stop-Process 的别名，故不分平台都查） */
+    private static final Pattern UNIX_KILL_VERB =
+            Pattern.compile("\\b(?:kill|pkill|killall)\\b", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Windows 下「杀宿主进程」的终止动词。
+     *
+     * <p>Unix 侧只靠 {@code kill|pkill|killall} 关键字就够了，Windows 完全不同：
+     * {@code taskkill /F /PID 1234} 里 PID 前面隔着 {@code /F /PID} 这种含 {@code /} 的开关（不属于
+     * {@code [\s\w]}，所以旧正则永不命中），而 {@code Stop-Process -Id 1234} /
+     * {@code Stop-Process -Name java} 连 {@code kill} 字样都没有。引导词里已向模型明文承诺
+     * 「严禁 taskkill /IM java.exe、Stop-Process -Name java」，这里必须有对应的硬拦截，
+     * 否则两个平台的自保护强度不对等。</p>
+     *
+     * <p>{@code spps} 是 PowerShell 里 {@code Stop-Process} 的别名（{@code kill} 也是，已由 Unix
+     * 分支的关键字覆盖）。</p>
+     */
+    private static final Pattern WINDOWS_KILL_VERB =
+            Pattern.compile("\\b(?:taskkill|stop-process|spps)\\b", Pattern.CASE_INSENSITIVE);
+
+    /** 按进程名批量终止 java（{@code /IM java.exe}、{@code -Name java}、{@code -Name javaw}） */
+    private static final Pattern WINDOWS_KILL_JAVA_BY_NAME =
+            Pattern.compile("\\bjavaw?(?:\\.exe)?\\b", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * 删除动词（含 PowerShell 别名 {@code ri}/{@code rm}、CMD 的 {@code rd}/{@code rmdir}/{@code del}）。
+     */
+    private static final Pattern WINDOWS_DELETE_VERB = Pattern.compile(
+            "(?:\\bremove-item\\b|\\bri\\b|\\brm\\b|\\brd\\b|\\brmdir\\b|\\bdel\\b|\\berase\\b)",
+            Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Windows 高危删除目标：盘符根（{@code C:\}、{@code C:/}）与系统目录。
+     *
+     * <p>这是 {@code rm -rf /} 在 Windows 上的等价物：{@code Remove-Item -Recurse -Force C:\}、
+     * {@code rd /s /q C:\}。同样包含环境变量写法（{@code %SystemRoot%}、{@code $env:windir}），
+     * 否则一个变量就能绕过字面量匹配。</p>
+     */
+    private static final Pattern WINDOWS_CRITICAL_TARGET = Pattern.compile(
+            "(?:(?<![\\w:])[a-z]:[\\\\/](?=[\\s\"']|$)"
+                    + "|(?<![\\w:])[a-z]:[\\\\/](?:windows|winnt|users|programdata|program files(?: \\(x86\\))?)\\b"
+                    + "|%(?:systemroot|windir|systemdrive|programfiles|userprofile)%"
+                    + "|\\$env:(?:systemroot|windir|systemdrive|programfiles|userprofile)\\b)",
+            Pattern.CASE_INSENSITIVE);
+
     /**
      * 统一的命令安全校验
      *
      * <p>设计理念（参考 Anthropic sandbox-runtime）：Java 层仅做最小自保护，
      * 安全隔离的重活交给 OS 内核沙盒（Seatbelt / bwrap）。
      * 当 sandboxSystemRestrict=true 时，由 wrapCommand() 在 OS 内核级强制隔离。</p>
+     *
+     * <p><b>平台对等</b>：自保护与根目录删除这两条红线必须在 Unix / CMD / PowerShell 上强度一致。
+     * 只在引导词里写「严禁」而不做硬拦截，等于给了一个不存在的护栏。</p>
      *
      * @return null 表示校验通过；非 null 为错误消息
      */
@@ -544,10 +592,12 @@ public class TerminalSupport {
         String lowerCmd = command.toLowerCase();
 
         // 1. 自保护：禁止杀死当前 Java 进程（全模式、全配置始终生效）
-        String killPattern = "(?i).*(?:kill|pkill|killall)\\s+[\\s\\w]*\\b" + pid + "\\b.*";
-        if (lowerCmd.matches(killPattern) ||
-                lowerCmd.contains("pkill java") ||
-                lowerCmd.contains("killall java")) {
+        if (isUnixHostKill(lowerCmd, pid)) {
+            return "错误：检测到危险命令。严禁试图停止宿主进程 (PID: " + pid + ")。";
+        }
+
+        // 1b. Windows 侧的等价形态（taskkill / Stop-Process）
+        if (isWindowsShellMode() && isWindowsHostKill(command, pid)) {
             return "错误：检测到危险命令。严禁试图停止宿主进程 (PID: " + pid + ")。";
         }
 
@@ -557,7 +607,67 @@ public class TerminalSupport {
             return "错误：检测到高危指令。出于安全策略，禁止执行 exit、系统重启或根目录删除的操作。";
         }
 
+        // 2b. Windows 侧的盘符根/系统目录删除
+        if (isWindowsShellMode()
+                && WINDOWS_DELETE_VERB.matcher(command).find()
+                && WINDOWS_CRITICAL_TARGET.matcher(command).find()) {
+            return "错误：检测到高危指令。禁止对盘符根目录或系统目录（Windows / Program Files / Users 等）执行删除操作。";
+        }
+
         return null; // null 表示校验通过
+    }
+
+    private boolean isWindowsShellMode() {
+        return this.shellMode == ShellMode.CMD || this.shellMode == ShellMode.POWERSHELL;
+    }
+
+    /**
+     * 是否属于类 Unix 下「指向宿主进程」的终止命令。
+     *
+     * <p><b>旧实现的洞</b>：旧正则为 {@code (?:kill|pkill|killall)\s+[\s\w]*\b<pid>\b}——
+     * {@code [\s\w]} 不包含 {@code -}，所以只要动词与 PID 之间夹了任何开关（而“带信号”才是
+     * 真实用法）就彻底失效：{@code kill -9 <pid>}、{@code kill -TERM <pid>}、{@code killall -9 java}
+     * 全部不命中。而引导词里写的是「严禁执行 kill -9 任何数字」——同样是一个对模型承诺了
+     * 却不存在的护栏。此处改为按「同一命令段内出现终止动词 + 目标」判定。</p>
+     *
+     * <p><b>不能误伤 {@code pkill -P <pid>}</b>：它只终止宿主的<b>子进程</b>，是引导词明确推荐的
+     * 清理方式，必须显式放行；否则新护栏会把自己推荐的用法也拦了。</p>
+     *
+     * <p>跨命令段（{@code ; | &}）不算：{@code kill 111; echo <pid>} 里的 PID 只是一个被打印的
+     * 数字，与终止目标无关。</p>
+     */
+    private static boolean isUnixHostKill(String lowerCmd, String pid) {
+        if (UNIX_KILL_VERB.matcher(lowerCmd).find() == false) {
+            return false;
+        }
+        String quotedPid = Pattern.quote(pid);
+        if (lowerCmd.matches("(?s).*\\bpkill\\b[^\\r\\n;|&]*\\s-p\\s+" + quotedPid + "\\b.*")) {
+            return false; // pkill -P <pid>：只杀子进程，放行
+        }
+        if (lowerCmd.matches("(?s).*\\b(?:kill|pkill|killall)\\b[^\\r\\n;|&]*\\b" + quotedPid + "\\b.*")) {
+            return true;
+        }
+        // 按进程名批量终止 java（pkill java、killall -9 java、pkill -f javaw）
+        return lowerCmd.matches("(?s).*\\b(?:pkill|killall)\\b[^\\r\\n;|&]*\\bjavaw?\\b.*");
+    }
+
+    /**
+     * 是否属于 Windows 下「指向宿主进程」的终止命令。
+     *
+     * <p>三种形态：① 终止动词 + 宿主 PID；② 终止动词 + java 进程名（批量杀必然误伤自己）；
+     * ③ {@code Get-Process java | Stop-Process} 这种管道形式——终止动词后面没有任何参数，
+     * 但“java”仍出现在同一条命令里，故第二条能覆盖。</p>
+     */
+    private static boolean isWindowsHostKill(String command, String pid) {
+        if (WINDOWS_KILL_VERB.matcher(command).find() == false) {
+            return false;
+        }
+        // ① 直接指向宿主 PID（taskkill /PID 1234、Stop-Process -Id 1234）
+        if (Pattern.compile("\\b" + Pattern.quote(pid) + "\\b").matcher(command).find()) {
+            return true;
+        }
+        // ②/③ 按进程名批量终止 java
+        return WINDOWS_KILL_JAVA_BY_NAME.matcher(command).find();
     }
 
     /**
@@ -572,7 +682,10 @@ public class TerminalSupport {
         prefixes.add("/private/tmp");
         String tmpdir = System.getProperty("java.io.tmpdir");
         if (Assert.isNotEmpty(tmpdir)) {
-            String normalized = tmpdir.replace("\\", "/");
+            // Windows 的 java.io.tmpdir 带尾部分隔符（如 C:\...\Temp\），不剥除的话
+            // isAllowedAbsolutePath 里的 prefix + "/" 会拼成 "Temp//"，永远匹配不上，
+            // 临时目录白名单在 Windows 上等于完全失效
+            String normalized = stripTrailingSeparator(tmpdir.replace("\\", "/"));
             if (!normalized.equals("/tmp")) {
                 prefixes.add(normalized);
                 if (normalized.startsWith("/var/")) {
@@ -603,15 +716,37 @@ public class TerminalSupport {
     }
 
     /**
-     * 检测给定的绝对路径是否在允许列表内（前缀匹配）
+     * 检测给定的绝对路径是否在允许列表内（前缀匹配）。
+     *
+     * <p>Windows 路径大小写不敏感（{@code C:/Users} 与 {@code c:/users} 是同一个目录），
+     * 用大小写敏感的 {@code startsWith} 比前缀会漏判；类 Unix 仍按大小写敏感比较。</p>
      */
     private boolean isAllowedAbsolutePath(String absPath, java.util.List<String> allowedPrefixes) {
+        boolean ignoreCase = EnvironmentResolver.isWindows();
         for (String prefix : allowedPrefixes) {
-            if (absPath.equals(prefix) || absPath.startsWith(prefix + "/") || absPath.startsWith(prefix + File.separator)) {
+            if (startsWithPath(absPath, prefix, ignoreCase)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static boolean startsWithPath(String absPath, String prefix, boolean ignoreCase) {
+        if (ignoreCase) {
+            absPath = absPath.toLowerCase(Locale.ROOT);
+            prefix = prefix.toLowerCase(Locale.ROOT);
+        }
+        return absPath.equals(prefix)
+                || absPath.startsWith(prefix + "/")
+                || absPath.startsWith(prefix + File.separator);
+    }
+
+    private static String stripTrailingSeparator(String path) {
+        int end = path.length();
+        while (end > 1 && (path.charAt(end - 1) == '/' || path.charAt(end - 1) == '\\')) {
+            end--;
+        }
+        return end == path.length() ? path : path.substring(0, end);
     }
 
     private String preprocessUserHome(String pStr) {
@@ -952,8 +1087,20 @@ public class TerminalSupport {
                     // 已知边界：只看前一个字符，别名若处于一段更长的引号串中间（如 cat "dir @pool/f.txt"）
                     // 仍会产生嵌套引号——要完整覆盖需跟踪整行引号状态，当前按主流用法（裸用或紧跟引号）近似处理。
                     if (realPath.indexOf(' ') >= 0 || realPath.indexOf('\t') >= 0) {
-                        result = result.replaceAll("(?<![\"'])" + aliasRegex,
-                                Matcher.quoteReplacement('"' + placeholder + '"'));
+                        if (this.shellMode == ShellMode.POWERSHELL) {
+                            // PowerShell 不做 bash/cmd 那种「引号段与裸字符相邻即拼接」的处理：
+                            // `"$env:POOL"/a.py` 会被解析成两个独立参数（实测 Get-Content 报
+                            // 「找不到接受实际参数 /a.py 的位置形式参数」）。必须把占位符连同后续路径片段
+                            // 整体包进同一对引号：`"$env:POOL/a.py"`。
+                            // 后缀在遇到空白、引号或 shell 元字符（; | & < > ( )）处停止，避免把
+                            // `cd @pool/bin; ls` 的分号一起吞进引号里。
+                            String tokenRegex = "(?<![\"'])" + aliasRegex + "([/\\\\][^\\s\"';|&<>()]*)?";
+                            result = result.replaceAll(tokenRegex,
+                                    Matcher.quoteReplacement("\"" + placeholder) + "$1" + "\"");
+                        } else {
+                            result = result.replaceAll("(?<![\"'])" + aliasRegex,
+                                    Matcher.quoteReplacement('"' + placeholder + '"'));
+                        }
                     }
                     // 剩余的（已在引号内）按裸占位符替换
                     result = result.replaceAll(aliasRegex, Matcher.quoteReplacement(placeholder));
@@ -986,6 +1133,30 @@ public class TerminalSupport {
         }
         matcher.appendTail(sb);
         return sb.toString();
+    }
+
+    /**
+     * UTF-8 BOM 解码后的字符（{@code EF BB BF} → {@code U+FEFF}）。
+     *
+     * <p>Java 的 UTF-8 解码器不会自动剥除 BOM，它会作为首行的第一个字符出现。
+     * Windows PowerShell 5.1 的 {@code Set-Content -Encoding UTF8} / {@code >} 写出的文件必带 BOM，
+     * 若不剥除：{@code read} 的首行会多一个不可见字符，{@code edit} 对首行的匹配会无声失败，
+     * {@code grep} 对首行的 {@code ^} 锚定也会失效。</p>
+     */
+    static final char UTF8_BOM = '\uFEFF';
+
+    /**
+     * 文本是否以 BOM 开头。
+     */
+    static boolean hasUtf8Bom(String content) {
+        return content != null && content.length() > 0 && content.charAt(0) == UTF8_BOM;
+    }
+
+    /**
+     * 剥除首部 BOM（幂等：无 BOM 时原串返回）。
+     */
+    static String stripUtf8Bom(String content) {
+        return hasUtf8Bom(content) ? content.substring(1) : content;
     }
 
     String getEnvPlaceholder(String envKey) {

@@ -52,6 +52,8 @@ public class ProcessExecutor {
     private static final Logger LOG = LoggerFactory.getLogger(ProcessExecutor.class);
 
     private static final int DEFAULT_TIMEOUT_MS = 120_000; //120s
+    /** 进程结束后等待输出读取线程排空管道的时间上限 */
+    private static final long OUTPUT_DRAIN_TIMEOUT_MS = 5_000;
 
     // 面向 LLM 的默认输出字符上限。
     public static final int DEFAULT_LLM_OUTPUT_CHARS = 64_000;
@@ -123,14 +125,25 @@ public class ProcessExecutor {
     }
 
 
+    /**
+     * 探测可用的 Python 命令。
+     *
+     * <p><b>Windows 上必须先试 {@code python}</b>：python.org 安装器只会放 {@code python.exe}，
+     * 而 {@code python3} 在未安装 Store 版本时会解析到
+     * {@code %LOCALAPPDATA%\Microsoft\WindowsApps\python3.exe} 这个应用商店存根（执行它会弹商店
+     * 而不是跑 Python）。先试 {@code python3} 就会反复撞上存根，白白多花一次探测超时。
+     * 类 Unix 上相反：{@code python} 可能指向已停维的 Python 2，应优先 {@code python3}。</p>
+     */
     public String probePythonCommand() {
-        if (isCommandAvailable("python3")) {
-            return "python3";
+        String[] candidates = EnvironmentResolver.isWindows()
+                ? new String[]{"python", "python3"}
+                : new String[]{"python3", "python"};
+        for (String candidate : candidates) {
+            if (isCommandAvailable(candidate)) {
+                return candidate;
+            }
         }
-        if (isCommandAvailable("python")) {
-            return "python";
-        }
-        return null; // 或者返回 ""，表示没找到
+        return null; // 没找到
     }
 
     public String probeNodeCommand() {
@@ -238,35 +251,66 @@ public class ProcessExecutor {
 
             // 1. 异步读取输出（在字节层收集，便于可靠的二进制探测）
             final OutputDecoder streamDecoder = onOutput == null ? null : new OutputDecoder(outputCharset);
+            // PowerShell 的 stderr 被重定向时会强制写出 CLIXML 块：必须在解码前剥离，否则
+            // 「CLIXML(ANSI 代码页) + stdout(UTF-8)」两种编码混在一条流里，字符集只能锁一种，另一半必乱码
+            final CliXmlFilter cliXmlFilter = CliXmlFilter.isNeeded() ? new CliXmlFilter() : null;
+            final StringBuilder cliXmlMessages = new StringBuilder();
+            // 输出是否撞上物理字节上限（maxOutputSize）：撞上后进程会被终止，必须显式告知模型
+            // 「这不是命令自然结束」，否则它会把被截断的输出当成完整结果继续推理
+            final boolean[] sizeCapped = {false};
             CompletableFuture<byte[]> outputFuture = RunUtil.async(() -> {
                 ByteArrayOutputStream buf = new ByteArrayOutputStream();
                 try (InputStream in = process.getInputStream()) {
                     byte[] buffer = new byte[4096];
                     int n;
                     while ((n = in.read(buffer)) != -1) {
+                        byte[] chunk = buffer;
+                        int len = n;
+                        if (cliXmlFilter != null) {
+                            chunk = cliXmlFilter.accept(buffer, n);
+                            len = chunk.length;
+                            if (len == 0) {
+                                continue; // 本段全部落在 CLIXML 块内（或为待定的标记前缀）
+                            }
+                        }
 
                         if (onOutput != null) {
                             // 实时回调：增量解码，避免多字节字符被读取分块切断
-                            String piece = streamDecoder.decode(buffer, n);
+                            String piece = streamDecoder.decode(chunk, len);
                             if (!piece.isEmpty()) {
                                 onOutput.accept(piece);
                             }
                         }
 
-                        if (buf.size() + n <= maxOutputSize) {
-                            buf.write(buffer, 0, n);
+                        if (buf.size() + len <= maxOutputSize) {
+                            buf.write(chunk, 0, len);
                         } else {
                             int remaining = maxOutputSize - buf.size();
                             if (remaining > 0) {
-                                buf.write(buffer, 0, remaining);
+                                buf.write(chunk, 0, remaining);
                             }
-                            // 物理上限兜底：防止超大输出撑爆内存
-                            process.destroyForcibly();
+                            // 物理上限兜底：防止超大输出撑爆内存。必须整树终止——Windows 无进程组信号，
+                            // 只杀 shell 会让孙进程（node/mvn/java 等）孤儿化继续跑
+                            sizeCapped[0] = true;
+                            TerminalSessionManager.destroyProcessTree(process);
                             break;
                         }
                     }
                 } catch (IOException e) {
                     LOG.debug("Stream reading interrupted: {}", e.getMessage());
+                }
+                if (cliXmlFilter != null) {
+                    byte[] rest = cliXmlFilter.flush();
+                    if (rest.length > 0 && buf.size() + rest.length <= maxOutputSize) {
+                        buf.write(rest, 0, rest.length);
+                        if (onOutput != null) {
+                            String piece = streamDecoder.decode(rest, rest.length);
+                            if (!piece.isEmpty()) {
+                                onOutput.accept(piece);
+                            }
+                        }
+                    }
+                    cliXmlMessages.append(cliXmlFilter.drainMessages());
                 }
                 if (streamDecoder != null) {
                     String tail = streamDecoder.flush();
@@ -274,38 +318,93 @@ public class ProcessExecutor {
                         onOutput.accept(tail);
                     }
                 }
+                if (onOutput != null && cliXmlMessages.length() > 0) {
+                    onOutput.accept(cliXmlMessages.toString());
+                }
                 return buf.toByteArray();
             });
 
-            // 2. 超时控制
+            // 2. 超时控制：必须整树终止。Windows 没有进程组信号，只 destroyForcibly 根 shell 的话，
+            // `cmd /d /c mvn ...` / `powershell ... npm run dev` 的孙进程会孤儿化并继续占用端口
             if (!process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
-                process.destroyForcibly();
-                return "执行超时：运行时间超过 " + timeoutMs + " 毫秒。";
+                TerminalSessionManager.destroyProcessTree(process);
+                // 超时前已产生的输出是最有价值的诊断线索（卡在哪一步、最后一条日志是什么），
+                // 不能连同超时一起丢弃。进程树已终止，读取线程会随管道关闭而收尾，故此处等待极短
+                String partial = renderOutput(awaitOutput(outputFuture, OUTPUT_DRAIN_TIMEOUT_MS),
+                        streamDecoder, cliXmlMessages, maxOutputChars);
+                String head = "执行超时：运行时间超过 " + timeoutMs + " 毫秒（已终止进程树）。";
+                return partial.isEmpty() ? head : (head + "\n--- 超时前已产生的输出 ---\n" + partial);
             }
 
-            // 3. 获取原始字节输出
-            byte[] raw = outputFuture.get(1, TimeUnit.SECONDS);
+            // 3. 获取原始字节输出（读取线程可能仍在收尾：给足排空时间，而不是 1 秒硬超时后抛异常
+            // ——那会让模型收到一句无信息量的「系统失败: null」）
+            byte[] raw = awaitOutput(outputFuture, OUTPUT_DRAIN_TIMEOUT_MS);
 
             // 二进制输出降级：在字节层探测，避免乱码塞满上下文（如 cat 某个 jar/class/图片）
             if (isLikelyBinary(raw)) {
                 return summarizeBinaryOutput(raw);
             }
 
-            // 流式回调已锁定过字符集时复用它：否则同一次执行里「实时输出」与「最终返回值」可能按不同
-            // 字符集解码（流式只能看到开头分块，而 decodeAll 看到全量字节），给出两份不一致的文本
-            Charset locked = streamDecoder == null ? null : streamDecoder.selectedCharset();
-            String result = (locked == null ? decodeSmartly(raw, outputCharset) : new String(raw, locked)).trim();
+            String result = renderOutput(raw, streamDecoder, cliXmlMessages, maxOutputChars);
+
+            if (sizeCapped[0]) {
+                result = result + "\n... [输出超过 " + maxOutputSize
+                        + " 字节的物理上限，命令已被终止。请缩小输出范围（如加过滤/分页），或重定向到文件后再分段查看]";
+            }
+
+            // 退出码：非零时必须显式给出。否则命令失败（编译报错、测试失败、脚本 exit 1）时模型只能
+            // 从输出文本里猜成败，而 PowerShell 的错误对象经 CLIXML 剥离后已丢失与正文的交错顺序
+            int exitCode = process.exitValue();
+            if (exitCode != 0) {
+                result = (result.isEmpty() ? "" : result + "\n") + "[exit_code=" + exitCode + "]";
+            }
+
             if (result.isEmpty()) {
                 return "执行成功";
             }
-
-            // 面向 LLM 的输出上限：头尾保留截断
-            return truncateForLlm(result, normalizeMaxOutputChars(maxOutputChars));
+            return result;
 
         } catch (Throwable e) {
             LOG.error("Process execution failed", e);
-            return "系统失败: " + e.getMessage();
+            return "系统失败: " + e;
         }
+    }
+
+    /**
+     * 等待输出读取线程交出已收集的字节；超时或失败时返回已知的空结果（绝不因此让整条命令报错）。
+     */
+    private static byte[] awaitOutput(CompletableFuture<byte[]> outputFuture, long timeoutMs) {
+        try {
+            return outputFuture.get(timeoutMs, TimeUnit.MILLISECONDS);
+        } catch (Throwable e) {
+            LOG.debug("Collect process output failed: {}", e.toString());
+            return new byte[0];
+        }
+    }
+
+    /**
+     * 把原始字节渲染为面向 LLM 的文本：解码 + 追加 CLIXML 文本记录 + 头尾保留截断。
+     *
+     * @param streamDecoder   流式回调用过的解码器（可为 null）：已锁定字符集时必须复用，否则同一次执行里
+     *                        「实时输出」与「最终返回值」会按不同字符集解码，给出两份不一致的文本
+     * @param cliXmlMessages  CLIXML 里还原出的 error/warning 文本（与主流不同编码，只能单独解码，
+     *                        因此无法保持原始交错顺序，统一补在末尾）
+     */
+    private String renderOutput(byte[] raw, OutputDecoder streamDecoder,
+                                StringBuilder cliXmlMessages, Integer maxOutputChars) {
+        Charset locked = streamDecoder == null ? null : streamDecoder.selectedCharset();
+        String result = (raw == null || raw.length == 0)
+                ? ""
+                : (locked == null ? decodeSmartly(raw, outputCharset) : new String(raw, locked)).trim();
+
+        if (cliXmlMessages.length() > 0) {
+            String extra = cliXmlMessages.toString().trim();
+            if (!extra.isEmpty()) {
+                result = result.isEmpty() ? extra : (result + "\n" + extra);
+            }
+        }
+
+        return truncateForLlm(result, normalizeMaxOutputChars(maxOutputChars));
     }
 
     private static int normalizeMaxOutputChars(Integer maxOutputChars) {

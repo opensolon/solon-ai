@@ -21,8 +21,11 @@ public class TerminalSessionManagerTest {
         Path workDir = Files.createTempDirectory("solon-ai-command-session-short-");
         try {
             TerminalSessionManager manager = new TerminalSessionManager();
+            // printf 是 Unix 专有命令，Windows 的 cmd / PowerShell 都没有；
+            // echo 在三种 shell 下都可用，此处只需要一条「能立刻结束并有输出」的命令。
+            String echoHello = isWindows() ? "echo hello" : "printf hello";
             TerminalSessionManager.CommandSnapshot snapshot =
-                    manager.exec("printf hello", workDir, null, 2_000, 1_000, 10_000);
+                    manager.exec(echoHello, workDir, null, 2_000, 1_000, 10_000);
 
             assertFalse(snapshot.running());
             assertTrue(snapshot.output().contains("hello"), snapshot.output());

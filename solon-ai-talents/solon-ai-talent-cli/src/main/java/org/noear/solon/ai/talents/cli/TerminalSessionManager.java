@@ -48,19 +48,19 @@ public final class TerminalSessionManager {
     private final ConcurrentMap<String, CommandSession> sessions = new ConcurrentHashMap<>();
     private final Charset outputCharset;
     private final ShellCommandFactory shellCommandFactory;
-    
+
     public TerminalSessionManager() {
         this(ShellCommandFactory.detect(), StandardCharsets.UTF_8);
     }
-    
+
     public TerminalSessionManager(ShellCommandFactory shellCommandFactory) {
         this(shellCommandFactory, StandardCharsets.UTF_8);
     }
-    
+
     public TerminalSessionManager(Charset outputCharset) {
         this(ShellCommandFactory.detect(), outputCharset);
     }
-    
+
     public TerminalSessionManager(ShellCommandFactory shellCommandFactory, Charset outputCharset) {
         this.shellCommandFactory =
                 shellCommandFactory == null ? ShellCommandFactory.detect() : shellCommandFactory;
@@ -314,8 +314,8 @@ public final class TerminalSessionManager {
         try {
             process = new ProcessBuilder("pgrep", "-P", String.valueOf(pid)).start();
             try (BufferedReader reader =
-                    new BufferedReader(
-                            new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                         new BufferedReader(
+                                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     try {
@@ -637,11 +637,23 @@ public final class TerminalSessionManager {
             // 字节层读取 + 增量解码：解码器（仅本线程使用）内部保留不完整的多字节序列，
             // 因此 UTF-8 中文不会被 4096 分块边界切断；同时具备 ANSI 代码页兜底能力
             OutputDecoder decoder = new OutputDecoder(outputCharset);
+            // PowerShell 会向 stderr 写 CLIXML 块（参见 CliXmlFilter）：必须在解码前剥离，
+            // 否则一条流里混着两种编码，字符集锁定后必有一半变乱码
+            CliXmlFilter cliXmlFilter = CliXmlFilter.isNeeded() ? new CliXmlFilter() : null;
             try (InputStream input = process.getInputStream()) {
                 byte[] buffer = new byte[4096];
                 int n;
                 while ((n = input.read(buffer)) != -1) {
-                    String text = decoder.decode(buffer, n);
+                    byte[] chunk = buffer;
+                    int len = n;
+                    if (cliXmlFilter != null) {
+                        chunk = cliXmlFilter.accept(buffer, n);
+                        len = chunk.length;
+                        if (len == 0) {
+                            continue;
+                        }
+                    }
+                    String text = decoder.decode(chunk, len);
                     if (text.isEmpty() == false) {
                         synchronized (lock) {
                             output.append(text);
@@ -652,10 +664,21 @@ public final class TerminalSessionManager {
                 LOG.debug("Command output reader stopped for {}: {}", sessionId, e.getMessage());
                 readerFuture.completeExceptionally(e);
             } finally {
-                String tail = decoder.flush();
-                if (tail.isEmpty() == false) {
+                StringBuilder rest = new StringBuilder();
+                if (cliXmlFilter != null) {
+                    byte[] pending = cliXmlFilter.flush();
+                    if (pending.length > 0) {
+                        rest.append(decoder.decode(pending, pending.length));
+                    }
+                }
+                rest.append(decoder.flush());
+                // CLIXML 里的 error/warning 文本单独解码后补在末尾
+                if (cliXmlFilter != null) {
+                    rest.append(cliXmlFilter.drainMessages());
+                }
+                if (rest.length() > 0) {
                     synchronized (lock) {
-                        output.append(tail);
+                        output.append(rest);
                     }
                 }
                 if (readerFuture.isDone() == false) {

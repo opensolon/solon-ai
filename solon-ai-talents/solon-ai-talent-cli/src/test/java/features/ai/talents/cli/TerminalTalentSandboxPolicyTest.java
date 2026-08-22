@@ -1,6 +1,8 @@
 package features.ai.talents.cli;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.talents.cli.ShellCommandFactory;
+import org.noear.solon.ai.talents.cli.ShellMode;
 import org.noear.solon.ai.talents.cli.TerminalTalent;
 import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
 import org.noear.solon.ai.sandbox.config.FilesystemConfig;
@@ -13,11 +15,27 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 public class TerminalTalentSandboxPolicyTest {
+
+    /**
+     * 当前运行 shell 下环境变量占位符的期望写法。引导词里的占位符必须跟随实际方言，
+     * 硬编码 {@code $VAR} 会让断言只在 Unix 上成立。
+     */
+    private static String expectedEnvPlaceholder(String envKey) {
+        ShellMode mode = ShellCommandFactory.detect().getShellMode();
+        if (mode == ShellMode.CMD) {
+            return "%" + envKey + "%";
+        }
+        if (mode == ShellMode.POWERSHELL) {
+            return "$env:" + envKey;
+        }
+        return "$" + envKey;
+    }
 
     @Test
     public void writeRejectsMandatoryDenyPathWhenSandboxConfigEnabled() throws Exception {
@@ -271,7 +289,11 @@ public class TerminalTalentSandboxPolicyTest {
         Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
         try {
             Files.write(workDir.resolve(".bashrc"), "safe".getBytes());
-            Files.createSymbolicLink(workDir.resolve("safe-link"), workDir.resolve(".bashrc"));
+            try {
+                Files.createSymbolicLink(workDir.resolve("safe-link"), workDir.resolve(".bashrc"));
+            } catch (UnsupportedOperationException | SecurityException | java.nio.file.FileSystemException e) {
+                assumeTrue(false, "Symbolic links are not available in this environment: " + e.getMessage());
+            }
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
             talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
@@ -289,7 +311,11 @@ public class TerminalTalentSandboxPolicyTest {
         Path pool = Files.createTempDirectory("solon-ai-terminal-pool-");
         try {
             Files.write(pool.resolve(".bashrc"), "safe".getBytes());
-            Files.createSymbolicLink(pool.resolve("safe-link"), pool.resolve(".bashrc"));
+            try {
+                Files.createSymbolicLink(pool.resolve("safe-link"), pool.resolve(".bashrc"));
+            } catch (UnsupportedOperationException | SecurityException | java.nio.file.FileSystemException e) {
+                assumeTrue(false, "Symbolic links are not available in this environment: " + e.getMessage());
+            }
 
             MountManager mountManager = new MountManager(workDir.toString());
             mountManager.register(MountDir.builder()
@@ -323,7 +349,10 @@ public class TerminalTalentSandboxPolicyTest {
 
             TerminalTalent talent = new TerminalTalent(mountManager);
             String instruction = talent.getInstruction(null);
-            assertTrue(instruction.contains("$WORKSPACE_AGENTS"), instruction);
+            // 别名里的连字符必须转成合法环境变量名（WORKSPACE_AGENTS）；
+            // 占位符写法随 shell 方言不同（%VAR% / $env:VAR / $VAR），不能硬编码 Unix 形态。
+            assertTrue(instruction.contains(expectedEnvPlaceholder("WORKSPACE_AGENTS")), instruction);
+            assertFalse(instruction.contains("WORKSPACE-AGENTS"), instruction);
         } finally {
             deleteRecursively(workDir);
             deleteRecursively(pool);
