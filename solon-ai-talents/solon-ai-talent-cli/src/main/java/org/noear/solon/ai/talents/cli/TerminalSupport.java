@@ -563,12 +563,57 @@ public class TerminalSupport {
      * <p>这是 {@code rm -rf /} 在 Windows 上的等价物：{@code Remove-Item -Recurse -Force C:\}、
      * {@code rd /s /q C:\}。同样包含环境变量写法（{@code %SystemRoot%}、{@code $env:windir}），
      * 否则一个变量就能绕过字面量匹配。</p>
+     *
+     * <p><b>系统目录与用户目录区别对待</b>：{@code C:\Windows}、{@code Program Files} 连子路径一并拦
+     * （删其中任何一块都不是正常开发动作）；而用户目录（{@code C:\Users}、{@code %USERPROFILE%}）
+     * <b>只拦目录自身</b>。后者如果连子路径一起拦，{@code Remove-Item -Recurse
+     * $env:USERPROFILE\.gradle\caches}、{@code del %USERPROFILE%\Downloads\x.zip} 这类日常清理就全部被误伤，
+     * 而 Unix 侧对应的 {@code rm -rf ~/.gradle/caches} 是放行的——两个平台的护栏强度必须一致。</p>
      */
     private static final Pattern WINDOWS_CRITICAL_TARGET = Pattern.compile(
             "(?:(?<![\\w:])[a-z]:[\\\\/](?=[\\s\"']|$)"
-                    + "|(?<![\\w:])[a-z]:[\\\\/](?:windows|winnt|users|programdata|program files(?: \\(x86\\))?)\\b"
-                    + "|%(?:systemroot|windir|systemdrive|programfiles|userprofile)%"
-                    + "|\\$env:(?:systemroot|windir|systemdrive|programfiles|userprofile)\\b)",
+                    + "|(?<![\\w:])[a-z]:[\\\\/](?:windows|winnt|programdata|program files(?: \\(x86\\))?)\\b"
+                    + "|(?<![\\w:])[a-z]:[\\\\/]users[\\\\/]?(?=[\\s\"']|$)"
+                    + "|%(?:systemroot|windir|systemdrive|programfiles)%"
+                    + "|\\$env:(?:systemroot|windir|systemdrive|programfiles)\\b"
+                    + "|%userprofile%[\\\\/]?(?=[\\s\"']|$)"
+                    + "|\\$env:userprofile[\\\\/]?(?=[\\s\"']|$))",
+            Pattern.CASE_INSENSITIVE);
+
+    /**
+     * 类 Unix 的「递归强删根目录 / 系统目录」。
+     *
+     * <p><b>旧写法的误伤</b>：{@code .*rm\s+.*-[rR].*f\s+/.*} 只要删除目标以 {@code /} 开头就命中，
+     * 于是 {@code rm -rf /tmp/build}、{@code rm -rf /var/folders/xx/T/xxx}（macOS 临时目录）这类
+     * 完全正当、且已在临时目录白名单内的清理命令全部被拦，Linux/macOS 上的误报率远高于命中率。</p>
+     *
+     * <p>现改为只认「目标就是根目录或某个系统目录本身」：{@code rm -rf /}、{@code rm -rf /usr} 拦；
+     * {@code rm -rf /usr/local/lib/node_modules/x}（Homebrew 区）、{@code rm -rf /tmp/x} 放行。</p>
+     *
+     * <p><b>递归/强制开关改用两个 lookahead 分开认</b>：只列举 {@code -rf}、{@code -fr}、{@code -r -f}
+     * 这些组合永远会漏——{@code rm --recursive --force /}、{@code rm -r --force /} 都是合法的 GNU 写法，
+     * 一个长选项就能绕过整条护栏。现在只要同一命令段内同时出现「含 r 的短选项或 --recursive」与
+     * 「含 f 的短选项或 --force」即命中，与书写顺序无关。开关判定宽一点不危险：精度由后面的
+     * 目标限定（必须是根/系统目录本身）撑着。</p>
+     *
+     * <p><b>目标前的引号要可选吞掉</b>：{@code rm -rf "/"}、{@code rm -rf '/usr'} 与裸写法危害完全相同，
+     * 而只写 {@code \s+/} 会因为中间夹了一个引号导致整条不命中。Windows 侧的
+     * {@link #WINDOWS_CRITICAL_TARGET} 已在收尾 lookahead 里认了 {@code "'}，两侧须对称。</p>
+     *
+     * <p><b>为何把 {@code ~} / {@code $HOME} 也当临界目标</b>：本校验跑在
+     * {@link #translateCommandToEnv} 之前，看到的是未展开的原文，所以 {@code rm -rf ~} 既不会命中
+     * {@code /home} 字面量，也不会命中任何其它分支——而 Windows 侧的 {@code %USERPROFILE%} /
+     * {@code $env:USERPROFILE} 是拦的。同样只拦目录自身：{@code rm -rf ~/.gradle/caches} 放行。</p>
+     */
+    private static final Pattern UNIX_RM_CRITICAL = Pattern.compile(
+            "\\brm\\b"
+                    + "(?=[^;|&\\r\\n]*?(?:\\s-[a-z]*r|\\s--recursive\\b))"
+                    + "(?=[^;|&\\r\\n]*?(?:\\s-[a-z]*f|\\s--force\\b))"
+                    + "[^;|&\\r\\n]*?\\s+[\"']?(?:/\\*?"
+                    + "|/(?:etc|usr|bin|sbin|lib|lib64|boot|proc|sys|dev|var|opt|root|home|users"
+                    + "|system|library|applications)/?"
+                    + "|~[\\\\/]?|\\$\\{?home\\}?[\\\\/]?)"
+                    + "(?=[\\s\"';|&]|$)",
             Pattern.CASE_INSENSITIVE);
 
     /**
@@ -601,10 +646,10 @@ public class TerminalSupport {
             return "错误：检测到危险命令。严禁试图停止宿主进程 (PID: " + pid + ")。";
         }
 
-        // 2. 高危自毁命令：exit / rm -rf / （全模式、全配置始终生效）
+        // 2. 高危自毁命令：exit / 递归强删根目录或系统目录（全模式、全配置始终生效）
         if (lowerCmd.matches("(?i)(?:^|.*[;|&])\\s*exit\\b.*") ||
-                lowerCmd.matches("(?i).*rm\\s+.*-[rR].*f\\s+/.*")) {
-            return "错误：检测到高危指令。出于安全策略，禁止执行 exit、系统重启或根目录删除的操作。";
+                UNIX_RM_CRITICAL.matcher(lowerCmd).find()) {
+            return "错误：检测到高危指令。出于安全策略，禁止执行 exit、系统重启或根目录/系统目录删除的操作。";
         }
 
         // 2b. Windows 侧的盘符根/系统目录删除

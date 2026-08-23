@@ -579,8 +579,14 @@ public class TerminalTalent extends AbsTalent {
         // 参数示例必须用当前 shell 真存在的命令：在 Windows 上举 `python3` / `cat` 会被模型当作可用命令而直接照拄
         sb.append("- **参数与编码**: 含空格/引号等特殊字符的参数务必用引号包裹（如 `")
                 .append(Assert.isNotEmpty(pyCmd) ? pyCmd : (windowsShell ? "python" : "python3"))
-                .append(" a.py \"hello world\"`、`").append(readFileCommandExample()).append("`）。")
-                .append("输出编码由系统自动识别（UTF-8 优先，Windows 遗留代码页兜底），无需自行加 chcp 或设置编码环境变量。\n");
+                .append(" a.py \"hello world\"`、`").append(readFileCommandExample()).append("`）。");
+        // 编码说明只在 Windows 下成立：类 Unix 没有代码页概念（OutputDecoder 也不做代码页兼底），
+        // 也不存在 chcp，向 Linux/macOS 上的模型描述这些只会注入错误的平台先验
+        if (windowsShell) {
+            sb.append("输出编码由系统自动识别（UTF-8 优先，Windows 遗留代码页兜底），无需自行加 chcp 或设置编码环境变量。\n");
+        } else {
+            sb.append("输出按 UTF-8 解码，无需额外设置编码环境变量。\n");
+        }
 
         appendShellDialectRules(sb);
 
@@ -653,14 +659,20 @@ public class TerminalTalent extends AbsTalent {
             sb.append("- **PowerShell 方言（必须遵守）**: 当前 shell 是 PowerShell，以下 Unix 写法在此**不存在**，用后必报错，须按右侧改写：\n");
             sb.append("  - 丢弃错误输出：`2>/dev/null` → `2>$null`；丢弃全部输出：`| Out-Null`。\n");
             if (core) {
-                sb.append("  - 命令串联：`&&` / `||` 可用（PowerShell 7+），`;` 也可用。\n");
+                sb.append("  - 命令串联：`&&` / `||` 可用（PowerShell 7+），`;` 也可用；需要「前一步失败就停」时请用 `&&` 而不是 `;`。\n");
             } else {
                 sb.append("  - 命令串联：`&&` / `||` → `;`（Windows PowerShell 5.1 不支持 `&&`、`||`）。\n");
+                // `;` 不等于 `&&`：换写后丢的是「失败即停」语义，而整条命令的退出码只反映最后一步，
+                // 前面的编译/测试失败会被后面一步的成功掩盖（模型会据此误判为构建通过）
+                sb.append("    - 注意 `;` 不等于 `&&`：前一步失败不会中断后续步骤，且返回的 `[exit_code]` 只反映最后一步。")
+                        .append("多步骤构建/测试请拆成多次 `bash` 调用，或写 `cmd1; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; cmd2`。\n");
             }
             sb.append("  - 取前/后 N 行：`head -n N` / `tail -n N` → `Select-Object -First N` / `-Last N`。\n");
             sb.append("  - 查看文件：`cat` → `Get-Content`；文本检索：`grep` → `Select-String`；查找文件：`find` → `Get-ChildItem -Recurse -Filter`。\n");
             sb.append("  - 系统信息：`uname -a`、`cat /etc/os-release` → `Get-ComputerInfo`、`$PSVersionTable`、`[System.Environment]::OSVersion`。\n");
             sb.append("  - 其它：`pwd` → `Get-Location`；`which x` → `Get-Command x`；`export A=B` → `$env:A='B'`；读环境变量用 `$env:NAME`（不是 `$NAME`）。\n");
+            appendPowerShellAliasTrapRule(sb, core);
+            appendMergedStderrRule(sb);
             sb.append("  - 不存在任何 Unix 路径：`/dev/null`、`/etc`、`/usr`、`/tmp` 均无效；路径分隔符为 `\\`，临时目录用 `$env:TEMP`。\n");
             appendEncodingRules(sb, core);
             sb.append("  - 上述方言与编码差异可以完全绕开：读写文件与检索请遵循「执行规约 → 工具优先」，用 `read` / `grep` / `glob` / `ls` 工具而非命令行文本处理。\n");
@@ -669,7 +681,11 @@ public class TerminalTalent extends AbsTalent {
             sb.append("  - 丢弃错误输出：`2>/dev/null` → `2>nul`。\n");
             sb.append("  - 查看文件：`cat` → `type`；文本检索：`grep` → `findstr`；列目录：`ls` → `dir`。\n");
             sb.append("  - 系统信息：`uname -a`、`cat /etc/os-release` → `ver`、`systeminfo`。\n");
-            sb.append("  - 其它：`which x` → `where x`；`export A=B` → `set A=B`；读环境变量用 `%NAME%`（不是 `$NAME`）。没有 `head` / `tail` 等价命令。\n");
+            sb.append("  - 其它：`which x` → `where x`；`export A=B` → `set A=B`；读环境变量用 `%NAME%`（不是 `$NAME`）。没有 `head` / `tail` 等价命令（取前 N 行可用 `more +N`）。\n");
+            // 跨盘符切目录是 CMD 特有的陷：`cd D:\x` 不报错、也不切，后续命令全在错的目录里执行
+            sb.append("  - 跨盘符切目录必须写 `cd /d D:\\proj`（或 `pushd D:\\proj`）：`cd D:\\proj` 既不报错也不会切过去，后续命令会静默地在原目录执行。\n");
+            sb.append("  - 多步骤串联：`&&`（失败即停）可用；用 `&` 串联则前一步失败不会中断，且返回的 `[exit_code]` 只反映最后一步。\n");
+            appendMergedStderrRule(sb);
             sb.append("  - 不存在任何 Unix 路径：`/dev/null`、`/etc`、`/usr`、`/tmp` 均无效；路径分隔符为 `\\`，临时目录用 `%TEMP%`。\n");
             // 多行命令会以批处理脚本形式执行，% 语义与单行命令不同，需向模型说明
             sb.append("  - `%` 的语义差异：单行命令按命令行语义（`for %i in (...) do ...`）；多行命令按批处理脚本语义执行，循环变量需写成 `%%i`，字面百分号需写成 `%%`。不确定时优先拆成单行命令执行。\n");
@@ -678,6 +694,48 @@ public class TerminalTalent extends AbsTalent {
         }
     }
 
+
+    /**
+     * PowerShell 下的「Unix 别名陷阱」规约。
+     *
+     * <p>这一类错误比「命令不存在」更难自教：{@code ls}、{@code rm}、{@code cp}、{@code ps}
+     * 在 PowerShell 里确实存在（都是 cmdlet 别名），模型看到命令能识别会认为自己写对了，
+     * 但它们一律不接受 Unix 风格的短参数：{@code ls -la} / {@code rm -rf x} 报的是参数绑定错误，
+     * 而不是「未知命令」。不明说就会反复重试同一写法。</p>
+     *
+     * <p>{@code curl} / {@code wget} 需分版本：Windows PowerShell 5.1 把两者别名到
+     * {@code Invoke-WebRequest}（所以 {@code curl -s <url>} 必报错）；PowerShell 7+ 已移除这两个别名，
+     * {@code curl} 直接指向系统自带的 {@code curl.exe}。</p>
+     */
+    private void appendPowerShellAliasTrapRule(StringBuilder sb, boolean powerShellCore) {
+        sb.append("  - **Unix 别名是陷阱（命令存在但参数不兼容）**：`ls`、`rm`、`cp`、`mv`、`ps`、`cat` 在此都是 cmdlet 别名，")
+                .append("不接受 Unix 短参数：`ls -la`、`rm -rf dir`、`cp -r a b`、`ps aux` 全部报参数绑定错误（不是命令不存在，重试同写法也不会好）。")
+                .append("等价写法：`Get-ChildItem -Force`、`Remove-Item -Recurse -Force dir`、`Copy-Item -Recurse a b`、`Get-Process`。\n");
+        if (powerShellCore) {
+            sb.append("    - `curl` / `wget` 在 PowerShell 7+ 已不再是别名，指向真实的 `curl.exe`，Unix 参数可用。\n");
+        } else {
+            sb.append("    - `curl` / `wget` 在 Windows PowerShell 5.1 是 `Invoke-WebRequest` 的别名，`curl -s <url>` 必报错；要用真 curl 请写 `curl.exe -s <url>`。\n");
+        }
+    }
+
+    /**
+     * 「stderr 已合流」规约（仅 Windows 系 shell 输出）。
+     *
+     * <p>本工具在 Java 层已经 {@code redirectErrorStream(true)}，命令里再写 {@code 2>&1} 完全多余；
+     * 而在 PowerShell 下它还有实实在在的危害：一旦把原生程序的 stderr 重定向进 PowerShell 的流，
+     * 引擎会把每一行 stderr 包成 {@code NativeCommandError} 错误记录（额外输出「所在位置 行:1 字符:1」
+     * 等四五行噪声），并且使整个 PowerShell 进程的退出码变成 1。实测：`mvn test` 明明 BUILD SUCCESS，
+     * 只因为命令里写了 {@code 2>&1}，结果就带上了 {@code [exit_code=1]}——模型会据此误判为失败并无意义地重试。</p>
+     */
+    private void appendMergedStderrRule(StringBuilder sb) {
+        sb.append("  - **不要在命令里写 `2>&1`**：stderr 已由系统自动合并到输出里，无需任何重定向。");
+        if (shellMode == ShellMode.POWERSHELL) {
+            sb.append("在 PowerShell 下额外写 `2>&1` 还会把原生程序的 stderr 转成错误记录，凭空多出「所在位置 行:1 字符:1 / NativeCommandError」几行噪声，")
+                    .append("并让整条命令的退出码变成 1（成功也会被报成 `[exit_code=1]`）。只想丢弃 stderr 时用 `2>$null`。\n");
+        } else {
+            sb.append("只想丢弃 stderr 时用 `2>nul`。\n");
+        }
+    }
 
     /**
      * 追加编码规约（仅 PowerShell）。
@@ -720,9 +778,13 @@ public class TerminalTalent extends AbsTalent {
     }
 
     // --- 1. 执行命令 ---
+    // 描述里点明「多行脚本可直接传入、落盘与清理由系统负责」是刻意的能力声明：
+    // 模型若不知道本工具自带脚本承载能力，就会退化成先用 write 在工作区生成临时脚本再执行——
+    // 那些文件落在工作区（沙盒下 write 到不了系统临时目录），会污染 git 状态与后续 glob/grep，
+    // 且没有任何清理保证。此处只讲能力、不设禁令，让模型基于「更省事」自行选择正确路径。
     @ToolMapping(
             name = "bash",
-            description = "在当前终端执行非交互式命令。工具名叫 bash 仅为历史兼容，**实际 shell 未必是 bash**：请以系统提示中「Terminal 环境状态 → 终端类型」为准（可为 PowerShell / CMD / Unix shell），并按对应方言书写命令。支持多行命令与逻辑路径（如 `cd @pool1/bin/tool/`）。含空格或特殊字符的参数请用引号包裹；输出编码由系统自动识别。本工具只用于真正需要执行的场景（构建、测试、git、包管理、脚本运行）；读文件、列目录、查找文件、全文检索、写/改文件请改用 `read` / `ls` / `glob` / `grep` / `write` / `edit` 工具，不要用命令代劳。"
+            description = "在当前终端执行非交互式命令。工具名叫 bash 仅为历史兼容，**实际 shell 未必是 bash**：请以系统提示中「Terminal 环境状态 → 终端类型」为准（可为 PowerShell / CMD / Unix shell），并按对应方言书写命令。支持逻辑路径（如 `cd @pool1/bin/tool/`）。多步逻辑可把多行脚本整段作为 command 传入，系统会按当前 shell 选择可靠的执行方案（必要时自动写入系统临时目录并在结束后删除）。含空格或特殊字符的参数请用引号包裹；输出编码由系统自动识别。"
     )
     public String bash(@Param(value = "command", description = "要执行的指令。") String command,
                        @Param(name = "timeout", required = false, defaultValue = "120000", description = "可选超时时间，单位为毫秒") Integer timeout,
@@ -998,7 +1060,9 @@ public class TerminalTalent extends AbsTalent {
     }
 
     // --- 4. 写入与编辑 ---
-    @ToolMapping(name = TOOL_WRITE, description = "创建新文件或覆盖现有文件。")
+    // 「不用于临时脚本」写在此处而非 bash 描述里：误用的决策点发生在调用 write 的那一刻。
+    // 沙盒下本工具只能写工作区，产出的脚本会进 git 状态且无人清理；多行脚本交给 bash 更省事。
+    @ToolMapping(name = TOOL_WRITE, description = "创建新文件或覆盖现有文件。仅用于项目产物；要执行的多行脚本请直接交给 `bash`，不必先落成临时脚本文件。")
     public String write(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String filePath,
                         @Param(value = PARAM_CONTENT, description = "完整文本内容。") String content,
                         String __cwd) throws IOException {

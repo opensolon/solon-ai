@@ -166,6 +166,103 @@ public class TerminalSupportWindowsGuardTest {
         assertNull(support.validateCommandNoKill("ls -la"));
     }
 
+    // ---------- Unix rm 护栏：开关形态、引号、目标粒度 ----------
+
+    /**
+     * 递归 + 强制的各种写法都必须命中。
+     *
+     * <p>旧正则 {@code .*rm\s+.*-[rR].*f\s+/.*} 要求 r 出现在 f 之前且同处一个 token，
+     * 于是 {@code -fr}、{@code -r -f} 直接漏；而只枚举短选项组合的话，
+     * {@code --recursive --force} 这种合法 GNU 写法一个长选项就能绕过整条护栏。</p>
+     */
+    @Test
+    public void unix_blocksEveryRecursiveForceFlagForm() throws Exception {
+        TerminalSupport support = supportOf(ShellMode.UNIX_SHELL);
+        for (String cmd : new String[]{
+                "rm -rf /", "rm -fr /", "rm -Rf /", "rm -r -f /", "rm -f -r /",
+                "rm -rf /*", "rm --recursive --force /", "rm --force --recursive /",
+                "rm -r --force /", "rm --recursive -f /", "rm -rfv /", "sudo rm -rf /",
+                "rm -rf --no-preserve-root /", "echo hi; rm -rf /"}) {
+            assertNotNull(support.validateCommandNoKill(cmd), cmd + " 必须拦截");
+        }
+    }
+
+    /**
+     * 目标被引号包起来时同样必须命中：危害与裸写法完全相同，
+     * 而 {@code \s+/} 会因为中间夹了一个引号而整条不命中。
+     */
+    @Test
+    public void unix_blocksQuotedCriticalTargets() throws Exception {
+        TerminalSupport support = supportOf(ShellMode.UNIX_SHELL);
+        assertNotNull(support.validateCommandNoKill("rm -rf \"/\""), "双引号包裹的根目录必须拦截");
+        assertNotNull(support.validateCommandNoKill("rm -rf '/'"), "单引号包裹的根目录必须拦截");
+        assertNotNull(support.validateCommandNoKill("rm -rf '/usr'"), "单引号包裹的系统目录必须拦截");
+    }
+
+    /**
+     * 系统目录本身拦、其子路径放行。这是本次收窄的核心：
+     * 子路径清理（构建缓存、Homebrew 区、临时目录）是日常操作，全拦等于工具不可用。
+     */
+    @Test
+    public void unix_allowsSubPathCleanupUnderSystemDirs() throws Exception {
+        TerminalSupport support = supportOf(ShellMode.UNIX_SHELL);
+        assertNotNull(support.validateCommandNoKill("rm -rf /usr"), "系统目录自身必须拦截");
+        assertNotNull(support.validateCommandNoKill("rm -rf /var/"), "带尾部斜杠的系统目录自身必须拦截");
+
+        assertNull(support.validateCommandNoKill("rm -rf /tmp/build"), "临时目录子路径应放行");
+        assertNull(support.validateCommandNoKill("rm -rf /var/folders/xx/T/zz"),
+                "macOS 临时目录（已在白名单内）应放行");
+        assertNull(support.validateCommandNoKill("rm -rf /usr/local/lib/node_modules/x"),
+                "Homebrew 区子路径应放行");
+        assertNull(support.validateCommandNoKill("rm -rf ./target"), "相对路径应放行");
+        assertNull(support.validateCommandNoKill("rm -f /tmp/x.lock"), "非递归删单文件应放行");
+    }
+
+    /**
+     * {@code ~} / {@code $HOME} 也是临界目标。
+     *
+     * <p>校验跑在 {@code translateCommandToEnv} 之前，看到的是未展开的原文，
+     * 所以 {@code rm -rf ~} 不会命中 {@code /home} 字面量；而 Windows 侧的
+     * {@code %USERPROFILE%} 是拦的，两侧强度必须一致。同样只拦目录自身。</p>
+     */
+    @Test
+    public void unix_blocksHomeItselfButAllowsHomeSubPaths() throws Exception {
+        TerminalSupport support = supportOf(ShellMode.UNIX_SHELL);
+        assertNotNull(support.validateCommandNoKill("rm -rf ~"), "删整个 home 必须拦截");
+        assertNotNull(support.validateCommandNoKill("rm -rf ~/"), "带尾部斜杠同样必须拦截");
+        assertNotNull(support.validateCommandNoKill("rm -rf $HOME"), "$HOME 写法必须拦截");
+        assertNotNull(support.validateCommandNoKill("rm -rf ${HOME}"), "${HOME} 写法必须拦截");
+        assertNotNull(support.validateCommandNoKill("rm -rf \"$HOME\""), "带引号的 $HOME 必须拦截");
+        assertNotNull(support.validateCommandNoKill("rm -rf /home"), "/home 自身必须拦截");
+
+        assertNull(support.validateCommandNoKill("rm -rf ~/.gradle/caches"),
+                "清理 home 下的构建缓存是日常操作，必须放行");
+        assertNull(support.validateCommandNoKill("rm -rf $HOME/.m2/repository/x"), "必须放行");
+        assertNull(support.validateCommandNoKill("rm -rf /home/bob/tmp"), "必须放行");
+    }
+
+    /**
+     * Windows 侧的对称约定：用户目录只拦自身，子路径放行。
+     * 连子路径一起拦会误伤 {@code $env:USERPROFILE\.gradle\caches} 这类日常清理。
+     */
+    @Test
+    public void windows_blocksUserProfileItselfButAllowsSubPaths() throws Exception {
+        TerminalSupport support = supportOf(ShellMode.POWERSHELL);
+        assertNotNull(support.validateCommandNoKill("Remove-Item -Recurse -Force $env:USERPROFILE"),
+                "删整个用户目录必须拦截");
+        assertNotNull(support.validateCommandNoKill("rd /s /q %USERPROFILE%"),
+                "%USERPROFILE% 写法必须拦截");
+        assertNotNull(support.validateCommandNoKill("Remove-Item -Recurse -Force C:\\Users\\"),
+                "C:\\Users 自身必须拦截");
+
+        assertNull(support.validateCommandNoKill("Remove-Item -Recurse -Force $env:USERPROFILE\\.gradle\\caches"),
+                "清理 home 下的构建缓存必须放行（与 Unix 侧 rm -rf ~/.gradle/caches 对等）");
+        assertNull(support.validateCommandNoKill("del %USERPROFILE%\\Downloads\\x.zip"),
+                "删单个文件必须放行");
+        assertNull(support.validateCommandNoKill("Remove-Item -Recurse -Force C:\\Users\\bob\\tmp"),
+                "用户目录子路径必须放行");
+    }
+
     @Test
     public void emptyCommandRejectedOnAllModes() throws Exception {
         for (ShellMode mode : ShellMode.values()) {

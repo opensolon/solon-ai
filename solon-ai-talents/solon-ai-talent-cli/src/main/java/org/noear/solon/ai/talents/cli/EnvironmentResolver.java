@@ -204,7 +204,8 @@ public final class EnvironmentResolver {
                     + "[Environment]::GetEnvironmentVariable('Path','Machine')"
                     + " + ';' + [Environment]::GetEnvironmentVariable('Path','User')";
             ProcessBuilder pb = new ProcessBuilder(
-                    "powershell", "-NoProfile", "-NonInteractive", "-Command", script);
+                    ShellCommandFactory.defaultWindowsPowerShellCmd(),
+                    "-NoProfile", "-NonInteractive", "-Command", script);
             pb.redirectErrorStream(true);
             process = pb.start();
 
