@@ -59,13 +59,13 @@ public class TerminalTalentInstructionDialectTest {
         String text = instructionOf(ShellMode.POWERSHELL, "powershell");
 
         assertTrue(text.contains("**不是** bash/sh"), "必须显式点明当前 shell 不是 bash");
-        // 负面清单 + 等价写法必须成对出现，否则模型仍会退回 Unix 习惯用法
-        assertTrue(text.contains("2>$null"), "应给出 2>/dev/null 的 PowerShell 等价写法");
+        // 负面清单 + 等价写法必须成对出现，否则模型仍会退回 Unix 习惯用法。
+        // `2>$null` 只在 stderr 合流规约里给一次（方言速查表里不再重复），这里按那句原文断言。
+        assertTrue(text.contains("只想丢弃 stderr 时用 `2>$null`"), "应给出 2>/dev/null 的 PowerShell 等价写法");
         assertTrue(text.contains("Select-Object -First"), "应给出 head 的等价写法");
         assertTrue(text.contains("Get-Content"), "应给出 cat 的等价写法");
         assertTrue(text.contains("Select-String"), "应给出 grep 的等价写法");
         assertTrue(text.contains("Get-ComputerInfo"), "应给出 uname / os-release 的等价写法");
-        assertTrue(text.contains("`/dev/null`"), "应显式声明 /dev/null 不存在");
     }
 
     @Test
@@ -245,5 +245,29 @@ public class TerminalTalentInstructionDialectTest {
         assertTrue(ps.contains("exit_code=1"), "必须告知退出码会被误报为 1");
         assertTrue(cmd.contains("2>&1"), "CMD 下也应说明 stderr 已合流");
         assertFalse(unix.contains("2>&1"), "Unix 下 `2>&1` 无害且习惯，不应无故增加约束");
+    }
+
+    // ---------- 引导词自洽：不得示范会被自家护栏拦下的写法 ----------
+
+    /**
+     * 「严禁指令」已禁止 {@code exit}，且 {@code TerminalSupport.validateCommandNoKill} 按
+     * {@code (^|[;|&])\s*exit\b} 硬拦。早前 Windows PowerShell 5.1 分支里的多步骤示范写的是
+     * {@code cmd1; if ($LASTEXITCODE -ne 0) &#123; exit $LASTEXITCODE &#125;; cmd2}：引导词一边禁 exit、
+     * 一边示范 exit。当时没报错只是因为 exit 前面是 {@code &#123;} 而不是 {@code ;}，
+     * 模型略改写法就会撞上安全拦截，而它是照着提示写的，无从理解为何被拒。
+     */
+    @Test
+    public void instruction_neverDemonstratesForbiddenExit() throws Exception {
+        for (String[] it : new String[][]{{"POWERSHELL", "powershell"}, {"POWERSHELL", "pwsh"},
+                {"CMD", "cmd"}, {"UNIX_SHELL", "bash"}}) {
+            String text = instructionOf(ShellMode.valueOf(it[0]), it[1]);
+
+            assertTrue(text.contains("严禁执行 `exit`"), it[1] + " 下应保留 exit 禁令");
+            assertFalse(text.contains("exit $LASTEXITCODE"), it[1] + " 不得示范会被安全策略拦下的 exit 写法");
+        }
+
+        // 5.1 仍需给出「前一步失败就不做后一步」的可用写法，只是换成不带 exit 的正向嵌套
+        String legacy = instructionOf(ShellMode.POWERSHELL, "powershell");
+        assertTrue(legacy.contains("if ($LASTEXITCODE -eq 0)"), "5.1 下应给出不带 exit 的多步骤写法");
     }
 }

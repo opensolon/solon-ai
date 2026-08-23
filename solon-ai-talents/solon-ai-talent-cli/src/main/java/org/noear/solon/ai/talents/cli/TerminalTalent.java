@@ -659,27 +659,31 @@ public class TerminalTalent extends AbsTalent {
         if (shellMode == ShellMode.POWERSHELL) {
             boolean core = shellCommandFactory.isPowerShellCore();
             sb.append("- **PowerShell 方言（必须遵守）**: 当前 shell 是 PowerShell，以下 Unix 写法在此**不存在**，用后必报错，须按右侧改写：\n");
-            sb.append("  - 丢弃错误输出：`2>/dev/null` → `2>$null`；丢弃全部输出：`| Out-Null`。\n");
+            sb.append("  - 丢弃全部输出：`| Out-Null`（只丢 stderr 的写法见下方 stderr 规约）。\n");
             if (core) {
                 sb.append("  - 命令串联：`&&` / `||` 可用（PowerShell 7+），`;` 也可用；需要「前一步失败就停」时请用 `&&` 而不是 `;`。\n");
             } else {
                 sb.append("  - 命令串联：`&&` / `||` → `;`（Windows PowerShell 5.1 不支持 `&&`、`||`）。\n");
                 // `;` 不等于 `&&`：换写后丢的是「失败即停」语义，而整条命令的退出码只反映最后一步，
-                // 前面的编译/测试失败会被后面一步的成功掩盖（模型会据此误判为构建通过）
+                // 前面的编译/测试失败会被后面一步的成功掩盖（模型会据此误判为构建通过）。
+                // 替代写法一律不用 `exit`：上面的「严禁指令」已禁止 exit，且 validateCommandNoKill 会
+                // 按 `(^|[;|&])\s*exit\b` 拦截，示范带 exit 的写法会让模型照抄后撞上自家护栏。
                 sb.append("    - 注意 `;` 不等于 `&&`：前一步失败不会中断后续步骤，且返回的 `[exit_code]` 只反映最后一步。")
-                        .append("多步骤构建/测试请拆成多次 `bash` 调用，或写 `cmd1; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; cmd2`。\n");
+                        .append("多步骤构建/测试请拆成多次 `bash` 调用，或写 `cmd1; if ($LASTEXITCODE -eq 0) { cmd2 }`（不要用 `exit`）。\n");
             }
             // 「命令不存在」类映射（head/cat/grep/find/uname/pwd/which/export）模型看到
             // CommandNotFoundException 一轮即可自纠，故压成一行速查表而非逐条展开：既省常驻 token，
             // 又不丢信息。真正不可自纠的（别名参数陷阱、2>&1、`;` 语义）仍单独成条。
             sb.append("  - 常用等价（一次报错即可自纠，此处仅作速查）：`head/tail -n N` → `Select-Object -First/-Last N`；`cat` → `Get-Content`；`grep` → `Select-String`；`find` → `Get-ChildItem -Recurse -Filter`；`uname -a`、`cat /etc/os-release` → `Get-ComputerInfo`、`$PSVersionTable`；`pwd` → `Get-Location`；`which x` → `Get-Command x`；`export A=B` → `$env:A='B'`（读环境变量用 `$env:NAME`，不是 `$NAME`）。\n");
-            sb.append("  - 无 Unix 路径：`/dev/null`、`/etc`、`/usr`、`/tmp` 均无效；分隔符为 `\\`，临时目录用 `$env:TEMP`。\n");
+            // 「无 Unix 路径」一条已由「终端类型」里的「**不是** bash/sh，POSIX 命令与语法一律不可用」覆盖，
+            // `\` 分隔符与 $env:TEMP 属常识，删掉以免同一件事在一份提示里说第三遍。
             appendPowerShellAliasTrapRule(sb, core);
             appendMergedStderrRule(sb);
             appendEncodingRules(sb, core);
         } else if (shellMode == ShellMode.CMD) {
             sb.append("- **CMD 方言（必须遵守）**: 当前 shell 是 cmd.exe，以下 Unix 写法在此**不存在**，用后必报错，须按右侧改写：\n");
-            sb.append("  - 常用等价（一次报错即可自纠，此处仅作速查）：`2>/dev/null` → `2>nul`；`cat` → `type`；`grep` → `findstr`；`ls` → `dir`；`uname -a` → `ver`、`systeminfo`；`which x` → `where x`；`export A=B` → `set A=B`（读环境变量用 `%NAME%`，不是 `$NAME`）。没有 `head` / `tail`（取前 N 行用 `more +N`）。无 Unix 路径：`/dev/null`、`/tmp` 均无效；分隔符为 `\\`，临时目录用 `%TEMP%`。\n");
+            // 同 PowerShell 分支：`2>nul` 由下方 stderr 规约给出，「无 Unix 路径」由「不是 bash/sh」覆盖，此处不再重复。
+            sb.append("  - 常用等价（一次报错即可自纠，此处仅作速查）：`cat` → `type`；`grep` → `findstr`；`ls` → `dir`；`uname -a` → `ver`、`systeminfo`；`which x` → `where x`；`export A=B` → `set A=B`（读环境变量用 `%NAME%`，不是 `$NAME`）。没有 `head` / `tail`（取前 N 行用 `more +N`）。\n");
             // 跨盘符切目录是 CMD 特有的陷：`cd D:\x` 不报错、也不切，后续命令全在错的目录里执行
             sb.append("  - 跨盘符切目录必须写 `cd /d D:\\proj`（或 `pushd D:\\proj`）：`cd D:\\proj` 既不报错也不会切过去，后续命令会静默地在原目录执行。\n");
             sb.append("  - 多步骤串联：`&&`（失败即停）可用；用 `&` 串联则前一步失败不会中断，且返回的 `[exit_code]` 只反映最后一步。\n");
