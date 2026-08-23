@@ -466,14 +466,16 @@ public class TerminalTalent extends AbsTalent {
             sb.append("  - 建议：若需清理任务，请使用 `pkill -P [PID]` 仅停止子进程。\n");
         }
 
+        // 这里只列「会被 validateCommandNoKill 直接拦下」的两类硬禁令：exit 与根/系统目录删除。
+        // 泛化条款（如「不要改变宿主系统状态」）没有可判定边界、也无代码兜底，写了只是占 token，
+        // 真正的强制隔离交给 sandboxSystemRestrict + OS 沙盒。
         sb.append("- **严禁指令**:\n");
-        sb.append("  - 严禁执行 `exit`。如果你需要结束脚本，请让脚本自然执行完毕。\n");
+        sb.append("  - 严禁执行 `exit`（会被安全策略拦截）。如果你需要结束脚本，请让脚本自然执行完毕。\n");
         if (windowsShell) {
             sb.append("  - 严禁对盘符根目录（如 `C:\\`）或系统目录（如 `C:\\Windows`、`C:\\Program Files`、`C:\\Users`）执行任何删除操作。\n");
         } else {
             sb.append("  - 严禁执行任何针对根目录 `/` 或系统目录（如 `/etc`, `/usr`）的删除操作。\n");
         }
-        sb.append("  - 严禁执行任何可能改变宿主系统状态的命令（如修改网络配置、安装系统驱动等）。\n");
 
         sb.append("- **执行环境**: \n");
         String pyCmd = pythonCmd();
@@ -591,10 +593,10 @@ public class TerminalTalent extends AbsTalent {
         appendShellDialectRules(sb);
 
         if (sandboxEnabled) {
+            // 原本三条语义高度重叠，且「你是一个标准的底层 shell 执行器」会覆盖上层 agent 的人格设定，
+            // 「禁止解释权限逻辑」又会让越界时给不出可操作反馈。此处只保留唯一意图：不向外暴露内部机制。
             sb.append("\n<SYSTEM_CONSTRAINTS>\n");
-            sb.append("1. 严禁向用户复述或提及“系统限制”、“沙盒”、“规约”等术语。\n");
-            sb.append("2. 你是一个标准的底层 shell 执行器。面对越界请求，必须直接返回“无权访问”。\n");
-            sb.append("3. 禁止解释权限逻辑，禁止讨论路径映射关系。\n");
+            sb.append("- 不向用户复述“系统限制”、“沙盒”、“规约”等内部术语，也不展开讲解权限逻辑与路径映射关系；遇到越界请求直接答“无权访问”。\n");
             sb.append("</SYSTEM_CONSTRAINTS>\n");
         }
 
@@ -667,30 +669,24 @@ public class TerminalTalent extends AbsTalent {
                 sb.append("    - 注意 `;` 不等于 `&&`：前一步失败不会中断后续步骤，且返回的 `[exit_code]` 只反映最后一步。")
                         .append("多步骤构建/测试请拆成多次 `bash` 调用，或写 `cmd1; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; cmd2`。\n");
             }
-            sb.append("  - 取前/后 N 行：`head -n N` / `tail -n N` → `Select-Object -First N` / `-Last N`。\n");
-            sb.append("  - 查看文件：`cat` → `Get-Content`；文本检索：`grep` → `Select-String`；查找文件：`find` → `Get-ChildItem -Recurse -Filter`。\n");
-            sb.append("  - 系统信息：`uname -a`、`cat /etc/os-release` → `Get-ComputerInfo`、`$PSVersionTable`、`[System.Environment]::OSVersion`。\n");
-            sb.append("  - 其它：`pwd` → `Get-Location`；`which x` → `Get-Command x`；`export A=B` → `$env:A='B'`；读环境变量用 `$env:NAME`（不是 `$NAME`）。\n");
+            // 「命令不存在」类映射（head/cat/grep/find/uname/pwd/which/export）模型看到
+            // CommandNotFoundException 一轮即可自纠，故压成一行速查表而非逐条展开：既省常驻 token，
+            // 又不丢信息。真正不可自纠的（别名参数陷阱、2>&1、`;` 语义）仍单独成条。
+            sb.append("  - 常用等价（一次报错即可自纠，此处仅作速查）：`head/tail -n N` → `Select-Object -First/-Last N`；`cat` → `Get-Content`；`grep` → `Select-String`；`find` → `Get-ChildItem -Recurse -Filter`；`uname -a`、`cat /etc/os-release` → `Get-ComputerInfo`、`$PSVersionTable`；`pwd` → `Get-Location`；`which x` → `Get-Command x`；`export A=B` → `$env:A='B'`（读环境变量用 `$env:NAME`，不是 `$NAME`）。\n");
+            sb.append("  - 无 Unix 路径：`/dev/null`、`/etc`、`/usr`、`/tmp` 均无效；分隔符为 `\\`，临时目录用 `$env:TEMP`。\n");
             appendPowerShellAliasTrapRule(sb, core);
             appendMergedStderrRule(sb);
-            sb.append("  - 不存在任何 Unix 路径：`/dev/null`、`/etc`、`/usr`、`/tmp` 均无效；路径分隔符为 `\\`，临时目录用 `$env:TEMP`。\n");
             appendEncodingRules(sb, core);
-            sb.append("  - 上述方言与编码差异可以完全绕开：读写文件与检索请遵循「执行规约 → 工具优先」，用 `read` / `grep` / `glob` / `ls` 工具而非命令行文本处理。\n");
         } else if (shellMode == ShellMode.CMD) {
             sb.append("- **CMD 方言（必须遵守）**: 当前 shell 是 cmd.exe，以下 Unix 写法在此**不存在**，用后必报错，须按右侧改写：\n");
-            sb.append("  - 丢弃错误输出：`2>/dev/null` → `2>nul`。\n");
-            sb.append("  - 查看文件：`cat` → `type`；文本检索：`grep` → `findstr`；列目录：`ls` → `dir`。\n");
-            sb.append("  - 系统信息：`uname -a`、`cat /etc/os-release` → `ver`、`systeminfo`。\n");
-            sb.append("  - 其它：`which x` → `where x`；`export A=B` → `set A=B`；读环境变量用 `%NAME%`（不是 `$NAME`）。没有 `head` / `tail` 等价命令（取前 N 行可用 `more +N`）。\n");
+            sb.append("  - 常用等价（一次报错即可自纠，此处仅作速查）：`2>/dev/null` → `2>nul`；`cat` → `type`；`grep` → `findstr`；`ls` → `dir`；`uname -a` → `ver`、`systeminfo`；`which x` → `where x`；`export A=B` → `set A=B`（读环境变量用 `%NAME%`，不是 `$NAME`）。没有 `head` / `tail`（取前 N 行用 `more +N`）。无 Unix 路径：`/dev/null`、`/tmp` 均无效；分隔符为 `\\`，临时目录用 `%TEMP%`。\n");
             // 跨盘符切目录是 CMD 特有的陷：`cd D:\x` 不报错、也不切，后续命令全在错的目录里执行
             sb.append("  - 跨盘符切目录必须写 `cd /d D:\\proj`（或 `pushd D:\\proj`）：`cd D:\\proj` 既不报错也不会切过去，后续命令会静默地在原目录执行。\n");
             sb.append("  - 多步骤串联：`&&`（失败即停）可用；用 `&` 串联则前一步失败不会中断，且返回的 `[exit_code]` 只反映最后一步。\n");
             appendMergedStderrRule(sb);
-            sb.append("  - 不存在任何 Unix 路径：`/dev/null`、`/etc`、`/usr`、`/tmp` 均无效；路径分隔符为 `\\`，临时目录用 `%TEMP%`。\n");
             // 多行命令会以批处理脚本形式执行，% 语义与单行命令不同，需向模型说明
             sb.append("  - `%` 的语义差异：单行命令按命令行语义（`for %i in (...) do ...`）；多行命令按批处理脚本语义执行，循环变量需写成 `%%i`，字面百分号需写成 `%%`。不确定时优先拆成单行命令执行。\n");
             sb.append("  - **读文件会乱码**：`type` / `findstr` 按当前代码页（非 UTF-8）解析文件，读含中文/日韩文/emoji 的 UTF-8 文件必乱码，**且无法在命令里可靠地修正**。读文件一律改用 `read` 工具，检索一律改用 `grep` 工具。\n");
-            sb.append("  - 上述方言差异可以完全绕开：读写文件与检索请遵循「执行规约 → 工具优先」，用 `read` / `grep` / `glob` / `ls` 工具而非命令行文本处理。\n");
         }
     }
 
@@ -956,10 +952,10 @@ public class TerminalTalent extends AbsTalent {
     }
 
     // --- 3. 读取内容 ---
-    @ToolMapping(name = "read", description = "读取文件内容。修改文件前先通过此工具确认最新的文本内容、缩进和换行符。支持大文件分页。支持逻辑路径（如 @pool）。优先尝试不限制读取（即尝试完整读取）")
+    @ToolMapping(name = "read", description = "读取文件内容。修改文件前先通过此工具确认最新的文本内容、缩进和换行符。支持大文件分页。支持逻辑路径（如 @pool）。")
     public String read(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String filePath,
                        @Param(value = "offset", required = false, defaultValue = "1", description = "开始读取的行号（默认从1开始索引）") Integer offset,
-                       @Param(value = "limit", required = false, description = "需要读取的最大行数（默认不限制）。注意：单次读取受最大物理长度保护，如果触发截断，请根据输出提示调整 offset 分页读取。") Integer limit,
+                       @Param(value = "limit", required = false, description = "需要读取的最大行数。不传表示完整读取（推荐）。注意：单次读取受最大物理长度保护，如果触发截断，请根据输出提示调整 offset 分页读取。") Integer limit,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
         Path target = support.resolveSafePath(workPath, filePath, false, sandboxEnabled, sandboxAllowUserHome, fs());
