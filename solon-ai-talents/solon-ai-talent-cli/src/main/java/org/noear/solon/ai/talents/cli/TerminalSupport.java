@@ -624,7 +624,9 @@ public class TerminalSupport {
      * 当 sandboxSystemRestrict=true 时，由 wrapCommand() 在 OS 内核级强制隔离。</p>
      *
      * <p><b>平台对等</b>：自保护与根目录删除这两条红线必须在 Unix / CMD / PowerShell 上强度一致。
-     * 只在引导词里写「严禁」而不做硬拦截，等于给了一个不存在的护栏。</p>
+     * 只在引导词里写「严禁」而不做硬拦截，等于给了一个不存在的护栏。
+     * Windows 侧的 1b / 2b 以「宿主 OS 是 Windows」为适用判据（见 {@link #isWindowsRiskScope()}），
+     * 以免 Windows 上跑 {@link ShellMode#UNIX_SHELL} 时整条护栏隐形失效。</p>
      *
      * @return null 表示校验通过；非 null 为错误消息
      */
@@ -642,7 +644,7 @@ public class TerminalSupport {
         }
 
         // 1b. Windows 侧的等价形态（taskkill / Stop-Process）
-        if (isWindowsShellMode() && isWindowsHostKill(command, pid)) {
+        if (isWindowsRiskScope() && isWindowsHostKill(command, pid)) {
             return "错误：检测到危险命令。严禁试图停止宿主进程 (PID: " + pid + ")。";
         }
 
@@ -653,7 +655,7 @@ public class TerminalSupport {
         }
 
         // 2b. Windows 侧的盘符根/系统目录删除
-        if (isWindowsShellMode()
+        if (isWindowsRiskScope()
                 && WINDOWS_DELETE_VERB.matcher(command).find()
                 && WINDOWS_CRITICAL_TARGET.matcher(command).find()) {
             return "错误：检测到高危指令。禁止对盘符根目录或系统目录（Windows / Program Files / Users 等）执行删除操作。";
@@ -662,8 +664,23 @@ public class TerminalSupport {
         return null; // null 表示校验通过
     }
 
-    private boolean isWindowsShellMode() {
-        return this.shellMode == ShellMode.CMD || this.shellMode == ShellMode.POWERSHELL;
+    /**
+     * Windows 专属红线（自保护 1b、盘符根/系统目录删除 2b）的适用范围。
+     *
+     * <p><b>判据是宿主 OS，不是 shell 方言</b>：旧实现只看 {@code shellMode == CMD || POWERSHELL}，
+     * 于是在 Windows 宿主上一旦方言是 {@link ShellMode#UNIX_SHELL}（Git Bash / MSYS / WSL 风格的会话，
+     * 或用户通过 shell override 显式指定），两条红线整体失效——而 {@code taskkill /IM java.exe}、
+     * {@code Remove-Item -Recurse -Force C:\} 在那种会话里照样能执行并杀掉宿主 JVM。
+     * 护栏的成立条件是「命令可能在 Windows 宿主上生效」，与用哪种方言书写无关。</p>
+     *
+     * <p><b>为何仍保留方言判定</b>：一是非 Windows 宿主上声明 Windows 方言时（单元测试即如此）
+     * 护栏依然要可验证；二是这两条规则在类 Unix 宿主上本就不可能命中真实命令
+     * （没有 {@code taskkill}、没有盘符），多判一次零成本、无误伤风险。</p>
+     */
+    private boolean isWindowsRiskScope() {
+        return EnvironmentResolver.isWindows()
+                || this.shellMode == ShellMode.CMD
+                || this.shellMode == ShellMode.POWERSHELL;
     }
 
     /**

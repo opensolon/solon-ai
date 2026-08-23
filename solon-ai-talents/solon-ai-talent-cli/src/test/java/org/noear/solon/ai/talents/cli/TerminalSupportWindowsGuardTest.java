@@ -2,6 +2,7 @@ package org.noear.solon.ai.talents.cli;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -159,11 +160,42 @@ public class TerminalSupportWindowsGuardTest {
                 "跨命令段不应误判");
         assertNull(support.validateCommandNoKill("kill -9 999999"), "终止非宿主 PID 不应拦截");
 
-        // Windows 专属规则不得泄漏到 Unix：这些在 Unix 上是普通字符串，不该被拦
-        assertNull(support.validateCommandNoKill("echo 'Stop-Process -Name java'"),
-                "Unix 下不应套用 Windows 规则");
+        // Windows 专属规则不得泄漏到类 Unix 宿主：这些在 Unix 上是普通字符串，不该被拦。
+        // 但 Windows 宿主上即使方言是 UNIX_SHELL（Git Bash 类会话），taskkill / Stop-Process 仍然
+        // 真能杀掉宿主 JVM，护栏必须生效，此处不适用——见 windowsGuard_appliesOnWindowsHostEvenInUnixDialect。
+        if (EnvironmentResolver.isWindows() == false) {
+            assertNull(support.validateCommandNoKill("echo 'Stop-Process -Name java'"),
+                    "类 Unix 宿主下不应套用 Windows 规则");
+        }
         assertNull(support.validateCommandNoKill("rm -rf target"), "Unix 下清理相对路径不应拦截");
         assertNull(support.validateCommandNoKill("ls -la"));
+    }
+
+    /**
+     * 红线适用范围的判据是「宿主 OS 是 Windows」，不是「shell 方言是 Windows 系」。
+     *
+     * <p>旧实现只看 {@code shellMode == CMD || POWERSHELL}，于是 Windows 宿主上一旦方言被定为
+     * {@link ShellMode#UNIX_SHELL}，{@code taskkill /IM java.exe} 与
+     * {@code Remove-Item -Recurse -Force C:\} 两条红线整体失效——而这两条命令在那种会话里
+     * 照样能执行并杀掉宿主 JVM。本用例把修正后的语义固定下来。</p>
+     *
+     * <p>只能在 Windows 宿主上验证（{@code os.name} 不可注入），其它平台跳过。</p>
+     */
+    @Test
+    public void windowsGuard_appliesOnWindowsHostEvenInUnixDialect() throws Exception {
+        assumeTrue(EnvironmentResolver.isWindows(), "仅 Windows 宿主适用");
+
+        TerminalSupport support = supportOf(ShellMode.UNIX_SHELL);
+        assertNotNull(support.validateCommandNoKill("taskkill /F /PID " + PID),
+                "Windows 宿主 + UNIX_SHELL 方言下，taskkill 仍能杀宿主，必须拦截");
+        assertNotNull(support.validateCommandNoKill("taskkill /IM java.exe"),
+                "按进程名批量杀 java 必须拦截");
+        assertNotNull(support.validateCommandNoKill("Remove-Item -Recurse -Force C:\\"),
+                "盘符根删除必须拦截");
+
+        // 不得因为放宽适用范围而误伤日常清理
+        assertNull(support.validateCommandNoKill("rm -rf target"), "清理相对路径不应拦截");
+        assertNull(support.validateCommandNoKill("taskkill /IM node.exe /F"), "终止 node 不应拦截");
     }
 
     // ---------- Unix rm 护栏：开关形态、引号、目标粒度 ----------
