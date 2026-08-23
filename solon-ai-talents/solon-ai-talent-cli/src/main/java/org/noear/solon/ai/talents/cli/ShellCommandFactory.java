@@ -15,7 +15,12 @@
  */
 package org.noear.solon.ai.talents.cli;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -24,6 +29,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
@@ -43,6 +49,8 @@ import java.util.concurrent.TimeUnit;
  */
 public final class ShellCommandFactory {
 
+    private static final Logger LOG = LoggerFactory.getLogger(ShellCommandFactory.class);
+
     /**
      * {@code -EncodedCommand} 的 Base64 长度上限。Windows 命令行总长约 32767 字符，
      * 留足前缀与余量；超限则回退到临时 {@code .ps1} 脚本。
@@ -60,7 +68,34 @@ public final class ShellCommandFactory {
      */
     private static final int MAX_PARENT_WALK = 6;
 
+    /**
+     * 祖先链探测中需要跳过的前两层：{@code level0} 是探测用的 PowerShell 自身（不跳会自匹配成
+     * powershell），{@code level1} 是当前 JVM（等价于 {@code 原实现的 current()}，也不该参与判定）。
+     * 因此脚本共走 {@code SKIP + MAX_PARENT_WALK} 层，输出的第一行才对应「JVM 的父进程」。
+     */
+    private static final int PARENT_WALK_SKIP = 2;
+
+    /**
+     * 祖先链探测的超时。实测（Windows 11 + PowerShell 5.1）典型耗时 ≈ 1.2s，其中约 0.6s 是
+     * PowerShell 自身的启动成本、约 0.6s 是 WMI 查询；因此超时不能跟 {@code EnvironmentResolver}
+     * 的 2s 一样紧（实测会在冷启动/负载高时碍到），也不能无限等（它在 detect() 的同步路径上）。
+     */
+    private static final long PARENT_PROBE_TIMEOUT_MS = 4_000;
+
+    /**
+     * 探测输出的行标记。祖先链探测把 stderr 合并进 stdout（避免未读的 stderr 管道憋住子进程），
+     * 而 PowerShell 的报错文本里可能出现 {@code powershell} 字样——若不加标记逐行甄别，
+     * 一条错误信息就足以把判定结果带偏。
+     */
+    private static final String PARENT_PROBE_MARK = "p#";
+
+    /** 父 shell 探测失败/不可判定的缓存哨兵（进程名不可能是 NUL 字符） */
+    private static final String PARENT_PROBE_FAILED = "\u0000";
+
     private static volatile String cachedUnixShell;
+
+    /** 父 shell 探测结果缓存：探测要 fork 进程，而 {@link #detect()} 有多个调用点 */
+    private static volatile String cachedWindowsParentShell;
 
     /**
      * PowerShell 启动前置脚本：把一次执行内的「输出 / 输入 / 文件读写」编码全部归一到 UTF-8。
@@ -225,34 +260,193 @@ public final class ShellCommandFactory {
 
     /**
      * 探测 Windows 下真实的父 shell：向上遍历祖先进程（最多 {@value #MAX_PARENT_WALK} 层），
-     * 按进程命令名返回 {@code "pwsh"} / {@code "powershell"} / {@code "cmd"}；全部不可判定返回
-     * {@code null}。
+     * 按进程映像路径返回 {@code "pwsh"} / {@code "powershell"} / {@code "cmd"}；全部不可判定返回
+     * {@code null}（结果带缓存，进程内只探测一次）。
      *
-     * <p>{@link ProcessHandle} 自 JDK 9 起可用。进程信息受平台权限影响可能取不到
-     * （{@code command()} 为空），此时继续向上找。</p>
+     * <p><b>为何不用 {@code ProcessHandle}</b>：它自 JDK 9 才有，而本模块需要在 Java 8 上可编译、
+     * 可运行。改为外挂一次 PowerShell 查询祖先链，Java 8 与新版 JDK 走同一条码路，不存在
+     * 「两套实现行为漂移」的隐患。</p>
+     *
+     * <p>进程信息受平台权限影响可能取不到（映像路径为空），此时退用进程名；整条链取不到则
+     * 返回 {@code null}，由 {@link #windowsShellOf(String)} 回退默认 PowerShell——与改造前
+     * {@code catch} 后回退的语义一致。</p>
+     *
+     * @see #ancestorCommands()
      */
     static String detectWindowsParentShellName() {
-        try {
-            ProcessHandle handle = ProcessHandle.current().parent().orElse(null);
-            for (int i = 0; i < MAX_PARENT_WALK && handle != null; i++) {
-                String cmd = handle.info().command().orElse("").toLowerCase();
-                // pwsh 必须先判：传统 5.1 的路径含 WindowsPowerShell，两个关键字不会同时命中，
-                // 但用户自定义安装路径（如 D:\PowerShell\7\pwsh.exe）可能两者都含
-                if (cmd.contains("pwsh")) {
-                    return "pwsh";
+        String cached = cachedWindowsParentShell;
+        if (cached == null) {
+            synchronized (ShellCommandFactory.class) {
+                cached = cachedWindowsParentShell;
+                if (cached == null) {
+                    cached = probeWindowsParentShellName();
+                    cachedWindowsParentShell = (cached == null) ? PARENT_PROBE_FAILED : cached;
                 }
-                if (cmd.contains("powershell")) {
-                    return "powershell";
-                }
-                if (cmd.contains("cmd.exe") || cmd.endsWith("\\cmd") || cmd.equals("cmd")) {
-                    return "cmd";
-                }
-                handle = handle.parent().orElse(null);
             }
-        } catch (Throwable ignore) {
-            // 平台不支持或权限受限，交由调用方回退默认
+        }
+        return PARENT_PROBE_FAILED.equals(cached) ? null : cached;
+    }
+
+    private static String probeWindowsParentShellName() {
+        if (!EnvironmentResolver.isWindows()) {
+            // 类 Unix 下 detect() 走 probeUnixShell()，从不需要祖先链；这里守住「别在 Linux 上 fork powershell」
+            return null;
+        }
+        for (String cmd : ancestorCommands()) {
+            String name = shellNameOfCommand(cmd);
+            if (name != null) {
+                return name;
+            }
         }
         return null;
+    }
+
+    /**
+     * 由祖先进程的映像路径/进程名判定 shell 名；不可判定返回 {@code null}。
+     *
+     * <p>抽成纯函数是为了可测：真实祖先链随启动方式漂移（surefire fork ← mvn ← 某个 shell），
+     * 无法直接断言。入参需已转小写。</p>
+     */
+    static String shellNameOfCommand(String cmd) {
+        if (cmd == null || cmd.isEmpty()) {
+            return null;
+        }
+        // pwsh 必须先判：传统 5.1 的路径含 WindowsPowerShell，两个关键字不会同时命中，
+        // 但用户自定义安装路径（如 D:\PowerShell\7\pwsh.exe）可能两者都含
+        if (cmd.contains("pwsh")) {
+            return "pwsh";
+        }
+        if (cmd.contains("powershell")) {
+            return "powershell";
+        }
+        if (cmd.contains("cmd.exe") || cmd.endsWith("\\cmd") || cmd.equals("cmd")) {
+            return "cmd";
+        }
+        return null;
+    }
+
+    /**
+     * 祖先链探测脚本：一次取回全部进程的 {@code (pid, ppid, 映像路径)}，在内存里从探测进程
+     * 自身逐级向上走，输出映像路径（取不到则输出进程名）。
+     *
+     * <p><b>为何用 {@code Get-CimInstance} 而不是 {@code wmic.exe}</b>：WMIC 已被微软从 Windows 11
+     * 移除、且不再作为可选功能提供（WMI 服务本身不受影响，{@code Get-CimInstance} 继续可用）。
+     * {@code tasklist} 不输出父进程 ID，PowerShell 5.1 的 {@code Get-Process} 也没有 {@code .Parent}
+     * 属性（7+ 才有），因此本机查父进程只剩 CIM/WMI 一条路；老环境（PowerShell 2.0）无
+     * {@code Get-CimInstance}，降级到 {@code Get-WmiObject}。</p>
+     *
+     * <p><b>为何一次拉全量而不是逐层 {@code -Filter ProcessId=}</b>：后者要发 8 次 WMI 查询，
+     * 实测总耗时 ≈ 2.9s，而单次全量查询 + 内存遍历 ≈ 1.2s。探测在 {@link #detect()} 的同步
+     * 起动路径上，这一倍多的开销直接反映为启动延迟。</p>
+     *
+     * <p><b>为何全程不用双引号</b>：这段脚本作为单个 argv 元素传给 PowerShell，JDK 会为含空格的
+     * 参数补引号并把内层 {@code "} 转义成 {@code \"}。全用单引号可完全绕开这层转义差异。</p>
+     *
+     * <p>编码用无 BOM 的 UTF-8：{@code [Text.Encoding]::UTF8} 带 preamble，会让首行多出
+     * {@code \uFEFF} 而破坏行标记匹配。</p>
+     */
+    private static final String ANCESTOR_PROBE_SCRIPT =
+            "$ErrorActionPreference='SilentlyContinue';"
+                    + " try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { };"
+                    + " $useCim = $null -ne (Get-Command Get-CimInstance -ErrorAction SilentlyContinue);"
+                    + " if ($useCim) { $all = Get-CimInstance -ClassName Win32_Process"
+                    + " -Property ProcessId,ParentProcessId,ExecutablePath,Name }"
+                    + " else { $all = Get-WmiObject -Class Win32_Process"
+                    + " -Property ProcessId,ParentProcessId,ExecutablePath,Name };"
+                    + " $map = @{};"
+                    + " foreach ($p in $all) { $map[[int]$p.ProcessId] = $p };"
+                    + " $id = [int]$PID;"
+                    + " for ($i = 0; $i -lt " + (PARENT_WALK_SKIP + MAX_PARENT_WALK) + "; $i++) {"
+                    + "   $p = $map[$id];"
+                    + "   if ($null -eq $p) { break };"
+                    + "   if ($i -ge " + PARENT_WALK_SKIP + ") {"
+                    + "     if ($p.ExecutablePath) { '" + PARENT_PROBE_MARK + "' + $p.ExecutablePath }"
+                    + "     else { '" + PARENT_PROBE_MARK + "' + $p.Name }"
+                    + "   };"
+                    + "   $id = [int]$p.ParentProcessId;"
+                    + "   if ($id -eq 0) { break }"
+                    + " }";
+
+    /**
+     * 取「JVM 的父进程」起、最多 {@value #MAX_PARENT_WALK} 层祖先的映像路径（已转小写，由近及远）。
+     * 任何失败（无 WMI、禁止创建子进程、超时）都返回空列表，绝不抛出。
+     *
+     * <p>骨架与 {@code EnvironmentResolver.resolveWindowsPath()} 一致：独立守护线程消费输出，
+     * 主线程按超时等待——同步读流会让超时形同虚设。</p>
+     */
+    private static List<String> ancestorCommands() {
+        Process process = null;
+        try {
+            ProcessBuilder pb = new ProcessBuilder(defaultWindowsPowerShellCmd(),
+                    "-NoProfile", "-NonInteractive", "-Command", ANCESTOR_PROBE_SCRIPT);
+            pb.redirectErrorStream(true);
+            process = pb.start();
+
+            final Process proc = process;
+            final ByteArrayOutputStream buf = new ByteArrayOutputStream();
+            Thread reader = new Thread(() -> {
+                try (InputStream in = proc.getInputStream()) {
+                    byte[] buffer = new byte[4096];
+                    int n;
+                    while ((n = in.read(buffer)) != -1) {
+                        synchronized (buf) {
+                            buf.write(buffer, 0, n);
+                            if (buf.size() > 64 * 1024) {
+                                proc.destroyForcibly();
+                                break;
+                            }
+                        }
+                    }
+                } catch (Throwable ignore) {
+                    // 进程被强杀或流关闭，读取线程静默退出
+                }
+            }, "shell-parent-probe");
+            reader.setDaemon(true);
+            reader.start();
+
+            if (!process.waitFor(PARENT_PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                process.destroyForcibly();
+                LOG.debug("Detect parent shell timed out");
+                return Collections.emptyList();
+            }
+            reader.join(200);
+
+            String output;
+            synchronized (buf) {
+                output = new String(buf.toByteArray(), StandardCharsets.UTF_8);
+            }
+            return parseAncestorCommands(output);
+        } catch (Throwable e) {
+            if (process != null) {
+                process.destroyForcibly();
+            }
+            LOG.debug("Detect parent shell failed: {}", e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * 从探测输出里挑出带行标记的祖先映像路径（转小写、去标记）。无标记的行一律丢弃：
+     * 那是合并进来的 PowerShell 报错文本，其中可能含 {@code powershell} 字样。
+     */
+    static List<String> parseAncestorCommands(String output) {
+        List<String> commands = new ArrayList<>();
+        if (output == null) {
+            return commands;
+        }
+        for (String line : output.split("\\r?\\n")) {
+            String s = line.trim().toLowerCase();
+            if (s.startsWith("\uFEFF")) {
+                s = s.substring(1).trim();
+            }
+            if (s.startsWith(PARENT_PROBE_MARK)) {
+                String cmd = s.substring(PARENT_PROBE_MARK.length()).trim();
+                if (!cmd.isEmpty()) {
+                    commands.add(cmd);
+                }
+            }
+        }
+        return commands;
     }
 
     /**
