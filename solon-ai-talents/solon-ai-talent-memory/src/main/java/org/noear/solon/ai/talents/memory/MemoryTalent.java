@@ -184,27 +184,27 @@ public class MemoryTalent extends AbsTalent {
             }
         }
 
-        String mentalModel = "";
+        String mentalModel = null;
         if (!merged.isEmpty()) {
             StringBuilder sb = new StringBuilder();
             for (MemorySearchResult r : merged.values()) {
-                sb.append(String.format("- [%s] %s%s: %s (Imp: %.2f)\n",
+                sb.append(String.format("- [%s] %s%s: %s (Imp:%d)\n",
                         r.getTime(), scopeTag(r.getScope()), r.getKey(), r.getContent(), r.getImportance()));
             }
             mentalModel = sb.toString();
         }
 
         return "## 长期记忆与心智演进指南\n" +
-                "你拥有自主维护用户心智模型的能力。请实时提取对话中的价值点，并维持认知的一致性。\n\n" +
+                "自主维护用户心智模型：实时提取有价值信息，保持认知一致。\n\n" +
                 "### 1. 当前核心认知预览：\n" +
-                (Assert.isEmpty(mentalModel) ? "- (暂无核心认知，请通过交流逐步构建用户画像与经验库)" : mentalModel) +
-                "\n\n### 2. 评分标准 (importance: 1-3琐碎事实, 4-6偏好习惯, 7-9核心经验/规约, 10重大身份定论/永久核心洞察)\n\n" +
-                "### 3. 认知维护指令：\n" +
-                "- **发现经验时**：仅当出现「跨会话可复用、脱离当前具体任务仍成立」的通用经验/教训/最佳实践时，才调用 `memory_extract` 记录；一次性的、仅在当前任务内有效的调试细节不写入长期记忆。记录前优先复用或更新同主题已有 Key（如 lesson-xxx-xxx），避免碎片化。importance 按可信度分档：经反复验证的通用规约给 7-9，适用面较窄或尚待验证的给 5-6；同类经验积累多条后可用 `memory_consolidate` 整合为更高层洞察。\n" +
-                "- **发现冲突时**：若新事实与「核心认知预览」冲突，应优先调用 `memory_extract` 覆盖更新，并根据返回的 `[认知对比]` 向用户确认或在回复中体现认知的修正；若旧认知已被证实错误或过时，应调用 `memory_prune` 清理，避免错误信息持续影响判断。\n" +
-                "- **碎片过多时**：当你发现检索到多个关于同一主题的记录（尤其是低分碎片 Imp < 5），应主动调用 `memory_consolidate` 将其升维为一条永久核心洞察（系统自动赋予最高重要度）。\n" +
-                "- **列出全部时**：当用户问「记住了哪些/有哪些记忆」时，调用 `memory_search('*')` 获取全部条目索引（Key + 摘要），需要细节再用 `memory_recall` 按 Key 召回。\n" +
-                "- **时效性原则**：永远以时间戳（Time）最近的认知记录为准。\n";
+                (mentalModel == null ? "- (暂无核心认知，可通过交流逐步构建)" : mentalModel) +
+                "\n\n### 2. 评分标准 (importance)：1-3琐碎事实，4-6偏好习惯，7-9核心经验/规约，10重大定论\n\n" +
+                "### 3. 维护指令：\n" +
+                "- **发现经验**：仅记录「跨会话可复用」的通用经验/教训，一次性调试细节不写入；优先复用同主题已有 Key（如 lesson-xxx）避免碎片化。验证充分的规约给 7-9，待验证的给 5-6。\n" +
+                "- **发现冲突**：新事实与既有认知冲突时用 `memory_extract` 覆盖更新；已过时或错误的用 `memory_prune` 清理。\n" +
+                "- **碎片过多**：同主题低分碎片(Imp<5)较多时，用 `memory_consolidate` 升维为核心洞察。\n" +
+                "- **列出全部**：用户问「记住了哪些」时，用 `memory_search('*')` 取索引，需细节再用 `memory_recall` 召回。\n" +
+                "- **时效性**：以时间戳最近的记录为准。\n";
     }
 
     /**
@@ -272,10 +272,9 @@ public class MemoryTalent extends AbsTalent {
 
             if (Utils.isNotEmpty(oldJson)) {
                 ONode old = ONode.ofJson(oldJson);
-                feedback.append("\n[认知对比] 发现历史记录：")
+                feedback.append("\n[认知对比] 已存在同 Key 历史记录：")
                         .append("\n- 旧内容: ").append(old.get("content").getString())
-                        .append("\n- 旧时间: ").append(old.get("time").getString())
-                        .append("\n请对比新旧信息差异。若发生改变，请在后续对话中体现出你的认知进化。");
+                        .append("\n- 旧时间: ").append(old.get("time").getString());
             }
 
             Map<String, Object> data = new HashMap<>();
@@ -356,7 +355,7 @@ public class MemoryTalent extends AbsTalent {
             int count = 0;
             for (MemorySearchResult res : all) {
                 if (count >= LIST_ALL_LIMIT) break;
-                sb.append(String.format("- [%s] %s(Key: %s) Imp:%.2f: %s\n",
+                sb.append(String.format("- [%s] %s(Key: %s) Imp:%d: %s\n",
                         Utils.isNotEmpty(res.getTime()) ? res.getTime() : "未知时间",
                         scopeTag(res.getScope()),
                         res.getKey(), res.getImportance(), summaryOf(res.getContent())));
@@ -423,14 +422,14 @@ public class MemoryTalent extends AbsTalent {
     }
 
     /**
-     * M4.1：统计低分（Imp<5）碎片数，超阈值时在 feedback 附加整合建议，把被动变半主动。
-     */
-    /**
      * 碎片计数缓存：避免每次 extract 都做全量 listAll 遍历。
      * key=userId, value=低分碎片数。consolidate/prune 后置为 -1 触发下次重算。
      */
     private final Map<String, Integer> fragmentCountCache = new ConcurrentHashMap<>();
 
+    /**
+     * M4.1：统计低分（Imp<5）碎片数，超阈值时在 feedback 附加整合建议，把被动变半主动。
+     */
     private void appendFragmentHint(StringBuilder feedback, MemorySearcher searchProvider, String userId) {
         try {
             Integer cached = fragmentCountCache.get(userId);
@@ -623,9 +622,6 @@ public class MemoryTalent extends AbsTalent {
     }
 
     public static boolean isMemoryTool(String toolName) {
-        if (toolName != null && toolName.startsWith("memory_")) {
-            return true;
-        }
-        return false;
+        return toolName != null && toolName.startsWith("memory_");
     }
 }

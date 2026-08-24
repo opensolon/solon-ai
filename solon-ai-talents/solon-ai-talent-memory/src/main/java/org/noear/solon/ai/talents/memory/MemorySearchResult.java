@@ -24,7 +24,7 @@ package org.noear.solon.ai.talents.memory;
 public class MemorySearchResult {
     private String key;
     private String content;
-    private double importance;
+    private int importance;
     private String time; // 记录时间，用于时序冲突判断
     private String scope; // 记忆作用域："workspace" | "user"
 
@@ -32,7 +32,7 @@ public class MemorySearchResult {
         //用于反序列化
     }
 
-    public MemorySearchResult(String key, String content, double importance, String time, String scope) {
+    public MemorySearchResult(String key, String content, int importance, String time, String scope) {
         this.key = key;
         this.content = content;
         this.importance = importance;
@@ -53,7 +53,7 @@ public class MemorySearchResult {
         return content;
     }
 
-    public double getImportance() {
+    public int getImportance() {
         return importance;
     }
 
@@ -77,7 +77,7 @@ public class MemorySearchResult {
         this.content = content;
     }
 
-    public void setImportance(double importance) {
+    public void setImportance(int importance) {
         this.importance = importance;
     }
 

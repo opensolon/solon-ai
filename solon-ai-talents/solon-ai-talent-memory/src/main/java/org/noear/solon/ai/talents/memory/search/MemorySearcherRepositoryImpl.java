@@ -91,7 +91,7 @@ public class MemorySearcherRepositoryImpl implements MemorySearcher {
             List<Document> docs = repository.search(condition);
             return docs.stream()
                     .map(this::mapToResult)
-                    .sorted(Comparator.comparingDouble(MemorySearchResult::getImportance).reversed())
+                    .sorted(Comparator.comparingInt(MemorySearchResult::getImportance).reversed())
                     .collect(Collectors.toList());
         } catch (Exception e) {
             log.error("MemSearchProvider listAll error: {}", e.getMessage());
