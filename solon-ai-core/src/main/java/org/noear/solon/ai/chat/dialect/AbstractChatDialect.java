@@ -97,6 +97,11 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 // 有 tool_calls 但无文本内容（如 reasoning-only 后调工具）时，显式设 content=null
                 // OpenAI 规范要求 assistant message 含 tool_calls 时 content 字段存在（可为 null）
                 oNode.set("content", (String) null);
+            } else {
+                // 无答案、也无 tool_calls（如纯推理轮：只有 <think> 没给结论）时，仍需写出 content 键；
+                // 否则出站就是 {"role":"assistant"}（或仅带 reasoning_content）的空消息，会被 OpenAI 兼容服务端拒绝（会话中毒）。
+                // 这里只做协议占位：思考内容不回灌 content（与多模态分支 stripThinkTags 的语义保持一致，避免上下文污染）
+                oNode.set("content", "");
             }
         } else {
             // 多模态：OpenAI 兼容 content 数组

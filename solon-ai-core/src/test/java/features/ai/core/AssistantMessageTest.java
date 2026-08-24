@@ -275,6 +275,30 @@ public class AssistantMessageTest {
     }
 
     @Test
+    public void buildAssistantMessageNodeThinkingOnlyShouldStillEmitContent() {
+        TestDialect dialect = new TestDialect();
+        // 纯推理轮：只有 <think>（甚至未闭合），没有答案、也没有 tool_calls
+        AssistantMessage msg = new AssistantMessage("<think>推理中", true);
+
+        ONode node = dialect.buildChatMessageNode(new ChatConfig(), msg);
+        Assertions.assertEquals("", msg.getAnswer());
+        // 必须写出 content 键，否则出站是空的 assistant 消息，会被服务端拒绝；
+        // content 只做协议占位，思考内容不回灌正文（与多模态 stripThinkTags 语义一致）
+        Assertions.assertTrue(node.hasKey("content"));
+        Assertions.assertEquals("", node.get("content").getString());
+    }
+
+    @Test
+    public void buildAssistantMessageNodeEmptyShouldStillEmitContent() {
+        TestDialect dialect = new TestDialect();
+        AssistantMessage msg = new AssistantMessage("");
+
+        ONode node = dialect.buildChatMessageNode(new ChatConfig(), msg);
+        Assertions.assertTrue(node.hasKey("content"));
+        Assertions.assertEquals("", node.get("content").getString());
+    }
+
+    @Test
     public void buildAssistantMultiModalShouldStripThinkTagsFromTextBlocks() {
         TestDialect dialect = new TestDialect();
         List<ContentBlock> blocks = Arrays.asList(
@@ -755,9 +779,10 @@ public class AssistantMessageTest {
         Assertions.assertEquals("仅推理无工具调用",
                 node.get("reasoning_content").getString());
 
-        // 无 tool_calls 时不强加 content=null
-        // getResultContent() 为空，content 字段不写出（原有行为保持）
-        Assertions.assertFalse(node.hasKey("content"),
-                "content should not be written when empty and no tool_calls");
+        // 无 tool_calls 时不强加 content=null，但必须写出 content 键（否则仅带 reasoning_content 的消息会被服务端拒绝）；
+        // 推理已随 reasoning_content 回传，content 只做协议占位
+        Assertions.assertTrue(node.hasKey("content"),
+                "content key should be written even when answer is empty");
+        Assertions.assertEquals("", node.get("content").getString());
     }
 }

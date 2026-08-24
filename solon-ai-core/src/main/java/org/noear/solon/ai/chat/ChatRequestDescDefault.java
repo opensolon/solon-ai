@@ -401,6 +401,17 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     }
 
     private void onEventEnd(ChatResponseDefault resp, FluxSink<? super ChatResponse> sink, Disposable.Composite resources) {
+        // 流结束时思考仍未闭合（模型整轮只吐 reasoning，既无正文也无 tool_calls）：
+        // 补一帧 `</think>`，避免聚合内容是未闭合的 `<think>...` 而失去良构性。
+        if (resp.in_thinking) {
+            resp.in_thinking = false;
+            resp.reset();
+            ChatChoice choice = new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(),
+                    new AssistantMessage("</think>", true).reasoningFieldName(resp.reasoning_field_name));
+            resp.addChoice(choice);
+            publishResponse(sink, resp, choice);
+        }
+
         if (resp.toolCallBuilders.size() > 0) {
             if (buildStreamToolCallMessage(resp, sink, resources) == false) {
                 return; // 进入了内部递归流处理，不执行 complete

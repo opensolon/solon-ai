@@ -246,7 +246,8 @@ public class ReasonTask {
 
         // 容错处理：模型响应内容、工具调用与媒体均为空时，引导其重新生成
         // 纯生图等 media-only 响应不算空，避免被当成空响应重试
-        if (Assert.isEmpty(responseMessage.getAnswer())
+        // 注：answer 用 trim 判定，纯空白（如 "\n\n"）等价于空，否则会 END 出一个空白答案
+        if (Assert.isBlank(responseMessage.getAnswer())
                 && Assert.isEmpty(responseMessage.getToolCalls())
                 && !responseMessage.hasMedia()) {
             if (trace.getEmptyRetryCounter().incrementAndGet() < 3) {
@@ -283,7 +284,15 @@ public class ReasonTask {
                 LOG.warn("ReActAgent[{}] empty response persists after {} retries, ending.",
                         trace.getAgentName(), trace.getEmptyRetryCounter().get());
                 trace.setRoute(Agent.ID_END);
-                trace.setFinalAnswer("抱歉，模型多次未返回有效内容。请稍后重试。");
+
+                // 纯思考轮（只有 reasoning 没有 Final Answer）时，思考内容其实已流式输出给前端，
+                // 再用兜底文案覆盖会造成“内容都出来了却报未返回有效内容”的割裂；此处降级用思考内容作答。
+                String thinkingFallback = responseMessage.getThinking();
+                if (Assert.isBlank(thinkingFallback)) {
+                    trace.setFinalAnswer("抱歉，模型多次未返回有效内容。请稍后重试。");
+                } else {
+                    trace.setFinalAnswer(thinkingFallback.trim(), false);
+                }
             }
 
             return;
