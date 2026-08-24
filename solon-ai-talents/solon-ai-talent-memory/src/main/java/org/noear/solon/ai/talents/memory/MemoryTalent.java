@@ -200,7 +200,7 @@ public class MemoryTalent extends AbsTalent {
                 (Assert.isEmpty(mentalModel) ? "- (暂无核心认知，请通过交流逐步构建用户画像与经验库)" : mentalModel) +
                 "\n\n### 2. 评分标准 (importance: 1-3琐碎事实, 4-6偏好习惯, 7-9核心经验/规约, 10重大身份定论/永久核心洞察)\n\n" +
                 "### 3. 认知维护指令：\n" +
-                "- **发现经验时**：当对话中产生了可复用的经验总结、踩坑教训或最佳实践，应主动调用 `memory_extract` 记录，importance 建议设为 7-9，Key 用经验主题命名（如 lesson-xxx-xxx）；同类经验积累多条后可用 `memory_consolidate` 整合为更高层洞察。\n" +
+                "- **发现经验时**：仅当出现「跨会话可复用、脱离当前具体任务仍成立」的通用经验/教训/最佳实践时，才调用 `memory_extract` 记录；一次性的、仅在当前任务内有效的调试细节不写入长期记忆。记录前优先复用或更新同主题已有 Key（如 lesson-xxx-xxx），避免碎片化。importance 按可信度分档：经反复验证的通用规约给 7-9，适用面较窄或尚待验证的给 5-6；同类经验积累多条后可用 `memory_consolidate` 整合为更高层洞察。\n" +
                 "- **发现冲突时**：若新事实与「核心认知预览」冲突，应优先调用 `memory_extract` 覆盖更新，并根据返回的 `[认知对比]` 向用户确认或在回复中体现认知的修正；若旧认知已被证实错误或过时，应调用 `memory_prune` 清理，避免错误信息持续影响判断。\n" +
                 "- **碎片过多时**：当你发现检索到多个关于同一主题的记录（尤其是低分碎片 Imp < 5），应主动调用 `memory_consolidate` 将其升维为一条永久核心洞察（系统自动赋予最高重要度）。\n" +
                 "- **列出全部时**：当用户问「记住了哪些/有哪些记忆」时，调用 `memory_search('*')` 获取全部条目索引（Key + 摘要），需要细节再用 `memory_recall` 按 Key 召回。\n" +
@@ -229,7 +229,7 @@ public class MemoryTalent extends AbsTalent {
      * 解决了记忆冲突与反思逻辑
      */
     @ToolMapping(name = "memory_extract",
-            description = "存入事实/偏好/经验/进度（或用户要求记住时）。当对话中产生了可复用的经验、教训或最佳实践时，应主动存入。同名 Key 会返回旧记录供对比，信息有变则覆盖写入。")
+            description = "存入事实/偏好/经验/进度（或用户要求记住时）。仅当经验为跨会话可复用的通用规律时才主动存入，一次性的当前任务调试细节不必记录。同名 Key 会返回旧记录供对比，信息有变则覆盖写入。")
     public String extract(@Param(value = "key", description = "唯一语义标识（如 user-tech-stack）。同主题复用同一 Key 而非新建，以防碎片化。") String key,
                           @Param(value = "fact", description = "完整自包含的陈述句，不依赖上下文指代，便于独立召回。") String fact,
                           @Param(value = "importance", description = "权重(1-10)：1-3琐碎事实, 4-6偏好习惯, 7-9核心经验/规约, 10重大身份定论") int importance,
