@@ -86,9 +86,13 @@ public class CodeTalent extends AbsTalent {
     private static final int MAX_CACHE_ENTRIES = 64;
 
     /**
-     * 同构子模块清单的最大展开条目数（超出则截断，避免提示词被大型多模块工程淹没）
+     * 同构子模块清单的最大展开条目数。
+     * <p>
+     * 注意：CODE.md 不会被注入提示词（getInstruction 只给出一行摘要 + 文件路径），
+     * 因此截断并不省提示词开销，只是防止病态工程写出超大文件；正常多模块工程应完整列出。
+     * 触发截断时必须给出可自行补全清单的检索方式，避免模型误判“模块不存在”。
      */
-    private static final int MAX_MODULE_LIST_ITEMS = 120;
+    private static final int MAX_MODULE_LIST_ITEMS = 500;
 
     private final String workDir;
     private final String codeDir;
@@ -360,8 +364,9 @@ public class CodeTalent extends AbsTalent {
                 LOG.error("Scan sub-modules failed", e);
             }
 
-            // 同构模块（与根项目同一技术栈）：按类型归组，最终折叠成一行，避免逐行复述同一句套话
-            Map<String, List<String>> homogeneous = new LinkedHashMap<>();
+            // 同构模块（与根项目同一技术栈）：按类型归组，共用一句说明，不逐行复述套话
+            // 以 Provider 为键，便于截断时给出该类型的构建标记检索式
+            Map<LanguageProvider, List<String>> homogeneous = new LinkedHashMap<>();
 
             // 已作为“叶子模块”处理过的路径，其子目录不再单独列出（聚合器不参与，见 isAggregator）
             Set<String> processedPaths = new HashSet<>();
@@ -393,7 +398,7 @@ public class CodeTalent extends AbsTalent {
                             }
                         } else {
                             String item = (ver == null) ? relativePath : relativePath + "（" + ver + "）";
-                            homogeneous.computeIfAbsent(provider.typeName(), k -> new ArrayList<>()).add(item);
+                            homogeneous.computeIfAbsent(provider, k -> new ArrayList<>()).add(item);
                         }
                         break; // 一个目录识别为一个主语言即可
                     }
@@ -474,9 +479,15 @@ public class CodeTalent extends AbsTalent {
     }
 
     /**
-     * 同构子模块清单：每种类型仅一行，模块名以逗号分隔（同样的信息量，约 1/4 的体积）
+     * 同构子模块清单：按类型归组，组内一行一个模块（完整相对路径）。
+     * <p>
+     * 不把模块挤成一行逗号列表：路径本身含 `/` 与 `-`，逗号分隔可读性差、精确取值易错；
+     * 而换行相比 ", " 每个模块仅多约 3 字符，与去掉逐行套话省下的体积不在一个量级。
+     * <p>
+     * 仅在病态规模下才截断，且必须附带该类型的检索方式：清单不完整时若不给补全手段，
+     * 读者会把“清单里没有”误当成“模块不存在”。
      */
-    private void appendHomogeneousModules(StringBuilder buf, Map<String, List<String>> homogeneous) {
+    private void appendHomogeneousModules(StringBuilder buf, Map<LanguageProvider, List<String>> homogeneous) {
         if (homogeneous.isEmpty()) {
             return;
         }
@@ -484,20 +495,41 @@ public class CodeTalent extends AbsTalent {
         buf.append("### 子模块与子项目 (Sub-modules & Sub-projects)\n")
                 .append("> 以下模块受根项目指令统一控制（构建与测试请按上文根项目指令执行）。\n");
 
-        for (Map.Entry<String, List<String>> e : homogeneous.entrySet()) {
-            List<String> items = e.getValue();
-            buf.append("- ").append(e.getKey()).append(" (").append(items.size()).append(" 个): ");
+        for (Map.Entry<LanguageProvider, List<String>> e : homogeneous.entrySet()) {
+            LanguageProvider provider = e.getKey();
+            List<String> items = new ArrayList<>(e.getValue());
+            // 排序使同一父目录下的模块相邻，便于人工核对
+            Collections.sort(items);
 
-            if (items.size() > MAX_MODULE_LIST_ITEMS) {
-                buf.append(String.join(", ", items.subList(0, MAX_MODULE_LIST_ITEMS)))
-                        .append(" … 及其余 ").append(items.size() - MAX_MODULE_LIST_ITEMS).append(" 个");
-            } else {
-                buf.append(String.join(", ", items));
+            buf.append("- ").append(provider.typeName()).append(" (").append(items.size()).append(" 个)\n");
+
+            int shown = Math.min(items.size(), MAX_MODULE_LIST_ITEMS);
+            for (int i = 0; i < shown; i++) {
+                buf.append("  - ").append(items.get(i)).append("\n");
             }
-            buf.append("\n");
+            if (items.size() > shown) {
+                buf.append("  - … 及其余 ").append(items.size() - shown)
+                        .append(" 个模块（未展开，完整清单请检索 ")
+                        .append(markerGlobs(provider))
+                        .append("）\n");
+            }
         }
 
         buf.append("\n");
+    }
+
+    /**
+     * 该类型的构建标记检索式，供清单被截断时自行补全（如 `**&#47;pom.xml`）
+     */
+    private static String markerGlobs(LanguageProvider provider) {
+        StringBuilder sb = new StringBuilder();
+        for (String marker : provider.markers()) {
+            if (sb.length() > 0) {
+                sb.append(" 或 ");
+            }
+            sb.append("`**/").append(marker).append("`");
+        }
+        return sb.length() == 0 ? "对应构建标记文件" : sb.toString();
     }
 
     /**

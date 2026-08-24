@@ -109,10 +109,10 @@ public class CodeTalentScanTest {
         assertTrue(talent.init(null).startsWith("已验证"), "内容未变时不应报告为更新");
     }
 
-    // ---------- 同构子模块折叠 ----------
+    // ---------- 同构子模块归组 ----------
 
     @Test
-    public void homogeneousModules_areFoldedIntoOneLine(@TempDir Path root) throws Exception {
+    public void homogeneousModules_groupedByTypeOnePerLine(@TempDir Path root) throws Exception {
         write(root, "pom.xml", "<project><modules><module>a</module></modules></project>");
         write(root, "mod-a/pom.xml", "<project></project>");
         write(root, "mod-b/pom.xml", "<project></project>");
@@ -122,17 +122,69 @@ public class CodeTalentScanTest {
         String md = codeMd(root);
 
         assertTrue(md.contains("### 子模块与子项目"));
-        assertTrue(md.contains("mod-a"));
-        assertTrue(md.contains("mod-b"));
-        assertTrue(md.contains("group/mod-c"));
         assertTrue(md.contains("Maven 模块 (3 个)"), "应给出模块总数：\n" + md);
 
         assertEquals(1, countOf(md, "Maven 模块"),
-                "3 个同构模块应折叠为一行，而不是逐行复述同一句套话");
+                "同一技术栈只应有一个归组标题，而不是逐模块重复类型名");
         assertEquals(0, countOf(md, "受根项目指令统一控制。"),
                 "旧实现的逐行套话应已消除");
         assertEquals(1, countOf(md, "受根项目指令统一控制"),
                 "统一控制的说明只保留一处");
+
+        // 每个模块各占一行，且为可直接使用的完整相对路径
+        assertTrue(md.contains("\n  - mod-a\n"), "模块应单独成行：\n" + md);
+        assertTrue(md.contains("\n  - mod-b\n"));
+        assertTrue(md.contains("\n  - group/mod-c\n"), "嵌套模块应保留完整路径，不拆成前缀+名称：\n" + md);
+
+        // 不得回到“所有模块挤在一行”：列表行不应出现逗号分隔的多个路径
+        assertFalse(md.contains("mod-a, "), "模块不应逗号拼接在同一行：\n" + md);
+    }
+
+    @Test
+    public void homogeneousModules_sortedForStableReading(@TempDir Path root) throws Exception {
+        write(root, "pom.xml", "<project></project>");
+        write(root, "zeta/pom.xml", "<project></project>");
+        write(root, "alpha/pom.xml", "<project></project>");
+        write(root, "mid/pom.xml", "<project></project>");
+
+        talentOf(root).init(null);
+        String md = codeMd(root);
+
+        assertTrue(md.indexOf("- alpha") < md.indexOf("- mid"), "模块应排序输出：\n" + md);
+        assertTrue(md.indexOf("- mid") < md.indexOf("- zeta"), md);
+    }
+
+    @Test
+    public void homogeneousModules_notTruncatedAtNormalScale(@TempDir Path root) throws Exception {
+        write(root, "pom.xml", "<project></project>");
+        for (int i = 0; i < 200; i++) {
+            write(root, String.format("m%03d/pom.xml", i), "<project></project>");
+        }
+
+        talentOf(root).init(null);
+        String md = codeMd(root);
+
+        assertTrue(md.contains("Maven 模块 (200 个)"), "总数应按完整数量统计：\n" + md);
+        assertFalse(md.contains("未展开"), "200 个模块属于正常多模块工程规模，不应截断：\n" + md);
+        assertTrue(md.contains("\n  - m000\n") && md.contains("\n  - m199\n"), "首尾模块都应列出");
+    }
+
+    @Test
+    public void homogeneousModules_truncatedOnlyAtPathologicalScale(@TempDir Path root) throws Exception {
+        write(root, "pom.xml", "<project></project>");
+        for (int i = 0; i < 510; i++) {
+            write(root, String.format("m%03d/pom.xml", i), "<project></project>");
+        }
+
+        talentOf(root).init(null);
+        String md = codeMd(root);
+
+        assertTrue(md.contains("Maven 模块 (510 个)"), "总数应按完整数量统计：\n" + md);
+        assertTrue(md.contains("及其余 10 个模块"), "超限部分应告知剩余数量：\n" + md);
+        // 截断必须可恢复：否则模型会把“清单里没有”当成“模块不存在”
+        assertTrue(md.contains("`**/pom.xml`"), "截断时必须给出补全清单的检索式：\n" + md);
+        assertTrue(md.contains("\n  - m000\n"), "截断前的模块仍应逐行列出");
+        assertFalse(md.contains("\n  - m509\n"), "超限部分不应展开");
     }
 
     @Test
