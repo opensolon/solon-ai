@@ -561,14 +561,13 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         for (ToolCall call : acm.getToolCalls()) {
             ToolCallBuilder callBuilder = resp.toolCallBuilders.computeIfAbsent(call.getIndex(), k -> new ToolCallBuilder());
 
-            if (call.getId() != null) {
-                if (callBuilder.idBuilder.length() == 0) {
-                    callBuilder.idBuilder.append(call.getId());
-                } else if (!call.getId().contentEquals(callBuilder.idBuilder)) {
-                    callBuilder.idBuilder.append(call.getId());
-                }
+            // id 按官方流式协议仅首分片携带（对齐 openai-java ChatCompletionAccumulator 的 getOrPut 语义：首片胜出）；
+            // 若网关每帧重复下发完整 id，拼接会得到 'call_xxcall_xx' 这类脏值，导致 tool_call_id 对不上
+            if (call.getId() != null && callBuilder.idBuilder.length() == 0) {
+                callBuilder.idBuilder.append(call.getId());
             }
 
+            // name 保留累积：部分网关/自研端点会把函数名也分片下发，仅跳过完全重复的重发
             if (call.getName() != null) {
                 if (callBuilder.nameBuilder.length() == 0) {
                     callBuilder.nameBuilder.append(call.getName());
@@ -577,6 +576,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 }
             }
 
+            // arguments 分片只做字符串累积，不在此处校验 JSON
             if (call.getArgumentsStr() != null) {
                 callBuilder.argumentsBuilder.append(call.getArgumentsStr());
             }

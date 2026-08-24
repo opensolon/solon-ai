@@ -555,7 +555,14 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 n1fArgs = reader.readLast();
 
                 if (n1fArgs == null) {
-                    LOG.warn("Parse tool arguments failed: {}", argStr);
+                    //流式分片本就是不完整的 JSON 片段，解析失败属预期，降级为 debug 避免刷日志
+                    if (resp.isStream()) {
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("Parse tool arguments chunk skipped: {}", argStr);
+                        }
+                    } else {
+                        LOG.warn("Parse tool arguments failed: {}", argStr);
+                    }
                 }
             }
         }
@@ -925,8 +932,15 @@ public abstract class AbstractChatDialect implements ChatDialect {
         List<Map> searchResultsRaw = null;
 
         if (Utils.isNotEmpty(toolCalls)) {
-            // 非流式解析出口净化：截断损坏的 arguments 禁止入历史（vllm 空串语义已由净化器兜底为 "{}"）
-            toolCallsRaw = ToolCallJsonSanitizer.sanitizeToolCallsRaw(toolCallsNode.toBean(List.class));
+            // 流式分片（ChatCompletionMessageToolCallChunk）的 arguments 是 JSON 片段（如 'la'、'{"comm'），
+            // 逐帧净化会误判为非法 JSON 而刷 WARN、并把分片改写成 "{}" 导致订阅侧拿不到增量。
+            // 对齐 openai-java ChatCompletionAccumulator / anthropic MessageAccumulator：
+            // 分片期只做字符串累积不校验，校验统一交给聚合出口（buildAssistantToolCallMessageNode）
+            // 与出站兜底（buildAssistantMessageNodeDo）。
+            List<Map> toolCallsRawOrigin = toolCallsNode.toBean(List.class);
+            toolCallsRaw = resp.isStream() ? toolCallsRawOrigin
+                    : ToolCallJsonSanitizer.sanitizeToolCallsRaw(toolCallsRawOrigin);
+
             if (resp.in_thinking && resp.isStream()) {
                 //说明是思考结束立刻调用了工具，需要添加思考的结束标识
                 messageList.add(new AssistantMessage("</think>", true).reasoningFieldName(resp.reasoning_field_name));

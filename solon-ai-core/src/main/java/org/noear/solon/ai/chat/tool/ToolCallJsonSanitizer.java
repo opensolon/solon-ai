@@ -75,7 +75,9 @@ public final class ToolCallJsonSanitizer {
         }
 
         String raw = argStr.length() > 200 ? argStr.substring(0, 200) + "..." : argStr;
-        LOG.warn("Tool call arguments is not a valid JSON object (fn: '{}'), reset to '{{}}'. raw: {}", fnName, raw);
+        // 注意：SLF4J 的占位符不支持 '{{}}' 形式的转义（会被当成内层 '{}' 消耗掉一个参数），
+        // 故此处用字面文本描述兜底结果，避免日志把 raw 错位吞掉造成误导
+        LOG.warn("Tool call arguments is not a valid JSON object (fn: '{}'), reset to empty object. raw: {}", fnName, raw);
         return "{}";
     }
 

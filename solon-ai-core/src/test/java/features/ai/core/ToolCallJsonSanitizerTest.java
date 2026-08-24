@@ -251,4 +251,100 @@ public class ToolCallJsonSanitizerTest {
         ONode node = dialect.buildAssistantToolCallMessageNode(new TestResponse(), builders);
         Assertions.assertEquals("{}", node.get("tool_calls").get(0).get("function").get("arguments").getString());
     }
+
+    /**
+     * 非流式响应（供“分片期不校验、非流式仍校验”的对照测试）
+     */
+    static class TestResponseNonStream extends ChatResponseDefault {
+        public TestResponseNonStream() {
+            super(new ChatRequest(
+                    new ChatConfig(),
+                    new TestDialect(),
+                    ChatOptions.of(),
+                    InMemoryChatSession.builder().build(),
+                    null,
+                    null,
+                    false), false);
+        }
+    }
+
+    /**
+     * 流式分片帧：arguments 是 JSON 片段（如 '{"comm'），不得被逐帧净化成 "{}"
+     *
+     * <p>对齐 openai-java ChatCompletionAccumulator / anthropic MessageAccumulator：
+     * 分片期只做字符串累积，不校验 JSON。否则订阅侧拿不到增量，且会刷一堆 WARN。</p>
+     */
+    @Test
+    public void streamChunkArgumentsShouldNotBeSanitized() {
+        TestDialect dialect = new TestDialect();
+
+        ONode oMessage = new ONode();
+        oMessage.getOrNew("tool_calls").asArray().addNew()
+                .set("index", 0)
+                .set("id", "call_a")
+                .set("type", "function")
+                .getOrNew("function")
+                .set("name", "bash")
+                .set("arguments", "{\"comm");
+
+        List<AssistantMessage> messages = dialect.parseAssistantMessage(new TestResponse(), oMessage);
+
+        Assertions.assertFalse(messages.isEmpty());
+        AssistantMessage msg = messages.get(0);
+        Assertions.assertNotNull(msg.getToolCallsRaw());
+
+        Map fn = (Map) msg.getToolCallsRaw().get(0).get("function");
+        //分片原样保留，未被改写为 "{}"
+        Assertions.assertEquals("{\"comm", fn.get("arguments"));
+    }
+
+    /**
+     * 非流式响应仍必须净化：截断的 arguments 不得入历史
+     */
+    @Test
+    public void nonStreamArgumentsShouldStillBeSanitized() {
+        TestDialect dialect = new TestDialect();
+
+        ONode oMessage = new ONode();
+        oMessage.getOrNew("tool_calls").asArray().addNew()
+                .set("id", "call_a")
+                .set("type", "function")
+                .getOrNew("function")
+                .set("name", "bash")
+                .set("arguments", "{\"comm");
+
+        List<AssistantMessage> messages = dialect.parseAssistantMessage(new TestResponseNonStream(), oMessage);
+
+        Assertions.assertFalse(messages.isEmpty());
+        Map fn = (Map) messages.get(0).getToolCallsRaw().get(0).get("function");
+        Assertions.assertEquals("{}", fn.get("arguments"));
+    }
+
+    /**
+     * 端到端：多个 arguments 分片按 index 聚合后，出口得到完整合法 JSON（而非 "{}"）
+     */
+    @Test
+    public void streamChunksShouldAggregateIntoCompleteArguments() {
+        TestDialect dialect = new TestDialect();
+        ToolCallBuilder builder = new ToolCallBuilder();
+        builder.idBuilder.append("call_a");
+        builder.nameBuilder.append("bash");
+
+        //模拟 OpenAI completions 的 delta 分片序列
+        for (String chunk : new String[]{"{\"", "comm", "and\"", ":\"", "ls", " -la", "\"}"}) {
+            builder.argumentsBuilder.append(chunk);
+        }
+
+        Map<String, ToolCallBuilder> builders = new LinkedHashMap<>();
+        builders.put("idx:0", builder);
+
+        ONode node = dialect.buildAssistantToolCallMessageNode(new TestResponse(), builders);
+        ONode fn = ONode.ofJson(node.toJson()).get("tool_calls").get(0).get("function");
+
+        Assertions.assertEquals("bash", fn.get("name").getString());
+
+        //聚合后是完整参数，不应被兜底成 "{}"
+        ONode args = ONode.ofJson(fn.get("arguments").getString());
+        Assertions.assertEquals("ls -la", args.get("command").getString());
+    }
 }
