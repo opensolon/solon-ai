@@ -405,8 +405,13 @@ public class ChatResponseDefault implements ChatResponse {
      *
      * <p>将各 LLM 返回的不同值映射为框架统一定义的值：
      * <ul>
-     *   <li>工具调用："tool"</li>
-     *   <li>正常结束："stop"</li>
+     *   <li>工具调用："tool"（含 tool_calls、function_call 等变体）</li>
+     *   <li>正常结束："stop"（含 stop、end 等变体）</li>
+     * </ul>
+     * 其他值保持原样透传，由调用方自行判断，例如（OpenAI 官方枚举）：
+     * <ul>
+     *   <li>"length"：因 max_tokens 截断</li>
+     *   <li>"content_filter"：内容被安全策略拦截（返回内容可能不完整）</li>
      * </ul>
      *
      * @param finishReason LLM 返回的原始 finishReason

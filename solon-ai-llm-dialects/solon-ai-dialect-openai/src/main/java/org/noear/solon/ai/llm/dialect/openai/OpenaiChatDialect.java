@@ -161,8 +161,8 @@ public class OpenaiChatDialect extends AbstractChatDialect {
                     thinkTokens = oUsage.get("think_tokens").getLong();
                 }
 
-                // 缓存 token 统计（官方 prompt_tokens_details：cached_tokens / cache_write_tokens；
-                // 兼容 DeepSeek 形态 prompt_cache_hit_tokens）
+                // 缓存 token 统计（官方 prompt_tokens_details 仅定义了 cached_tokens / audio_tokens；
+                // 兼容 DeepSeek 形态 prompt_cache_hit_tokens，cache_write_tokens 为个别端点的非官方扩展）
                 long cacheReadInputTokens = 0L;
                 long cacheCreationInputTokens = 0L;
                 ONode promptTokensDetails = oUsage.getOrNull("prompt_tokens_details");
