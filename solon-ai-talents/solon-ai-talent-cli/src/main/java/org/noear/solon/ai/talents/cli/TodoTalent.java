@@ -25,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.function.BiFunction;
 
 /**
  * 任务进度追踪才能
@@ -42,8 +43,14 @@ public class TodoTalent extends AbsTalent {
 
     private final String relativeDir;
 
+    private BiFunction<String, String, Path> workPathHook;
+
+    public void setWorkPathHook(BiFunction<String, String, Path> workPathHook) {
+        this.workPathHook = workPathHook;
+    }
+
     public TodoTalent() {
-       this(null);
+        this(null);
     }
 
     public TodoTalent(String relativeDir) {
@@ -68,6 +75,10 @@ public class TodoTalent extends AbsTalent {
     }
 
     protected Path getWorkPath(String __cwd, String __sessionId) {
+        if (workPathHook != null) {
+            return workPathHook.apply(__cwd, __sessionId);
+        }
+
         if (relativeDir == null) {
             return Paths.get(__cwd).toAbsolutePath().normalize()
                     .resolve(__sessionId);
