@@ -18,19 +18,29 @@ package org.noear.solon.ai.talents.code.impl;
 import org.noear.solon.ai.talents.code.LanguageProvider;
 
 import java.nio.file.Path;
+import java.util.Set;
 
 /**
  * @author noear
  * @since 3.10.5
  */
 public class GradleProvider implements LanguageProvider {
+    private static final String[] MARKERS = {"build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"};
+    private static final String[] IGNORE_FOLDERS = {"build", ".gradle"};
+
     @Override public String id() { return "Gradle"; }
     @Override public String typeName() { return "Gradle 模块"; }
-    @Override public String[] markers() { return new String[]{"build.gradle", "build.gradle.kts", "settings.gradle"}; }
+    @Override public String[] markers() { return MARKERS; }
 
     @Override
     public String[] ignoreFolders() {
-        return new String[]{"build", ".gradle"};
+        return IGNORE_FOLDERS;
+    }
+
+    @Override
+    public boolean isAggregator(Path dir, Set<String> entryNames) {
+        // settings.gradle 所在位置即多项目构建的根，子项目在其下
+        return entryNames.contains("settings.gradle") || entryNames.contains("settings.gradle.kts");
     }
 
     @Override

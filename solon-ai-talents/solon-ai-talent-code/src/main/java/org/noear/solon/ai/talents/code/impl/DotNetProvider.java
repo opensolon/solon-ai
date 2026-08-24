@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 
 
 /**
@@ -28,19 +29,40 @@ import java.nio.file.Path;
  * @since 3.10.5
  */
 public class DotNetProvider implements LanguageProvider {
+    private static final String[] IGNORE_FOLDERS = {"obj", "bin"};
+
     @Override public String id() { return "C#/.NET"; }
     @Override public String typeName() { return "C# 项目"; }
 
-    @Override public String[] markers() { return new String[]{".sln", ".csproj"}; }
+    /**
+     * C# 按扩展名（*.sln / *.csproj）识别，无法用精确文件名表达，故返回空数组，判定逻辑见 {@link #isMatch(Path, Set)}
+     */
+    @Override public String[] markers() { return new String[0]; }
 
     @Override
     public String[] ignoreFolders() {
-        return new String[]{"obj", "bin"};
+        return IGNORE_FOLDERS;
     }
 
     @Override
-    public boolean isMatch(Path dir) {
-        return hasFileWithExtension(dir, ".sln") || hasFileWithExtension(dir, ".csproj");
+    public boolean isMatch(Path dir, Set<String> entryNames) {
+        for (String name : entryNames) {
+            if (name.endsWith(".sln") || name.endsWith(".csproj")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public boolean isAggregator(Path dir, Set<String> entryNames) {
+        // 解决方案文件（*.sln）本身不是项目，它引用的 *.csproj 通常在子目录
+        for (String name : entryNames) {
+            if (name.endsWith(".sln")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -75,13 +97,5 @@ public class DotNetProvider implements LanguageProvider {
                 .append("- 构建: `cd ").append(moduleName).append(" && dotnet build`\n")
                 .append("- 全量测试: `cd ").append(moduleName).append(" && dotnet test`\n")
                 .append("- 单测执行: `cd ").append(moduleName).append(" && dotnet test --filter FullyQualifiedName=Namespace.ClassName` (替换为实际类名)\n\n");
-    }
-
-    private boolean hasFileWithExtension(Path dir, String ext) {
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, "*" + ext)) {
-            return stream.iterator().hasNext();
-        } catch (IOException e) {
-            return false;
-        }
     }
 }

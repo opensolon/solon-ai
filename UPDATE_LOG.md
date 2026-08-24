@@ -16,6 +16,7 @@
 * 添加 solon-ai-core AssistantMessage getThinking，getAnswer 方法（替代 getReasoning 和 getResultContent）
 * 优化 solon-ai-dialect-openai 方言适配
 * 优化 solon-ai-dialect-anthropic 方言适配
+* 优化 solon-ai-talent-code 扫描扩为4层，增加可超时的缓存
 * 调整 solon-ai-harness HarnessExtension.configure 添加 engine 参数
 * 修复 solon-ai-dialect-anthropic 缓存率计算错误的问题
 * 修复 solon-ai-dialect-anthropic 输出有叠字的问题

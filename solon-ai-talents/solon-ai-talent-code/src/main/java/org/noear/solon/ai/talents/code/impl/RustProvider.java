@@ -18,12 +18,16 @@ package org.noear.solon.ai.talents.code.impl;
 import org.noear.solon.ai.talents.code.LanguageProvider;
 
 import java.nio.file.Path;
+import java.util.Set;
 
 /**
  * @author noear
  * @since 3.10.5
  */
 public class RustProvider implements LanguageProvider {
+    private static final String[] MARKERS = {"Cargo.toml"};
+    private static final String[] IGNORE_FOLDERS = {"target"};
+
     @Override
     public String id() {
         return "Rust";
@@ -36,12 +40,19 @@ public class RustProvider implements LanguageProvider {
 
     @Override
     public String[] markers() {
-        return new String[]{"Cargo.toml"};
+        return MARKERS;
     }
 
     @Override
     public String[] ignoreFolders() {
-        return new String[]{"target"};
+        return IGNORE_FOLDERS;
+    }
+
+    @Override
+    public boolean isAggregator(Path dir, Set<String> entryNames) {
+        // Cargo 工作区：成员 crate 在子目录
+        String cargo = LanguageProvider.readText(dir, "Cargo.toml");
+        return cargo != null && LanguageProvider.find(cargo, "(?m)^\\s*(\\[workspace\\])") != null;
     }
 
     @Override

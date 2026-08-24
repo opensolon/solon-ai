@@ -24,6 +24,9 @@ import java.nio.file.Path;
  * @since 3.10.5
  */
 public class CangjieProvider implements LanguageProvider {
+    private static final String[] MARKERS = {"cjpm.toml"};
+    private static final String[] IGNORE_FOLDERS = {"target", ".cjpm"};
+
     @Override
     public String id() {
         return "Cangjie";
@@ -36,7 +39,7 @@ public class CangjieProvider implements LanguageProvider {
 
     @Override
     public String[] markers() {
-        return new String[]{"cjpm.toml"};
+        return MARKERS;
     }
 
     @Override
@@ -50,7 +53,7 @@ public class CangjieProvider implements LanguageProvider {
     @Override
     public String[] ignoreFolders() {
         // 仓颉默认的构建输出目录
-        return new String[]{"target", ".cjpm"};
+        return IGNORE_FOLDERS;
     }
 
     @Override

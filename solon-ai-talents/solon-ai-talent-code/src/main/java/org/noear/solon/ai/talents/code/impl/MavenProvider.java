@@ -18,12 +18,16 @@ package org.noear.solon.ai.talents.code.impl;
 import org.noear.solon.ai.talents.code.LanguageProvider;
 
 import java.nio.file.Path;
+import java.util.Set;
 
 /**
  * @author noear
  * @since 3.10.5
  */
 public class MavenProvider implements LanguageProvider {
+    private static final String[] MARKERS = {"pom.xml"};
+    private static final String[] IGNORE_FOLDERS = {"target"};
+
     @Override
     public String id() {
         return "Maven";
@@ -36,12 +40,19 @@ public class MavenProvider implements LanguageProvider {
 
     @Override
     public String[] markers() {
-        return new String[]{"pom.xml"};
+        return MARKERS;
     }
 
     @Override
     public String[] ignoreFolders() {
-        return new String[]{"target"};
+        return IGNORE_FOLDERS;
+    }
+
+    @Override
+    public boolean isAggregator(Path dir, Set<String> entryNames) {
+        // 声明了 <modules> 的父 POM：自身是模块，但真正的代码模块在子目录
+        String pom = LanguageProvider.readText(dir, "pom.xml");
+        return pom != null && LanguageProvider.find(pom, "(<modules>)") != null;
     }
 
     @Override

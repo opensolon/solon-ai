@@ -24,6 +24,9 @@ import java.nio.file.Path;
  * @since 3.10.5
  */
 public class GoProvider implements LanguageProvider {
+    private static final String[] MARKERS = {"go.mod"};
+    private static final String[] IGNORE_FOLDERS = {"vendor"};
+
     @Override
     public String id() {
         return "Go";
@@ -36,12 +39,12 @@ public class GoProvider implements LanguageProvider {
 
     @Override
     public String[] markers() {
-        return new String[]{"go.mod"};
+        return MARKERS;
     }
 
     @Override
     public String[] ignoreFolders() {
-        return new String[]{"vendor"};
+        return IGNORE_FOLDERS;
     }
 
     @Override

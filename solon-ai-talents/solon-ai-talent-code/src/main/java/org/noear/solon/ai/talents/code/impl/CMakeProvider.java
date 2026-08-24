@@ -18,15 +18,26 @@ package org.noear.solon.ai.talents.code.impl;
 import org.noear.solon.ai.talents.code.LanguageProvider;
 
 import java.nio.file.Path;
+import java.util.Set;
 
 /**
  * @author noear
  * @since 3.10.5
  */
 public class CMakeProvider implements LanguageProvider {
+    private static final String[] MARKERS = {"CMakeLists.txt"};
+    private static final String[] IGNORE_FOLDERS = {"build", "CMakeFiles", ".cmake"};
+
     @Override public String id() { return "CMake"; }
     @Override public String typeName() { return "C/C++ 项目"; }
-    @Override public String[] markers() { return new String[]{"CMakeLists.txt"}; }
+    @Override public String[] markers() { return MARKERS; }
+
+    @Override
+    public boolean isAggregator(Path dir, Set<String> entryNames) {
+        // 声明了 add_subdirectory 的 CMakeLists.txt：子目录里还有真正的工程
+        String cmake = LanguageProvider.readText(dir, "CMakeLists.txt");
+        return cmake != null && LanguageProvider.find(cmake, "(add_subdirectory)\\s*\\(") != null;
+    }
 
     @Override
     public String detectVersion(Path dir) {
@@ -42,7 +53,7 @@ public class CMakeProvider implements LanguageProvider {
 
     @Override
     public String[] ignoreFolders() {
-        return new String[]{"build", "CMakeFiles", ".cmake"};
+        return IGNORE_FOLDERS;
     }
 
     @Override

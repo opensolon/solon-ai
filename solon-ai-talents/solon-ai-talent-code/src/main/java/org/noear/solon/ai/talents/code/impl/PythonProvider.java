@@ -24,13 +24,16 @@ import java.nio.file.Path;
  * @since 3.10.5
  */
 public class PythonProvider implements LanguageProvider {
+    private static final String[] MARKERS = {"requirements.txt", "pyproject.toml", "setup.py"};
+    private static final String[] IGNORE_FOLDERS = {"venv", ".venv", "__pycache__"};
+
     @Override public String id() { return "Python"; }
     @Override public String typeName() { return "Python 项目"; }
-    @Override public String[] markers() { return new String[]{"requirements.txt", "pyproject.toml", "setup.py"}; }
+    @Override public String[] markers() { return MARKERS; }
 
     @Override
     public String[] ignoreFolders() {
-        return new String[]{"venv", ".venv", "__pycache__"};
+        return IGNORE_FOLDERS;
     }
 
     @Override
@@ -64,7 +67,7 @@ public class PythonProvider implements LanguageProvider {
                 .append("- 环境: 优先检查并激活 `venv` 或 `.venv`\n")
                 .append("- 依赖: `pip install -r requirements.txt` (或使用 poetry/pdm)\n")
                 .append("- 全量测试: `pytest` 或 `python -m unittest discover`\n")
-                .append("- 单文件测试: `pytest -m path/to/test_file.py` (替换为实际路径)\n\n");
+                .append("- 单文件测试: `pytest path/to/test_file.py` (替换为实际路径)\n\n");
     }
 
     @Override

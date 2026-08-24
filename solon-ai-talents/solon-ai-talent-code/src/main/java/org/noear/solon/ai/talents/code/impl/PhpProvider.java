@@ -24,13 +24,16 @@ import java.nio.file.Path;
  * @since 3.10.5
  */
 public class PhpProvider implements LanguageProvider {
+    private static final String[] MARKERS = {"composer.json"};
+    private static final String[] IGNORE_FOLDERS = {"vendor"};
+
     @Override public String id() { return "PHP"; }
     @Override public String typeName() { return "PHP 项目"; }
-    @Override public String[] markers() { return new String[]{"composer.json"}; }
+    @Override public String[] markers() { return MARKERS; }
 
     @Override
     public String[] ignoreFolders() {
-        return new String[]{"vendor"};
+        return IGNORE_FOLDERS;
     }
 
     @Override

@@ -24,24 +24,28 @@ import java.nio.file.Path;
  * @since 3.10.5
  */
 public class FlutterProvider implements LanguageProvider {
+    private static final String[] MARKERS = {"pubspec.yaml"};
+    private static final String[] IGNORE_FOLDERS = {".dart_tool", ".packages", "build"};
+
     @Override public String id() { return "Flutter"; }
     @Override public String typeName() { return "Flutter 项目"; }
-    @Override public String[] markers() { return new String[]{"pubspec.yaml"}; }
+    @Override public String[] markers() { return MARKERS; }
 
     @Override
     public String[] ignoreFolders() {
-        return new String[]{".dart_tool", ".packages", "build"};
+        return IGNORE_FOLDERS;
     }
 
     @Override
     public String detectVersion(Path dir) {
         // pubspec.yaml: environment: { sdk: ">=3.0.0 <4.0.0", flutter: ">=3.10.0" }
+        // 注：版本约束常以比较符开头（>=、^、~），故首字符不能只允许数字
         String pubspec = LanguageProvider.readText(dir, "pubspec.yaml");
-        String flutter = LanguageProvider.find(pubspec, "(?m)^\\s*flutter\\s*:\\s*[\"']?([\\d][^\"'\\n]*)");
+        String flutter = LanguageProvider.find(pubspec, "(?m)^\\s*flutter\\s*:\\s*[\"']?([\\d><=^~][^\"'\\n]*)");
         if (flutter != null) {
             return "Flutter " + flutter.trim();
         }
-        String sdk = LanguageProvider.find(pubspec, "(?m)^\\s*sdk\\s*:\\s*[\"']?([\\d][^\"'\\n]*)");
+        String sdk = LanguageProvider.find(pubspec, "(?m)^\\s*sdk\\s*:\\s*[\"']?([\\d><=^~][^\"'\\n]*)");
         return (sdk == null) ? null : "Dart SDK " + sdk.trim();
     }
 

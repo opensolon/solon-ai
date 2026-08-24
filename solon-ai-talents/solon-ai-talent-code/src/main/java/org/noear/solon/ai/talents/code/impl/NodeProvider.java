@@ -18,12 +18,16 @@ package org.noear.solon.ai.talents.code.impl;
 import org.noear.solon.ai.talents.code.LanguageProvider;
 
 import java.nio.file.Path;
+import java.util.Set;
 
 /**
  * @author noear
  * @since 3.10.5
  */
 public class NodeProvider implements LanguageProvider {
+    private static final String[] MARKERS = {"package.json"};
+    private static final String[] IGNORE_FOLDERS = {"node_modules"};
+
     @Override
     public String id() {
         return "Node";
@@ -36,12 +40,19 @@ public class NodeProvider implements LanguageProvider {
 
     @Override
     public String[] markers() {
-        return new String[]{"package.json"};
+        return MARKERS;
     }
 
     @Override
     public String[] ignoreFolders() {
-        return new String[]{"node_modules"};
+        return IGNORE_FOLDERS;
+    }
+
+    @Override
+    public boolean isAggregator(Path dir, Set<String> entryNames) {
+        // package.json 声明了 workspaces（npm/yarn/pnpm monorepo）
+        String pkg = LanguageProvider.readText(dir, "package.json");
+        return pkg != null && LanguageProvider.find(pkg, "(\"workspaces\")") != null;
     }
 
     @Override
