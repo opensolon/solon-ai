@@ -498,7 +498,7 @@ public class TerminalTalent extends AbsTalent {
                 .anyMatch(m->m.isEnabled());
 
         sb.append("- **路径规则**: \n");
-        sb.append("  - **工作区（默认作用域）**: 你的主目录，支持读写。所有文件查找（ls/glob/grep/read）与路径解析默认都以工作区为根，使用相对路径访问（如 `src/app.java`）。\n");
+        sb.append("  - **工作区（默认作用域）**").append(workspaceNameHint()).append(": 你的主目录，支持读写。所有文件查找（ls/glob/grep/read）与路径解析默认都以工作区为根，使用相对路径访问（如 `src/app.java`）。\n");
 
         if(hasMount) {
             sb.append("  - **挂载点（仅按需访问）**: 以 `@` 开头的逻辑路径（如 `@pool1/bin/tool/`），对应一个真实的物理目录。见下方挂载点清单。**仅当用户的提示词中明确提及了具体的挂载点名时**（如 `@global-skills`、`@workspace-agents`），才去对应挂载点下查找。\n");
@@ -1328,6 +1328,26 @@ public class TerminalTalent extends AbsTalent {
         String path = (__cwd != null) ? __cwd : mountManager.getWorkDir();
         if (path == null) throw new IllegalStateException("Working directory is not set.");
         return Paths.get(path).toAbsolutePath().normalize();
+    }
+
+    /**
+     * 工作区目录名提示（仅末级目录名，不暴露完整路径）。
+     * 供指令中的定位锚点使用；取不到（未设置/根目录/空名）时返回空串，指令退回无名称形态。
+     */
+    private String workspaceNameHint() {
+        String workDir = mountManager.getWorkDir();
+        if (workDir == null || workDir.isEmpty()) {
+            return "";
+        }
+        Path fileName = Paths.get(workDir).toAbsolutePath().normalize().getFileName();
+        if (fileName == null) {
+            return "";
+        }
+        String name = fileName.toString();
+        if (name.isEmpty()) {
+            return "";
+        }
+        return ": 目录「" + name + "」（相对路径与 \".\" 的解析根）";
     }
 
 
