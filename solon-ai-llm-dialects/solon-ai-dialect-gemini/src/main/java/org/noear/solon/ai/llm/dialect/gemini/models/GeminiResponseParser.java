@@ -157,6 +157,18 @@ public class GeminiResponseParser {
                 }
             }
 
+            // prompt 被安全策略拦截时无 candidates 返回，需显式报错避免静默结束
+            if (hasChoices == false) {
+                ONode oPromptFeedback = oResp.getOrNull("promptFeedback");
+                if (oPromptFeedback != null) {
+                    String blockReason = oPromptFeedback.get("blockReason").getString();
+                    if (Utils.isNotEmpty(blockReason)) {
+                        resp.setError(new ChatException("prompt blocked: " + blockReason));
+                        return true;
+                    }
+                }
+            }
+
             ONode oUsage = oResp.getOrNull("usageMetadata");
             if (oUsage != null && resp.isFinished()) {
                 long promptTokens = oUsage.getOrNull("promptTokenCount") != null ? oUsage.get("promptTokenCount").getLong() : 0;
@@ -164,8 +176,9 @@ public class GeminiResponseParser {
                 long totalTokens = oUsage.getOrNull("totalTokenCount") != null ? oUsage.get("totalTokenCount").getLong() : 0;
 
                 long cachedContentTokens = oUsage.getOrNull("cachedContentTokenCount") != null ? oUsage.get("cachedContentTokenCount").getLong() : 0L;
+                long thinkingTokens = oUsage.getOrNull("thoughtsTokenCount") != null ? oUsage.get("thoughtsTokenCount").getLong() : 0L;
 
-                resp.setUsage(new AiUsage(promptTokens, 0L, completionTokens, totalTokens,
+                resp.setUsage(new AiUsage(promptTokens, thinkingTokens, completionTokens, totalTokens,
                         0L, cachedContentTokens, oUsage));
             }
         }
@@ -247,6 +260,18 @@ public class GeminiResponseParser {
             }
         }
 
+        // prompt 被安全策略拦截时无 candidates 返回，需显式报错避免静默返回空响应
+        if (resp.hasChoices() == false) {
+            ONode oPromptFeedback = oResp.getOrNull("promptFeedback");
+            if (oPromptFeedback != null) {
+                String blockReason = oPromptFeedback.get("blockReason").getString();
+                if (Utils.isNotEmpty(blockReason)) {
+                    resp.setError(new ChatException("prompt blocked: " + blockReason));
+                    return true;
+                }
+            }
+        }
+
         ONode oUsage = oResp.getOrNull("usageMetadata");
         if (oUsage != null) {
             long promptTokens = oUsage.get("promptTokenCount").getLong();
@@ -254,8 +279,9 @@ public class GeminiResponseParser {
             long totalTokens = oUsage.get("totalTokenCount").getLong();
 
             long cachedContentTokens = oUsage.get("cachedContentTokenCount").getLong();
+            long thinkingTokens = oUsage.get("thoughtsTokenCount").getLong();
 
-            resp.setUsage(new AiUsage(promptTokens, 0L, completionTokens, totalTokens,
+            resp.setUsage(new AiUsage(promptTokens, thinkingTokens, completionTokens, totalTokens,
                     0L, cachedContentTokens, oUsage));
         }
 
