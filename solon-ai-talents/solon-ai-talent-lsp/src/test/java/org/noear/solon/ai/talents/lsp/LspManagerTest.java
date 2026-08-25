@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.talents.lsp.exception.LspNoMatchException;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -263,19 +264,26 @@ public class LspManagerTest {
         manager.registerServer("java", params);
 
         AtomicReference<String> receivedUri = new AtomicReference<>();
-        AtomicReference<String> receivedText = new AtomicReference<>();
-        manager.setDiagnosticsCallback((uri, text) -> {
+        AtomicReference<List<org.eclipse.lsp4j.Diagnostic>> receivedItems = new AtomicReference<>();
+        manager.setDiagnosticsCallback((uri, items) -> {
             receivedUri.set(uri);
-            receivedText.set(text);
+            receivedItems.set(items);
         });
 
-        // 通过 LspTool 接收回调
+        // 通过 LspTalent 接收回调（结构化诊断，渲染下沉到 LspDiagnosticReporter）
         LspTalent tool = new LspTalent(manager, "/tmp/test-workspace");
         manager.setDiagnosticsCallback(tool::updateDiagnostics);
 
-        // 手动触发 updateDiagnostics 验证回调链
-        tool.updateDiagnostics("file:///Test.java", "Test.java:1:1 [ERROR] missing semicolon");
+        org.eclipse.lsp4j.Diagnostic d = new org.eclipse.lsp4j.Diagnostic();
+        d.setSeverity(org.eclipse.lsp4j.DiagnosticSeverity.Error);
+        d.setMessage("missing semicolon");
+        d.setRange(new org.eclipse.lsp4j.Range(
+                new org.eclipse.lsp4j.Position(0, 0), new org.eclipse.lsp4j.Position(0, 1)));
 
+        // 手动触发 updateDiagnostics 验证回调链
+        tool.updateDiagnostics("file:///Test.java", Arrays.asList(d));
+
+        assertEquals(1, tool.getDiagnostics("file:///Test.java").size());
         assertNotNull(manager);
     }
 

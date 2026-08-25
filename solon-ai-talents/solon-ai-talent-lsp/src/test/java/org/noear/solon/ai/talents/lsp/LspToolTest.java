@@ -1,11 +1,17 @@
 package org.noear.solon.ai.talents.lsp;
 
+import org.eclipse.lsp4j.Diagnostic;
+import org.eclipse.lsp4j.DiagnosticSeverity;
+import org.eclipse.lsp4j.Position;
+import org.eclipse.lsp4j.Range;
 import org.junit.jupiter.api.*;
 import org.noear.solon.ai.rag.Document;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -108,37 +114,50 @@ public class LspToolTest {
     }
 
     @Test
-    public void testDiagnostics_NoCache() throws Exception {
+    public void testDiagnostics_NoCache() {
         assertNotNull(tool);
-        Document doc = (Document) tool.lsp("diagnostics", "main.py", 1, 1, null, null);
-        assertNotNull(doc);
-        assertEquals("diagnostics", doc.getMetadata("operation"));
-        assertTrue(doc.getContent().contains("No diagnostics available"));
+        String uri = worktree.resolve("main.py").toUri().toString();
+        assertTrue(tool.getDiagnostics(uri).isEmpty());
     }
 
     @Test
-    public void testDiagnostics_WithCache() throws Exception {
+    public void testDiagnostics_WithCache() {
         assertNotNull(tool);
-        Path testFile = worktree.resolve("main.py");
-        String uri = testFile.toUri().toString();
-        tool.updateDiagnostics(uri, "main.py:1:1 [ERROR] missing semicolon");
-        Document doc = (Document) tool.lsp("diagnostics", "main.py", 1, 1, null, null);
-        assertNotNull(doc);
-        assertTrue(doc.getContent().contains("missing semicolon"));
+        String uri = worktree.resolve("main.py").toUri().toString();
+
+        tool.updateDiagnostics(uri, Arrays.asList(newError("missing semicolon", 0, 0)));
+
+        List<Diagnostic> items = tool.getDiagnostics(uri);
+        assertEquals(1, items.size());
+        assertEquals("missing semicolon", items.get(0).getMessage());
+        //渲染由 LspDiagnosticReporter 负责：不带 uri 前缀，行列 1-based
+        assertEquals("ERROR [1:1] missing semicolon", LspDiagnosticReporter.renderItem(items.get(0)));
     }
 
     @Test
     public void testUpdateDiagnostics_RemoveWhenNull() {
         assertNotNull(tool);
-        tool.updateDiagnostics("file:///test_null.py", "some error");
-        tool.updateDiagnostics("file:///test_null.py", null);
+        String uri = "file:///test_null.py";
+        tool.updateDiagnostics(uri, Arrays.asList(newError("some error", 0, 0)));
+        tool.updateDiagnostics(uri, null);
+        assertTrue(tool.getDiagnostics(uri).isEmpty());
     }
 
     @Test
     public void testUpdateDiagnostics_RemoveWhenEmpty() {
         assertNotNull(tool);
-        tool.updateDiagnostics("file:///test_empty.py", "some error");
-        tool.updateDiagnostics("file:///test_empty.py", "");
+        String uri = "file:///test_empty.py";
+        tool.updateDiagnostics(uri, Arrays.asList(newError("some error", 0, 0)));
+        tool.updateDiagnostics(uri, Collections.<Diagnostic>emptyList());
+        assertTrue(tool.getDiagnostics(uri).isEmpty());
+    }
+
+    private static Diagnostic newError(String message, int line, int character) {
+        Diagnostic d = new Diagnostic();
+        d.setSeverity(DiagnosticSeverity.Error);
+        d.setMessage(message);
+        d.setRange(new Range(new Position(line, character), new Position(line, character + 1)));
+        return d;
     }
 
     @Test

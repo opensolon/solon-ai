@@ -46,4 +46,18 @@
         </dependency>
     </dependencies>
 
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- 真实语言服务器的冷启动索引远超生产默认的 15s（jdtls 首次建索引常见 60s+），
+                         仅在测试中放宽，不改变运行时默认值 -->
+                    <argLine>-Dlsp.operationTimeout=90</argLine>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
 </project>

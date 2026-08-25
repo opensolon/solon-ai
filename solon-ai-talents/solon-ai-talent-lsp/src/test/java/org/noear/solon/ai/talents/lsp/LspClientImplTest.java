@@ -24,7 +24,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -55,12 +54,9 @@ public class LspClientImplTest {
     public void setup() throws Exception {
         tempDir = Files.createTempDirectory("lsp-client-impl-test");
 
-        // 使用 "true" 命令（Unix 下立即退出），进程启动后马上结束
-        client = new LspClientImpl("test", new String[]{"true"}, tempDir.toString());
-
-        // 通过反射注入 MockLanguageServer，覆盖真实连接
+        // 走测试专用构造：不启动子进程，直接注入 MockLanguageServer
         mockServer = new MockLanguageServer();
-        setField(client, "remoteServer", mockServer);
+        client = new LspClientImpl(tempDir.toString(), mockServer);
     }
 
     @AfterEach
@@ -73,16 +69,16 @@ public class LspClientImplTest {
         }
     }
 
-    // ==================== publishDiagnostics 测试 ====================
+    // ==================== publishDiagnostics 测试（结构化） ====================
 
     @Test
     public void testPublishDiagnostics_SingleError() {
         AtomicReference<String> receivedUri = new AtomicReference<>();
-        AtomicReference<String> receivedText = new AtomicReference<>();
+        AtomicReference<List<Diagnostic>> receivedItems = new AtomicReference<>();
 
-        client.setDiagnosticsConsumer((uri, text) -> {
+        client.setDiagnosticsConsumer((uri, items) -> {
             receivedUri.set(uri);
-            receivedText.set(text);
+            receivedItems.set(items);
         });
 
         Diagnostic diag = new Diagnostic(
@@ -92,113 +88,59 @@ public class LspClientImplTest {
         diag.setSeverity(DiagnosticSeverity.Error);
         diag.setSource("javac");
 
-        PublishDiagnosticsParams params = new PublishDiagnosticsParams(
-                "file:///Test.java", Collections.singletonList(diag)
-        );
-        client.publishDiagnostics(params);
+        client.publishDiagnostics(new PublishDiagnosticsParams(
+                "file:///Test.java", Collections.singletonList(diag)));
 
         assertEquals("file:///Test.java", receivedUri.get());
-        assertNotNull(receivedText.get());
-        assertTrue(receivedText.get().contains("missing semicolon"));
-        assertTrue(receivedText.get().contains("ERROR"));
-        assertTrue(receivedText.get().contains("(javac)"));
+        assertEquals(1, receivedItems.get().size());
+        assertEquals("missing semicolon", receivedItems.get().get(0).getMessage());
+        //严重度不再被压成文本，保留给渲染层过滤
+        assertEquals(DiagnosticSeverity.Error, receivedItems.get().get(0).getSeverity());
+        //客户端自身也缓存一份，供 waitForDiagnostics/getDiagnostics 读取
+        assertEquals(1, client.getDiagnostics("file:///Test.java").size());
+        //渲染由 LspDiagnosticReporter 负责：1-based 行列，无 uri 前缀
+        assertEquals("ERROR [3:6] missing semicolon (javac)",
+                LspDiagnosticReporter.renderItem(receivedItems.get().get(0)));
     }
 
     @Test
-    public void testPublishDiagnostics_PositionFormatting() {
-        // 验证 0-based -> 1-based 的位置转换
-        AtomicReference<String> receivedText = new AtomicReference<>();
-        client.setDiagnosticsConsumer((uri, text) -> receivedText.set(text));
+    public void testPublishDiagnostics_EmptyOrNull() {
+        AtomicReference<List<Diagnostic>> receivedItems = new AtomicReference<>();
+        client.setDiagnosticsConsumer((uri, items) -> receivedItems.set(items));
 
-        Diagnostic diag = new Diagnostic(
-                new Range(new Position(3, 7), new Position(3, 12)),
-                "some error"
-        );
-        diag.setSeverity(DiagnosticSeverity.Error);
+        //lsp4j 的双参构造禁止 null，用无参构造模拟"服务器未给 diagnostics 字段"
+        PublishDiagnosticsParams bare = new PublishDiagnosticsParams();
+        bare.setUri("file:///Test.java");
+        client.publishDiagnostics(bare);
+        assertNotNull(receivedItems.get());
+        assertTrue(receivedItems.get().isEmpty());
+        assertTrue(client.getDiagnostics("file:///Test.java").isEmpty());
 
-        PublishDiagnosticsParams params = new PublishDiagnosticsParams(
-                "file:///Test.java", Collections.singletonList(diag)
-        );
-        client.publishDiagnostics(params);
-
-        assertNotNull(receivedText.get());
-        // start.line=3 -> 输出 4, start.character=7 -> 输出 8
-        assertTrue(receivedText.get().contains("file:///Test.java:4:8"));
+        client.publishDiagnostics(new PublishDiagnosticsParams("file:///Test.java", Collections.emptyList()));
+        assertTrue(receivedItems.get().isEmpty());
     }
 
     @Test
-    public void testPublishDiagnostics_NullDiagnostics() {
-        AtomicReference<String> receivedUri = new AtomicReference<>();
-        AtomicReference<String> receivedText = new AtomicReference<>();
-
-        client.setDiagnosticsConsumer((uri, text) -> {
-            receivedUri.set(uri);
-            receivedText.set(text);
-        });
-
-        PublishDiagnosticsParams params = new PublishDiagnosticsParams(
-                "file:///Test.java", null
-        );
-        client.publishDiagnostics(params);
-
-        assertEquals("file:///Test.java", receivedUri.get());
-        assertNull(receivedText.get());
-    }
-
-    @Test
-    public void testPublishDiagnostics_EmptyDiagnostics() {
-        AtomicReference<String> receivedUri = new AtomicReference<>();
-        AtomicReference<String> receivedText = new AtomicReference<>();
-
-        client.setDiagnosticsConsumer((uri, text) -> {
-            receivedUri.set(uri);
-            receivedText.set(text);
-        });
-
-        PublishDiagnosticsParams params = new PublishDiagnosticsParams(
-                "file:///Test.java", Collections.emptyList()
-        );
-        client.publishDiagnostics(params);
-
-        assertEquals("file:///Test.java", receivedUri.get());
-        assertNull(receivedText.get());
-    }
-
-    @Test
-    public void testPublishDiagnostics_MultipleDiagnostics() {
-        AtomicReference<String> receivedText = new AtomicReference<>();
-        client.setDiagnosticsConsumer((uri, text) -> receivedText.set(text));
+    public void testPublishDiagnostics_MixedSeverity_OnlyErrorsRendered() {
+        AtomicReference<List<Diagnostic>> receivedItems = new AtomicReference<>();
+        client.setDiagnosticsConsumer((uri, items) -> receivedItems.set(items));
 
         List<Diagnostic> diags = new ArrayList<>();
-        Diagnostic d1 = new Diagnostic(new Range(new Position(0, 0), new Position(0, 5)), "error1");
-        d1.setSeverity(DiagnosticSeverity.Error);
-        diags.add(d1);
+        diags.add(newDiag(DiagnosticSeverity.Error, "error1", 0, 0));
+        diags.add(newDiag(DiagnosticSeverity.Warning, "warning1", 2, 3));
+        diags.add(newDiag(DiagnosticSeverity.Information, "info1", 5, 1));
+        diags.add(newDiag(DiagnosticSeverity.Hint, "hint1", 10, 0));
 
-        Diagnostic d2 = new Diagnostic(new Range(new Position(2, 3), new Position(2, 8)), "warning1");
-        d2.setSeverity(DiagnosticSeverity.Warning);
-        diags.add(d2);
+        client.publishDiagnostics(new PublishDiagnosticsParams("file:///Test.java", diags));
 
-        Diagnostic d3 = new Diagnostic(new Range(new Position(5, 1), new Position(5, 6)), "info1");
-        d3.setSeverity(DiagnosticSeverity.Information);
-        diags.add(d3);
-
-        Diagnostic d4 = new Diagnostic(new Range(new Position(10, 0), new Position(10, 4)), "hint1");
-        d4.setSeverity(DiagnosticSeverity.Hint);
-        diags.add(d4);
-
-        PublishDiagnosticsParams params = new PublishDiagnosticsParams("file:///Test.java", diags);
-        client.publishDiagnostics(params);
-
-        String text = receivedText.get();
-        assertNotNull(text);
-        assertTrue(text.contains("error1"));
-        assertTrue(text.contains("warning1"));
-        assertTrue(text.contains("info1"));
-        assertTrue(text.contains("hint1"));
-        assertTrue(text.contains("ERROR"));
-        assertTrue(text.contains("WARN"));
-        assertTrue(text.contains("INFO"));
-        assertTrue(text.contains("HINT"));
+        //回调拿到全量（保留原始严重度）
+        assertEquals(4, receivedItems.get().size());
+        //渲染只留 ERROR
+        String block = LspDiagnosticReporter.renderBlock("Test.java", receivedItems.get());
+        assertTrue(block.contains("error1"));
+        assertFalse(block.contains("warning1"));
+        assertFalse(block.contains("info1"));
+        assertFalse(block.contains("hint1"));
     }
 
     @Test
@@ -211,66 +153,7 @@ public class LspClientImplTest {
                 "file:///Test.java", Collections.singletonList(diag)
         );
         assertDoesNotThrow(() -> client.publishDiagnostics(params));
-    }
-
-    @Test
-    public void testPublishDiagnostics_SeverityNull() {
-        AtomicReference<String> receivedText = new AtomicReference<>();
-        client.setDiagnosticsConsumer((uri, text) -> receivedText.set(text));
-
-        Diagnostic diag = new Diagnostic(
-                new Range(new Position(0, 0), new Position(0, 5)), "unknown severity"
-        );
-        diag.setSeverity(null);
-
-        PublishDiagnosticsParams params = new PublishDiagnosticsParams(
-                "file:///Test.java", Collections.singletonList(diag)
-        );
-        client.publishDiagnostics(params);
-
-        assertNotNull(receivedText.get());
-        assertTrue(receivedText.get().contains("[?]"));
-        assertTrue(receivedText.get().contains("unknown severity"));
-    }
-
-    @Test
-    public void testPublishDiagnostics_SourceNull() {
-        AtomicReference<String> receivedText = new AtomicReference<>();
-        client.setDiagnosticsConsumer((uri, text) -> receivedText.set(text));
-
-        Diagnostic diag = new Diagnostic(
-                new Range(new Position(0, 0), new Position(0, 5)), "error msg"
-        );
-        diag.setSeverity(DiagnosticSeverity.Error);
-        diag.setSource(null);
-
-        PublishDiagnosticsParams params = new PublishDiagnosticsParams(
-                "file:///Test.java", Collections.singletonList(diag)
-        );
-        client.publishDiagnostics(params);
-
-        assertNotNull(receivedText.get());
-        assertFalse(receivedText.get().contains("()"));
-        assertFalse(receivedText.get().contains("(null)"));
-    }
-
-    @Test
-    public void testPublishDiagnostics_SourcePresent() {
-        AtomicReference<String> receivedText = new AtomicReference<>();
-        client.setDiagnosticsConsumer((uri, text) -> receivedText.set(text));
-
-        Diagnostic diag = new Diagnostic(
-                new Range(new Position(0, 0), new Position(0, 5)), "error msg"
-        );
-        diag.setSeverity(DiagnosticSeverity.Error);
-        diag.setSource("eslint");
-
-        PublishDiagnosticsParams params = new PublishDiagnosticsParams(
-                "file:///app.ts", Collections.singletonList(diag)
-        );
-        client.publishDiagnostics(params);
-
-        assertTrue(receivedText.get().contains("(eslint)"));
+        assertEquals(1, client.getDiagnostics("file:///Test.java").size());
     }
 
     // ==================== setDiagnosticsConsumer 测试 ====================
@@ -278,49 +161,206 @@ public class LspClientImplTest {
     @Test
     public void testSetDiagnosticsConsumer() {
         AtomicBoolean called = new AtomicBoolean(false);
-        client.setDiagnosticsConsumer((uri, text) -> called.set(true));
+        client.setDiagnosticsConsumer((uri, items) -> called.set(true));
 
-        PublishDiagnosticsParams params = new PublishDiagnosticsParams(
-                "file:///Test.java", Collections.emptyList()
-        );
-        client.publishDiagnostics(params);
+        client.publishDiagnostics(new PublishDiagnosticsParams(
+                "file:///Test.java", Collections.emptyList()));
 
         assertTrue(called.get());
     }
 
-    // ==================== touchFile 测试 ====================
+    // ==================== syncFile / touchFile 测试 ====================
 
     @Test
-    public void testTouchFile_OpensFile() throws Exception {
+    public void testSyncFile_FirstTimeOpens() throws Exception {
         Path testFile = tempDir.resolve("Demo.java");
         Files.write(testFile, "public class Demo {}".getBytes());
 
         String uri = testFile.toUri().toString();
         mockServer.textDocumentService.didOpenCalled = false;
-        client.touchFile(uri);
 
+        int version = client.syncFile(uri, false);
+
+        assertEquals(1, version);
         assertTrue(mockServer.textDocumentService.didOpenCalled);
+        assertFalse(mockServer.textDocumentService.didChangeCalled);
     }
 
     @Test
-    public void testTouchFile_SkipDuplicateOpen() throws Exception {
+    public void testSyncFile_ContentUnchanged_NoDidChange() throws Exception {
         Path testFile = tempDir.resolve("Demo.java");
         Files.write(testFile, "public class Demo {}".getBytes());
-
         String uri = testFile.toUri().toString();
+
         client.touchFile(uri);
         mockServer.textDocumentService.didOpenCalled = false;
-        // 第二次调用应该跳过
+        mockServer.textDocumentService.didChangeCalled = false;
+
         client.touchFile(uri);
 
+        //内容没变：既不重复 didOpen，也不空发 didChange
         assertFalse(mockServer.textDocumentService.didOpenCalled);
+        assertFalse(mockServer.textDocumentService.didChangeCalled);
     }
 
     @Test
-    public void testTouchFile_NonexistentFile() {
+    public void testSyncFile_ContentChanged_SendsDidChangeWithNewVersion() throws Exception {
+        Path testFile = tempDir.resolve("Demo.java");
+        Files.write(testFile, "public class Demo {}".getBytes());
+        String uri = testFile.toUri().toString();
+
+        assertEquals(1, client.syncFile(uri, false));
+
+        //模拟 write/edit 改盘
+        Files.write(testFile, "public class Demo { int x = ; }".getBytes());
+
+        int version = client.syncFile(uri, false);
+
+        assertEquals(2, version);
+        assertTrue(mockServer.textDocumentService.didChangeCalled);
+        assertEquals(2, mockServer.textDocumentService.lastDidChangeVersion);
+        assertTrue(mockServer.textDocumentService.lastDidChangeText.contains("int x = ;"));
+        //文档已 didOpen，内容真相归客户端所有，变更只能走 didChange：
+        //jdtls 之类服务器收到 watched-files 会自行重读磁盘，与 didChange 形成双重应用而撕裂文本
+        assertFalse(mockServer.workspaceService.didChangeWatchedFilesCalled);
+    }
+
+    @Test
+    public void testSyncFile_ConcurrentCallsApplyChangeOnce() throws Exception {
+        Path testFile = tempDir.resolve("Demo.java");
+        Files.write(testFile, "public class Demo {}".getBytes());
+        String uri = testFile.toUri().toString();
+
+        client.syncFile(uri, false); // didOpen, version=1
+
+        //模拟 write/edit 改盘后，钩子与文件监听等多个入口同时触发同步
+        Files.write(testFile, "public class Demo { int x = ; }".getBytes());
+        mockServer.textDocumentService.didChangeCount = 0;
+
+        int threads = 4;
+        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(threads);
+        for (int i = 0; i < threads; i++) {
+            new Thread(() -> {
+                try {
+                    start.await();
+                    client.syncFile(uri, false);
+                } catch (Exception ignored) {
+                } finally {
+                    done.countDown();
+                }
+            }).start();
+        }
+        start.countDown();
+        assertTrue(done.await(10, java.util.concurrent.TimeUnit.SECONDS));
+
+        //只能发一次：重复应用同一份基于旧文本的增量范围会把服务器端文本错位
+        assertEquals(1, mockServer.textDocumentService.didChangeCount);
+        assertEquals(2, mockServer.textDocumentService.lastDidChangeVersion);
+    }
+
+    @Test
+    public void testSyncFile_ForceChange() throws Exception {
+        Path testFile = tempDir.resolve("Demo.java");
+        Files.write(testFile, "public class Demo {}".getBytes());
+        String uri = testFile.toUri().toString();
+
+        client.syncFile(uri, false);
+        mockServer.textDocumentService.didChangeCalled = false;
+
+        //内容未变但强制同步（写入钩子用这条路径，确保服务器不会拿旧文本回答）
+        int version = client.syncFile(uri, true);
+
+        assertEquals(2, version);
+        assertTrue(mockServer.textDocumentService.didChangeCalled);
+    }
+
+    @Test
+    public void testSyncFile_NonexistentFile() {
         String uri = tempDir.resolve("NotExist.java").toUri().toString();
         assertDoesNotThrow(() -> client.touchFile(uri));
         assertTrue(mockServer.textDocumentService.didOpenCalled);
+    }
+
+    // ==================== waitForDiagnostics 测试 ====================
+
+    @Test
+    public void testWaitForDiagnostics_NeverSynced() {
+        assertTrue(client.waitForDiagnostics("file:///Nope.java", 50).isEmpty());
+    }
+
+    @Test
+    public void testWaitForDiagnostics_ReturnsFreshPush() throws Exception {
+        Path testFile = tempDir.resolve("Demo.java");
+        Files.write(testFile, "public class Demo {}".getBytes());
+        String uri = testFile.toUri().toString();
+
+        client.syncFile(uri, false);
+
+        //在等待期间异步推送诊断
+        new Thread(() -> {
+            try {
+                Thread.sleep(80);
+            } catch (InterruptedException ignored) {
+            }
+            client.publishDiagnostics(new PublishDiagnosticsParams(uri,
+                    Collections.singletonList(newDiag(DiagnosticSeverity.Error, "late error", 0, 0))));
+        }).start();
+
+        List<Diagnostic> items = client.waitForDiagnostics(uri, 3000);
+
+        assertEquals(1, items.size());
+        assertEquals("late error", items.get(0).getMessage());
+    }
+
+    @Test
+    public void testWaitForDiagnostics_StalePushIgnoredUntilTimeout() throws Exception {
+        Path testFile = tempDir.resolve("Demo.java");
+        Files.write(testFile, "public class Demo {}".getBytes());
+        String uri = testFile.toUri().toString();
+
+        //旧诊断：早于本次同步
+        client.publishDiagnostics(new PublishDiagnosticsParams(uri,
+                Collections.singletonList(newDiag(DiagnosticSeverity.Error, "stale error", 0, 0))));
+
+        Thread.sleep(5);
+        Files.write(testFile, "public class Demo { }".getBytes());
+        client.syncFile(uri, false);
+
+        long begin = System.currentTimeMillis();
+        List<Diagnostic> items = client.waitForDiagnostics(uri, 120);
+        long cost = System.currentTimeMillis() - begin;
+
+        //超时后退回已有诊断（宁可给旧的，也不阻塞写入返回）
+        assertEquals(1, items.size());
+        assertTrue(cost >= 60, "should have waited for a fresh push, cost=" + cost);
+    }
+
+    @Test
+    public void testWaitForDiagnostics_VersionMismatchRejected() throws Exception {
+        Path testFile = tempDir.resolve("Demo.java");
+        Files.write(testFile, "public class Demo {}".getBytes());
+        String uri = testFile.toUri().toString();
+
+        client.syncFile(uri, false); // version = 1
+
+        PublishDiagnosticsParams stale = new PublishDiagnosticsParams(uri,
+                Collections.singletonList(newDiag(DiagnosticSeverity.Error, "v0 error", 0, 0)));
+        stale.setVersion(0); //服务器明确标注这是旧版本的诊断
+        client.publishDiagnostics(stale);
+
+        long begin = System.currentTimeMillis();
+        client.waitForDiagnostics(uri, 120);
+        long cost = System.currentTimeMillis() - begin;
+
+        assertTrue(cost >= 60, "version mismatch should not be treated as fresh, cost=" + cost);
+    }
+
+    private static Diagnostic newDiag(DiagnosticSeverity severity, String message, int line, int character) {
+        Diagnostic d = new Diagnostic(
+                new Range(new Position(line, character), new Position(line, character + 1)), message);
+        d.setSeverity(severity);
+        return d;
     }
 
     // ==================== LSP 操作方法测试 ====================
@@ -516,12 +556,6 @@ public class LspClientImplTest {
 
     // ==================== 辅助方法 ====================
 
-    private static void setField(Object target, String fieldName, Object value) throws Exception {
-        Field field = target.getClass().getDeclaredField(fieldName);
-        field.setAccessible(true);
-        field.set(target, value);
-    }
-
     // ==================== Mock 类 ====================
 
     /**
@@ -564,6 +598,10 @@ public class LspClientImplTest {
      */
     static class MockTextDocumentService implements TextDocumentService {
         boolean didOpenCalled;
+        boolean didChangeCalled;
+        volatile int didChangeCount;
+        int lastDidChangeVersion;
+        String lastDidChangeText;
         boolean definitionCalled;
         boolean referencesCalled;
         boolean hoverCalled;
@@ -581,7 +619,12 @@ public class LspClientImplTest {
         }
 
         @Override
-        public void didChange(DidChangeTextDocumentParams params) {}
+        public synchronized void didChange(DidChangeTextDocumentParams params) {
+            didChangeCalled = true;
+            didChangeCount++;
+            lastDidChangeVersion = params.getTextDocument().getVersion();
+            lastDidChangeText = params.getContentChanges().get(0).getText();
+        }
 
         @Override
         public void didClose(DidCloseTextDocumentParams params) {}
@@ -643,6 +686,7 @@ public class LspClientImplTest {
      */
     static class MockWorkspaceService implements WorkspaceService {
         boolean symbolCalled;
+        boolean didChangeWatchedFilesCalled;
 
         @Override
         public CompletableFuture<Either<List<? extends SymbolInformation>, List<? extends WorkspaceSymbol>>> symbol(WorkspaceSymbolParams params) {
@@ -654,6 +698,8 @@ public class LspClientImplTest {
         public void didChangeConfiguration(DidChangeConfigurationParams params) {}
 
         @Override
-        public void didChangeWatchedFiles(DidChangeWatchedFilesParams params) {}
+        public void didChangeWatchedFiles(DidChangeWatchedFilesParams params) {
+            didChangeWatchedFilesCalled = true;
+        }
     }
 }

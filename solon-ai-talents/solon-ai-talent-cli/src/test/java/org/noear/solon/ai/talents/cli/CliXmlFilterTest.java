@@ -55,6 +55,10 @@ public class CliXmlFilterTest {
     /**
      * 关键回归：CLIXML 段是 GBK、正文是 UTF-8（PowerShell 实际行为）。
      * 过滤后剩下的字节必须是纯 UTF-8，从而让字符集判定不再锁错，正文中文不再变「鏈缃」。
+     *
+     * <p>注意：这里显式传入 GBK 作为 fallback 来断言判定结果，而不是走 {@code decodeAll}
+     * 的环境默认——{@code legacyCharset} 仅在 Windows 上返回 ANSI 代码页，非 Windows 上为 null，
+     * 「未过滤时会锁错字符集」这个前提在 macOS/Linux 上根本不成立，据此断言会平台性失败。
      */
     @Test
     public void mixedEncodingNoLongerBreaksDetection() {
@@ -64,12 +68,14 @@ public class CliXmlFilterTest {
                 ("\r\n" + PROGRESS_XML).getBytes(GBK)); // stderr 侧用 ANSI 代码页
 
         // 未过滤时：整条流不是合法 UTF-8，判定回退到 GBK，正文中文被解成乱码
-        String broken = OutputDecoder.decodeAll(raw, StandardCharsets.UTF_8);
-        assertFalse(broken.contains("MAVEN_HOME 未设置"));
+        assertEquals(GBK, OutputDecoder.select(raw, 0, raw.length, StandardCharsets.UTF_8, GBK));
+        assertFalse(new String(raw, GBK).contains("MAVEN_HOME 未设置"));
 
-        // 过滤后：正文正确
-        String fixed = OutputDecoder.decodeAll(CliXmlFilter.filterAll(raw, null), StandardCharsets.UTF_8);
-        assertEquals("MAVEN_HOME 未设置\r\n\r\n", fixed);
+        // 过滤后：剩余字节是纯 UTF-8，判定不再回退，正文正确
+        byte[] filtered = CliXmlFilter.filterAll(raw, null);
+        assertEquals(StandardCharsets.UTF_8,
+                OutputDecoder.select(filtered, 0, filtered.length, StandardCharsets.UTF_8, GBK));
+        assertEquals("MAVEN_HOME 未设置\r\n\r\n", OutputDecoder.decodeAll(filtered, StandardCharsets.UTF_8));
     }
 
     /** error / warning 文本流记录要还原成纯文本（含 _x000D__x000A_ 与 XML 实体） */

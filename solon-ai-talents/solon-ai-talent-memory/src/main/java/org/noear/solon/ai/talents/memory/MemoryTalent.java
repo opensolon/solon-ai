@@ -352,14 +352,12 @@ public class MemoryTalent extends AbsTalent {
             }
 
             StringBuilder sb = new StringBuilder("当前共记录以下认知条目（如需完整细节，请用 memory_recall 按 Key 召回）：\n");
-            int count = 0;
+            // all 已由 listAll(LIST_ALL_LIMIT) 限流，长度天然 <= 上限，直接遍历即可
             for (MemorySearchResult res : all) {
-                if (count >= LIST_ALL_LIMIT) break;
                 sb.append(String.format("- [%s] %s(Key: %s) Imp:%d: %s\n",
                         Utils.isNotEmpty(res.getTime()) ? res.getTime() : "未知时间",
                         scopeTag(res.getScope()),
                         res.getKey(), res.getImportance(), summaryOf(res.getContent())));
-                count++;
             }
             if (all.size() >= LIST_ALL_LIMIT) {
                 sb.append("（仅展示前 ").append(LIST_ALL_LIMIT).append(" 条，更多请按主题检索）\n");

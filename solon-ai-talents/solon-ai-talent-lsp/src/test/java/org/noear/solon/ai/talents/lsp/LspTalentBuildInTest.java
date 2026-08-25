@@ -793,25 +793,32 @@ public class LspTalentBuildInTest {
         }
 
         @Test
-        @DisplayName("diagnostics 缓存: 无诊断信息时应返回 No diagnostics")
+        @DisplayName("diagnostics 缓存: 无诊断信息时应为空")
         public void testDiagnostics_NoCache() throws Exception {
             Files.write(worktree.resolve("test.py"), "x = 1\n".getBytes("UTF-8"));
-            Document doc = (Document) lspTalent.lsp("diagnostics", "test.py", 1, 1, null, null);
-            assertNotNull(doc);
-            assertTrue(doc.getContent().contains("No diagnostics available"));
+            String uri = worktree.resolve("test.py").toUri().toString();
+            assertTrue(lspTalent.getDiagnostics(uri).isEmpty());
         }
 
         @Test
-        @DisplayName("diagnostics 缓存: 设置后应可读取")
+        @DisplayName("diagnostics 缓存: 设置后应可读取并按 ERROR 渲染")
         public void testDiagnostics_WithCache() throws Exception {
             Files.write(worktree.resolve("test.py"), "x = 1\n".getBytes("UTF-8"));
-            Path absPath = worktree.resolve("test.py");
-            String uri = absPath.toUri().toString();
+            String uri = worktree.resolve("test.py").toUri().toString();
 
-            lspTalent.updateDiagnostics(uri, "test.py:1:1 [ERROR] undefined variable");
-            Document doc = (Document) lspTalent.lsp("diagnostics", "test.py", 1, 1, null, null);
-            assertNotNull(doc);
-            assertTrue(doc.getContent().contains("undefined variable"));
+            org.eclipse.lsp4j.Diagnostic d = new org.eclipse.lsp4j.Diagnostic();
+            d.setSeverity(org.eclipse.lsp4j.DiagnosticSeverity.Error);
+            d.setMessage("undefined variable");
+            d.setRange(new org.eclipse.lsp4j.Range(
+                    new org.eclipse.lsp4j.Position(0, 0), new org.eclipse.lsp4j.Position(0, 1)));
+
+            lspTalent.updateDiagnostics(uri, java.util.Arrays.asList(d));
+
+            assertEquals(1, lspTalent.getDiagnostics(uri).size());
+            String block = LspDiagnosticReporter.renderForToolOutput("test.py", lspTalent.getDiagnostics(uri));
+            assertNotNull(block);
+            assertTrue(block.contains("undefined variable"));
+            assertTrue(block.contains("<diagnostics file=\"test.py\">"));
         }
 
         @Test

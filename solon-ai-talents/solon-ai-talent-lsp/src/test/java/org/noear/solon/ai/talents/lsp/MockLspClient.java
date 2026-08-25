@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public class MockLspClient implements LspClient {
-    @Override public void touchFile(String uri) {}
+    @Override public int syncFile(String uri, boolean forceChange) { return 1; }
     @Override public void shutdown() {}
 
     // LanguageClient 抽象方法

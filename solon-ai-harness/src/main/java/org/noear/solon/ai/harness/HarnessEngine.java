@@ -1082,6 +1082,11 @@ public class HarnessEngine {
         terminalTalent.setSandboxAllowUserHome(options.isSandboxAllowUserHome());
         terminalTalent.setSandboxSystemRestrict(options.isSandboxSystemRestrict());
 
+        //LSP 与文件工具接线：诊断靠 write/edit 自动注入（不依赖模型主动调工具），read 后异步预热。
+        //钩子内部会在总开关关闭 / 文件类型无匹配服务器 / 服务器已知启动失败时零成本短路。
+        terminalTalent.setFileDiagnosticsHook(lspTalent::reportFileDiagnostics);
+        terminalTalent.setFileWarmupHook(lspTalent::warmupFile);
+
         //mainAgent = createMainAgent(); //改为懒加载
     }
 

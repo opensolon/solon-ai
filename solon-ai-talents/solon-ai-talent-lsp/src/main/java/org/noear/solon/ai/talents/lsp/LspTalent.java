@@ -26,30 +26,48 @@ import org.noear.solon.ai.talents.lsp.exception.LspEnvironmentException;
 import org.noear.solon.ai.talents.lsp.exception.LspNoMatchException;
 import org.noear.solon.ai.talents.lsp.exception.LspStartException;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.core.util.RunUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.*;
 
 /**
- * LSP 工具包 - 对齐 OpenCode 的 LSP 工具模型
+ * LSP 工具包 - 对齐 OpenCode 的 LSP 使用模型
  *
- * <p>支持按文件扩展名自动路由到对应的 LSP 服务器。
- * 提供跳转定义、查找引用、悬停提示、文档符号、调用层次等操作。
+ * <p>分工上分三层（与 OpenCode 一致）：
+ * <ul>
+ *   <li>诊断：不依赖模型主动调用，由 write/edit 写入后自动注入（{@link #reportFileDiagnostics}）</li>
+ *   <li>预热：read 后异步 touch，只为让语言服务器提前索引（{@link #warmupFile}）</li>
+ *   <li>导航：作为可选工具暴露给模型（{@code lsp} 工具）</li>
+ * </ul>
  *
  * @author noear
  * @since 3.10.0
  */
 public class LspTalent extends AbsTalent {
+    private static final Logger LOG = LoggerFactory.getLogger(LspTalent.class);
+
+    /**
+     * 写入后等待诊断的最长时长（毫秒）。
+     *
+     * <p>这个等待直接叠加在每次 write/edit 上，故默认比 OpenCode 的 5s 更保守；
+     * 超时只是拿不到本轮新诊断，不影响写入结果。
+     */
+    private static final long DIAGNOSTICS_WAIT_MS = Long.getLong("lsp.diagnosticsWait", 2000L);
+
     private final LspManager lspManager;
     private final String workDir;
 
     /**
-     * 诊断信息缓存：uri -> 诊断文本
+     * 诊断信息缓存：uri -> 结构化诊断（保留 severity，渲染与过滤下沉到 {@link LspDiagnosticReporter}）
      */
-    private final ConcurrentHashMap<String, String> diagnosticsCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, List<Diagnostic>> diagnosticsCache = new ConcurrentHashMap<>();
 
     public LspTalent(LspManager lspManager, String workDir) {
         this.lspManager = lspManager;
@@ -74,7 +92,7 @@ public class LspTalent extends AbsTalent {
     //可以返回 Document（结果结构数据） 或 String（给 llm 的提示）
     @ToolMapping(
             name = "lsp",
-            description = "执行 LSP 操作，用于代码导航与分析。根据操作类型可能需要光标位置（行号+列号）。\n\n" +
+            description = "执行 LSP 代码导航操作（跳转定义、查找引用、类型签名、符号搜索、调用层级）。\n\n" +
                     "操作说明：\n" +
                     "  - goToDefinition：跳转到光标处符号的定义位置\n" +
                     "  - findReferences：查找光标处符号的所有引用\n" +
@@ -84,12 +102,12 @@ public class LspTalent extends AbsTalent {
                     "  - incomingCalls：谁调用了光标处的方法\n" +
                     "  - outgoingCalls：光标处的方法调用了谁\n" +
                     "  - documentSymbol：列出当前文件中的所有符号（类/方法/字段），不需光标位置\n" +
-                    "  - workspaceSymbol：在整个工作区中搜索符号，不需光标位置\n" +
-                    "  - diagnostics：获取当前文件的编译/语法诊断信息，不需光标位置\n\n" +
-                    "使用建议：当需要理解代码结构、查找定义、搜索符号时优先使用此工具。"
+                    "  - workspaceSymbol：在整个工作区中搜索符号，不需光标位置\n\n" +
+                    "使用建议：需要理解代码结构、查找定义或搜索符号时优先使用此工具。" +
+                    "编译/语法错误无需在此查询——写入文件后会自动附带该文件的 LSP 错误。"
     )
     public Document lsp(
-            @Param(name = "operation", description = "LSP 操作类型。可选值：goToDefinition（跳转到定义）、findReferences（查找引用）、hover（悬停类型/文档）、documentSymbol（当前文件符号）、workspaceSymbol（工作区符号搜索）、goToImplementation（跳转实现）、prepareCallHierarchy（准备调用层次）、incomingCalls（谁调用了当前方法）、outgoingCalls（当前方法调用了谁）、diagnostics（获取诊断信息）") String operation,
+            @Param(name = "operation", description = "LSP 操作类型。可选值：goToDefinition（跳转到定义）、findReferences（查找引用）、hover（悬停类型/文档）、documentSymbol（当前文件符号）、workspaceSymbol（工作区符号搜索）、goToImplementation（跳转实现）、prepareCallHierarchy（准备调用层次）、incomingCalls（谁调用了当前方法）、outgoingCalls（当前方法调用了谁）") String operation,
             @Param(name = "filePath", description = "目标文件路径，相对于工作区根目录。例如：src/main/java/App.java") String filePath,
             @Param(name = "line", required = false, defaultValue = "1", description = "行号（1-based，如编辑器中显示的行号）。仅 goToDefinition/findReferences/hover/goToImplementation/prepareCallHierarchy/incomingCalls/outgoingCalls 需要）") Integer line,
             @Param(name = "character", required = false, defaultValue = "1", description = "列号（1-based，如编辑器中显示的列号）。仅 goToDefinition/findReferences/hover/goToImplementation/prepareCallHierarchy/incomingCalls/outgoingCalls 需要）") Integer character,
@@ -111,17 +129,7 @@ public class LspTalent extends AbsTalent {
 
         String uri = path.toUri().toString();
 
-        // 2. diagnostics 操作直接返回缓存
-        if ("diagnostics".equals(operation)) {
-            String diagnostics = diagnosticsCache.getOrDefault(uri, "No diagnostics available for " + filePath);
-            return new Document()
-                    .title(String.format("diagnostics %s", workPath.relativize(path)))
-                    .content(diagnostics)
-                    .metadata("operation", "diagnostics")
-                    .metadata("uri", uri);
-        }
-
-        // 3. 路由到对应的 LSP 服务器
+        // 2. 路由到对应的 LSP 服务器
         LspClient client;
         try {
             client = lspManager.getClientForFile(filePath);
@@ -264,11 +272,99 @@ public class LspTalent extends AbsTalent {
     /**
      * 更新诊断信息缓存（由 LspClientImpl 的 publishDiagnostics 回调调用）
      */
-    public void updateDiagnostics(String uri, String diagnosticsText) {
-        if (diagnosticsText == null || diagnosticsText.isEmpty()) {
+    public void updateDiagnostics(String uri, List<Diagnostic> items) {
+        if (items == null || items.isEmpty()) {
             diagnosticsCache.remove(uri);
         } else {
-            diagnosticsCache.put(uri, diagnosticsText);
+            diagnosticsCache.put(uri, items);
         }
+    }
+
+    /**
+     * 获取已缓存的诊断（不等待）
+     */
+    public List<Diagnostic> getDiagnostics(String uri) {
+        List<Diagnostic> items = diagnosticsCache.get(uri);
+        return (items == null) ? Collections.<Diagnostic>emptyList() : items;
+    }
+
+    /**
+     * 写入后的诊断上报：同步文件 -> 等待本轮诊断 -> 渲染 ERROR 片段。
+     *
+     * <p>这是本 Talent 的主路径（而非 {@code lsp} 工具）：诊断不依赖模型主动查询，
+     * 由 write/edit 工具在写入成功后直接把结果附到 tool output 上。
+     *
+     * <p>三重短路（均不启动任何进程）：总开关关闭、文件类型无匹配服务器、
+     * 服务器已标记启动失败。任何异常一律降级为 null，绝不影响写入结果。
+     *
+     * @param absFile 文件绝对路径
+     * @return 待追加到工具输出的诊断片段；无错误或不可用时返回 null
+     */
+    public String reportFileDiagnostics(Path absFile) {
+        if (isEnabled() == false || absFile == null) {
+            return null;
+        }
+
+        try {
+            String relPath = relativizeSafely(absFile);
+            if (lspManager.hasClientFor(relPath) == false) {
+                return null;
+            }
+
+            LspClient client = lspManager.getClientForFile(relPath);
+            String uri = absFile.toUri().toString();
+
+            //强制发 didChange：此时磁盘内容刚被改写，服务器手里还是旧文本
+            client.syncFile(uri, true);
+            List<Diagnostic> items = client.waitForDiagnostics(uri, DIAGNOSTICS_WAIT_MS);
+
+            return LspDiagnosticReporter.renderForToolOutput(relPath, items);
+        } catch (LspNoMatchException e) {
+            return null;
+        } catch (Exception e) {
+            //语言服务器不可用不应影响写文件：只记 debug，不往模型上下文里塞噪声
+            LOG.debug("LSP diagnostics unavailable for {}: {}", absFile, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 读取后的预热：异步把文件同步给语言服务器，让它提前索引。
+     *
+     * <p>不等待、不返回、不抛异常：预热失败只意味着后续诊断/导航慢一点。
+     */
+    public void warmupFile(Path absFile) {
+        if (isEnabled() == false || absFile == null) {
+            return;
+        }
+
+        String relPath;
+        try {
+            relPath = relativizeSafely(absFile);
+            if (lspManager.hasClientFor(relPath) == false) {
+                return;
+            }
+        } catch (Exception e) {
+            return;
+        }
+
+        final String finalRelPath = relPath;
+        RunUtil.async(() -> {
+            try {
+                LspClient client = lspManager.getClientForFile(finalRelPath);
+                client.syncFile(absFile.toUri().toString(), false);
+            } catch (Exception e) {
+                LOG.debug("LSP warmup skipped for {}: {}", absFile, e.getMessage());
+            }
+        });
+    }
+
+    private String relativizeSafely(Path absFile) {
+        Path base = getWorkPath(null);
+        Path normalized = absFile.toAbsolutePath().normalize();
+        if (normalized.startsWith(base)) {
+            return base.relativize(normalized).toString();
+        }
+        return normalized.toString();
     }
 }

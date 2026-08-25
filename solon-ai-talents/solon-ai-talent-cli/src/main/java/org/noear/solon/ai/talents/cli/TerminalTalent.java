@@ -40,6 +40,8 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.concurrent.locks.ReentrantLock;
@@ -99,6 +101,19 @@ public class TerminalTalent extends AbsTalent {
     protected final TerminalSessionManager bashSessionManager;
     //异步会话模式：启用后提供 bash_start/wait/stdin/stop 工具
     private boolean bashAsyncEnabled = false;
+
+    /**
+     * 写入后的诊断钩子：入参为文件绝对路径，返回待追加到工具输出的诊断片段（无则 null）。
+     *
+     * <p>诊断不能指望模型主动去查：只有把它贴在 write/edit 的返回值上，模型才会在下一轮看到。
+     * 用钩子而非直接依赖是为了不让 talent-cli 反向依赖 talent-lsp（由 harness 层接线）。
+     */
+    private Function<Path, String> fileDiagnosticsHook;
+
+    /**
+     * 读取后的预热钩子：入参为文件绝对路径。实现方须自行异步化，不得阻塞读取返回。
+     */
+    private Consumer<Path> fileWarmupHook;
 
     private final Set<String> ignoreDirs = new HashSet<>(Arrays.asList(
             ".soloncode", ".claude", ".opencode",
@@ -162,6 +177,56 @@ public class TerminalTalent extends AbsTalent {
         this.maxCharacterLimit = maxCharacterLimit;
         if (support != null) {
             support.setMaxCharacterLimit(maxCharacterLimit);
+        }
+    }
+
+    /**
+     * 设置写入后的诊断钩子（见 {@link #fileDiagnosticsHook}）
+     */
+    public void setFileDiagnosticsHook(Function<Path, String> fileDiagnosticsHook) {
+        this.fileDiagnosticsHook = fileDiagnosticsHook;
+    }
+
+    /**
+     * 设置读取后的预热钩子（见 {@link #fileWarmupHook}）
+     */
+    public void setFileWarmupHook(Consumer<Path> fileWarmupHook) {
+        this.fileWarmupHook = fileWarmupHook;
+    }
+
+    /**
+     * 把诊断片段追加到工具输出末尾。
+     *
+     * <p>钩子里的任何异常都必须吞掉：语言服务器不可用是常态（未安装/不支持该文件类型），
+     * 绝不能让它把一次已经成功的写入变成失败。
+     */
+    private String withDiagnostics(String result, Path target) {
+        Function<Path, String> hook = this.fileDiagnosticsHook;
+        if (hook == null) {
+            return result;
+        }
+
+        try {
+            String diagnostics = hook.apply(target);
+            if (diagnostics == null || diagnostics.isEmpty()) {
+                return result;
+            }
+            return result + "\n\n" + diagnostics;
+        } catch (Throwable e) {
+            return result;
+        }
+    }
+
+    private void warmupFile(Path target) {
+        Consumer<Path> hook = this.fileWarmupHook;
+        if (hook == null) {
+            return;
+        }
+
+        try {
+            hook.accept(target);
+        } catch (Throwable e) {
+            //预热失败只影响后续诊断/导航的响应速度，不影响读取结果
         }
     }
 
@@ -1056,6 +1121,9 @@ public class TerminalTalent extends AbsTalent {
             sb.append("\n\n--- [文件读取完毕] ---");
         }
 
+        //读完顺手预热语言服务器（异步、不阻塞、失败无声）：模型读过的文件往往紧接着就要改
+        warmupFile(target);
+
         return sb.toString();
     }
 
@@ -1071,7 +1139,7 @@ public class TerminalTalent extends AbsTalent {
 
         Files.createDirectories(target.getParent());
         Files.write(target, content.getBytes(fileCharset));
-        return "文件成功写入: " + filePath;
+        return withDiagnostics("文件成功写入: " + filePath, target);
     }
 
 
@@ -1154,7 +1222,7 @@ public class TerminalTalent extends AbsTalent {
         // 原子性保存（原文件带 BOM 则保持带 BOM）
         Files.write(target, (hadBom ? TerminalSupport.UTF8_BOM + workingContent : workingContent).getBytes(fileCharset));
 
-        return String.format("文件 %s 成功完成 %d 处修改。", filePath, edits.size());
+        return withDiagnostics(String.format("文件 %s 成功完成 %d 处修改。", filePath, edits.size()), target);
     }
 
     // --- 5. 搜索工具 ---
