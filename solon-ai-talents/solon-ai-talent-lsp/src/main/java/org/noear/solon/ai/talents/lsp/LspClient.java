@@ -13,13 +13,30 @@ import java.util.concurrent.CompletableFuture;
  */
 public interface LspClient extends LanguageClient {
     /**
+     * {@link #syncFile} 的返回值：本次未能同步（未拿到同步锁、或发送被判定卡死）。
+     *
+     * <p>调用方拿到它就不该再等待诊断：服务器手里的文本与磁盘不一致，任何结论都不可信。
+     */
+    int VERSION_UNSYNCED = -1;
+
+    /**
      * 同步文件内容给语言服务器（首次 didOpen，之后按内容变化 didChange）
      *
      * @param uri         文件 uri
      * @param forceChange 内容未变化时是否也强制发一次 didChange
-     * @return 同步后的文档版本号
+     * @return 同步后的文档版本号；{@link #VERSION_UNSYNCED} 表示本次未同步
      */
     int syncFile(String uri, boolean forceChange) throws Exception;
+
+    /**
+     * 客户端是否仍可用。
+     *
+     * <p>{@code false} 表示这个连接已经废掉（进程退出、或对端停止读取 stdin 后被强制回收），
+     * 上层应当丢弃并重建，而不是继续往里发消息。
+     */
+    default boolean isAlive() {
+        return true;
+    }
 
     /**
      * 同步文件内容给语言服务器（内容未变化时不重复通知）
@@ -35,7 +52,17 @@ public interface LspClient extends LanguageClient {
      * @param timeoutMs 最长等待毫秒数
      */
     default List<Diagnostic> waitForDiagnostics(String uri, long timeoutMs) {
-        return getDiagnostics(uri);
+        return waitForDiagnosticsResult(uri, timeoutMs).getItems();
+    }
+
+    /**
+     * 同 {@link #waitForDiagnostics}，但额外给出「本轮结论是否已确认」。
+     *
+     * <p>调用方要区分「确认无错」与「等待超时、结果未知」时必须用这个方法：空列表本身
+     * 无法表达两者的差别。默认实现按未确认返回，避免未覆盖该语义的实现给出过强保证。
+     */
+    default LspDiagnosticsResult waitForDiagnosticsResult(String uri, long timeoutMs) {
+        return LspDiagnosticsResult.unconfirmed(getDiagnostics(uri));
     }
 
     /**

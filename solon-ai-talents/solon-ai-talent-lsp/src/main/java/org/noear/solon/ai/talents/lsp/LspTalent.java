@@ -24,6 +24,7 @@ import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.talents.lsp.exception.LspCommandNotFoundException;
 import org.noear.solon.ai.talents.lsp.exception.LspEnvironmentException;
 import org.noear.solon.ai.talents.lsp.exception.LspNoMatchException;
+import org.noear.solon.ai.talents.lsp.exception.LspStalledException;
 import org.noear.solon.ai.talents.lsp.exception.LspStartException;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.RunUtil;
@@ -34,7 +35,9 @@ import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.*;
 
 /**
@@ -61,6 +64,11 @@ public class LspTalent extends AbsTalent {
      */
     private static final long DIAGNOSTICS_WAIT_MS = Long.getLong("lsp.diagnosticsWait", 2000L);
 
+    /**
+     * 检查状态的记忆容量：只服务于展示层对最近若干次写入的三态判定，无需更大
+     */
+    private static final int CHECK_STATE_CAPACITY = 256;
+
     private final LspManager lspManager;
     private final String workDir;
 
@@ -68,6 +76,21 @@ public class LspTalent extends AbsTalent {
      * 诊断信息缓存：uri -> 结构化诊断（保留 severity，渲染与过滤下沉到 {@link LspDiagnosticReporter}）
      */
     private final ConcurrentHashMap<String, List<Diagnostic>> diagnosticsCache = new ConcurrentHashMap<>();
+
+    /**
+     * 最近写入的检查状态：路径 -> {@link LspCheckState}。
+     *
+     * <p>诊断文本只能表达「有错误」，无法表达「确认无错」与「等待超时」的区别，故把每次
+     * {@link #reportFileDiagnostics} 的结论额外记在这里供展示层查询。按访问顺序做小容量 LRU：
+     * 状态只在紧随写入之后被读取一次，留存更久没有意义。
+     */
+    private final Map<String, LspCheckState> checkStates = Collections.synchronizedMap(
+            new LinkedHashMap<String, LspCheckState>(64, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, LspCheckState> eldest) {
+                    return size() > CHECK_STATE_CAPACITY;
+                }
+            });
 
     public LspTalent(LspManager lspManager, String workDir) {
         this.lspManager = lspManager;
@@ -297,6 +320,9 @@ public class LspTalent extends AbsTalent {
      * <p>三重短路（均不启动任何进程）：总开关关闭、文件类型无匹配服务器、
      * 服务器已标记启动失败。任何异常一律降级为 null，绝不影响写入结果。
      *
+     * <p>返回值只能表达「有错误」，因此本轮结论另记入 {@link #checkStates}（见
+     * {@link #getFileCheckState}），供展示层区分确认无错与等待超时。
+     *
      * @param absFile 文件绝对路径
      * @return 待追加到工具输出的诊断片段；无错误或不可用时返回 null
      */
@@ -305,9 +331,11 @@ public class LspTalent extends AbsTalent {
             return null;
         }
 
+        String relPath = null;
         try {
-            String relPath = relativizeSafely(absFile);
+            relPath = relativizeSafely(absFile);
             if (lspManager.hasClientFor(relPath) == false) {
+                recordCheckState(absFile, relPath, LspCheckState.NONE);
                 return null;
             }
 
@@ -315,17 +343,93 @@ public class LspTalent extends AbsTalent {
             String uri = absFile.toUri().toString();
 
             //强制发 didChange：此时磁盘内容刚被改写，服务器手里还是旧文本
-            client.syncFile(uri, true);
-            List<Diagnostic> items = client.waitForDiagnostics(uri, DIAGNOSTICS_WAIT_MS);
+            if (client.syncFile(uri, true) == LspClient.VERSION_UNSYNCED) {
+                //同步未完成（正在被其他线程同步、或发送通道异常）：服务器手里的文本不可信，
+                //再等下去只会拿到针对旧文本的诊断，不如直接告知「本轮无结论」
+                recordCheckState(absFile, relPath, LspCheckState.PENDING);
+                return null;
+            }
 
-            return LspDiagnosticReporter.renderForToolOutput(relPath, items);
+            LspDiagnosticsResult result = client.waitForDiagnosticsResult(uri, DIAGNOSTICS_WAIT_MS);
+
+            String block = LspDiagnosticReporter.renderForToolOutput(relPath, result.getItems());
+            if (block != null) {
+                recordCheckState(absFile, relPath, LspCheckState.ERRORS);
+            } else {
+                //无 ERROR：只有拿到本轮推送才能断言「干净」，否则仅代表「还没结论」
+                recordCheckState(absFile, relPath,
+                        result.isConfirmed() ? LspCheckState.CLEAN : LspCheckState.PENDING);
+            }
+            return block;
         } catch (LspNoMatchException e) {
+            recordCheckState(absFile, relPath, LspCheckState.NONE);
+            return null;
+        } catch (LspStalledException e) {
+            //已经试过但语言服务器停止读取输入：本轮无结论（而不是「无覆盖」也不是「干净」）；
+            //进程已被强制回收，下一次写入会拿到新进程
+            recordCheckState(absFile, relPath, LspCheckState.PENDING);
+            LOG.warn("LSP diagnostics skipped for {}: {}", absFile, e.getMessage());
             return null;
         } catch (Exception e) {
             //语言服务器不可用不应影响写文件：只记 debug，不往模型上下文里塞噪声
+            recordCheckState(absFile, relPath, LspCheckState.NONE);
             LOG.debug("LSP diagnostics unavailable for {}: {}", absFile, e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 查询最近一次写入后的 LSP 检查状态
+     *
+     * <p>供展示层区分三种情形：确认无错、等待超时结果未知、无语言服务器覆盖。
+     * 参数可以是工具入参里的相对路径，也可以是绝对路径。
+     *
+     * @param filePath 文件路径（相对工作区或绝对）
+     */
+    public LspCheckState getFileCheckState(String filePath) {
+        if (filePath == null || filePath.isEmpty()) {
+            return LspCheckState.NONE;
+        }
+
+        //工具入参通常就是展示用相对路径，先试字面命中
+        LspCheckState state = checkStates.get(filePath);
+        if (state != null) {
+            return state;
+        }
+
+        try {
+            state = checkStates.get(pathKey(Paths.get(filePath)));
+        } catch (Exception e) {
+            return LspCheckState.NONE;
+        }
+        return (state == null) ? LspCheckState.NONE : state;
+    }
+
+    /**
+     * 记录本次检查结论。
+     *
+     * <p>同时存展示用相对路径与规范化绝对路径两个 key：调用方（Web 展示层）拿到的是模型
+     * 传给工具的原始字符串，两种形式都可能出现。
+     */
+    private void recordCheckState(Path absFile, String displayPath, LspCheckState state) {
+        if (displayPath != null && displayPath.isEmpty() == false) {
+            checkStates.put(displayPath, state);
+        }
+        if (absFile != null) {
+            try {
+                checkStates.put(pathKey(absFile), state);
+            } catch (Exception e) {
+                //路径规范化失败不影响主流程
+            }
+        }
+    }
+
+    /**
+     * 统一的路径 key：相对路径一律按工作区解析（而非进程 CWD），保证两端一致
+     */
+    private String pathKey(Path path) {
+        Path abs = path.isAbsolute() ? path : getWorkPath(null).resolve(path);
+        return abs.normalize().toString();
     }
 
     /**

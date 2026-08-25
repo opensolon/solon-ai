@@ -356,6 +356,53 @@ public class LspClientImplTest {
         assertTrue(cost >= 60, "version mismatch should not be treated as fresh, cost=" + cost);
     }
 
+    // ==================== waitForDiagnosticsResult 测试（确认态 vs 超时态）====================
+
+    @Test
+    public void testWaitForDiagnosticsResult_NeverSyncedIsUnconfirmed() {
+        LspDiagnosticsResult r = client.waitForDiagnosticsResult("file:///Nope.java", 50);
+        assertFalse(r.isConfirmed(), "从未同步过的文件不能给出结论");
+        assertTrue(r.getItems().isEmpty());
+    }
+
+    @Test
+    public void testWaitForDiagnosticsResult_EmptyPushIsConfirmedClean() throws Exception {
+        Path testFile = tempDir.resolve("Demo.java");
+        Files.write(testFile, "public class Demo {}".getBytes());
+        String uri = testFile.toUri().toString();
+
+        client.syncFile(uri, false);
+
+        //服务器明确推送空诊断：这才是「检查过、没有错误」
+        new Thread(() -> {
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException ignored) {
+            }
+            client.publishDiagnostics(new PublishDiagnosticsParams(uri, Collections.emptyList()));
+        }).start();
+
+        LspDiagnosticsResult r = client.waitForDiagnosticsResult(uri, 3000);
+
+        assertTrue(r.isConfirmed(), "收到本轮推送即为已确认");
+        assertTrue(r.getItems().isEmpty());
+    }
+
+    @Test
+    public void testWaitForDiagnosticsResult_TimeoutIsUnconfirmed() throws Exception {
+        Path testFile = tempDir.resolve("Demo.java");
+        Files.write(testFile, "public class Demo {}".getBytes());
+        String uri = testFile.toUri().toString();
+
+        client.syncFile(uri, false);
+
+        //冷启动场景：等待预算内一条推送都没来，空列表不等于无错误
+        LspDiagnosticsResult r = client.waitForDiagnosticsResult(uri, 80);
+
+        assertFalse(r.isConfirmed(), "超时未收到推送不能断言无错误");
+        assertTrue(r.getItems().isEmpty());
+    }
+
     private static Diagnostic newDiag(DiagnosticSeverity severity, String message, int line, int character) {
         Diagnostic d = new Diagnostic(
                 new Range(new Position(line, character), new Position(line, character + 1)), message);
@@ -374,6 +421,8 @@ public class LspClientImplTest {
                 client.definition(params);
 
         assertNotNull(result);
+        //请求的发送已下沉到发送线程（写管道不能阻塞业务线程），因此要等 future 完成后再断言
+        result.join();
         assertTrue(mockServer.textDocumentService.definitionCalled);
     }
 
@@ -385,6 +434,8 @@ public class LspClientImplTest {
         CompletableFuture<List<? extends Location>> result = client.references(params);
 
         assertNotNull(result);
+        //请求的发送已下沉到发送线程（写管道不能阻塞业务线程），因此要等 future 完成后再断言
+        result.join();
         assertTrue(mockServer.textDocumentService.referencesCalled);
     }
 
@@ -396,6 +447,8 @@ public class LspClientImplTest {
         CompletableFuture<Hover> result = client.hover(params);
 
         assertNotNull(result);
+        //请求的发送已下沉到发送线程（写管道不能阻塞业务线程），因此要等 future 完成后再断言
+        result.join();
         assertTrue(mockServer.textDocumentService.hoverCalled);
     }
 
@@ -408,6 +461,8 @@ public class LspClientImplTest {
                 client.documentSymbol(params);
 
         assertNotNull(result);
+        //请求的发送已下沉到发送线程（写管道不能阻塞业务线程），因此要等 future 完成后再断言
+        result.join();
         assertTrue(mockServer.textDocumentService.documentSymbolCalled);
     }
 
@@ -418,6 +473,8 @@ public class LspClientImplTest {
                 client.workspaceSymbol(params);
 
         assertNotNull(result);
+        //请求的发送已下沉到发送线程（写管道不能阻塞业务线程），因此要等 future 完成后再断言
+        result.join();
         assertTrue(mockServer.workspaceService.symbolCalled);
     }
 
@@ -430,6 +487,8 @@ public class LspClientImplTest {
                 client.implementation(params);
 
         assertNotNull(result);
+        //请求的发送已下沉到发送线程（写管道不能阻塞业务线程），因此要等 future 完成后再断言
+        result.join();
         assertTrue(mockServer.textDocumentService.implementationCalled);
     }
 
@@ -441,6 +500,8 @@ public class LspClientImplTest {
         CompletableFuture<List<CallHierarchyItem>> result = client.prepareCallHierarchy(params);
 
         assertNotNull(result);
+        //请求的发送已下沉到发送线程（写管道不能阻塞业务线程），因此要等 future 完成后再断言
+        result.join();
         assertTrue(mockServer.textDocumentService.prepareCallHierarchyCalled);
     }
 

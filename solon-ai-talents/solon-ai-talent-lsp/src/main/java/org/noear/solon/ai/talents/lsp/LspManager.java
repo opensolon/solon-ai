@@ -27,6 +27,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 import java.util.regex.Pattern;
@@ -55,6 +56,19 @@ public class LspManager {
      * <p>没有这层记忆，未安装语言服务器的机器会在每次写文件时反复 fork 失败进程并刷错误栈。
      */
     private final Map<String, RuntimeException> brokenServers = new ConcurrentHashMap<>();
+    /**
+     * 已重建次数：name -> 次数。
+     *
+     * <p>卡死/崩溃后自动重建是为了不让一次意外废掉整个会话的语言服务，但必须有配额：
+     * 反复卡死说明这个服务器在本环境/本仓库下就是不可用的，再拉只是反复付出启动代价。
+     */
+    private final Map<String, AtomicInteger> restartCounts = new ConcurrentHashMap<>();
+
+    /**
+     * 单个服务器允许的自动重建次数
+     */
+    private static final int MAX_RESTARTS = Integer.getInteger("lsp.maxRestarts", 2);
+
     private final String workspace;
     private final ReentrantLock clientLock = new ReentrantLock();
     private BiConsumer<String, List<Diagnostic>> diagnosticsCallback;
@@ -100,6 +114,7 @@ public class LspManager {
         serverConfigs.put(name, params);
         //配置变更后清掉旧的失败记忆，让用户改完命令能立刻重试
         brokenServers.remove(name);
+        restartCounts.remove(name);
 
         if (params.isEnabled()) {
             LOG.info("Registered LSP server '{}': command={}, extensions={}",
@@ -204,6 +219,7 @@ public class LspManager {
      */
     public void clearBroken() {
         brokenServers.clear();
+        restartCounts.clear();
     }
 
     /**
@@ -289,7 +305,7 @@ public class LspManager {
 
     private LspClient getOrCreateClient(String name, LspServerParameters params) throws LspStartException {
         LspClient existing = activeClients.get(name);
-        if (existing != null) {
+        if (existing != null && existing.isAlive()) {
             return existing;
         }
 
@@ -304,7 +320,13 @@ public class LspManager {
             // double-check
             existing = activeClients.get(name);
             if (existing != null) {
-                return existing;
+                if (existing.isAlive()) {
+                    return existing;
+                }
+                //进程已死（崩溃或被卡死判定后强制回收）：丢弃旧实例，按配额决定是否重建
+                activeClients.remove(name, existing);
+                closeQuietly(name, existing);
+                noteRestart(name, params, "process is no longer alive");
             }
 
             broken = brokenServers.get(name);
@@ -328,6 +350,9 @@ public class LspManager {
                 }
             });
 
+            //卡死（对端停止读 stdin）后立即驱逐：否则下一次写文件会拿到同一个已废的客户端
+            client.setStalledListener(() -> onClientStalled(name, params, client));
+
             activeClients.put(name, client);
             LOG.info("LSP server '{}' started successfully", name);
             return client;
@@ -346,6 +371,40 @@ public class LspManager {
     }
 
     /**
+     * 客户端被判定卡死（对端停止消费 stdin）时的回收：驱逐并计入重建配额。
+     *
+     * <p>这里不重建，只清场：下一次真正用到时再拉起新进程，避免为一次已经降级的写入
+     * 额外支付几十秒的冷启动代价。
+     */
+    private void onClientStalled(String name, LspServerParameters params, LspClient client) {
+        activeClients.remove(name, client);
+        noteRestart(name, params, "server stopped reading its stdin");
+    }
+
+    /**
+     * 记一次重建；超出配额则标记为 broken（后续一律短路，不再尝试）
+     */
+    private void noteRestart(String name, LspServerParameters params, String reason) {
+        int times = restartCounts.computeIfAbsent(name, k -> new AtomicInteger()).incrementAndGet();
+        if (times > MAX_RESTARTS) {
+            LspStartException se = new LspStartException(name, params.getCommandArray(),
+                    new RuntimeException("gave up after " + (times - 1) + " restarts: " + reason));
+            brokenServers.put(name, se);
+            LOG.error("LSP server '{}' failed {} times ({}), disabling it for this session", name, times, reason);
+        } else {
+            LOG.warn("LSP server '{}' will be restarted on next use ({}/{}): {}", name, times, MAX_RESTARTS, reason);
+        }
+    }
+
+    private void closeQuietly(String name, LspClient client) {
+        try {
+            client.shutdown();
+        } catch (Exception e) {
+            LOG.debug("Error closing stale LSP client '{}': {}", name, e.getMessage());
+        }
+    }
+
+    /**
      * 注销并关闭一个 LSP 服务器
      */
     public void unregisterServer(String name) {
@@ -353,6 +412,7 @@ public class LspManager {
 
         serverConfigs.remove(name);
         brokenServers.remove(name);
+        restartCounts.remove(name);
 
         LspClient client = activeClients.remove(name);
         if (client != null) {
