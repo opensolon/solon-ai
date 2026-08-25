@@ -331,6 +331,13 @@ public class LspTalent extends AbsTalent {
             return null;
         }
 
+        if (isInsideWorkspace(absFile) == false) {
+            //工作区之外的文件（挂载点里的其它仓库等）不属于本工作区语言服务器的项目模型：
+            //拿到的诊断没有意义，却要付出全量索引的代价，直接判为「无覆盖」
+            recordCheckState(absFile, null, LspCheckState.NONE);
+            return null;
+        }
+
         String relPath = null;
         try {
             relPath = relativizeSafely(absFile);
@@ -442,6 +449,10 @@ public class LspTalent extends AbsTalent {
             return;
         }
 
+        if (isInsideWorkspace(absFile) == false) {
+            return;
+        }
+
         String relPath;
         try {
             relPath = relativizeSafely(absFile);
@@ -461,6 +472,22 @@ public class LspTalent extends AbsTalent {
                 LOG.debug("LSP warmup skipped for {}: {}", absFile, e.getMessage());
             }
         });
+    }
+
+    /**
+     * 判断文件是否位于当前工作区之内
+     *
+     * <p>语言服务器一律以工作区为根启动，故工作区之外的文件不在其项目模型内。
+     * 放行这类文件会让重量级服务器（如 jdtls）对无关文件做全量索引，既无收益又有风险。
+     *
+     * <p>工作目录未配置等异常一律判为「不在工作区内」，宁可少做也不误启进程。
+     */
+    private boolean isInsideWorkspace(Path absFile) {
+        try {
+            return absFile.toAbsolutePath().normalize().startsWith(getWorkPath(null));
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private String relativizeSafely(Path absFile) {
