@@ -153,13 +153,13 @@ public class SimpleTrace implements AgentTrace {
     }
 
     /**
-     * 流式订阅是否已取消（无 sink 时视为 false）
+     * 流式订阅是否已取消（无 sink 时视为 true）
      */
     public boolean isStreamCancelled() {
         if (hasStreamSink()) {
             return options.getStreamSink().isCancelled();
         } else {
-            return false;
+            return true;
         }
     }
 
