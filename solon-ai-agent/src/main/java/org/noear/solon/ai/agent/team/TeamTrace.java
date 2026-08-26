@@ -444,7 +444,11 @@ public class TeamTrace implements AgentTrace {
      * 流式订阅是否已取消（无 sink 时视为 false）
      */
     public boolean isStreamCancelled() {
-        return options.getStreamSink().isCancelled();
+        if (hasStreamSink()) {
+            return options.getStreamSink().isCancelled();
+        } else {
+            return false;
+        }
     }
 
     /**
@@ -452,7 +456,7 @@ public class TeamTrace implements AgentTrace {
      */
     public void pushAgentEvent(AgentEvent event) {
         try {
-            if (hasStreamSink() == false || isStreamCancelled()) {
+            if (isStreamCancelled()) {
                 return;
             }
 
