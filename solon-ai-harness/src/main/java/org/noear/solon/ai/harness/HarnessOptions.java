@@ -77,6 +77,7 @@ class HarnessOptions implements NonSerializable {
     private volatile int sessionWindowSize = 12;
     private volatile int compressionMaxMessages = 100;
     private volatile double compressionMaxContextRatio = 0.75D;
+    private volatile long compressionDefaultContextLength = 128_000L; //128k
     private volatile String compressionModel; //压缩大模型
 
     // ========== 记忆 ==========
@@ -275,6 +276,16 @@ class HarnessOptions implements NonSerializable {
     void setCompressionMaxContextRatio(Double compressionMaxContextRatio) {
         if (compressionMaxContextRatio != null) {
             this.compressionMaxContextRatio = compressionMaxContextRatio;
+        }
+    }
+
+    long getCompressionDefaultContextLength() {
+        return compressionDefaultContextLength;
+    }
+
+    void setCompressionDefaultContextLength(Long compressionDefaultContextLength) {
+        if (compressionDefaultContextLength != null) {
+            this.compressionDefaultContextLength = compressionDefaultContextLength;
         }
     }
 

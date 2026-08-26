@@ -317,6 +317,10 @@ public class HarnessEngine {
         return options.getCompressionMaxContextRatio();
     }
 
+    public long getCompressionDefaultContextLength() {
+        return options.getCompressionDefaultContextLength();
+    }
+
     /**
      * @deprecated 4.0.4
      */
@@ -602,6 +606,14 @@ public class HarnessEngine {
             options.getCompressionInterceptor().setMaxContextLengthRatio(maxContextRatio);
         }
     }
+
+    public void setCompressionDefaultContextLength(Long defaultContextLength) {
+        if (defaultContextLength != null) {
+            options.setCompressionDefaultContextLength(defaultContextLength);
+            options.getCompressionInterceptor().setDefaultContextLength(defaultContextLength);
+        }
+    }
+
 
     public void setSystemPrompt(String systemPrompt) {
         if (Assert.isNotEmpty(systemPrompt)) {
@@ -1300,6 +1312,11 @@ public class HarnessEngine {
         public Builder compressionThreshold(Integer maxMessages, Double maxContextRatio) {
             options.setCompressionMaxMessages(maxMessages);
             options.setCompressionMaxContextRatio(maxContextRatio);
+            return this;
+        }
+
+        public Builder compressionDefaultContextLength(Long defaultContextLength) {
+            options.setCompressionDefaultContextLength(defaultContextLength);
             return this;
         }
 
