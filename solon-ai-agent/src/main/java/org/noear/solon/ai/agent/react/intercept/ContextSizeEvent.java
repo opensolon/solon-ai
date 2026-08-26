@@ -32,6 +32,10 @@ import org.noear.solon.lang.Preview;
 public class ContextSizeEvent extends AbsAgentEvent {
     private final ReActTrace trace;
     /**
+     * 模型上下文长度
+     */
+    private final long contextLength;
+    /**
      * 当前上下文的总消息数
      */
     private final int messageCount;
@@ -60,13 +64,14 @@ public class ContextSizeEvent extends AbsAgentEvent {
      */
     private final int afterTokenCount;
 
-    public ContextSizeEvent(ReActTrace trace, int messageCount, int tokenCount,
+    public ContextSizeEvent(ReActTrace trace, long contextLength, int messageCount, int tokenCount,
                             boolean compressed,
                             int beforeMessageCount, int afterMessageCount,
                             int beforeTokenCount, int afterTokenCount) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession(), null);
 
         this.trace = trace;
+        this.contextLength = contextLength;
         this.messageCount = messageCount;
         this.tokenCount = tokenCount;
         this.compressed = compressed;
@@ -78,6 +83,13 @@ public class ContextSizeEvent extends AbsAgentEvent {
 
     public ReActTrace getTrace() {
         return trace;
+    }
+
+    /**
+     * 模型上下文长度
+     */
+    public long getContextLength() {
+        return contextLength;
     }
 
     /**

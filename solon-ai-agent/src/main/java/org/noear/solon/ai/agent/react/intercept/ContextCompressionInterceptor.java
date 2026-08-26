@@ -222,13 +222,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         return tmp;
     }
 
-    /**
-     * 计算最终 Token 阈值为上下文压缩提供依据。
-     *
-     * <p>优先使用模型配置的 {@code contextLength} 与 {@link #maxContextLengthRatio}
-     * 的乘积；当模型未提供 contextLength 时，回退到 {@link #defaultContextLength}。</p>
-     */
-    private int finalTokenThreshold(ChatModel model) {
+    private long finalContextLength(ChatModel model){
         long contextLength = this.defaultContextLength;
         try {
             if (model != null && model.getConfig() != null) {
@@ -242,6 +236,18 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                 log.debug("Failed to resolve model context length, using default context window={}", this.defaultContextLength, e);
             }
         }
+
+        return contextLength;
+    }
+
+    /**
+     * 计算最终 Token 阈值为上下文压缩提供依据。
+     *
+     * <p>优先使用模型配置的 {@code contextLength} 与 {@link #maxContextLengthRatio}
+     * 的乘积；当模型未提供 contextLength 时，回退到 {@link #defaultContextLength}。</p>
+     */
+    private int finalTokenThreshold(ChatModel model) {
+        long contextLength = finalContextLength(model);
 
         double threshold = Math.floor(contextLength * maxContextLengthRatio);
         return (int) Math.max(1D, Math.min(Integer.MAX_VALUE, threshold));
@@ -1508,7 +1514,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                                   int beforeTokenCount, int afterTokenCount) {
 
         if (trace.hasStreamSink()) {
-            trace.pushAgentEvent(new ContextSizeEvent(trace, msgCount, tokenCount, compressed,
+            ChatModel chatModel = trace.getOptions().getChatModel();
+            long contextLength = finalContextLength(chatModel);
+
+            trace.pushAgentEvent(new ContextSizeEvent(trace, contextLength, msgCount, tokenCount, compressed,
                     beforeMessageCount, afterMessageCount,
                     beforeTokenCount, afterTokenCount));
         }
