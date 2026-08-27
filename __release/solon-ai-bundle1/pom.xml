@@ -26,6 +26,7 @@
 
         <module>../../solon-ai</module>
         <module>../../solon-ai-core</module>
+        <module>../../solon-ai-router</module>
         <module>../../solon-ai-agent</module>
         <module>../../solon-ai-acp</module>
         <module>../../solon-ai-flow</module>
