@@ -1228,11 +1228,16 @@ public class TerminalTalent extends AbsTalent {
     // --- 5. 搜索工具 ---
     @ToolMapping(name = "grep", description = "递归搜索内容。返回 '路径:行号:内容'。在不确定文件位置时先执行搜索。支持逻辑路径（如 @pool）。pattern 支持正则表达式匹配。")
     public String grep(@Param(value = "pattern", description = "搜索内容，支持正则表达式匹配") String pattern,
-                       @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
+                       @Param(value = "path", description = "（单个）目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
                        @Param(value = "include", required = false, description = "要包含的文件模式（如 \"*.js\"、\"*.{ts,tsx}\"）") String include,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
         Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome, fs());
+
+        String pathError = checkSearchPath("grep", path, target);
+        if (pathError != null) {
+            return pathError;
+        }
 
         // 预编译正则，若语法无效则回退到 contains 匹配
         final Pattern finalPattern;
@@ -1317,10 +1322,15 @@ public class TerminalTalent extends AbsTalent {
 
     @ToolMapping(name = "glob", description = "按通配符模式（如 **/*.java）搜索文件。确定文件范围的最高效工具。支持逻辑路径（如 @pool）。")
     public String glob(@Param(value = "pattern", description = "glob 模式。") String pattern,
-                       @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
+                       @Param(value = "path", description = "（单个）目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
         Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome, fs());
+
+        String pathError = checkSearchPath("glob", path, target);
+        if (pathError != null) {
+            return pathError;
+        }
 
         String fixedPattern = pattern.replace("\\", "/");
         final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + fixedPattern);
@@ -1390,6 +1400,37 @@ public class TerminalTalent extends AbsTalent {
         }
         // Java 的 glob 语法天然支持 {ts,tsx} 这种模式
         return FileSystems.getDefault().getPathMatcher("glob:" + include.replace("\\", "/"));
+    }
+
+    /**
+     * 校验搜索类工具（grep/glob）的 path 参数。
+     * <p>
+     * 这类工具只接受「单个已存在的目录」。调用方常按 ripgrep 习惯用 ';' 或 ',' 拼接多个路径，
+     * 拼串会被当成一个目录名解析，最终在 walkFileTree 抛 NoSuchFileException，
+     * 调用方只能看到一条堆栈、拿不到纠偏线索。此处统一转成可执行的提示文案。
+     * <p>
+     * 分隔符判定放在存在性判定之后：目录名本身合法地含有 ',' 等字符时不会被误拦。
+     *
+     * @return 不合法时返回提示文案；合法返回 null
+     */
+    private String checkSearchPath(String toolName, String path, Path target) {
+        if (Files.exists(target)) {
+            return null;
+        }
+
+        if (path != null) {
+            for (char ch : new char[]{';', ',', '\n', '\r', '|'}) {
+                if (path.indexOf(ch) >= 0) {
+                    String chLabel = (ch == '\n' ? "\\n" : (ch == '\r' ? "\\r" : String.valueOf(ch)));
+                    return String.format("错误：%s 的 path 只支持单个目录，检测到分隔符 '%s'（当前值：%s）。" +
+                                    "请分多次调用，或改用这些目录的共同父目录并配合 pattern/include 收窄范围。",
+                            toolName, chLabel, path);
+                }
+            }
+        }
+
+        return String.format("错误：路径不存在（%s path=%s）。请先用 ls 确认目录层级；" +
+                "注意 path 只接受单个目录，且不要把通配符写进 path（通配符应写在 pattern 里）。", toolName, path);
     }
 
     private Path getWorkPath(String __cwd) {

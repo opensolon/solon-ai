@@ -284,4 +284,71 @@ public class TerminalTalentGrepTest {
             deleteRecursively(workDir);
         }
     }
+    // ==================== 非法 path 参数 ====================
+
+    @Test
+    public void grepMultiPathJoinedBySemicolonReturnsHint() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-grep-");
+        try {
+            Files.createDirectories(workDir.resolve("mod-a/src"));
+            Files.createDirectories(workDir.resolve("mod-b/src"));
+
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            // 按 ripgrep 习惯用 ';' 拼接多个路径：过去会抛 NoSuchFileException
+            String result = talent.grep("TODO", "mod-a/src;mod-b/src", null, workDir.toString());
+
+            assertTrue(result.startsWith("错误："), "多路径拼串应返回错误提示而非抛异常，实际：" + result);
+            assertTrue(result.contains("单个目录"), "提示应说明只支持单个目录");
+            assertTrue(result.contains("';'"), "提示应指出检测到的分隔符");
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
+    @Test
+    public void globMultiPathJoinedByCommaReturnsHint() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-grep-");
+        try {
+            Files.createDirectories(workDir.resolve("mod-a"));
+            Files.createDirectories(workDir.resolve("mod-b"));
+
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            String result = talent.glob("**/*.java", "mod-a,mod-b", workDir.toString());
+
+            assertTrue(result.startsWith("错误："), "多路径拼串应返回错误提示而非抛异常，实际：" + result);
+            assertTrue(result.contains("单个目录"), "提示应说明只支持单个目录");
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
+    @Test
+    public void grepMissingPathReturnsNotFoundHint() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-grep-");
+        try {
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            String result = talent.grep("TODO", "not-exists-dir", null, workDir.toString());
+
+            assertTrue(result.contains("路径不存在"), "路径不存在时应返回可读提示，实际：" + result);
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
+    @Test
+    public void grepDirectoryNameWithCommaStillWorks() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-grep-");
+        try {
+            // 合法目录名本身含 ','：不应被分隔符规则误拦
+            Files.createDirectories(workDir.resolve("a,b"));
+            Files.write(workDir.resolve("a,b/note.txt"), Arrays.asList("TODO: keep me"));
+
+            TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
+            String result = talent.grep("TODO", "a,b", null, workDir.toString());
+
+            assertTrue(result.contains("keep me"), "含 ',' 的真实目录应正常搜索，实际：" + result);
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
 }
