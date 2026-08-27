@@ -1,0 +1,542 @@
+openapi: 3.1.0
+info:
+  title: Google Gemini Content Generation API
+  description: Google's Gemini API provides access to generative AI models for text generation, multimodal understanding, and embedding creation. The API supports text, image, audio, and video inputs with configurable safety settings, generation parameters, and tool use capabilities.
+  version: v1beta
+  termsOfService: https://ai.google.dev/terms
+  contact:
+    name: Google AI Developer Support
+    url: https://ai.google.dev/docs/support
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+servers:
+- url: https://generativelanguage.googleapis.com/v1beta
+  description: Google Generative Language API v1beta
+security:
+- ApiKeyAuth: []
+tags:
+- name: Content Generation
+  description: Generate content using Gemini models with text, image, audio, and video inputs. Supports multimodal prompts, function calling, structured output, and configurable safety settings.
+paths:
+  /models/{model}:generateContent:
+    post:
+      operationId: generateContent
+      tags:
+      - Content Generation
+      summary: Google Gemini Generates a model response given an input GenerateContentRequest. Refer to the text generation guide for detailed usage information. Input capabilities differ between models, including tuned models.
+      description: Generates a response from the model given an input. The input can include text, images, audio, video, and other multimodal content. The model processes the input according to its capabilities and returns generated content along with safety ratings and usage metadata.
+      parameters:
+      - name: model
+        in: path
+        required: true
+        description: 'The name of the Model to use for generating the completion. Format: models/{model}. Example: models/gemini-2.0-flash.'
+        schema:
+          type: string
+          example: gemini-2.0-flash
+      - name: key
+        in: query
+        required: true
+        description: API key for authentication.
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateContentRequest'
+      responses:
+        '200':
+          description: Successful response with generated content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateContentResponse'
+        '400':
+          description: Bad request. The request body is malformed or missing required fields.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized. Invalid or missing API key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The API key does not have permission to access the requested model.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found. The specified model does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests. Rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /models/{model}:streamGenerateContent:
+    post:
+      operationId: streamGenerateContent
+      tags:
+      - Content Generation
+      summary: Google Gemini Generates a streamed response from the model given an input GenerateContentRequest. Returns a stream of GenerateContentResponse chunks using server-sent events.
+      description: Generates a streamed response from the model. This endpoint behaves identically to generateContent but returns partial responses incrementally as server-sent events. Each event contains a GenerateContentResponse with one or more candidate content parts. Use the alt=sse query parameter to enable streaming.
+      parameters:
+      - name: model
+        in: path
+        required: true
+        description: 'The name of the Model to use for generating the completion. Format: models/{model}. Example: models/gemini-2.0-flash.'
+        schema:
+          type: string
+          example: gemini-2.0-flash
+      - name: key
+        in: query
+        required: true
+        description: API key for authentication.
+        schema:
+          type: string
+      - name: alt
+        in: query
+        required: false
+        description: Set to 'sse' for server-sent events streaming.
+        schema:
+          type: string
+          enum:
+          - sse
+          default: sse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateContentRequest'
+      responses:
+        '200':
+          description: Successful streaming response. Returns a stream of GenerateContentResponse objects as server-sent events.
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/GenerateContentResponse'
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests. Rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    Blob:
+      type: object
+      description: Raw media bytes with MIME type information.
+      properties:
+        mimeType:
+          type: string
+          description: 'The IANA standard MIME type of the source data. Examples: image/png, image/jpeg, audio/mp3, video/mp4.'
+        data:
+          type: string
+          format: byte
+          description: Raw bytes for media formats encoded as base64.
+    Tool:
+      type: object
+      description: Tool details that the model may use to generate response. A Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.
+      properties:
+        functionDeclarations:
+          type: array
+          description: A list of FunctionDeclarations available to the model that can be used for function calling. The model or system does not execute the function. Instead the defined function may be returned as a FunctionCall with arguments to the client side for execution.
+          items:
+            $ref: '#/components/schemas/FunctionDeclaration'
+        codeExecution:
+          type: object
+          description: Enables the model to execute code as part of generation. Code execution is enabled by passing an empty object.
+    SafetyRating:
+      type: object
+      description: Safety rating for a piece of content. The safety rating contains the category of harm and the harm probability level in that category for a piece of content.
+      properties:
+        category:
+          type: string
+          description: The category for this rating.
+          enum:
+          - HARM_CATEGORY_UNSPECIFIED
+          - HARM_CATEGORY_HATE_SPEECH
+          - HARM_CATEGORY_SEXUALLY_EXPLICIT
+          - HARM_CATEGORY_DANGEROUS_CONTENT
+          - HARM_CATEGORY_HARASSMENT
+          - HARM_CATEGORY_CIVIC_INTEGRITY
+        probability:
+          type: string
+          description: The probability of harm for this content.
+          enum:
+          - HARM_PROBABILITY_UNSPECIFIED
+          - NEGLIGIBLE
+          - LOW
+          - MEDIUM
+          - HIGH
+        blocked:
+          type: boolean
+          description: Was this content blocked because of this rating?
+    GenerateContentResponse:
+      type: object
+      description: Response from the model supporting multiple candidate responses. Safety ratings and content filtering are reported for both prompt in GenerateContentResponse.prompt_feedback and for each candidate in finishReason and safetyRatings.
+      properties:
+        candidates:
+          type: array
+          description: Candidate responses from the model. There may be multiple candidates if candidateCount was set in the GenerationConfig.
+          items:
+            $ref: '#/components/schemas/Candidate'
+        promptFeedback:
+          $ref: '#/components/schemas/PromptFeedback'
+        usageMetadata:
+          $ref: '#/components/schemas/UsageMetadata'
+        modelVersion:
+          type: string
+          description: The model version used to generate the response.
+        responseId:
+          type: string
+          description: Unique identifier for the response.
+    GenerationConfig:
+      type: object
+      description: Configuration options for model generation and outputs. Not all parameters are configurable for every model.
+      properties:
+        candidateCount:
+          type: integer
+          format: int32
+          description: Number of generated responses to return. Currently, this value can only be set to 1. If unset, this will default to 1.
+        stopSequences:
+          type: array
+          description: The set of character sequences (up to 5) that will stop output generation. If specified, the API will stop at the first appearance of a stop_sequence. The stop sequence will not be included as part of the response.
+          items:
+            type: string
+        maxOutputTokens:
+          type: integer
+          format: int32
+          description: 'The maximum number of tokens to include in a response candidate. Note: The default value varies by model.'
+        temperature:
+          type: number
+          format: float
+          description: Controls the randomness of the output. Values can range from 0.0 to 2.0 inclusive. A higher value will produce responses that are more varied and creative, while a value closer to 0.0 will typically result in more straightforward responses from the model.
+        topP:
+          type: number
+          format: float
+          description: The maximum cumulative probability of tokens to consider when sampling. The model uses combined Top-k and Top-p (nucleus) sampling. Tokens are sorted based on their assigned probabilities so that only the most likely tokens are considered.
+        topK:
+          type: integer
+          format: int32
+          description: The maximum number of tokens to consider when sampling. Gemini models use Top-p (nucleus) sampling or a combination of Top-k and nucleus sampling.
+        responseMimeType:
+          type: string
+          description: MIME type of the generated candidate text. Supported MIME types are text/plain (default), application/json (JSON response in the response candidates), and text/x.enum (for classification tasks).
+        responseSchema:
+          type: object
+          description: 'Output schema of the generated candidate text. Schemas must be a subset of the OpenAPI schema and can be objects, primitives, or arrays. If set, a compatible responseMimeType must also be set. Compatible MIME types: application/json.'
+          additionalProperties: true
+        presencePenalty:
+          type: number
+          format: float
+          description: Positive values penalize tokens that have already appeared in the generated text, increasing the likelihood of generating more diverse content.
+        frequencyPenalty:
+          type: number
+          format: float
+          description: Positive values penalize tokens based on their frequency in the generated text, decreasing the likelihood of repeating the same content verbatim.
+        seed:
+          type: integer
+          format: int32
+          description: Seed used in decoding. If specified with the same seed and parameters, the model will attempt to return the same response.
+    GenerateContentRequest:
+      type: object
+      description: Request to generate a completion from the model. Contains the conversation content, optional tools, safety settings, system instructions, and generation configuration.
+      required:
+      - contents
+      properties:
+        contents:
+          type: array
+          description: Required. The content of the current conversation with the model. For single-turn queries, this is a single instance. For multi-turn queries such as chat, this is a repeated field that contains the conversation history and the latest request.
+          items:
+            $ref: '#/components/schemas/Content'
+        tools:
+          type: array
+          description: A list of Tools the Model may use to generate the next response. A Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the Model.
+          items:
+            $ref: '#/components/schemas/Tool'
+        toolConfig:
+          $ref: '#/components/schemas/ToolConfig'
+        safetySettings:
+          type: array
+          description: A list of unique SafetySetting instances for blocking unsafe content. This will be enforced on the GenerateContentRequest.contents and GenerateContentResponse.candidates. There should be at most one setting for each SafetyCategory type.
+          items:
+            $ref: '#/components/schemas/SafetySetting'
+        systemInstruction:
+          $ref: '#/components/schemas/Content'
+        generationConfig:
+          $ref: '#/components/schemas/GenerationConfig'
+        cachedContent:
+          type: string
+          description: 'The name of the cached content used as context to serve the prediction. Format: cachedContents/{cachedContent}.'
+    FunctionCallingConfig:
+      type: object
+      description: Configuration for specifying function calling behavior.
+      properties:
+        mode:
+          type: string
+          description: Specifies the mode in which function calling should execute.
+          enum:
+          - MODE_UNSPECIFIED
+          - AUTO
+          - ANY
+          - NONE
+        allowedFunctionNames:
+          type: array
+          description: A set of function names that, when provided, limits the functions the model will call. This should only be set when the Mode is ANY. Function names should match FunctionDeclaration.name.
+          items:
+            type: string
+    PromptFeedback:
+      type: object
+      description: A set of the feedback metadata for the prompt specified in GenerateContentRequest.content.
+      properties:
+        blockReason:
+          type: string
+          description: If set, the prompt was blocked and no candidates are returned.
+          enum:
+          - BLOCK_REASON_UNSPECIFIED
+          - SAFETY
+          - OTHER
+          - BLOCKLIST
+          - PROHIBITED_CONTENT
+        safetyRatings:
+          type: array
+          description: Ratings for safety of the prompt.
+          items:
+            $ref: '#/components/schemas/SafetyRating'
+    Candidate:
+      type: object
+      description: A response candidate generated from the model.
+      properties:
+        content:
+          $ref: '#/components/schemas/Content'
+        finishReason:
+          type: string
+          description: The reason why the model stopped generating tokens. If empty, the model has not stopped generating tokens.
+          enum:
+          - FINISH_REASON_UNSPECIFIED
+          - STOP
+          - MAX_TOKENS
+          - SAFETY
+          - RECITATION
+          - LANGUAGE
+          - OTHER
+          - BLOCKLIST
+          - PROHIBITED_CONTENT
+          - SPII
+          - MALFORMED_FUNCTION_CALL
+        safetyRatings:
+          type: array
+          description: List of ratings for the safety of a response candidate. There is at most one rating per category.
+          items:
+            $ref: '#/components/schemas/SafetyRating'
+        citationMetadata:
+          $ref: '#/components/schemas/CitationMetadata'
+        tokenCount:
+          type: integer
+          format: int32
+          description: Token count for this candidate.
+        index:
+          type: integer
+          format: int32
+          description: Index of the candidate in the list of response candidates.
+    Part:
+      type: object
+      description: A datatype containing media that is part of a multi-part Content message. A Part consists of data which has an associated datatype. A Part can only contain one of the accepted types in its corresponding field.
+      properties:
+        text:
+          type: string
+          description: Inline text.
+        inlineData:
+          $ref: '#/components/schemas/Blob'
+        fileData:
+          $ref: '#/components/schemas/FileData'
+        functionCall:
+          $ref: '#/components/schemas/FunctionCall'
+        functionResponse:
+          $ref: '#/components/schemas/FunctionResponse'
+    CitationSource:
+      type: object
+      description: A citation to a source for a portion of a specific response.
+      properties:
+        startIndex:
+          type: integer
+          format: int32
+          description: Start of segment of the response that is attributed to this source.
+        endIndex:
+          type: integer
+          format: int32
+          description: End of the attributed segment, exclusive.
+        uri:
+          type: string
+          description: URI that is attributed as a source for a portion of the text.
+        license:
+          type: string
+          description: License for the GitHub project that is attributed as a source.
+    FunctionCall:
+      type: object
+      description: A predicted FunctionCall returned from the model that contains a string representing the FunctionDeclaration.name with the arguments and their values.
+      properties:
+        name:
+          type: string
+          description: Required. The name of the function to call. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+        args:
+          type: object
+          description: The function parameters and values in JSON object format.
+          additionalProperties: true
+    FileData:
+      type: object
+      description: URI based data for media uploaded via the Files API.
+      properties:
+        mimeType:
+          type: string
+          description: The IANA standard MIME type of the source data.
+        fileUri:
+          type: string
+          description: URI of the file.
+    SafetySetting:
+      type: object
+      description: Safety setting, affecting the safety-blocking behavior. Passing a safety setting for a category changes the allowed probability that content is blocked.
+      properties:
+        category:
+          type: string
+          description: Required. The category for this setting.
+          enum:
+          - HARM_CATEGORY_UNSPECIFIED
+          - HARM_CATEGORY_HATE_SPEECH
+          - HARM_CATEGORY_SEXUALLY_EXPLICIT
+          - HARM_CATEGORY_DANGEROUS_CONTENT
+          - HARM_CATEGORY_HARASSMENT
+          - HARM_CATEGORY_CIVIC_INTEGRITY
+        threshold:
+          type: string
+          description: Required. Controls the probability threshold at which harm is blocked.
+          enum:
+          - HARM_BLOCK_THRESHOLD_UNSPECIFIED
+          - BLOCK_LOW_AND_ABOVE
+          - BLOCK_MEDIUM_AND_ABOVE
+          - BLOCK_ONLY_HIGH
+          - BLOCK_NONE
+          - false
+    ErrorResponse:
+      type: object
+      description: Error response from the API.
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+              description: HTTP error code.
+            message:
+              type: string
+              description: Human-readable error message.
+            status:
+              type: string
+              description: Error status string.
+    UsageMetadata:
+      type: object
+      description: Metadata on the generation request's token usage.
+      properties:
+        promptTokenCount:
+          type: integer
+          format: int32
+          description: Number of tokens in the prompt.
+        candidatesTokenCount:
+          type: integer
+          format: int32
+          description: Total number of tokens across all the generated response candidates.
+        totalTokenCount:
+          type: integer
+          format: int32
+          description: Total token count for the generation request (prompt + response candidates).
+        cachedContentTokenCount:
+          type: integer
+          format: int32
+          description: Number of tokens in the cached part of the prompt (the cached content).
+    FunctionResponse:
+      type: object
+      description: The result output from a FunctionCall that contains a string representing the FunctionDeclaration.name and a structured JSON object containing any output from the function call.
+      properties:
+        name:
+          type: string
+          description: Required. The name of the function to call. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+        response:
+          type: object
+          description: Required. The function response in JSON object format.
+          additionalProperties: true
+    CitationMetadata:
+      type: object
+      description: A collection of source attributions for a piece of content.
+      properties:
+        citationSources:
+          type: array
+          description: Citations to sources for a specific response.
+          items:
+            $ref: '#/components/schemas/CitationSource'
+    Content:
+      type: object
+      description: The base structured datatype containing multi-part content of a message. A Content includes a role field designating the producer of the Content and a parts field containing multi-part data that contains the content of the message turn.
+      properties:
+        parts:
+          type: array
+          description: Ordered Parts that constitute a single message. Parts may have different MIME types.
+          items:
+            $ref: '#/components/schemas/Part'
+        role:
+          type: string
+          description: The producer of the content. Must be either 'user' or 'model'. Useful to set for multi-turn conversations, otherwise can be left blank or unset.
+          enum:
+          - user
+          - model
+    ToolConfig:
+      type: object
+      description: The Tool configuration containing parameters for specifying Tool use in the request.
+      properties:
+        functionCallingConfig:
+          $ref: '#/components/schemas/FunctionCallingConfig'
+    FunctionDeclaration:
+      type: object
+      description: Structured representation of a function declaration as defined by the OpenAPI 3.0 specification. Included in this declaration are the function name and parameters.
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          description: Required. The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+        description:
+          type: string
+          description: Required. A brief description of the function.
+        parameters:
+          type: object
+          description: 'Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object. String key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.'
+          additionalProperties: true
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: query
+      name: key
+      description: API key for authenticating requests. Obtain from Google AI Studio at https://aistudio.google.com/app/apikey.
