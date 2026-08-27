@@ -131,7 +131,7 @@ public class ReActTrace implements AgentTrace {
      */
     private volatile String finalAnswer;
     /**
-     * 是否异常（结束的）
+     * 是否异常结束的（只要不是由 ai 输出最终答案的，都算异常）
      */
     private volatile boolean abnormal;
     /**
@@ -384,7 +384,7 @@ public class ReActTrace implements AgentTrace {
 
 
     /**
-     * 是否异常结束的
+     * 是否异常结束的（只要不是由 ai 输出最终答案的，都算异常）
      */
     public boolean isAbnormal() {
         return abnormal;

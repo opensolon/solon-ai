@@ -1240,7 +1240,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                     && amContent != null && amContent.equals(am.getContentRaw()))) {
                 return null;
             }
-            AssistantMessage rebuilt = new AssistantMessage(am.isThinking()?"":newContent, am.isThinking()?newContent:"", am.isThinking());
+            // thinking 消息：截断内容归 thinking 槽，text 保持空；普通文本消息：截断内容归 text 槽，thinking 保持空
+            String rebuiltText = am.isThinking() ? "" : newContent;
+            String rebuiltThinking = am.isThinking() ? newContent : "";
+            AssistantMessage rebuilt = new AssistantMessage(rebuiltText, rebuiltThinking, am.isThinking());
             copyMetadataExceptTokenSize(origin, rebuilt);
             return rebuilt;
         }

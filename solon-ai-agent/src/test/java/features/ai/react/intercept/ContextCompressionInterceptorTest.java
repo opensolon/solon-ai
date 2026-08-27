@@ -1184,6 +1184,7 @@ public class ContextCompressionInterceptorTest {
         source.setMinReservedMessages(7);
         source.setPerMessageCap(1_500);
         source.setMaxContextLengthRatio(0.8D);
+        source.setDefaultContextLength(200_000L);
 
         ContextCompressionInterceptor copied = source.copyWith(30);
 
@@ -1191,7 +1192,7 @@ public class ContextCompressionInterceptorTest {
         assertEquals(7, readIntField(copied, "minReservedMessages"));
         assertEquals(1_500, readIntField(copied, "perMessageCap"));
         assertEquals(0.8D, readDoubleField(copied, "maxContextLengthRatio"), 0.000001D);
-        assertEquals(128_000L, readLongField(copied, "defaultContextWindow"));
+        assertEquals(200_000L, readLongField(copied, "defaultContextLength"));
         assertEquals(30, readIntField(copied, "maxMessages"));
     }
 
