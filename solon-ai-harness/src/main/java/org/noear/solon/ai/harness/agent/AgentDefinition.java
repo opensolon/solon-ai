@@ -180,7 +180,7 @@ public class AgentDefinition {
 
         Markdown markdown = MarkdownUtil.resolve(lines);
 
-        definition.metadata = markdown.getMetadata().toBean(Metadata.class);
+        markdown.getMetadata().bindTo(definition.metadata);
         definition.systemPrompt = markdown.getContent();
 
         // 手动解析 permissionRules（Snack4 无法直接反序列化 PermissionRule）
