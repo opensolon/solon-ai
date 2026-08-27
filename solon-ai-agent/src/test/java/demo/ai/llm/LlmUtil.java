@@ -20,6 +20,11 @@ public class LlmUtil {
 //                .model("deepseek-chat") //deepseek-reasoner//deepseek-chat
 //                .build();
 
+//        return ChatModel.of("https://open.bigmodel.cn/api/paas/v4/chat/completions")
+//                .apiKey("52755d7995a8413783bb70ff6d44f42f.zCAKSzqlo9hmJS7s")
+//                .model("glm-4.5-flash")
+//                .build();
+
         return ChatModel.of("https://ai.gitee.com/v1/chat/completions")
                 .apiKey("PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18")
                 .model("Qwen3-32B") //Qwen3-32B, GLM-4.6

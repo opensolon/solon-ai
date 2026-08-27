@@ -20,7 +20,7 @@ public class SimpleAgentTest {
 
     @Test
     public void case2() throws Throwable {
-        ChatModel chatModel = LlmUtil.getChatModelReasoner();
+        ChatModel chatModel = LlmUtil.getChatModel();
 
         AgentSession session = InMemoryAgentSession.of("tmp");
         SimpleAgent agent = SimpleAgent.of(chatModel)

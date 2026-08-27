@@ -362,11 +362,6 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                                 name(), attempt, config.getMaxRetries(), e.toString());
                     })
                     .callWithRetry(() -> {
-                        // 运行中检查：如果流已被取消，直接跳出重试
-                        if (trace.isStreamCancelled()) {
-                            return null;
-                        }
-
                         return doCall(trace, session, finalPrompt, chatReq);
                     });
 

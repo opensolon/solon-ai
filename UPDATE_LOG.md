@@ -21,6 +21,7 @@
 * 优化 solon-ai-telent-lsp 体验及超时处理
 * 优化 solon-ai-harness 添加 compressionDefaultContextLength 配置支持
 * 调整 solon-ai-harness HarnessExtension.configure 添加 engine 参数
+* 修复 solon-ai-agent SimpleAgent 因 isStreamCancelled 引起的问题。
 * 修复 solon-ai-dialect-anthropic 缓存率计算错误的问题
 * 修复 solon-ai-dialect-anthropic 输出有叠字的问题
 
