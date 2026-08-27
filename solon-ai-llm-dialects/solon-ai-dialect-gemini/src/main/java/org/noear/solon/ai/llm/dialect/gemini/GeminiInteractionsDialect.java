@@ -242,7 +242,7 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
 
             List<AssistantMessage> messages = new ArrayList<>();
             if (!toolCalls.isEmpty()) {
-                messages.add(new AssistantMessage("", false, null, null, toolCalls, null));
+                messages.add(new AssistantMessage("", "",false, null, null, toolCalls, null));
             }
             return messages;
         }

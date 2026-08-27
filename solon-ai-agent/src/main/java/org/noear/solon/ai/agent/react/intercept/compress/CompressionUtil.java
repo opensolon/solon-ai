@@ -241,7 +241,7 @@ public class CompressionUtil {
      * @since 4.0.0
      */
     public static boolean isTextAction(AssistantMessage message) {
-        String content = message.getAnswer();
+        String content = message.getText();
         if (content == null) {
             return false;
         }

@@ -260,21 +260,21 @@ public class AnthropicResponseParser {
                         if (!resp.in_thinking) {
                             // 第一次进入思考模式，添加开始标记
                             resp.addChoice(new ChatChoice(0, new Date(), null,
-                                    new AssistantMessage("<think>", true)));
+                                    new AssistantMessage("","", true)));
                             resp.in_thinking = true;
                             hasChoices = true;
                         }
                         String thinking = contentBlock.get("thinking").getString();
                         if (Utils.isNotEmpty(thinking)) {
                             resp.addChoice(new ChatChoice(0, new Date(), null,
-                                    new AssistantMessage(thinking, true)));
+                                    new AssistantMessage("",thinking, true)));
                             hasChoices = true;
                         }
                     } else if ("text".equals(blockType)) {
                         // 如果之前在思考模式，添加结束标记
                         if (resp.in_thinking) {
                             resp.addChoice(new ChatChoice(0, new Date(), null,
-                                    new AssistantMessage("</think>", true)));
+                                    new AssistantMessage("", "", true)));
                             resp.in_thinking = false;
                             hasChoices = true;
                         }
@@ -288,7 +288,7 @@ public class AnthropicResponseParser {
                         // 如果之前在思考模式，添加结束标记
                         if (resp.in_thinking) {
                             resp.addChoice(new ChatChoice(0, new Date(), null,
-                                    new AssistantMessage("</think>", true)));
+                                    new AssistantMessage("", "", true)));
                             resp.in_thinking = false;
                             hasChoices = true;
                         }
@@ -324,7 +324,7 @@ public class AnthropicResponseParser {
                         String thinking = delta.get("thinking").getString();
                         if (Utils.isNotEmpty(thinking)) {
                             resp.addChoice(new ChatChoice(0, new Date(), null,
-                                    new AssistantMessage(thinking, true)));
+                                    new AssistantMessage("",thinking, true)));
                             hasChoices = true;
                         }
                     } else if ("signature_delta".equals(deltaType)) {
@@ -395,7 +395,7 @@ public class AnthropicResponseParser {
 
                         List<ToolCall> toolCalls = new ArrayList<>();
                         toolCalls.add(toolCall);
-                        AssistantMessage assistantMessage = new AssistantMessage("",
+                        AssistantMessage assistantMessage = new AssistantMessage("","",
                                 false, null, toolCallsRaw,
                                 toolCalls, null);
                         resp.addChoice(new ChatChoice(0, new Date(), null, assistantMessage));
@@ -651,11 +651,11 @@ public class AnthropicResponseParser {
 
             // 将所有工具调用合并到一个 AssistantMessage 中
             if (!allToolCalls.isEmpty()) {
-                AssistantMessage msg = new AssistantMessage(textContent,
+                AssistantMessage msg = new AssistantMessage(textContent,"",
                         false, contentRaw, allToolCallsRaw, allToolCalls, null, blocksForMsg);
                 resp.addChoice(new ChatChoice(0, created, choiceFinishReason, msg));
             } else if (Utils.isNotEmpty(textContent) || blocksForMsg != null || contentRaw != null) {
-                AssistantMessage msg = new AssistantMessage(textContent,
+                AssistantMessage msg = new AssistantMessage(textContent, "",
                         false, contentRaw, null, null, null, blocksForMsg);
                 resp.addChoice(new ChatChoice(0, created, choiceFinishReason, msg));
             }

@@ -55,6 +55,7 @@ public class OpenaiResponsesResponseParser {
         String currentReasoningId;
         String currentReasoningEncryptedContent;
     }
+
     private static final String STREAM_STATE_KEY = "StreamState";
 
     public OpenaiResponsesResponseParser() {
@@ -136,7 +137,7 @@ public class OpenaiResponsesResponseParser {
                 continue;
             }
 
-            if(oResp.hasKey("error")){
+            if (oResp.hasKey("error")) {
                 // 顶层 error 帧：流已终止，先清理流式状态再返回
                 resp.attrRemove(STREAM_STATE_KEY);
                 resp.setError(new ChatException(oResp.get("error").getString()));
@@ -242,7 +243,7 @@ public class OpenaiResponsesResponseParser {
                         state.currentReasoningContent = new StringBuilder();
                     }
                     state.currentReasoningContent.append(delta);
-                    AssistantMessage thinkingMsg = new AssistantMessage(delta, true);
+                    AssistantMessage thinkingMsg = new AssistantMessage("", delta, true);
                     attachReasoningMetadata(thinkingMsg, state);
                     resp.addChoice(new ChatChoice(0, new Date(), null, thinkingMsg));
                     hasChoices = true;
@@ -270,7 +271,7 @@ public class OpenaiResponsesResponseParser {
                     StreamState state = resp.attrAs(STREAM_STATE_KEY);
                     if (state != null && state.currentReasoningContent != null) {
                         state.currentReasoningContent.append(delta);
-                        AssistantMessage thinkingMsg = new AssistantMessage(delta, true);
+                        AssistantMessage thinkingMsg = new AssistantMessage("", delta, true);
                         attachReasoningMetadata(thinkingMsg, state);
                         resp.addChoice(new ChatChoice(0, new Date(), null, thinkingMsg));
                         hasChoices = true;
@@ -304,7 +305,7 @@ public class OpenaiResponsesResponseParser {
                             // 思考增量经 content_part.delta 到达：按 thinking 消息处理，防止被当作普通文本输出
                             if (state != null && state.currentReasoningContent != null) {
                                 state.currentReasoningContent.append(text);
-                                AssistantMessage thinkingMsg = new AssistantMessage(text, true);
+                                AssistantMessage thinkingMsg = new AssistantMessage("", text, true);
                                 attachReasoningMetadata(thinkingMsg, state);
                                 resp.addChoice(new ChatChoice(0, new Date(), null, thinkingMsg));
                                 hasChoices = true;
@@ -571,7 +572,7 @@ public class OpenaiResponsesResponseParser {
                         }
                     }
                     allToolCalls.add(new ToolCall(callId, callId, functionName, arguments, argMap));
-                    
+
                     Map<String, Object> toolCallRaw = new HashMap<>();
                     toolCallRaw.put("id", callId);
                     toolCallRaw.put("type", "function");
@@ -582,7 +583,7 @@ public class OpenaiResponsesResponseParser {
                     allToolCallsRaw.add(toolCallRaw);
                 }
             }
-        
+
             List<ContentBlock> blocksForMsg = null;
             if (!mediaBlocks.isEmpty()) {
                 blocksForMsg = new ArrayList<>();
@@ -592,10 +593,10 @@ public class OpenaiResponsesResponseParser {
                 blocksForMsg.addAll(mediaBlocks);
                 resp.addMediaBlocks(mediaBlocks);
             }
-        
+
             // 思考内容优先输出为 thinking 消息（官方/DeepSeek Responses 思维链回传）
             if (reasoningContent.length() > 0) {
-                AssistantMessage thinkingMsg = new AssistantMessage(reasoningContent.toString(), true);
+                AssistantMessage thinkingMsg = new AssistantMessage("", reasoningContent.toString(), true);
                 if (Utils.isNotEmpty(reasoningItemId)) {
                     thinkingMsg.getMetadata().put("reasoning_item_id", reasoningItemId);
                 }
@@ -607,11 +608,11 @@ public class OpenaiResponsesResponseParser {
 
             // 将所有工具调用合并到一个 AssistantMessage 中
             if (!allToolCalls.isEmpty()) {
-                AssistantMessage msg = new AssistantMessage(textContent.toString(),
+                AssistantMessage msg = new AssistantMessage(textContent.toString(), "",
                         false, null, allToolCallsRaw, allToolCalls, null, blocksForMsg);
                 resp.addChoice(new ChatChoice(0, created, "stop", msg));
             } else if (textContent.length() > 0 || blocksForMsg != null) {
-                AssistantMessage msg = new AssistantMessage(textContent.toString(),
+                AssistantMessage msg = new AssistantMessage(textContent.toString(), "",
                         false, null, null, null, null, blocksForMsg);
                 resp.addChoice(new ChatChoice(0, created, "stop", msg));
             } else {
@@ -626,7 +627,7 @@ public class OpenaiResponsesResponseParser {
             String reasoningText = oResp.get("reasoning_text").getString();
             if (Utils.isNotEmpty(reasoningText)) {
                 resp.addChoice(new ChatChoice(0, created, null,
-                        new AssistantMessage(reasoningText, true)));
+                        new AssistantMessage("", reasoningText, true)));
             }
             String outputText = oResp.get("output_text").getString();
             if (Utils.isNotEmpty(outputText)) {
@@ -656,7 +657,7 @@ public class OpenaiResponsesResponseParser {
         String id = outputItem.get("id").getString();
         String revisedPrompt = outputItem.get("revised_prompt").getString();
         String status = outputItem.get("status").getString();
-    
+
         ImageBlock block = null;
         if (Utils.isNotEmpty(result)) {
             // result 为 base64（可能带 data: 前缀）
@@ -674,11 +675,11 @@ public class OpenaiResponsesResponseParser {
             // 仅 id：占位，便于多轮回传 image_generation_call
             block = ImageBlock.ofUrl("image-generation://" + id);
         }
-    
+
         if (block == null) {
             return null;
         }
-    
+
         if (Utils.isNotEmpty(id)) {
             block.metaAdd("id", id);
             block.metaAdd("image_generation_id", id);
@@ -692,7 +693,7 @@ public class OpenaiResponsesResponseParser {
         }
         return block;
     }
-    
+
     /**
      * 解析 message content 中的图片项。
      *
@@ -725,7 +726,7 @@ public class OpenaiResponsesResponseParser {
         if (data == null && contentItem.hasKey("result")) {
             data = contentItem.get("result").getString();
         }
-    
+
         if (Utils.isNotEmpty(data)) {
             if (data.startsWith("data:") && data.contains(";base64,")) {
                 int comma = data.indexOf(',');
@@ -740,7 +741,7 @@ public class OpenaiResponsesResponseParser {
         }
         return null;
     }
-    
+
     private void attachReasoningMetadata(AssistantMessage thinkingMsg, StreamState state) {
         if (state == null) {
             return;
@@ -785,7 +786,7 @@ public class OpenaiResponsesResponseParser {
             toolCallsRaw.add(toolCallRaw);
             List<ToolCall> toolCalls = new ArrayList<>();
             toolCalls.add(toolCall);
-            AssistantMessage assistantMessage = new AssistantMessage("",
+            AssistantMessage assistantMessage = new AssistantMessage("", "",
                     false, null,
                     toolCallsRaw, toolCalls, null);
             resp.addChoice(new ChatChoice(0, new Date(), null, assistantMessage));

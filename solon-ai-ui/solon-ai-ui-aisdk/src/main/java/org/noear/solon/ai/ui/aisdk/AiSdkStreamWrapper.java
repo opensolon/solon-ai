@@ -173,7 +173,7 @@ public class AiSdkStreamWrapper {
                 }
 
                 // 6. 正文内容（使用 getResultContent 获取去除思考标签的纯文本）
-                String content = message.getAnswer();
+                String content = message.getText();
                 if (content != null && !content.isEmpty()) {
                     emit(sink, new TextStartPart(textId));
                     emit(sink, new TextDeltaPart(textId, content));

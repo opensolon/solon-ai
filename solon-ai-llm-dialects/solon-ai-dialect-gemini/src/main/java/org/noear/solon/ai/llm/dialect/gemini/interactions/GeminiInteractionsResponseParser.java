@@ -151,7 +151,7 @@ public class GeminiInteractionsResponseParser {
                             if (Utils.isNotEmpty(signature)) {
                                 thinkingSignature = signature;
                             }
-                            messages.add(new AssistantMessage(thoughtText, true));
+                            messages.add(new AssistantMessage("",thoughtText, true));
                         }
                         break;
 
@@ -203,11 +203,11 @@ public class GeminiInteractionsResponseParser {
             // 结束 thinking 状态（如果有）
             if (resp.in_thinking) {
                 resp.addChoice(new ChatChoice(choiceIndex++, created, finishReason,
-                        new AssistantMessage("</think>", true)));
+                        new AssistantMessage("","", true)));
                 resp.in_thinking = false;
                 hasChoices = true;
             }
-            AssistantMessage toolCallMsg = new AssistantMessage("", false, null, null, toolCalls, null);
+            AssistantMessage toolCallMsg = new AssistantMessage("", "", false, null, null, toolCalls, null);
             resp.addChoice(new ChatChoice(choiceIndex++, created, finishReason, toolCallMsg));
             hasChoices = true;
         }
@@ -341,7 +341,7 @@ public class GeminiInteractionsResponseParser {
         if ("thought".equals(stepType) && !resp.in_thinking) {
             resp.in_thinking = true;
             resp.addChoice(new ChatChoice(index, created, null,
-                    new AssistantMessage("\n\n", true)));
+                    new AssistantMessage("", "", true)));
             return true;
         }
 
@@ -388,11 +388,11 @@ public class GeminiInteractionsResponseParser {
                 if ("model_output".equals(acc.stepType)) {
                     if (resp.in_thinking) {
                         resp.addChoice(new ChatChoice(index, created, null,
-                                new AssistantMessage("</think>", true)));
+                                new AssistantMessage("", "", true)));
                         resp.in_thinking = false;
                     }
                     resp.addChoice(new ChatChoice(index, created, null,
-                            new AssistantMessage(text, false)));
+                            new AssistantMessage(text, "", false)));
                     return true;
                 }
             }
@@ -412,11 +412,11 @@ public class GeminiInteractionsResponseParser {
                     // thought 的 summary 增量作为 thinking 内容发出
                     if (!resp.in_thinking) {
                         resp.addChoice(new ChatChoice(index, created, null,
-                                new AssistantMessage("\n\n", true)));
+                                new AssistantMessage("", "", true)));
                         resp.in_thinking = true;
                     }
                     resp.addChoice(new ChatChoice(index, created, null,
-                            new AssistantMessage(summaryText, true)));
+                            new AssistantMessage("",summaryText, true)));
                     return true;
                 }
             }
@@ -446,7 +446,7 @@ public class GeminiInteractionsResponseParser {
             // 结束 thinking 状态
             if (resp.in_thinking) {
                 resp.addChoice(new ChatChoice(index, created, null,
-                        new AssistantMessage("</think>", true)));
+                        new AssistantMessage("", "", true)));
                 resp.in_thinking = false;
             }
 
@@ -455,7 +455,7 @@ public class GeminiInteractionsResponseParser {
             ToolCall toolCall = buildToolCallFromAccumulator(acc);
             if (toolCall != null) {
                 resp.addChoice(new ChatChoice(index, created, null,
-                        new AssistantMessage("", false, null, null,
+                        new AssistantMessage("", "", false, null, null,
                                 Collections.singletonList(toolCall), null)));
                 return true;
             }
@@ -620,7 +620,7 @@ public class GeminiInteractionsResponseParser {
         }
         
         if (media.isEmpty()) {
-            return new AssistantMessage(text.toString(), false);
+            return new AssistantMessage(text.toString(), "", false);
         }
     
         List<ContentBlock> blocksForMsg = new ArrayList<>();
@@ -628,7 +628,7 @@ public class GeminiInteractionsResponseParser {
             blocksForMsg.add(TextBlock.of(text.toString()));
         }
         blocksForMsg.addAll(media);
-        return new AssistantMessage(text.toString(), false, null, null, null, null, blocksForMsg);
+        return new AssistantMessage(text.toString(), "",false, null, null, null, null, blocksForMsg);
     }
     
     /**

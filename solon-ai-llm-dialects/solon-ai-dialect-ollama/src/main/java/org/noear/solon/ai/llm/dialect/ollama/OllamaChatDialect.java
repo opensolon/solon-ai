@@ -120,8 +120,8 @@ public class OllamaChatDialect extends AbstractChatDialect {
     protected void buildAssistantMessageNodeDo(ChatConfig config, ONode oNode, AssistantMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
 
-        if (Utils.isNotEmpty(msg.getAnswer())) {
-            oNode.set("content", msg.getAnswer());
+        if (Utils.isNotEmpty(msg.getText())) {
+            oNode.set("content", msg.getText());
         } else {
             oNode.set("content", "");
         }
@@ -131,7 +131,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
         }
 
         //兼容 r1 的 tool-call
-        if (Utils.isNotEmpty(msg.getReasoningFieldName())) {
+        if (Utils.isNotEmpty(msg.getReasoningFieldName()) && Utils.isNotEmpty(msg.getThinking())) {
             oNode.set(msg.getReasoningFieldName(), msg.getThinking());
         }
 
@@ -175,8 +175,8 @@ public class OllamaChatDialect extends AbstractChatDialect {
                     && !msg.isThinking()
                     && Utils.isEmpty(msg.getToolCalls())) {
                 List<ContentBlock> blocks = new ArrayList<>();
-                if (Utils.isNotEmpty(msg.getContent())) {
-                    blocks.add(TextBlock.of(msg.getContent()));
+                if (Utils.isNotEmpty(msg.getTextRaw())) {
+                    blocks.add(TextBlock.of(msg.getTextRaw()));
                 }
                 // 保留已有 blocks （若有）再追加侧车媒体
                 if (Utils.isNotEmpty(msg.getBlocks())) {
@@ -188,7 +188,8 @@ public class OllamaChatDialect extends AbstractChatDialect {
                 }
                 blocks.addAll(mediaBlocks);
                 result.add(new AssistantMessage(
-                        msg.getContent(),
+                        msg.getTextRaw(),
+                        msg.getThinkingRaw(),
                         msg.isThinking(),
                         msg.getContentRaw(),
                         msg.getToolCallsRaw(),
@@ -203,7 +204,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
 
         // 若只有 thinking/tool 消息，补一条带媒体的空文本消息
         if (!mediaMerged) {
-            result.add(new AssistantMessage("", false, null, null, null, null, mediaBlocks));
+            result.add(new AssistantMessage("","", false, null, null, null, null, mediaBlocks));
         }
 
         return result;
@@ -276,7 +277,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
     public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode oNode = new ONode();
         oNode.set("role", "assistant");
-        oNode.set("content", resp.getAggregationContent());
+        oNode.set("content", resp.getAggregationText());
         oNode.getOrNew("tool_calls").asArray().then(n1 -> {
             for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
                 //有可能没有

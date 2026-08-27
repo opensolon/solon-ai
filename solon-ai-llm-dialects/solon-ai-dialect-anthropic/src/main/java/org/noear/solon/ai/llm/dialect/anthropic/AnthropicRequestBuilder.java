@@ -730,7 +730,7 @@ public class AnthropicRequestBuilder {
             appendRedactedThinkingBlocks(contentArray, assistantMessage);
 
             // 添加文本内容（如果有，排除  与纯空白）
-            String resultContent = trimToNull(assistantMessage.getAnswer());
+            String resultContent = trimToNull(assistantMessage.getText());
             if (resultContent != null) {
                 contentArray.addNew()
                     .set("type", "text")
@@ -768,7 +768,7 @@ public class AnthropicRequestBuilder {
                 }
             }
             if (!hasText) {
-                String fallbackText = trimToNull(assistantMessage.getAnswer());
+                String fallbackText = trimToNull(assistantMessage.getText());
                 if (fallbackText != null) {
                     contentArray.addNew()
                             .set("type", "text")
@@ -777,7 +777,7 @@ public class AnthropicRequestBuilder {
             }
         } else {
             // 纯文本回传剥离 think，与多模态 TextBlock 路径一致；空白不回传为 text
-            String content = trimToNull(assistantMessage.getAnswer());
+            String content = trimToNull(assistantMessage.getText());
             if (content != null) {
                 node.set("content", content);
             } else {
@@ -1082,7 +1082,7 @@ public class AnthropicRequestBuilder {
 
         // 仅当 thinkingSignature 有效时回传 thinking；无 signature 的 thinking 不回传，
         // 避免 tool 多轮在兼容网关上触发 EMPTY_RESPONSE
-        String thinkingContent = resp.reasoningBuilder.toString();
+        String thinkingContent = resp.thinkingBuilder.toString();
         if (Utils.isNotEmpty(thinkingContent) && Utils.isNotEmpty(resp.thinkingSignature)) {
             contentArray.addNew()
                     .set("type", "thinking")

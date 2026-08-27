@@ -272,12 +272,12 @@ public class GeminiRequestBuilder {
             ONode parts = node.getOrNew("parts").asArray();
             appendAssistantContentParts(parts, assistantMessage);
             if (parts.getArray() != null && parts.getArray().isEmpty()
-                    && Utils.isNotEmpty(assistantMessage.getAnswer())) {
-                parts.addNew().set("text", assistantMessage.getAnswer());
+                    && Utils.isNotEmpty(assistantMessage.getText())) {
+                parts.addNew().set("text", assistantMessage.getText());
             }
         } else {
             // 与多模态路径对齐：纯文本也剥离 think 标签
-            String content = assistantMessage.getAnswer();
+            String content = assistantMessage.getText();
             if (Utils.isNotEmpty(content)) {
                 node.getOrNew("parts").asArray().addNew().set("text", content);
             }
@@ -303,11 +303,11 @@ public class GeminiRequestBuilder {
                     appendMediaPart(partsArr, (AbsMedia<?>) block);
                 }
             }
-            if (!hasText && Utils.isNotEmpty(assistantMessage.getAnswer())) {
-                partsArr.addNew().set("text", assistantMessage.getAnswer());
+            if (!hasText && Utils.isNotEmpty(assistantMessage.getText())) {
+                partsArr.addNew().set("text", assistantMessage.getText());
             }
-        } else if (Utils.isNotEmpty(assistantMessage.getAnswer())) {
-            partsArr.addNew().set("text", assistantMessage.getAnswer());
+        } else if (Utils.isNotEmpty(assistantMessage.getText())) {
+            partsArr.addNew().set("text", assistantMessage.getText());
         }
     }
 

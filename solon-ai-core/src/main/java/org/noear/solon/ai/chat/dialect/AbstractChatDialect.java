@@ -46,7 +46,7 @@ import java.util.*;
 public abstract class AbstractChatDialect implements ChatDialect {
     private static final Logger LOG = LoggerFactory.getLogger(AbstractChatDialect.class);
 
-    protected String getApiUrl(ChatConfig config){
+    protected String getApiUrl(ChatConfig config) {
         return config.getApiUrl();
     }
 
@@ -91,8 +91,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
         if (msg.isMultiModal() == false) {
             // 单模态：保持原有 string content 行为
-            if (Utils.isNotEmpty(msg.getAnswer())) {
-                oNode.set("content", msg.getAnswer());
+            if (Utils.isNotEmpty(msg.getText())) {
+                oNode.set("content", msg.getText());
             } else if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
                 // 有 tool_calls 但无文本内容（如 reasoning-only 后调工具）时，显式设 content=null
                 // OpenAI 规范要求 assistant message 含 tool_calls 时 content 字段存在（可为 null）
@@ -153,21 +153,21 @@ public abstract class AbstractChatDialect implements ChatDialect {
                             oNode1.getOrNew("video_url").set("url", videoData);
                         }
                     }
-        
+
                     // 不再把内部 meta（audio_id/source_type 等）写入 OpenAI content item，避免协议污染
                 }
             });
-        
+
             // 若 content 数组为空（仅侧车 audio / 媒体已被截断），补文本投影避免协议缺 content
             if (oNode.get("content").isArray() && oNode.get("content").getArray().isEmpty()) {
-                if (Utils.isNotEmpty(msg.getAnswer())) {
-                    oNode.set("content", msg.getAnswer());
+                if (Utils.isNotEmpty(msg.getText())) {
+                    oNode.set("content", msg.getText());
                 }
             }
         }
 
         //兼容 r1 的 tool-call(可以再优化，只在最后一条加)
-        if (Utils.isNotEmpty(msg.getReasoningFieldName())) {
+        if (Utils.isNotEmpty(msg.getReasoningFieldName()) && Utils.isNotEmpty(msg.getThinking())) {
             oNode.set(msg.getReasoningFieldName(), msg.getThinking());
         }
 
@@ -231,7 +231,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
             }
         }
     }
-        
+
     /**
      * 追加 OpenAI 兼容的 text/media content item；空/已截断媒体跳过。
      *
@@ -241,7 +241,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         if (block == null) {
             return;
         }
-                        
+
         if (block instanceof TextBlock) {
             TextBlock textBlock = (TextBlock) block;
             if (Utils.isNotEmpty(textBlock.getContent())) {
@@ -249,16 +249,16 @@ public abstract class AbstractChatDialect implements ChatDialect {
             }
             return;
         }
-                        
+
         if (!isMediaBlockPlayable(block)) {
             return;
         }
-                        
+
         String data = block.toDataString(true);
         if (Utils.isEmpty(data)) {
             return;
         }
-            
+
         if (block instanceof ImageBlock) {
             ONode item = contentArray.addNew();
             item.set("type", "image_url");
@@ -277,7 +277,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
             item.getOrNew("video_url").set("url", data);
         }
     }
-    
+
     /**
      * 尝试拦截中转网关直接输出的纯文本错误（如 "error xxx"，非 JSON）。
      * <p>命中时设置错误并返回 true（表示已处理），避免后续 JSON 解析报出误导性格式错误。</p>
@@ -305,12 +305,12 @@ public abstract class AbstractChatDialect implements ChatDialect {
         if (!(block instanceof AbsMedia)) {
             return true;
         }
-    
+
         AbsMedia<?> media = (AbsMedia<?>) block;
         if (Utils.isNotEmpty(media.getData()) || Utils.isNotEmpty(media.getUrl())) {
             return true;
         }
-    
+
         // 仅侧车 id 也可回传（如 OpenAI audio.id / Responses image_generation_id）
         if (media.metas() != null) {
             for (String key : new String[]{"audio_id", "id", "image_generation_id"}) {
@@ -320,7 +320,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 }
             }
         }
-    
+
         return false;
     }
 
@@ -395,7 +395,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
             for (Map.Entry<String, Object> kv : options.options().entrySet()) {
                 String key = kv.getKey();
                 Object value = kv.getValue();
-            
+
                 // 统一推理水平 → 顶层 reasoning_effort（Chat Completions / 兼容协议）
                 // 仅归一化本字段后写出；非法值不落库，避免污染请求
                 // 国产模型族（qwen/kimi/glm/minimax）默认不写顶层 effort（对齐 OpenCode variants 空）
@@ -421,7 +421,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                     }
                     continue;
                 }
-                
+
                 // 统一思考开关：按 model（辅以 provider/apiUrl）单写对应字段，避免双写触发严格网关 400
                 // 非 Boolean（Map 等）仍按原 key 透传，供供应商原生配置与逃生舱使用
                 if ("thinking".equals(key)) {
@@ -432,14 +432,14 @@ public abstract class AbstractChatDialect implements ChatDialect {
                     }
                     continue;
                 }
-                
+
                 n.set(key, ONode.ofBean(value));
             }
-            
+
             // 对齐 OpenCode variants：选了 effort 档位时，对需要显式开关的模型隐式开启 thinking
             // thinking(false) / 显式 Map thinking 优先，不覆盖
             maybeEnableThinkingFromReasoningEffort(n, config, options);
-            
+
             ChatMessage lastMessage = messages.get(messages.size() - 1);
             buildReqToolsNode(n, config, options, lastMessage);
         });
@@ -449,7 +449,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
     public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode oNode = new ONode();
         oNode.set("role", "assistant");
-        oNode.set("content", resp.getAggregationContent());
+        oNode.set("content", resp.getAggregationText());
         oNode.getOrNew("tool_calls").asArray().then(n1 -> {
             for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
                 //有可能没有
@@ -501,7 +501,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
 
         assistantMessage.addMetadata("reason", "tool")
-                .addMetadata("source", toolCallMessage.getAnswer());
+                .addMetadata("source", toolCallMessage.getText());
 
         for (ToolMessage toolMessage : toolMessages) {
             assistantMessage.addMetadata(toolMessage.getMetadata());
@@ -948,7 +948,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
             if (resp.in_thinking && resp.isStream()) {
                 //说明是思考结束立刻调用了工具，需要添加思考的结束标识
-                messageList.add(new AssistantMessage("</think>", true).reasoningFieldName(resp.reasoning_field_name));
+                messageList.add(new AssistantMessage("", "", true).reasoningFieldName(resp.reasoning_field_name));
             }
             resp.in_thinking = false; //重置状态
         }
@@ -976,6 +976,9 @@ public abstract class AbstractChatDialect implements ChatDialect {
             reasoning_content = null;
         }
 
+        //非流式：随正文一起双字段构造的思考内容（不再缝合 <think> 标签进 content）
+        String pendingThinking = null;
+
         if (Utils.isNotEmpty(reasoning_content)) {
             resp.has_reasoning_field = true;
             //有思考专属内容的协议
@@ -984,7 +987,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 if (Utils.isEmpty(content)) {
                     if (resp.in_thinking == false) {
                         //说明是第一次
-                        messageList.add(new AssistantMessage("<think>", true).reasoningFieldName(resp.reasoning_field_name));
+                        messageList.add(new AssistantMessage("", "", true).reasoningFieldName(resp.reasoning_field_name));
                         if (Utils.isNotEmpty(reasoning_content)) {
                             content = reasoning_content;
                         }
@@ -994,18 +997,19 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
                     resp.in_thinking = true;
                 } else {
-                    if (resp.in_thinking) {
-                        //说明是最后一次
-                        messageList.add(new AssistantMessage("</think>", true).reasoningFieldName(resp.reasoning_field_name));
+                    //同帧同时携带思考与正文（部分网关会这么发）：思考增量先入通道，再发闭合信号；正文由下方 text 通道承载
+                    if (resp.in_thinking == false) {
+                        //首帧即双通道：补开启信号，保持 thinking->text 边界完整
+                        messageList.add(new AssistantMessage("", "", true).reasoningFieldName(resp.reasoning_field_name));
                     }
+                    messageList.add(new AssistantMessage("", reasoning_content, true).reasoningFieldName(resp.reasoning_field_name));
+                    messageList.add(new AssistantMessage("", "", true).reasoningFieldName(resp.reasoning_field_name));
 
                     resp.in_thinking = false;
                 }
             } else {
-                //如查是单次返回
-                if (Utils.isNotEmpty(reasoning_content)) {
-                    content = "<think>\n\n" + reasoning_content + "</think>\n\n" + content;
-                }
+                //如果是单次返回：思考单独存放，不再缝合进 content
+                pendingThinking = reasoning_content;
             }
         } else if (Utils.isNotEmpty(content)) {
             if (resp.has_reasoning_field) { //有些情况，后面就没字段了
@@ -1013,7 +1017,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 if (resp.in_thinking) {
                     if (resp.isStream()) {
                         //说明是最后一次
-                        messageList.add(new AssistantMessage("</think>", true).reasoningFieldName(resp.reasoning_field_name));
+                        messageList.add(new AssistantMessage("", "", true).reasoningFieldName(resp.reasoning_field_name));
                     }
 
                     resp.in_thinking = false;
@@ -1024,12 +1028,27 @@ public abstract class AbstractChatDialect implements ChatDialect {
                     //如果是流返回
                     if (content.startsWith("<think>")) {
                         resp.in_thinking = true;
+                        //剥离开标签：纯标签帧剥后为空（相当于信号帧），前缀粘连时正文不混入 thinking
+                        content = content.substring("<think>".length());
                     } else {
                         if (resp.in_thinking) {
                             int thinkEnd = content.indexOf("</think>");
-                            if (thinkEnd >= 0) { //可能是个开始符
+                            if (thinkEnd >= 0) {
+                                //闭合标签可能与思考尾巴/正文头粘连在同一分片，拆成单通道帧，避免互相污染
                                 resp.in_thinking = false;
-                                messageList.add(new AssistantMessage(content, true).reasoningFieldName(resp.reasoning_field_name));
+
+                                String thinkPart = content.substring(0, thinkEnd);
+                                if (Utils.isNotEmpty(thinkPart)) {
+                                    messageList.add(new AssistantMessage("", thinkPart, true).reasoningFieldName(resp.reasoning_field_name));
+                                }
+
+                                //闭合信号帧（保持订阅侧 thinking->text 边界）
+                                messageList.add(new AssistantMessage("", "", true).reasoningFieldName(resp.reasoning_field_name));
+
+                                String answerPart = content.substring(thinkEnd + "</think>".length());
+                                if (Utils.isNotEmpty(answerPart)) {
+                                    messageList.add(new AssistantMessage(answerPart, "", false).reasoningFieldName(resp.reasoning_field_name));
+                                }
                                 return messageList;
                             }
                         }
@@ -1038,10 +1057,12 @@ public abstract class AbstractChatDialect implements ChatDialect {
             }
         }
 
-        // 有文本 / 工具调用 / 多模态媒体时都需要产出消息
-        if (content != null || toolCallsRaw != null || Utils.isNotEmpty(blocksForMsg)) {
+        // 有文本 / 思考 / 工具调用 / 多模态媒体时都需要产出消息
+        if (content != null || pendingThinking != null || toolCallsRaw != null || Utils.isNotEmpty(blocksForMsg)) {
             Object contentRaw = oContent == null || oContent.isNull() ? content : oContent.toBean();
-            AssistantMessage message = new AssistantMessage(content, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw, blocksForMsg)
+            String textOut = resp.in_thinking ? "" : (content == null ? "" : content);
+            String thinkingOut = resp.in_thinking ? (content == null ? "" : content) : (pendingThinking == null ? "" : pendingThinking);
+            AssistantMessage message = new AssistantMessage(textOut, thinkingOut, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw, blocksForMsg)
                     .reasoningFieldName(resp.reasoning_field_name);
 
             messageList.add(message);
@@ -1076,18 +1097,28 @@ public abstract class AbstractChatDialect implements ChatDialect {
      * @since 4.0.4
      */
     protected enum ThinkingSwitchWire {
-        /** Qwen / DashScope 兼容 / 多数中转：{@code enable_thinking} */
+        /**
+         * Qwen / DashScope 兼容 / 多数中转：{@code enable_thinking}
+         */
         ENABLE_THINKING,
-        /** DeepSeek / Kimi / 火山等：{@code thinking.type=enabled|disabled} */
+        /**
+         * DeepSeek / Kimi / 火山等：{@code thinking.type=enabled|disabled}
+         */
         THINKING_TYPE,
-        /** 智谱：{@code thinking.type} + {@code clear_thinking=false}（开启时） */
+        /**
+         * 智谱：{@code thinking.type} + {@code clear_thinking=false}（开启时）
+         */
         THINKING_TYPE_CLEAR,
-        /** MiniMax：开启 {@code adaptive}，关闭 {@code disabled} */
+        /**
+         * MiniMax：开启 {@code adaptive}，关闭 {@code disabled}
+         */
         THINKING_TYPE_ADAPTIVE,
-        /** 无标准布尔开关（如 OpenAI 官方）：不写出，仅保留 Map 逃生舱 */
+        /**
+         * 无标准布尔开关（如 OpenAI 官方）：不写出，仅保留 Map 逃生舱
+         */
         NONE
     }
-                
+
     /**
      * 按 model 为主、provider/apiUrl 为辅，解析思考开关写出形态。
      * <p>中转站（DashScope / ModelScope / SiliconFlow 等）即使模型名是 deepseek，
@@ -1100,7 +1131,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         String provider = config == null || config.getProvider() == null ? "" : config.getProvider().toLowerCase(Locale.ROOT);
         String apiUrl = config == null || config.getApiUrl() == null ? "" : config.getApiUrl().toLowerCase(Locale.ROOT);
         String hint = model + ' ' + provider + ' ' + apiUrl;
-        
+
         // 已知“enable_thinking 中转站”：同一 deepseek 模型在中转口也走布尔开关
         if (containsAny(hint, "dashscope", "modelscope", "aliyuncs", "aliyun", "bailian",
                 "siliconflow", "together.ai", "together.xyz")) {
@@ -1211,7 +1242,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         if (effort.isEmpty() || "auto".equals(effort) || "none".equals(effort)) {
             return;
         }
-     
+
         Object thinkingOpt = options.options().get("thinking");
         // 显式关闭优先
         if (Boolean.FALSE.equals(thinkingOpt)) {
@@ -1228,7 +1259,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         if (n.hasKey("thinking")) {
             return;
         }
-     
+
         ThinkingSwitchWire wire = resolveThinkingSwitchWire(config);
         if (wire == ThinkingSwitchWire.NONE) {
             // OpenAI 等：reasoning_effort 本身即控制，无需 enable 位
@@ -1237,7 +1268,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         // 仅对需要显式开关的模型族开启（qwen/deepseek/kimi/glm/minimax/中转）
         applyChatCompletionsThinkingSwitch(n, config, true);
     }
-     
+
     /**
      * 是否抑制 Chat Completions 顶层 reasoning_effort。
      * <p>对齐 OpenCode：qwen / deepseek / kimi / glm / minimax 等不做 effort 变体，
@@ -1562,8 +1593,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
     }
 
     /**
-     * @deprecated 使用 {@link #clampChatCompletionsEffort(Object, ChatConfig)}
      * @since 4.0.4
+     * @deprecated 使用 {@link #clampChatCompletionsEffort(Object, ChatConfig)}
      */
     protected String clampChatCompletionsEffort(Object value) {
         return clampChatCompletionsEffort(value, null);

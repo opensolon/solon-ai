@@ -188,7 +188,7 @@ public class SupervisorTask implements NamedTaskComponent {
         }
 
         // 优先从正文提取决策；若模型走 feedback 工具，仅在正文存在「显式指派成员名」时抢路由
-        String clearContent = responseMessage.hasContent() ? responseMessage.getAnswer() : "";
+        String clearContent = responseMessage.hasContent() ? responseMessage.getText() : "";
         String decision = clearContent == null ? "" : clearContent.trim();
 
         if (Assert.isNotEmpty(responseMessage.getToolCalls())) {

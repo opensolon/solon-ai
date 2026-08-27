@@ -289,7 +289,7 @@ public class ActionTask {
      * <p>核心逻辑：从"全执行后拼接"改为"逐个执行并即时回填与反馈"</p>
      */
     private void processTextModeAction(AssistantMessage lastReason, ReActTrace trace, Map<String, ToolExchanger> toolExchangerMap) throws Throwable {
-        String lastContent = lastReason.getAnswer();
+        String lastContent = lastReason.getText();
         if (Assert.isEmpty(lastContent)) {
             return;
         }

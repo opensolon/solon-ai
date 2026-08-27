@@ -14,6 +14,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.llm.dialect.anthropic.AnthropicChatDialect;
 import org.noear.solon.ai.llm.dialect.dashscope.DashscopeChatDialect;
 import org.noear.solon.ai.llm.dialect.gemini.GeminiChatDialect;
@@ -22,6 +23,8 @@ import org.noear.solon.ai.llm.dialect.ollama.OllamaChatDialect;
 import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.ai.llm.dialect.openai.OpenaiChatDialect;
 import org.noear.solon.ai.llm.dialect.openai.OpenaiResponsesDialect;
+
+import java.util.*;
 
 /**
  * 各方言 Assistant 多模态适配单测（mock JSON，不依赖真实 API）
@@ -501,6 +504,7 @@ public class DialectAssistantMultimodalTest {
             Assertions.assertEquals("user caption", withTextNode.get("content").getString());
         }
     }
+
     @Test
     public void anthropicParseAssistantImageAndToolUseMixed() {
         AnthropicChatDialect dialect = AnthropicChatDialect.getInstance();
@@ -646,7 +650,10 @@ public class DialectAssistantMultimodalTest {
 
         AssistantMessage found = null;
         for (AssistantMessage m : list) {
-            if (m.hasMedia()) { found = m; break; }
+            if (m.hasMedia()) {
+                found = m;
+                break;
+            }
         }
         Assertions.assertNotNull(found);
         Assertions.assertTrue(found.getBlocks().stream().anyMatch(b -> b instanceof AudioBlock),
@@ -669,7 +676,10 @@ public class DialectAssistantMultimodalTest {
 
         AssistantMessage found = null;
         for (AssistantMessage m : list) {
-            if (m.hasMedia()) { found = m; break; }
+            if (m.hasMedia()) {
+                found = m;
+                break;
+            }
         }
         Assertions.assertNotNull(found);
         Assertions.assertTrue(found.getBlocks().stream().anyMatch(b -> b instanceof VideoBlock),
@@ -781,7 +791,7 @@ public class DialectAssistantMultimodalTest {
         java.util.List<java.util.Map> toolCallsRaw = java.util.Collections.singletonList(rawMap);
 
         AssistantMessage msg = new AssistantMessage(
-                "I will check", false, "I will check",
+                "I will check", "", false, "I will check",
                 toolCallsRaw, toolCalls, null,
                 java.util.Arrays.asList(
                         TextBlock.of("I will check"),
@@ -860,8 +870,8 @@ public class DialectAssistantMultimodalTest {
         contentRaw.put("thinkingSignature", ""); // 空 signature 视为无效
 
         AssistantMessage msg = new AssistantMessage(
-                "<think>\n\nneed tool</think>\n\n",
-                false, contentRaw, toolCallsRaw, toolCalls, null, null);
+                "", "need tool",
+                true, contentRaw, toolCallsRaw, toolCalls, null, null);
 
         ChatConfig config = new ChatConfig();
         config.setModel("claude-test");
@@ -900,30 +910,30 @@ public class DialectAssistantMultimodalTest {
     public void anthropicBuildThinkingToolUseShouldWriteValidSignature() {
         AnthropicChatDialect dialect = AnthropicChatDialect.getInstance();
 
-        java.util.List<org.noear.solon.ai.chat.tool.ToolCall> toolCalls = java.util.Collections.singletonList(
-                new org.noear.solon.ai.chat.tool.ToolCall("call_2", "call_2", "currentTime", "{}", java.util.Collections.emptyMap()));
-        java.util.Map<String, Object> funcMap = new java.util.HashMap<>();
+        List<ToolCall> toolCalls = Collections.singletonList(
+                new ToolCall("call_2", "call_2", "currentTime", "{}", java.util.Collections.emptyMap()));
+        Map<String, Object> funcMap = new HashMap<>();
         funcMap.put("name", "currentTime");
         funcMap.put("arguments", "{}");
-        java.util.Map<String, Object> rawMap = new java.util.HashMap<>();
+        Map<String, Object> rawMap = new HashMap<>();
         rawMap.put("id", "call_2");
         rawMap.put("type", "function");
         rawMap.put("function", funcMap);
-        java.util.List<java.util.Map> toolCallsRaw = java.util.Collections.singletonList(rawMap);
+        List<java.util.Map> toolCallsRaw = Collections.singletonList(rawMap);
 
-        java.util.Map<String, Object> contentRaw = new java.util.LinkedHashMap<>();
+        Map<String, Object> contentRaw = new LinkedHashMap<>();
         contentRaw.put("thinking", "call time tool");
         contentRaw.put("thinkingSignature", "sig-valid-001");
 
         AssistantMessage msg = new AssistantMessage(
-                "<think>\n\ncall time tool</think>\n\n",
-                false, contentRaw, toolCallsRaw, toolCalls, null, null);
+                "", "call time tool",
+                true, contentRaw, toolCallsRaw, toolCalls, null, null);
 
         ChatConfig config = new ChatConfig();
         config.setModel("claude-test");
         ONode root = dialect.buildRequestJson(
                 config, ChatOptions.of(),
-                java.util.Collections.singletonList(msg), false);
+                Collections.singletonList(msg), false);
 
         ONode assistant = root.get("messages").get(0);
         boolean foundSignature = false;
@@ -943,34 +953,34 @@ public class DialectAssistantMultimodalTest {
     public void anthropicParseNonStreamShouldAcceptPlainTextGatewayError() {
         AnthropicChatDialect dialect = AnthropicChatDialect.getInstance();
         ChatResponseDefault resp = newResp(false, dialect);
-    
+
         // 网关常直接返回纯文本："error code: 502"（不是 JSON）
         Assertions.assertTrue(dialect.parseResponseJson(new ChatConfig(), resp, "error code: 502"));
         Assertions.assertNotNull(resp.getError());
         Assertions.assertTrue(resp.getError().getMessage().contains("error code: 502"));
         Assertions.assertFalse(resp.hasChoices());
     }
-    
+
     @Test
     public void anthropicParseNonStreamShouldAcceptBadGatewayText() {
         AnthropicChatDialect dialect = AnthropicChatDialect.getInstance();
         ChatResponseDefault resp = newResp(false, dialect);
-    
+
         Assertions.assertTrue(dialect.parseResponseJson(new ChatConfig(), resp, "error code: 502"));
         Assertions.assertNotNull(resp.getError());
         Assertions.assertTrue(resp.getError().getMessage().contains("502"));
     }
-    
+
     @Test
     public void anthropicParseStreamShouldAcceptPlainTextGatewayError() {
         AnthropicChatDialect dialect = AnthropicChatDialect.getInstance();
         ChatResponseDefault resp = newResp(true, dialect);
-    
+
         Assertions.assertTrue(dialect.parseResponseJson(new ChatConfig(), resp, "error code: 502"));
         Assertions.assertNotNull(resp.getError());
         Assertions.assertTrue(resp.getError().getMessage().contains("error code: 502"));
     }
-    
+
     // ==================== 新增：Gemini Chat file_data 构建/解析 + audio/video inline_data ====================
 
     @Test
@@ -1139,4 +1149,3 @@ public class DialectAssistantMultimodalTest {
         Assertions.assertTrue(hasInputAudio, "base64 AudioBlock should produce input_audio with format");
     }
 }
-

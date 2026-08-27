@@ -92,9 +92,14 @@ public interface ChatResponse {
     AssistantMessage getAggregationMessage();
 
     /**
-     * 获取聚合内容（流响应完成时可用）
+     * 获取聚合文本（流响应完成时可用）
      */
-    String getAggregationContent();
+    String getAggregationText();
+
+    /**
+     * 获取聚合思考（流响应完成时可用）
+     */
+    String getAggregationThinking();
 
     /**
      * 是否有消息内容
@@ -107,8 +112,21 @@ public interface ChatResponse {
     String getContent();
 
     /**
-     * 获取消息结果内容（清理过思考）
+     * 获取文本
      */
+    String getText();
+
+    /**
+     * 获取思考
+     */
+    String getThinking();
+
+    /**
+     * 获取消息结果内容（清理过思考）
+     *
+     * @deprecated 4.1 {@link #getText()}
+     */
+    @Deprecated
     String getResultContent();
 
     /**

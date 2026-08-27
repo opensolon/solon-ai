@@ -190,8 +190,8 @@ public class ToolCallJsonSanitizerTest {
         call.put("type", "function");
         call.put("function", fn);
 
-        AssistantMessage poisoned = new AssistantMessage(
-                null, false, null, Arrays.asList(call), null, null);
+        AssistantMessage poisoned = new AssistantMessage("",
+                "", false, null, Arrays.asList(call), null, null);
 
         TestDialect dialect = new TestDialect();
         ONode node = dialect.buildChatMessageNode(new ChatConfig(), poisoned);

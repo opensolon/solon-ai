@@ -112,7 +112,7 @@ public interface ChatMessage extends Serializable {
         }
 
         List<ContentBlock> blocks = contents.getBlocks();
-        return new AssistantMessage(contents.getContent(), false, null, null, null, null,
+        return new AssistantMessage(contents.getContent(), "", false, null, null, null, null,
                 Utils.isEmpty(blocks) ? null : new ArrayList<>(blocks));
     }
 
@@ -146,7 +146,7 @@ public interface ChatMessage extends Serializable {
             finalBlocks.add(0, TextBlock.of(content));
         }
 
-        return new AssistantMessage(content == null ? "" : content, false, null, null, null, null, finalBlocks);
+        return new AssistantMessage(content == null ? "" : content, "",false, null, null, null, null, finalBlocks);
     }
 
     /**

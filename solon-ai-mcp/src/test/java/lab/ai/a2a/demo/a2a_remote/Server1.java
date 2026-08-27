@@ -20,6 +20,6 @@ public class Server1 implements AgentTaskHandler {
     @ToolMapping(name = "weather_agent", description = "专业的天气预报助手。主要任务是利用所提供的工具获取并传递天气信息")
     @Override
     public String handleTask(String message) throws Throwable {
-        return chatModel.prompt(message).call().getMessage().getAnswer();
+        return chatModel.prompt(message).call().getMessage().getText();
     }
 }

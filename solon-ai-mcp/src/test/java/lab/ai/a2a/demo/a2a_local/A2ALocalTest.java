@@ -74,7 +74,7 @@ public class A2ALocalTest {
                 .stringParamAdd("message", "任务消息")
                 .doHandle(args -> {
                     String message = (String) args.get("message");
-                    return chatModel.prompt(message).call().getMessage().getAnswer();
+                    return chatModel.prompt(message).call().getMessage().getText();
                 });
     }
 
@@ -91,7 +91,7 @@ public class A2ALocalTest {
                 .stringParamAdd("message", "任务消息")
                 .doHandle(args -> {
                     String message = (String) args.get("message");
-                    return chatModel.prompt(message).call().getMessage().getAnswer();
+                    return chatModel.prompt(message).call().getMessage().getText();
                 });
     }
 }

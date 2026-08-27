@@ -317,14 +317,14 @@ public class OpenaiResponsesRequestBuilder {
      
             if (!hasAny) {
                 // 兜底：用去 think 后的文本投影
-                String text = assistantMessage.getAnswer();
+                String text = assistantMessage.getText();
                 contentArray.addNew()
                         .set("type", "output_text")
                         .set("text", text != null ? text : "");
             }
         } else {
             // 纯文本：与 getResultContent 对齐，剥离 think 标签；有 tool_calls 时仅非空才写
-            String plain = assistantMessage.getAnswer();
+            String plain = assistantMessage.getText();
             if (!hasToolCalls) {
                 inputArray.addNew()
                         .set("role", "assistant")
@@ -531,7 +531,7 @@ public class OpenaiResponsesRequestBuilder {
     public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode oNode = new ONode();
         oNode.set("role", "assistant");
-        oNode.set("content", resp.getAggregationContent());
+        oNode.set("content", resp.getAggregationText());
         oNode.getOrNew("tool_calls").asArray().then(n1 -> {
             for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
                 ToolCallBuilder builder = kv.getValue();

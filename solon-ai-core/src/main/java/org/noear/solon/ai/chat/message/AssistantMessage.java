@@ -38,43 +38,51 @@ import java.util.*;
 public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     private final ChatRole role = ChatRole.ASSISTANT;
     private final List<ContentBlock> blocks = new ArrayList<>();
-    private String content;
+
+    /**
+     * 兼容旧版本的反序列化（同时包括：text 和 thinking）
+     *
+     * @deprecated 4.1
+     */
+    @Deprecated
+    private @Nullable String content; //内容（）
+
     private List<ToolCall> toolCalls;
     private List<Map> toolCallsRaw;
     private List<Map> searchResultsRaw;
     private Object contentRaw;
 
-    //纯思考；纯内容；混合内容
+    private @Nullable String text; //文本
+    private @Nullable String thinking; //想法
     private boolean isThinking;
-    private String reasoningFieldName; //推理字段
 
-    private transient String thinking; //想法
-    private transient String answer; //答案
+    private String reasoningFieldName; //推理字段
 
     public AssistantMessage() {
         //用于序列化
     }
 
-    public AssistantMessage(String content) {
-        this(content, false, null, null, null, null, null);
+    public AssistantMessage(String text) {
+        this(text, null, false, null, null, null, null, null);
     }
 
-    public AssistantMessage(String content, boolean isThinking) {
-        this(content, isThinking, null, null, null, null, null);
+    public AssistantMessage(String text, String thinking, boolean isThinking) {
+        this(text, thinking, isThinking, null, null, null, null, null);
     }
 
-    public AssistantMessage(String content, boolean isThinking, List<Map> searchResultsRaw) {
-        this(content, isThinking, null, null, null, searchResultsRaw, null);
+    public AssistantMessage(String text, String thinking, boolean isThinking, List<Map> searchResultsRaw) {
+        this(text, thinking, isThinking, null, null, null, searchResultsRaw, null);
     }
 
-    public AssistantMessage(String content, boolean isThinking, Object contentRaw, List<Map> toolCallsRaw, List<ToolCall> toolCalls, List<Map> searchResultsRaw) {
-        this(content, isThinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw, null);
+    public AssistantMessage(String text, String thinking, boolean isThinking, Object contentRaw, List<Map> toolCallsRaw, List<ToolCall> toolCalls, List<Map> searchResultsRaw) {
+        this(text, thinking, isThinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw, null);
     }
 
     /**
      * 支持多模态内容块的构造
      *
-     * @param content          文本投影（兼容单模态 / thinking / toBean）
+     * @param text             文本
+     * @param thinking         思考
      * @param isThinking       是否思考中
      * @param contentRaw       厂商原始 content
      * @param toolCallsRaw     工具调用原始数据
@@ -83,20 +91,17 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
      * @param blocks           多模态内容块（可为 null）
      * @since 3.9
      */
-    public AssistantMessage(String content, boolean isThinking, Object contentRaw, List<Map> toolCallsRaw, List<ToolCall> toolCalls, List<Map> searchResultsRaw, List<ContentBlock> blocks) {
-        if (content == null) {
-            content = "";
-        }
-
+    public AssistantMessage(String text, String thinking, boolean isThinking, Object contentRaw, List<Map> toolCallsRaw, List<ToolCall> toolCalls, List<Map> searchResultsRaw, List<ContentBlock> blocks) {
+        this.text = text;
+        this.thinking = thinking;
         this.createdAt = System.currentTimeMillis();
-        this.content = content;
         this.isThinking = isThinking;
         this.toolCallsRaw = toolCallsRaw;
         this.toolCalls = toolCalls;
         this.searchResultsRaw = searchResultsRaw;
 
         if (contentRaw == null) {
-            this.contentRaw = content;
+            this.contentRaw = getContent();
         } else {
             this.contentRaw = contentRaw;
         }
@@ -125,7 +130,8 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
      * 是否有内容
      */
     public boolean hasContent() {
-        return Assert.isNotEmpty(content);
+        //优先新模型（text/thinking），旧字段 content 仅为反序列化兼容
+        return Assert.isNotEmpty(getContent());
     }
 
     /**
@@ -133,8 +139,15 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
      */
     @Override
     public String getContent() {
-        //由 thinking + answer 组成的完整内容
-        return content;
+        if (content != null) {
+            return content;
+        } else {
+            if (isThinking()) {
+                return thinking;
+            } else {
+                return text;
+            }
+        }
     }
 
     /**
@@ -145,41 +158,52 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
         return isThinking;
     }
 
-    /**
-     * 获取思考
-     */
-    public String getThinking() {
-        if (thinking == null) {
-            // 反序列化/纯 toolCalls 消息可能 content 为 null，需空安全
-            String src = content == null ? "" : content;
-            if (isThinking) {
-                thinking = src.replace("<think>", "").replace("</think>", "");
-            } else if (src.contains("</think>")) {
-                int start = src.indexOf("<think>");
-                int end = src.indexOf("</think>");
-
-                if (start > -1 && end > -1) {
-                    thinking = src.substring(start + 7, end);
-                } else {
-                    thinking = "";
-                }
-            } else {
-                thinking = "";
-            }
-        }
-
+    public String getThinkingRaw() {
         return thinking;
     }
 
     /**
-     * 答案（没有推理标签的内容）
+     * 获取思考
      */
-    public String getAnswer() {
-        if (answer == null) {
-            answer = stripThinkTags(content);
-        }
+    public String getThinking() {
+        if (thinking != null) {
+            return thinking;
+        } else {
+            //兼容旧版
+            if (content == null) {
+                thinking = "";
+            } else {
+                int start = content.indexOf("<think>");
+                int end = content.indexOf("</think>");
 
-        return answer; //think
+                if (start > -1 && end > -1) {
+                    thinking = content.substring(start + 7, end);
+                } else {
+                    thinking = "";
+                }
+            }
+
+            return thinking;
+        }
+    }
+
+    public String getTextRaw() {
+        return text;
+    }
+
+
+    /**
+     * 获取文本
+     */
+    public String getText() {
+        if (text != null) {
+            return text;
+        } else {
+            //兼容旧版
+            text = stripThinkTags(content);
+
+            return text; //think
+        }
     }
 
     /**
@@ -247,15 +271,17 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
         return false;
     }
 
+
     /**
-     * 获取答案
+     * 获取文本
      *
-     * @deprecated 4.1 {@link #getAnswer()}
+     * @deprecated 4.1 {@link #getText()}
      */
     @Deprecated
     public String getResultContent() {
-        return getAnswer();
+        return getText();
     }
+
 
     /**
      * 获取思考
@@ -276,6 +302,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
         if (text == null) {
             return "";
         }
+
         int thinkEndIndex = text.indexOf("</think>");
         if (thinkEndIndex > -1) {
             return text.substring(thinkEndIndex + 8);
@@ -290,7 +317,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
 
     public String getJsonContent() {
         if (jsonContent == null) {
-            String txt = getAnswer();
+            String txt = getResultContent();
 
             if (Assert.isNotEmpty(txt)) {
                 txt = txt.trim();
@@ -363,16 +390,21 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
             buf.append(", is_thinking=true");
         }
 
+        // 兼容旧数据
         if (Utils.isNotEmpty(content)) {
             buf.append(", content='").append(content).append('\'');
         }
 
-        if (isMultiModal()) {
-            buf.append(", blocks=").append(blocks);
+        if (Utils.isNotEmpty(text)) {
+            buf.append(", text='").append(text).append('\'');
         }
 
         if (Utils.isNotEmpty(thinking)) {
-            buf.append(", reasoning='").append(thinking).append('\'');
+            buf.append(", thinking='").append(thinking).append('\'');
+        }
+
+        if (isMultiModal()) {
+            buf.append(", blocks=").append(blocks);
         }
 
         if (contentRaw != null) {

@@ -262,7 +262,7 @@ public class AnthropicChatDialect extends AbstractChatDialect {
         }
 
         if (resp.in_thinking && resp.isStream()) {
-            messageList.add(new AssistantMessage("</think>", true));
+            messageList.add(new AssistantMessage("","", true));
             resp.in_thinking = false;
         }
 
@@ -286,7 +286,7 @@ public class AnthropicChatDialect extends AbstractChatDialect {
             content = textContent.length() > 0 ? textContent.toString() : "";
         }
 
-        AssistantMessage message = new AssistantMessage(content,
+        AssistantMessage message = new AssistantMessage(content, "",
                 false, contentRaw, toolCallsRaw, toolCalls, null, mediaBlocks.isEmpty() ? null : mediaBlocks);
         messageList.add(message);
 

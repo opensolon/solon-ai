@@ -172,7 +172,7 @@ public class HierarchicalCompressionStrategyTest {
         ChatModel model = mock(ChatModel.class);
         when(model.prompt(anyString())).thenReturn(request);
 
-        AssistantMessage action = new AssistantMessage("call", false, null, null,
+        AssistantMessage action = new AssistantMessage("call", "", false, null, null,
                 Arrays.asList(new ToolCall("0", "call_1", "read", "{}", Utils.asMap())), null);
         ToolMessage observation = ChatMessage.ofTool("tool-result", "read", "call_1");
         ChatMessage recent = ChatMessage.ofAssistant("recent-step");

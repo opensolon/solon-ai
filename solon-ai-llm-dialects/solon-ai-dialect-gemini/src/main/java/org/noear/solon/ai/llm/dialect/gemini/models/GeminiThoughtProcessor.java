@@ -169,7 +169,7 @@ public class GeminiThoughtProcessor {
                     
             if (!toolCalls.isEmpty()) {
                 if (resp.in_thinking && resp.isStream()) {
-                    messageList.add(new AssistantMessage("</think>", true));
+                    messageList.add(new AssistantMessage("", "", true));
                 }
                 resp.in_thinking = false;
                         
@@ -178,7 +178,7 @@ public class GeminiThoughtProcessor {
                     blocksForMsg = new ArrayList<>(mediaBlocks);
                     resp.addMediaBlocks(mediaBlocks);
                 }
-                AssistantMessage msg = new AssistantMessage("", false, null, null, toolCalls, null, blocksForMsg);
+                AssistantMessage msg = new AssistantMessage("", "",false, null, null, toolCalls, null, blocksForMsg);
                 messageList.add(msg);
                 return messageList;
             }
@@ -186,7 +186,7 @@ public class GeminiThoughtProcessor {
             if (resp.isStream()) {
                 if (hasThoughtPart && !hasNormalPart && !hasMediaPart) {
                     if (!resp.in_thinking) {
-                        messageList.add(new AssistantMessage("\n\n", true));
+                        messageList.add(new AssistantMessage("","", true));
                         resp.in_thinking = true;
                     }
                         
@@ -197,13 +197,13 @@ public class GeminiThoughtProcessor {
                         if (isThought) {
                             String text = oPart.get("text").getString();
                             if (Utils.isNotEmpty(text)) {
-                                messageList.add(new AssistantMessage(text, true));
+                                messageList.add(new AssistantMessage("",text, true));
                             }
                         }
                     }
                 } else if (!hasThoughtPart && (hasNormalPart || hasMediaPart)) {
                     if (resp.in_thinking) {
-                        messageList.add(new AssistantMessage("</think>", true));
+                        messageList.add(new AssistantMessage("","", true));
                         resp.in_thinking = false;
                     }
 
@@ -219,7 +219,7 @@ public class GeminiThoughtProcessor {
                             if (Utils.isNotEmpty(text)) {
                                 normalContent.append(text);
                                 if (mediaBlocks.isEmpty()) {
-                                    messageList.add(new AssistantMessage(text, false));
+                                    messageList.add(new AssistantMessage(text, "", false));
                                 }
                             }
                         }
@@ -232,11 +232,11 @@ public class GeminiThoughtProcessor {
                             blocks.add(TextBlock.of(normalContent.toString()));
                         }
                         blocks.addAll(mediaBlocks);
-                        messageList.add(new AssistantMessage(normalContent.toString(), false, null, null, null, null, blocks));
+                        messageList.add(new AssistantMessage(normalContent.toString(), "",false, null, null, null, null, blocks));
                     }
                 } else if (hasThoughtPart && (hasNormalPart || hasMediaPart)) {
                     if (!resp.in_thinking) {
-                        messageList.add(new AssistantMessage("\n\n", true));
+                        messageList.add(new AssistantMessage("", "", true));
                     }
 
                     for (ONode oPart : oParts.getArray()) {
@@ -246,12 +246,12 @@ public class GeminiThoughtProcessor {
                         if (isThought) {
                             String text = oPart.get("text").getString();
                             if (Utils.isNotEmpty(text)) {
-                                messageList.add(new AssistantMessage(text, true));
+                                messageList.add(new AssistantMessage("",text, true));
                             }
                         }
                     }
 
-                    messageList.add(new AssistantMessage("</think>", true));
+                    messageList.add(new AssistantMessage("","", true));
                     resp.in_thinking = false;
 
                     // 有媒体时：合并为单条消息；无媒体时按 part 增量推送
@@ -265,7 +265,7 @@ public class GeminiThoughtProcessor {
                             if (Utils.isNotEmpty(text)) {
                                 normalContent.append(text);
                                 if (mediaBlocks.isEmpty()) {
-                                    messageList.add(new AssistantMessage(text, false));
+                                    messageList.add(new AssistantMessage(text,"", false));
                                 }
                             }
                         }
@@ -278,7 +278,7 @@ public class GeminiThoughtProcessor {
                             blocks.add(TextBlock.of(normalContent.toString()));
                         }
                         blocks.addAll(mediaBlocks);
-                        messageList.add(new AssistantMessage(normalContent.toString(), false, null, null, null, null, blocks));
+                        messageList.add(new AssistantMessage(normalContent.toString(), "",false, null, null, null, null, blocks));
                     }
                 }
             } else {
@@ -326,7 +326,7 @@ public class GeminiThoughtProcessor {
                     contentRaw.put("thought", cleanedThought);
                     contentRaw.put("content", normalContent.toString());
     
-                    messageList.add(new AssistantMessage(fullContent, false, contentRaw, null, null, null, blocksForMsg));
+                    messageList.add(new AssistantMessage(fullContent, "",false, contentRaw, null, null, null, blocksForMsg));
                 } else if (thoughtContent.length() > 0) {
                     String cleanedThought = cleanThoughtContent(thoughtContent.toString());
     
@@ -335,9 +335,9 @@ public class GeminiThoughtProcessor {
                     Map<String, Object> contentRaw = new LinkedHashMap<>();
                     contentRaw.put("thought", cleanedThought);
     
-                    messageList.add(new AssistantMessage(fullContent, false, contentRaw, null, null, null, blocksForMsg));
+                    messageList.add(new AssistantMessage(fullContent, "",false, contentRaw, null, null, null, blocksForMsg));
                 } else if (normalContent.length() > 0 || blocksForMsg != null) {
-                    messageList.add(new AssistantMessage(normalContent.toString(), false, null, null, null, null, blocksForMsg));
+                    messageList.add(new AssistantMessage(normalContent.toString(), "",false, null, null, null, null, blocksForMsg));
                 }
             }
         }

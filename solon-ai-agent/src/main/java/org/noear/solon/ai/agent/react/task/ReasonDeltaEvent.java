@@ -97,10 +97,10 @@ public class ReasonDeltaEvent extends AbsAgentEvent {
     }
 
     /**
-     * 获取答案
+     * 获取文本
      */
-    public String getAnswer() {
-        return assistantMessage.getAnswer();
+    public String getText() {
+        return assistantMessage.getText();
     }
 
     /**

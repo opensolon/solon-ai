@@ -116,7 +116,7 @@ public class ContextCompressionInterceptorTest {
 
         // 构造原子对 (Action + Observation)
         List<ToolCall> toolCalls = Arrays.asList(new ToolCall("c1", "c1", "t1", "{}", Utils.asMap()));
-        AssistantMessage action = new AssistantMessage("call", false, null, null, toolCalls, null);
+        AssistantMessage action = new AssistantMessage("call","", false, null, null, toolCalls, null);
         workingMemory.addMessage(action);
         workingMemory.addMessage(ChatMessage.ofTool("res", "t1", "c1"));
 
@@ -175,7 +175,7 @@ public class ContextCompressionInterceptorTest {
         }
 
         List<ToolCall> toolCalls = Arrays.asList(new ToolCall("0", "call_1", "t1", "{}", Utils.asMap()));
-        AssistantMessage action = new AssistantMessage("call", false, null, null, toolCalls, null);
+        AssistantMessage action = new AssistantMessage("call","", false, null, null, toolCalls, null);
         ToolMessage toolResult = ChatMessage.ofTool("result", "t1", "call_1");
         workingMemory.addMessage(action);
         workingMemory.addMessage(toolResult);
@@ -210,7 +210,7 @@ public class ContextCompressionInterceptorTest {
         }
 
         List<ToolCall> toolCalls = Arrays.asList(new ToolCall("0", "call_1", "t1", "{}", Utils.asMap()));
-        AssistantMessage danglingAction = new AssistantMessage("call", false, null, null, toolCalls, null);
+        AssistantMessage danglingAction = new AssistantMessage("call", "", false, null, null, toolCalls, null);
         workingMemory.addMessage(danglingAction);
         workingMemory.addMessage(ChatMessage.ofUser("continue"));
 
@@ -235,7 +235,7 @@ public class ContextCompressionInterceptorTest {
         }
 
         // 模拟 LLM 返回纯思考响应：content 只有 <think> 标签，getResultContent() 为空，无 tool_calls
-        AssistantMessage emptyThought = new AssistantMessage("", false, null, null, null, null);
+        AssistantMessage emptyThought = new AssistantMessage("", "",false, null, null, null, null);
         workingMemory.addMessage(emptyThought);
         workingMemory.addMessage(ChatMessage.ofUser("continue"));
 
@@ -319,7 +319,7 @@ public class ContextCompressionInterceptorTest {
                 new ToolCall("0", "call_1", "t1", "{}", Utils.asMap()),
                 new ToolCall("1", "call_2", "t2", "{}", Utils.asMap())
         );
-        AssistantMessage action = new AssistantMessage("call", false, null, null, toolCalls, null);
+        AssistantMessage action = new AssistantMessage("call", "",false, null, null, toolCalls, null);
         ToolMessage toolResult = ChatMessage.ofTool("result1", "t1", "call_1");
         workingMemory.addMessage(action);
         workingMemory.addMessage(toolResult);
@@ -350,7 +350,7 @@ public class ContextCompressionInterceptorTest {
                 new ToolCall("0", "call_1", "t1", "{}", Utils.asMap()),
                 new ToolCall("1", "call_2", "t2", "{}", Utils.asMap())
         );
-        AssistantMessage action = new AssistantMessage("call", false, null, null, toolCalls, null);
+        AssistantMessage action = new AssistantMessage("call", "",false, null, null, toolCalls, null);
         ToolMessage toolResult1 = ChatMessage.ofTool("result1", "t1", "call_1");
         ToolMessage unrelatedToolResult = ChatMessage.ofTool("bad", "bad", "call_bad");
         ToolMessage toolResult2 = ChatMessage.ofTool("result2", "t2", "call_2");
@@ -703,7 +703,7 @@ public class ContextCompressionInterceptorTest {
 
         // 触发工具调用的 Assistant + 一条超大 ToolMessage（模拟读了个超大文件）
         List<ToolCall> toolCalls = Arrays.asList(new ToolCall("0", "call_1", "bash", "{}", Utils.asMap()));
-        AssistantMessage toolCallMsg = new AssistantMessage("call", false, null, null, toolCalls, null);
+        AssistantMessage toolCallMsg = new AssistantMessage("call", "",false, null, null, toolCalls, null);
         workingMemory.addMessage(toolCallMsg);
 
         StringBuilder huge = new StringBuilder();
@@ -824,7 +824,7 @@ public class ContextCompressionInterceptorTest {
         }
         String thought = huge.toString();
         List<ToolCall> toolCalls = Arrays.asList(new ToolCall("0", "call_1", "bash", "{}", Utils.asMap()));
-        AssistantMessage am = new AssistantMessage(thought, false, null, null, toolCalls, null);
+        AssistantMessage am = new AssistantMessage(thought, "",false, null, null, toolCalls, null);
         workingMemory.addMessage(am);
         // 配对的 ToolMessage，避免被悬挂清理逻辑移除
         workingMemory.addMessage(ChatMessage.ofTool("result", "bash", "call_1"));
@@ -961,7 +961,7 @@ public class ContextCompressionInterceptorTest {
         ToolCall tc = new ToolCall("0", "call_1", "read", "{\"file_path\":\"src/App.java\"}",
                 java.util.Collections.singletonMap("file_path", "src/App.java"));
         List<ToolCall> toolCalls = java.util.Collections.singletonList(tc);
-        AssistantMessage am = new AssistantMessage("", false, null, null, toolCalls, null);
+        AssistantMessage am = new AssistantMessage("","", false, null, null, toolCalls, null);
 
         String formatted = CompressionUtil.formatMessageForCompression(am);
 
@@ -983,7 +983,7 @@ public class ContextCompressionInterceptorTest {
         ToolCall tc = new ToolCall("0", "call_1", "bash", "{\"command\":\"ls -la\"}",
                 java.util.Collections.singletonMap("command", "ls -la"));
         List<ToolCall> toolCalls = java.util.Collections.singletonList(tc);
-        AssistantMessage am = new AssistantMessage("我需要先查看目录结构", false, null, null, toolCalls, null);
+        AssistantMessage am = new AssistantMessage("我需要先查看目录结构", "",false, null, null, toolCalls, null);
 
         String formatted = CompressionUtil.formatMessageForCompression(am);
 
@@ -1077,7 +1077,7 @@ public class ContextCompressionInterceptorTest {
         List<ToolCall> calls = Arrays.asList(
                 new ToolCall("0", "call_1", "t1", "{}", Utils.asMap()),
                 new ToolCall("1", "call_2", "t2", "{}", Utils.asMap()));
-        AssistantMessage action = new AssistantMessage("call", false, null, null, calls, null);
+        AssistantMessage action = new AssistantMessage("call", "",false, null, null, calls, null);
         ToolMessage result1 = ChatMessage.ofTool(repeat("result1 ", 1000), "t1", "call_1");
         ToolMessage result2 = ChatMessage.ofTool(repeat("result2 ", 1000), "t2", "call_2");
         workingMemory.addMessage(action);
@@ -1342,10 +1342,10 @@ public class ContextCompressionInterceptorTest {
         when(cfg.getStyle()).thenReturn(org.noear.solon.ai.agent.react.ReActStyle.NATIVE_TOOL);
         when(trace.getConfig()).thenReturn(cfg);
 
-        AssistantMessage nullIdAction = new AssistantMessage("call", false, null, null,
+        AssistantMessage nullIdAction = new AssistantMessage("call", "",false, null, null,
                 Arrays.asList(new ToolCall("0", null, "t1", "{}", Utils.asMap())), null);
         ToolMessage nullIdResult = ChatMessage.ofTool("result", "t1", null);
-        AssistantMessage duplicateIdAction = new AssistantMessage("call", false, null, null,
+        AssistantMessage duplicateIdAction = new AssistantMessage("call", "", false, null, null,
                 Arrays.asList(new ToolCall("0", "same", "t1", "{}", Utils.asMap()),
                         new ToolCall("1", "same", "t2", "{}", Utils.asMap())), null);
         ToolMessage duplicateIdResult = ChatMessage.ofTool("result", "t1", "same");
@@ -1374,7 +1374,7 @@ public class ContextCompressionInterceptorTest {
         when(cfg.getStyle()).thenReturn(org.noear.solon.ai.agent.react.ReActStyle.NATIVE_TOOL);
         when(trace.getConfig()).thenReturn(cfg);
 
-        AssistantMessage action = new AssistantMessage("call", false, null, null,
+        AssistantMessage action = new AssistantMessage("call", "",false, null, null,
                 Arrays.asList(new ToolCall("0", null, "read", "{}", Utils.asMap()),
                         new ToolCall("1", null, "grep", "{}", Utils.asMap())), null);
         ToolMessage wrongFirst = ChatMessage.ofTool("result1", "grep", null);
@@ -1468,7 +1468,7 @@ public class ContextCompressionInterceptorTest {
         when(cfg.getStyle()).thenReturn(org.noear.solon.ai.agent.react.ReActStyle.NATIVE_TOOL);
         when(trace.getConfig()).thenReturn(cfg);
 
-        AssistantMessage action = new AssistantMessage("call", false, null, null,
+        AssistantMessage action = new AssistantMessage("call","", false, null, null,
                 Arrays.asList(new ToolCall("0", "call_1", "t1", "{}", Utils.asMap())), null);
         ToolMessage result1 = ChatMessage.ofTool("result1", "t1", "call_1");
         ToolMessage result2 = ChatMessage.ofTool("result2", "t1", "call_1");
@@ -1543,7 +1543,7 @@ public class ContextCompressionInterceptorTest {
     @Test
     public void testUnsafeAssistantExtensionsAreNotRebuiltDuringTruncation() throws Exception {
         List<java.util.Map> searchRaw = Arrays.asList(Utils.asMap("query", "important"));
-        AssistantMessage extended = new AssistantMessage("large content", false, "vendor-raw",
+        AssistantMessage extended = new AssistantMessage("large content", "",false, "vendor-raw",
                 null, null, searchRaw, null).reasoningFieldName("reasoning_content");
 
         java.lang.reflect.Method method = ContextCompressionInterceptor.class.getDeclaredMethod(
@@ -1608,7 +1608,7 @@ public class ContextCompressionInterceptorTest {
     @Test
     public void testProtocolCleanupDoesNotProtectShiftedVariableMessage() throws Exception {
         ChatMessage fixed = ChatMessage.ofUser("fixed").addMetadata(AgentTrace.META_FIRST, 1);
-        AssistantMessage invalidFixed = new AssistantMessage("", false, null, null, null, null);
+        AssistantMessage invalidFixed = new AssistantMessage("", "",false, null, null, null, null);
         invalidFixed.addMetadata(AgentTrace.META_FIRST, 1);
         ChatMessage shiftedVariable = ChatMessage.ofAssistant("shifted variable");
         ChatMessage recent = ChatMessage.ofAssistant("recent");
@@ -1664,7 +1664,7 @@ public class ContextCompressionInterceptorTest {
         when(response.hasContent()).thenReturn(true);
         when(response.getContent()).thenReturn("有效摘要");
 
-        AssistantMessage action = new AssistantMessage("call", false, null, null,
+        AssistantMessage action = new AssistantMessage("call", "",false, null, null,
                 Arrays.asList(new ToolCall("0", "call_1", "read", "{}", Utils.asMap())), null);
         ToolMessage output = ChatMessage.ofTool("result", "read", "call_1");
         ChatMessage recent = ChatMessage.ofAssistant("recent");

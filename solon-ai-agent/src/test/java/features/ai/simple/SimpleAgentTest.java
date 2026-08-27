@@ -30,22 +30,22 @@ public class SimpleAgentTest {
         AssistantMessage message = agent.prompt("你还记得我是谁吗？").session(session).call().getMessage();
 
         System.out.println("模型直接返回1: " + message.getContent());
-        System.out.println("模型直接返回2: " + message.getAnswer());
-        Assertions.assertEquals(message.getContent(), message.getAnswer(), "没有清理掉思考");
+        System.out.println("模型直接返回2: " + message.getText());
+        Assertions.assertEquals(message.getContent(), message.getText(), "没有清理掉思考");
 
 
         message = agent.prompt("我叫阿飞啊!").session(session).call().getMessage();
 
         System.out.println("模型直接返回1: " + message.getContent());
-        System.out.println("模型直接返回2: " + message.getAnswer());
-        Assertions.assertEquals(message.getContent(), message.getAnswer(), "没有清理掉思考");
+        System.out.println("模型直接返回2: " + message.getText());
+        Assertions.assertEquals(message.getContent(), message.getText(), "没有清理掉思考");
 
 
         message = agent.prompt("现在知道我是谁了吗？").session(session).call().getMessage();
 
         System.out.println("模型直接返回1: " + message.getContent());
-        System.out.println("模型直接返回2: " + message.getAnswer());
-        Assertions.assertEquals(message.getContent(), message.getAnswer(), "没有清理掉思考");
+        System.out.println("模型直接返回2: " + message.getText());
+        Assertions.assertEquals(message.getContent(), message.getText(), "没有清理掉思考");
         Assertions.assertTrue(message.getContent().contains("阿飞"), "记忆失败了");
 
 

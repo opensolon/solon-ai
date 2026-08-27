@@ -83,7 +83,7 @@ SearchCondition condition = new SearchCondition("latest AI developments")
 TavilySearchResponse response = repo.search(condition);
 
 // 获取 LLM 答案
-System.out.println("Answer: " + response.getAnswer());
+System.out.println("Answer: " + response.getText());
 
 // 遍历搜索结果（Tavily 原生类型）
 for (TavilySearchDocument doc : response.getResults()) {

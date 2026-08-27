@@ -27,7 +27,7 @@ import java.util.List;
 public class AssistantMessageTest {
     @Test
     public void getReasoningShouldRemoveThinkTagsWhenThinking() {
-        AssistantMessage message = new AssistantMessage("<think>analysis</think>", true);
+        AssistantMessage message = new AssistantMessage("","analysis", true);
 
         Assertions.assertEquals("analysis", message.getThinking());
     }
@@ -130,7 +130,7 @@ public class AssistantMessageTest {
     public void aggregationShouldNotDuplicateMediaFromLastMessageAndMediaBlocks() {
         TestResponse tr = new TestResponse();
         ImageBlock image = ImageBlock.ofUrl("https://example.com/agg.png");
-        tr.appendContent("hello");
+        tr.appendText("hello");
         tr.addMediaBlocks(Arrays.asList(image));
 
         AssistantMessage last = ChatMessage.ofAssistant("hello", image);
@@ -278,10 +278,10 @@ public class AssistantMessageTest {
     public void buildAssistantMessageNodeThinkingOnlyShouldStillEmitContent() {
         TestDialect dialect = new TestDialect();
         // 纯推理轮：只有 <think>（甚至未闭合），没有答案、也没有 tool_calls
-        AssistantMessage msg = new AssistantMessage("<think>推理中", true);
+        AssistantMessage msg = new AssistantMessage("", "推理中", true);
 
         ONode node = dialect.buildChatMessageNode(new ChatConfig(), msg);
-        Assertions.assertEquals("", msg.getAnswer());
+        Assertions.assertEquals("", msg.getText());
         // 必须写出 content 键，否则出站是空的 assistant 消息，会被服务端拒绝；
         // content 只做协议占位，思考内容不回灌正文（与多模态 stripThinkTags 语义一致）
         Assertions.assertTrue(node.hasKey("content"));
@@ -305,7 +305,8 @@ public class AssistantMessageTest {
                 TextBlock.of("<think>secret</think>answer"),
                 ImageBlock.ofUrl("https://example.com/t.png"));
         AssistantMessage msg = new AssistantMessage(
-                "<think>secret</think>answer",
+                "answer",
+                "secret",
                 false, null, null, null, null, blocks);
 
         ONode node = dialect.buildChatMessageNode(new ChatConfig(), msg);
@@ -349,7 +350,7 @@ public class AssistantMessageTest {
     public void aggregationMessageShouldIncludeMediaBlocks() {
         // 流式依赖 contentBuilder。使用子类访问 protected contentBuilder
         TestResponse tr = new TestResponse();
-        tr.appendContent("stream text");
+        tr.appendText("stream text");
         tr.addMediaBlocks(Arrays.asList(ImageBlock.ofUrl("https://example.com/s.png")));
         tr.addChoice(new org.noear.solon.ai.chat.ChatChoice(
                 0, new java.util.Date(), "stop", ChatMessage.ofAssistant("stream text")));
@@ -439,7 +440,7 @@ public class AssistantMessageTest {
         Assertions.assertNotNull(tr.getMessage());
         Assertions.assertFalse(tr.hasContent()); // 仅 media，文本为空
         Assertions.assertEquals("", tr.getContent());
-        Assertions.assertEquals("", tr.getResultContent());
+        Assertions.assertEquals("", tr.getText());
     }
     
     @Test
@@ -625,8 +626,8 @@ public class AssistantMessageTest {
                     true), true);
         }
 
-        public void appendContent(String text) {
-            contentBuilder.append(text);
+        public void appendText(String text) {
+           textBuilder.append(text);
         }
     }
 
@@ -666,7 +667,7 @@ public class AssistantMessageTest {
     @Test
     public void emptyBlocksListShouldNotThrow() {
         AssistantMessage msg = new AssistantMessage(
-                "", false, null, null, null, null, java.util.Collections.emptyList());
+                "", "",false, null, null, null, null, java.util.Collections.emptyList());
 
         Assertions.assertFalse(msg.isMultiModal());
         Assertions.assertFalse(msg.hasMedia());
@@ -695,7 +696,8 @@ public class AssistantMessageTest {
 
         // content 含 think 标签和推理文本，getResultContent() 会剥离标签后为空
         AssistantMessage msg = new AssistantMessage(
-                "<think>用户想知道杭州天气。</think>",
+                "",
+                "用户想知道杭州天气。",
                 false, null, toolCallsRaw, null, null, null)
                 .reasoningFieldName("reasoning_content");
 
@@ -740,6 +742,7 @@ public class AssistantMessageTest {
 
         AssistantMessage msg = new AssistantMessage(
                 "让我帮你搜索天气信息。",
+                "",
                 false, null, toolCallsRaw, null, null, null)
                 .reasoningFieldName("reasoning_content");
 
@@ -761,13 +764,14 @@ public class AssistantMessageTest {
 
     @Test
     public void buildAssistantWithReasoningFieldNameButNoToolCallsShouldWriteReasoning() {
-        // 仅有 reasoningFieldName 且 reasoning 内容非空，但无 tool_calls 且 getResultContent() 为空
+        // 仅有 reasoningFieldName 且 reasoning 内容非空，但无 tool_calls 且文本为空
         // reasoning_content 应回传；content 不写出（无 tool_calls 时不强加 null）
         TestDialect dialect = new TestDialect();
 
-        // content 含 think 标签，getResultContent() 为空
+        // 纯推理消息：text 为空、thinking 有值（旧形态为 content 内嵌 think 标签）
         AssistantMessage msg = new AssistantMessage(
-                "<think>仅推理无工具调用</think>",
+                "",
+                "仅推理无工具调用",
                 false, null, null, null, null, null)
                 .reasoningFieldName("reasoning_content");
 

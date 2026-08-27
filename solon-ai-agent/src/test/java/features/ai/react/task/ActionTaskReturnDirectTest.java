@@ -65,7 +65,9 @@ public class ActionTaskReturnDirectTest {
     private AgentSession session;
     private ReActOptions options;
     private AtomicInteger toolCallCount;
-    /** null=未调用 setFinalAnswer；true/false=abnormal 标记 */
+    /**
+     * null=未调用 setFinalAnswer；true/false=abnormal 标记
+     */
     private AtomicReference<Boolean> finalAnswerAbnormal;
     private AtomicReference<AssistantMessage> lastReasonHolder;
     private AtomicReference<List<ContentBlock>> finalMediaHolder;
@@ -145,11 +147,11 @@ public class ActionTaskReturnDirectTest {
 
     private AssistantMessage nativeToolCallMessage(String toolName, Map<String, Object> args) {
         ToolCall call = new ToolCall("0", "call_" + toolName, toolName, null, args);
-        return new AssistantMessage("", false, null, null, Collections.singletonList(call), null);
+        return new AssistantMessage("", "", false, null, null, Collections.singletonList(call), null);
     }
 
     private AssistantMessage nativeMultiToolCallMessage(List<ToolCall> calls) {
-        return new AssistantMessage("", false, null, null, calls, null);
+        return new AssistantMessage("", "", false, null, null, calls, null);
     }
 
     private AssistantMessage textActionMessage(String toolName, Map<String, Object> args) {

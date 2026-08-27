@@ -407,7 +407,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             resp.in_thinking = false;
             resp.reset();
             ChatChoice choice = new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(),
-                    new AssistantMessage("</think>", true).reasoningFieldName(resp.reasoning_field_name));
+                    new AssistantMessage("", "", true).reasoningFieldName(resp.reasoning_field_name));
             resp.addChoice(choice);
             publishResponse(sink, resp, choice);
         }
@@ -534,12 +534,12 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
         if (acm != null && Assert.isEmpty(acm.getToolCalls())) {
             //工具不为空时已在 buildToolCallBuilder 已添加
-            if (Assert.isNotEmpty(acm.getContent())) {
-                resp.contentBuilder.append(acm.getContent());
+            if (Assert.isNotEmpty(acm.getTextRaw())) {
+                resp.textBuilder.append(acm.getTextRaw());
             }
 
-            if (Assert.isNotEmpty(acm.getThinking())) {
-                resp.reasoningBuilder.append(acm.getThinking());
+            if (Assert.isNotEmpty(acm.getThinkingRaw())) {
+                resp.thinkingBuilder.append(acm.getThinkingRaw());
             }
 
             // 流式聚合媒体块（文本已走 contentBuilder）
@@ -556,12 +556,12 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             return;
         }
 
-        if (Assert.isNotEmpty(acm.getContent())) {
-            resp.contentBuilder.append(acm.getContent());
+        if (Assert.isNotEmpty(acm.getTextRaw())) {
+            resp.textBuilder.append(acm.getTextRaw());
         }
 
-        if (Assert.isNotEmpty(acm.getThinking())) {
-            resp.reasoningBuilder.append(acm.getThinking());
+        if (Assert.isNotEmpty(acm.getThinkingRaw())) {
+            resp.thinkingBuilder.append(acm.getThinkingRaw());
         }
 
         // 工具调用消息中也可能附带媒体

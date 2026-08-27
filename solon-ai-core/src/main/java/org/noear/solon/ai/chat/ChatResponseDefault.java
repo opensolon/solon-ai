@@ -49,8 +49,8 @@ public class ChatResponseDefault implements ChatResponse {
     protected String model;
     protected boolean finished;
 
-    protected final StringBuilder contentBuilder = new StringBuilder();
-    public final StringBuilder reasoningBuilder = new StringBuilder();
+    protected final StringBuilder textBuilder = new StringBuilder();
+    public final StringBuilder thinkingBuilder = new StringBuilder();
     /**
      * 流式聚合中的非文本媒体块（终态写入）
      *
@@ -168,8 +168,13 @@ public class ChatResponseDefault implements ChatResponse {
         return null;
     }
 
-    public String getAggregationContent() {
-        return contentBuilder.toString();
+    public String getAggregationText() {
+        return textBuilder.toString();
+    }
+
+
+    public String getAggregationThinking() {
+        return thinkingBuilder.toString();
     }
 
     /**
@@ -225,7 +230,8 @@ public class ChatResponseDefault implements ChatResponse {
     @Override
     public boolean isEmpty() {
         if (stream) {
-            if (contentBuilder.length() == 0 &&
+            if (textBuilder.length() == 0 &&
+                    thinkingBuilder.length() == 0 &&
                     toolCallBuilders.isEmpty() &&
                     mediaBlocks.isEmpty() &&
                     choices.isEmpty()) {
@@ -248,9 +254,12 @@ public class ChatResponseDefault implements ChatResponse {
         if (hasChoices()) {
             if (stream) {
                 AssistantMessage last = lastChoice().getMessage();
-                List<ContentBlock> aggBlocks = buildAggregationBlocks(contentBuilder.toString(), last);
-                return new AssistantMessage(contentBuilder.toString(),
-                        last.isThinking(),
+                List<ContentBlock> aggBlocks = buildAggregationBlocks(textBuilder.toString(), last);
+
+                return new AssistantMessage(
+                        textBuilder.toString(),
+                        thinkingBuilder.toString(),
+                        textBuilder.length() == 0 && thinkingBuilder.length() > 0,
                         last.getContentRaw(),
                         last.getToolCallsRaw(),
                         last.getToolCalls(),
@@ -261,9 +270,17 @@ public class ChatResponseDefault implements ChatResponse {
                 return lastChoice().getMessage();
             }
         } else {
-            if (contentBuilder.length() > 0 || Utils.isNotEmpty(mediaBlocks)) {
-                List<ContentBlock> aggBlocks = buildAggregationBlocks(contentBuilder.toString(), null);
-                return new AssistantMessage(contentBuilder.toString(), false, null, null, null, null, aggBlocks)
+            if (textBuilder.length() > 0 || thinkingBuilder.length() > 0 || Utils.isNotEmpty(mediaBlocks)) {
+                List<ContentBlock> aggBlocks = buildAggregationBlocks(textBuilder.toString(), null);
+                return new AssistantMessage(
+                        textBuilder.toString(),
+                        thinkingBuilder.toString(),
+                        false,
+                        null,
+                        null,
+                        null,
+                        null,
+                        aggBlocks)
                         .reasoningFieldName(reasoning_field_name);
             } else {
                 return null;
@@ -330,9 +347,20 @@ public class ChatResponseDefault implements ChatResponse {
      * <p>与 {@link #getMessage()} 对齐：流式仅 media 时也回落聚合消息。</p>
      */
     @Override
-    public String getResultContent() {
+    public String getText() {
         AssistantMessage msg = getMessage();
-        return msg == null ? null : msg.getAnswer();
+        return msg == null ? null : msg.getText();
+    }
+
+    @Override
+    public String getThinking() {
+        AssistantMessage msg = getMessage();
+        return msg == null ? null : msg.getThinking();
+    }
+
+    @Override
+    public String getResultContent() {
+        return getText();
     }
 
     /**

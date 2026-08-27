@@ -69,7 +69,7 @@ public class OpenaiResponsesThinkParseTest {
         // 第一条为思考消息
         AssistantMessage first = resp.getChoices().get(0).getMessage();
         Assertions.assertTrue(first.isThinking());
-        Assertions.assertEquals("让我想想\n再想想", first.getContent());
+        Assertions.assertEquals("让我想想再想想", first.getContent());
         // 第二条为正文消息
         AssistantMessage second = resp.getChoices().get(1).getMessage();
         Assertions.assertFalse(second.isThinking());
@@ -179,7 +179,7 @@ public class OpenaiResponsesThinkParseTest {
     public void buildShouldEmitReasoningItemForThinkingMessage() {
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.ofSystem("你是助手"));
-        messages.add(new AssistantMessage("让我先想想", true));
+        messages.add(new AssistantMessage("", "让我先想想", true));
         messages.add(ChatMessage.ofUser("你好"));
 
         ONode node = new OpenaiResponsesRequestBuilder().build(new ChatConfig(), ChatOptions.of(), messages, false);
@@ -204,7 +204,7 @@ public class OpenaiResponsesThinkParseTest {
     @Test
     public void buildShouldStripThinkTagsForThinkingMessage() {
         List<ChatMessage> messages = new ArrayList<>();
-        messages.add(new AssistantMessage("<think>内部思考</think>", true));
+        messages.add(new AssistantMessage("", "内部思考", true));
 
         ONode node = new OpenaiResponsesRequestBuilder().build(new ChatConfig(), ChatOptions.of(), messages, false);
 
