@@ -600,28 +600,22 @@ public class AnthropicResponseParser {
                 }
             }
 
-            // 构建文本内容
-            String textContent;
+            // 构建 AssistantMessage：text/thinking 分离（新接口），不再注入 <think> 标签；
+            // 仅思考无正文时 isThinking=true，与流式聚合（getAggregationMessage）语义对齐
+            String textStr = normalContent.toString();
+            String thinkingStr = thinkingContent.toString();
+            boolean thinkingOnly = thinkingContent.length() > 0 && normalContent.length() == 0;
+
             Map<String, Object> contentRaw = null;
-            if (thinkingContent.length() > 0 && normalContent.length() > 0) {
-                textContent = "<think>\n\n" + thinkingContent.toString() + "</think>\n\n" + normalContent.toString();
+            if (thinkingContent.length() > 0) {
                 contentRaw = new LinkedHashMap<>();
                 contentRaw.put("thinking", thinkingContent.toString());
                 if (Utils.isNotEmpty(thinkingSignature)) {
                     contentRaw.put("thinkingSignature", thinkingSignature);
                 }
-                contentRaw.put("content", normalContent.toString());
-            } else if (thinkingContent.length() > 0) {
-                textContent = "<think>\n\n" + thinkingContent.toString() + "</think>\n\n";
-                contentRaw = new LinkedHashMap<>();
-                contentRaw.put("thinking", thinkingContent.toString());
-                if (Utils.isNotEmpty(thinkingSignature)) {
-                    contentRaw.put("thinkingSignature", thinkingSignature);
+                if (normalContent.length() > 0) {
+                    contentRaw.put("content", normalContent.toString());
                 }
-            } else if (normalContent.length() > 0) {
-                textContent = normalContent.toString();
-            } else {
-                textContent = "";
             }
 
             // redacted_thinking 分块列表透传到 contentRaw，供多轮逐块回传（拼接会损坏 opaque 数据）
@@ -635,10 +629,9 @@ public class AnthropicResponseParser {
             List<ContentBlock> blocksForMsg = null;
             if (!mediaBlocks.isEmpty()) {
                 blocksForMsg = new ArrayList<>();
-                if (Utils.isNotEmpty(textContent)) {
-                    // 多模态时用 result 文本投影（不含 think 标签）
-                    String textProjection = normalContent.length() > 0 ? normalContent.toString() : textContent;
-                    blocksForMsg.add(TextBlock.of(textProjection));
+                if (Utils.isNotEmpty(textStr)) {
+                    // 多模态时用 result 文本投影（不含思考内容）
+                    blocksForMsg.add(TextBlock.of(textStr));
                 }
                 blocksForMsg.addAll(mediaBlocks);
                 resp.addMediaBlocks(mediaBlocks);
@@ -649,14 +642,16 @@ public class AnthropicResponseParser {
                     ? stopReason
                     : (!allToolCalls.isEmpty() ? "tool_use" : "stop");
 
-            // 将所有工具调用合并到一个 AssistantMessage 中
+            // 将所有工具调用合并到一个 AssistantMessage 中（带 tool 的终态消息 isThinking=false，确保历史回传不被跳过）
             if (!allToolCalls.isEmpty()) {
-                AssistantMessage msg = new AssistantMessage(textContent,"",
-                        false, contentRaw, allToolCallsRaw, allToolCalls, null, blocksForMsg);
+                AssistantMessage msg = new AssistantMessage(textStr, thinkingStr,
+                        false, contentRaw, allToolCallsRaw, allToolCalls, null, blocksForMsg)
+                        .reasoningFieldName("thinking");
                 resp.addChoice(new ChatChoice(0, created, choiceFinishReason, msg));
-            } else if (Utils.isNotEmpty(textContent) || blocksForMsg != null || contentRaw != null) {
-                AssistantMessage msg = new AssistantMessage(textContent, "",
-                        false, contentRaw, null, null, null, blocksForMsg);
+            } else if (Utils.isNotEmpty(textStr) || contentRaw != null || blocksForMsg != null) {
+                AssistantMessage msg = new AssistantMessage(textStr, thinkingStr,
+                        thinkingOnly, contentRaw, null, null, null, blocksForMsg)
+                        .reasoningFieldName("thinking");
                 resp.addChoice(new ChatChoice(0, created, choiceFinishReason, msg));
             }
         }

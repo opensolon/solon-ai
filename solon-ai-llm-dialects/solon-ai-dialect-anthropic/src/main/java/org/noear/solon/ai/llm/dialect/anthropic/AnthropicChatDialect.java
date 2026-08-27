@@ -266,28 +266,26 @@ public class AnthropicChatDialect extends AbstractChatDialect {
             resp.in_thinking = false;
         }
 
-        // 构建消息内容，将思考内容用 <think>...</think> 包裹以便 getReasoning() 能提取
-        String content;
+        // 构建 AssistantMessage：text/thinking 分离（新接口），不再注入 <think> 标签；
+        // 终态消息（含工具调用）isThinking=false，确保历史回传不被跳过
+        String textStr = textContent.toString();
+        String thinkingStr = thinkingContent.toString();
+
         Map<String, Object> contentRaw = null;
-        if (thinkingContent.length() > 0) {
-            content = "<think>\n\n" + thinkingContent.toString() + "</think>\n\n";
-            if (textContent.length() > 0) {
-                content += textContent.toString();
-            }
+        if (thinkingStr.length() > 0) {
             contentRaw = new LinkedHashMap<>();
-            contentRaw.put("thinking", thinkingContent.toString());
+            contentRaw.put("thinking", thinkingStr);
             if (thinkingSignature != null) {
                 contentRaw.put("thinkingSignature", thinkingSignature);
             }
-            if (textContent.length() > 0) {
-                contentRaw.put("content", textContent.toString());
+            if (textStr.length() > 0) {
+                contentRaw.put("content", textStr);
             }
-        } else {
-            content = textContent.length() > 0 ? textContent.toString() : "";
         }
 
-        AssistantMessage message = new AssistantMessage(content, "",
-                false, contentRaw, toolCallsRaw, toolCalls, null, mediaBlocks.isEmpty() ? null : mediaBlocks);
+        AssistantMessage message = new AssistantMessage(textStr, thinkingStr,
+                false, contentRaw, toolCallsRaw, toolCalls, null, mediaBlocks.isEmpty() ? null : mediaBlocks)
+                .reasoningFieldName("thinking");
         messageList.add(message);
 
         return messageList;

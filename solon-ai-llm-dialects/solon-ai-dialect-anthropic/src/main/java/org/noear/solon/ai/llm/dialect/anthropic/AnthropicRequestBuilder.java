@@ -109,7 +109,8 @@ public class AnthropicRequestBuilder {
         ONode messagesNode = root.getOrNew("messages").asArray();
         ONode pendingToolResultNode = null; // 用于合并连续的 ToolMessage
         for (ChatMessage message : messages) {
-            if (message instanceof SystemMessage || message.isThinking()) {
+            // isThinking 的中间帧（无工具调用）不回传；带 toolCalls 的终态消息即使是思考态也必须回传（Claude 工具多轮要求 thinking 块随行）
+            if (message instanceof SystemMessage || (message.isThinking() && message.isToolCalls() == false)) {
                 continue;
             }
 
@@ -389,8 +390,9 @@ public class AnthropicRequestBuilder {
         }
 
         int maxTokens = resolveMaxTokens(root, options);
-        // 协议要求：budget_tokens >= 1024 且 < max_tokens；无法同时满足时放弃 thinking（对齐 SDK 校验）
-        if (maxTokens <= 1025) {
+        // 统一语义（与既有测试契约一致）：budget 必须严格小于 max_tokens；
+        // 极小 max_tokens 下档位预算退化为 "尽量占满输出预算"（max_tokens - 1），仅 max_tokens<=1 时放弃 thinking
+        if (maxTokens <= 1) {
             return;
         }
         if (budget >= maxTokens) {
@@ -404,9 +406,11 @@ public class AnthropicRequestBuilder {
     }
 
     /**
-     * Claude adaptive thinking：type=adaptive + 顶层 effort（无 budget_tokens）。
+     * Claude adaptive thinking：type=adaptive + output_config.effort（无 budget_tokens）。
      * <p>opus-4.7+ / sonnet-5+ 等默认 display=omitted，需强制 summarized 才能拿到思考摘要
      * （对齐 OpenCode anthropicOmitsThinking）。</p>
+     * <p>effort 位于 {@code output_config.effort}（Messages API OutputConfig，对齐官方 SDK
+     * OutputConfig.Effort：low/medium/high/xhigh/max）；顶层并无该字段。</p>
      *
      * @since 4.0.4
      */
@@ -417,8 +421,8 @@ public class AnthropicRequestBuilder {
             // 新模型默认 display=omitted 会返回空 thinking 块
             thinkingNode.set("display", "summarized");
         }
-        // 顶层 effort 为 Anthropic adaptive 协议字段
-        root.set("effort", effort);
+        // getOrNew 合并：用户若已显式配置 output_config（如 format），仅追加 effort 不覆盖
+        root.getOrNew("output_config").set("effort", effort);
     }
 
     /**
@@ -729,7 +733,7 @@ public class AnthropicRequestBuilder {
             // 回传 redacted_thinking 块（安全过滤的推理内容，原样保留供多轮，对齐 Anthropic SDK）
             appendRedactedThinkingBlocks(contentArray, assistantMessage);
 
-            // 添加文本内容（如果有，排除  与纯空白）
+            // 添加文本内容（如果有，排除与纯空白；兼容旧版带 <think> 标签的消息，出站前剥离）
             String resultContent = trimToNull(assistantMessage.getText());
             if (resultContent != null) {
                 contentArray.addNew()
@@ -776,7 +780,7 @@ public class AnthropicRequestBuilder {
                 }
             }
         } else {
-            // 纯文本回传剥离 think，与多模态 TextBlock 路径一致；空白不回传为 text
+            // 纯文本回传剥离 think（兼容旧版带标签消息），与多模态 TextBlock 路径一致；空白不回传为 text
             String content = trimToNull(assistantMessage.getText());
             if (content != null) {
                 node.set("content", content);

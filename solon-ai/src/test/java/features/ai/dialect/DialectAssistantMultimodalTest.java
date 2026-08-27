@@ -403,7 +403,7 @@ public class DialectAssistantMultimodalTest {
     @Test
     public void anthropicPlainAssistantShouldStripThinkTags() {
         AnthropicChatDialect dialect = AnthropicChatDialect.getInstance();
-        AssistantMessage msg = ChatMessage.ofAssistant("<think>secret</think>visible");
+        AssistantMessage msg = new AssistantMessage("visible", "secret", false);
 
         ChatConfig config = new ChatConfig();
         config.setModel("claude-test");
@@ -421,7 +421,7 @@ public class DialectAssistantMultimodalTest {
     @Test
     public void geminiPlainAssistantShouldStripThinkTags() {
         GeminiChatDialect dialect = GeminiChatDialect.getInstance();
-        AssistantMessage msg = ChatMessage.ofAssistant("<think>secret</think>visible");
+        AssistantMessage msg = new AssistantMessage("visible", "secret", false);
 
         ChatConfig config = new ChatConfig();
         config.setModel("gemini-test");

@@ -97,8 +97,8 @@ public interface ChatMessage extends Serializable {
 
     /// //////////////
 
-    static AssistantMessage ofAssistant(String content) {
-        return new AssistantMessage(content);
+    static AssistantMessage ofAssistant(String text) {
+        return new AssistantMessage(text);
     }
 
     /**
