@@ -62,6 +62,16 @@ public class AnthropicResponseParser {
     private static final String STREAM_TOOL_STATE_KEY = "StreamToolStates";
     private static final String REDACTED_THINKING_DATA_KEY = "redactedThinkingData";
 
+    /**
+     * Claude 思考内容对应的统一推理字段名（与非流式 parseNonStreamResponse 保持一致）
+     */
+    private static final String REASONING_FIELD_THINKING = "thinking";
+
+    /**
+     * 终态帧已发射标记（message_stop 与兼容网关 [DONE] 双发时防重复补位）
+     */
+    private static final String TERMINAL_FRAME_EMITTED_KEY = "AnthropicTerminalFrameEmitted";
+
     @SuppressWarnings("unchecked")
     static Map<Integer, StreamToolState> toolStates(ChatResponseDefault resp, boolean create) {
         Map<Integer, StreamToolState> states = resp.attrAs(STREAM_TOOL_STATE_KEY);
@@ -202,10 +212,7 @@ public class AnthropicResponseParser {
             }
             if ("[DONE]".equals(jsonData)) {
                 resp.attrRemove(STREAM_TOOL_STATE_KEY);
-                if (resp.isFinished() == false) {
-                    resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
-                    resp.setFinished(true);
-                }
+                emitTerminalFrameOnce(resp);
                 return true;
             }
 
@@ -258,37 +265,38 @@ public class AnthropicResponseParser {
                     if ("thinking".equals(blockType)) {
                         // 思考内容块开始
                         if (!resp.in_thinking) {
-                            // 第一次进入思考模式，添加开始标记
+                            // 第一次进入思考模式，添加开始标记；同步统一推理字段名（供后续闭合帧/聚合复用）
+                            resp.reasoning_field_name = REASONING_FIELD_THINKING;
                             resp.addChoice(new ChatChoice(0, new Date(), null,
-                                    new AssistantMessage("","", true)));
+                                    new AssistantMessage("", "", true).reasoningFieldName(REASONING_FIELD_THINKING)));
                             resp.in_thinking = true;
                             hasChoices = true;
                         }
                         String thinking = contentBlock.get("thinking").getString();
                         if (Utils.isNotEmpty(thinking)) {
                             resp.addChoice(new ChatChoice(0, new Date(), null,
-                                    new AssistantMessage("",thinking, true)));
+                                    new AssistantMessage("", thinking, true).reasoningFieldName(REASONING_FIELD_THINKING)));
                             hasChoices = true;
                         }
                     } else if ("text".equals(blockType)) {
                         // 如果之前在思考模式，添加结束标记
                         if (resp.in_thinking) {
                             resp.addChoice(new ChatChoice(0, new Date(), null,
-                                    new AssistantMessage("", "", true)));
+                                    new AssistantMessage("", "", true).reasoningFieldName(resp.reasoning_field_name)));
                             resp.in_thinking = false;
                             hasChoices = true;
                         }
                         String text = contentBlock.get("text").getString();
                         if (Utils.isNotEmpty(text)) {
                             resp.addChoice(new ChatChoice(0, new Date(), null,
-                                    new AssistantMessage(text)));
+                                    new AssistantMessage(text, "", false).reasoningFieldName(resp.reasoning_field_name)));
                             hasChoices = true;
                         }
                     } else if ("tool_use".equals(blockType)) {
                         // 如果之前在思考模式，添加结束标记
                         if (resp.in_thinking) {
                             resp.addChoice(new ChatChoice(0, new Date(), null,
-                                    new AssistantMessage("", "", true)));
+                                    new AssistantMessage("", "", true).reasoningFieldName(resp.reasoning_field_name)));
                             resp.in_thinking = false;
                             hasChoices = true;
                         }
@@ -324,7 +332,7 @@ public class AnthropicResponseParser {
                         String thinking = delta.get("thinking").getString();
                         if (Utils.isNotEmpty(thinking)) {
                             resp.addChoice(new ChatChoice(0, new Date(), null,
-                                    new AssistantMessage("",thinking, true)));
+                                    new AssistantMessage("", thinking, true).reasoningFieldName(REASONING_FIELD_THINKING)));
                             hasChoices = true;
                         }
                     } else if ("signature_delta".equals(deltaType)) {
@@ -336,7 +344,7 @@ public class AnthropicResponseParser {
                         String text = delta.get("text").getString();
                         if (Utils.isNotEmpty(text)) {
                             resp.addChoice(new ChatChoice(0, new Date(), null,
-                                    new AssistantMessage(text)));
+                                    new AssistantMessage(text, "", false).reasoningFieldName(resp.reasoning_field_name)));
                             hasChoices = true;
                         }
                     } else if ("input_json_delta".equals(deltaType)) {
@@ -395,9 +403,10 @@ public class AnthropicResponseParser {
 
                         List<ToolCall> toolCalls = new ArrayList<>();
                         toolCalls.add(toolCall);
-                        AssistantMessage assistantMessage = new AssistantMessage("","",
+                        // 终态工具消息同样携带统一推理字段名，保证聚合消息与非流式行为一致
+                        AssistantMessage assistantMessage = new AssistantMessage("", "",
                                 false, null, toolCallsRaw,
-                                toolCalls, null);
+                                toolCalls, null).reasoningFieldName(resp.reasoning_field_name);
                         resp.addChoice(new ChatChoice(0, new Date(), null, assistantMessage));
                         hasChoices = true;
                     } catch (Exception e) {
@@ -435,12 +444,9 @@ public class AnthropicResponseParser {
                     }
                 }
             } else if ("message_stop".equals(eventType)) {
-                // 消息结束，清理状态并添加信息对 finished 进行透传
+                // 消息结束，清理状态并补齐终态帧（finishReason 透传 / thinkingSignature 载体 / thinking 边界闭合）
                 resp.attrRemove(STREAM_TOOL_STATE_KEY);
-
-                if (resp.hasChoices() == false) { //完成时。如果为空，则补位
-                    resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
-                }
+                emitTerminalFrameOnce(resp);
 
                 resp.setFinished(true);
                 hasChoices = true;
@@ -451,6 +457,60 @@ public class AnthropicResponseParser {
         }
 
         return hasChoices;
+    }
+
+    /**
+     * 发射终态帧（幂等）：message_stop 与兼容网关的 [DONE] 双发场景下仅补一次。
+     *
+     * <p>不依赖 resp.isFinished() 判断：message_delta(stop_reason) 会先行置 finished，
+     * 若以它为标记，后续 [DONE] 里的终态补齐（thinkingSignature 载体）会被误跳过。</p>
+     *
+     * @since 4.0.4
+     */
+    private void emitTerminalFrameOnce(ChatResponseDefault resp) {
+        if (resp.attrAs(TERMINAL_FRAME_EMITTED_KEY) == null) {
+            resp.attrPut(TERMINAL_FRAME_EMITTED_KEY, Boolean.TRUE);
+            emitTerminalFrame(resp);
+        }
+        resp.setFinished(true);
+    }
+
+    /**
+     * 流式终态补齐（对齐 AssistantMessage 双字段接口 82119a72e 后的聚合链路）：
+     * <ol>
+     *   <li>thinking 边界闭合：仅思考无正文的流（max_tokens 截断等）没有后续 text/tool_use
+     *       块可借道闭合，此处补齐思考结束信号，保证下游逐帧订阅者收到完整边界；</li>
+     *   <li>终态补位：无任何 choice 时补空帧透传 finishReason（原有行为）；</li>
+     *   <li>thinkingSignature 载体：core 的 getAggregationMessage() 以 last choice 的 contentRaw
+     *       为聚合消息 contentRaw，流式 signature 若只存 resp.thinkingSignature，非工具多轮对话的
+     *       聚合消息会丢失签名 → 历史回传时 thinking 块被丢弃，多轮 extended thinking 上下文断裂。
+     *       此处以携带 {thinkingSignature} contentRaw 的空帧收官，使聚合消息拿到签名。</li>
+     * </ol>
+     *
+     * @since 4.0.4
+     */
+    private void emitTerminalFrame(ChatResponseDefault resp) {
+        // 1) 仅思考无正文的流：补思考闭合信号（空帧、无内容累加，仅边界语义）
+        if (resp.in_thinking) {
+            resp.addChoice(new ChatChoice(0, new Date(), null,
+                    new AssistantMessage("", "", true).reasoningFieldName(resp.reasoning_field_name)));
+            resp.in_thinking = false;
+        }
+
+        // 2) 终态补位：空流补空帧透传 finishReason；有 signature 时补载体帧（二选一命中即补）
+        if (resp.hasChoices() == false || Utils.isNotEmpty(resp.thinkingSignature)) {
+            Map<String, Object> contentRaw = null;
+            if (Utils.isNotEmpty(resp.thinkingSignature)) {
+                // 供 getAggregationMessage() 取 last.getContentRaw() 时携带签名，多轮回传时可重建 thinking 块
+                contentRaw = new LinkedHashMap<>();
+                contentRaw.put("thinkingSignature", resp.thinkingSignature);
+            }
+
+            AssistantMessage placeholder = new AssistantMessage("", "",
+                    false, contentRaw, null, null, null, null)
+                    .reasoningFieldName(resp.reasoning_field_name);
+            resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), placeholder));
+        }
     }
 
     /**
@@ -465,7 +525,8 @@ public class AnthropicResponseParser {
     public boolean parseNonStreamResponse(ChatResponseDefault resp, String json) {
         if ("[DONE]".equals(json)) {
             if (resp.isFinished() == false) {
-                resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
+                resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(),
+                        new AssistantMessage("").reasoningFieldName(resp.reasoning_field_name)));
                 resp.setFinished(true);
             }
             return true;

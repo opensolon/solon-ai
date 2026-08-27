@@ -63,7 +63,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     public AssistantMessage(String text) {
-        this(text, null, false, null, null, null, null, null);
+        this(text, "", false, null, null, null, null, null);
     }
 
     public AssistantMessage(String text, String thinking, boolean isThinking) {

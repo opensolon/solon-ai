@@ -262,7 +262,7 @@ public class AnthropicChatDialect extends AbstractChatDialect {
         }
 
         if (resp.in_thinking && resp.isStream()) {
-            messageList.add(new AssistantMessage("","", true));
+            messageList.add(new AssistantMessage("","", true).reasoningFieldName(resp.reasoning_field_name));
             resp.in_thinking = false;
         }
 
