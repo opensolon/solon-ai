@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.message;
 
 import org.noear.solon.Utils;
+import org.noear.solon.core.util.Assert;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -87,5 +88,14 @@ public abstract class ChatMessageBase<Slf extends ChatMessageBase> implements Ch
         } else {
             return metadata.containsKey(key);
         }
+    }
+
+    /**
+     * 是否有元数据（不触发懒初始化，便于流式逐帧检查）
+     *
+     * @since 4.1
+     */
+    public boolean hasMetadata() {
+        return Assert.isNotEmpty(metadata);
     }
 }

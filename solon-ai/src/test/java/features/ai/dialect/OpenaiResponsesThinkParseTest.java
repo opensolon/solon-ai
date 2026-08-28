@@ -40,7 +40,7 @@ public class OpenaiResponsesThinkParseTest {
     }
 
     /**
-     * 非流式：reasoning item + message item → thinking choice + 正文 choice + usage.thinkTokens
+     * 非流式：reasoning item + message item → 思考与正文合并为单条消息 + usage.thinkTokens
      */
     @Test
     public void nonStreamShouldParseReasoningItem() {
@@ -65,15 +65,12 @@ public class OpenaiResponsesThinkParseTest {
         boolean ok = dialect.parseResponseJson(new ChatConfig(), resp, json);
 
         Assertions.assertTrue(ok);
-        Assertions.assertEquals(2, resp.getChoices().size());
-        // 第一条为思考消息
-        AssistantMessage first = resp.getChoices().get(0).getMessage();
-        Assertions.assertTrue(first.isThinking());
-        Assertions.assertEquals("让我想想再想想", first.getContent());
-        // 第二条为正文消息
-        AssistantMessage second = resp.getChoices().get(1).getMessage();
-        Assertions.assertFalse(second.isThinking());
-        Assertions.assertEquals("你好", second.getContent());
+        // 4.1 起与 AbstractChatDialect 对齐：思考与正文合并为单条消息（text/thinking 已分离）
+        Assertions.assertEquals(1, resp.getChoices().size());
+        AssistantMessage msg = resp.getChoices().get(0).getMessage();
+        Assertions.assertFalse(msg.isThinking());
+        Assertions.assertEquals("让我想想再想想", msg.getThinking());
+        Assertions.assertEquals("你好", msg.getText());
         // usage 思考 token 已解析
         Assertions.assertNotNull(resp.getUsage());
         Assertions.assertEquals(8L, resp.getUsage().thinkTokens());
@@ -99,11 +96,11 @@ public class OpenaiResponsesThinkParseTest {
         boolean ok = dialect.parseResponseJson(new ChatConfig(), resp, json);
 
         Assertions.assertTrue(ok);
-        Assertions.assertEquals(2, resp.getChoices().size());
-        Assertions.assertTrue(resp.getChoices().get(0).getMessage().isThinking());
-        Assertions.assertEquals("顶层思考", resp.getChoices().get(0).getMessage().getContent());
-        Assertions.assertFalse(resp.getChoices().get(1).getMessage().isThinking());
-        Assertions.assertEquals("顶层正文", resp.getChoices().get(1).getMessage().getContent());
+        Assertions.assertEquals(1, resp.getChoices().size());
+        AssistantMessage topMsg = resp.getChoices().get(0).getMessage();
+        Assertions.assertFalse(topMsg.isThinking());
+        Assertions.assertEquals("顶层思考", topMsg.getThinking());
+        Assertions.assertEquals("顶层正文", topMsg.getText());
     }
 
     /**

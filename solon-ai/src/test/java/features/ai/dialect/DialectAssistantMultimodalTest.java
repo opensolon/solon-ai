@@ -1142,8 +1142,10 @@ public class DialectAssistantMultimodalTest {
         for (ONode item : content.getArray()) {
             if ("input_audio".equals(item.get("type").getString())) {
                 hasInputAudio = true;
-                Assertions.assertEquals("UklGRiQ=", item.get("data").getString());
-                Assertions.assertEquals("wav", item.get("format").getString());
+                // 官方 Responses input item：{type:input_audio, input_audio:{data,format}}（嵌套形态）
+                ONode inputAudio = item.get("input_audio");
+                Assertions.assertEquals("UklGRiQ=", inputAudio.get("data").getString());
+                Assertions.assertEquals("wav", inputAudio.get("format").getString());
             }
         }
         Assertions.assertTrue(hasInputAudio, "base64 AudioBlock should produce input_audio with format");

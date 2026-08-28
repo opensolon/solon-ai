@@ -137,6 +137,12 @@ public class OpenaiChatDialect extends AbstractChatDialect {
                 }
             }
 
+            if (resp.isStream() == false) {
+                // 非流式：一次就是全部。部分兼容端点不回 finish_reason，此处统一标完成，
+                // 与 Responses 方言的非流式语义保持一致，避免上层拿到 isFinished=false
+                resp.setFinished(true);
+            }
+
             if (resp.isFinished()) {
                 if (resp.hasChoices() == false) { //完成时。如果为空，则补位
                     resp.addChoice(new ChatChoice(0, created, resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
@@ -161,8 +167,8 @@ public class OpenaiChatDialect extends AbstractChatDialect {
                     thinkTokens = oUsage.get("think_tokens").getLong();
                 }
 
-                // 缓存 token 统计（官方 prompt_tokens_details 仅定义了 cached_tokens / audio_tokens；
-                // 兼容 DeepSeek 形态 prompt_cache_hit_tokens，cache_write_tokens 为个别端点的非官方扩展）
+                // 缓存 token 统计（官方 prompt_tokens_details 含 cached_tokens / cache_write_tokens；
+                // 另兼容 DeepSeek 形态 prompt_cache_hit_tokens）
                 long cacheReadInputTokens = 0L;
                 long cacheCreationInputTokens = 0L;
                 ONode promptTokensDetails = oUsage.getOrNull("prompt_tokens_details");

@@ -328,6 +328,13 @@ public class AssistantMessageTest {
         Assertions.assertEquals("", AssistantMessage.stripThinkTags("<think>only"));
         Assertions.assertEquals("plain", AssistantMessage.stripThinkTags("plain"));
         Assertions.assertEquals("", AssistantMessage.stripThinkTags(null));
+        // 标签不在开头（正文在讨论 <think> 标签本身）：不得当作思考剥离，否则整段正文会丢
+        Assertions.assertEquals("请解释 <think> 标签的作用",
+                AssistantMessage.stripThinkTags("请解释 <think> 标签的作用"));
+        Assertions.assertEquals("a <think>x</think> b",
+                AssistantMessage.stripThinkTags("a <think>x</think> b"));
+        // 首部空白不影响判定
+        Assertions.assertEquals("answer", AssistantMessage.stripThinkTags("\n <think>x</think>answer"));
     }
 
     @Test

@@ -20,13 +20,19 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.noear.solon.core.util.Assert;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -164,6 +170,63 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
     @Override
     public ONode buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
         return requestBuilder.build(config, options, messages, isStream);
+    }
+
+    /**
+     * 解析助手消息（流式工具调用轮的聚合出口）。
+     * <p>Responses 的 thinking / text 分帧由 {@link OpenaiResponsesResponseParser} 直接产出 choice，
+     * 从不经过父类的 think 标签状态机；本方法实际只被
+     * {@code ChatRequestDescDefault#buildStreamToolCallMessage} 调用，用于把
+     * {@link #buildAssistantToolCallMessageNode} 的聚合结果落成会话消息。</p>
+     * <p>故不再委派父类：父类会把「同帧双通道（正文 + reasoning_content）」拆成
+     * 多条思考信号消息 + 正文消息，导致</p>
+     * <ol>
+     *   <li>{@code messages.get(0)} 不是携带 tool_calls 的那条 → 工具不被执行，
+     *       下一轮 input 只有 function_call 而无 function_call_output，官方端点会 400；</li>
+     *   <li>reasoning 元数据被挂到多条消息上 → 下一轮 input 出现多个同 id 的 reasoning 项。</li>
+     * </ol>
+     *
+     * @since 4.1
+     */
+    @Override
+    public List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
+        String text = oMessage.get("content").getString();
+        String thinking = oMessage.get("reasoning_content").getString();
+
+        ONode toolCallsNode = oMessage.getOrNull("tool_calls");
+        List<ToolCall> toolCalls = parseToolCalls(resp, toolCallsNode);
+        List<Map> toolCallsRaw = Utils.isEmpty(toolCalls) ? null : toolCallsNode.toBean(List.class);
+
+        // 流式聚合的媒体块（如 image_generation_call）随消息带上，多轮才能按 id 回传
+        List<ContentBlock> blocksForMsg = null;
+        if (Utils.isNotEmpty(resp.getMediaBlocks())) {
+            blocksForMsg = new ArrayList<>();
+            if (Utils.isNotEmpty(text)) {
+                blocksForMsg.add(TextBlock.of(text));
+            }
+            blocksForMsg.addAll(resp.getMediaBlocks());
+        }
+
+        if (Utils.isEmpty(text) && Utils.isEmpty(thinking)
+                && Utils.isEmpty(toolCalls) && blocksForMsg == null) {
+            return Collections.emptyList();
+        }
+
+        AssistantMessage message = new AssistantMessage(
+                text == null ? "" : text,
+                thinking == null ? "" : thinking,
+                false, null, toolCallsRaw, toolCalls, null, blocksForMsg);
+
+        // 官方多轮回放 reasoning 项需要 reasoning_item_id / reasoning_encrypted_content，
+        // 它们来自流式分片 metadata 聚合（节点里不携带）
+        Map<String, Object> aggMetadata = resp.getAggregationMetadata();
+        if (Utils.isNotEmpty(aggMetadata)) {
+            message.addMetadata(aggMetadata);
+        }
+
+        resp.in_thinking = false; //本方言不走父类思考状态机，统一复位
+
+        return Collections.singletonList(message);
     }
 
     /**

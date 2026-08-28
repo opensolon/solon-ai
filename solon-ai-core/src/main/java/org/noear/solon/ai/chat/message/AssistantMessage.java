@@ -294,7 +294,10 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     /**
-     * 剥离 {@code <think>...</think>} 标签，供多模态回传 TextBlock 与文本投影复用。
+     * 剥离开头的 {@code <think>...</think>} 标签，供多模态回传 TextBlock 与文本投影复用。
+     * <p>仅当文本（去首部空白后）以 {@code <think>} 开头时才剥离——这是旧版把思考内嵌在
+     * {@code content} 开头的形态；正文中间出现 {@code <think>} 字样（如讨论该标签本身）
+     * 不得当作思考剥离，否则会把正常正文整段清空。</p>
      *
      * @since 4.0.4
      */
@@ -303,14 +306,32 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
             return "";
         }
 
-        int thinkEndIndex = text.indexOf("</think>");
+        int tagStart = indexOfLeadingThinkTag(text);
+        if (tagStart < 0) {
+            return text;
+        }
+
+        int thinkEndIndex = text.indexOf("</think>", tagStart);
         if (thinkEndIndex > -1) {
             return text.substring(thinkEndIndex + 8);
         }
-        if (text.contains("<think>")) {
-            return "";
+
+        // 只有开标签（流式未闭合）：整段都是思考
+        return "";
+    }
+
+    /**
+     * 首个非空白字符处是否为 {@code <think>}，返回其下标；不是则返回 -1。
+     */
+    private static int indexOfLeadingThinkTag(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            if (Character.isWhitespace(text.charAt(i))) {
+                continue;
+            }
+            return text.startsWith("<think>", i) ? i : -1;
         }
-        return text;
+
+        return -1;
     }
 
     private transient String jsonContent;

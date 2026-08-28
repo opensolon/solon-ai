@@ -246,7 +246,7 @@ public class ReasonTask {
 
         // 容错处理：模型响应内容、工具调用与媒体均为空时，引导其重新生成
         // 纯生图等 media-only 响应不算空，避免被当成空响应重试
-        // 注：answer 用 trim 判定，纯空白（如 "\n\n"）等价于空，否则会 END 出一个空白答案
+        // 注：text 用 trim 判定，纯空白（如 "\n\n"）等价于空，否则会 END 出一个空白答案
         if (Assert.isBlank(responseMessage.getText())
                 && Assert.isEmpty(responseMessage.getToolCalls())
                 && !responseMessage.hasMedia()) {

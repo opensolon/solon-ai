@@ -57,6 +57,12 @@ public class ChatResponseDefault implements ChatResponse {
      * @since 3.9
      */
     protected final List<ContentBlock> mediaBlocks = new ArrayList<>();
+    /**
+     * 流式分片消息的 metadata 聚合（如 reasoning 项 id/encrypted_content，多轮回放需要）
+     *
+     * @since 4.1
+     */
+    protected final Map<String, Object> aggregationMetadata = new LinkedHashMap<>();
     protected final Map<String, ToolCallBuilder> toolCallBuilders = new LinkedHashMap<>();
 
     //附件属性
@@ -265,7 +271,8 @@ public class ChatResponseDefault implements ChatResponse {
                         last.getToolCalls(),
                         last.getSearchResultsRaw(),
                         aggBlocks
-                ).reasoningFieldName(last.getReasoningFieldName());
+                ).reasoningFieldName(last.getReasoningFieldName())
+                        .addMetadata(aggregationMetadata);
             } else {
                 return lastChoice().getMessage();
             }
@@ -281,7 +288,8 @@ public class ChatResponseDefault implements ChatResponse {
                         null,
                         null,
                         aggBlocks)
-                        .reasoningFieldName(reasoning_field_name);
+                        .reasoningFieldName(reasoning_field_name)
+                        .addMetadata(aggregationMetadata);
             } else {
                 return null;
             }
@@ -492,6 +500,21 @@ public class ChatResponseDefault implements ChatResponse {
      */
     public void addChoice(ChatChoice choice) {
         this.choices.add(choice);
+
+        // 分片 metadata 聚合：思考分片携带的元数据（如 reasoning_item_id）不在最后一片上，
+        // 需累积后交给 getAggregationMessage，否则多轮回放会丢失（@since 4.1）
+        if (stream && choice.getMessage() != null && choice.getMessage().hasMetadata()) {
+            this.aggregationMetadata.putAll(choice.getMessage().getMetadata());
+        }
+    }
+
+    /**
+     * 流式分片 metadata 聚合结果
+     *
+     * @since 4.1
+     */
+    public Map<String, Object> getAggregationMetadata() {
+        return aggregationMetadata;
     }
 
     /**
