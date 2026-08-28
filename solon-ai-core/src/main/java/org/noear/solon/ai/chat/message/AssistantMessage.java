@@ -82,8 +82,8 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
      * 支持多模态内容块的构造
      *
      * @param text             文本
-     * @param thinking         思考
-     * @param isThinking       是否思考中
+     * @param thinking         想法
+     * @param isThinking       是否为想法（一般在流式中用）
      * @param contentRaw       厂商原始 content
      * @param toolCallsRaw     工具调用原始数据
      * @param toolCalls        工具调用
@@ -151,7 +151,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     /**
-     * 是否思考中
+     * 是否为想法
      */
     @Override
     public boolean isThinking() {
@@ -163,7 +163,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     /**
-     * 获取思考
+     * 获取想法
      */
     public String getThinking() {
         if (thinking != null) {
@@ -284,7 +284,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
 
 
     /**
-     * 获取思考
+     * 获取想法
      *
      * @deprecated 4.1 {@link #getThinking()}
      */
@@ -297,7 +297,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
      * 剥离开头的 {@code <think>...</think>} 标签，供多模态回传 TextBlock 与文本投影复用。
      * <p>仅当文本（去首部空白后）以 {@code <think>} 开头时才剥离——这是旧版把思考内嵌在
      * {@code content} 开头的形态；正文中间出现 {@code <think>} 字样（如讨论该标签本身）
-     * 不得当作思考剥离，否则会把正常正文整段清空。</p>
+     * 不得当作想法剥离，否则会把正常正文整段清空。</p>
      *
      * @since 4.0.4
      */
@@ -306,7 +306,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
             return "";
         }
 
-        int tagStart = indexOfLeadingThinkTag(text);
+        int tagStart = text.indexOf("<think>");
         if (tagStart < 0) {
             return text;
         }
@@ -318,20 +318,6 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
 
         // 只有开标签（流式未闭合）：整段都是思考
         return "";
-    }
-
-    /**
-     * 首个非空白字符处是否为 {@code <think>}，返回其下标；不是则返回 -1。
-     */
-    private static int indexOfLeadingThinkTag(String text) {
-        for (int i = 0; i < text.length(); i++) {
-            if (Character.isWhitespace(text.charAt(i))) {
-                continue;
-            }
-            return text.startsWith("<think>", i) ? i : -1;
-        }
-
-        return -1;
     }
 
     private transient String jsonContent;
