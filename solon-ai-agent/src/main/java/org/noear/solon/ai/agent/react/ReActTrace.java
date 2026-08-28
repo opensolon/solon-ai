@@ -118,7 +118,7 @@ public class ReActTrace implements AgentTrace {
     private AtomicInteger toolCounter = new AtomicInteger(0);
 
     /**
-     * 连续思考计数器
+     * 连续空响应计数器（仅统计连续；任一有效响应或新一次执行都会归零）
      */
     private transient AtomicInteger emptyRetryCounter = new AtomicInteger(0);
 
@@ -196,6 +196,10 @@ public class ReActTrace implements AgentTrace {
         this.protocol = protocol;
         this.finalAnswer = null;
         this.abnormal = false;
+
+        //空响应计数器按“本次执行”隔离：它计的是连续空响应，续跑（HITL 恢复、无 prompt 恢复）
+        //不走 reset(prompt)，若沿用上次的历史值，会让本次首个偶发空响应直接跨过重试上限而误熔断
+        this.emptyRetryCounter.set(0);
 
         //每次执行重置中断状态
         session.pending(false, null);

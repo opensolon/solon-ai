@@ -294,7 +294,7 @@ public class GeminiRequestBuilder {
             boolean hasText = false;
             for (ContentBlock block : assistantMessage.getBlocks()) {
                 if (block instanceof TextBlock) {
-                    String text = AssistantMessage.stripThinkTags(block.getContent());
+                    String text = block.getContent();
                     if (Utils.isNotEmpty(text)) {
                         partsArr.addNew().set("text", text);
                         hasText = true;

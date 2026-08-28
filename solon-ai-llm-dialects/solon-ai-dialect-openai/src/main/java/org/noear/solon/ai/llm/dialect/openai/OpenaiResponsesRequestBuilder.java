@@ -324,11 +324,7 @@ public class OpenaiResponsesRequestBuilder {
         }
 
         if (block instanceof TextBlock) {
-            // stripThink 仅用于 assistant 侧历史（旧数据 content 内嵌 think 标签）；
-            // user 侧不得剥离，否则正常包含该字样的文本会被整段清空
-            String text = stripThink
-                    ? AssistantMessage.stripThinkTags(block.getContent())
-                    : block.getContent();
+            String text = block.getContent();
             if (Utils.isNotEmpty(text)) {
                 contentArray.addNew().set("type", "input_text").set("text", text);
             }

@@ -109,8 +109,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 for (ContentBlock block1 : msg.getBlocks()) {
                     if (block1 instanceof TextBlock) {
                         TextBlock m1Text = (TextBlock) block1;
-                        // 回传时与 getText 对齐：剥离开头的 think 标签
-                        String text = AssistantMessage.stripThinkTags(m1Text.getContent());
+                        String text = m1Text.getContent();
                         if (Utils.isNotEmpty(text)) {
                             n1.addNew().set("type", "text").set("text", text);
                         }

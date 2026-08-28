@@ -759,7 +759,7 @@ public class AnthropicRequestBuilder {
             if (Utils.isNotEmpty(assistantMessage.getBlocks())) {
                 for (ContentBlock block : assistantMessage.getBlocks()) {
                     if (block instanceof TextBlock) {
-                        String text = trimToNull(AssistantMessage.stripThinkTags(block.getContent()));
+                        String text = trimToNull(block.getContent());
                         if (text != null) {
                             contentArray.addNew()
                                     .set("type", "text")

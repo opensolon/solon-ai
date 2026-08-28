@@ -27,6 +27,7 @@ import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.tool.ToolCall;
 
@@ -169,13 +170,55 @@ public class OpenaiResponsesDialectTest {
     @Test
     public void textFormatOption_keptAsNode() {
         // prepareOutputFormatOptions 写入的是 ONode，不能再走 ofBean 二次序列化
+        // （样本用 json_schema：Responses 的 text.format 无 json_object 类型，避免误导）
         ChatOptions options = ChatOptions.of();
-        ONode format = new ONode().set("type", "json_object");
+        ONode format = new ONode().set("type", "json_schema");
         options.optionSet("text", new ONode().set("format", format));
 
         ONode root = build(options, Collections.singletonList(ChatMessage.ofUser("hi")));
 
-        assertEquals("json_object", root.get("text").get("format").get("type").getString());
+        assertEquals("json_schema", root.get("text").get("format").get("type").getString());
+    }
+
+    @Test
+    public void outputFormat_invalidSchema_fallbackToText() {
+        // Responses 的 text.format 仅接受 text/json_schema/grammar：
+        // 非法 schema 降级为 text（而非 Chat 协议的 json_object），保证请求可合法出站
+        ChatOptions options = ChatOptions.of().outputSchema("{not a valid json");
+        OpenaiResponsesDialect.getInstance().prepareOutputFormatOptions(options);
+
+        ONode root = build(options, Collections.singletonList(ChatMessage.ofUser("hi")));
+
+        ONode format = root.get("text").get("format");
+        assertEquals("text", format.get("type").getString(), root.toJson());
+        assertFalse(format.hasKey("name"), "降级后不应残留 json_schema 专属字段: " + root.toJson());
+    }
+
+    @Test
+    public void outputFormat_validSchema_buildsJsonSchema() {
+        ChatOptions options = ChatOptions.of().outputSchema("{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}");
+        OpenaiResponsesDialect.getInstance().prepareOutputFormatOptions(options);
+
+        ONode root = build(options, Collections.singletonList(ChatMessage.ofUser("hi")));
+
+        ONode format = root.get("text").get("format");
+        assertEquals("json_schema", format.get("type").getString(), root.toJson());
+        assertEquals("output_schema", format.get("name").getString());
+        assertTrue(format.get("schema").get("properties").hasKey("city"), root.toJson());
+    }
+
+    @Test
+    public void toolMessage_nullContent_outputFallbackEmpty() {
+        // output 为官方必填字段：工具无返回（null）时兜底空串，避免端点 400
+        ToolMessage tool = ChatMessage.ofTool(null, "getWeather", "call_1");
+
+        ONode root = build(ChatOptions.of(), Collections.singletonList(tool));
+
+        ONode item = root.get("input").get(0);
+        assertEquals("function_call_output", item.get("type").getString());
+        assertEquals("call_1", item.get("call_id").getString());
+        assertEquals("", item.get("output").getString(), "null 应兜底为空串: " + root.toJson());
+        assertNotNull(item.get("output"), "output 字段必须存在: " + root.toJson());
     }
 
     @Test

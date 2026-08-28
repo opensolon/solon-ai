@@ -273,7 +273,7 @@ public class GeminiInteractionsRequestBuilder {
         if (Utils.isNotEmpty(msg.getBlocks())) {
             for (ContentBlock block : msg.getBlocks()) {
                 if (block instanceof TextBlock) {
-                    String text = AssistantMessage.stripThinkTags(block.getContent());
+                    String text = block.getContent();
                     if (Utils.isNotEmpty(text)) {
                         contentArr.addNew().set("type", "text").set("text", text);
                         hasText = true;

@@ -317,8 +317,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
                         }
                     }
                 } else if (block1 instanceof TextBlock) {
-                    // Assistant 回传时剥离 think；User 一般无 think 标签，剥离也无侧作用
-                    String text = AssistantMessage.stripThinkTags(block1.getContent());
+                    String text = block1.getContent();
                     if (Utils.isNotEmpty(text)) {
                         contentArray.addNew().set("text", text);
                         hasTextBlock = true;
