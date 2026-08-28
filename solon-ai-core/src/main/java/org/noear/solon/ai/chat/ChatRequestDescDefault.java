@@ -532,8 +532,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     private void publishResponse(FluxSink<? super ChatResponse> sink, ChatResponseDefault resp, ChatChoice choice) {
         AssistantMessage acm = choice.getMessage();
 
-        if (acm != null && Assert.isEmpty(acm.getToolCalls())) {
-            //工具不为空时已在 buildToolCallBuilder 已添加
+        if (acm != null) {
             if (Assert.isNotEmpty(acm.getTextRaw())) {
                 resp.textBuilder.append(acm.getTextRaw());
             }
@@ -554,19 +553,6 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     private void buildToolCallBuilder(ChatResponseDefault resp, AssistantMessage acm) {
         if (Assert.isEmpty(acm.getToolCalls())) {
             return;
-        }
-
-        if (Assert.isNotEmpty(acm.getTextRaw())) {
-            resp.textBuilder.append(acm.getTextRaw());
-        }
-
-        if (Assert.isNotEmpty(acm.getThinkingRaw())) {
-            resp.thinkingBuilder.append(acm.getThinkingRaw());
-        }
-
-        // 工具调用消息中也可能附带媒体
-        if (acm.hasMedia()) {
-            resp.addMediaBlocks(acm.getBlocks());
         }
 
         for (ToolCall call : acm.getToolCalls()) {
