@@ -92,6 +92,12 @@
 
             <dependency>
                 <groupId>org.noear</groupId>
+                <artifactId>solon-ai-router</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
                 <artifactId>solon-ai-agent</artifactId>
                 <version>${project.version}</version>
             </dependency>
