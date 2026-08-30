@@ -519,7 +519,9 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 resp.reset();
                 resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
 
-                publishResponse(sink, resp, resp.lastChoice());
+                // 该消息的正文取自 resp.getAggregationText()（见 buildAssistantToolCallMessageNode），
+                // 已在各分片 publishResponse 时累积过，这里不能再累积，否则聚合文本会翻倍
+                publishResponse(sink, resp, resp.lastChoice(), false);
                 return true; //触发外层的完成事件
             }
 
@@ -530,15 +532,25 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     }
 
     private void publishResponse(FluxSink<? super ChatResponse> sink, ChatResponseDefault resp, ChatChoice choice) {
+        publishResponse(sink, resp, choice, true);
+    }
+
+    /**
+     * @param aggregateText 是否把该消息的文本/思考计入流式聚合（消息文本本身来自聚合结果时必须传 false）
+     */
+    private void publishResponse(FluxSink<? super ChatResponse> sink, ChatResponseDefault resp, ChatChoice choice,
+                                 boolean aggregateText) {
         AssistantMessage acm = choice.getMessage();
 
         if (acm != null) {
-            if (Assert.isNotEmpty(acm.getTextRaw())) {
-                resp.textBuilder.append(acm.getTextRaw());
-            }
+            if (aggregateText) {
+                if (Assert.isNotEmpty(acm.getTextRaw())) {
+                    resp.textBuilder.append(acm.getTextRaw());
+                }
 
-            if (Assert.isNotEmpty(acm.getThinkingRaw())) {
-                resp.thinkingBuilder.append(acm.getThinkingRaw());
+                if (Assert.isNotEmpty(acm.getThinkingRaw())) {
+                    resp.thinkingBuilder.append(acm.getThinkingRaw());
+                }
             }
 
             // 流式聚合媒体块（文本已走 contentBuilder）

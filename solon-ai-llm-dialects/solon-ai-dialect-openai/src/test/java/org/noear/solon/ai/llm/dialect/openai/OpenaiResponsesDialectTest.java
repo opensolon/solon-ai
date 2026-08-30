@@ -17,6 +17,7 @@ package org.noear.solon.ai.llm.dialect.openai;
 
 import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
+import org.noear.solon.ai.chat.ChatChoice;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRequest;
@@ -648,5 +649,62 @@ public class OpenaiResponsesDialectTest {
             }
         }
         assertTrue(kept, "新模型数据的正文不应被 think 剔除: " + root.toJson());
+    }
+
+    @Test
+    public void streamCumulativeOutputTextDelta_isNormalizedToSuffix() {
+        ChatResponseDefault resp = newResponse(true);
+
+        parser.parseStreamResponse(resp, "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_1\",\"type\":\"message\"}}\n"
+                + "{\"type\":\"response.output_text.delta\",\"delta\":\"所有代码修改完成。\"}\n"
+                + "{\"type\":\"response.output_text.delta\",\"delta\":\"所有代码修改完成。更新任务进度并运行验证\"}");
+
+        assertEquals("所有代码修改完成。更新任务进度并运行验证",
+                resp.getChoices().get(0).getMessage().getTextRaw()
+                        + resp.getChoices().get(1).getMessage().getTextRaw());
+    }
+
+    @Test
+    public void streamCumulativeReasoningDelta_isNormalizedToSuffix() {
+        ChatResponseDefault resp = newResponse(true);
+
+        parser.parseStreamResponse(resp, "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"rs_1\",\"type\":\"reasoning\"}}\n"
+                + "{\"type\":\"response.reasoning_text.delta\",\"delta\":\"补登README目录结构\"}\n"
+                + "{\"type\":\"response.reasoning_text.delta\",\"delta\":\"补登README目录结构(新增composables/)\"}");
+
+        assertEquals("补登README目录结构(新增composables/)",
+                resp.getChoices().get(0).getMessage().getThinkingRaw()
+                        + resp.getChoices().get(1).getMessage().getThinkingRaw());
+    }
+
+    @Test
+    public void streamShortLegitDeltas_areNotTreatedAsSnapshot() {
+        ChatResponseDefault resp = newResponse(true);
+
+        // 合规增量在流首极易偶然构成前缀关系（"好" / "好的"），累计长度未达门槛时不得改写
+        parser.parseStreamResponse(resp, "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_1\",\"type\":\"message\"}}\n"
+                + "{\"type\":\"response.output_text.delta\",\"delta\":\"好\"}\n"
+                + "{\"type\":\"response.output_text.delta\",\"delta\":\"好的\"}");
+
+        StringBuilder buf = new StringBuilder();
+        for (ChatChoice choice : resp.getChoices()) {
+            buf.append(choice.getMessage().getTextRaw());
+        }
+        assertEquals("好好的", buf.toString());
+    }
+
+    @Test
+    public void streamDuplicatedSnapshotFrame_isDropped() {
+        ChatResponseDefault resp = newResponse(true);
+
+        parser.parseStreamResponse(resp, "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_1\",\"type\":\"message\"}}\n"
+                + "{\"type\":\"response.output_text.delta\",\"delta\":\"所有代码修改完成。\"}\n"
+                + "{\"type\":\"response.output_text.delta\",\"delta\":\"所有代码修改完成。更新任务进度\"}\n"
+                + "{\"type\":\"response.output_text.delta\",\"delta\":\"所有代码修改完成。更新任务进度\"}");
+
+        assertEquals(2, resp.getChoices().size(), "完全重复的快照帧不应产生新的 choice");
+        assertEquals("所有代码修改完成。更新任务进度",
+                resp.getChoices().get(0).getMessage().getTextRaw()
+                        + resp.getChoices().get(1).getMessage().getTextRaw());
     }
 }

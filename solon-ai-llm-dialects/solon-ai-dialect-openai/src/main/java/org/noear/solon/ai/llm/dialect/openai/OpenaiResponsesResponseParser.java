@@ -46,8 +46,8 @@ public class OpenaiResponsesResponseParser {
     private static class StreamState {
         String currentItemId;
         String currentItemType;
-        StringBuilder currentTextContent;
-        StringBuilder currentReasoningContent;
+        SnapshotDeltaNormalizer currentTextContent;
+        SnapshotDeltaNormalizer currentReasoningContent;
         String currentFunctionCallId;
         String currentFunctionName;
         StringBuilder currentFunctionArguments;
@@ -172,9 +172,9 @@ public class OpenaiResponsesResponseParser {
                     state.currentItemType = item.get("type").getString();
 
                     if ("message".equals(state.currentItemType)) {
-                        state.currentTextContent = new StringBuilder();
+                        state.currentTextContent = new SnapshotDeltaNormalizer();
                     } else if ("reasoning".equals(state.currentItemType)) {
-                        state.currentReasoningContent = new StringBuilder();
+                        state.currentReasoningContent = new SnapshotDeltaNormalizer();
                         // 官方 OpenAI：捕获服务端返回的 reasoning 项 id/encrypted_content（多轮回放需要）。
                         // added 帧的 encrypted_content 通常为空（仅 done 帧携带），交付状态在此一并重置
                         String addedId = item.get("id").getString();
@@ -246,10 +246,10 @@ public class OpenaiResponsesResponseParser {
                     String partType = part.get("type").getString();
                     if ("output_text".equals(partType)) {
                         StreamState state = getOrCreateState(resp);
-                        state.currentTextContent = new StringBuilder();
+                        state.currentTextContent = new SnapshotDeltaNormalizer();
                     } else if ("reasoning_text".equals(partType)) {
                         StreamState state = getOrCreateState(resp);
-                        state.currentReasoningContent = new StringBuilder();
+                        state.currentReasoningContent = new SnapshotDeltaNormalizer();
                     }
                 }
             } else if ("response.reasoning_summary_part.added".equals(eventType)) {
@@ -257,16 +257,17 @@ public class OpenaiResponsesResponseParser {
                 // （SDK ResponseStreamEvent.kt: response.reasoning_summary_part.added）
                 StreamState state = getOrCreateState(resp);
                 if (state.currentReasoningContent == null) {
-                    state.currentReasoningContent = new StringBuilder();
+                    state.currentReasoningContent = new SnapshotDeltaNormalizer();
                 }
             } else if ("response.reasoning_summary_text.delta".equals(eventType)) {
                 // 官方 OpenAI o 系列思维链摘要增量
                 // （SDK ResponseStreamEvent.kt: response.reasoning_summary_text.delta）
+                // 该事件仅官方实现下发，不存在累计快照形态，故不做快照归一（避免无收益的误判风险）
                 String delta = oResp.get("delta").getString();
                 if (Utils.isNotEmpty(delta)) {
                     StreamState state = getOrCreateState(resp);
                     if (state.currentReasoningContent == null) {
-                        state.currentReasoningContent = new StringBuilder();
+                        state.currentReasoningContent = new SnapshotDeltaNormalizer();
                     }
                     state.currentReasoningContent.append(delta);
                     AssistantMessage thinkingMsg = new AssistantMessage("", delta, true);
@@ -279,12 +280,12 @@ public class OpenaiResponsesResponseParser {
                 // 思维链摘要完成：增量已通过 delta 事件推送，无需额外处理
             } else if ("response.refusal.delta".equals(eventType)) {
                 // 官方拒答流式增量（SDK ResponseStreamEvent.kt: response.refusal.delta）：
-                // 按普通文本输出，避免拒答内容丢失
+                // 按普通文本输出，避免拒答内容丢失。同为官方独有事件，不做快照归一
                 String delta = oResp.get("delta").getString();
                 if (Utils.isNotEmpty(delta)) {
                     StreamState state = getOrCreateState(resp);
                     if (state.currentTextContent == null) {
-                        state.currentTextContent = new StringBuilder();
+                        state.currentTextContent = new SnapshotDeltaNormalizer();
                     }
                     state.currentTextContent.append(delta);
                     resp.addChoice(new ChatChoice(0, new Date(), null, new AssistantMessage(delta)));
@@ -296,7 +297,10 @@ public class OpenaiResponsesResponseParser {
                 if (Utils.isNotEmpty(delta)) {
                     StreamState state = resp.attrAs(STREAM_STATE_KEY);
                     if (state != null && state.currentReasoningContent != null) {
-                        state.currentReasoningContent.append(delta);
+                        delta = state.currentReasoningContent.normalize(delta);
+                        if (Utils.isEmpty(delta)) {
+                            continue;
+                        }
                         AssistantMessage thinkingMsg = new AssistantMessage("", delta, true);
                         attachReasoningMetadata(thinkingMsg, state);
                         resp.addChoice(new ChatChoice(0, new Date(), null, thinkingMsg));
@@ -315,7 +319,10 @@ public class OpenaiResponsesResponseParser {
                 if (Utils.isNotEmpty(delta)) {
                     StreamState state = resp.attrAs(STREAM_STATE_KEY);
                     if (state != null && state.currentTextContent != null) {
-                        state.currentTextContent.append(delta);
+                        delta = state.currentTextContent.normalize(delta);
+                        if (Utils.isEmpty(delta)) {
+                            continue;
+                        }
                     }
                     resp.addChoice(new ChatChoice(0, new Date(), null, new AssistantMessage(delta)));
                     hasChoices = true;
@@ -330,7 +337,10 @@ public class OpenaiResponsesResponseParser {
                         if ("reasoning_text".equals(delta.get("type").getString())) {
                             // 思考增量经 content_part.delta 到达：按 thinking 消息处理，防止被当作普通文本输出
                             if (state != null && state.currentReasoningContent != null) {
-                                state.currentReasoningContent.append(text);
+                                text = state.currentReasoningContent.normalize(text);
+                                if (Utils.isEmpty(text)) {
+                                    continue;
+                                }
                                 AssistantMessage thinkingMsg = new AssistantMessage("", text, true);
                                 attachReasoningMetadata(thinkingMsg, state);
                                 resp.addChoice(new ChatChoice(0, new Date(), null, thinkingMsg));
@@ -340,7 +350,10 @@ public class OpenaiResponsesResponseParser {
                             }
                         } else {
                             if (state != null && state.currentTextContent != null) {
-                                state.currentTextContent.append(text);
+                                text = state.currentTextContent.normalize(text);
+                                if (Utils.isEmpty(text)) {
+                                    continue;
+                                }
                             }
                             resp.addChoice(new ChatChoice(0, new Date(), null, new AssistantMessage(text)));
                             hasChoices = true;

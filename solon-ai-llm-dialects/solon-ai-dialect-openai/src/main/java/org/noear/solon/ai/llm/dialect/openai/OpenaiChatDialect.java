@@ -23,8 +23,11 @@ import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 
+import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Openai 聊天模型方言
@@ -36,6 +39,28 @@ public class OpenaiChatDialect extends AbstractChatDialect {
     private static final OpenaiChatDialect instance = new OpenaiChatDialect();
     public static OpenaiChatDialect getInstance() {
         return instance;
+    }
+
+    private static final String SNAPSHOT_STATE_KEY = "OpenaiStreamSnapshotState";
+
+    /**
+     * 流式快照归一状态（按请求隔离，内部再按 choice.index 隔离；正文与思考各自独立判定）
+     *
+     * <p>与官方 SDK 的 ChatCompletionAccumulator 对齐：官方把 messageContents / toolCallBuilders
+     * 全部按 choice.index() 建 Map，n&gt;1 时各路 choice 的文本互不干扰。若共用一份累积基准，
+     * 多路交错下发会把基准搅成 c0f1+c1f1+c0f2…，快照判定失效且存在误截断风险。</p>
+     */
+    private static class SnapshotState {
+        private final Map<Integer, SnapshotDeltaNormalizer> contents = new HashMap<>();
+        private final Map<Integer, SnapshotDeltaNormalizer> reasonings = new HashMap<>();
+
+        SnapshotDeltaNormalizer content(int index) {
+            return contents.computeIfAbsent(index, k -> new SnapshotDeltaNormalizer());
+        }
+
+        SnapshotDeltaNormalizer reasoning(int index) {
+            return reasonings.computeIfAbsent(index, k -> new SnapshotDeltaNormalizer());
+        }
     }
 
     @Override
@@ -77,6 +102,7 @@ public class OpenaiChatDialect extends AbstractChatDialect {
     @Override
     public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
         if ("[DONE]".equals(json)) { //不是数据结构
+            resp.attrRemove(SNAPSHOT_STATE_KEY);
             if(resp.isFinished() == false) {
                 resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 resp.setFinished(true);
@@ -120,7 +146,19 @@ public class OpenaiChatDialect extends AbstractChatDialect {
 
                     List<AssistantMessage> messageList;
                     if (resp.isStream()) {   //object=chat.completion.chunk
-                        messageList = parseAssistantMessage(resp, oChoice1.get("delta"));
+                        // OpenAI 兼容端点中有少数实现把累计快照放在 delta.content/reasoning_content
+                        // 中。核心聚合器按协议只接受增量，因此在方言边界把快照转换为增量。
+                        ONode normalized = normalizeStreamDelta(resp, index, oChoice1);
+                        if (normalized == null) {
+                            // 整帧都是已交付过的快照重复：不解析（避免污染 in_thinking 状态机）、不推空 choice。
+                            // 仍带 finish_reason 时要继续走完成流程，由下方补位逻辑推结束帧
+                            if (Utils.isEmpty(finish_reason)) {
+                                continue;
+                            }
+                            messageList = Collections.emptyList();
+                        } else {
+                            messageList = parseAssistantMessage(resp, normalized.get("delta"));
+                        }
                     } else {
                         //object=chat.completion
                         messageList = parseAssistantMessage(resp, oChoice1.get("message"));
@@ -186,5 +224,84 @@ public class OpenaiChatDialect extends AbstractChatDialect {
         }
 
         return true;
+    }
+
+    /**
+     * 将部分 OpenAI 兼容端点返回的累计快照转换为真正的流式增量。
+     *
+     * <p>官方协议的 delta.content 是新增文本；但部分网关会依次返回 "a"、"ab"、"abc"，
+     * 核心层无条件追加会得到成倍膨胀的文本。判定与累积均由 {@link SnapshotDeltaNormalizer} 负责：
+     * 按原始报文自行累积（不受 think 标签分流影响），且要求累积长度达阈值后才允许首次判定，
+     * 普通增量不会被改写。</p>
+     *
+     * <p>覆盖范围仅限文本字段（content 与 reasoning_content/reasoning）；tool_calls.arguments
+     * 的快照式下发不在此处理（由核心 ToolCallBuilder 累积）。delta.refusal 是官方独有字段（兼容网关
+     * 不实现，无快照风险），不做判定，但核心层会在正文为空时把它投影进文本，因此按同样条件记入正文
+     * 累积基准，保证基准与「已交付文本」一致。</p>
+     *
+     * @param index choice 序号（n&gt;1 时各路 choice 的累积基准必须隔离，与官方 SDK 的按 index 累积一致）
+     * @return 归一后的 choice；整帧文本都是已交付过的重复快照且无 tool_calls 时返回 null（表示可整帧丢弃）
+     */
+    private ONode normalizeStreamDelta(ChatResponseDefault resp, int index, ONode choice) {
+        if (choice == null || choice.hasKey("delta") == false) {
+            return choice;
+        }
+
+        ONode delta = choice.get("delta");
+        if (delta == null || delta.isObject() == false) {
+            return choice;
+        }
+
+        String contentRaw = delta.get("content").getString();
+        // 推理字段名与核心解析保持一致的优先级：reasoning_content 优先，其次 reasoning
+        String reasoningKey = delta.hasKey("reasoning_content") ? "reasoning_content"
+                : (delta.hasKey("reasoning") ? "reasoning" : null);
+        String reasoningRaw = reasoningKey == null ? null : delta.get(reasoningKey).getString();
+        String refusalRaw = delta.get("refusal").getString();
+
+        if (Utils.isEmpty(contentRaw) && Utils.isEmpty(reasoningRaw) && Utils.isEmpty(refusalRaw)) {
+            return choice; //无文本可判定（role 帧 / 纯 tool_calls 帧）
+        }
+
+        SnapshotState state = resp.attrIfAbsent(SNAPSHOT_STATE_KEY, k -> new SnapshotState());
+
+        boolean changed = false;
+
+        String contentDelta = contentRaw;
+        if (Utils.isNotEmpty(contentRaw)) {
+            contentDelta = state.content(index).normalize(contentRaw);
+            changed |= (contentRaw.equals(contentDelta) == false);
+        }
+
+        String reasoningDelta = reasoningRaw;
+        if (Utils.isNotEmpty(reasoningRaw)) {
+            reasoningDelta = state.reasoning(index).normalize(reasoningRaw);
+            changed |= (reasoningRaw.equals(reasoningDelta) == false);
+        }
+
+        // 与核心投影条件对齐：仅当本帧没有正文时，refusal 才会成为文本
+        if (Utils.isNotEmpty(refusalRaw) && Utils.isEmpty(contentDelta)) {
+            state.content(index).append(refusalRaw);
+        }
+
+        if (changed == false) {
+            return choice;
+        }
+
+        ONode oToolCalls = delta.getOrNull("tool_calls");
+        if (Utils.isEmpty(contentDelta) && Utils.isEmpty(reasoningDelta) && Utils.isEmpty(refusalRaw)
+                && (oToolCalls == null || oToolCalls.isNull())) {
+            return null;
+        }
+
+        // 原地改写：该节点本轮解析完即弃，无需深拷贝
+        if (Utils.isNotEmpty(contentRaw)) {
+            delta.set("content", contentDelta);
+        }
+        if (Utils.isNotEmpty(reasoningRaw)) {
+            delta.set(reasoningKey, reasoningDelta);
+        }
+
+        return choice;
     }
 }
