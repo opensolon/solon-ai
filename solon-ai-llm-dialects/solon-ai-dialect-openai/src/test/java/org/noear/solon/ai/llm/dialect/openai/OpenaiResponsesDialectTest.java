@@ -23,6 +23,7 @@ import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRequest;
 import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.content.AudioBlock;
+import org.noear.solon.ai.chat.content.BlobBlock;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
@@ -31,6 +32,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.ai.chat.tool.ToolResult;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -67,8 +69,12 @@ public class OpenaiResponsesDialectTest {
     }
 
     private ONode build(ChatOptions options, List<ChatMessage> messages) {
+        return build("gpt-5.4", options, messages);
+    }
+
+    private ONode build(String model, ChatOptions options, List<ChatMessage> messages) {
         ChatConfig config = new ChatConfig();
-        config.setModel("gpt-5.4");
+        config.setModel(model);
         return builder.build(config, options, messages, false);
     }
 
@@ -170,28 +176,28 @@ public class OpenaiResponsesDialectTest {
 
     @Test
     public void textFormatOption_keptAsNode() {
-        // prepareOutputFormatOptions 写入的是 ONode，不能再走 ofBean 二次序列化
-        // （样本用 json_schema：Responses 的 text.format 无 json_object 类型，避免误导）
+        // prepareOutputFormatOptions 写入的是 ONode，不能再走 ofBean 二次序列化；
+        // json_object 也是 Responses text.format 的官方合法类型。
         ChatOptions options = ChatOptions.of();
-        ONode format = new ONode().set("type", "json_schema");
+        ONode format = new ONode().set("type", "json_object");
         options.optionSet("text", new ONode().set("format", format));
 
         ONode root = build(options, Collections.singletonList(ChatMessage.ofUser("hi")));
 
-        assertEquals("json_schema", root.get("text").get("format").get("type").getString());
+        assertEquals("json_object", root.get("text").get("format").get("type").getString());
     }
 
     @Test
-    public void outputFormat_invalidSchema_fallbackToText() {
-        // Responses 的 text.format 仅接受 text/json_schema/grammar：
-        // 非法 schema 降级为 text（而非 Chat 协议的 json_object），保证请求可合法出站
+    public void outputFormat_invalidSchema_fallbackToJsonObject() {
+        // schema 无法解析时不能继续使用 json_schema；降级到官方支持的旧式 JSON mode，
+        // 保留输出必须为合法 JSON 的保证。
         ChatOptions options = ChatOptions.of().outputSchema("{not a valid json");
         OpenaiResponsesDialect.getInstance().prepareOutputFormatOptions(options);
 
         ONode root = build(options, Collections.singletonList(ChatMessage.ofUser("hi")));
 
         ONode format = root.get("text").get("format");
-        assertEquals("text", format.get("type").getString(), root.toJson());
+        assertEquals("json_object", format.get("type").getString(), root.toJson());
         assertFalse(format.hasKey("name"), "降级后不应残留 json_schema 专属字段: " + root.toJson());
     }
 
@@ -220,6 +226,47 @@ public class OpenaiResponsesDialectTest {
         assertEquals("call_1", item.get("call_id").getString());
         assertEquals("", item.get("output").getString(), "null 应兜底为空串: " + root.toJson());
         assertNotNull(item.get("output"), "output 字段必须存在: " + root.toJson());
+    }
+
+    @Test
+    public void toolMessage_textOutput_keepsStringShape() {
+        ToolMessage tool = ChatMessage.ofTool("晴天", "getWeather", "call_1");
+
+        ONode root = build(ChatOptions.of(), Collections.singletonList(tool));
+
+        ONode output = root.get("input").get(0).get("output");
+        assertFalse(output.isArray(), "纯文本工具结果应保持字符串形态: " + root.toJson());
+        assertEquals("晴天", output.getString());
+    }
+
+    @Test
+    public void toolMessage_multimodalOutput_usesContentArray() {
+        ToolResult result = new ToolResult()
+                .addText("结果如下")
+                .addBlock(ImageBlock.ofUrl("https://x.com/result.png"));
+        ToolMessage tool = ChatMessage.ofTool(result, "render", "call_2", false);
+
+        ONode root = build(ChatOptions.of(), Collections.singletonList(tool));
+
+        ONode output = root.get("input").get(0).get("output");
+        assertTrue(output.isArray(), "多模态工具结果应使用官方内容数组: " + root.toJson());
+        assertEquals("input_text", output.get(0).get("type").getString());
+        assertEquals("结果如下", output.get(0).get("text").getString());
+        assertEquals("input_image", output.get(1).get("type").getString());
+        assertEquals("https://x.com/result.png", output.get(1).get("image_url").getString());
+    }
+
+    @Test
+    public void toolMessage_blobOutput_usesInputFile() {
+        ToolResult result = new ToolResult().addBlock(BlobBlock.of("QUJD", "application/pdf"));
+        ToolMessage tool = ChatMessage.ofTool(result, "export", "call_3", false);
+
+        ONode root = build(ChatOptions.of(), Collections.singletonList(tool));
+
+        ONode output = root.get("input").get(0).get("output");
+        assertTrue(output.isArray(), "文件工具结果应使用官方内容数组: " + root.toJson());
+        assertEquals("input_file", output.get(0).get("type").getString());
+        assertEquals("QUJD", output.get(0).get("file_data").getString());
     }
 
     @Test
@@ -394,6 +441,88 @@ public class OpenaiResponsesDialectTest {
         assertFalse(node.get("summary").isArray(), "summary 应为字符串: " + root.toJson());
         assertEquals("detailed", node.get("summary").getString());
         assertEquals("all_turns", node.get("context").getString(), "context 等官方字段应透传: " + root.toJson());
+    }
+
+    @Test
+    public void thinkingOn_requestsReasoningSummary() {
+        // thinking(true) 是统一 API 中“希望可观察推理”的明确意图；Responses 需要 summary=auto 才会返回摘要事件。
+        ONode root = build(ChatOptions.of().thinking(true),
+                Collections.singletonList(ChatMessage.ofUser("hi")));
+
+        ONode reasoning = root.get("reasoning");
+        assertEquals("auto", reasoning.get("summary").getString(), root.toJson());
+        assertFalse(reasoning.hasKey("effort"), "thinking(true) 不应臆造固定 effort: " + root.toJson());
+    }
+
+    @Test
+    public void thinkingOnWithEffort_requestsSummaryAndKeepsEffort() {
+        ONode root = build(ChatOptions.of().thinking(true).reasoning_effort("high"),
+                Collections.singletonList(ChatMessage.ofUser("hi")));
+
+        ONode reasoning = root.get("reasoning");
+        assertEquals("high", reasoning.get("effort").getString(), root.toJson());
+        assertEquals("auto", reasoning.get("summary").getString(), root.toJson());
+    }
+
+    @Test
+    public void thinkingOff_doesNotRequestReasoningSummary() {
+        ONode root = build(ChatOptions.of().thinking(false).reasoning_effort("high"),
+                Collections.singletonList(ChatMessage.ofUser("hi")));
+
+        ONode reasoning = root.get("reasoning");
+        assertEquals("none", reasoning.get("effort").getString(), root.toJson());
+        assertFalse(reasoning.hasKey("summary"), "关闭推理时不应请求 summary: " + root.toJson());
+    }
+
+    @Test
+    public void explicitReasoning_canControlSummaryCompatibility() {
+        // 兼容端点可用显式 reasoning 完全接管，避免自动添加不支持的 summary 字段。
+        Map<String, Object> reasoning = new HashMap<>();
+        reasoning.put("effort", "high");
+        ONode root = build("gpt-4o", ChatOptions.of().thinking(true).optionSet("reasoning", reasoning),
+                Collections.singletonList(ChatMessage.ofUser("hi")));
+
+        ONode node = root.get("reasoning");
+        assertEquals("high", node.get("effort").getString(), root.toJson());
+        assertFalse(node.hasKey("summary"), root.toJson());
+    }
+
+    @Test
+    public void gpt5ModelAliases_receiveAutomaticReasoning() {
+        ONode canonical = build("gpt-5.6", ChatOptions.of().thinking(true),
+                Collections.singletonList(ChatMessage.ofUser("hi")));
+        assertEquals("auto", canonical.get("reasoning").get("summary").getString(), canonical.toJson());
+
+        // 兼容网关常用无连字符别名；只放宽能力判断，出站 model 保持调用方原值。
+        ONode compact = build("gpt5.6", ChatOptions.of().thinking(true),
+                Collections.singletonList(ChatMessage.ofUser("hi")));
+        assertEquals("auto", compact.get("reasoning").get("summary").getString(), compact.toJson());
+
+        // 带供应商前缀的模型 ID（如 Bedrock）也应识别 GPT-5 家族。
+        ONode prefixed = build("us.openai.gpt-5.6-sol", ChatOptions.of().thinking(true),
+                Collections.singletonList(ChatMessage.ofUser("hi")));
+        assertEquals("auto", prefixed.get("reasoning").get("summary").getString(), prefixed.toJson());
+    }
+
+    @Test
+    public void reasoningEffortAlone_doesNotRequestVisibleSummary() {
+        // effort 控制推理投入；Responses 的可展示摘要需要单独请求 summary。
+        ONode root = build("gpt-5.6", ChatOptions.of().reasoning_effort("high"),
+                Collections.singletonList(ChatMessage.ofUser("hi")));
+
+        assertEquals("high", root.get("reasoning").get("effort").getString(), root.toJson());
+        assertFalse(root.get("reasoning").hasKey("summary"), root.toJson());
+    }
+
+    @Test
+    public void nonReasoningModels_doNotReceiveAutomaticReasoning() {
+        ONode gpt4o = build("gpt-4o", ChatOptions.of().thinking(true).reasoning_effort("high"),
+                Collections.singletonList(ChatMessage.ofUser("hi")));
+        assertFalse(gpt4o.hasKey("reasoning"), "非推理模型不应自动发送 reasoning: " + gpt4o.toJson());
+
+        ONode unknown = build("vendor-model", ChatOptions.of().thinking(false),
+                Collections.singletonList(ChatMessage.ofUser("hi")));
+        assertFalse(unknown.hasKey("reasoning"), "未知模型应保守跳过自动 reasoning: " + unknown.toJson());
     }
 
     @Test
@@ -662,6 +791,30 @@ public class OpenaiResponsesDialectTest {
         assertEquals("所有代码修改完成。更新任务进度并运行验证",
                 resp.getChoices().get(0).getMessage().getTextRaw()
                         + resp.getChoices().get(1).getMessage().getTextRaw());
+    }
+
+    @Test
+    public void streamReasoningSummaryDelta_isPublishedAsThinking() {
+        ChatResponseDefault resp = newResponse(true);
+
+        parser.parseStreamResponse(resp,
+                "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"rs_1\",\"type\":\"reasoning\"}}\n"
+                        + "{\"type\":\"response.reasoning_summary_part.added\",\"item_id\":\"rs_1\"}\n"
+                        + "{\"type\":\"response.reasoning_summary_text.delta\",\"item_id\":\"rs_1\",\"delta\":\"正在分析\"}\n"
+                        + "{\"type\":\"response.reasoning_summary_text.delta\",\"item_id\":\"rs_1\",\"delta\":\"请求参数\"}");
+
+        assertEquals(2, resp.getChoices().size(), resp.toString());
+        assertTrue(resp.getChoices().get(0).getMessage().isThinking(), resp.toString());
+        assertTrue(resp.getChoices().get(1).getMessage().isThinking(), resp.toString());
+        assertEquals("正在分析", resp.getChoices().get(0).getMessage().getThinkingRaw());
+        assertEquals("请求参数", resp.getChoices().get(1).getMessage().getThinkingRaw());
+
+        // parser 只负责产出分片；核心 ChatRequestDesc 发布分片时才写入 aggregationThinking。
+        StringBuilder thinking = new StringBuilder();
+        for (ChatChoice choice : resp.getChoices()) {
+            thinking.append(choice.getMessage().getThinkingRaw());
+        }
+        assertEquals("正在分析请求参数", thinking.toString());
     }
 
     @Test

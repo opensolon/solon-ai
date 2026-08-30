@@ -29,6 +29,7 @@ import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.noear.solon.ai.chat.content.AudioBlock;
+import org.noear.solon.ai.chat.content.BlobBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -163,7 +164,7 @@ public class OpenaiResponsesRequestBuilder {
         }
 
         // 统一 thinking 开关 + reasoning_effort（显式 reasoning 优先）
-        applyUnifiedReasoningOptions(root, options, thinkingSwitch);
+        applyUnifiedReasoningOptions(root, options, thinkingSwitch, config.getModel());
 
         // store=false 时补 include，reasoning 的 encrypted_content 否则不会返回，多轮回放会断链
         applyReasoningInclude(root);
@@ -188,11 +189,7 @@ public class OpenaiResponsesRequestBuilder {
      */
     private void buildInputItem(ONode inputArray, ChatMessage message) {
         if (message instanceof ToolMessage) {
-            ToolMessage toolMessage = (ToolMessage) message;
-            inputArray.addNew()
-                    .set("type", "function_call_output")
-                    .set("call_id", toolMessage.getToolCallId())
-                    .set("output", toolMessage.getContent());
+            buildToolMessageInputItem(inputArray, (ToolMessage) message);
             return;
         }
 
@@ -253,6 +250,76 @@ public class OpenaiResponsesRequestBuilder {
         inputArray.addNew()
                 .set("role", role)
                 .set("content", message.getContent() != null ? message.getContent() : "");
+    }
+
+    /**
+     * 构建函数工具输出。
+     * <p>官方 {@code FunctionCallOutput.output} 支持字符串或
+     * {@code ResponseFunctionCallOutputItem} 数组；后者仅包含
+     * {@code input_text / input_image / input_file}。</p>
+     *
+     * @since 4.1
+     */
+    private void buildToolMessageInputItem(ONode inputArray, ToolMessage toolMessage) {
+        ONode item = inputArray.addNew()
+                .set("type", "function_call_output")
+                .set("call_id", toolMessage.getToolCallId());
+
+        if (toolMessage.isMultiModal() == false) {
+            item.set("output", toolMessage.getContent() == null ? "" : toolMessage.getContent());
+            return;
+        }
+
+        ONode outputArray = new ONode().asArray();
+        for (ContentBlock block : toolMessage.getBlocks()) {
+            appendFunctionCallOutputContent(outputArray, block);
+        }
+
+        if (outputArray.getArray().isEmpty()) {
+            // output 为必填字段；不支持或已截断的媒体回退到文本投影，最终以空串占位。
+            item.set("output", toolMessage.getContent() == null ? "" : toolMessage.getContent());
+        } else {
+            item.set("output", outputArray);
+        }
+    }
+
+    /**
+     * 追加函数工具输出内容项。
+     *
+     * @since 4.1
+     */
+    private void appendFunctionCallOutputContent(ONode outputArray, ContentBlock block) {
+        if (block == null) {
+            return;
+        }
+
+        if (block instanceof TextBlock) {
+            String text = block.getContent();
+            if (Utils.isNotEmpty(text)) {
+                outputArray.addNew().set("type", "input_text").set("text", text);
+            }
+            return;
+        }
+
+        if (block instanceof ImageBlock) {
+            String imageUrl = block.toDataString(true);
+            if (Utils.isNotEmpty(imageUrl) && !imageUrl.startsWith("image-generation://")) {
+                outputArray.addNew()
+                        .set("type", "input_image")
+                        .set("image_url", imageUrl)
+                        .set("detail", "auto");
+            }
+            return;
+        }
+
+        if (block instanceof BlobBlock) {
+            String fileData = ((BlobBlock) block).getBlob();
+            if (Utils.isNotEmpty(fileData)) {
+                outputArray.addNew()
+                        .set("type", "input_file")
+                        .set("file_data", fileData);
+            }
+        }
     }
 
     /**
@@ -624,31 +691,99 @@ public class OpenaiResponsesRequestBuilder {
 
     /**
      * 统一 thinking 开关 + reasoning_effort。
-     * <p>显式 {@code reasoning} 优先；{@code thinking(false)} → effort=none；
-     * {@code reasoning_effort} 映射 effort；{@code thinking(true)} 不强制改 effort
-     *（由模型默认行为开启思考）。</p>
+     * <p>显式 {@code reasoning} 优先；统一选项仅对 GPT-5 和已知 o-series 模型自动映射：
+     * {@code thinking(false)} → effort=none；{@code reasoning_effort} 映射 effort；
+     * {@code thinking(true)} 不强制改 effort，但会请求 {@code summary=auto}，使模型返回可展示的
+     * 推理摘要（不会暴露原始推理 token）。未知或非推理模型不自动发送 reasoning，
+     * 避免严格端点因不支持该字段而拒绝请求。</p>
+     *
+     * <p>调用方仍可通过 {@code optionSet("reasoning", ...)} 完全接管请求体。</p>
      *
      * @since 4.0.4
      */
-    private void applyUnifiedReasoningOptions(ONode root, ChatOptions options, Object thinkingSwitch) {
-        // 已有显式 reasoning 则不覆盖
+    private void applyUnifiedReasoningOptions(ONode root, ChatOptions options, Object thinkingSwitch, String model) {
+        // 已有显式 reasoning 则不覆盖，也不受模型名能力判断限制。
         if (root.hasKey("reasoning")) {
             return;
         }
-     
+
+        if (supportsReasoningOptions(model) == false) {
+            return;
+        }
+
         if (Boolean.FALSE.equals(thinkingSwitch)) {
             root.getOrNew("reasoning").set("effort", "none");
             return;
         }
-     
+
         Object effortObj = options == null ? null : options.options().get("reasoning_effort");
+        String effort = null;
         if (effortObj != null) {
-            String effort = normalizeResponsesEffort(effortObj, false);
+            effort = normalizeResponsesEffort(effortObj, false);
             if (effort != null) {
                 root.getOrNew("reasoning").set("effort", effort);
             }
         }
-        // thinking(true) 仅表示开启意图，不强制写入 effort
+
+        // OpenAI Responses 默认只返回 reasoning item 的 id / encrypted_content，不会返回可展示的摘要。
+        // 只有显式 thinking(true) 才表示调用方要求可观察的推理；reasoning_effort 单独设置时
+        // 保持原有语义，避免无意向不支持 summary 的兼容网关发送额外字段。
+        if (Boolean.TRUE.equals(thinkingSwitch)) {
+            root.getOrNew("reasoning").set("summary", "auto");
+        }
+    }
+
+    /**
+     * 判断是否可安全自动发送 OpenAI reasoning 配置。
+     * <p>官方 SDK 将该配置限定于 GPT-5 和 o-series；未知模型保持保守，
+     * 需要时可通过显式 reasoning 绕过自动判断。</p>
+     *
+     * @since 4.1
+     */
+    private boolean supportsReasoningOptions(String model) {
+        if (Utils.isEmpty(model)) {
+            return false;
+        }
+
+        String modelName = model.trim().toLowerCase();
+        return isModelFamily(modelName, "gpt-5")
+                || isModelFamily(modelName, "o1")
+                || isModelFamily(modelName, "o3")
+                || isModelFamily(modelName, "o4");
+    }
+
+    private boolean isModelFamily(String model, String family) {
+        if (matchesModelFamily(model, family)) {
+            return true;
+        }
+
+        // 一些兼容网关把 gpt-5 写成 gpt5；不改写出站 model，只放宽能力判断。
+        return "gpt-5".equals(family) && matchesModelFamily(model, "gpt5");
+    }
+
+    private boolean matchesModelFamily(String model, String family) {
+        int fromIndex = 0;
+        while (fromIndex < model.length()) {
+            int start = model.indexOf(family, fromIndex);
+            if (start < 0) {
+                return false;
+            }
+
+            int end = start + family.length();
+            boolean validPrefix = start == 0 || isModelTokenBoundary(model.charAt(start - 1));
+            boolean validSuffix = end == model.length()
+                    || model.charAt(end) == '-'
+                    || model.charAt(end) == '.';
+            if (validPrefix && validSuffix) {
+                return true;
+            }
+            fromIndex = start + 1;
+        }
+        return false;
+    }
+
+    private boolean isModelTokenBoundary(char ch) {
+        return ch == '/' || ch == '.' || ch == ':' || ch == '_' || ch == '-';
     }
      
     /**

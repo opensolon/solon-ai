@@ -109,6 +109,8 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
                 formatNode.set("schema", schemaNode);
                 formatNode.set("strict", true);
             } catch (Exception e) {
+                // schema 无法解析时不能使用 json_schema；退回 Responses 支持的旧式 JSON mode，
+                // 至少保留“输出为合法 JSON”的协议保证。
                 log.warn("Failed to parse outputSchema as JSON, falling back to json_object format", e);
                 formatNode.set("type", "json_object");
             }

@@ -482,7 +482,8 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      * <p>方言映射（首批）：anthropic 经典 → thinking.budget_tokens；
      * anthropic 4.6/4.7+/sonnet-5+ → thinking.type=adaptive + 顶层 effort
      * （4.7+/sonnet-5+ 带 display=summarized）；
-     * openai Responses → reasoning.effort；openai Chat Completions → reasoning_effort
+     * openai Responses（仅 GPT-5 / 已知 o-series 自动映射）→ reasoning.effort；
+     * openai Chat Completions → reasoning_effort
      * （OpenRouter → reasoning.effort；qwen/kimi/glm/minimax 等默认不写顶层 effort；
      * GLM-5.2 例外写出 high/max）；
      * DeepSeek 官方 → high/max；
@@ -534,7 +535,9 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      * </ul>
      * anthropic → {@code thinking.type}（enabled/disabled；4.6/4.7+/sonnet-5+ 为 adaptive + effort，
      * 其中 4.7+/sonnet-5+ 带 display=summarized）；
-     * openai Responses：{@code false} → {@code reasoning.effort=none}（{@code true} 不强制改 effort）；
+     * openai Responses：仅 GPT-5 / 已知 o-series 自动映射，{@code false} →
+     * {@code reasoning.effort=none}，{@code true} → {@code reasoning.summary=auto}
+     * （不强制改 effort；未知模型不自动发送 reasoning，可用 optionSet 逃生舱）；
      * gemini models → {@code generationConfig.thinkingConfig}
      * （2.5：budget=0 关闭；3.x：thinkingLevel=minimal 关闭）；
      * gemini interactions → {@code thinking_summaries} / 默认开启水平；
