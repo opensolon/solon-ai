@@ -280,7 +280,7 @@ public class ProcessExecutor {
             // 非交互执行：立刻关闭子进程 stdin，让读取输入的命令拿到 EOF 而不是一直等到超时。
             // 不关的话（ProcessBuilder 默认给 stdin 挂一个没人写的管道），`git commit`（拉起编辑器）、
             // `npm login`、Unix 的 `read`、CMD 的 `pause` 这类命令会稳定空转到 timeoutMs 才返回——
-            // 三个平台同病。需要交互输入的场景走 bash_start / bash_stdin（那条路径保留 stdin）
+            // 三个平台同病。需要交互输入的场景走 bash_start / bash_wait(chars)（那条路径保留 stdin）
             closeQuietly(process.getOutputStream());
 
             // 1. 异步读取输出（在字节层收集，便于可靠的二进制探测）

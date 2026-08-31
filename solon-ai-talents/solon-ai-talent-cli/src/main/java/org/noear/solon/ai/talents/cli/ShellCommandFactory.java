@@ -106,7 +106,7 @@ public final class ShellCommandFactory {
      *   <li><b>引擎输出流</b>（{@code $OutputEncoding} / {@code [Console]::OutputEncoding}）：决定
      *       PowerShell 向下游管道写什么字节、以及如何解码 native 子命令的 stdout。不设则为 ANSI
      *       代码页，Java 侧按 UTF-8 解码必乱。</li>
-     *   <li><b>引擎输入流</b>（{@code [Console]::InputEncoding}）：{@code bash_stdin} 向会话写入的
+     *   <li><b>引擎输入流</b>（{@code [Console]::InputEncoding}）：{@code bash_wait(chars)} 向会话写入的
      *       是 UTF-8 字节，不设则 PowerShell 按 ANSI 读，非 ASCII 应答（如中文确认）会变乱码。</li>
      *   <li><b>文件读取</b>（{@code Get-Content} / {@code Select-String} / {@code Import-Csv} 的
      *       {@code -Encoding} 默认值）：<b>5.1 的默认是 ANSI 代码页，不是 UTF-8</b>。这是最难排查的
@@ -541,7 +541,7 @@ public final class ShellCommandFactory {
      *
      * @param command     用户命令
      * @param interactive 进程是否可能需要读取 stdin（会话式执行）。为 {@code true} 时不加
-     *                    PowerShell 的 {@code -NonInteractive}，否则 {@code bash_stdin} 想应答的
+     *                    PowerShell 的 {@code -NonInteractive}，否则 {@code bash_wait(chars)} 想应答的
      *                    确认提示会直接失败而不是等待输入。
      */
     public PreparedCommand prepare(String command, boolean interactive) throws IOException {

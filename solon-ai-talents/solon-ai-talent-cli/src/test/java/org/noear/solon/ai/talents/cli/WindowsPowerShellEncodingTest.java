@@ -26,7 +26,7 @@ import org.junit.jupiter.api.condition.OS;
  * 再把错字按 UTF-8 正确地写给我们——字节层完全合法，{@link OutputDecoder} 的字符集判定
  * 永远无从下手。同类问题还有：{@code Set-Content} 默认 ANSI（emoji/日韩文直接丢字）、
  * {@code >} 默认 UTF-16LE（产物在任何按 UTF-8 读的工具里都是乱码）、
- * {@code [Console]::InputEncoding} 默认 ANSI（{@code bash_stdin} 的非 ASCII 应答变乱码）。
+ * {@code [Console]::InputEncoding} 默认 ANSI（{@code bash_wait(chars)} 的非 ASCII 应答变乱码）。
  *
  * <p><b>对策</b>：只能在源头修——启动前置脚本把这四个决策点全部归一到 UTF-8
  * （见 {@link ShellCommandFactory#POWERSHELL_PREAMBLE}）。
@@ -56,7 +56,7 @@ public class WindowsPowerShellEncodingTest {
         // ① 引擎输出流：不设则为 ANSI，Java 侧按 UTF-8 解码必乱
         assertTrue(preamble.contains("$OutputEncoding"), preamble);
         assertTrue(preamble.contains("[Console]::OutputEncoding"), preamble);
-        // ② 引擎输入流：bash_stdin 写入的是 UTF-8 字节
+        // ② 引擎输入流：bash_wait(chars) 写入的是 UTF-8 字节
         assertTrue(preamble.contains("[Console]::InputEncoding"), preamble);
         // ③/④ 文件读写默认编码
         assertTrue(preamble.contains("$PSDefaultParameterValues"), preamble);

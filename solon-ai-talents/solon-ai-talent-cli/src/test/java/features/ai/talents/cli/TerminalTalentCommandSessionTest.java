@@ -23,12 +23,12 @@ public class TerminalTalentCommandSessionTest {
         try {
             TerminalTalent skill = new TerminalTalent(new MountManager(workDir.toString()));
             List<String> toolNames =
-                    skill.getToolAry("bash_start", "bash_wait", "bash_stdin", "bash_stop").stream()
+                    skill.getToolAry("bash_start", "bash_wait", "bash_stop").stream()
                             .map(FunctionTool::name)
                             .sorted()
                             .collect(Collectors.toList());
 
-            assertEquals(Arrays.asList("bash_start", "bash_stdin", "bash_stop", "bash_wait"), toolNames);
+            assertEquals(Arrays.asList("bash_start", "bash_stop", "bash_wait"), toolNames);
         } finally {
             deleteRecursively(workDir);
         }
@@ -53,9 +53,31 @@ public class TerminalTalentCommandSessionTest {
             assertTrue(first.contains("Process running with session ID"), first);
             String sessionId = extractSessionId(first);
 
-            String second = skill.bashWait(sessionId, 2_000, 2_000);
+            String second = skill.bashWait(sessionId, null, 2_000, 2_000);
             assertTrue(second.contains("status: completed"), second);
             assertTrue(second.contains("end"), second);
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
+    @Test
+    public void waitCanSendStdinToRunningSession() throws Exception {
+        if (System.getProperty("os.name").toLowerCase().contains("win")) {
+            return;
+        }
+        Path workDir = Files.createTempDirectory("solon-ai-terminal-stdin-");
+        try {
+            TerminalTalent skill = new TerminalTalent(new MountManager(workDir.toString()));
+            String first = skill.bashStart(
+                    "read line; echo got:$line", null, 50, 2_000, 10_000, workDir.toString());
+            assertTrue(first.contains("Process running with session ID"), first);
+            String sessionId = extractSessionId(first);
+
+            // read 内置命令需要换行才结束读取；write() 原样写字节不追加换行，与原 bash_stdin 行为一致
+            String second = skill.bashWait(sessionId, "hello\n", 2_000, 2_000);
+            assertTrue(second.contains("status: completed"), second);
+            assertTrue(second.contains("got:hello"), second);
         } finally {
             deleteRecursively(workDir);
         }

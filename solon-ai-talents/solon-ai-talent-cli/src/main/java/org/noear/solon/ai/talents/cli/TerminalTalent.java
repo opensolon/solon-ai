@@ -99,7 +99,7 @@ public class TerminalTalent extends AbsTalent {
     protected Charset fileCharset = StandardCharsets.UTF_8;
     protected final ProcessExecutor executor = new ProcessExecutor();
     protected final TerminalSessionManager bashSessionManager;
-    //异步会话模式：启用后提供 bash_start/wait/stdin/stop 工具
+    //异步会话模式：启用后提供 bash_start/wait/stop 工具
     private boolean bashAsyncEnabled = false;
 
     /**
@@ -640,7 +640,7 @@ public class TerminalTalent extends AbsTalent {
                 .append("`bash` 用于真正需要执行的场景：构建、测试、git、包管理、脚本运行，以及工具无法覆盖的管道与统计。\n");
 
         if (bashAsyncEnabled) {
-            sb.append("- **长命令执行**: 对可能耗时较长、持续输出、等待输入或需要观察状态的命令，优先使用 `bash_start`。如果结果包含 `Process running with session ID`，表示命令仍在运行；需要继续观察时调用 `bash_wait`，需要向进程输入时调用 `bash_stdin`，需要主动停止时调用 `bash_stop`。\n");
+            sb.append("- **长命令执行**: 对可能耗时较长、持续输出、等待输入或需要观察状态的命令，优先使用 `bash_start`。如果结果包含 `Process running with session ID`，表示命令仍在运行；需要继续观察时调用 `bash_wait`，命令卡在分页器或等待应答时用 `bash_wait` 的 chars 参数传入应答文本，需要主动停止时调用 `bash_stop`。\n");
         }
 
         // 参数示例必须用当前 shell 真存在的命令：在 Windows 上举 `python3` / `cat` 会被模型当作可用命令而直接照拄
@@ -824,7 +824,7 @@ public class TerminalTalent extends AbsTalent {
      * 异步会话工具名称集合，用于过滤
      */
     private static final Set<String> ASYNC_BASH_TOOLS = new HashSet<>(Arrays.asList(
-            "bash_start", "bash_wait", "bash_stdin", "bash_stop"
+            "bash_start", "bash_wait", "bash_stop"
     ));
 
     protected boolean isNotAsyncBash(String toolName){
@@ -915,7 +915,7 @@ public class TerminalTalent extends AbsTalent {
 
     @ToolMapping(
             name = "bash_start",
-            description = "启动 shell 命令会话。命令超过 yield_time_ms 仍未结束时不会失败，而是返回 session_id，后续可用 bash_wait 继续等待、bash_stdin 输入或 bash_stop 终止。")
+            description = "启动 shell 命令会话。命令超过 yield_time_ms 仍未结束时不会失败，而是返回 session_id，后续可用 bash_wait 继续等待或输入（chars 参数）、bash_stop 终止。")
     public String bashStart(@Param(value = "command", description = "要执行的 shell 命令。") String command,
                             @Param(value = "workdir", required = false, description = "工作目录。默认使用当前工作区。") String workdir,
                             @Param(value = "yield_time_ms", required = false, defaultValue = "1000", description = "先等待多久再把控制权交还给模型，单位毫秒。") Integer yieldTimeMs,
@@ -963,28 +963,19 @@ public class TerminalTalent extends AbsTalent {
 
         TerminalSessionManager.CommandSnapshot snapshot =
                 bashSessionManager.exec(finalCommand, targetWorkPath, envs, yieldTimeMs, maxOutputChars, hardTimeoutMs);
-        return formatCommandSnapshot(snapshot, "bash_start");
+        return formatCommandSnapshot(snapshot);
     }
 
     @ToolMapping(
             name = "bash_wait",
-            description = "继续等待仍在运行的命令会话，返回自上次读取后的新增输出或最终状态。")
+            description = "继续等待仍在运行的命令会话，返回自上次读取后的新增输出或最终状态；也可通过 chars 向进程写入 stdin（应答确认、退出分页器等），不传时仅等待。")
     public String bashWait(@Param(value = "session_id", description = "bash_start 返回的命令会话 id。") String sessionId,
+                           @Param(value = "chars", required = false, description = "可选。要写入 stdin 的文本；不传表示只等待新增输出。") String chars,
                            @Param(value = "yield_time_ms", required = false, defaultValue = "1000", description = "等待新增输出或进程结束的时长，单位毫秒。") Integer yieldTimeMs,
                            @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符新增输出，超出保留最新部分。") Integer maxOutputChars) throws IOException {
         TerminalSessionManager.CommandSnapshot snapshot =
-                bashSessionManager.writeStdin(sessionId, "", yieldTimeMs, maxOutputChars);
-        return formatCommandSnapshot(snapshot, "bash_wait");
-    }
-
-    @ToolMapping(name = "bash_stdin", description = "向仍在运行的命令会话写入 stdin，然后等待新增输出或进程结束。")
-    public String bashStdin(@Param(value = "session_id", description = "bash_start 返回的命令会话 id。") String sessionId,
-                            @Param(value = "chars", description = "写入 stdin 的文本。") String chars,
-                            @Param(value = "yield_time_ms", required = false, defaultValue = "1000", description = "写入后等待新增输出或进程结束的时长，单位毫秒。") Integer yieldTimeMs,
-                            @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符新增输出，超出保留最新部分。") Integer maxOutputChars) throws IOException {
-        TerminalSessionManager.CommandSnapshot snapshot =
                 bashSessionManager.writeStdin(sessionId, chars, yieldTimeMs, maxOutputChars);
-        return formatCommandSnapshot(snapshot, "bash_stdin");
+        return formatCommandSnapshot(snapshot);
     }
 
     @ToolMapping(name = "bash_stop", description = "终止仍在运行的命令会话及其子进程树。")
@@ -993,7 +984,7 @@ public class TerminalTalent extends AbsTalent {
                            @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "终止后最多返回多少字符新增输出。") Integer maxOutputChars) {
         TerminalSessionManager.CommandSnapshot snapshot =
                 bashSessionManager.terminate(sessionId, reason, maxOutputChars);
-        return formatCommandSnapshot(snapshot, "bash_stop");
+        return formatCommandSnapshot(snapshot);
     }
 
     // --- 2. 发现文件 ---
@@ -1460,10 +1451,9 @@ public class TerminalTalent extends AbsTalent {
     }
 
 
-    private String formatCommandSnapshot(TerminalSessionManager.CommandSnapshot snapshot, String sourceTool) {
+    private String formatCommandSnapshot(TerminalSessionManager.CommandSnapshot snapshot) {
         StringBuilder sb = new StringBuilder();
         sb.append("Command Session\n");
-        sb.append("source_tool: ").append(sourceTool).append('\n');
         sb.append("session_id: ").append(snapshot.sessionId()).append('\n');
         sb.append("status: ").append(snapshot.running() ? "running" : "completed").append('\n');
         if (snapshot.exitCode() != null) {
@@ -1478,14 +1468,12 @@ public class TerminalTalent extends AbsTalent {
         if (snapshot.terminateReason() != null) {
             sb.append("terminate_reason: ").append(snapshot.terminateReason()).append('\n');
         }
-        sb.append("wall_time_ms: ").append(snapshot.wallTimeMs()).append('\n');
-        sb.append("workdir: ").append(snapshot.workdir()).append('\n');
         sb.append("output_chars_total: ").append(snapshot.outputChars()).append('\n');
         sb.append("output_chars_returned: ").append(snapshot.returnedChars()).append('\n');
         sb.append("output_truncated: ").append(snapshot.outputTruncated()).append('\n');
         if (snapshot.running()) {
             sb.append("Process running with session ID: ").append(snapshot.sessionId()).append('\n');
-            sb.append("Use bash_wait to continue waiting, bash_stdin to send input, or bash_stop to stop it.\n");
+            sb.append("Use bash_wait to continue waiting (or send input via chars), or bash_stop to stop it.\n");
         }
         sb.append("Output:\n");
         if (Assert.isEmpty(snapshot.output())) {

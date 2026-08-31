@@ -155,7 +155,7 @@ public class ShellCommandFactoryPrepareTest {
     }
 
     /**
-     * 会话式执行（支持 bash_stdin）不能加 -NonInteractive，否则需要确认输入的命令会直接失败而不是等待输入。
+     * 会话式执行（支持 bash_wait(chars) 写入）不能加 -NonInteractive，否则需要确认输入的命令会直接失败而不是等待输入。
      */
     @Test
     public void powershell_interactiveKeepsStdinUsable() throws Exception {

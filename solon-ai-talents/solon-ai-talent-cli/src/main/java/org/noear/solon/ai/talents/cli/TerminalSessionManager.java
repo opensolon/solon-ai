@@ -84,7 +84,7 @@ public final class TerminalSessionManager {
             // Windows：改用 ShellCommandFactory 的可靠启动方案（PowerShell 用 -EncodedCommand；
             // CMD 默认 /d /c 直连、仅多行/非 ANSI/超长命令才落 .bat），规避命令文本代码页转换问题；
             // 若产生临时脚本，由会话结束回调清理（异步会话下进程可能在本方法返回后仍在运行，不能提前删除）。
-            // interactive=true：会话支持 bash_stdin，不能加 -NonInteractive，否则等待输入的命令会直接失败
+            // interactive=true：会话支持 bash_wait(chars) 写入，不能加 -NonInteractive，否则等待输入的命令会直接失败
             if (shellCommandFactory.isWindowsShell()) {
                 prepared = shellCommandFactory.prepare(command, true);
             }
