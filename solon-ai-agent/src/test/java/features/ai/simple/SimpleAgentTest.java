@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
-import org.noear.solon.ai.agent.simple.ChatDeltaEvent;
+import org.noear.solon.ai.agent.simple.SimpleDeltaEvent;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.simple.SimpleChunk;
 import org.noear.solon.ai.chat.ChatModel;
@@ -73,7 +73,7 @@ public class SimpleAgentTest {
                 .thenConsumeWhile(c -> true)
                 .consumeRecordedWith(chunks -> {
                     // 验证中间块
-                    boolean hasChatChunks = chunks.stream().anyMatch(c -> c instanceof ChatDeltaEvent);
+                    boolean hasChatChunks = chunks.stream().anyMatch(c -> c instanceof SimpleDeltaEvent);
                     // 验证结束块
                     boolean hasSimpleChunk = chunks.stream().anyMatch(c -> c instanceof SimpleChunk);
 

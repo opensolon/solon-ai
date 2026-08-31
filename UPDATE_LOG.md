@@ -16,6 +16,7 @@
 * 添加 solon-ai-core AssistantMessage getThinking，getText 方法（替代 getReasoning 和 getResultContent）
 * 添加 solon-ai-agent ContextSizeEvent.contextLength 字段
 * 优化 solon-ai-core AssistantMessage context 拆为 thinking + text 双字段
+* 优化 solon-ai-agent 添加 SimpleDeltaEvent 替代 ChatDeltaEvent（标为弃用）
 * 优化 solon-ai-dialect-openai 方言适配
 * 优化 solon-ai-dialect-anthropic 方言适配
 * 优化 solon-ai-talent-code 扫描扩为4层，增加可超时的缓存

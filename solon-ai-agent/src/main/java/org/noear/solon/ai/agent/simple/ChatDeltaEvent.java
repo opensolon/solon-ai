@@ -25,8 +25,10 @@ import org.noear.solon.lang.Preview;
  *
  * @author noear
  * @since 3.9.1
+ * @deprecated 4.1.0 {@link SimpleDeltaEvent}
  */
 @Preview("3.9.1")
+@Deprecated
 public class ChatDeltaEvent extends AbsAgentEvent {
     private final transient SimpleTrace trace;
     private final transient ChatResponse response;

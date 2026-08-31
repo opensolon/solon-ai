@@ -4,7 +4,7 @@ import demo.ai.llm.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.simple.ChatDeltaEvent;
+import org.noear.solon.ai.agent.simple.SimpleDeltaEvent;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamChunk;
@@ -58,7 +58,7 @@ public class TeamAgentStreamTest {
                 })
                 .consumeRecordedWith(chunks -> {
                     // 断言 1：流中应包含 ChatChunk (成员输出)
-                    boolean hasChatChunks = chunks.stream().anyMatch(c -> c instanceof ChatDeltaEvent);
+                    boolean hasChatChunks = chunks.stream().anyMatch(c -> c instanceof SimpleDeltaEvent);
                     // 断言 2：流中应包含 TeamChunk (最终汇总)
                     boolean hasTeamChunk = chunks.stream().anyMatch(c -> c instanceof TeamChunk);
 
