@@ -20,11 +20,14 @@ import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.ChatException;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.lang.Nullable;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 聊天事件实现（不可变）
@@ -50,6 +53,7 @@ public class ChatEventDefault implements ChatEvent {
     private final AiUsage usage;
     private final ChatException error;
     private final ChatResponse response;
+    private AtomicReference<AssistantMessage> messageReference;
 
     private final ONode raw;
     private final Map<String, Object> attrs;
@@ -157,8 +161,43 @@ public class ChatEventDefault implements ChatEvent {
     }
 
     @Override
-    public ChatResponse getResponse() {
+    public @Nullable ChatResponse getResponse() {
         return response;
+    }
+
+    /**
+     * 本帧消息（契约见 {@link ChatEvent#getMessage()}：带响应的帧给响应的消息，内容增量帧给当帧分片）
+     */
+    @Override
+    public @Nullable AssistantMessage getMessage() {
+        if (response != null) {
+            //终态 / 错误 / 用量帧：消息已由响应算定，直取（终态即完整聚合）
+            return response.getMessage();
+        }
+
+        if (messageReference == null) {
+            messageReference = new AtomicReference<>();
+
+            if (type == ChatEventType.THINKING_DELTA) {
+                //思考增量进 thinking 槽位、正文留空，前端才能与正文分区渲染
+                messageReference.set(new AssistantMessage("", getTextOrEmpty(), true));
+            }
+
+            if (type == ChatEventType.TEXT_DELTA) {
+                messageReference.set(new AssistantMessage(getTextOrEmpty(), "", false));
+            }
+
+            if (type == ChatEventType.MEDIA_DONE) {
+                //媒体进内容块槽位（不投文本）：url / 数据串不是模型正文，投进 text 会被当对话拼接，
+                //且丢掉 mimeType；终态聚合也是把媒体放 blocks，当帧与聚合才对得上
+                if (block != null) {
+                    messageReference.set(new AssistantMessage("", "", false, null, null, null, null,
+                            Collections.singletonList(block)));
+                }
+            }
+        }
+
+        return messageReference.get();
     }
 
     @Override

@@ -724,20 +724,68 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 acc.addContentItem(item);
                 publishItem(sink, ctx, item);
             }
-        } else if (Utils.isNotEmpty(acc.getMediaBlocks())) {
-            // 流式仅 media（如 image_generation_call.done）：无内容项也要推一帧
-            sink.next(ctx.event(ChatEventType.MEDIA_DONE)
-                    .block(acc.getMediaBlocks().isEmpty() ? null : acc.getMediaBlocks().get(acc.getMediaBlocks().size() - 1))
-                    .build());
-        } else if (acc.getUsage() != null) {
-            acc.addContentItem(new AssistantMessage(""));
-            sink.next(ctx.event(ChatEventType.USAGE)
-                    .usage(acc.getUsage())
-                    .response(acc.snapshotFrame())
-                    .build());
+        } else {
+            // 流式仅 media（如 image_generation_call.done）：无内容项也要推。
+            // 取「本帧新增」而非最后一块：一帧可解析出多块（多图），且 acc.mediaBlocks 是跨帧累积、
+            // reset() 不清，直接读末块会漏发其余块，并在后续无内容帧里把同一块反复重发
+            boolean mediaEmitted = emitMediaDone(ctx, sink, acc.getMediaBlocks());
+
+            if (mediaEmitted == false && acc.getUsage() != null) {
+                acc.addContentItem(new AssistantMessage(""));
+                sink.next(ctx.event(ChatEventType.USAGE)
+                        .usage(acc.getUsage())
+                        .response(acc.snapshotFrame())
+                        .build());
+            }
         }
 
         return true;
+    }
+
+    /**
+     * 发射媒体到达事件（逐块、跨帧去重）
+     *
+     * <p>两个发射点共用：内容项路径（{@link #emitItemEvents}）与「无内容项的侧车媒体」路径。
+     * 去重登记在流上下文（每步一个），因此同一块只会有一个 {@code MEDIA_DONE}，前端不会重复渲染。</p>
+     *
+     * @return 是否发出了新的媒体事件
+     */
+    private boolean emitMediaDone(ChatStreamContext ctx, FluxSink<ChatEvent> sink, List<ContentBlock> blocks) {
+        if (Utils.isEmpty(blocks)) {
+            return false;
+        }
+
+        ChatAccumulator acc = ctx.getAccumulator();
+        List<ContentBlock> emitted = emittedMediaBlocks(ctx);
+        boolean any = false;
+
+        for (ContentBlock block : blocks) {
+            if (block == null || block instanceof TextBlock) {
+                //文本不是媒体（走 TEXT_DELTA）
+                continue;
+            }
+
+            if (acc.containsEquivalentMedia(emitted, block)) {
+                continue;
+            }
+
+            emitted.add(block);
+            any = true;
+
+            sink.next(ctx.event(ChatEventType.MEDIA_DONE)
+                    .block(block)
+                    .build());
+        }
+
+        return any;
+    }
+
+    /**
+     * 已发过 {@code MEDIA_DONE} 的媒体块（本步）
+     */
+    @SuppressWarnings("unchecked")
+    private List<ContentBlock> emittedMediaBlocks(ChatStreamContext ctx) {
+        return ctx.attrIfAbsent("__emittedMediaBlocks", k -> new ArrayList<ContentBlock>());
     }
 
     /**
@@ -909,14 +957,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         }
 
         //媒体：旧路径只把它们归入聚合 blocks，流式订阅方全程看不到图片/音频的到达
-        if (acm != null && acm.hasMedia()) {
-            for (ContentBlock block : acm.getBlocks()) {
-                if (block instanceof TextBlock == false) {
-                    sink.next(ctx.event(ChatEventType.MEDIA_DONE)
-                            .block(block)
-                            .build());
-                }
-            }
+        if (acm != null) {
+            emitMediaDone(ctx, sink, acm.getBlocks());
         }
 
         ChatEvent itemEvent = buildItemEvent(ctx, acm);
