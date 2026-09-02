@@ -1,6 +1,8 @@
 package demo.ai;
 
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.annotation.Controller;
 import org.noear.solon.annotation.Inject;
@@ -46,12 +48,12 @@ public class DemoController {
     @Produces(MimeType.TEXT_EVENT_STREAM_UTF8_VALUE)
     @Mapping("/chat/send2")
     public Flux<SseEvent> send2(String prompt, Context ctx) throws IOException {
-        return Flux.from(chatModel.prompt(prompt).stream())
-                .filter(resp -> resp.hasChoices())
-                .map(resp -> resp.getMessage())
-                .map(msg -> {
-                    System.out.println(msg.getContent());
-                    return new SseEvent().data(msg.getContent());
+        return chatModel.prompt(prompt).stream()
+                .filter(e -> e.is(ChatEventType.TEXT_DELTA) && e.hasText())
+                .map(ChatEvent::getText)
+                .map(text -> {
+                    System.out.println(text);
+                    return new SseEvent().data(text);
                 });
     }
 }

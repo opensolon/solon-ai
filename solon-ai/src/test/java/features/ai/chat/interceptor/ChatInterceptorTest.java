@@ -1,6 +1,7 @@
 package features.ai.chat.interceptor;
 
 import org.noear.solon.ai.chat.ChatRequest;
+import org.noear.solon.ai.chat.event.ChatEvent;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.interceptor.*;
 import org.noear.solon.ai.chat.tool.ToolResult;
@@ -23,7 +24,7 @@ public class ChatInterceptorTest implements ChatInterceptor {
     }
 
     @Override
-    public Flux<ChatResponse> interceptStream(ChatRequest req, StreamChain chain) {
+    public Flux<ChatEvent> interceptStream(ChatRequest req, StreamChain chain) {
         log.warn("ChatInterceptor-interceptStream: " + req.getConfig().getModel());
         return chain.doIntercept(req);
     }

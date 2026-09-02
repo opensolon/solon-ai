@@ -66,12 +66,11 @@ public class TodoTalent extends AbsTalent {
     @Override
     public String getInstruction(Prompt prompt) {
         return "## 任务规划指南 (Task Planning Guide)\n" +
-                "1. **启动机制**: 超过3步以上的复杂任务，要通过 `todowrite` 创建计划；任务边界或目标发生重大变化时，用 `todowrite` 重构完整计划。\n" +
-                "2. **状态感知（恢复优先）**: 凡是你对当前进度没有十足把握时，必须 **先** `todoread` 再行动，禁止凭记忆推断。以下场景一律强制先读：上下文被压缩/截断后、用户说“继续/接着做/还有吗”、开启新一轮对话、或任务中途被打断后恢复。\n" +
-                "3. **实时推进**: 状态变更要随做随记，禁止攒着批量补记。开始做某项就置 `[/]`，做完就立即 `todowrite` 置 `[x]`。串行任务通常同一时刻只有一项 `[/]`；并行场景允许多项同时 `[/]`，但每项一旦完成都要第一时间单独更新，避免进度失真。**状态标记**: `[ ]` 待办；`[/]` 进行中；`[x]` 已完成。\n" +
-                "4. **闭环校验（禁止半途收尾）**: 只要清单中还存在 `[ ]` 或 `[/]`，即视为任务未完成。默认行为是 **继续把它做完**，不得停下、不得输出总结。仅当遇到真正的外部阻塞（缺少权限、缺少必要信息、需用户拍板决策）时，才允许停下并明确说明阻塞点求助；不得把“可自行完成的剩余工作”当作追问理由。\n" +
-                "5. **以返回为准**: `todoread`/`todowrite` 的返回值会附带 [进度] 与 [继续]/[完成] 提示，请以该提示作为“是否可以收尾”的判定依据。\n" +
-                "6. **适用边界**: 不要为常识性提问、简单计算或单次工具创建计划。";
+                "1. **适时启用**: 对需要多个步骤、阶段或工具协作的任务，使用 `todowrite` 建立清单；简单问答、单次查询或计算无需创建计划。任务目标或范围发生明显变化时，及时调整清单。\n" +
+                "2. **开始前同步**: 新建计划或不确定当前进度时，先使用 `todoread`/`todowrite` 同步清单，再开展后续工作。每个可跟踪事项使用 `- [ ]` 待办、`- [/]` 进行中、`- [x]` 已完成。\n" +
+                "3. **随进度更新**: 开始处理某项时标记为 `[/]`，客观完成后及时标记为 `[x]`，不要等到任务末尾集中补记。清单应反映当前实际进度，不要为了收尾虚假标记。\n" +
+                "4. **收尾前确认**: 输出最终结果前，确认清单与实际完成情况一致；只要仍有 `[ ]` 或 `[/]`，就继续推进或说明确实存在的外部阻塞，不要直接总结。以 `todoread`/`todowrite` 返回的进度提示作为收尾参考。\n" +
+                "5. **恢复优先**: 任务被打断、用户要求继续，或上下文发生变化后，先读取当前清单，避免凭记忆推断进度。";
     }
 
     protected Path getWorkPath(String __cwd, String __sessionId) {
@@ -95,7 +94,7 @@ public class TodoTalent extends AbsTalent {
         return getWorkPath(cwd, sessionId).resolve(TODO_FILE_NAME);
     }
 
-    @ToolMapping(name = TOOL_TODOREAD, description = "读取任务清单。用于同步执行进度，确认下一步操作。")
+    @ToolMapping(name = TOOL_TODOREAD, description = "读取当前任务清单和进度。开始复杂任务、恢复或继续已有任务时，或准备收尾前使用，以确认下一步及清单是否已完成。")
     public String todoRead(String __cwd,
                            String __sessionId) throws IOException {
         Path workPath = getWorkPath(__cwd, __sessionId);
@@ -111,7 +110,7 @@ public class TodoTalent extends AbsTalent {
         return content + buildProgressFooter(content);
     }
 
-    @ToolMapping(name = TOOL_TODOWRITE, description = "写入任务列表（新建、更新或重构）。接收完整的 Markdown 格式清单。")
+    @ToolMapping(name = TOOL_TODOWRITE, description = "创建或更新完整任务清单（用于同步实际执行进度）。收尾前确保清单与实际结果一致。")
     public String todoWrite(
             @Param(value = "todos", description = "完整 Markdown 任务清单。可使用 `##` 标题分组；所有可跟踪任务必须使用 checkbox 行：`- [ ]` 待办、`- [/]` 进行中、`- [x]` 已完成。不要用无状态普通列表 `- xxx` 表示任务，必须带 checkbox 标记。") String todosMarkdown,
             String __cwd,
