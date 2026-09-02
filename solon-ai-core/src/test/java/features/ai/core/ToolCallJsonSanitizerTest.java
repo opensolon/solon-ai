@@ -6,8 +6,9 @@ import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRequest;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
+import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
@@ -39,15 +40,15 @@ public class ToolCallJsonSanitizerTest {
         }
 
         @Override
-        public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
-            return false;
+        public void parseResponseJson(ChatStreamContext ctx, String data) {
+            //测试方言不解析响应
         }
     }
 
     /**
      * 可构造的响应对象（供流式聚合测试）
      */
-    static class TestResponse extends ChatResponseDefault {
+    static class TestResponse extends ChatAccumulator {
         public TestResponse() {
             super(new ChatRequest(
                     new ChatConfig(),
@@ -255,7 +256,7 @@ public class ToolCallJsonSanitizerTest {
     /**
      * 非流式响应（供“分片期不校验、非流式仍校验”的对照测试）
      */
-    static class TestResponseNonStream extends ChatResponseDefault {
+    static class TestResponseNonStream extends ChatAccumulator {
         public TestResponseNonStream() {
             super(new ChatRequest(
                     new ChatConfig(),

@@ -19,277 +19,126 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
-import org.noear.solon.ai.chat.tool.ToolCallBuilder;
+import org.noear.solon.ai.chat.event.ChatEvent;
 import org.noear.solon.ai.chat.message.AssistantMessage;
-import org.noear.solon.lang.Nullable;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
+
+import org.noear.solon.ai.chat.tool.ToolCall;
 
 /**
- * 聊天响应实现
+ * 聊天响应实现（不可变结果）
+ *
+ * <p>它只承担一个角色：<b>模型调用的结果</b>。所有字段在构造期定死，构造后不可再变。</p>
+ *
+ * <p>历史沿革：4.1 之前本类同时是结果对象、可变累积器与协议状态袋；拆分后累积器职责在
+ * {@link ChatAccumulator}（框架内部），本类不再有任何写入方法。</p>
  *
  * @author noear
  * @since 3.1
  */
 public class ChatResponseDefault implements ChatResponse {
-    private final ChatRequest request;
-    private final ChatConfigReadonly config;
-    private final ChatOptions options;
-    private final boolean stream;
+    private final boolean terminal;
 
-    protected String responseData;
-
-    protected final List<ChatChoice> choices = new ArrayList<>();
-    protected ChatException error;
-    protected AiUsage usage;
-    protected String model;
-    protected boolean finished;
-
-    protected final StringBuilder textBuilder = new StringBuilder();
-    public final StringBuilder thinkingBuilder = new StringBuilder();
-    /**
-     * 流式聚合中的非文本媒体块（终态写入）
-     *
-     * @since 3.9
-     */
-    protected final List<ContentBlock> mediaBlocks = new ArrayList<>();
-    /**
-     * 流式分片消息的 metadata 聚合（如 reasoning 项 id/encrypted_content，多轮回放需要）
-     *
-     * @since 4.1
-     */
-    protected final Map<String, Object> aggregationMetadata = new LinkedHashMap<>();
-    protected final Map<String, ToolCallBuilder> toolCallBuilders = new LinkedHashMap<>();
-
-    //附件属性
-    protected final Map<String, Object> attrs = new LinkedHashMap<>();
-    public <T> T attrAs(String name) {
-        return (T) attrs.get(name);
-    }
-    public void attrPut(String name, Object val){
-        attrs.put(name, val);
-    }
-    public <T> T attrIfAbsent(String name, Function<String, T> function) {
-        return (T) attrs.computeIfAbsent(name, function);
-    }
-    public <T> T  attrRemove(String name) {
-        return (T) attrs.remove(name);
-    }
-
-    public ChatResponseDefault(ChatRequest req, boolean stream) {
-        this.request = req;
-        this.config = req.getConfig();
-        this.options = req.getOptions();
-        this.stream = stream;
-    }
-
-    public ChatRequest getRequest() {
-        return request;
-    }
-
-    @Override
-    public ChatConfigReadonly getConfig() {
-        return config;
-    }
-
-    @Override
-    public ChatOptions getOptions() {
-        return options;
-    }
+    private final String frameRaw;
+    private final String model;
+    private final ChatException error;
+    private final AiUsage usage;
 
     /**
-     * 获取响应数据
+     * 结果消息（构造期算定：终态为完整聚合，分片帧为当帧分片）
      */
-    @Override
-    public String getResponseData() {
-        return responseData;
-    }
-
+    private final AssistantMessage message;
     /**
-     * 获取模型
+     * 完成原因（已归一化，构造期算定）
      */
-    @Override
-    public String getModel() {
-        return model;
-    }
-
+    private final String finishReason;
     /**
-     * 获取错误
+     * 非流式路径上方言产出的语义事件（构造期快照）
      */
-    @Override
-    public ChatException getError() {
-        return error;
-    }
+    private final List<ChatEvent> events;
 
-    /**
-     * 是否有工具构建器
-     */
-    public boolean hasToolCallBuilders() {
-        return Utils.isNotEmpty(toolCallBuilders);
-    }
+    protected ChatResponseDefault(ChatAccumulator acc, boolean terminal) {
+        this.terminal = terminal;
 
-    /**
-     * 获取所有选择
-     */
-    @Override
-    public List<ChatChoice> getChoices() {
-        return choices;
-    }
+        this.frameRaw = acc.getFrameRaw();
+        this.model = acc.getModel();
+        this.error = acc.getError();
+        this.usage = acc.getUsage();
+        this.events = acc.getEvents().isEmpty()
+                ? Collections.emptyList()
+                : Collections.unmodifiableList(new ArrayList<>(acc.getEvents()));
 
-    /**
-     * 是否有消息
-     */
-    @Override
-    public boolean hasChoices() {
-        return Utils.isNotEmpty(choices);
-    }
-
-    /**
-     * 最后一个选择
-     */
-    public ChatChoice lastChoice() {
-        return choices.get(choices.size() - 1);
-    }
-
-    /**
-     * 获取消息
-     * <p>流式仅 media、尚无 choice 时，回落聚合消息，避免中间帧 getMessage() 恒为 null。</p>
-     */
-    @Override
-    public AssistantMessage getMessage() {
-        if (hasChoices()) {
-            //取最后条消息
-            return lastChoice().getMessage();
+        if (terminal) {
+            this.message = buildAggregationMessage(acc);
+            //终态契约：无任何 finishReason 信号时默认正常结束（与旧 getLastFinishReasonNormalized 一致）
+            String rawFinish = ChatAccumulator.normalizeFinishReason(acc.lastFinishReason);
+            this.finishReason = rawFinish != null ? rawFinish : "stop";
+        } else {
+            this.message = frameMessage(acc);
+            this.finishReason = ChatAccumulator.normalizeFinishReason(acc.lastFinishReason);
         }
-        
-        // Responses 流式 image_generation_call 等：只收 mediaBlocks 不推 choice
-        if (stream && Utils.isNotEmpty(mediaBlocks)) {
-            return getAggregationMessage();
+    }
+
+    /**
+     * 分片帧的消息：优先当帧分片；流式仅 media 尚无内容项时，回落聚合消息
+     */
+    private static AssistantMessage frameMessage(ChatAccumulator acc) {
+        if (acc.hasContentItems()) {
+            return acc.lastItem();
         }
-    
+
+        // Responses 流式 image_generation_call 等：只收 mediaBlocks 不推内容项
+        if (acc.isStream() && Utils.isNotEmpty(acc.getMediaBlocks())) {
+            return buildAggregationMessage(acc);
+        }
+
         return null;
     }
 
-    public String getAggregationText() {
-        return textBuilder.toString();
-    }
-
-
-    public String getAggregationThinking() {
-        return thinkingBuilder.toString();
-    }
-
     /**
-     * 追加流式聚合的媒体块（跳过 TextBlock，文本走 contentBuilder）
-     *
-     * @since 3.9
+     * 终态聚合消息（逻辑与旧 getAggregationMessage 一致，构造期执行一次）
      */
-    public void addMediaBlocks(List<ContentBlock> blocks) {
-        if (Utils.isEmpty(blocks)) {
-            return;
-        }
+    private static AssistantMessage buildAggregationMessage(ChatAccumulator acc) {
+        if (acc.hasContentItems()) {
+            AssistantMessage lastMsg = acc.lastItem();
 
-        for (ContentBlock block : blocks) {
-            // 跳过文本；同一实例或同内容媒体避免方言 addMediaBlocks + publishResponse 双写
-            if (block != null && !(block instanceof TextBlock) && !containsEquivalentMedia(mediaBlocks, block)) {
-                mediaBlocks.add(block);
-            }
-        }
-    }
-    
-    /**
-     * 判断媒体块是否已存在（先引用相等，再按类型 + content 等价）。
-     *
-     * @since 3.9
-     */
-    protected boolean containsEquivalentMedia(List<ContentBlock> existing, ContentBlock candidate) {
-        if (Utils.isEmpty(existing) || candidate == null) {
-            return false;
-        }
-        for (ContentBlock block : existing) {
-            if (block == candidate) {
-                return true;
-            }
-            if (block != null
-                    && block.getClass() == candidate.getClass()
-                    && Utils.isNotEmpty(candidate.getContent())
-                    && candidate.getContent().equals(block.getContent())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 获取流式聚合的媒体块
-     *
-     * @since 3.9
-     */
-    public List<ContentBlock> getMediaBlocks() {
-        return mediaBlocks;
-    }
-
-    @Override
-    public boolean isEmpty() {
-        if (stream) {
-            if (textBuilder.length() == 0 &&
-                    thinkingBuilder.length() == 0 &&
-                    toolCallBuilders.isEmpty() &&
-                    mediaBlocks.isEmpty() &&
-                    choices.isEmpty()) {
-                return true;
-            }
-        } else {
-            if (choices.isEmpty()) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * 获取聚合消息
-     */
-    @Override
-    public AssistantMessage getAggregationMessage() {
-        if (hasChoices()) {
-            if (stream) {
-                AssistantMessage last = lastChoice().getMessage();
-                List<ContentBlock> aggBlocks = buildAggregationBlocks(textBuilder.toString(), last);
+            if (acc.isStream()) {
+                List<ContentBlock> aggBlocks = buildAggregationBlocks(acc, lastMsg);
 
                 return new AssistantMessage(
-                        textBuilder.toString(),
-                        thinkingBuilder.toString(),
-                        textBuilder.length() == 0 && thinkingBuilder.length() > 0,
-                        last.getContentRaw(),
-                        last.getToolCallsRaw(),
-                        last.getToolCalls(),
-                        last.getSearchResultsRaw(),
+                        acc.getAggregationText(),
+                        acc.getAggregationThinking(),
+                        acc.getAggregationText().length() == 0 && acc.getAggregationThinking().length() > 0,
+                        lastMsg.getContentRaw(),
+                        lastMsg.getToolCallsRaw(),
+                        lastMsg.getToolCalls(),
+                        lastMsg.getSearchResultsRaw(),
                         aggBlocks
-                ).reasoningFieldName(last.getReasoningFieldName())
-                        .addMetadata(aggregationMetadata);
+                ).reasoningFieldName(lastMsg.getReasoningFieldName())
+                        .addMetadata(acc.getAggregationMetadata());
             } else {
-                return lastChoice().getMessage();
+                // 非流式：一次响应就是一条结果。方言可能把它拆成多条内容项（如思考项 + 工具调用项），
+                // 取末条——工具调用总在最后一项上，取首条会丢掉 toolCalls。
+                // 这也与 ChatRequestDescDefault 写入记忆时的取值（lastItem）保持同一来源
+                return lastMsg;
             }
         } else {
-            if (textBuilder.length() > 0 || thinkingBuilder.length() > 0 || Utils.isNotEmpty(mediaBlocks)) {
-                List<ContentBlock> aggBlocks = buildAggregationBlocks(textBuilder.toString(), null);
+            if (acc.getAggregationText().length() > 0
+                    || acc.getAggregationThinking().length() > 0
+                    || Utils.isNotEmpty(acc.getMediaBlocks())) {
+                List<ContentBlock> aggBlocks = buildAggregationBlocks(acc, null);
+
                 return new AssistantMessage(
-                        textBuilder.toString(),
-                        thinkingBuilder.toString(),
+                        acc.getAggregationText(),
+                        acc.getAggregationThinking(),
                         false,
-                        null,
-                        null,
-                        null,
-                        null,
+                        null, null, null, null,
                         aggBlocks)
-                        .reasoningFieldName(reasoning_field_name)
-                        .addMetadata(aggregationMetadata);
+                        .reasoningFieldName(acc.reasoning_field_name)
+                        .addMetadata(acc.getAggregationMetadata());
             } else {
                 return null;
             }
@@ -298,16 +147,14 @@ public class ChatResponseDefault implements ChatResponse {
 
     /**
      * 构建聚合消息的 blocks：文本投影 + 流中媒体 + 最后一条消息媒体
-     *
-     * @since 3.9
      */
-    protected List<ContentBlock> buildAggregationBlocks(String text, AssistantMessage last) {
+    private static List<ContentBlock> buildAggregationBlocks(ChatAccumulator acc, AssistantMessage last) {
         List<ContentBlock> agg = new ArrayList<>();
 
-        // 优先使用流式过程中已收集的 mediaBlocks（publishResponse / 方言终态写入）。
+        // 优先使用流式过程中已收集的 mediaBlocks（publishChoice / 方言终态写入）。
         // 不再与 last.blocks 叠加，避免同一媒体被聚合两次。
-        if (Utils.isNotEmpty(mediaBlocks)) {
-            agg.addAll(mediaBlocks);
+        if (Utils.isNotEmpty(acc.getMediaBlocks())) {
+            agg.addAll(acc.getMediaBlocks());
         } else if (last != null && last.hasMedia()) {
             // 兜底：媒体只挂在最后一条消息、未进入 mediaBlocks 的路径
             for (ContentBlock block : last.getBlocks()) {
@@ -323,233 +170,112 @@ public class ChatResponseDefault implements ChatResponse {
         }
 
         List<ContentBlock> result = new ArrayList<>();
-        if (Utils.isNotEmpty(text)) {
-            result.add(TextBlock.of(text));
+        if (Utils.isNotEmpty(acc.getAggregationText())) {
+            result.add(TextBlock.of(acc.getAggregationText()));
         }
         result.addAll(agg);
         return result;
     }
 
     /**
-     * 是否有消息内容
-     * <p>与 {@link #getMessage()} 对齐：流式仅 media 时也回落聚合消息。</p>
+     * 是否为终态（true 时 getMessage() 即完整聚合）
      */
+    @Override
+    public boolean isTerminal() {
+        return terminal;
+    }
+
+    @Override
+    public String getFrameRaw() {
+        return frameRaw;
+    }
+
+    @Override
+    public String getModel() {
+        return model;
+    }
+
+    @Override
+    public ChatException getError() {
+        return error;
+    }
+
+    @Override
+    public AssistantMessage getMessage() {
+        return message;
+    }
+
+    @Override
+    public boolean isEmpty() {
+        if (message == null) {
+            return true;
+        }
+
+        return message.getContent() == null
+                && Utils.isEmpty(message.getToolCalls())
+                && Utils.isEmpty(message.getBlocks());
+    }
+
     @Override
     public boolean hasContent() {
-        AssistantMessage msg = getMessage();
-        return msg != null && msg.hasContent();
+        return message != null && message.hasContent();
     }
-        
-    /**
-     * 获取消息原始内容
-     * <p>与 {@link #getMessage()} 对齐：流式仅 media 时也回落聚合消息。</p>
-     */
+
     @Override
     public String getContent() {
-        AssistantMessage msg = getMessage();
-        return msg == null ? null : msg.getContent();
+        return message == null ? null : message.getContent();
     }
-        
-    /**
-     * 获取消息结果内容（清理过思考）
-     * <p>与 {@link #getMessage()} 对齐：流式仅 media 时也回落聚合消息。</p>
-     */
+
     @Override
     public String getText() {
-        AssistantMessage msg = getMessage();
-        return msg == null ? null : msg.getText();
+        return message == null ? null : message.getText();
     }
 
     @Override
     public String getThinking() {
-        AssistantMessage msg = getMessage();
-        return msg == null ? null : msg.getThinking();
+        return message == null ? null : message.getThinking();
     }
 
     @Override
-    public String getResultContent() {
-        return getText();
-    }
-
-    /**
-     * 获取使用情况（完成时，才会有使用情况）
-     */
-    @Override
-    public @Nullable AiUsage getUsage() {
-        return usage;
-    }
-
-    /**
-     * 是否完成
-     */
-    @Override
-    public boolean isFinished() {
-        return finished;
-    }
-
-    /**
-     * 是否为流响应
-     */
-    @Override
-    public boolean isStream() {
-        return stream;
-    }
-
-    /// //////////////////////////
-
-    /**
-     * 在思考中
-     */
-    public boolean in_thinking;
-
-    /**
-     * 有推理字段
-     */
-    public boolean has_reasoning_field;
-    /**
-     * 推理字段名
-     */
-    public String reasoning_field_name;
-
-    /**
-     * 思考签名（Claude thinking signature，用于多轮工具调用时回传）
-     */
-    public String thinkingSignature;
-
-    /**
-     * 最后的 callId
-     * */
-    public String lastToolCallId;
-
-    /**
-     * 最后的 finishReason（保存 LLM 返回的原始值，使用时通过 normalizeFinishReason 归一化）
-     */
-    public String lastFinishReason;
-
-    /**
-     * 获取归一化后的 finishReason，如果没有则返回默认值 "stop"
-     *
-     * @return 归一化后的 finishReason
-     */
-    public String getLastFinishReasonNormalized() {
-        String normalized = normalizeFinishReason(lastFinishReason);
-        return normalized != null ? normalized : "stop";
-    }
-
-    /**
-     * 归一化 finishReason
-     *
-     * <p>将各 LLM 返回的不同值映射为框架统一定义的值：
-     * <ul>
-     *   <li>工具调用："tool"（含 tool_calls、function_call 等变体）</li>
-     *   <li>正常结束："stop"（含 stop、end 等变体）</li>
-     * </ul>
-     * 其他值保持原样透传，由调用方自行判断，例如（OpenAI 官方枚举）：
-     * <ul>
-     *   <li>"length"：因 max_tokens 截断</li>
-     *   <li>"content_filter"：内容被安全策略拦截（返回内容可能不完整）</li>
-     * </ul>
-     *
-     * @param finishReason LLM 返回的原始 finishReason
-     * @return 归一化后的 finishReason
-     */
-    public static String normalizeFinishReason(String finishReason) {
-        if (finishReason == null || finishReason.isEmpty()) {
-            return finishReason;
+    public List<ToolCall> getToolCalls() {
+        if (message == null || Utils.isEmpty(message.getToolCalls())) {
+            return Collections.emptyList();
         }
 
-        String lower = finishReason.toLowerCase();
+        return Collections.unmodifiableList(message.getToolCalls());
+    }
 
-        // 工具调用 → "tool"
-        if (lower.contains("tool") || lower.contains("function")) {
-            return "tool";
-        }
-
-        // 正常结束 → "stop"
-        if (lower.contains("stop") || lower.contains("end")) {
-            return "stop";
-        }
-
-        // 其他保持原值
+    @Override
+    public String getFinishReason() {
         return finishReason;
     }
 
-    /**
-     * 重置响应数据
-     */
-    public void reset() {
-        this.error = null;
-        this.choices.clear();
-
-        //总累积内容不能清
-        //this.contentBuilder.setLength(0);
-        //this.reasoningBuilder.setLength(0);
-    }
-
-    /**
-     * 设置响应数据
-     */
-    public void setResponseData(String responseData) {
-        this.responseData = responseData;
-    }
-
-    /**
-     * 添加输出选择
-     *
-     * @param choice 选择
-     */
-    public void addChoice(ChatChoice choice) {
-        this.choices.add(choice);
-
-        // 分片 metadata 聚合：思考分片携带的元数据（如 reasoning_item_id）不在最后一片上，
-        // 需累积后交给 getAggregationMessage，否则多轮回放会丢失（@since 4.1）
-        if (stream && choice.getMessage() != null && choice.getMessage().hasMetadata()) {
-            this.aggregationMetadata.putAll(choice.getMessage().getMetadata());
+    @Override
+    public List<ContentBlock> getBlocks() {
+        if (message == null || Utils.isEmpty(message.getBlocks())) {
+            return Collections.emptyList();
         }
+
+        return Collections.unmodifiableList(message.getBlocks());
     }
 
-    /**
-     * 流式分片 metadata 聚合结果
-     *
-     * @since 4.1
-     */
-    public Map<String, Object> getAggregationMetadata() {
-        return aggregationMetadata;
+    @Override
+    public AiUsage getUsage() {
+        return usage;
     }
 
-    /**
-     * 设置错误
-     *
-     * @param error 错误
-     */
-    public void setError(ChatException error) {
-        this.error = error;
+    @Override
+    public List<ChatEvent> getEvents() {
+        return events;
     }
 
-    /**
-     * 设置使用情况
-     *
-     * @param usage 使用情况
-     */
-    public void setUsage(AiUsage usage) {
-        this.usage = usage;
-    }
-
-    /**
-     * 设置模型
-     *
-     * @param model 响应模型
-     */
-    public void setModel(String model) {
-        this.model = model;
-    }
-
-    /**
-     * 设置完成状态
-     *
-     * @param finished 完成状态
-     */
-    public void setFinished(boolean finished) {
-        this.finished = finished;
+    @Override
+    public String toString() {
+        return "ChatResponse{" +
+                (terminal ? "terminal" : "frame") +
+                ", model='" + model + '\'' +
+                ", finishReason='" + finishReason + '\'' +
+                ", message=" + message +
+                '}';
     }
 }

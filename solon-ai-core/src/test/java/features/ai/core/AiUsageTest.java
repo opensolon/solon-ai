@@ -19,10 +19,10 @@ public class AiUsageTest {
     }
 
     @Test
-    @DisplayName("普通命中率：1234/8765 → 14%")
+    @DisplayName("普通命中率：1234/8765 → 14.08%")
     public void testNormalCacheRate() {
         AiUsage usage = build(8765L, 500L, 1234L);
-        Assertions.assertEquals(14, usage.getCacheRate());
+        Assertions.assertEquals(14.08D, usage.getCacheRate());
     }
 
     @Test

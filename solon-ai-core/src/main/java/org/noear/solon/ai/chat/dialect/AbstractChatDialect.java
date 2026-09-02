@@ -283,9 +283,9 @@ public abstract class AbstractChatDialect implements ChatDialect {
      *
      * @since 4.0.5
      */
-    protected boolean tryParseErrorText(ChatResponseDefault resp, String json) {
+    protected boolean tryParseErrorText(ChatAccumulator acc, String json) {
         if (json != null && json.startsWith("error ")) {
-            resp.setError(new ChatException(json));
+            acc.setError(new ChatException(json));
             return true;
         }
         return false;
@@ -445,10 +445,10 @@ public abstract class AbstractChatDialect implements ChatDialect {
     }
 
     @Override
-    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
+    public ONode buildAssistantToolCallMessageNode(ChatAccumulator acc, Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode oNode = new ONode();
         oNode.set("role", "assistant");
-        oNode.set("content", resp.getAggregationText());
+        oNode.set("content", acc.getAggregationText());
         oNode.getOrNew("tool_calls").asArray().then(n1 -> {
             for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
                 //有可能没有
@@ -512,7 +512,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
     /**
      * 解析工具调用
      */
-    protected List<ToolCall> parseToolCalls(ChatResponseDefault resp, ONode toolCallsNode) {
+    protected List<ToolCall> parseToolCalls(ChatAccumulator acc, ONode toolCallsNode) {
         if (toolCallsNode == null) {
             return null;
         }
@@ -520,13 +520,13 @@ public abstract class AbstractChatDialect implements ChatDialect {
         List<ToolCall> toolCalls = new ArrayList<>();
 
         for (ONode n1 : toolCallsNode.getArray()) {
-            toolCalls.add(parseToolCall(resp, n1));
+            toolCalls.add(parseToolCall(acc, n1));
         }
 
         return toolCalls;
     }
 
-    protected ToolCall parseToolCall(ChatResponseDefault resp, ONode n1) {
+    protected ToolCall parseToolCall(ChatAccumulator acc, ONode n1) {
         String callId = n1.get("id").getString();
 
         // 官方流式协议（ChatCompletionMessageToolCallChunk）：id 仅首分片携带，index 字段才是分片聚合主键
@@ -541,11 +541,11 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
 
         if (Utils.isNotEmpty(callId)) {
-            resp.lastToolCallId = callId;
+            acc.lastToolCallId = callId;
         }
 
         String index = chunkIndexKey != null ? chunkIndexKey
-                : (Utils.isNotEmpty(callId) ? callId : resp.lastToolCallId);
+                : (Utils.isNotEmpty(callId) ? callId : acc.lastToolCallId);
 
         ONode n1f = n1.get("function");
         String name = n1f.get("name").getString(); //可能是空的
@@ -560,7 +560,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
                 if (n1fArgs == null) {
                     //流式分片本就是不完整的 JSON 片段，解析失败属预期，降级为 debug 避免刷日志
-                    if (resp.isStream()) {
+                    if (acc.isStream()) {
                         if (LOG.isDebugEnabled()) {
                             LOG.debug("Parse tool arguments chunk skipped: {}", argStr);
                         }
@@ -579,14 +579,6 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
 
         return new ToolCall(index, callId, name, argStr, argMap);
-    }
-
-    /**
-     * 解析助理消息 content 的文本投影（兼容旧逻辑）
-     */
-    protected String parseAssistantMessageContent(ChatResponseDefault resp, ONode oContent) {
-        List<ContentBlock> blocks = parseAssistantContentBlocks(resp, oContent, null);
-        return projectTextContent(blocks);
     }
 
     /**
@@ -639,7 +631,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
      * @param oMessage 可选，用于解析侧车字段（如 OpenAI message.audio）
      * @since 3.9
      */
-    protected List<ContentBlock> parseAssistantContentBlocks(ChatResponseDefault resp, ONode oContent, ONode oMessage) {
+    protected List<ContentBlock> parseAssistantContentBlocks(ChatAccumulator acc, ONode oContent, ONode oMessage) {
         List<ContentBlock> blocks = new ArrayList<>();
 
         if (oContent != null && !oContent.isNull()) {
@@ -910,12 +902,12 @@ public abstract class AbstractChatDialect implements ChatDialect {
         return null;
     }
 
-    public List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
+    public List<AssistantMessage> parseAssistantMessage(ChatAccumulator acc, ONode oMessage) {
         List<AssistantMessage> messageList = new ArrayList<>();
 
         ONode oContent = oMessage.get("content");
 
-        List<ContentBlock> contentBlocks = parseAssistantContentBlocks(resp, oContent, oMessage);
+        List<ContentBlock> contentBlocks = parseAssistantContentBlocks(acc, oContent, oMessage);
         String content = projectTextContent(contentBlocks);
 
         // 纯文本且非多模态时，blocks 置空以保持旧序列化形态
@@ -932,7 +924,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         ONode searchResultsNode = oMessage.getOrNull("search_results");
 
         List<Map> toolCallsRaw = null;
-        List<ToolCall> toolCalls = parseToolCalls(resp, toolCallsNode);
+        List<ToolCall> toolCalls = parseToolCalls(acc, toolCallsNode);
         List<Map> searchResultsRaw = null;
 
         if (Utils.isNotEmpty(toolCalls)) {
@@ -942,14 +934,14 @@ public abstract class AbstractChatDialect implements ChatDialect {
             // 分片期只做字符串累积不校验，校验统一交给聚合出口（buildAssistantToolCallMessageNode）
             // 与出站兜底（buildAssistantMessageNodeDo）。
             List<Map> toolCallsRawOrigin = toolCallsNode.toBean(List.class);
-            toolCallsRaw = resp.isStream() ? toolCallsRawOrigin
+            toolCallsRaw = acc.isStream() ? toolCallsRawOrigin
                     : ToolCallJsonSanitizer.sanitizeToolCallsRaw(toolCallsRawOrigin);
 
-            if (resp.in_thinking && resp.isStream()) {
+            if (acc.in_thinking && acc.isStream()) {
                 //说明是思考结束立刻调用了工具，需要添加思考的结束标识
-                messageList.add(new AssistantMessage("", "", true).reasoningFieldName(resp.reasoning_field_name));
+                messageList.add(new AssistantMessage("", "", true).reasoningFieldName(acc.reasoning_field_name));
             }
-            resp.in_thinking = false; //重置状态
+            acc.in_thinking = false; //重置状态
         }
 
         if (searchResultsNode != null) {
@@ -967,10 +959,10 @@ public abstract class AbstractChatDialect implements ChatDialect {
         final String reasoning_content;
         if (oMessage.hasKey("reasoning_content")) {
             reasoning_content = oMessage.get("reasoning_content").getValueAs();
-            resp.reasoning_field_name = "reasoning_content";
+            acc.reasoning_field_name = "reasoning_content";
         } else if (oMessage.hasKey("reasoning")) {
             reasoning_content = oMessage.get("reasoning").getValueAs();
-            resp.reasoning_field_name = "reasoning";
+            acc.reasoning_field_name = "reasoning";
         } else {
             reasoning_content = null;
         }
@@ -979,14 +971,14 @@ public abstract class AbstractChatDialect implements ChatDialect {
         String pendingThinking = null;
 
         if (Utils.isNotEmpty(reasoning_content)) {
-            resp.has_reasoning_field = true;
+            acc.has_reasoning_field = true;
             //有思考专属内容的协议
-            if (resp.isStream()) {
+            if (acc.isStream()) {
                 //如果是流返回（可能要拆成多条流消息）
                 if (Utils.isEmpty(content)) {
-                    if (resp.in_thinking == false) {
+                    if (acc.in_thinking == false) {
                         //说明是第一次
-                        messageList.add(new AssistantMessage("", "", true).reasoningFieldName(resp.reasoning_field_name));
+                        messageList.add(new AssistantMessage("", "", true).reasoningFieldName(acc.reasoning_field_name));
                         if (Utils.isNotEmpty(reasoning_content)) {
                             content = reasoning_content;
                         }
@@ -994,59 +986,59 @@ public abstract class AbstractChatDialect implements ChatDialect {
                         content = reasoning_content;
                     }
 
-                    resp.in_thinking = true;
+                    acc.in_thinking = true;
                 } else {
                     //同帧同时携带思考与正文（部分网关会这么发）：思考增量先入通道，再发闭合信号；正文由下方 text 通道承载
-                    if (resp.in_thinking == false) {
+                    if (acc.in_thinking == false) {
                         //首帧即双通道：补开启信号，保持 thinking->text 边界完整
-                        messageList.add(new AssistantMessage("", "", true).reasoningFieldName(resp.reasoning_field_name));
+                        messageList.add(new AssistantMessage("", "", true).reasoningFieldName(acc.reasoning_field_name));
                     }
-                    messageList.add(new AssistantMessage("", reasoning_content, true).reasoningFieldName(resp.reasoning_field_name));
-                    messageList.add(new AssistantMessage("", "", true).reasoningFieldName(resp.reasoning_field_name));
+                    messageList.add(new AssistantMessage("", reasoning_content, true).reasoningFieldName(acc.reasoning_field_name));
+                    messageList.add(new AssistantMessage("", "", true).reasoningFieldName(acc.reasoning_field_name));
 
-                    resp.in_thinking = false;
+                    acc.in_thinking = false;
                 }
             } else {
                 //如果是单次返回：思考单独存放，不再缝合进 content
                 pendingThinking = reasoning_content;
             }
         } else if (Utils.isNotEmpty(content)) {
-            if (resp.has_reasoning_field) { //有些情况，后面就没字段了
+            if (acc.has_reasoning_field) { //有些情况，后面就没字段了
                 //有推理字段的
-                if (resp.in_thinking) {
-                    if (resp.isStream()) {
+                if (acc.in_thinking) {
+                    if (acc.isStream()) {
                         //说明是最后一次
-                        messageList.add(new AssistantMessage("", "", true).reasoningFieldName(resp.reasoning_field_name));
+                        messageList.add(new AssistantMessage("", "", true).reasoningFieldName(acc.reasoning_field_name));
                     }
 
-                    resp.in_thinking = false;
+                    acc.in_thinking = false;
                 }
             } else {
                 //分析 think 状态（无推理字段的）
-                if (resp.isStream()) {
+                if (acc.isStream()) {
                     //如果是流返回
                     if (content.startsWith("<think>")) {
-                        resp.in_thinking = true;
+                        acc.in_thinking = true;
                         //剥离开标签：纯标签帧剥后为空（相当于信号帧），前缀粘连时正文不混入 thinking
                         content = content.substring("<think>".length());
                     } else {
-                        if (resp.in_thinking) {
+                        if (acc.in_thinking) {
                             int thinkEnd = content.indexOf("</think>");
                             if (thinkEnd >= 0) {
                                 //闭合标签可能与思考尾巴/正文头粘连在同一分片，拆成单通道帧，避免互相污染
-                                resp.in_thinking = false;
+                                acc.in_thinking = false;
 
                                 String thinkPart = content.substring(0, thinkEnd);
                                 if (Utils.isNotEmpty(thinkPart)) {
-                                    messageList.add(new AssistantMessage("", thinkPart, true).reasoningFieldName(resp.reasoning_field_name));
+                                    messageList.add(new AssistantMessage("", thinkPart, true).reasoningFieldName(acc.reasoning_field_name));
                                 }
 
                                 //闭合信号帧（保持订阅侧 thinking->text 边界）
-                                messageList.add(new AssistantMessage("", "", true).reasoningFieldName(resp.reasoning_field_name));
+                                messageList.add(new AssistantMessage("", "", true).reasoningFieldName(acc.reasoning_field_name));
 
                                 String answerPart = content.substring(thinkEnd + "</think>".length());
                                 if (Utils.isNotEmpty(answerPart)) {
-                                    messageList.add(new AssistantMessage(answerPart, "", false).reasoningFieldName(resp.reasoning_field_name));
+                                    messageList.add(new AssistantMessage(answerPart, "", false).reasoningFieldName(acc.reasoning_field_name));
                                 }
                                 return messageList;
                             }
@@ -1059,10 +1051,10 @@ public abstract class AbstractChatDialect implements ChatDialect {
         // 有文本 / 思考 / 工具调用 / 多模态媒体时都需要产出消息
         if (content != null || pendingThinking != null || toolCallsRaw != null || Utils.isNotEmpty(blocksForMsg)) {
             Object contentRaw = oContent == null || oContent.isNull() ? content : oContent.toBean();
-            String textOut = resp.in_thinking ? "" : (content == null ? "" : content);
-            String thinkingOut = resp.in_thinking ? (content == null ? "" : content) : (pendingThinking == null ? "" : pendingThinking);
-            AssistantMessage message = new AssistantMessage(textOut, thinkingOut, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw, blocksForMsg)
-                    .reasoningFieldName(resp.reasoning_field_name);
+            String textOut = acc.in_thinking ? "" : (content == null ? "" : content);
+            String thinkingOut = acc.in_thinking ? (content == null ? "" : content) : (pendingThinking == null ? "" : pendingThinking);
+            AssistantMessage message = new AssistantMessage(textOut, thinkingOut, acc.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw, blocksForMsg)
+                    .reasoningFieldName(acc.reasoning_field_name);
 
             messageList.add(message);
         }

@@ -3,10 +3,7 @@ package features.ai.core;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
-import org.noear.solon.ai.chat.ChatConfig;
-import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.ChatRequest;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.Contents;
@@ -14,6 +11,7 @@ import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
+import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
@@ -134,9 +132,9 @@ public class AssistantMessageTest {
         tr.addMediaBlocks(Arrays.asList(image));
 
         AssistantMessage last = ChatMessage.ofAssistant("hello", image);
-        tr.addChoice(new org.noear.solon.ai.chat.ChatChoice(0, new java.util.Date(), "stop", last));
+        tr.addContentItem(last);
 
-        AssistantMessage agg = tr.getAggregationMessage();
+        AssistantMessage agg = tr.snapshotTerminal().getMessage();
         Assertions.assertNotNull(agg);
         long mediaCount = agg.getBlocks().stream().filter(b -> !(b instanceof TextBlock)).count();
         Assertions.assertEquals(1, mediaCount);
@@ -160,7 +158,7 @@ public class AssistantMessageTest {
         Assertions.assertEquals("https://example.com/c.png", am.getBlocks().get(1).getContent());
     }
 
-    private static ChatResponseDefault newResp(boolean stream) {
+    private static ChatAccumulator newResp(boolean stream) {
         TestDialect dialect = new TestDialect();
         ChatRequest req = new ChatRequest(
                 new ChatConfig(),
@@ -170,13 +168,13 @@ public class AssistantMessageTest {
                 null,
                 null,
                 stream);
-        return new ChatResponseDefault(req, stream);
+        return new ChatAccumulator(req, stream);
     }
 
     @Test
     public void parseAssistantMultiModalContentArray() {
         TestDialect dialect = new TestDialect();
-        ChatResponseDefault resp = newResp(false);
+        ChatAccumulator acc = newResp(false);
 
         ONode oMessage = ONode.ofJson("{"
                 + "\"role\":\"assistant\","
@@ -186,7 +184,7 @@ public class AssistantMessageTest {
                 + "]"
                 + "}");
 
-        List<AssistantMessage> list = dialect.parseAssistantMessage(resp, oMessage);
+        List<AssistantMessage> list = dialect.parseAssistantMessage(acc, oMessage);
         Assertions.assertEquals(1, list.size());
 
         AssistantMessage msg = list.get(0);
@@ -201,7 +199,7 @@ public class AssistantMessageTest {
     @Test
     public void parseAssistantAudioSidecar() {
         TestDialect dialect = new TestDialect();
-        ChatResponseDefault resp = newResp(false);
+        ChatAccumulator acc = newResp(false);
 
         ONode oMessage = ONode.ofJson("{"
                 + "\"role\":\"assistant\","
@@ -214,7 +212,7 @@ public class AssistantMessageTest {
                 + "}"
                 + "}");
 
-        List<AssistantMessage> list = dialect.parseAssistantMessage(resp, oMessage);
+        List<AssistantMessage> list = dialect.parseAssistantMessage(acc, oMessage);
         Assertions.assertEquals(1, list.size());
 
         AssistantMessage msg = list.get(0);
@@ -236,10 +234,10 @@ public class AssistantMessageTest {
     @Test
     public void parsePlainTextShouldRemainCompatible() {
         TestDialect dialect = new TestDialect();
-        ChatResponseDefault resp = newResp(false);
+        ChatAccumulator acc = newResp(false);
 
         ONode oMessage = ONode.ofJson("{\"role\":\"assistant\",\"content\":\"plain\"}");
-        List<AssistantMessage> list = dialect.parseAssistantMessage(resp, oMessage);
+        List<AssistantMessage> list = dialect.parseAssistantMessage(acc, oMessage);
 
         Assertions.assertEquals(1, list.size());
         AssistantMessage msg = list.get(0);
@@ -359,10 +357,9 @@ public class AssistantMessageTest {
         TestResponse tr = new TestResponse();
         tr.appendText("stream text");
         tr.addMediaBlocks(Arrays.asList(ImageBlock.ofUrl("https://example.com/s.png")));
-        tr.addChoice(new org.noear.solon.ai.chat.ChatChoice(
-                0, new java.util.Date(), "stop", ChatMessage.ofAssistant("stream text")));
+        tr.addContentItem(ChatMessage.ofAssistant("stream text"));
 
-        AssistantMessage agg = tr.getAggregationMessage();
+        AssistantMessage agg = tr.snapshotTerminal().getMessage();
         Assertions.assertNotNull(agg);
         Assertions.assertEquals("stream text", agg.getContent());
         Assertions.assertTrue(agg.isMultiModal());
@@ -403,9 +400,9 @@ public class AssistantMessageTest {
         ImageBlock image = ImageBlock.ofUrl("https://example.com/only-media.png");
         tr.addMediaBlocks(Arrays.asList(image));
     
-        // 无 choice 时，流式仅 media 也应能 getMessage
-        Assertions.assertFalse(tr.hasChoices());
-        AssistantMessage msg = tr.getMessage();
+        // 无 choice 时，流式仅 media 也应能聚合出消息
+        Assertions.assertFalse(tr.hasContentItems());
+        AssistantMessage msg = tr.snapshotTerminal().getMessage();
         Assertions.assertNotNull(msg);
         Assertions.assertTrue(msg.hasMedia());
         Assertions.assertEquals(1, msg.getBlocks().stream().filter(b -> b instanceof ImageBlock).count());
@@ -442,12 +439,12 @@ public class AssistantMessageTest {
         ImageBlock image = ImageBlock.ofUrl("https://example.com/only-media-content.png");
         tr.addMediaBlocks(Arrays.asList(image));
     
-        // 与 getMessage 对齐：仅 media 时 content API 不抛 NPE，也不恒为 null/false 失配
-        Assertions.assertFalse(tr.hasChoices());
-        Assertions.assertNotNull(tr.getMessage());
-        Assertions.assertFalse(tr.hasContent()); // 仅 media，文本为空
-        Assertions.assertEquals("", tr.getContent());
-        Assertions.assertEquals("", tr.getText());
+        // 仅 media：终态投影下 content 为空串、hasContent 为 false，不抛 NPE
+        Assertions.assertFalse(tr.hasContentItems());
+        ChatResponse r = tr.snapshotTerminal();
+        Assertions.assertFalse(r.hasContent()); // 仅 media，文本为空
+        Assertions.assertEquals("", r.getContent());
+        Assertions.assertEquals("", r.getText());
     }
     
     @Test
@@ -602,8 +599,8 @@ public class AssistantMessageTest {
         }
 
         @Override
-        public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
-            return false;
+        public void parseResponseJson(ChatStreamContext ctx, String data) {
+            //测试方言不解析响应
         }
 
         /** 暴露 projectTextContent 便于单测 */
@@ -613,15 +610,15 @@ public class AssistantMessageTest {
 
         /** 暴露 parseAssistantContentBlocks 便于单测 */
         public List<ContentBlock> parseAssistantContentBlocksPublic(
-                ChatResponseDefault resp, ONode oContent, ONode oMessage) {
-            return parseAssistantContentBlocks(resp, oContent, oMessage);
+                ChatAccumulator acc, ONode oContent, ONode oMessage) {
+            return parseAssistantContentBlocks(acc, oContent, oMessage);
         }
     }
 
     /**
      * 暴露 contentBuilder 写入，便于聚合测试
      */
-    static class TestResponse extends ChatResponseDefault {
+    static class TestResponse extends ChatAccumulator {
         public TestResponse() {
             super(new ChatRequest(
                     new ChatConfig(),
@@ -633,8 +630,7 @@ public class AssistantMessageTest {
                     true), true);
         }
 
-        public void appendText(String text) {
-           textBuilder.append(text);
+        public void appendText(String text) {           super.appendText(text);
         }
     }
 

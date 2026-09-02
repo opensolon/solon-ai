@@ -19,8 +19,9 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
+import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
@@ -180,18 +181,18 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
     }
 
     @Override
-    public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
-        return responseParser.parseResponse(resp, json);
+    public void parseResponseJson(ChatStreamContext ctx, String data) {
+        responseParser.parseResponse(ctx, data);
     }
 
     @Override
-    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp,
+    public ONode buildAssistantToolCallMessageNode(ChatAccumulator acc,
                                                     Map<String, ToolCallBuilder> toolCallBuilders) {
-        return requestBuilder.buildAssistantToolCallMessageNode(resp, toolCallBuilders);
+        return requestBuilder.buildAssistantToolCallMessageNode(acc, toolCallBuilders);
     }
 
     @Override
-    public List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
+    public List<AssistantMessage> parseAssistantMessage(ChatAccumulator acc, ONode oMessage) {
         // 处理 steps 数组格式（来自 buildAssistantToolCallMessageNode）
         // 格式: [{type:"function_call", name:"...", id:"...", arguments:{...}}, ...]
         if (oMessage != null && oMessage.isArray()) {
@@ -247,6 +248,6 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
             return messages;
         }
 
-        return super.parseAssistantMessage(resp, oMessage);
+        return super.parseAssistantMessage(acc, oMessage);
     }
 }

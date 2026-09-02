@@ -16,11 +16,12 @@
 package org.noear.solon.ai.llm.dialect.openai;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.ai.chat.ChatChoice;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRequest;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.ChatAccumulator;
+import org.noear.solon.ai.chat.event.ChatStreamContextDefault;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 
@@ -35,11 +36,18 @@ public class OpenaiChatDialectStreamTest {
     private final ChatConfig config = new ChatConfig();
     private final OpenaiChatDialect dialect = OpenaiChatDialect.getInstance();
 
-    private ChatResponseDefault newStreamResponse() {
+    private ChatAccumulator newStreamResponse() {
         ChatOptions options = ChatOptions.of();
         ChatRequest req = new ChatRequest(config, dialect, options,
                 InMemoryChatSession.builder().build(), ChatMessage.ofSystem("test"), null, true);
-        return new ChatResponseDefault(req, true);
+        return new ChatAccumulator(req, true);
+    }
+
+    /**
+     * 走方言的唯一解析入口；单测不关心事件，故用「不发事件」的上下文
+     */
+    private void parse(ChatAccumulator resp, String json) {
+        dialect.parseResponseJson(ChatStreamContextDefault.ofNoEmit(config, resp), json);
     }
 
     private String chunk(String content) {
@@ -64,28 +72,21 @@ public class OpenaiChatDialectStreamTest {
     /**
      * 逐帧文本拼接（模拟核心层聚合：把每个 choice 的 textRaw 依次追加）
      */
-    private String joinText(ChatResponseDefault resp) {
-        return joinText(resp, -1);
-    }
-
-    private String joinText(ChatResponseDefault resp, int index) {
+    private String joinText(ChatAccumulator resp) {
         StringBuilder buf = new StringBuilder();
-        for (ChatChoice choice : resp.getChoices()) {
-            if (index >= 0 && choice.index() != index) {
-                continue;
-            }
-            if (choice.getMessage() != null && choice.getMessage().getTextRaw() != null) {
-                buf.append(choice.getMessage().getTextRaw());
+        for (AssistantMessage choice : resp.getContentItems()) {
+            if (choice != null && choice.getTextRaw() != null) {
+                buf.append(choice.getTextRaw());
             }
         }
         return buf.toString();
     }
 
-    private String joinThinking(ChatResponseDefault resp) {
+    private String joinThinking(ChatAccumulator resp) {
         StringBuilder buf = new StringBuilder();
-        for (ChatChoice choice : resp.getChoices()) {
-            if (choice.getMessage() != null && choice.getMessage().getThinkingRaw() != null) {
-                buf.append(choice.getMessage().getThinkingRaw());
+        for (AssistantMessage choice : resp.getContentItems()) {
+            if (choice != null && choice.getThinkingRaw() != null) {
+                buf.append(choice.getThinkingRaw());
             }
         }
         return buf.toString();
@@ -93,60 +94,61 @@ public class OpenaiChatDialectStreamTest {
 
     @Test
     public void cumulativeContentSnapshot_isNormalizedToSuffix() {
-        ChatResponseDefault resp = newStreamResponse();
+        ChatAccumulator resp = newStreamResponse();
 
-        dialect.parseResponseJson(config, resp, chunk("所有代码修改完成。"));
-        dialect.parseResponseJson(config, resp, chunk("所有代码修改完成。更新任务进度并运行验证"));
+        parse(resp, chunk("所有代码修改完成。"));
+        parse(resp, chunk("所有代码修改完成。更新任务进度并运行验证"));
 
         assertEquals("所有代码修改完成。更新任务进度并运行验证", joinText(resp));
     }
 
     @Test
     public void cumulativeReasoningSnapshot_isNormalizedToSuffix() {
-        ChatResponseDefault resp = newStreamResponse();
+        ChatAccumulator resp = newStreamResponse();
 
-        dialect.parseResponseJson(config, resp, reasoningChunk("先确认累计快照的判定门槛"));
-        dialect.parseResponseJson(config, resp, reasoningChunk("先确认累计快照的判定门槛，再决定是否截断"));
+        parse(resp, reasoningChunk("先确认累计快照的判定门槛"));
+        parse(resp, reasoningChunk("先确认累计快照的判定门槛，再决定是否截断"));
 
         assertEquals("先确认累计快照的判定门槛，再决定是否截断", joinThinking(resp));
     }
 
     @Test
     public void duplicatedSnapshotFrame_isDroppedWithoutEmptyChoice() {
-        ChatResponseDefault resp = newStreamResponse();
+        ChatAccumulator resp = newStreamResponse();
 
-        dialect.parseResponseJson(config, resp, chunk("所有代码修改完成。"));
-        dialect.parseResponseJson(config, resp, chunk("所有代码修改完成。更新任务进度"));
-        int choicesBefore = resp.getChoices().size();
+        parse(resp, chunk("所有代码修改完成。"));
+        parse(resp, chunk("所有代码修改完成。更新任务进度"));
+        int choicesBefore = resp.getContentItems().size();
 
-        // 完全重复的快照帧：整帧丢弃，不能给订阅侧多推一条空 delta
-        assertTrue(dialect.parseResponseJson(config, resp, chunk("所有代码修改完成。更新任务进度")));
+        // 完全重复的快照帧：整帧丢弃，不能给订阅侧多推一条空 delta。
+        // 内容项数量不变即为丢弃生效的信号
+        parse(resp, chunk("所有代码修改完成。更新任务进度"));
 
-        assertEquals(choicesBefore, resp.getChoices().size(), "重复快照帧不应产生新的 choice");
+        assertEquals(choicesBefore, resp.getContentItems().size(), "重复快照帧不应产生新的内容项");
         assertEquals("所有代码修改完成。更新任务进度", joinText(resp));
     }
 
     @Test
     public void shortLegitDeltas_areNotTreatedAsSnapshot() {
-        ChatResponseDefault resp = newStreamResponse();
+        ChatAccumulator resp = newStreamResponse();
 
         // 合规流的短增量极易偶然构成前缀关系（"好" / "好的"、"**" / "**"），
         // 必须原样保留，否则会静默篡改正常输出
-        dialect.parseResponseJson(config, resp, chunk("好"));
-        dialect.parseResponseJson(config, resp, chunk("好的"));
-        dialect.parseResponseJson(config, resp, chunk("**"));
-        dialect.parseResponseJson(config, resp, chunk("**"));
+        parse(resp, chunk("好"));
+        parse(resp, chunk("好的"));
+        parse(resp, chunk("**"));
+        parse(resp, chunk("**"));
 
         assertEquals("好好的****", joinText(resp));
     }
 
     @Test
     public void repeatedLongDelta_isKeptWhenNotPrefixOfAggregation() {
-        ChatResponseDefault resp = newStreamResponse();
+        ChatAccumulator resp = newStreamResponse();
 
         // 长增量但不构成前缀关系：不得改写
-        dialect.parseResponseJson(config, resp, chunk("第一段较长的输出内容"));
-        dialect.parseResponseJson(config, resp, chunk("第二段完全不同的内容"));
+        parse(resp, chunk("第一段较长的输出内容"));
+        parse(resp, chunk("第二段完全不同的内容"));
 
         assertEquals("第一段较长的输出内容第二段完全不同的内容", joinText(resp));
     }
@@ -157,14 +159,14 @@ public class OpenaiChatDialectStreamTest {
      */
     @Test
     public void multiChoiceSnapshot_isNormalizedPerIndex() {
-        ChatResponseDefault resp = newStreamResponse();
+        ChatAccumulator resp = newStreamResponse();
 
-        dialect.parseResponseJson(config, resp, twoChoiceChunk("第一路的较长输出内容", "第二路的较长输出内容"));
-        dialect.parseResponseJson(config, resp,
-                twoChoiceChunk("第一路的较长输出内容-续一", "第二路的较长输出内容-续二"));
+        parse(resp, twoChoiceChunk("第一路的较长输出内容", "第二路的较长输出内容"));
+        parse(resp, twoChoiceChunk("第一路的较长输出内容-续一", "第二路的较长输出内容-续二"));
 
-        assertEquals("第一路的较长输出内容-续一", joinText(resp, 0));
-        assertEquals("第二路的较长输出内容-续二", joinText(resp, 1));
+        // 内容项已无 index（4.1 取消候选维度），改断合并后的到达序列：
+        // 两路各自被正确归一成增量时，合并结果恰为 f1c0 + f1c1 + f2c0增量 + f2c1增量
+        assertEquals("第一路的较长输出内容第二路的较长输出内容-续一-续二", joinText(resp));
     }
 
     /**
@@ -173,12 +175,12 @@ public class OpenaiChatDialectStreamTest {
      */
     @Test
     public void refusalText_isCountedIntoSnapshotBaseline() {
-        ChatResponseDefault resp = newStreamResponse();
+        ChatAccumulator resp = newStreamResponse();
 
-        dialect.parseResponseJson(config, resp,
+        parse(resp,
                 "{\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"m\",\"choices\":[{\"index\":0,"
                         + "\"delta\":{\"role\":\"assistant\",\"refusal\":\"抱歉，我不能协助该请求。\"},\"finish_reason\":null}]}");
-        dialect.parseResponseJson(config, resp, chunk("抱歉，我不能协助该请求。可以换个问法"));
+        parse(resp, chunk("抱歉，我不能协助该请求。可以换个问法"));
 
         assertEquals("抱歉，我不能协助该请求。可以换个问法", joinText(resp));
     }

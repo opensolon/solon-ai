@@ -20,11 +20,12 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
+import org.noear.solon.ai.chat.event.ChatEventType;
+import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,8 +48,11 @@ public class OpenaiChatDialect extends AbstractChatDialect {
      * 流式快照归一状态（按请求隔离，内部再按 choice.index 隔离；正文与思考各自独立判定）
      *
      * <p>与官方 SDK 的 ChatCompletionAccumulator 对齐：官方把 messageContents / toolCallBuilders
-     * 全部按 choice.index() 建 Map，n&gt;1 时各路 choice 的文本互不干扰。若共用一份累积基准，
+     * 全部按响应里的 {@code choices[].index} 建 Map，n&gt;1 时各路 choice 的文本互不干扰。若共用一份累积基准，
      * 多路交错下发会把基准搅成 c0f1+c1f1+c0f2…，快照判定失效且存在误截断风险。</p>
+     *
+     * <p>注意：这里的 index 是<b>协议字段</b>，只用于本方言内部隔离累积基准；框架的
+     * 框架侧的内容项已不带 index（4.1 取消候选维度）。</p>
      */
     private static class SnapshotState {
         private final Map<Integer, SnapshotDeltaNormalizer> contents = new HashMap<>();
@@ -99,131 +103,202 @@ public class OpenaiChatDialect extends AbstractChatDialect {
         return oNode;
     }
 
+    /**
+     * 解析响应（事件形态）
+     *
+     * <p>OpenAI chat/completions 协议的流式帧只承载内容增量（正文 / 思考 / 工具调用分片），
+     * 没有独立的生命周期或服务端工具事件，因此内容主干统一交由核心从内容项转换为
+     * TEXT_DELTA / THINKING_DELTA / TOOL_CALL_CHUNK 并保证边界，此处只额外发射拒答与错误事件。</p>
+     *
+     * <p>每帧只解析一次 JSON：正文解析、拒答事件、错误事件共用同一份 {@link ONode}。</p>
+     *
+     * @since 4.1
+     */
     @Override
-    public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
-        if ("[DONE]".equals(json)) { //不是数据结构
-            resp.attrRemove(SNAPSHOT_STATE_KEY);
-            if(resp.isFinished() == false) {
-                resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
-                resp.setFinished(true);
+    public void parseResponseJson(ChatStreamContext ctx, String data) {
+        ChatAccumulator acc = ctx.getAccumulator();
+
+        if ("[DONE]".equals(data)) { //不是数据结构
+            acc.attrRemove(SNAPSHOT_STATE_KEY);
+            if (acc.isFinished() == false) {
+                acc.addContentItem(new AssistantMessage(""));
+                acc.setFinished(true);
             }
-            return true;
+            return;
         }
 
-        //有些中转会直接输出："error xxx" 内容
-        if (tryParseErrorText(resp, json)) {
-            return true;
+        //有些中转会直接输出："error xxx" 内容（非 JSON，不能进 ONode.ofJson）
+        if (tryParseErrorText(acc, data)) {
+            emitError(ctx, acc, null);
+            return;
         }
 
         //解析
-        ONode oResp = ONode.ofJson(json);
+        ONode oResp = ONode.ofJson(data);
 
         if (oResp.isObject() == false) {
-            return false;
+            return;
         }
 
+        parseFrameNode(ctx, acc, oResp);
+        emitRefusalEvents(ctx, oResp);
+
+        if (acc.getError() != null) {
+            emitError(ctx, acc, oResp);
+        }
+    }
+
+    /**
+     * 解析一帧（已解析好的 JSON 节点）
+     *
+     * @since 4.1
+     */
+    private void parseFrameNode(ChatStreamContext ctx, ChatAccumulator acc, ONode oResp) {
         // 非官方规范的顶层错误形态（个别兼容端点）与官方 {error:{message,type,code}} 统一走规范提取，
         // 避免 message 为对象时取出 null
         if ("error".equals(oResp.get("object").getString())) {
-            resp.setError(new ChatException(OpenaiDialectSupport.extractErrorMessage(
+            acc.setError(new ChatException(OpenaiDialectSupport.extractErrorMessage(
                     oResp.hasKey("error") ? oResp.get("error") : oResp.getOrNull("message"))));
+            return;
         } else if (oResp.hasKey("error")) {
             // 规范错误提取：error 为对象（{message,type,code}），不能整体序列化为字符串
-            resp.setError(new ChatException(OpenaiDialectSupport.extractErrorMessage(oResp.get("error"))));
-        } else {
-            resp.setModel(oResp.get("model").getString());
+            acc.setError(new ChatException(OpenaiDialectSupport.extractErrorMessage(oResp.get("error"))));
+            return;
+        }
 
-            // created 为官方必填，但部分兼容端点可能缺失；缺省或非法时用当前时间兜底，避免得到 epoch-0
-            long createdSeconds = oResp.get("created").getLong();
-            Date created = createdSeconds > 0 ? new Date(createdSeconds * 1000) : new Date();
+        acc.setModel(oResp.get("model").getString());
+        // 供应商响应标识（chatcmpl-xxx，同一响应的各 chunk 一致）：记录后本步事件自动预填
+        ctx.setProviderResponseId(oResp.get("id").getString());
 
-            // 官方 include_usage=true 时最后一个 usage chunk 的 choices 为空数组；个别端点可能缺省该字段，做防御
-            ONode oChoices = oResp.getOrNull("choices");
-            if (oChoices != null && oChoices.isArray()) {
-                for (ONode oChoice1 : oChoices.getArray()) {
-                    int index = oChoice1.get("index").getInt();
-                    String finish_reason = oChoice1.get("finish_reason").getString();
+        // 官方 include_usage=true 时最后一个 usage chunk 的 choices 为空数组；个别端点可能缺省该字段，做防御
+        ONode oChoices = oResp.getOrNull("choices");
+        if (oChoices != null && oChoices.isArray()) {
+            for (ONode oChoice1 : oChoices.getArray()) {
+                int index = oChoice1.get("index").getInt();
+                String finish_reason = oChoice1.get("finish_reason").getString();
 
-                    List<AssistantMessage> messageList;
-                    if (resp.isStream()) {   //object=chat.completion.chunk
-                        // OpenAI 兼容端点中有少数实现把累计快照放在 delta.content/reasoning_content
-                        // 中。核心聚合器按协议只接受增量，因此在方言边界把快照转换为增量。
-                        ONode normalized = normalizeStreamDelta(resp, index, oChoice1);
-                        if (normalized == null) {
-                            // 整帧都是已交付过的快照重复：不解析（避免污染 in_thinking 状态机）、不推空 choice。
-                            // 仍带 finish_reason 时要继续走完成流程，由下方补位逻辑推结束帧
-                            if (Utils.isEmpty(finish_reason)) {
-                                continue;
-                            }
-                            messageList = Collections.emptyList();
-                        } else {
-                            messageList = parseAssistantMessage(resp, normalized.get("delta"));
+                List<AssistantMessage> messageList;
+                if (acc.isStream()) {   //object=chat.completion.chunk
+                    // OpenAI 兼容端点中有少数实现把累计快照放在 delta.content/reasoning_content
+                    // 中。核心聚合器按协议只接受增量，因此在方言边界把快照转换为增量。
+                    ONode normalized = normalizeStreamDelta(acc, index, oChoice1);
+                    if (normalized == null) {
+                        // 整帧都是已交付过的快照重复：不解析（避免污染 in_thinking 状态机）、不推空内容项。
+                        // 仍带 finish_reason 时要继续走完成流程，由下方补位逻辑推结束帧
+                        if (Utils.isEmpty(finish_reason)) {
+                            continue;
                         }
+                        messageList = Collections.emptyList();
                     } else {
-                        //object=chat.completion
-                        messageList = parseAssistantMessage(resp, oChoice1.get("message"));
+                        messageList = parseAssistantMessage(acc, normalized.get("delta"));
                     }
-
-                    for (AssistantMessage msg1 : messageList) {
-                        resp.addChoice(new ChatChoice(index, created, finish_reason, msg1));
-                    }
-
-                    if (Utils.isNotEmpty(finish_reason)) {
-                        resp.setFinished(true);
-                        resp.lastFinishReason = finish_reason;
-                    }
-                }
-            }
-
-            if (resp.isStream() == false) {
-                // 非流式：一次就是全部。部分兼容端点不回 finish_reason，此处统一标完成，
-                // 与 Responses 方言的非流式语义保持一致，避免上层拿到 isFinished=false
-                resp.setFinished(true);
-            }
-
-            if (resp.isFinished()) {
-                if (resp.hasChoices() == false) { //完成时。如果为空，则补位
-                    resp.addChoice(new ChatChoice(0, created, resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
-                }
-            }
-
-            ONode oUsage = oResp.getOrNull("usage");
-            if (oUsage != null) {
-                long promptTokens = oUsage.get("prompt_tokens").getLong();
-                long completionTokens = oUsage.get("completion_tokens").getLong();
-                // 官方 SDK 中 total_tokens 为 optional（CompletionUsage），缺省时用输入+输出兜底
-                long totalTokens = oUsage.hasKey("total_tokens")
-                        ? oUsage.get("total_tokens").getLong() : (promptTokens + completionTokens);
-
-                // 思考 token 统计：优先 DeepSeek 形态 completion_tokens_details.reasoning_tokens，兜底 think_tokens
-                long thinkTokens = 0L;
-                ONode completionTokensDetails = oUsage.getOrNull("completion_tokens_details");
-                if (completionTokensDetails != null) {
-                    thinkTokens = completionTokensDetails.get("reasoning_tokens").getLong();
-                }
-                if (thinkTokens == 0L) {
-                    thinkTokens = oUsage.get("think_tokens").getLong();
+                } else {
+                    //object=chat.completion
+                    messageList = parseAssistantMessage(acc, oChoice1.get("message"));
                 }
 
-                // 缓存 token 统计（官方 prompt_tokens_details 含 cached_tokens / cache_write_tokens；
-                // 另兼容 DeepSeek 形态 prompt_cache_hit_tokens）
-                long cacheReadInputTokens = 0L;
-                long cacheCreationInputTokens = 0L;
-                ONode promptTokensDetails = oUsage.getOrNull("prompt_tokens_details");
-                if (promptTokensDetails != null) {
-                    cacheReadInputTokens = promptTokensDetails.get("cached_tokens").getLong();
-                    cacheCreationInputTokens = promptTokensDetails.get("cache_write_tokens").getLong();
-                }
-                if (cacheReadInputTokens == 0L) {
-                    cacheReadInputTokens = oUsage.get("prompt_cache_hit_tokens").getLong();
+                for (AssistantMessage msg1 : messageList) {
+                    acc.addContentItem(msg1);
                 }
 
-                resp.setUsage(new AiUsage(promptTokens, thinkTokens, completionTokens, totalTokens,
-                        cacheCreationInputTokens, cacheReadInputTokens, oUsage));
+                if (Utils.isNotEmpty(finish_reason)) {
+                    acc.setFinished(true);
+                    acc.lastFinishReason = finish_reason;
+                }
             }
         }
 
-        return true;
+        if (acc.isStream() == false) {
+            // 非流式：一次就是全部。部分兼容端点不回 finish_reason，此处统一标完成，
+            // 与 Responses 方言的非流式语义保持一致，避免上层拿到 isFinished=false
+            acc.setFinished(true);
+        }
+
+        if (acc.isFinished()) {
+            if (acc.hasContentItems() == false) { //完成时。如果为空，则补位
+                acc.addContentItem(new AssistantMessage(""));
+            }
+        }
+
+        ONode oUsage = oResp.getOrNull("usage");
+        if (oUsage != null) {
+            long promptTokens = oUsage.get("prompt_tokens").getLong();
+            long completionTokens = oUsage.get("completion_tokens").getLong();
+            // 官方 SDK 中 total_tokens 为 optional（CompletionUsage），缺省时用输入+输出兜底
+            long totalTokens = oUsage.hasKey("total_tokens")
+                    ? oUsage.get("total_tokens").getLong() : (promptTokens + completionTokens);
+
+            // 思考 token 统计：优先 DeepSeek 形态 completion_tokens_details.reasoning_tokens，兜底 think_tokens
+            long thinkTokens = 0L;
+            ONode completionTokensDetails = oUsage.getOrNull("completion_tokens_details");
+            if (completionTokensDetails != null) {
+                thinkTokens = completionTokensDetails.get("reasoning_tokens").getLong();
+            }
+            if (thinkTokens == 0L) {
+                thinkTokens = oUsage.get("think_tokens").getLong();
+            }
+
+            // 缓存 token 统计（官方 prompt_tokens_details 含 cached_tokens / cache_write_tokens；
+            // 另兼容 DeepSeek 形态 prompt_cache_hit_tokens）
+            long cacheReadInputTokens = 0L;
+            long cacheCreationInputTokens = 0L;
+            ONode promptTokensDetails = oUsage.getOrNull("prompt_tokens_details");
+            if (promptTokensDetails != null) {
+                cacheReadInputTokens = promptTokensDetails.get("cached_tokens").getLong();
+                cacheCreationInputTokens = promptTokensDetails.get("cache_write_tokens").getLong();
+            }
+            if (cacheReadInputTokens == 0L) {
+                cacheReadInputTokens = oUsage.get("prompt_cache_hit_tokens").getLong();
+            }
+
+            acc.setUsage(new AiUsage(promptTokens, thinkTokens, completionTokens, totalTokens,
+                    cacheCreationInputTokens, cacheReadInputTokens, oUsage));
+        }
+    }
+
+    /**
+     * 发射错误事件
+     *
+     * @since 4.1
+     */
+    private void emitError(ChatStreamContext ctx, ChatAccumulator acc, ONode raw) {
+        ctx.emit(ctx.event(ChatEventType.ERROR)
+                .rawType("error")
+                .error(acc.getError())
+                .raw(raw)
+                .build());
+    }
+
+    private void emitRefusalEvent(ChatStreamContext ctx, String rawType, ONode message, ONode raw) {
+        if (message == null || message.hasKey("refusal") == false) {
+            return;
+        }
+
+        String refusal = message.get("refusal").getString();
+        if (Utils.isNotEmpty(refusal)) {
+            ctx.emit(ctx.event(ChatEventType.REFUSAL_DELTA)
+                    .rawType(rawType)
+                    .text(refusal)
+                    .raw(raw)
+                    .build());
+        }
+    }
+
+    private void emitRefusalEvents(ChatStreamContext ctx, ONode response) {
+        ONode choices = response.getOrNull("choices");
+        if (choices == null || choices.isArray() == false) {
+            return;
+        }
+
+        String rawType = response.hasKey("object")
+                ? response.get("object").getString() : "chat.completion.chunk";
+        for (ONode choice : choices.getArray()) {
+            ONode message = choice.getOrNull("delta");
+            if (message == null) {
+                message = choice.getOrNull("message");
+            }
+            emitRefusalEvent(ctx, rawType, message, response);
+        }
     }
 
     /**
@@ -242,7 +317,7 @@ public class OpenaiChatDialect extends AbstractChatDialect {
      * @param index choice 序号（n&gt;1 时各路 choice 的累积基准必须隔离，与官方 SDK 的按 index 累积一致）
      * @return 归一后的 choice；整帧文本都是已交付过的重复快照且无 tool_calls 时返回 null（表示可整帧丢弃）
      */
-    private ONode normalizeStreamDelta(ChatResponseDefault resp, int index, ONode choice) {
+    private ONode normalizeStreamDelta(ChatAccumulator acc, int index, ONode choice) {
         if (choice == null || choice.hasKey("delta") == false) {
             return choice;
         }
@@ -263,7 +338,7 @@ public class OpenaiChatDialect extends AbstractChatDialect {
             return choice; //无文本可判定（role 帧 / 纯 tool_calls 帧）
         }
 
-        SnapshotState state = resp.attrIfAbsent(SNAPSHOT_STATE_KEY, k -> new SnapshotState());
+        SnapshotState state = acc.attrIfAbsent(SNAPSHOT_STATE_KEY, k -> new SnapshotState());
 
         boolean changed = false;
 

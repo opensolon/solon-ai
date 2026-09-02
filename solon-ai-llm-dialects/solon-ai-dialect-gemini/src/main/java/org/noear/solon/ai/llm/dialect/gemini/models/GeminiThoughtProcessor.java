@@ -17,7 +17,7 @@ package org.noear.solon.ai.llm.dialect.gemini.models;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
@@ -45,11 +45,11 @@ public class GeminiThoughtProcessor {
     /**
      * 解析 Gemini 助手消息，处理思考内容和工具调用
      *
-     * @param resp     聊天响应
+     * @param acc     聊天响应
      * @param oContent 消息内容节点
      * @return 解析后的助手消息列表
      */
-    public List<AssistantMessage> parse(ChatResponseDefault resp, ONode oContent) {
+    public List<AssistantMessage> parse(ChatAccumulator acc, ONode oContent) {
         List<AssistantMessage> messageList = new ArrayList<>();
 
         if (oContent == null) {
@@ -90,8 +90,8 @@ public class GeminiThoughtProcessor {
                     // 续帧兼容：OpenAI 兼容网关（如 bearlab.ai）流式转 Gemini 时会把 functionCall 分帧发送
                     // （帧1 带 name/空 args，帧2 带 args/空 name）。name 为空且已有调用上下文时，视为续帧，
                     // 从 lastToolCallId 恢复函数名，避免生成 name 为空的无效 ToolCall。
-                    if (Utils.isEmpty(functionName) && Utils.isNotEmpty(resp.lastToolCallId)) {
-                        functionName = resp.lastToolCallId;
+                    if (Utils.isEmpty(functionName) && Utils.isNotEmpty(acc.lastToolCallId)) {
+                        functionName = acc.lastToolCallId;
                     }
                     // Gemini 3+ 官方规范：functionCall 携带唯一调用 id，functionResponse 回传时必须带上相同 id。
                     // 解析并保留该 id；服务端（含 OpenAI 兼容网关转 Gemini）不返回 id 时为 null ——
@@ -114,11 +114,11 @@ public class GeminiThoughtProcessor {
                     Map<String, Object> argsMap = new LinkedHashMap<>();
                     if (argsNode != null && argsNode.isObject()) {
                         argsMap = argsNode.toBean(Map.class);
-                        if (!argsMap.isEmpty() || !resp.isStream()) {
+                        if (!argsMap.isEmpty() || !acc.isStream()) {
                             argsJson = argsNode.toJson();
                         }
                     }
-                    if (argsJson == null && !resp.isStream()) {
+                    if (argsJson == null && !acc.isStream()) {
                         argsJson = "{}";
                     }
                             
@@ -129,10 +129,10 @@ public class GeminiThoughtProcessor {
                         int seen = nameCount.merge(functionName, 1, Integer::sum);
                         callIndex = seen == 1 ? functionName : functionName + "#" + (seen - 1);
                     } else {
-                        callIndex = resp.lastToolCallId;
+                        callIndex = acc.lastToolCallId;
                     }
                     if (Utils.isNotEmpty(functionName)) {
-                        resp.lastToolCallId = functionName;
+                        acc.lastToolCallId = functionName;
                     }
                     ToolCall toolCall = new ToolCall(callIndex,
                             callId,
@@ -148,7 +148,7 @@ public class GeminiThoughtProcessor {
                             String thoughtSignature = thoughtSigNode.getString();
                             if (Utils.isNotEmpty(thoughtSignature)) {
                                 toolCall.setThoughtSignature(thoughtSignature);
-                                resp.thinkingSignature = thoughtSignature;
+                                acc.thinkingSignature = thoughtSignature;
                             }
                         }
                     }
@@ -168,26 +168,26 @@ public class GeminiThoughtProcessor {
             }
                     
             if (!toolCalls.isEmpty()) {
-                if (resp.in_thinking && resp.isStream()) {
+                if (acc.in_thinking && acc.isStream()) {
                     messageList.add(new AssistantMessage("", "", true));
                 }
-                resp.in_thinking = false;
+                acc.in_thinking = false;
                         
                 List<ContentBlock> blocksForMsg = null;
                 if (!mediaBlocks.isEmpty()) {
                     blocksForMsg = new ArrayList<>(mediaBlocks);
-                    resp.addMediaBlocks(mediaBlocks);
+                    acc.addMediaBlocks(mediaBlocks);
                 }
                 AssistantMessage msg = new AssistantMessage("", "",false, null, null, toolCalls, null, blocksForMsg);
                 messageList.add(msg);
                 return messageList;
             }
                         
-            if (resp.isStream()) {
+            if (acc.isStream()) {
                 if (hasThoughtPart && !hasNormalPart && !hasMediaPart) {
-                    if (!resp.in_thinking) {
+                    if (!acc.in_thinking) {
                         messageList.add(new AssistantMessage("","", true));
-                        resp.in_thinking = true;
+                        acc.in_thinking = true;
                     }
                         
                     for (ONode oPart : oParts.getArray()) {
@@ -202,9 +202,9 @@ public class GeminiThoughtProcessor {
                         }
                     }
                 } else if (!hasThoughtPart && (hasNormalPart || hasMediaPart)) {
-                    if (resp.in_thinking) {
+                    if (acc.in_thinking) {
                         messageList.add(new AssistantMessage("","", true));
-                        resp.in_thinking = false;
+                        acc.in_thinking = false;
                     }
 
                     // 有媒体时：合并为单条消息（文本 + media blocks），避免文本先 delta 再整段重复
@@ -226,7 +226,7 @@ public class GeminiThoughtProcessor {
                     }
 
                     if (!mediaBlocks.isEmpty()) {
-                        resp.addMediaBlocks(mediaBlocks);
+                        acc.addMediaBlocks(mediaBlocks);
                         List<ContentBlock> blocks = new ArrayList<>();
                         if (normalContent.length() > 0) {
                             blocks.add(TextBlock.of(normalContent.toString()));
@@ -235,7 +235,7 @@ public class GeminiThoughtProcessor {
                         messageList.add(new AssistantMessage(normalContent.toString(), "",false, null, null, null, null, blocks));
                     }
                 } else if (hasThoughtPart && (hasNormalPart || hasMediaPart)) {
-                    if (!resp.in_thinking) {
+                    if (!acc.in_thinking) {
                         messageList.add(new AssistantMessage("", "", true));
                     }
 
@@ -252,7 +252,7 @@ public class GeminiThoughtProcessor {
                     }
 
                     messageList.add(new AssistantMessage("","", true));
-                    resp.in_thinking = false;
+                    acc.in_thinking = false;
 
                     // 有媒体时：合并为单条消息；无媒体时按 part 增量推送
                     StringBuilder normalContent = new StringBuilder();
@@ -272,7 +272,7 @@ public class GeminiThoughtProcessor {
                     }
 
                     if (!mediaBlocks.isEmpty()) {
-                        resp.addMediaBlocks(mediaBlocks);
+                        acc.addMediaBlocks(mediaBlocks);
                         List<ContentBlock> blocks = new ArrayList<>();
                         if (normalContent.length() > 0) {
                             blocks.add(TextBlock.of(normalContent.toString()));
@@ -314,7 +314,7 @@ public class GeminiThoughtProcessor {
                         blocksForMsg.add(TextBlock.of(normalContent.toString()));
                     }
                     blocksForMsg.addAll(mediaBlocks);
-                    resp.addMediaBlocks(mediaBlocks);
+                    acc.addMediaBlocks(mediaBlocks);
                 }
     
                 if (thoughtContent.length() > 0 && normalContent.length() > 0) {

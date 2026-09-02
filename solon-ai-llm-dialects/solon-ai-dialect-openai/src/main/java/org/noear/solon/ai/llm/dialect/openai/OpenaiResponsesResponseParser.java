@@ -18,12 +18,13 @@ package org.noear.solon.ai.llm.dialect.openai;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
-import org.noear.solon.ai.chat.ChatChoice;
 import org.noear.solon.ai.chat.ChatException;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.ai.chat.event.ChatEventType;
+import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
@@ -67,34 +68,38 @@ public class OpenaiResponsesResponseParser {
     /**
      * 解析响应 JSON
      *
-     * @param resp 聊天响应对象
+     * @param ctx  流上下文
      * @param json 响应 JSON 字符串
      * @return 是否有有效的选择
-     * @author oisin lu
-     * @date 2026年1月28日
+     * @since 4.1
      */
-    public boolean parseResponse(ChatResponseDefault resp, String json) {
-        if (resp.isStream()) {
-            return parseStreamResponse(resp, json);
+    public boolean parseResponse(ChatStreamContext ctx, String json) {
+        if (ctx.getAccumulator().isStream()) {
+            return parseStreamResponse(ctx, json);
         } else {
-            return parseNonStreamResponse(resp, json);
+            return parseNonStreamResponse(ctx, json);
         }
     }
 
     /**
      * 获取或创建流式状态
      */
-    private StreamState getOrCreateState(ChatResponseDefault resp) {
-        return resp.attrIfAbsent(STREAM_STATE_KEY, k -> new StreamState());
+    private StreamState getOrCreateState(ChatAccumulator acc) {
+        return acc.attrIfAbsent(STREAM_STATE_KEY, k -> new StreamState());
     }
 
     /**
      * 解析流式响应
      *
-     * @author oisin lu
-     * @date 2026年1月28日
+     * <p>内容主干（正文 / 思考 / 工具调用）仍以内容项表达，由核心统一转成事件与边界；
+     * 本方法只额外发射「旧实现下只能被丢弃或降级成文本」的事件：生命周期、服务端工具、
+     * 思考签名、拒答、媒体渐进帧等。</p>
+     *
+     * @since 4.1
      */
-    public boolean parseStreamResponse(ChatResponseDefault resp, String json) {
+    public boolean parseStreamResponse(ChatStreamContext ctx, String json) {
+        ChatAccumulator acc = ctx.getAccumulator();
+
         if (json == null || json.isEmpty()) {
             return false;
         }
@@ -102,7 +107,7 @@ public class OpenaiResponsesResponseParser {
             log.debug("OpenAI Responses stream raw response: {}", json);
         }
         String[] lines = json.split("\n");
-        boolean hasChoices = false;
+        boolean hasContent = false;
         boolean hasMedia = false;
         for (String line : lines) {
             line = line.trim();
@@ -119,10 +124,10 @@ public class OpenaiResponsesResponseParser {
             }
             if (jsonData.isEmpty() || "[DONE]".equals(jsonData)) {
                 if ("[DONE]".equals(jsonData)) {
-                    resp.attrRemove(STREAM_STATE_KEY);
-                    if (resp.isFinished() == false) {
-                        resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
-                        resp.setFinished(true);
+                    acc.attrRemove(STREAM_STATE_KEY);
+                    if (acc.isFinished() == false) {
+                        acc.addContentItem(new AssistantMessage(""));
+                        acc.setFinished(true);
                     }
                     return true;
                 }
@@ -143,31 +148,71 @@ public class OpenaiResponsesResponseParser {
             if (oResp.hasKey("error")) {
                 // 顶层 error 帧：流已终止，先清理流式状态再返回
                 // 规范提取：error 为对象（{message,type,code}）时不能整体 getString（会得到 null）
-                resp.attrRemove(STREAM_STATE_KEY);
-                resp.setError(new ChatException(
+                acc.attrRemove(STREAM_STATE_KEY);
+                acc.setError(new ChatException(
                         OpenaiDialectSupport.extractErrorMessage(oResp.get("error"))));
+                ctx.emit(ctx.event(ChatEventType.ERROR)
+                        .rawType("error")
+                        .error(acc.getError())
+                        .raw(oResp)
+                        .build());
                 return true;
             }
 
             String eventType = oResp.get("type").getString();
             if ("error".equals(eventType)) {
-                resp.attrRemove(STREAM_STATE_KEY);
+                acc.attrRemove(STREAM_STATE_KEY);
                 // error 事件可能把 message/type/code 平链在帧顶层（无 error 子对象）
                 ONode oError = oResp.hasKey("error") ? oResp.get("error") : oResp;
-                resp.setError(new ChatException(OpenaiDialectSupport.extractErrorMessage(oError)));
+                acc.setError(new ChatException(OpenaiDialectSupport.extractErrorMessage(oError)));
+                ctx.emit(ctx.event(ChatEventType.ERROR)
+                        .rawType(eventType)
+                        .error(acc.getError())
+                        .raw(oResp)
+                        .build());
                 return true;
             } else if ("response.created".equals(eventType) || "response.in_progress".equals(eventType)
                     || "response.queued".equals(eventType)) {
                 // 响应创建/进行中/排队，可以设置模型信息
                 ONode response = oResp.get("response");
                 if (response != null) {
-                    resp.setModel(response.get("model").getString());
+                    acc.setModel(response.get("model").getString());
+                    // 供应商响应标识：记录一次，本步后续事件自动预填（关联供应商日志排障用）
+                    ctx.setProviderResponseId(response.get("id").getString());
                 }
+
+                // 旧实现下这三类帧被整帧丢弃，订阅方无法感知服务端状态推进
+                ctx.emit(ctx.event(ChatEventType.STATUS)
+                        .rawType(eventType)
+                        .itemId(response == null ? null : response.get("id").getString())
+                        .raw(oResp)
+                        .build());
+            } else if ("response.output_text.annotation.added".equals(eventType)) {
+                // 引用（联网搜索/文件检索的来源标注）：旧实现无分支，整帧丢弃
+                ONode annotation = oResp.getOrNull("annotation");
+                ctx.emit(ctx.event(ChatEventType.CITATION)
+                        .rawType(eventType)
+                        .itemId(oResp.get("item_id").getString())
+                        .index(oResp.get("annotation_index").getInt())
+                        .text(annotation == null ? null : annotation.get("url").getString())
+                        .raw(oResp)
+                        .build());
+            } else if (eventType != null && isServerToolEvent(eventType)) {
+                // 服务端工具（联网搜索 / 代码执行 / MCP / 文件检索 / 图像生成）：
+                // 旧实现完全无分支，整帧丢弃，订阅方无法知道模型正在调用服务端工具
+                emitServerToolEvent(ctx, eventType, oResp);
+            } else if ("response.refusal.done".equals(eventType)) {
+                // 拒答完成：增量已通过 delta 事件推送
+                ctx.emit(ctx.event(ChatEventType.CONTENT_FILTER)
+                        .rawType(eventType)
+                        .text(oResp.get("refusal").getString())
+                        .raw(oResp)
+                        .build());
             } else if ("response.output_item.added".equals(eventType)) {
                 // 新输出项添加
                 ONode item = oResp.get("item");
                 if (item != null) {
-                    StreamState state = getOrCreateState(resp);
+                    StreamState state = getOrCreateState(acc);
                     state.currentItemId = item.get("id").getString();
                     state.currentItemType = item.get("type").getString();
 
@@ -190,17 +235,17 @@ public class OpenaiResponsesResponseParser {
                     }
                 }
             } else if ("response.output_item.done".equals(eventType)) {
-                // 输出项完成：image_generation_call 仅收入 media 聚合，不再推空文本 choice（避免流式侧多一条空消息）
+                // 输出项完成：image_generation_call 仅收入 media 聚合，不再推空文本内容项（避免流式侧多一条空消息）
                 ONode item = oResp.get("item");
                 if (item != null && "image_generation_call".equals(item.get("type").getString())) {
                     ContentBlock imageBlock = parseImageGenerationCall(item);
                     if (imageBlock != null) {
-                        resp.addMediaBlocks(Collections.singletonList(imageBlock));
+                        acc.addMediaBlocks(Collections.singletonList(imageBlock));
                         hasMedia = true;
-                        // 不 addChoice：等待 response.completed / 文本 delta；media 由 getAggregationMessage 合并
+                        // 不推内容项：等待 response.completed / 文本 delta；media 由终态聚合合并
                     }
                 }
-                StreamState state = resp.attrAs(STREAM_STATE_KEY);
+                StreamState state = acc.attrAs(STREAM_STATE_KEY);
                 if (state != null) {
                     // 官方 OpenAI：reasoning 的 encrypted_content 只在 output_item.done 携带（added 帧通常为空）。
                     // 这里补捕获，并在元数据尚未随任何消息交付时补一条空 thinking 消息，供多轮回放使用。
@@ -220,15 +265,26 @@ public class OpenaiResponsesResponseParser {
                         if (isReasoningMetadataPending(state)) {
                             AssistantMessage metaMsg = new AssistantMessage("", "", true);
                             attachReasoningMetadata(metaMsg, state);
-                            resp.addChoice(new ChatChoice(0, new Date(), null, metaMsg));
-                            hasChoices = true;
+                            acc.addContentItem(metaMsg);
+                            hasContent = true;
+                        }
+
+                        // 旧实现下 encrypted_content 只能寄生在「伪造的空 thinking 消息」的 metadata 里，
+                        // 订阅方无法辨别；现在另给一个专用事件通道
+                        if (Utils.isNotEmpty(doneEncrypted)) {
+                            ctx.emit(ctx.event(ChatEventType.THINKING_SIGNATURE)
+                                    .rawType(eventType)
+                                    .itemId(state.currentReasoningId)
+                                    .text(doneEncrypted)
+                                    .raw(oResp)
+                                    .build());
                         }
                     }
                     // 兼容只发 output_item.done（携带完整 item）而不发 function_call_arguments.done 的实现：
                     // 兜底 flush，避免工具调用静默丢失
                     if (item != null && "function_call".equals(item.get("type").getString())
                             && state.currentFunctionCallId != null && state.currentFunctionName != null) {
-                        hasChoices |= flushFunctionCall(resp, state, item.get("arguments").getString());
+                        hasContent |= flushFunctionCall(acc, state, item.get("arguments").getString());
                     }
                     state.currentItemId = null;
                     state.currentItemType = null;
@@ -245,17 +301,17 @@ public class OpenaiResponsesResponseParser {
                 if (part != null) {
                     String partType = part.get("type").getString();
                     if ("output_text".equals(partType)) {
-                        StreamState state = getOrCreateState(resp);
+                        StreamState state = getOrCreateState(acc);
                         state.currentTextContent = new SnapshotDeltaNormalizer();
                     } else if ("reasoning_text".equals(partType)) {
-                        StreamState state = getOrCreateState(resp);
+                        StreamState state = getOrCreateState(acc);
                         state.currentReasoningContent = new SnapshotDeltaNormalizer();
                     }
                 }
             } else if ("response.reasoning_summary_part.added".equals(eventType)) {
                 // 官方 OpenAI o 系列思维链摘要：part 类型为 reasoning_summary_text
                 // （SDK ResponseStreamEvent.kt: response.reasoning_summary_part.added）
-                StreamState state = getOrCreateState(resp);
+                StreamState state = getOrCreateState(acc);
                 if (state.currentReasoningContent == null) {
                     state.currentReasoningContent = new SnapshotDeltaNormalizer();
                 }
@@ -265,15 +321,15 @@ public class OpenaiResponsesResponseParser {
                 // 该事件仅官方实现下发，不存在累计快照形态，故不做快照归一（避免无收益的误判风险）
                 String delta = oResp.get("delta").getString();
                 if (Utils.isNotEmpty(delta)) {
-                    StreamState state = getOrCreateState(resp);
+                    StreamState state = getOrCreateState(acc);
                     if (state.currentReasoningContent == null) {
                         state.currentReasoningContent = new SnapshotDeltaNormalizer();
                     }
                     state.currentReasoningContent.append(delta);
                     AssistantMessage thinkingMsg = new AssistantMessage("", delta, true);
                     attachReasoningMetadata(thinkingMsg, state);
-                    resp.addChoice(new ChatChoice(0, new Date(), null, thinkingMsg));
-                    hasChoices = true;
+                    acc.addContentItem(thinkingMsg);
+                    hasContent = true;
                 }
             } else if ("response.reasoning_summary_text.done".equals(eventType)
                     || "response.reasoning_summary_part.done".equals(eventType)) {
@@ -283,19 +339,27 @@ public class OpenaiResponsesResponseParser {
                 // 按普通文本输出，避免拒答内容丢失。同为官方独有事件，不做快照归一
                 String delta = oResp.get("delta").getString();
                 if (Utils.isNotEmpty(delta)) {
-                    StreamState state = getOrCreateState(resp);
+                    StreamState state = getOrCreateState(acc);
                     if (state.currentTextContent == null) {
                         state.currentTextContent = new SnapshotDeltaNormalizer();
                     }
                     state.currentTextContent.append(delta);
-                    resp.addChoice(new ChatChoice(0, new Date(), null, new AssistantMessage(delta)));
-                    hasChoices = true;
+                    acc.addContentItem(new AssistantMessage(delta));
+                    hasContent = true;
+
+                    // 旧实现下拒答被当普通正文输出，订阅方无法识别；
+                    // 此处另发专用事件，文本降级同时保留（不破坏现有 UI）
+                    ctx.emit(ctx.event(ChatEventType.REFUSAL_DELTA)
+                            .rawType(eventType)
+                            .text(delta)
+                            .raw(oResp)
+                            .build());
                 }
             } else if ("response.reasoning_text.delta".equals(eventType)) {
                 // 思考增量（DeepSeek Responses：思维链回传为 thinking 消息）
                 String delta = oResp.get("delta").getString();
                 if (Utils.isNotEmpty(delta)) {
-                    StreamState state = resp.attrAs(STREAM_STATE_KEY);
+                    StreamState state = acc.attrAs(STREAM_STATE_KEY);
                     if (state != null && state.currentReasoningContent != null) {
                         delta = state.currentReasoningContent.normalize(delta);
                         if (Utils.isEmpty(delta)) {
@@ -303,8 +367,8 @@ public class OpenaiResponsesResponseParser {
                         }
                         AssistantMessage thinkingMsg = new AssistantMessage("", delta, true);
                         attachReasoningMetadata(thinkingMsg, state);
-                        resp.addChoice(new ChatChoice(0, new Date(), null, thinkingMsg));
-                        hasChoices = true;
+                        acc.addContentItem(thinkingMsg);
+                        hasContent = true;
                     } else {
                         // 未处于 reasoning item 上下文（缺 output_item.added / content_part.added 前置事件）：
                         // 拒绝输出为 thinking 消息，防止非思考内容被误标
@@ -317,15 +381,15 @@ public class OpenaiResponsesResponseParser {
                 // 文本增量
                 String delta = oResp.get("delta").getString();
                 if (Utils.isNotEmpty(delta)) {
-                    StreamState state = resp.attrAs(STREAM_STATE_KEY);
+                    StreamState state = acc.attrAs(STREAM_STATE_KEY);
                     if (state != null && state.currentTextContent != null) {
                         delta = state.currentTextContent.normalize(delta);
                         if (Utils.isEmpty(delta)) {
                             continue;
                         }
                     }
-                    resp.addChoice(new ChatChoice(0, new Date(), null, new AssistantMessage(delta)));
-                    hasChoices = true;
+                    acc.addContentItem(new AssistantMessage(delta));
+                    hasContent = true;
                 }
             } else if ("response.content_part.delta".equals(eventType)) {
                 // 内容部分增量（通用，按 part 类型分流：output_text 普通文本 / reasoning_text 思考）
@@ -333,7 +397,7 @@ public class OpenaiResponsesResponseParser {
                 if (delta != null) {
                     String text = delta.get("text").getString();
                     if (Utils.isNotEmpty(text)) {
-                        StreamState state = resp.attrAs(STREAM_STATE_KEY);
+                        StreamState state = acc.attrAs(STREAM_STATE_KEY);
                         if ("reasoning_text".equals(delta.get("type").getString())) {
                             // 思考增量经 content_part.delta 到达：按 thinking 消息处理，防止被当作普通文本输出
                             if (state != null && state.currentReasoningContent != null) {
@@ -343,8 +407,8 @@ public class OpenaiResponsesResponseParser {
                                 }
                                 AssistantMessage thinkingMsg = new AssistantMessage("", text, true);
                                 attachReasoningMetadata(thinkingMsg, state);
-                                resp.addChoice(new ChatChoice(0, new Date(), null, thinkingMsg));
-                                hasChoices = true;
+                                acc.addContentItem(thinkingMsg);
+                                hasContent = true;
                             } else {
                                 log.warn("OpenAI Responses stream: ignored content_part.delta(reasoning_text) without reasoning context: {}", text);
                             }
@@ -355,8 +419,8 @@ public class OpenaiResponsesResponseParser {
                                     continue;
                                 }
                             }
-                            resp.addChoice(new ChatChoice(0, new Date(), null, new AssistantMessage(text)));
-                            hasChoices = true;
+                            acc.addContentItem(new AssistantMessage(text));
+                            hasContent = true;
                         }
                     }
                 }
@@ -364,102 +428,233 @@ public class OpenaiResponsesResponseParser {
                 // 函数调用参数增量
                 String delta = oResp.get("delta").getString();
                 if (Utils.isNotEmpty(delta)) {
-                    StreamState state = resp.attrAs(STREAM_STATE_KEY);
+                    StreamState state = acc.attrAs(STREAM_STATE_KEY);
                     if (state != null && state.currentFunctionArguments != null) {
                         state.currentFunctionArguments.append(delta);
                     }
                 }
             } else if ("response.function_call_arguments.done".equals(eventType)) {
                 // 函数调用参数完成
-                StreamState state = resp.attrAs(STREAM_STATE_KEY);
+                StreamState state = acc.attrAs(STREAM_STATE_KEY);
                 if (state != null && state.currentFunctionCallId != null && state.currentFunctionName != null) {
-                    hasChoices |= flushFunctionCall(resp, state, oResp.get("arguments").getString());
+                    hasContent |= flushFunctionCall(acc, state, oResp.get("arguments").getString());
                 }
             } else if ("response.output_text.done".equals(eventType) || "response.content_part.done".equals(eventType)) {
                 // 文本/内容部分完成
                 // 不需要特殊处理
             } else if ("response.completed".equals(eventType)) {
-                resp.attrRemove(STREAM_STATE_KEY);
+                acc.attrRemove(STREAM_STATE_KEY);
                 ONode response = oResp.get("response");
                 if (response != null) {
-                    resp.setModel(response.get("model").getString());
+                    acc.setModel(response.get("model").getString());
                     // 解析 usage
                     AiUsage usage = parseUsage(response.getOrNull("usage"));
                     if (usage != null) {
-                        resp.setUsage(usage);
+                        acc.setUsage(usage);
                     }
                 }
 
-                // 添加结束标记 choice，让框架能够将 isFinished=true 进行传递
-                if (resp.hasChoices() == false) {
-                    resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
+                // 添加结束标记内容项，让框架能够将 isFinished=true 进行传递
+                if (acc.hasContentItems() == false) {
+                    acc.addContentItem(new AssistantMessage(""));
                 }
 
-                resp.setFinished(true);
-                hasChoices = true;
+                acc.setFinished(true);
+                hasContent = true;
             } else if ("response.incomplete".equals(eventType)) {
                 // 响应未完成（如 max_output_tokens 截断等）：同样结束流，避免悬挂
-                resp.attrRemove(STREAM_STATE_KEY);
+                acc.attrRemove(STREAM_STATE_KEY);
                 ONode response = oResp.get("response");
                 if (response != null) {
-                    resp.setModel(response.get("model").getString());
+                    acc.setModel(response.get("model").getString());
                     AiUsage usage = parseUsage(response.getOrNull("usage"));
                     if (usage != null) {
-                        resp.setUsage(usage);
+                        acc.setUsage(usage);
                     }
                     // 回填 finishReason：incomplete_details.reason（如 max_output_tokens → length），便于上层区分截断
                     ONode incompleteDetails = response.getOrNull("incomplete_details");
                     if (incompleteDetails != null) {
                         String reason = incompleteDetails.get("reason").getString();
                         if (Utils.isNotEmpty(reason)) {
-                            resp.lastFinishReason = "max_output_tokens".equals(reason) ? "length" : reason;
+                            acc.lastFinishReason = "max_output_tokens".equals(reason) ? "length" : reason;
                         }
                     }
                 }
 
-                if (resp.hasChoices() == false) {
-                    resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
+                if (acc.hasContentItems() == false) {
+                    acc.addContentItem(new AssistantMessage(""));
                 }
 
-                resp.setFinished(true);
-                hasChoices = true;
+                acc.setFinished(true);
+                // incomplete 是服务端明确中止，而不是正常 completed；先发语义事件，再由核心按现有契约结束本步。
+                ctx.emit(ctx.event(ChatEventType.ABORT)
+                        .rawType(eventType)
+                        .text(acc.getLastFinishReasonNormalized())
+                        .raw(oResp)
+                        .build());
+                hasContent = true;
             } else if ("response.failed".equals(eventType)) {
                 // 响应失败，清理状态
-                resp.attrRemove(STREAM_STATE_KEY);
+                acc.attrRemove(STREAM_STATE_KEY);
                 ONode response = oResp.get("response");
                 if (response != null) {
-                    resp.setModel(response.get("model").getString());
+                    acc.setModel(response.get("model").getString());
                     AiUsage usage = parseUsage(response.getOrNull("usage"));
                     if (usage != null) {
-                        resp.setUsage(usage);
+                        acc.setUsage(usage);
                     }
                     ONode error = response.get("error");
                     // 与非流式 error 提取保持一致：格式化为 [type/code] message
-                    resp.setError(new ChatException(
+                    acc.setError(new ChatException(
                             OpenaiDialectSupport.extractErrorMessage(error != null ? error : response)));
                 } else {
-                    resp.setError(new ChatException("Response failed"));
+                    acc.setError(new ChatException("Response failed"));
                 }
-                resp.setFinished(true);
+                ctx.emit(ctx.event(ChatEventType.ERROR)
+                        .rawType(eventType)
+                        .error(acc.getError())
+                        .raw(oResp)
+                        .build());
+                acc.setFinished(true);
                 // 失败也视为有效处理帧，防止错误被当作解析失败吞掉
-                hasChoices = true;
+                hasContent = true;
+            } else {
+                // 未建模事件：旧实现静默丢弃，现在以 RAW 透出（默认不投递，需显式开启）
+                ctx.emit(ctx.event(ChatEventType.RAW)
+                        .rawType(eventType)
+                        .raw(oResp)
+                        .build());
+                //RAW 是已消费的合法模型帧，不能让调用方误判为不可识别响应。
+                hasContent = true;
             }
         }
-        // 有效处理过 choice 或 media 均视为解析成功（纯 media 事件无 choice 时也要 true）
-        return hasChoices || hasMedia;
+        // 有效处理过内容项 或 media 均视为解析成功（纯 media 事件无 choice 时也要 true）
+        return hasContent || hasMedia;
+    }
+
+    /**
+     * 服务端工具事件前缀（由模型服务方执行，不经本地工具链）
+     *
+     * @since 4.1
+     */
+    private static final String[] SERVER_TOOL_PREFIXES = {
+            "response.web_search_call",
+            "response.file_search_call",
+            "response.code_interpreter_call",
+            "response.computer_call",
+            "response.mcp_call",
+            "response.mcp_list_tools",
+            "response.image_generation_call"
+    };
+
+    /**
+     * 是否服务端工具事件
+     *
+     * @since 4.1
+     */
+    private static boolean isServerToolEvent(String eventType) {
+        for (String prefix : SERVER_TOOL_PREFIXES) {
+            if (eventType.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 发射服务端工具事件
+     *
+     * <p>供应商能力差异走 {@code subType}，不膨胀事件类型枚举。</p>
+     *
+     * @since 4.1
+     */
+    private void emitServerToolEvent(ChatStreamContext ctx, String eventType, ONode oResp) {
+        String subType = eventType.substring("response.".length());
+        int dot = subType.indexOf('.');
+        String phase = dot < 0 ? "" : subType.substring(dot + 1);
+        subType = dot < 0 ? subType : subType.substring(0, dot);
+
+        ChatEventType type;
+        if ("partial_image".equals(phase)) {
+            // 图像渐进帧：属媒体而非工具语义
+            type = ChatEventType.MEDIA_PARTIAL;
+        } else if (phase.endsWith("delta")) {
+            type = ChatEventType.SERVER_TOOL_ARGS_DELTA;
+        } else if ("completed".equals(phase) || "done".equals(phase) || "failed".equals(phase)
+                || phase.endsWith(".done")) {
+            type = ChatEventType.SERVER_TOOL_RESULT;
+        } else {
+            // in_progress / searching / generating / interpreting 等
+            type = ChatEventType.SERVER_TOOL_START;
+        }
+
+        ctx.emit(ctx.event(type)
+                .rawType(eventType)
+                .subType(subType)
+                .itemId(oResp.get("item_id").getString())
+                .index(oResp.get("output_index").getInt())
+                .text(oResp.get("delta").getString())
+                .raw(oResp)
+                .build());
+    }
+
+    /**
+     * 是否服务端工具输出项（非流式 {@code output[].type}）
+     *
+     * <p>image_generation_call 不在内：它已作为媒体块收入消息。</p>
+     *
+     * @since 4.1
+     */
+    private static boolean isServerToolItem(String itemType) {
+        if (itemType == null) {
+            return false;
+        }
+
+        return "web_search_call".equals(itemType)
+                || "file_search_call".equals(itemType)
+                || "code_interpreter_call".equals(itemType)
+                || "computer_call".equals(itemType)
+                || "mcp_call".equals(itemType)
+                || "mcp_list_tools".equals(itemType)
+                || "mcp_approval_request".equals(itemType);
+    }
+
+    /**
+     * 发射引用事件（非流式 {@code content[].annotations[]}）
+     *
+     * @since 4.1
+     */
+    private void emitAnnotations(ChatStreamContext ctx, ONode contentItem) {
+        ONode annotations = contentItem.getOrNull("annotations");
+        if (annotations == null || annotations.isArray() == false) {
+            return;
+        }
+
+        for (ONode annotation : annotations.getArray()) {
+            ctx.emit(ctx.event(ChatEventType.CITATION)
+                    .rawType("response.output_text.annotation")
+                    .subType(annotation.get("type").getString())
+                    .text(annotation.get("url").getString())
+                    .raw(annotation)
+                    .build());
+        }
     }
 
     /**
      * 解析非流式响应
      *
-     * @author oisin lu
-     * @date 2026年1月28日
+     * <p>非流式同样要给出扩展语义事件：错误、中止（cancelled / incomplete）、拒答、引用、
+     * 服务端工具结果——这些语义并非流式独有。</p>
+     *
+     * @since 4.1
      */
-    public boolean parseNonStreamResponse(ChatResponseDefault resp, String json) {
+    public boolean parseNonStreamResponse(ChatStreamContext ctx, String json) {
+        ChatAccumulator acc = ctx.getAccumulator();
+
         if ("[DONE]".equals(json)) {
-            if (resp.isFinished() == false) {
-                resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
-                resp.setFinished(true);
+            if (acc.isFinished() == false) {
+                acc.addContentItem(new AssistantMessage(""));
+                acc.setFinished(true);
             }
             return true;
         }
@@ -469,42 +664,53 @@ public class OpenaiResponsesResponseParser {
         }
         // 检查错误（规范提取：error 为对象时不能整体 getString）
         if (oResp.hasKey("error") && !oResp.get("error").isNull()) {
-            resp.setError(new ChatException(
+            acc.setError(new ChatException(
                     OpenaiDialectSupport.extractErrorMessage(oResp.get("error"))));
+            ctx.emit(ctx.event(ChatEventType.ERROR)
+                    .rawType("error")
+                    .error(acc.getError())
+                    .raw(oResp)
+                    .build());
             return true;
         }
         // 检查状态
         String status = oResp.get("status").getString();
         if ("failed".equals(status)) {
             ONode error = oResp.getOrNull("error");
-            resp.setError(new ChatException(OpenaiDialectSupport.extractErrorMessage(
+            acc.setError(new ChatException(OpenaiDialectSupport.extractErrorMessage(
                     error != null ? error : oResp)));
+            ctx.emit(ctx.event(ChatEventType.ERROR)
+                    .rawType("response.failed")
+                    .error(acc.getError())
+                    .raw(oResp)
+                    .build());
             return true;
         }
         if ("cancelled".equals(status)) {
-            resp.lastFinishReason = "cancelled";
+            acc.lastFinishReason = "cancelled";
+            // 与流式 response.incomplete 的 ABORT 对称：服务端明确中止，不是正常 completed
+            ctx.emit(ctx.event(ChatEventType.ABORT)
+                    .rawType("response.cancelled")
+                    .subType("cancelled")
+                    .raw(oResp)
+                    .build());
         } else if ("incomplete".equals(status)) {
             // 输出被截断（如 max_output_tokens）：回填 finishReason，与流式 response.incomplete 对齐
             ONode incompleteDetails = oResp.getOrNull("incomplete_details");
             String reason = incompleteDetails == null ? null : incompleteDetails.get("reason").getString();
             if (Utils.isNotEmpty(reason)) {
-                resp.lastFinishReason = "max_output_tokens".equals(reason) ? "length" : reason;
+                acc.lastFinishReason = "max_output_tokens".equals(reason) ? "length" : reason;
             } else {
-                resp.lastFinishReason = "length";
+                acc.lastFinishReason = "length";
             }
+            ctx.emit(ctx.event(ChatEventType.ABORT)
+                    .rawType("response.incomplete")
+                    .subType(reason)
+                    .raw(oResp)
+                    .build());
         }
         // 设置模型信息
-        resp.setModel(oResp.get("model").getString());
-        Date created = new Date();
-        if (oResp.hasKey("created_at")) {
-            try {
-                long createdAt = oResp.get("created_at").getLong();
-                if (createdAt > 0) {
-                    created = new Date(createdAt * 1000);
-                }
-            } catch (Exception ignored) {
-            }
-        }
+        acc.setModel(oResp.get("model").getString());
         // 解析 output 数组
         ONode outputArray = oResp.getOrNull("output");
         if (outputArray != null && outputArray.isArray()) {
@@ -515,6 +721,7 @@ public class OpenaiResponsesResponseParser {
             List<ContentBlock> mediaBlocks = new ArrayList<>();
             List<ToolCall> allToolCalls = new ArrayList<>();
             List<Map> allToolCallsRaw = new ArrayList<>();
+            boolean hasRefusal = false;
             for (ONode outputItem : outputArray.getArray()) {
                 String itemType = outputItem.get("type").getString();
                 if ("reasoning".equals(itemType)) {
@@ -567,21 +774,26 @@ public class OpenaiResponsesResponseParser {
                             if ("output_text".equals(contentType) || "text".equals(contentType)) {
                                 String text = contentItem.get("text").getString();
                                 if (Utils.isNotEmpty(text)) {
-//                                    if (textContent.length() > 0) {
-//                                        textContent.append("\n");
-//                                    }
                                     textContent.append(text);
                                 }
+                                // 引用（联网搜索 / 文件检索的来源标注）：与流式
+                                // response.output_text.annotation.added 对称，非流式此前整块丢弃
+                                emitAnnotations(ctx, contentItem);
                             } else if ("refusal".equals(contentType)) {
                                 String refusal = contentItem.get("refusal").getString();
                                 if (Utils.isEmpty(refusal)) {
                                     refusal = contentItem.get("text").getString();
                                 }
                                 if (Utils.isNotEmpty(refusal)) {
-//                                    if (textContent.length() > 0) {
-//                                        textContent.append("\n");
-//                                    }
                                     textContent.append(refusal);
+                                    // 旧实现下拒答被当普通正文输出，订阅方无法识别；
+                                    // 与流式一致：专用事件 + 文本降级并存
+                                    ctx.emit(ctx.event(ChatEventType.REFUSAL_DELTA)
+                                            .rawType("response.refusal")
+                                            .text(refusal)
+                                            .raw(contentItem)
+                                            .build());
+                                    hasRefusal = true;
                                 }
                             } else if ("output_image".equals(contentType) || "image".equals(contentType)
                                     || contentItem.hasKey("image_url")) {
@@ -623,7 +835,24 @@ public class OpenaiResponsesResponseParser {
                     functionData.put("arguments", arguments);
                     toolCallRaw.put("function", functionData);
                     allToolCallsRaw.add(toolCallRaw);
+                } else if (isServerToolItem(itemType)) {
+                    // 服务端工具项（联网搜索 / 代码执行 / MCP / 文件检索）：旧实现在非流式下整项丢弃，
+                    // 订阅方无从知道模型调用过服务端工具；与流式 SERVER_TOOL_RESULT 对称
+                    ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_RESULT)
+                            .rawType("response.output_item")
+                            .subType(itemType)
+                            .itemId(outputItem.get("id").getString())
+                            .raw(outputItem)
+                            .build());
                 }
+            }
+
+            if (hasRefusal) {
+                // 与流式 response.refusal.done 对称：拒答终态只发一次
+                ctx.emit(ctx.event(ChatEventType.CONTENT_FILTER)
+                        .rawType("response.refusal.done")
+                        .raw(oResp)
+                        .build());
             }
 
             List<ContentBlock> blocksForMsg = null;
@@ -633,16 +862,19 @@ public class OpenaiResponsesResponseParser {
                     blocksForMsg.add(TextBlock.of(textContent.toString()));
                 }
                 blocksForMsg.addAll(mediaBlocks);
-                resp.addMediaBlocks(mediaBlocks);
+                acc.addMediaBlocks(mediaBlocks);
             }
 
             // 非流式：与 AbstractChatDialect 对齐——思考与正文合并为单条消息（AssistantMessage 已分离 text/thinking），
-            // 不再拆成两个 choice，以保证 getText()/getThinking() 在同一条最终消息上都可用
+            // 不再拆成两个内容项，以保证 getText()/getThinking() 在同一条最终消息上都可用
             String thinkingOut = reasoningContent.toString();
             String textOut = textContent.toString();
             String finishReason = allToolCalls.isEmpty()
-                    ? (Utils.isEmpty(resp.lastFinishReason) ? "stop" : resp.lastFinishReason)
+                    ? (Utils.isEmpty(acc.lastFinishReason) ? "stop" : acc.lastFinishReason)
                     : "tool_calls";
+            // 非流式 status=completed 时上面的状态分支不会写 lastFinishReason，工具调用的终态原因
+            // 只在这里算得出来，必须回写累积器：它是框架判定「要不要进下一轮工具调用」的唯一来源
+            acc.lastFinishReason = finishReason;
 
             if (Utils.isEmpty(textOut) && Utils.isEmpty(thinkingOut)
                     && allToolCalls.isEmpty() && blocksForMsg == null) {
@@ -670,35 +902,33 @@ public class OpenaiResponsesResponseParser {
                     msg.getMetadata().put("reasoning_encrypted_content", reasoningEncryptedContent);
                 }
 
-                resp.addChoice(new ChatChoice(0, created, finishReason, msg));
+                acc.addContentItem(msg);
             }
         } else {
             // 如果没有 output 数组，尝试使用便捷字段 output_text / reasoning_text（DeepSeek 顶层字段）
             String reasoningText = oResp.get("reasoning_text").getString();
             String outputText = oResp.get("output_text").getString();
             if (Utils.isNotEmpty(reasoningText) || Utils.isNotEmpty(outputText)) {
-                String finishReason = Utils.isEmpty(resp.lastFinishReason) ? "stop" : resp.lastFinishReason;
-                resp.addChoice(new ChatChoice(0, created, finishReason, new AssistantMessage(
+                String finishReason = Utils.isEmpty(acc.lastFinishReason) ? "stop" : acc.lastFinishReason;
+                acc.addContentItem(new AssistantMessage(
                         outputText == null ? "" : outputText,
                         reasoningText == null ? "" : reasoningText,
-                        false)));
+                        false));
             }
         }
         // 解析用量信息
         AiUsage usage = parseUsage(oResp.getOrNull("usage"));
         if (usage != null) {
-            resp.setUsage(usage);
+            acc.setUsage(usage);
         }
 
         // 与 OpenaiChatDialect 对齐：output 全是未识别项（web_search_call / mcp_call 等）且无 output_text 时，
-        // 也要补一条空消息 choice，避免上层 getMessage() 拿到 null
-        if (resp.hasChoices() == false) {
-            resp.addChoice(new ChatChoice(0, created,
-                    Utils.isEmpty(resp.lastFinishReason) ? "stop" : resp.lastFinishReason,
-                    new AssistantMessage("")));
+        // 也要补一条空消息内容项，避免上层 getMessage() 拿到 null
+        if (acc.hasContentItems() == false) {
+            acc.addContentItem(new AssistantMessage(""));
         }
 
-        resp.setFinished(true);
+        acc.setFinished(true);
         return true;
     }
 
@@ -831,11 +1061,11 @@ public class OpenaiResponsesResponseParser {
     }
 
     /**
-     * 流式 function_call 落地：构建 ToolCall choice 并重置状态（供 arguments.done 与 output_item.done 兜底共用）。
+     * 流式 function_call 落地：构建 ToolCall 内容项 并重置状态（供 arguments.done 与 output_item.done 兜底共用）。
      *
-     * @return 是否添加了 choice
+     * @return 是否添加了内容项
      */
-    private boolean flushFunctionCall(ChatResponseDefault resp, StreamState state, String arguments) {
+    private boolean flushFunctionCall(ChatAccumulator acc, StreamState state, String arguments) {
         if (Utils.isEmpty(arguments) && state.currentFunctionArguments != null) {
             arguments = state.currentFunctionArguments.toString();
         }
@@ -865,7 +1095,7 @@ public class OpenaiResponsesResponseParser {
             AssistantMessage assistantMessage = new AssistantMessage("", "",
                     false, null,
                     toolCallsRaw, toolCalls, null);
-            resp.addChoice(new ChatChoice(0, new Date(), null, assistantMessage));
+            acc.addContentItem(assistantMessage);
             return true;
         } catch (Exception e) {
             log.warn("Failed to parse function call in stream mode", e);

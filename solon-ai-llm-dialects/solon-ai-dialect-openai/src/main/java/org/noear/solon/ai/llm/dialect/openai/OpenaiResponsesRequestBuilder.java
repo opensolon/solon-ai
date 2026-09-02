@@ -18,7 +18,7 @@ package org.noear.solon.ai.llm.dialect.openai;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.CacheControl;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
@@ -904,12 +904,12 @@ public class OpenaiResponsesRequestBuilder {
      * @author oisin lu
      * @date 2026年1月28日
      */
-    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
+    public ONode buildAssistantToolCallMessageNode(ChatAccumulator acc, Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode oNode = new ONode();
         oNode.set("role", "assistant");
-        oNode.set("content", resp.getAggregationText());
+        oNode.set("content", acc.getAggregationText());
         // 思考内容回嗂（父类 parseAssistantMessage 读 reasoning_content）
-        String thinking = resp.getAggregationThinking();
+        String thinking = acc.getAggregationThinking();
         if (Utils.isNotEmpty(thinking)) {
             oNode.set("reasoning_content", thinking);
         }

@@ -25,6 +25,7 @@ public interface ChatDialects {
     static String OPENAI_COMPLETIONS = "openai-completions";
 
     static String ANTHROPIC = "anthropic";
+    static String ANTHROPIC_MESSAGES = "anthropic-messages";
 
     static String GOOGLE_GENERATE = "google-generate"; //old
     static String GOOGLE_INTERACTIONS = "google-interactions";

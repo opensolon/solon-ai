@@ -19,6 +19,7 @@ import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRequest;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatSession;
+import org.noear.solon.ai.chat.event.ChatEvent;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import reactor.core.publisher.Flux;
 
@@ -59,8 +60,9 @@ public interface ChatInterceptor extends ToolInterceptor {
      *
      * @param req   请求
      * @param chain 拦截链
+     * @since 4.1 类型由 {@code Flux<ChatResponse>} 改为 {@code Flux<ChatEvent>}
      */
-    default Flux<ChatResponse> interceptStream(ChatRequest req, StreamChain chain) {
+    default Flux<ChatEvent> interceptStream(ChatRequest req, StreamChain chain) {
         return chain.doIntercept(req);
     }
 }

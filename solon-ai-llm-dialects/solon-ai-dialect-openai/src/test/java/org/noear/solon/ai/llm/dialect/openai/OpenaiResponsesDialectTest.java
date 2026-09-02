@@ -17,16 +17,16 @@ package org.noear.solon.ai.llm.dialect.openai;
 
 import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
-import org.noear.solon.ai.chat.ChatChoice;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRequest;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.content.BlobBlock;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.ai.chat.event.ChatStreamContextDefault;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
@@ -60,12 +60,26 @@ public class OpenaiResponsesDialectTest {
     private final OpenaiResponsesRequestBuilder builder = new OpenaiResponsesRequestBuilder();
     private final OpenaiResponsesResponseParser parser = new OpenaiResponsesResponseParser();
 
-    private ChatResponseDefault newResponse(boolean stream) {
+    private ChatAccumulator newResponse(boolean stream) {
         ChatConfig config = new ChatConfig();
         ChatOptions options = ChatOptions.of();
         ChatRequest req = new ChatRequest(config, OpenaiResponsesDialect.getInstance(), options,
                 InMemoryChatSession.builder().build(), ChatMessage.ofSystem("test"), null, stream);
-        return new ChatResponseDefault(req, stream);
+        return new ChatAccumulator(req, stream);
+    }
+
+    /**
+     * 走解析器的流上下文入口；本测试类只校验累积结果，故用「不发事件」的上下文
+     */
+    private boolean parse(ChatAccumulator resp, String json) {
+        return parser.parseResponse(ChatStreamContextDefault.ofNoEmit(resp), json);
+    }
+
+    /**
+     * 同上，但直接指定流式分支（不经 stream 标记路由）
+     */
+    private boolean parseStream(ChatAccumulator resp, String json) {
+        return parser.parseStreamResponse(ChatStreamContextDefault.ofNoEmit(resp), json);
     }
 
     private ONode build(ChatOptions options, List<ChatMessage> messages) {
@@ -314,63 +328,64 @@ public class OpenaiResponsesDialectTest {
 
     @Test
     public void nonStream_thinkingAndTextInOneMessage() {
-        ChatResponseDefault resp = newResponse(false);
+        ChatAccumulator resp = newResponse(false);
         String json = "{\"id\":\"resp_1\",\"model\":\"gpt-5.4\",\"status\":\"completed\",\"output\":["
                 + "{\"type\":\"reasoning\",\"id\":\"rs_1\",\"summary\":[],\"encrypted_content\":\"enc\","
                 + "\"content\":[{\"type\":\"reasoning_text\",\"text\":\"思考中\"}]},"
                 + "{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"答案\"}]}"
                 + "]}";
 
-        assertTrue(parser.parseResponse(resp, json));
+        assertTrue(parse(resp, json));
 
-        assertEquals(1, resp.getChoices().size(), "非流式应合并为单条消息");
-        AssistantMessage msg = resp.getChoices().get(0).getMessage();
+        assertEquals(1, resp.getContentItems().size(), "非流式应合并为单条消息");
+        AssistantMessage msg = resp.getContentItems().get(0);
         assertEquals("答案", msg.getText());
         assertEquals("思考中", msg.getThinking());
         assertFalse(msg.isThinking());
         assertEquals("rs_1", msg.getMetadata().get("reasoning_item_id"));
         assertEquals("enc", msg.getMetadata().get("reasoning_encrypted_content"));
-        assertEquals("stop", resp.getChoices().get(0).getFinishReason());
+        assertEquals("stop", resp.getLastFinishReasonNormalized());
     }
 
     @Test
     public void nonStream_toolCallsFinishReason() {
-        ChatResponseDefault resp = newResponse(false);
+        ChatAccumulator resp = newResponse(false);
         String json = "{\"model\":\"gpt-5.4\",\"status\":\"completed\",\"output\":["
                 + "{\"type\":\"function_call\",\"call_id\":\"call_1\",\"name\":\"getWeather\","
                 + "\"arguments\":\"{\\\"city\\\":\\\"hz\\\"}\"}]}";
 
-        assertTrue(parser.parseResponse(resp, json));
+        assertTrue(parse(resp, json));
 
-        assertEquals(1, resp.getChoices().size());
-        assertEquals("tool_calls", resp.getChoices().get(0).getFinishReason());
-        ToolCall call = resp.getChoices().get(0).getMessage().getToolCalls().get(0);
+        assertEquals(1, resp.getContentItems().size());
+        // 完成原因已是响应级属性：断原始值（框架归一化后为 "tool"）
+        assertEquals("tool_calls", resp.lastFinishReason);
+        ToolCall call = resp.getContentItems().get(0).getToolCalls().get(0);
         assertEquals("call_1", call.getId());
         assertEquals("getWeather", call.getName());
     }
 
     @Test
     public void nonStream_incompleteStatusMappedToLength() {
-        ChatResponseDefault resp = newResponse(false);
+        ChatAccumulator resp = newResponse(false);
         String json = "{\"model\":\"gpt-5.4\",\"status\":\"incomplete\","
                 + "\"incomplete_details\":{\"reason\":\"max_output_tokens\"},\"output\":["
                 + "{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"半句\"}]}"
                 + "]}";
 
-        assertTrue(parser.parseResponse(resp, json));
+        assertTrue(parse(resp, json));
 
-        assertEquals("length", resp.getChoices().get(0).getFinishReason());
+        assertEquals("length", resp.lastFinishReason);
     }
 
     @Test
     public void nonStream_usageCacheWriteTokens() {
-        ChatResponseDefault resp = newResponse(false);
+        ChatAccumulator resp = newResponse(false);
         String json = "{\"model\":\"gpt-5.4\",\"status\":\"completed\",\"output\":[],"
                 + "\"usage\":{\"input_tokens\":100,\"output_tokens\":20,\"total_tokens\":120,"
                 + "\"input_tokens_details\":{\"cached_tokens\":30,\"cache_write_tokens\":40},"
                 + "\"output_tokens_details\":{\"reasoning_tokens\":5}}}";
 
-        assertTrue(parser.parseResponse(resp, json));
+        assertTrue(parse(resp, json));
 
         assertNotNull(resp.getUsage());
         assertEquals(100, resp.getUsage().promptTokens());
@@ -382,10 +397,10 @@ public class OpenaiResponsesDialectTest {
 
     @Test
     public void nonStream_errorObjectMessageExtracted() {
-        ChatResponseDefault resp = newResponse(false);
+        ChatAccumulator resp = newResponse(false);
         String json = "{\"error\":{\"message\":\"invalid model\",\"type\":\"invalid_request_error\"}}";
 
-        assertTrue(parser.parseResponse(resp, json));
+        assertTrue(parse(resp, json));
 
         assertNotNull(resp.getError());
         assertTrue(resp.getError().getMessage().contains("invalid model"), resp.getError().getMessage());
@@ -396,10 +411,10 @@ public class OpenaiResponsesDialectTest {
 
     @Test
     public void stream_topLevelErrorObjectExtracted() {
-        ChatResponseDefault resp = newResponse(true);
+        ChatAccumulator resp = newResponse(true);
         String frame = "data: {\"error\":{\"message\":\"rate limited\",\"code\":\"rate_limit_exceeded\"}}";
 
-        assertTrue(parser.parseResponse(resp, frame));
+        assertTrue(parse(resp, frame));
 
         assertNotNull(resp.getError());
         assertTrue(resp.getError().getMessage().contains("rate limited"), resp.getError().getMessage());
@@ -407,17 +422,17 @@ public class OpenaiResponsesDialectTest {
 
     @Test
     public void stream_reasoningEncryptedContentCapturedOnItemDone() {
-        ChatResponseDefault resp = newResponse(true);
+        ChatAccumulator resp = newResponse(true);
 
-        parser.parseResponse(resp, "data: {\"type\":\"response.output_item.added\","
+        parse(resp, "data: {\"type\":\"response.output_item.added\","
                 + "\"item\":{\"type\":\"reasoning\",\"id\":\"rs_1\"}}");
-        parser.parseResponse(resp, "data: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"思考\"}");
-        parser.parseResponse(resp, "data: {\"type\":\"response.output_item.done\","
+        parse(resp, "data: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"思考\"}");
+        parse(resp, "data: {\"type\":\"response.output_item.done\","
                 + "\"item\":{\"type\":\"reasoning\",\"id\":\"rs_1\",\"encrypted_content\":\"enc_x\"}}");
 
         boolean found = false;
-        for (int i = 0; i < resp.getChoices().size(); i++) {
-            Object enc = resp.getChoices().get(i).getMessage().getMetadata().get("reasoning_encrypted_content");
+        for (int i = 0; i < resp.getContentItems().size(); i++) {
+            Object enc = resp.getContentItems().get(i).getMetadata().get("reasoning_encrypted_content");
             if ("enc_x".equals(enc)) {
                 found = true;
             }
@@ -621,30 +636,30 @@ public class OpenaiResponsesDialectTest {
     @Test
     public void nonStream_unrecognizedOutputStillHasChoice() {
         // output 全是未识别项（web_search_call 等）时，不能让上层 getMessage() 拿到 null
-        ChatResponseDefault resp = newResponse(false);
+        ChatAccumulator resp = newResponse(false);
         String json = "{\"model\":\"gpt-5.4\",\"status\":\"completed\",\"output\":["
                 + "{\"type\":\"web_search_call\",\"id\":\"ws_1\",\"status\":\"completed\"}]}";
 
-        assertTrue(parser.parseResponse(resp, json));
+        assertTrue(parse(resp, json));
 
-        assertEquals(1, resp.getChoices().size(), "应补一条空消息 choice");
-        assertNotNull(resp.getChoices().get(0).getMessage());
-        assertEquals("stop", resp.getChoices().get(0).getFinishReason());
+        assertEquals(1, resp.getContentItems().size(), "应补一条空消息内容项");
+        assertNotNull(resp.getContentItems().get(0));
+        assertEquals("stop", resp.getLastFinishReasonNormalized());
     }
 
     @Test
     public void stream_reasoningMetadataAggregatedForReplay() {
         // 流式：reasoning 元数据在思考分片上，不在最后一片；需经聚合交给会话，否则多轮回放断链
-        ChatResponseDefault resp = newResponse(true);
+        ChatAccumulator resp = newResponse(true);
 
-        parser.parseResponse(resp, "data: {\"type\":\"response.output_item.added\","
+        parse(resp, "data: {\"type\":\"response.output_item.added\","
                 + "\"item\":{\"type\":\"reasoning\",\"id\":\"rs_1\"}}");
-        parser.parseResponse(resp, "data: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"思考\"}");
-        parser.parseResponse(resp, "data: {\"type\":\"response.output_item.done\","
+        parse(resp, "data: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"思考\"}");
+        parse(resp, "data: {\"type\":\"response.output_item.done\","
                 + "\"item\":{\"type\":\"reasoning\",\"id\":\"rs_1\",\"encrypted_content\":\"enc_x\"}}");
-        parser.parseResponse(resp, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"答案\"}");
+        parse(resp, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"答案\"}");
 
-        AssistantMessage agg = resp.getAggregationMessage();
+        AssistantMessage agg = resp.snapshotTerminal().getMessage();
         assertNotNull(agg);
         assertEquals("rs_1", agg.getMetadata().get("reasoning_item_id"), agg.toString());
         assertEquals("enc_x", agg.getMetadata().get("reasoning_encrypted_content"), agg.toString());
@@ -654,15 +669,15 @@ public class OpenaiResponsesDialectTest {
         // store=true 且未请求 reasoning.summary 时，reasoning 项没有任何 delta 帧，
         // done 帧的 id 与 added 帧相同；若按「与 added 帧是否不同」判定就不会补元数据消息，
         // 导致 reasoning_item_id 拿不到、多轮回放断链
-        ChatResponseDefault resp = newResponse(true);
+        ChatAccumulator resp = newResponse(true);
 
-        parser.parseResponse(resp, "data: {\"type\":\"response.output_item.added\","
+        parse(resp, "data: {\"type\":\"response.output_item.added\","
                 + "\"item\":{\"type\":\"reasoning\",\"id\":\"rs_only_id\",\"summary\":[]}}");
-        assertTrue(parser.parseResponse(resp, "data: {\"type\":\"response.output_item.done\","
+        assertTrue(parse(resp, "data: {\"type\":\"response.output_item.done\","
                 + "\"item\":{\"type\":\"reasoning\",\"id\":\"rs_only_id\",\"summary\":[]}}"));
-        parser.parseResponse(resp, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"答案\"}");
+        parse(resp, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"答案\"}");
 
-        AssistantMessage agg = resp.getAggregationMessage();
+        AssistantMessage agg = resp.snapshotTerminal().getMessage();
         assertNotNull(agg);
         assertEquals("rs_only_id", agg.getMetadata().get("reasoning_item_id"), agg.toString());
     }
@@ -670,16 +685,16 @@ public class OpenaiResponsesDialectTest {
     @Test
     public void stream_reasoningMetadataNotDuplicatedAfterDeltas() {
         // 元数据已随思考分片交付时，done 帧不应再补一条重复的空 thinking 消息
-        ChatResponseDefault resp = newResponse(true);
+        ChatAccumulator resp = newResponse(true);
 
-        parser.parseResponse(resp, "data: {\"type\":\"response.output_item.added\","
+        parse(resp, "data: {\"type\":\"response.output_item.added\","
                 + "\"item\":{\"type\":\"reasoning\",\"id\":\"rs_1\",\"encrypted_content\":\"enc_x\"}}");
-        parser.parseResponse(resp, "data: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"思考\"}");
-        int beforeDone = resp.getChoices().size();
-        parser.parseResponse(resp, "data: {\"type\":\"response.output_item.done\","
+        parse(resp, "data: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"思考\"}");
+        int beforeDone = resp.getContentItems().size();
+        parse(resp, "data: {\"type\":\"response.output_item.done\","
                 + "\"item\":{\"type\":\"reasoning\",\"id\":\"rs_1\",\"encrypted_content\":\"enc_x\"}}");
 
-        assertEquals(beforeDone, resp.getChoices().size(), "元数据已交付，不应重复补消息");
+        assertEquals(beforeDone, resp.getContentItems().size(), "元数据已交付，不应重复补消息");
     }
 
     // ==================== 流式工具调用轮（聚合出口） ====================
@@ -702,14 +717,14 @@ public class OpenaiResponsesDialectTest {
     public void streamToolCallRound_singleMessageCarriesToolCalls() {
         // 父类会把「正文 + reasoning_content」同帧双通道拆成多条思考信号消息，
         // 导致 get(0) 不带 tool_calls（工具不被执行）且 reasoning 元数据被重复挂载
-        ChatResponseDefault resp = newResponse(true);
+        ChatAccumulator resp = newResponse(true);
         OpenaiResponsesDialect dialect = OpenaiResponsesDialect.getInstance();
 
         // 思考分片交付 reasoning 元数据（供多轮回放）
-        parser.parseResponse(resp, "data: {\"type\":\"response.output_item.added\","
+        parse(resp, "data: {\"type\":\"response.output_item.added\","
                 + "\"item\":{\"type\":\"reasoning\",\"id\":\"rs_1\"}}");
-        parser.parseResponse(resp, "data: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"想一下\"}");
-        parser.parseResponse(resp, "data: {\"type\":\"response.output_item.done\","
+        parse(resp, "data: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"想一下\"}");
+        parse(resp, "data: {\"type\":\"response.output_item.done\","
                 + "\"item\":{\"type\":\"reasoning\",\"id\":\"rs_1\",\"encrypted_content\":\"enc_x\"}}");
 
         List<AssistantMessage> messages = dialect.parseAssistantMessage(resp, newToolCallNode("我来查天气", "想一下"));
@@ -726,12 +741,12 @@ public class OpenaiResponsesDialectTest {
     @Test
     public void streamToolCallRound_replayHasSingleReasoningItem() {
         // 回放：一条消息 → 一个 reasoning 项（此前多条消息各带同 id 元数据，会重复输出）
-        ChatResponseDefault resp = newResponse(true);
+        ChatAccumulator resp = newResponse(true);
         OpenaiResponsesDialect dialect = OpenaiResponsesDialect.getInstance();
 
-        parser.parseResponse(resp, "data: {\"type\":\"response.output_item.added\","
+        parse(resp, "data: {\"type\":\"response.output_item.added\","
                 + "\"item\":{\"type\":\"reasoning\",\"id\":\"rs_1\"}}");
-        parser.parseResponse(resp, "data: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"想一下\"}");
+        parse(resp, "data: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"想一下\"}");
 
         List<ChatMessage> history = new ArrayList<>();
         history.addAll(dialect.parseAssistantMessage(resp, newToolCallNode("查询中", "想一下")));
@@ -782,82 +797,82 @@ public class OpenaiResponsesDialectTest {
 
     @Test
     public void streamCumulativeOutputTextDelta_isNormalizedToSuffix() {
-        ChatResponseDefault resp = newResponse(true);
+        ChatAccumulator resp = newResponse(true);
 
-        parser.parseStreamResponse(resp, "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_1\",\"type\":\"message\"}}\n"
+        parseStream(resp, "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_1\",\"type\":\"message\"}}\n"
                 + "{\"type\":\"response.output_text.delta\",\"delta\":\"所有代码修改完成。\"}\n"
                 + "{\"type\":\"response.output_text.delta\",\"delta\":\"所有代码修改完成。更新任务进度并运行验证\"}");
 
         assertEquals("所有代码修改完成。更新任务进度并运行验证",
-                resp.getChoices().get(0).getMessage().getTextRaw()
-                        + resp.getChoices().get(1).getMessage().getTextRaw());
+                resp.getContentItems().get(0).getTextRaw()
+                        + resp.getContentItems().get(1).getTextRaw());
     }
 
     @Test
     public void streamReasoningSummaryDelta_isPublishedAsThinking() {
-        ChatResponseDefault resp = newResponse(true);
+        ChatAccumulator resp = newResponse(true);
 
-        parser.parseStreamResponse(resp,
+        parseStream(resp,
                 "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"rs_1\",\"type\":\"reasoning\"}}\n"
                         + "{\"type\":\"response.reasoning_summary_part.added\",\"item_id\":\"rs_1\"}\n"
                         + "{\"type\":\"response.reasoning_summary_text.delta\",\"item_id\":\"rs_1\",\"delta\":\"正在分析\"}\n"
                         + "{\"type\":\"response.reasoning_summary_text.delta\",\"item_id\":\"rs_1\",\"delta\":\"请求参数\"}");
 
-        assertEquals(2, resp.getChoices().size(), resp.toString());
-        assertTrue(resp.getChoices().get(0).getMessage().isThinking(), resp.toString());
-        assertTrue(resp.getChoices().get(1).getMessage().isThinking(), resp.toString());
-        assertEquals("正在分析", resp.getChoices().get(0).getMessage().getThinkingRaw());
-        assertEquals("请求参数", resp.getChoices().get(1).getMessage().getThinkingRaw());
+        assertEquals(2, resp.getContentItems().size(), resp.toString());
+        assertTrue(resp.getContentItems().get(0).isThinking(), resp.toString());
+        assertTrue(resp.getContentItems().get(1).isThinking(), resp.toString());
+        assertEquals("正在分析", resp.getContentItems().get(0).getThinkingRaw());
+        assertEquals("请求参数", resp.getContentItems().get(1).getThinkingRaw());
 
         // parser 只负责产出分片；核心 ChatRequestDesc 发布分片时才写入 aggregationThinking。
         StringBuilder thinking = new StringBuilder();
-        for (ChatChoice choice : resp.getChoices()) {
-            thinking.append(choice.getMessage().getThinkingRaw());
+        for (AssistantMessage choice : resp.getContentItems()) {
+            thinking.append(choice.getThinkingRaw());
         }
         assertEquals("正在分析请求参数", thinking.toString());
     }
 
     @Test
     public void streamCumulativeReasoningDelta_isNormalizedToSuffix() {
-        ChatResponseDefault resp = newResponse(true);
+        ChatAccumulator resp = newResponse(true);
 
-        parser.parseStreamResponse(resp, "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"rs_1\",\"type\":\"reasoning\"}}\n"
+        parseStream(resp, "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"rs_1\",\"type\":\"reasoning\"}}\n"
                 + "{\"type\":\"response.reasoning_text.delta\",\"delta\":\"补登README目录结构\"}\n"
                 + "{\"type\":\"response.reasoning_text.delta\",\"delta\":\"补登README目录结构(新增composables/)\"}");
 
         assertEquals("补登README目录结构(新增composables/)",
-                resp.getChoices().get(0).getMessage().getThinkingRaw()
-                        + resp.getChoices().get(1).getMessage().getThinkingRaw());
+                resp.getContentItems().get(0).getThinkingRaw()
+                        + resp.getContentItems().get(1).getThinkingRaw());
     }
 
     @Test
     public void streamShortLegitDeltas_areNotTreatedAsSnapshot() {
-        ChatResponseDefault resp = newResponse(true);
+        ChatAccumulator resp = newResponse(true);
 
         // 合规增量在流首极易偶然构成前缀关系（"好" / "好的"），累计长度未达门槛时不得改写
-        parser.parseStreamResponse(resp, "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_1\",\"type\":\"message\"}}\n"
+        parseStream(resp, "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_1\",\"type\":\"message\"}}\n"
                 + "{\"type\":\"response.output_text.delta\",\"delta\":\"好\"}\n"
                 + "{\"type\":\"response.output_text.delta\",\"delta\":\"好的\"}");
 
         StringBuilder buf = new StringBuilder();
-        for (ChatChoice choice : resp.getChoices()) {
-            buf.append(choice.getMessage().getTextRaw());
+        for (AssistantMessage choice : resp.getContentItems()) {
+            buf.append(choice.getTextRaw());
         }
         assertEquals("好好的", buf.toString());
     }
 
     @Test
     public void streamDuplicatedSnapshotFrame_isDropped() {
-        ChatResponseDefault resp = newResponse(true);
+        ChatAccumulator resp = newResponse(true);
 
-        parser.parseStreamResponse(resp, "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_1\",\"type\":\"message\"}}\n"
+        parseStream(resp, "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_1\",\"type\":\"message\"}}\n"
                 + "{\"type\":\"response.output_text.delta\",\"delta\":\"所有代码修改完成。\"}\n"
                 + "{\"type\":\"response.output_text.delta\",\"delta\":\"所有代码修改完成。更新任务进度\"}\n"
                 + "{\"type\":\"response.output_text.delta\",\"delta\":\"所有代码修改完成。更新任务进度\"}");
 
-        assertEquals(2, resp.getChoices().size(), "完全重复的快照帧不应产生新的 choice");
+        assertEquals(2, resp.getContentItems().size(), "完全重复的快照帧不应产生新的 choice");
         assertEquals("所有代码修改完成。更新任务进度",
-                resp.getChoices().get(0).getMessage().getTextRaw()
-                        + resp.getChoices().get(1).getMessage().getTextRaw());
+                resp.getContentItems().get(0).getTextRaw()
+                        + resp.getContentItems().get(1).getTextRaw());
     }
 }

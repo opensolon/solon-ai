@@ -18,7 +18,8 @@ package org.noear.solon.ai.chat.dialect;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.AiModelDialect;
 import org.noear.solon.ai.chat.ChatConfig;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.ChatAccumulator;
+import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -83,7 +84,7 @@ public interface ChatDialect extends AiModelDialect {
      *
      * @param toolCallBuilders 工具调用构建器集合
      */
-    ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders);
+    ONode buildAssistantToolCallMessageNode(ChatAccumulator acc, Map<String, ToolCallBuilder> toolCallBuilders);
 
     /**
      * 构建助理消息根据直接返回的工具消息
@@ -93,19 +94,27 @@ public interface ChatDialect extends AiModelDialect {
     AssistantMessage buildAssistantMessageByToolMessages(AssistantMessage toolCallMessage, List<ToolMessage> toolMessages);
 
     /**
-     * 分析响应数据
+     * 分析响应数据（事件形态）
      *
-     * @param config   聊天配置
-     * @param resp     响应体
+     * <p>方言解析响应的<b>唯一必需入口</b>。方言不再用 {@code boolean} 返回值区分「有内容」
+     * 与「解析失败」——有内容就 {@code ctx.emit(...)} 或写入 {@code ctx.getAccumulator()}，
+     * 出错就 {@code ctx.getAccumulator().setError(...)}，已消费但无内容则什么都不做。</p>
+     *
+     * <p>内容主干（正文 / 思考 / 工具调用）应写入累积器的内容项，由核心统一转成
+     * TEXT_* / THINKING_* / TOOL_CALL_* 事件并保证边界；方言只直接发射旧模型表达不了的
+     * 扩展语义（生命周期、服务端工具、引用、拒答、思考签名等）。</p>
+     *
+     * @param ctx      流上下文
      * @param respJson 响应数据
+     * @since 4.1
      */
-    boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String respJson);
+    void parseResponseJson(ChatStreamContext ctx, String respJson);
 
     /**
      * 分析工具调用
      *
-     * @param resp     响应体
+     * @param acc      响应累积器
      * @param oMessage 消息节点
      */
-    List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage);
+    List<AssistantMessage> parseAssistantMessage(ChatAccumulator acc, ONode oMessage);
 }

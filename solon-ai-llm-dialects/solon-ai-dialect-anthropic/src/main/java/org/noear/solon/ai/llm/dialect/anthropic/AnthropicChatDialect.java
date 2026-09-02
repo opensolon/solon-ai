@@ -19,8 +19,10 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
+import org.noear.solon.ai.chat.dialect.ChatDialects;
+import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -64,7 +66,8 @@ public class AnthropicChatDialect extends AbstractChatDialect {
         String standard = config.getStandardOrProvider();
 
         return "claude".equalsIgnoreCase(standard) ||
-                "anthropic".equalsIgnoreCase(standard) ||
+                ChatDialects.ANTHROPIC.equalsIgnoreCase(standard) ||
+                ChatDialects.ANTHROPIC_MESSAGES.equalsIgnoreCase(standard) ||
                 (Assert.isEmpty(standard) && config.getApiUrl().endsWith("/messages"));
     }
 
@@ -144,13 +147,13 @@ public class AnthropicChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
+    public void parseResponseJson(ChatStreamContext ctx, String data) {
         //有些中转会直接输出："error xxx" 内容
-        if (tryParseErrorText(resp, json)) {
-            return true;
+        if (tryParseErrorText(ctx.getAccumulator(), data)) {
+            return;
         }
 
-        return responseParser.parseResponse(resp, json);
+        responseParser.parseResponse(ctx, data);
     }
 
     /**
@@ -170,12 +173,12 @@ public class AnthropicChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
-        return requestBuilder.buildAssistantToolCallMessageNode(resp, toolCallBuilders);
+    public ONode buildAssistantToolCallMessageNode(ChatAccumulator acc, Map<String, ToolCallBuilder> toolCallBuilders) {
+        return requestBuilder.buildAssistantToolCallMessageNode(acc, toolCallBuilders);
     }
 
     @Override
-    public List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
+    public List<AssistantMessage> parseAssistantMessage(ChatAccumulator acc, ONode oMessage) {
         ONode oContent = oMessage.getOrNull("content");
         if (oContent != null && oContent.isArray()) {
             boolean hasToolUse = false;
@@ -187,23 +190,23 @@ public class AnthropicChatDialect extends AbstractChatDialect {
             }
 
             if (hasToolUse) {
-                return parseClaudeAssistantMessage(resp, oMessage, oContent);
+                return parseClaudeAssistantMessage(acc, oMessage, oContent);
             }
         }
 
-        return super.parseAssistantMessage(resp, oMessage);
+        return super.parseAssistantMessage(acc, oMessage);
     }
 
     /**
      * 构建Claude消息体
-     * @param resp
+     * @param acc
      * @param oMessage
      * @param oContent
      * @return 消息集合
      * @author oisin lu
      * @date 2026年3月4日
      */
-    private List<AssistantMessage> parseClaudeAssistantMessage(ChatResponseDefault resp, ONode oMessage, ONode oContent) {
+    private List<AssistantMessage> parseClaudeAssistantMessage(ChatAccumulator acc, ONode oMessage, ONode oContent) {
         List<AssistantMessage> messageList = new ArrayList<>();
 
         StringBuilder thinkingContent = new StringBuilder();
@@ -261,9 +264,9 @@ public class AnthropicChatDialect extends AbstractChatDialect {
             }
         }
 
-        if (resp.in_thinking && resp.isStream()) {
-            messageList.add(new AssistantMessage("","", true).reasoningFieldName(resp.reasoning_field_name));
-            resp.in_thinking = false;
+        if (acc.in_thinking && acc.isStream()) {
+            messageList.add(new AssistantMessage("","", true).reasoningFieldName(acc.reasoning_field_name));
+            acc.in_thinking = false;
         }
 
         // 构建 AssistantMessage：text/thinking 分离（新接口），不再注入 <think> 标签；

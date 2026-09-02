@@ -24,11 +24,11 @@ import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.content.AudioBlock;
-import org.noear.solon.ai.chat.ChatChoice;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatException;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
+import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
@@ -39,12 +39,10 @@ import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.core.util.DateUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
@@ -147,7 +145,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
      * @since 3.9
      */
     @Override
-    public List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
+    public List<AssistantMessage> parseAssistantMessage(ChatAccumulator acc, ONode oMessage) {
         // Ollama think 模式字段为 thinking，映射到通用 reasoning 管线
         if (oMessage != null
                 && !oMessage.hasKey("reasoning")
@@ -159,13 +157,13 @@ public class OllamaChatDialect extends AbstractChatDialect {
             }
         }
 
-        List<AssistantMessage> messageList = super.parseAssistantMessage(resp, oMessage);
+        List<AssistantMessage> messageList = super.parseAssistantMessage(acc, oMessage);
         List<ContentBlock> mediaBlocks = parseOllamaMediaSidecars(oMessage);
         if (Utils.isEmpty(mediaBlocks)) {
             return messageList;
         }
 
-        resp.addMediaBlocks(mediaBlocks);
+        acc.addMediaBlocks(mediaBlocks);
 
         List<AssistantMessage> result = new ArrayList<>(messageList.size());
         boolean mediaMerged = false;
@@ -274,10 +272,10 @@ public class OllamaChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
+    public ONode buildAssistantToolCallMessageNode(ChatAccumulator acc, Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode oNode = new ONode();
         oNode.set("role", "assistant");
-        oNode.set("content", resp.getAggregationText());
+        oNode.set("content", acc.getAggregationText());
         oNode.getOrNew("tool_calls").asArray().then(n1 -> {
             for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
                 //有可能没有
@@ -296,54 +294,75 @@ public class OllamaChatDialect extends AbstractChatDialect {
         return oNode;
     }
 
+    /**
+     * 解析响应（事件形态）
+     *
+     * <p>Ollama chat 协议的流式帧只承载内容增量（正文 / 思考 / 工具调用分片），
+     * 没有独立的生命周期或服务端工具事件，因此内容主干统一交由核心从内容项转换为
+     * TEXT_DELTA / THINKING_DELTA / TOOL_CALL_CHUNK 并保证边界，此处不额外发射事件。</p>
+     *
+     * @since 4.1
+     */
     @Override
-    public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
-        //解析
-        ONode oResp = ONode.ofJson(json);
+    public void parseResponseJson(ChatStreamContext ctx, String data) {
+        ChatAccumulator acc = ctx.getAccumulator();
+
+        //解析（每帧只解析一次 JSON：正文解析与错误事件共用同一份节点）
+        ONode oResp = ONode.ofJson(data);
 
         if (oResp.isObject() == false) {
-            return false;
+            return;
         }
 
+        parseFrameNode(acc, oResp);
+
+        if (acc.getError() != null) {
+            ctx.emit(ctx.event(org.noear.solon.ai.chat.event.ChatEventType.ERROR)
+                    .rawType("error")
+                    .error(acc.getError())
+                    .raw(oResp)
+                    .build());
+        }
+    }
+
+    /**
+     * 解析一帧（已解析好的 JSON 节点）
+     *
+     * @since 4.1
+     */
+    private void parseFrameNode(ChatAccumulator acc, ONode oResp) {
         if (oResp.hasKey("error")) {
-            resp.setError(new ChatException(oResp.get("error").getString()));
+            acc.setError(new ChatException(oResp.get("error").getString()));
         } else {
-            resp.setModel(oResp.get("model").getString());
-            resp.setFinished(oResp.get("done").getBoolean());
+            acc.setModel(oResp.get("model").getString());
+            acc.setFinished(oResp.get("done").getBoolean());
             String done_reason = oResp.get("done_reason").getString();
 
-            String createdStr = oResp.get("created_at").getString();
-            if (createdStr != null) {
-                createdStr = createdStr.substring(0, createdStr.indexOf(".") + 4);
-            }
-            Date created = DateUtil.parseTry(createdStr);
-            List<AssistantMessage> messageList = parseAssistantMessage(resp, oResp.get("message"));
+            List<AssistantMessage> messageList = parseAssistantMessage(acc, oResp.get("message"));
             for (AssistantMessage msg1 : messageList) {
-                resp.addChoice(new ChatChoice(0, created, done_reason, msg1));
+                acc.addContentItem(msg1);
             }
 
             if (Utils.isNotEmpty(done_reason)) {
-                resp.lastFinishReason = done_reason;
+                acc.lastFinishReason = done_reason;
             }
 
-            if (resp.isFinished()) {
+            if (acc.isFinished()) {
                 long promptTokens = oResp.get("prompt_eval_count").getLong();
                 long completionTokens = oResp.get("eval_count").getLong();
                 long totalTokens = promptTokens + completionTokens;
 
-                resp.setUsage(new AiUsage(promptTokens, 0L, completionTokens, totalTokens, oResp));
+                acc.setUsage(new AiUsage(promptTokens, 0L, completionTokens, totalTokens, oResp));
 
-                if (resp.hasChoices() == false) {
-                    resp.addChoice(new ChatChoice(0, created, resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
+                if (acc.hasContentItems() == false) {
+                    acc.addContentItem(new AssistantMessage(""));
                 }
             }
         }
-
-        return true;
     }
 
     @Override
-    protected ToolCall parseToolCall(ChatResponseDefault resp, ONode n1) {
+    protected ToolCall parseToolCall(ChatAccumulator acc, ONode n1) {
         String callId = n1.get("id").getString();//可能是空的
 
         ONode n1f = n1.get("function");

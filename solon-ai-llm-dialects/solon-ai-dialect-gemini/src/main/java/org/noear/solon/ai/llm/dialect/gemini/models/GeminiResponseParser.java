@@ -18,12 +18,10 @@ package org.noear.solon.ai.llm.dialect.gemini.models;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
-import org.noear.solon.ai.chat.ChatChoice;
 import org.noear.solon.ai.chat.ChatException;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 
-import java.util.Date;
 import java.util.List;
 
 /**
@@ -45,32 +43,32 @@ public class GeminiResponseParser {
     /**
      * 解析响应 JSON
      *
-     * @param resp  聊天响应对象
+     * @param acc  聊天响应对象
      * @param json  响应 JSON 字符串
      * @return 是否有有效的选择
      */
-    public boolean parseResponse(ChatResponseDefault resp, String json) {
-        if (resp.isStream()) {
-            return parseStreamResponse(resp, json);
+    public boolean parseResponse(ChatAccumulator acc, String json) {
+        if (acc.isStream()) {
+            return parseStreamResponse(acc, json);
         } else {
-            return parseNonStreamResponse(resp, json);
+            return parseNonStreamResponse(acc, json);
         }
     }
 
     /**
      * 解析流式响应
      *
-     * @param resp 聊天响应对象
+     * @param acc 聊天响应对象
      * @param json 响应 JSON 字符串
      * @return 是否有有效的选择
      */
-    public boolean parseStreamResponse(ChatResponseDefault resp, String json) {
+    public boolean parseStreamResponse(ChatAccumulator acc, String json) {
         if (json == null || json.isEmpty()) {
             return false;
         }
 
         String[] lines = json.split("\n");
-        boolean hasChoices = false;
+        boolean hasContent = false;
 
         for (String line : lines) {
             line = line.trim();
@@ -89,9 +87,9 @@ public class GeminiResponseParser {
             }
 
             if ("[DONE]".equals(jsonData)) {
-                if (resp.isFinished() == false) {
-                    resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
-                    resp.setFinished(true);
+                if (acc.isFinished() == false) {
+                    acc.addContentItem(new AssistantMessage(""));
+                    acc.setFinished(true);
                 }
                 return true;
             }
@@ -108,69 +106,57 @@ public class GeminiResponseParser {
                 if (Utils.isEmpty(errorMsg)) {
                     errorMsg = oError.getString();
                 }
-                resp.setError(new ChatException(errorMsg));
+                acc.setError(new ChatException(errorMsg));
                 return true;
             }
 
             if (oResp.hasKey("model")) {
-                resp.setModel(oResp.get("model").getString());
+                acc.setModel(oResp.get("model").getString());
             } else if (oResp.hasKey("modelVersion")) {
-                resp.setModel(oResp.get("modelVersion").getString());
-            }
-
-            Date created = new Date();
-            if (oResp.hasKey("createTime")) {
-                String createTime = oResp.get("createTime").getString();
-                if (createTime != null && createTime.length() >= 19) {
-                    try {
-                        created = java.sql.Timestamp.valueOf(createTime.replace("T", " ").substring(0, 19));
-                    } catch (Exception e) {
-                    }
-                }
+                acc.setModel(oResp.get("modelVersion").getString());
             }
 
             ONode oCandidates = oResp.getOrNull("candidates");
             if (oCandidates != null && oCandidates.isArray()) {
                 for (ONode oChoice1 : oCandidates.getArray()) {
-                    int index = oChoice1.get("index").getInt();
                     String finishReason = oChoice1.get("finishReason").getString();
 
                     if (Utils.isNotEmpty(finishReason)) {
-                        resp.setFinished(true);
-                        resp.lastFinishReason = finishReason;
+                        acc.setFinished(true);
+                        acc.lastFinishReason = finishReason;
                     }
 
                     ONode oContent = oChoice1.get("content");
-                    List<AssistantMessage> messageList = thoughtProcessor.parse(resp, oContent);
+                    List<AssistantMessage> messageList = thoughtProcessor.parse(acc, oContent);
 
                     for (AssistantMessage msg1 : messageList) {
-                        resp.addChoice(new ChatChoice(index, created, finishReason, msg1));
-                        hasChoices = true;
+                        acc.addContentItem(msg1);
+                        hasContent = true;
                     }
 
                     // 若 finishReason 存在但 messageList 为空（如最后一帧仅含 thoughtSignature 而无文本），
-                    // 仍需补充一个空消息，以确保 finished 状态能通过 Choice 正常传递给订阅者
+                    // 仍需补充一个空消息，以确保 finished 状态能通过内容项正常传递给订阅者
                     if (Utils.isNotEmpty(finishReason) && messageList.isEmpty()) {
-                        resp.addChoice(new ChatChoice(index, created, finishReason, new AssistantMessage("")));
-                        hasChoices = true;
+                        acc.addContentItem(new AssistantMessage(""));
+                        hasContent = true;
                     }
                 }
             }
 
             // prompt 被安全策略拦截时无 candidates 返回，需显式报错避免静默结束
-            if (hasChoices == false) {
+            if (hasContent == false) {
                 ONode oPromptFeedback = oResp.getOrNull("promptFeedback");
                 if (oPromptFeedback != null) {
                     String blockReason = oPromptFeedback.get("blockReason").getString();
                     if (Utils.isNotEmpty(blockReason)) {
-                        resp.setError(new ChatException("prompt blocked: " + blockReason));
+                        acc.setError(new ChatException("prompt blocked: " + blockReason));
                         return true;
                     }
                 }
             }
 
             ONode oUsage = oResp.getOrNull("usageMetadata");
-            if (oUsage != null && resp.isFinished()) {
+            if (oUsage != null && acc.isFinished()) {
                 long promptTokens = oUsage.getOrNull("promptTokenCount") != null ? oUsage.get("promptTokenCount").getLong() : 0;
                 long completionTokens = oUsage.getOrNull("candidatesTokenCount") != null ? oUsage.get("candidatesTokenCount").getLong() : 0;
                 long totalTokens = oUsage.getOrNull("totalTokenCount") != null ? oUsage.get("totalTokenCount").getLong() : 0;
@@ -178,26 +164,26 @@ public class GeminiResponseParser {
                 long cachedContentTokens = oUsage.getOrNull("cachedContentTokenCount") != null ? oUsage.get("cachedContentTokenCount").getLong() : 0L;
                 long thinkingTokens = oUsage.getOrNull("thoughtsTokenCount") != null ? oUsage.get("thoughtsTokenCount").getLong() : 0L;
 
-                resp.setUsage(new AiUsage(promptTokens, thinkingTokens, completionTokens, totalTokens,
+                acc.setUsage(new AiUsage(promptTokens, thinkingTokens, completionTokens, totalTokens,
                         0L, cachedContentTokens, oUsage));
             }
         }
 
-        return hasChoices;
+        return hasContent;
     }
 
     /**
      * 解析非流式响应
      *
-     * @param resp 聊天响应对象
+     * @param acc 聊天响应对象
      * @param json 响应 JSON 字符串
      * @return 解析是否成功
      */
-    public boolean parseNonStreamResponse(ChatResponseDefault resp, String json) {
+    public boolean parseNonStreamResponse(ChatAccumulator acc, String json) {
         if ("[DONE]".equals(json)) {
-            if (resp.isFinished() == false) {
-                resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
-                resp.setFinished(true);
+            if (acc.isFinished() == false) {
+                acc.addContentItem(new AssistantMessage(""));
+                acc.setFinished(true);
             }
             return true;
         }
@@ -214,26 +200,20 @@ public class GeminiResponseParser {
             if (Utils.isEmpty(errorMsg)) {
                 errorMsg = oError.getString();
             }
-            resp.setError(new ChatException(errorMsg));
+            acc.setError(new ChatException(errorMsg));
             return true;
         }
 
         if (oResp.hasKey("model")) {
-            resp.setModel(oResp.get("model").getString());
+            acc.setModel(oResp.get("model").getString());
         } else if (oResp.hasKey("modelVersion")) {
-            resp.setModel(oResp.get("modelVersion").getString());
-        }
-
-        Date created = new Date();
-        if (oResp.hasKey("created")) {
-            created = new Date(oResp.get("created").getLong() * 1000);
+            acc.setModel(oResp.get("modelVersion").getString());
         }
 
         ONode oCandidates = oResp.getOrNull("candidates");
         if (oCandidates != null && oCandidates.isArray()) {
 
             for (ONode oChoice1 : oCandidates.getArray()) {
-                int index = oChoice1.get("index").getInt();
                 String finishReason = oChoice1.get("finishReason").getString();
 
                 if (Utils.isEmpty(finishReason)) {
@@ -241,32 +221,32 @@ public class GeminiResponseParser {
                 }
 
                 ONode oContent = oChoice1.get("content");
-                List<AssistantMessage> messageList = thoughtProcessor.parse(resp, oContent);
+                List<AssistantMessage> messageList = thoughtProcessor.parse(acc, oContent);
 
                 for (AssistantMessage msg1 : messageList) {
-                    resp.addChoice(new ChatChoice(index, created, finishReason, msg1));
+                    acc.addContentItem(msg1);
                 }
 
                 if (Utils.isNotEmpty(finishReason)) {
-                    resp.setFinished(true);
-                    resp.lastFinishReason = finishReason;
+                    acc.setFinished(true);
+                    acc.lastFinishReason = finishReason;
                 }
             }
         }
 
-        if (resp.isFinished()) {
-            if (resp.hasChoices() == false) {
-                resp.addChoice(new ChatChoice(0, created, resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
+        if (acc.isFinished()) {
+            if (acc.hasContentItems() == false) {
+                acc.addContentItem(new AssistantMessage(""));
             }
         }
 
         // prompt 被安全策略拦截时无 candidates 返回，需显式报错避免静默返回空响应
-        if (resp.hasChoices() == false) {
+        if (acc.hasContentItems() == false) {
             ONode oPromptFeedback = oResp.getOrNull("promptFeedback");
             if (oPromptFeedback != null) {
                 String blockReason = oPromptFeedback.get("blockReason").getString();
                 if (Utils.isNotEmpty(blockReason)) {
-                    resp.setError(new ChatException("prompt blocked: " + blockReason));
+                    acc.setError(new ChatException("prompt blocked: " + blockReason));
                     return true;
                 }
             }
@@ -281,7 +261,7 @@ public class GeminiResponseParser {
             long cachedContentTokens = oUsage.get("cachedContentTokenCount").getLong();
             long thinkingTokens = oUsage.get("thoughtsTokenCount").getLong();
 
-            resp.setUsage(new AiUsage(promptTokens, thinkingTokens, completionTokens, totalTokens,
+            acc.setUsage(new AiUsage(promptTokens, thinkingTokens, completionTokens, totalTokens,
                     0L, cachedContentTokens, oUsage));
         }
 

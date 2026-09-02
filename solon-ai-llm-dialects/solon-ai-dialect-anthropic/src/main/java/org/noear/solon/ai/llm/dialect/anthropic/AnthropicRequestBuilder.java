@@ -19,7 +19,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.message.*;
@@ -1078,7 +1078,7 @@ public class AnthropicRequestBuilder {
      * @param toolCallBuilders 工具调用构建器
      * @return 助手消息
      */
-    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
+    public ONode buildAssistantToolCallMessageNode(ChatAccumulator acc, Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode node = new ONode();
         node.set("role", "assistant");
 
@@ -1086,16 +1086,16 @@ public class AnthropicRequestBuilder {
 
         // 仅当 thinkingSignature 有效时回传 thinking；无 signature 的 thinking 不回传，
         // 避免 tool 多轮在兼容网关上触发 EMPTY_RESPONSE
-        String thinkingContent = resp.thinkingBuilder.toString();
-        if (Utils.isNotEmpty(thinkingContent) && Utils.isNotEmpty(resp.thinkingSignature)) {
+        String thinkingContent = acc.getAggregationThinking();
+        if (Utils.isNotEmpty(thinkingContent) && Utils.isNotEmpty(acc.thinkingSignature)) {
             contentArray.addNew()
                     .set("type", "thinking")
                     .set("thinking", thinkingContent)
-                    .set("signature", resp.thinkingSignature);
+                    .set("signature", acc.thinkingSignature);
         }
 
         // 回传 redacted_thinking 块（安全过滤的推理内容，原样保留供多轮，对齐 Anthropic SDK）
-        appendRedactedThinkingBlocks(contentArray, resp);
+        appendRedactedThinkingBlocks(contentArray, acc);
 
         for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
             ToolCallBuilder builder = kv.getValue();
@@ -1130,7 +1130,7 @@ public class AnthropicRequestBuilder {
      * 将 redacted_thinking 内容块追加到 content 数组。
      * <p>redacted_thinking 是 Anthropic API 对安全过滤推理内容的 opaque 加密块，
      * 必须原样回传，否则多轮对话可能失败（对齐 Anthropic SDK 规范）。</p>
-     * <p>两种重载：从 {@link AssistantMessage}（contentRaw 路径）和从 {@link ChatResponseDefault}
+     * <p>两种重载：从 {@link AssistantMessage}（contentRaw 路径）和从 {@link ChatAccumulator}
      * （流式聚合路径）获取 redactedThinkingData。</p>
      *
      * @since 4.0.4
@@ -1161,9 +1161,9 @@ public class AnthropicRequestBuilder {
                 .set("data", (String) redacted);
     }
 
-    private void appendRedactedThinkingBlocks(ONode contentArray, ChatResponseDefault resp) {
+    private void appendRedactedThinkingBlocks(ONode contentArray, ChatAccumulator acc) {
         // 优先分块列表（协议：逐块原样回传）
-        java.util.List<String> blocks = AnthropicResponseParser.getRedactedBlocks(resp, false);
+        java.util.List<String> blocks = AnthropicResponseParser.getRedactedBlocks(acc, false);
         if (blocks != null && !blocks.isEmpty()) {
             for (String data : blocks) {
                 contentArray.addNew()
@@ -1173,7 +1173,7 @@ public class AnthropicRequestBuilder {
             return;
         }
 
-        String data = resp.attrIfAbsent("redactedThinkingData", k->new StringBuilder()).toString();
+        String data = acc.attrIfAbsent("redactedThinkingData", k->new StringBuilder()).toString();
         if (Utils.isNotEmpty(data)) {
             contentArray.addNew()
                     .set("type", "redacted_thinking")

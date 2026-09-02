@@ -19,7 +19,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.content.AbsMedia;
 import org.noear.solon.ai.chat.content.AudioBlock;
@@ -452,7 +452,7 @@ public class GeminiRequestBuilder {
      * @param toolCallBuilders 工具调用构建器
      * @return 助手消息节点
      */
-    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
+    public ONode buildAssistantToolCallMessageNode(ChatAccumulator acc, Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode oNode = new ONode();
         oNode.set("role", "model");
 
@@ -486,8 +486,8 @@ public class GeminiRequestBuilder {
                     }
                 });
                 // 仅第一个 part 需要回传 thoughtSignature（并行调用时后续 part 不需要）
-                if (isFirst[0] && Utils.isNotEmpty(resp.thinkingSignature)) {
-                    partNode.set("thoughtSignature", resp.thinkingSignature);
+                if (isFirst[0] && Utils.isNotEmpty(acc.thinkingSignature)) {
+                    partNode.set("thoughtSignature", acc.thinkingSignature);
                 }
                 isFirst[0] = false;
             }

@@ -20,7 +20,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRequest;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
@@ -40,17 +40,17 @@ import static org.junit.jupiter.api.Assertions.*;
 public class GeminiThoughtProcessorTest {
     private final GeminiThoughtProcessor processor = new GeminiThoughtProcessor();
 
-    private ChatResponseDefault newResponse(boolean stream) {
+    private ChatAccumulator newResponse(boolean stream) {
         ChatConfig config = new ChatConfig();
         ChatOptions options = ChatOptions.of();
         ChatRequest req = new ChatRequest(config, GeminiChatDialect.getInstance(), options,
                 InMemoryChatSession.builder().build(), ChatMessage.ofSystem("test"), null, stream);
-        return new ChatResponseDefault(req, stream);
+        return new ChatAccumulator(req, stream);
     }
 
     @Test
     public void parseFunctionCall_withServerId() {
-        ChatResponseDefault resp = newResponse(true);
+        ChatAccumulator resp = newResponse(true);
         ONode oContent = ONode.ofJson("{\"parts\":[{\"functionCall\":{\"name\":\"getWeather\"," +
                 "\"args\":{\"city\":\"hz\"},\"id\":\"call-abc-123\"}}]}");
 
@@ -66,7 +66,7 @@ public class GeminiThoughtProcessorTest {
     public void parseFunctionCall_withoutServerId_idIsNull() {
         // Gemini 2.5 / OpenAI 兼容网关不返回 id：ToolCall.id 保持 null，
         // 回传时按 Gemini 2.5 的 name 关联方式（不写 id），避免本地伪造 id 导致网关关联失败
-        ChatResponseDefault resp = newResponse(true);
+        ChatAccumulator resp = newResponse(true);
         ONode oContent = ONode.ofJson("{\"parts\":[{\"functionCall\":{\"name\":\"getWeather\"," +
                 "\"args\":{\"city\":\"hz\"}}}]}");
 
@@ -79,7 +79,7 @@ public class GeminiThoughtProcessorTest {
     @Test
     public void parseFunctionCall_streaming_parallelSameName_distinctIndex() {
         // 同一 chunk 并行调用同名函数：index 用 name#n 区分（流式聚合 key），id 保留各自服务端 id
-        ChatResponseDefault resp = newResponse(true);
+        ChatAccumulator resp = newResponse(true);
         ONode oContent = ONode.ofJson("{\"parts\":[" +
                 "{\"functionCall\":{\"name\":\"getWeather\",\"args\":{\"city\":\"hz\"},\"id\":\"call-1\"}}," +
                 "{\"functionCall\":{\"name\":\"getWeather\",\"args\":{\"city\":\"bj\"},\"id\":\"call-2\"}}]}");
@@ -98,7 +98,7 @@ public class GeminiThoughtProcessorTest {
     public void parseFunctionCall_continuationFrame_nameRestoredFromLast() {
         // OpenAI 兼容网关（如 bearlab.ai）流式转 Gemini 时把 functionCall 分帧发送：
         // 帧2 只带 args、name 为空。应视为续帧，从 lastToolCallId 恢复函数名。
-        ChatResponseDefault resp = newResponse(true);
+        ChatAccumulator resp = newResponse(true);
         ONode frame1 = ONode.ofJson("{\"parts\":[{\"functionCall\":{\"name\":\"getWeather\",\"args\":{}}}]}");
         ONode frame2 = ONode.ofJson("{\"parts\":[{\"functionCall\":{\"name\":\"\",\"args\":{\"city\":\"hz\"}}}]}");
 
@@ -113,7 +113,7 @@ public class GeminiThoughtProcessorTest {
 
     @Test
     public void parseFunctionCall_nonStream_withServerId() {
-        ChatResponseDefault resp = newResponse(false);
+        ChatAccumulator resp = newResponse(false);
         ONode oContent = ONode.ofJson("{\"parts\":[{\"functionCall\":{\"name\":\"getWeather\"," +
                 "\"args\":{\"city\":\"hz\"},\"id\":\"call-xyz\"}}]}");
 

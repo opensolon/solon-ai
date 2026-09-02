@@ -19,6 +19,8 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
+import org.noear.solon.ai.chat.event.ChatEventType;
+import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
@@ -191,9 +193,167 @@ public class GeminiChatDialect extends AbstractChatDialect {
         options.optionSet("response_mime_type", "application/json");
     }
 
+    /**
+     * 解析响应（事件形态）
+     *
+     * <p>Gemini models generateContent 协议的流式帧只承载内容增量（正文 / 思考 / 工具调用分片），
+     * 没有独立的生命周期或服务端工具事件，因此内容主干统一交由核心从内容项转换为
+     * TEXT_DELTA / THINKING_DELTA / TOOL_CALL_CHUNK 并保证边界，此处不额外发射事件。</p>
+     *
+     * @since 4.1
+     */
     @Override
-    public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
-        return responseParser.parseResponse(resp, json);
+    public void parseResponseJson(ChatStreamContext ctx, String data) {
+        ChatAccumulator acc = ctx.getAccumulator();
+
+        // models generateContent 分支的解析器仅有累积器形态（无 ctx 重载）
+        responseParser.parseResponse(acc, data);
+
+        // 每帧只解析一次 JSON：错误事件与联网来源共用同一份节点
+        ONode raw;
+        try {
+            raw = ONode.ofJson(data);
+        } catch (Throwable e) {
+            raw = null;
+        }
+
+        if (acc.getError() != null) {
+            ctx.emit(ctx.event(ChatEventType.ERROR)
+                    .rawType("error")
+                    .error(acc.getError())
+                    .raw(raw)
+                    .build());
+        }
+
+        emitGroundingCitations(ctx, raw);
+        emitCodeExecution(ctx, raw);
+    }
+
+    /**
+     * 发射联网搜索来源（groundingMetadata）
+     *
+     * <p>generateContent 协议把来源放在 candidates[].groundingMetadata 里而非独立帧，
+     * 事件通道就位前这部分信息对订阅方不可见。</p>
+     *
+     * @since 4.1
+     */
+    private void emitGroundingCitations(ChatStreamContext ctx, ONode oResp) {
+        if (oResp == null || oResp.isObject() == false) {
+            return;
+        }
+
+        ONode candidates = oResp.getOrNull("candidates");
+        if (candidates == null || candidates.isArray() == false) {
+            return;
+        }
+
+        int candidateIndex = -1;
+        for (ONode candidate : candidates.getArray()) {
+            candidateIndex++;
+
+            ONode grounding = candidate.getOrNull("groundingMetadata");
+            if (grounding == null || grounding.isObject() == false) {
+                continue;
+            }
+
+            ONode chunks = grounding.getOrNull("groundingChunks");
+            if (chunks == null || chunks.isArray() == false) {
+                continue;
+            }
+
+            for (ONode chunk : chunks.getArray()) {
+                ONode web = chunk.getOrNull("web");
+                if (web == null || web.isObject() == false) {
+                    continue;
+                }
+
+                String uri = web.get("uri").getString();
+                if (Utils.isEmpty(uri)) {
+                    continue;
+                }
+
+                ctx.emit(ctx.event(ChatEventType.CITATION)
+                        .rawType("groundingMetadata")
+                        .subType("google_search")
+                        .index(candidateIndex)
+                        .text(uri)
+                        .raw(chunk)
+                        .build());
+            }
+        }
+    }
+
+    /**
+     * 发射代码执行服务端工具事件（executableCode / codeExecutionResult）
+     *
+     * <p>这两类 part 既不属于正文也不属于思考，内容项通道无处安放，旧实现下被静默丢弃：
+     * 订阅方既看不到模型跑了什么代码，也看不到执行输出。代码执行是 Gemini 服务端内置工具，
+     * 语义上与 Google 搜索同类，因此走 SERVER_TOOL_* 通道并保证 START/RESULT 成对。</p>
+     *
+     * <p>内容项产出不受影响：本方法只旁路发事件，不介入 GeminiThoughtProcessor 的文本拼接。</p>
+     *
+     * @since 4.1
+     */
+    private void emitCodeExecution(ChatStreamContext ctx, ONode oResp) {
+        if (oResp == null || oResp.isObject() == false) {
+            return;
+        }
+
+        ONode candidates = oResp.getOrNull("candidates");
+        if (candidates == null || candidates.isArray() == false) {
+            return;
+        }
+
+        int candidateIndex = -1;
+        for (ONode candidate : candidates.getArray()) {
+            candidateIndex++;
+
+            ONode content = candidate.getOrNull("content");
+            if (content == null || content.isObject() == false) {
+                continue;
+            }
+
+            ONode parts = content.getOrNull("parts");
+            if (parts == null || parts.isArray() == false) {
+                continue;
+            }
+
+            for (ONode part : parts.getArray()) {
+                if (part == null || part.isObject() == false) {
+                    continue;
+                }
+
+                //官方 REST 用 camelCase，部分兼容网关转发时写成 snake_case，两种都接
+                ONode executableCode = part.getOrNull("executableCode");
+                if (executableCode == null) {
+                    executableCode = part.getOrNull("executable_code");
+                }
+                if (executableCode != null && executableCode.isObject()) {
+                    ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_START)
+                            .rawType("executableCode")
+                            .subType("code_execution")
+                            .index(candidateIndex)
+                            .text(executableCode.get("code").getString())
+                            .raw(part)
+                            .build());
+                    continue;
+                }
+
+                ONode executionResult = part.getOrNull("codeExecutionResult");
+                if (executionResult == null) {
+                    executionResult = part.getOrNull("code_execution_result");
+                }
+                if (executionResult != null && executionResult.isObject()) {
+                    ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_RESULT)
+                            .rawType("codeExecutionResult")
+                            .subType("code_execution")
+                            .index(candidateIndex)
+                            .text(executionResult.get("output").getString())
+                            .raw(part)
+                            .build());
+                }
+            }
+        }
     }
 
     /**
@@ -225,18 +385,18 @@ public class GeminiChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
-        return requestBuilder.buildAssistantToolCallMessageNode(resp, toolCallBuilders);
+    public ONode buildAssistantToolCallMessageNode(ChatAccumulator acc, Map<String, ToolCallBuilder> toolCallBuilders) {
+        return requestBuilder.buildAssistantToolCallMessageNode(acc, toolCallBuilders);
     }
 
     @Override
-    public List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
+    public List<AssistantMessage> parseAssistantMessage(ChatAccumulator acc, ONode oMessage) {
         ONode oParts = oMessage.getOrNull("parts");
         if (oParts != null) {
             GeminiThoughtProcessor thoughtProcessor = new GeminiThoughtProcessor();
-            return thoughtProcessor.parse(resp, oMessage);
+            return thoughtProcessor.parse(acc, oMessage);
         } else {
-            return super.parseAssistantMessage(resp, oMessage);
+            return super.parseAssistantMessage(acc, oMessage);
         }
     }
 }

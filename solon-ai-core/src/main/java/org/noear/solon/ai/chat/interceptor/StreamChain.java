@@ -17,7 +17,7 @@ package org.noear.solon.ai.chat.interceptor;
 
 import org.noear.solon.ai.AiHandler;
 import org.noear.solon.ai.chat.ChatRequest;
-import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.event.ChatEvent;
 import org.noear.solon.core.util.RankEntity;
 import reactor.core.publisher.Flux;
 
@@ -34,28 +34,40 @@ import java.util.List;
  */
 public class StreamChain {
     private final List<RankEntity<ChatInterceptor>> interceptorList;
-    private final AiHandler<ChatRequest, Flux<ChatResponse>, RuntimeException> lastHandler;
-    private int index;
+    private final AiHandler<ChatRequest, Flux<ChatEvent>, RuntimeException> lastHandler;
+    /** 当前链节点的下一个拦截器位置；链节点本身不可变，可安全地被多个订阅复用。 */
+    private final int index;
 
-    public StreamChain(Collection<RankEntity<ChatInterceptor>> interceptors, AiHandler<ChatRequest, Flux<ChatResponse>, RuntimeException> lastHandler) {
-        this.interceptorList = new ArrayList<>(interceptors);
-
-        if (interceptorList.size() > 1) {
-            Collections.sort(interceptorList);
-        }
-
-        this.lastHandler = lastHandler;
-        this.index = 0;
+    public StreamChain(Collection<RankEntity<ChatInterceptor>> interceptors, AiHandler<ChatRequest, Flux<ChatEvent>, RuntimeException> lastHandler) {
+        this(copyAndSort(interceptors), lastHandler, 0);
     }
 
-    public Flux<ChatResponse> doIntercept(ChatRequest req) {
-        // 跳过已禁用的拦截器
-        while (index < interceptorList.size() && !interceptorList.get(index).target.isEnabled()) {
-            index++;
+    private StreamChain(List<RankEntity<ChatInterceptor>> interceptors,
+                        AiHandler<ChatRequest, Flux<ChatEvent>, RuntimeException> lastHandler,
+                        int index) {
+        this.interceptorList = interceptors;
+        this.lastHandler = lastHandler;
+        this.index = index;
+    }
+
+    private static List<RankEntity<ChatInterceptor>> copyAndSort(Collection<RankEntity<ChatInterceptor>> interceptors) {
+        List<RankEntity<ChatInterceptor>> list = new ArrayList<>(interceptors);
+        if (list.size() > 1) {
+            Collections.sort(list);
+        }
+        return Collections.unmodifiableList(list);
+    }
+
+    public Flux<ChatEvent> doIntercept(ChatRequest req) {
+        int nextIndex = index;
+        // 跳过已禁用的拦截器。不要修改当前节点的 index，否则延迟订阅和重复订阅会相互污染。
+        while (nextIndex < interceptorList.size() && !interceptorList.get(nextIndex).target.isEnabled()) {
+            nextIndex++;
         }
 
-        if (index < interceptorList.size()) {
-            return interceptorList.get(index++).target.interceptStream(req, this);
+        if (nextIndex < interceptorList.size()) {
+            StreamChain next = new StreamChain(interceptorList, lastHandler, nextIndex + 1);
+            return interceptorList.get(nextIndex).target.interceptStream(req, next);
         } else {
             // 所有拦截器都已禁用或已处理完
             if (lastHandler != null) {

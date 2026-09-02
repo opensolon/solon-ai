@@ -19,7 +19,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.content.AbsMedia;
 import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.content.ContentBlock;
@@ -565,7 +565,7 @@ public class GeminiInteractionsRequestBuilder {
      *
      * @return ONode 数组，每个元素是一个 function_call step
      */
-    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp,
+    public ONode buildAssistantToolCallMessageNode(ChatAccumulator acc,
                                                     Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode arrNode = new ONode().asArray();
 
@@ -593,8 +593,8 @@ public class GeminiInteractionsRequestBuilder {
             }
 
             // 仅第一个 step 回传 thoughtSignature
-            if (isFirst && Utils.isNotEmpty(resp.thinkingSignature)) {
-                step.set("thought_signature", resp.thinkingSignature);
+            if (isFirst && Utils.isNotEmpty(acc.thinkingSignature)) {
+                step.set("thought_signature", acc.thinkingSignature);
             }
             isFirst = false;
         }
