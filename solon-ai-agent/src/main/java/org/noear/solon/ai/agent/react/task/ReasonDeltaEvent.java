@@ -19,14 +19,10 @@ import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.event.ChatEvent;
-import org.noear.solon.ai.chat.event.ChatEventDefault;
 import org.noear.solon.ai.chat.event.ChatEventGroup;
-import org.noear.solon.ai.chat.event.ChatEventType;
-import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
-import java.util.List;
 
 /**
  * ReAct 思考流块

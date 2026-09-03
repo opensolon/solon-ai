@@ -26,6 +26,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.function.BiFunction;
+import java.util.regex.Pattern;
 
 /**
  * 任务进度追踪才能
@@ -66,11 +67,11 @@ public class TodoTalent extends AbsTalent {
     @Override
     public String getInstruction(Prompt prompt) {
         return "## 任务规划指南 (Task Planning Guide)\n" +
-                "1. **适时启用**: 对需要多个步骤、阶段或工具协作的任务，使用 `todowrite` 建立清单；简单问答、单次查询或计算无需创建计划。任务目标或范围发生明显变化时，及时调整清单。\n" +
-                "2. **开始前同步**: 新建计划或不确定当前进度时，先使用 `todoread`/`todowrite` 同步清单，再开展后续工作。每个可跟踪事项使用 `- [ ]` 待办、`- [/]` 进行中、`- [x]` 已完成。\n" +
-                "3. **随进度更新**: 开始处理某项时标记为 `[/]`，客观完成后及时标记为 `[x]`，不要等到任务末尾集中补记。清单应反映当前实际进度，不要为了收尾虚假标记。\n" +
-                "4. **收尾前确认**: 输出最终结果前，确认清单与实际完成情况一致；只要仍有 `[ ]` 或 `[/]`，就继续推进或说明确实存在的外部阻塞，不要直接总结。以 `todoread`/`todowrite` 返回的进度提示作为收尾参考。\n" +
-                "5. **恢复优先**: 任务被打断、用户要求继续，或上下文发生变化后，先读取当前清单，避免凭记忆推断进度。";
+                "1. **适时启用**: 对需要多个步骤、阶段或工具协作的任务，必须使用 `todowrite` 建立清单；简单问答、单次查询无需创建计划。任务目标变化时及时更新。\n" +
+                "2. **全量更新**: `todowrite` 会覆盖原文件，更新进度时**必须提供包含所有历史任务（含已完成）的完整 Markdown**，切勿仅发送新增或修改的单行。\n" +
+                "3. **同步与状态标记**: 每个可跟踪事项统一使用 `- [ ]` 待办、`- [/]` 进行中、`- [x]` 已完成。开始处理某项标记为 `[/]`，完成后立即更新为 `[x]`。\n" +
+                "4. **严禁虚假收尾**: 输出最终回复前，确认清单全为 `[x]`；若存在 `[ ]` 或 `[/]`，严禁直接总结或假装结束，必须继续调用工具推进，或显式向用户说明阻塞原因。\n" +
+                "5. **上下文恢复**: 任务打断、继续或提示词很长时，优先调用 `todoread` 读取进度，避免凭记忆推断。";
     }
 
     protected Path getWorkPath(String __cwd, String __sessionId) {
@@ -94,7 +95,7 @@ public class TodoTalent extends AbsTalent {
         return getWorkPath(cwd, sessionId).resolve(TODO_FILE_NAME);
     }
 
-    @ToolMapping(name = TOOL_TODOREAD, description = "读取当前任务清单和进度。开始复杂任务、恢复或继续已有任务时，或准备收尾前使用，以确认下一步及清单是否已完成。")
+    @ToolMapping(name = TOOL_TODOREAD, description = "读取当前任务清单和执行进度。用于恢复被打断的任务、确认下一步工作，或在收尾前核对是否全完成。")
     public String todoRead(String __cwd,
                            String __sessionId) throws IOException {
         Path workPath = getWorkPath(__cwd, __sessionId);
@@ -110,9 +111,9 @@ public class TodoTalent extends AbsTalent {
         return content + buildProgressFooter(content);
     }
 
-    @ToolMapping(name = TOOL_TODOWRITE, description = "创建或更新完整任务清单（用于同步实际执行进度）。收尾前确保清单与实际结果一致。")
+    @ToolMapping(name = TOOL_TODOWRITE, description = "创建或全量覆盖更新任务清单。更新状态时必须传入包含所有任务（已完成/进行中/待办）的完整 Markdown 内容。")
     public String todoWrite(
-            @Param(value = "todos", description = "完整 Markdown 任务清单。可使用 `##` 标题分组；所有可跟踪任务必须使用 checkbox 行：`- [ ]` 待办、`- [/]` 进行中、`- [x]` 已完成。不要用无状态普通列表 `- xxx` 表示任务，必须带 checkbox 标记。") String todosMarkdown,
+            @Param(value = "todos", description = "完整 Markdown 任务清单。只能使用 `- [ ]` 待办、`- [/]` 进行中、`- [x]` 已完成，不要使用数字序号或无状态列表。更新时必须包含全量任务，不能只传部分。") String todosMarkdown,
             String __cwd,
             String __sessionId
     ) throws IOException {
@@ -133,20 +134,27 @@ public class TodoTalent extends AbsTalent {
         return "TODO saved." + buildProgressFooter(content);
     }
 
+    // 在 ^ 和 [*-] 之间增加 \s*，匹配可选的缩进
+    private static final Pattern TODO_LINE_PATTERN = Pattern.compile("^\\s*[*-]\\s*\\[([ x/X])\\]\\s*(.*)");
+
     /**
      * 根据清单内容构造进度页脚，并在决策点给出明确的“继续/完成”推力。
      */
     private String buildProgressFooter(String content) {
         int total = 0, done = 0, inProgress = 0, pending = 0;
         String firstUnfinished = null;
+
         for (String line : content.split("\n")) {
             String trimmed = line.trim();
-            // 仅识别形如 "- [x]" 的 checkbox 行，状态字符大小写均兼容（如 [X] / [ ] / [/]）
-            if (trimmed.length() < 5 || !trimmed.startsWith("- [") || trimmed.charAt(4) != ']') {
+            java.util.regex.Matcher matcher = TODO_LINE_PATTERN.matcher(trimmed);
+
+            if (!matcher.matches()) {
                 continue;
             }
-            char mark = Character.toLowerCase(trimmed.charAt(3));
-            String text = trimmed.substring(5).trim();
+
+            char mark = Character.toLowerCase(matcher.group(1).charAt(0));
+            String text = matcher.group(2).trim();
+
             if (mark == 'x') {
                 total++;
                 done++;

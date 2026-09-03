@@ -319,6 +319,104 @@ public class AiSdkStreamWrapper {
     }
 
     /**
+     * 将 Agent 事件流转换为 Vercel AI SDK 协议 SSE（薄适配，反射解耦）。
+     *
+     * <p>本模块不依赖 solon-ai-agent（分层：UI 只依赖 core），Agent 事件以 Object 传入：
+     * 有 getChatEvent() 的（三个 Delta 事件）直接委托核心事件状态机；ToolCallStart/End
+     * 映射 tool-input-start / tool-input-available / tool-output-available；Run/End 终态
+     * 记录后由 onEventComplete 统一收口；其余 Agent 特有事件降级 data-* part。</p>
+     *
+     * @since 4.1
+     */
+    public Flux<SseEvent> toAiSdkAgentStream(Flux<?> source, Map<String, Object> metadata) {
+        return Flux.create(sink -> {
+            String messageId = idGenerator.ofMessage();
+            EventState state = new EventState();
+
+            emit(sink, new StartPart(messageId));
+            if (metadata != null && !metadata.isEmpty()) {
+                emit(sink, new MetadataPart(metadata));
+            }
+
+            Disposable upstream = source.subscribe(
+                    event -> onAgentEvent(sink, event, state),
+                    error -> onError(sink, error, state),
+                    () -> onEventComplete(sink, state)
+            );
+            sink.onDispose(upstream);
+        }, FluxSink.OverflowStrategy.BUFFER);
+    }
+
+    private void onAgentEvent(FluxSink<SseEvent> sink, Object event, EventState state) {
+        if (event == null || sink.isCancelled()) return;
+
+        //内嵌 ChatEvent：直接委托核心状态机（多块/lazy-open/幂等 close/服务端工具补齐全部复用）
+        ChatEvent chatEvent = invokeChatEvent(event);
+        if (chatEvent != null) {
+            onEvent(sink, chatEvent, state);
+            return;
+        }
+
+        String simpleName = event.getClass().getSimpleName();
+
+        if ("ToolCallStartEvent".equals(simpleName)) {
+            String tcId = str(invoke(event, "getCallId"));
+            String tcName = str(invoke(event, "getToolName"));
+            if (state.toolInputStarted.add(tcId)) {
+                emit(sink, new ToolInputStartPart(tcId, tcName));
+                emit(sink, new ToolInputAvailablePart(tcId, tcName,
+                        invoke(event, "getArgs")));
+            }
+            return;
+        }
+        if ("ToolCallEndEvent".equals(simpleName)) {
+            String tcId = str(invoke(event, "getCallId"));
+            String tcName = str(invoke(event, "getToolName"));
+            if (state.toolInputStarted.add(tcId)) {
+                //没有 START（例如重放/恢复场景）：补齐 input 部件对，避免孤儿 output
+                emit(sink, new ToolInputStartPart(tcId, tcName));
+                emit(sink, new ToolInputAvailablePart(tcId, tcName, null));
+            }
+            emit(sink, new ToolOutputAvailablePart(tcId, str(invoke(event, "getText"))));
+            return;
+        }
+        //RunEnd/SimpleEnd/TeamEnd：终态由 onEventComplete 统一收口（finish part），这里不重复发
+        if ("RunEndEvent".equals(simpleName) || "SimpleEndEvent".equals(simpleName)
+                || "TeamEndEvent".equals(simpleName)) {
+            return;
+        }
+
+        //其余 Agent 特有事件（Plan/HITL/Node/Supervisor/Context/Run/Reason/Action/Simple...）降级 data-* part
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("agentEventType", simpleName);
+        data.put("runId", invoke(event, "getRunId"));
+        data.put("agentName", invoke(event, "getAgentName"));
+        String text = str(invoke(event, "getText"));
+        if (text != null && !text.isEmpty()) {
+            data.put("text", text);
+        }
+        emitData(sink, "agent-event", data);
+    }
+
+    /** 反射取内嵌 ChatEvent（三个 Delta 事件）；无此方法返回 null */
+    private static ChatEvent invokeChatEvent(Object event) {
+        Object v = invoke(event, "getChatEvent");
+        return v instanceof ChatEvent ? (ChatEvent) v : null;
+    }
+
+    private static Object invoke(Object target, String methodName) {
+        try {
+            return target.getClass().getMethod(methodName).invoke(target);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static String str(Object v) {
+        return v == null ? null : v.toString();
+    }
+
+    /**
      * 将 ChatModel 事件流转换为 Vercel AI SDK 协议格式的 SSE 事件流（附带元数据）
      *
      * <p>相比旧的帧流实现，事件流可直接映射出此前无发射点的 part：
@@ -373,6 +471,8 @@ public class AiSdkStreamWrapper {
         final Set<String> toolInputStarted = new LinkedHashSet<>();
         /** 没有供应商 ID 时按事件身份分配稳定工具 ID */
         final Map<String, String> toolIds = new LinkedHashMap<>();
+        /** 服务端工具名（按 itemId/subType 索引） */
+        final Map<String, String> serverToolNames = new LinkedHashMap<>();
 
         String finishReason;
         AiUsage usage;
@@ -392,6 +492,14 @@ public class AiSdkStreamWrapper {
         String errorText;
 
         EventState() {
+        }
+    }
+
+    /** 记录服务端工具名（RESULT 补齐 input 部件对时需要） */
+    private void rememberServerToolName(EventState state, ChatEvent event) {
+        String id = event.getItemId() != null ? event.getItemId() : event.getSubType();
+        if (id != null && event.getSubType() != null) {
+            state.serverToolNames.putIfAbsent(id, event.getSubType());
         }
     }
 
@@ -465,6 +573,8 @@ public class AiSdkStreamWrapper {
                 break;
 
             case SERVER_TOOL_START:
+                //记录服务端工具名：RESULT 补齐 input 部件对时需要
+                rememberServerToolName(state, event);
                 emitData(sink, "server-tool-start", eventPayload(event));
                 break;
 
@@ -472,11 +582,18 @@ public class AiSdkStreamWrapper {
                 emitData(sink, "server-tool-args", eventPayload(event));
                 break;
 
-            case SERVER_TOOL_RESULT:
-                emit(sink, new ToolOutputAvailablePart(
-                        event.getItemId() != null ? event.getItemId() : event.getSubType(),
-                        event.getText()));
+            case SERVER_TOOL_RESULT: {
+                //服务端工具没有 TOOL_CALL_* 帧，标准客户端会丢弃无 input 部件的 output：
+                //此处幂等补齐 tool-input-start / tool-input-available，再发结果
+                String tcId = event.getItemId() != null ? event.getItemId() : event.getSubType();
+                String tcName = state.serverToolNames.getOrDefault(tcId, event.getSubType());
+                if (state.toolInputStarted.add(tcId)) {
+                    emit(sink, new ToolInputStartPart(tcId, tcName));
+                    emit(sink, new ToolInputAvailablePart(tcId, tcName, null));
+                }
+                emit(sink, new ToolOutputAvailablePart(tcId, event.getText()));
                 break;
+            }
 
             case CITATION:
                 emitCitation(sink, event);

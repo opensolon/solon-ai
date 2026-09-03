@@ -439,15 +439,10 @@ public class ReasonTask {
                             response = req.stream()
                                     .takeUntil(e -> trace.isStreamCancelled())
                                     .doOnNext(e -> {
-                                        //重试门控与 AgentEvent 映射解耦：只要模型已产生任何内容侧输出，
-                                        //重放整个请求就会造成重复内容或二次外部副作用。
                                         if (isRetryUnsafeOutput(e)) {
                                             streamEmitted.set(true);
                                         }
 
-                                        //只上抛正文与思考增量（媒体取完成帧）：边界帧（TEXT_START/END 等）会与
-                                        //DELTA 重复渲染，工具参数分片不是模型正文。ReasonTask 只输出思考与正文流；
-                                        //工具/动作类事件一律由 ActionTask 发出（ActionStart/End、ToolCallStart/End）。
                                         if (e.is(ChatEventType.TEXT_START, ChatEventType.TEXT_DELTA, ChatEventType.TEXT_END,
                                                 ChatEventType.THINKING_START, ChatEventType.THINKING_DELTA, ChatEventType.THINKING_END,
                                                 ChatEventType.MEDIA_DONE)) {

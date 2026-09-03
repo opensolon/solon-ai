@@ -13,6 +13,12 @@
 
 ### 4.1.0
 
+* 优化 solon-ai-agent ReasonTask / SimpleAgent / SupervisorTask 上抛思考与正文全部内容帧（含 TEXT/THINKING 的 START/END 边界帧；此前仅上抛 DELTA，消费端无法获知块边界，多块拼接无从下手）（**行为变更**：流中会出现 text 为空的边界帧，消费端拼文本时请用 getTextOrEmpty 语义处理）
+* 优化 solon-ai-agent ReActAgent 非正常结束（HITL 挂起、迭代上限、异常兜底等非 ai 输出终稿场景）补发补位帧：TEXT_DELTA(终稿全文) + TEXT_END（此前终稿只落在 Session/日志，流订阅端看不到；正常 ai 结束路径仍由模型流自然收口，不补位不重复）
+* 移除 solon-ai-core ChatEventType.TOOL_CALL_CHUNK 与 CHUNK 相位（**不兼容变更**：核心事件模型不再有"中间快照帧"概念，工具参数一律走 TOOL_CALL_ARGS_DELTA 增量；方言/适配层遗留引用已同步清理）
+* 重写 solon-ai-ui-aisdk AiSdkStreamWrapper 为按 itemId → index → default 键控的多块状态机（同一回复多文本块/多思考块/并行工具各自独立 open/close，不再共用单一当前块；lazy-open：未开块时 DELTA 自动开块；错误路径先 closeOpenParts 再发 error，不再裸断流）
+* 添加 solon-ai-ui-agui AgUiStreamWrapper（核心 ChatEvent 流 → AG-UI 事件流：运行启停、文本/思考多块、工具三段式、ABORT→RunFinished(interrupt)、ERROR→RunError、未建模事件降级 CustomEvent 保留负载，终态一次性防双收尾）
+
 * 添加 solon-ai-core EmbeddingModel, GenerateModel::getStandard, getStandardOrProvider, getProvider, getModel, getNameOrModel 方法（与 ChatModel 对齐；EmbeddingConfig::toString 补上 standard）
 * 添加 solon-ai-core ChatEventFilter 事件投递过滤器（HEARTBEAT/RAW 默认不投递，可通过 eventFilter(ChatEventFilter.all()) 显式开启；支持 of/ofGroup/or/and 组合）
 * 优化 solon-ai-core ChatEventNormalizer 边界补齐扩到 TOOL_CALL 组（宽松策略只补不删：裸 ARGS_DELTA 自动补 START、流终止前补未闭合 END；分片协议末片才给 id 时回退关闭最早开启的调用，不再误去重并行 START）

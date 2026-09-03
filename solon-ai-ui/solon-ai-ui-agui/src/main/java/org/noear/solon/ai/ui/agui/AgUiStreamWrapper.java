@@ -14,6 +14,7 @@ import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -48,6 +49,119 @@ public class AgUiStreamWrapper {
 
     public static AgUiStreamWrapper of(String threadId, String runId) {
         return new AgUiStreamWrapper(threadId, runId);
+    }
+
+    /**
+     * 将 Agent 事件流转换为 AG-UI 事件流（薄适配，反射解耦）。
+     *
+     * <p>本模块不依赖 solon-ai-agent（分层：UI 只依赖 core），Agent 事件以 Object 传入：
+     * 有 getChatEvent() 的（三个 Delta 事件）直接委托核心状态机；ToolCallStart/End、RunEnd
+     * 按方法名识别映射 AG-UI 工具三段式与终态；其余降级 CustomEvent 保留负载。</p>
+     *
+     * @since 4.1
+     */
+    public Flux<Event> toAgUiAgentStream(Flux<?> source, String threadId, String runId) {
+        final String actualThreadId = empty(threadId) ? defaultThreadId : threadId;
+        final String actualRunId = empty(runId) ? defaultRunId : runId;
+
+        return Flux.create(sink -> {
+            State state = new State();
+            RunStartedEvent started = new RunStartedEvent();
+            started.setThreadId(actualThreadId);
+            started.setRunId(actualRunId);
+            sink.next(started);
+
+            Disposable upstream = source.subscribe(
+                    event -> emitAgentEvent(sink, event, state, actualThreadId, actualRunId),
+                    error -> finishError(sink, state, actualThreadId, actualRunId, error),
+                    () -> finishSuccess(sink, state, actualThreadId, actualRunId));
+            sink.onDispose(upstream);
+        }, FluxSink.OverflowStrategy.BUFFER);
+    }
+
+    private void emitAgentEvent(FluxSink<Event> sink, Object event, State state,
+                                String threadId, String runId) {
+        if (event == null || sink.isCancelled()) return;
+
+        //内嵌 ChatEvent：直接委托核心状态机（多块/lazy-open/幂等 close 全部复用）
+        ChatEvent chatEvent = invokeChatEvent(event);
+        if (chatEvent != null) {
+            for (Event out : map(chatEvent, state, threadId, runId)) {
+                if (!sink.isCancelled()) sink.next(out);
+            }
+            return;
+        }
+
+        String simpleName = event.getClass().getSimpleName();
+
+        //Agent 工具事件：ToolCallStart → TOOL_CALL_START；ToolCallEnd → END + RESULT
+        if ("ToolCallStartEvent".equals(simpleName)) {
+            org.noear.solon.ai.ui.agui.event.ToolCallStartEvent out =
+                    new org.noear.solon.ai.ui.agui.event.ToolCallStartEvent();
+            String callId = str(invoke(event, "getCallId"));
+            out.setToolCallId(callId);
+            out.setToolCallName(str(invoke(event, "getToolName")));
+            sink.next(out);
+            state.openTools.add(callId);
+            return;
+        }
+        if ("ToolCallEndEvent".equals(simpleName)) {
+            String callId = str(invoke(event, "getCallId"));
+            if (state.openTools.remove(callId)) {
+                org.noear.solon.ai.ui.agui.event.ToolCallEndEvent end =
+                        new org.noear.solon.ai.ui.agui.event.ToolCallEndEvent();
+                end.setToolCallId(callId);
+                sink.next(end);
+            }
+            org.noear.solon.ai.ui.agui.event.ToolCallResultEvent result =
+                    new org.noear.solon.ai.ui.agui.event.ToolCallResultEvent();
+            result.setToolCallId(callId);
+            result.setContent(str(invoke(event, "getText")));
+            result.setRole(Role.TOOL);
+            sink.next(result);
+            return;
+        }
+        //RunEnd：记录终态，由 finishSuccess 统一收口（关块 + RunFinished）
+        if ("RunEndEvent".equals(simpleName) || "SimpleEndEvent".equals(simpleName)
+                || "TeamEndEvent".equals(simpleName)) {
+            Object resp = invoke(event, "getResponse");
+            if (resp != null) state.result = resp;
+            return;
+        }
+
+        //其余 Agent 事件（Plan/HITL/Node/Supervisor/Context/Run/Reason/Action/Simple...）降级 CustomEvent
+        CustomEvent custom = new CustomEvent();
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("agentEventType", simpleName);
+        payload.put("runId", invoke(event, "getRunId"));
+        payload.put("agentName", invoke(event, "getAgentName"));
+        String text = str(invoke(event, "getText"));
+        if (text != null && !text.isEmpty()) {
+            payload.put("text", text);
+        }
+        custom.setRawEvent(payload);
+        sink.next(custom);
+    }
+
+    /** 反射取内嵌 ChatEvent（三个 Delta 事件）；无此方法返回 null */
+    private static ChatEvent invokeChatEvent(Object event) {
+        Object v = invoke(event, "getChatEvent");
+        return v instanceof ChatEvent ? (ChatEvent) v : null;
+    }
+
+    private static Object invoke(Object target, String methodName) {
+        try {
+            Method m = target.getClass().getMethod(methodName);
+            return m.invoke(target);
+        } catch (NoSuchMethodException e) {
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static String str(Object v) {
+        return v == null ? null : v.toString();
     }
 
     /** 将核心事件流转换为 AG-UI 事件流。 */
@@ -113,12 +227,7 @@ public class AgUiStreamWrapper {
                 result.add(copy(e, event));
                 break;
             }
-            case TEXT_START: {
-                String id = openText(result, state, event);
-                //openText 已输出事件；id 仅用于保持分支结构清晰。
-                if (id == null) result.clear();
-                break;
-            }
+
             case TEXT_DELTA: {
                 if (!event.hasText()) break;
                 String id = openText(result, state, event);
@@ -231,29 +340,6 @@ public class AgUiStreamWrapper {
                 break;
         }
         return result;
-    }
-
-    private void mapToolChunk(List<Event> result, State state, ChatEvent event) {
-        String id = toolId(event, state);
-        ToolCallStartEvent start = new ToolCallStartEvent();
-        start.setToolCallId(id);
-        start.setToolCallName(toolName(event));
-        start.setParentMessageId(event.getItemId());
-        result.add(copy(start, event));
-        state.openTools.add(id);
-
-        ToolCall call = event.getToolCall();
-        String args = call == null ? event.getText() : call.getArgumentsStr();
-        if (!empty(args)) {
-            ToolCallArgsEvent argsEvent = new ToolCallArgsEvent();
-            argsEvent.setToolCallId(id);
-            argsEvent.setDelta(args);
-            result.add(copy(argsEvent, event));
-        }
-        ToolCallEndEvent end = new ToolCallEndEvent();
-        end.setToolCallId(id);
-        result.add(copy(end, event));
-        state.openTools.remove(id);
     }
 
     private String openText(List<Event> result, State state, ChatEvent event) {
