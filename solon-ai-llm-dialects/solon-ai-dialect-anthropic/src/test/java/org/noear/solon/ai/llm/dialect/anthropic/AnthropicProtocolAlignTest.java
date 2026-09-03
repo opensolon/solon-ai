@@ -192,8 +192,8 @@ public class AnthropicProtocolAlignTest {
     }
 
     /**
-     * mcp_tool_use（Beta）与 server_tool_use 同为服务端执行的工具调用：必须登记 StreamToolState，
-     * 否则随后的 input_json_delta 因取不到状态被静默丢弃（旧实现把它归到 RAW、不建 state，
+     * server_tool_use / mcp_tool_use 同为服务端执行的工具调用：必须登记 StreamToolState，
+     * 否则随后的 input_json_delta 因取不到状态被静默丢弃（旧实现把 mcp_tool_use 归到 RAW、不建 state，
      * 而同族的 mcp_tool_result 反因 _tool_result 后缀被正常归一，半边通半边断）
      */
     @Test
@@ -201,8 +201,7 @@ public class AnthropicProtocolAlignTest {
         ChatStreamContext ctx = newCtx(true);
 
         parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":2,"
-                + "\"content_block\":{\"type\":\"mcp_tool_use\",\"id\":\"mcp_1\",\"name\":\"query\","
-                + "\"server_name\":\"db\"}}");
+                + "\"content_block\":{\"type\":\"mcp_tool_use\",\"id\":\"mcp_1\",\"name\":\"query\"}}");
         parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":2,"
                 + "\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"q\\\":1}\"}}");
 
@@ -210,10 +209,9 @@ public class AnthropicProtocolAlignTest {
         assertNotNull(start, "mcp_tool_use should emit SERVER_TOOL_START");
         assertEquals("query", start.getSubType());
         assertEquals("mcp_1", start.getItemId());
-        assertEquals("db", start.getAttrs().get("serverName"));
 
         ChatEvent args = firstOf(ChatEventType.SERVER_TOOL_ARGS_DELTA);
-        assertNotNull(args, "mcp_tool_use 的参数分片不应被丢弃");
+        assertNotNull(args, "服务端工具的参数分片不应被丢弃");
         assertEquals("mcp_1", args.getToolCallId());
         assertEquals("{\"q\":1}", args.getText());
 
@@ -223,19 +221,20 @@ public class AnthropicProtocolAlignTest {
     }
 
     /**
-     * 未建模增量（Beta 的 compaction_delta 等）：旧实现的 delta 分支是无 else 的 if/else-if 链，
-     * 整帧静默丢弃且 hasContent 不置位，可能被上层判为不可识别响应
+     * 未建模增量：旧实现的 delta 分支是无 else 的 if/else-if 链，
+     * 整帧静默丢弃且 hasContent 不置位，可能被上层判为不可识别响应。
+     * GA 的 RawContentBlockDelta 今后变长时，此兜底保证不静默丢帧
      */
     @Test
     public void unknownContentBlockDeltaBecomesRaw() {
         ChatStreamContext ctx = newCtx(true);
 
         boolean consumed = parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":1,"
-                + "\"delta\":{\"type\":\"compaction_delta\",\"content\":\"c\",\"encrypted_content\":\"e\"}}");
+                + "\"delta\":{\"type\":\"some_future_delta\",\"content\":\"c\"}}");
 
         ChatEvent e = firstOf(ChatEventType.RAW);
         assertNotNull(e, "unknown delta should emit RAW");
-        assertEquals("compaction_delta", e.getSubType());
+        assertEquals("some_future_delta", e.getSubType());
         assertEquals(1, e.getIndex());
         assertTrue(consumed, "RAW 是已消费的合法模型帧，不能让调用方误判为不可识别响应");
     }
@@ -757,91 +756,6 @@ public class AnthropicProtocolAlignTest {
         assertEquals(50L, usage.completionTokens());
     }
 
-    /// ///////////////// 上下文管理报告
-
-    /**
-     * {@code context_management.applied_edits} 是服务端「实际从历史里清理了什么」的报告。
-     * 调用方自己的历史台账需要据此对齐，否则下一轮会把已清理内容再发一遍。
-     * 注意它在 message_delta 里是事件顶层字段（与 delta / usage 同级），不在 delta 内部
-     */
-    @Test
-    public void contextManagementIsCaptured() {
-        ChatStreamContext ctx = newCtx(true);
-
-        parser.parseStreamResponse(ctx, "{\"type\":\"message_start\",\"message\":{\"id\":\"msg_11\","
-                + "\"model\":\"claude-sonnet-4-5\",\"context_management\":{\"applied_edits\":["
-                + "{\"type\":\"clear_tool_uses_20250919\",\"cleared_input_tokens\":1200,\"cleared_tool_uses\":3}]}}}");
-
-        ONode captured = AnthropicResponseParser.contextManagement(ctx.getAccumulator());
-        assertNotNull(captured, "旧实现整块丢弃，调用方无从获知服务端清理了什么");
-        assertEquals(1200L, captured.get("applied_edits").get(0).get("cleared_input_tokens").getLong());
-
-        parser.parseStreamResponse(ctx, "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},"
-                + "\"context_management\":{\"applied_edits\":["
-                + "{\"type\":\"clear_thinking_20251015\",\"cleared_input_tokens\":80}]}}");
-
-        captured = AnthropicResponseParser.contextManagement(ctx.getAccumulator());
-        assertEquals("clear_thinking_20251015",
-                captured.get("applied_edits").get(0).get("type").getString(),
-                "message_delta 的 context_management 在事件顶层，不在 delta 内");
-    }
-
-    /**
-     * 非流式与流式 message_start 对称
-     */
-    @Test
-    public void contextManagementIsCapturedInNonStream() {
-        ChatStreamContext ctx = newCtx(false);
-
-        parser.parseNonStreamResponse(ctx, "{\"id\":\"msg_12\",\"model\":\"claude-sonnet-4-5\","
-                + "\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"text\",\"text\":\"ok\"}],"
-                + "\"context_management\":{\"applied_edits\":["
-                + "{\"type\":\"clear_tool_uses_20250919\",\"cleared_input_tokens\":5,\"cleared_tool_uses\":1}]}}");
-
-        assertNotNull(AnthropicResponseParser.contextManagement(ctx.getAccumulator()));
-    }
-
-    /// ///////////////// 拒答后的重试提示
-
-    /**
-     * {@code stop_details} 的三个重试字段只能合用：recommended_model 指明换哪个模型，
-     * fallback_credit_token 是该次重试的缓存未命中退费凭证，fallback_has_prefill_claim 决定凭证怎么兑。
-     * 只透一个都不可执行
-     */
-    @Test
-    public void refusalCarriesRetryHints() {
-        ChatStreamContext ctx = newCtx(true);
-
-        parser.parseStreamResponse(ctx, "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"refusal\","
-                + "\"stop_details\":{\"type\":\"refusal\",\"category\":\"policy\",\"explanation\":\"nope\","
-                + "\"recommended_model\":\"claude-opus-4-7\",\"fallback_credit_token\":\"tok_abc\","
-                + "\"fallback_has_prefill_claim\":true}}}");
-
-        ChatEvent e = firstOf(ChatEventType.CONTENT_FILTER);
-        assertNotNull(e);
-        assertEquals("policy", e.getSubType());
-        assertEquals("nope", e.getText());
-        assertEquals("claude-opus-4-7", e.getAttrs().get("recommendedModel"));
-        assertEquals("tok_abc", e.getAttrs().get("fallbackCreditToken"));
-        assertEquals(Boolean.TRUE, e.getAttrs().get("fallbackHasPrefillClaim"));
-    }
-
-    /**
-     * GA 响应不带这三个字段，不得造出空值键
-     */
-    @Test
-    public void refusalWithoutRetryHintsHasNoEmptyAttrs() {
-        ChatStreamContext ctx = newCtx(true);
-
-        parser.parseStreamResponse(ctx, "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"refusal\","
-                + "\"stop_details\":{\"type\":\"refusal\",\"category\":\"policy\"}}}");
-
-        ChatEvent e = firstOf(ChatEventType.CONTENT_FILTER);
-        assertNotNull(e);
-        assertFalse(e.getAttrs().containsKey("recommendedModel"));
-        assertFalse(e.getAttrs().containsKey("fallbackCreditToken"));
-        assertFalse(e.getAttrs().containsKey("fallbackHasPrefillClaim"));
-    }
 
     /// ///////////////// 请求侧：thinking.display
 

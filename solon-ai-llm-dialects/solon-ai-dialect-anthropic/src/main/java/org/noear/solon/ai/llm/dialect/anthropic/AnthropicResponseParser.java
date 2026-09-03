@@ -107,40 +107,6 @@ public class AnthropicResponseParser {
         }
     }
 
-    /**
-     * 服务端上下文管理报告（{@code message_start.message.context_management}
-     * / {@code message_delta.context_management} / 非流式 {@code context_management}）。
-     *
-     * <p>协议 BetaContextManagementResponse 携带 {@code applied_edits[]}，每项形如
-     * {@code {type:clear_tool_uses_20250919, cleared_input_tokens, cleared_tool_uses}} 或
-     * {@code {type:clear_thinking_20251015, cleared_input_tokens}}——即服务端在本轮从历史里
-     * 实际清掉了什么。调用方自己维护的历史台账需要据此对齐，否则下一轮会把服务端已清理的
-     * 内容再发一遍（既多付费又可能触发同样的清理）。旧实现整块丢弃，无从获知。</p>
-     *
-     * @since 4.1
-     */
-    private static final String CONTEXT_MANAGEMENT_KEY = "AnthropicContextManagement";
-
-    /**
-     * 取本次响应携带的上下文管理报告节点（未出现则为 null）。
-     *
-     * @since 4.1
-     */
-    public static ONode contextManagement(ChatAccumulator acc) {
-        return acc == null ? null : acc.attrAs(CONTEXT_MANAGEMENT_KEY);
-    }
-
-    /**
-     * 记录上下文管理报告（幂等覆盖：后到的帧为更完整的快照）。
-     *
-     * @since 4.1
-     */
-    private static void captureContextManagement(ChatAccumulator acc, ONode node) {
-        if (node != null && node.isObject()) {
-            acc.attrPut(CONTEXT_MANAGEMENT_KEY, node);
-        }
-    }
-
     @SuppressWarnings("unchecked")
     static Map<Integer, StreamToolState> toolStates(ChatAccumulator acc, boolean create) {
         Map<Integer, StreamToolState> states = acc.attrAs(STREAM_TOOL_STATE_KEY);
@@ -396,9 +362,6 @@ public class AnthropicResponseParser {
                     // 代码执行容器（container.id / expires_at）：多轮复用需回传，旧实现整块丢弃
                     captureContainer(acc, message.getOrNull("container"));
 
-                    // 服务端上下文管理报告（协议 BetaMessage.context_management）：本轮从历史里清理了什么
-                    captureContextManagement(acc, message.getOrNull("context_management"));
-
                     // 某些情况下 message_start 也包含初始 usage 信息
                     AiUsage usage = parseUsage(message.getOrNull("usage"));
                     if (usage != null) {
@@ -467,11 +430,10 @@ public class AnthropicResponseParser {
                                     .build());
                         }
                     } else if ("server_tool_use".equals(blockType) || "mcp_tool_use".equals(blockType)) {
-                        // mcp_tool_use（Beta）与 server_tool_use 同属「服务端执行的工具调用」，两者的 input
-                        // 都经 input_json_delta 分片下发，必须登记 StreamToolState：旧实现把 mcp_tool_use
-                        // 归到 RAW 分支、不建 state，随后的参数分片因取不到状态而静默丢弃
-                        // （既无 SERVER_TOOL_START 也无 SERVER_TOOL_ARGS_DELTA），
-                        // 而同族的 mcp_tool_result 反而因命中 _tool_result 后缀被正常归一，半边通半边断。
+                        // 「服务端执行的工具调用」：input 经 input_json_delta 分片下发，必须登记 StreamToolState，
+                        // 否则随后的参数分片因取不到状态而静默丢弃（既无 SERVER_TOOL_START 也无 SERVER_TOOL_ARGS_DELTA）。
+                        // mcp_tool_use 一并收在这里：它的结果块 mcp_tool_result 会被下面的 _tool_result 后缀规则
+                        // 捎带命中，把调用侧排除反而要额外加特例代码，还会让事件流出现「有结果无调用」的不自洽。
                         int serverBlockIdx = oResp.get("index").getInt();
                         ChatEventDefault.Builder serverToolStart = ctx.event(ChatEventType.SERVER_TOOL_START)
                                 .rawType(eventType)
@@ -480,12 +442,6 @@ public class AnthropicResponseParser {
                                 .index(serverBlockIdx)
                                 .raw(oResp);
                         appendServerToolCaller(serverToolStart, contentBlock);
-                        // MCP 工具额外携带来源服务器（协议 BetaMcpToolUseBlock.server_name），
-                        // 同名工具可能来自不同 MCP server，丢了它就无法区分
-                        String mcpServerName = contentBlock.get("server_name").getString();
-                        if (Utils.isNotEmpty(mcpServerName)) {
-                            serverToolStart.attr("serverName", mcpServerName);
-                        }
                         ctx.emit(serverToolStart.build());
 
                         StreamToolState serverState = new StreamToolState();
@@ -518,9 +474,10 @@ public class AnthropicResponseParser {
                                 .raw(oResp)
                                 .build());
                     } else if (Utils.isNotEmpty(blockType)) {
-                        // 未建模内容块（Beta 侧 compaction / fallback / advisor_tool_result 等经网关下发时）：
-                        // 与顶层未建模事件对称地以 RAW 透出。
-                        // 旧实现在此静默落空，是块级与事件级的不对称缺口
+                        // 未建模内容块：与顶层未建模事件对称地以 RAW 透出。
+                        // 这是 GA 前向兼容手段，不是为 Beta 建模：ContentBlock 的 GA 面本身就在逐步变长，
+                        // 无兜底时新增类型是静默丢帧（无异常、无日志）。官方 SDK 同样给每个 union
+                        // 留了 unknown(json) visitor。旧实现在此静默落空，是块级与事件级的不对称缺口
                         ctx.emit(ctx.event(ChatEventType.RAW)
                                 .rawType(eventType)
                                 .subType(blockType)
@@ -604,8 +561,7 @@ public class AnthropicResponseParser {
                     } else if (Utils.isNotEmpty(deltaType)) {
                         // 未建模增量：与块级、事件级的 RAW 兜底对称。
                         // 旧实现是一条无 else 的 if/else-if 链，未知 delta 整帧静默丢弃；
-                        // GA 的 RawContentBlockDelta 是 5 变体（已覆盖），Beta 多一个 compaction_delta
-                        // （content / encrypted_content）。兜底比逐个枚举 beta type 更根本：
+                        // GA 的 RawContentBlockDelta 现为 5 变体（已全覆盖），兜底是为它今后变长而留：
                         // 官方 SDK 同样给每个 union 留了 unknown(json) visitor 作为前向兼容手段
                         ctx.emit(ctx.event(ChatEventType.RAW)
                                 .rawType(eventType)
@@ -703,10 +659,6 @@ public class AnthropicResponseParser {
                     }
                     acc.setUsage(usage);
                 }
-
-                // 上下文管理报告在 message_delta 里是【事件顶层】字段（协议 BetaRawMessageDeltaEvent.context_management，
-                // 与 delta / usage 同级），不在 delta 内部——写成 delta.getOrNull("context_management") 会恒取不到
-                captureContextManagement(acc, oResp.getOrNull("context_management"));
 
                 ONode delta = oResp.getOrNull("delta");
                 if (delta != null) {
@@ -982,13 +934,11 @@ public class AnthropicResponseParser {
             String category = null;
             String explanation = null;
             ONode stopDetails = stopNode == null ? null : stopNode.getOrNull("stop_details");
-            ChatEventDefault.Builder builder = ctx.event(ChatEventType.CONTENT_FILTER);
             if (stopDetails != null && stopDetails.isObject()) {
                 category = stopDetails.get("category").getString();
                 explanation = stopDetails.get("explanation").getString();
-                appendRefusalRetryHints(builder, stopDetails);
             }
-            ctx.emit(builder
+            ctx.emit(ctx.event(ChatEventType.CONTENT_FILTER)
                     .rawType(rawType)
                     .subType(Utils.isEmpty(category) ? stopReason : category)
                     .text(explanation)
@@ -1009,37 +959,6 @@ public class AnthropicResponseParser {
                     .subType(stopReason)
                     .raw(raw)
                     .build());
-        }
-    }
-
-    /**
-     * 拒答后的重试提示（协议 BetaRefusalStopDetails 比 GA RefusalStopDetails 多出的三个字段）。
-     *
-     * <p>这三个字段只能合用，拆开任一个都不可执行：
-     * {@code recommended_model} 告诉调用方换哪个模型重试，
-     * {@code fallback_credit_token} 是该次重试的缓存未命中退费凭证（不带就多付一次 cache miss，
-     * 5 分钟内有效），{@code fallback_has_prefill_claim} 则决定该凭证要用哪种重试形态兑付
-     * （true：原请求体 + 追加一条载有部分输出的 assistant 消息；false：原请求体不变）。
-     * 只透 {@code recommended_model} 会让调用方把退费凭证丢掉，只透凭证又不知道怎么兑。</p>
-     *
-     * <p>GA 响应不携带这三个字段，不存在时不写 attr（不造空值键）。</p>
-     *
-     * @since 4.1
-     */
-    private static void appendRefusalRetryHints(ChatEventDefault.Builder builder, ONode stopDetails) {
-        String recommendedModel = stopDetails.get("recommended_model").getString();
-        if (Utils.isNotEmpty(recommendedModel)) {
-            builder.attr("recommendedModel", recommendedModel);
-        }
-
-        String fallbackCreditToken = stopDetails.get("fallback_credit_token").getString();
-        if (Utils.isNotEmpty(fallbackCreditToken)) {
-            builder.attr("fallbackCreditToken", fallbackCreditToken);
-            // 仅在凭证存在时才有意义（协议：only set when fallback_credit_token is present）
-            ONode prefillClaim = stopDetails.getOrNull("fallback_has_prefill_claim");
-            if (prefillClaim != null && prefillClaim.isNull() == false) {
-                builder.attr("fallbackHasPrefillClaim", prefillClaim.getBoolean());
-            }
         }
     }
 
@@ -1189,8 +1108,6 @@ public class AnthropicResponseParser {
         acc.setModel(oResp.get("model").getString());
         // 代码执行容器（协议 Message.container）：与流式 message_start 对称地记录，供多轮复用
         captureContainer(acc, oResp.getOrNull("container"));
-        // 服务端上下文管理报告：与流式 message_start 对称
-        captureContextManagement(acc, oResp.getOrNull("context_management"));
         // 先解析 stop_reason 供 lastFinishReason 使用；但停止事件延到内容块遍历之后再发，
         // 以保持与流式同序：content_block_* 在前、message_delta 的 stop 在后。
         // 否则按事件序做状态机的订阅方会看到 call() 与 stream() 行为分叉
