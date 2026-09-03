@@ -970,7 +970,7 @@ public class OpenaiResponsesDialectTest {
     }
 
     @Test
-    public void streamTextSnapshot_isolatedByContentIndex() {
+    public void streamTextDelta_isolatedByContentIndexAndAppended() {
         ChatAccumulator resp = newResponse(true);
         parseStream(resp, "{\"type\":\"response.output_item.added\",\"item\":{"
                 + "\"id\":\"msg_1\",\"type\":\"message\"}}\n"
@@ -984,7 +984,7 @@ public class OpenaiResponsesDialectTest {
 
         StringBuilder text = new StringBuilder();
         for (AssistantMessage item : resp.getContentItems()) text.append(item.getTextRaw());
-        assertEquals("abcdefghijklmnopUPDATED", text.toString());
+        assertEquals("abcdefghijklmnopabcdefghUPDATED", text.toString());
     }
 
     @Test
