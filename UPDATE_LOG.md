@@ -13,6 +13,7 @@
 
 ### 4.1.0
 
+* 添加 solon-ai-core EmbeddingModel, GenerateModel::getStandard, getStandardOrProvider, getProvider, getModel, getNameOrModel 方法（与 ChatModel 对齐；EmbeddingConfig::toString 补上 standard）
 * 添加 solon-ai-core ChatEventFilter 事件投递过滤器（HEARTBEAT/RAW 默认不投递，可通过 eventFilter(ChatEventFilter.all()) 显式开启；支持 of/ofGroup/or/and 组合）
 * 优化 solon-ai-core ChatEventNormalizer 边界补齐扩到 TOOL_CALL 组（宽松策略只补不删：裸 ARGS_DELTA 自动补 START、流终止前补未闭合 END；分片协议末片才给 id 时回退关闭最早开启的调用，不再误去重并行 START）
 * 优化 solon-ai-agent ReasonTask 只对外输出思考与正文流：工具/动作类事件一律由 ActionTask 发出（服务端工具由服务方在本次调用内执行完毕，不经 ActionTask，不构成智能体自己的 Action/Observation，故不发工具事件、也不拼进正文）

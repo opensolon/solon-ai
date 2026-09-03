@@ -337,17 +337,6 @@ public class ChatEventNormalizerTest {
     }
 
     /**
-     * TOOL_CALL_CHUNK 同样展开为 START + ARGS_DELTA + END
-     */
-    @Test
-    public void toolCallChunkIsExpanded() {
-        normalizer.apply(ChatEventDefault.of(TOOL_CALL_CHUNK).toolCallId("call-1").text("{}").build(), sink);
-
-        assertEquals(java.util.Arrays.asList(TOOL_CALL_START, TOOL_CALL_ARGS_DELTA, TOOL_CALL_END), types());
-        assertEquals("{}", out.get(1).getText());
-    }
-
-    /**
      * TOOL_RESULT 不是边界事件：原样透传，不参与配对
      */
     @Test

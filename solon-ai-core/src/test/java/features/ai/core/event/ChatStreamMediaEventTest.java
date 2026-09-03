@@ -28,6 +28,7 @@ import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventGroup;
 import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -107,7 +108,7 @@ public class ChatStreamMediaEventTest {
         List<ContentBlock> blocks = new ArrayList<>();
 
         for (ChatEvent e : events) {
-            if (e.is(ChatEventType.TEXT_DELTA, ChatEventType.THINKING_DELTA, ChatEventType.MEDIA_DONE) == false) {
+            if ((e.isGroup(ChatEventGroup.THINKING, ChatEventGroup.TEXT) || e.is(ChatEventType.MEDIA_DONE)) == false) {
                 continue;
             }
 

@@ -45,13 +45,6 @@ public class ReasonDeltaEvent extends AbsAgentEvent {
     private final transient ChatEvent chatEvent;
     private final String reasonId;
 
-    public ReasonDeltaEvent(ReActTrace trace, AssistantMessage message) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
-        this.trace = trace;
-        this.chatEvent = ChatEventDefault.of(ChatEventType.TEXT_DELTA).text(message.getContent()).build();
-        this.reasonId = trace.getCurrentReasonId();
-    }
-
     public ReasonDeltaEvent(ReActTrace trace, ChatEvent event) {
         super(trace.getRunId(), trace.getAgentName(), trace.getSession());
         this.trace = trace;
@@ -83,6 +76,6 @@ public class ReasonDeltaEvent extends AbsAgentEvent {
      */
     @Override
     public String getText() {
-        return chatEvent.getText();
+        return chatEvent.getTextOrEmpty();
     }
 }

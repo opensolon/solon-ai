@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventGroup;
 import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.ChatRole;
@@ -604,7 +605,9 @@ public class SupervisorTask implements NamedTaskComponent {
                             response = req.stream()
                                     .takeUntil(e -> trace.isStreamCancelled())
                                     .doOnNext(e -> {
-                                        if (e.is(ChatEventType.TEXT_DELTA, ChatEventType.THINKING_DELTA, ChatEventType.MEDIA_DONE)) {
+                                        if (e.is(ChatEventType.TEXT_START, ChatEventType.TEXT_DELTA, ChatEventType.TEXT_END,
+                                                ChatEventType.THINKING_START, ChatEventType.THINKING_DELTA, ChatEventType.THINKING_END,
+                                                ChatEventType.MEDIA_DONE)) {
                                             trace.pushAgentEvent(new SupervisorDeltaEvent(node, trace, e));
                                         }
                                     })

@@ -26,6 +26,8 @@ import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.ai.chat.event.ChatEventDefault;
+import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -314,7 +316,11 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         if (trace.isAbnormal()) {
             //非 ai 结束的，要补位
             if (trace.hasStreamSink()) {
-                trace.pushAgentEvent(new ReasonDeltaEvent(trace,  assistantMessage));
+                trace.pushAgentEvent(new ReasonDeltaEvent(trace,  ChatEventDefault.of(ChatEventType.TEXT_DELTA)
+                        .text(assistantMessage.getContent())
+                        .build()));
+                trace.pushAgentEvent(new ReasonDeltaEvent(trace,  ChatEventDefault.of(ChatEventType.TEXT_END)
+                        .build()));
             }
         }
 

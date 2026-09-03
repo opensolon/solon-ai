@@ -116,10 +116,6 @@ public enum ChatEventType {
      */
     TOOL_CALL_END(TOOL_CALL, END),
     /**
-     * 客户端工具调用整块
-     */
-    TOOL_CALL_CHUNK(TOOL_CALL, CHUNK),
-    /**
      * 客户端工具执行结果（本地执行完毕）
      */
     TOOL_RESULT(TOOL_CALL, NONE),
@@ -215,13 +211,6 @@ public enum ChatEventType {
      */
     public boolean isDelta() {
         return phase == DELTA;
-    }
-
-    /**
-     * 是否为整块事件（需归一化展开）
-     */
-    public boolean isChunk() {
-        return phase == CHUNK;
     }
 
     /**

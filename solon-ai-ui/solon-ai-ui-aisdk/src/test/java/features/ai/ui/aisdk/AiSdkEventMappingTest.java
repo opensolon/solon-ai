@@ -18,6 +18,7 @@ package features.ai.ui.aisdk;
 import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.ChatException;
+import org.noear.solon.ai.chat.content.BlobBlock;
 import org.noear.solon.ai.chat.event.ChatEvent;
 import org.noear.solon.ai.chat.event.ChatEventDefault;
 import org.noear.solon.ai.chat.event.ChatEventType;
@@ -113,24 +114,6 @@ public class AiSdkEventMappingTest {
     }
 
     /**
-     * 整块方言（只给完整调用，无增量）：仍补齐 start + delta + available
-     */
-    @Test
-    public void wholeToolCallStillGetsStartAndDelta() {
-        Flux<ChatEvent> events = Flux.just(
-                ChatEventDefault.of(ChatEventType.TOOL_CALL_CHUNK)
-                        .toolCallId("call_9")
-                        .toolCall(newCall("call_9", "get_rainfall", "{\"city\":\"北京\"}"))
-                        .build());
-
-        List<String> types = typesOf(AiSdkStreamWrapper.of().toAiSdkStream(events));
-
-        assertEquals(1, count(types, "tool-input-start"), types.toString());
-        assertEquals(1, count(types, "tool-input-delta"), types.toString());
-        assertEquals(1, count(types, "tool-input-available"), types.toString());
-    }
-
-    /**
      * 生命周期与正文：start / text / finish 的基本映射不被工具通道改动影响
      */
     @Test
@@ -153,6 +136,42 @@ public class AiSdkEventMappingTest {
         assertEquals(1, count(types, "text-end"), types.toString());
         assertEquals(1, count(types, "finish"), types.toString());
     }
+
+    @Test
+    public void mediaDoneUsesEventBlockAndUnsupportedEventsAreNotDropped() {
+        Flux<ChatEvent> events = Flux.just(
+                ChatEventDefault.of(ChatEventType.MEDIA_DONE)
+                        .itemId("image_1")
+                        .block(BlobBlock.of("aGVsbG8=", "image/png"))
+                        .build(),
+                ChatEventDefault.of(ChatEventType.THINKING_SIGNATURE)
+                        .itemId("think_1").text("sig").build(),
+                ChatEventDefault.of(ChatEventType.SERVER_TOOL_START)
+                        .subType("web_search").build(),
+                ChatEventDefault.of(ChatEventType.CUSTOM)
+                        .subType("progress").text("50%").build());
+
+        String all = joinAll(AiSdkStreamWrapper.of().toAiSdkStream(events));
+        assertTrue(all.contains("\"type\":\"file\""), all);
+        assertTrue(all.contains("aGVsbG8="), all);
+        assertTrue(all.contains("data-thinking-signature"), all);
+        assertTrue(all.contains("data-server-tool-start"), all);
+        assertTrue(all.contains("data-progress"), all);
+    }
+
+    @Test
+    public void textPartsKeepDistinctItemIds() {
+        Flux<ChatEvent> events = Flux.just(
+                ChatEventDefault.of(ChatEventType.TEXT_DELTA).itemId("text_1").text("one").build(),
+                ChatEventDefault.of(ChatEventType.TEXT_END).itemId("text_1").build(),
+                ChatEventDefault.of(ChatEventType.TEXT_DELTA).itemId("text_2").text("two").build(),
+                ChatEventDefault.of(ChatEventType.TEXT_END).itemId("text_2").build());
+
+        String all = joinAll(AiSdkStreamWrapper.of().toAiSdkStream(events));
+        assertEquals(2, count(typesOf(AiSdkStreamWrapper.of().toAiSdkStream(events)), "text-start"), all);
+        assertEquals(2, count(typesOf(AiSdkStreamWrapper.of().toAiSdkStream(events)), "text-end"), all);
+    }
+
 
     private static long count(List<String> list, String value) {
         return list.stream().filter(value::equals).count();

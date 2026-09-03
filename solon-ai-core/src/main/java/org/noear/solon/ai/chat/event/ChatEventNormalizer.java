@@ -97,24 +97,6 @@ public class ChatEventNormalizer {
             lastStep = event.getStep();
         }
 
-        if (phase == ChatEventPhase.CHUNK) {
-            closeOpen(out, event);
-
-            ChatEventType startType = startTypeOf(group);
-            ChatEventType deltaType = deltaTypeOf(group);
-            ChatEventType endType = endTypeOf(group);
-
-            if (startType == null || deltaType == null || endType == null) {
-                out.emit(event);
-                return;
-            }
-
-            out.emit(rebuild(event, startType, null));
-            out.emit(rebuild(event, deltaType, event.getText()));
-            out.emit(rebuild(event, endType, null));
-            return;
-        }
-
         if (group == ChatEventGroup.TOOL_CALL) {
             applyToolCall(event, type, out);
             return;

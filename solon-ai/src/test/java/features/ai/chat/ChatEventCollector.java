@@ -91,7 +91,7 @@ public class ChatEventCollector {
                 }
                 break;
             case TOOL_CALL:
-                if (event.is(ChatEventType.TOOL_CALL_END) || event.is(ChatEventType.TOOL_CALL_CHUNK)) {
+                if (event.is(ChatEventType.TOOL_CALL_END)) {
                     if (event.getToolCall() != null) {
                         toolCalls.add(event.getToolCall());
                     }
@@ -355,7 +355,6 @@ public class ChatEventCollector {
         for (ChatEvent e : list) {
             switch (e.getType()) {
                 case TOOL_CALL_END:
-                case TOOL_CALL_CHUNK:
                     Assertions.assertNotNull(e.getToolCall(), "工具调用完成事件应携带 toolCall: " + e);
                     break;
                 case TOOL_RESULT:
@@ -490,8 +489,6 @@ public class ChatEventCollector {
             } else if (phase == ChatEventPhase.END) {
                 Assertions.assertEquals(group, open, "END 应有配对的 START: " + e);
                 open = null;
-            } else if (phase == ChatEventPhase.CHUNK) {
-                Assertions.fail("CHUNK 应已被归一化器展开，不应到达订阅方: " + e);
             }
         }
 

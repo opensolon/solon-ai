@@ -40,10 +40,6 @@ public enum ChatEventPhase {
      */
     END,
     /**
-     * 整块（一发即含首尾；由 {@code ChatEventNormalizer} 展开为 START + DELTA + END）
-     */
-    CHUNK,
-    /**
      * 无阶段（独立事件，如心跳、用量、签名）
      */
     NONE;

@@ -200,7 +200,8 @@ public abstract class AbsChatTest {
                 }).doOnError(err -> {
                     err.printStackTrace();
                     doneLatch.countDown();
-                });
+                })
+                .subscribe();
 
 
         doneLatch.await();

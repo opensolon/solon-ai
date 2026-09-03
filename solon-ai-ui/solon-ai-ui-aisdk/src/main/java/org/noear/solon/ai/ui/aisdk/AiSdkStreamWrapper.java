@@ -31,8 +31,11 @@ import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -336,7 +339,7 @@ public class AiSdkStreamWrapper {
     public Flux<SseEvent> toAiSdkStream(Flux<ChatEvent> source, Map<String, Object> metadata) {
         return Flux.create(sink -> {
             String messageId = idGenerator.ofMessage();
-            EventState state = new EventState(idGenerator.ofReasoning(), idGenerator.ofText());
+            EventState state = new EventState();
 
             // 1. start part
             emit(sink, new StartPart(messageId));
@@ -362,18 +365,14 @@ public class AiSdkStreamWrapper {
      * @since 4.1
      */
     private static final class EventState {
-        final String reasoningId;
-        final String textId;
-
-        boolean textOpen;
-        boolean reasoningOpen;
-
-        /**
-         * 已发过 tool-input-start 的工具调用（核心逐片发 ARGS_DELTA 时用于去重）
-         *
-         * @since 4.1
-         */
-        final java.util.Set<String> toolInputStarted = new java.util.LinkedHashSet<>();
+        final Map<String, String> textIds = new LinkedHashMap<>();
+        final Map<String, String> reasoningIds = new LinkedHashMap<>();
+        final Set<String> openText = new LinkedHashSet<>();
+        final Set<String> openReasoning = new LinkedHashSet<>();
+        /** 已发过 tool-input-start 的工具调用 */
+        final Set<String> toolInputStarted = new LinkedHashSet<>();
+        /** 没有供应商 ID 时按事件身份分配稳定工具 ID */
+        final Map<String, String> toolIds = new LinkedHashMap<>();
 
         String finishReason;
         AiUsage usage;
@@ -392,9 +391,7 @@ public class AiSdkStreamWrapper {
          */
         String errorText;
 
-        EventState(String reasoningId, String textId) {
-            this.reasoningId = reasoningId;
-            this.textId = textId;
+        EventState() {
         }
     }
 
@@ -411,41 +408,41 @@ public class AiSdkStreamWrapper {
                 break;
 
             case TEXT_START:
-                openText(sink, state);
+                openText(sink, state, event);
                 break;
 
             case TEXT_DELTA:
                 if (isEmpty(event.getText())) {
                     break;
                 }
-                openText(sink, state);
-                emit(sink, new TextDeltaPart(state.textId, event.getText()));
+                emit(sink, new TextDeltaPart(openText(sink, state, event), event.getText()));
                 break;
 
             case TEXT_END:
-                if (state.textOpen) {
-                    emit(sink, new TextEndPart(state.textId));
-                    state.textOpen = false;
-                }
+                closeText(sink, state, event);
                 break;
 
             case THINKING_START:
-                openReasoning(sink, state);
+                openReasoning(sink, state, event);
                 break;
 
             case THINKING_DELTA:
                 if (isEmpty(event.getText())) {
                     break;
                 }
-                openReasoning(sink, state);
-                emit(sink, new ReasoningDeltaPart(state.reasoningId, event.getText()));
+                emit(sink, new ReasoningDeltaPart(openReasoning(sink, state, event), event.getText()));
                 break;
 
             case THINKING_END:
-                if (state.reasoningOpen) {
-                    emit(sink, new ReasoningEndPart(state.reasoningId));
-                    state.reasoningOpen = false;
-                }
+                closeReasoning(sink, state, event);
+                break;
+
+            case THINKING_SIGNATURE:
+                emitData(sink, "thinking-signature", eventPayload(event));
+                break;
+
+            case THINKING_REDACTED:
+                emitData(sink, "thinking-redacted", eventPayload(event));
                 break;
 
             case TOOL_CALL_START:
@@ -458,7 +455,6 @@ public class AiSdkStreamWrapper {
                 emitToolInputDelta(sink, event, state);
                 break;
 
-            case TOOL_CALL_CHUNK:
             case TOOL_CALL_END:
                 emitToolCall(sink, event, state);
                 break;
@@ -468,8 +464,15 @@ public class AiSdkStreamWrapper {
                 emit(sink, new ToolOutputAvailablePart(event.getToolCallId(), event.getText()));
                 break;
 
+            case SERVER_TOOL_START:
+                emitData(sink, "server-tool-start", eventPayload(event));
+                break;
+
+            case SERVER_TOOL_ARGS_DELTA:
+                emitData(sink, "server-tool-args", eventPayload(event));
+                break;
+
             case SERVER_TOOL_RESULT:
-                //服务端工具结果（联网搜索 / 代码执行 / MCP）：旧实现下被拍平进正文
                 emit(sink, new ToolOutputAvailablePart(
                         event.getItemId() != null ? event.getItemId() : event.getSubType(),
                         event.getText()));
@@ -477,6 +480,10 @@ public class AiSdkStreamWrapper {
 
             case CITATION:
                 emitCitation(sink, event);
+                break;
+
+            case MEDIA_PARTIAL:
+                emitData(sink, "media-partial", eventPayload(event));
                 break;
 
             case MEDIA_DONE:
@@ -512,14 +519,30 @@ public class AiSdkStreamWrapper {
                 state.finishReason = finishReasonOf(event, state.finishReason);
                 break;
 
+            case REFUSAL_DELTA:
+                emitData(sink, "refusal", eventPayload(event));
+                break;
+
+            case CONTENT_FILTER:
+                emitData(sink, "content-filter", eventPayload(event));
+                break;
+
+            case CUSTOM:
+                emitData(sink, isEmpty(event.getSubType()) ? "custom" : event.getSubType(), eventPayload(event));
+                break;
+
             case RAW:
                 //默认事件过滤器（ChatEventFilter.DEFAULT）会挡掉 RAW，只有调用方
                 //显式 eventFilter(ChatEventFilter.all()) 才会收到，详见 toAiSdkStream javadoc
                 emit(sink, new RawDataPart(event.getRawType(), event.getRaw() == null ? null : event.getRaw().toJson()));
                 break;
 
+            case STATUS:
+            case HEARTBEAT:
+                emitData(sink, event.getType().name().toLowerCase(), eventPayload(event));
+                break;
+
             default:
-                //STATUS / HEARTBEAT / THINKING_SIGNATURE 等：AI SDK 协议无对应 part
                 break;
         }
     }
@@ -542,29 +565,73 @@ public class AiSdkStreamWrapper {
     }
 
     private void closeOpenParts(FluxSink<SseEvent> sink, EventState state) {
-        if (state.reasoningOpen) {
-            emit(sink, new ReasoningEndPart(state.reasoningId));
-            state.reasoningOpen = false;
+        for (String key : new LinkedHashSet<>(state.openReasoning)) {
+            String id = state.reasoningIds.get(key);
+            if (id != null) {
+                emit(sink, new ReasoningEndPart(id));
+            }
         }
+        state.openReasoning.clear();
 
-        if (state.textOpen) {
-            emit(sink, new TextEndPart(state.textId));
-            state.textOpen = false;
+        for (String key : new LinkedHashSet<>(state.openText)) {
+            String id = state.textIds.get(key);
+            if (id != null) {
+                emit(sink, new TextEndPart(id));
+            }
+        }
+        state.openText.clear();
+    }
+
+    private String openText(FluxSink<SseEvent> sink, EventState state, ChatEvent event) {
+        String key = contentKey(event);
+        String id = state.textIds.get(key);
+        if (id == null) {
+            id = idGenerator.ofText();
+            state.textIds.put(key, id);
+        }
+        if (state.openText.add(key)) {
+            emit(sink, new TextStartPart(id));
+        }
+        return id;
+    }
+
+    private void closeText(FluxSink<SseEvent> sink, EventState state, ChatEvent event) {
+        String key = contentKey(event);
+        String id = state.textIds.get(key);
+        if (id != null && state.openText.remove(key)) {
+            emit(sink, new TextEndPart(id));
         }
     }
 
-    private void openText(FluxSink<SseEvent> sink, EventState state) {
-        if (state.textOpen == false) {
-            emit(sink, new TextStartPart(state.textId));
-            state.textOpen = true;
+    private String openReasoning(FluxSink<SseEvent> sink, EventState state, ChatEvent event) {
+        String key = contentKey(event);
+        String id = state.reasoningIds.get(key);
+        if (id == null) {
+            id = idGenerator.ofReasoning();
+            state.reasoningIds.put(key, id);
+        }
+        if (state.openReasoning.add(key)) {
+            emit(sink, new ReasoningStartPart(id));
+        }
+        return id;
+    }
+
+    private void closeReasoning(FluxSink<SseEvent> sink, EventState state, ChatEvent event) {
+        String key = contentKey(event);
+        String id = state.reasoningIds.get(key);
+        if (id != null && state.openReasoning.remove(key)) {
+            emit(sink, new ReasoningEndPart(id));
         }
     }
 
-    private void openReasoning(FluxSink<SseEvent> sink, EventState state) {
-        if (state.reasoningOpen == false) {
-            emit(sink, new ReasoningStartPart(state.reasoningId));
-            state.reasoningOpen = true;
+    private static String contentKey(ChatEvent event) {
+        if (isEmpty(event.getItemId()) == false) {
+            return "item:" + event.getItemId();
         }
+        if (event.getIndex() >= 0) {
+            return "index:" + event.getIndex();
+        }
+        return "default";
     }
 
     /**
@@ -573,13 +640,7 @@ public class AiSdkStreamWrapper {
     private String emitToolInputStart(FluxSink<SseEvent> sink, ChatEvent event, EventState state) {
         ToolCall tc = event.getToolCall();
 
-        String tcId = event.getToolCallId();
-        if (isEmpty(tcId) && tc != null) {
-            tcId = tc.getId();
-        }
-        if (isEmpty(tcId)) {
-            tcId = idGenerator.ofToolCall();
-        }
+        String tcId = resolveToolCallId(event, state);
 
         if (state.toolInputStarted.add(tcId)) {
             emit(sink, new ToolInputStartPart(tcId, tc == null ? null : tc.getName()));
@@ -606,7 +667,7 @@ public class AiSdkStreamWrapper {
             return;
         }
 
-        String tcId = tc.getId() != null ? tc.getId() : idGenerator.ofToolCall();
+        String tcId = resolveToolCallId(event, state);
 
         //参数未走增量通道时（整块方言），在此补齐 start + delta
         if (state.toolInputStarted.add(tcId)) {
@@ -620,6 +681,42 @@ public class AiSdkStreamWrapper {
         emit(sink, new ToolInputAvailablePart(tcId, tc.getName(), tc.getArguments()));
     }
 
+    private String resolveToolCallId(ChatEvent event, EventState state) {
+        ToolCall tc = event.getToolCall();
+        String id = event.getToolCallId();
+        if (isEmpty(id) && tc != null) {
+            id = tc.getId();
+        }
+        if (isEmpty(id) == false) {
+            return id;
+        }
+        String key = contentKey(event);
+        id = state.toolIds.get(key);
+        if (id == null) {
+            id = idGenerator.ofToolCall();
+            state.toolIds.put(key, id);
+        }
+        return id;
+    }
+
+    private static Map<String, Object> eventPayload(ChatEvent event) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("eventType", event.getType().name());
+        if (event.getRawType() != null) data.put("rawType", event.getRawType());
+        if (event.getSubType() != null) data.put("subType", event.getSubType());
+        if (event.getResponseId() != null) data.put("responseId", event.getResponseId());
+        if (event.getProviderResponseId() != null) data.put("providerResponseId", event.getProviderResponseId());
+        if (event.getItemId() != null) data.put("itemId", event.getItemId());
+        if (event.getToolCallId() != null) data.put("toolCallId", event.getToolCallId());
+        if (event.getText() != null) data.put("text", event.getText());
+        if (event.getAttrs() != null && !event.getAttrs().isEmpty()) data.put("attrs", event.getAttrs());
+        if (event.getRaw() != null) data.put("raw", event.getRaw().toJson());
+        return data;
+    }
+
+    private static void emitData(FluxSink<SseEvent> sink, String type, Object data) {
+        emit(sink, DataPart.of(type, data));
+    }
     private void emitCitation(FluxSink<SseEvent> sink, ChatEvent event) {
         String url = event.getText();
         String sourceId = event.getItemId() != null ? event.getItemId() : url;
@@ -632,27 +729,11 @@ public class AiSdkStreamWrapper {
     }
 
     private void emitMedia(FluxSink<SseEvent> sink, ChatEvent event) {
-        ChatResponse resp = event.getResponse();
-        if (resp == null) {
-            return;
-        }
-
-        //媒体统一从消息取（终态即完整聚合，含流中累积的 mediaBlocks）
-        AssistantMessage msg = resp.getMessage();
-        if (msg == null || msg.hasMedia() == false) {
-            return;
-        }
-
-        List<ContentBlock> blocks = msg.getBlocks();
-        if (blocks == null) {
-            return;
-        }
-
-        for (ContentBlock block : blocks) {
-            String content = block.getContent();
-            if (isEmpty(content) == false) {
-                emit(sink, new FilePart(content, block.getMimeType()));
-            }
+        //MEDIA_DONE 的语义负载就是当前已完成的媒体块；不能依赖终态 response，
+        //否则正常的媒体完成事件会被静默丢弃，且多媒体响应还可能重复发送。
+        ContentBlock block = event.getBlock();
+        if (block != null && isEmpty(block.getContent()) == false) {
+            emit(sink, new FilePart(block.getContent(), block.getMimeType()));
         }
     }
 

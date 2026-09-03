@@ -25,6 +25,7 @@ import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventGroup;
 import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -394,7 +395,9 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                 response = chatReq.stream()
                         .takeUntil(e -> trace.isStreamCancelled())
                         .doOnNext(e -> {
-                            if (e.is(ChatEventType.TEXT_DELTA, ChatEventType.THINKING_DELTA, ChatEventType.MEDIA_DONE)) {
+                            if (e.is(ChatEventType.TEXT_START, ChatEventType.TEXT_DELTA, ChatEventType.TEXT_END,
+                                    ChatEventType.THINKING_START, ChatEventType.THINKING_DELTA, ChatEventType.THINKING_END,
+                                    ChatEventType.MEDIA_DONE)) {
                                 trace.pushAgentEvent(new SimpleDeltaEvent(trace, e));
                             }
                         })

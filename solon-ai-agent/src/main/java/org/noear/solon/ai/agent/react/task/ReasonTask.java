@@ -448,7 +448,9 @@ public class ReasonTask {
                                         //只上抛正文与思考增量（媒体取完成帧）：边界帧（TEXT_START/END 等）会与
                                         //DELTA 重复渲染，工具参数分片不是模型正文。ReasonTask 只输出思考与正文流；
                                         //工具/动作类事件一律由 ActionTask 发出（ActionStart/End、ToolCallStart/End）。
-                                        if (e.is(ChatEventType.TEXT_DELTA, ChatEventType.THINKING_DELTA, ChatEventType.MEDIA_DONE)) {
+                                        if (e.is(ChatEventType.TEXT_START, ChatEventType.TEXT_DELTA, ChatEventType.TEXT_END,
+                                                ChatEventType.THINKING_START, ChatEventType.THINKING_DELTA, ChatEventType.THINKING_END,
+                                                ChatEventType.MEDIA_DONE)) {
                                             trace.pushAgentEvent(new ReasonDeltaEvent(trace, e));
                                         }
                                     })
@@ -484,16 +486,6 @@ public class ReasonTask {
 
     /**
      * 判断是否已经产生不可安全重放的模型输出。
-     *
-     * <p>这是重试策略，与上方「能否作为正文增量上抛」的白名单必然不同：工具参数分片不能进正文，却说明
-     * 模型已经开始产出；服务端工具（联网搜索、代码执行）更是已经真实发生并计费，重放会二次执行。</p>
-     *
-     * <p>判定按<b>分组</b>而非具体类型：分组是闭集（9 个），新增事件类型只会落入既有分组，因此这里
-     * 天然向前兼容——旧的 11 项显式白名单会在核心新增类型时静默漏判（如 {@code TOOL_CALL_CHUNK}、
-     * {@code SERVER_TOOL_*}、{@code REFUSAL_DELTA} 就都不在其中）。</p>
-     *
-     * <p>排除的三个分组：{@code LIFECYCLE}（响应开始/状态/心跳/结束）、{@code STEP}（步边界）、
-     * {@code META}（用量/错误/原始帧）——它们不载模型内容，也不产生外部副作用。</p>
      */
     private boolean isRetryUnsafeOutput(ChatEvent event) {
         return event != null && event.isGroup(

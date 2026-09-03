@@ -55,6 +55,6 @@ public class SimpleDeltaEvent extends AbsAgentEvent {
 
     @Override
     public String getText() {
-        return chatEvent.getText();
+        return chatEvent.getTextOrEmpty();
     }
 }
