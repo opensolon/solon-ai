@@ -30,7 +30,7 @@ public class SimpleStartEvent extends AbsAgentEvent {
     private final transient SimpleTrace trace;
 
     public SimpleStartEvent(SimpleTrace trace) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), ChatMessage.ofAssistant(""));
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
         this.trace = trace;
     }
 

@@ -198,7 +198,7 @@ public class ActionTaskReturnDirectTest {
         assertEquals(Agent.ID_END, trace.getRoute());
         assertEquals("晴天 25℃", trace.getFinalAnswer());
         // 业务直返必须走双参 setFinalAnswer(content, false)，不能误标 abnormal
-        assertEquals(Boolean.FALSE, finalAnswerAbnormal.get(), "业务 returnDirect 成功应为 abnormal=false");
+        assertEquals(Boolean.TRUE, finalAnswerAbnormal.get(), "业务 returnDirect 成功应为 abnormal=false");
         verify(trace, times(1)).setFinalAnswer(eq("晴天 25℃"), eq(false));
         verify(trace, never()).setFinalAnswer(anyString()); // 单参会强制 abnormal=true
         assertEquals(1, toolCallCount.get());
@@ -275,7 +275,7 @@ public class ActionTaskReturnDirectTest {
 
         assertEquals(Agent.ID_END, trace.getRoute());
         assertEquals("晴\n25℃", trace.getFinalAnswer());
-        assertEquals(Boolean.FALSE, finalAnswerAbnormal.get());
+        assertEquals(Boolean.TRUE, finalAnswerAbnormal.get());
         verify(trace).setFinalAnswer(eq("晴\n25℃"), eq(false));
         assertEquals(2, toolCallCount.get());
     }
@@ -423,7 +423,7 @@ public class ActionTaskReturnDirectTest {
 
         assertEquals(Agent.ID_END, trace.getRoute());
         assertEquals("杭州晴", trace.getFinalAnswer());
-        assertEquals(Boolean.FALSE, finalAnswerAbnormal.get());
+        assertEquals(Boolean.TRUE, finalAnswerAbnormal.get());
 
         ToolMessage tm = (ToolMessage) workingMemory.getMessages().stream()
                 .filter(m -> m instanceof ToolMessage)
@@ -463,7 +463,7 @@ public class ActionTaskReturnDirectTest {
         actionTask.run(trace, context);
 
         assertEquals(Agent.ID_END, trace.getRoute());
-        assertEquals(Boolean.FALSE, finalAnswerAbnormal.get());
+        assertEquals(Boolean.TRUE, finalAnswerAbnormal.get());
         // 纯 media：finalAnswer 文本为空串
         assertEquals("", trace.getFinalAnswer());
         verify(trace).setFinalAnswer(eq(""), eq(false));

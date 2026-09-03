@@ -16,7 +16,6 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.AbsAgentEvent;
-import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -30,7 +29,7 @@ public class TeamStartEvent extends AbsAgentEvent {
     private final TeamTrace trace;
 
     public TeamStartEvent(TeamTrace trace) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), ChatMessage.ofAssistant(""));
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
 
         this.trace = trace;
     }

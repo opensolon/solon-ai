@@ -21,6 +21,9 @@ import org.noear.solon.ai.agent.exception.LlmNoReturnException;
 import org.noear.solon.ai.agent.react.*;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventGroup;
+import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.util.RetryTask;
@@ -200,10 +203,7 @@ public class ReasonTask {
         String systemPromptStr = systemPromptBuf.toString();
 
         if (trace.hasStreamSink()) {
-            List<ChatMessage> messages = new ArrayList<>();
-            messages.add(ChatMessage.ofSystem(systemPromptStr));
-            messages.addAll(trace.getWorkingMemory().getMessages());
-            trace.pushAgentEvent(new ReasonStartEvent(trace, systemPromptStr, messages));
+            trace.pushAgentEvent(new ReasonStartEvent(trace, systemPromptStr));
         }
 
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
@@ -214,12 +214,7 @@ public class ReasonTask {
             return;
         }
 
-        final AssistantMessage responseMessage;
-        if (response.isStream()) {
-            responseMessage = response.getAggregationMessage();
-        } else {
-            responseMessage = response.getMessage();
-        }
+        final AssistantMessage responseMessage = response.getMessage();
 
         if(responseMessage == null){
             trace.setRoute(Agent.ID_END);
@@ -247,12 +242,18 @@ public class ReasonTask {
         // 容错处理：模型响应内容、工具调用与媒体均为空时，引导其重新生成
         // 纯生图等 media-only 响应不算空，避免被当成空响应重试
         // 注：text 用 trim 判定，纯空白（如 "\n\n"）等价于空，否则会 END 出一个空白答案
+        //
+        // 【保留原因】不要用 callWithRetry 里的 response.isEmpty()（第 469 行）替代本段：
+        // 1) isEmpty() 是严格 null 判定（getContent()==null），拦不住纯空白文本，会在不重试的
+        //    非流式路径下 END 出空白答案；
+        // 2) 本段同时服务于流式与非流式两条路径（位于 callWithRetry 返回之后），且承担
+        //    「格式修正/自我反思提示注入」的业务功能，删掉即丢失空响应重试能力。
         if (Assert.isBlank(responseMessage.getText())
                 && Assert.isEmpty(responseMessage.getToolCalls())
                 && !responseMessage.hasMedia()) {
             if (trace.getEmptyRetryCounter().incrementAndGet() < 3) {
                 //做3次重复
-                LOG.warn("ReActAgent[{}] choices size:{}, responseMessage is empty: {}", trace.getAgentName(), response.getChoices().size(), responseMessage);
+                LOG.warn("ReActAgent[{}] responseMessage is empty: {}", trace.getAgentName(), responseMessage);
 
                 if (Assert.isNotEmpty(responseMessage.getContent())) {
                     trace.getWorkingMemory().addMessage(responseMessage); //有些 llm 不能接受空消息
@@ -321,11 +322,6 @@ public class ReasonTask {
 
         if(trace.getSession().isPending()){
             return;
-        }
-
-        if (trace.hasStreamSink()) {
-            //@deprecated 4.0.4
-            trace.pushAgentEvent(new ThoughtChunk(trace, response, responseMessage, thoughtContent));
         }
 
         trace.setLastReasonMessage(responseMessage);
@@ -441,22 +437,42 @@ public class ReasonTask {
                         final ChatResponse response;
                         if (trace.hasStreamSink()) {
                             response = req.stream()
-                                    .takeUntil(r -> trace.isStreamCancelled())
-                                    .doOnNext(resp -> {
-                                        streamEmitted.set(true);
+                                    .takeUntil(e -> trace.isStreamCancelled())
+                                    .doOnNext(e -> {
+                                        //重试门控与 AgentEvent 映射解耦：只要模型已产生任何内容侧输出，
+                                        //重放整个请求就会造成重复内容或二次外部副作用。
+                                        if (isRetryUnsafeOutput(e)) {
+                                            streamEmitted.set(true);
+                                        }
 
-                                        if (resp.hasChoices() && resp.getMessage().isToolCalls() == false) {
-                                            //非工作调用才是 delta （工作时，已聚合内容）
-                                            trace.pushAgentEvent(new ReasonDeltaEvent(trace, resp, resp.getMessage()));
-                                            trace.pushAgentEvent(new ReasonChunk(trace, resp, resp.getMessage()));
+                                        //只上抛正文与思考增量（媒体取完成帧）：边界帧（TEXT_START/END 等）会与
+                                        //DELTA 重复渲染，工具参数分片不是模型正文。ReasonTask 只输出思考与正文流；
+                                        //工具/动作类事件一律由 ActionTask 发出（ActionStart/End、ToolCallStart/End）。
+                                        if (e.is(ChatEventType.TEXT_DELTA, ChatEventType.THINKING_DELTA, ChatEventType.MEDIA_DONE)) {
+                                            trace.pushAgentEvent(new ReasonDeltaEvent(trace, e));
                                         }
                                     })
-                                    .blockLast();
+                                    .filter(e -> e.is(ChatEventType.RESPONSE_END))
+                                    .reduce((a, b) -> a.getType() == ChatEventType.RESPONSE_END ? a : b)
+                                    .map(ChatEvent::getResponse)
+                                    .block();
                         } else {
                             response = req.call();
                         }
 
-                        if (response == null || response.isEmpty()) {
+                        if (response == null) {
+                            //流中没有终态帧（订阅端取消时 takeUntil 提前完成流），归约结果为 null。
+                            //这不是模型故障——重试同样会被立即取消，只会白花调用，
+                            //所以直接返回 null，由 run() 以 END 收尾（不写兜底错误文案）。
+                            //注意：非流式路径下 isStreamCancelled() 恒为 true（无 sink），必须先判 hasStreamSink()。
+                            if (trace.hasStreamSink() && trace.isStreamCancelled()) {
+                                return null;
+                            }
+
+                            throw new LlmNoReturnException("The LLM did not return");
+                        }
+
+                        if (response.isEmpty()) {
                             throw new LlmNoReturnException("The LLM did not return");
                         }
                         return response;
@@ -464,6 +480,29 @@ public class ReasonTask {
         } catch (Throwable e) {
             return handleLastException(trace, e);
         }
+    }
+
+    /**
+     * 判断是否已经产生不可安全重放的模型输出。
+     *
+     * <p>这是重试策略，与上方「能否作为正文增量上抛」的白名单必然不同：工具参数分片不能进正文，却说明
+     * 模型已经开始产出；服务端工具（联网搜索、代码执行）更是已经真实发生并计费，重放会二次执行。</p>
+     *
+     * <p>判定按<b>分组</b>而非具体类型：分组是闭集（9 个），新增事件类型只会落入既有分组，因此这里
+     * 天然向前兼容——旧的 11 项显式白名单会在核心新增类型时静默漏判（如 {@code TOOL_CALL_CHUNK}、
+     * {@code SERVER_TOOL_*}、{@code REFUSAL_DELTA} 就都不在其中）。</p>
+     *
+     * <p>排除的三个分组：{@code LIFECYCLE}（响应开始/状态/心跳/结束）、{@code STEP}（步边界）、
+     * {@code META}（用量/错误/原始帧）——它们不载模型内容，也不产生外部副作用。</p>
+     */
+    private boolean isRetryUnsafeOutput(ChatEvent event) {
+        return event != null && event.isGroup(
+                ChatEventGroup.TEXT,
+                ChatEventGroup.THINKING,
+                ChatEventGroup.TOOL_CALL,
+                ChatEventGroup.SERVER_TOOL,
+                ChatEventGroup.MEDIA,
+                ChatEventGroup.SAFETY);
     }
 
     private ChatRequestDesc buildRequest(ReActTrace trace, List<ChatMessage> messages) {

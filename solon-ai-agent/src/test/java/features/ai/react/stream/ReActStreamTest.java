@@ -6,9 +6,9 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActChunk;
-import org.noear.solon.ai.agent.react.task.ActionChunk;
-import org.noear.solon.ai.agent.react.task.ReasonChunk;
+import org.noear.solon.ai.agent.react.RunEndEvent;
+import org.noear.solon.ai.agent.react.task.ToolCallStartEvent;
+import org.noear.solon.ai.agent.react.task.ReasonDeltaEvent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
@@ -26,7 +26,7 @@ public class ReActStreamTest {
 
     /**
      * 测试 1：验证基础流式输出
-     * 目标：确保能观测到 ReasonChunk（思考片段）和最后的 ReActChunk（汇总片段）
+     * 目标：确保能观测到 ReasonDeltaEvent（思考片段）和最后的 RunEndEvent（汇总片段）
      */
     @Test
     public void testSimpleStream() throws Throwable {
@@ -43,10 +43,10 @@ public class ReActStreamTest {
                 .recordWith(java.util.ArrayList::new)
                 .thenConsumeWhile(chunk -> true) // 消费所有 chunk
                 .consumeRecordedWith(chunks -> {
-                    // 1. 验证是否产生了 ReasonChunk (思考流)
-                    boolean hasReason = chunks.stream().anyMatch(c -> c instanceof ReasonChunk);
-                    // 2. 验证是否产生了最后的汇总 ReActChunk
-                    boolean hasFinal = chunks.stream().anyMatch(c -> c instanceof ReActChunk);
+                    // 1. 验证是否产生了 ReasonDeltaEvent (思考流)
+                    boolean hasReason = chunks.stream().anyMatch(c -> c instanceof ReasonDeltaEvent);
+                    // 2. 验证是否产生了最后的汇总 RunEndEvent
+                    boolean hasFinal = chunks.stream().anyMatch(c -> c instanceof RunEndEvent);
 
                     Assertions.assertTrue(hasReason, "流中应包含思考片段");
                     Assertions.assertTrue(hasFinal, "流中应包含最终汇总片段");
@@ -58,7 +58,7 @@ public class ReActStreamTest {
 
     /**
      * 测试 2：验证包含工具调用的复杂流
-     * 目标：观测到 [ReasonChunk -> ActionChunk -> ReasonChunk -> ReActChunk] 的完整生命周期
+     * 目标：观测到 [ReasonDeltaEvent -> ToolCallStartEvent -> ReasonDeltaEvent -> RunEndEvent] 的完整生命周期
      */
     @Test
     public void testActionStream() throws Throwable {
@@ -76,18 +76,18 @@ public class ReActStreamTest {
                 .session(session)
                 .stream()
                 .doOnNext(chunk -> {
-                    if (chunk instanceof ReasonChunk) {
-                        System.out.println("[思考]: " + chunk.getContent());
-                    } else if (chunk instanceof ActionChunk) {
+                    if (chunk instanceof ReasonDeltaEvent) {
+                        System.out.println("[思考]: " + chunk.getText());
+                    } else if (chunk instanceof ToolCallStartEvent) {
                         actionFound.set(true);
                         System.out.println("[动作]: 正在调用工具...");
-                    } else if (chunk instanceof ReActChunk) {
-                        System.out.println("[结果]: " + chunk.getContent());
+                    } else if (chunk instanceof RunEndEvent) {
+                        System.out.println("[结果]: " + chunk.getText());
                     }
                 })
                 .blockLast(); // 阻塞直至流结束
 
-        Assertions.assertTrue(actionFound.get(), "在流式输出中应该捕获到 ActionChunk");
+        Assertions.assertTrue(actionFound.get(), "在流式输出中应该捕获到 ToolCallStartEvent");
     }
 
     /**
@@ -105,7 +105,7 @@ public class ReActStreamTest {
 
         Flux<AgentEvent> stream = agent.prompt("hello").stream();
 
-        assert stream.blockLast().getContent().contains("暂时无法使用模型服务");
+        assert stream.blockLast().getText().contains("暂时无法使用模型服务");
     }
 
     // --- 模拟工具类 ---

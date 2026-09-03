@@ -19,6 +19,8 @@ import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -166,12 +168,7 @@ public class SupervisorTask implements NamedTaskComponent {
             return;
         }
 
-        final AssistantMessage responseMessage;
-        if (response.isStream()) {
-            responseMessage = response.getAggregationMessage();
-        } else {
-            responseMessage = response.getMessage();
-        }
+        final AssistantMessage responseMessage = response.getMessage();
 
         if (response.getUsage() != null) {
             trace.getMetrics().addUsage(response.getUsage());
@@ -605,19 +602,21 @@ public class SupervisorTask implements NamedTaskComponent {
 
                         if (trace.hasStreamSink()) {
                             response = req.stream()
-                                    .takeUntil(r -> trace.isStreamCancelled())
-                                    .doOnNext(resp -> {
-                                        trace.pushAgentEvent(new SupervisorDeltaEvent(node, trace, resp));
-
-                                        //@deprecated 4.0.4
-                                        trace.pushAgentEvent(new SupervisorChunk(node, trace, resp));
+                                    .takeUntil(e -> trace.isStreamCancelled())
+                                    .doOnNext(e -> {
+                                        if (e.is(ChatEventType.TEXT_DELTA, ChatEventType.THINKING_DELTA, ChatEventType.MEDIA_DONE)) {
+                                            trace.pushAgentEvent(new SupervisorDeltaEvent(node, trace, e));
+                                        }
                                     })
-                                    .blockLast();
+                                    .filter(e -> e.is(ChatEventType.RESPONSE_END))
+                                    .reduce((a, b) -> a.getType() == ChatEventType.RESPONSE_END ? a : b)
+                                    .map(ChatEvent::getResponse)
+                                    .block();
                         } else {
                             response = req.call();
                         }
 
-                        if (response.isEmpty()) {
+                        if (response == null || response.isEmpty()) {
                             //触发重试
                             throw new LlmNoReturnException("The LLM did not return");
                         }

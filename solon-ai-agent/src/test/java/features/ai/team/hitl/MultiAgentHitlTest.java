@@ -13,7 +13,6 @@ import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.TeamResponse;
 import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.ai.chat.ChatChoice;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -176,12 +175,9 @@ public class MultiAgentHitlTest {
 
     private ChatResponse mockResponse(AssistantMessage message) {
         ChatResponse resp = mock(ChatResponse.class);
-        when(resp.isStream()).thenReturn(false);
         when(resp.isEmpty()).thenReturn(false);
         when(resp.getMessage()).thenReturn(message);
-        when(resp.getAggregationMessage()).thenReturn(message);
-        when(resp.getChoices()).thenReturn(Collections.singletonList(
-                new ChatChoice(0, new Date(), "stop", message)));
+        when(resp.getToolCalls()).thenReturn(message.getToolCalls() == null ? java.util.Collections.emptyList() : message.getToolCalls());
         when(resp.getUsage()).thenReturn(null);
         return resp;
     }

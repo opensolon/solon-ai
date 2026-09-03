@@ -11,7 +11,8 @@ package org.noear.solon.ai.agent.team.task;
 
 import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.agent.team.TeamTrace;
-import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventGroup;
 import org.noear.solon.flow.Node;
 import org.noear.solon.lang.Preview;
 
@@ -27,14 +28,13 @@ import org.noear.solon.lang.Preview;
 public class SupervisorDeltaEvent extends AbsAgentEvent {
     private final transient Node node;
     private final transient TeamTrace trace;
-    private final transient ChatResponse response;
+    private final transient ChatEvent chatEvent;
 
-    public SupervisorDeltaEvent(Node node, TeamTrace trace, ChatResponse response) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), response.getMessage());
-
+    public SupervisorDeltaEvent(Node node, TeamTrace trace, ChatEvent event) {
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
         this.node = node;
         this.trace = trace;
-        this.response = response;
+        this.chatEvent = event;
     }
 
     public Node getNode() {
@@ -45,7 +45,19 @@ public class SupervisorDeltaEvent extends AbsAgentEvent {
         return trace;
     }
 
-    public ChatResponse getResponse() {
-        return response;
+    public ChatEvent getChatEvent() {
+        return chatEvent;
+    }
+
+    /**
+     * 是否为思考
+     */
+    public boolean isThinking() {
+        return chatEvent.isGroup(ChatEventGroup.THINKING);
+    }
+
+    @Override
+    public String getText() {
+        return chatEvent.getText();
     }
 }

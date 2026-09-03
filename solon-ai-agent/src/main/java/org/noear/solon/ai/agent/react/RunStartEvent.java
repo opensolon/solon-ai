@@ -28,7 +28,7 @@ public class RunStartEvent extends AbsAgentEvent {
     private final ReActTrace trace;
 
     public RunStartEvent(ReActTrace trace) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), ChatMessage.ofAssistant(""));
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
 
         this.trace = trace;
     }

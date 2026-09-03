@@ -92,7 +92,7 @@ public class PlanTalent extends AbsTalent {
             }
 
             if (trace.hasStreamSink()) {
-                trace.pushAgentEvent(new PlanEvent(trace, PlanStage.CREATE, trace.getLastReasonMessage()));
+                trace.pushAgentEvent(new PlanEvent(trace, PlanStage.CREATE));
             }
 
             return "成功：计划已初始化，共 " + cleaned.size() + " 步。请开始执行第一步。";
@@ -124,7 +124,7 @@ public class PlanTalent extends AbsTalent {
         }
 
         if (trace.hasStreamSink()) {
-            trace.pushAgentEvent(new PlanEvent(trace, PlanStage.PROGRESS, trace.getLastReasonMessage()));
+            trace.pushAgentEvent(new PlanEvent(trace, PlanStage.PROGRESS));
         }
 
         return desc;
@@ -169,7 +169,7 @@ public class PlanTalent extends AbsTalent {
         }
 
         if (trace.hasStreamSink()) {
-            trace.pushAgentEvent(new PlanEvent(trace, PlanStage.REVISE, trace.getLastReasonMessage()));
+            trace.pushAgentEvent(new PlanEvent(trace, PlanStage.REVISE));
         }
 
         return "成功：计划已从第 " + from_index + " 步开始重构。请按照新计划继续执行。";

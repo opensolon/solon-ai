@@ -8,7 +8,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.simple.SimpleDeltaEvent;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
-import org.noear.solon.ai.agent.simple.SimpleChunk;
+import org.noear.solon.ai.agent.simple.SimpleEndEvent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import reactor.test.StepVerifier;
@@ -75,10 +75,10 @@ public class SimpleAgentTest {
                     // 验证中间块
                     boolean hasChatChunks = chunks.stream().anyMatch(c -> c instanceof SimpleDeltaEvent);
                     // 验证结束块
-                    boolean hasSimpleChunk = chunks.stream().anyMatch(c -> c instanceof SimpleChunk);
+                    boolean hasSimpleEndEvent = chunks.stream().anyMatch(c -> c instanceof SimpleEndEvent);
 
-                    Assertions.assertTrue(hasChatChunks, "流中应该包含 ChatChunk 中间片段");
-                    Assertions.assertTrue(hasSimpleChunk, "流中应该包含 SimpleChunk 最终汇总");
+                    Assertions.assertTrue(hasChatChunks, "流中应该包含 SimpleDeltaEvent 中间事件");
+                    Assertions.assertTrue(hasSimpleEndEvent, "流中应该包含 SimpleEndEvent 最终事件");
                 })
                 .verifyComplete();
     }

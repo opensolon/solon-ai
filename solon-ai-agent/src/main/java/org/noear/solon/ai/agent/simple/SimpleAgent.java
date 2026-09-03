@@ -24,6 +24,8 @@ import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -390,32 +392,26 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
             if (trace.hasStreamSink()) {
                 response = chatReq.stream()
-                        .takeUntil(r -> trace.isStreamCancelled())
-                        .doOnNext(resp -> {
-                            trace.pushAgentEvent(new SimpleDeltaEvent(trace, resp));
-
-                            //@deprecated 4.1.0
-                            trace.pushAgentEvent(new ChatDeltaEvent(trace, resp));
-
-                            //@deprecated 4.0.4
-                            trace.pushAgentEvent(new ChatChunk(trace, resp));
+                        .takeUntil(e -> trace.isStreamCancelled())
+                        .doOnNext(e -> {
+                            if (e.is(ChatEventType.TEXT_DELTA, ChatEventType.THINKING_DELTA, ChatEventType.MEDIA_DONE)) {
+                                trace.pushAgentEvent(new SimpleDeltaEvent(trace, e));
+                            }
                         })
-                        .blockLast();
+                        .filter(e -> e.is(ChatEventType.RESPONSE_END))
+                        .reduce((a, b) -> a.getType() == ChatEventType.RESPONSE_END ? a : b)
+                        .map(ChatEvent::getResponse)
+                        .block();
             } else {
                 response = chatReq.call();
             }
 
-            if (response.isEmpty()) {
+            if (response == null || response.isEmpty()) {
                 //触发重试
                 throw new LlmNoReturnException("The LLM did not return");
             }
 
-            final AssistantMessage responseMessage;
-            if (response.isStream()) {
-                responseMessage = response.getAggregationMessage();
-            } else {
-                responseMessage = response.getMessage();
-            }
+            final AssistantMessage responseMessage = response.getMessage();
 
             if (response.getUsage() != null) {
                 trace.getMetrics().addUsage(response.getUsage());

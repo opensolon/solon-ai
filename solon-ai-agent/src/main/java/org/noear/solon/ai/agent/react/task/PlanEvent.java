@@ -31,14 +31,14 @@ import java.util.List;
 @Preview("3.9.1")
 public class PlanEvent extends AbsAgentEvent {
     private final transient ReActTrace trace;
-    private final transient PlanStage event;
+    private final transient PlanStage stage;
     private final String reasonId;
 
-    public PlanEvent(ReActTrace trace, PlanStage event, AssistantMessage message) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
+    public PlanEvent(ReActTrace trace, PlanStage stage) {
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
 
         this.trace = trace;
-        this.event = event;
+        this.stage = stage;
         this.reasonId = trace.getCurrentReasonId();
     }
 
@@ -46,12 +46,12 @@ public class PlanEvent extends AbsAgentEvent {
         return trace;
     }
 
-    public PlanStage getEvent() {
-        return event;
-    }
-
     public List<String> getPlans() {
         return trace.getPlans();
+    }
+
+    public PlanStage getPlanStage() {
+        return stage;
     }
 
     public int getPlanIndex() {

@@ -31,7 +31,7 @@ public class NodeStartEvent extends AbsAgentEvent {
     private final transient Node node;
 
     public NodeStartEvent(Node node, TeamTrace trace) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), ChatMessage.ofAssistant(""));
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
         this.trace = trace;
         this.node = node;
     }

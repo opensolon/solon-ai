@@ -118,7 +118,7 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
     }
 
     /**
-     * 响应式流输出：实时推送推理过程中的 Chunk（如 ReasonChunk, ActionChunk）
+     * 响应式流输出：统一推送推理过程中的 AgentEvent（如 ReasonDeltaEvent、ToolCallStartEvent）
      * 适用于 Web 端 SSE 或 WebSocket 实时展示思考过程
      */
     public Flux<AgentEvent> stream() {
@@ -141,7 +141,6 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
 
                 if (sink.isCancelled() == false) {
                     trace.pushAgentEvent(new RunEndEvent(resp));
-                    trace.pushAgentEvent(new ReActChunk(resp));
                     sink.complete();
                 }
             } catch (Throwable e) {

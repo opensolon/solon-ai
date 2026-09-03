@@ -15,9 +15,9 @@
  */
 package org.noear.solon.ai.agent;
 
-import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.AiEvent;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.NonSerializable;
-import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 import java.util.Map;
@@ -29,7 +29,7 @@ import java.util.Map;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public interface AgentEvent extends NonSerializable {
+public interface AgentEvent extends AiEvent, NonSerializable {
     /**
      * 获取运行 Id
      */
@@ -56,26 +56,16 @@ public interface AgentEvent extends NonSerializable {
     boolean hasMeta(String name);
 
     /**
-     * 获取当前块的消息
+     * 是否有文本
      */
-    @Nullable
-    ChatMessage getMessage();
-
-    /**
-     * 是否有当前块内容
-     */
-    default boolean hasContent() {
-        return getMessage() != null && getMessage().getContent() != null;
+    default boolean hasText() {
+        return Assert.isNotEmpty(getText());
     }
 
     /**
-     * 获取当前块的消息内容
+     * 获取文本
      */
-    default String getContent() {
-        if (hasContent()) {
-            return getMessage().getContent();
-        } else {
-            return "";
-        }
+    default String getText() {
+        return "";
     }
 }

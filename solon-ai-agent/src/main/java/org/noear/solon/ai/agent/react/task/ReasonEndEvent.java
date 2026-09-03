@@ -33,16 +33,16 @@ import java.util.List;
 public class ReasonEndEvent extends AbsAgentEvent {
     private final ReActTrace trace;
     private final ChatResponse response;
-    private final AssistantMessage assistantMessage;
+    private final AssistantMessage message;
     private final long durationMs;
     private final String reasonId;
 
     public ReasonEndEvent(ReActTrace trace, ChatResponse response, AssistantMessage message, long durationMs) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
 
         this.trace = trace;
         this.response = response;
-        this.assistantMessage = message;
+        this.message = message;
         this.durationMs = durationMs;
         this.reasonId = trace.getCurrentReasonId();
     }
@@ -55,8 +55,13 @@ public class ReasonEndEvent extends AbsAgentEvent {
         return response;
     }
 
-    public AssistantMessage getAssistantMessage() {
-        return assistantMessage;
+    public AssistantMessage getMessage() {
+        return message;
+    }
+
+    @Override
+    public String getText() {
+        return message.getContent();
     }
 
     public long getDurationMs() {
@@ -68,10 +73,10 @@ public class ReasonEndEvent extends AbsAgentEvent {
     }
 
     public boolean isToolCalls() {
-        return Assert.isNotEmpty(assistantMessage.getToolCalls());
+        return message.isToolCalls();
     }
 
     public List<ToolCall> getToolCalls() {
-        return assistantMessage.getToolCalls();
+        return message.getToolCalls();
     }
 }

@@ -17,7 +17,6 @@ package org.noear.solon.ai.agent.react.intercept;
 
 import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
 import java.util.ArrayList;
@@ -44,8 +43,7 @@ public class HITLPendingEvent extends AbsAgentEvent {
     public HITLPendingEvent(ReActTrace trace, List<HITLTask> pendingTasks) {
         super(trace.getRunId(),
                 trace.getAgentName(),
-                trace.getSession(),
-                ChatMessage.ofAssistant(""));
+                trace.getSession());
 
         this.trace = trace;
         this.pendingTasks = Collections.unmodifiableList(new ArrayList<>(pendingTasks));

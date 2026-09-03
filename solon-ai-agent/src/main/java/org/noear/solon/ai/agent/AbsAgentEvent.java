@@ -15,8 +15,6 @@
  */
 package org.noear.solon.ai.agent;
 
-import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 import java.util.HashMap;
@@ -32,15 +30,13 @@ import java.util.Map;
 public abstract class AbsAgentEvent implements AgentEvent {
     protected final String runId;
     protected final String agentName;
-    protected final @Nullable ChatMessage message;
     protected final transient AgentSession session;
     protected Map<String, Object> meta;
 
-    public AbsAgentEvent(String runId, String agentName, AgentSession session, ChatMessage message) {
+    public AbsAgentEvent(String runId, String agentName, AgentSession session) {
         this.runId = runId;
         this.agentName = agentName;
         this.session = session;
-        this.message = message;
     }
 
     @Override
@@ -56,11 +52,6 @@ public abstract class AbsAgentEvent implements AgentEvent {
     @Override
     public AgentSession getSession() {
         return session;
-    }
-
-    @Override
-    public @Nullable ChatMessage getMessage() {
-        return message;
     }
 
     @Override

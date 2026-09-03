@@ -18,8 +18,11 @@ package org.noear.solon.ai.agent.react.task;
 import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventDefault;
+import org.noear.solon.ai.chat.event.ChatEventGroup;
+import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.message.AssistantMessage;
-import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
@@ -28,6 +31,10 @@ import java.util.List;
 /**
  * ReAct 思考流块
  *
+ * <p>4.1 移除了 {@code isFinished()} 与 {@code isError()}：增量帧本质上永远不是终态，而 4.1 后
+ * 本事件不再携带 {@link ChatResponse}，两个方法会恒返回 true（即每个增量都自称“已完成、已出错”）。
+ * 请改用：完成信号取 {@code RunEndEvent}，异常判定取 {@code ReActTrace#isAbnormal()}。</p>
+ *
  * @author noear
  * @since 3.9.1
  * @since 4.0.4
@@ -35,15 +42,20 @@ import java.util.List;
 @Preview("4.0.4")
 public class ReasonDeltaEvent extends AbsAgentEvent {
     private final transient ReActTrace trace;
-    private final transient @Nullable ChatResponse response;
-    private final transient AssistantMessage assistantMessage;
+    private final transient ChatEvent chatEvent;
     private final String reasonId;
 
-    public ReasonDeltaEvent(ReActTrace trace, @Nullable ChatResponse response, AssistantMessage assistantMessage) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), assistantMessage);
+    public ReasonDeltaEvent(ReActTrace trace, AssistantMessage message) {
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
         this.trace = trace;
-        this.response = response;
-        this.assistantMessage = assistantMessage;
+        this.chatEvent = ChatEventDefault.of(ChatEventType.TEXT_DELTA).text(message.getContent()).build();
+        this.reasonId = trace.getCurrentReasonId();
+    }
+
+    public ReasonDeltaEvent(ReActTrace trace, ChatEvent event) {
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
+        this.trace = trace;
+        this.chatEvent = event;
         this.reasonId = trace.getCurrentReasonId();
     }
 
@@ -51,13 +63,8 @@ public class ReasonDeltaEvent extends AbsAgentEvent {
         return trace;
     }
 
-    @Nullable
-    public ChatResponse getResponse() {
-        return response;
-    }
-
-    public AssistantMessage getAssistantMessage() {
-        return assistantMessage;
+    public @Nullable ChatEvent getChatEvent() {
+        return chatEvent;
     }
 
     public String getReasonId() {
@@ -65,55 +72,17 @@ public class ReasonDeltaEvent extends AbsAgentEvent {
     }
 
     /**
-     * 是否已完成
-     */
-    public boolean isFinished() {
-        if (response == null) {
-            return true;
-        } else {
-            return response.isFinished();
-        }
-    }
-
-    /**
-     * 是否异常结束
-     */
-    public boolean isError() {
-        return response == null;
-    }
-
-    /**
      * 是否为思考
      */
     public boolean isThinking() {
-        return assistantMessage.isThinking();
-    }
-
-    /**
-     * 获取思考
-     */
-    public String getThinking() {
-        return assistantMessage.getThinking();
+        return chatEvent.isGroup(ChatEventGroup.THINKING);
     }
 
     /**
      * 获取文本
      */
+    @Override
     public String getText() {
-        return assistantMessage.getText();
-    }
-
-    /**
-     * 是否为工具调用
-     */
-    public boolean isToolCalls() {
-        return assistantMessage.isToolCalls();
-    }
-
-    /**
-     * 获取工具调用
-     */
-    public List<ToolCall> getToolCalls() {
-        return assistantMessage.getToolCalls();
+        return chatEvent.getText();
     }
 }

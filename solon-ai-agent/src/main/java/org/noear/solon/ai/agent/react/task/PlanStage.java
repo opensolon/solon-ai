@@ -18,14 +18,23 @@ package org.noear.solon.ai.agent.react.task;
 import org.noear.solon.lang.Preview;
 
 /**
- * ReAct 计划事件
+ * ReAct 计划阶段
  *
  * @author noear
  * @since 3.9.3
  */
 @Preview("3.9.3")
 public enum PlanStage {
+    /**
+     * 创建
+     */
     CREATE,
+    /**
+     * 进展
+     */
     PROGRESS,
+    /**
+     * 修订
+     */
     REVISE
 }

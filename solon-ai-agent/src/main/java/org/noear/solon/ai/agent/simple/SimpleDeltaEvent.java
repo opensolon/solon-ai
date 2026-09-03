@@ -16,7 +16,8 @@
 package org.noear.solon.ai.agent.simple;
 
 import org.noear.solon.ai.agent.AbsAgentEvent;
-import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventGroup;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -29,19 +30,31 @@ import org.noear.solon.lang.Preview;
 @Preview("3.9.1")
 public class SimpleDeltaEvent extends AbsAgentEvent {
     private final transient SimpleTrace trace;
-    private final transient ChatResponse response;
+    private final transient ChatEvent chatEvent;
 
-    public SimpleDeltaEvent(SimpleTrace trace, ChatResponse response) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), response.getMessage());
+    public SimpleDeltaEvent(SimpleTrace trace, ChatEvent event) {
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
         this.trace = trace;
-        this.response = response;
+        this.chatEvent = event;
     }
 
     public SimpleTrace getTrace() {
         return trace;
     }
 
-    public ChatResponse getResponse() {
-        return response;
+    public ChatEvent getChatEvent() {
+        return chatEvent;
+    }
+
+    /**
+     * 是否为思考
+     */
+    public boolean isThinking() {
+        return chatEvent.isGroup(ChatEventGroup.THINKING);
+    }
+
+    @Override
+    public String getText() {
+        return chatEvent.getText();
     }
 }

@@ -184,9 +184,6 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
             //状态实时化
             if (trace.hasStreamSink()) {
                 trace.pushAgentEvent(new NodeEndEvent(node, trace, msg));
-
-                //@deprecated 4.0.4
-                trace.pushAgentEvent(new NodeChunk(node, trace, msg));
             }
 
             //协议后处理集成

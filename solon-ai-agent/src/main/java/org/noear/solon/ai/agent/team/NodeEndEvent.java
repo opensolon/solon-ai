@@ -16,7 +16,7 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.AbsAgentEvent;
-import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.flow.Node;
 
 /**
@@ -29,11 +29,13 @@ import org.noear.solon.flow.Node;
 public class NodeEndEvent extends AbsAgentEvent {
     private final transient TeamTrace trace;
     private final transient Node node;
+    private final AssistantMessage message;
 
-    public NodeEndEvent(Node node, TeamTrace trace, ChatMessage message) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), message);
+    public NodeEndEvent(Node node, TeamTrace trace, AssistantMessage message) {
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
         this.trace = trace;
         this.node = node;
+        this.message = message;
     }
 
     /**
@@ -43,10 +45,19 @@ public class NodeEndEvent extends AbsAgentEvent {
         return trace;
     }
 
+    public AssistantMessage getMessage() {
+        return message;
+    }
+
     /**
      * 获取当前正在执行的流程节点信息
      */
     public Node getNode() {
         return node;
+    }
+
+    @Override
+    public String getText() {
+        return message.getContent();
     }
 }

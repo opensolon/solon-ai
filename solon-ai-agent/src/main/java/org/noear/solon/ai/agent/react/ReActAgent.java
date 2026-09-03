@@ -312,11 +312,9 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         session.updateSnapshot();
 
         if (trace.isAbnormal()) {
+            //非 ai 结束的，要补位
             if (trace.hasStreamSink()) {
-                trace.pushAgentEvent(new ReasonDeltaEvent(trace, null, assistantMessage));
-
-                //@deprecated 4.0.4
-                trace.pushAgentEvent(new ReasonChunk(trace, null, assistantMessage));
+                trace.pushAgentEvent(new ReasonDeltaEvent(trace,  assistantMessage));
             }
         }
 

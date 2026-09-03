@@ -7,7 +7,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.simple.SimpleDeltaEvent;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.team.TeamAgent;
-import org.noear.solon.ai.agent.team.TeamChunk;
+import org.noear.solon.ai.agent.team.TeamEndEvent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import reactor.test.StepVerifier;
@@ -49,30 +49,30 @@ public class TeamAgentStreamTest {
                 .stream()
                 .as(StepVerifier::create)
                 // 预期：首先可能会有 Supervisor 的决策过程（取决于 Protocol 实现）
-                // 或者直接是成员 Agent 的 ChatChunk
+                // 或者直接是成员 Agent 的 SimpleDeltaEvent
                 .recordWith(ArrayList::new)
                 .thenConsumeWhile(chunk -> {
                     // 打印 Chunk 类型，方便调试观察
-                    System.out.println("收到 Chunk: " + chunk.getClass().getSimpleName() + " -> " + chunk.getContent());
+                    System.out.println("收到 Chunk: " + chunk.getClass().getSimpleName() + " -> " + chunk.getText());
                     return true;
                 })
                 .consumeRecordedWith(chunks -> {
-                    // 断言 1：流中应包含 ChatChunk (成员输出)
-                    boolean hasChatChunks = chunks.stream().anyMatch(c -> c instanceof SimpleDeltaEvent);
-                    // 断言 2：流中应包含 TeamChunk (最终汇总)
-                    boolean hasTeamChunk = chunks.stream().anyMatch(c -> c instanceof TeamChunk);
+                    // 断言 1：流中应包含 SimpleDeltaEvent (成员输出)
+                    boolean hasSimpleDeltaEvents = chunks.stream().anyMatch(c -> c instanceof SimpleDeltaEvent);
+                    // 断言 2：流中应包含 TeamEndEvent (最终汇总)
+                    boolean hasTeamEndEvent = chunks.stream().anyMatch(c -> c instanceof TeamEndEvent);
 
-                    // 可选断言：如果使用了 HIERARCHICAL 协议，应包含 SupervisorChunk
-                    // boolean hasSupervisor = chunks.stream().anyMatch(c -> c instanceof SupervisorChunk);
+                    // 可选断言：如果使用了 HIERARCHICAL 协议，应包含 SupervisorDeltaEvent
+                    // boolean hasSupervisor = chunks.stream().anyMatch(c -> c instanceof SupervisorDeltaEvent);
 
-                    Assertions.assertTrue(hasChatChunks, "流中缺失成员对话片段 (ChatChunk)");
-                    Assertions.assertTrue(hasTeamChunk, "流中缺失团队汇总片段 (TeamChunk)");
+                    Assertions.assertTrue(hasSimpleDeltaEvents, "流中缺失成员对话片段 (SimpleDeltaEvent)");
+                    Assertions.assertTrue(hasTeamEndEvent, "流中缺失团队汇总片段 (TeamEndEvent)");
 
                     // 检查最后一个 Chunk 的类型
                     Object lastChunk = new ArrayList<>(chunks).get(chunks.size() - 1);
-                    Assertions.assertTrue(lastChunk instanceof TeamChunk, "最后一个 Chunk 必须是 TeamChunk");
+                    Assertions.assertTrue(lastChunk instanceof TeamEndEvent, "最后一个 Chunk 必须是 TeamEndEvent");
 
-                    TeamChunk finalChunk = (TeamChunk) lastChunk;
+                    TeamEndEvent finalChunk = (TeamEndEvent) lastChunk;
                     Assertions.assertNotNull(finalChunk.getResponse().getContent(), "最终响应内容不能为空");
                     Assertions.assertTrue(finalChunk.getResponse().getTrace().getTurnCount() > 0, "应有执行轮次记录");
                 })

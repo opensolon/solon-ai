@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.simple;
 
 import org.noear.solon.ai.agent.AbsAgentEvent;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -29,14 +30,25 @@ import org.noear.solon.lang.Preview;
 @Preview("3.9.1")
 public class SimpleEndEvent extends AbsAgentEvent {
     private final transient SimpleResponse response;
+    private final transient AssistantMessage message;
 
     public SimpleEndEvent(SimpleResponse resp) {
-        super(resp.getTrace().getRunId(), resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());
+        super(resp.getTrace().getRunId(), resp.getTrace().getAgentName(), resp.getSession());
         this.response = resp;
+        this.message = resp.getMessage();
     }
 
     public SimpleResponse getResponse() {
         return response;
+    }
+
+    public AssistantMessage getMessage() {
+        return message;
+    }
+
+    @Override
+    public String getText() {
+        return message.getContent();
     }
 
     public SimpleTrace getTrace() {

@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.agent.trace.Metrics;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 
 /**
  * 任务运行结束块
@@ -26,14 +27,25 @@ import org.noear.solon.ai.agent.trace.Metrics;
  */
 public class RunEndEvent extends AbsAgentEvent {
     private final transient ReActResponse response;
+    private final transient AssistantMessage message;
 
     public RunEndEvent(ReActResponse resp) {
-        super(resp.getTrace().getRunId(), resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());
+        super(resp.getTrace().getRunId(), resp.getTrace().getAgentName(), resp.getSession());
         this.response = resp;
+        this.message = resp.getMessage();
     }
 
     public ReActResponse getResponse() {
         return response;
+    }
+
+    public AssistantMessage getMessage() {
+        return message;
+    }
+
+    @Override
+    public String getText() {
+        return message.getContent();
     }
 
     public ReActTrace getTrace() {

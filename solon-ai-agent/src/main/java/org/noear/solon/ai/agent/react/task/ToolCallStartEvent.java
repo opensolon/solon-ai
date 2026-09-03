@@ -28,8 +28,8 @@ import java.util.Map;
  * @since 4.0.4
  */
 @Preview("4.0.4")
-public class ToolCallStartEvent extends AbsActionEvent {
+public class ToolCallStartEvent extends AbsToolCallEvent {
     public ToolCallStartEvent(ReActTrace trace, String callId, String toolName, Map<String, Object> args) {
-        super(trace, callId, toolName, args, ChatMessage.ofAssistant(""));
+        super(trace, callId, toolName, args);
     }
 }

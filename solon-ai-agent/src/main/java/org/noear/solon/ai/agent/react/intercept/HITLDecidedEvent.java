@@ -17,7 +17,6 @@ package org.noear.solon.ai.agent.react.intercept;
 
 import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
@@ -38,7 +37,7 @@ import java.util.Map;
 public class HITLDecidedEvent extends AbsAgentEvent {
     private final transient ReActTrace trace;
     /**
-     * 关联的工具调用 ID（可与 ActionChunk/ToolStartChunk 对齐）
+     * 关联的工具调用 ID（可与 ToolCallStartEvent/ToolCallEndEvent 对齐）
      */
     private final @Nullable String callId;
     /**
@@ -65,8 +64,7 @@ public class HITLDecidedEvent extends AbsAgentEvent {
                             HITLDecision decision) {
         super(trace.getRunId(),
                 trace.getAgentName(),
-                trace.getSession(),
-                ChatMessage.ofAssistant(""));
+                trace.getSession());
 
         this.trace = trace;
         this.callId = callId;

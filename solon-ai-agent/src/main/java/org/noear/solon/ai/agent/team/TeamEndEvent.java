@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.AbsAgentEvent;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -27,17 +28,28 @@ import org.noear.solon.lang.Preview;
 @Preview("4.0.4")
 public class TeamEndEvent extends AbsAgentEvent {
     private final transient TeamResponse response;
+    private final transient AssistantMessage message;
 
     public TeamEndEvent(TeamResponse resp) {
-        super(resp.getTrace().getRunId(), resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());
+        super(resp.getTrace().getRunId(), resp.getTrace().getAgentName(), resp.getSession());
         this.response = resp;
+        this.message = resp.getMessage();
     }
 
     public TeamResponse getResponse() {
         return response;
     }
 
+    public AssistantMessage getMessage() {
+        return message;
+    }
+
     public TeamTrace getTrace() {
         return response.getTrace();
+    }
+
+    @Override
+    public String getText() {
+        return message.getContent();
     }
 }

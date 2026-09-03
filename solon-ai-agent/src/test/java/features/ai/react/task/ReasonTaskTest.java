@@ -23,7 +23,6 @@ import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.*;
 import org.noear.solon.ai.agent.react.task.ReasonTask;
-import org.noear.solon.ai.chat.ChatChoice;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -108,12 +107,9 @@ public class ReasonTaskTest {
      */
     private ChatResponse mockResponse(AssistantMessage message) {
         ChatResponse resp = mock(ChatResponse.class);
-        when(resp.isStream()).thenReturn(false);
         when(resp.isEmpty()).thenReturn(false);
         when(resp.getMessage()).thenReturn(message);
-        when(resp.getAggregationMessage()).thenReturn(message);
-        when(resp.getChoices()).thenReturn(Collections.singletonList(
-                new ChatChoice(0, new Date(), "stop", message)));
+        when(resp.getToolCalls()).thenReturn(message.getToolCalls() == null ? java.util.Collections.emptyList() : message.getToolCalls());
         when(resp.getUsage()).thenReturn(null);
         return resp;
     }
@@ -394,7 +390,9 @@ public class ReasonTaskTest {
         // 软上限变硬：不再保持 REASON 空转，而是直接 END + 兑底 FinalAnswer
         verify(trace).setRoute(Agent.ID_END);
         verify(trace, never()).setRoute(ReActAgent.ID_REASON);
-        verify(trace).setFinalAnswer(anyString());
+        // 纯思考轮降级用思考内容作答：属正常收口（abnormal=false），不走单参兜底文案
+        verify(trace).setFinalAnswer(eq("Still thinking"), eq(false));
+        verify(trace, never()).setFinalAnswer(anyString());
     }
 
     @Test

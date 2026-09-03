@@ -68,7 +68,7 @@ public class ContextSizeEvent extends AbsAgentEvent {
                             boolean compressed,
                             int beforeMessageCount, int afterMessageCount,
                             int beforeTokenCount, int afterTokenCount) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), null);
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
 
         this.trace = trace;
         this.contextLength = contextLength;

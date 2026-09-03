@@ -17,13 +17,10 @@ package org.noear.solon.ai.agent.react.task;
 
 import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.chat.message.ChatMessage;
-
-import java.util.Collections;
-import java.util.List;
+import org.noear.solon.ai.chat.prompt.Prompt;
 
 /**
- * 思考运行开始块
+ * 推理运行开始块
  *
  * @author noear
  * @since 4.0.4
@@ -31,16 +28,14 @@ import java.util.List;
 public class ReasonStartEvent extends AbsAgentEvent {
     private final ReActTrace trace;
     private final String systemPrompt;
-    private final List<ChatMessage> messages;
     private final String reasonId;
 
-    public ReasonStartEvent(ReActTrace trace, String systemPrompt, List<ChatMessage> messages) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession(), ChatMessage.ofAssistant(""));
+    public ReasonStartEvent(ReActTrace trace, String systemPrompt) {
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
 
         this.trace = trace;
         this.reasonId = trace.getCurrentReasonId();
         this.systemPrompt = systemPrompt;
-        this.messages = Collections.unmodifiableList(messages);
     }
 
     public ReActTrace getTrace() {
@@ -51,8 +46,8 @@ public class ReasonStartEvent extends AbsAgentEvent {
         return systemPrompt;
     }
 
-    public List<ChatMessage> getMessages() {
-        return messages;
+    public Prompt getWorkingMemory() {
+        return trace.getWorkingMemory();
     }
 
     public String getReasonId() {

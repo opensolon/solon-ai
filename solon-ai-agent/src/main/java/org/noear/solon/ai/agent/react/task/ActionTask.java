@@ -139,7 +139,6 @@ public class ActionTask {
         // 3. 推送流式动作片
         if (trace.hasStreamSink()) {
             trace.pushAgentEvent(new ToolCallStartEvent(trace, exchanger.getCallId(), exchanger.getToolName(), exchanger.getArgs()));
-            trace.pushAgentEvent(new ActionChunk(trace, exchanger.getCallId(), exchanger.getToolName(), exchanger.getArgs()));
         }
 
         long startMs = System.currentTimeMillis();
@@ -433,9 +432,6 @@ public class ActionTask {
         // 流式客户端通知闭环（使用最终 observation）
         if (trace.hasStreamSink()) {
             trace.pushAgentEvent(new ToolCallEndEvent(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
-
-            //@deprecated 4.0.4
-            trace.pushAgentEvent(new ObservationChunk(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
         }
     }
 
@@ -623,7 +619,7 @@ public class ActionTask {
         }
 
         // 纯 media 时 finalAnswer 可为 ""，ReActAgent.buildFinalAssistantMessage 靠 trace.finalMediaBlocks 收口
-        trace.setFinalAnswer(joined.toString());
+        trace.setFinalAnswer(joined.toString()); //trace.setFinalAnswer(joined.toString(), false);
         trace.setRoute(Agent.ID_END);
 
         if (!mediaBlocks.isEmpty()) {
