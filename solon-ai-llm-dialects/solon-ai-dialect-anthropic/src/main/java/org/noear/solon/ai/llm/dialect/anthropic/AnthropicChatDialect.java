@@ -318,6 +318,13 @@ public class AnthropicChatDialect extends AbstractChatDialect {
                     redactedBlocks.add(data);
                 }
             }
+            // server_tool_use / *_tool_result / container_upload 不在此逐块收集：
+            // 本方法的入参多为方言自建的中间节点（buildAssistantToolCallMessageNode 的输出），
+            // 其中的服务端块正是从 acc 回填的，再收一遍等于重复。权威来源统一取 acc（见下方 contentRaw）。
+            //
+            // 引用（text.citations）在本旁路无法表达：方法签名没有 ChatStreamContext，发不了 CITATION 事件。
+            // 这不构成 call/stream 分叉——真实响应的引用由 parseNonStreamResponse / citations_delta 两条
+            // 主路径覆盖，本旁路拿到的中间节点本身不携带 citations。
         }
 
         if (acc.in_thinking && acc.isStream()) {
@@ -350,6 +357,11 @@ public class AnthropicChatDialect extends AbstractChatDialect {
             }
             contentRaw.put("redactedThinkingBlocks", redactedBlocks);
         }
+
+        // 服务端工具原始块与代码执行容器：本轮的工具循环会把这条消息写进历史，下一轮出站时
+        // 由 AnthropicRequestBuilder 从 contentRaw 取回原样回传。不带的话 server_tool_use 与
+        // 其结果块（含 encrypted_content）在第二轮就消失，pause_turn 续跑退化为重跑
+        contentRaw = AnthropicResponseParser.appendServerToolRaw(acc, contentRaw);
 
         AssistantMessage message = new AssistantMessage(textStr, thinkingStr,
                 false, contentRaw, toolCallsRaw, toolCalls, null, mediaBlocks.isEmpty() ? null : mediaBlocks)

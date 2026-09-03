@@ -15,11 +15,8 @@
  */
 package org.noear.solon.ai.llm.dialect.anthropic;
 
-import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
-import org.noear.snack4.Options;
 import org.noear.snack4.json.JsonReader;
-import org.noear.snack4.json.util.FormatUtil;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.ChatException;
@@ -32,7 +29,6 @@ import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
-import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -104,6 +100,165 @@ public class AnthropicResponseParser {
     private static void captureContainer(ChatAccumulator acc, ONode containerNode) {
         if (containerNode != null && containerNode.isObject()) {
             acc.attrPut(CONTAINER_KEY, containerNode);
+        }
+    }
+
+    /**
+     * 服务端工具原始块留存区（{@code server_tool_use} / {@code *_tool_result} / {@code container_upload}）。
+     *
+     * <p><b>为什么必须原样留存</b>：协议要求「续跑时把上一轮的 content 原样回传」，而这些块的语义
+     * 无法从事件重建——{@code web_search_tool_result} 里的 {@code encrypted_content} 是服务端签发的
+     * opaque 凭证、{@code code_execution_tool_result} 关联着沙盒容器、{@code server_tool_use} 是结果块的
+     * {@code tool_use_id} 归属方。旧实现把它们转成事件后即丢弃，于是：</p>
+     * <ul>
+     *   <li>{@code stop_reason=pause_turn} 的续跑退化为「重跑」（搜索/抓取重新计费）；</li>
+     *   <li>历史前缀每轮缺块，缓存断点前的字节序与上一轮不一致，prompt cache 命中率被连带拉低。</li>
+     * </ul>
+     *
+     * <p>以 JSON 字符串按原序保存（而非 ONode）：出站要跨轮存活在
+     * {@code AssistantMessage.contentRaw} 里，字符串形态可被记忆序列化与反序列化。</p>
+     *
+     * @since 4.1
+     */
+    static final String SERVER_BLOCKS_KEY = "AnthropicServerToolBlocks";
+
+    /**
+     * {@code contentRaw} 中承载服务端工具原始块的键（供 {@code AnthropicRequestBuilder} 回传取用）。
+     *
+     * @since 4.1
+     */
+    static final String SERVER_BLOCKS_RAW_KEY = "anthropicServerToolBlocks";
+
+    /**
+     * {@code contentRaw} 中承载代码执行容器的键（供下一轮回填顶层 {@code container}）。
+     *
+     * @since 4.1
+     */
+    static final String CONTAINER_RAW_KEY = "anthropicContainer";
+
+    @SuppressWarnings("unchecked")
+    static List<String> getServerToolBlocks(ChatAccumulator acc, boolean create) {
+        List<String> blocks = acc.attrAs(SERVER_BLOCKS_KEY);
+        if (blocks == null && create) {
+            blocks = new ArrayList<>();
+            acc.attrPut(SERVER_BLOCKS_KEY, blocks);
+        }
+        return blocks;
+    }
+
+    /**
+     * 留存一个服务端工具原始块（保序、去重）。
+     *
+     * <p>去重按整块 JSON：兼容网关重发同一块（如把 content_block_start 与非流式 content 都投一遍）时，
+     * 回传里出现两个同 {@code tool_use_id} 的结果块会被服务端按 schema 拒掉。</p>
+     *
+     * @since 4.1
+     */
+    private static void captureServerToolBlock(ChatAccumulator acc, ONode blockNode) {
+        if (blockNode == null || blockNode.isObject() == false) {
+            return;
+        }
+        String json = blockNode.toJson();
+        List<String> blocks = getServerToolBlocks(acc, true);
+        if (blocks.contains(json) == false) {
+            blocks.add(json);
+        }
+    }
+
+    /**
+     * 把留存的服务端工具块与容器写入 {@code contentRaw}（供下一轮出站回传）。
+     *
+     * @since 4.1
+     */
+    static Map<String, Object> appendServerToolRaw(ChatAccumulator acc, Map<String, Object> contentRaw) {
+        List<String> blocks = getServerToolBlocks(acc, false);
+        ONode containerNode = container(acc);
+
+        if (Utils.isEmpty(blocks) && containerNode == null) {
+            return contentRaw;
+        }
+
+        Map<String, Object> raw = contentRaw == null ? new LinkedHashMap<>() : contentRaw;
+        if (Utils.isEmpty(blocks) == false) {
+            raw.put(SERVER_BLOCKS_RAW_KEY, new ArrayList<>(blocks));
+        }
+        if (containerNode != null) {
+            raw.put(CONTAINER_RAW_KEY, containerNode.toJson());
+        }
+        return raw;
+    }
+
+    /**
+     * 构建一个「工具调用参数分片」内容项。
+     *
+     * <p>核心把内容项里的 {@code ToolCall} 按 {@code index} 累积到 {@code ToolCallBuilder}，并为每个分片
+     * 发一条 {@code TOOL_CALL_ARGS_DELTA}（首片另发 {@code TOOL_CALL_START}）。因此把 Anthropic 的
+     * {@code input_json_delta} 逐片交付出去，订阅方拿到的才是真增量；等到 {@code content_block_stop}
+     * 再一次性交付全量，订阅方只会在块尾收到一条「全量参数」的增量事件，长参数（大段 diff / 代码）
+     * 无法边生成边渲染。</p>
+     *
+     * <p>{@code index} 取 Anthropic 的块序号：它是分片归属的唯一依据（协议保证每个事件都带），
+     * 且同一响应内多个并行 tool_use 块的序号互不相同。</p>
+     *
+     * <p>{@code argsShard} 允许为 null（表示「参数流开始、本片无负载」）：核心仅在非 null 时累积，
+     * 传空串会在极端网关下把 null 与 "" 的语义混同。</p>
+     *
+     * @since 4.1
+     */
+    private static AssistantMessage toolCallShardItem(ChatAccumulator acc, int blockIndex,
+                                                      String toolUseId, String toolName, String argsShard) {
+        List<ToolCall> calls = new ArrayList<>();
+        //arguments 用空 Map 而非 null：分片期参数本就不完整，但订阅方读 getArguments() 不应 NPE
+        calls.add(new ToolCall(String.valueOf(blockIndex), toolUseId, toolName, argsShard, new HashMap<>()));
+        return new AssistantMessage("", "", false, null, null, calls, null)
+                .reasoningFieldName(acc.reasoning_field_name);
+    }
+
+    /**
+     * 取 {@code tool_use} / {@code server_tool_use} 块在 {@code content_block_start} 时已给出的参数初值。
+     *
+     * <p>协议上 {@code input} 是必填字段，标准流式实现里它恒为空对象（真实参数全部走
+     * {@code input_json_delta}）。但网关与 eager input streaming 可能在 start 就给出部分或完整参数，
+     * 且此时后续可能<b>不再有</b> delta——不读它，参数会静默退化成空对象。</p>
+     *
+     * <p>空对象必须返回 null 而不是 {@code "{}"}：否则它会与随后的 delta 拼成 {@code {}{"a":1}} 这类脏值。</p>
+     *
+     * @since 4.1
+     */
+    private static String initialToolInput(ONode contentBlock) {
+        ONode inputNode = contentBlock.getOrNull("input");
+        if (inputNode == null || inputNode.isObject() == false || inputNode.getObject().isEmpty()) {
+            return null;
+        }
+        return inputNode.toJson();
+    }
+
+    /**
+     * 发射 {@code text} 块内嵌的引用（协议 {@code TextBlock.citations}）。
+     *
+     * <p>流式路径有 {@code citations_delta} 事件可依，非流式的引用则直接内嵌在 text 块里。旧实现只读
+     * {@code text} 字段，于是同一模型行为下 {@code call()} 完全看不到引用、{@code stream()} 看得到——
+     * 正是本方言在别处反复保证要避免的 call/stream 分叉。</p>
+     *
+     * @since 4.1
+     */
+    private static void emitTextCitations(ChatStreamContext ctx, String rawType, int blockIndex, ONode textBlock) {
+        ONode citations = textBlock.getOrNull("citations");
+        if (citations == null || citations.isArray() == false) {
+            return;
+        }
+
+        for (ONode citation : citations.getArray()) {
+            if (citation == null || citation.isObject() == false) {
+                continue;
+            }
+            ctx.emit(ctx.event(ChatEventType.CITATION)
+                    .rawType(rawType)
+                    .subType(citation.get("type").getString())
+                    .index(blockIndex)
+                    .text(extractCitationText(citation))
+                    .raw(citation)
+                    .build());
         }
     }
 
@@ -398,6 +553,8 @@ public class AnthropicResponseParser {
                             acc.addContentItem(new AssistantMessage(text, "", false).reasoningFieldName(acc.reasoning_field_name));
                             hasContent = true;
                         }
+                        //text 块在 start 就可能内嵌 citations（非增量形态），与 citations_delta 同走 CITATION
+                        emitTextCitations(ctx, eventType, oResp.get("index").getInt(), contentBlock);
                     } else if ("tool_use".equals(blockType)) {
                         // 如果之前在思考模式，添加结束标记
                         if (acc.in_thinking) {
@@ -413,6 +570,16 @@ public class AnthropicResponseParser {
                         // 按块 index 存储（协议：事件均携带 index，支持多块并行）
                         int blockIdx = oResp.get("index").getInt();
                         getToolStates(acc, true).put(blockIdx, state);
+
+                        // 首片内容项：核心据此发 TOOL_CALL_START 并开始按 index 累积参数分片。
+                        // input 初值只在非空时带上（标准实现恒为空对象，见 initialToolInput）
+                        String initialInput = initialToolInput(contentBlock);
+                        if (initialInput != null) {
+                            state.toolInput.append(initialInput);
+                        }
+                        acc.addContentItem(toolCallShardItem(acc, blockIdx,
+                                state.toolUseId, state.toolName, initialInput));
+                        hasContent = true;
                     } else if ("redacted_thinking".equals(blockType)) {
                         // 安全过滤的推理内容块，原样保留供多轮回传（对齐 Anthropic SDK）
                         String data = contentBlock.get("data").getString();
@@ -450,6 +617,23 @@ public class AnthropicResponseParser {
                         serverState.toolName = contentBlock.get("name").getString();
                         serverState.toolInput = new StringBuilder();
                         getToolStates(acc, true).put(serverBlockIdx, serverState);
+
+                        //start 已给出的 input 初值：不读则该调用的参数在事件流里完全缺失
+                        String initialServerInput = initialToolInput(contentBlock);
+                        if (initialServerInput != null) {
+                            serverState.toolInput.append(initialServerInput);
+                            ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_ARGS_DELTA)
+                                    .rawType(eventType)
+                                    .toolCallId(serverState.toolUseId)
+                                    .itemId(serverState.toolUseId)
+                                    .index(serverBlockIdx)
+                                    .text(initialServerInput)
+                                    .raw(oResp)
+                                    .build());
+                        }
+
+                        //原样留存供下一轮回传（pause_turn 续跑与缓存前缀稳定性）
+                        captureServerToolBlock(acc, contentBlock);
                     } else if (blockType != null && blockType.endsWith("_tool_result")) {
                         // 服务端工具结果（web_search_tool_result / web_fetch_tool_result / mcp_tool_result 等）：
                         // 旧实现把结果内容直接拼进正文，订阅方无法与模型自述区分
@@ -461,6 +645,9 @@ public class AnthropicResponseParser {
                                 .text(extractToolResultText(contentBlock))
                                 .raw(oResp)
                                 .build());
+
+                        //结果块含 encrypted_content 等无法重建的服务端凭证，必须原样留存
+                        captureServerToolBlock(acc, contentBlock);
                     } else if ("container_upload".equals(blockType)) {
                         // 代码执行产出的文件（协议 ContainerUploadBlock，仅 file_id）：
                         // 旧实现不匹配任何分支被静默丢弃，file_id 对订阅方不可见
@@ -473,6 +660,8 @@ public class AnthropicResponseParser {
                                 .text(fileId)
                                 .raw(oResp)
                                 .build());
+
+                        captureServerToolBlock(acc, contentBlock);
                     } else if (Utils.isNotEmpty(blockType)) {
                         // 未建模内容块：与顶层未建模事件对称地以 RAW 透出。
                         // 这是 GA 前向兼容手段，不是为 Beta 建模：ContentBlock 的 GA 面本身就在逐步变长，
@@ -542,7 +731,8 @@ public class AnthropicResponseParser {
                             Map<Integer, StreamToolState> states = getToolStates(acc, false);
                             if (states != null) {
                                 // 按事件携带的 index 定位所属工具块
-                                StreamToolState state = states.get(oResp.get("index").getInt());
+                                int deltaBlockIdx = oResp.get("index").getInt();
+                                StreamToolState state = states.get(deltaBlockIdx);
                                 if (state != null) {
                                     state.toolInput.append(partialJson);
                                     if (state.serverTool) {
@@ -550,10 +740,17 @@ public class AnthropicResponseParser {
                                                 .rawType(eventType)
                                                 .toolCallId(state.toolUseId)
                                                 .itemId(state.toolUseId)
-                                                .index(oResp.get("index").getInt())
+                                                .index(deltaBlockIdx)
                                                 .text(partialJson)
                                                 .raw(oResp)
                                                 .build());
+                                    } else {
+                                        // 本地工具：逐片交付内容项，核心据此发真增量 TOOL_CALL_ARGS_DELTA
+                                        // 并按 index 累积到 ToolCallBuilder。分片只带增量负载，
+                                        // 不重复 id/name 之外的任何全量数据
+                                        acc.addContentItem(toolCallShardItem(acc, deltaBlockIdx,
+                                                state.toolUseId, state.toolName, partialJson));
+                                        hasContent = true;
                                     }
                                 }
                             }
@@ -573,59 +770,19 @@ public class AnthropicResponseParser {
                     }
                 }
             } else if ("content_block_stop".equals(eventType)) {
-                // 内容块结束：按 index 精确定位并清理对应工具块状态
+                // 内容块结束：按 index 精确定位并释放对应工具块状态。
+                //
+                // 本地 tool_use 的参数已在 content_block_start / input_json_delta 处以分片内容项交付（见
+                // toolCallShardItem），此处不能再补一个「全量参数」内容项：核心会把它二次累积进
+                // ToolCallBuilder（得到 {"a":1}{"a":1} 这类脏值），并多发一条内容为全量的
+                // TOOL_CALL_ARGS_DELTA（按增量语义拼接的订阅方会得到双倍参数）。
+                //
+                // 参数的出站净化也不在这里做了：截断损坏的 arguments 由
+                // AnthropicRequestBuilder#buildAssistantToolCallMessageNode 在重建出站消息时
+                // 统一过 ToolCallJsonSanitizer（分片协议的唯一出口）。
                 Map<Integer, StreamToolState> states = getToolStates(acc, false);
-                StreamToolState state = null;
                 if (states != null) {
-                    state = states.remove(oResp.get("index").getInt());
-                }
-                if (state != null && state.serverTool) {
-                    // 服务端工具不是本地 function call，不应被拼入 ChatAccumulator 的工具调用。
-                    continue;
-                }
-                if (state != null) {
-                    try {
-                        // 流式解析出口净化：截断损坏的 arguments 禁止入历史（input_json_delta 中断场景）
-                        String argStr = ToolCallJsonSanitizer.sanitizeArguments(
-                                state.toolInput.toString(), state.toolName);
-                        Map<String, Object> arguments = new HashMap<>();
-
-                        if (FormatUtil.hasNestedJsonBlock(argStr)) {
-                            JsonReader reader = new JsonReader(argStr, Options.of(Feature.Read_AutoRepair));
-                            ONode n1fArgs = reader.readLast();
-
-                            if (n1fArgs == null) {
-                                LOG.warn("Parse tool arguments failed: {}", argStr);
-                            } else if (n1fArgs.isObject()) {
-                                arguments = n1fArgs.toBean(Map.class);
-                            }
-                        }
-
-                        // 创建工具调用对象
-                        ToolCall toolCall = new ToolCall(state.toolUseId, state.toolUseId, state.toolName, argStr, arguments);
-
-                        // 创建带有工具调用的助手消息
-                        List<Map> toolCallsRaw = new ArrayList<>();
-                        Map<String, Object> toolCallRaw = new HashMap<>();
-                        toolCallRaw.put("id", state.toolUseId);
-                        toolCallRaw.put("type", "function");
-                        Map<String, Object> functionData = new HashMap<>();
-                        functionData.put("name", state.toolName);
-                        functionData.put("arguments", argStr);
-                        toolCallRaw.put("function", functionData);
-                        toolCallsRaw.add(toolCallRaw);
-
-                        List<ToolCall> toolCalls = new ArrayList<>();
-                        toolCalls.add(toolCall);
-                        // 终态工具消息同样携带统一推理字段名，保证聚合消息与非流式行为一致
-                        AssistantMessage assistantMessage = new AssistantMessage("", "",
-                                false, null, toolCallsRaw,
-                                toolCalls, null).reasoningFieldName(acc.reasoning_field_name);
-                        acc.addContentItem(assistantMessage);
-                        hasContent = true;
-                    } catch (Exception e) {
-                        LOG.warn("Failed to parse tool call in stream mode", e);
-                    }
+                    states.remove(oResp.get("index").getInt());
                 }
             } else if ("message_delta".equals(eventType)) {
                 // 消息增量更新，包含停止原因和用量信息
@@ -1021,6 +1178,11 @@ public class AnthropicResponseParser {
 
         // (a) 签名载体：非工具的多轮回传只能从聚合消息的 contentRaw 取签名
         boolean signatureCarrier = Utils.isNotEmpty(acc.thinkingSignature);
+        // (a2) 服务端工具块 / 容器载体：pause_turn 续跑要求把上一轮 content 原样回传，
+        //      而服务端工具轮次不产生 ToolCallBuilder（不走下方 toolPath），只能借终态内容项的
+        //      contentRaw 把原始块带到下一轮；否则 encrypted_content / container 逐轮丢失，续跑退化为重跑
+        boolean serverBlockCarrier = Utils.isEmpty(getServerToolBlocks(acc, false)) == false
+                || container(acc) != null;
         // (b) 仅思考无正文：核心的终态聚合只在「有内容项」分支按 text/thinking 计算 isThinking，
         //     一个内容项都没有时会硬编码 false，聚合消息的 getContent() 会从思考文本变成空串
         boolean thinkingOnly = acc.getAggregationText().isEmpty()
@@ -1032,13 +1194,15 @@ public class AnthropicResponseParser {
                 && acc.getAggregationThinking().isEmpty()
                 && Utils.isEmpty(acc.getMediaBlocks());
 
-        if (toolPath == false && (signatureCarrier || thinkingOnly || emptyStream)) {
+        if (toolPath == false && (signatureCarrier || serverBlockCarrier || thinkingOnly || emptyStream)) {
             Map<String, Object> contentRaw = null;
             if (signatureCarrier) {
                 // 供核心终态聚合取 lastItem().getContentRaw() 时携带签名，下一轮据此重建 thinking 块
                 contentRaw = new LinkedHashMap<>();
                 contentRaw.put("thinkingSignature", acc.thinkingSignature);
             }
+            //服务端工具原始块与容器：与签名同乘一个载体帧（两者可共存）
+            contentRaw = appendServerToolRaw(acc, contentRaw);
 
             // isThinking 跟随流末所在的块，避免为一个空帧关掉当前块又开一个新块；
             // 这也意味着此处不能再发 THINKING_END：载体帧随后会被核心映射成 THINKING_DELTA，
@@ -1165,6 +1329,9 @@ public class AnthropicResponseParser {
 //                        }
                         normalContent.append(text);
                     }
+                    //与流式 citations_delta 对称：非流式的引用直接内嵌在 text 块的 citations 数组里，
+                    //旧实现只读 text 字段，使得 call() 根本看不到引用（而 stream() 看得到）
+                    emitTextCitations(ctx, contentType, blockIndex, contentItem);
                 } else if ("image".equals(contentType)) {
                     ContentBlock imageBlock = parseClaudeImageBlock(contentItem);
                     if (imageBlock != null) {
@@ -1219,6 +1386,9 @@ public class AnthropicResponseParser {
                             .raw(contentItem);
                     appendServerToolCaller(serverToolStart, contentItem);
                     ctx.emit(serverToolStart.build());
+
+                    //原样留存供下一轮回传（与流式对称）
+                    captureServerToolBlock(acc, contentItem);
                 } else if (contentType != null && contentType.endsWith("_tool_result")) {
                     // web_search_tool_result / web_fetch_tool_result 等：
                     // 旧实现把结果原文拍平进正文，订阅方无法与模型自述区分
@@ -1231,6 +1401,8 @@ public class AnthropicResponseParser {
                             .text(extractToolResultText(contentItem))
                             .raw(contentItem)
                             .build());
+
+                    captureServerToolBlock(acc, contentItem);
                 } else if ("container_upload".equals(contentType)) {
                     // 与流式对称：代码执行产出的文件（仅 file_id）
                     hasServerToolBlocks = true;
@@ -1243,6 +1415,8 @@ public class AnthropicResponseParser {
                             .text(fileId)
                             .raw(contentItem)
                             .build());
+
+                    captureServerToolBlock(acc, contentItem);
                 } else if (Utils.isNotEmpty(contentType)) {
                     // 与流式对称：未建模内容块以 RAW 透出，不再静默丢弃
                     ctx.emit(ctx.event(ChatEventType.RAW)
@@ -1279,6 +1453,10 @@ public class AnthropicResponseParser {
                 }
                 contentRaw.put("redactedThinkingBlocks", redactedBlocks);
             }
+
+            // 服务端工具原始块与代码执行容器：pause_turn 续跑与多轮服务端工具要求原样回传，
+            // 不存就只能重跑（搜索/抓取重新计费），且历史前缀每轮缺块还会拉低 prompt cache 命中率
+            contentRaw = appendServerToolRaw(acc, contentRaw);
 
             List<ContentBlock> blocksForMsg = null;
             if (!mediaBlocks.isEmpty()) {

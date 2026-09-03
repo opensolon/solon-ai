@@ -27,6 +27,7 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
+import org.noear.solon.ai.chat.content.BlobBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 
@@ -74,6 +75,17 @@ public class AnthropicRequestBuilder {
     private static final Set<String> CACHE_TTL_ALLOWED = new HashSet<>(Arrays.asList("5m", "1h"));
 
     /**
+     * 工具定义里不允许被旁路配置改写的字段。
+     *
+     * <p>前三个由 {@link FunctionTool} 自身决定（改写会让工具名与实际可调用的函数错位）；
+     * {@code cache_control} 由缓存断点预算统一协调（超预算会整条 400）。</p>
+     *
+     * @since 4.1
+     */
+    private static final Set<String> TOOL_RESERVED_FIELDS = new HashSet<>(
+            Arrays.asList("name", "description", "input_schema", "cache_control"));
+
+    /**
      * OpenAI 风格但 Anthropic Messages API 不接受的顶层选项键。
      *
      * <p>协议 {@code MessageCreateParams} 顶层只接受 model / messages / max_tokens / cache_control /
@@ -88,21 +100,39 @@ public class AnthropicRequestBuilder {
      */
     private static final Set<String> UNSUPPORTED_OPTION_KEYS = new HashSet<>(Arrays.asList(
             "frequency_penalty", "presence_penalty", "logit_bias", "logprobs", "top_logprobs",
-            "n", "seed", "response_format", "parallel_tool_calls", "stream_options",
+            "n", "seed", "response_format", "stream_options",
             "prompt_cache_key", "max_completion_tokens"));
 
     /**
      * 由方言自身消费、不进请求体的合成选项键。
      *
-     * <p>{@code structured_outputs} / {@code strict_tools} 是本方言给出的开关（协议无同名字段）；
-     * {@code anthropic_beta} / {@code betas} 在协议上走请求头协商——GA 的 {@code MessageCreateParams}
-     * 并没有 betas 字段（只有 beta 客户端的 {@code BetaMessageCreateParams} 才有，且同样落在头上），
-     * 原样透传会变成非法顶层字段。</p>
+     * <p>{@code structured_outputs} / {@code strict_tools} / {@code anthropic_tools} 是本方言给出的开关
+     * （协议无同名字段）；{@code anthropic_beta} / {@code betas} 在协议上走请求头协商——GA 的
+     * {@code MessageCreateParams} 并没有 betas 字段（只有 beta 客户端的 {@code BetaMessageCreateParams}
+     * 才有，且同样落在头上），原样透传会变成非法顶层字段。</p>
      *
      * @since 4.1
      */
     private static final Set<String> DIALECT_ONLY_OPTION_KEYS = new HashSet<>(Arrays.asList(
-            "structured_outputs", "strict_tools", "anthropic_beta", "betas"));
+            "structured_outputs", "strict_tools", "anthropic_tools", "anthropic_beta", "betas"));
+
+    /**
+     * 逐工具的 GA 协议字段配置入口（{@code Map<toolName, Map<field, value>>}）。
+     *
+     * <p>协议 {@code Tool} 除 name/description/input_schema 外还有 {@code defer_loading} /
+     * {@code eager_input_streaming} / {@code allowed_callers} / {@code input_examples} 四个 GA 字段，
+     * 而统一 API 的 {@link FunctionTool} 没有对应载体。</p>
+     *
+     * <p><b>为什么不用 {@code FunctionTool.meta()}</b>：{@code descriptionAndMeta()} 会把 meta 里的每一项
+     * 拼成 {@code [key:value]} 前缀推给模型，把协议字段放进去等于污染工具描述。</p>
+     *
+     * <p><b>为什么不做全局开关</b>：{@code defer_loading=true} 让工具定义不进初始 prompt
+     * （靠 tool_search 再拉取），一刷全开会直接弄丢工具可见性；{@code input_examples} 本质上就是
+     * per-tool 的。因此只提供按工具名寻址的单一入口，且值直接透传（新增协议字段无需改代码）。</p>
+     *
+     * @since 4.1
+     */
+    private static final String TOOL_CONFIG_OPTION_KEY = "anthropic_tools";
 
     /**
      * 声明 beta 能力的选项键（值可为逗号分隔串、集合或数组）。
@@ -297,6 +327,12 @@ public class AnthropicRequestBuilder {
                 continue;
             }
 
+            // 结构差异：统一 API 的 parallel_tool_calls → 协议 tool_choice.disable_parallel_tool_use
+            // （循环后统一处理：它与 tool_choice 的出现顺序不定，必须等 tool_choice 建好再挂上去）
+            if ("parallel_tool_calls".equals(key)) {
+                continue;
+            }
+
             // OpenAI 风格但 Anthropic 不接受的字段：在出站前剔除，否则整条请求 400
             if (UNSUPPORTED_OPTION_KEYS.contains(key)) {
                 continue;
@@ -320,10 +356,116 @@ public class AnthropicRequestBuilder {
 
         buildToolsNode(root, options, cacheOnTools);
 
+        // 统一 API 的 parallel_tool_calls → tool_choice.disable_parallel_tool_use（需 tool_choice 已建）
+        applyParallelToolUse(root, options);
+
+        // 代码执行容器复用：从历史里取回上一轮的 container 回填顶层
+        applyContainer(root, messages);
+
         // 原生结构化输出（output_config.format）：放在 thinking 之后，getOrNew 与 adaptive 的 effort 合并共存
         applyStructuredOutput(root, config, options);
 
         return root;
+    }
+
+    /**
+     * 统一 API 的 {@code parallel_tool_calls=false} → 协议 {@code tool_choice.disable_parallel_tool_use=true}。
+     *
+     * <p>旧实现把 {@code parallel_tool_calls} 归入不支持选项直接丢弃，但协议上
+     * {@code ToolChoiceAuto} / {@code ToolChoiceAny} / {@code ToolChoiceTool} 三个变体都带
+     * {@code disable_parallel_tool_use}，语义可直接映射——丢弃等于让用户的「禁止并行」诉求静默失效。</p>
+     *
+     * <p>三条边界：{@code true} 不写出（并行本就是默认）；无 tools 且无 tool_choice 时不写（字段无意义，
+     * 且凭空冒出一个 tool_choice 会改变请求语义）；{@code type=none} 不写（协议 {@code ToolChoiceNone}
+     * 没有该字段，本轮不调工具也无并行可言，写上去会被 schema 拒掉）。</p>
+     *
+     * @since 4.1
+     */
+    private void applyParallelToolUse(ONode root, ChatOptions options) {
+        Object flag = options.options().get("parallel_tool_calls");
+        if (flag == null) {
+            return;
+        }
+        if (Boolean.FALSE.equals(flag) == false && "false".equalsIgnoreCase(String.valueOf(flag)) == false) {
+            return;
+        }
+
+        boolean hasToolChoice = root.hasKey("tool_choice");
+        if (hasToolChoice == false && Utils.isEmpty(options.tools())) {
+            return;
+        }
+
+        ONode tcNode = root.getOrNew("tool_choice");
+        if (tcNode.hasKey("type") == false) {
+            //未显式指定时 Anthropic 默认行为等同 auto，这里补写出来以承载开关
+            tcNode.set("type", "auto");
+        }
+        if ("none".equals(tcNode.get("type").getString())) {
+            return;
+        }
+        tcNode.set("disable_parallel_tool_use", true);
+    }
+
+    /**
+     * 从对话历史里取回代码执行容器并回填顶层 {@code container}。
+     *
+     * <p>协议 {@code MessageCreateParams.container} 接受容器 id 字符串（或 {@code ContainerParams} 对象），
+     * 回传后下一轮代码执行才能复用同一个沙盒（文件、已安装依赖、工作目录全都在里面）。
+     * 不回传就是每轮开新容器，上一轮的产物全丢。</p>
+     *
+     * <p>取值链路：解析器把响应的 {@code container} 写进 {@code AssistantMessage.contentRaw}
+     * （见 {@code AnthropicResponseParser.CONTAINER_RAW_KEY}），此处从最近一条 assistant 消息取回。
+     * 用户已显式给顶层 {@code container}（原生形态透传）时不覆盖。</p>
+     *
+     * @since 4.1
+     */
+    private void applyContainer(ONode root, List<ChatMessage> messages) {
+        if (root.hasKey("container") || Utils.isEmpty(messages)) {
+            return;
+        }
+
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            ChatMessage message = messages.get(i);
+            if (message instanceof AssistantMessage == false) {
+                continue;
+            }
+            Object contentRaw = ((AssistantMessage) message).getContentRaw();
+            if (contentRaw instanceof Map == false) {
+                continue;
+            }
+            Object value = ((Map<?, ?>) contentRaw).get(AnthropicResponseParser.CONTAINER_RAW_KEY);
+            if (value instanceof String == false || Utils.isEmpty((String) value)) {
+                continue;
+            }
+
+            String containerId = resolveContainerId((String) value);
+            if (Utils.isNotEmpty(containerId)) {
+                root.set("container", containerId);
+            }
+            return;
+        }
+    }
+
+    /**
+     * 从响应的 {@code Container} JSON 里取容器 id（兼容网关直接给字符串 id 的形态）。
+     *
+     * <p>只回传 id 而不把整个对象原样送回：响应的 {@code Container} 带 {@code expires_at}，
+     * 而请求侧的 {@code ContainerParams} 只有 {@code id} / {@code skills}，多余字段会被 schema 拒掉。</p>
+     *
+     * @since 4.1
+     */
+    private static String resolveContainerId(String containerJson) {
+        String trimmed = containerJson.trim();
+        if (trimmed.startsWith("{") == false) {
+            return trimmed;
+        }
+        try {
+            ONode node = ONode.ofJson(trimmed);
+            return node == null ? null : node.get("id").getString();
+        } catch (Exception e) {
+            //不能因为一个可选的容器复用字段把整条请求打挂
+            return null;
+        }
     }
 
     /**
@@ -608,6 +750,16 @@ public class AnthropicRequestBuilder {
                 }
             } else {
                 tcNode.set("type", "auto");
+            }
+
+            // 原生形态里的 disable_parallel_tool_use：协议上 auto/any/tool 三个变体都带这个字段，
+            // 旧实现只拷 type 与 name，走 Map 原生形态的用户同样丢掉该开关
+            Object disableParallel = choiceMap.get("disable_parallel_tool_use");
+            if (disableParallel != null && "none".equals(tcNode.get("type").getString()) == false) {
+                if (Boolean.TRUE.equals(disableParallel)
+                        || "true".equalsIgnoreCase(String.valueOf(disableParallel))) {
+                    tcNode.set("disable_parallel_tool_use", true);
+                }
             }
         } else if (toolChoice instanceof String) {
             String choice = (String) toolChoice;
@@ -1090,6 +1242,15 @@ public class AnthropicRequestBuilder {
                             .set("text", cb.getContent());
                 } else if (cb instanceof ImageBlock) {
                     appendClaudeImageBlock(resultBlocks, (ImageBlock) cb);
+                } else if (cb instanceof BlobBlock) {
+                    // 协议 ToolResultBlockParam.Content 含 document 变体：工具返回 PDF / 纯文本文档
+                    appendClaudeDocumentBlock(resultBlocks, (BlobBlock) cb);
+                } else if (Utils.isNotEmpty(cb.getContent())) {
+                    // 其余块（音频 / 视频 / 资源）协议上没有对应的 tool_result 内容变体：
+                    // 退化为 text 而不是静默丢弃（丢弃会让工具结果凭空少一块，模型无从得知）
+                    resultBlocks.addNew()
+                            .set("type", "text")
+                            .set("text", cb.getContent());
                 }
             }
         } else {
@@ -1124,6 +1285,9 @@ public class AnthropicRequestBuilder {
             // 回传 redacted_thinking 块（安全过滤的推理内容，原样保留供多轮，对齐 Anthropic SDK）
             appendRedactedThinkingBlocks(contentArray, assistantMessage);
 
+            // 回传服务端工具块（位置在 text 之前，与真实响应的块序一致）
+            appendServerToolBlocks(contentArray, resolveServerToolBlocks(assistantMessage));
+
             // 添加文本内容（如果有，排除与纯空白；兼容旧版带 <think> 标签的消息，出站前剥离）
             String resultContent = trimToNull(assistantMessage.getText());
             if (resultContent != null) {
@@ -1146,6 +1310,8 @@ public class AnthropicRequestBuilder {
         } else if (assistantMessage.isMultiModal()) {
             // 多模态助手消息：content 数组（text + image）
             ONode contentArray = node.getOrNew("content").asArray();
+            //服务端工具块先行（与真实响应的块序一致：工具轮次在前、模型行文在后）
+            appendServerToolBlocks(contentArray, resolveServerToolBlocks(assistantMessage));
             boolean hasText = false;
             if (Utils.isNotEmpty(assistantMessage.getBlocks())) {
                 for (ContentBlock block : assistantMessage.getBlocks()) {
@@ -1159,6 +1325,8 @@ public class AnthropicRequestBuilder {
                         }
                     } else if (block instanceof ImageBlock) {
                         appendClaudeImageBlock(contentArray, (ImageBlock) block);
+                    } else if (block instanceof BlobBlock) {
+                        appendClaudeDocumentBlock(contentArray, (BlobBlock) block);
                     }
                 }
             }
@@ -1171,25 +1339,51 @@ public class AnthropicRequestBuilder {
                 }
             }
         } else {
-            // 纯文本回传剥离 think（兼容旧版带标签消息），与多模态 TextBlock 路径一致；空白不回传为 text
+            List<String> serverBlocks = resolveServerToolBlocks(assistantMessage);
             String content = trimToNull(assistantMessage.getText());
-            if (content != null) {
+
+            if (Utils.isEmpty(serverBlocks) == false) {
+                // 服务端工具轮次（pause_turn 续跑 / 多轮 web_search）：本轮没有本地 tool_use，
+                // 但 content 必须是块数组才能把 server_tool_use 与结果块原样带回去。
+                // 不带回去的后果：服务端无法认领上一轮的搜索凭证（encrypted_content），
+                // pause_turn 续跑退化为从头重跑（搜索与抓取按次重新计费）
+                ONode contentArray = node.getOrNew("content").asArray();
+                appendThinkingBlock(contentArray, assistantMessage);
+                appendRedactedThinkingBlocks(contentArray, assistantMessage);
+                appendServerToolBlocks(contentArray, serverBlocks);
+                if (content != null) {
+                    contentArray.addNew()
+                            .set("type", "text")
+                            .set("text", content);
+                }
+            } else if (content != null) {
+                // 纯文本回传剥离 think（兼容旧版带标签消息），与多模态 TextBlock 路径一致；空白不回传为 text
                 node.set("content", content);
             } else {
                 // 若仅有思考内容（无正文、无 tool）：仅在 signature 有效时回传 thinking；
                 // 否则只保留空 content，避免兼容网关因无 signature thinking 拒绝下一轮
-                String reasoning = assistantMessage.getThinking();
-                String signature = resolveThinkingSignature(assistantMessage);
-                if (Utils.isNotEmpty(reasoning) && Utils.isNotEmpty(signature)) {
-                    ONode contentArray = node.getOrNew("content").asArray();
-                    contentArray.addNew()
-                            .set("type", "thinking")
-                            .set("thinking", reasoning)
-                            .set("signature", signature);
-                } else {
-                    node.getOrNew("content").asArray(); // Claude 需要 content 字段，即使是空数组
-                }
+                ONode contentArray = node.getOrNew("content").asArray(); // Claude 需要 content 字段，即使是空数组
+                appendThinkingBlock(contentArray, assistantMessage);
             }
+        }
+    }
+
+    /**
+     * 回传 thinking 块（仅当 signature 有效）。
+     *
+     * <p>兼容网关（如 DeepSeek claude_chat）在多轮回传无 signature 的 thinking 时常触发
+     * EMPTY_RESPONSE；官方 Claude 也要求 thinking 块带有效 signature 才能继续多轮。</p>
+     *
+     * @since 4.1
+     */
+    private void appendThinkingBlock(ONode contentArray, AssistantMessage assistantMessage) {
+        String reasoning = assistantMessage.getThinking();
+        String signature = resolveThinkingSignature(assistantMessage);
+        if (Utils.isNotEmpty(reasoning) && Utils.isNotEmpty(signature)) {
+            contentArray.addNew()
+                    .set("type", "thinking")
+                    .set("thinking", reasoning)
+                    .set("signature", signature);
         }
     }
 
@@ -1244,7 +1438,7 @@ public class AnthropicRequestBuilder {
         if (Utils.isEmpty(mediaType)) {
             mediaType = "image/jpeg";
         }
-    
+
         if (Utils.isNotEmpty(image.getData())) {
             contentArray.addNew()
                     .set("type", "image")
@@ -1253,12 +1447,106 @@ public class AnthropicRequestBuilder {
                             .set("media_type", mediaType)
                             .set("data", image.toDataString(false)));
         } else if (Utils.isNotEmpty(image.getUrl())) {
-            // 兼容 url 源（Claude 支持 source.type=url）
-            contentArray.addNew()
-                    .set("type", "image")
-                    .set("source", new ONode()
-                            .set("type", "url")
-                            .set("url", image.getUrl()));
+            String fileId = resolveAnthropicFileId(image.getUrl());
+            if (fileId != null) {
+                // 协议 FileImageSource：Files API 上传后的引用形态（不重传字节，也不占输入 token）。
+                // 旧实现只有 base64 / url 两种 source，file_id 会被当成 url 发出去而被服务端拒掉
+                contentArray.addNew()
+                        .set("type", "image")
+                        .set("source", new ONode()
+                                .set("type", "file")
+                                .set("file_id", fileId));
+            } else {
+                // 兼容 url 源（Claude 支持 source.type=url）
+                contentArray.addNew()
+                        .set("type", "image")
+                        .set("source", new ONode()
+                                .set("type", "url")
+                                .set("url", image.getUrl()));
+            }
+        }
+    }
+
+    /**
+     * 识别 Files API 的文件引用。
+     *
+     * <p>统一 API 的 {@link ImageBlock} 只有 {@code data} / {@code url} 两个载体，因此约定用 url 位置表达
+     * file_id：显式前缀 {@code anthropic-file:file_xxx}，或直接写 Anthropic 原样标识 {@code file_xxx}。</p>
+     *
+     * <p>判定收得很紧（无协议头、无路径分隔）：否则一个真实的
+     * {@code https://host/file_1.png} 会被误当成 file_id。</p>
+     *
+     * @since 4.1
+     */
+    private static String resolveAnthropicFileId(String url) {
+        if (Utils.isEmpty(url)) {
+            return null;
+        }
+        String value = url.trim();
+        if (value.startsWith("anthropic-file:")) {
+            String fileId = value.substring("anthropic-file:".length()).trim();
+            return fileId.isEmpty() ? null : fileId;
+        }
+        if (value.startsWith("file_") && value.indexOf('/') < 0 && value.indexOf(':') < 0) {
+            return value;
+        }
+        return null;
+    }
+
+    /**
+     * 构建 {@code document} 块（协议 DocumentBlockParam）。
+     *
+     * <p>统一 API 的 {@link BlobBlock} 是非图像二进制内容的载体（PDF 最典型），旧实现在所有
+     * content 构建处都只认 TextBlock / ImageBlock，它会被静默丢弃——用户以为传了 PDF，
+     * 模型却从未看到。</p>
+     *
+     * <p>{@code text/plain} 走协议的 {@code PlainTextSource}（明文 data）而不是 base64：
+     * 两者的 source.type 不同，传错会被 schema 拒掉。解码失败时退回 base64 形态，
+     * 不让一个附件把整条请求打挂。</p>
+     *
+     * @since 4.1
+     */
+    private void appendClaudeDocumentBlock(ONode contentArray, BlobBlock blob) {
+        String data = blob.getBlob();
+        if (Utils.isEmpty(data)) {
+            return;
+        }
+
+        String mediaType = blob.getMimeType();
+        ONode source = new ONode();
+
+        if ("text/plain".equals(mediaType)) {
+            String plainText = decodeBase64Text(data);
+            if (plainText != null) {
+                source.set("type", "text")
+                        .set("media_type", "text/plain")
+                        .set("data", plainText);
+            } else {
+                source.set("type", "base64")
+                        .set("media_type", mediaType)
+                        .set("data", data);
+            }
+        } else {
+            source.set("type", "base64")
+                    .set("media_type", Utils.isEmpty(mediaType) ? "application/pdf" : mediaType)
+                    .set("data", data);
+        }
+
+        contentArray.addNew()
+                .set("type", "document")
+                .set("source", source);
+    }
+
+    /**
+     * base64 → UTF-8 明文（不合法时返回 null）。
+     *
+     * @since 4.1
+     */
+    private static String decodeBase64Text(String base64) {
+        try {
+            return new String(java.util.Base64.getDecoder().decode(base64), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return null;
         }
     }
 
@@ -1286,17 +1574,18 @@ public class AnthropicRequestBuilder {
                                 .set("type", "text")
                                 .set("text", text.getContent());
                     } else if (block1 instanceof ImageBlock) {
-                        ImageBlock image = (ImageBlock) block1;
-
-                        // 从Image对象获取实际的媒体类型
-                        String mediaType = image.getMimeType();
-
+                        // 改走统一的 image 构建：旧实现在此处只写 base64 source，
+                        // url 图片会得到 data:null 的非法块（而同一个 ImageBlock 在助手消息里是支持 url 的）
+                        appendClaudeImageBlock(contentArray, (ImageBlock) block1);
+                    } else if (block1 instanceof BlobBlock) {
+                        // PDF / 纯文本附件 → 协议 document 块（旧实现静默丢弃）
+                        appendClaudeDocumentBlock(contentArray, (BlobBlock) block1);
+                    } else if (Utils.isNotEmpty(block1.getContent())) {
+                        // 音频 / 视频 / 资源块：Messages API 的 ContentBlockParam 没有对应变体，
+                        // 退化为 text 而不是静默丢弃（至少不会发出一条缺块的请求）
                         contentArray.addNew()
-                                .set("type", "image")
-                                .set("source", new ONode()
-                                        .set("type", "base64")
-                                        .set("media_type", mediaType)
-                                        .set("data", image.toDataString(false)));
+                                .set("type", "text")
+                                .set("text", block1.getContent());
                     }
                 }
             }
@@ -1348,6 +1637,9 @@ public class AnthropicRequestBuilder {
         // 只能显式 opt-in：开启后 schema 不合规的工具会直接被拒，且仅 Claude 4.5+ 支持
         final boolean strictTools = isStrictToolsEnabled(options);
 
+        // 逐工具的 GA 协议字段（defer_loading / eager_input_streaming / allowed_callers / input_examples）
+        final Map<String, Object> toolConfigs = resolveToolConfigs(options);
+
         ONode toolsNode = root.getOrNew("tools").asArray();
         int toolCount = 0;
         int totalTools = tools.size();
@@ -1378,6 +1670,9 @@ public class AnthropicRequestBuilder {
                 if (strictTools) {
                     toolNode.set("strict", true);
                 }
+
+                // 逐工具 GA 字段：在 cache_control 之前写出（它们属于工具定义的缓存前缀，顶层断点必须是最后一项）
+                applyToolProtocolFields(toolNode, toolConfigs, func.name());
 
                 // ⭐ 在最后一个工具定义上添加 cache_control (Anthropic Prompt Caching)
                 if (isLast && cacheEnabled) {
@@ -1515,6 +1810,10 @@ public class AnthropicRequestBuilder {
         // 回传 redacted_thinking 块（安全过滤的推理内容，原样保留供多轮，对齐 Anthropic SDK）
         appendRedactedThinkingBlocks(contentArray, acc);
 
+        // 回传服务端工具块：同一轮里模型先搜索再调本地工具是常见序列，
+        // 不带回去就会出现「结果块缺失但后文引用了它」的不自洽上下文
+        appendServerToolBlocks(contentArray, AnthropicResponseParser.getServerToolBlocks(acc, false));
+
         for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
             ToolCallBuilder builder = kv.getValue();
 
@@ -1596,6 +1895,98 @@ public class AnthropicRequestBuilder {
             contentArray.addNew()
                     .set("type", "redacted_thinking")
                     .set("data", data);
+        }
+    }
+
+    /**
+     * 从 {@code contentRaw} 取回服务端工具原始块（解析时留存的 JSON 字符串列表）。
+     *
+     * @since 4.1
+     */
+    private static List<String> resolveServerToolBlocks(AssistantMessage assistantMessage) {
+        Object contentRaw = assistantMessage == null ? null : assistantMessage.getContentRaw();
+        if (contentRaw instanceof Map == false) {
+            return null;
+        }
+        Object blocks = ((Map<?, ?>) contentRaw).get(AnthropicResponseParser.SERVER_BLOCKS_RAW_KEY);
+        if (blocks instanceof List == false) {
+            return null;
+        }
+
+        List<String> out = new java.util.ArrayList<>();
+        for (Object item : (List<?>) blocks) {
+            if (item instanceof String && Utils.isNotEmpty((String) item)) {
+                out.add((String) item);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 把服务端工具原始块按原序回传到 content 数组。
+     *
+     * <p><b>为什么必须原样回传而不是用事件重建</b>：{@code web_search_tool_result} 里的
+     * {@code encrypted_content} 是服务端签发的 opaque 凭证（本地无法伪造），
+     * {@code server_tool_use} 与结果块靠 {@code tool_use_id} 配对，
+     * {@code code_execution_tool_result} 又与沙盒容器绑定。任意一环重建不准，
+     * {@code stop_reason=pause_turn} 的续跑就会退化成重跑（搜索与抓取按次重新计费）。</p>
+     *
+     * <p>解析失败的块直接跳过：宁可少一块上文，也不能把脏数据发出去换回整条 400。</p>
+     *
+     * @since 4.1
+     */
+    private void appendServerToolBlocks(ONode contentArray, List<String> serverBlocks) {
+        if (Utils.isEmpty(serverBlocks)) {
+            return;
+        }
+
+        for (String json : serverBlocks) {
+            try {
+                ONode block = ONode.ofJson(json);
+                if (block != null && block.isObject() && Utils.isNotEmpty(block.get("type").getString())) {
+                    contentArray.add(block);
+                }
+            } catch (Exception e) {
+                //单块不可解析不影响其余块的回传
+            }
+        }
+    }
+
+    /**
+     * 取逐工具的 GA 字段配置（{@code anthropic_tools}）。
+     *
+     * @since 4.1
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> resolveToolConfigs(ChatOptions options) {
+        Object configs = options == null ? null : options.options().get(TOOL_CONFIG_OPTION_KEY);
+        return configs instanceof Map ? (Map<String, Object>) configs : null;
+    }
+
+    /**
+     * 写出单个工具的 GA 协议字段（{@code defer_loading} / {@code eager_input_streaming} /
+     * {@code allowed_callers} / {@code input_examples} 等）。
+     *
+     * <p>不做字段白名单，只拦保留字段：协议 {@code Tool} 的字段面仍在变长，
+     * 白名单会把新增字段一并拦掉而需要改代码。</p>
+     *
+     * @since 4.1
+     */
+    private static void applyToolProtocolFields(ONode toolNode, Map<String, Object> toolConfigs, String toolName) {
+        if (Utils.isEmpty(toolConfigs) || Utils.isEmpty(toolName)) {
+            return;
+        }
+        Object config = toolConfigs.get(toolName);
+        if (config instanceof Map == false) {
+            return;
+        }
+
+        for (Map.Entry<?, ?> kv : ((Map<?, ?>) config).entrySet()) {
+            String field = kv.getKey() == null ? null : String.valueOf(kv.getKey());
+            if (Utils.isEmpty(field) || kv.getValue() == null || TOOL_RESERVED_FIELDS.contains(field)) {
+                continue;
+            }
+            toolNode.set(field, ONode.ofBean(kv.getValue()));
         }
     }
 }
