@@ -17,6 +17,7 @@ package org.noear.solon.ai.llm.dialect.anthropic;
 
 import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
+import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.event.*;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -175,19 +176,68 @@ public class AnthropicProtocolAlignTest {
     }
 
     /**
-     * 未建模内容块（Beta 侧 mcp_tool_use / compaction 等）：与顶层未建模事件对称地以 RAW 透出
+     * 未建模内容块（Beta 侧 compaction / fallback 等）：与顶层未建模事件对称地以 RAW 透出
      */
     @Test
     public void unknownContentBlockBecomesRaw() {
         ChatStreamContext ctx = newCtx(true);
 
         parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":3,"
-                + "\"content_block\":{\"type\":\"mcp_tool_use\",\"id\":\"mcp_1\",\"name\":\"x\"}}");
+                + "\"content_block\":{\"type\":\"compaction\",\"content\":\"x\"}}");
 
         ChatEvent e = firstOf(ChatEventType.RAW);
         assertNotNull(e, "unknown content block should emit RAW");
-        assertEquals("mcp_tool_use", e.getSubType());
+        assertEquals("compaction", e.getSubType());
         assertEquals(3, e.getIndex());
+    }
+
+    /**
+     * mcp_tool_use（Beta）与 server_tool_use 同为服务端执行的工具调用：必须登记 StreamToolState，
+     * 否则随后的 input_json_delta 因取不到状态被静默丢弃（旧实现把它归到 RAW、不建 state，
+     * 而同族的 mcp_tool_result 反因 _tool_result 后缀被正常归一，半边通半边断）
+     */
+    @Test
+    public void mcpToolUseIsRegisteredAsServerTool() {
+        ChatStreamContext ctx = newCtx(true);
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":2,"
+                + "\"content_block\":{\"type\":\"mcp_tool_use\",\"id\":\"mcp_1\",\"name\":\"query\","
+                + "\"server_name\":\"db\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":2,"
+                + "\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"q\\\":1}\"}}");
+
+        ChatEvent start = firstOf(ChatEventType.SERVER_TOOL_START);
+        assertNotNull(start, "mcp_tool_use should emit SERVER_TOOL_START");
+        assertEquals("query", start.getSubType());
+        assertEquals("mcp_1", start.getItemId());
+        assertEquals("db", start.getAttrs().get("serverName"));
+
+        ChatEvent args = firstOf(ChatEventType.SERVER_TOOL_ARGS_DELTA);
+        assertNotNull(args, "mcp_tool_use 的参数分片不应被丢弃");
+        assertEquals("mcp_1", args.getToolCallId());
+        assertEquals("{\"q\":1}", args.getText());
+
+        //服务端工具不是本地 function call，不能被拼进工具调用历史
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_stop\",\"index\":2}");
+        assertFalse(ctx.getAccumulator().hasToolCallBuilders());
+    }
+
+    /**
+     * 未建模增量（Beta 的 compaction_delta 等）：旧实现的 delta 分支是无 else 的 if/else-if 链，
+     * 整帧静默丢弃且 hasContent 不置位，可能被上层判为不可识别响应
+     */
+    @Test
+    public void unknownContentBlockDeltaBecomesRaw() {
+        ChatStreamContext ctx = newCtx(true);
+
+        boolean consumed = parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":1,"
+                + "\"delta\":{\"type\":\"compaction_delta\",\"content\":\"c\",\"encrypted_content\":\"e\"}}");
+
+        ChatEvent e = firstOf(ChatEventType.RAW);
+        assertNotNull(e, "unknown delta should emit RAW");
+        assertEquals("compaction_delta", e.getSubType());
+        assertEquals(1, e.getIndex());
+        assertTrue(consumed, "RAW 是已消费的合法模型帧，不能让调用方误判为不可识别响应");
     }
 
     /**
@@ -491,5 +541,346 @@ public class AnthropicProtocolAlignTest {
             assertEquals(5L, usage.cacheCreationInputTokens());
             assertEquals(20L, usage.cacheReadInputTokens());
         }
+    }
+
+    /// ///////////////// 缓存写入的 TTL 明细
+
+    /**
+     * {@code usage.cache_creation} 的 5m / 1h 拆分必须落到 AiUsage 字段：
+     * 1h 写入单价是 5m 的两倍，只有汇总值算不出真实缓存成本
+     */
+    @Test
+    public void cacheCreationTtlBreakdownLandsInUsage() {
+        ChatStreamContext ctx = newCtx(true);
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_start\",\"message\":{\"id\":\"msg_5\","
+                + "\"model\":\"claude-sonnet-4-5\",\"usage\":{\"input_tokens\":10,\"output_tokens\":1,"
+                + "\"cache_creation_input_tokens\":100,"
+                + "\"cache_creation\":{\"ephemeral_5m_input_tokens\":40,\"ephemeral_1h_input_tokens\":60}}}}");
+
+        AiUsage usage = ctx.getAccumulator().getUsage();
+        assertEquals(100L, usage.cacheCreationInputTokens());
+        assertEquals(40L, usage.cacheCreation5mInputTokens());
+        assertEquals(60L, usage.cacheCreation1hInputTokens());
+    }
+
+    /**
+     * 只给明细、不给汇总的形态：由明细求和补出汇总，否则缓存写入部分会从 promptTokens 里消失
+     */
+    @Test
+    public void cacheCreationAggregateDerivedFromBreakdown() {
+        ChatStreamContext ctx = newCtx(true);
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_start\",\"message\":{\"id\":\"msg_6\","
+                + "\"model\":\"claude-sonnet-4-5\",\"usage\":{\"input_tokens\":10,\"output_tokens\":1,"
+                + "\"cache_creation\":{\"ephemeral_5m_input_tokens\":7,\"ephemeral_1h_input_tokens\":3}}}}");
+
+        AiUsage usage = ctx.getAccumulator().getUsage();
+        assertEquals(10L, usage.cacheCreationInputTokens(), "汇总缺失时由 5m+1h 补出");
+        assertEquals(20L, usage.promptTokens(), "input(10) + 缓存写入(5m 7 + 1h 3) 归一为全部输入 token");
+    }
+
+    /// ///////////////// stop_reason：截断类语义
+
+    /**
+     * {@code max_tokens} 与 {@code model_context_window_exceeded} 旧实现只落在 lastFinishReason 字符串里，
+     * 订阅方无法与正常 end_turn 区分。用 STATUS 而不是 ERROR：服务端返回的是携带可用内容的合法消息
+     */
+    @Test
+    public void truncationStopReasonsBecomeStatus() {
+        for (String reason : new String[]{"max_tokens", "model_context_window_exceeded"}) {
+            ChatStreamContext ctx = newCtx(true);
+
+            parser.parseStreamResponse(ctx, "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\""
+                    + reason + "\"}}");
+
+            ChatEvent e = firstOf(ChatEventType.STATUS);
+            assertNotNull(e, reason + " 应有事件通道");
+            assertEquals(reason, e.getSubType());
+            assertNull(firstOf(ChatEventType.ERROR), reason + " 不能抬为 ERROR（会弃掉已生成内容）");
+            assertEquals(reason, ctx.getAccumulator().lastFinishReason);
+        }
+    }
+
+    /**
+     * 非流式的 stop 事件序必须与流式一致：内容块事件在前、stop 在后。
+     * 旧实现在遍历 content 之前就发 stop，按事件序做状态机的订阅方会看到 call() 与 stream() 行为分叉
+     */
+    @Test
+    public void nonStreamStopEventComesAfterContentEvents() {
+        ChatStreamContext ctx = newCtx(false);
+
+        parser.parseNonStreamResponse(ctx, "{\"id\":\"msg_7\",\"model\":\"claude-sonnet-4-5\","
+                + "\"stop_reason\":\"max_tokens\",\"content\":["
+                + "{\"type\":\"server_tool_use\",\"id\":\"srv_1\",\"name\":\"web_search\"}]}");
+
+        int serverToolAt = -1;
+        int statusAt = -1;
+        for (int i = 0; i < events.size(); i++) {
+            ChatEventType type = events.get(i).getType();
+            if (type == ChatEventType.SERVER_TOOL_START && serverToolAt < 0) {
+                serverToolAt = i;
+            } else if (type == ChatEventType.STATUS && statusAt < 0) {
+                statusAt = i;
+            }
+        }
+
+        assertTrue(serverToolAt >= 0, "server_tool_use 应发 SERVER_TOOL_START");
+        assertTrue(statusAt >= 0, "max_tokens 应发 STATUS");
+        assertTrue(serverToolAt < statusAt, "内容块事件必须在 stop 事件之前（与流式同序）");
+    }
+
+    /// ///////////////// 请求侧：缓存机制冲突消解
+
+    /**
+     * 用户自带顶层 {@code cache_control}（协议合法：服务端自动给最后一个可缓存块加断点）时，
+     * 方言不能再打自己的块级断点：两套叠加会超出每请求 4 个断点上限而整条 400
+     */
+    @Test
+    public void nativeTopLevelCacheControlDisablesManualBreakpoints() {
+        ChatConfig config = new ChatConfig();
+        config.setModel("claude-sonnet-4-5");
+
+        Map<String, Object> nativeCache = new LinkedHashMap<>();
+        nativeCache.put("type", "ephemeral");
+
+        ONode root = requestBuilder.build(config,
+                ChatOptions.of()
+                        .cacheControl(CacheControl.ofEphemeral())
+                        .optionSet("cache_control", nativeCache),
+                Arrays.asList(ChatMessage.ofSystem("sys"), ChatMessage.ofUser("hi")), false);
+
+        //顶层字段本身是合法 GA 字段，继续透传
+        assertEquals("ephemeral", root.get("cache_control").get("type").getString());
+        //system 退回纯字符串形态（不再为了挂断点而转成 block 数组）
+        assertTrue(root.get("system").isString(), "不应再为挂断点而把 system 转成数组");
+        for (ONode messageNode : root.get("messages").getArray()) {
+            ONode content = messageNode.get("content");
+            if (content.isArray() == false) {
+                continue;
+            }
+            for (ONode block : content.getArray()) {
+                assertFalse(block.hasKey("cache_control"),
+                        "顶层 cache_control 已接管断点，方言不得重复标记");
+            }
+        }
+    }
+
+    /// ///////////////// 旁路解析：redacted_thinking
+
+    /**
+     * {@code parseAssistantMessage} 旁路旧实现只认 thinking/text/image/tool_use，redacted_thinking 整块丢弃
+     * → contentRaw 无 redactedThinkingBlocks → opaque 块无法原样回传，多轮 extended thinking 断链
+     */
+    @Test
+    public void assistantMessageKeepsRedactedThinkingBlocks() {
+        ChatStreamContext ctx = newCtx(false);
+
+        ONode oMessage = ONode.ofJson("{\"role\":\"assistant\",\"content\":["
+                + "{\"type\":\"redacted_thinking\",\"data\":\"opaque_1\"},"
+                + "{\"type\":\"redacted_thinking\",\"data\":\"opaque_2\"},"
+                + "{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"f\",\"input\":{}}]}");
+
+        List<AssistantMessage> list = AnthropicChatDialect.getInstance()
+                .parseAssistantMessage(ctx.getAccumulator(), oMessage);
+
+        AssistantMessage msg = list.get(list.size() - 1);
+        Object raw = msg.getContentRaw();
+        assertTrue(raw instanceof Map);
+        Object blocks = ((Map<?, ?>) raw).get("redactedThinkingBlocks");
+        assertTrue(blocks instanceof List);
+        assertEquals(Arrays.asList("opaque_1", "opaque_2"), blocks,
+                "opaque 块必须逐块保留，拼接会损坏 base64");
+    }
+
+    /// ///////////////// usage：按次计费维度与计价修饰量
+
+    /**
+     * {@code usage.server_tool_use} 是按「次」独立计费的维度（与 token 不同计价单位），
+     * 旧实现整块不读；同时不得并入 promptTokens/totalTokens，否则等于把次数当 token 算
+     */
+    @Test
+    public void serverToolRequestCountsLandInUsage() {
+        ChatStreamContext ctx = newCtx(true);
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_start\",\"message\":{\"id\":\"msg_8\","
+                + "\"model\":\"claude-sonnet-4-5\",\"usage\":{\"input_tokens\":10,\"output_tokens\":2,"
+                + "\"server_tool_use\":{\"web_search_requests\":3,\"web_fetch_requests\":1},"
+                + "\"service_tier\":\"priority\",\"inference_geo\":\"us-east\"}}}");
+
+        AiUsage usage = ctx.getAccumulator().getUsage();
+        assertEquals(3L, usage.webSearchRequests());
+        assertEquals(1L, usage.webFetchRequests());
+        assertEquals("priority", usage.serviceTier(), "各档位单价不同，缺该值算不出真实成本");
+        assertEquals("us-east", usage.inferenceGeo());
+        assertEquals(10L, usage.promptTokens(), "按次计费维度不得并入 token 统计");
+        assertEquals(12L, usage.totalTokens());
+    }
+
+    /**
+     * 只有服务端工具轮次、没有 token 产出的帧也必须产出 usage：
+     * 旧的「无 token 就返回 null」判定会把已计费的搜索次数整帧丢掉
+     */
+    @Test
+    public void serverToolOnlyUsageIsNotDropped() {
+        ChatStreamContext ctx = newCtx(true);
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_start\",\"message\":{\"id\":\"msg_9\","
+                + "\"model\":\"claude-sonnet-4-5\",\"usage\":{\"input_tokens\":0,\"output_tokens\":0,"
+                + "\"server_tool_use\":{\"web_search_requests\":2}}}}");
+
+        AiUsage usage = ctx.getAccumulator().getUsage();
+        assertNotNull(usage, "已计费的搜索次数不能因为 0 token 而被丢弃");
+        assertEquals(2L, usage.webSearchRequests());
+    }
+
+    /**
+     * 步内合并：{@code server_tool_use} 在 message_start 与 message_delta 都出现且是累计快照，按 max（不能相加）；
+     * {@code service_tier} / {@code inference_geo} 只在 message_start 给（MessageDeltaUsage 无此两字段），
+     * 不能被 message_delta 解出的 null 覆盖掉
+     */
+    @Test
+    public void serviceTierSurvivesMessageDeltaMerge() {
+        ChatStreamContext ctx = newCtx(true);
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_start\",\"message\":{\"id\":\"msg_10\","
+                + "\"model\":\"claude-sonnet-4-5\",\"usage\":{\"input_tokens\":10,\"output_tokens\":1,"
+                + "\"server_tool_use\":{\"web_search_requests\":2},"
+                + "\"service_tier\":\"batch\",\"inference_geo\":\"eu-west\"}}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},"
+                + "\"usage\":{\"output_tokens\":50,\"server_tool_use\":{\"web_search_requests\":2}}}");
+
+        AiUsage usage = ctx.getAccumulator().getUsage();
+        assertEquals(2L, usage.webSearchRequests(), "累计快照按 max，相加会重复计次");
+        assertEquals("batch", usage.serviceTier(), "message_delta 无此字段，不得覆盖为 null");
+        assertEquals("eu-west", usage.inferenceGeo());
+        assertEquals(50L, usage.completionTokens());
+    }
+
+    /// ///////////////// 上下文管理报告
+
+    /**
+     * {@code context_management.applied_edits} 是服务端「实际从历史里清理了什么」的报告。
+     * 调用方自己的历史台账需要据此对齐，否则下一轮会把已清理内容再发一遍。
+     * 注意它在 message_delta 里是事件顶层字段（与 delta / usage 同级），不在 delta 内部
+     */
+    @Test
+    public void contextManagementIsCaptured() {
+        ChatStreamContext ctx = newCtx(true);
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_start\",\"message\":{\"id\":\"msg_11\","
+                + "\"model\":\"claude-sonnet-4-5\",\"context_management\":{\"applied_edits\":["
+                + "{\"type\":\"clear_tool_uses_20250919\",\"cleared_input_tokens\":1200,\"cleared_tool_uses\":3}]}}}");
+
+        ONode captured = AnthropicResponseParser.contextManagement(ctx.getAccumulator());
+        assertNotNull(captured, "旧实现整块丢弃，调用方无从获知服务端清理了什么");
+        assertEquals(1200L, captured.get("applied_edits").get(0).get("cleared_input_tokens").getLong());
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},"
+                + "\"context_management\":{\"applied_edits\":["
+                + "{\"type\":\"clear_thinking_20251015\",\"cleared_input_tokens\":80}]}}");
+
+        captured = AnthropicResponseParser.contextManagement(ctx.getAccumulator());
+        assertEquals("clear_thinking_20251015",
+                captured.get("applied_edits").get(0).get("type").getString(),
+                "message_delta 的 context_management 在事件顶层，不在 delta 内");
+    }
+
+    /**
+     * 非流式与流式 message_start 对称
+     */
+    @Test
+    public void contextManagementIsCapturedInNonStream() {
+        ChatStreamContext ctx = newCtx(false);
+
+        parser.parseNonStreamResponse(ctx, "{\"id\":\"msg_12\",\"model\":\"claude-sonnet-4-5\","
+                + "\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"text\",\"text\":\"ok\"}],"
+                + "\"context_management\":{\"applied_edits\":["
+                + "{\"type\":\"clear_tool_uses_20250919\",\"cleared_input_tokens\":5,\"cleared_tool_uses\":1}]}}");
+
+        assertNotNull(AnthropicResponseParser.contextManagement(ctx.getAccumulator()));
+    }
+
+    /// ///////////////// 拒答后的重试提示
+
+    /**
+     * {@code stop_details} 的三个重试字段只能合用：recommended_model 指明换哪个模型，
+     * fallback_credit_token 是该次重试的缓存未命中退费凭证，fallback_has_prefill_claim 决定凭证怎么兑。
+     * 只透一个都不可执行
+     */
+    @Test
+    public void refusalCarriesRetryHints() {
+        ChatStreamContext ctx = newCtx(true);
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"refusal\","
+                + "\"stop_details\":{\"type\":\"refusal\",\"category\":\"policy\",\"explanation\":\"nope\","
+                + "\"recommended_model\":\"claude-opus-4-7\",\"fallback_credit_token\":\"tok_abc\","
+                + "\"fallback_has_prefill_claim\":true}}}");
+
+        ChatEvent e = firstOf(ChatEventType.CONTENT_FILTER);
+        assertNotNull(e);
+        assertEquals("policy", e.getSubType());
+        assertEquals("nope", e.getText());
+        assertEquals("claude-opus-4-7", e.getAttrs().get("recommendedModel"));
+        assertEquals("tok_abc", e.getAttrs().get("fallbackCreditToken"));
+        assertEquals(Boolean.TRUE, e.getAttrs().get("fallbackHasPrefillClaim"));
+    }
+
+    /**
+     * GA 响应不带这三个字段，不得造出空值键
+     */
+    @Test
+    public void refusalWithoutRetryHintsHasNoEmptyAttrs() {
+        ChatStreamContext ctx = newCtx(true);
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"refusal\","
+                + "\"stop_details\":{\"type\":\"refusal\",\"category\":\"policy\"}}}");
+
+        ChatEvent e = firstOf(ChatEventType.CONTENT_FILTER);
+        assertNotNull(e);
+        assertFalse(e.getAttrs().containsKey("recommendedModel"));
+        assertFalse(e.getAttrs().containsKey("fallbackCreditToken"));
+        assertFalse(e.getAttrs().containsKey("fallbackHasPrefillClaim"));
+    }
+
+    /// ///////////////// 请求侧：thinking.display
+
+    /**
+     * 协议 ThinkingConfigEnabled 带 {@code display}（summarized | omitted）。旧实现只在 adaptive 路径写，
+     * 经典 type=enabled 路径整块不写，经典模型用户无法关掉思考摘要
+     */
+    @Test
+    public void classicThinkingDisplayIsPassedThrough() {
+        ChatConfig config = new ChatConfig();
+        config.setModel("claude-sonnet-4-5");
+
+        Map<String, Object> thinking = new LinkedHashMap<>();
+        thinking.put("type", "enabled");
+        thinking.put("budget_tokens", 2048);
+        thinking.put("display", "omitted");
+
+        ONode root = requestBuilder.build(config,
+                ChatOptions.of().optionSet("thinking", thinking).optionSet("max_tokens", 8192),
+                Arrays.asList(ChatMessage.ofUser("hi")), false);
+
+        ONode thinkingNode = root.get("thinking");
+        assertEquals("enabled", thinkingNode.get("type").getString());
+        assertEquals(2048, thinkingNode.get("budget_tokens").getInt());
+        assertEquals("omitted", thinkingNode.get("display").getString());
+    }
+
+    /**
+     * 未显式指定时不写 display（不改变现有请求行为）
+     */
+    @Test
+    public void classicThinkingWithoutDisplayStaysUnset() {
+        ChatConfig config = new ChatConfig();
+        config.setModel("claude-sonnet-4-5");
+
+        ONode root = requestBuilder.build(config,
+                ChatOptions.of().optionSet("thinking", 2048).optionSet("max_tokens", 8192),
+                Arrays.asList(ChatMessage.ofUser("hi")), false);
+
+        assertFalse(root.get("thinking").hasKey("display"));
     }
 }

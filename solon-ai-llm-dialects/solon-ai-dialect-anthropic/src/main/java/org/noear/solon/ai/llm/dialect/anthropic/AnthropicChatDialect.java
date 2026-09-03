@@ -145,6 +145,13 @@ public class AnthropicChatDialect extends AbstractChatDialect {
      * 汇总 {@code anthropic-beta} 头值：config 级选项（{@code anthropic_beta} / {@code betas}）
      * 与 {@code config.getHeaders()} 里已有的同名头合并去重。
      *
+     * <p>beta 能力只靠本头 opt-in，请求 URL 不追加 {@code ?beta=true}：本方言按 GA 面对齐
+     * （{@code POST /v1/messages} 无 query param），而带 beta 头请求 GA 端点本身就是合法协商方式，
+     * 绝大多数 beta 能力（output-128k、context-1m、fine-grained-tool-streaming 等）只给头即可生效。
+     * 只有纯 beta 请求结构（mcp_toolsets / compaction / advisor / fallback）才可能额外要求该参数，
+     * 而这些结构本方言并不建模——需要时直接写进 {@code apiUrl}，或用
+     * {@code options().httpCustomize(...)} 处理。</p>
+     *
      * @since 4.1
      */
     private String resolveBetaHeader(ChatConfig config) {
@@ -161,6 +168,7 @@ public class AnthropicChatDialect extends AbstractChatDialect {
 
         return betas.isEmpty() ? null : String.join(",", betas);
     }
+
 
 
 //    @Override
@@ -253,6 +261,7 @@ public class AnthropicChatDialect extends AbstractChatDialect {
         List<ToolCall> toolCalls = new ArrayList<>();
         List<Map> toolCallsRaw = new ArrayList<>();
         List<ContentBlock> mediaBlocks = new ArrayList<>();
+        List<String> redactedBlocks = new ArrayList<>();
 
         for (ONode item : oContent.getArray()) {
             String type = item.get("type").getString();
@@ -299,6 +308,15 @@ public class AnthropicChatDialect extends AbstractChatDialect {
                 functionData.put("arguments", inputJson);
                 toolCallRaw.put("function", functionData);
                 toolCallsRaw.add(toolCallRaw);
+            } else if ("redacted_thinking".equals(type)) {
+                // opaque 安全过滤块：逐块原样保留，供下一轮
+                // AnthropicRequestBuilder#appendRedactedThinkingBlocks 取用。
+                // 旧实现在本旁路里整块丢弃 → contentRaw 无 redactedThinkingBlocks
+                // → opaque 块无法原样回传，多轮 extended thinking 有断链风险
+                String data = item.get("data").getString();
+                if (Utils.isNotEmpty(data)) {
+                    redactedBlocks.add(data);
+                }
             }
         }
 
@@ -322,6 +340,15 @@ public class AnthropicChatDialect extends AbstractChatDialect {
             if (textStr.length() > 0) {
                 contentRaw.put("content", textStr);
             }
+        }
+
+        // redacted_thinking 分块列表透传到 contentRaw，供多轮逐块回传（拼接会损坏 opaque 数据）；
+        // 与 parseNonStreamResponse 对称
+        if (redactedBlocks.isEmpty() == false) {
+            if (contentRaw == null) {
+                contentRaw = new LinkedHashMap<>();
+            }
+            contentRaw.put("redactedThinkingBlocks", redactedBlocks);
         }
 
         AssistantMessage message = new AssistantMessage(textStr, thinkingStr,

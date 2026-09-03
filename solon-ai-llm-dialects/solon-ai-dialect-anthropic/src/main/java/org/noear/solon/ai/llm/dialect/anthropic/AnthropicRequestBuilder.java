@@ -171,7 +171,13 @@ public class AnthropicRequestBuilder {
         // 缓存控制：仅 Anthropic 风格（type 非空）才在请求体上打 cache_control 断点；
         // prompt_cache_key（OpenAI/DeepSeek 风格）不适用于 Claude，忽略之。
         CacheControl cacheControl = options.cacheControl();
-        boolean cacheEnabled = (cacheControl != null && Utils.isNotEmpty(cacheControl.getType()));
+        // 用户直接在 options 里给了 Anthropic 原生顶层 cache_control（协议 MessageCreateParams.cache_control：
+        // 服务端自动给请求里最后一个可缓存块加断点）。此时必须让出方言自己的块级断点：
+        // 两套机制叠加会超出每请求 CACHE_BREAKPOINT_LIMIT 个断点的上限而整条 400，
+        // 且两条通道互不知情，实际生效位置不可控。顶层字段本身仍按合法 GA 字段透传
+        boolean nativeAutoCache = options.options().get("cache_control") != null;
+        boolean cacheEnabled = nativeAutoCache == false
+                && (cacheControl != null && Utils.isNotEmpty(cacheControl.getType()));
 
         // 提取系统消息（供缓存预算判断与下方 system 节点构建复用，避免重复遍历）
         String systemMessage = extractSystemMessage(messages);
@@ -664,6 +670,15 @@ public class AnthropicRequestBuilder {
             }
             if (budgetTokens instanceof Number) {
                 thinkingNode.set("budget_tokens", ((Number) budgetTokens).intValue());
+            }
+
+            // 思考摘要可见性（协议 ThinkingConfigEnabled.display：summarized | omitted）：
+            // 旧实现只在 adaptive 路径写 display，经典 type=enabled 路径整块不写，
+            // 经典模型用户无法关掉思考摘要（比如为了省输出带宽只要结论）。
+            // 仅在用户显式指定时透出，不提供默认值，避免改变现有请求行为
+            Object display = thinkingMap.get("display");
+            if (display instanceof String && Utils.isNotEmpty((String) display)) {
+                thinkingNode.set("display", display);
             }
         } else if (value instanceof Boolean) {
             // 统一开关 / 简化配置：thinking: true|false

@@ -107,6 +107,40 @@ public class AnthropicResponseParser {
         }
     }
 
+    /**
+     * 服务端上下文管理报告（{@code message_start.message.context_management}
+     * / {@code message_delta.context_management} / 非流式 {@code context_management}）。
+     *
+     * <p>协议 BetaContextManagementResponse 携带 {@code applied_edits[]}，每项形如
+     * {@code {type:clear_tool_uses_20250919, cleared_input_tokens, cleared_tool_uses}} 或
+     * {@code {type:clear_thinking_20251015, cleared_input_tokens}}——即服务端在本轮从历史里
+     * 实际清掉了什么。调用方自己维护的历史台账需要据此对齐，否则下一轮会把服务端已清理的
+     * 内容再发一遍（既多付费又可能触发同样的清理）。旧实现整块丢弃，无从获知。</p>
+     *
+     * @since 4.1
+     */
+    private static final String CONTEXT_MANAGEMENT_KEY = "AnthropicContextManagement";
+
+    /**
+     * 取本次响应携带的上下文管理报告节点（未出现则为 null）。
+     *
+     * @since 4.1
+     */
+    public static ONode contextManagement(ChatAccumulator acc) {
+        return acc == null ? null : acc.attrAs(CONTEXT_MANAGEMENT_KEY);
+    }
+
+    /**
+     * 记录上下文管理报告（幂等覆盖：后到的帧为更完整的快照）。
+     *
+     * @since 4.1
+     */
+    private static void captureContextManagement(ChatAccumulator acc, ONode node) {
+        if (node != null && node.isObject()) {
+            acc.attrPut(CONTEXT_MANAGEMENT_KEY, node);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     static Map<Integer, StreamToolState> toolStates(ChatAccumulator acc, boolean create) {
         Map<Integer, StreamToolState> states = acc.attrAs(STREAM_TOOL_STATE_KEY);
@@ -153,8 +187,24 @@ public class AnthropicResponseParser {
         // Claude Prompt Caching 相关的 token 统计
         long cacheCreationInputTokens = 0L;
         long cacheReadInputTokens = 0L;
+
+        // 缓存写入的 TTL 明细（协议 Usage.cache_creation → CacheCreation）：
+        // 1h 写入单价是 5m 的两倍，只有汇总的 cache_creation_input_tokens 无法还原真实缓存成本。
+        // 旧实现整块不读，调用方只能自己去 AiUsage.getSource() 里捞
+        long cacheCreation5mTokens = 0L;
+        long cacheCreation1hTokens = 0L;
+        ONode cacheCreation = usageNode.getOrNull("cache_creation");
+        if (cacheCreation != null && cacheCreation.isObject()) {
+            cacheCreation5mTokens = cacheCreation.get("ephemeral_5m_input_tokens").getLong();
+            cacheCreation1hTokens = cacheCreation.get("ephemeral_1h_input_tokens").getLong();
+        }
+
         if (usageNode.hasKey("cache_creation_input_tokens")) {
             cacheCreationInputTokens = usageNode.get("cache_creation_input_tokens").getLong();
+        } else {
+            // 只给明细不给汇总的形态：由明细求和补出汇总，否则 cacheCreationInputTokens 恒 0，
+            // 连带 promptTokens 少算掉整个缓存写入部分
+            cacheCreationInputTokens = cacheCreation5mTokens + cacheCreation1hTokens;
         }
         if (usageNode.hasKey("cache_read_input_tokens")) {
             cacheReadInputTokens = usageNode.get("cache_read_input_tokens").getLong();
@@ -169,14 +219,44 @@ public class AnthropicResponseParser {
                 thinkTokens = outputTokensDetails.get("reasoning_tokens").getLong();
             }
         }
+
+        // 服务端内置工具的调用次数（协议 Usage.server_tool_use → ServerToolUsage）：
+        // 按「次」独立计费（与 token 不同计价单位），不能并入 promptTokens/totalTokens，否则等于把次数当 token 算。
+        // 该字段在 message_start 与 message_delta 都会出现（协议 MessageDeltaUsage 同样带 server_tool_use）
+        long webSearchRequests = 0L;
+        long webFetchRequests = 0L;
+        ONode serverToolUse = usageNode.getOrNull("server_tool_use");
+        if (serverToolUse != null && serverToolUse.isObject()) {
+            webSearchRequests = serverToolUse.get("web_search_requests").getLong();
+            webFetchRequests = serverToolUse.get("web_fetch_requests").getLong();
+        }
+
+        // 计费档位与推理区域（协议 Usage.service_tier / Usage.inference_geo）：只出现在 message_start，
+        // 保留供应商原始字面量（service_tier 已知 standard/priority/batch，不做枚举归一以免掩盖新增档位）
+        String serviceTier = usageNode.get("service_tier").getString();
+        String inferenceGeo = usageNode.get("inference_geo").getString();
+
         // Anthropic 的 input_tokens 不含缓存部分，需将 cache 两项并入，归一为“全部输入 token”语义（与 OpenAI prompt_tokens 对齐），
         // 否则下游 cacheRate = cacheRead / promptTokens 会被高估并恒定 100%
         long totalInputTokens = inputTokens + cacheCreationInputTokens + cacheReadInputTokens;
-        // 只有在有实际 token 消耗时才返回 usage
+        // 只有在有实际消耗时才返回 usage（服务端工具次数也算消耗：可能出现 0 token 但已计费的搜索轮次）
         if (inputTokens > 0 || outputTokens > 0 || cacheCreationInputTokens > 0 || cacheReadInputTokens > 0
-                || thinkTokens > 0) {
-            return new AiUsage(totalInputTokens, thinkTokens, outputTokens, totalInputTokens + outputTokens,
-                    cacheCreationInputTokens, cacheReadInputTokens, usageNode);
+                || thinkTokens > 0 || webSearchRequests > 0 || webFetchRequests > 0) {
+            return AiUsage.builder()
+                    .promptTokens(totalInputTokens)
+                    .thinkTokens(thinkTokens)
+                    .completionTokens(outputTokens)
+                    .totalTokens(totalInputTokens + outputTokens)
+                    .cacheCreationInputTokens(cacheCreationInputTokens)
+                    .cacheReadInputTokens(cacheReadInputTokens)
+                    .cacheCreation5mInputTokens(cacheCreation5mTokens)
+                    .cacheCreation1hInputTokens(cacheCreation1hTokens)
+                    .webSearchRequests(webSearchRequests)
+                    .webFetchRequests(webFetchRequests)
+                    .serviceTier(serviceTier)
+                    .inferenceGeo(inferenceGeo)
+                    .source(usageNode)
+                    .build();
         }
 
         return null;
@@ -316,6 +396,9 @@ public class AnthropicResponseParser {
                     // 代码执行容器（container.id / expires_at）：多轮复用需回传，旧实现整块丢弃
                     captureContainer(acc, message.getOrNull("container"));
 
+                    // 服务端上下文管理报告（协议 BetaMessage.context_management）：本轮从历史里清理了什么
+                    captureContextManagement(acc, message.getOrNull("context_management"));
+
                     // 某些情况下 message_start 也包含初始 usage 信息
                     AiUsage usage = parseUsage(message.getOrNull("usage"));
                     if (usage != null) {
@@ -383,23 +466,36 @@ public class AnthropicResponseParser {
                                     .raw(oResp)
                                     .build());
                         }
-                    } else if ("server_tool_use".equals(blockType)) {
+                    } else if ("server_tool_use".equals(blockType) || "mcp_tool_use".equals(blockType)) {
+                        // mcp_tool_use（Beta）与 server_tool_use 同属「服务端执行的工具调用」，两者的 input
+                        // 都经 input_json_delta 分片下发，必须登记 StreamToolState：旧实现把 mcp_tool_use
+                        // 归到 RAW 分支、不建 state，随后的参数分片因取不到状态而静默丢弃
+                        // （既无 SERVER_TOOL_START 也无 SERVER_TOOL_ARGS_DELTA），
+                        // 而同族的 mcp_tool_result 反而因命中 _tool_result 后缀被正常归一，半边通半边断。
+                        int serverBlockIdx = oResp.get("index").getInt();
                         ChatEventDefault.Builder serverToolStart = ctx.event(ChatEventType.SERVER_TOOL_START)
                                 .rawType(eventType)
                                 .subType(contentBlock.get("name").getString())
                                 .itemId(contentBlock.get("id").getString())
-                                .index(oResp.get("index").getInt())
+                                .index(serverBlockIdx)
                                 .raw(oResp);
                         appendServerToolCaller(serverToolStart, contentBlock);
+                        // MCP 工具额外携带来源服务器（协议 BetaMcpToolUseBlock.server_name），
+                        // 同名工具可能来自不同 MCP server，丢了它就无法区分
+                        String mcpServerName = contentBlock.get("server_name").getString();
+                        if (Utils.isNotEmpty(mcpServerName)) {
+                            serverToolStart.attr("serverName", mcpServerName);
+                        }
                         ctx.emit(serverToolStart.build());
+
                         StreamToolState serverState = new StreamToolState();
                         serverState.serverTool = true;
                         serverState.toolUseId = contentBlock.get("id").getString();
                         serverState.toolName = contentBlock.get("name").getString();
                         serverState.toolInput = new StringBuilder();
-                        getToolStates(acc, true).put(oResp.get("index").getInt(), serverState);
+                        getToolStates(acc, true).put(serverBlockIdx, serverState);
                     } else if (blockType != null && blockType.endsWith("_tool_result")) {
-                        // 服务端工具结果（web_search_tool_result / web_fetch_tool_result 等）：
+                        // 服务端工具结果（web_search_tool_result / web_fetch_tool_result / mcp_tool_result 等）：
                         // 旧实现把结果内容直接拼进正文，订阅方无法与模型自述区分
                         ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_RESULT)
                                 .rawType(eventType)
@@ -422,8 +518,8 @@ public class AnthropicResponseParser {
                                 .raw(oResp)
                                 .build());
                     } else if (Utils.isNotEmpty(blockType)) {
-                        // 未建模内容块（Beta 侧 mcp_tool_use / mcp_tool_result / compaction / fallback /
-                        // advisor_tool_result 等经网关下发时）：与顶层未建模事件对称地以 RAW 透出。
+                        // 未建模内容块（Beta 侧 compaction / fallback / advisor_tool_result 等经网关下发时）：
+                        // 与顶层未建模事件对称地以 RAW 透出。
                         // 旧实现在此静默落空，是块级与事件级的不对称缺口
                         ctx.emit(ctx.event(ChatEventType.RAW)
                                 .rawType(eventType)
@@ -431,6 +527,8 @@ public class AnthropicResponseParser {
                                 .index(oResp.get("index").getInt())
                                 .raw(oResp)
                                 .build());
+                        //RAW 是已消费的合法模型帧，与顶层 RAW 一致地不让调用方误判为不可识别响应
+                        hasContent = true;
                     }
                 }
             } else if ("content_block_delta".equals(eventType)) {
@@ -503,6 +601,19 @@ public class AnthropicResponseParser {
                                 }
                             }
                         }
+                    } else if (Utils.isNotEmpty(deltaType)) {
+                        // 未建模增量：与块级、事件级的 RAW 兜底对称。
+                        // 旧实现是一条无 else 的 if/else-if 链，未知 delta 整帧静默丢弃；
+                        // GA 的 RawContentBlockDelta 是 5 变体（已覆盖），Beta 多一个 compaction_delta
+                        // （content / encrypted_content）。兜底比逐个枚举 beta type 更根本：
+                        // 官方 SDK 同样给每个 union 留了 unknown(json) visitor 作为前向兼容手段
+                        ctx.emit(ctx.event(ChatEventType.RAW)
+                                .rawType(eventType)
+                                .subType(deltaType)
+                                .index(oResp.get("index").getInt())
+                                .raw(oResp)
+                                .build());
+                        hasContent = true;
                     }
                 }
             } else if ("content_block_stop".equals(eventType)) {
@@ -570,18 +681,32 @@ public class AnthropicResponseParser {
                 if (usage != null) {
                     AiUsage prev = acc.getUsage();
                     if (prev != null) {
-                        usage = new AiUsage(
-                                Math.max(prev.promptTokens(), usage.promptTokens()),
-                                Math.max(prev.thinkTokens(), usage.thinkTokens()),
-                                Math.max(prev.completionTokens(), usage.completionTokens()),
-                                Math.max(prev.totalTokens(), usage.totalTokens()),
-                                Math.max(prev.cacheCreationInputTokens(), usage.cacheCreationInputTokens()),
-                                Math.max(prev.cacheReadInputTokens(), usage.cacheReadInputTokens()),
+                        usage = usage.toBuilder()
+                                .promptTokens(Math.max(prev.promptTokens(), usage.promptTokens()))
+                                .thinkTokens(Math.max(prev.thinkTokens(), usage.thinkTokens()))
+                                .completionTokens(Math.max(prev.completionTokens(), usage.completionTokens()))
+                                .totalTokens(Math.max(prev.totalTokens(), usage.totalTokens()))
+                                .cacheCreationInputTokens(Math.max(prev.cacheCreationInputTokens(), usage.cacheCreationInputTokens()))
+                                .cacheReadInputTokens(Math.max(prev.cacheReadInputTokens(), usage.cacheReadInputTokens()))
+                                .cacheCreation5mInputTokens(Math.max(prev.cacheCreation5mInputTokens(), usage.cacheCreation5mInputTokens()))
+                                .cacheCreation1hInputTokens(Math.max(prev.cacheCreation1hInputTokens(), usage.cacheCreation1hInputTokens()))
+                                // 服务端工具次数同为累计快照，按 max（不能相加，否则多个 message_delta 会重复计次）
+                                .webSearchRequests(Math.max(prev.webSearchRequests(), usage.webSearchRequests()))
+                                .webFetchRequests(Math.max(prev.webFetchRequests(), usage.webFetchRequests()))
+                                // service_tier / inference_geo 只在 message_start 给（MessageDeltaUsage 无此两字段），
+                                // 不能让本帧解出的 null 覆盖掉已有值
+                                .serviceTier(Utils.isEmpty(usage.serviceTier()) ? prev.serviceTier() : usage.serviceTier())
+                                .inferenceGeo(Utils.isEmpty(usage.inferenceGeo()) ? prev.inferenceGeo() : usage.inferenceGeo())
                                 // 保留 message_start 中的嵌套计费明细（cache_creation/server_tool_use/output_tokens_details）
-                                mergeUsageSource(prev.getSource(), usage.getSource()));
+                                .source(mergeUsageSource(prev.getSource(), usage.getSource()))
+                                .build();
                     }
                     acc.setUsage(usage);
                 }
+
+                // 上下文管理报告在 message_delta 里是【事件顶层】字段（协议 BetaRawMessageDeltaEvent.context_management，
+                // 与 delta / usage 同级），不在 delta 内部——写成 delta.getOrNull("context_management") 会恒取不到
+                captureContextManagement(acc, oResp.getOrNull("context_management"));
 
                 ONode delta = oResp.getOrNull("delta");
                 if (delta != null) {
@@ -827,15 +952,25 @@ public class AnthropicResponseParser {
      *
      * <p>协议 {@code StopReason} 共 7 值：{@code end_turn} / {@code max_tokens} / {@code stop_sequence}
      * / {@code tool_use} / {@code pause_turn} / {@code refusal} / {@code model_context_window_exceeded}。
-     * 旧实现只把原始串塞进 {@code lastFinishReason}，后三者的语义对订阅方完全不可见。</p>
+     * 旧实现只把原始串塞进 {@code lastFinishReason}，除 {@code end_turn} / {@code tool_use} 之外
+     * 的语义对订阅方完全不可见。</p>
      *
      * <p>{@code lastFinishReason} 仍保留供应商原始值（不做归一，避免掩盖具体成因），这里只为原本静默的情形补事件：</p>
      * <ul>
      *   <li>{@code refusal} → {@code CONTENT_FILTER}，携带 {@code stop_details} 的分类与说明</li>
-     *   <li>{@code pause_turn} → {@code STATUS}，服务端工具轮次暂停、需带上下文续跑。
-     *       <b>刻意不用 ABORT</b>：ABORT 在归一化器里会提前关闭未闭合块，而 message_delta 紧邻
-     *       message_stop，会与随后的终态收口帧（签名载体）抢块边界</li>
+     *   <li>{@code pause_turn} → {@code STATUS}，服务端工具轮次暂停、需带上下文续跑</li>
+     *   <li>{@code max_tokens} → {@code STATUS}，输出被截断（回答不完整，与正常收尾同为“成功”响应）</li>
+     *   <li>{@code model_context_window_exceeded} → {@code STATUS}，上下文溢出</li>
      *   <li>{@code stop_sequence} → {@code STATUS}，透出实际命中的自定义停止序列（旧实现连这个值都不读）</li>
+     * </ul>
+     *
+     * <p><b>为什么截断类停止原因用 STATUS 而不是 ERROR / ABORT</b>：</p>
+     * <ul>
+     *   <li>不用 {@code ERROR}：{@code max_tokens} 与 {@code model_context_window_exceeded} 下
+     *   服务端返回的是一条完整合法、携带可用部分内容的消息。抬为 ERROR 会连带
+     *   {@code acc.setError}，把已生成的正文与计费一同弃掉，属于倒退；</li>
+     *   <li>不用 {@code ABORT}：ABORT 在事件归一化器里会提前关闭未闭合块，而 {@code message_delta}
+     *   紧邻 {@code message_stop}，会与随后的终态收口帧（签名载体）抢块边界。</li>
      * </ul>
      *
      * @param stopNode 承载 stop_sequence / stop_details 的节点（流式为 delta，非流式为 message 本体）
@@ -847,20 +982,16 @@ public class AnthropicResponseParser {
             String category = null;
             String explanation = null;
             ONode stopDetails = stopNode == null ? null : stopNode.getOrNull("stop_details");
+            ChatEventDefault.Builder builder = ctx.event(ChatEventType.CONTENT_FILTER);
             if (stopDetails != null && stopDetails.isObject()) {
                 category = stopDetails.get("category").getString();
                 explanation = stopDetails.get("explanation").getString();
+                appendRefusalRetryHints(builder, stopDetails);
             }
-            ctx.emit(ctx.event(ChatEventType.CONTENT_FILTER)
+            ctx.emit(builder
                     .rawType(rawType)
                     .subType(Utils.isEmpty(category) ? stopReason : category)
                     .text(explanation)
-                    .raw(raw)
-                    .build());
-        } else if ("pause_turn".equals(stopReason)) {
-            ctx.emit(ctx.event(ChatEventType.STATUS)
-                    .rawType(rawType)
-                    .subType(stopReason)
                     .raw(raw)
                     .build());
         } else if ("stop_sequence".equals(stopReason)) {
@@ -870,6 +1001,45 @@ public class AnthropicResponseParser {
                     .text(stopNode == null ? null : stopNode.get("stop_sequence").getString())
                     .raw(raw)
                     .build());
+        } else if ("pause_turn".equals(stopReason)
+                || "max_tokens".equals(stopReason)
+                || "model_context_window_exceeded".equals(stopReason)) {
+            ctx.emit(ctx.event(ChatEventType.STATUS)
+                    .rawType(rawType)
+                    .subType(stopReason)
+                    .raw(raw)
+                    .build());
+        }
+    }
+
+    /**
+     * 拒答后的重试提示（协议 BetaRefusalStopDetails 比 GA RefusalStopDetails 多出的三个字段）。
+     *
+     * <p>这三个字段只能合用，拆开任一个都不可执行：
+     * {@code recommended_model} 告诉调用方换哪个模型重试，
+     * {@code fallback_credit_token} 是该次重试的缓存未命中退费凭证（不带就多付一次 cache miss，
+     * 5 分钟内有效），{@code fallback_has_prefill_claim} 则决定该凭证要用哪种重试形态兑付
+     * （true：原请求体 + 追加一条载有部分输出的 assistant 消息；false：原请求体不变）。
+     * 只透 {@code recommended_model} 会让调用方把退费凭证丢掉，只透凭证又不知道怎么兑。</p>
+     *
+     * <p>GA 响应不携带这三个字段，不存在时不写 attr（不造空值键）。</p>
+     *
+     * @since 4.1
+     */
+    private static void appendRefusalRetryHints(ChatEventDefault.Builder builder, ONode stopDetails) {
+        String recommendedModel = stopDetails.get("recommended_model").getString();
+        if (Utils.isNotEmpty(recommendedModel)) {
+            builder.attr("recommendedModel", recommendedModel);
+        }
+
+        String fallbackCreditToken = stopDetails.get("fallback_credit_token").getString();
+        if (Utils.isNotEmpty(fallbackCreditToken)) {
+            builder.attr("fallbackCreditToken", fallbackCreditToken);
+            // 仅在凭证存在时才有意义（协议：only set when fallback_credit_token is present）
+            ONode prefillClaim = stopDetails.getOrNull("fallback_has_prefill_claim");
+            if (prefillClaim != null && prefillClaim.isNull() == false) {
+                builder.attr("fallbackHasPrefillClaim", prefillClaim.getBoolean());
+            }
         }
     }
 
@@ -1019,13 +1189,12 @@ public class AnthropicResponseParser {
         acc.setModel(oResp.get("model").getString());
         // 代码执行容器（协议 Message.container）：与流式 message_start 对称地记录，供多轮复用
         captureContainer(acc, oResp.getOrNull("container"));
-        // 先解析 stop_reason，供 lastFinishReason 使用
+        // 服务端上下文管理报告：与流式 message_start 对称
+        captureContextManagement(acc, oResp.getOrNull("context_management"));
+        // 先解析 stop_reason 供 lastFinishReason 使用；但停止事件延到内容块遍历之后再发，
+        // 以保持与流式同序：content_block_* 在前、message_delta 的 stop 在后。
+        // 否则按事件序做状态机的订阅方会看到 call() 与 stream() 行为分叉
         String stopReason = oResp.get("stop_reason").getString();
-        if (Utils.isNotEmpty(stopReason)) {
-            // 与流式 message_delta 对称：refusal / pause_turn / stop_sequence 补事件通道
-            // （非流式的 stop_sequence 与 stop_details 位于 message 本体的顶层）
-            emitStopReasonEvent(ctx, "message", stopReason, oResp, oResp);
-        }
 
         // 解析内容
         ONode contentArray = oResp.getOrNull("content");
@@ -1228,6 +1397,13 @@ public class AnthropicResponseParser {
         }
         // 同步 lastFinishReason（复用已算好的 choiceFinishReason，避免重复计算）
         acc.lastFinishReason = choiceFinishReason;
+
+        // 与流式 message_delta 对称：refusal / stop_sequence / pause_turn / max_tokens /
+        // model_context_window_exceeded 补事件通道（非流式的 stop_sequence 与 stop_details
+        // 位于 message 本体的顶层）。放在内容块事件之后，与流式的事件序一致
+        if (Utils.isNotEmpty(stopReason)) {
+            emitStopReasonEvent(ctx, "message", stopReason, oResp, oResp);
+        }
 
         // 解析用量信息
         AiUsage usage = parseUsage(oResp.getOrNull("usage"));
