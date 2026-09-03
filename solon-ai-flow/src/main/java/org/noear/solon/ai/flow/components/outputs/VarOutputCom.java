@@ -16,6 +16,8 @@
 package org.noear.solon.ai.flow.components.outputs;
 
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.ai.generate.GenerateResponse;
@@ -49,10 +51,12 @@ public class VarOutputCom extends AbsAiComponent implements AiIoComponent {
 
         if (data instanceof Publisher) {
             AtomicReference<Throwable> errReference = new AtomicReference<>();
-            Flux.from((Publisher<ChatResponse>) data)
-                    .filter(resp -> resp.hasChoices())
-                    .doOnNext(resp -> {
-                        buf.append(resp.getMessage().getContent());
+            Flux.from((Publisher<?>) data)
+                    .doOnNext(item -> {
+                        String text = textOf(item);
+                        if (text != null) {
+                            buf.append(text);
+                        }
                     })
                     .doOnError(err -> {
                         errReference.set(err);
@@ -76,5 +80,36 @@ public class VarOutputCom extends AbsAiComponent implements AiIoComponent {
         }
 
         return buf.toString();
+    }
+
+    /**
+     * 取流元素的正文文本
+     *
+     * <p>同时兼容 {@code Flux<ChatEvent>}（4.1 起 {@code stream()} 的类型）
+     * 与 {@code Flux<ChatResponse>}（旧类型，或调用方自建的响应帧流）。
+     * 非正文元素（思考、工具调用、生命周期等）返回 null 表示跳过。</p>
+     *
+     * @param item 流元素
+     * @since 4.1
+     */
+    public static String textOf(Object item) {
+        if (item instanceof ChatEvent) {
+            ChatEvent event = (ChatEvent) item;
+            //只要正文增量：思考/工具/生命周期事件不计入文本输出
+            if (event.is(ChatEventType.TEXT_DELTA)) {
+                return event.getText();
+            }
+            return null;
+        }
+
+        if (item instanceof ChatResponse) {
+            ChatResponse resp = (ChatResponse) item;
+            if (resp.hasContent()) {
+                return resp.getContent();
+            }
+            return null;
+        }
+
+        return null;
     }
 }

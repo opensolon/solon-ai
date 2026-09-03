@@ -5,7 +5,7 @@ Solon AI 对接 [Vercel AI SDK](https://ai-sdk.dev/) 的 UI 协议适配模块�
 _目前，有官方的AI Elments组件库，是基于Shadcn的，也有Vue版本，觉得很不错，这个协议也比较成熟，适合拿来直接用，无论是否用 Vercel 的东西，无需自己再造轮子。_
 
 ## 功能
-- 将 `ChatModel.prompt().stream()` 返回的 `Flux<ChatResponse>` 自动转换为
+- 将 `ChatModel.prompt().stream()` 返回的 `Flux<ChatEvent>` 自动转换为
 [UI Message Stream Protocol v1](https://ai-sdk.dev/docs/ai-sdk-ui/stream-protocol) 格式的 SSE 事件流，
 前端可直接使用 `@ai-sdk/vue` 的 `useChat` 或 `@ai-sdk/react` 的 `useChat` 无缝对接，只需要修改下端点即可。
 - 也支持将`prompt().call()`的阻塞式调用，转换为假流式，虽然场景比较罕见；
@@ -27,7 +27,7 @@ _目前，有官方的AI Elments组件库，是基于Shadcn的，也有Vue版本
 
 ```
 org.noear.solon.ai.ui.aisdk
-├── AiSdkStreamWrapper              # 核心包装器：Flux<ChatResponse> → Flux<SseEvent>
+├── AiSdkStreamWrapper              # 核心包装器：Flux<ChatEvent> → Flux<SseEvent>
 ├── part/                            # 协议 Part 类（模板方法模式）
 │   ├── AiSdkStreamPart            #   抽象基类
 │   ├── StartPart                   #   流开始
@@ -339,9 +339,8 @@ public class AiChatController {
     @Produces(MimeType.TEXT_EVENT_STREAM_UTF8_VALUE)
     @Mapping("/ai/chat/stream")
     public Flux<SseEvent> stream(String prompt) {
-        return chatModel.prompt(prompt).stream()
-                .map(resp -> resp.getMessage())
-                .map(msg -> new SseEvent().data(msg.getContent()))
+        return chatModel.prompt(prompt).streamText()
+                .map(text -> new SseEvent().data(text))
                 .doOnError(err -> {
                     log.error("{}", err);
                 });

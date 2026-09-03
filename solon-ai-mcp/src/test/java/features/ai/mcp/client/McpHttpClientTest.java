@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.rx.SimpleSubscriber;
@@ -126,9 +128,12 @@ public class McpHttpClientTest {
 
         chatModel.prompt("杭州天气和北京降雨量如何？")
                 .stream()
-                .subscribe(new SimpleSubscriber<ChatResponse>()
-                        .doOnNext(resp -> {
-                            respHolder.set(resp);
+                .subscribe(new SimpleSubscriber<ChatEvent>()
+                        .doOnNext(event -> {
+                            //终态聚合由 RESPONSE_END 携带（全流恰好一次）
+                            if (event.getType() == ChatEventType.RESPONSE_END) {
+                                respHolder.set(event.getResponse());
+                            }
                         })
                         .doOnComplete(() -> {
                             latch.countDown();
@@ -141,7 +146,7 @@ public class McpHttpClientTest {
         assert respHolder.get() != null;
 
         //打印消息
-        log.info("{}", respHolder.get().getAggregationMessage());
+        log.info("{}", respHolder.get().getMessage());
         toolProvider.close();
         toolProvider2.close();
     }

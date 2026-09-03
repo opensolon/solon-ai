@@ -13,6 +13,42 @@
 
 ### 4.1.0
 
+* 添加 solon-ai-core ChatEventFilter 事件投递过滤器（HEARTBEAT/RAW 默认不投递，可通过 eventFilter(ChatEventFilter.all()) 显式开启；支持 of/ofGroup/or/and 组合）
+* 优化 solon-ai-core ChatEventNormalizer 边界补齐扩到 TOOL_CALL 组（宽松策略只补不删：裸 ARGS_DELTA 自动补 START、流终止前补未闭合 END；分片协议末片才给 id 时回退关闭最早开启的调用，不再误去重并行 START）
+* 优化 solon-ai-agent ReasonTask 只对外输出思考与正文流：工具/动作类事件一律由 ActionTask 发出（服务端工具由服务方在本次调用内执行完毕，不经 ActionTask，不构成智能体自己的 Action/Observation，故不发工具事件、也不拼进正文）
+* 优化 solon-ai-agent ReasonTask 重试门控由帧类型白名单改为事件分组判定（TEXT/THINKING/TOOL_CALL/SERVER_TOOL/MEDIA/SAFETY 即视为已产出不可重放的输出），补上旧白名单漏掉的 SERVER_TOOL_*（联网搜索已计费且有外部副作用，重放会二次执行）、TOOL_CALL_CHUNK、REFUSAL_DELTA、CITATION；分组是闭集，核心新增类型不会再静默漏判
+* 修复 solon-ai-agent SimpleAgent / SupervisorTask 未判 ChatEvents.reduce 返回 null 导致的 NPE（契约：流中无 RESPONSE_END 即返回 null，订阅端取消时 takeUntil 会提前完成流；旧 blockLast 在同场景返回最后一帧不为 null，故为 4.1 新引入的风险点）；取消不再被当成模型故障重试或记成团队致命错误
+* 移除 solon-ai-agent ReasonDeltaEvent.isFinished() / isError()（**不兼容变更**：4.1 起本事件不再携带 ChatResponse，两者会恒返回 true——即每个增量都自称“已完成、已出错”；完成信号请取 RunEndEvent，异常判定请取 ReActTrace.isAbnormal()）
+* 添加 docs/chat-event-model.md 事件模型契约文档（分组表、硬不变量、ABORT vs cancel、方言 parseResponseJson 迁移指南含 contentEmits 双发规则与下线时间表）（此前取归一化值须穿透到 ChatResponseDefault）
+* 添加 solon-ai-core ChatResponse.getToolCalls() 直取工具调用（无调用时为空集合而非 null，不必再穿透 getMessage() 判空）
+* 添加 solon-ai-core ChatResponse.getBlocks() / getAlternatives()（多模态内容块；多候选 n&gt;1 由 getAlternatives 表达，不再借 getChoices 兼作分片历史）
+* 添加 solon-ai-core ChatAccumulator 可变累积器（**不兼容变更**：ChatDialect.parseResponseJson / parseAssistantMessage / buildAssistantMessageNode 等形参由 ChatResponseDefault 改为 ChatAccumulator，第三方方言需同步调整；协议状态 in_thinking / lastFinishReason / toolCallBuilders / attr* 与 addChoice / reset 均迁至此）
+* 优化 solon-ai-core ChatResponse 收窄为纯结果接口，取值只有一个入口 getMessage()：STEP_END / RESPONSE_END 携带的终态，getMessage() 即完整聚合，与非流式 call() 语义一致（**不兼容变更**：getAggregationMessage/Text/Thinking、isFinished、isStream、getChoices、hasChoices、lastChoice、getConfig、getOptions 已移除——它们属可变累积器与请求上下文角色，流式过程请订阅 stream() 事件）
+* 优化 solon-ai-core ChatResponseDefault 成为不可变结果实现：字段构造期算定，无任何写入方法；两种构造形态 of(acc) 分片帧 / ofTerminal(acc) 终态（此前同一个类兼任结果对象、可变累积器与协议状态袋三个角色，事件携带的快照还是被 reset 反复复用的同一实例）
+* 移除 solon-ai-core ChatRequestDesc.streamResponses() 与 ChatEvents.toResponses / isContentFrame（**不兼容变更**，旧帧流投影随 ChatResponse 纯结果化一并移除，请改用 stream() 事件流或 streamText()）
+* 添加 solon-ai-core 流式事件模型 `org.noear.solon.ai.chat.event`（ChatEvent / ChatEventType / ChatEventGroup / ChatEventPhase / ChatEvents / ChatEventNormalizer / ChatStreamSession / ChatStreamContext）
+* 添加 solon-ai-core ChatRequestDesc.streamText() 只取正文增量（最短路径，替代 filter + map 样板）
+* 添加 solon-ai-core ChatRequestDesc.stream(ChatEventListener) 单方法监听入口（非响应式用法）
+* 调整 solon-ai-core ChatDialect 解析入口收敛为 parseResponseJson(ChatStreamContext, String)（**不兼容变更**：旧的 boolean parseResponseJson(ChatConfig, ChatAccumulator, String) 已移除，方言解析统一经 ChatStreamContext 交互，可发事件；第三方方言需同步调整）
+* 添加 solon-ai-ui-aisdk AiSdkStreamWrapper.toAiSdkStream(Flux&lt;ChatEvent&gt;)，激活此前无发射点的 StartStepPart / FinishStepPart / ToolOutputAvailablePart / SourceUrlPart / SourceDocumentPart / FilePart / AbortPart / DataPart
+* 调整 solon-ai-core ChatRequestDesc.stream() 返回类型由 `Flux<ChatResponse>` 改为 `Flux<ChatEvent>`（**不兼容变更**）
+* 调整 solon-ai-core ChatInterceptor.interceptStream / StreamChain 返回类型同步改为 `Flux<ChatEvent>`（**不兼容变更**）
+* 调整 solon-ai-ui-aisdk 旧的 `toAiSdkStream(Flux<ChatResponse>)` 更名为 `toAiSdkStreamOfResponses`（**不兼容变更**，泛型擦除无法重载；框架已不再产出 `Flux<ChatResponse>`，此重载仅供自建帧流适配，已标记弃用）
+* 优化 solon-ai-dialect-openai Responses 方言事件适配：response.created/queued/in_progress → STATUS、web_search/code_interpreter/mcp/file_search → SERVER_TOOL_*、image_generation partial_image → MEDIA_PARTIAL、annotation → CITATION、refusal → REFUSAL_DELTA、reasoning encrypted_content → THINKING_SIGNATURE、未建模事件 → RAW
+* 优化 solon-ai-dialect-anthropic 方言事件适配：ping → HEARTBEAT（不再整帧丢弃）、signature_delta → THINKING_SIGNATURE（不再寄生 contentRaw）、redacted_thinking → THINKING_REDACTED、server_tool_use / *_tool_result → SERVER_TOOL_START / SERVER_TOOL_RESULT（不再拼成 "[server tool: name]" 混入正文）
+* 优化 solon-ai-dialect-gemini Interactions 方言事件适配：interaction.created/completed → STATUS、google_search_call / google_search_result → SERVER_TOOL_*、未建模事件 → RAW
+* 优化 solon-ai-agent ReasonTask / SimpleAgent / SupervisorTask 改用 ChatEvents.reduce 归约终态（替代依赖可变累积器的 blockLast）
+* 修复 solon-ai-flow VarOutputCom / WebOutputCom 对 `Flux<ChatEvent>` 的适配（原先强转 `Publisher<ChatResponse>`，泛型擦除下编译通过、运行时 ClassCastException；现按元素运行时类型分派，ChatEvent 与 ChatResponse 双兼容）
+* 修复 solon-ai-core 终态 getFinishReason() 在方言与 choice 都未给出信号时返回 null（契约为归一化后正常结束应给 "stop"，旧 getLastFinishReasonNormalized 有此兜底、拆分时丢失）
+* 修复 solon-ai-core ChatEvents.toTexts 空正文增量抛 NPE（Reactor 的 map 不允许返回 null，改为先过滤再映射）
+* 修复 solon-ai-core 流式响应体不可识别时静默变成空流（apiUrl 指错命中网关首页/错误页，部分网关以 200 + text/html 返回）：新增两道守卫，content-type 为 html/xml 时在 HTTP 边界即报错；整个响应体无一帧形似模型帧时在流末报错；`call()` 同步给出指向配置的错误而非裸 JSON 解析异常
+* 修复 solon-ai-core 关闭自动工具调用（autoToolCall(false)）的流式路径重复发射 TOOL_CALL_START 与完整参数 ARGS_DELTA 的问题（拼接参数的订阅方会拿到翻倍的参数串）
+* 移除 solon-ai-core ChatSubscriberProxy（**不兼容变更**，为旧 `Subscriber<ChatResponse>` 流式模型的遗留物，事件模型下全仓库已无引用）
+* 优化 solon-ai-core 流生命周期与终态契约：每次订阅独立创建 ChatStreamSession/Normalizer，StreamChain 改为无共享游标；STEP_END 携带单步 Usage，RESPONSE_END 携带多步累计 Usage；ChatEvents.reduce 仅认 STEP_END/RESPONSE_END
+* 优化 solon-ai-core ChatEventNormalizer 按 group + itemId + index 管理多个并行内容块；TEXT/THINKING/TOOL_CALL 参数增量不再携带完整 ChatResponse，完整结果只在 STEP_END/RESPONSE_END 交付
+* 优化七个 Chat 方言的事件错误语义：协议错误统一发射 ERROR；OpenAI Responses incomplete/failed 映射 ABORT/ERROR；Ollama 兼容缺失 created_at
+* 移除 solon-ai-agent ChatDeltaEvent 及 ChatChunk/SimpleChunk/ReasonChunk/ThoughtChunk/ActionChunk/ObservationChunk/ReActChunk/SupervisorChunk/TeamChunk/NodeChunk（**不兼容变更**）；Agent 增量事件改为直接携带 ChatEvent，Harness 终态改用 RunEndEvent
+* 修复 solon-ai-ui-aisdk 新旧流桥接的取消传播，浏览器断开后会取消上游模型订阅，避免后台继续消耗 token
 * 添加 solon-ai-core AssistantMessage getThinking，getText 方法（替代 getReasoning 和 getResultContent）
 * 添加 solon-ai-agent ContextSizeEvent.contextLength 字段
 * 优化 solon-ai-core AssistantMessage context 拆为 thinking + text 双字段
@@ -22,6 +58,7 @@
 * 优化 solon-ai-talent-code 扫描扩为4层，增加可超时的缓存
 * 优化 solon-ai-telent-lsp 体验及超时处理
 * 优化 solon-ai-harness 添加 compressionDefaultContextLength 配置支持
+* 调整 solon-ai-core `stream<ChatResponse>` 改为 `stream<ChatEvent>`
 * 调整 solon-ai-harness HarnessExtension.configure 添加 engine 参数
 * 修复 solon-ai-agent SimpleAgent 因 isStreamCancelled 引起的问题。
 * 修复 solon-ai-dialect-anthropic 缓存率计算错误的问题

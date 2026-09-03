@@ -113,7 +113,7 @@ AssistantMessage result = ChatchatModel.prompt("The weather in Hangzhou today？
 System.out.println(result);
 
 // Stream call
-chatModel.prompt("hello").stream(); //Publisher<ChatResponse>
+chatModel.prompt("hello").stream();     //Flux<ChatEvent>, full semantic events
 ```
 
 * Talents（Solon AI Talents）

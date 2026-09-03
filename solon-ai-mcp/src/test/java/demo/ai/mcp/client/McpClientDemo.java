@@ -2,7 +2,8 @@ package demo.ai.mcp.client;
 
 import lombok.extern.slf4j.Slf4j;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.annotation.Controller;
 import org.noear.solon.annotation.Inject;
@@ -25,14 +26,16 @@ public class McpClientDemo {
 
     @Produces(MimeType.TEXT_EVENT_STREAM_VALUE)
     @Mapping("mcp/test")
-    public Flux<ChatMessage> mcpTest() {
-        return Flux.from(chatModel
-                        .prompt("今天杭州的天气情况？")
-                        .options(options -> {
-                            //转为工具集合用于绑定
-                            options.toolAdd(mcpClient.getTools());
-                        })
-                        .stream())
-                .map(resp -> resp.getMessage());
+    public Flux<String> mcpTest() {
+        return chatModel
+                .prompt("今天杭州的天气情况？")
+                .options(options -> {
+                    //转为工具集合用于绑定
+                    options.toolAdd(mcpClient.getTools());
+                })
+                .stream()
+                .filter(e -> e.is(ChatEventType.TEXT_DELTA) && e.hasText())
+                .map(ChatEvent::getText);
+
     }
 }

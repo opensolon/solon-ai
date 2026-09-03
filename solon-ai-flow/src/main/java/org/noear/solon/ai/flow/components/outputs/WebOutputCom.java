@@ -56,13 +56,17 @@ public class WebOutputCom extends AbsAiComponent implements AiIoComponent {
 
             if (data instanceof Publisher) {
                 AtomicReference<Throwable> errReference = new AtomicReference<>();
-                Flux.from((Publisher<ChatResponse>) data)
-                        .filter(resp -> resp.hasChoices())
-                        .doOnNext(resp -> {
-                            buf.append(resp.getMessage().getContent());
+                Flux.from((Publisher<?>) data)
+                        .doOnNext(item -> {
+                            String text = VarOutputCom.textOf(item);
+                            if (text == null) {
+                                return;
+                            }
+
+                            buf.append(text);
 
                             try {
-                                ctx.render(resp.getMessage());
+                                ctx.render(ChatMessage.ofAssistant(text));
                                 ctx.output("\n");
                                 ctx.flush();
                             } catch (Throwable ex) {

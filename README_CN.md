@@ -110,7 +110,7 @@ AssistantMessage result = ChatchatModel.prompt("今天杭州的天气情况？")
 System.out.println(result);
 
 //响应式调用
-chatModel.prompt("hello").stream(); //Publisher<ChatResponse>
+chatModel.prompt("hello").stream();     //Flux<ChatEvent>，全量语义事件
 ```
 
 * Talents（Solon AI Talents 才能）
