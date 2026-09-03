@@ -69,6 +69,7 @@ public class EmbeddingConfig extends AiConfig {
         return "EmbeddingConfig{" +
                 "apiUrl='" + apiUrl + '\'' +
                 ", apiKey='" + apiKey + '\'' +
+                ", standard='" + standard + '\'' +
                 ", provider='" + provider + '\'' +
                 ", model='" + model + '\'' +
                 ", headers=" + headers +

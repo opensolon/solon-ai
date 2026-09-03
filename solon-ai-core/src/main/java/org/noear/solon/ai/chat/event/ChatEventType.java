@@ -225,24 +225,6 @@ public enum ChatEventType {
     }
 
     /**
-     * 是否为主干内容事件（正文 / 思考 / 工具调用的开始与增量）
-     *
-     * <p>这是个很窄的判定，专为「本帧是否已经把内容以事件形态表达完了」这个门控而设，
-     * 必须与「真正载有内容主干」严格一致。两类事件存心排除在外：</p>
-     * <ul>
-     *   <li><b>旁路元数据</b>（{@code CITATION} / {@code THINKING_SIGNATURE} /
-     *   {@code THINKING_REDACTED} / {@code MEDIA_*}）：它们虽然落在内容分组里，却常与正文
-     *   <b>同帧</b>出现（如 Gemini 的 groundingMetadata 与 content.parts 同居一个 candidate）。
-     *   若计入门控，那一帧的正文会被整体静默丢弃，同帧的工具调用也不会被登记。</li>
-     *   <li><b>结束相位</b>（{@code *_END}）：只关闭块，自身不载内容。</li>
-     * </ul>
-     */
-    public boolean isMainContent() {
-        return (group == TEXT || group == THINKING || group == TOOL_CALL)
-                && (phase == START || phase == DELTA || phase == CHUNK);
-    }
-
-    /**
      * 是否为终止事件
      */
     public boolean isTerminal() {
