@@ -134,6 +134,24 @@ public class GeminiThoughtSignatureTest {
     }
 
     /**
+     * Gemini 完整值快照被核心按字符串追加时，终态应取最后一个完整对象，不能取到前面的空占位对象。
+     */
+    @Test
+    public void streamAggregation_usesLastJsonObjectSnapshot() {
+        ChatAccumulator acc = newAccumulator(true);
+
+        Map<String, ToolCallBuilder> builders = new LinkedHashMap<>();
+        builders.put("getWeather", toolCallBuilder("call-1", "getWeather",
+                "{}{\"location\":\"杭州\"}"));
+
+        ONode node = builder.buildAssistantToolCallMessageNode(acc, builders);
+        ONode args = node.get("parts").get(0).get("functionCall").get("args");
+
+        assertTrue(args.isObject(), node.toJson());
+        assertEquals("杭州", args.get("location").getString(), node.toJson());
+    }
+
+    /**
      * 反向锚点：无签名时不写出 thoughtSignature 字段。
      */
     @Test

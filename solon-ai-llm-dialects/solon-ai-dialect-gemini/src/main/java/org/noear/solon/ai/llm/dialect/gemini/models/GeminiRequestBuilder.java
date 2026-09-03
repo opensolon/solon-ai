@@ -471,10 +471,10 @@ public class GeminiRequestBuilder {
                     if (builder.argumentsBuilder.length() > 0) {
                         // Gemini 流式 functionCall.args 是累积完整 JSON（非 OpenAI 增量片段）：
                         // 同一 functionCall 跨 chunk 重复发送时 append 会产生 {..}{..} 拼接，
-                        // 此处取第一个完整 JSON 对象（Gemini 完整值语义下首帧即完整参数）
-                        String rawArgs = takeFirstJsonObject(builder.argumentsBuilder.toString());
-                        // 流式聚合出口净化：截断损坏的 arguments 禁止以字符串形态写入 args（会被服务端拒绝）
-                        String safeArgs = ToolCallJsonSanitizer.sanitizeArguments(rawArgs, builder.nameBuilder.toString());
+                        // 交给公共净化器读取最后一个完整 JSON 对象，避免取到过期的首帧参数。
+                        // 流式聚合出口净化：截断损坏的 arguments 禁止以字符串形态写入 args
+                        String safeArgs = ToolCallJsonSanitizer.sanitizeArguments(
+                                builder.argumentsBuilder.toString(), builder.nameBuilder.toString());
                         try {
                             ONode argsNode = ONode.ofJson(safeArgs);
                             n2.set("args", argsNode.isObject() ? argsNode : new ONode().asObject());
@@ -494,25 +494,6 @@ public class GeminiRequestBuilder {
         });
 
         return oNode;
-    }
-
-    /**
-     * Gemini 完整值语义下，argumentsBuilder 可能因同一 functionCall 跨 chunk 重复发送而拼接出
-     * 多个 JSON 对象（{..}{..}）。取第一个完整对象；单对象或非法串原样返回交给净化器兜底。
-     *
-     * @since 4.0.6
-     */
-    private String takeFirstJsonObject(String args) {
-        if (args == null || args.isEmpty()) {
-            return args;
-        }
-        String trimmed = args.trim();
-        int firstClose = trimmed.indexOf('}');
-        if (firstClose > 0 && firstClose < trimmed.length() - 1) {
-            // 多个 JSON 对象拼接（如 {"a":1}{"a":1}）→ 取第一个完整对象
-            return trimmed.substring(0, firstClose + 1);
-        }
-        return trimmed;
     }
 
     /**
