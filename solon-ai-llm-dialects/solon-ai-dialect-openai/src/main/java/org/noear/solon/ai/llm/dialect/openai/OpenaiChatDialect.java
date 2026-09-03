@@ -190,11 +190,11 @@ public class OpenaiChatDialect extends AbstractChatDialect {
                         }
                         messageList = Collections.emptyList();
                     } else {
-                        messageList = parseAssistantMessage(acc, normalized.get("delta"));
+                        messageList = parseAssistantMessage(acc, normalizeLegacyFunctionCall(acc, normalized.get("delta")));
                     }
                 } else {
                     //object=chat.completion
-                    messageList = parseAssistantMessage(acc, oChoice1.get("message"));
+                    messageList = parseAssistantMessage(acc, normalizeLegacyFunctionCall(acc, oChoice1.get("message")));
                 }
 
                 for (AssistantMessage msg1 : messageList) {
@@ -302,9 +302,27 @@ public class OpenaiChatDialect extends AbstractChatDialect {
     }
 
     /**
+     * 将旧版 function_call 兼容转换为统一的 tool_calls 形态。
+     * openai-java 的 ChatCompletionAccumulator 同时支持两种字段，兼容网关仍可能返回旧字段。
+     */
+    private ONode normalizeLegacyFunctionCall(ChatAccumulator acc, ONode message) {
+        if (message == null || message.hasKey("tool_calls") || !message.hasKey("function_call")) {
+            return message;
+        }
+        ONode function = message.getOrNull("function_call");
+        if (function == null || !function.isObject()) return message;
+        String id = function.get("id").getString();
+        if (Utils.isEmpty(id)) id = acc.lastToolCallId;
+        if (Utils.isEmpty(id)) id = "legacy_function_call";
+        ONode calls = new ONode().asArray();
+        calls.addNew().set("id", id).set("index", 0).set("type", "function")
+                .set("function", function);
+        message.set("tool_calls", calls);
+        return message;
+    }
+
+    /**
      * 将部分 OpenAI 兼容端点返回的累计快照转换为真正的流式增量。
-     *
-     * <p>官方协议的 delta.content 是新增文本；但部分网关会依次返回 "a"、"ab"、"abc"，
      * 核心层无条件追加会得到成倍膨胀的文本。判定与累积均由 {@link SnapshotDeltaNormalizer} 负责：
      * 按原始报文自行累积（不受 think 标签分流影响），且要求累积长度达阈值后才允许首次判定，
      * 普通增量不会被改写。</p>

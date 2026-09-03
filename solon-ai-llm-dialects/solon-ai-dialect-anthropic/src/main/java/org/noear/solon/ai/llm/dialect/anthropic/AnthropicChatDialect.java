@@ -129,7 +129,37 @@ public class AnthropicChatDialect extends AbstractChatDialect {
 
         httpUtils.headers(config.getHeaders());
 
+        // beta 能力协商：协议上只走请求头（GA 的 MessageCreateParams 里没有 betas 字段）。
+        // 写在 headers(config.getHeaders()) 之后且把已有同名头并入去重，避免两个渠道互相覆盖。
+        // 注意：取的是 config 级选项——本方法先于请求体构建执行，且请求级 options 是 config 的副本，
+        // 单请求临时要加 beta 请用 options().httpCustomize(...)。
+        String betaHeader = resolveBetaHeader(config);
+        if (Utils.isNotEmpty(betaHeader)) {
+            httpUtils.header("anthropic-beta", betaHeader);
+        }
+
         return httpUtils;
+    }
+
+    /**
+     * 汇总 {@code anthropic-beta} 头值：config 级选项（{@code anthropic_beta} / {@code betas}）
+     * 与 {@code config.getHeaders()} 里已有的同名头合并去重。
+     *
+     * @since 4.1
+     */
+    private String resolveBetaHeader(ChatConfig config) {
+        Set<String> betas = new LinkedHashSet<>();
+
+        for (Map.Entry<String, String> kv : config.getHeaders().entrySet()) {
+            if ("anthropic-beta".equalsIgnoreCase(kv.getKey())) {
+                AnthropicRequestBuilder.collectBetas(kv.getValue(), betas);
+            }
+        }
+
+        String fromOptions = AnthropicRequestBuilder.resolveBetaHeader(config.getModelOptions());
+        AnthropicRequestBuilder.collectBetas(fromOptions, betas);
+
+        return betas.isEmpty() ? null : String.join(",", betas);
     }
 
 
@@ -141,6 +171,14 @@ public class AnthropicChatDialect extends AbstractChatDialect {
 //                .append("Output only the raw JSON, beginning with '{' and ending with '}'.");
 //    }
 
+    /**
+     * 置空：Anthropic 没有 OpenAI 的 {@code response_format} 字段，基类默认注入的
+     * {@code response_format={type:json_object}} 在这里是非法顶层字段（直接 400）。
+     *
+     * <p>原生结构化输出走另一条路：由 {@code AnthropicRequestBuilder} 在构建请求时根据
+     * {@code options.outputSchema()} 与模型代次写出 {@code output_config.format}。
+     * 不能在本方法里做：它拿不到 {@link ChatConfig}，无法做模型门控。</p>
+     */
     @Override
     public void prepareOutputFormatOptions(ChatOptions options) {
 

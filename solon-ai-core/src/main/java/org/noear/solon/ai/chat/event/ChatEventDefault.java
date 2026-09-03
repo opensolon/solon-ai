@@ -53,7 +53,6 @@ public class ChatEventDefault implements ChatEvent {
     private final AiUsage usage;
     private final ChatException error;
     private final ChatResponse response;
-    private AtomicReference<AssistantMessage> messageReference;
 
     private final ONode raw;
     private final Map<String, Object> attrs;

@@ -30,10 +30,13 @@ import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Claude 请求构建器
@@ -49,6 +52,96 @@ public class AnthropicRequestBuilder {
      * @since 4.0.4
      */
     private static final int CACHE_BREAKPOINT_LIMIT = 4;
+
+    /**
+     * 不能承载 cache_control 的内容块类型。
+     *
+     * <p>协议上 {@code ThinkingBlockParam} 与 {@code RedactedThinkingBlockParam} 没有 cache_control 字段
+     * （而 {@code TextBlockParam} / {@code ToolUseBlockParam} / {@code ToolResultBlockParam} 等都有），
+     * 挂上去会被服务端按 schema 直接拒掉。触发路径：只有 thinking（无正文、无 tool_calls）的
+     * assistant 消息落在滚动窗口内。</p>
+     *
+     * @since 4.1
+     */
+    private static final Set<String> CACHE_CONTROL_UNSUPPORTED_BLOCKS = new HashSet<>(
+            Arrays.asList("thinking", "redacted_thinking"));
+
+    /**
+     * Anthropic 允许的 {@code cache_control.ttl} 取值（协议 CacheControlEphemeral.Ttl）。
+     *
+     * @since 4.1
+     */
+    private static final Set<String> CACHE_TTL_ALLOWED = new HashSet<>(Arrays.asList("5m", "1h"));
+
+    /**
+     * OpenAI 风格但 Anthropic Messages API 不接受的顶层选项键。
+     *
+     * <p>协议 {@code MessageCreateParams} 顶层只接受 model / messages / max_tokens / cache_control /
+     * container / inference_geo / metadata / output_config / service_tier / stop_sequences / system /
+     * temperature / thinking / tool_choice / tools / top_k / top_p。而统一 API（{@code ModelOptionsAmend}）
+     * 对外暴露了 {@code frequency_penalty()} / {@code presence_penalty()} / {@code response_format()} 等
+     * OpenAI 风格 setter，任一被调用就会透传成非法字段导致 400。</p>
+     *
+     * <p>用黑名单而非白名单：白名单会把 Anthropic 后续新增的合法字段一并拦掉，不利于向前兼容。</p>
+     *
+     * @since 4.1
+     */
+    private static final Set<String> UNSUPPORTED_OPTION_KEYS = new HashSet<>(Arrays.asList(
+            "frequency_penalty", "presence_penalty", "logit_bias", "logprobs", "top_logprobs",
+            "n", "seed", "response_format", "parallel_tool_calls", "stream_options",
+            "prompt_cache_key", "max_completion_tokens"));
+
+    /**
+     * 由方言自身消费、不进请求体的合成选项键。
+     *
+     * <p>{@code structured_outputs} / {@code strict_tools} 是本方言给出的开关（协议无同名字段）；
+     * {@code anthropic_beta} / {@code betas} 在协议上走请求头协商——GA 的 {@code MessageCreateParams}
+     * 并没有 betas 字段（只有 beta 客户端的 {@code BetaMessageCreateParams} 才有，且同样落在头上），
+     * 原样透传会变成非法顶层字段。</p>
+     *
+     * @since 4.1
+     */
+    private static final Set<String> DIALECT_ONLY_OPTION_KEYS = new HashSet<>(Arrays.asList(
+            "structured_outputs", "strict_tools", "anthropic_beta", "betas"));
+
+    /**
+     * 声明 beta 能力的选项键（值可为逗号分隔串、集合或数组）。
+     *
+     * @since 4.1
+     */
+    private static final String[] BETA_OPTION_KEYS = {"anthropic_beta", "betas"};
+
+    /**
+     * 原生结构化输出（{@code output_config.format}）的最低模型代次：Claude 4.5。
+     *
+     * <p>官方支持列表为 sonnet-4-5 / opus-4-5 / haiku-4-5 及其后的 4.6+ / 5+ / fable-5 / mythos 系列。
+     * 更早的模型（claude-3-5-sonnet、claude-sonnet-4、opus-4-1 等）传 {@code output_config.format} 会被拒，
+     * 需退回“把 schema 写进 system 提示词”的兜底路径。</p>
+     *
+     * @since 4.1
+     */
+    private static final int STRUCTURED_OUTPUT_MIN_VERSION = 405;
+
+    /**
+     * 正序命名的模型代次：{@code claude-sonnet-4-5-20250929} / {@code claude-opus-4.7}。
+     *
+     * <p>主次版本都限定 1-2 位并加数字负向预查，否则 {@code claude-sonnet-4-20250514} 的日期串
+     * 会被当成次版本号（20250514），把 Sonnet 4 误判为 4.5+。</p>
+     *
+     * @since 4.1
+     */
+    private static final java.util.regex.Pattern CLAUDE_VERSION_PATTERN = java.util.regex.Pattern.compile(
+            "(?:opus|sonnet|haiku)[.-](\\d{1,2})(?![\\d])(?:[.-](\\d{1,2})(?![\\d.]))?",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /**
+     * 倒置命名的模型代次（SAP / 部分网关）：{@code claude-4.7-opus} / {@code claude-3-5-sonnet}。
+     *
+     * @since 4.1
+     */
+    private static final java.util.regex.Pattern CLAUDE_VERSION_INVERTED_PATTERN = java.util.regex.Pattern.compile(
+            "claude[.-](\\d{1,2})(?![\\d])(?:[.-](\\d{1,2})(?![\\d.]))?[.-](?:opus|sonnet|haiku)",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
 
     /**
      * 构建请求 JSON
@@ -68,7 +161,12 @@ public class AnthropicRequestBuilder {
 
         // Claude max_tokens 是必要参数
         // 默认最大输出token数，AWS 32000，ANTHROPIC 64000
-        root.set("max_tokens", options.options().getOrDefault("max_tokens", 32000));
+        // 统一 API 的 max_completion_tokens（OpenAI 风格别名）在此并入，否则它会被当作非法顶层字段透传
+        Object maxTokensOpt = options.options().get("max_tokens");
+        if (maxTokensOpt == null) {
+            maxTokensOpt = options.options().get("max_completion_tokens");
+        }
+        root.set("max_tokens", maxTokensOpt == null ? 32000 : maxTokensOpt);
 
         // 缓存控制：仅 Anthropic 风格（type 非空）才在请求体上打 cache_control 断点；
         // prompt_cache_key（OpenAI/DeepSeek 风格）不适用于 Claude，忽略之。
@@ -178,7 +276,31 @@ public class AnthropicRequestBuilder {
                 buildToolChoiceNode(root, kv.getValue());
                 continue;
             }
-        
+
+            // 命名差异：统一 API 的 stop → Anthropic stop_sequences（协议只认后者）
+            if ("stop".equals(key)) {
+                writeStopSequences(root, kv.getValue());
+                continue;
+            }
+
+            // 命名差异：统一 API 的 user → Anthropic metadata.user_id（顶层无 user 字段）
+            if ("user".equals(key)) {
+                if (kv.getValue() instanceof String && Utils.isNotEmpty((String) kv.getValue())) {
+                    root.getOrNew("metadata").set("user_id", (String) kv.getValue());
+                }
+                continue;
+            }
+
+            // OpenAI 风格但 Anthropic 不接受的字段：在出站前剔除，否则整条请求 400
+            if (UNSUPPORTED_OPTION_KEYS.contains(key)) {
+                continue;
+            }
+
+            // 方言自身消费的合成选项（含走请求头的 beta 声明）不进请求体
+            if (DIALECT_ONLY_OPTION_KEYS.contains(key)) {
+                continue;
+            }
+
             root.set(key, ONode.ofBean(kv.getValue()));
         }
         
@@ -192,7 +314,261 @@ public class AnthropicRequestBuilder {
 
         buildToolsNode(root, options, cacheOnTools);
 
+        // 原生结构化输出（output_config.format）：放在 thinking 之后，getOrNew 与 adaptive 的 effort 合并共存
+        applyStructuredOutput(root, config, options);
+
         return root;
+    }
+
+    /**
+     * 原生结构化输出：{@code output_config.format = {type:"json_schema", schema:...}}。
+     *
+     * <p>这是 GA 形态（对齐 {@code OutputConfig.format} / {@code JsonOutputFormat}），<b>不需要</b>
+     * {@code anthropic-beta} 头；早期 beta 的 {@code output_format} 顶层字段已被取代。</p>
+     *
+     * <p>门控三层，缺一层都会把原本可用的请求打成 400：</p>
+     * <ol>
+     *   <li>{@code structured_outputs=false} 显式退回“schema 写进 system 提示词”的兜底路径
+     *       （网关不支持该字段时的逃生门）；{@code true} 则跳过模型判定强制启用；</li>
+     *   <li>未显式指定时按模型代次判定（见 {@link #STRUCTURED_OUTPUT_MIN_VERSION}）；</li>
+     *   <li>用户已自带 {@code output_config.format}（原生形态透传）时不覆盖。</li>
+     * </ol>
+     *
+     * <p><b>兜底提示词仍会保留</b>：核心在调用本方言前已把 schema 追加进 system
+     * （{@code prepareOutputSchemaInstruction} 先于 {@code prepareOutputFormatOptions} 执行，
+     * 且方言拿不到那个 StringBuilder），无法回收。原生约束与提示词描述语义一致，只是多花些输入 token。</p>
+     *
+     * @since 4.1
+     */
+    private void applyStructuredOutput(ONode root, ChatConfig config, ChatOptions options) {
+        if (options == null || Utils.isEmpty(options.outputSchema())) {
+            return;
+        }
+
+        Object toggle = options.options().get("structured_outputs");
+        boolean forced = false;
+        if (toggle != null) {
+            if (Boolean.FALSE.equals(toggle) || "false".equalsIgnoreCase(String.valueOf(toggle))) {
+                return;
+            }
+            forced = Boolean.TRUE.equals(toggle) || "true".equalsIgnoreCase(String.valueOf(toggle));
+        }
+
+        if (forced == false && supportsStructuredOutputs(config) == false) {
+            return;
+        }
+
+        ONode outputConfig = root.getOrNull("output_config");
+        if (outputConfig != null && outputConfig.hasKey("format")) {
+            return;
+        }
+
+        ONode schemaNode;
+        try {
+            schemaNode = ONode.ofJson(options.outputSchema());
+        } catch (Exception e) {
+            // schema 不是合法 JSON：静默退回提示词兜底，不能让结构化诉求把整条请求打挂
+            return;
+        }
+        if (schemaNode == null || schemaNode.isObject() == false) {
+            return;
+        }
+
+        normalizeStructuredSchema(schemaNode);
+
+        root.getOrNew("output_config").getOrNew("format")
+                .set("type", "json_schema")
+                .set("schema", schemaNode);
+    }
+
+    /**
+     * 把 schema 就地补齐为 Anthropic 结构化输出要求的形态。
+     *
+     * <p>两条硬性要求（不满足直接 400）：对象必须显式 {@code additionalProperties:false}；
+     * {@code required} 必须列全所有属性。后者与 OpenAI strict 模式一致——可选字段应改用可空类型表达，
+     * 而不是从 required 里省略。官方各语言 SDK 同样在本地做这层改写。</p>
+     *
+     * <p>不动数值/字符串长度约束（{@code minimum} / {@code maxLength} 等）：协议声明不支持，
+     * 但删掉会静默削弱用户 schema 的语义，宁可让服务端报错、由 {@code structured_outputs=false} 兜住。</p>
+     *
+     * @since 4.1
+     */
+    private static void normalizeStructuredSchema(ONode node) {
+        if (node == null) {
+            return;
+        }
+
+        if (node.isArray()) {
+            for (ONode item : node.getArray()) {
+                normalizeStructuredSchema(item);
+            }
+            return;
+        }
+        if (node.isObject() == false) {
+            return;
+        }
+
+        ONode properties = node.getOrNull("properties");
+        boolean hasProperties = properties != null && properties.isObject();
+        ONode typeNode = node.getOrNull("type");
+        boolean typedObject = typeNode != null && typeNode.isString() && "object".equals(typeNode.getString());
+
+        if (hasProperties || typedObject) {
+            // additionalProperties 也可能是「子 schema」形态，已存在就不覆盖
+            if (node.hasKey("additionalProperties") == false) {
+                node.set("additionalProperties", false);
+            }
+            if (hasProperties && properties.getObject().isEmpty() == false) {
+                ONode required = new ONode().asArray();
+                for (String name : properties.getObject().keySet()) {
+                    required.add(name);
+                }
+                node.set("required", required);
+            }
+        }
+
+        if (hasProperties) {
+            for (ONode child : properties.getObject().values()) {
+                normalizeStructuredSchema(child);
+            }
+        }
+        for (String key : new String[]{"items", "additionalItems", "not", "anyOf", "oneOf", "allOf", "prefixItems"}) {
+            normalizeStructuredSchema(node.getOrNull(key));
+        }
+        for (String key : new String[]{"$defs", "definitions"}) {
+            ONode defs = node.getOrNull(key);
+            if (defs != null && defs.isObject()) {
+                for (ONode child : defs.getObject().values()) {
+                    normalizeStructuredSchema(child);
+                }
+            }
+        }
+    }
+
+    /**
+     * 模型是否支持原生结构化输出与严格工具（官方支持列表：Claude 4.5 及以后）。
+     *
+     * @since 4.1
+     */
+    private boolean supportsStructuredOutputs(ChatConfig config) {
+        if (config == null || Utils.isEmpty(config.getModel())) {
+            return false;
+        }
+        String model = config.getModel().toLowerCase();
+        // fable / mythos 都是 5.x 代且在支持列表内；claude-mythos-preview 无版本号，只能按族判定
+        if (model.contains("fable-5") || model.contains("mythos")) {
+            return true;
+        }
+        int version = resolveClaudeVersionScore(model);
+        return version >= STRUCTURED_OUTPUT_MIN_VERSION;
+    }
+
+    /**
+     * 解析模型代次为可比较分值（{@code major * 100 + minor}），无法识别返回 -1。
+     *
+     * @since 4.1
+     */
+    private static int resolveClaudeVersionScore(String model) {
+        java.util.regex.Matcher matcher = CLAUDE_VERSION_PATTERN.matcher(model);
+        if (matcher.find() == false) {
+            matcher = CLAUDE_VERSION_INVERTED_PATTERN.matcher(model);
+            if (matcher.find() == false) {
+                return -1;
+            }
+        }
+        try {
+            int major = Integer.parseInt(matcher.group(1));
+            int minor = matcher.group(2) == null ? 0 : Integer.parseInt(matcher.group(2));
+            return major * 100 + minor;
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    /**
+     * 汇总 beta 声明为 {@code anthropic-beta} 头值（逗号分隔、按声明序去重）。
+     *
+     * <p>协议上 beta 能力经请求头协商，GA 请求体里没有对应字段，因此由
+     * {@code AnthropicChatDialect#createHttpUtils} 在建连时取用。</p>
+     *
+     * @since 4.1
+     */
+    static String resolveBetaHeader(ChatOptions options) {
+        if (options == null) {
+            return null;
+        }
+        Set<String> betas = new java.util.LinkedHashSet<>();
+        for (String key : BETA_OPTION_KEYS) {
+            collectBetas(options.options().get(key), betas);
+        }
+        return betas.isEmpty() ? null : String.join(",", betas);
+    }
+
+    /**
+     * 展开 beta 声明：支持逗号分隔串、集合与数组。
+     *
+     * @since 4.1
+     */
+    static void collectBetas(Object value, Set<String> out) {
+        if (value == null) {
+            return;
+        }
+        if (value instanceof String) {
+            for (String part : ((String) value).split(",")) {
+                String beta = part.trim();
+                if (beta.isEmpty() == false) {
+                    out.add(beta);
+                }
+            }
+        } else if (value instanceof Collection) {
+            for (Object item : (Collection<?>) value) {
+                collectBetas(item, out);
+            }
+        } else if (value instanceof Object[]) {
+            for (Object item : (Object[]) value) {
+                collectBetas(item, out);
+            }
+        }
+    }
+
+    /**
+     * 是否开启严格工具（{@code tools[].strict}）。
+     *
+     * <p>不做“模型支持就自动开”：开启后服务端会校验每个 {@code input_schema}，
+     * 已有工具只要有一个不合规就会令整条请求失败，不能默默改变现有行为。</p>
+     *
+     * @since 4.1
+     */
+    private boolean isStrictToolsEnabled(ChatOptions options) {
+        if (options == null) {
+            return false;
+        }
+        Object strict = options.options().get("strict_tools");
+        return Boolean.TRUE.equals(strict) || "true".equalsIgnoreCase(String.valueOf(strict));
+    }
+
+    /**
+     * 统一 API 的 {@code stop} → Anthropic {@code stop_sequences}。
+     *
+     * @since 4.1
+     */
+    private void writeStopSequences(ONode root, Object stop) {
+        if (stop == null) {
+            return;
+        }
+        if (stop instanceof String) {
+            if (Utils.isNotEmpty((String) stop)) {
+                root.set("stop_sequences", ONode.ofBean(java.util.Collections.singletonList(stop)));
+            }
+        } else if (stop instanceof Collection) {
+            if (Utils.isNotEmpty((Collection<?>) stop)) {
+                root.set("stop_sequences", ONode.ofBean(stop));
+            }
+        } else if (stop instanceof String[]) {
+            if (((String[]) stop).length > 0) {
+                root.set("stop_sequences", ONode.ofBean(stop));
+            }
+        }
     }
 
     /**
@@ -953,6 +1329,10 @@ public class AnthropicRequestBuilder {
         boolean cacheEnabled = cacheOnTools
                 && (cacheControl != null && Utils.isNotEmpty(cacheControl.getType()));
 
+        // 严格工具（协议 Tool.strict，与结构化输出同期 GA）：保证入参严格符合 input_schema。
+        // 只能显式 opt-in：开启后 schema 不合规的工具会直接被拒，且仅 Claude 4.5+ 支持
+        final boolean strictTools = isStrictToolsEnabled(options);
+
         ONode toolsNode = root.getOrNew("tools").asArray();
         int toolCount = 0;
         int totalTools = tools.size();
@@ -977,6 +1357,11 @@ public class AnthropicRequestBuilder {
                     toolNode.getOrNew("input_schema")
                         .set("type", "object")
                         .getOrNew("properties").set("", new ONode());
+                }
+
+                // 严格工具：写在 cache_control 之前，与协议字段顺序无关，仅保持可读
+                if (strictTools) {
+                    toolNode.set("strict", true);
                 }
 
                 // ⭐ 在最后一个工具定义上添加 cache_control (Anthropic Prompt Caching)
@@ -1005,46 +1390,59 @@ public class AnthropicRequestBuilder {
             return;
         }
 
-        // 最后 quota 条消息（不足则只处理存在的那些）
-        int count = Math.min(quota, total);
-        int fromIndex = total - count;
-        for (int i = total - 1; i >= fromIndex; i--) {
-            ONode messageNode = messagesNode.get(i);
-            markMessageCacheBreakpoint(messageNode, cacheControl);
+        // 从最后一条往前放置，直到用满配额。
+        // 不能直接按「最后 quota 条消息」计数：仅含 thinking / redacted_thinking 的消息无处挂断点
+        // （协议上这两类块没有 cache_control 字段），跳过它继续往前找，才不会白扇配额
+        int placed = 0;
+        for (int i = total - 1; i >= 0 && placed < quota; i--) {
+            if (markMessageCacheBreakpoint(messagesNode.get(i), cacheControl)) {
+                placed++;
+            }
         }
     }
 
     /**
-     * 给单条消息节点的最后一个 content block 挂 cache_control。
+     * 给单条消息节点挂 cache_control（从后往前找第一个可承载的 content block）。
      *
      * <p>Claude 的 content 可能是字符串（单模态文本）或 content block 数组。字符串形态无法承载
      * cache_control，需先转成 {@code [{"type":"text","text":<原文>,"cache_control":...}]}。</p>
      *
+     * <p><b>不能无条件挂到最后一块</b>：thinking / redacted_thinking 在协议上没有 cache_control
+     * 字段（见 {@link #CACHE_CONTROL_UNSUPPORTED_BLOCKS}），挂上去整条请求会被服务端拒掉。</p>
+     *
+     * @return 是否实际放置了断点
      * @since 4.0.4
      */
-    private void markMessageCacheBreakpoint(ONode messageNode, CacheControl cacheControl) {
+    private boolean markMessageCacheBreakpoint(ONode messageNode, CacheControl cacheControl) {
         if (messageNode == null || !messageNode.isObject()) {
-            return;
+            return false;
         }
 
         ONode contentNode = messageNode.getOrNull("content");
         if (contentNode == null) {
-            return;
+            return false;
         }
 
         if (contentNode.isArray()) {
-            int size = contentNode.size();
-            if (size == 0) {
-                return;
+            // 从后往前找第一个可承载 cache_control 的块（返回的是元素引用，原地修改即生效）
+            for (int i = contentNode.size() - 1; i >= 0; i--) {
+                ONode block = contentNode.get(i);
+                if (block == null || !block.isObject()) {
+                    continue;
+                }
+                if (CACHE_CONTROL_UNSUPPORTED_BLOCKS.contains(block.get("type").getString())) {
+                    continue;
+                }
+                writeCacheControl(block, cacheControl);
+                return true;
             }
-            // 数组最后一个 block（get 支持负索引；返回的是元素引用，原地修改即生效）
-            ONode lastBlock = contentNode.get(-1);
-            if (lastBlock != null && lastBlock.isObject()) {
-                writeCacheControl(lastBlock, cacheControl);
-            }
+            return false;
         } else if (contentNode.isString()) {
-            // 字符串 content 转成带断点的 text block 数组
+            // 字符串 content 转成带断点的 text block 数组（空串不转：空 text 块同样会被服务端拒）
             String text = contentNode.getString();
+            if (Utils.isEmpty(text)) {
+                return false;
+            }
             ONode blocks = new ONode().asArray();
             blocks.addNew().then(block -> {
                 block.set("type", "text");
@@ -1052,11 +1450,14 @@ public class AnthropicRequestBuilder {
                 writeCacheControl(block, cacheControl);
             });
             messageNode.set("content", blocks);
+            return true;
         }
+
+        return false;
     }
 
     /**
-     * 向指定节点写入 cache_control 标记（统一 type 与可选 ttl）。
+     * 向指定节点写入 cache_control 标记（统一 type 与 ttl）。
      *
      * @param blockNode    要挂载 cache_control 的节点（system/tool/content block）
      * @param cacheControl 缓存控制（type 已确保非空）
@@ -1065,9 +1466,11 @@ public class AnthropicRequestBuilder {
     private void writeCacheControl(ONode blockNode, CacheControl cacheControl) {
         ONode ccNode = blockNode.getOrNew("cache_control");
         ccNode.set("type", cacheControl.getType());
-        // ttl 为空时不写出，避免 "ttl":null 触发 API 校验错误（协议：ttl 仅可取 5m/1h）
-        if (Utils.isNotEmpty(cacheControl.getTtl())) {
-            ccNode.set("ttl", cacheControl.getTtl());
+        // 协议：ttl 仅可取 5m / 1h。CacheControl.getTtl() 是 @NonNull（缺省回落 "5m"），
+        // 所以这里不存在“为空不写出”的情形，只需拦掉非法值（如 "10m"）避免透传后换回 400
+        String ttl = cacheControl.getTtl();
+        if (CACHE_TTL_ALLOWED.contains(ttl)) {
+            ccNode.set("ttl", ttl);
         }
     }
 

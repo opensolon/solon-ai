@@ -24,7 +24,6 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.dialect.ChatDialects;
 import org.noear.solon.ai.chat.event.ChatEvent;
-import org.noear.solon.ai.chat.event.ChatEvents;
 import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;

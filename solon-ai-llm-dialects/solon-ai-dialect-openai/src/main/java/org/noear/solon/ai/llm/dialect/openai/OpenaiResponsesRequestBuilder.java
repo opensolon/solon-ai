@@ -102,6 +102,7 @@ public class OpenaiResponsesRequestBuilder {
         root.set("stream", isStream);
         // 添加其他选项
         Object thinkingSwitch = null;
+        Object promptCacheBreakpoint = null;
         String optionInstructions = null;
         for (Map.Entry<String, Object> kv : options.options().entrySet()) {
             String key = kv.getKey();
@@ -128,6 +129,11 @@ public class OpenaiResponsesRequestBuilder {
                 optionInstructions = kv.getValue() == null ? null : String.valueOf(kv.getValue());
                 continue;
             }
+            if ("prompt_cache_breakpoint".equals(key)) {
+                // SDK 将缓存断点放在 input content 上，而不是请求顶层；延后挂到最后一个可缓存内容项。
+                promptCacheBreakpoint = kv.getValue();
+                continue;
+            }
             // 统一思考开关（Boolean）延后处理
             if ("thinking".equals(key) && kv.getValue() instanceof Boolean) {
                 thinkingSwitch = kv.getValue();
@@ -151,6 +157,9 @@ public class OpenaiResponsesRequestBuilder {
 
             root.set(key, toNode(kv.getValue()));
         }
+
+        // 显式缓存断点挂到最后一个输入内容项（ResponseInputText/Image/File.prompt_cache_breakpoint）。
+        applyPromptCacheBreakpoint(inputArray, promptCacheBreakpoint);
 
         // instructions：SystemMessage 优先在前，options 逃生舱追加在后
         if (Utils.isNotEmpty(optionInstructions)) {
@@ -542,6 +551,39 @@ public class OpenaiResponsesRequestBuilder {
             genId = metas.get("id");
         }
         return genId == null ? null : String.valueOf(genId);
+    }
+
+    /**
+     * 将调用方通过 optionSet("prompt_cache_breakpoint", ...) 指定的断点挂到最后一个输入内容项。
+     */
+    private void applyPromptCacheBreakpoint(ONode inputArray, Object value) {
+        if (value == null || inputArray == null || !inputArray.isArray()) return;
+        ONode breakpoint = toNode(value);
+        if (breakpoint.isValue()) {
+            breakpoint = new ONode().set("mode", breakpoint.getString());
+        }
+        for (int i = inputArray.size() - 1; i >= 0; i--) {
+            ONode item = inputArray.get(i);
+            ONode content = item.getOrNull("content");
+            if (content == null) continue;
+            if (content.isArray()) {
+                for (int j = content.size() - 1; j >= 0; j--) {
+                    ONode part = content.get(j);
+                    String type = part.get("type").getString();
+                    if ("input_text".equals(type) || "input_image".equals(type) || "input_file".equals(type)) {
+                        part.set("prompt_cache_breakpoint", breakpoint);
+                        return;
+                    }
+                }
+            } else if (content.isValue()) {
+                String text = content.getString();
+                ONode contentArray = new ONode().asArray();
+                contentArray.addNew().set("type", "input_text").set("text", text == null ? "" : text)
+                        .set("prompt_cache_breakpoint", breakpoint);
+                item.set("content", contentArray);
+                return;
+            }
+        }
     }
 
     /**

@@ -875,4 +875,23 @@ public class OpenaiResponsesDialectTest {
                 resp.getContentItems().get(0).getTextRaw()
                         + resp.getContentItems().get(1).getTextRaw());
     }
+    @Test
+    public void explicitPromptCacheBreakpoint_isAttachedToLastInputContent() {
+        ChatOptions options = ChatOptions.of().optionSet("prompt_cache_breakpoint", "after_tools");
+        ONode root = build(options, Collections.singletonList(ChatMessage.ofUser("hi")));
+        ONode content = root.get("input").get(0).get("content");
+        assertTrue(content.isArray(), root.toJson());
+        assertEquals("after_tools", content.get(content.size() - 1)
+                .get("prompt_cache_breakpoint").get("mode").getString(), root.toJson());
+    }
+
+    @Test
+    public void zeroResponsesUsage_isPreserved() {
+        ChatAccumulator resp = newResponse(false);
+        assertTrue(parse(resp, "{\"model\":\"gpt-5.4\",\"status\":\"completed\",\"output\":[],"
+                + "\"usage\":{\"input_tokens\":0,\"output_tokens\":0,\"total_tokens\":0}}"));
+        assertNotNull(resp.getUsage());
+        assertEquals(0, resp.getUsage().totalTokens());
+    }
+
 }

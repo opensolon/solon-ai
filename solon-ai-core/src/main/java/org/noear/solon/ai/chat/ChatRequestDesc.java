@@ -17,7 +17,6 @@ package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.chat.event.ChatEvent;
 import org.noear.solon.ai.chat.event.ChatEventFilter;
-import org.noear.solon.ai.chat.event.ChatEvents;
 import org.noear.solon.lang.Preview;
 import reactor.core.publisher.Flux;
 
@@ -86,8 +85,7 @@ public interface ChatRequestDesc {
      * {@code eventFilter(ChatEventFilter.all())} 显式开启。</p>
      *
      * <p>无论如何过滤，{@code LIFECYCLE} 与 {@code STEP} 两个分组一律放行：它们是
-     * {@link #stream()} 的不变量载体（{@code RESPONSE_END} 携带终态聚合，
-     * {@link ChatEvents#reduce} 依赖它）。若允许被挡掉，一个看似无害的
+     * {@link #stream()} 的不变量载体（{@code RESPONSE_END} 携带终态聚合）。若允许被挡掉，一个看似无害的
      * {@code of(TEXT_DELTA)} 会让归约静默返回 null。</p>
      *
      * @param filter 过滤器

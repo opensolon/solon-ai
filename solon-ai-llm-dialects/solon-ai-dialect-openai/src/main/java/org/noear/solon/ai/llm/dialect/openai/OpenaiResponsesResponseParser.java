@@ -23,6 +23,7 @@ import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.ai.chat.event.ChatEventDefault;
 import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -52,17 +53,92 @@ public class OpenaiResponsesResponseParser {
         String currentFunctionCallId;
         String currentFunctionName;
         StringBuilder currentFunctionArguments;
-        // 官方 OpenAI：reasoning 项的 id/encrypted_content，用于多轮回放
         String currentReasoningId;
         String currentReasoningEncryptedContent;
-        // 已随消息交付给会话的 reasoning 元数据（用于判断 done 帧是否仍需补发）
+        String emittedReasoningId;
+        String emittedReasoningEncryptedContent;
+        final Map<String, ItemSnapshot> itemStates = new LinkedHashMap<>();
+        String activeStateKey;
+    }
+
+    private static class ItemSnapshot {
+        String itemId;
+        String itemType;
+        SnapshotDeltaNormalizer textContent;
+        SnapshotDeltaNormalizer reasoningContent;
+        String functionCallId;
+        String functionName;
+        StringBuilder functionArguments;
+        String reasoningId;
+        String reasoningEncryptedContent;
         String emittedReasoningId;
         String emittedReasoningEncryptedContent;
     }
 
     private static final String STREAM_STATE_KEY = "StreamState";
+    private static final String DEFAULT_STATE_KEY = "__default__";
 
     public OpenaiResponsesResponseParser() {
+    }
+
+    /**
+     * 获取或创建流式状态
+     */
+    private StreamState getOrCreateState(ChatAccumulator acc) {
+        return acc.attrIfAbsent(STREAM_STATE_KEY, k -> new StreamState());
+    }
+
+    private void activateItemState(StreamState state, String itemId, int outputIndex) {
+        if (state == null) return;
+        String key = Utils.isNotEmpty(itemId) ? "id:" + itemId
+                : (outputIndex >= 0 ? "index:" + outputIndex
+                : (state.activeStateKey == null ? DEFAULT_STATE_KEY : state.activeStateKey));
+        if (key.equals(state.activeStateKey)) return;
+        saveActiveItemState(state);
+        state.activeStateKey = key;
+        ItemSnapshot saved = state.itemStates.get(key);
+        if (saved == null) {
+            state.currentItemId = Utils.isEmpty(itemId) ? null : itemId;
+            state.currentItemType = null;
+            state.currentTextContent = null;
+            state.currentReasoningContent = null;
+            state.currentFunctionCallId = null;
+            state.currentFunctionName = null;
+            state.currentFunctionArguments = null;
+            state.currentReasoningId = null;
+            state.currentReasoningEncryptedContent = null;
+            state.emittedReasoningId = null;
+            state.emittedReasoningEncryptedContent = null;
+            return;
+        }
+        state.currentItemId = saved.itemId;
+        state.currentItemType = saved.itemType;
+        state.currentTextContent = saved.textContent;
+        state.currentReasoningContent = saved.reasoningContent;
+        state.currentFunctionCallId = saved.functionCallId;
+        state.currentFunctionName = saved.functionName;
+        state.currentFunctionArguments = saved.functionArguments;
+        state.currentReasoningId = saved.reasoningId;
+        state.currentReasoningEncryptedContent = saved.reasoningEncryptedContent;
+        state.emittedReasoningId = saved.emittedReasoningId;
+        state.emittedReasoningEncryptedContent = saved.emittedReasoningEncryptedContent;
+    }
+
+    private void saveActiveItemState(StreamState state) {
+        if (state == null || state.activeStateKey == null) return;
+        ItemSnapshot saved = new ItemSnapshot();
+        saved.itemId = state.currentItemId;
+        saved.itemType = state.currentItemType;
+        saved.textContent = state.currentTextContent;
+        saved.reasoningContent = state.currentReasoningContent;
+        saved.functionCallId = state.currentFunctionCallId;
+        saved.functionName = state.currentFunctionName;
+        saved.functionArguments = state.currentFunctionArguments;
+        saved.reasoningId = state.currentReasoningId;
+        saved.reasoningEncryptedContent = state.currentReasoningEncryptedContent;
+        saved.emittedReasoningId = state.emittedReasoningId;
+        saved.emittedReasoningEncryptedContent = state.emittedReasoningEncryptedContent;
+        state.itemStates.put(state.activeStateKey, saved);
     }
 
     /**
@@ -79,13 +155,6 @@ public class OpenaiResponsesResponseParser {
         } else {
             return parseNonStreamResponse(ctx, json);
         }
-    }
-
-    /**
-     * 获取或创建流式状态
-     */
-    private StreamState getOrCreateState(ChatAccumulator acc) {
-        return acc.attrIfAbsent(STREAM_STATE_KEY, k -> new StreamState());
     }
 
     /**
@@ -160,7 +229,20 @@ public class OpenaiResponsesResponseParser {
             }
 
             String eventType = oResp.get("type").getString();
-            if ("error".equals(eventType)) {
+            StreamState itemState = acc.attrAs(STREAM_STATE_KEY);
+            if (itemState != null) {
+                String itemId = oResp.get("item_id").getString();
+                int outputIndex = optionalIndex(oResp, "output_index");
+                if (Utils.isNotEmpty(itemId) || outputIndex >= 0) {
+                    activateItemState(itemState, itemId, outputIndex);
+                }
+            }
+            if ("keepalive".equals(eventType)) {
+                // SDK 对 keepalive 事件只做流保活，不应被当成模型内容或 RAW。
+                ctx.emit(ctx.event(ChatEventType.HEARTBEAT)
+                        .rawType(eventType).raw(oResp).build());
+                hasContent = true;
+            } else if ("error".equals(eventType)) {
                 acc.attrRemove(STREAM_STATE_KEY);
                 // error 事件可能把 message/type/code 平链在帧顶层（无 error 子对象）
                 ONode oError = oResp.hasKey("error") ? oResp.get("error") : oResp;
@@ -187,14 +269,27 @@ public class OpenaiResponsesResponseParser {
                         .itemId(response == null ? null : response.get("id").getString())
                         .raw(oResp)
                         .build());
+            } else if ("response.audio.delta".equals(eventType)
+                    || "response.audio.done".equals(eventType)
+                    || "response.audio.transcript.delta".equals(eventType)
+                    || "response.audio.transcript.done".equals(eventType)) {
+                // openai-java ResponseStreamEvent 已建模的音频事件；音频本体/转写均保留在媒体事件中。
+                boolean transcript = eventType.startsWith("response.audio.transcript.");
+                boolean done = eventType.endsWith(".done");
+                String delta = oResp.get("delta").getString();
+                ChatEventType mediaType = done ? ChatEventType.MEDIA_DONE : ChatEventType.MEDIA_PARTIAL;
+                ctx.emit(ctx.event(mediaType).rawType(eventType)
+                        .subType(transcript ? "audio_transcript" : "audio")
+                        .text(delta).raw(oResp).build());
+                hasMedia = true;
             } else if ("response.output_text.annotation.added".equals(eventType)) {
                 // 引用（联网搜索/文件检索的来源标注）：旧实现无分支，整帧丢弃
                 ONode annotation = oResp.getOrNull("annotation");
                 ctx.emit(ctx.event(ChatEventType.CITATION)
                         .rawType(eventType)
                         .itemId(oResp.get("item_id").getString())
-                        .index(oResp.get("annotation_index").getInt())
-                        .text(annotation == null ? null : annotation.get("url").getString())
+                        .index(optionalIndex(oResp, "annotation_index"))
+                        .text(extractAnnotationText(annotation))
                         .raw(oResp)
                         .build());
             } else if (eventType != null && isServerToolEvent(eventType)) {
@@ -213,6 +308,7 @@ public class OpenaiResponsesResponseParser {
                 ONode item = oResp.get("item");
                 if (item != null) {
                     StreamState state = getOrCreateState(acc);
+                    activateItemState(state, item.get("id").getString(), optionalIndex(oResp, "output_index"));
                     state.currentItemId = item.get("id").getString();
                     state.currentItemType = item.get("type").getString();
 
@@ -220,8 +316,6 @@ public class OpenaiResponsesResponseParser {
                         state.currentTextContent = new SnapshotDeltaNormalizer();
                     } else if ("reasoning".equals(state.currentItemType)) {
                         state.currentReasoningContent = new SnapshotDeltaNormalizer();
-                        // 官方 OpenAI：捕获服务端返回的 reasoning 项 id/encrypted_content（多轮回放需要）。
-                        // added 帧的 encrypted_content 通常为空（仅 done 帧携带），交付状态在此一并重置
                         String addedId = item.get("id").getString();
                         String addedEncrypted = item.get("encrypted_content").getString();
                         state.currentReasoningId = Utils.isEmpty(addedId) ? null : addedId;
@@ -235,53 +329,36 @@ public class OpenaiResponsesResponseParser {
                     }
                 }
             } else if ("response.output_item.done".equals(eventType)) {
-                // 输出项完成：image_generation_call 仅收入 media 聚合，不再推空文本内容项（避免流式侧多一条空消息）
                 ONode item = oResp.get("item");
                 if (item != null && "image_generation_call".equals(item.get("type").getString())) {
                     ContentBlock imageBlock = parseImageGenerationCall(item);
                     if (imageBlock != null) {
                         acc.addMediaBlocks(Collections.singletonList(imageBlock));
                         hasMedia = true;
-                        // 不推内容项：等待 response.completed / 文本 delta；media 由终态聚合合并
                     }
                 }
                 StreamState state = acc.attrAs(STREAM_STATE_KEY);
                 if (state != null) {
-                    // 官方 OpenAI：reasoning 的 encrypted_content 只在 output_item.done 携带（added 帧通常为空）。
-                    // 这里补捕获，并在元数据尚未随任何消息交付时补一条空 thinking 消息，供多轮回放使用。
+                    if (item != null) {
+                        activateItemState(state, item.get("id").getString(), optionalIndex(oResp, "output_index"));
+                    }
                     if (item != null && "reasoning".equals(item.get("type").getString())) {
                         String doneId = item.get("id").getString();
                         String doneEncrypted = item.get("encrypted_content").getString();
-                        if (Utils.isNotEmpty(doneId)) {
-                            state.currentReasoningId = doneId;
-                        }
-                        if (Utils.isNotEmpty(doneEncrypted)) {
-                            state.currentReasoningEncryptedContent = doneEncrypted;
-                        }
-
-                        // 判据是「是否已交付」而非「与 added 帧是否不同」：
-                        // store=true 且未请求 reasoning.summary 时整个 reasoning 项没有任何 delta 帧，
-                        // 而 done 帧的 id 与 added 帧相同，按差异判定会认为无新增 → reasoning_item_id 丢失、多轮回放断链
+                        if (Utils.isNotEmpty(doneId)) state.currentReasoningId = doneId;
+                        if (Utils.isNotEmpty(doneEncrypted)) state.currentReasoningEncryptedContent = doneEncrypted;
                         if (isReasoningMetadataPending(state)) {
                             AssistantMessage metaMsg = new AssistantMessage("", "", true);
                             attachReasoningMetadata(metaMsg, state);
                             acc.addContentItem(metaMsg);
                             hasContent = true;
                         }
-
-                        // 旧实现下 encrypted_content 只能寄生在「伪造的空 thinking 消息」的 metadata 里，
-                        // 订阅方无法辨别；现在另给一个专用事件通道
                         if (Utils.isNotEmpty(doneEncrypted)) {
                             ctx.emit(ctx.event(ChatEventType.THINKING_SIGNATURE)
-                                    .rawType(eventType)
-                                    .itemId(state.currentReasoningId)
-                                    .text(doneEncrypted)
-                                    .raw(oResp)
-                                    .build());
+                                    .rawType(eventType).itemId(state.currentReasoningId)
+                                    .text(doneEncrypted).raw(oResp).build());
                         }
                     }
-                    // 兼容只发 output_item.done（携带完整 item）而不发 function_call_arguments.done 的实现：
-                    // 兜底 flush，避免工具调用静默丢失
                     if (item != null && "function_call".equals(item.get("type").getString())
                             && state.currentFunctionCallId != null && state.currentFunctionName != null) {
                         hasContent |= flushFunctionCall(acc, state, item.get("arguments").getString());
@@ -543,8 +620,12 @@ public class OpenaiResponsesResponseParser {
             "response.code_interpreter_call",
             "response.computer_call",
             "response.mcp_call",
+            "response.mcp_call_arguments",
             "response.mcp_list_tools",
-            "response.image_generation_call"
+            "response.image_generation_call",
+            "response.shell_call",
+            "response.local_shell_call",
+            "response.custom_tool_call_input"
     };
 
     /**
@@ -561,9 +642,31 @@ public class OpenaiResponsesResponseParser {
         return false;
     }
 
+    private String extractEventText(ONode node) {
+        if (node == null) return null;
+        String value = node.get("delta").getString();
+        if (Utils.isNotEmpty(value)) return value;
+        value = node.get("arguments").getString();
+        if (Utils.isNotEmpty(value)) return value;
+        value = node.get("input").getString();
+        if (Utils.isNotEmpty(value)) return value;
+        ONode delta = node.getOrNull("delta");
+        if (delta != null && delta.isObject()) {
+            String stdout = delta.get("stdout").getString();
+            String stderr = delta.get("stderr").getString();
+            if (Utils.isNotEmpty(stdout) && Utils.isNotEmpty(stderr)) return stdout + stderr;
+            return Utils.isNotEmpty(stdout) ? stdout : stderr;
+        }
+        return null;
+    }
+
+    private int optionalIndex(ONode node, String name) {
+        return node != null && node.hasKey(name) && !node.get(name).isNull()
+                ? node.get(name).getInt() : -1;
+    }
+
     /**
      * 发射服务端工具事件
-     *
      * <p>供应商能力差异走 {@code subType}，不膨胀事件类型枚举。</p>
      *
      * @since 4.1
@@ -588,14 +691,18 @@ public class OpenaiResponsesResponseParser {
             type = ChatEventType.SERVER_TOOL_START;
         }
 
-        ctx.emit(ctx.event(type)
+        ChatEventDefault.Builder event = ctx.event(type)
                 .rawType(eventType)
                 .subType(subType)
                 .itemId(oResp.get("item_id").getString())
-                .index(oResp.get("output_index").getInt())
-                .text(oResp.get("delta").getString())
-                .raw(oResp)
-                .build());
+                .index(optionalIndex(oResp, "output_index"))
+                .text(extractEventText(oResp))
+                .raw(oResp);
+        if (oResp.hasKey("sequence_number")) event.attr("sequence_number", oResp.get("sequence_number").getLong());
+        if (oResp.hasKey("content_index")) event.attr("content_index", oResp.get("content_index").getInt());
+        if (oResp.hasKey("summary_index")) event.attr("summary_index", oResp.get("summary_index").getInt());
+        if (oResp.hasKey("command_index")) event.attr("command_index", oResp.get("command_index").getInt());
+        ctx.emit(event.build());
     }
 
     /**
@@ -616,7 +723,32 @@ public class OpenaiResponsesResponseParser {
                 || "computer_call".equals(itemType)
                 || "mcp_call".equals(itemType)
                 || "mcp_list_tools".equals(itemType)
-                || "mcp_approval_request".equals(itemType);
+                || "mcp_approval_request".equals(itemType)
+                || "mcp_approval_response".equals(itemType)
+                || "shell_call".equals(itemType)
+                || "shell_call_output".equals(itemType)
+                || "local_shell_call".equals(itemType)
+                || "local_shell_call_output".equals(itemType)
+                || "apply_patch_call".equals(itemType)
+                || "apply_patch_call_output".equals(itemType)
+                || "custom_tool_call".equals(itemType)
+                || "custom_tool_call_output".equals(itemType)
+                || "tool_search_call".equals(itemType)
+                || "tool_search_output".equals(itemType)
+                || "program".equals(itemType)
+                || "program_output".equals(itemType)
+                || "compaction".equals(itemType)
+                || "additional_tools".equals(itemType);
+    }
+
+    private String extractAnnotationText(ONode annotation) {
+        if (annotation == null) return null;
+        String value = annotation.get("url").getString();
+        if (Utils.isNotEmpty(value)) return value;
+        value = annotation.get("file_id").getString();
+        if (Utils.isNotEmpty(value)) return value;
+        value = annotation.get("filename").getString();
+        return Utils.isNotEmpty(value) ? value : annotation.toJson();
     }
 
     /**
@@ -634,7 +766,7 @@ public class OpenaiResponsesResponseParser {
             ctx.emit(ctx.event(ChatEventType.CITATION)
                     .rawType("response.output_text.annotation")
                     .subType(annotation.get("type").getString())
-                    .text(annotation.get("url").getString())
+                    .text(extractAnnotationText(annotation))
                     .raw(annotation)
                     .build());
         }
@@ -1139,8 +1271,13 @@ public class OpenaiResponsesResponseParser {
             thinkTokens = outputTokensDetails.get("reasoning_tokens").getLong();
         }
 
-        if (inputTokens > 0 || outputTokens > 0 || cacheReadInputTokens > 0
-                || cacheCreationInputTokens > 0 || thinkTokens > 0) {
+        // 兼容部分 Responses 网关沿用 Chat Completions 的顶层缓存命中字段。
+        if (cacheReadInputTokens == 0L && usageNode.hasKey("prompt_cache_hit_tokens")) {
+            cacheReadInputTokens = usageNode.get("prompt_cache_hit_tokens").getLong();
+        }
+
+        // usage 节点存在且结构合法时，即使全部为 0 也必须保留；0 token 不是“usage 不存在”。
+        if (usageNode.isObject()) {
             return new AiUsage(inputTokens, thinkTokens, outputTokens, totalTokens,
                     cacheCreationInputTokens, cacheReadInputTokens, usageNode);
         }

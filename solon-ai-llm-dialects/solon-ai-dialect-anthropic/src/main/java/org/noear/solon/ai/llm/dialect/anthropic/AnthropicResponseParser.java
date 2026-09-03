@@ -27,6 +27,7 @@ import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.ai.chat.event.ChatEventDefault;
 import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -74,6 +75,38 @@ public class AnthropicResponseParser {
      */
     private static final String TERMINAL_FRAME_EMITTED_KEY = "AnthropicTerminalFrameEmitted";
 
+    /**
+     * 代码执行沙盒容器（{@code message_start.message.container} / {@code message_delta.delta.container}
+     * / 非流式 {@code container}）。
+     *
+     * <p>协议 Container 携带 {@code id} 与 {@code expires_at}：多轮复用同一容器需在下一轮请求里回传
+     * {@code container} 字段（MessageCreateParams 合法顶层字段，可经 options 透传）。旧实现整块丢弃，
+     * 调用方无从获取容器标识。</p>
+     *
+     * @since 4.1
+     */
+    private static final String CONTAINER_KEY = "AnthropicContainer";
+
+    /**
+     * 取本次响应携带的代码执行容器节点（未出现则为 null）。
+     *
+     * @since 4.1
+     */
+    public static ONode container(ChatAccumulator acc) {
+        return acc == null ? null : acc.attrAs(CONTAINER_KEY);
+    }
+
+    /**
+     * 记录代码执行容器（幂等覆盖：message_start 先给，message_delta 可刷新）。
+     *
+     * @since 4.1
+     */
+    private static void captureContainer(ChatAccumulator acc, ONode containerNode) {
+        if (containerNode != null && containerNode.isObject()) {
+            acc.attrPut(CONTAINER_KEY, containerNode);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     static Map<Integer, StreamToolState> toolStates(ChatAccumulator acc, boolean create) {
         Map<Integer, StreamToolState> states = acc.attrAs(STREAM_TOOL_STATE_KEY);
@@ -104,7 +137,7 @@ public class AnthropicResponseParser {
     }
 
     /**
-     * 解析 usage 信息（包含 Prompt Caching 统计）
+     * 解析 usage 信息（包含 Prompt Caching 与思考 token 统计）
      *
      * @param usageNode usage JSON 节点
      * @return AiUsage 对象
@@ -126,12 +159,23 @@ public class AnthropicResponseParser {
         if (usageNode.hasKey("cache_read_input_tokens")) {
             cacheReadInputTokens = usageNode.get("cache_read_input_tokens").getLong();
         }
+        // 思考 token（协议 OutputTokensDetails.thinking_tokens；兼容网关可能用 OpenAI 风格的 reasoning_tokens），
+        // 不读取时 AiUsage.thinkTokens() 在 Anthropic 路径下恒为 0
+        long thinkTokens = 0L;
+        ONode outputTokensDetails = usageNode.getOrNull("output_tokens_details");
+        if (outputTokensDetails != null && outputTokensDetails.isObject()) {
+            thinkTokens = outputTokensDetails.get("thinking_tokens").getLong();
+            if (thinkTokens == 0L) {
+                thinkTokens = outputTokensDetails.get("reasoning_tokens").getLong();
+            }
+        }
         // Anthropic 的 input_tokens 不含缓存部分，需将 cache 两项并入，归一为“全部输入 token”语义（与 OpenAI prompt_tokens 对齐），
         // 否则下游 cacheRate = cacheRead / promptTokens 会被高估并恒定 100%
         long totalInputTokens = inputTokens + cacheCreationInputTokens + cacheReadInputTokens;
         // 只有在有实际 token 消耗时才返回 usage
-        if (inputTokens > 0 || outputTokens > 0 || cacheCreationInputTokens > 0 || cacheReadInputTokens > 0) {
-            return new AiUsage(totalInputTokens, 0L, outputTokens, totalInputTokens + outputTokens,
+        if (inputTokens > 0 || outputTokens > 0 || cacheCreationInputTokens > 0 || cacheReadInputTokens > 0
+                || thinkTokens > 0) {
+            return new AiUsage(totalInputTokens, thinkTokens, outputTokens, totalInputTokens + outputTokens,
                     cacheCreationInputTokens, cacheReadInputTokens, usageNode);
         }
 
@@ -269,6 +313,9 @@ public class AnthropicResponseParser {
                     // 供应商响应标识（msg_xxx）：记录一次，本步后续事件自动预填
                     ctx.setProviderResponseId(message.get("id").getString());
 
+                    // 代码执行容器（container.id / expires_at）：多轮复用需回传，旧实现整块丢弃
+                    captureContainer(acc, message.getOrNull("container"));
+
                     // 某些情况下 message_start 也包含初始 usage 信息
                     AiUsage usage = parseUsage(message.getOrNull("usage"));
                     if (usage != null) {
@@ -337,13 +384,14 @@ public class AnthropicResponseParser {
                                     .build());
                         }
                     } else if ("server_tool_use".equals(blockType)) {
-                        ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_START)
+                        ChatEventDefault.Builder serverToolStart = ctx.event(ChatEventType.SERVER_TOOL_START)
                                 .rawType(eventType)
                                 .subType(contentBlock.get("name").getString())
                                 .itemId(contentBlock.get("id").getString())
                                 .index(oResp.get("index").getInt())
-                                .raw(oResp)
-                                .build());
+                                .raw(oResp);
+                        appendServerToolCaller(serverToolStart, contentBlock);
+                        ctx.emit(serverToolStart.build());
                         StreamToolState serverState = new StreamToolState();
                         serverState.serverTool = true;
                         serverState.toolUseId = contentBlock.get("id").getString();
@@ -359,6 +407,28 @@ public class AnthropicResponseParser {
                                 .itemId(contentBlock.get("tool_use_id").getString())
                                 .index(oResp.get("index").getInt())
                                 .text(extractToolResultText(contentBlock))
+                                .raw(oResp)
+                                .build());
+                    } else if ("container_upload".equals(blockType)) {
+                        // 代码执行产出的文件（协议 ContainerUploadBlock，仅 file_id）：
+                        // 旧实现不匹配任何分支被静默丢弃，file_id 对订阅方不可见
+                        String fileId = contentBlock.get("file_id").getString();
+                        ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_RESULT)
+                                .rawType(eventType)
+                                .subType(blockType)
+                                .itemId(fileId)
+                                .index(oResp.get("index").getInt())
+                                .text(fileId)
+                                .raw(oResp)
+                                .build());
+                    } else if (Utils.isNotEmpty(blockType)) {
+                        // 未建模内容块（Beta 侧 mcp_tool_use / mcp_tool_result / compaction / fallback /
+                        // advisor_tool_result 等经网关下发时）：与顶层未建模事件对称地以 RAW 透出。
+                        // 旧实现在此静默落空，是块级与事件级的不对称缺口
+                        ctx.emit(ctx.event(ChatEventType.RAW)
+                                .rawType(eventType)
+                                .subType(blockType)
+                                .index(oResp.get("index").getInt())
                                 .raw(oResp)
                                 .build());
                     }
@@ -403,11 +473,11 @@ public class AnthropicResponseParser {
                         }
                     } else if ("citations_delta".equals(deltaType) || "citation_delta".equals(deltaType)) {
                         ONode citation = delta.getOrNull("citation");
-                        String citationText = citation == null ? null : citation.get("url").getString();
                         ctx.emit(ctx.event(ChatEventType.CITATION)
                                 .rawType(eventType)
+                                .subType(citation == null ? null : citation.get("type").getString())
                                 .index(oResp.get("index").getInt())
-                                .text(citationText)
+                                .text(extractCitationText(citation))
                                 .raw(oResp)
                                 .build());
                     } else if ("input_json_delta".equals(deltaType)) {
@@ -492,16 +562,17 @@ public class AnthropicResponseParser {
                 }
             } else if ("message_delta".equals(eventType)) {
                 // 消息增量更新，包含停止原因和用量信息
-                // 协议规范（RawMessageStreamEvent）：message_delta.usage 仅携带累计的 output_tokens，
-                // input_tokens / cache_* 统计只在 message_start.usage 中出现，直接覆盖会丢失输入侧计费数据，
-                // 因此按字段取 max 合并（output_tokens 为累计值只会增大；input/cache 字段沿用 message_start 的值）
+                // 协议规范（MessageDeltaUsage）：message_delta.usage 是「整条消息的累计快照」，现已同时携带
+                // input_tokens / cache_* / output_tokens_details / server_tool_use（早期规范里只有 output_tokens）。
+                // 但兼容网关仍可能只给 output_tokens，直接覆盖会丢失 message_start 的输入侧计费数据，
+                // 因此按字段取 max 合并（累计值只会增大；缺失字段沿用 message_start 的值）
                 AiUsage usage = parseUsage(oResp.get("usage"));
                 if (usage != null) {
                     AiUsage prev = acc.getUsage();
                     if (prev != null) {
                         usage = new AiUsage(
                                 Math.max(prev.promptTokens(), usage.promptTokens()),
-                                0L,
+                                Math.max(prev.thinkTokens(), usage.thinkTokens()),
                                 Math.max(prev.completionTokens(), usage.completionTokens()),
                                 Math.max(prev.totalTokens(), usage.totalTokens()),
                                 Math.max(prev.cacheCreationInputTokens(), usage.cacheCreationInputTokens()),
@@ -512,12 +583,16 @@ public class AnthropicResponseParser {
                     acc.setUsage(usage);
                 }
 
-                ONode stopReason = oResp.get("delta");
-                if (stopReason != null) {
-                    String finishReason = stopReason.get("stop_reason").getString();
+                ONode delta = oResp.getOrNull("delta");
+                if (delta != null) {
+                    // 容器可能在此刷新（代码执行工具的沙盒续期）
+                    captureContainer(acc, delta.getOrNull("container"));
+
+                    String finishReason = delta.get("stop_reason").getString();
                     if (Utils.isNotEmpty(finishReason)) {
                         acc.setFinished(true);
                         acc.lastFinishReason = finishReason;
+                        emitStopReasonEvent(ctx, eventType, finishReason, delta, oResp);
                     }
                 }
             } else if ("message_stop".equals(eventType)) {
@@ -549,7 +624,18 @@ public class AnthropicResponseParser {
     }
 
     /**
-     * 提取服务端工具结果块内的文本
+     * 提取服务端工具结果块内的可读文本。
+     *
+     * <p><b>为什么不能只找 {@code text} 字段</b>：Anthropic 各服务端工具的 {@code content} 都不是
+     * {@code [{text:...}]} 形态，协议里根本没有 text 字段——
+     * {@code web_search_tool_result} 是 {@code WebSearchResultBlock[]}（title/url/page_age/encrypted_content）、
+     * {@code web_fetch_tool_result} 是单个 {@code WebFetchBlock} 对象（url/content:DocumentBlock/retrieved_at）、
+     * {@code code_execution_tool_result} 是 {@code CodeExecutionResultBlock}（stdout/stderr/return_code/content）、
+     * {@code tool_search_tool_result} 是 {@code tool_references[]}。
+     * 旧实现按 text 取值，对真实服务端工具一律返回 null，订阅方只能自己去啃 {@code raw}。</p>
+     *
+     * <p>错误形态（{@code *_tool_result_error}，携带 {@code error_code}）同样在此归一，
+     * 否则搜索失败时事件既无文本也无错误。</p>
      *
      * @since 4.1
      */
@@ -560,21 +646,231 @@ public class AnthropicResponseParser {
         }
 
         if (resultContent.isString()) {
-            return resultContent.getString();
+            return Utils.isEmpty(resultContent.getString()) ? null : resultContent.getString();
         }
 
         if (resultContent.isArray()) {
             StringBuilder buf = new StringBuilder();
             for (ONode rb : resultContent.getArray()) {
-                String text = rb.get("text").getString();
-                if (Utils.isNotEmpty(text)) {
-                    buf.append(text);
+                appendLine(buf, extractResultEntryText(rb));
+            }
+            return buf.length() == 0 ? null : buf.toString();
+        }
+
+        //单对象形态（web_fetch_result / code_execution_result / *_tool_result_error 等）
+        return extractResultEntryText(resultContent);
+    }
+
+    /**
+     * 按各服务端工具结果块的实际结构提取文本（单条目）。
+     *
+     * @since 4.1
+     */
+    private static String extractResultEntryText(ONode node) {
+        if (node == null) {
+            return null;
+        }
+        if (node.isString()) {
+            return Utils.isEmpty(node.getString()) ? null : node.getString();
+        }
+        if (node.isObject() == false) {
+            return null;
+        }
+
+        //通用 text（tool_result 的 text block、兼容网关的简化形态）
+        String text = node.get("text").getString();
+        if (Utils.isNotEmpty(text)) {
+            return text;
+        }
+
+        //错误形态：web_search / web_fetch / code_execution / tool_search 共用 error_code(+error_message)
+        String errorCode = node.get("error_code").getString();
+        if (Utils.isNotEmpty(errorCode)) {
+            String errorMessage = node.get("error_message").getString();
+            return Utils.isEmpty(errorMessage) ? "[" + errorCode + "]" : "[" + errorCode + "] " + errorMessage;
+        }
+
+        //代码执行结果：stdout / stderr（含 bash / text_editor 变体）
+        if (node.hasKey("stdout") || node.hasKey("stderr")) {
+            StringBuilder buf = new StringBuilder();
+            appendLine(buf, node.get("stdout").getString());
+            appendLine(buf, node.get("stderr").getString());
+            return buf.length() == 0 ? null : buf.toString();
+        }
+
+        //web_search_result: title + url；web_fetch_result: url + 内嵌 document 的 title
+        String url = node.get("url").getString();
+        String title = node.get("title").getString();
+        if (Utils.isEmpty(title)) {
+            ONode document = node.getOrNull("content");
+            if (document != null && document.isObject()) {
+                title = document.get("title").getString();
+            }
+        }
+        if (Utils.isNotEmpty(title) && Utils.isNotEmpty(url)) {
+            return title + " - " + url;
+        }
+        if (Utils.isNotEmpty(title)) {
+            return title;
+        }
+        if (Utils.isNotEmpty(url)) {
+            return url;
+        }
+
+        //tool_search 结果：tool_references[].tool_name
+        ONode toolReferences = node.getOrNull("tool_references");
+        if (toolReferences != null && toolReferences.isArray()) {
+            StringBuilder buf = new StringBuilder();
+            for (ONode ref : toolReferences.getArray()) {
+                String toolName = ref.get("tool_name").getString();
+                if (Utils.isNotEmpty(toolName)) {
+                    if (buf.length() > 0) {
+                        buf.append(", ");
+                    }
+                    buf.append(toolName);
                 }
             }
             return buf.length() == 0 ? null : buf.toString();
         }
 
-        return null;
+        //container_upload / code_execution_output：仅 file_id
+        String fileId = node.get("file_id").getString();
+        return Utils.isEmpty(fileId) ? null : fileId;
+    }
+
+    /**
+     * 追加一段非空文本，多段之间用换行分隔。
+     *
+     * @since 4.1
+     */
+    private static void appendLine(StringBuilder buf, String text) {
+        if (Utils.isNotEmpty(text)) {
+            if (buf.length() > 0) {
+                buf.append('\n');
+            }
+            buf.append(text);
+        }
+    }
+
+    /**
+     * 提取引用的可读文本。
+     *
+     * <p>协议 {@code TextCitation} 是 5 变体联合，只有 {@code web_search_result_location} 与
+     * {@code search_result_location} 带 {@code url}；{@code char_location} / {@code page_location} /
+     * {@code content_block_location} 是文档内定位，字段为 {@code cited_text} 与 {@code document_title}。
+     * 旧实现固定取 url，文档类引用的 CITATION 事件文本一律为 null。</p>
+     *
+     * @since 4.1
+     */
+    private static String extractCitationText(ONode citation) {
+        if (citation == null || citation.isObject() == false) {
+            return null;
+        }
+
+        String url = citation.get("url").getString();
+        if (Utils.isNotEmpty(url)) {
+            return url;
+        }
+
+        String citedText = citation.get("cited_text").getString();
+        if (Utils.isNotEmpty(citedText)) {
+            return citedText;
+        }
+
+        String title = citation.get("title").getString();
+        if (Utils.isEmpty(title)) {
+            title = citation.get("document_title").getString();
+        }
+        return Utils.isEmpty(title) ? null : title;
+    }
+
+    /**
+     * 白名单之外的 server_tool_use.caller：区分模型直调与代码执行内嵌调用。
+     *
+     * <p>协议 {@code ServerToolUseBlock.caller} 是三变体联合（{@code direct} /
+     * {@code code_execution_20250825} / {@code code_execution_20260120}），后两者还携带
+     * {@code tool_id}（发起该调用的代码执行块）。不读它就无法分辨 programmatic tool calling
+     * 里究竟是谁发起的工具调用。</p>
+     *
+     * <p>宽容两种形态：对象（取 {@code type}）与网关简化后的纯字符串。</p>
+     *
+     * @since 4.1
+     */
+    private static void appendServerToolCaller(ChatEventDefault.Builder builder, ONode contentBlock) {
+        ONode caller = contentBlock.getOrNull("caller");
+        if (caller == null) {
+            return;
+        }
+
+        if (caller.isString()) {
+            if (Utils.isNotEmpty(caller.getString())) {
+                builder.attr("caller", caller.getString());
+            }
+            return;
+        }
+        if (caller.isObject() == false) {
+            return;
+        }
+
+        String callerType = caller.get("type").getString();
+        if (Utils.isNotEmpty(callerType)) {
+            builder.attr("caller", callerType);
+        }
+        String callerToolId = caller.get("tool_id").getString();
+        if (Utils.isNotEmpty(callerToolId)) {
+            builder.attr("callerToolId", callerToolId);
+        }
+    }
+
+    /**
+     * 停止原因的语义分流。
+     *
+     * <p>协议 {@code StopReason} 共 7 值：{@code end_turn} / {@code max_tokens} / {@code stop_sequence}
+     * / {@code tool_use} / {@code pause_turn} / {@code refusal} / {@code model_context_window_exceeded}。
+     * 旧实现只把原始串塞进 {@code lastFinishReason}，后三者的语义对订阅方完全不可见。</p>
+     *
+     * <p>{@code lastFinishReason} 仍保留供应商原始值（不做归一，避免掩盖具体成因），这里只为原本静默的情形补事件：</p>
+     * <ul>
+     *   <li>{@code refusal} → {@code CONTENT_FILTER}，携带 {@code stop_details} 的分类与说明</li>
+     *   <li>{@code pause_turn} → {@code STATUS}，服务端工具轮次暂停、需带上下文续跑。
+     *       <b>刻意不用 ABORT</b>：ABORT 在归一化器里会提前关闭未闭合块，而 message_delta 紧邻
+     *       message_stop，会与随后的终态收口帧（签名载体）抢块边界</li>
+     *   <li>{@code stop_sequence} → {@code STATUS}，透出实际命中的自定义停止序列（旧实现连这个值都不读）</li>
+     * </ul>
+     *
+     * @param stopNode 承载 stop_sequence / stop_details 的节点（流式为 delta，非流式为 message 本体）
+     * @since 4.1
+     */
+    private void emitStopReasonEvent(ChatStreamContext ctx, String rawType, String stopReason,
+                                     ONode stopNode, ONode raw) {
+        if ("refusal".equals(stopReason)) {
+            String category = null;
+            String explanation = null;
+            ONode stopDetails = stopNode == null ? null : stopNode.getOrNull("stop_details");
+            if (stopDetails != null && stopDetails.isObject()) {
+                category = stopDetails.get("category").getString();
+                explanation = stopDetails.get("explanation").getString();
+            }
+            ctx.emit(ctx.event(ChatEventType.CONTENT_FILTER)
+                    .rawType(rawType)
+                    .subType(Utils.isEmpty(category) ? stopReason : category)
+                    .text(explanation)
+                    .raw(raw)
+                    .build());
+        } else if ("pause_turn".equals(stopReason)) {
+            ctx.emit(ctx.event(ChatEventType.STATUS)
+                    .rawType(rawType)
+                    .subType(stopReason)
+                    .raw(raw)
+                    .build());
+        } else if ("stop_sequence".equals(stopReason)) {
+            ctx.emit(ctx.event(ChatEventType.STATUS)
+                    .rawType(rawType)
+                    .subType(stopReason)
+                    .text(stopNode == null ? null : stopNode.get("stop_sequence").getString())
+                    .raw(raw)
+                    .build());
+        }
     }
 
     /**
@@ -721,8 +1017,15 @@ public class AnthropicResponseParser {
 
         // 设置模型信息
         acc.setModel(oResp.get("model").getString());
+        // 代码执行容器（协议 Message.container）：与流式 message_start 对称地记录，供多轮复用
+        captureContainer(acc, oResp.getOrNull("container"));
         // 先解析 stop_reason，供 lastFinishReason 使用
         String stopReason = oResp.get("stop_reason").getString();
+        if (Utils.isNotEmpty(stopReason)) {
+            // 与流式 message_delta 对称：refusal / pause_turn / stop_sequence 补事件通道
+            // （非流式的 stop_sequence 与 stop_details 位于 message 本体的顶层）
+            emitStopReasonEvent(ctx, "message", stopReason, oResp, oResp);
+        }
 
         // 解析内容
         ONode contentArray = oResp.getOrNull("content");
@@ -822,13 +1125,14 @@ public class AnthropicResponseParser {
                     // 服务端工具（web_search/code_execution 等）：走事件通道。
                     // 旧实现在此拼 "[server tool: name]" 进正文，导致 call() 与 stream() 的聚合正文分叉
                     hasServerToolBlocks = true;
-                    ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_START)
+                    ChatEventDefault.Builder serverToolStart = ctx.event(ChatEventType.SERVER_TOOL_START)
                             .rawType(contentType)
                             .subType(contentItem.get("name").getString())
                             .itemId(contentItem.get("id").getString())
                             .index(blockIndex)
-                            .raw(contentItem)
-                            .build());
+                            .raw(contentItem);
+                    appendServerToolCaller(serverToolStart, contentItem);
+                    ctx.emit(serverToolStart.build());
                 } else if (contentType != null && contentType.endsWith("_tool_result")) {
                     // web_search_tool_result / web_fetch_tool_result 等：
                     // 旧实现把结果原文拍平进正文，订阅方无法与模型自述区分
@@ -839,6 +1143,26 @@ public class AnthropicResponseParser {
                             .itemId(contentItem.get("tool_use_id").getString())
                             .index(blockIndex)
                             .text(extractToolResultText(contentItem))
+                            .raw(contentItem)
+                            .build());
+                } else if ("container_upload".equals(contentType)) {
+                    // 与流式对称：代码执行产出的文件（仅 file_id）
+                    hasServerToolBlocks = true;
+                    String fileId = contentItem.get("file_id").getString();
+                    ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_RESULT)
+                            .rawType(contentType)
+                            .subType(contentType)
+                            .itemId(fileId)
+                            .index(blockIndex)
+                            .text(fileId)
+                            .raw(contentItem)
+                            .build());
+                } else if (Utils.isNotEmpty(contentType)) {
+                    // 与流式对称：未建模内容块以 RAW 透出，不再静默丢弃
+                    ctx.emit(ctx.event(ChatEventType.RAW)
+                            .rawType(contentType)
+                            .subType(contentType)
+                            .index(blockIndex)
                             .raw(contentItem)
                             .build());
                 }
