@@ -26,16 +26,19 @@ import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.content.BlobBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -93,16 +96,18 @@ public class OpenaiResponsesRequestBuilder {
         }
         // 构建 input（将消息转为 input 数组，SystemMessage 已提取到 instructions）
         ONode inputArray = root.getOrNew("input").asArray();
+        boolean allowInputAudio = Boolean.TRUE.equals(options.options().get("responses_input_audio_enabled"));
         for (ChatMessage msg : messages) {
             if (msg instanceof SystemMessage) {
                 continue;
             }
-            buildInputItem(inputArray, msg);
+            buildInputItem(inputArray, msg, allowInputAudio);
         }
         root.set("stream", isStream);
         // 添加其他选项
         Object thinkingSwitch = null;
         Object promptCacheBreakpoint = null;
+        Object promptCacheBreakpoints = null;
         String optionInstructions = null;
         for (Map.Entry<String, Object> kv : options.options().entrySet()) {
             String key = kv.getKey();
@@ -146,6 +151,24 @@ public class OpenaiResponsesRequestBuilder {
                 promptCacheBreakpoint = kv.getValue();
                 continue;
             }
+            if ("prompt_cache_breakpoints".equals(key)) {
+                // Solon 兼容扩展：按输入顺序将最多四个显式断点挂到末尾若干可缓存内容块。
+                promptCacheBreakpoints = kv.getValue();
+                continue;
+            }
+            if ("responses_reasoning_delta_mode".equals(key)
+                    || "responses_input_audio_enabled".equals(key)) {
+                // 仅控制方言本地兼容行为，不得发送给服务端。
+                continue;
+            }
+            if ("prompt_cache_options".equals(key)) {
+                applyPromptCacheOptions(root, kv.getValue());
+                continue;
+            }
+            if ("prompt_cache_retention".equals(key)) {
+                applyPromptCacheRetention(root, kv.getValue());
+                continue;
+            }
             // 统一思考开关（Boolean）延后处理
             if ("thinking".equals(key) && kv.getValue() instanceof Boolean) {
                 thinkingSwitch = kv.getValue();
@@ -170,8 +193,15 @@ public class OpenaiResponsesRequestBuilder {
             root.set(key, toNode(kv.getValue()));
         }
 
-        // 显式缓存断点挂到最后一个输入内容项（ResponseInputText/Image/File.prompt_cache_breakpoint）。
-        applyPromptCacheBreakpoint(inputArray, promptCacheBreakpoint);
+        // 显式缓存断点挂到输入内容项（ResponseInputText/Image/File.prompt_cache_breakpoint）。
+        if (promptCacheBreakpoints != null) {
+            int applied = applyPromptCacheBreakpoints(inputArray, promptCacheBreakpoints);
+            if (applied > 3 && root.hasKey("prompt_cache_options") == false) {
+                root.getOrNew("prompt_cache_options").set("mode", "explicit");
+            }
+        } else {
+            applyPromptCacheBreakpoint(inputArray, promptCacheBreakpoint);
+        }
 
         // instructions：SystemMessage 优先在前，options 逃生舱追加在后
         if (Utils.isNotEmpty(optionInstructions)) {
@@ -196,6 +226,7 @@ public class OpenaiResponsesRequestBuilder {
         //    后者可经 options 直接透传（如 options.options().put("previous_response_id", ...)）
         CacheControl cacheControl = options.cacheControl();
         if (cacheControl != null && Utils.isNotEmpty(cacheControl.getPromptCacheKey())) {
+            // CacheControl.type/ttl 是 Anthropic 消息级语义，不能解释为 Responses PromptCacheOptions。
             root.set("prompt_cache_key", cacheControl.getPromptCacheKey());
         }
         // 构建 tools
@@ -208,7 +239,7 @@ public class OpenaiResponsesRequestBuilder {
      * @author oisin lu
      * @date 2026年1月28日
      */
-    private void buildInputItem(ONode inputArray, ChatMessage message) {
+    private void buildInputItem(ONode inputArray, ChatMessage message, boolean allowInputAudio) {
         if (message instanceof ToolMessage) {
             buildToolMessageInputItem(inputArray, (ToolMessage) message);
             return;
@@ -217,10 +248,16 @@ public class OpenaiResponsesRequestBuilder {
         if (message instanceof AssistantMessage) {
             AssistantMessage assistantMessage = (AssistantMessage) message;
 
+            // 优先按 Responses 原始 output_index 回放完整 output item，避免按类型重排或字段降级。
+            if (appendResponsesOutputItems(inputArray, assistantMessage)) {
+                return;
+            }
+
             // 1) reasoning 项先行（官方要求 reasoning 在其后续项之前），与正文 / function_call 并列而非二选一：
             //    4.1 后非流式解析产出的是 text/thinking 合并的单条消息（isThinking=false），
             //    不能再用 isThinking() 做消息分类，否则 thinking 与 reasoning 元数据会整体丢弃
             boolean reasoningEmitted = appendReasoningInputItem(inputArray, assistantMessage);
+            boolean responseMessagesEmitted = appendResponseMessageItems(inputArray, assistantMessage);
 
             // 2) 纯思考分片（流式 thinking 消息）：无正文 / 无工具调用时不再补空 assistant 项
             if (assistantMessage.isThinking()
@@ -230,7 +267,8 @@ public class OpenaiResponsesRequestBuilder {
                 return;
             }
 
-            buildAssistantInputItems(inputArray, assistantMessage, reasoningEmitted);
+            buildAssistantInputItems(inputArray, assistantMessage, reasoningEmitted,
+                    responseMessagesEmitted, allowInputAudio);
             return;
         }
 
@@ -256,7 +294,7 @@ public class OpenaiResponsesRequestBuilder {
                 //多模态（用户文本不做 think 剔除，避免正常包含 think 标签字样的文本被清空）
                 ONode contentArray = msgNode.getOrNew("content").asArray();
                 for (ContentBlock block1 : userMessage.getBlocks()) {
-                    appendResponsesInputContent(contentArray, block1, false);
+                    appendResponsesInputContent(contentArray, block1, false, allowInputAudio);
                 }
                 // 全部媒体被截断时补文本投影，避免出站空 content 数组
                 if (contentArray.getArray().isEmpty()) {
@@ -351,9 +389,43 @@ public class OpenaiResponsesRequestBuilder {
      * @return 是否已输出 reasoning 项
      * @since 4.1
      */
+    @SuppressWarnings("unchecked")
+    private boolean appendResponsesOutputItems(ONode inputArray, AssistantMessage message) {
+        if (!message.hasMetadata()) return false;
+        Object value = message.getMetadata().get("responses_output_items");
+        if (!(value instanceof Collection)) return false;
+
+        List<Map<String, Object>> wrappers = new ArrayList<>();
+        for (Object wrapper : (Collection<?>) value) {
+            if (wrapper instanceof Map && ((Map<?, ?>) wrapper).get("item") instanceof Map) {
+                wrappers.add((Map<String, Object>) wrapper);
+            }
+        }
+        Collections.sort(wrappers, new Comparator<Map<String, Object>>() {
+            @Override
+            public int compare(Map<String, Object> left, Map<String, Object> right) {
+                return Integer.compare(replayOutputIndex(left), replayOutputIndex(right));
+            }
+        });
+        for (Map<String, Object> wrapper : wrappers) {
+            inputArray.add(toNode(wrapper.get("item")));
+        }
+        return !wrappers.isEmpty();
+    }
+
+    private int replayOutputIndex(Map<String, Object> wrapper) {
+        Object value = wrapper.get("output_index");
+        return value instanceof Number ? ((Number) value).intValue() : Integer.MAX_VALUE;
+    }
+
     private boolean appendReasoningInputItem(ONode inputArray, AssistantMessage assistantMessage) {
         if (assistantMessage.hasMetadata()) {
             Map<String, Object> metas = assistantMessage.getMetadata();
+            Object replayItems = metas.get("reasoning_items");
+            boolean emitted = appendReasoningReplayItems(inputArray, replayItems);
+            if (emitted) {
+                return true;
+            }
             Object reasoningId = metas.get("reasoning_item_id");
             Object encryptedContent = metas.get("reasoning_encrypted_content");
             String idStr = reasoningId == null ? null : String.valueOf(reasoningId);
@@ -384,6 +456,51 @@ public class OpenaiResponsesRequestBuilder {
         return false;
     }
 
+    @SuppressWarnings("unchecked")
+    private boolean appendReasoningReplayItems(ONode inputArray, Object value) {
+        if (!(value instanceof Collection)) {
+            return false;
+        }
+        boolean emitted = false;
+        Set<String> identities = new HashSet<>();
+        for (Object itemObj : (Collection<?>) value) {
+            if (!(itemObj instanceof Map)) continue;
+            Map<String, Object> item = (Map<String, Object>) itemObj;
+            String id = item.get("id") == null ? null : String.valueOf(item.get("id"));
+            String encrypted = item.get("encrypted_content") == null
+                    ? null : String.valueOf(item.get("encrypted_content"));
+            String identity = Utils.isNotEmpty(id) ? "id:" + id : "encrypted:" + encrypted;
+            if ((Utils.isEmpty(id) && Utils.isEmpty(encrypted)) || !identities.add(identity)) continue;
+            ONode reasoningItem = newReasoningItem(inputArray);
+            if (Utils.isNotEmpty(id)) reasoningItem.set("id", id);
+            if (Utils.isNotEmpty(encrypted)) reasoningItem.set("encrypted_content", encrypted);
+            emitted = true;
+        }
+        return emitted;
+    }
+
+    @SuppressWarnings("unchecked")
+    private boolean appendResponseMessageItems(ONode inputArray, AssistantMessage message) {
+        if (!message.hasMetadata()) return false;
+        Object value = message.getMetadata().get("response_message_items");
+        if (!(value instanceof Collection) || ((Collection<?>) value).size() <= 1) return false;
+        boolean emitted = false;
+        for (Object itemObj : (Collection<?>) value) {
+            if (!(itemObj instanceof Map)) continue;
+            Map<String, Object> item = (Map<String, Object>) itemObj;
+            ONode node = inputArray.addNew()
+                    .set("role", "assistant")
+                    .set("content", item.get("text") == null ? "" : String.valueOf(item.get("text")));
+            Object phase = item.get("phase");
+            if (phase != null && ("commentary".equals(String.valueOf(phase))
+                    || "final_answer".equals(String.valueOf(phase)))) {
+                node.set("phase", String.valueOf(phase));
+            }
+            emitted = true;
+        }
+        return emitted;
+    }
+
     /**
      * 新建 reasoning input item。
      * <p>官方 {@code ResponseReasoningItem} 的 {@code summary} 为必填（数组，可为空），
@@ -406,7 +523,8 @@ public class OpenaiResponsesRequestBuilder {
      * @param stripThink 是否剔除 {@code <think>} 标签（仅旧版 assistant 历史需要）
      * @since 4.1
      */
-    private void appendResponsesInputContent(ONode contentArray, ContentBlock block, boolean stripThink) {
+    private void appendResponsesInputContent(ONode contentArray, ContentBlock block,
+                                             boolean stripThink, boolean allowInputAudio) {
         if (block == null) {
             return;
         }
@@ -432,6 +550,10 @@ public class OpenaiResponsesRequestBuilder {
         }
 
         if (block instanceof AudioBlock) {
+            if (!allowInputAudio) {
+                throw new IllegalArgumentException("OpenAI Responses ResponseInputContent does not support input_audio; "
+                        + "set responses_input_audio_enabled=true only for a compatible gateway");
+            }
             AudioBlock audio = (AudioBlock) block;
             if (Utils.isNotEmpty(audio.getData())) {
                 ONode audioNode = contentArray.addNew().set("type", "input_audio");
@@ -456,7 +578,9 @@ public class OpenaiResponsesRequestBuilder {
      * @param reasoningEmitted 本轮是否已输出 reasoning 项（决定空正文是否还需补位）
      * @since 3.9
      */
-    private void buildAssistantInputItems(ONode inputArray, AssistantMessage assistantMessage, boolean reasoningEmitted) {
+    private void buildAssistantInputItems(ONode inputArray, AssistantMessage assistantMessage,
+                                           boolean reasoningEmitted, boolean responseMessagesEmitted,
+                                           boolean allowInputAudio) {
         // 1) 先回传 image_generation_call 历史项（按官方多轮约定）
         if (Utils.isNotEmpty(assistantMessage.getBlocks())) {
             for (ContentBlock block : assistantMessage.getBlocks()) {
@@ -472,10 +596,11 @@ public class OpenaiResponsesRequestBuilder {
             }
         }
      
-        // 2) 文本 / 多模态 content
+        // 2) 文本 / 多模态 content；多 Responses message 已按各自 phase 原样回放时不再聚合重复写入。
         boolean hasToolCalls = Utils.isNotEmpty(assistantMessage.getToolCalls());
         boolean multiModal = assistantMessage.isMultiModal();
 
+        if (responseMessagesEmitted == false) {
         if (multiModal) {
             // 官方 input item 约束：EasyInputMessage(role=assistant) 的 content 仅接受
             // input_text / input_image / input_file；output_text 只能出现在带 id 的 output message 项里。
@@ -494,7 +619,7 @@ public class OpenaiResponsesRequestBuilder {
                     // 已以 image_generation_call id 回传的跳过 data 再写
                     continue;
                 }
-                appendResponsesInputContent(contentArray, block, legacyThinkInline);
+                appendResponsesInputContent(contentArray, block, legacyThinkInline, allowInputAudio);
             }
 
             if (contentArray.getArray().isEmpty()) {
@@ -520,8 +645,9 @@ public class OpenaiResponsesRequestBuilder {
                         .set("content", plain != null ? plain : "");
                 applyAssistantPhase(assistantNode, assistantMessage);
             }
+            }
         }
-     
+
         // 3) 工具调用 items（出站兜底净化：截断/双重编码的 arguments 禁止原样回传）
         if (hasToolCalls) {
             for (ToolCall call : assistantMessage.getToolCalls()) {
@@ -584,33 +710,95 @@ public class OpenaiResponsesRequestBuilder {
      * Responses 官方断点的 mode 是协议值 explicit；after_tools 等只表示上层的挂载策略。
      */
     private void applyPromptCacheBreakpoint(ONode inputArray, Object value) {
-        if (value == null || inputArray == null || !inputArray.isArray()) return;
-        ONode breakpoint = toNode(value);
-        if (!breakpoint.isObject() || !"explicit".equals(breakpoint.get("mode").getString())) {
-            // 不把统一层的 after_tools/其它策略名误发送为 Responses 的 mode。
-            breakpoint = new ONode().set("mode", "explicit");
+        if (!isValidPromptCacheBreakpoint(value) || inputArray == null || !inputArray.isArray()) return;
+        List<ONode> contents = cacheableInputContents(inputArray);
+        if (!contents.isEmpty()) {
+            contents.get(contents.size() - 1)
+                    .set("prompt_cache_breakpoint", new ONode().set("mode", "explicit"));
         }
-        for (int i = inputArray.size() - 1; i >= 0; i--) {
-            ONode item = inputArray.get(i);
+    }
+
+    private int applyPromptCacheBreakpoints(ONode inputArray, Object value) {
+        if (value == null || inputArray == null || !inputArray.isArray()) return 0;
+        ONode requested = toNode(value);
+        int count = 0;
+        if (requested.isArray()) {
+            for (ONode descriptor : requested.getArray()) {
+                if (isValidPromptCacheBreakpoint(descriptor)) count++;
+            }
+        } else if (isValidPromptCacheBreakpoint(requested)) {
+            count = 1;
+        }
+        count = Math.min(4, count);
+        List<ONode> contents = cacheableInputContents(inputArray);
+        count = Math.min(count, contents.size());
+        for (int i = contents.size() - count; i < contents.size(); i++) {
+            contents.get(i).set("prompt_cache_breakpoint", new ONode().set("mode", "explicit"));
+        }
+        return count;
+    }
+
+    private boolean isValidPromptCacheBreakpoint(Object value) {
+        if (value == null) return false;
+        if (value instanceof Boolean) return (Boolean) value;
+        ONode node = value instanceof ONode ? (ONode) value : toNode(value);
+        if (node.isObject()) return "explicit".equals(node.get("mode").getString());
+        if (node.isValue()) {
+            String text = node.getString();
+            return "explicit".equals(text) || "after_tools".equals(text);
+        }
+        return false;
+    }
+
+    private List<ONode> cacheableInputContents(ONode inputArray) {
+        List<ONode> result = new ArrayList<>();
+        for (ONode item : inputArray.getArray()) {
             ONode content = item.getOrNull("content");
             if (content == null) continue;
             if (content.isArray()) {
-                for (int j = content.size() - 1; j >= 0; j--) {
-                    ONode part = content.get(j);
+                for (ONode part : content.getArray()) {
                     String type = part.get("type").getString();
                     if ("input_text".equals(type) || "input_image".equals(type) || "input_file".equals(type)) {
-                        part.set("prompt_cache_breakpoint", breakpoint);
-                        return;
+                        result.add(part);
                     }
                 }
             } else if (content.isValue()) {
                 String text = content.getString();
                 ONode contentArray = new ONode().asArray();
-                contentArray.addNew().set("type", "input_text").set("text", text == null ? "" : text)
-                        .set("prompt_cache_breakpoint", breakpoint);
+                ONode part = contentArray.addNew().set("type", "input_text").set("text", text == null ? "" : text);
                 item.set("content", contentArray);
-                return;
+                result.add(part);
             }
+        }
+        return result;
+    }
+
+    private void applyPromptCacheOptions(ONode root, Object value) {
+        ONode source = toNode(value);
+        if (!source.isObject()) return;
+        ONode target = new ONode();
+        for (Map.Entry<String, ONode> entry : source.getObject().entrySet()) {
+            String key = entry.getKey();
+            ONode option = entry.getValue();
+            if ("mode".equals(key)) {
+                String mode = option.getString();
+                if ("implicit".equals(mode) || "explicit".equals(mode)) target.set(key, mode);
+            } else if ("ttl".equals(key)) {
+                if ("30m".equals(option.getString())) target.set(key, "30m");
+            } else {
+                log.debug("Ignoring unknown OpenAI Responses prompt_cache_options field: {}", key);
+            }
+        }
+        if (!target.getObject().isEmpty()) root.set("prompt_cache_options", target);
+    }
+
+    private void applyPromptCacheRetention(ONode root, Object value) {
+        if (value == null) return;
+        String retention = String.valueOf(value).trim();
+        if ("in_memory".equals(retention) || "24h".equals(retention)) {
+            root.set("prompt_cache_retention", retention);
+        } else if (Utils.isNotEmpty(retention)) {
+            log.debug("Ignoring invalid OpenAI Responses prompt_cache_retention: {}", retention);
         }
     }
 
@@ -700,9 +888,11 @@ public class OpenaiResponsesRequestBuilder {
                     if (Utils.isNotEmpty(summary)) {
                         reasoningNode.set(key, summary);
                     }
-                } else {
-                    // mode / context 等官方字段原样透传（含厂商扩展）
+                } else if ("context".equals(key) || "mode".equals(key)) {
+                    // 当前官方 Reasoning 还包含 context / mode；其他未知字段默认不出站。
                     reasoningNode.set(key, toNode(val));
+                } else {
+                    log.debug("Ignoring unknown OpenAI Responses reasoning field: {}", key);
                 }
             }
         } else if (value instanceof String) {
@@ -729,7 +919,7 @@ public class OpenaiResponsesRequestBuilder {
             for (Object s : (Collection<?>) value) {
                 String v = s == null ? null : String.valueOf(s).trim();
                 if (Utils.isNotEmpty(v)) {
-                    return v;
+                    return knownReasoningSummary(v);
                 }
             }
             return null;
@@ -739,7 +929,7 @@ public class OpenaiResponsesRequestBuilder {
             for (Object s : (Object[]) value) {
                 String v = s == null ? null : String.valueOf(s).trim();
                 if (Utils.isNotEmpty(v)) {
-                    return v;
+                    return knownReasoningSummary(v);
                 }
             }
             return null;
@@ -750,13 +940,18 @@ public class OpenaiResponsesRequestBuilder {
             for (String part : s.substring(1, s.length() - 1).split(",")) {
                 String v = part.trim().replace("\"", "");
                 if (Utils.isNotEmpty(v)) {
-                    return v;
+                    return knownReasoningSummary(v);
                 }
             }
             return null;
         }
 
-        return Utils.isEmpty(s) ? null : s;
+        return knownReasoningSummary(s);
+    }
+
+    private String knownReasoningSummary(String value) {
+        if (Utils.isEmpty(value)) return null;
+        return "auto".equals(value) || "concise".equals(value) || "detailed".equals(value) ? value : null;
     }
 
     /**

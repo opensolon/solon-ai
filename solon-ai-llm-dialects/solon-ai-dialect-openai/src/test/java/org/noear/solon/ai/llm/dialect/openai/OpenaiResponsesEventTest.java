@@ -17,6 +17,7 @@ package org.noear.solon.ai.llm.dialect.openai;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.*;
+import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.event.*;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
@@ -330,5 +331,134 @@ public class OpenaiResponsesEventTest {
         assertNotNull(firstOf(ChatEventType.ERROR), "failed must emit ERROR");
         assertNotNull(ctx2.getAccumulator().getError());
         assertTrue(ctx2.getAccumulator().isFinished(), "failed 响应必须结束累积器");
+    }
+
+    @Test
+    public void streamTerminalErrorsFinishAndProvideFallbackMessage() {
+        ChatStreamContext ctx = newCtx();
+        parser.parseStreamResponse(ctx, "{\"error\":{\"message\":\"boom\"}}");
+        assertTrue(ctx.getAccumulator().isFinished());
+        assertTrue(ctx.getAccumulator().hasContentItems());
+
+        ChatStreamContext failed = newCtx();
+        parser.parseStreamResponse(failed, "{\"type\":\"response.failed\",\"sequence_number\":9,"
+                + "\"response\":{\"id\":\"resp_failed\",\"error\":{\"message\":\"bad\"}}}");
+        assertTrue(failed.getAccumulator().isFinished());
+        assertTrue(failed.getAccumulator().hasContentItems());
+        assertEquals("resp_failed", failed.getProviderResponseId());
+        assertEquals(Long.valueOf(9), firstOf(ChatEventType.ERROR).attrAs("sequence_number"));
+    }
+
+    @Test
+    public void audioAndTranscriptKeepTheirNativeShapes() {
+        ChatStreamContext ctx = newCtx();
+        parser.parseStreamResponse(ctx, "{\"type\":\"response.audio.delta\",\"delta\":\"QUJD\",\"sequence_number\":1}");
+        ChatEvent audio = firstOf(ChatEventType.MEDIA_PARTIAL);
+        assertNotNull(audio);
+        assertTrue(audio.getBlock() instanceof AudioBlock);
+        assertNull(audio.getText(), "音频 Base64 不应伪装为普通文本");
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"response.audio.transcript.delta\",\"delta\":\"hello\",\"sequence_number\":2}");
+        ChatEvent transcript = events.get(events.size() - 1);
+        assertEquals("audio_transcript", transcript.getSubType());
+        assertEquals("hello", transcript.getText());
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"response.audio.done\",\"sequence_number\":3}");
+        assertEquals(1, ctx.getAccumulator().getMediaBlocks().size());
+        AudioBlock complete = (AudioBlock) ctx.getAccumulator().getMediaBlocks().get(0);
+        assertEquals("QUJD", complete.getData());
+        assertEquals("hello", complete.metas().get("transcript"));
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"response.completed\",\"response\":{\"output\":[{"
+                + "\"id\":\"msg_audio\",\"type\":\"message\",\"content\":[{\"type\":\"output_audio\","
+                + "\"data\":\"QUJD\",\"transcript\":\"hello\"}]}]}}");
+        assertEquals(1, ctx.getAccumulator().getMediaBlocks().size(), "completed 不应重复加入已交付音频");
+    }
+
+    @Test
+    public void functionDoneRecoversWithoutAddedAndKeepsCallsIsolated() {
+        ChatStreamContext ctx = newCtx();
+        parser.parseStreamResponse(ctx, "{\"type\":\"response.function_call_arguments.done\","
+                + "\"item_id\":\"fc_1\",\"output_index\":0,\"name\":\"weather\","
+                + "\"arguments\":\"{\\\"city\\\":\\\"hz\\\"}\"}");
+        assertFalse(ctx.getAccumulator().hasContentItems(), "未知真实 call_id 时不能执行工具调用");
+        parser.parseStreamResponse(ctx, "{\"type\":\"response.output_item.done\",\"output_index\":0,"
+                + "\"item\":{\"id\":\"fc_1\",\"type\":\"function_call\",\"call_id\":\"call_1\","
+                + "\"name\":\"weather\",\"arguments\":\"{\\\"city\\\":\\\"hz\\\"}\"}}");
+        assertTrue(ctx.getAccumulator().lastItem().isToolCalls());
+        assertEquals("weather", ctx.getAccumulator().lastItem().getToolCalls().get(0).getName());
+        assertEquals("call_1", ctx.getAccumulator().lastItem().getToolCalls().get(0).getId());
+    }
+
+    @Test
+    public void signatureRefusalAndAnnotationEventsAreIdempotent() {
+        ChatStreamContext ctx = newCtx();
+        String reasoning = "{\"type\":\"response.output_item.done\",\"output_index\":0,"
+                + "\"item\":{\"id\":\"rs_1\",\"type\":\"reasoning\",\"encrypted_content\":\"enc\"}}";
+        parser.parseStreamResponse(ctx, reasoning);
+        parser.parseStreamResponse(ctx, reasoning);
+        assertEquals(1, types().stream().filter(t -> t == ChatEventType.THINKING_SIGNATURE).count(), events.toString());
+
+        String refusal = "{\"type\":\"response.refusal.done\",\"item_id\":\"msg_1\","
+                + "\"output_index\":1,\"content_index\":0,\"refusal\":\"no\"}";
+        parser.parseStreamResponse(ctx, refusal);
+        parser.parseStreamResponse(ctx, refusal);
+        assertEquals(1, types().stream().filter(t -> t == ChatEventType.CONTENT_FILTER).count());
+
+        String annotation = "{\"type\":\"response.output_text.annotation.added\",\"item_id\":\"msg_1\","
+                + "\"output_index\":1,\"content_index\":0,\"annotation_index\":2,\"sequence_number\":8,"
+                + "\"annotation\":{\"type\":\"url_citation\",\"url\":\"https://example.com\"}}";
+        parser.parseStreamResponse(ctx, annotation);
+        parser.parseStreamResponse(ctx, annotation);
+        assertEquals(1, types().stream().filter(t -> t == ChatEventType.CITATION).count());
+        ChatEvent citation = firstOf(ChatEventType.CITATION);
+        assertEquals("url_citation", citation.getSubType());
+        assertEquals(Integer.valueOf(0), citation.attrAs("content_index"));
+        assertEquals(Integer.valueOf(1), citation.attrAs("output_index"));
+        assertEquals(Long.valueOf(8), citation.attrAs("sequence_number"));
+    }
+
+    @Test
+    public void genericOutputItemDoneAndShellPayloadStayObservable() {
+        ChatStreamContext ctx = newCtx();
+        parser.parseStreamResponse(ctx, "{\"type\":\"response.output_item.done\",\"output_index\":0,"
+                + "\"sequence_number\":4,\"item\":{\"id\":\"pc_1\",\"type\":\"computer_call_output\"}}");
+        ChatEvent result = firstOf(ChatEventType.SERVER_TOOL_RESULT);
+        assertNotNull(result);
+        assertEquals("computer_call_output", result.getSubType());
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"response.shell_call_output_content.delta\","
+                + "\"item_id\":\"sh_1\",\"output_index\":1,\"command_index\":0,\"sequence_number\":5,"
+                + "\"delta\":{\"stdout\":\"ok\",\"stderr\":\"warn\"}}");
+        ChatEvent shell = events.get(events.size() - 1);
+        assertEquals("ok", shell.attrAs("stdout"));
+        assertEquals("warn", shell.attrAs("stderr"));
+        assertEquals(Integer.valueOf(0), shell.attrAs("command_index"));
+
+        String completed = "{\"type\":\"response.web_search_call.completed\",\"item_id\":\"ws_1\","
+                + "\"output_index\":2,\"sequence_number\":6}";
+        parser.parseStreamResponse(ctx, completed);
+        parser.parseStreamResponse(ctx, completed);
+        parser.parseStreamResponse(ctx, "{\"type\":\"response.output_item.done\",\"output_index\":2,"
+                + "\"item\":{\"id\":\"ws_1\",\"type\":\"web_search_call\"}}");
+        assertEquals(2, types().stream().filter(t -> t == ChatEventType.SERVER_TOOL_RESULT).count(),
+                "同一工具显式 terminal 与 output_item.done fallback 应共享幂等键");
+
+        String partial = "{\"type\":\"response.image_generation_call.partial_image\",\"item_id\":\"ig_1\","
+                + "\"output_index\":3,\"partial_image_b64\":\"aW1n\"}";
+        parser.parseStreamResponse(ctx, partial);
+        parser.parseStreamResponse(ctx, partial);
+        assertEquals(1, types().stream().filter(t -> t == ChatEventType.MEDIA_PARTIAL).count(),
+                "缺少 partial_image_index 时也应按内容签名幂等");
+    }
+
+    @Test
+    public void reasoningSummaryIncompleteIsStatusNotResponseAbort() {
+        ChatStreamContext ctx = newCtx();
+        parser.parseStreamResponse(ctx, "{\"type\":\"response.reasoning_summary_part.done\","
+                + "\"item_id\":\"rs_1\",\"output_index\":0,\"summary_index\":0,\"status\":\"incomplete\","
+                + "\"part\":{\"type\":\"summary_text\",\"text\":\"partial\"}}");
+        assertNotNull(firstOf(ChatEventType.STATUS));
+        assertFalse(types().contains(ChatEventType.ABORT));
     }
 }

@@ -49,7 +49,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 对齐 OpenAI 官方 Responses API 规范（openapi.transformed.yml / openai-java SDK 模型类）：
  * <ul>
  *   <li>EasyInputMessage 的 content 仅接受 input_text / input_image / input_file</li>
- *   <li>input_audio 为嵌套形态 {@code {type:input_audio, input_audio:{data,format}}}</li>
+ *   <li>input_audio 仅作为显式开启的兼容网关扩展，官方 Responses 默认拒绝</li>
  *   <li>ResponseReasoningItem 的 summary 为必填数组</li>
  *   <li>ToolChoiceFunction 为扁平形态 {@code {type:function, name}}</li>
  *   <li>ResponseUsage.input_tokens_details 含 cached_tokens / cache_write_tokens</li>
@@ -61,8 +61,11 @@ public class OpenaiResponsesDialectTest {
     private final OpenaiResponsesResponseParser parser = new OpenaiResponsesResponseParser();
 
     private ChatAccumulator newResponse(boolean stream) {
+        return newResponse(stream, ChatOptions.of());
+    }
+
+    private ChatAccumulator newResponse(boolean stream, ChatOptions options) {
         ChatConfig config = new ChatConfig();
-        ChatOptions options = ChatOptions.of();
         ChatRequest req = new ChatRequest(config, OpenaiResponsesDialect.getInstance(), options,
                 InMemoryChatSession.builder().build(), ChatMessage.ofSystem("test"), null, stream);
         return new ChatAccumulator(req, stream);
@@ -112,12 +115,14 @@ public class OpenaiResponsesDialectTest {
     }
 
     @Test
-    public void audioBlock_useNestedInputAudio() {
-        // 官方 ResponseInputAudio：{type:input_audio, input_audio:{data,format}}
+    public void compatibleGatewayAudioBlock_useNestedInputAudioOnlyWhenEnabled() {
+        // input_audio 不是官方 ResponseInputContent，只有明确声明兼容网关时才发送。
         List<ContentBlock> blocks = new ArrayList<>();
         blocks.add(AudioBlock.ofBase64("AAAA", "audio/wav"));
 
-        ONode root = build(ChatOptions.of(),
+        assertThrows(IllegalArgumentException.class, () -> build(ChatOptions.of(),
+                Collections.singletonList(ChatMessage.ofUser("听一下", blocks))));
+        ONode root = build(ChatOptions.of().optionSet("responses_input_audio_enabled", true),
                 Collections.singletonList(ChatMessage.ofUser("听一下", blocks)));
 
         ONode audioItem = null;
@@ -456,6 +461,13 @@ public class OpenaiResponsesDialectTest {
         assertFalse(node.get("summary").isArray(), "summary 应为字符串: " + root.toJson());
         assertEquals("detailed", node.get("summary").getString());
         assertEquals("all_turns", node.get("context").getString(), "context 等官方字段应透传: " + root.toJson());
+
+        reasoning.put("summary", "verbose");
+        reasoning.put("unknown_field", "x");
+        ONode invalid = build(ChatOptions.of().optionSet("reasoning", reasoning),
+                Collections.singletonList(ChatMessage.ofUser("hi")));
+        assertFalse(invalid.get("reasoning").hasKey("summary"));
+        assertFalse(invalid.get("reasoning").hasKey("unknown_field"));
     }
 
     @Test
@@ -834,7 +846,8 @@ public class OpenaiResponsesDialectTest {
 
     @Test
     public void streamCumulativeReasoningDelta_isNormalizedToSuffix() {
-        ChatAccumulator resp = newResponse(true);
+        ChatAccumulator resp = newResponse(true,
+                ChatOptions.of().optionSet("responses_reasoning_delta_mode", "snapshot"));
 
         parseStream(resp, "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"rs_1\",\"type\":\"reasoning\"}}\n"
                 + "{\"type\":\"response.reasoning_text.delta\",\"delta\":\"补登README目录结构\"}\n"
@@ -921,7 +934,7 @@ public class OpenaiResponsesDialectTest {
     @Test
     public void explicitPromptCacheBreakpoint_isAttachedToLastInputContent() {
         ChatOptions options = ChatOptions.of().optionSet("prompt_cache_breakpoint", "after_tools");
-        ONode root = build(options, Collections.singletonList(ChatMessage.ofUser("hi")));
+        ONode root = build("gpt-5.6", options, Collections.singletonList(ChatMessage.ofUser("hi")));
         ONode content = root.get("input").get(0).get("content");
         assertTrue(content.isArray(), root.toJson());
         assertEquals("explicit", content.get(content.size() - 1)
@@ -992,8 +1005,178 @@ public class OpenaiResponsesDialectTest {
         ChatAccumulator resp = newResponse(false);
         parse(resp, "{\"model\":\"gpt-5.4\",\"status\":\"completed\",\"output\":[],"
                 + "\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2,"
-                + "\"input_tokens_details\":{\"cached_tokens\":0},\"prompt_cache_hit_tokens\":99}}");
+                + "\"input_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0},\"prompt_cache_hit_tokens\":99}}");
         assertNotNull(resp.getUsage());
         assertEquals(0, resp.getUsage().cacheReadInputTokens());
+        assertEquals(0, resp.getUsage().cacheCreationInputTokens());
+    }
+
+    @Test
+    public void nonStreamOutputAudioPreservesBlockAndTranscript() {
+        ChatAccumulator resp = newResponse(false);
+        parse(resp, "{\"id\":\"resp_1\",\"model\":\"gpt-5.4\",\"status\":\"completed\",\"output\":["
+                + "{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":["
+                + "{\"type\":\"output_audio\",\"data\":\"QUJD\",\"transcript\":\"hello\"}]}]}");
+        AssistantMessage msg = resp.getContentItems().get(0);
+        assertEquals("hello", msg.getText());
+        assertTrue(msg.getBlocks().get(1) instanceof AudioBlock);
+        AudioBlock audio = (AudioBlock) msg.getBlocks().get(1);
+        assertEquals("QUJD", audio.getData());
+        assertEquals("hello", audio.metas().get("transcript"));
+    }
+
+    @Test
+    public void multipleAssistantPhasesAndReasoningItemsReplayIndependently() {
+        ChatAccumulator resp = newResponse(false);
+        parse(resp, "{\"model\":\"gpt-5.4\",\"status\":\"completed\",\"output\":["
+                + "{\"type\":\"reasoning\",\"id\":\"rs_1\",\"summary\":[],\"encrypted_content\":\"enc_1\"},"
+                + "{\"type\":\"message\",\"id\":\"msg_1\",\"status\":\"completed\",\"role\":\"assistant\",\"phase\":\"commentary\","
+                + "\"content\":[{\"type\":\"output_text\",\"text\":\"working\",\"annotations\":[],\"logprobs\":[]}]},"
+                + "{\"type\":\"reasoning\",\"id\":\"rs_2\",\"summary\":[],\"encrypted_content\":\"enc_2\"},"
+                + "{\"type\":\"message\",\"id\":\"msg_2\",\"status\":\"completed\",\"role\":\"assistant\",\"phase\":\"final_answer\","
+                + "\"content\":[{\"type\":\"output_text\",\"text\":\"done\",\"annotations\":[],\"logprobs\":[]}]}]}");
+
+        ONode replay = build(ChatOptions.of(), Collections.singletonList(resp.getContentItems().get(0)));
+        assertEquals("reasoning", replay.get("input").get(0).get("type").getString());
+        assertEquals("rs_1", replay.get("input").get(0).get("id").getString());
+        assertEquals("commentary", replay.get("input").get(1).get("phase").getString());
+        assertEquals("working", replay.get("input").get(1).get("content").get(0).get("text").getString());
+        assertEquals("reasoning", replay.get("input").get(2).get("type").getString());
+        assertEquals("rs_2", replay.get("input").get(2).get("id").getString());
+        assertEquals("final_answer", replay.get("input").get(3).get("phase").getString());
+        assertEquals("done", replay.get("input").get(3).get("content").get(0).get("text").getString());
+    }
+
+    @Test
+    public void promptCacheOptionsAreNormalizedAndBreakpointsAreSchemaSafe() {
+        Map<String, Object> cacheOptions = new HashMap<>();
+        cacheOptions.put("mode", "explicit");
+        cacheOptions.put("ttl", "30m");
+        Map<String, Object> breakpointOption = new HashMap<>();
+        breakpointOption.put("mode", "explicit");
+        breakpointOption.put("ttl", "30m");
+        ChatOptions options = ChatOptions.of()
+                .optionSet("prompt_cache_options", cacheOptions)
+                .optionSet("prompt_cache_retention", "24h")
+                .optionSet("prompt_cache_breakpoint", breakpointOption);
+        ONode root = build("gpt-5.6", options, Collections.singletonList(ChatMessage.ofUser("hi")));
+        assertEquals("explicit", root.get("prompt_cache_options").get("mode").getString());
+        assertEquals("30m", root.get("prompt_cache_options").get("ttl").getString());
+        assertEquals("24h", root.get("prompt_cache_retention").getString());
+        assertFalse(build("gpt-5.6", ChatOptions.of().optionSet("prompt_cache_retention", "1h"),
+                Collections.singletonList(ChatMessage.ofUser("hi"))).hasKey("prompt_cache_retention"));
+        ONode breakpoint = root.get("input").get(0).get("content").get(0).get("prompt_cache_breakpoint");
+        assertEquals(1, breakpoint.getObject().size(), breakpoint.toJson());
+        assertEquals("explicit", breakpoint.get("mode").getString());
+    }
+
+    @Test
+    public void multiplePromptCacheBreakpointsAreCappedAndEnableExplicitModeWhenNeeded() {
+        List<ChatMessage> messages = Arrays.asList(
+                ChatMessage.ofUser("a"), ChatMessage.ofAssistant("b"),
+                ChatMessage.ofUser("c"), ChatMessage.ofAssistant("d"), ChatMessage.ofUser("e"));
+        ONode root = build("gpt-5.6", ChatOptions.of().optionSet("prompt_cache_breakpoints",
+                Arrays.asList("explicit", "explicit", "explicit", "explicit", "explicit")), messages);
+        int count = 0;
+        for (ONode item : root.get("input").getArray()) {
+            ONode content = item.getOrNull("content");
+            if (content != null && content.isArray()) {
+                for (ONode part : content.getArray()) {
+                    if (part.hasKey("prompt_cache_breakpoint")) count++;
+                }
+            }
+        }
+        assertEquals(4, count);
+        assertEquals("explicit", root.get("prompt_cache_options").get("mode").getString());
+
+        ONode disabled = build("gpt-5.6", ChatOptions.of().optionSet("prompt_cache_breakpoint", false), messages);
+        assertFalse(disabled.hasKey("prompt_cache_options"));
+        for (ONode item : disabled.get("input").getArray()) {
+            ONode content = item.getOrNull("content");
+            if (content != null && content.isArray()) {
+                for (ONode part : content.getArray()) assertFalse(part.hasKey("prompt_cache_breakpoint"));
+            }
+        }
+    }
+
+    @Test
+    public void officialReasoningDeltaDefaultsToDeltaAndSnapshotModeIsOptIn() {
+        ChatAccumulator official = newResponse(true);
+        parseStream(official, "{\"type\":\"response.reasoning_text.delta\",\"item_id\":\"rs_1\","
+                + "\"content_index\":0,\"delta\":\"abcdefgh\"}\n"
+                + "{\"type\":\"response.reasoning_text.delta\",\"item_id\":\"rs_1\","
+                + "\"content_index\":0,\"delta\":\"abcdefghX\"}");
+        assertEquals("abcdefghabcdefghX", official.getContentItems().get(0).getThinkingRaw()
+                + official.getContentItems().get(1).getThinkingRaw());
+
+        ChatAccumulator compatible = newResponse(true,
+                ChatOptions.of().optionSet("responses_reasoning_delta_mode", "snapshot"));
+        parseStream(compatible, "{\"type\":\"response.reasoning_text.delta\",\"item_id\":\"rs_1\","
+                + "\"content_index\":0,\"delta\":\"abcdefgh\"}\n"
+                + "{\"type\":\"response.reasoning_text.delta\",\"item_id\":\"rs_1\","
+                + "\"content_index\":0,\"delta\":\"abcdefghX\"}");
+        assertEquals("abcdefghX", compatible.getContentItems().get(0).getThinkingRaw()
+                + compatible.getContentItems().get(1).getThinkingRaw());
+    }
+
+    @Test
+    public void terminalFallbackCompletesFieldsWithoutDuplicatingDeliveredContent() {
+        ChatAccumulator resp = newResponse(true);
+        parseStream(resp, "{\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{"
+                + "\"id\":\"msg_1\",\"type\":\"message\",\"content\":["
+                + "{\"type\":\"output_text\",\"text\":\"hello\"}]}}");
+        parseStream(resp, "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"output\":[{"
+                + "\"id\":\"msg_1\",\"type\":\"message\",\"content\":["
+                + "{\"type\":\"output_text\",\"text\":\"hello world\"}] }]}}");
+        assertEquals("hello world", resp.snapshotTerminal().getMessage().getText());
+    }
+
+    @Test
+    public void repeatedCompletedReasoningIsFieldIdempotent() {
+        ChatAccumulator resp = newResponse(true);
+        String completed = "{\"type\":\"response.completed\",\"response\":{\"output\":[{"
+                + "\"id\":\"rs_1\",\"type\":\"reasoning\",\"encrypted_content\":\"enc\","
+                + "\"content\":[{\"type\":\"reasoning_text\",\"text\":\"think\"}],\"summary\":[]}]}}";
+        parseStream(resp, completed);
+        parseStream(resp, completed);
+        int thinkingItems = 0;
+        for (AssistantMessage item : resp.getContentItems()) {
+            if (item.isThinking() && (item.getThinkingRaw() != null || item.hasMetadata())) thinkingItems++;
+        }
+        assertEquals(1, thinkingItems);
+    }
+
+    @Test
+    public void nonStreamReasoningSummaryFallbackIsPerItem() {
+        ChatAccumulator resp = newResponse(false);
+        parse(resp, "{\"status\":\"completed\",\"output\":["
+                + "{\"id\":\"rs_1\",\"type\":\"reasoning\",\"summary\":[],"
+                + "\"content\":[{\"type\":\"reasoning_text\",\"text\":\"first\"}]},"
+                + "{\"id\":\"rs_2\",\"type\":\"reasoning\",\"content\":[],"
+                + "\"summary\":[{\"type\":\"summary_text\",\"text\":\"second\"}]}]}");
+        assertEquals("firstsecond", resp.getContentItems().get(0).getThinkingRaw());
+    }
+
+    @Test
+    public void orderedReplayPreservesServerToolItem() {
+        ChatAccumulator resp = newResponse(false);
+        parse(resp, "{\"status\":\"completed\",\"output\":["
+                + "{\"id\":\"ws_1\",\"type\":\"web_search_call\",\"status\":\"completed\",\"action\":{\"type\":\"search\",\"query\":\"solon\"}},"
+                + "{\"id\":\"msg_1\",\"type\":\"message\",\"status\":\"completed\",\"role\":\"assistant\","
+                + "\"content\":[{\"type\":\"output_text\",\"text\":\"ok\",\"annotations\":[],\"logprobs\":[]}]}]}");
+        ONode root = build(ChatOptions.of(), Collections.singletonList(resp.getContentItems().get(0)));
+        assertEquals("web_search_call", root.get("input").get(0).get("type").getString());
+        assertEquals("message", root.get("input").get(1).get("type").getString());
+        assertEquals("msg_1", root.get("input").get(1).get("id").getString());
+    }
+
+    @Test
+    public void compatibilityCacheUsageFallsBackOnlyWhenOfficialDetailsAreMissing() {
+        ChatAccumulator resp = newResponse(false);
+        parse(resp, "{\"model\":\"gpt-5.4\",\"status\":\"completed\",\"output\":[],\"usage\":{"
+                + "\"input_tokens\":2,\"output_tokens\":1,\"input_cached_tokens\":7,"
+                + "\"input_cache_write_tokens\":8}}");
+        assertEquals(7, resp.getUsage().cacheReadInputTokens());
+        assertEquals(8, resp.getUsage().cacheCreationInputTokens());
     }
 }
