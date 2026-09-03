@@ -796,14 +796,14 @@ public class OpenaiResponsesDialectTest {
     }
 
     @Test
-    public void streamCumulativeOutputTextDelta_isNormalizedToSuffix() {
+    public void streamOfficialOutputTextDelta_isAppendedWithoutSnapshotGuessing() {
         ChatAccumulator resp = newResponse(true);
 
         parseStream(resp, "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_1\",\"type\":\"message\"}}\n"
                 + "{\"type\":\"response.output_text.delta\",\"delta\":\"所有代码修改完成。\"}\n"
                 + "{\"type\":\"response.output_text.delta\",\"delta\":\"所有代码修改完成。更新任务进度并运行验证\"}");
 
-        assertEquals("所有代码修改完成。更新任务进度并运行验证",
+        assertEquals("所有代码修改完成。所有代码修改完成。更新任务进度并运行验证",
                 resp.getContentItems().get(0).getTextRaw()
                         + resp.getContentItems().get(1).getTextRaw());
     }
@@ -862,7 +862,7 @@ public class OpenaiResponsesDialectTest {
     }
 
     @Test
-    public void streamDuplicatedSnapshotFrame_isDropped() {
+    public void streamOfficialRepeatedOutputTextDelta_isPreserved() {
         ChatAccumulator resp = newResponse(true);
 
         parseStream(resp, "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_1\",\"type\":\"message\"}}\n"
@@ -870,18 +870,61 @@ public class OpenaiResponsesDialectTest {
                 + "{\"type\":\"response.output_text.delta\",\"delta\":\"所有代码修改完成。更新任务进度\"}\n"
                 + "{\"type\":\"response.output_text.delta\",\"delta\":\"所有代码修改完成。更新任务进度\"}");
 
-        assertEquals(2, resp.getContentItems().size(), "完全重复的快照帧不应产生新的 choice");
-        assertEquals("所有代码修改完成。更新任务进度",
+        assertEquals(3, resp.getContentItems().size(), "官方 delta 即使内容相同也都是新增负载");
+        assertEquals("所有代码修改完成。所有代码修改完成。更新任务进度所有代码修改完成。更新任务进度",
                 resp.getContentItems().get(0).getTextRaw()
-                        + resp.getContentItems().get(1).getTextRaw());
+                        + resp.getContentItems().get(1).getTextRaw()
+                        + resp.getContentItems().get(2).getTextRaw());
     }
+    @Test
+    public void streamDoneEvents_supplyFinalPayloadWhenDeltasAreMissing() {
+        ChatAccumulator resp = newResponse(true);
+        parseStream(resp, "{\"type\":\"response.output_text.done\",\"item_id\":\"msg_1\","
+                + "\"content_index\":0,\"text\":\"done text\"}");
+        parseStream(resp, "{\"type\":\"response.reasoning_summary_text.done\",\"item_id\":\"rs_1\","
+                + "\"summary_index\":0,\"text\":\"summary text\"}");
+
+        assertEquals("done text", resp.getContentItems().get(0).getText());
+        assertEquals("summary text", resp.getContentItems().get(1).getThinking());
+    }
+
+    @Test
+    public void streamContentPartDone_suppliesOutputText() {
+        ChatAccumulator resp = newResponse(true);
+        parseStream(resp, "{\"type\":\"response.content_part.done\",\"item_id\":\"msg_1\","
+                + "\"content_index\":0,\"part\":{\"type\":\"output_text\",\"text\":\"part text\"}}");
+        assertEquals("part text", resp.getContentItems().get(0).getText());
+    }
+
+    @Test
+    public void streamRefusalDone_suppliesTextWithoutDelta() {
+        ChatAccumulator resp = newResponse(true);
+        parseStream(resp, "{\"type\":\"response.refusal.done\",\"item_id\":\"msg_1\","
+                + "\"content_index\":0,\"refusal\":\"拒答内容\"}");
+        assertEquals("拒答内容", resp.getContentItems().get(0).getText());
+    }
+
+    @Test
+    public void responseMessagePhase_isReplayedOnNextAssistantInput() {
+        ChatAccumulator resp = newResponse(false);
+        String responseJson = "{\"model\":\"gpt-5.4\",\"status\":\"completed\",\"output\":["
+                + "{\"type\":\"message\",\"role\":\"assistant\",\"phase\":\"commentary\","
+                + "\"content\":[{\"type\":\"output_text\",\"text\":\"answer\"}]}]}";
+        assertTrue(parse(resp, responseJson));
+        AssistantMessage message = resp.getContentItems().get(0);
+        assertEquals("commentary", message.getMetadata().get("phase"));
+
+        ONode replay = build(ChatOptions.of(), Collections.singletonList(message));
+        assertEquals("commentary", replay.get("input").get(0).get("phase").getString(), replay.toJson());
+    }
+
     @Test
     public void explicitPromptCacheBreakpoint_isAttachedToLastInputContent() {
         ChatOptions options = ChatOptions.of().optionSet("prompt_cache_breakpoint", "after_tools");
         ONode root = build(options, Collections.singletonList(ChatMessage.ofUser("hi")));
         ONode content = root.get("input").get(0).get("content");
         assertTrue(content.isArray(), root.toJson());
-        assertEquals("after_tools", content.get(content.size() - 1)
+        assertEquals("explicit", content.get(content.size() - 1)
                 .get("prompt_cache_breakpoint").get("mode").getString(), root.toJson());
     }
 
@@ -893,5 +936,64 @@ public class OpenaiResponsesDialectTest {
         assertNotNull(resp.getUsage());
         assertEquals(0, resp.getUsage().totalTokens());
     }
+    @Test
+    public void streamOptions_includeObfuscationKeptOnlyForStreamingResponses() {
+        ChatConfig config = new ChatConfig();
+        config.setModel("gpt-5.4");
+        ChatOptions options = ChatOptions.of().optionSet("stream_options",
+                Collections.singletonMap("include_obfuscation", false));
+        ONode root = builder.build(config, options,
+                Collections.singletonList(ChatMessage.ofUser("hi")), true);
 
+        assertFalse(root.get("stream_options").get("include_obfuscation").getBoolean(), root.toJson());
+
+        ONode nonStream = builder.build(config, options,
+                Collections.singletonList(ChatMessage.ofUser("hi")), false);
+        assertFalse(nonStream.hasKey("stream_options"), nonStream.toJson());
+    }
+
+    @Test
+    public void streamCompletedFinalResponse_isUsedAsIdempotentFallback() {
+        ChatAccumulator resp = newResponse(true);
+        assertTrue(parseStream(resp, "{\"type\":\"response.completed\",\"response\":{"
+                + "\"id\":\"resp_1\",\"model\":\"gpt-5.4\",\"output\":["
+                + "{\"type\":\"message\",\"id\":\"msg_1\",\"role\":\"assistant\","
+                + "\"content\":[{\"type\":\"output_text\",\"text\":\"最终答案\"}]}]}}"));
+        assertEquals("最终答案", resp.snapshotTerminal().getMessage().getText());
+
+        // 同一终态重复到达不能重复追加。
+        parseStream(resp, "{\"type\":\"response.completed\",\"response\":{"
+                + "\"id\":\"resp_1\",\"model\":\"gpt-5.4\",\"output\":["
+                + "{\"type\":\"message\",\"id\":\"msg_1\",\"role\":\"assistant\","
+                + "\"content\":[{\"type\":\"output_text\",\"text\":\"最终答案\"}]}]}}" );
+        assertEquals("最终答案", resp.snapshotTerminal().getMessage().getText());
+    }
+
+    @Test
+    public void streamTextSnapshot_isolatedByContentIndex() {
+        ChatAccumulator resp = newResponse(true);
+        parseStream(resp, "{\"type\":\"response.output_item.added\",\"item\":{"
+                + "\"id\":\"msg_1\",\"type\":\"message\"}}\n"
+                + "{\"type\":\"response.content_part.added\",\"item_id\":\"msg_1\",\"content_index\":0,"
+                + "\"part\":{\"type\":\"output_text\"}}\n"
+                + "{\"type\":\"response.output_text.delta\",\"item_id\":\"msg_1\",\"content_index\":0,\"delta\":\"abcdefgh\"}\n"
+                + "{\"type\":\"response.content_part.added\",\"item_id\":\"msg_1\",\"content_index\":1,"
+                + "\"part\":{\"type\":\"output_text\"}}\n"
+                + "{\"type\":\"response.output_text.delta\",\"item_id\":\"msg_1\",\"content_index\":1,\"delta\":\"ijklmnop\"}\n"
+                + "{\"type\":\"response.output_text.delta\",\"item_id\":\"msg_1\",\"content_index\":0,\"delta\":\"abcdefghUPDATED\"}");
+
+        StringBuilder text = new StringBuilder();
+        for (AssistantMessage item : resp.getContentItems()) text.append(item.getTextRaw());
+        assertEquals("abcdefghijklmnopUPDATED", text.toString());
+    }
+
+    @Test
+    public void usageOfficialZeroCachedTokens_winsOverCompatibilityField() {
+        ChatAccumulator resp = newResponse(false);
+        parse(resp, "{\"model\":\"gpt-5.4\",\"status\":\"completed\",\"output\":[],"
+                + "\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2,"
+                + "\"input_tokens_details\":{\"cached_tokens\":0},\"prompt_cache_hit_tokens\":99}}");
+        assertNotNull(resp.getUsage());
+        assertEquals(0, resp.getUsage().cacheReadInputTokens());
+    }
 }

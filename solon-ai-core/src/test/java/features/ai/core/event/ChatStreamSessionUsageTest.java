@@ -140,4 +140,46 @@ public class ChatStreamSessionUsageTest {
         assertEquals(2, session.nextStep());
         assertEquals(2, session.getStep());
     }
+
+    /**
+     * 服务端内置工具按「次」计费，与 token 同为步间累加项；
+     * 计费档位 / 推理区域是标签不是计数，累加无意义，取首个非空值
+     */
+    @Test
+    public void serverToolCountsAccumulateAndLabelsStayStable() {
+        ChatStreamSession session = new ChatStreamSession();
+
+        session.accumulateUsage(AiUsage.builder()
+                .promptTokens(100).completionTokens(10).totalTokens(110)
+                .webSearchRequests(2).webFetchRequests(1)
+                .serviceTier("priority").inferenceGeo("us-east")
+                .build());
+        AiUsage total = session.accumulateUsage(AiUsage.builder()
+                .promptTokens(50).completionTokens(5).totalTokens(55)
+                .webSearchRequests(3).webFetchRequests(4)
+                .serviceTier("standard").inferenceGeo("eu-west")
+                .build());
+
+        assertEquals(5, total.webSearchRequests(), "按次计费项必须跨步累加");
+        assertEquals(5, total.webFetchRequests());
+        assertEquals(150, total.promptTokens());
+        assertEquals("priority", total.serviceTier(), "标签取首个非空值，逐步原值仍在 source.steps[] 里");
+        assertEquals("us-east", total.inferenceGeo());
+    }
+
+    /**
+     * 首步无标签、后续步才给时，不能永久为空
+     */
+    @Test
+    public void labelFillsInWhenFirstStepHasNone() {
+        ChatStreamSession session = new ChatStreamSession();
+
+        session.accumulateUsage(usageOf(10, 0, 5, 15));
+        AiUsage total = session.accumulateUsage(AiUsage.builder()
+                .promptTokens(10).completionTokens(5).totalTokens(15)
+                .serviceTier("batch")
+                .build());
+
+        assertEquals("batch", total.serviceTier());
+    }
 }

@@ -141,11 +141,14 @@ public class OpenaiResponsesEventTest {
     public void partialImageBecomesMediaPartial() {
         ChatStreamContext ctx = newCtx();
 
-        parser.parseStreamResponse(ctx, "{\"type\":\"response.image_generation_call.partial_image\",\"item_id\":\"img_1\"}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"response.image_generation_call.partial_image\",\"item_id\":\"img_1\","
+                + "\"partial_image_b64\":\"QUJD\",\"partial_image_index\":2}");
 
         assertEquals(1, events.size());
         assertSame(ChatEventType.MEDIA_PARTIAL, events.get(0).getType());
         assertSame(ChatEventGroup.MEDIA, events.get(0).getGroup());
+        assertEquals(Integer.valueOf(2), events.get(0).attrAs("partial_image_index"));
+        assertNotNull(events.get(0).getBlock());
     }
 
     /**
@@ -326,5 +329,6 @@ public class OpenaiResponsesEventTest {
                 + "\"error\":{\"message\":\"boom\"}}");
         assertNotNull(firstOf(ChatEventType.ERROR), "failed must emit ERROR");
         assertNotNull(ctx2.getAccumulator().getError());
+        assertTrue(ctx2.getAccumulator().isFinished(), "failed 响应必须结束累积器");
     }
 }

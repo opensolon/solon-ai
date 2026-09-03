@@ -56,7 +56,7 @@ public class OpenaiResponsesRequestBuilder {
      * @since 4.1
      */
     private static final Set<String> UNSUPPORTED_KEYS = new HashSet<>(Arrays.asList(
-            "stop", "stream_options", "frequency_penalty", "presence_penalty",
+            "stop", "frequency_penalty", "presence_penalty",
             "logit_bias", "n", "seed"));
 
     /**
@@ -108,6 +108,18 @@ public class OpenaiResponsesRequestBuilder {
             String key = kv.getKey();
             // 跳过已处理的字段（response_format 不适用于 Responses API，使用 text.format 替代）
             if ("stream".equals(key) || "response_format".equals(key)) {
+                continue;
+            }
+            // Responses 的 stream_options 与 Chat Completions 不是同一组字段；官方 SDK 当前支持
+            // include_obfuscation，include_usage 属于 Chat Completions，不能原样转发。
+            if ("stream_options".equals(key)) {
+                if (isStream) {
+                    ONode streamOptions = toNode(kv.getValue());
+                    if (streamOptions.isObject() && streamOptions.hasKey("include_obfuscation")) {
+                        root.getOrNew("stream_options")
+                                .set("include_obfuscation", streamOptions.get("include_obfuscation").getBoolean());
+                    }
+                }
                 continue;
             }
             // Chat Completions 专属参数：Responses API 不接受，剔除避免 400
@@ -469,6 +481,7 @@ public class OpenaiResponsesRequestBuilder {
             // input_text / input_image / input_file；output_text 只能出现在带 id 的 output message 项里。
             // 这里统一用 input_* 形态回传，避免与 input_image 混排导致 400。
             ONode msgNode = inputArray.addNew().set("role", "assistant");
+            applyAssistantPhase(msgNode, assistantMessage);
             ONode contentArray = msgNode.getOrNew("content").asArray();
 
             // 4.1 起 thinking 与 text 已物理分离，TextBlock 里不再内嵌 think 标签；
@@ -496,14 +509,16 @@ public class OpenaiResponsesRequestBuilder {
             String plain = assistantMessage.getText();
             if (hasToolCalls || reasoningEmitted) {
                 if (Utils.isNotEmpty(plain)) {
-                    inputArray.addNew()
+                    ONode assistantNode = inputArray.addNew()
                             .set("role", "assistant")
                             .set("content", plain);
+                    applyAssistantPhase(assistantNode, assistantMessage);
                 }
             } else {
-                inputArray.addNew()
+                ONode assistantNode = inputArray.addNew()
                         .set("role", "assistant")
                         .set("content", plain != null ? plain : "");
+                applyAssistantPhase(assistantNode, assistantMessage);
             }
         }
      
@@ -553,14 +568,27 @@ public class OpenaiResponsesRequestBuilder {
         return genId == null ? null : String.valueOf(genId);
     }
 
+    private void applyAssistantPhase(ONode assistantNode, AssistantMessage message) {
+        if (assistantNode == null || message == null || !message.hasMetadata()) return;
+        Object phase = message.getMetadata().get("phase");
+        if (phase != null) {
+            String value = String.valueOf(phase).trim();
+            if ("commentary".equals(value) || "final_answer".equals(value)) {
+                assistantNode.set("phase", value);
+            }
+        }
+    }
+
     /**
      * 将调用方通过 optionSet("prompt_cache_breakpoint", ...) 指定的断点挂到最后一个输入内容项。
+     * Responses 官方断点的 mode 是协议值 explicit；after_tools 等只表示上层的挂载策略。
      */
     private void applyPromptCacheBreakpoint(ONode inputArray, Object value) {
         if (value == null || inputArray == null || !inputArray.isArray()) return;
         ONode breakpoint = toNode(value);
-        if (breakpoint.isValue()) {
-            breakpoint = new ONode().set("mode", breakpoint.getString());
+        if (!breakpoint.isObject() || !"explicit".equals(breakpoint.get("mode").getString())) {
+            // 不把统一层的 after_tools/其它策略名误发送为 Responses 的 mode。
+            breakpoint = new ONode().set("mode", "explicit");
         }
         for (int i = inputArray.size() - 1; i >= 0; i--) {
             ONode item = inputArray.get(i);
@@ -969,6 +997,12 @@ public class OpenaiResponsesRequestBuilder {
                         });
             }
         });
-        return oNode;
+        ONode toolNode = oNode;
+        String phase = acc.getAggregationMetadata().get("phase") == null
+                ? null : String.valueOf(acc.getAggregationMetadata().get("phase"));
+        if ("commentary".equals(phase) || "final_answer".equals(phase)) {
+            toolNode.set("phase", phase);
+        }
+        return toolNode;
     }
 }

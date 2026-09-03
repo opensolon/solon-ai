@@ -231,10 +231,9 @@ public class OpenaiChatDialect extends AbstractChatDialect {
             // 思考 token 统计：优先 DeepSeek 形态 completion_tokens_details.reasoning_tokens，兜底 think_tokens
             long thinkTokens = 0L;
             ONode completionTokensDetails = oUsage.getOrNull("completion_tokens_details");
-            if (completionTokensDetails != null) {
+            if (completionTokensDetails != null && completionTokensDetails.hasKey("reasoning_tokens")) {
                 thinkTokens = completionTokensDetails.get("reasoning_tokens").getLong();
-            }
-            if (thinkTokens == 0L) {
+            } else if (oUsage.hasKey("think_tokens")) {
                 thinkTokens = oUsage.get("think_tokens").getLong();
             }
 
@@ -244,10 +243,15 @@ public class OpenaiChatDialect extends AbstractChatDialect {
             long cacheCreationInputTokens = 0L;
             ONode promptTokensDetails = oUsage.getOrNull("prompt_tokens_details");
             if (promptTokensDetails != null) {
-                cacheReadInputTokens = promptTokensDetails.get("cached_tokens").getLong();
-                cacheCreationInputTokens = promptTokensDetails.get("cache_write_tokens").getLong();
+                if (promptTokensDetails.hasKey("cached_tokens")) {
+                    cacheReadInputTokens = promptTokensDetails.get("cached_tokens").getLong();
+                }
+                if (promptTokensDetails.hasKey("cache_write_tokens")) {
+                    cacheCreationInputTokens = promptTokensDetails.get("cache_write_tokens").getLong();
+                }
             }
-            if (cacheReadInputTokens == 0L) {
+            if ((promptTokensDetails == null || !promptTokensDetails.hasKey("cached_tokens"))
+                    && oUsage.hasKey("prompt_cache_hit_tokens")) {
                 cacheReadInputTokens = oUsage.get("prompt_cache_hit_tokens").getLong();
             }
 

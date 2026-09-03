@@ -69,16 +69,31 @@ public class ChatStreamSession {
         if (totalUsage == null) {
             totalUsage = usage;
         } else {
-            totalUsage = new AiUsage(
-                    totalUsage.promptTokens() + usage.promptTokens(),
-                    totalUsage.thinkTokens() + usage.thinkTokens(),
-                    totalUsage.completionTokens() + usage.completionTokens(),
-                    totalUsage.totalTokens() + usage.totalTokens(),
-                    totalUsage.cacheCreationInputTokens() + usage.cacheCreationInputTokens(),
-                    totalUsage.cacheReadInputTokens() + usage.cacheReadInputTokens(),
-                    aggregateSource());
+            totalUsage = totalUsage.toBuilder()
+                    .promptTokens(totalUsage.promptTokens() + usage.promptTokens())
+                    .thinkTokens(totalUsage.thinkTokens() + usage.thinkTokens())
+                    .completionTokens(totalUsage.completionTokens() + usage.completionTokens())
+                    .totalTokens(totalUsage.totalTokens() + usage.totalTokens())
+                    .cacheCreationInputTokens(totalUsage.cacheCreationInputTokens() + usage.cacheCreationInputTokens())
+                    .cacheReadInputTokens(totalUsage.cacheReadInputTokens() + usage.cacheReadInputTokens())
+                    // TTL 明细与汇总同为步间累加项；漏掉这两项会让多步流的缓存成本明细静默归零
+                    .cacheCreation5mInputTokens(totalUsage.cacheCreation5mInputTokens() + usage.cacheCreation5mInputTokens())
+                    .cacheCreation1hInputTokens(totalUsage.cacheCreation1hInputTokens() + usage.cacheCreation1hInputTokens())
+                    // 服务端内置工具按「次」计费，与 token 同为累加项
+                    .webSearchRequests(totalUsage.webSearchRequests() + usage.webSearchRequests())
+                    .webFetchRequests(totalUsage.webFetchRequests() + usage.webFetchRequests())
+                    // 档位/区域是标签不是计数，累加没有意义；取首个非空值（同一次 stream 内各步通常一致，
+                    // 万一各步不同，逐步原值仍完整保留在 source.steps[] 里）
+                    .serviceTier(firstNonEmpty(totalUsage.serviceTier(), usage.serviceTier()))
+                    .inferenceGeo(firstNonEmpty(totalUsage.inferenceGeo(), usage.inferenceGeo()))
+                    .source(aggregateSource())
+                    .build();
         }
         return totalUsage;
+    }
+
+    private static String firstNonEmpty(String prev, String curr) {
+        return Utils.isEmpty(prev) ? curr : prev;
     }
 
     /**
