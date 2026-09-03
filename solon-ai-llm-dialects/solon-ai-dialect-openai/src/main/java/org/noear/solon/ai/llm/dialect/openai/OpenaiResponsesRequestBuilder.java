@@ -97,11 +97,12 @@ public class OpenaiResponsesRequestBuilder {
         // 构建 input（将消息转为 input 数组，SystemMessage 已提取到 instructions）
         ONode inputArray = root.getOrNew("input").asArray();
         boolean allowInputAudio = Boolean.TRUE.equals(options.options().get("responses_input_audio_enabled"));
+        boolean replayReasoning = isReasoningReplayEnabled(config.getModel(), options);
         for (ChatMessage msg : messages) {
             if (msg instanceof SystemMessage) {
                 continue;
             }
-            buildInputItem(inputArray, msg, allowInputAudio);
+            buildInputItem(inputArray, msg, allowInputAudio, replayReasoning);
         }
         root.set("stream", isStream);
         // 添加其他选项
@@ -157,7 +158,8 @@ public class OpenaiResponsesRequestBuilder {
                 continue;
             }
             if ("responses_reasoning_delta_mode".equals(key)
-                    || "responses_input_audio_enabled".equals(key)) {
+                    || "responses_input_audio_enabled".equals(key)
+                    || "responses_reasoning_replay_enabled".equals(key)) {
                 // 仅控制方言本地兼容行为，不得发送给服务端。
                 continue;
             }
@@ -239,7 +241,8 @@ public class OpenaiResponsesRequestBuilder {
      * @author oisin lu
      * @date 2026年1月28日
      */
-    private void buildInputItem(ONode inputArray, ChatMessage message, boolean allowInputAudio) {
+    private void buildInputItem(ONode inputArray, ChatMessage message, boolean allowInputAudio,
+                                boolean replayReasoning) {
         if (message instanceof ToolMessage) {
             buildToolMessageInputItem(inputArray, (ToolMessage) message);
             return;
@@ -249,14 +252,15 @@ public class OpenaiResponsesRequestBuilder {
             AssistantMessage assistantMessage = (AssistantMessage) message;
 
             // 优先按 Responses 原始 output_index 回放完整 output item，避免按类型重排或字段降级。
-            if (appendResponsesOutputItems(inputArray, assistantMessage)) {
+            if (appendResponsesOutputItems(inputArray, assistantMessage, replayReasoning)) {
                 return;
             }
 
             // 1) reasoning 项先行（官方要求 reasoning 在其后续项之前），与正文 / function_call 并列而非二选一：
             //    4.1 后非流式解析产出的是 text/thinking 合并的单条消息（isThinking=false），
             //    不能再用 isThinking() 做消息分类，否则 thinking 与 reasoning 元数据会整体丢弃
-            boolean reasoningEmitted = appendReasoningInputItem(inputArray, assistantMessage);
+            boolean reasoningEmitted = replayReasoning
+                    && appendReasoningInputItem(inputArray, assistantMessage);
             boolean responseMessagesEmitted = appendResponseMessageItems(inputArray, assistantMessage);
 
             // 2) 纯思考分片（流式 thinking 消息）：无正文 / 无工具调用时不再补空 assistant 项
@@ -390,7 +394,8 @@ public class OpenaiResponsesRequestBuilder {
      * @since 4.1
      */
     @SuppressWarnings("unchecked")
-    private boolean appendResponsesOutputItems(ONode inputArray, AssistantMessage message) {
+    private boolean appendResponsesOutputItems(ONode inputArray, AssistantMessage message,
+                                               boolean replayReasoning) {
         if (!message.hasMetadata()) return false;
         Object value = message.getMetadata().get("responses_output_items");
         if (!(value instanceof Collection)) return false;
@@ -407,10 +412,32 @@ public class OpenaiResponsesRequestBuilder {
                 return Integer.compare(replayOutputIndex(left), replayOutputIndex(right));
             }
         });
+        boolean emitted = false;
         for (Map<String, Object> wrapper : wrappers) {
-            inputArray.add(toNode(wrapper.get("item")));
+            ONode item = toNode(wrapper.get("item"));
+            String type = item.get("type").getString();
+            if (!replayReasoning && "reasoning".equals(type)) {
+                continue;
+            }
+            if ("function_call".equals(type)) {
+                item.set("arguments", ToolCallJsonSanitizer.sanitizeArguments(
+                        item.get("arguments").getString(), item.get("name").getString()));
+            }
+            inputArray.add(item);
+            emitted = true;
         }
-        return !wrappers.isEmpty();
+        return emitted;
+    }
+
+    private boolean isReasoningReplayEnabled(String model, ChatOptions options) {
+        Object configured = options.options().get("responses_reasoning_replay_enabled");
+        if (configured instanceof Boolean) {
+            return (Boolean) configured;
+        }
+
+        // GLM 的 Responses 兼容层会把 input item 转成 Anthropic messages，
+        // 但 reasoning item 没有 message.content，回放后会被其内部校验拒绝。
+        return Utils.isEmpty(model) || !model.toLowerCase().startsWith("glm-");
     }
 
     private int replayOutputIndex(Map<String, Object> wrapper) {

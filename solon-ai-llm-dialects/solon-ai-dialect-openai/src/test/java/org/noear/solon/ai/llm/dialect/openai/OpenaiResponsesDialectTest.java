@@ -165,7 +165,54 @@ public class OpenaiResponsesDialectTest {
         assertTrue(item.get("summary").isArray(), root.toJson());
     }
 
-    // ==================== options 归一 ====================
+    @Test
+    public void glmReplayDropsUnsupportedReasoningAndSanitizesFunctionArguments() {
+        AssistantMessage message = new AssistantMessage("", "", false);
+        List<Map<String, Object>> items = new ArrayList<>();
+        Map<String, Object> reasoning = new HashMap<>();
+        reasoning.put("type", "reasoning");
+        reasoning.put("id", "rs_1");
+        reasoning.put("summary", Collections.emptyList());
+        items.add(wrapper(0, reasoning));
+        Map<String, Object> function = new HashMap<>();
+        function.put("type", "function_call");
+        function.put("id", "fc_1");
+        function.put("call_id", "call_1");
+        function.put("name", "get_weather");
+        function.put("arguments", "{}{\"location\":\"杭州\"}");
+        items.add(wrapper(1, function));
+        message.getMetadata().put("responses_output_items", items);
+
+        ONode root = build("glm-5.3", ChatOptions.of(), Collections.singletonList(message));
+        assertEquals(1, root.get("input").size(), root.toJson());
+        ONode call = root.get("input").get(0);
+        assertEquals("function_call", call.get("type").getString());
+        assertEquals("杭州", ONode.ofJson(call.get("arguments").getString()).get("location").getString());
+    }
+
+    @Test
+    public void glmReasoningReplayCanBeExplicitlyEnabled() {
+        AssistantMessage message = new AssistantMessage("", "", false);
+        Map<String, Object> reasoning = new HashMap<>();
+        reasoning.put("type", "reasoning");
+        reasoning.put("id", "rs_1");
+        reasoning.put("summary", Collections.emptyList());
+        message.getMetadata().put("responses_output_items",
+                Collections.singletonList(wrapper(0, reasoning)));
+
+        ONode root = build("glm-5.3", ChatOptions.of()
+                .optionSet("responses_reasoning_replay_enabled", true),
+                Collections.singletonList(message));
+        assertEquals("reasoning", root.get("input").get(0).get("type").getString());
+    }
+
+    private Map<String, Object> wrapper(int index, Map<String, Object> item) {
+        Map<String, Object> wrapper = new HashMap<>();
+        wrapper.put("output_index", index);
+        wrapper.put("item", item);
+        return wrapper;
+    }
+
 
     @Test
     public void toolChoice_flattenedForResponses() {
