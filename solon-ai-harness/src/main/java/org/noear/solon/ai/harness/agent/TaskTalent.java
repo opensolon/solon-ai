@@ -20,8 +20,8 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.react.RunEndEvent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatSession;
@@ -184,7 +184,7 @@ public class TaskTalent extends AbsTalent {
 
             if (__parentTrace == null || __parentTrace.getOptions() == null || __parentTrace.getOptions().getStreamSink() == null) {
                 // 同步模式
-                ReActChunk agentChunk = (ReActChunk) agent.prompt(originalPrompt)
+                RunEndEvent agentEnd = (RunEndEvent) agent.prompt(originalPrompt)
                         .session(session)
                         .options(o -> {
                             o.toolContextPut(HarnessEngine.ATTR_CWD, __cwd);
@@ -200,16 +200,20 @@ public class TaskTalent extends AbsTalent {
                     throw errRef.get();
                 }
 
-                if (__parentTrace != null) {
-                    __parentTrace.getMetrics().addMetrics(agentChunk.getMetrics());
+                if (agentEnd == null) {
+                    throw new IllegalStateException("子代理未正常完成：未收到未收到正常响应");
                 }
 
-                result = agentChunk.getContent();
+                if (__parentTrace != null) {
+                    __parentTrace.getMetrics().addMetrics(agentEnd.getMetrics());
+                }
+
+                result = agentEnd.getText();
             } else {
                 // 流式模式
                 final FluxSink<AgentEvent> sink = __parentTrace.getOptions().getStreamSink();
 
-                ReActChunk response = (ReActChunk) agent.prompt(originalPrompt)
+                RunEndEvent agentEnd = (RunEndEvent) agent.prompt(originalPrompt)
                         .session(session)
                         .options(o -> {
                             o.toolContextPut(HarnessEngine.ATTR_CWD, __cwd);
@@ -234,13 +238,15 @@ public class TaskTalent extends AbsTalent {
                     throw errRef.get();
                 }
 
-                // 取消或流被提前截断时 blockLast 可能为 null
-                if (response != null) {
-                    __parentTrace.getMetrics().addMetrics(response.getMetrics());
-                    result = response.getContent();
-                } else {
-                    result = "";
+                if (agentEnd == null) {
+                    if (sink.isCancelled()) {
+                        throw new IllegalStateException("主代理已暂停");
+                    }
+                    throw new IllegalStateException("子代理未正常完成：未收到正常响应");
                 }
+
+                __parentTrace.getMetrics().addMetrics(agentEnd.getMetrics());
+                result = agentEnd.getText();
             }
 
 

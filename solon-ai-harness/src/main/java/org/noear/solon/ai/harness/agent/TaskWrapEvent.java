@@ -32,7 +32,7 @@ public class TaskWrapEvent extends AbsAgentEvent {
     private final AgentEvent realEvent;
 
     public TaskWrapEvent(ReActTrace parentTrace, String taskId, TaskTalent.MultiTaskOp taskOp, boolean isMultitask, AgentEvent realEvent) {
-        super(realEvent.getRunId(), realEvent.getAgentName(), realEvent.getSession(), realEvent.getMessage());
+        super(realEvent.getRunId(), realEvent.getAgentName(), realEvent.getSession());
         this.parentTrace = parentTrace;
         this.taskId = taskId;
         this.taskOp = taskOp;
@@ -66,5 +66,10 @@ public class TaskWrapEvent extends AbsAgentEvent {
 
     public AgentEvent getRealEvent() {
         return realEvent;
+    }
+
+    @Override
+    public String getText() {
+        return realEvent.getText();
     }
 }
