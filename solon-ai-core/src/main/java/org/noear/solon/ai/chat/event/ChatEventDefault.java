@@ -165,41 +165,6 @@ public class ChatEventDefault implements ChatEvent {
         return response;
     }
 
-    /**
-     * 本帧消息（契约见 {@link ChatEvent#getMessage()}：带响应的帧给响应的消息，内容增量帧给当帧分片）
-     */
-    @Override
-    public @Nullable AssistantMessage getMessage() {
-        if (response != null) {
-            //终态 / 错误 / 用量帧：消息已由响应算定，直取（终态即完整聚合）
-            return response.getMessage();
-        }
-
-        if (messageReference == null) {
-            messageReference = new AtomicReference<>();
-
-            if (type == ChatEventType.THINKING_DELTA) {
-                //思考增量进 thinking 槽位、正文留空，前端才能与正文分区渲染
-                messageReference.set(new AssistantMessage("", getTextOrEmpty(), true));
-            }
-
-            if (type == ChatEventType.TEXT_DELTA) {
-                messageReference.set(new AssistantMessage(getTextOrEmpty(), "", false));
-            }
-
-            if (type == ChatEventType.MEDIA_DONE) {
-                //媒体进内容块槽位（不投文本）：url / 数据串不是模型正文，投进 text 会被当对话拼接，
-                //且丢掉 mimeType；终态聚合也是把媒体放 blocks，当帧与聚合才对得上
-                if (block != null) {
-                    messageReference.set(new AssistantMessage("", "", false, null, null, null, null,
-                            Collections.singletonList(block)));
-                }
-            }
-        }
-
-        return messageReference.get();
-    }
-
     @Override
     public ONode getRaw() {
         return raw;

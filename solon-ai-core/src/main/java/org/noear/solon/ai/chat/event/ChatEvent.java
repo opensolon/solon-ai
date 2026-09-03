@@ -189,38 +189,16 @@ public interface ChatEvent extends AiEvent, NonSerializable {
     ChatResponse getResponse();
 
     /**
-     * 本帧消息。带响应的帧给响应的消息，内容增量帧给当帧分片，其它帧为 null
-     *
-     * <p>取值规则：</p>
-     * <ul>
-     *   <li>带 {@link #getResponse()} 的帧：即 {@code getResponse().getMessage()}，省一次判空。
-     *       其中终态帧（{@link ChatEventType#RESPONSE_END} / {@link ChatEventType#STEP_END}）是
-     *       <b>完整聚合</b>，与非流式 {@code call()} 一致；{@link ChatEventType#ERROR} 是已完成部分；
-     *       {@link ChatEventType#USAGE} 是当帧快照（通常为空消息）；</li>
-     *   <li>{@link ChatEventType#TEXT_DELTA}：当帧增量进正文槽；</li>
-     *   <li>{@link ChatEventType#THINKING_DELTA}：当帧增量进思考槽（{@code isThinking()} 为 true），
-     *       前端才能与正文分区渲染；</li>
-     *   <li>{@link ChatEventType#MEDIA_DONE}：内容块进 {@code getBlocks()}，不投文本——url /
-     *       base64 数据串不是模型正文，投进文本会被当对话拼接、还会丢掉 mimeType；</li>
-     *   <li>其它帧（生命周期 / 步 / 元数据 / 工具调用 / 边界帧等）：null。边界帧自身不载内容，
-     *       上抛会与增量重复渲染；工具调用组的文本是参数分片，不是模型正文。</li>
-     * </ul>
-     *
-     * <p><b>先按类型选帧，再取值</b>：同一条流里既有当帧增量、也有整段聚合，对每一帧无条件追加会让
-     * 正文翻倍。打字机场景固定取增量帧（如 {@code e.is(TEXT_DELTA, THINKING_DELTA, MEDIA_DONE)}）；
-     * 要最终结果则取终态帧（{@link ChatEventType#RESPONSE_END}，或用 {@link ChatEvents#reduce}）。</p>
+     * 聚合消息。仅终态与收尾帧携带：{@link ChatEventType#RESPONSE_END}（全流终态）与
+     * {@link ChatEventType#STEP_END}（分步终态）为完整聚合，{@link ChatEventType#ERROR} 为
+     * 已完成部分（便于打捞），{@link ChatEventType#USAGE} 为当帧快照
      */
-    @Nullable
-    AssistantMessage getMessage();
-
-    /**
-     * 本帧消息，无内容可取时给空消息（便于直接访问 {@code getText()} / {@code isThinking()} 等而不判空）
-     */
-    @NonNull
-    default AssistantMessage getMessageOrEmpty() {
-        AssistantMessage message = getMessage();
-
-        return message == null ? new AssistantMessage("") : message;
+    default @Nullable AssistantMessage getMessage() {
+        if (getResponse() == null) {
+            return null;
+        } else {
+            return getResponse().getMessage();
+        }
     }
 
     /**
