@@ -211,17 +211,17 @@ group / phase 在枚举构造期绑定，实现类不可覆写——`getType()` 
 
 ### 分组表
 
-| Group | 类型 | 载荷入口 |
-|---|---|---|
-| `LIFECYCLE` | `RESPONSE_START` `STATUS` `HEARTBEAT` `RESPONSE_END` `ABORT` | `RESPONSE_END.getResponse()` 携带终态聚合 |
-| `STEP` | `STEP_START` `STEP_END` | `STEP_END.getUsage()` 单步 usage；`getResponse()` 单步聚合 |
-| `TEXT` | `TEXT_START` `TEXT_DELTA` `TEXT_END` `TEXT_CHUNK` | `getText()` |
-| `THINKING` | `THINKING_START` `THINKING_DELTA` `THINKING_END` `THINKING_CHUNK` `THINKING_SIGNATURE` `THINKING_REDACTED` | `getText()`；签名为 base64 文本 |
-| `TOOL_CALL` | `TOOL_CALL_START` `TOOL_CALL_ARGS_DELTA` `TOOL_CALL_END` `TOOL_CALL_CHUNK` `TOOL_RESULT` | `getToolCall()` / `getToolCallId()`；`TOOL_RESULT` 是本地已执行的结果 |
-| `SERVER_TOOL` | `SERVER_TOOL_START` `SERVER_TOOL_ARGS_DELTA` `SERVER_TOOL_RESULT` | `getSubType()` 区分 `web_search` / `code_interpreter` / `mcp_call` / `google_search` 等 |
-| `MEDIA` | `CITATION` `MEDIA_PARTIAL` `MEDIA_DONE` | 引用与生成媒体 |
-| `SAFETY` | `REFUSAL_DELTA` `CONTENT_FILTER` | 拒答与内容过滤 |
-| `META` | `USAGE` `ERROR` `RAW` `CUSTOM` | `RAW` 为未建模原始帧，`getRaw()` 取原始 JSON |
+| Group         | 类型                                                                                      | 载荷入口                                                                                |
+|---------------|-------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------|
+| `LIFECYCLE`   | `RESPONSE_START` `STATUS` `HEARTBEAT` `RESPONSE_END` `ABORT`                              | `RESPONSE_END.getResponse()` 携带终态聚合                                               |
+| `STEP`        | `STEP_START` `STEP_END`                                                                   | `STEP_END.getUsage()` 单步 usage；`getResponse()` 单步聚合                              |
+| `TEXT`        | `TEXT_START` `TEXT_DELTA` `TEXT_END`                                                      | `getText()`                                                                             |
+| `THINKING`    | `THINKING_START` `THINKING_DELTA` `THINKING_END` `THINKING_SIGNATURE` `THINKING_REDACTED` | `getText()`；签名为 base64 文本                                                         |
+| `TOOL_CALL`   | `TOOL_CALL_START` `TOOL_CALL_ARGS_DELTA` `TOOL_CALL_END` `TOOL_CALL_CHUNK` `TOOL_RESULT`  | `getToolCall()` / `getToolCallId()`；`TOOL_RESULT` 是本地已执行的结果                   |
+| `SERVER_TOOL` | `SERVER_TOOL_START` `SERVER_TOOL_ARGS_DELTA` `SERVER_TOOL_RESULT`                         | `getSubType()` 区分 `web_search` / `code_interpreter` / `mcp_call` / `google_search` 等 |
+| `MEDIA`       | `CITATION` `MEDIA_PARTIAL` `MEDIA_DONE`                                                   | 引用与生成媒体                                                                          |
+| `SAFETY`      | `REFUSAL_DELTA` `CONTENT_FILTER`                                                          | 拒答与内容过滤                                                                          |
+| `META`        | `USAGE` `ERROR` `RAW` `CUSTOM`                                                            | `RAW` 为未建模原始帧，`getRaw()` 取原始 JSON                                            |
 
 ### Phase
 

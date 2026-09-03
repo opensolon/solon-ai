@@ -3,8 +3,8 @@ package features.ai.chat;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
-import org.noear.solon.ai.chat.ChatResponseDefault;
-import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.annotation.Bean;
 import org.noear.solon.annotation.Configuration;
 import org.noear.solon.annotation.Inject;
@@ -13,7 +13,6 @@ import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 
-import java.util.Arrays;
 import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -38,7 +37,7 @@ public class App {
         ChatResponse resp = chatModel.prompt("hello").call();
         System.out.println("=========----------===========");
         //打印消息
-        System.out.println(resp.getChoices());
+        System.out.println(resp.getMessage());
     }
 
     @Test
@@ -56,9 +55,10 @@ public class App {
         int[] resultChunkCount = {0};
         boolean[] finishedReported = {false};
 
-        Publisher<ChatResponse> stream = chatModel.prompt("请问1+2+3+4+5+....+999等于多少？").stream();
+        //手写 Subscriber + 背压（验证事件流对原生 reactive-streams 的兼容性）
+        Publisher<ChatEvent> stream = chatModel.prompt("请问1+2+3+4+5+....+999等于多少？").stream();
 
-        stream.subscribe(new Subscriber<ChatResponse>() {
+        stream.subscribe(new Subscriber<ChatEvent>() {
             private Subscription subscription;
 
             @Override
@@ -68,54 +68,29 @@ public class App {
             }
 
             @Override
-            public void onNext(ChatResponse response) {
+            public void onNext(ChatEvent event) {
                 chunkCount[0]++;
 
-                String responseData = response.getResponseData();
-                if (responseData != null && responseData.contains("thought")) {
-                    System.err.println("RAW RESPONSE: " + responseData.substring(0, Math.min(500, responseData.length())));
-                }
+                if (event.getError() == null) {
+                    String text = event.getText();
 
-                System.err.println("TEST DEBUG onNext: response=" + (response != null ? response.getClass().getSimpleName() : "null"));
-                if (response != null && response instanceof ChatResponseDefault) {
-                    ChatResponseDefault respDefault = (ChatResponseDefault) response;
-                    System.err.println("  respDefault.in_thinking=" + respDefault.in_thinking);
-                }
-
-                if (response != null && response.getError() == null) {
-                    if (response.getChoices().size() > 0) {
-                        AssistantMessage msg = response.getChoices().get(0).getMessage();
-                        String content = msg.getContent();
-                        boolean isThinking = msg.isThinking();
-
-                        System.err.println("TEST DEBUG: isThinking=" + isThinking + ", contentLength=" + (content != null ? content.length() : "null"));
-                        if (content != null) {
-                            String preview = content.replace("\n", "\\n").replace("\r", "\\r");
-                            if (!preview.isEmpty()) {
-                                System.err.println("  preview: " + preview);
-                            } else {
-                                System.err.println("  content is whitespace only, chars: " + Arrays.toString(content.toCharArray()));
-                            }
-                        } else {
-                            System.err.println("  content is null!");
+                    if (event.is(ChatEventType.THINKING_DELTA)) {
+                        if (text != null && !text.isEmpty()) {
+                            thinkingChunkCount[0]++;
+                            fullResponse.append(text);
+                            thinkingResponse.append(text);
+                            System.out.print("[思考块 #" + thinkingChunkCount[0] + "]");
                         }
-
-                        if (content != null && !content.isEmpty()) {
-                            fullResponse.append(content);
-
-                            if (isThinking) {
-                                thinkingChunkCount[0]++;
-                                thinkingResponse.append(content);
-                                System.out.print("[思考块 #" + thinkingChunkCount[0] + "]");
-                            } else {
-                                resultChunkCount[0]++;
-                                resultResponse.append(content);
-                                System.out.print(content);
-                            }
+                    } else if (event.is(ChatEventType.TEXT_DELTA)) {
+                        if (text != null && !text.isEmpty()) {
+                            resultChunkCount[0]++;
+                            fullResponse.append(text);
+                            resultResponse.append(text);
+                            System.out.print(text);
                         }
                     }
 
-                    if (response.isFinished() && !finishedReported[0]) {
+                    if (event.is(ChatEventType.RESPONSE_END) && !finishedReported[0]) {
                         finishedReported[0] = true;
 
                         System.out.println("\n\n===========================================");

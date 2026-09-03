@@ -3,10 +3,11 @@ package features.ai.dialect;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
+import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRequest;
-import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.event.ChatStreamContextDefault;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
@@ -22,12 +23,22 @@ import java.util.List;
  * <p>覆盖：非流式 reasoning item、流式 reasoning_text.delta、usage.reasoning_tokens、
  * 请求侧 thinking 消息回传为 reasoning item、response.incomplete 结束处理。</p>
  *
+ * <p>本测试为方言白盒测试：直接驱动 {@link ChatAccumulator}（4.1 起从 ChatResponseDefault
+ * 拆出的可变累积器），断言方言写入累积器的分片与协议状态。</p>
+ *
  * @since 4.0.5
  */
 public class OpenaiResponsesThinkParseTest {
+
+    /**
+     * 走方言的唯一解析入口；单测不关心事件，故用「不发事件」的上下文
+     */
+    private static void parse(OpenaiResponsesDialect dialect, ChatAccumulator acc, String json) {
+        dialect.parseResponseJson(ChatStreamContextDefault.ofNoEmit(new ChatConfig(), acc), json);
+    }
     private static final OpenaiResponsesDialect dialect = OpenaiResponsesDialect.getInstance();
 
-    private static ChatResponseDefault newResp(boolean stream) {
+    private static ChatAccumulator newAcc(boolean stream) {
         ChatRequest req = new ChatRequest(
                 new ChatConfig(),
                 dialect,
@@ -36,7 +47,7 @@ public class OpenaiResponsesThinkParseTest {
                 null,
                 null,
                 stream);
-        return new ChatResponseDefault(req, stream);
+        return new ChatAccumulator(req, stream);
     }
 
     /**
@@ -44,7 +55,7 @@ public class OpenaiResponsesThinkParseTest {
      */
     @Test
     public void nonStreamShouldParseReasoningItem() {
-        ChatResponseDefault resp = newResp(false);
+        ChatAccumulator resp = newAcc(false);
         String json = "{"
                 + "\"id\":\"resp_1\","
                 + "\"object\":\"response\","
@@ -62,12 +73,10 @@ public class OpenaiResponsesThinkParseTest {
                 + "  \"output_tokens_details\":{\"reasoning_tokens\":8}}"
                 + "}";
 
-        boolean ok = dialect.parseResponseJson(new ChatConfig(), resp, json);
-
-        Assertions.assertTrue(ok);
+        parse(dialect, resp, json);
         // 4.1 起与 AbstractChatDialect 对齐：思考与正文合并为单条消息（text/thinking 已分离）
-        Assertions.assertEquals(1, resp.getChoices().size());
-        AssistantMessage msg = resp.getChoices().get(0).getMessage();
+        Assertions.assertEquals(1, resp.getContentItems().size());
+        AssistantMessage msg = resp.getContentItems().get(0);
         Assertions.assertFalse(msg.isThinking());
         Assertions.assertEquals("让我想想再想想", msg.getThinking());
         Assertions.assertEquals("你好", msg.getText());
@@ -83,7 +92,7 @@ public class OpenaiResponsesThinkParseTest {
      */
     @Test
     public void nonStreamShouldParseTopLevelReasoningText() {
-        ChatResponseDefault resp = newResp(false);
+        ChatAccumulator resp = newAcc(false);
         String json = "{"
                 + "\"id\":\"resp_2\","
                 + "\"object\":\"response\","
@@ -93,11 +102,9 @@ public class OpenaiResponsesThinkParseTest {
                 + "\"output_text\":\"顶层正文\""
                 + "}";
 
-        boolean ok = dialect.parseResponseJson(new ChatConfig(), resp, json);
-
-        Assertions.assertTrue(ok);
-        Assertions.assertEquals(1, resp.getChoices().size());
-        AssistantMessage topMsg = resp.getChoices().get(0).getMessage();
+        parse(dialect, resp, json);
+        Assertions.assertEquals(1, resp.getContentItems().size());
+        AssistantMessage topMsg = resp.getContentItems().get(0);
         Assertions.assertFalse(topMsg.isThinking());
         Assertions.assertEquals("顶层思考", topMsg.getThinking());
         Assertions.assertEquals("顶层正文", topMsg.getText());
@@ -108,7 +115,7 @@ public class OpenaiResponsesThinkParseTest {
      */
     @Test
     public void streamShouldParseReasoningDelta() {
-        ChatResponseDefault resp = newResp(true);
+        ChatAccumulator resp = newAcc(true);
         String[] sse = new String[]{
                 "data: {\"type\":\"response.created\",\"response\":{\"model\":\"deepseek-reasoner\"}}",
                 "data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"r1\",\"type\":\"reasoning\"}}",
@@ -127,18 +134,18 @@ public class OpenaiResponsesThinkParseTest {
         };
 
         for (String line : sse) {
-            dialect.parseResponseJson(new ChatConfig(), resp, line);
+            parse(dialect, resp, line);
         }
 
         Assertions.assertTrue(resp.isFinished());
         // 既有思考消息、也有非思考消息
-        Assertions.assertTrue(resp.getChoices().stream().anyMatch(c -> c.getMessage().isThinking()));
-        Assertions.assertTrue(resp.getChoices().stream().anyMatch(c -> !c.getMessage().isThinking()));
+        Assertions.assertTrue(resp.getContentItems().stream().anyMatch(c -> c.isThinking()));
+        Assertions.assertTrue(resp.getContentItems().stream().anyMatch(c -> !c.isThinking()));
         // 思考增量内容已按序回传
         List<String> thinkDeltas = new ArrayList<>();
-        for (org.noear.solon.ai.chat.ChatChoice choice : resp.getChoices()) {
-            if (choice.getMessage().isThinking()) {
-                thinkDeltas.add(choice.getMessage().getContent());
+        for (AssistantMessage choice : resp.getContentItems()) {
+            if (choice.isThinking()) {
+                thinkDeltas.add(choice.getContent());
             }
         }
         Assertions.assertEquals("让我", thinkDeltas.get(0));
@@ -153,7 +160,7 @@ public class OpenaiResponsesThinkParseTest {
      */
     @Test
     public void streamIncompleteShouldFinish() {
-        ChatResponseDefault resp = newResp(true);
+        ChatAccumulator resp = newAcc(true);
         String[] sse = new String[]{
                 "data: {\"type\":\"response.created\",\"response\":{\"model\":\"deepseek-reasoner\"}}",
                 "data: {\"type\":\"response.output_text.delta\",\"delta\":\"部分内容\"}",
@@ -162,11 +169,11 @@ public class OpenaiResponsesThinkParseTest {
         };
 
         for (String line : sse) {
-            dialect.parseResponseJson(new ChatConfig(), resp, line);
+            parse(dialect, resp, line);
         }
 
         Assertions.assertTrue(resp.isFinished());
-        Assertions.assertTrue(resp.hasChoices());
+        Assertions.assertTrue(resp.hasContentItems());
     }
 
     /**
@@ -216,19 +223,19 @@ public class OpenaiResponsesThinkParseTest {
      */
     @Test
     public void streamShouldDropReasoningDeltaWithoutContext() {
-        ChatResponseDefault resp = newResp(true);
+        ChatAccumulator resp = newAcc(true);
         String[] sse = new String[]{
                 "data: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"孤立增量\"}",
                 "data: {\"type\":\"response.completed\",\"response\":{\"model\":\"m\"}}"
         };
 
         for (String line : sse) {
-            dialect.parseResponseJson(new ChatConfig(), resp, line);
+            parse(dialect, resp, line);
         }
 
         Assertions.assertTrue(resp.isFinished());
         // 不应产生任何 thinking 消息
-        Assertions.assertTrue(resp.getChoices().stream().noneMatch(c -> c.getMessage().isThinking()));
+        Assertions.assertTrue(resp.getContentItems().stream().noneMatch(c -> c.isThinking()));
     }
 
     /**
@@ -237,7 +244,7 @@ public class OpenaiResponsesThinkParseTest {
      */
     @Test
     public void streamShouldParseReasoningContentPartDeltaAsThinking() {
-        ChatResponseDefault resp = newResp(true);
+        ChatAccumulator resp = newAcc(true);
         String[] sse = new String[]{
                 "data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"r1\",\"type\":\"reasoning\"}}",
                 "data: {\"type\":\"response.content_part.added\",\"part\":{\"type\":\"reasoning_text\"}}",
@@ -247,16 +254,16 @@ public class OpenaiResponsesThinkParseTest {
         };
 
         for (String line : sse) {
-            dialect.parseResponseJson(new ChatConfig(), resp, line);
+            parse(dialect, resp, line);
         }
 
         Assertions.assertTrue(resp.isFinished());
         // 应产生 thinking 消息且内容正确
-        org.noear.solon.ai.chat.ChatChoice thinking = resp.getChoices().stream()
-                .filter(c -> c.getMessage().isThinking())
+        AssistantMessage thinking = resp.getContentItems().stream()
+                .filter(c -> c.isThinking())
                 .findFirst()
                 .orElse(null);
         Assertions.assertNotNull(thinking);
-        Assertions.assertEquals("思考中", thinking.getMessage().getContent());
+        Assertions.assertEquals("思考中", thinking.getContent());
     }
 }

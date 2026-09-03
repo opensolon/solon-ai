@@ -1,9 +1,11 @@
 package labs.ai;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatRequest;
 import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.event.ChatStreamContextDefault;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -18,6 +20,13 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  */
 public class OpenAiTest {
+    /**
+     * 走方言的唯一解析入口；单测不关心事件，故用「不发事件」的上下文
+     */
+    private void parse(OpenaiChatDialect dialect, ChatConfig config, ChatAccumulator acc, String json) {
+        dialect.parseResponseJson(ChatStreamContextDefault.ofNoEmit(config, acc), json);
+    }
+
     @Test
     public void testStreamUsageWithEmptyChoicesChunk() {
         // 模拟 MiMo 流式响应：最后一个 chunk choices=[] 但 usage 有数据
@@ -36,24 +45,19 @@ public class OpenAiTest {
         ChatConfig config = new ChatConfig();
 
         ChatRequest req = new ChatRequest(config, dialect, config.getModelOptions(), InMemoryChatSession.builder().build(), ChatMessage.ofSystem(""), Prompt.of(""), true);
-        ChatResponseDefault resp = new ChatResponseDefault(req, true);
+        ChatAccumulator acc = new ChatAccumulator(req, true);
 
         for (String chunk : chunks) {
-            resp.reset();
-            boolean parsed = dialect.parseResponseJson(config, resp, chunk);
-            assertTrue(parsed);
-
-            // Chunk 5 解析后：
-            // - isFinished() = true（从 Chunk 4 继承）
-            // - hasChoices() 应该 = true（parseResponseJson 应该补了空 choice）
-            // - getUsage() 应该 != null
+            acc.reset();
+            parse(dialect, config, acc, chunk);
         }
 
-        // 最终断言
-        assertNotNull(resp.getUsage(), "usage 不应为 null");
-        assertEquals(5, resp.getUsage().completionTokens());
-        assertEquals(260, resp.getUsage().promptTokens());
-        assertEquals(265, resp.getUsage().totalTokens());
+        // 最后一帧（choices=[] 但带 usage）：终态下必须补位空内容项，且 usage 要落到累积器
+        assertTrue(acc.hasContentItems(), "choices=[] 的 usage 帧仍应补出空内容项");
+        assertNotNull(acc.getUsage(), "usage 不应为 null");
+        assertEquals(5, acc.getUsage().completionTokens());
+        assertEquals(260, acc.getUsage().promptTokens());
+        assertEquals(265, acc.getUsage().totalTokens());
     }
 
     @Test
@@ -67,18 +71,18 @@ public class OpenAiTest {
         OpenaiChatDialect dialect = new OpenaiChatDialect();
         ChatConfig config = new ChatConfig();
         ChatRequest req = new ChatRequest(config, dialect, config.getModelOptions(), InMemoryChatSession.builder().build(), ChatMessage.ofSystem(""), Prompt.of(""), false);
-        ChatResponseDefault resp = new ChatResponseDefault(req, false);
+        ChatAccumulator acc = new ChatAccumulator(req, false);
 
-        assertTrue(dialect.parseResponseJson(config, resp, json));
+        parse(dialect, config, acc, json);
 
-        assertNotNull(resp.getUsage());
-        assertEquals(12, resp.getUsage().promptTokens());
-        assertEquals(88, resp.getUsage().completionTokens());
-        assertEquals(100, resp.getUsage().totalTokens());
+        assertNotNull(acc.getUsage());
+        assertEquals(12, acc.getUsage().promptTokens());
+        assertEquals(88, acc.getUsage().completionTokens());
+        assertEquals(100, acc.getUsage().totalTokens());
         // 思考 token 应从 completion_tokens_details.reasoning_tokens 提取
-        assertEquals(60, resp.getUsage().thinkTokens());
+        assertEquals(60, acc.getUsage().thinkTokens());
         // 缓存命中应从顶层 prompt_cache_hit_tokens 提取
-        assertEquals(10, resp.getUsage().cacheReadInputTokens());
+        assertEquals(10, acc.getUsage().cacheReadInputTokens());
     }
 
     @Test
@@ -91,12 +95,12 @@ public class OpenAiTest {
         OpenaiChatDialect dialect = new OpenaiChatDialect();
         ChatConfig config = new ChatConfig();
         ChatRequest req = new ChatRequest(config, dialect, config.getModelOptions(), InMemoryChatSession.builder().build(), ChatMessage.ofSystem(""), Prompt.of(""), false);
-        ChatResponseDefault resp = new ChatResponseDefault(req, false);
+        ChatAccumulator acc = new ChatAccumulator(req, false);
 
-        assertTrue(dialect.parseResponseJson(config, resp, json));
+        parse(dialect, config, acc, json);
 
-        assertEquals(20, resp.getUsage().thinkTokens());
-        assertEquals(4, resp.getUsage().cacheReadInputTokens());
+        assertEquals(20, acc.getUsage().thinkTokens());
+        assertEquals(4, acc.getUsage().cacheReadInputTokens());
     }
 
     @Test
@@ -112,35 +116,37 @@ public class OpenAiTest {
         OpenaiChatDialect dialect = new OpenaiChatDialect();
         ChatConfig config = new ChatConfig();
         ChatRequest req = new ChatRequest(config, dialect, config.getModelOptions(), InMemoryChatSession.builder().build(), ChatMessage.ofSystem(""), Prompt.of(""), true);
-        ChatResponseDefault resp = new ChatResponseDefault(req, true);
+        ChatAccumulator acc = new ChatAccumulator(req, true);
 
-        // Chunk 1：首段思考 → 产出 <think> 标记消息 + 思维链消息
-        resp.reset();
-        assertTrue(dialect.parseResponseJson(config, resp, chunks[0]));
-        assertEquals(2, resp.getChoices().size());
-        assertTrue(resp.getChoices().get(0).getMessage().isThinking());
-        assertEquals("<think>", resp.getChoices().get(0).getMessage().getContent());
-        assertEquals("第一步思考", resp.getChoices().get(1).getMessage().getThinking());
+        // Chunk 1：首段思考 → 产出思考开启信号帧（content 为空）+ 思维链消息
+        // 4.1 起边界不再用 <think> 字面量缝进 content，改为空内容的 thinking 信号帧
+        acc.reset();
+        parse(dialect, config, acc, chunks[0]);
+        assertEquals(2, acc.getContentItems().size());
+        assertTrue(acc.getContentItems().get(0).isThinking());
+        assertEquals("", acc.getContentItems().get(0).getContent());
+        assertEquals("第一步思考", acc.getContentItems().get(1).getThinking());
 
         // Chunk 2：中间思考增量
-        resp.reset();
-        assertTrue(dialect.parseResponseJson(config, resp, chunks[1]));
-        assertEquals(1, resp.getChoices().size());
-        assertEquals("第二步思考", resp.getChoices().get(0).getMessage().getThinking());
-        assertTrue(resp.getChoices().get(0).getMessage().isThinking());
+        acc.reset();
+        parse(dialect, config, acc, chunks[1]);
+        assertEquals(1, acc.getContentItems().size());
+        assertEquals("第二步思考", acc.getContentItems().get(0).getThinking());
+        assertTrue(acc.getContentItems().get(0).isThinking());
 
-        // Chunk 3：思考结束 → 产出 </think> 标记消息 + 正文消息
-        resp.reset();
-        assertTrue(dialect.parseResponseJson(config, resp, chunks[2]));
-        assertEquals(2, resp.getChoices().size());
-        assertEquals("</think>", resp.getChoices().get(0).getMessage().getContent());
-        assertFalse(resp.getChoices().get(1).getMessage().isThinking());
-        assertEquals("正文", resp.getChoices().get(1).getMessage().getContent());
+        // Chunk 3：思考结束 → 产出思考闭合信号帧（content 为空）+ 正文消息
+        acc.reset();
+        parse(dialect, config, acc, chunks[2]);
+        assertEquals(2, acc.getContentItems().size());
+        assertTrue(acc.getContentItems().get(0).isThinking());
+        assertEquals("", acc.getContentItems().get(0).getContent());
+        assertFalse(acc.getContentItems().get(1).isThinking());
+        assertEquals("正文", acc.getContentItems().get(1).getContent());
 
-        // Chunk 4：工具调用
-        resp.reset();
-        assertTrue(dialect.parseResponseJson(config, resp, chunks[3]));
-        AssistantMessage toolMsg = resp.getMessage();
+        // Chunk 4：工具调用（取当帧分片消息）
+        acc.reset();
+        parse(dialect, config, acc, chunks[3]);
+        AssistantMessage toolMsg = acc.snapshotFrame().getMessage();
         assertNotNull(toolMsg.getToolCalls());
         assertEquals("get_weather", toolMsg.getToolCalls().get(0).getName());
     }

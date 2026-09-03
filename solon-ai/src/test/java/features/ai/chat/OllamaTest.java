@@ -3,6 +3,8 @@ package features.ai.chat;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.test.SolonTest;
 
+import java.time.Duration;
+
 /**
  * @author noear 2025/1/28 created
  */
@@ -17,6 +19,6 @@ public class OllamaTest extends AbsChatTest{
                 .standard("ollama")
                 .model("qwen3.5:0.8b")
                 .userAgent(userAgent)
-                ; //"llama3.2";
+                .timeout(Duration.ofMinutes(10));
     }
 }
