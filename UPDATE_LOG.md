@@ -63,7 +63,7 @@
 * 优化 solon-ai-dialect-openai 方言适配
 * 优化 solon-ai-dialect-anthropic 方言适配
 * 优化 solon-ai-talent-code 扫描扩为4层，增加可超时的缓存
-* 优化 solon-ai-telent-lsp 体验及超时处理
+* 优化 solon-ai-telent-lsp jdtls 体验及超时处理
 * 优化 solon-ai-harness 添加 compressionDefaultContextLength 配置支持
 * 调整 solon-ai-core `stream<ChatResponse>` 改为 `stream<ChatEvent>`
 * 调整 solon-ai-harness HarnessExtension.configure 添加 engine 参数

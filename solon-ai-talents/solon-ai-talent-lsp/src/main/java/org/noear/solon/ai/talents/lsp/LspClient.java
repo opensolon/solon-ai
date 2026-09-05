@@ -39,6 +39,26 @@ public interface LspClient extends LanguageClient {
     }
 
     /**
+     * 服务器的分析结果是否已可采信。
+     *
+     * <p>{@code false} 表示项目模型还没建好（典型是 jdtls 正在导入多模块 Maven 仓库）。此时它
+     * 照样会推送诊断，但那是按「没有 classpath 的孤立源文件」算出来的，几乎全是假错，
+     * 导航结果同样不可信（会得到空结果，容易被误读成「符号不存在」）。
+     */
+    default boolean isReady() {
+        return true;
+    }
+
+    /**
+     * 等待服务器就绪，最长 {@code timeoutMs}
+     *
+     * @return 是否已就绪
+     */
+    default boolean awaitReady(long timeoutMs) {
+        return isReady();
+    }
+
+    /**
      * 同步文件内容给语言服务器（内容未变化时不重复通知）
      */
     default void touchFile(String uri) throws Exception {

@@ -19,6 +19,7 @@ import org.eclipse.lsp4j.*;
 import org.eclipse.lsp4j.jsonrpc.Launcher;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageServer;
+import org.noear.solon.ai.talents.lsp.exception.LspBusyException;
 import org.noear.solon.ai.talents.lsp.exception.LspCommandNotFoundException;
 import org.noear.solon.ai.talents.lsp.exception.LspEnvironmentException;
 import org.noear.solon.ai.talents.lsp.exception.LspStalledException;
@@ -80,13 +81,29 @@ public class LspClientImpl implements LspClient {
     private static final long STDERR_DRAIN_JOIN_MS = 300L;
 
     /**
-     * 单条出站消息的写入预算。
+     * 单条出站消息的「软预算」：调用方最多等这么久，超时即放弃本轮（返回未同步），但不追究服务器。
      *
-     * <p>健康服务器下写管道是微秒级操作，超过这个时间只有一种解释：对端不再读自己的 stdin。
-     * 这个上限的意义在于把「不可自愈的永久阻塞」变成「一次可降级的超时」——写文件、编辑
-     * 文件这类主流程绝不能因为语言服务器出问题而挂住。
+     * <p>曾经这里只有一个 2s 的预算，且超时就直接判定「对端不再读 stdin」并强杀进程。这个推断
+     * 对 jdtls 不成立：项目导入期它的消息读取线程会被工作区锁挡住，而 didOpen 要一次性推整份
+     * 文件文本，管道缓冲（通常 64KB）一满我们就阻塞——于是一个正在正常导入项目的服务器被反复
+     * 杀掉，配额（{@code lsp.maxRestarts}）用尽后整个会话的 Java 语言服务静默失效。
+     *
+     * <p>所以软预算只负责「主流程不被拖住」，判定卡死交给 {@link #sendHardTimeoutMs}。
      */
-    private static final long SEND_TIMEOUT_MS = Long.getLong("lsp.sendTimeout", 2000L);
+    private static final long SEND_SOFT_TIMEOUT_DEFAULT = 5000L;
+
+    /**
+     * 单条出站消息的「硬预算」：同一次写入卡这么久才判定对端确实停止消费 stdin。
+     *
+     * <p>健康服务器下写管道是微秒级操作，慢也慢在「忙」；只有长时间毫无进展才是不可自愈的
+     * 双向管道死锁，那时才值得付出杀进程 + 冷启动重建的代价。
+     */
+    private static final long SEND_HARD_TIMEOUT_DEFAULT = 60_000L;
+
+    /**
+     * 就绪信号的兜底预算（见 {@link LspReadyGate}）
+     */
+    private static final long READY_TIMEOUT_DEFAULT = 180_000L;
 
     /**
      * 关闭握手的等待预算
@@ -125,9 +142,30 @@ public class LspClientImpl implements LspClient {
     private ExecutorService rpcExecutor;
 
     /**
-     * 对端已停止消费 stdin（写入超时）。一经判定即永久成立：此进程已不可信，只能重建。
+     * 对端已停止消费 stdin（写入超过硬预算）。一经判定即永久成立：此进程已不可信，只能重建。
      */
     private volatile boolean stalled;
+
+    /**
+     * 当前正在发送的消息描述与起始时间（0 表示空闲）。
+     *
+     * <p>发送线程只有一条，所以「是否有一次写入卡住了、卡了多久」是全局事实：
+     * 据此即可区分「服务器在忙」（本轮降级、下次再试）与「服务器死了」（杀掉重建），
+     * 并让后续调用方在已知堆积时立即降级，而不是每人再白白等一个软预算。
+     */
+    private volatile String sendInFlightDesc;
+    private volatile long sendInFlightSince;
+
+    /**
+     * 单条出站消息的软/硬预算（构造时定，便于测试与按服务器调优）
+     */
+    private final long sendSoftTimeoutMs;
+    private final long sendHardTimeoutMs;
+
+    /**
+     * 项目模型就绪门禁：就绪前的诊断一律不采信（见 {@link LspReadyGate}）
+     */
+    private final LspReadyGate readyGate;
 
     /**
      * 已关闭标记：避免重复关闭时向已停止的执行器提交任务
@@ -205,6 +243,9 @@ public class LspClientImpl implements LspClient {
         this.remoteServer = remoteServer;
         this.process = null;
         this.sender = newSingleThreadSender(this.serverName);
+        this.sendSoftTimeoutMs = longProp("lsp.sendTimeout", SEND_SOFT_TIMEOUT_DEFAULT);
+        this.sendHardTimeoutMs = longProp("lsp.stallTimeout", SEND_HARD_TIMEOUT_DEFAULT);
+        this.readyGate = new LspReadyGate(this.serverName, false, 0L);
     }
 
     public LspClientImpl(String serverName, String[] command, String rootDir,
@@ -214,6 +255,12 @@ public class LspClientImpl implements LspClient {
         this.rootDir = rootDir;
         this.rootUri = new File(rootDir).toURI().toString();
         this.sender = newSingleThreadSender(serverName);
+        this.sendSoftTimeoutMs = longProp("lsp.sendTimeout", SEND_SOFT_TIMEOUT_DEFAULT);
+        this.sendHardTimeoutMs = longProp("lsp.stallTimeout", SEND_HARD_TIMEOUT_DEFAULT);
+        //jdtls 导入项目期会推一批「无 classpath」的假诊断，必须等它自述就绪才能采信
+        this.readyGate = new LspReadyGate(serverName,
+                JdtlsSupport.isJdtls(command == null || command.length == 0 ? null : command[0]),
+                longProp("lsp.readyTimeout", READY_TIMEOUT_DEFAULT));
 
         // 1. 启动语言服务器进程（对齐 OpenCode：必须继承父进程环境变量）
         ProcessBuilder builder = new ProcessBuilder(command);
@@ -314,7 +361,25 @@ public class LspClientImpl implements LspClient {
             throw e;
         }
 
-        notifyServer("initialized", () -> remoteServer.initialized(new InitializedParams()));
+        notifyServerQuietly("initialized", () -> remoteServer.initialized(new InitializedParams()));
+    }
+
+    /**
+     * 读取 long 型系统属性（非法值回退默认）。
+     *
+     * <p>每次构造时读而不是写成 static final：属性名水平不高但效果很具体——既能现场改一个
+     * -D 就生效，也让超时相关的回归测试能按用例设预算。
+     */
+    private static long longProp(String name, long defaultValue) {
+        try {
+            String value = System.getProperty(name);
+            if (value == null || value.trim().isEmpty()) {
+                return defaultValue;
+            }
+            return Long.parseLong(value.trim());
+        } catch (Exception e) {
+            return defaultValue;
+        }
     }
 
     private static ExecutorService newSingleThreadSender(String serverName) {
@@ -333,11 +398,17 @@ public class LspClientImpl implements LspClient {
     // ---- 出站通道：写管道只允许阻塞发送线程，绝不阻塞业务线程 ----
 
     /**
-     * 投递一条通知（无响应消息），最长等待 {@link #SEND_TIMEOUT_MS}。
+     * 投递一条通知（无响应消息），最长等待 {@link #sendSoftTimeoutMs}。
      *
-     * <p>超时即判定对端已停止消费 stdin：这种状态不会自行恢复，只能杀掉进程重建，
-     * 否则后续每一次写入都会再赔上一条被永久阻塞的线程。
+     * <p>两级判定：
+     * <ul>
+     *   <li>软超时 → 抛 {@link LspBusyException}：本轮放弃，进程不动。语言服务器在项目导入、
+     *       大文件重解析期间读 stdin 本来就会变慢，把它当故障杀掉纯属自伤。</li>
+     *   <li>同一次写入积压超过 {@link #sendHardTimeoutMs} → 判定卡死（杀进程 + 通知重建）：
+     *       这才是不可自愈的双向管道死锁。</li>
+     * </ul>
      *
+     * @throws LspBusyException    对端暂时跟不上（可重试）
      * @throws LspStalledException 对端已卡死（含本次判定与此前已判定）
      */
     private void notifyServer(String desc, Runnable action) {
@@ -348,23 +419,42 @@ public class LspClientImpl implements LspClient {
             throw new LspStalledException(serverName, desc + " skipped: client is closed");
         }
 
+        //已有写入积压：仅当「等下去也必然吃满软预算」才立即降级。短暂的在飞写入是正常排队
+        //（读文件预热与写文件诊断本就会并发同步不同文件），若见到在飞就放弃，一次几十毫秒的
+        //慢写入便会让并发的那次诊断凭空落空——那是拿一种假象换另一种。
+        long backlog = sendBacklogMs();
+        if (backlog >= sendHardTimeoutMs) {
+            String inFlight = markStalledInFlight(backlog);
+            throw new LspStalledException(serverName,
+                    desc + " skipped: " + inFlight + " has been stuck for " + backlog + "ms");
+        }
+        if (backlog >= sendSoftTimeoutMs) {
+            throw new LspBusyException(serverName,
+                    desc + " skipped: " + sendInFlightDesc + " is still in flight (" + backlog + "ms)");
+        }
+
         Future<?> future;
         try {
-            future = sender.submit(action);
+            future = sender.submit(wrapSend(desc, action));
         } catch (java.util.concurrent.RejectedExecutionException e) {
             throw new LspStalledException(serverName, desc + " rejected: sender is shut down");
         }
 
         try {
-            future.get(SEND_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            future.get(sendSoftTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
-            //不取消 future：写已进入 native write，只能靠关掉管道让它失败退出
-            markStalled(desc);
-            throw new LspStalledException(serverName,
-                    desc + " timed out after " + SEND_TIMEOUT_MS + "ms; server stopped reading stdin");
+            //不取消 future：写可能已进入 native write，取消不了；留给后续调用或关闭时收敛
+            long stuckFor = sendBacklogMs();
+            if (stuckFor >= sendHardTimeoutMs) {
+                markStalled(desc, stuckFor);
+                throw new LspStalledException(serverName,
+                        desc + " timed out after " + stuckFor + "ms; server stopped reading stdin");
+            }
+            throw new LspBusyException(serverName,
+                    desc + " did not complete within " + sendSoftTimeoutMs + "ms; server is busy");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new LspStalledException(serverName, desc + " interrupted");
+            throw new LspBusyException(serverName, desc + " interrupted");
         } catch (ExecutionException e) {
             Throwable cause = (e.getCause() == null) ? e : e.getCause();
             if (cause instanceof RuntimeException) {
@@ -372,6 +462,45 @@ public class LspClientImpl implements LspClient {
             }
             throw new RuntimeException(cause);
         }
+    }
+
+    /**
+     * 发同一条通知，但把「暂时发不出去」降级为日志：用于握手收尾与关闭这类不值得失败的场景
+     */
+    private void notifyServerQuietly(String desc, Runnable action) {
+        try {
+            notifyServer(desc, action);
+        } catch (LspBusyException e) {
+            //通知已排在发送线程里，迟一点发出即可；不能因此让整个客户端创建失败
+            LOG.debug("LSP notification '{}' deferred for '{}': {}", desc, serverName, e.getMessage());
+        }
+    }
+
+    /**
+     * 包装出站动作，记录「当前是否有一条写入正在进行、从何时开始」
+     */
+    private Runnable wrapSend(String desc, Runnable action) {
+        return () -> {
+            sendInFlightDesc = desc;
+            sendInFlightSince = System.currentTimeMillis();
+            try {
+                action.run();
+            } finally {
+                sendInFlightSince = 0L;
+                sendInFlightDesc = null;
+            }
+        };
+    }
+
+    /**
+     * 当前写入已积压多久（0 表示发送线程空闲）
+     */
+    private long sendBacklogMs() {
+        long since = sendInFlightSince;
+        if (since == 0L) {
+            return 0L;
+        }
+        return Math.max(1L, System.currentTimeMillis() - since);
     }
 
     /**
@@ -401,15 +530,15 @@ public class LspClientImpl implements LspClient {
      * 判定对端卡死并强制回收：destroyForcibly 会关闭管道，使阻塞在 native write 的
      * 发送线程立刻拿到 IOException 退出 —— 这是让线程不泄漏的唯一手段。
      */
-    private void markStalled(String desc) {
+    private void markStalled(String desc, long stuckForMs) {
         if (stalled) {
             return;
         }
         stalled = true;
 
         String tail = readStderr();
-        LOG.error("LSP server '{}' stopped consuming stdin ({} exceeded {}ms), terminating it to recover.{}",
-                serverName, desc, SEND_TIMEOUT_MS,
+        LOG.error("LSP server '{}' stopped consuming stdin ({} stuck for {}ms, over the {}ms budget), terminating it to recover.{}",
+                serverName, (desc == null) ? "an in-flight write" : desc, stuckForMs, sendHardTimeoutMs,
                 tail.isEmpty() ? "" : " stderr tail: " + truncate(tail, 1000));
 
         destroyProcess();
@@ -425,6 +554,23 @@ public class LspClientImpl implements LspClient {
     }
 
     /**
+     * 按当前在飞写入判定卡死。
+     *
+     * <p>{@code sendInFlightDesc} 会被发送线程随时清空，故先取一份快照再用：否则日志与异常
+     * 里会出现一个 null，把「谁卡住了」这条唯一线索丢掉。
+     *
+     * @return 用于错误信息的在飞写入描述
+     */
+    private String markStalledInFlight(long backlogMs) {
+        String inFlight = sendInFlightDesc;
+        if (inFlight == null) {
+            inFlight = "an in-flight write";
+        }
+        markStalled(inFlight, backlogMs);
+        return inFlight;
+    }
+
+    /**
      * 注册卡死回调（由 {@link LspManager} 用于驱逐并按配额重启）
      */
     public void setStalledListener(Runnable listener) {
@@ -432,14 +578,57 @@ public class LspClientImpl implements LspClient {
     }
 
     /**
-     * 客户端是否仍可用：进程存活且未被判定卡死
+     * 客户端是否仍可用：进程存活、未被判定卡死、且没有超出硬预算的写入积压
      */
     @Override
     public boolean isAlive() {
         if (stalled || closed) {
             return false;
         }
+        //没人再发消息时也要能收敛：积压超过硬预算即在此处判定卡死
+        long backlog = sendBacklogMs();
+        if (backlog >= sendHardTimeoutMs) {
+            markStalledInFlight(backlog);
+            return false;
+        }
         return (process == null) || process.isAlive();
+    }
+
+    // ---- 就绪门禁：项目模型建好之前不采信任何分析结果 ----
+
+    @Override
+    public boolean isReady() {
+        return readyGate.isReady();
+    }
+
+    @Override
+    public boolean awaitReady(long timeoutMs) {
+        return readyGate.await(timeoutMs);
+    }
+
+    /**
+     * jdtls 私有通知 {@code language/status}：项目导入完成时会推 {@code ServiceReady}。
+     *
+     * <p>lsp4j 只认 {@link org.eclipse.lsp4j.services.LanguageClient} 上声明的方法，服务器私有
+     * 通知需要像这样自行登记（{@code GenericEndpoint} 会扫描本实现类上的 {@code @JsonNotification}），
+     * 否则只会留下一行 “Unsupported notification method” 的日志，我们也就永远无从判断它是否就绪。
+     */
+    @org.eclipse.lsp4j.jsonrpc.services.JsonNotification("language/status")
+    public void languageStatus(LanguageStatusReport report) {
+        if (report == null) {
+            return;
+        }
+        if ("ServiceReady".equalsIgnoreCase(report.type) || "Ready".equalsIgnoreCase(report.type)) {
+            readyGate.markReady("language/status=" + report.type);
+        }
+    }
+
+    /**
+     * {@code language/status} 的载荷（jdtls 私有协议，只取判定就绪所需的字段）
+     */
+    public static class LanguageStatusReport {
+        public String type;
+        public String message;
     }
 
     // ---- stderr 排空 ----
@@ -490,7 +679,7 @@ public class LspClientImpl implements LspClient {
         ReentrantLock lock = syncLocks.computeIfAbsent(uri, k -> new ReentrantLock());
         boolean locked;
         try {
-            locked = lock.tryLock(SEND_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            locked = lock.tryLock(sendSoftTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return VERSION_UNSYNCED;
@@ -503,6 +692,10 @@ public class LspClientImpl implements LspClient {
 
         try {
             return syncFileInLock(uri, forceChange);
+        } catch (LspBusyException e) {
+            //服务器暂时跟不上：本轮算未同步（上层据此判「无结论」），但进程仍可用，下次再试
+            LOG.debug("LSP sync deferred for {}: {}", uri, e.getMessage());
+            return VERSION_UNSYNCED;
         } finally {
             lock.unlock();
         }
@@ -583,6 +776,12 @@ public class LspClientImpl implements LspClient {
      */
     @Override
     public LspDiagnosticsResult waitForDiagnosticsResult(String uri, long timeoutMs) {
+        if (readyGate.isReady() == false) {
+            //项目模型还没建好：此时服务器推的诊断是按「无 classpath 的孤立文件」算出来的，
+            //连 JDK 类型与同文件字段都会报 cannot be resolved，一律不采信、也不往上报
+            return LspDiagnosticsResult.unconfirmed(Collections.<Diagnostic>emptyList());
+        }
+
         DiagState ds = diagStates.get(uri);
         if (ds == null) {
             //没有同步记录，谈不上「本轮」，一律按未确认处理

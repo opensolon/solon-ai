@@ -1050,6 +1050,11 @@ public class HarnessEngine {
         }
         this.lspTalent = new LspTalent(lspManager, options.getWorkspace());
         this.lspManager.setDiagnosticsCallback(lspTalent::updateDiagnostics);
+        if (options.getMountManager() != null) {
+            //lsp 工具的路径入参要与 read/grep 一致地支持挂载点逻辑路径，否则同一个 @xx/a.java
+            //能 read 却做不了导航，只报「文件不存在」
+            this.lspTalent.setPathResolver(options.getMountManager()::resolve);
+        }
 
         if (options.getMemoryProvider() != null) {
             this.memoryTalent = new MemoryTalent(options.getMemoryProvider())

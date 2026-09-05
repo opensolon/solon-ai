@@ -65,6 +65,11 @@ public class LspManager {
     private final Map<String, AtomicInteger> restartCounts = new ConcurrentHashMap<>();
 
     /**
+     * 已禁用命令加固的服务器名（见 {@link #createClient}）
+     */
+    private final Set<String> hardenBlocked = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+
+    /**
      * 单个服务器允许的自动重建次数
      */
     private static final int MAX_RESTARTS = Integer.getInteger("lsp.maxRestarts", 2);
@@ -115,6 +120,7 @@ public class LspManager {
         //配置变更后清掉旧的失败记忆，让用户改完命令能立刻重试
         brokenServers.remove(name);
         restartCounts.remove(name);
+        hardenBlocked.remove(name);
 
         if (params.isEnabled()) {
             LOG.info("Registered LSP server '{}': command={}, extensions={}",
@@ -220,6 +226,7 @@ public class LspManager {
     public void clearBroken() {
         brokenServers.clear();
         restartCounts.clear();
+        hardenBlocked.clear();
     }
 
     /**
@@ -334,14 +341,7 @@ public class LspManager {
                 throw broken;
             }
 
-            LOG.info("Starting LSP server '{}': {}", name, params.getCommand());
-            LspClientImpl client = new LspClientImpl(
-                    name,
-                    params.getCommandArray(),
-                    workspace,
-                    params.getInitialization(),
-                    params.getEnv()
-            );
+            LspClientImpl client = createClient(name, params);
 
             // 设置诊断信息回调
             client.setDiagnosticsConsumer((uri, items) -> {
@@ -367,6 +367,36 @@ public class LspManager {
             throw se;
         } finally {
             clientLock.unlock();
+        }
+    }
+
+    /**
+     * 启动一个语言服务器进程（含 jdtls 专项加固与失败回退）。
+     *
+     * <p>加固（见 {@link JdtlsSupport}）本身是有风险的：{@code -javaagent} 的 premain 一旦与本机
+     * 运行时不兼容就会直接带倒整个 JVM。一旦加固后启动失败，退回原始命令再试一次：
+     * 最差也只是丢掉 Lombok 支持，而不是整个 Java 语言服务全哑。
+     */
+    private LspClientImpl createClient(String name, LspServerParameters params) throws Exception {
+        String[] raw = params.getCommandArray();
+        String[] command = hardenBlocked.contains(name) ? raw : JdtlsSupport.harden(raw, workspace);
+
+        LOG.info("Starting LSP server '{}': {}", name, Arrays.toString(command));
+
+        try {
+            return new LspClientImpl(name, command, workspace, params.getInitialization(), params.getEnv());
+        } catch (LspCommandNotFoundException e) {
+            //可执行文件本身不存在，与加固参数无关，重试只会多一次无意义的 fork
+            throw e;
+        } catch (Exception e) {
+            if (command == raw) {
+                throw e;
+            }
+
+            hardenBlocked.add(name);
+            LOG.warn("LSP server '{}' failed to start with hardened args, retrying with the original command: {}",
+                    name, e.getMessage());
+            return new LspClientImpl(name, raw, workspace, params.getInitialization(), params.getEnv());
         }
     }
 

@@ -21,6 +21,7 @@ import org.eclipse.lsp4j.services.TextDocumentService;
 import org.eclipse.lsp4j.services.WorkspaceService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.talents.lsp.exception.LspEnvironmentException;
 import org.noear.solon.ai.talents.lsp.exception.LspStalledException;
@@ -40,10 +41,12 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>背景：写管道是阻塞操作。当语言服务器自己卡住（典型成因是没人读它的 stderr，
  * 它便阻塞在写日志上并停止读自己的 stdin）时，didOpen/didChange 会永久卡在 native
- * write —— 一次编辑工具调用就此再也不返回，整轮对话失去响应。这里锁定两条底线：
+ * write —— 一次编辑工具调用就此再也不返回，整轮对话失去响应。这里锁定三条底线：
  *
  * <ul>
  *   <li>写入方永远有超时可退：绝不把业务线程押在一条不可自愈的写上；</li>
+ *   <li>「慢」不等于「死」：项目导入期读 stdin 变慢是正常现象，只降级本轮，不许杀进程
+ *       （杀了要付几十秒冷启动，且重启配额用尽后整个会话的语言服务会静默失效）；</li>
  *   <li>子进程的 stderr 必须被持续排空：从源头上不让对端有卡住的机会。</li>
  * </ul>
  *
@@ -51,8 +54,11 @@ import static org.junit.jupiter.api.Assertions.*;
  * @since 4.1
  */
 public class LspClientStallTest {
-    /** 与 LspClientImpl.SEND_TIMEOUT_MS 的默认值一致 */
-    private static final long SEND_TIMEOUT_MS = 2000L;
+    /** 本轮放弃的软预算（构造客户端时读取） */
+    private static final long SOFT_TIMEOUT_MS = 800L;
+
+    /** 判定卡死的硬预算 */
+    private static final long HARD_TIMEOUT_MS = 60_000L;
 
     private Path tempDir;
     private Path sample;
@@ -63,10 +69,15 @@ public class LspClientStallTest {
         tempDir = Files.createTempDirectory("lsp-stall-test");
         sample = tempDir.resolve("Sample.java");
         Files.write(sample, "class Sample {}\n".getBytes("UTF-8"));
+
+        System.setProperty("lsp.sendTimeout", String.valueOf(SOFT_TIMEOUT_MS));
+        System.setProperty("lsp.stallTimeout", String.valueOf(HARD_TIMEOUT_MS));
     }
 
     @AfterEach
     public void teardown() {
+        System.clearProperty("lsp.sendTimeout");
+        System.clearProperty("lsp.stallTimeout");
         if (client != null) {
             try {
                 client.shutdown();
@@ -75,35 +86,69 @@ public class LspClientStallTest {
         }
     }
 
-    // ==================== 写入侧：超时可退 ====================
+    // ==================== 写入侧：超时可退，但「慢」不等于「死」 ====================
 
     @Test
-    public void syncFile_givesUpWhenServerStopsReadingItsInput() {
+    @DisplayName("对端暂时不读输入：本轮按未同步降级，不抛异常也不杀进程")
+    public void slowServer_degradesThisRoundOnly() {
         BlockingLanguageServer server = new BlockingLanguageServer();
         client = new LspClientImpl(tempDir.toString(), server);
 
         String uri = sample.toUri().toString();
 
         long startAt = System.currentTimeMillis();
-        LspStalledException e = assertThrows(LspStalledException.class, () -> client.syncFile(uri, true));
+        int version = client.syncFile(uri, true);
         long cost = System.currentTimeMillis() - startAt;
 
-        //必须在发送预算内退出，而不是跟着对端一起永久卡住
-        assertTrue(cost >= SEND_TIMEOUT_MS, "should have waited the send budget, but returned in " + cost + "ms");
-        assertTrue(cost < SEND_TIMEOUT_MS + 3000, "should not block far beyond the send budget: " + cost + "ms");
-        assertTrue(e.getMessage().contains("didOpen"), "unexpected message: " + e.getMessage());
+        //必须在软预算内退出，而不是跟着对端一起永久卡住
+        assertEquals(LspClient.VERSION_UNSYNCED, version);
+        assertTrue(cost >= SOFT_TIMEOUT_MS, "should have waited the send budget, but returned in " + cost + "ms");
+        assertTrue(cost < SOFT_TIMEOUT_MS + 3000, "should not block far beyond the send budget: " + cost + "ms");
+
+        //关键：一次写入超时不构成「服务器已死」的证据。jdtls 导入项目期间读 stdin 本来就会变慢，
+        //在这里杀掉它，只会让它永远停在冷启动，并把重启配额白白耗光
+        assertTrue(client.isAlive(), "a merely slow server must not be terminated");
     }
 
     @Test
-    public void afterStall_clientIsNotAliveAndFurtherSendsFailFast() {
+    @DisplayName("写入长期毫无进展才判定卡死：杀进程并对外宣告不可用")
+    public void permanentlyStuckServer_isDeclaredStalled() throws Exception {
+        //硬预算压到很小，模拟「已经卡了很久」
+        System.setProperty("lsp.sendTimeout", "200");
+        System.setProperty("lsp.stallTimeout", "400");
+
         BlockingLanguageServer server = new BlockingLanguageServer();
         client = new LspClientImpl(tempDir.toString(), server);
 
         String uri = sample.toUri().toString();
-        assertThrows(LspStalledException.class, () -> client.syncFile(uri, true));
 
-        //卡死是终局判定：这个连接已经废掉，上层应据此重建而不是继续往里发消息
-        assertFalse(client.isAlive(), "a stalled client must not report itself as alive");
+        //第一次：软超时，本轮降级
+        assertEquals(LspClient.VERSION_UNSYNCED, client.syncFile(uri, true));
+        assertTrue(server.entered.await(3, TimeUnit.SECONDS), "server should have received didOpen");
+        assertTrue(client.isAlive(), "one slow write alone is not evidence of death");
+
+        //同一条写入持续毫无进展，越过硬预算后升级为卡死判定
+        Thread.sleep(500);
+        assertFalse(client.isAlive(), "a permanently stuck write must be declared stalled even without new sends");
+
+        LspStalledException e = assertThrows(LspStalledException.class, () -> client.syncFile(uri, true));
+        assertTrue(e.getMessage().contains("stall") || e.getMessage().contains("stuck"),
+                "unexpected message: " + e.getMessage());
+    }
+
+    @Test
+    @DisplayName("已判定卡死后：后续发送与导航请求都立刻失败")
+    public void afterStall_furtherSendsFailFast() throws Exception {
+        System.setProperty("lsp.sendTimeout", "200");
+        System.setProperty("lsp.stallTimeout", "400");
+
+        BlockingLanguageServer server = new BlockingLanguageServer();
+        client = new LspClientImpl(tempDir.toString(), server);
+
+        String uri = sample.toUri().toString();
+        client.syncFile(uri, true);
+        Thread.sleep(500);
+        assertThrows(LspStalledException.class, () -> client.syncFile(uri, true));
 
         long startAt = System.currentTimeMillis();
         assertThrows(LspStalledException.class, () -> client.syncFile(uri, true));
@@ -116,6 +161,7 @@ public class LspClientStallTest {
     }
 
     @Test
+    @DisplayName("并发同步：后来者不跟着前一个卡住的写一起排队")
     public void concurrentSync_secondCallerDoesNotQueueBehindAStalledWrite() throws Exception {
         BlockingLanguageServer server = new BlockingLanguageServer();
         server.blockOn = "didChange";
@@ -136,21 +182,48 @@ public class LspClientStallTest {
         assertTrue(server.entered.await(3, TimeUnit.SECONDS), "server should have received didChange");
 
         long startAt = System.currentTimeMillis();
-        int version = LspClient.VERSION_UNSYNCED;
-        try {
-            version = client.syncFile(uri, true);
-        } catch (LspStalledException e) {
-            //前一个写入者已经把对端判定为卡死（两者的 2s 预算几乎同时到期），
-            //此时快速失败与返回未同步同义：都是「不跟着一起阻塞」
-        }
+        int version = client.syncFile(uri, true);
         long cost = System.currentTimeMillis() - startAt;
 
         //拿不到同步锁时返回「未同步」而不是无限排队——写文件的响应时间必须有上限
         assertEquals(LspClient.VERSION_UNSYNCED, version);
-        assertTrue(cost < SEND_TIMEOUT_MS + 3000, "second caller blocked too long: " + cost + "ms");
+        assertTrue(cost < SOFT_TIMEOUT_MS + 3000, "second caller blocked too long: " + cost + "ms");
     }
 
     @Test
+    @DisplayName("对端短暂变慢：并发同步另一个文件仍要成功，而不是立即降级")
+    public void brieflyBusyServer_concurrentSyncOfAnotherFileStillSucceeds() throws Exception {
+        //读文件的异步预热与写文件的诊断会并发到同一个发送线程上：若「只要见到在飞写入
+        //就降级」，一次几百毫秒的正常排队就会让并发的那次诊断无声落空（PENDING）
+        SlowLanguageServer server = new SlowLanguageServer(300L);
+        client = new LspClientImpl(tempDir.toString(), server);
+
+        Path other = tempDir.resolve("Other.java");
+        Files.write(other, "class Other {}\n".getBytes("UTF-8"));
+
+        AtomicInteger firstVersion = new AtomicInteger();
+        Thread first = new Thread(() -> firstVersion.set(client.syncFile(sample.toUri().toString(), false)),
+                "slow-writer");
+        first.setDaemon(true);
+        first.start();
+
+        //确保第一条写入确实正在飞行中，下面那次同步才是真的「并发」
+        assertTrue(server.entered.await(2, TimeUnit.SECONDS), "server should have received the first didOpen");
+
+        long startAt = System.currentTimeMillis();
+        int secondVersion = client.syncFile(other.toUri().toString(), false);
+        long cost = System.currentTimeMillis() - startAt;
+
+        assertEquals(1, secondVersion, "a briefly busy server must not fail a concurrent sync of another file");
+        assertTrue(cost < SOFT_TIMEOUT_MS + 1000, "second caller waited too long: " + cost + "ms");
+
+        first.join(3000);
+        assertEquals(1, firstVersion.get());
+        assertTrue(client.isAlive(), "a briefly busy server must stay alive");
+    }
+
+    @Test
+    @DisplayName("未同步与正常版本号必须可区分")
     public void unsyncedResult_isDistinguishableFromASuccessfulVersion() throws Exception {
         NoopLanguageServer server = new NoopLanguageServer();
         client = new LspClientImpl(tempDir.toString(), server);
@@ -232,6 +305,29 @@ public class LspClientStallTest {
             try {
                 //模拟卡在 native write 上：不响应中断，只能靠关管道/杀进程解除
                 new CountDownLatch(1).await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    /**
+     * 只是「慢」而不是「死」的服务器：模拟导入项目、大文件重解析期间读 stdin 变慢
+     */
+    static class SlowLanguageServer extends NoopLanguageServer {
+        final CountDownLatch entered = new CountDownLatch(1);
+        private final long delayMs;
+
+        SlowLanguageServer(long delayMs) {
+            this.delayMs = delayMs;
+        }
+
+        @Override
+        public void didOpen(DidOpenTextDocumentParams params) {
+            super.didOpen(params);
+            entered.countDown();
+            try {
+                Thread.sleep(delayMs);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }

@@ -21,6 +21,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.rag.Document;
+import org.noear.solon.ai.talents.lsp.exception.LspBusyException;
 import org.noear.solon.ai.talents.lsp.exception.LspCommandNotFoundException;
 import org.noear.solon.ai.talents.lsp.exception.LspEnvironmentException;
 import org.noear.solon.ai.talents.lsp.exception.LspNoMatchException;
@@ -39,6 +40,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
+import java.util.function.BiFunction;
 
 /**
  * LSP 工具包 - 对齐 OpenCode 的 LSP 使用模型
@@ -65,12 +67,25 @@ public class LspTalent extends AbsTalent {
     private static final long DIAGNOSTICS_WAIT_MS = Long.getLong("lsp.diagnosticsWait", 2000L);
 
     /**
+     * 导航类操作（{@code lsp} 工具）等待服务器就绪的最长时长。
+     *
+     * <p>比诊断更宽松：导航是模型主动发起的一次查询，宁可多等几秒，也不能在项目导入期
+     * 返回一个空结果——那会被误读成「这个符号不存在」。
+     */
+    private static final long READY_WAIT_MS = Long.getLong("lsp.readyWait", 10000L);
+
+    /**
      * 检查状态的记忆容量：只服务于展示层对最近若干次写入的三态判定，无需更大
      */
     private static final int CHECK_STATE_CAPACITY = 256;
 
     private final LspManager lspManager;
     private final String workDir;
+
+    /**
+     * 路径解析器（可选）：接入挂载体系后支持 {@code @挂载点/...} 逻辑路径
+     */
+    private volatile BiFunction<Path, String, Path> pathResolver;
 
     /**
      * 诊断信息缓存：uri -> 结构化诊断（保留 severity，渲染与过滤下沉到 {@link LspDiagnosticReporter}）
@@ -95,6 +110,17 @@ public class LspTalent extends AbsTalent {
     public LspTalent(LspManager lspManager, String workDir) {
         this.lspManager = lspManager;
         this.workDir = workDir;
+    }
+
+    /**
+     * 设置路径解析器（工作目录 + 入参路径 -> 真实路径）。
+     *
+     * <p>不设则只按工作区相对路径解析。接入后 {@code lsp} 工具才能像 read/grep 一样认
+     * {@code @挂载点/...} 这类逻辑路径；否则模型用同一个路径能 read 却不能做导航，只报
+     * 「文件不存在」，很容易被误读成代码问题。
+     */
+    public void setPathResolver(BiFunction<Path, String, Path> pathResolver) {
+        this.pathResolver = pathResolver;
     }
 
     public LspManager getLspManager() {
@@ -139,10 +165,20 @@ public class LspTalent extends AbsTalent {
     ) throws Exception {
         Path workPath = getWorkPath(__cwd);
 
-        // 1. 路径与安全校验
-        Path path = workPath.resolve(filePath).toAbsolutePath().normalize();
-        if (!path.startsWith(workPath)) {
-            throw new SecurityException("权限拒绝：路径越界。");
+        // 1. 路径解析与安全校验（支持挂载点逻辑路径，与 read/grep 等文件工具保持一致）
+        Path path = resolveFilePath(workPath, filePath);
+
+        //语言服务器一律以工作区为根启动：工作区之外的文件（挂载点里的其它仓库）不在它的项目
+        //模型内，强行分析只会得到「符号全都找不到」，比直接说明不支持更容易误导。
+        //这一步必须早于任何文件系统访问：否则越界路径会通过「文件不存在」的差异暴露存在性
+        if (isInsideWorkspace(path) == false) {
+            return new Document()
+                    .title(String.format("%s %s", operation, filePath))
+                    .content("LSP navigation is scoped to the current workspace, and this file is outside of it: "
+                            + filePath + ". The language server runs with the workspace as its project root, so "
+                            + "symbols in external directories (mounted repositories, etc.) are not in its project model. "
+                            + "Use read/grep to inspect this file instead.")
+                    .metadata("operation", operation);
         }
 
         File file = path.toFile();
@@ -215,6 +251,19 @@ public class LspTalent extends AbsTalent {
                     .content("Unexpected error: LSP client is null for file: " + filePath)
                     .metadata("operation", operation)
                     .metadata("uri", uri);
+        }
+
+        //项目模型未建好时的导航结果一律不可信（jdtls 导入期会把文件当成无 classpath 的孤立源文件）：
+        //直接返回空结果会被模型读成「这个符号/引用不存在」，危害比多等几秒大得多
+        if (client.awaitReady(READY_WAIT_MS) == false) {
+            return new Document()
+                    .title(String.format("%s %s", operation, filePath))
+                    .content("The language server is still importing this project, so navigation results are not "
+                            + "reliable yet (an empty result would NOT mean the symbol does not exist). "
+                            + "Retry this operation in a moment, or use grep to search in the meantime.")
+                    .metadata("operation", operation)
+                    .metadata("uri", uri)
+                    .metadata("pending", "true");
         }
 
         // 4. 坐标转换 (1-based -> 0-based)，line/character 可为 null（documentSymbol/workspaceSymbol/diagnostics 不需要）
@@ -351,25 +400,42 @@ public class LspTalent extends AbsTalent {
 
             //强制发 didChange：此时磁盘内容刚被改写，服务器手里还是旧文本
             if (client.syncFile(uri, true) == LspClient.VERSION_UNSYNCED) {
-                //同步未完成（正在被其他线程同步、或发送通道异常）：服务器手里的文本不可信，
+                //同步未完成（正在被其他线程同步、或服务器暂时跟不上）：服务器手里的文本不可信，
                 //再等下去只会拿到针对旧文本的诊断，不如直接告知「本轮无结论」
                 recordCheckState(absFile, relPath, LspCheckState.PENDING);
                 return null;
             }
 
-            LspDiagnosticsResult result = client.waitForDiagnosticsResult(uri, DIAGNOSTICS_WAIT_MS);
+            //项目模型未建好前的诊断一律不采信（见 LspReadyGate）：先在等待预算内给它一个机会，
+            //到点仍未就绪就算本轮无结论——宁可暂时拿不到诊断，也不能把导入期的假错注入上下文。
+            //就绪等待与诊断等待共用同一份预算：写文件的额外耗时不能因为多了这道门禁而翻倍
+            long deadline = System.currentTimeMillis() + DIAGNOSTICS_WAIT_MS;
+            if (client.awaitReady(DIAGNOSTICS_WAIT_MS) == false) {
+                recordCheckState(absFile, relPath, LspCheckState.PENDING);
+                LOG.debug("LSP diagnostics deferred for {}: server is still importing the project", absFile);
+                return null;
+            }
+
+            long diagnosticsBudget = deadline - System.currentTimeMillis();
+            LspDiagnosticsResult result = client.waitForDiagnosticsResult(uri, Math.max(0L, diagnosticsBudget));
+
+            if (result.isConfirmed() == false) {
+                //未拿到本轮推送：此时手里只有上一轮的残留诊断，模型刚改完的错误也在里面。
+                //把过期清单当成本轮结果注入，比什么都不报更坏：模型会反复去“修”已经修好的东西
+                recordCheckState(absFile, relPath, LspCheckState.PENDING);
+                return null;
+            }
 
             String block = LspDiagnosticReporter.renderForToolOutput(relPath, result.getItems());
-            if (block != null) {
-                recordCheckState(absFile, relPath, LspCheckState.ERRORS);
-            } else {
-                //无 ERROR：只有拿到本轮推送才能断言「干净」，否则仅代表「还没结论」
-                recordCheckState(absFile, relPath,
-                        result.isConfirmed() ? LspCheckState.CLEAN : LspCheckState.PENDING);
-            }
+            recordCheckState(absFile, relPath, (block != null) ? LspCheckState.ERRORS : LspCheckState.CLEAN);
             return block;
         } catch (LspNoMatchException e) {
             recordCheckState(absFile, relPath, LspCheckState.NONE);
+            return null;
+        } catch (LspBusyException e) {
+            //服务器暂时跟不上（导入中/大文件重解析）：本轮无结论，进程仍可用，下次写入再试
+            recordCheckState(absFile, relPath, LspCheckState.PENDING);
+            LOG.debug("LSP diagnostics deferred for {}: {}", absFile, e.getMessage());
             return null;
         } catch (LspStalledException e) {
             //已经试过但语言服务器停止读取输入：本轮无结论（而不是「无覆盖」也不是「干净」）；
@@ -472,6 +538,26 @@ public class LspTalent extends AbsTalent {
                 LOG.debug("LSP warmup skipped for {}: {}", absFile, e.getMessage());
             }
         });
+    }
+
+    /**
+     * 解析工具入参路径：有挂载解析器时交给它（支持 {@code @挂载点/...}），否则按工作区相对
+     * 路径解析。
+     *
+     * <p>注意：解析器只负责「把逻辑路径映射成真实路径」，不承担越界拦截；本工具的边界由调用处
+     * 的工作区归属判定负责（语言服务器只认工作区这一个项目根）。
+     */
+    private Path resolveFilePath(Path workPath, String filePath) {
+        BiFunction<Path, String, Path> resolver = this.pathResolver;
+        if (resolver != null) {
+            return resolver.apply(workPath, filePath).toAbsolutePath().normalize();
+        }
+
+        Path path = workPath.resolve(filePath).toAbsolutePath().normalize();
+        if (path.startsWith(workPath) == false) {
+            throw new SecurityException("Permission denied: path is outside the workspace.");
+        }
+        return path;
     }
 
     /**
