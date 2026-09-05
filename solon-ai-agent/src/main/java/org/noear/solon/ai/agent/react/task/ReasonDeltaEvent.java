@@ -25,7 +25,7 @@ import org.noear.solon.lang.Preview;
 
 
 /**
- * ReAct 思考流块
+ * ReAct 推理流块
  *
  * <p>4.1 移除了 {@code isFinished()} 与 {@code isError()}：增量帧本质上永远不是终态，而 4.1 后
  * 本事件不再携带 {@link ChatResponse}，两个方法会恒返回 true（即每个增量都自称“已完成、已出错”）。

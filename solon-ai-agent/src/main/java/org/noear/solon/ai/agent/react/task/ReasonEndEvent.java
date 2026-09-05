@@ -20,12 +20,11 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
-import org.noear.solon.core.util.Assert;
 
 import java.util.List;
 
 /**
- * 思考运行结束块
+ * ReAct 推理完成（可能同时有思考、文本、工具混合输出）
  *
  * @author noear
  * @since 4.0.4
@@ -51,19 +50,6 @@ public class ReasonEndEvent extends AbsAgentEvent {
         return trace;
     }
 
-    public ChatResponse getResponse() {
-        return response;
-    }
-
-    public AssistantMessage getMessage() {
-        return message;
-    }
-
-    @Override
-    public String getText() {
-        return message.getContent();
-    }
-
     public long getDurationMs() {
         return durationMs;
     }
@@ -72,10 +58,36 @@ public class ReasonEndEvent extends AbsAgentEvent {
         return reasonId;
     }
 
+    public ChatResponse getResponse() {
+        return response;
+    }
+
+    public AssistantMessage getMessage() {
+        return message;
+    }
+
+    /**
+     * 获取思考
+     */
+    public String getThinking() {
+        return message.getThinking();
+    }
+
+    /**
+     * 获取文本
+     */
+    @Override
+    public String getText() {
+        return message.getText();
+    }
+
     public boolean isToolCalls() {
         return message.isToolCalls();
     }
 
+    /**
+     * 获取工具
+     */
     public List<ToolCall> getToolCalls() {
         return message.getToolCalls();
     }

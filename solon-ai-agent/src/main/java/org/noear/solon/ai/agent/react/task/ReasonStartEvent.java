@@ -20,7 +20,7 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.prompt.Prompt;
 
 /**
- * 推理运行开始块
+ * ReAct 推理开始
  *
  * @author noear
  * @since 4.0.4
