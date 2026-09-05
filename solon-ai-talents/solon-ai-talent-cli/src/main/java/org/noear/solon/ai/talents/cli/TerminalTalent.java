@@ -1468,6 +1468,7 @@ public class TerminalTalent extends AbsTalent {
         if (snapshot.terminateReason() != null) {
             sb.append("terminate_reason: ").append(snapshot.terminateReason()).append('\n');
         }
+        sb.append("wall_time_ms: ").append(snapshot.wallTimeMs()).append('\n');
         sb.append("output_chars_total: ").append(snapshot.outputChars()).append('\n');
         sb.append("output_chars_returned: ").append(snapshot.returnedChars()).append('\n');
         sb.append("output_truncated: ").append(snapshot.outputTruncated()).append('\n');
