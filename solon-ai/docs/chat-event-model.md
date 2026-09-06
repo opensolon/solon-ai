@@ -33,8 +33,11 @@ chatModel.prompt("hello").stream().subscribe(e -> {
     }
 });
 
-// 终态归约（替代旧 blockLast 依赖可变累积器的写法）
-ChatResponse response = ChatEvents.reduce(chatModel.prompt("hello").stream());
+// 终态归约：从 RESPONSE_END 事件取得完整响应
+ChatResponse response = chatModel.prompt("hello").stream()
+        .filter(e -> e.is(ChatEventType.RESPONSE_END))
+        .map(ChatEvent::getResponse)
+        .blockFirst();
 ```
 
 `stream()` 返回的就是标准 `Flux<ChatEvent>`：filter / buffer / window / timeout / publishOn /
@@ -147,24 +150,26 @@ public Flux<SseEvent> chat(String message) {
 **画像**：ReAct 循环、批处理任务。要边流边消费事件（推 trace、推 UI），结束时拿完整结果继续下一步；
 通常还有主动取消、失败重试诉求。
 
-**推荐姿势**：`ChatEvents.reduce()` / `reduceAsync()` 归约终态，消费逻辑放 `doOnNext` 纯映射。
+**推荐姿势**：用 `RESPONSE_END` 事件取得终态聚合，消费逻辑放 `doOnNext` 纯映射。
 
 ```java
-// 命令式风格：边流边消费，最后拿不可变终态（替代旧 blockLast + 可变累积器）
+// 命令式风格：边流边消费，最后拿不可变终态
 // 消息经 prompt(...) 传入；工具与请求选项经 options(...) 配置
-ChatResponse response = ChatEvents.reduce(
-        chatModel.prompt(messages)                    // List<ChatMessage>：会话历史 + 本次输入
-                .options(o -> o.toolAdd(tools))       // 绑定工具
-                .stream()
-                .takeUntil(e -> isCancelled())        // 主动取消：原生操作符
-                .doOnNext(e -> {
-                    AgentEvent agentEvent = AgentEvents.from(e);   // 纯映射，见下
-                    if (agentEvent != null) {
-                        trace.pushAgentEvent(agentEvent);
-                    }
-                }));
+ChatResponse response = chatModel.prompt(messages)                    // List<ChatMessage>：会话历史 + 本次输入
+        .options(o -> o.toolAdd(tools))                               // 绑定工具
+        .stream()
+        .takeUntil(e -> isCancelled())                                // 主动取消：原生操作符
+        .doOnNext(e -> {
+            AgentEvent agentEvent = AgentEvents.from(e);              // 纯映射，见下
+            if (agentEvent != null) {
+                trace.pushAgentEvent(agentEvent);
+            }
+        })
+        .filter(e -> e.is(ChatEventType.RESPONSE_END))
+        .map(ChatEvent::getResponse)
+        .blockFirst();
 
-// 流中无 RESPONSE_END 时 reduce 返回 null（如取消后无回落帧），先判空
+// 流中无 RESPONSE_END 时 blockFirst() 返回 null（如取消后无回落帧），先判空
 if (response != null && response.getMessage().isToolCalls()) {
     // 执行工具，递归下一轮 …
 }
@@ -185,10 +190,13 @@ static AgentEvent from(ChatEvent e) {
 }
 ```
 
-异步（非阻塞）场景用 `reduceAsync`：
+异步（非阻塞）场景用 `next()` 获取 `RESPONSE_END`：
 
 ```java
-Mono<ChatResponse> response = ChatEvents.reduceAsync(chatModel.prompt(query).stream());
+Mono<ChatResponse> response = chatModel.prompt(query).stream()
+        .filter(e -> e.is(ChatEventType.RESPONSE_END))
+        .map(ChatEvent::getResponse)
+        .next();
 ```
 
 失败打捞：`ERROR` 事件携带已完成的部分聚合，部分成功的内容不必整轮丢弃：
@@ -312,7 +320,7 @@ public interface ChatDialect extends AiModelDialect {
 |---|-----------------------------------------------------------------------------------------------|
 | `stream().subscribe(resp -> resp.getMessage().getContent())` | `stream().filter(e -> e.is(ChatEventType.TEXT_DELTA) && e.hasText()).map(ChatEvent::getText)` |
 | `stream()` 里 `filter(resp -> resp.isFinished())` 取末帧 usage | `reduce(stream())` → `RESPONSE_END.getUsage()`，或订阅 `ChatEventType.USAGE`                  |
-| `blockLast()` 聚合（依赖可变实例） | `ChatEvents.reduce(stream())`（不可变终态）                                                   |
+| `blockLast()` 聚合（依赖可变实例） | 从 `RESPONSE_END` 事件取终态响应（不可变终态）                                                   |
 | `resp.isThinking()` 判断思考帧 | `e.getGroup() == ChatEventGroup.THINKING`                                                     |
 | `resp.getMessage().getToolCalls()` 流式累计 | `TOOL_CALL_START/ARGS_DELTA/END` 事件序列，终态经 `reduce()`                                  |
 | 自写 `textStarted` 状态机保证边界 | 直接依赖 `*_START/*_DELTA/*_END` 不变量                                                       |
