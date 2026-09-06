@@ -1012,10 +1012,10 @@ public class TerminalTalent extends AbsTalent {
     }
 
     // --- 3. 读取内容 ---
-    @ToolMapping(name = "read", description = "读取文件内容。修改文件前先通过此工具确认最新的文本内容、缩进和换行符。支持大文件分页。支持逻辑路径（如 @pool）。")
+    @ToolMapping(name = "read", description = "读取文件内容。修改文件前先通过此工具确认最新文本、缩进和换行符。默认一次性加载完整内容；仅当文件极长或需定位局部时，才使用 offset/limit 分页。支持逻辑路径（如 @pool）。")
     public String read(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String filePath,
-                       @Param(value = "offset", required = false, defaultValue = "1", description = "开始读取的行号（默认从1开始索引）") Integer offset,
-                       @Param(value = "limit", required = false, description = "需要读取的最大行数。不传表示完整读取（推荐）。注意：单次读取受最大物理长度保护，如果触发截断，请根据输出提示调整 offset 分页读取。") Integer limit,
+                       @Param(value = "offset", required = false, description = "（可选）开始读取的行号（默认从1开始索引）") Integer offset,
+                       @Param(value = "limit", required = false, description = "（可选）需要读取的最大行数。不传表示完整读取。注意：单次读取受最大物理长度保护，如果触发截断，请根据输出提示调整 offset 分页读取。") Integer limit,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
         Path target = support.resolveSafePath(workPath, filePath, false, sandboxEnabled, sandboxAllowUserHome, fs());
