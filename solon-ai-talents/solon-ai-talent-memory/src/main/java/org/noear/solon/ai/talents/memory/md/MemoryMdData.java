@@ -119,9 +119,13 @@ public class MemoryMdData implements AutoCloseable {
      *
      * <p>注意：搜索索引的更新由 MemoryTalent 统一调用 updateIndex() 完成，
      * 保持与其他方案（Lucene/Repository/Rogue）的调用约定一致，避免双写冗余。
+     *
+     * <p>写入失败会抛出异常（而非静默吞掉）：上层靠此判定成败，
+     * 否则会把未落盘的写入当成功上报，并留下能搜到、读不到的幽灵索引。
      */
     public void put(String userId, String key, String val, int ttl, String scope) {
         String storeKey = buildStoreKey(userId, key);
+        String effectiveScope = resolveScope(scope);
         try {
             ONode node = ONode.ofJson(val);
             String content = node.get("content").getString();
@@ -130,14 +134,39 @@ public class MemoryMdData implements AutoCloseable {
             String storedTime = getNow();
 
             // 1. 写 MD 文件（Front Matter 中保存完整 storeKey 和 scope，消除还原歧义）
-            Path file = resolveFile(storeKey, scopeDirMap.get(scope));
-            writeMdFile(file, storeKey, scope, time, importance, ttl, storedTime, content);
+            Path file = resolveFile(storeKey, scopeDirMap.get(effectiveScope));
+            writeMdFile(file, storeKey, effectiveScope, time, importance, ttl, storedTime, content);
 
             // 2. 更新内存缓存（scope 维度隔离，避免跨域同 key 覆盖）
-            cache.put(buildCacheKey(userId, key, scope), new MemoryEntry(content, time, importance, ttl, storedTime, scope));
+            cache.put(buildCacheKey(userId, key, effectiveScope),
+                    new MemoryEntry(content, time, importance, ttl, storedTime, effectiveScope));
         } catch (Exception e) {
             LOG.error("MdMemoryData put error, userId={}, key={}", userId, key, e);
+            throw new IllegalStateException("Memory put failed: key=" + key + ", reason=" + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 解析有效作用域：未配置或为空的 scope 回落到迭代序末位（优先级最高）的域。
+     *
+     * <p>回落后缓存键与 Front Matter 统一使用回落后的域名，保证 {@link #get} 能探到；
+     * 旧实现会在 scope 未配置时因 {@code scopeDirMap.get(scope)} 为 null 而静默丢弃写入。
+     */
+    private String resolveScope(String scope) {
+        if (scope != null && scopeDirMap.containsKey(scope)) {
+            return scope;
+        }
+
+        String fallback = null;
+        for (String s : scopeDirMap.keySet()) {
+            fallback = s;
+        }
+        if (fallback == null) {
+            throw new IllegalStateException("No memory scope directory configured");
+        }
+
+        LOG.warn("MdMemoryData: unknown scope '{}', fallback to '{}'", scope, fallback);
+        return fallback;
     }
 
     /**
@@ -180,9 +209,13 @@ public class MemoryMdData implements AutoCloseable {
                             new IndexEntry(userId, key, entry.content, entry.importance, entry.time, entry.scope));
         }
 
-        // TTL 过期检查
+        // TTL 过期检查（删除失败不影响“已过期”的读结论，故按最佳努力处理）
         if (isExpired(entry)) {
-            remove(userId, key);
+            try {
+                remove(userId, key);
+            } catch (Exception e) {
+                LOG.warn("MdMemoryData get: expired entry cleanup failed, userId={}, key={}", userId, key, e);
+            }
             return null;
         }
 
@@ -197,11 +230,19 @@ public class MemoryMdData implements AutoCloseable {
 
     /**
      * 删除记忆条目：删 MD 文件 + 清缓存 + 清搜索索引
+     *
+     * <p>某个作用域下不存在同名文件属正常情况（多域实现），不算失败；
+     * 但文件确实存在却删不掉（被锁、无权限）时会抛出异常，避免上层把“记忆仍在”当成已清理。
+     *
+     * <p>即便部分域删除失败，也先清空缓存与索引再抛异常：多域下可能已有域删除成功，
+     * 若保留缓存，{@link #get} 会继续返回已被删除的内容。清空后未删掉的文件会在下次
+     * {@code get} 时从磁盘重新加载并回填，读结论始终与磁盘一致。
      */
     public void remove(String userId, String key) {
         String storeKey = buildStoreKey(userId, key);
 
-        for(Map.Entry<String,Path> entry : scopeDirMap.entrySet()) {
+        IOException failure = null;
+        for (Map.Entry<String, Path> entry : scopeDirMap.entrySet()) {
             Path file = resolveFile(storeKey, entry.getValue());
             try {
                 boolean deleted = Files.deleteIfExists(file);
@@ -212,6 +253,9 @@ public class MemoryMdData implements AutoCloseable {
                 }
             } catch (IOException e) {
                 LOG.error("MdMemoryData remove error (file may be locked), userId={}, key={}, file={}", userId, key, file, e);
+                if (failure == null) {
+                    failure = e;
+                }
             }
         }
 
@@ -226,6 +270,10 @@ public class MemoryMdData implements AutoCloseable {
             if (userMap.isEmpty()) {
                 indexByUser.remove(userId);
             }
+        }
+
+        if (failure != null) {
+            throw new IllegalStateException("Memory remove failed: key=" + key + ", reason=" + failure.getMessage(), failure);
         }
     }
 
@@ -521,8 +569,28 @@ public class MemoryMdData implements AutoCloseable {
         return userId + ":" + key;
     }
 
+    /**
+     * 解析条目文件路径。
+     *
+     * <p>storeKey 内含由模型给出的 key，故必须是作用域目录下的直接子文件：
+     * <ul>
+     *   <li>带分隔符的 key（如 {@code a/../../x}）会让 {@code resolve} 逃出记忆目录，
+     *       而 {@link #writeMdFile} 会自动建目录并写入模型可控的内容；</li>
+     *   <li>即使未逃出，子目录里的文件也会被非递归的 {@link #loadFromDisk} 遗漏，
+     *       重启后等于静默丢记忆。</li>
+     * </ul>
+     */
     private Path resolveFile(String storeKey, Path scopeBaseDir) {
-        return scopeBaseDir.resolve(storeKey + ".md");
+        if (storeKey.indexOf('/') >= 0 || storeKey.indexOf('\\') >= 0) {
+            throw new IllegalArgumentException("Illegal memory key (path separator not allowed): " + storeKey);
+        }
+
+        Path base = scopeBaseDir.normalize();
+        Path file = base.resolve(storeKey + ".md").normalize();
+        if (!base.equals(file.getParent())) {
+            throw new IllegalArgumentException("Illegal memory key (must resolve inside scope dir): " + storeKey);
+        }
+        return file;
     }
 
     /**
@@ -661,10 +729,24 @@ public class MemoryMdData implements AutoCloseable {
      * 判断索引条目是否已过期（反查缓存中的 TTL 信息）
      *
      * <p>索引条目不携带 TTL（接口签名未含），故反查 cache 中同 key 的 MemoryEntry。
-     * 缓存无对应条目时按未过期处理（保守降级，保持原有行为）。
+     * 索引里的 scope 由外部 {@code updateIndex} 传入，可能与实际落盘域不一致
+     * （如传入未配置的域名被 {@link #resolveScope} 回落），仅按该域查缓存会永远查不到，
+     * 于是条目永不过期、长期出现在检索结果里。故先精确匹配，未命中再按域优先级回查。
+     *
+     * <p>所有域都无缓存条目时按未过期处理（保守降级：无 TTL 依据不擅自隐藏记忆）。
      */
     private boolean isIndexExpired(IndexEntry entry) {
         MemoryEntry cached = cache.get(buildCacheKey(entry.userId, entry.userKey, entry.scope));
+
+        if (cached == null) {
+            for (String scope : scopeDirMap.keySet()) {
+                MemoryEntry other = cache.get(buildCacheKey(entry.userId, entry.userKey, scope));
+                if (other != null) {
+                    cached = other;
+                }
+            }
+        }
+
         return cached != null && isExpired(cached);
     }
 
@@ -715,11 +797,18 @@ public class MemoryMdData implements AutoCloseable {
                 }
             }
         }
+        int removed = 0;
         for (String[] parts : expiredKeys) {
-            remove(parts[0], parts[1]);
+            try {
+                remove(parts[0], parts[1]);
+                removed++;
+            } catch (Exception e) {
+                // 单条删除失败不得中止整轮清理（下一轮会重试）
+                LOG.warn("MdMemoryData cleanup: remove failed, userId={}, key={}", parts[0], parts[1], e);
+            }
         }
-        if (!expiredKeys.isEmpty()) {
-            LOG.debug("MdMemoryData cleanup: {} expired entries removed", expiredKeys.size());
+        if (removed > 0) {
+            LOG.debug("MdMemoryData cleanup: {} expired entries removed", removed);
         }
     }
 

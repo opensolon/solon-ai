@@ -1057,9 +1057,10 @@ public class MemoryMdDataTest {
         }
 
         @Test
-        @DisplayName("非法 JSON 的 put 被吞掉且不产生脏条目")
-        public void invalid_json_put_is_swallowed() {
-            data.put(U1, "bad", "not-a-json", -1, SCOPE_USER);
+        @DisplayName("非法 JSON 的 put 抛出异常且不产生脏条目")
+        public void invalid_json_put_throws_and_leaves_no_entry() {
+            // 写入失败必须可被上层感知：静默吞掉会让调用方把失败当成功并建索引
+            assertThrows(IllegalStateException.class, () -> data.put(U1, "bad", "not-a-json", -1, SCOPE_USER));
 
             assertNull(data.get(U1, "bad"), "非法输入不应产生可读条目");
         }

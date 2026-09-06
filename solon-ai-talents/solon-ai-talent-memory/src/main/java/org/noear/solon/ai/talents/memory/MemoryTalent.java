@@ -67,6 +67,22 @@ public class MemoryTalent extends AbsTalent {
     /** 时间格式器：线程安全且不可变，复用避免每次重建 */
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    /** extract 成功反馈的固定前缀：consolidate 据此判定写入结果，修改需同步 */
+    private static final String EXTRACT_SUCCESS_PREFIX = "【操作成功】";
+
+    /**
+     * 指令缓存的属性名。
+     *
+     * <p>缓存挂在 Prompt 的属性表上、随 Prompt 生命周期存续：同一个 Prompt 被重复激活时
+     * （如 HITL 中断后的续跑，ReAct 会复用 trace 中的 originalPrompt 再次激活才能），
+     * 指令保持字节一致，避免 system 前缀变动导致模型侧提示缓存整体失效。
+     *
+     * <p>属性名固定，故一份属性表只承载一份缓存：{@code Prompt.copy()} 与 {@code attrPut(attrs)}
+     * 会整体复制属性表，若同一份属性先后被两个不同的 MemoryTalent 实例激活，后者会沿用前者
+     * 构建的记忆块。当前按单实例部署（同一实例内用 __cwd 路由多工作区），不受此影响。
+     */
+    private final String instructionCacheAttr = "__memory_cached";
+
     private final MemorySolutionProvider solutionProvider;
     private boolean sessionIsolation = false; // 默认会话不隔离
     private boolean relevanceInjection = true; // 默认按"相关性+热度"混合注入画像
@@ -156,8 +172,10 @@ public class MemoryTalent extends AbsTalent {
      */
     @Override
     public String getInstruction(Prompt prompt) {
-        //新加的缓存机制
-        String __memory_cached = prompt.attrAs("__memory_cached");
+        //按 Prompt 实例缓存：同一个 Prompt 被重复激活时（如 HITL 中断后的续跑，
+        //ReAct 会复用 trace 中的 originalPrompt 再次激活才能），指令保持字节一致，
+        //避免 system 前缀变动导致模型侧提示缓存整体失效。
+        String __memory_cached = prompt.attrAs(instructionCacheAttr);
 
         if (__memory_cached == null) {
             String __cwd = prompt.attrAs("__cwd");
@@ -221,8 +239,8 @@ public class MemoryTalent extends AbsTalent {
                     "- importance：1-4 待验证观察；5-6 可信且可复用；7-9 反复确认或结果验证的稳定认知；10 仅限用户明确确认的长期定论。普通写入拿不准时不超过 6。框架默认 TTL：1-4 为 7 天，5-9 为 30 天，10 永久；具体方案可覆盖。\n" +
                     "- 用户问记住了哪些时，用 `memory_search('*')` 列出索引，必要时再按 Key 召回。\n";
 
-            //一次提示词内，缓存是稳定的
-            prompt.attrPut("__memory_cached", __memory_cached);
+            //一次提示词内，缓存是稳定的（记忆变更要到下一个 Prompt 才反映）
+            prompt.attrPut(instructionCacheAttr, __memory_cached);
         }
 
         return __memory_cached;
@@ -249,6 +267,30 @@ public class MemoryTalent extends AbsTalent {
             return "";
         }
         return "[" + scope + "] ";
+    }
+
+    /** 从存储 JSON 中安全读取字段，不存在或解析失败时返回 null。 */
+    private String readField(String json, String name) {
+        if (Utils.isEmpty(json)) {
+            return null;
+        }
+        try {
+            return ONode.ofJson(json).get(name).getString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 决定写入作用域：调用方未显式指定时，沿用同 Key 原记录所在域。
+     *
+     * <p>否则“原地更新”会落到默认域，而聚合读会优先返回默认域的新副本，
+     * 旧域那份则变成本工作区看不见、其它工作区仍生效的重影。
+     * 方案未在 get 中回传 scope（无域实现）时退回默认域，行为与旧版一致。
+     */
+    private String resolveWriteScope(String oldJson) {
+        String oldScope = readField(oldJson, "scope");
+        return Utils.isNotEmpty(oldScope) ? oldScope : solutionProvider.getScopesDefault();
     }
 
     /**
@@ -280,10 +322,16 @@ public class MemoryTalent extends AbsTalent {
                                    String __cwd, String __sessionId, boolean skipFragmentHint) {
         String userId = getUserId(__sessionId);
 
-        // scope 为空时交由方案自定默认域（透传 null 即可）
-        if (Assert.isEmpty(scope)) {
-            scope = solutionProvider.getScopesDefault();
+        if (Assert.isBlank(key)) {
+            return "【操作失败】key 为空，无法定位认知条目。";
         }
+        if (Assert.isBlank(fact)) {
+            return "【操作失败】fact 为空，无内容可记录。";
+        }
+        key = key.trim();
+
+        // 调用方是否显式指定作用域：未指定时沿用同 Key 原记录所在域（见 resolveWriteScope）
+        boolean scopeSpecified = Utils.isNotEmpty(scope);
 
         // 重要度约束到声明的 1-10 区间
         importance = Math.max(1, Math.min(10, importance));
@@ -299,7 +347,11 @@ public class MemoryTalent extends AbsTalent {
             String oldJson = storeProvider.get(userId, key);
             String now = getNow();
 
-            StringBuilder feedback = new StringBuilder("【操作成功】心智模型已更新。");
+            if (scopeSpecified == false) {
+                scope = resolveWriteScope(oldJson);
+            }
+
+            StringBuilder feedback = new StringBuilder(EXTRACT_SUCCESS_PREFIX + "心智模型已更新。");
             if (Utils.isNotEmpty(scope)) {
                 feedback.append("\n[存储域: ").append(scope).append("]");
             }
@@ -410,10 +462,11 @@ public class MemoryTalent extends AbsTalent {
 
         StringBuilder sb = new StringBuilder("匹配到以下认知参考（如有冲突，请结合当前陈述与可核验事实判断）：\n");
         for (MemorySearchResult res : results) {
-            sb.append(String.format("- [%s] %s(Key: %s): %s\n",
+            // 带上 Imp：模型需据此判断该条是待验证观察还是稳定认知（与 listAll 视图一致）
+            sb.append(String.format("- [%s] %s(Key: %s) Imp:%d: %s\n",
                     Utils.isNotEmpty(res.getTime()) ? res.getTime() : "未知时间",
                     scopeTag(res.getScope()),
-                    res.getKey(), res.getContent()));
+                    res.getKey(), res.getImportance(), res.getContent()));
         }
         return sb.toString();
     }
@@ -613,16 +666,16 @@ public class MemoryTalent extends AbsTalent {
                               String __sessionId) {
         String userId = getUserId(__sessionId);
 
-        if (Assert.isEmpty(scope)) {
-            scope = solutionProvider.getScopesDefault();
-        }
+        // 调用方是否显式指定作用域（未指定时按目标/来源所在域继承，见 resolveConsolidateScope）
+        boolean scopeSpecified = Utils.isNotEmpty(scope);
 
-        if (Utils.isEmpty(newKey)) {
+        if (Assert.isBlank(newKey)) {
             return "【合并异常】new_key 为空，无法写入洞察，旧碎片已保留。";
         }
-        if (Utils.isEmpty(insight)) {
+        if (Assert.isBlank(insight)) {
             return "【合并异常】evolved_insight 为空，无法升维为洞察，旧碎片已保留。";
         }
+        newKey = newKey.trim();
 
         LinkedHashSet<String> sourceKeys = new LinkedHashSet<>();
         if (oldKeys != null) {
@@ -638,7 +691,7 @@ public class MemoryTalent extends AbsTalent {
 
         String fact = "[Evolved Insight] " + insight;
 
-        // 步骤1：获取 solution 实例（整次 consolidate 复用同一个实例，避免重复调用）
+        // 获取 solution 实例（整次 consolidate 复用同一个实例，避免重复调用）
         MemorySolution memorySolution = solutionProvider.get(__cwd);
         if (memorySolution == null || memorySolution.getStorer() == null) {
             return "【合并异常】未找到记忆存储方案，无法写入洞察，旧碎片已保留。";
@@ -646,6 +699,7 @@ public class MemoryTalent extends AbsTalent {
 
         List<String> unreadableSourceKeys = new ArrayList<>();
         Map<String, Integer> sourceImportance = new LinkedHashMap<>();
+        Set<String> sourceScopes = new LinkedHashSet<>();
         for (String sourceKey : sourceKeys) {
             try {
                 String sourceJson = memorySolution.getStorer().get(userId, sourceKey);
@@ -653,6 +707,10 @@ public class MemoryTalent extends AbsTalent {
                     unreadableSourceKeys.add(sourceKey);
                 } else {
                     sourceImportance.put(sourceKey, ONode.ofJson(sourceJson).get("importance").getInt());
+                    String sourceScope = readField(sourceJson, "scope");
+                    if (Utils.isNotEmpty(sourceScope)) {
+                        sourceScopes.add(sourceScope);
+                    }
                 }
             } catch (Exception e) {
                 unreadableSourceKeys.add(sourceKey);
@@ -670,8 +728,14 @@ public class MemoryTalent extends AbsTalent {
             LOG.warn("MemoryTalent consolidate read target error, newKey={}", newKey, e);
             return "【合并异常】目标 Key 当前不可读取，无法安全校验写入，旧碎片已保留。";
         }
-        if (Utils.isNotEmpty(previousTargetJson) && !sourceKeys.contains(newKey)) {
+        if (Utils.isNotEmpty(previousTargetJson) && !sourceKeys.contains(newKey)
+                && !fact.equals(readField(previousTargetJson, "content"))) {
             return "【合并异常】目标 Key 已存在；为避免覆盖未声明的认知，请将 new_key 加入 keys_to_merge 后原地升维。";
+        }
+
+        // 未显式指定时继承目标/来源所在域，避免“跳域写洞察 + 跳域删来源”造成认知净丢失
+        if (scopeSpecified == false) {
+            scope = resolveConsolidateScope(previousTargetJson, sourceScopes);
         }
 
         // 新派生洞察最多为 9；只有目标 Key 自身已有 Imp=10 且原地升维时才保留永久属性
@@ -679,18 +743,20 @@ public class MemoryTalent extends AbsTalent {
 
         // 写入新的合并洞察（跳过碎片检测避免 O(n^2)）
         String writeResult = extractInternal(newKey, fact, importance, scope, __cwd, __sessionId, true);
-        if (!writeResult.startsWith("【操作成功】")) {
+        if (!writeResult.startsWith(EXTRACT_SUCCESS_PREFIX)) {
             return "【合并异常】新洞察写入失败，旧碎片已保留，未做任何清理。";
         }
 
         // 碎片整合后仅让当前工作区/用户的统计失效，下次 extract 时重算
         fragmentStatCache.remove(fragmentCacheKey(__cwd, userId));
 
+        // 删除来源前读回校验：清理不可逆，必须先确认洞察确实已落盘
+        String storedJson = null;
         boolean written = false;
         try {
-            String writtenJson = memorySolution.getStorer().get(userId, newKey);
-            if (Utils.isNotEmpty(writtenJson)) {
-                ONode stored = ONode.ofJson(writtenJson);
+            storedJson = memorySolution.getStorer().get(userId, newKey);
+            if (Utils.isNotEmpty(storedJson)) {
+                ONode stored = ONode.ofJson(storedJson);
                 written = fact.equals(stored.get("content").getString())
                         && importance == stored.get("importance").getInt();
             }
@@ -698,12 +764,13 @@ public class MemoryTalent extends AbsTalent {
             LOG.error("MemoryTalent consolidate verify error, newKey={}", newKey, e);
         }
         if (!written) {
-            restoreTargetIndex(memorySolution, userId, newKey, previousTargetJson, scope);
+            syncIndexToStore(memorySolution, userId, newKey, storedJson);
             LOG.error("MemoryTalent consolidate verify failed, newKey={}", newKey);
-            return "【合并异常】新洞察写入校验失败，旧碎片已保留，未做任何清理。请稍后重试。";
+            return "【合并异常】新洞察写入后读回校验失败：来源已全部保留、未做清理；"
+                    + "目标 Key 可能已被部分写入，请用 memory_recall 核对实际内容后再决定重试或改用 memory_prune 清理来源。";
         }
 
-        // 步骤2：逐个清理普通来源。派生时不删除 Imp=10 来源，避免模型推论替代用户确认的永久定论
+        // 逐个清理普通来源。派生时不删除 Imp=10 来源，避免模型推论替代用户确认的永久定论
         List<String> failedKeys = new ArrayList<>();
         List<String> protectedKeys = new ArrayList<>();
         int removed = 0;
@@ -758,27 +825,46 @@ public class MemoryTalent extends AbsTalent {
         return importance;
     }
 
-    /** 写入校验失败时恢复目标 Key 原索引，避免存储未落盘却留下新洞察的幽灵索引。 */
-    private void restoreTargetIndex(MemorySolution memorySolution, String userId, String key,
-                                    String previousTargetJson, String fallbackScope) {
+    /**
+     * 决定洞察写入的作用域（调用方未显式指定时）。
+     *
+     * <p>目标 Key 已存在则沿用其所在域（原地升维不搬家）；否则全部来源同域时继承该域——
+     * 清理来源是跳域删除的，若洞察只写默认域，其它工作区会凭空丢掉这些认知。
+     * 来源跸多个域时无安全的归属可选，退回默认域。
+     */
+    private String resolveConsolidateScope(String previousTargetJson, Set<String> sourceScopes) {
+        String targetScope = readField(previousTargetJson, "scope");
+        if (Utils.isNotEmpty(targetScope)) {
+            return targetScope;
+        }
+
+        return solutionProvider.getScopesDefault();
+    }
+
+    /**
+     * 读回校验失败时让检索索引镜像存储主体，避免出现“搜到的与召回的不一致”。
+     *
+     * <p>不回滚主体：写入结果本就不可信，回滚同样可能失败，且可能撑销一次实际有效的写入。
+     * 保证索引与主体一致后，模型用 memory_recall 核对到的就是真实状态。
+     */
+    private void syncIndexToStore(MemorySolution memorySolution, String userId, String key, String storedJson) {
         MemorySearcher searcher = memorySolution.getSearcher();
         if (searcher == null) {
             return;
         }
         try {
-            if (Utils.isEmpty(previousTargetJson)) {
+            if (Utils.isEmpty(storedJson)) {
                 searcher.removeIndex(userId, key);
             } else {
-                ONode old = ONode.ofJson(previousTargetJson);
-                String oldScope = old.get("scope").getString();
+                ONode stored = ONode.ofJson(storedJson);
                 searcher.updateIndex(userId, key,
-                        old.get("content").getString(),
-                        old.get("importance").getInt(),
-                        old.get("time").getString(),
-                        Utils.isEmpty(oldScope) ? fallbackScope : oldScope);
+                        stored.get("content").getString(),
+                        stored.get("importance").getInt(),
+                        stored.get("time").getString(),
+                        stored.get("scope").getString());
             }
         } catch (Exception e) {
-            LOG.error("MemoryTalent consolidate restore target index error, key={}", key, e);
+            LOG.error("MemoryTalent consolidate sync index error, key={}", key, e);
         }
     }
 
@@ -794,6 +880,16 @@ public class MemoryTalent extends AbsTalent {
         MemorySolution solution = solutionProvider.get(__cwd);
         if (solution == null || solution.getStorer() == null) {
             return "清理失败 Key: " + key + "（未找到存储方案）。";
+        }
+
+        // 先确认存在：对不存在的 Key 也报“已清理”，会让 Key 写错的模型误以为已删掉想删的内容
+        try {
+            if (Utils.isEmpty(solution.getStorer().get(userId, key))) {
+                return "未找到认知条目 [" + key + "]，无需清理（可能已过期、已删除或 Key 有误）。";
+            }
+        } catch (Exception e) {
+            // 读失败不代表不存在，仍照常尝试删除
+            LOG.warn("MemoryTalent prune probe error, userId={}, key={}", userId, key, e);
         }
 
         if (pruneInternal(solution, userId, key)) {

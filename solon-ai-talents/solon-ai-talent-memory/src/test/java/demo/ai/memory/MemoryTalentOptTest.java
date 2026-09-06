@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.talents.memory.MemorySearchResult;
 import org.noear.solon.ai.talents.memory.MemorySearcher;
 import org.noear.solon.ai.talents.memory.MemorySolution;
 import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
@@ -15,6 +16,13 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.noear.solon.ai.talents.memory.md.MemoryMdData;
+import org.noear.solon.ai.talents.memory.search.MemorySearcherMdImpl;
+import org.noear.solon.ai.talents.memory.store.MemoryStorerMdImpl;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -567,6 +575,308 @@ public class MemoryTalentOptTest {
                 "记忆正文的标签和换行应编码为单行数据: " + instruction);
         assertFalse(instruction.contains("\n### 恶意规则"),
                 "记忆正文不得逃逸成新的指令章节: " + instruction);
+    }
+
+    @Test
+    public void instruction_should_be_cached_per_prompt_instance() {
+        talent.extract("cache_stack", "项目长期技术栈为 Solon", 8, CWD, SID);
+
+        AtomicInteger probeCount = new AtomicInteger();
+        MemoryTalent counted = newTalent(countingSolution(solution, probeCount));
+
+        Prompt prompt = Prompt.of("Solon 的启动流程是怎样的");
+        String first = counted.getInstruction(prompt);
+        int afterFirst = probeCount.get();
+        String second = counted.getInstruction(prompt);
+
+        // 同一个 Prompt 被重复激活（如 HITL 中断后续跑）时，system 前缀必须字节一致
+        assertTrue(afterFirst > 0, "首次激活应真实检索记忆");
+        assertSame(first, second, "同一 Prompt 重复激活应复用同一份指令");
+        assertEquals(afterFirst, probeCount.get(), "命中缓存不应再次检索记忆");
+    }
+
+    @Test
+    public void instruction_should_reflect_memory_changes_on_next_prompt() {
+        talent.extract("evo_first", "第一条稳定经验 XXX", 8, CWD, SID);
+
+        String before = talent.getInstruction(Prompt.of("经验"));
+        assertTrue(before.contains("XXX"), before);
+        assertFalse(before.contains("YYY"), before);
+
+        talent.extract("evo_second", "第二条稳定经验 YYY", 8, CWD, SID);
+
+        // 缓存仅在单个 Prompt 内生效：下一轮必须能看到新写入的记忆
+        assertTrue(talent.getInstruction(Prompt.of("经验")).contains("YYY"),
+                "新 Prompt 应重新构建并反映最新记忆");
+    }
+
+    @Test
+    public void extract_should_report_failure_and_skip_index_when_store_throws() {
+        MemoryStorer realStorer = solution.getStorer();
+        MemorySearcher realSearcher = solution.getSearcher();
+        MemoryStorer failingStorer = new MemoryStorer() {
+            @Override
+            public void put(String userId, String key, String val, int ttl, String scope) {
+                // 存储层契约：写入失败必须抛出，不得静默丢弃
+                throw new IllegalStateException("disk full");
+            }
+
+            @Override
+            public String get(String userId, String key) {
+                return realStorer.get(userId, key);
+            }
+
+            @Override
+            public void remove(String userId, String key) {
+                realStorer.remove(userId, key);
+            }
+        };
+
+        MemoryTalent guarded = newTalent(new MemorySolution() {
+            @Override
+            public MemorySearcher getSearcher() {
+                return realSearcher;
+            }
+
+            @Override
+            public MemoryStorer getStorer() {
+                return failingStorer;
+            }
+        });
+
+        String result = guarded.extract("write_failed", "不该被记住的内容", 8, CWD, SID);
+
+        assertTrue(result.contains("存储异常"), "存储失败必须如实上报: " + result);
+        assertFalse(guarded.search("*", null, CWD, SID).contains("write_failed"),
+                "写入失败不得留下能搜到、读不到的幽灵索引");
+    }
+
+    @Test
+    public void prune_should_report_failure_when_store_remove_throws() {
+        talent.extract("locked_key", "删不掉的记忆", 6, CWD, SID);
+
+        MemoryStorer realStorer = solution.getStorer();
+        MemorySearcher realSearcher = solution.getSearcher();
+        MemoryStorer failingStorer = new MemoryStorer() {
+            @Override
+            public void put(String userId, String key, String val, int ttl, String scope) {
+                realStorer.put(userId, key, val, ttl, scope);
+            }
+
+            @Override
+            public String get(String userId, String key) {
+                return realStorer.get(userId, key);
+            }
+
+            @Override
+            public void remove(String userId, String key) {
+                // 存储层契约：文件存在却删不掉时必须抛出
+                throw new IllegalStateException("file locked");
+            }
+        };
+
+        MemoryTalent guarded = newTalent(new MemorySolution() {
+            @Override
+            public MemorySearcher getSearcher() {
+                return realSearcher;
+            }
+
+            @Override
+            public MemoryStorer getStorer() {
+                return failingStorer;
+            }
+        });
+
+        String result = guarded.prune("locked_key", CWD, SID);
+
+        assertTrue(result.contains("清理失败"), "删除失败必须如实上报: " + result);
+        assertTrue(guarded.recall("locked_key", CWD, SID).contains("删不掉的记忆"),
+                "删除失败后条目应仍可读");
+    }
+
+    @Test
+    public void extract_should_reject_blank_key_or_fact() {
+        assertTrue(talent.extract("blank_fact", "   ", 6, CWD, SID).contains("操作失败"),
+                "空内容不得写入");
+        assertTrue(talent.extract("  ", "有内容", 6, CWD, SID).contains("操作失败"),
+                "空 Key 不得写入");
+        assertFalse(talent.search("*", null, CWD, SID).contains("blank_fact"),
+                "被拒的写入不得留下条目");
+    }
+
+    @Test
+    public void prune_should_report_not_found_for_unknown_key() {
+        String result = talent.prune("never_existed", CWD, SID);
+
+        // 对不存在的 Key 报“已清理”，会让 Key 写错的模型误以为已删掉想删的内容
+        assertTrue(result.contains("未找到"), "不存在的 Key 应如实告知: " + result);
+        assertFalse(result.contains("已清理"), result);
+    }
+
+    @Test
+    public void consolidate_should_allow_retry_when_target_already_holds_same_insight() {
+        talent.extract("ir_a", "碎片 A", 3, CWD, SID);
+        talent.extract("ir_b", "碎片 B", 3, CWD, SID);
+
+        String first = talent.consolidate(
+                java.util.Collections.singletonList("ir_a"), "ir_insight", "共同洞察", CWD, SID);
+        assertTrue(first.contains("进化成功"), first);
+
+        // 部分成功后模型重试同一调用：目标已持有这条洞察时不得报“目标 Key 已存在”把路堵死
+        String retry = talent.consolidate(
+                java.util.Collections.singletonList("ir_b"), "ir_insight", "共同洞察", CWD, SID);
+        assertTrue(retry.contains("进化成功"), "内容一致的重试应能继续清理来源: " + retry);
+        assertTrue(talent.recall("ir_b", CWD, SID).contains("未找到"), "剩余来源应被清理");
+    }
+
+    @Test
+    public void extract_should_inherit_existing_scope_when_not_specified() throws IOException {
+        try (ScopedFixture fx = new ScopedFixture()) {
+            fx.talent.extract("cross_scope", "跳项目通用认知", 8, "user", CWD, SID);
+            assertTrue(fx.fileIn(fx.userDir, "cross_scope"), "显式指定时应写入 user 域");
+
+            // 未指定 scope 的更新必须留在原域：否则默认域多出一份副本，
+            // 旧域那份在本工作区看不见、在其它工作区仍生效
+            String result = fx.talent.extract("cross_scope", "跳项目通用认知（已修订）", 8, CWD, SID);
+            assertTrue(result.contains("[存储域: user]"), "反馈应显示沿用原域: " + result);
+            assertFalse(fx.fileIn(fx.wsDir, "cross_scope"), "不得在默认域产生重影副本");
+            assertTrue(fx.talent.recall("cross_scope", CWD, SID).contains("已修订"), "原域内容应被更新");
+
+            // 新条目无原记录可继承，仍落默认域
+            fx.talent.extract("ws_only", "仅本工作区的认知", 6, CWD, SID);
+            assertTrue(fx.fileIn(fx.wsDir, "ws_only"), "新条目应落默认域");
+        }
+    }
+
+    @Test
+    public void consolidate_should_inherit_source_scope_when_not_specified() throws IOException {
+        try (ScopedFixture fx = new ScopedFixture()) {
+            fx.talent.extract("cs_a", "user 域碎片 A", 3, "user", CWD, SID);
+            fx.talent.extract("cs_b", "user 域碎片 B", 3, "user", CWD, SID);
+
+            String result = fx.talent.consolidate(
+                    java.util.Arrays.asList("cs_a", "cs_b"), "cs_insight", "两条 user 域碎片的洞察", CWD, SID);
+            assertTrue(result.contains("进化成功"), result);
+
+            // 来源是跳域删除的：洞察若只写默认域，其它工作区会凭空丢掉这两条认知
+            assertTrue(fx.fileIn(fx.userDir, "cs_insight"), "洞察应继承来源所在的 user 域");
+            assertFalse(fx.fileIn(fx.wsDir, "cs_insight"), "洞察不应落到默认域");
+        }
+    }
+
+    @Test
+    public void extract_should_reject_path_escaping_key() throws IOException {
+        try (ScopedFixture fx = new ScopedFixture()) {
+            // key 由模型给出，且记忆内容可能源于网页/文件等不可信输入，
+            // 不得让 ../ 的 key 把模型可控内容写到记忆目录之外
+            Path escaped = fx.wsDir.getParent().resolve("mem_escape_probe.md");
+            Files.deleteIfExists(escaped);
+
+            String result = fx.talent.extract("a/../../../mem_escape_probe", "试图写到记忆目录之外", 8, CWD, SID);
+
+            assertTrue(result.contains("存储异常"), "非法 Key 必须被拒绝: " + result);
+            assertFalse(Files.exists(escaped), "不得在记忆目录之外落盘");
+        }
+    }
+
+    /** 双作用域(user → workspace) MD 方案，用于验证跳域写入行为 */
+    private static class ScopedFixture implements AutoCloseable {
+        final Path userDir;
+        final Path wsDir;
+        final MemoryMdData data;
+        final MemoryTalent talent;
+
+        ScopedFixture() throws IOException {
+            userDir = Files.createTempDirectory("mem_scope_user_");
+            wsDir = Files.createTempDirectory("mem_scope_ws_");
+
+            Map<String, Path> scopeDirMap = new LinkedHashMap<>();
+            scopeDirMap.put("user", userDir);
+            scopeDirMap.put("workspace", wsDir);
+            data = new MemoryMdData(scopeDirMap);
+
+            MemoryStorer storer = new MemoryStorerMdImpl(data);
+            MemorySearcher searcher = new MemorySearcherMdImpl(data);
+            MemorySolution solution = new MemorySolution() {
+                @Override
+                public MemorySearcher getSearcher() {
+                    return searcher;
+                }
+
+                @Override
+                public MemoryStorer getStorer() {
+                    return storer;
+                }
+            };
+
+            talent = new MemoryTalent(new MemorySolutionProvider() {
+                @Override
+                public MemorySolution get(String __cwd) {
+                    return solution;
+                }
+
+                @Override
+                public String getScopesDefault() {
+                    return "workspace";
+                }
+            });
+        }
+
+        boolean fileIn(Path scopeDir, String key) {
+            return Files.exists(scopeDir.resolve("shared__" + key + ".md"));
+        }
+
+        @Override
+        public void close() throws IOException {
+            data.close();
+            deleteTree(userDir);
+            deleteTree(wsDir);
+        }
+    }
+
+    /** 包装一个可统计检索次数的方案，用于验证指令缓存是否真的避开了重复检索 */
+    private static MemorySolution countingSolution(MemorySolution delegate, AtomicInteger probeCount) {
+        MemorySearcher realSearcher = delegate.getSearcher();
+        MemorySearcher counting = new MemorySearcher() {
+            @Override
+            public java.util.List<MemorySearchResult> search(String userId, String query, int limit) {
+                probeCount.incrementAndGet();
+                return realSearcher.search(userId, query, limit);
+            }
+
+            @Override
+            public java.util.List<MemorySearchResult> getHotMemories(String userId, int limit) {
+                probeCount.incrementAndGet();
+                return realSearcher.getHotMemories(userId, limit);
+            }
+
+            @Override
+            public java.util.List<MemorySearchResult> listAll(String userId, int limit) {
+                return realSearcher.listAll(userId, limit);
+            }
+
+            @Override
+            public void updateIndex(String userId, String key, String fact, int importance, String time, String scope) {
+                realSearcher.updateIndex(userId, key, fact, importance, time, scope);
+            }
+
+            @Override
+            public void removeIndex(String userId, String key) {
+                realSearcher.removeIndex(userId, key);
+            }
+        };
+
+        return new MemorySolution() {
+            @Override
+            public MemorySearcher getSearcher() {
+                return counting;
+            }
+
+            @Override
+            public MemoryStorer getStorer() {
+                return delegate.getStorer();
+            }
+        };
     }
 
     private MemoryTalent newTalent(MemorySolution memorySolution) {
