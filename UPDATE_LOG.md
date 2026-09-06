@@ -30,6 +30,16 @@
 * 调整 solon-ai-agent 移除 `ReasonDeltaEvent.isFinished()/isError()`；完成状态改取 `RunEndEvent`，异常状态改取 `ReActTrace.isAbnormal()`。（**不兼容变更**）
 * 修复 solon-ai-core 空正文、静默空流、工具参数重复、Agent 取消/NPE、Flow 流类型适配、Anthropic 缓存率与叠字等问题。
 
+
+变更说明：
+
+| 旧接口                             | 新接口                          | 说明 |
+|------------------------------------|---------------------------------|------|
+| `chatModel:<ChatResponse>stream()` | `chatModel:<ChatEvent>stream()` |      |
+|                                    |                                 |      |
+
+
+
 ### 4.0.6
 
 * 添加 solon-ai-agent Metrics 缓存率计算支持
