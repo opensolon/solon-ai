@@ -46,7 +46,7 @@ public interface MemoryStorer {
      * 获取记忆条目
      *
      * <p>多作用域实现应做聚合读并在返回的 JSON 中带上 {@code scope} 字段：
-     * 调用方在未显式指定作用域时会沿用该域写回，避免同 Key 跳域产生重影。
+     * 调用方在未显式指定作用域时会沿用该域写回，避免同 Key 跨域产生重影。
      *
      * @param key   存储键
      * @return      序列化内容，若不存在则返回 null
