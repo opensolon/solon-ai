@@ -22,6 +22,7 @@ import org.noear.solon.ai.agent.*;
 import org.noear.solon.ai.agent.exception.LlmNoReturnException;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.event.ChatEvent;
@@ -175,17 +176,16 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         AssistantMessage assistantMessage = null;
 
         long startTime = System.currentTimeMillis();
+        Metrics metricsBaseline = trace.getMetrics().snapshot();
         try {
-            trace.getMetrics().reset();
-
             assistantMessage = callWithRetry(trace, session, finalPrompt, options);
         } finally {
-            trace.getMetrics().setTotalDuration(System.currentTimeMillis() - startTime);
+            trace.getMetrics().addTotalDuration(System.currentTimeMillis() - startTime);
 
             // 父一级团队轨迹
             if (parentTeamTrace != null) {
-                // 汇总 token 使用情况
-                parentTeamTrace.getMetrics().addMetrics(trace.getMetrics());
+                // 只汇总本次执行增量，避免重复执行时累计历史用量
+                parentTeamTrace.getMetrics().addMetrics(trace.getMetrics().deltaSince(metricsBaseline));
             }
         }
 

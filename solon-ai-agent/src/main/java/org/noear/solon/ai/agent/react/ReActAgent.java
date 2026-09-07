@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.*;
 import org.noear.solon.ai.agent.react.task.*;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatSession;
@@ -262,17 +263,16 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             }
 
             long startTime = System.currentTimeMillis();
+            Metrics metricsBaseline = trace.getMetrics().snapshot();
             try {
-                trace.getMetrics().reset();
-
                 // 核心执行：基于计算图进行循环推理
                 context.with(KEY_CURRENT_UNIT_TRACE_KEY, config.getTraceKey(), () -> {
                     evalDo(trace, context);
                 });
             } finally {
-                // 记录性能指标
+                // 累计本次活跃执行片段的性能指标（不包含任务挂起等待时间）
                 long duration = System.currentTimeMillis() - startTime;
-                trace.getMetrics().setTotalDuration(duration);
+                trace.getMetrics().addTotalDuration(duration);
 
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("ReActAgent [{}] finished. Duration: {}ms, Turns: {}, Tools: {}",
@@ -281,8 +281,8 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
                 // 父一级团队轨迹
                 if (parentTeamTrace != null) {
-                    // 汇总 token 使用情况
-                    parentTeamTrace.getMetrics().addMetrics(trace.getMetrics());
+                    // 只汇总本次执行增量，避免恢复执行时重复累计历史用量
+                    parentTeamTrace.getMetrics().addMetrics(trace.getMetrics().deltaSince(metricsBaseline));
                 }
             }
         } else {

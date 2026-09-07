@@ -80,6 +80,7 @@ public class SimpleTrace implements AgentTrace {
     }
 
     protected void reset(Prompt originalPrompt) {
+        this.metrics.reset();
         this.originalPrompt = originalPrompt;
         this.beginTimeMs = System.currentTimeMillis();
         this.runId = Utils.uuid();

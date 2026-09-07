@@ -27,7 +27,8 @@ import org.noear.solon.lang.Preview;
 @Preview("3.1")
 public class AiUsage {
     /**
-     * 提示语（输入）消耗令牌数，对应 OpenAI prompt_tokens / Anthropic input_tokens / DashScope input_tokens
+     * 提示语（输入）消耗令牌数，对应 OpenAI prompt_tokens / DashScope input_tokens；
+     * Anthropic 方言归一化为 input_tokens + cache_creation_input_tokens + cache_read_input_tokens
      */
     private final long promptTokens;
     /**
@@ -286,7 +287,8 @@ public class AiUsage {
             return 0.0D;
 
         double rate = (double) cacheReadInputTokens * 100.0D / promptTokens;
-        return Math.round(Math.min(100.0D, rate) * 100.0D) / 100.0D;
+        rate = Math.max(0.0D, Math.min(100.0D, rate));
+        return Math.round(rate * 100.0D) / 100.0D;
     }
 
     /**

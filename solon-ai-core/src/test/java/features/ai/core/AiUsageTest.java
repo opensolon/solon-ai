@@ -54,6 +54,13 @@ public class AiUsageTest {
     }
 
     @Test
+    @DisplayName("异常数据：缓存读取为负数 → 收敛到 0%")
+    public void testNegativeClampToZero() {
+        AiUsage usage = build(100L, 0L, -1L);
+        Assertions.assertEquals(0, usage.getCacheRate());
+    }
+
+    @Test
     @DisplayName("输入为 0（防除零）→ 0%")
     public void testZeroPromptTokens() {
         AiUsage usage = build(0L, 0L, 100L);

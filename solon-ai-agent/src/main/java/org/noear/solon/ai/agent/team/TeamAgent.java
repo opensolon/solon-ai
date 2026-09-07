@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.*;
+import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
@@ -247,6 +248,7 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
                 }
 
                 long startTime = System.currentTimeMillis();
+                Metrics metricsBaseline = trace.getMetrics().snapshot();
 
                 try {
                     final FlowOptions flowOptions = new FlowOptions();
@@ -256,17 +258,15 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
                         }
                     }
 
-                    trace.getMetrics().reset();
-
                     context.with(Agent.KEY_CURRENT_TEAM_TRACE_KEY, config.getTraceKey(), () -> {
                         context.with(Agent.KEY_PROTOCOL, config.getProtocol(), () -> {
                             flowEngine.eval(graph, -1, context, flowOptions);
                         });
                     });
                 } finally {
-                    // 记录性能指标
+                    // 累计本次活跃执行片段的性能指标（不包含任务挂起等待时间）
                     long duration = System.currentTimeMillis() - startTime;
-                    trace.getMetrics().setTotalDuration(duration);
+                    trace.getMetrics().addTotalDuration(duration);
 
                     if (LOG.isDebugEnabled()) {
                         LOG.debug("TeamAgent [{}] finished. Duration: {}ms, turns: {}",
@@ -275,8 +275,8 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
 
                     // 父一级团队轨迹
                     if (parentTeamTrace != null) {
-                        // 汇总 token 使用情况
-                        parentTeamTrace.getMetrics().addMetrics(trace.getMetrics());
+                        // 只汇总本次执行增量，避免恢复执行时重复累计历史用量
+                        parentTeamTrace.getMetrics().addMetrics(trace.getMetrics().deltaSince(metricsBaseline));
                     }
                 }
             } else {
