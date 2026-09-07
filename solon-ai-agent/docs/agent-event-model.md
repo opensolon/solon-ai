@@ -530,7 +530,7 @@ List<AgentEvent> firstEvents = agent.prompt(query).stream()
 | 使用 `AgentChunk` | 使用 `AgentEvent` 及具体事件类 |
 | 把每个流事件都当作正文 | 只消费对应 Delta 事件，并检查其 `ChatEvent` 类型 |
 | 用统一完成标记判断所有 Agent | 按 Agent 类型过滤 `SimpleEndEvent`、`RunEndEvent` 或 `TeamEndEvent` |
-| 把 `ReasonEndEvent` 当作 ReAct 最终结果 | 从 `RunEndEvent.getResponse()` 读取完整 `ReActResponse` |
+| 把 `ReActChunk` 当作 ReAct 最终结果 | 从 `RunEndEvent.getResponse()` 读取完整 `ReActResponse` |
 | 从 Chat 工具参数分片推断工具执行 | 使用 `ToolCallStartEvent` / `ToolCallEndEvent` 观察本地工具执行 |
 | 失败只看 Reactor `onError` | 同时观察 observation、`ToolCallEndEvent.getError()`、`RunEndEvent.isAbnormal()` 和 Reactor `onError` |
 | 对完整事件流直接调用 `blockFirst()` | 先过滤具体顶层 End 事件，再调用 `blockFirst()`；异步使用 `next()` |
