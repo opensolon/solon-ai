@@ -223,7 +223,7 @@ public class OpenaiResponsesRequestBuilder {
         // store=false 时补 include，reasoning 的 encrypted_content 否则不会返回，多轮回放会断链
         applyReasoningInclude(root);
 
-        // ⭐ prompt_cache_key（官方 Responses API 独立的缓存路由提示字段）
+        // prompt_cache_key（官方 Responses API 独立的缓存路由提示字段）
         //    通过 ChatOptions.promptCacheKey() 传入，仅用于提升 KV cache 命中，不改变会话语义
         //    注意：与 previous_response_id（服务端会话续接）是两个不同字段；
         //    后者可经 options 直接透传（如 options.options().put("previous_response_id", ...)）
@@ -1030,50 +1030,13 @@ public class OpenaiResponsesRequestBuilder {
         }
 
         String modelName = model.trim().toLowerCase();
-        return isModelFamily(modelName, "gpt-5")
-                || isModelFamily(modelName, "gpt-6")
-                || isModelFamily(modelName, "o1")
-                || isModelFamily(modelName, "o3")
-                || isModelFamily(modelName, "o4");
+        return OpenaiDialectSupport.isModelFamily(modelName, "gpt-5")
+                || OpenaiDialectSupport.isModelFamily(modelName, "gpt-6")
+                || OpenaiDialectSupport.isModelFamily(modelName, "o1")
+                || OpenaiDialectSupport.isModelFamily(modelName, "o3")
+                || OpenaiDialectSupport.isModelFamily(modelName, "o4");
     }
 
-    private boolean isModelFamily(String model, String family) {
-        if (matchesModelFamily(model, family)) {
-            return true;
-        }
-
-        // 一些兼容网关会省略 GPT 主系列名称中的连字符；只放宽能力判断，不改写出站 model。
-        if (family.startsWith("gpt-") && family.length() > 4) {
-            return matchesModelFamily(model, "gpt" + family.substring(4));
-        }
-        return false;
-    }
-
-    private boolean matchesModelFamily(String model, String family) {
-        int fromIndex = 0;
-        while (fromIndex < model.length()) {
-            int start = model.indexOf(family, fromIndex);
-            if (start < 0) {
-                return false;
-            }
-
-            int end = start + family.length();
-            boolean validPrefix = start == 0 || isModelTokenBoundary(model.charAt(start - 1));
-            boolean validSuffix = end == model.length()
-                    || model.charAt(end) == '-'
-                    || model.charAt(end) == '.';
-            if (validPrefix && validSuffix) {
-                return true;
-            }
-            fromIndex = start + 1;
-        }
-        return false;
-    }
-
-    private boolean isModelTokenBoundary(char ch) {
-        return ch == '/' || ch == '.' || ch == ':' || ch == '_' || ch == '-';
-    }
-     
     /**
      * 无状态场景补 {@code include}。
      * <p>官方规范：{@code encrypted_content} 仅在 {@code include} 显式请求时返回；
@@ -1146,7 +1109,7 @@ public class OpenaiResponsesRequestBuilder {
      * @author oisin lu
      * @date 2026年1月28日
      */
-    public void buildToolsNode(ONode root, ChatOptions options) {
+    void buildToolsNode(ONode root, ChatOptions options) {
         Collection<FunctionTool> tools = options.tools();
         if (Utils.isEmpty(tools)) {
             return;
@@ -1217,7 +1180,7 @@ public class OpenaiResponsesRequestBuilder {
 
     /**
      * 构建助手消息（用于工具调用后的多轮对话）
-     * <p>注：该节点不直接出站，而是回嗂给 {@code parseAssistantMessage} 重建会话消息，
+     * <p>注：该节点不直接出站，而是回传给 {@code parseAssistantMessage} 重建会话消息，
      * 因此沿用 Chat Completions 形态；相比父类额外带上 {@code reasoning_content}，
      * 避免工具调用轮的思考内容丢失。</p>
      * @author oisin lu
@@ -1227,7 +1190,7 @@ public class OpenaiResponsesRequestBuilder {
         ONode oNode = new ONode();
         oNode.set("role", "assistant");
         oNode.set("content", acc.getAggregationText());
-        // 思考内容回嗂（父类 parseAssistantMessage 读 reasoning_content）
+        // 思考内容回传（父类 parseAssistantMessage 读 reasoning_content）
         String thinking = acc.getAggregationThinking();
         if (Utils.isNotEmpty(thinking)) {
             oNode.set("reasoning_content", thinking);

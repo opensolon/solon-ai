@@ -35,7 +35,15 @@ import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * OpenAI Responses API 响应解析器
@@ -58,8 +66,6 @@ public class OpenaiResponsesResponseParser {
         final Map<String, SnapshotDeltaNormalizer> reasoningContents = new LinkedHashMap<>();
         final Map<String, StringBuilder> deliveredTextContents = new LinkedHashMap<>();
         final Map<String, StringBuilder> deliveredReasoningContents = new LinkedHashMap<>();
-        final Set<String> textDeltaItems = new HashSet<>();
-        final Set<String> reasoningDeltaItems = new HashSet<>();
         final Set<String> emittedFunctionCalls = new HashSet<>();
         final Set<String> emittedMediaItems = new HashSet<>();
         final Set<String> emittedPartialImages = new HashSet<>();
@@ -91,8 +97,6 @@ public class OpenaiResponsesResponseParser {
         final Map<String, SnapshotDeltaNormalizer> reasoningContents = new LinkedHashMap<>();
         final Map<String, StringBuilder> deliveredTextContents = new LinkedHashMap<>();
         final Map<String, StringBuilder> deliveredReasoningContents = new LinkedHashMap<>();
-        final Set<String> textDeltaItems = new HashSet<>();
-        final Set<String> reasoningDeltaItems = new HashSet<>();
         final Set<String> emittedFunctionCalls = new HashSet<>();
         final Set<String> emittedMediaItems = new HashSet<>();
         final Set<String> emittedPartialImages = new HashSet<>();
@@ -165,8 +169,6 @@ public class OpenaiResponsesResponseParser {
             state.reasoningContents.clear();
             state.deliveredTextContents.clear();
             state.deliveredReasoningContents.clear();
-            state.textDeltaItems.clear();
-            state.reasoningDeltaItems.clear();
             state.emittedFunctionCalls.clear();
             state.emittedMediaItems.clear();
             state.emittedPartialImages.clear();
@@ -192,10 +194,6 @@ public class OpenaiResponsesResponseParser {
         state.deliveredTextContents.putAll(saved.deliveredTextContents);
         state.deliveredReasoningContents.clear();
         state.deliveredReasoningContents.putAll(saved.deliveredReasoningContents);
-        state.textDeltaItems.clear();
-        state.textDeltaItems.addAll(saved.textDeltaItems);
-        state.reasoningDeltaItems.clear();
-        state.reasoningDeltaItems.addAll(saved.reasoningDeltaItems);
         state.emittedFunctionCalls.clear();
         state.emittedFunctionCalls.addAll(saved.emittedFunctionCalls);
         state.emittedMediaItems.clear();
@@ -223,8 +221,6 @@ public class OpenaiResponsesResponseParser {
         saved.reasoningContents.putAll(state.reasoningContents);
         saved.deliveredTextContents.putAll(state.deliveredTextContents);
         saved.deliveredReasoningContents.putAll(state.deliveredReasoningContents);
-        saved.textDeltaItems.addAll(state.textDeltaItems);
-        saved.reasoningDeltaItems.addAll(state.reasoningDeltaItems);
         saved.emittedFunctionCalls.addAll(state.emittedFunctionCalls);
         saved.emittedMediaItems.addAll(state.emittedMediaItems);
         saved.emittedPartialImages.addAll(state.emittedPartialImages);
@@ -328,7 +324,6 @@ public class OpenaiResponsesResponseParser {
             state.deliveredTextContents.put(key, buf);
         }
         buf.append(value);
-        state.textDeltaItems.add(key);
     }
 
     /** 记录真正交付给 ChatAccumulator 的 reasoning 增量。 */
@@ -342,7 +337,6 @@ public class OpenaiResponsesResponseParser {
             state.deliveredReasoningContents.put(key, buf);
         }
         buf.append(value);
-        state.reasoningDeltaItems.add(key);
     }
 
     private String deliveredText(StreamState state, String itemKey, String partKey) {
@@ -942,14 +936,12 @@ public class OpenaiResponsesResponseParser {
                     if (Utils.isNotEmpty(text)) {
                         StreamState state = getOrCreateState(acc);
                         if ("reasoning_text".equals(delta.get("type").getString())) {
-                            if (state != null) {
-                                recordDeliveredReasoning(state, oResp, "content_index", text);
-                                mergeReasoningMetadata(acc, state);
-                                emitThinkingDelta(ctx, state, oResp, text);
-                                hasContent = true;
-                            }
+                            recordDeliveredReasoning(state, oResp, "content_index", text);
+                            mergeReasoningMetadata(acc, state);
+                            emitThinkingDelta(ctx, state, oResp, text);
+                            hasContent = true;
                         } else {
-                            if (state != null) recordDeliveredText(state, oResp, text);
+                            recordDeliveredText(state, oResp, text);
                             ctx.emit(withResponseEventAttrs(ctx.event(ChatEventType.TEXT_DELTA)
                                     .rawType(eventType)
                                     .itemId(oResp.get("item_id").getString())
@@ -2298,18 +2290,6 @@ public class OpenaiResponsesResponseParser {
         return added;
     }
 
-    private Set<String> textDeltaItems(StreamState state, String itemKey) {
-        if (itemKey.equals(state.activeStateKey)) return state.textDeltaItems;
-        ItemSnapshot saved = state.itemStates.get(itemKey);
-        return saved == null ? Collections.<String>emptySet() : saved.textDeltaItems;
-    }
-
-    private Set<String> reasoningDeltaItems(StreamState state, String itemKey) {
-        if (itemKey.equals(state.activeStateKey)) return state.reasoningDeltaItems;
-        ItemSnapshot saved = state.itemStates.get(itemKey);
-        return saved == null ? Collections.<String>emptySet() : saved.reasoningDeltaItems;
-    }
-
     private boolean functionAlreadyEmitted(StreamState state, String itemKey, String callId) {
         if (itemKey.equals(state.activeStateKey)) return state.emittedFunctionCalls.contains(callId);
         ItemSnapshot saved = state.itemStates.get(itemKey);
@@ -2321,21 +2301,6 @@ public class OpenaiResponsesResponseParser {
         ItemSnapshot saved = state.itemStates.get(itemKey);
         return saved != null && saved.emittedMediaItems.contains(itemKey);
     }
-
-    private boolean hasItemPart(Set<String> values, String itemKey, int partIndex) {
-        String explicit = itemKey + ":content_index:" + partIndex;
-        String defaultPart = itemKey + ":content_index:-1";
-        return values.contains(explicit) || values.contains(defaultPart);
-    }
-
-
-    private boolean hasItemPrefix(Set<String> values, String prefix) {
-        for (String value : values) {
-            if (value.startsWith(prefix)) return true;
-        }
-        return false;
-    }
-
 
     /**
      * 解析 usage 信息

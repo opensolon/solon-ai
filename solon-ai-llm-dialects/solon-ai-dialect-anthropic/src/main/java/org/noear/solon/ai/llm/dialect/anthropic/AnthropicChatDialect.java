@@ -50,7 +50,7 @@ public class AnthropicChatDialect extends AbstractChatDialect {
     private final AnthropicResponseParser responseParser;
     private final AnthropicRequestBuilder requestBuilder;
 
-    private static final Pattern pattern =  Pattern.compile("/v\\d+/?$");
+    private static final Pattern VERSION_PATH_PATTERN = Pattern.compile("/v\\d+/?$");
 
     public AnthropicChatDialect() {
         this.responseParser = new AnthropicResponseParser();
@@ -69,38 +69,38 @@ public class AnthropicChatDialect extends AbstractChatDialect {
         return "claude".equalsIgnoreCase(standard) ||
                 ChatDialects.ANTHROPIC.equalsIgnoreCase(standard) ||
                 ChatDialects.ANTHROPIC_MESSAGES.equalsIgnoreCase(standard) ||
-                (Assert.isEmpty(standard) && config.getApiUrl().endsWith("/messages"));
+                (Assert.isEmpty(standard) && apiPath(config.getApiUrl()).endsWith("/messages"));
     }
 
     @Override
     protected String getApiUrl(ChatConfig config) {
+        String apiUrl = stripFragment(config.getApiUrl());
+        int queryIndex = apiUrl.indexOf('?');
+        String query = queryIndex < 0 ? "" : apiUrl.substring(queryIndex);
+        String path = queryIndex < 0 ? apiUrl : apiUrl.substring(0, queryIndex);
 
-        //处理后缀#
-        int index = config.getApiUrl().indexOf('#');
-        if (index > 0) {
-            return config.getApiUrl().substring(0, index);
+        // 自动补全地址；query 只在路径补全后接回，避免参与后缀与版本判断。
+        if (path.endsWith("/messages")) {
+            return path + query;
         }
 
-        //自动补全地址
-        if (config.getApiUrl().endsWith("/messages")) {
-            return config.getApiUrl();
+        if (VERSION_PATH_PATTERN.matcher(path).find()) { //匹配 /v1,/v4/ 等
+            path = path.endsWith("/") ? path + "messages" : path + "/messages";
         } else {
-            if (pattern.matcher(config.getApiUrl()).find()) { //匹配 /v1,/v4/ 等
-                //已带版本
-                if (config.getApiUrl().endsWith("/")) {
-                    return config.getApiUrl() + "messages";
-                } else {
-                    return config.getApiUrl() + "/messages";
-                }
-            } else {
-                //未带版本
-                if (config.getApiUrl().endsWith("/")) {
-                    return config.getApiUrl() + "v1/messages";
-                } else {
-                    return config.getApiUrl() + "/v1/messages";
-                }
-            }
+            path = path.endsWith("/") ? path + "v1/messages" : path + "/v1/messages";
         }
+        return path + query;
+    }
+
+    private static String stripFragment(String apiUrl) {
+        int index = apiUrl.indexOf('#');
+        return index < 0 ? apiUrl : apiUrl.substring(0, index);
+    }
+
+    private static String apiPath(String apiUrl) {
+        String value = stripFragment(apiUrl);
+        int queryIndex = value.indexOf('?');
+        return queryIndex < 0 ? value : value.substring(0, queryIndex);
     }
 
     @Override
@@ -228,17 +228,7 @@ public class AnthropicChatDialect extends AbstractChatDialect {
     public List<AssistantMessage> parseAssistantMessage(ChatAccumulator acc, ONode oMessage) {
         ONode oContent = oMessage.getOrNull("content");
         if (oContent != null && oContent.isArray()) {
-            boolean hasToolUse = false;
-            for (ONode item : oContent.getArray()) {
-                if ("tool_use".equals(item.get("type").getString())) {
-                    hasToolUse = true;
-                    break;
-                }
-            }
-
-            if (oContent != null && oContent.isArray()) {
-                return parseClaudeAssistantMessage(acc, oMessage, oContent);
-            }
+            return parseClaudeAssistantMessage(acc, oMessage, oContent);
         }
 
         return super.parseAssistantMessage(acc, oMessage);

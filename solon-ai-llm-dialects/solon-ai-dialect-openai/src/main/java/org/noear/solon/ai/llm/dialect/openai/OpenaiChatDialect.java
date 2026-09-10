@@ -25,6 +25,8 @@ import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -40,6 +42,8 @@ import java.util.Map;
  * @since 3.1
  */
 public class OpenaiChatDialect extends AbstractChatDialect {
+    private static final Logger log = LoggerFactory.getLogger(OpenaiChatDialect.class);
+
     /**
      * 本地方言指令角色策略：auto（默认）/ system / developer。
      * <p>该选项只控制 Chat Completions 出站角色，不会透传给服务端。</p>
@@ -200,42 +204,16 @@ public class OpenaiChatDialect extends AbstractChatDialect {
         }
 
         String modelName = model.trim().toLowerCase(Locale.ROOT);
-        if (matchesModelFamily(modelName, "o1-preview") || matchesModelFamily(modelName, "o1-mini")) {
+        if (OpenaiDialectSupport.isModelFamily(modelName, "o1-preview")
+                || OpenaiDialectSupport.isModelFamily(modelName, "o1-mini")) {
             return false;
         }
 
-        return matchesModelFamily(modelName, "o1")
-                || matchesModelFamily(modelName, "o3")
-                || matchesModelFamily(modelName, "o4")
-                || matchesModelFamily(modelName, "gpt-5")
-                || matchesModelFamily(modelName, "gpt5")
-                || matchesModelFamily(modelName, "gpt-6")
-                || matchesModelFamily(modelName, "gpt6");
-    }
-
-    private boolean matchesModelFamily(String model, String family) {
-        int fromIndex = 0;
-        while (fromIndex < model.length()) {
-            int start = model.indexOf(family, fromIndex);
-            if (start < 0) {
-                return false;
-            }
-
-            int end = start + family.length();
-            boolean validPrefix = start == 0 || isProviderBoundary(model.charAt(start - 1));
-            boolean validSuffix = end == model.length()
-                    || model.charAt(end) == '-'
-                    || model.charAt(end) == '.';
-            if (validPrefix && validSuffix) {
-                return true;
-            }
-            fromIndex = start + 1;
-        }
-        return false;
-    }
-
-    private boolean isProviderBoundary(char ch) {
-        return ch == '/' || ch == ':' || ch == '.';
+        return OpenaiDialectSupport.isModelFamily(modelName, "o1")
+                || OpenaiDialectSupport.isModelFamily(modelName, "o3")
+                || OpenaiDialectSupport.isModelFamily(modelName, "o4")
+                || OpenaiDialectSupport.isModelFamily(modelName, "gpt-5")
+                || OpenaiDialectSupport.isModelFamily(modelName, "gpt-6");
     }
 
     /**
@@ -268,8 +246,15 @@ public class OpenaiChatDialect extends AbstractChatDialect {
             return;
         }
 
-        //解析
-        ONode oResp = ONode.ofJson(data);
+        //解析：单帧损坏（如网关中途下发截断 JSON）不阻断整个流，与 Responses 方言保持同一语义；
+        //「整个响应体都不是模型流」的场景由核心层零有效帧守卫兑底。
+        ONode oResp;
+        try {
+            oResp = ONode.ofJson(data);
+        } catch (Exception e) {
+            log.warn("OpenAI chat/completions stream: skip malformed frame: {}", data, e);
+            return;
+        }
 
         if (oResp.isObject() == false) {
             return;

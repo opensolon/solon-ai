@@ -408,10 +408,9 @@ public class AnthropicResponseParser {
     }
 
     private static boolean emitCitation(ChatStreamContext ctx, String rawType, int blockIndex,
-                                        int citationIndex, ONode citation, ONode raw) {
+                                         ONode citation, ONode raw) {
         Citation typedCitation = parseCitation(citation);
-        if (typedCitation == null || markTypedEvent(ctx.getAccumulator(), "citation", blockIndex,
-                citationIndex, citation) == false) {
+        if (typedCitation == null) {
             return false;
         }
 
@@ -441,13 +440,11 @@ public class AnthropicResponseParser {
             return;
         }
 
-        int citationIndex = -1;
         for (ONode citation : citations.getArray()) {
-            citationIndex++;
             if (citation == null || citation.isObject() == false) {
                 continue;
             }
-            emitCitation(ctx, rawType, blockIndex, citationIndex, citation, citation);
+            emitCitation(ctx, rawType, blockIndex, citation, citation);
         }
     }
 
@@ -922,7 +919,7 @@ public class AnthropicResponseParser {
                     } else if ("citations_delta".equals(deltaType) || "citation_delta".equals(deltaType)) {
                         int blockIndex = oResp.get("index").getInt();
                         ONode citation = delta.getOrNull("citation");
-            boolean emitted = emitCitation(ctx, eventType, blockIndex, -1, citation, oResp);
+                        boolean emitted = emitCitation(ctx, eventType, blockIndex, citation, oResp);
                         if (emitted) {
                             updateStreamContentBlock(acc, blockIndex, deltaType, delta);
                         }
@@ -1463,18 +1460,7 @@ public class AnthropicResponseParser {
         }
 
         if (oResp.hasKey("error") && !oResp.get("error").isNull()) {
-            ONode oError = oResp.get("error");
-            String errorType = oError.get("type").getString();
-            String errorMsg = oError.get("message").getString();
-            if (Utils.isEmpty(errorMsg)) {
-                errorMsg = oError.getString();
-            }
-            // 构建详细的错误信息
-            String detailedError = errorMsg;
-            if (Utils.isNotEmpty(errorType)) {
-                detailedError = String.format("[%s] %s", errorType, errorMsg);
-            }
-            acc.setError(new ChatException(detailedError));
+            acc.setError(parseAnthropicError(oResp.get("error")));
             ctx.emit(ctx.event(ChatEventType.ERROR)
                     .rawType("error")
                     .error(acc.getError())

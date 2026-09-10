@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.content.BlobBlock;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.event.*;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -533,7 +534,7 @@ public class AnthropicRoundTripAlignTest {
                 + "\"title\":\"A\",\"cited_text\":\"来源 A\"}}}";
         assertTrue(parser.parseStreamResponse(ctx, firstCitationDelta));
         assertTrue(parser.parseStreamResponse(ctx, firstCitationDelta),
-                "兼容网关重放同一 citation delta 时仍应视为已消费，只是不重复发事件或写终态块");
+                "相同 citation delta 可能表示答案中另一次合法引用，应继续按 occurrence 保留");
         parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":0,"
                 + "\"delta\":{\"type\":\"citations_delta\",\"citation\":{"
                 + "\"type\":\"page_location\",\"document_index\":1,\"start_page_number\":2,"
@@ -547,15 +548,16 @@ public class AnthropicRoundTripAlignTest {
 
         ONode terminalBlock = ONode.ofJson((String) blocks.get(0));
         assertEquals("据报道", terminalBlock.get("text").getString());
-        assertEquals(2, terminalBlock.get("citations").size());
+        assertEquals(3, terminalBlock.get("citations").size());
         assertEquals("https://a.dev/x", terminalBlock.get("citations").get(0).get("url").getString());
-        assertEquals("来源 B", terminalBlock.get("citations").get(1).get("cited_text").getString());
+        assertEquals("https://a.dev/x", terminalBlock.get("citations").get(1).get("url").getString());
+        assertEquals("来源 B", terminalBlock.get("citations").get(2).get("cited_text").getString());
 
         ONode replay = build(ChatOptions.of(), Collections.singletonList(message))
                 .get("messages").get(0).get("content").get(0);
         assertEquals(terminalBlock.toJson(), replay.toJson());
         List<ChatEvent> citationEvents = allOf(ChatEventType.CITATION);
-        assertEquals(2, citationEvents.size(), "重复引用 delta 不应产生重复事件");
+        assertEquals(3, citationEvents.size(), "引用按协议 occurrence 保序，不按内容去重");
         Citation first = citationEvents.get(0).getCitation();
         assertNotNull(first);
         assertEquals("web_search_result_location", first.getType());
@@ -566,9 +568,9 @@ public class AnthropicRoundTripAlignTest {
         assertEquals("content_block_delta", citationEvents.get(0).getRaw().get("type").getString());
 
         List<Citation> terminalCitations = ctx.getAccumulator().snapshotTerminal().getCitations();
-        assertEquals(2, terminalCitations.size());
-        assertEquals("手册", terminalCitations.get(1).getTitle());
-        assertEquals("来源 B", terminalCitations.get(1).getCitedText());
+        assertEquals(3, terminalCitations.size());
+        assertEquals("手册", terminalCitations.get(2).getTitle());
+        assertEquals("来源 B", terminalCitations.get(2).getCitedText());
     }
 
     /// ///////////////// 回环：服务端工具块与容器
@@ -899,6 +901,35 @@ public class AnthropicRoundTripAlignTest {
 
     /// ///////////////// 请求侧：document 与 image file source
 
+    @Test
+    public void assistantPrefillPreservesBoundaryWhitespace() {
+        String prefill = "  Answer: \n";
+        ONode content = build(ChatOptions.of(), Arrays.asList(
+                ChatMessage.ofUser("continue"), new AssistantMessage(prefill)))
+                .get("messages").get(1).get("content");
+
+        assertTrue(content.isString());
+        assertEquals(prefill, content.getString());
+    }
+
+    @Test
+    public void assistantToolCallKeepsWhitespaceAndDocument() {
+        String pdf = Base64.getEncoder().encodeToString("%PDF-1.7".getBytes());
+        ToolCall call = new ToolCall("0", "toolu_1", "inspect", "{}",
+                new LinkedHashMap<String, Object>());
+        AssistantMessage message = AssistantMessage.snapshot(
+                " Answer: ", "", Collections.singletonList(call),
+                Collections.<ContentBlock>singletonList(BlobBlock.of(pdf, "application/pdf")),
+                null, null, null);
+
+        ONode content = build(ChatOptions.of(), Collections.<ChatMessage>singletonList(message))
+                .get("messages").get(0).get("content");
+        assertEquals(" Answer: ", content.get(0).get("text").getString());
+        assertEquals("document", content.get(1).get("type").getString());
+        assertEquals("application/pdf", content.get(1).get("source").get("media_type").getString());
+        assertEquals("tool_use", content.get(2).get("type").getString());
+    }
+
     /**
      * BlobBlock → document 块：旧实现在所有 content 构建处只认 TextBlock / ImageBlock，PDF 被静默丢弃。
      */
@@ -920,6 +951,33 @@ public class AnthropicRoundTripAlignTest {
         assertEquals("base64", doc.get("source").get("type").getString());
         assertEquals("application/pdf", doc.get("source").get("media_type").getString());
         assertEquals(pdf, doc.get("source").get("data").getString());
+    }
+
+    @Test
+    public void blobWithoutMimeDefaultsToPdf() {
+        String pdf = Base64.getEncoder().encodeToString("%PDF-1.7".getBytes());
+        ONode source = build(ChatOptions.of(), Collections.singletonList(
+                ChatMessage.ofUser("read", BlobBlock.of(pdf, null))))
+                .get("messages").get(0).get("content").get(1).get("source");
+
+        assertEquals("base64", source.get("type").getString());
+        assertEquals("application/pdf", source.get("media_type").getString());
+    }
+
+    @Test
+    public void unsupportedBlobMimeIsRejected() {
+        String zip = Base64.getEncoder().encodeToString("PK".getBytes());
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () ->
+                build(ChatOptions.of(), Collections.singletonList(
+                        ChatMessage.ofUser("read", BlobBlock.of(zip, "application/zip")))));
+        assertTrue(error.getMessage().contains("application/zip"));
+    }
+
+    @Test
+    public void invalidPlainTextBase64IsRejected() {
+        assertThrows(IllegalArgumentException.class, () ->
+                build(ChatOptions.of(), Collections.singletonList(
+                        ChatMessage.ofUser("read", BlobBlock.of("not-base64!", "text/plain")))));
     }
 
     /**
@@ -1031,6 +1089,8 @@ public class AnthropicRoundTripAlignTest {
         assertTrue(inner.isArray(), inner.toJson());
         assertEquals("text", inner.get(0).get("type").getString());
         assertEquals("document", inner.get(1).get("type").getString());
+        assertEquals("base64", inner.get(1).get("source").get("type").getString());
+        assertEquals("application/pdf", inner.get(1).get("source").get("media_type").getString());
         assertEquals(pdf, inner.get(1).get("source").get("data").getString());
     }
 }

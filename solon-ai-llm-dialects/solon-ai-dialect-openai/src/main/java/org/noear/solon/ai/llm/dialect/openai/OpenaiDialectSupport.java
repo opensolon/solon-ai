@@ -123,4 +123,58 @@ class OpenaiDialectSupport {
         }
         return message;
     }
+
+    /**
+     * 判断模型名是否属于指定模型族（如 "gpt-5"、"o3"）。
+     *
+     * <p>匹配要求模型族片段出现在 token 边界处：片段位于开头，或前一个字符是供应商分隔符
+     * （{@code / : . _ -}，兼容 {@code azure/o4-mini}、{@code openai:gpt-5}、{@code vendor_o3}
+     * 等厂商前缀拼接形态）；片段结尾处须是结尾或 {@code -}/{@code .} 后缀。统一了 Chat Completions
+     * 与 Responses 两处的能力判定，避免同一模型名在两个方言下得到不同结论。</p>
+     *
+     * @param model  小写化的模型名
+     * @param family 小写化的模型族（不含通配）
+     * @since 4.1
+     */
+    static boolean matchesModelFamily(String model, String family) {
+        int fromIndex = 0;
+        while (fromIndex < model.length()) {
+            int start = model.indexOf(family, fromIndex);
+            if (start < 0) {
+                return false;
+            }
+
+            int end = start + family.length();
+            boolean validPrefix = start == 0 || isModelTokenBoundary(model.charAt(start - 1));
+            boolean validSuffix = end == model.length()
+                    || model.charAt(end) == '-'
+                    || model.charAt(end) == '.';
+            if (validPrefix && validSuffix) {
+                return true;
+            }
+            fromIndex = start + 1;
+        }
+        return false;
+    }
+
+    /**
+     * matchesModelFamily 的兼容扩展：部分兼容网关会省略 GPT 主系列名称中的连字符（如 gpt5）。
+     * 只放宽能力判断，不改写出站 model。
+     *
+     * @since 4.1
+     */
+    static boolean isModelFamily(String model, String family) {
+        if (matchesModelFamily(model, family)) {
+            return true;
+        }
+
+        if (family.startsWith("gpt-") && family.length() > 4) {
+            return matchesModelFamily(model, "gpt" + family.substring(4));
+        }
+        return false;
+    }
+
+    private static boolean isModelTokenBoundary(char ch) {
+        return ch == '/' || ch == ':' || ch == '.' || ch == '_' || ch == '-';
+    }
 }

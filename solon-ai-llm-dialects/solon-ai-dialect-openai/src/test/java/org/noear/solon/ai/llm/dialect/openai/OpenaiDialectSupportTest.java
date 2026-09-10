@@ -185,4 +185,54 @@ public class OpenaiDialectSupportTest {
     public void extract_emptyStringNode_fallbackUnknown() {
         assertEquals("Unknown error", OpenaiDialectSupport.extractErrorMessage(ONode.ofJson("\"\"")));
     }
+
+    // ==================== 模型族匹配（matchesModelFamily / isModelFamily） ====================
+
+    /**
+     * 统一后的边界规则：/ : . _ - 均为供应商前缀分隔符，两个方言得到同一结论。
+     */
+    @Test
+    public void modelFamily_providerPrefixedForms_areAllRecognized() {
+        assertTrue(OpenaiDialectSupport.matchesModelFamily("azure/o4-mini", "o4"));
+        assertTrue(OpenaiDialectSupport.matchesModelFamily("openai:gpt-5", "gpt-5"));
+        assertTrue(OpenaiDialectSupport.matchesModelFamily("myvendor.gpt-5.1", "gpt-5"));
+        assertTrue(OpenaiDialectSupport.matchesModelFamily("vendor_o3", "o3"));
+        assertTrue(OpenaiDialectSupport.matchesModelFamily("xxx-o1", "o1"), "连字符拼接的厂商前缀同样是 token 边界");
+    }
+
+    @Test
+    public void modelFamily_substringWithoutBoundary_isNotMatched() {
+        // 片段必须出现在边界处：普通子串不算命中
+        assertFalse(OpenaiDialectSupport.matchesModelFamily("qwen3no1knowledge", "o1"), "o1 前有非边界字符不命中");
+        assertFalse(OpenaiDialectSupport.matchesModelFamily("ao1", "o1"));
+        assertFalse(OpenaiDialectSupport.matchesModelFamily("o10", "o1"), "后缀必须是 - . 或结尾");
+    }
+
+    @Test
+    public void modelFamily_plainAndSuffixedForms() {
+        assertTrue(OpenaiDialectSupport.matchesModelFamily("o1", "o1"));
+        assertTrue(OpenaiDialectSupport.matchesModelFamily("o3-mini", "o3"));
+        assertTrue(OpenaiDialectSupport.matchesModelFamily("gpt-5.1", "gpt-5"));
+        assertTrue(OpenaiDialectSupport.matchesModelFamily("GPT-5-Codex".toLowerCase(), "gpt-5"));
+    }
+
+    /**
+     * 兼容网关省略连字符的别名（gpt5/gpt6）：仅能力判断放宽，由 isModelFamily 承接。
+     */
+    @Test
+    public void modelFamily_hyphenlessGptAlias_supportedByIsModelFamily() {
+        assertTrue(OpenaiDialectSupport.isModelFamily("gpt5", "gpt-5"));
+        assertTrue(OpenaiDialectSupport.isModelFamily("gpt6-turbo", "gpt-6"));
+        assertFalse(OpenaiDialectSupport.isModelFamily("gpt5x", "gpt-5"), "别名同样受 token 边界约束");
+    }
+
+    /**
+     * 早期模型排除是方言层的显式逻辑（Chat 方言排除 o1-preview/o1-mini），
+     * 共享匹配层只负责边界判定：o1-preview 本身就是 o1 族的合法形态。
+     */
+    @Test
+    public void modelFamily_o1PreviewAndMini_areStillO1FamilyAtMatchLevel() {
+        assertTrue(OpenaiDialectSupport.isModelFamily("o1-preview", "o1"));
+        assertTrue(OpenaiDialectSupport.isModelFamily("o1-mini", "o1"));
+    }
 }

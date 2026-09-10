@@ -1373,8 +1373,8 @@ public class AnthropicRequestBuilder {
             // 回传服务端工具块（位置在 text 之前，与真实响应的块序一致）
             appendServerToolBlocks(contentArray, resolveServerToolBlocks(assistantMessage));
 
-            // 添加文本内容（如果有，排除与纯空白；兼容旧版带 <think> 标签的消息，出站前剥离）
-            String resultContent = trimToNull(assistantMessage.getText());
+            // 添加文本内容（如果有；兼容旧版带 <think> 标签的消息，出站前剥离）
+            String resultContent = emptyToNull(assistantMessage.getText());
             if (resultContent != null) {
                 contentArray.addNew()
                     .set("type", "text")
@@ -1401,7 +1401,7 @@ public class AnthropicRequestBuilder {
             if (Utils.isNotEmpty(assistantMessage.getBlocks())) {
                 for (ContentBlock block : assistantMessage.getBlocks()) {
                     if (block instanceof TextBlock) {
-                        String text = trimToNull(block.getContent());
+                        String text = emptyToNull(block.getContent());
                         if (text != null) {
                             contentArray.addNew()
                                     .set("type", "text")
@@ -1416,7 +1416,7 @@ public class AnthropicRequestBuilder {
                 }
             }
             if (!hasText) {
-                String fallbackText = trimToNull(assistantMessage.getText());
+                String fallbackText = emptyToNull(assistantMessage.getText());
                 if (fallbackText != null) {
                     contentArray.addNew()
                             .set("type", "text")
@@ -1425,7 +1425,7 @@ public class AnthropicRequestBuilder {
             }
         } else {
             List<Object> serverBlocks = resolveServerToolBlocks(assistantMessage);
-            String content = trimToNull(assistantMessage.getText());
+            String content = emptyToNull(assistantMessage.getText());
 
             if (Utils.isEmpty(serverBlocks) == false) {
                 // 服务端工具轮次（pause_turn 续跑 / 多轮 web_search）：本轮没有本地 tool_use，
@@ -1442,7 +1442,7 @@ public class AnthropicRequestBuilder {
                             .set("text", content);
                 }
             } else if (content != null) {
-                // 纯文本回传剥离 think（兼容旧版带标签消息），与多模态 TextBlock 路径一致；空白不回传为 text
+                // 纯文本按原样回传，保证 assistant prefill 的前后空白不被改变。
                 node.set("content", content);
             } else {
                 // 若仅有思考内容（无正文、无 tool）：仅在 signature 有效时回传 thinking；
@@ -1487,18 +1487,14 @@ public class AnthropicRequestBuilder {
     }
 
     /**
-     * 去除首尾空白；空串或纯空白返回 null，避免回传无意义 text 块。
+     * 空串返回 null；非空文本按原样保留，避免改变 assistant prefill 的精确续写前缀。
      */
-    private static String trimToNull(String text) {
-        if (text == null) {
-            return null;
-        }
-        String trimmed = text.trim();
-        return trimmed.isEmpty() ? null : trimmed;
+    private static String emptyToNull(String text) {
+        return text == null || text.isEmpty() ? null : text;
     }
     
     /**
-     * 将 Assistant 媒体块追加到 Claude content 数组（当前支持 image）。
+     * 将 Assistant 媒体块追加到 Claude content 数组（支持 image / document）。
      *
      * @since 3.9
      */
@@ -1509,6 +1505,8 @@ public class AnthropicRequestBuilder {
         for (ContentBlock block : assistantMessage.getBlocks()) {
             if (block instanceof ImageBlock) {
                 appendClaudeImageBlock(contentArray, (ImageBlock) block);
+            } else if (block instanceof BlobBlock) {
+                appendClaudeDocumentBlock(contentArray, (BlobBlock) block);
             }
         }
     }
@@ -1585,9 +1583,9 @@ public class AnthropicRequestBuilder {
      * content 构建处都只认 TextBlock / ImageBlock，它会被静默丢弃——用户以为传了 PDF，
      * 模型却从未看到。</p>
      *
-     * <p>{@code text/plain} 走协议的 {@code PlainTextSource}（明文 data）而不是 base64：
-     * 两者的 source.type 不同，传错会被 schema 拒掉。解码失败时退回 base64 形态，
-     * 不让一个附件把整条请求打挂。</p>
+     * <p>{@code text/plain} 走协议的 {@code PlainTextSource}（明文 data）而不是 base64；
+     * base64 source 则只允许 {@code application/pdf}。其他 MIME 或损坏的纯文本 base64
+     * 直接拒绝，避免发送必然不符合 DocumentBlockParam schema 的请求。</p>
      *
      * @since 4.1
      */
@@ -1602,19 +1600,18 @@ public class AnthropicRequestBuilder {
 
         if ("text/plain".equals(mediaType)) {
             String plainText = decodeBase64Text(data);
-            if (plainText != null) {
-                source.set("type", "text")
-                        .set("media_type", "text/plain")
-                        .set("data", plainText);
-            } else {
-                source.set("type", "base64")
-                        .set("media_type", mediaType)
-                        .set("data", data);
+            if (plainText == null) {
+                throw new IllegalArgumentException("Anthropic text document requires valid base64 data");
             }
-        } else {
+            source.set("type", "text")
+                    .set("media_type", "text/plain")
+                    .set("data", plainText);
+        } else if (Utils.isEmpty(mediaType) || "application/pdf".equals(mediaType)) {
             source.set("type", "base64")
-                    .set("media_type", Utils.isEmpty(mediaType) ? "application/pdf" : mediaType)
+                    .set("media_type", "application/pdf")
                     .set("data", data);
+        } else {
+            throw new IllegalArgumentException("Unsupported Anthropic document MIME type: " + mediaType);
         }
 
         contentArray.addNew()

@@ -559,11 +559,16 @@ public class OpenaiChatDialectMoreTest {
 
         String[] systemModels = {
                 "gpt-4o", "gpt-4.1", "o1-preview", "o1-mini",
-                "vendor-model", "not-o3-model", "not-gpt-6-model", "gpt-60"
+                "vendor-model", "notgpt5model", "gpt-60"
         };
         for (String model : systemModels) {
             assertEquals("system", buildInstructionRole(model, ChatOptions.of()), model);
         }
+
+        // 统一边界规则后，连字符拼接的厂商前缀（xxx-o1）也是合法 token 边界，
+        // 与 Responses 方言的能力判定保持一致
+        assertEquals("developer", buildInstructionRole("azure-o4-mini", ChatOptions.of()));
+        assertEquals("system", buildInstructionRole("qwen3no1knowledge", ChatOptions.of()));
     }
 
     @Test
@@ -656,5 +661,38 @@ public class OpenaiChatDialectMoreTest {
         assertSame(dialect, OpenaiChatDialect.getInstance());
         assertTrue(dialect.isDefault(), "OpenAI chat/completions 是默认方言");
         assertFalse(dialect.matched(new ChatConfig()), "默认方言不参与 matched 竞争");
+    }
+
+    // ==================== 单帧损坏与整流续收 ====================
+
+    /**
+     * 流中单帧损坏（如网关中途下发截断 JSON）：告警跳过，不阻断整个流，后续帧仍正常聚合。
+     * 与 Responses 方言保持同一语义；「整个响应体都不是模型流」由核心层零有效帧守卫兑底。
+     */
+    @Test
+    public void malformedFrameInStream_isSkippedAndLaterFramesStillAggregate() {
+        ChatStreamContext ctx = newCtx(true);
+
+        dialect.parseResponseJson(ctx, contentChunk("第一段"));
+        dialect.parseResponseJson(ctx, "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"截断"); // 截断 JSON，非 error 前缀
+        dialect.parseResponseJson(ctx, contentChunk("第二段"));
+        dialect.parseResponseJson(ctx, "[DONE]");
+
+        ChatAccumulator acc = ctx.getAccumulator();
+        assertEquals("第一段第二段", joinText(acc), "损坏帧应被跳过，前后帧仍正常聚合");
+        assertNull(acc.getError(), "单帧损坏不应上升为错误");
+        assertTrue(acc.isFinished(), "后续 [DONE] 仍能正常收尾");
+    }
+
+    /**
+     * 非 JSON 但带 error 前缀的纯文本仍走错误路径（不被静默吞掉）。
+     */
+    @Test
+    public void malformedFrameWithErrorPrefix_stillReportsError() {
+        ChatStreamContext ctx = newCtx(true);
+
+        dialect.parseResponseJson(ctx, "error upstream connection reset");
+
+        assertNotNull(ctx.getAccumulator().getError(), "error 前缀文本仍应报错");
     }
 }
