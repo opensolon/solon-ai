@@ -142,7 +142,7 @@ public class GeminiInteractionsResponseParser {
             return false;
         }
 
-        // 错误处理
+        // 错误处理：顶层 error 帧是终态，必须置 finished，否则流会永远挂起等待后续帧
         if (oResp.hasKey("error")) {
             ONode oError = oResp.get("error");
             String errorMsg = oError.get("message").getString();
@@ -150,6 +150,12 @@ public class GeminiInteractionsResponseParser {
                 errorMsg = oError.toJson();
             }
             acc.setError(new ChatException(errorMsg));
+            acc.setFinished(true);
+            // 同帧可能携带 status（如 failed）：映射为 finishReason，供上层诊断
+            String status1 = oResp.get("status").getString();
+            if (Utils.isNotEmpty(status1)) {
+                acc.lastFinishReason = mapStatusToFinishReason(status1);
+            }
             ctx.emit(ctx.event(ChatEventType.ERROR)
                     .rawType("error")
                     .error(acc.getError())
@@ -169,6 +175,9 @@ public class GeminiInteractionsResponseParser {
         // status → finishReason
         String status = oResp.get("status").getString();
         String finishReason = mapStatusToFinishReason(status);
+
+        // 终态 status（如 failed）同样要走统一的状态处理：报错与 finishReason 由它负责
+        applyInteractionStatus(acc, oResp);
 
         // steps[]: 解析各个 step
         List<AssistantMessage> messages = new ArrayList<>();
@@ -341,6 +350,8 @@ public class GeminiInteractionsResponseParser {
                 errorMsg = oError.toJson();
             }
             acc.setError(new ChatException(errorMsg));
+            // error 帧是交互的终态，必须置 finished，否则流会永远挂起等待后续帧
+            acc.setFinished(true);
             ctx.emit(ctx.event(ChatEventType.ERROR).rawType("error")
                     .error(acc.getError()).raw(oData).build());
             return true;
@@ -785,12 +796,13 @@ public class GeminiInteractionsResponseParser {
      */
     private ToolCall parseFunctionCallStep(ONode oStep) {
         String name = oStep.get("name").getString();
-        // Interactions API 在 function_call step 中使用 "id" 字段（非 "call_id"）
+        // Interactions API 在 function_call step 中使用 "id" 字段（非 "call_id"）；
+        // 缺 id 时不伪造（时间戳 id 无法被服务端关联回原 step），回退 name 关联
         String callId = oStep.get("id").getString();
         if (name == null) return null;
 
         if (Utils.isEmpty(callId)) {
-            callId = name + "_" + System.currentTimeMillis();
+            callId = name;
         }
 
         ONode argsNode = oStep.getOrNull("arguments");

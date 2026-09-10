@@ -30,8 +30,7 @@ import org.noear.solon.ai.llm.dialect.gemini.models.GeminiResponseParser;
 import org.noear.solon.ai.llm.dialect.gemini.models.GeminiThoughtProcessor;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.net.http.HttpUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.noear.solon.net.http.HttpTimeout;
 
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -62,11 +61,11 @@ import java.util.Set;
  */
 public class GeminiChatDialect extends AbstractChatDialect {
     private static final GeminiChatDialect instance = new GeminiChatDialect();
-    private static final Logger log = LoggerFactory.getLogger(GeminiChatDialect.class);
     private static final String GROUNDING_CITATION_EVENT_STATE_KEY = "GeminiGroundingCitationEvents";
 
     private final GeminiResponseParser responseParser;
     private final GeminiRequestBuilder requestBuilder;
+    private final GeminiThoughtProcessor thoughtProcessor;
 
     public static GeminiChatDialect getInstance() {
         return instance;
@@ -75,6 +74,7 @@ public class GeminiChatDialect extends AbstractChatDialect {
     public GeminiChatDialect() {
         this.responseParser = new GeminiResponseParser();
         this.requestBuilder = new GeminiRequestBuilder();
+        this.thoughtProcessor = new GeminiThoughtProcessor();
     }
 
     /**
@@ -106,7 +106,7 @@ public class GeminiChatDialect extends AbstractChatDialect {
         String apiUrl = buildApiUrl(config.getApiUrl(), config.getModel(), isStream);
 
         HttpUtils httpUtils = HttpUtils.http(apiUrl)
-                .timeout((int) config.getTimeout().getSeconds());
+                .timeout(HttpTimeout.of(config.getTimeout()));
 
         if (config.getProxy() != null) {
             httpUtils.proxy(config.getProxy());
@@ -213,15 +213,6 @@ public class GeminiChatDialect extends AbstractChatDialect {
         return result.toString();
     }
 
-//    @Override
-//    public void prepareOutputSchemaInstruction(ChatOptions options, StringBuilder instructionBuilder) {
-//        instructionBuilder.append("\n\n## [IMPORTANT: OUTPUT FORMAT]\n")
-//                .append("Format your response as a JSON object strictly following this schema:\n")
-//                .append("<output_schema>\n").append(options.outputSchema()).append("\n</output_schema>\n")
-//                .append("Output only the raw JSON, beginning with '{' and ending with '}'.");
-//
-//    }
-
     @Override
     public void prepareOutputFormatOptions(ChatOptions options) {
         // 由请求构建器写入 generationConfig.responseMimeType/responseJsonSchema。
@@ -239,15 +230,8 @@ public class GeminiChatDialect extends AbstractChatDialect {
     public void parseResponseJson(ChatStreamContext ctx, String data) {
         ChatAccumulator acc = ctx.getAccumulator();
 
-        responseParser.parseResponse(ctx, data);
-
-        // 每帧只解析一次 JSON：错误事件与联网来源共用同一份节点
-        ONode raw;
-        try {
-            raw = ONode.ofJson(data);
-        } catch (Throwable e) {
-            raw = null;
-        }
+        // 错误事件与联网来源/代码执行共用 parser 解析出的同一份节点，避免每帧重复解析 JSON
+        ONode raw = responseParser.parseResponseNode(ctx, data);
 
         if (acc.getError() != null) {
             ctx.emit(ctx.event(ChatEventType.ERROR)
@@ -439,7 +423,6 @@ public class GeminiChatDialect extends AbstractChatDialect {
     public List<AssistantMessage> parseAssistantMessage(ChatAccumulator acc, ONode oMessage) {
         ONode oParts = oMessage.getOrNull("parts");
         if (oParts != null) {
-            GeminiThoughtProcessor thoughtProcessor = new GeminiThoughtProcessor();
             return thoughtProcessor.parse(acc, oMessage);
         } else {
             return super.parseAssistantMessage(acc, oMessage);

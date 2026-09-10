@@ -231,11 +231,9 @@ public class GeminiInteractionsRequestBuilder {
                 ONode step = new ONode();
                 step.set("type", "function_call");
                 step.set("name", call.getName());
-                // Interactions API: function_call step 使用 "id" 字段
+                // Interactions API: function_call step 使用 "id" 字段；缺 id 时不伪造（时间戳 id 无法被服务端关联回原 step）
                 if (Utils.isNotEmpty(call.getId())) {
                     step.set("id", call.getId());
-                } else {
-                    step.set("id", call.getName() + "_" + System.currentTimeMillis());
                 }
                 // arguments（出站兜底净化：截断/双重编码的 arguments 禁止以字符串形态回传）
                 String safeArgs = ToolCallJsonSanitizer.sanitizeArguments(call);

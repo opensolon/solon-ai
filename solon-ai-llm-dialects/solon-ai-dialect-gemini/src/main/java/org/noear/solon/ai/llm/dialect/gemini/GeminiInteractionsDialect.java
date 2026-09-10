@@ -32,8 +32,7 @@ import org.noear.solon.ai.llm.dialect.gemini.interactions.GeminiInteractionsRequ
 import org.noear.solon.ai.llm.dialect.gemini.interactions.GeminiInteractionsResponseParser;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.net.http.HttpUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.noear.solon.net.http.HttpTimeout;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -62,7 +61,6 @@ import java.util.regex.Pattern;
  */
 public class GeminiInteractionsDialect extends AbstractChatDialect {
     private static final GeminiInteractionsDialect instance = new GeminiInteractionsDialect();
-    private static final Logger log = LoggerFactory.getLogger(GeminiInteractionsDialect.class);
 
     private final GeminiInteractionsResponseParser responseParser;
     private final GeminiInteractionsRequestBuilder requestBuilder;
@@ -122,9 +120,14 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
             url = url.substring(0, queryAt);
         }
         if (!url.endsWith("/interactions")) {
-            if (!url.endsWith("/")) url += "/";
-            if (!pattern.matcher(url).find()) url += "v1/";
-            url += "interactions";
+            // 兼容尾斜杠误拼（/interactions/）：去掉后重新补全，避免 /interactions/interactions
+            if (url.endsWith("/interactions/")) {
+                url = url.substring(0, url.length() - 1);
+            } else {
+                if (!url.endsWith("/")) url += "/";
+                if (!pattern.matcher(url).find()) url += "v1/";
+                url += "interactions";
+            }
         }
         return query.isEmpty() ? url : url + "?" + query;
     }
@@ -137,7 +140,7 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
         }
 
         HttpUtils httpUtils = HttpUtils.http(apiUrl)
-                .timeout((int) config.getTimeout().getSeconds());
+                .timeout(HttpTimeout.of(config.getTimeout()));
 
         if (config.getProxy() != null) {
             httpUtils.proxy(config.getProxy());
@@ -208,9 +211,10 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
                 }
                 if ("function_call".equals(type)) {
                     String name = step.get("name").getString();
+                    // 缺 id 时不伪造（时间戳 id 无法被服务端关联回原 step），回退 name 关联
                     String callId = step.get("id").getString();
                     if (Utils.isEmpty(callId)) {
-                        callId = name + "_" + System.currentTimeMillis();
+                        callId = name;
                     }
 
                     // 解析 arguments（净化：仅 object 采纳；字符串可能内含截断 JSON，归一为合法 JSON object）

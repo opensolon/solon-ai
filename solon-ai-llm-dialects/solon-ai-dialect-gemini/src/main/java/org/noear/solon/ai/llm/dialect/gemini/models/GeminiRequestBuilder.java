@@ -601,8 +601,7 @@ public class GeminiRequestBuilder {
                     if (builder.argumentsBuilder.length() > 0) {
                         // Gemini Models 的 args 是累计快照；仅在此方言聚合边界允许从多根拼接中取最后快照。
                         // 公共 sanitizer 保持“单一 JSON 根”严格语义，不能把该容错泄漏到其他方言。
-                        String safeArgs = sanitizeGeminiSnapshotArguments(
-                                builder.argumentsBuilder.toString(), builder.nameBuilder.toString());
+                        String safeArgs = sanitizeGeminiSnapshotArguments(builder.argumentsBuilder.toString());
                         try {
                             ONode argsNode = ONode.ofJson(safeArgs);
                             n2.set("args", argsNode.isObject() ? argsNode : new ONode().asObject());
@@ -624,7 +623,7 @@ public class GeminiRequestBuilder {
         return oNode;
     }
 
-    private String sanitizeGeminiSnapshotArguments(String raw, String functionName) {
+    private String sanitizeGeminiSnapshotArguments(String raw) {
         try {
             ONode last = new JsonReader(raw, Options.of()).readLast();
             if (last != null && last.isObject()) {

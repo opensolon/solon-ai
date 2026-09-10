@@ -54,6 +54,16 @@ public class GeminiResponseParser {
         return parseNonStreamResponse(ctx, json);
     }
 
+    /**
+     * 解析响应并回传已解析的帧节点（供错误/grounding 等旁路事件复用，避免重复解析）
+     *
+     * @since 4.1
+     */
+    public ONode parseResponseNode(ChatStreamContext ctx, String json) {
+        if (ctx.isStream()) return parseStreamResponseNode(ctx, json);
+        return parseNonStreamResponseNode(ctx, json);
+    }
+
     /** @deprecated use the context-based entry point. */
     @Deprecated
     public boolean parseResponse(ChatAccumulator acc, String json) {
@@ -98,73 +108,56 @@ public class GeminiResponseParser {
                 return true;
             }
 
-            ONode oResp = ONode.ofJson(jsonData);
+            ONode oResp = parseJsonQuietly(jsonData);
 
-            if (oResp.isObject() == false) {
+            if (oResp == null || oResp.isObject() == false) {
                 continue;
             }
 
-            if (oResp.hasKey("error")) {
-                ONode oError = oResp.get("error");
-                String errorMsg = oError.get("message").getString();
-                if (Utils.isEmpty(errorMsg)) {
-                    errorMsg = oError.getString();
-                }
-                acc.setError(new ChatException(errorMsg));
-                return true;
-            }
-
-            if (oResp.hasKey("model")) {
-                acc.setModel(oResp.get("model").getString());
-            } else if (oResp.hasKey("modelVersion")) {
-                acc.setModel(oResp.get("modelVersion").getString());
-            }
-
-            ONode oCandidates = oResp.getOrNull("candidates");
-            if (oCandidates != null && oCandidates.isArray() && oCandidates.size() > 0) {
-                ONode oChoice1 = oCandidates.get(0);
-                String finishReason = oChoice1.get("finishReason").getString();
-
-                if (Utils.isNotEmpty(finishReason)) {
-                    acc.setFinished(true);
-                    acc.lastFinishReason = finishReason;
-                }
-
-                ONode oContent = oChoice1.get("content");
-                thoughtProcessor.emitStream(ctx, oContent, 0, Utils.isNotEmpty(finishReason));
-                hasContent = true;
-
-                applyAbnormalFinishReason(acc, oChoice1, finishReason);
-            }
-
-            // prompt 被安全策略拦截时无 candidates 返回，需显式报错避免静默结束
-            if (hasContent == false) {
-                ONode oPromptFeedback = oResp.getOrNull("promptFeedback");
-                if (oPromptFeedback != null) {
-                    String blockReason = oPromptFeedback.get("blockReason").getString();
-                    if (Utils.isNotEmpty(blockReason)) {
-                        acc.setError(new ChatException("prompt blocked: " + blockReason));
-                        return true;
-                    }
-                }
-            }
-
-            ONode oUsage = oResp.getOrNull("usageMetadata");
-            if (oUsage != null && acc.isFinished()) {
-                long toolUseTokens = oUsage.getOrNull("toolUsePromptTokenCount") != null ? oUsage.get("toolUsePromptTokenCount").getLong() : 0L;
-                long promptTokens = (oUsage.getOrNull("promptTokenCount") != null ? oUsage.get("promptTokenCount").getLong() : 0L) + toolUseTokens;
-                long completionTokens = oUsage.getOrNull("candidatesTokenCount") != null ? oUsage.get("candidatesTokenCount").getLong() : 0;
-                long totalTokens = oUsage.getOrNull("totalTokenCount") != null ? oUsage.get("totalTokenCount").getLong() : 0;
-
-                long cachedContentTokens = oUsage.getOrNull("cachedContentTokenCount") != null ? oUsage.get("cachedContentTokenCount").getLong() : 0L;
-                long thinkingTokens = oUsage.getOrNull("thoughtsTokenCount") != null ? oUsage.get("thoughtsTokenCount").getLong() : 0L;
-
-                acc.setUsage(new AiUsage(promptTokens, thinkingTokens, completionTokens, totalTokens,
-                        0L, cachedContentTokens, oUsage));
-            }
+            hasContent = applyResponseNode(ctx, oResp) || hasContent;
         }
 
         return hasContent;
+    }
+
+    /** 流式版本，回传最后一条有效帧的已解析节点（供旁路事件复用）。
+     *
+     * @since 4.1 */
+    ONode parseStreamResponseNode(ChatStreamContext ctx, String json) {
+        if (json == null || json.isEmpty()) {
+            return null;
+        }
+
+        ONode lastFrame = null;
+        String[] lines = json.split("\n");
+
+        for (String line : lines) {
+            line = line.trim();
+            if (line.isEmpty()) {
+                continue;
+            }
+
+            String jsonData = line;
+
+            if (line.startsWith("data:")) {
+                jsonData = line.substring(5).trim();
+            }
+
+            if ( jsonData.isEmpty() || "[DONE]".equals(jsonData)) {
+                continue;
+            }
+
+            ONode oResp = parseJsonQuietly(jsonData);
+
+            if (oResp == null || oResp.isObject() == false) {
+                continue;
+            }
+
+            applyResponseNode(ctx, oResp);
+            lastFrame = oResp;
+        }
+
+        return lastFrame;
     }
 
     /**
@@ -180,19 +173,26 @@ public class GeminiResponseParser {
 
     /** 使用统一事件上下文解析非流式响应。 */
     public boolean parseNonStreamResponse(ChatStreamContext ctx, String json) {
+        return parseNonStreamResponseNode(ctx, json) != null;
+    }
+
+    /** 非流式版本，回传已解析的根节点（供旁路事件复用）。
+     *
+     * @since 4.1 */
+    ONode parseNonStreamResponseNode(ChatStreamContext ctx, String json) {
         ChatAccumulator acc = ctx.getAccumulator();
         if ("[DONE]".equals(json)) {
             if (acc.isFinished() == false) {
                 acc.setTerminalMessage(new AssistantMessage(""));
                 acc.setFinished(true);
             }
-            return true;
+            return null;
         }
 
-        ONode oResp = ONode.ofJson(json);
+        ONode oResp = parseJsonQuietly(json);
 
-        if (oResp.isObject() == false) {
-            return false;
+        if (oResp == null || oResp.isObject() == false) {
+            return null;
         }
 
         if (oResp.hasKey("error")) {
@@ -202,7 +202,7 @@ public class GeminiResponseParser {
                 errorMsg = oError.getString();
             }
             acc.setError(new ChatException(errorMsg));
-            return true;
+            return oResp;
         }
 
         if (oResp.hasKey("model")) {
@@ -246,26 +246,107 @@ public class GeminiResponseParser {
                 String blockReason = oPromptFeedback.get("blockReason").getString();
                 if (Utils.isNotEmpty(blockReason)) {
                     acc.setError(new ChatException("prompt blocked: " + blockReason));
-                    return true;
+                    return oResp;
                 }
             }
         }
 
         ONode oUsage = oResp.getOrNull("usageMetadata");
         if (oUsage != null) {
-            long promptTokens = oUsage.get("promptTokenCount").getLong()
-                    + oUsage.get("toolUsePromptTokenCount").getLong();
-            long completionTokens = oUsage.get("candidatesTokenCount").getLong();
-            long totalTokens = oUsage.get("totalTokenCount").getLong();
+            long toolUseTokens = oUsage.getOrNull("toolUsePromptTokenCount") != null ? oUsage.get("toolUsePromptTokenCount").getLong() : 0L;
+            long promptTokens = (oUsage.getOrNull("promptTokenCount") != null ? oUsage.get("promptTokenCount").getLong() : 0L) + toolUseTokens;
+            long completionTokens = oUsage.getOrNull("candidatesTokenCount") != null ? oUsage.get("candidatesTokenCount").getLong() : 0;
+            long totalTokens = oUsage.getOrNull("totalTokenCount") != null ? oUsage.get("totalTokenCount").getLong() : 0;
 
-            long cachedContentTokens = oUsage.get("cachedContentTokenCount").getLong();
-            long thinkingTokens = oUsage.get("thoughtsTokenCount").getLong();
+            long cachedContentTokens = oUsage.getOrNull("cachedContentTokenCount") != null ? oUsage.get("cachedContentTokenCount").getLong() : 0L;
+            long thinkingTokens = oUsage.getOrNull("thoughtsTokenCount") != null ? oUsage.get("thoughtsTokenCount").getLong() : 0L;
 
             acc.setUsage(new AiUsage(promptTokens, thinkingTokens, completionTokens, totalTokens,
                     0L, cachedContentTokens, oUsage));
         }
 
-        return true;
+        return oResp;
+    }
+
+    /** 单帧 JSON 容错解析：损坏帧返回 null，由调用方跳过。 */
+    private static ONode parseJsonQuietly(String json) {
+        try {
+            return ONode.ofJson(json);
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    /**
+     * 应用单帧响应节点（流式帧与终态帧共用）
+     *
+     * @return 该帧是否携带有效内容（candidates/promptFeedback 均无则 false）
+     * @since 4.1
+     */
+    private boolean applyResponseNode(ChatStreamContext ctx, ONode oResp) {
+        ChatAccumulator acc = ctx.getAccumulator();
+        boolean hasContent = false;
+
+        if (oResp.hasKey("error")) {
+            ONode oError = oResp.get("error");
+            String errorMsg = oError.get("message").getString();
+            if (Utils.isEmpty(errorMsg)) {
+                errorMsg = oError.getString();
+            }
+            acc.setError(new ChatException(errorMsg));
+            return true;
+        }
+
+        if (oResp.hasKey("model")) {
+            acc.setModel(oResp.get("model").getString());
+        } else if (oResp.hasKey("modelVersion")) {
+            acc.setModel(oResp.get("modelVersion").getString());
+        }
+
+        ONode oCandidates = oResp.getOrNull("candidates");
+        if (oCandidates != null && oCandidates.isArray() && oCandidates.size() > 0) {
+            ONode oChoice1 = oCandidates.get(0);
+            String finishReason = oChoice1.get("finishReason").getString();
+
+            if (Utils.isNotEmpty(finishReason)) {
+                acc.setFinished(true);
+                acc.lastFinishReason = finishReason;
+            }
+
+            ONode oContent = oChoice1.get("content");
+            thoughtProcessor.emitStream(ctx, oContent, 0, Utils.isNotEmpty(finishReason));
+            hasContent = true;
+
+            applyAbnormalFinishReason(acc, oChoice1, finishReason);
+        }
+
+        // prompt 被安全策略拦截时无 candidates 返回，需显式报错避免静默结束
+        if (hasContent == false) {
+            ONode oPromptFeedback = oResp.getOrNull("promptFeedback");
+            if (oPromptFeedback != null) {
+                String blockReason = oPromptFeedback.get("blockReason").getString();
+                if (Utils.isNotEmpty(blockReason)) {
+                    acc.setError(new ChatException("prompt blocked: " + blockReason));
+                    return true;
+                }
+            }
+        }
+
+        ONode oUsage = oResp.getOrNull("usageMetadata");
+        if (oUsage != null && acc.isFinished()) {
+            long toolUseTokens = oUsage.getOrNull("toolUsePromptTokenCount") != null ? oUsage.get("toolUsePromptTokenCount").getLong() : 0L;
+            long promptTokens = (oUsage.getOrNull("promptTokenCount") != null ? oUsage.get("promptTokenCount").getLong() : 0L) + toolUseTokens;
+            long completionTokens = oUsage.getOrNull("candidatesTokenCount") != null ? oUsage.get("candidatesTokenCount").getLong() : 0;
+            long totalTokens = oUsage.getOrNull("totalTokenCount") != null ? oUsage.get("totalTokenCount").getLong() : 0;
+
+            long cachedContentTokens = oUsage.getOrNull("cachedContentTokenCount") != null ? oUsage.get("cachedContentTokenCount").getLong() : 0L;
+            long thinkingTokens = oUsage.getOrNull("thoughtsTokenCount") != null ? oUsage.get("thoughtsTokenCount").getLong() : 0L;
+
+            acc.setUsage(new AiUsage(promptTokens, thinkingTokens, completionTokens, totalTokens,
+                    0L, cachedContentTokens, oUsage));
+        }
+
+        return hasContent;
     }
 
     /** 与官方 SDK 的 checkFinishReason 语义一致：STOP/MAX_TOKENS 之外的终止原因可诊断。 */

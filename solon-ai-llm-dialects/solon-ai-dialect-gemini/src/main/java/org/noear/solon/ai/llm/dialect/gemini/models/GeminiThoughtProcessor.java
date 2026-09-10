@@ -48,6 +48,8 @@ import java.util.Set;
  * @since 3.1
  */
 public class GeminiThoughtProcessor {
+    /** 清理思考内容时，仅处理不超过此长度的整行 "**...**" 包裹（标题型），避免误删正常加粗正文 */
+    static final int CLEAN_THOUGHT_HEADING_MAX_LENGTH = 30;
 
     /**
      * 解析 Gemini 助手消息，处理思考内容和工具调用
@@ -683,10 +685,10 @@ public class GeminiThoughtProcessor {
 
         for (String line : lines) {
             String trimmed = line.trim();
-            if (trimmed.startsWith("**") && trimmed.endsWith("**")) {
-                continue;
-            }
-            if (trimmed.equals("**")) {
+            // 仅清理短小的标题型包裹行（如 "**思考过程**"）与空包裹符：
+            // 思考正文里合法的整行加粗短语不受影响
+            if (trimmed.length() <= CLEAN_THOUGHT_HEADING_MAX_LENGTH
+                    && trimmed.startsWith("**") && trimmed.endsWith("**")) {
                 continue;
             }
 
