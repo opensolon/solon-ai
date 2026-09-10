@@ -74,7 +74,8 @@ public class GeminiThoughtProcessor {
             return messageList;
         }
 
-        if (oParts != null && oParts.isArray()) {
+        if (oParts != null) {
+            // 此处 oParts 必为非空数组（上方已校验）
             boolean hasThoughtPart = false;
             boolean hasNormalPart = false;
             boolean hasMediaPart = false;

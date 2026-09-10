@@ -522,7 +522,7 @@ public class GeminiInteractionsResponseParser {
         String stepTypeValue = step.get("type").getString();
         if (stepTypeValue == null) return false;
 
-        // 未建模的类型解析为 null，仍照旧行为登记累积器（只是后绥不会命中任何类型分支）
+        // 未建模的类型解析为 null，仍照旧行为登记累积器（只是后续不会命中任何类型分支）
         StepAccumulator stepAcc = new StepAccumulator(InteractionStepType.fromApiValue(stepTypeValue));
         if (stepAcc.stepType == null) {
             ctx.emit(ctx.event(ChatEventType.RAW).rawType("step.start")
@@ -1258,7 +1258,7 @@ public class GeminiInteractionsResponseParser {
      * 用于在流式模式下累积每个 step 的增量数据。
      */
     private static class StepAccumulator {
-        // 未建模的步骤类型为 null：后绥按类型分叉时自然不命中，与旧字符串比较等价
+        // 未建模的步骤类型为 null：后续按类型分叉时自然不命中，与旧字符串比较等价
         final InteractionStepType stepType;
         String functionName;
         String callId;

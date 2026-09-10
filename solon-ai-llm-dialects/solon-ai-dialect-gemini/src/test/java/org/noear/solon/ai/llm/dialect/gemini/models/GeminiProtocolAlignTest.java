@@ -75,4 +75,49 @@ public class GeminiProtocolAlignTest {
         assertEquals("application/json", generation.get("responseMimeType").getString());
         assertEquals("object", generation.get("responseJsonSchema").get("type").getString());
     }
+
+    @Test
+    public void multipleSystemMessagesMergeIntoSingleSystemInstruction() {
+        // systemInstruction 是 Gemini 与 OpenAI 最关键的协议差异点：
+        // 任意位置的 SystemMessage 都必须合并进唯一 systemInstruction.parts[0].text，不得落入 contents
+        ChatConfig config = new ChatConfig();
+        config.setModel("gemini-3-flash-preview");
+        ONode root = builder.build(config, ChatOptions.of(), Arrays.asList(
+                new SystemMessage("role: assistant"),
+                ChatMessage.ofUser("hello"),
+                new SystemMessage("safety: strict")), false);
+
+        assertTrue(root.hasKey("systemInstruction"));
+        assertEquals("role: assistant\n\nsafety: strict",
+                root.get("systemInstruction").get("parts").get(0).get("text").getString());
+        assertEquals(1, root.get("contents").size());
+        assertEquals("user", root.get("contents").get(0).get("role").getString());
+        assertFalse(root.get("contents").toJson().contains("safety: strict"), "系统消息不得混入 contents");
+    }
+
+    @Test
+    public void cachedContentOptionIsPromotedToRoot() {
+        // 显式 Context Caching：cachedContent 必须在请求根节点，不在 generationConfig
+        ChatConfig config = new ChatConfig();
+        config.setModel("gemini-2.5-flash");
+        ChatOptions options = ChatOptions.of().optionSet("cachedContent", "cachedContents/abc123");
+        ONode root = builder.build(config, options,
+                java.util.Collections.singletonList(ChatMessage.ofUser("hello")), false);
+
+        assertEquals("cachedContents/abc123", root.get("cachedContent").getString());
+        assertFalse(root.hasKey("generationConfig") && root.get("generationConfig").hasKey("cachedContent"),
+                "cachedContent 属于根级字段");
+    }
+
+    @Test
+    public void contextCacheIdAliasIsPromotedToRoot() {
+        // 兼容别名 context_cache_id
+        ChatConfig config = new ChatConfig();
+        config.setModel("gemini-2.5-flash");
+        ChatOptions options = ChatOptions.of().optionSet("context_cache_id", "cachedContents/xyz");
+        ONode root = builder.build(config, options,
+                java.util.Collections.singletonList(ChatMessage.ofUser("hello")), false);
+
+        assertEquals("cachedContents/xyz", root.get("cachedContent").getString());
+    }
 }

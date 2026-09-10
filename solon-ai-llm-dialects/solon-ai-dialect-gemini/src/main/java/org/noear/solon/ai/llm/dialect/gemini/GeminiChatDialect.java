@@ -175,7 +175,7 @@ public class GeminiChatDialect extends AbstractChatDialect {
         if (!baseUrl.endsWith("/")) {
             urlBuilder.append("/");
         }
-        if (!baseUrl.contains("v1beta/") && !baseUrl.contains("v1/")) {
+        if (!baseUrl.contains("v1beta/") && !baseUrl.contains("v1/") && !baseUrl.contains("v1alpha/")) {
             urlBuilder.append("v1beta/");
         }
         urlBuilder.append("models/").append(model);
@@ -350,40 +350,40 @@ public class GeminiChatDialect extends AbstractChatDialect {
         }
 
         for (ONode part : parts.getArray()) {
-                if (part == null || part.isObject() == false) {
-                    continue;
-                }
-
-                //官方 REST 用 camelCase，部分兼容网关转发时写成 snake_case，两种都接
-                ONode executableCode = part.getOrNull("executableCode");
-                if (executableCode == null) {
-                    executableCode = part.getOrNull("executable_code");
-                }
-                if (executableCode != null && executableCode.isObject()) {
-                    ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_START)
-                            .rawType("executableCode")
-                            .subType("code_execution")
-                            .index(candidateIndex)
-                            .text(executableCode.get("code").getString())
-                            .raw(part)
-                            .build());
-                    continue;
-                }
-
-                ONode executionResult = part.getOrNull("codeExecutionResult");
-                if (executionResult == null) {
-                    executionResult = part.getOrNull("code_execution_result");
-                }
-                if (executionResult != null && executionResult.isObject()) {
-                    ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_RESULT)
-                            .rawType("codeExecutionResult")
-                            .subType("code_execution")
-                            .index(candidateIndex)
-                            .text(executionResult.get("output").getString())
-                            .raw(part)
-                            .build());
-                }
+            if (part == null || part.isObject() == false) {
+                continue;
             }
+
+            //官方 REST 用 camelCase，部分兼容网关转发时写成 snake_case，两种都接
+            ONode executableCode = part.getOrNull("executableCode");
+            if (executableCode == null) {
+                executableCode = part.getOrNull("executable_code");
+            }
+            if (executableCode != null && executableCode.isObject()) {
+                ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_START)
+                        .rawType("executableCode")
+                        .subType("code_execution")
+                        .index(candidateIndex)
+                        .text(executableCode.get("code").getString())
+                        .raw(part)
+                        .build());
+                continue;
+            }
+
+            ONode executionResult = part.getOrNull("codeExecutionResult");
+            if (executionResult == null) {
+                executionResult = part.getOrNull("code_execution_result");
+            }
+            if (executionResult != null && executionResult.isObject()) {
+                ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_RESULT)
+                        .rawType("codeExecutionResult")
+                        .subType("code_execution")
+                        .index(candidateIndex)
+                        .text(executionResult.get("output").getString())
+                        .raw(part)
+                        .build());
+            }
+        }
     }
 
     /**

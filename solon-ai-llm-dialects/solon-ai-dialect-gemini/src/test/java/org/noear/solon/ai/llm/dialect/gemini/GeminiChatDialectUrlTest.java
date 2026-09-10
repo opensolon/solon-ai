@@ -30,4 +30,13 @@ public class GeminiChatDialectUrlTest {
         config.setApiUrl("https://example.test/v1/models/gemini:generateContent?key=x");
         assertTrue(dialect.matched(config));
     }
+
+    @Test
+    public void v1alphaBaseIsNotDoublePrefixed() {
+        // v1alpha 基址（预览/实验 API）不得再拼 v1beta
+        assertEquals("https://example.test/v1alpha/models/gemini:generateContent",
+                dialect.buildApiUrl("https://example.test/v1alpha/", "gemini", false));
+        assertEquals("https://example.test/v1alpha/models/gemini:streamGenerateContent?alt=sse",
+                dialect.buildApiUrl("https://example.test/v1alpha/", "gemini", true));
+    }
 }

@@ -143,7 +143,15 @@ public class GeminiResponseParser {
                 jsonData = line.substring(5).trim();
             }
 
-            if ( jsonData.isEmpty() || "[DONE]".equals(jsonData)) {
+            if (jsonData.isEmpty()) {
+                continue;
+            }
+
+            if ("[DONE]".equals(jsonData)) {
+                // 供应商只用 [DONE] 收尾时提交尚未发出的 functionCall 快照（OpenAI 兼容网关转 Gemini 场景），
+                // 与旧入口 parseStreamResponse 的语义保持一致，避免工具调用静默丢失
+                thoughtProcessor.completeStream(ctx);
+                ctx.getAccumulator().setFinished(true);
                 continue;
             }
 
@@ -195,21 +203,11 @@ public class GeminiResponseParser {
             return null;
         }
 
-        if (oResp.hasKey("error")) {
-            ONode oError = oResp.get("error");
-            String errorMsg = oError.get("message").getString();
-            if (Utils.isEmpty(errorMsg)) {
-                errorMsg = oError.getString();
-            }
-            acc.setError(new ChatException(errorMsg));
+        if (applyErrorIfPresent(acc, oResp)) {
             return oResp;
         }
 
-        if (oResp.hasKey("model")) {
-            acc.setModel(oResp.get("model").getString());
-        } else if (oResp.hasKey("modelVersion")) {
-            acc.setModel(oResp.get("modelVersion").getString());
-        }
+        applyModelName(acc, oResp);
 
         ONode oCandidates = oResp.getOrNull("candidates");
         if (oCandidates != null && oCandidates.isArray() && oCandidates.size() > 0) {
@@ -240,29 +238,13 @@ public class GeminiResponseParser {
         }
 
         // prompt 被安全策略拦截时无 candidates 返回，需显式报错避免静默返回空响应
-        if (acc.isTerminalMessagePresent() == false) {
-            ONode oPromptFeedback = oResp.getOrNull("promptFeedback");
-            if (oPromptFeedback != null) {
-                String blockReason = oPromptFeedback.get("blockReason").getString();
-                if (Utils.isNotEmpty(blockReason)) {
-                    acc.setError(new ChatException("prompt blocked: " + blockReason));
-                    return oResp;
-                }
-            }
+        if (acc.isTerminalMessagePresent() == false && applyPromptFeedbackBlock(acc, oResp)) {
+            return oResp;
         }
 
         ONode oUsage = oResp.getOrNull("usageMetadata");
         if (oUsage != null) {
-            long toolUseTokens = oUsage.getOrNull("toolUsePromptTokenCount") != null ? oUsage.get("toolUsePromptTokenCount").getLong() : 0L;
-            long promptTokens = (oUsage.getOrNull("promptTokenCount") != null ? oUsage.get("promptTokenCount").getLong() : 0L) + toolUseTokens;
-            long completionTokens = oUsage.getOrNull("candidatesTokenCount") != null ? oUsage.get("candidatesTokenCount").getLong() : 0;
-            long totalTokens = oUsage.getOrNull("totalTokenCount") != null ? oUsage.get("totalTokenCount").getLong() : 0;
-
-            long cachedContentTokens = oUsage.getOrNull("cachedContentTokenCount") != null ? oUsage.get("cachedContentTokenCount").getLong() : 0L;
-            long thinkingTokens = oUsage.getOrNull("thoughtsTokenCount") != null ? oUsage.get("thoughtsTokenCount").getLong() : 0L;
-
-            acc.setUsage(new AiUsage(promptTokens, thinkingTokens, completionTokens, totalTokens,
-                    0L, cachedContentTokens, oUsage));
+            acc.setUsage(buildUsage(oUsage));
         }
 
         return oResp;
@@ -287,26 +269,19 @@ public class GeminiResponseParser {
         ChatAccumulator acc = ctx.getAccumulator();
         boolean hasContent = false;
 
-        if (oResp.hasKey("error")) {
-            ONode oError = oResp.get("error");
-            String errorMsg = oError.get("message").getString();
-            if (Utils.isEmpty(errorMsg)) {
-                errorMsg = oError.getString();
-            }
-            acc.setError(new ChatException(errorMsg));
+        if (applyErrorIfPresent(acc, oResp)) {
             return true;
         }
 
-        if (oResp.hasKey("model")) {
-            acc.setModel(oResp.get("model").getString());
-        } else if (oResp.hasKey("modelVersion")) {
-            acc.setModel(oResp.get("modelVersion").getString());
-        }
+        applyModelName(acc, oResp);
 
         ONode oCandidates = oResp.getOrNull("candidates");
         if (oCandidates != null && oCandidates.isArray() && oCandidates.size() > 0) {
             ONode oChoice1 = oCandidates.get(0);
             String finishReason = oChoice1.get("finishReason").getString();
+            if (Utils.isEmpty(finishReason)) {
+                finishReason = oChoice1.get("finish_reason").getString();
+            }
 
             if (Utils.isNotEmpty(finishReason)) {
                 acc.setFinished(true);
@@ -321,32 +296,88 @@ public class GeminiResponseParser {
         }
 
         // prompt 被安全策略拦截时无 candidates 返回，需显式报错避免静默结束
-        if (hasContent == false) {
-            ONode oPromptFeedback = oResp.getOrNull("promptFeedback");
-            if (oPromptFeedback != null) {
-                String blockReason = oPromptFeedback.get("blockReason").getString();
-                if (Utils.isNotEmpty(blockReason)) {
-                    acc.setError(new ChatException("prompt blocked: " + blockReason));
-                    return true;
-                }
-            }
+        if (hasContent == false && applyPromptFeedbackBlock(acc, oResp)) {
+            return true;
         }
 
         ONode oUsage = oResp.getOrNull("usageMetadata");
         if (oUsage != null && acc.isFinished()) {
-            long toolUseTokens = oUsage.getOrNull("toolUsePromptTokenCount") != null ? oUsage.get("toolUsePromptTokenCount").getLong() : 0L;
-            long promptTokens = (oUsage.getOrNull("promptTokenCount") != null ? oUsage.get("promptTokenCount").getLong() : 0L) + toolUseTokens;
-            long completionTokens = oUsage.getOrNull("candidatesTokenCount") != null ? oUsage.get("candidatesTokenCount").getLong() : 0;
-            long totalTokens = oUsage.getOrNull("totalTokenCount") != null ? oUsage.get("totalTokenCount").getLong() : 0;
-
-            long cachedContentTokens = oUsage.getOrNull("cachedContentTokenCount") != null ? oUsage.get("cachedContentTokenCount").getLong() : 0L;
-            long thinkingTokens = oUsage.getOrNull("thoughtsTokenCount") != null ? oUsage.get("thoughtsTokenCount").getLong() : 0L;
-
-            acc.setUsage(new AiUsage(promptTokens, thinkingTokens, completionTokens, totalTokens,
-                    0L, cachedContentTokens, oUsage));
+            acc.setUsage(buildUsage(oUsage));
         }
 
         return hasContent;
+    }
+
+    /** 单帧错误信息提取：error.message 优先，缺失时回退 error 字符串形态。 @since 4.1 */
+    private boolean applyErrorIfPresent(ChatAccumulator acc, ONode oResp) {
+        if (oResp.hasKey("error") == false) {
+            return false;
+        }
+        ONode oError = oResp.get("error");
+        String errorMsg = oError.get("message").getString();
+        if (Utils.isEmpty(errorMsg)) {
+            errorMsg = oError.getString();
+        }
+        acc.setError(new ChatException(errorMsg));
+        return true;
+    }
+
+    /** 模型名提取：优先 model（兼容网关），其次 modelVersion（官方原生）。 @since 4.1 */
+    private void applyModelName(ChatAccumulator acc, ONode oResp) {
+        if (oResp.hasKey("model")) {
+            acc.setModel(oResp.get("model").getString());
+        } else if (oResp.hasKey("modelVersion")) {
+            acc.setModel(oResp.get("modelVersion").getString());
+        }
+    }
+
+    /** promptFeedback 安全拦截：camelCase/snake_case 双形态兼容。 @since 4.1 */
+    private boolean applyPromptFeedbackBlock(ChatAccumulator acc, ONode oResp) {
+        ONode oPromptFeedback = oResp.getOrNull("promptFeedback");
+        if (oPromptFeedback == null) {
+            oPromptFeedback = oResp.getOrNull("prompt_feedback");
+        }
+        if (oPromptFeedback == null) {
+            return false;
+        }
+        String blockReason = oPromptFeedback.get("blockReason").getString();
+        if (Utils.isEmpty(blockReason)) {
+            blockReason = oPromptFeedback.get("block_reason").getString();
+        }
+        if (Utils.isEmpty(blockReason)) {
+            return false;
+        }
+        acc.setError(new ChatException("prompt blocked: " + blockReason));
+        return true;
+    }
+
+    /**
+     * usageMetadata → AiUsage。
+     *
+     * <p>与官方 SDK 语义对齐：totalTokenCount = prompt + candidates + toolUse + thoughts，
+     * 即 toolUsePromptTokenCount 是独立项（不包含在 promptTokenCount 内），需计入 promptTokens；
+     * responseTokenCount 是 candidatesTokenCount 的新版替代字段，缺失时回退读取。</p>
+     *
+     * @since 4.1
+     */
+    private AiUsage buildUsage(ONode oUsage) {
+        long toolUseTokens = getLongOrZero(oUsage, "toolUsePromptTokenCount");
+        long promptTokens = getLongOrZero(oUsage, "promptTokenCount") + toolUseTokens;
+        long completionTokens = getLongOrZero(oUsage, "candidatesTokenCount");
+        if (completionTokens == 0) {
+            completionTokens = getLongOrZero(oUsage, "responseTokenCount");
+        }
+        long totalTokens = getLongOrZero(oUsage, "totalTokenCount");
+        long cachedContentTokens = getLongOrZero(oUsage, "cachedContentTokenCount");
+        long thinkingTokens = getLongOrZero(oUsage, "thoughtsTokenCount");
+
+        return new AiUsage(promptTokens, thinkingTokens, completionTokens, totalTokens,
+                0L, cachedContentTokens, oUsage);
+    }
+
+    private static long getLongOrZero(ONode oUsage, String key) {
+        ONode node = oUsage.getOrNull(key);
+        return node == null ? 0L : node.getLong();
     }
 
     /** 与官方 SDK 的 checkFinishReason 语义一致：STOP/MAX_TOKENS 之外的终止原因可诊断。 */

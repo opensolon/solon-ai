@@ -785,11 +785,10 @@ public class GeminiRequestBuilder {
     private String mapEffortToThinkingLevelName(String effort, ChatConfig config) {
         String model = config == null || config.getModel() == null ? "" : config.getModel().toLowerCase();
         boolean isFlash = model.contains("flash");
-        // Gemini 3 族（含 3.1）普遍支持 medium；非 3 的 google 模型仅 low/high
+        // Gemini 3 族（含 3.1/3-1，且 gemini+3 交叠覆盖）普遍支持 medium；非 3 的 google 模型仅 low/high
         boolean isGemini3 = model.contains("gemini-3") || model.contains("gemini3")
                 || model.contains("3.1") || model.contains("3-1")
                 || (model.contains("gemini") && model.contains("3"));
-        boolean supportsMedium = isGemini3 || model.contains("3.1") || model.contains("3-1");
         boolean supportsMinimal = isFlash; // flash 支持 minimal 关闭/极低
 
         switch (effort) {
@@ -799,7 +798,7 @@ public class GeminiRequestBuilder {
             case "low":
                 return "low";
             case "medium":
-                return supportsMedium ? "medium" : "high";
+                return isGemini3 ? "medium" : "high";
             case "high":
             case "max":
                 return "high";
