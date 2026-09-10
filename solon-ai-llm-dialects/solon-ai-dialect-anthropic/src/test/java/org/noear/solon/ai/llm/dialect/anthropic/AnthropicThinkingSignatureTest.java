@@ -105,40 +105,94 @@ public class AnthropicThinkingSignatureTest {
         // (b) 聚合器字段（tool 多轮回传路径依赖）
         assertEquals("sig_abc", acc.thinkingSignature);
 
-        // (c) 终态载体帧：last choice 的 contentRaw 必须是携带签名的 Map
-        //     （核心 buildAggregationMessage 以此作为聚合消息的 contentRaw）
-        Object contentRaw = acc.lastItem().getContentRaw();
+        ChatResponse terminal = acc.snapshotTerminal();
+        assertTrue(terminal.isTerminal());
+        AssistantMessage terminalMessage = terminal.getMessage();
+        assertNotNull(terminalMessage);
+
+        Object contentRaw = AnthropicMessageStateSupport.resolveData(terminalMessage);
         assertTrue(contentRaw instanceof Map,
                 "last choice contentRaw must be a Map carrier, but was: " + contentRaw);
         assertEquals("sig_abc", ((Map<?, ?>) contentRaw).get("thinkingSignature"));
 
-        // 内容主干仍由 choice 逐帧承载（正文/思考的最终聚合在核心 publishItem 完成），
-        // 载体帧本身不带内容，不污染正文
-        assertTrue(hasChoiceText(acc, "杭州今天晴"), "text_delta 应仍以 choice 承载");
-        assertTrue(hasChoiceThinking(acc, "让我想想"), "thinking_delta 应仍以 choice 承载");
-        assertEquals("", acc.lastItem().getText(), "载体帧必须是空内容帧");
+        assertEquals("杭州今天晴", terminal.getText());
+        assertEquals("让我想想", terminal.getThinking());
+        assertNotNull(firstOf(ChatEventType.TEXT_DELTA));
+        assertNotNull(firstOf(ChatEventType.THINKING_DELTA));
     }
 
-    private boolean hasChoiceText(ChatAccumulator acc, String text) {
-        for (AssistantMessage c : acc.getContentItems()) {
-            if (text.equals(c.getText())) {
-                return true;
-            }
-        }
-        return false;
-    }
+    @Test
+    public void signatureOnThinkingBlockStartEmitsOnceAndIsSaved() {
+        ChatStreamContext ctx = newCtx();
 
-    private boolean hasChoiceThinking(ChatAccumulator acc, String thinking) {
-        for (AssistantMessage c : acc.getContentItems()) {
-            if (thinking.equals(c.getThinkingRaw())) {
-                return true;
-            }
-        }
-        return false;
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":3,"
+                + "\"content_block\":{\"type\":\"thinking\",\"thinking\":\"plan\","
+                + "\"signature\":\"sig_on_start\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_stop\",\"index\":3}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_stop\"}");
+
+        assertEquals(1, countOf(ChatEventType.THINKING_SIGNATURE),
+                "start 直接携带签名且无 signature_delta 时应发唯一签名事件");
+        ChatEvent signature = firstOf(ChatEventType.THINKING_SIGNATURE);
+        assertEquals("sig_on_start", signature.getText());
+        assertEquals(3, signature.getIndex());
+        assertEquals("sig_on_start", ctx.getAccumulator().thinkingSignature);
+
+        Map<?, ?> state = AnthropicMessageStateSupport.resolveData(
+                ctx.getAccumulator().snapshotTerminal().getMessage());
+        assertNotNull(state);
+        assertEquals("sig_on_start", state.get("thinkingSignature"));
+        ONode block = ONode.ofJson((String) ((List<?>) state.get(
+                AnthropicResponseParser.CONTENT_BLOCKS_RAW_KEY)).get(0));
+        assertEquals("sig_on_start", block.get("signature").getString());
     }
 
     /**
-     * 环节 2 幂等：message_stop 之后网关再补 [DONE]，载体帧只补一次。
+     * 兼容网关可能把官方单帧完整 signature 拆成多个 signature_delta。
+     * 各分片必须按 content block index 累计，且事件、acc、终态载体保持同一份完整值。
+     */
+    @Test
+    public void fragmentedSignature_accumulatesByBlockIndex() {
+        ChatStreamContext ctx = newCtx();
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":2,"
+                + "\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":2,"
+                + "\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"让我想想\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":2,"
+                + "\"delta\":{\"type\":\"signature_delta\",\"signature\":\"sig_\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":2,"
+                + "\"delta\":{\"type\":\"signature_delta\",\"signature\":\"abc\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_stop\",\"index\":2}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_stop\"}");
+
+        ChatAccumulator acc = ctx.getAccumulator();
+        assertEquals("sig_abc", acc.thinkingSignature);
+
+        List<ChatEvent> signatureEvents = new ArrayList<>();
+        for (ChatEvent event : events) {
+            if (event.getType() == ChatEventType.THINKING_SIGNATURE) {
+                signatureEvents.add(event);
+            }
+        }
+        assertEquals(2, signatureEvents.size());
+        assertEquals("sig_", signatureEvents.get(0).getText());
+        assertEquals("sig_abc", signatureEvents.get(1).getText());
+        assertEquals(2, signatureEvents.get(1).getIndex());
+
+        AssistantMessage terminalMessage = acc.snapshotTerminal().getMessage();
+        Map<?, ?> contentRaw = AnthropicMessageStateSupport.resolveData(terminalMessage);
+        assertEquals("sig_abc", contentRaw.get("thinkingSignature"));
+
+        List<?> rawBlocks = (List<?>) contentRaw.get(AnthropicResponseParser.CONTENT_BLOCKS_RAW_KEY);
+        assertEquals(1, rawBlocks.size());
+        ONode thinkingBlock = ONode.ofJson((String) rawBlocks.get(0));
+        assertEquals("让我想想", thinkingBlock.get("thinking").getString());
+        assertEquals("sig_abc", thinkingBlock.get("signature").getString());
+    }
+
+    /**
+     * 环节 2 幂等：message_stop 之后网关再补 [DONE]，终态载荷与语义事件只保留一次。
      */
     @Test
     public void terminalCarrierFrame_isIdempotentAcrossDone() {
@@ -150,27 +204,41 @@ public class AnthropicThinkingSignatureTest {
                 + "\"delta\":{\"type\":\"signature_delta\",\"signature\":\"sig_abc\"}}");
         parser.parseStreamResponse(ctx, "{\"type\":\"message_stop\"}");
 
-        int sizeAfterStop = ctx.getAccumulator().getContentItems().size();
+        ChatResponse afterStop = ctx.getAccumulator().snapshotTerminal();
+        assertNotNull(afterStop.getMessage());
+        int signatureEvents = countOf(ChatEventType.THINKING_SIGNATURE);
+        int thinkingEndEvents = countOf(ChatEventType.THINKING_END);
 
         parser.parseStreamResponse(ctx, "data: [DONE]");
 
-        assertEquals(sizeAfterStop, ctx.getAccumulator().getContentItems().size(),
-                "terminal carrier frame must be emitted once");
-        Object contentRaw = ctx.getAccumulator().lastItem().getContentRaw();
+        ChatResponse afterDone = ctx.getAccumulator().snapshotTerminal();
+        assertEquals(afterStop.getText(), afterDone.getText());
+        assertEquals(afterStop.getThinking(), afterDone.getThinking());
+        assertEquals(afterStop.getFinishReason(), afterDone.getFinishReason());
+        assertEquals(AnthropicMessageStateSupport.resolveData(afterStop.getMessage()), AnthropicMessageStateSupport.resolveData(afterDone.getMessage()));
+        assertEquals(signatureEvents, countOf(ChatEventType.THINKING_SIGNATURE));
+        assertEquals(thinkingEndEvents, countOf(ChatEventType.THINKING_END));
+
+        Object contentRaw = AnthropicMessageStateSupport.resolveData(afterDone.getMessage());
         assertTrue(contentRaw instanceof Map, String.valueOf(contentRaw));
         assertEquals("sig_abc", ((Map<?, ?>) contentRaw).get("thinkingSignature"));
     }
 
-    /**
-     * 环节 3：下一轮请求构建从 contentRaw 取回签名（无工具、仅思考的历史消息）。
-     */
+    private int countOf(ChatEventType type) {
+        int count = 0;
+        for (ChatEvent event : events) {
+            if (event.getType() == type) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     @Test
     public void requestBuild_replaysSignatureFromContentRaw() {
-        Map<String, Object> contentRaw = new LinkedHashMap<>();
-        contentRaw.put("thinkingSignature", "sig_abc");
-
-        AssistantMessage history = new AssistantMessage("", "让我想想", false,
-                contentRaw, null, null, null);
+        AssistantMessage history = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"\",\"thinking\":\"让我想想\"," +
+                        "\"contentRaw\":{\"thinkingSignature\":\"sig_abc\"}}");
 
         ONode root = buildRequest(Arrays.asList(ChatMessage.ofUser("天气"), history,
                 ChatMessage.ofUser("那明天呢")));
@@ -187,12 +255,11 @@ public class AnthropicThinkingSignatureTest {
      */
     @Test
     public void requestBuild_replaysSignatureWithToolCalls() {
-        Map<String, Object> contentRaw = new LinkedHashMap<>();
-        contentRaw.put("thinkingSignature", "sig_abc");
-
-        ToolCall call = new ToolCall("getWeather", "toolu_1", "getWeather", "{}", new HashMap<>());
-        AssistantMessage history = new AssistantMessage("", "让我想想", false,
-                contentRaw, null, Collections.singletonList(call), null);
+        AssistantMessage history = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"\",\"thinking\":\"让我想想\"," +
+                        "\"contentRaw\":{\"thinkingSignature\":\"sig_abc\"}," +
+                        "\"toolCalls\":[{\"index\":\"getWeather\",\"id\":\"toolu_1\"," +
+                        "\"name\":\"getWeather\",\"argumentsStr\":\"{}\",\"arguments\":{}}]}");
 
         ONode root = buildRequest(Arrays.asList(ChatMessage.ofUser("天气"), history));
 
@@ -207,8 +274,9 @@ public class AnthropicThinkingSignatureTest {
      */
     @Test
     public void requestBuild_dropsThinkingWithoutSignature() {
-        AssistantMessage history = new AssistantMessage("", "让我想想", false,
-                new LinkedHashMap<String, Object>(), null, null, null);
+        AssistantMessage history = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"\",\"thinking\":\"让我想想\"," +
+                        "\"contentRaw\":{}}");
 
         String json = buildRequest(Arrays.asList(ChatMessage.ofUser("天气"), history)).toJson();
 

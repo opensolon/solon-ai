@@ -134,6 +134,10 @@ public enum ChatEventType {
     SERVER_TOOL_RESULT(SERVER_TOOL, END),
 
     /**
+     * 搜索结果（一次服务端搜索可产生多条）
+     */
+    SEARCH_RESULT(MEDIA, NONE),
+    /**
      * 引用（来源文档 / URL）
      */
     CITATION(MEDIA, NONE),

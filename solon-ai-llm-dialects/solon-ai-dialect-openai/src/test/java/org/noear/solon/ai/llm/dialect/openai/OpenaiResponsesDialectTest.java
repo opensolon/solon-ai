@@ -17,10 +17,7 @@ package org.noear.solon.ai.llm.dialect.openai;
 
 import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
-import org.noear.solon.ai.chat.ChatConfig;
-import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.ChatRequest;
-import org.noear.solon.ai.chat.ChatAccumulator;
+import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.content.BlobBlock;
 import org.noear.solon.ai.chat.content.ContentBlock;
@@ -29,15 +26,18 @@ import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.event.ChatStreamContextDefault;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.MessageProtocolState;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolResult;
+import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -95,6 +95,93 @@ public class OpenaiResponsesDialectTest {
         return builder.build(config, options, messages, false);
     }
 
+    private ONode firstContentItem(ONode root, String type) {
+        for (ONode input : root.get("input").getArray()) {
+            ONode content = input.getOrNull("content");
+            if (content == null || !content.isArray()) {
+                continue;
+            }
+            for (ONode item : content.getArray()) {
+                if (type.equals(item.get("type").getString())) {
+                    return item;
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean hasContentItem(ONode root, String type) {
+        return firstContentItem(root, type) != null;
+    }
+
+    // ==================== tools 形态 ====================
+
+    @Test
+    public void functionTool_strictAndOutputSchema_useApiSpecificShape() {
+        FunctionToolDesc tool = new FunctionToolDesc("lookup")
+                .description("lookup data")
+                .inputSchema("{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}},\"required\":[\"id\"],\"additionalProperties\":false}")
+                .outputSchema("{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}},\"required\":[\"value\"],\"additionalProperties\":false}")
+                .strict(true);
+        ChatOptions options = ChatOptions.of().toolAdd(tool);
+
+        ONode responses = build(options, Collections.singletonList(ChatMessage.ofUser("go")));
+        ONode responsesTool = responses.get("tools").get(0);
+        assertTrue(responsesTool.get("strict").getBoolean());
+        assertTrue(responsesTool.get("output_schema").isObject());
+        assertFalse(responsesTool.hasKey("function"));
+
+        ChatConfig config = new ChatConfig();
+        config.setModel("gpt-4.1");
+        ONode chat = OpenaiChatDialect.getInstance().buildRequestJson(config, options,
+                Collections.singletonList(ChatMessage.ofUser("go")), false);
+        ONode chatTool = chat.get("tools").get(0);
+        assertTrue(chatTool.get("function").get("strict").getBoolean());
+        assertFalse(chatTool.get("function").hasKey("output_schema"),
+                "Chat Completions 官方 FunctionDefinition 没有 output_schema");
+    }
+
+    @Test
+    public void functionTool_invalidSchemas_fallbackWithoutPollutingRequest() {
+        FunctionToolDesc tool = new FunctionToolDesc("lookup")
+                .inputSchema("not-json")
+                .outputSchema("not-json");
+        ChatOptions options = ChatOptions.of().toolAdd(tool);
+
+        ONode responsesTool = build(options, Collections.singletonList(ChatMessage.ofUser("go")))
+                .get("tools").get(0);
+        assertEquals("object", responsesTool.get("parameters").get("type").getString());
+        assertFalse(responsesTool.get("strict").getBoolean(), "Responses FunctionTool 必须显式输出默认 strict=false");
+        assertFalse(responsesTool.hasKey("output_schema"));
+
+        ChatConfig config = new ChatConfig();
+        ONode chatTool = OpenaiChatDialect.getInstance().buildRequestJson(config, options,
+                Collections.singletonList(ChatMessage.ofUser("go")), false)
+                .get("tools").get(0).get("function");
+        assertEquals("object", chatTool.get("parameters").get("type").getString());
+    }
+
+    @Test
+    public void functionTool_jsonScalarSchemas_areRejectedOrIgnored() {
+        FunctionToolDesc tool = new FunctionToolDesc("lookup")
+                .inputSchema("[]")
+                .outputSchema("\"not-an-object\"");
+        ONode responsesTool = build(ChatOptions.of().toolAdd(tool),
+                Collections.singletonList(ChatMessage.ofUser("go"))).get("tools").get(0);
+        assertEquals("object", responsesTool.get("parameters").get("type").getString());
+        assertFalse(responsesTool.hasKey("output_schema"));
+    }
+
+    @Test
+    public void functionTool_strictRejectsNonStrictSchema() {
+        FunctionToolDesc tool = new FunctionToolDesc("lookup")
+                .inputSchema("{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}}}")
+                .strict(true);
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> build(ChatOptions.of().toolAdd(tool), Collections.singletonList(ChatMessage.ofUser("go"))));
+        assertTrue(error.getMessage().contains("additionalProperties=false"), error.getMessage());
+    }
+
     // ==================== input items 形态 ====================
 
     @Test
@@ -124,24 +211,115 @@ public class OpenaiResponsesDialectTest {
                 Collections.singletonList(ChatMessage.ofUser("听一下", blocks))));
         ONode root = build(ChatOptions.of().optionSet("responses_input_audio_enabled", true),
                 Collections.singletonList(ChatMessage.ofUser("听一下", blocks)));
-
-        ONode audioItem = null;
-        for (ONode item : root.get("input").get(0).get("content").getArray()) {
-            if ("input_audio".equals(item.get("type").getString())) {
-                audioItem = item;
-            }
-        }
+        ONode audioItem = firstContentItem(root, "input_audio");
 
         assertNotNull(audioItem, "应写出 input_audio 项: " + root.toJson());
         assertTrue(audioItem.get("input_audio").isObject(), "input_audio 应为嵌套对象: " + root.toJson());
         assertEquals("AAAA", audioItem.get("input_audio").get("data").getString());
         assertEquals("wav", audioItem.get("input_audio").get("format").getString());
+        assertFalse(root.hasKey("responses_input_audio_enabled"), "本地兼容选项不得透传: " + root.toJson());
+    }
+
+    @Test
+    public void inputAudioOptionRequiresBooleanTrueAndNeverPassesThrough() {
+        List<ContentBlock> audio = Collections.<ContentBlock>singletonList(
+                AudioBlock.ofBase64("AAAA", "audio/wav"));
+
+        assertThrows(IllegalArgumentException.class, () -> build(
+                ChatOptions.of().optionSet("responses_input_audio_enabled", false),
+                Collections.singletonList(ChatMessage.ofUser("听一下", audio))));
+        assertThrows(IllegalArgumentException.class, () -> build(
+                ChatOptions.of().optionSet("responses_input_audio_enabled", "true"),
+                Collections.singletonList(ChatMessage.ofUser("听一下", audio))));
+
+        for (Object value : Arrays.<Object>asList(false, "true", true)) {
+            ONode root = build(ChatOptions.of().optionSet("responses_input_audio_enabled", value),
+                    Collections.singletonList(ChatMessage.ofUser("纯文本")));
+            assertFalse(root.hasKey("responses_input_audio_enabled"),
+                    "本地选项不得透传，value=" + value + ": " + root.toJson());
+        }
+    }
+
+    @Test
+    public void urlOnlyAudioFallsBackToInputTextForUserAndAssistant() {
+        ChatOptions enabled = ChatOptions.of().optionSet("responses_input_audio_enabled", true);
+        List<ContentBlock> blocks = Collections.<ContentBlock>singletonList(
+                AudioBlock.ofUrl("https://cdn.example/audio.wav", "audio/wav"));
+
+        ONode user = build(enabled, Collections.singletonList(ChatMessage.ofUser("听一下", blocks)));
+        ONode assistant = build(enabled, Collections.singletonList(ChatMessage.ofAssistant("听一下", blocks)));
+
+        assertFalse(hasContentItem(user, "input_audio"), user.toJson());
+        assertFalse(hasContentItem(assistant, "input_audio"), assistant.toJson());
+        assertEquals("[audio]https://cdn.example/audio.wav",
+                findContentText(user, "[audio]"));
+        assertEquals("[audio]https://cdn.example/audio.wav",
+                findContentText(assistant, "[audio]"));
+    }
+
+    @Test
+    public void base64AudioMappingIsConsistentForUserAndAssistant() {
+        ChatOptions enabled = ChatOptions.of().optionSet("responses_input_audio_enabled", true);
+        List<ContentBlock> blocks = Collections.<ContentBlock>singletonList(
+                AudioBlock.ofBase64("QUJD", "audio/mpeg"));
+
+        ONode userAudio = firstContentItem(build(enabled,
+                Collections.singletonList(ChatMessage.ofUser("听一下", blocks))), "input_audio");
+        ONode assistantAudio = firstContentItem(build(enabled,
+                Collections.singletonList(ChatMessage.ofAssistant("听一下", blocks))), "input_audio");
+
+        assertNotNull(userAudio);
+        assertNotNull(assistantAudio);
+        assertEquals(userAudio.toJson(), assistantAudio.toJson());
+        assertEquals("mpeg", userAudio.get("input_audio").get("format").getString());
+    }
+
+    @Test
+    public void emptyAudioNeverEmitsMalformedInputAudio() {
+        ChatOptions enabled = ChatOptions.of().optionSet("responses_input_audio_enabled", true);
+        List<ContentBlock> emptyAudio = Collections.<ContentBlock>singletonList(
+                AudioBlock.ofBase64("", "audio/wav"));
+
+        ONode user = build(enabled, Collections.singletonList(ChatMessage.ofUser("fallback", emptyAudio)));
+        ONode assistant = build(enabled,
+                Collections.singletonList(ChatMessage.ofAssistant("fallback", emptyAudio)));
+        ONode emptyUser = build(enabled, Collections.singletonList(
+                ChatMessage.ofUser("", Collections.<ContentBlock>singletonList(AudioBlock.ofUrl("audio://empty")))));
+        ONode emptyAssistant = build(enabled, Collections.singletonList(
+                ChatMessage.ofAssistant("", Collections.<ContentBlock>singletonList(AudioBlock.ofUrl("audio://empty")))));
+
+        assertFalse(hasContentItem(user, "input_audio"), user.toJson());
+        assertFalse(hasContentItem(assistant, "input_audio"), assistant.toJson());
+        assertTrue(user.toJson().contains("fallback"), user.toJson());
+        assertTrue(assistant.toJson().contains("fallback"), assistant.toJson());
+        assertFalse(emptyUser.toJson().contains("input_audio"), emptyUser.toJson());
+        assertFalse(emptyAssistant.toJson().contains("input_audio"), emptyAssistant.toJson());
+        assertFalse(emptyUser.toJson().contains("audio://empty"), emptyUser.toJson());
+        assertFalse(emptyAssistant.toJson().contains("audio://empty"), emptyAssistant.toJson());
+        assertTrue(emptyUser.get("input").get(0).hasKey("content"), emptyUser.toJson());
+        assertTrue(emptyAssistant.get("input").get(0).hasKey("content"), emptyAssistant.toJson());
+    }
+
+    private String findContentText(ONode root, String prefix) {
+        for (ONode input : root.get("input").getArray()) {
+            ONode content = input.getOrNull("content");
+            if (content == null || !content.isArray()) {
+                continue;
+            }
+            for (ONode item : content.getArray()) {
+                String text = item.get("text").getString();
+                if (text != null && text.startsWith(prefix)) {
+                    return text;
+                }
+            }
+        }
+        return null;
     }
 
     @Test
     public void reasoningItem_alwaysCarrySummary() {
         // 官方 ResponseReasoningItem.summary 为必填（可为空数组），缺失会 400
-        AssistantMessage thinking = new AssistantMessage("", "先分析一下", true);
+        AssistantMessage thinking = new AssistantMessage("", "先分析一下");
         ONode root = build(ChatOptions.of(), Collections.singletonList(thinking));
 
         ONode item = root.get("input").get(0);
@@ -152,8 +330,26 @@ public class OpenaiResponsesDialectTest {
     }
 
     @Test
+    public void streamDone_promotesResponsesReplayDataToProtocolState() {
+        ChatAccumulator resp = newResponse(true);
+        parseStream(resp, "data: {\"type\":\"response.output_item.added\","
+                + "\"item\":{\"type\":\"reasoning\",\"id\":\"rs_done\"}}");
+        parseStream(resp, "data: {\"type\":\"response.output_item.done\","
+                + "\"output_index\":0,\"item\":{\"type\":\"reasoning\",\"id\":\"rs_done\","
+                + "\"encrypted_content\":\"enc_done\",\"summary\":[]}}");
+        parseStream(resp, "data: {\"type\":\"response.output_text.delta\",\"item_id\":\"msg_1\",\"delta\":\"答案\"}");
+        parseStream(resp, "data: [DONE]");
+
+        AssistantMessage message = resp.snapshotTerminal().getMessage();
+        MessageProtocolState state = message.getProtocolState(OpenaiResponsesMessageStateSupport.PROTOCOL_ID);
+        assertNotNull(state, message.toString());
+        assertEquals("rs_done", state.getData().get(OpenaiResponsesMessageStateSupport.REASONING_ITEM_ID));
+        assertEquals("enc_done", state.getData().get(OpenaiResponsesMessageStateSupport.REASONING_ENCRYPTED_CONTENT));
+        assertNotNull(state.getSemanticHash(), message.toString());
+    }
+    @Test
     public void reasoningItem_echoServerIdWithSummary() {
-        AssistantMessage thinking = new AssistantMessage("", "x", true);
+        AssistantMessage thinking = new AssistantMessage("", "x");
         thinking.getMetadata().put("reasoning_item_id", "rs_123");
         thinking.getMetadata().put("reasoning_encrypted_content", "enc_abc");
 
@@ -166,8 +362,176 @@ public class OpenaiResponsesDialectTest {
     }
 
     @Test
+    public void reasoningItem_protocolStateIsWrittenAndLegacyMetadataRemainsReadable() {
+        ChatAccumulator resp = newResponse(false);
+        String json = "{\"id\":\"resp_1\",\"model\":\"gpt-5.4\",\"status\":\"completed\",\"output\":["
+                + "{\"type\":\"reasoning\",\"id\":\"rs_state\",\"summary\":[],\"encrypted_content\":\"enc_state\"},"
+                + "{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"答案\"}]}]}";
+
+        assertTrue(parse(resp, json));
+        AssistantMessage message = resp.snapshotTerminal().getMessage();
+        MessageProtocolState state = message.getProtocolState(OpenaiResponsesMessageStateSupport.PROTOCOL_ID);
+        assertNotNull(state, message.toString());
+        assertEquals(OpenaiResponsesMessageStateSupport.VERSION, state.getVersion());
+        assertEquals("rs_state", state.getData().get("reasoning_item_id"));
+        assertEquals("enc_state", state.getData().get("reasoning_encrypted_content"));
+        assertNotNull(state.getSemanticHash(), message.toString());
+        // 新响应不再把协议内部字段写入应用 metadata。
+        assertFalse(message.getMetadata().containsKey("reasoning_item_id"));
+        assertFalse(message.getMetadata().containsKey("reasoning_encrypted_content"));
+    }
+
+    @Test
+    public void parserWorkspaceKeysMustNotCollideWithApplicationMetadata() {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("phase", "application-phase");
+        metadata.put(OpenaiResponsesMessageStateSupport.AGGREGATION_PHASE, "commentary");
+        metadata.put(OpenaiResponsesMessageStateSupport.AGGREGATION_REASONING_ITEM_ID, "rs_internal");
+
+        MessageProtocolState state = OpenaiResponsesMessageStateSupport.fromAggregation(metadata);
+        assertNotNull(state);
+        assertEquals("commentary", state.getData().get(OpenaiResponsesMessageStateSupport.PHASE));
+        OpenaiResponsesMessageStateSupport.removeProtocolKeys(metadata);
+        assertEquals("application-phase", metadata.get("phase"));
+        assertFalse(metadata.containsKey(OpenaiResponsesMessageStateSupport.AGGREGATION_PHASE));
+
+        AssistantMessage ordinary = AssistantMessage.snapshot(
+                "answer", "", null, null, null, null, null,
+                Collections.<String, Object>singletonMap("phase", "commentary"));
+        ONode request = build(ChatOptions.of(), Collections.singletonList(ordinary));
+        assertFalse(request.get("input").get(0).hasKey("phase"), request.toJson());
+    }
+
+    @Test
+    public void streamToolMessageMustReuseTerminalReplayStateAfterWorkspaceCleanup() {
+        ChatAccumulator acc = newResponse(true);
+        MessageProtocolState state = new MessageProtocolState(OpenaiResponsesMessageStateSupport.VERSION)
+                .dataPut(OpenaiResponsesMessageStateSupport.REASONING_ITEM_ID, "rs_terminal");
+        acc.putTerminalProtocolState(OpenaiResponsesMessageStateSupport.PROTOCOL_ID, state);
+        acc.getAggregationMetadata().clear();
+
+        AssistantMessage message = OpenaiResponsesDialect.getInstance()
+                .parseAssistantMessage(acc, newToolCallNode("answer", "thought")).get(0);
+
+        assertNotSame(state, message.getProtocolState(OpenaiResponsesMessageStateSupport.PROTOCOL_ID));
+        assertNull(state.getSemanticHash());
+        assertNotNull(message.getProtocolState(
+                OpenaiResponsesMessageStateSupport.PROTOCOL_ID).getSemanticHash());
+    }
+
+    @Test
+    public void protocolState_isPreferredOverLegacyMetadata() {
+        Map<String, Object> data = new HashMap<>();
+        data.put(OpenaiResponsesMessageStateSupport.REASONING_ITEM_ID, "rs_new");
+        data.put(OpenaiResponsesMessageStateSupport.REASONING_ENCRYPTED_CONTENT, "enc_new");
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("reasoning_item_id", "rs_legacy");
+        metadata.put("reasoning_encrypted_content", "enc_legacy");
+        AssistantMessage message = AssistantMessage.snapshot(
+                "答案", "思考", null, null, null, null,
+                Collections.singletonMap(OpenaiResponsesMessageStateSupport.PROTOCOL_ID,
+                        new MessageProtocolState(OpenaiResponsesMessageStateSupport.VERSION, data)),
+                metadata);
+
+        ONode root = build(ChatOptions.of(), Collections.singletonList(message));
+        ONode item = root.get("input").get(0);
+        assertEquals("rs_new", item.get("id").getString(), root.toJson());
+        assertEquals("enc_new", item.get("encrypted_content").getString(), root.toJson());
+    }
+    @Test
+    public void legacyOutputItems_textConflictFallsBackButKeepsReasoningIdentity() {
+        AssistantMessage message = new AssistantMessage("当前答案", "当前思考");
+        Map<String, Object> oldMessage = new LinkedHashMap<>();
+        oldMessage.put("type", "message");
+        oldMessage.put("id", "msg_old");
+        oldMessage.put("role", "assistant");
+        Map<String, Object> oldContent = new LinkedHashMap<>();
+        oldContent.put("type", "output_text");
+        oldContent.put("text", "旧答案");
+        oldMessage.put("content", Collections.singletonList(oldContent));
+        message.getMetadata().put(OpenaiResponsesMessageStateSupport.OUTPUT_ITEMS,
+                Collections.singletonList(wrapper(0, oldMessage)));
+        message.getMetadata().put(OpenaiResponsesMessageStateSupport.MESSAGE_ITEMS,
+                Collections.singletonList(Collections.singletonMap("text", "旧答案")));
+        message.getMetadata().put(OpenaiResponsesMessageStateSupport.REASONING_ITEM_ID, "rs_legacy");
+        message.getMetadata().put(OpenaiResponsesMessageStateSupport.REASONING_ENCRYPTED_CONTENT, "enc_legacy");
+
+        ONode root = build(ChatOptions.of(), Collections.singletonList(message));
+
+        assertEquals(2, root.get("input").size(), root.toJson());
+        assertEquals("reasoning", root.get("input").get(0).get("type").getString(), root.toJson());
+        assertEquals("rs_legacy", root.get("input").get(0).get("id").getString(), root.toJson());
+        assertEquals("enc_legacy", root.get("input").get(0).get("encrypted_content").getString(), root.toJson());
+        assertEquals("当前答案", root.get("input").get(1).get("content").getString(), root.toJson());
+        assertFalse(root.toJson().contains("msg_old"), root.toJson());
+        assertFalse(root.toJson().contains("旧答案"), root.toJson());
+    }
+
+    @Test
+    public void legacyOutputItems_toolCallConflictFallsBackToCurrentToolCalls() {
+        ToolCall currentCall = new ToolCall("call_current", "call_current", "lookup",
+                "{\"city\":\"杭州\"}", Collections.<String, Object>singletonMap("city", "杭州"));
+        AssistantMessage message = new AssistantMessage("", "",
+                Collections.singletonList(currentCall), null);
+        Map<String, Object> oldCall = new LinkedHashMap<>();
+        oldCall.put("type", "function_call");
+        oldCall.put("id", "fc_old");
+        oldCall.put("call_id", "call_old");
+        oldCall.put("name", "lookup");
+        oldCall.put("arguments", "{\"city\":\"上海\"}");
+        message.getMetadata().put(OpenaiResponsesMessageStateSupport.OUTPUT_ITEMS,
+                Collections.singletonList(wrapper(0, oldCall)));
+
+        ONode root = build(ChatOptions.of(), Collections.singletonList(message));
+
+        assertEquals(1, root.get("input").size(), root.toJson());
+        assertEquals("function_call", root.get("input").get(0).get("type").getString(), root.toJson());
+        assertEquals("call_current", root.get("input").get(0).get("call_id").getString(), root.toJson());
+        assertEquals("{\"city\":\"杭州\"}", root.get("input").get(0).get("arguments").getString(), root.toJson());
+        assertFalse(root.toJson().contains("call_old"), root.toJson());
+    }
+
+    @Test
+    public void targetProtocolState_wrongVersionAndUnboundAreFailClosed() {
+        for (MessageProtocolState targetState : Arrays.asList(
+                new MessageProtocolState(OpenaiResponsesMessageStateSupport.VERSION + 1)
+                        .dataPut(OpenaiResponsesMessageStateSupport.REASONING_ITEM_ID, "rs_wrong_version"),
+                new MessageProtocolState(OpenaiResponsesMessageStateSupport.VERSION)
+                        .dataPut(OpenaiResponsesMessageStateSupport.REASONING_ITEM_ID, "rs_unbound"))) {
+            Map<String, Object> metadata = Collections.<String, Object>singletonMap(
+                    OpenaiResponsesMessageStateSupport.REASONING_ITEM_ID, "rs_legacy");
+            AssistantMessage message;
+            if (targetState.getVersion() != OpenaiResponsesMessageStateSupport.VERSION) {
+                message = AssistantMessage.snapshot(
+                        "答案", "当前思考", null, null, null, null,
+                        Collections.singletonMap(OpenaiResponsesMessageStateSupport.PROTOCOL_ID, targetState),
+                        metadata);
+            } else {
+                ONode node = ONode.ofJson("{\"role\":\"assistant\",\"text\":\"答案\"," +
+                        "\"thinking\":\"当前思考\"}");
+                node.getOrNew("metadata").set("reasoning_item_id", "rs_legacy");
+                node.getOrNew("protocolStates")
+                        .getOrNew(OpenaiResponsesMessageStateSupport.PROTOCOL_ID)
+                        .set("version", targetState.getVersion())
+                        .getOrNew("data").set(OpenaiResponsesMessageStateSupport.REASONING_ITEM_ID,
+                                "rs_unbound");
+                message = (AssistantMessage) ChatMessage.fromJson(node);
+            }
+
+            ONode root = build(ChatOptions.of(), Collections.singletonList(message));
+
+            assertEquals("reasoning", root.get("input").get(0).get("type").getString(), root.toJson());
+            assertFalse(root.get("input").get(0).hasKey("id"), root.toJson());
+            assertEquals("当前思考", root.get("input").get(0).get("content").get(0).get("text").getString(), root.toJson());
+            assertFalse(root.toJson().contains("rs_legacy"), root.toJson());
+            assertFalse(root.toJson().contains("rs_wrong_version"), root.toJson());
+            assertFalse(root.toJson().contains("rs_unbound"), root.toJson());
+        }
+    }
+
+    @Test
     public void glmReplayDropsUnsupportedReasoningAndSanitizesFunctionArguments() {
-        AssistantMessage message = new AssistantMessage("", "", false);
+        AssistantMessage message = new AssistantMessage("", "");
         List<Map<String, Object>> items = new ArrayList<>();
         Map<String, Object> reasoning = new HashMap<>();
         reasoning.put("type", "reasoning");
@@ -187,12 +551,12 @@ public class OpenaiResponsesDialectTest {
         assertEquals(1, root.get("input").size(), root.toJson());
         ONode call = root.get("input").get(0);
         assertEquals("function_call", call.get("type").getString());
-        assertEquals("杭州", ONode.ofJson(call.get("arguments").getString()).get("location").getString());
+        assertEquals("{\"location\":\"杭州\"}", call.get("arguments").getString());
     }
 
     @Test
     public void glmReasoningReplayCanBeExplicitlyEnabled() {
-        AssistantMessage message = new AssistantMessage("", "", false);
+        AssistantMessage message = new AssistantMessage("", "");
         Map<String, Object> reasoning = new HashMap<>();
         reasoning.put("type", "reasoning");
         reasoning.put("id", "rs_1");
@@ -214,6 +578,65 @@ public class OpenaiResponsesDialectTest {
     }
 
 
+    @Test
+    public void parserMessageJsonRoundTrip_replaysOriginalResponsesOutputItems() {
+        ChatAccumulator resp = newResponse(false);
+        String json = "{\"id\":\"resp_roundtrip\",\"model\":\"gpt-5.4\",\"status\":\"completed\",\"output\":["
+                + "{\"type\":\"reasoning\",\"id\":\"rs_roundtrip\",\"summary\":[],\"encrypted_content\":\"enc_roundtrip\"},"
+                + "{\"type\":\"message\",\"id\":\"msg_roundtrip\",\"status\":\"completed\",\"role\":\"assistant\","
+                + "\"content\":[{\"type\":\"output_text\",\"text\":\"真实答案\",\"annotations\":[]}]},"
+                + "{\"type\":\"function_call\",\"id\":\"fc_roundtrip\",\"call_id\":\"call_roundtrip\","
+                + "\"name\":\"lookup\",\"arguments\":\"{\\\"city\\\":\\\"杭州\\\"}\"}]}";
+
+        assertTrue(parse(resp, json));
+        AssistantMessage parsed = resp.snapshotTerminal().getMessage();
+        AssistantMessage restored = (AssistantMessage) ChatMessage.fromJson(ChatMessage.toJson(parsed));
+        ONode replay = build(ChatOptions.of(), Collections.singletonList(restored));
+
+        assertEquals(3, replay.get("input").size(), replay.toJson());
+        assertEquals("rs_roundtrip", replay.get("input").get(0).get("id").getString(), replay.toJson());
+        assertEquals("enc_roundtrip", replay.get("input").get(0).get("encrypted_content").getString(), replay.toJson());
+        assertEquals("msg_roundtrip", replay.get("input").get(1).get("id").getString(), replay.toJson());
+        assertEquals("真实答案", replay.get("input").get(1).get("content").get(0).get("text").getString(), replay.toJson());
+        assertEquals("call_roundtrip", replay.get("input").get(2).get("call_id").getString(), replay.toJson());
+        assertEquals("{\"city\":\"杭州\"}", replay.get("input").get(2).get("arguments").getString(), replay.toJson());
+    }
+
+    @Test
+    public void protocolState_roundTripAndSemanticMismatchFallsBackToCommonFields() {
+        Map<String, Object> data = new HashMap<>();
+        data.put(OpenaiResponsesMessageStateSupport.REASONING_ITEM_ID, "rs_persisted");
+        AssistantMessage source = AssistantMessage.snapshot(
+                "答案", "思考", null, null, null, null,
+                Collections.singletonMap(OpenaiResponsesMessageStateSupport.PROTOCOL_ID,
+                        new MessageProtocolState(OpenaiResponsesMessageStateSupport.VERSION, data)));
+
+        AssistantMessage restored = (AssistantMessage) ChatMessage.fromJson(ChatMessage.toJson(source));
+        ONode replay = build(ChatOptions.of(), Collections.singletonList(restored));
+        assertEquals("rs_persisted", replay.get("input").get(0).get("id").getString(), replay.toJson());
+
+        AssistantMessage changed = AssistantMessage.snapshot(
+                "改写后的答案", "新的思考", null, null, null, null,
+                Collections.singletonMap(OpenaiResponsesMessageStateSupport.PROTOCOL_ID,
+                        restored.getProtocolState(OpenaiResponsesMessageStateSupport.PROTOCOL_ID)));
+        ONode fallback = build(ChatOptions.of(), Collections.singletonList(changed));
+        assertFalse(fallback.get("input").get(0).hasKey("id"), fallback.toJson());
+        assertEquals("新的思考", fallback.get("input").get(0).get("content").get(0).get("text").getString());
+    }
+
+    @Test
+    public void foreignProtocolState_isIgnoredByResponsesBuilder() {
+        Map<String, Object> foreignData = new HashMap<>();
+        foreignData.put(OpenaiResponsesMessageStateSupport.REASONING_ITEM_ID, "must_not_replay");
+        AssistantMessage message = AssistantMessage.snapshot(
+                "答案", "通用思考", null, null, null, null,
+                Collections.singletonMap("anthropic.messages",
+                        new MessageProtocolState(1, foreignData)));
+
+        ONode root = build(ChatOptions.of(), Collections.singletonList(message));
+        assertFalse(root.get("input").get(0).hasKey("id"), root.toJson());
+        assertEquals("通用思考", root.get("input").get(0).get("content").get(0).get("text").getString());
+    }
     @Test
     public void toolChoice_flattenedForResponses() {
         // Chat Completions: {type:function, function:{name}} → Responses: {type:function, name}
@@ -268,6 +691,14 @@ public class OpenaiResponsesDialectTest {
     }
 
     @Test
+    public void outputFormat_jsonScalarSchema_fallbackToJsonObject() {
+        ChatOptions options = ChatOptions.of().outputSchema("[]");
+        OpenaiResponsesDialect.getInstance().prepareOutputFormatOptions(options);
+        ONode root = build(options, Collections.singletonList(ChatMessage.ofUser("hi")));
+        assertEquals("json_object", root.get("text").get("format").get("type").getString());
+    }
+
+    @Test
     public void outputFormat_validSchema_buildsJsonSchema() {
         ChatOptions options = ChatOptions.of().outputSchema("{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}");
         OpenaiResponsesDialect.getInstance().prepareOutputFormatOptions(options);
@@ -278,6 +709,8 @@ public class OpenaiResponsesDialectTest {
         assertEquals("json_schema", format.get("type").getString(), root.toJson());
         assertEquals("output_schema", format.get("name").getString());
         assertTrue(format.get("schema").get("properties").hasKey("city"), root.toJson());
+        assertFalse(format.get("schema").get("additionalProperties").getBoolean(), root.toJson());
+        assertEquals("city", format.get("schema").get("required").get(0).getString());
     }
 
     @Test
@@ -389,13 +822,16 @@ public class OpenaiResponsesDialectTest {
 
         assertTrue(parse(resp, json));
 
-        assertEquals(1, resp.getContentItems().size(), "非流式应合并为单条消息");
-        AssistantMessage msg = resp.getContentItems().get(0);
+        AssistantMessage msg = resp.snapshotTerminal().getMessage();
+        assertNotNull(msg, "非流式应生成终态消息");
         assertEquals("答案", msg.getText());
         assertEquals("思考中", msg.getThinking());
-        assertFalse(msg.isThinking());
-        assertEquals("rs_1", msg.getMetadata().get("reasoning_item_id"));
-        assertEquals("enc", msg.getMetadata().get("reasoning_encrypted_content"));
+        assertTrue(msg.hasThinking());
+        MessageProtocolState state = msg.getProtocolState(OpenaiResponsesMessageStateSupport.PROTOCOL_ID);
+        assertNotNull(state, msg.toString());
+        assertEquals("rs_1", state.getData().get(OpenaiResponsesMessageStateSupport.REASONING_ITEM_ID));
+        assertEquals("enc", state.getData().get(OpenaiResponsesMessageStateSupport.REASONING_ENCRYPTED_CONTENT));
+        assertFalse(msg.getMetadata().containsKey("reasoning_item_id"));
         assertEquals("stop", resp.getLastFinishReasonNormalized());
     }
 
@@ -408,10 +844,11 @@ public class OpenaiResponsesDialectTest {
 
         assertTrue(parse(resp, json));
 
-        assertEquals(1, resp.getContentItems().size());
+        AssistantMessage message = resp.snapshotTerminal().getMessage();
+        assertNotNull(message);
         // 完成原因已是响应级属性：断原始值（框架归一化后为 "tool"）
         assertEquals("tool_calls", resp.lastFinishReason);
-        ToolCall call = resp.getContentItems().get(0).getToolCalls().get(0);
+        ToolCall call = message.getToolCalls().get(0);
         assertEquals("call_1", call.getId());
         assertEquals("getWeather", call.getName());
     }
@@ -482,14 +919,12 @@ public class OpenaiResponsesDialectTest {
         parse(resp, "data: {\"type\":\"response.output_item.done\","
                 + "\"item\":{\"type\":\"reasoning\",\"id\":\"rs_1\",\"encrypted_content\":\"enc_x\"}}");
 
-        boolean found = false;
-        for (int i = 0; i < resp.getContentItems().size(); i++) {
-            Object enc = resp.getContentItems().get(i).getMetadata().get("reasoning_encrypted_content");
-            if ("enc_x".equals(enc)) {
-                found = true;
-            }
-        }
-        assertTrue(found, "output_item.done 的 encrypted_content 应被捕获用于多轮回放");
+        assertEquals("思考", resp.getAggregationThinking());
+        assertEquals("enc_x", resp.getAggregationMetadata().get(
+                        OpenaiResponsesMessageStateSupport.AGGREGATION_REASONING_ENCRYPTED_CONTENT),
+                "output_item.done 的 encrypted_content 应进入命名空间化解析工作区");
+        assertEquals("rs_1", resp.getAggregationMetadata().get(
+                OpenaiResponsesMessageStateSupport.AGGREGATION_REASONING_ITEM_ID));
     }
 
     @Test
@@ -562,20 +997,18 @@ public class OpenaiResponsesDialectTest {
     }
 
     @Test
-    public void gpt5ModelAliases_receiveAutomaticReasoning() {
-        ONode canonical = build("gpt-5.6", ChatOptions.of().thinking(true),
-                Collections.singletonList(ChatMessage.ofUser("hi")));
-        assertEquals("auto", canonical.get("reasoning").get("summary").getString(), canonical.toJson());
-
-        // 兼容网关常用无连字符别名；只放宽能力判断，出站 model 保持调用方原值。
-        ONode compact = build("gpt5.6", ChatOptions.of().thinking(true),
-                Collections.singletonList(ChatMessage.ofUser("hi")));
-        assertEquals("auto", compact.get("reasoning").get("summary").getString(), compact.toJson());
-
-        // 带供应商前缀的模型 ID（如 Bedrock）也应识别 GPT-5 家族。
-        ONode prefixed = build("us.openai.gpt-5.6-sol", ChatOptions.of().thinking(true),
-                Collections.singletonList(ChatMessage.ofUser("hi")));
-        assertEquals("auto", prefixed.get("reasoning").get("summary").getString(), prefixed.toJson());
+    public void gptNewGenerationAliases_receiveAutomaticReasoning() {
+        String[] models = {
+                "gpt-5.6", "gpt5.6", "us.openai.gpt-5.6-sol",
+                "gpt-6", "gpt6.1", "us.openai.gpt-6.1-pro"
+        };
+        for (String model : models) {
+            ONode root = build(model, ChatOptions.of().thinking(true),
+                    Collections.singletonList(ChatMessage.ofUser("hi")));
+            assertEquals("auto", root.get("reasoning").get("summary").getString(),
+                    model + ": " + root.toJson());
+            assertEquals(model, root.get("model").getString(), "出站 model 不应被能力识别改写");
+        }
     }
 
     @Test
@@ -634,9 +1067,9 @@ public class OpenaiResponsesDialectTest {
 
     @Test
     public void mergedAssistantMessage_replayReasoningAndContent() {
-        // 4.1：非流式产出的是 text/thinking 合并的单条消息（isThinking=false），
-        // 不能再以 isThinking() 作为是否回传 reasoning 项的分闸
-        AssistantMessage msg = new AssistantMessage("结论", "思考过程", false);
+        // 4.1：非流式产出的是 text/thinking 合并的单条消息，
+        // 不能再以已删除的 isThinking() 作为是否回传 reasoning 项的分闸
+        AssistantMessage msg = new AssistantMessage("结论", "思考过程");
         msg.getMetadata().put("reasoning_item_id", "rs_9");
 
         ONode root = build(ChatOptions.of(), Collections.singletonList(msg));
@@ -651,7 +1084,7 @@ public class OpenaiResponsesDialectTest {
 
     @Test
     public void mergedAssistantMessage_replayThinkingWithoutMetadata() {
-        AssistantMessage msg = new AssistantMessage("结论", "思考过程", false);
+        AssistantMessage msg = new AssistantMessage("结论", "思考过程");
 
         ONode root = build(ChatOptions.of(), Collections.singletonList(msg));
 
@@ -662,8 +1095,19 @@ public class OpenaiResponsesDialectTest {
     }
 
     @Test
+    public void mixedLegacyFlagStillReplaysThinkingThenText() {
+        AssistantMessage mixed = new AssistantMessage("answer", "thinking");
+
+        ONode root = build(ChatOptions.of(), Collections.singletonList(mixed));
+
+        assertEquals(2, root.get("input").size(), root.toJson());
+        assertEquals("reasoning", root.get("input").get(0).get("type").getString());
+        assertEquals("answer", root.get("input").get(1).get("content").getString());
+    }
+
+    @Test
     public void thinkingOnlyMessage_noEmptyAssistantItem() {
-        AssistantMessage thinking = new AssistantMessage("", "只有思考", true);
+        AssistantMessage thinking = new AssistantMessage("", "只有思考");
 
         ONode root = build(ChatOptions.of(), Collections.singletonList(thinking));
 
@@ -701,14 +1145,14 @@ public class OpenaiResponsesDialectTest {
 
         assertTrue(parse(resp, json));
 
-        assertEquals(1, resp.getContentItems().size(), "应补一条空消息内容项");
-        assertNotNull(resp.getContentItems().get(0));
+        AssistantMessage message = resp.snapshotTerminal().getMessage();
+        assertNotNull(message, "未识别输出仍应提交空终态消息");
         assertEquals("stop", resp.getLastFinishReasonNormalized());
     }
 
     @Test
     public void stream_reasoningMetadataAggregatedForReplay() {
-        // 流式：reasoning 元数据在思考分片上，不在最后一片；需经聚合交给会话，否则多轮回放断链
+        // reasoning metadata 直接写入聚合状态，不再寄生于思考分片内容项。
         ChatAccumulator resp = newResponse(true);
 
         parse(resp, "data: {\"type\":\"response.output_item.added\","
@@ -720,8 +1164,10 @@ public class OpenaiResponsesDialectTest {
 
         AssistantMessage agg = resp.snapshotTerminal().getMessage();
         assertNotNull(agg);
-        assertEquals("rs_1", agg.getMetadata().get("reasoning_item_id"), agg.toString());
-        assertEquals("enc_x", agg.getMetadata().get("reasoning_encrypted_content"), agg.toString());
+        assertEquals("rs_1", agg.getMetadata().get(
+                OpenaiResponsesMessageStateSupport.AGGREGATION_REASONING_ITEM_ID), agg.toString());
+        assertEquals("enc_x", agg.getMetadata().get(
+                OpenaiResponsesMessageStateSupport.AGGREGATION_REASONING_ENCRYPTED_CONTENT), agg.toString());
     }
     @Test
     public void stream_reasoningIdDeliveredWithoutDeltas() {
@@ -738,7 +1184,8 @@ public class OpenaiResponsesDialectTest {
 
         AssistantMessage agg = resp.snapshotTerminal().getMessage();
         assertNotNull(agg);
-        assertEquals("rs_only_id", agg.getMetadata().get("reasoning_item_id"), agg.toString());
+        assertEquals("rs_only_id", agg.getMetadata().get(
+                OpenaiResponsesMessageStateSupport.AGGREGATION_REASONING_ITEM_ID), agg.toString());
     }
 
     @Test
@@ -749,11 +1196,15 @@ public class OpenaiResponsesDialectTest {
         parse(resp, "data: {\"type\":\"response.output_item.added\","
                 + "\"item\":{\"type\":\"reasoning\",\"id\":\"rs_1\",\"encrypted_content\":\"enc_x\"}}");
         parse(resp, "data: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"思考\"}");
-        int beforeDone = resp.getContentItems().size();
+        assertEquals("思考", resp.getAggregationThinking());
+        assertEquals("思考", resp.getAggregationThinking(),
+                "reasoning delta 和 metadata 应只进入事件聚合");
         parse(resp, "data: {\"type\":\"response.output_item.done\","
                 + "\"item\":{\"type\":\"reasoning\",\"id\":\"rs_1\",\"encrypted_content\":\"enc_x\"}}");
 
-        assertEquals(beforeDone, resp.getContentItems().size(), "元数据已交付，不应重复补消息");
+        assertEquals("思考", resp.getAggregationThinking());
+        assertEquals("思考", resp.getAggregationThinking(),
+                "done 只应补 metadata/signature，不应重复思考内容");
     }
 
     // ==================== 流式工具调用轮（聚合出口） ====================
@@ -793,8 +1244,10 @@ public class OpenaiResponsesDialectTest {
         assertTrue(msg.isToolCalls(), "首条消息必须携带 tool_calls，否则工具不会被执行");
         assertEquals("我来查天气", msg.getText());
         assertEquals("想一下", msg.getThinking());
-        assertEquals("rs_1", msg.getMetadata().get("reasoning_item_id"), msg.toString());
-        assertEquals("enc_x", msg.getMetadata().get("reasoning_encrypted_content"), msg.toString());
+        MessageProtocolState state = msg.getProtocolState(OpenaiResponsesMessageStateSupport.PROTOCOL_ID);
+        assertNotNull(state, msg.toString());
+        assertEquals("rs_1", state.getData().get(OpenaiResponsesMessageStateSupport.REASONING_ITEM_ID));
+        assertEquals("enc_x", state.getData().get(OpenaiResponsesMessageStateSupport.REASONING_ENCRYPTED_CONTENT));
     }
 
     @Test
@@ -828,14 +1281,30 @@ public class OpenaiResponsesDialectTest {
     }
 
     @Test
+    public void assistantHistory_legacyInlineThinkIsStrippedFromTextBlock() throws Exception {
+        List<ContentBlock> blocks = new ArrayList<>();
+        blocks.add(TextBlock.of("<think>private reasoning</think>visible answer"));
+        blocks.add(ImageBlock.ofUrl("https://x/y.png"));
+        ONode legacyJson = ONode.ofJson(ChatMessage.toJson(
+                new AssistantMessage("placeholder", "", null, blocks)));
+        legacyJson.set("text", null);
+        legacyJson.set("content", "<think>private reasoning</think>visible answer");
+        AssistantMessage msg = (AssistantMessage) ChatMessage.fromJson(legacyJson.toJson());
+
+        ONode root = build(ChatOptions.of(), Collections.singletonList((ChatMessage) msg));
+        String json = root.toJson();
+        assertTrue(json.contains("visible answer"), json);
+        assertFalse(json.contains("private reasoning"), json);
+    }
+
+    @Test
     public void assistantHistory_newModelTextBlockNotStripped() {
         // 4.1 起 text/thinking 已物理分离，TextBlock 不再内嵌 think 标签；
         // 正文恰以 <think> 开头的合法文本不能被当作思考剔除
         List<ContentBlock> blocks = new ArrayList<>();
         blocks.add(TextBlock.of("<think> 标签的用法说明"));
         blocks.add(ImageBlock.ofUrl("https://x/y.png"));
-        AssistantMessage msg = new AssistantMessage("<think> 标签的用法说明", "", false,
-                null, null, null, null, blocks);
+        AssistantMessage msg = new AssistantMessage("<think> 标签的用法说明", "", null, blocks);
 
         ONode root = build(ChatOptions.of(), Collections.singletonList((ChatMessage) msg));
 
@@ -863,8 +1332,7 @@ public class OpenaiResponsesDialectTest {
                 + "{\"type\":\"response.output_text.delta\",\"delta\":\"所有代码修改完成。更新任务进度并运行验证\"}");
 
         assertEquals("所有代码修改完成。所有代码修改完成。更新任务进度并运行验证",
-                resp.getContentItems().get(0).getTextRaw()
-                        + resp.getContentItems().get(1).getTextRaw());
+                resp.getAggregationText());
     }
 
     @Test
@@ -877,18 +1345,9 @@ public class OpenaiResponsesDialectTest {
                         + "{\"type\":\"response.reasoning_summary_text.delta\",\"item_id\":\"rs_1\",\"delta\":\"正在分析\"}\n"
                         + "{\"type\":\"response.reasoning_summary_text.delta\",\"item_id\":\"rs_1\",\"delta\":\"请求参数\"}");
 
-        assertEquals(2, resp.getContentItems().size(), resp.toString());
-        assertTrue(resp.getContentItems().get(0).isThinking(), resp.toString());
-        assertTrue(resp.getContentItems().get(1).isThinking(), resp.toString());
-        assertEquals("正在分析", resp.getContentItems().get(0).getThinkingRaw());
-        assertEquals("请求参数", resp.getContentItems().get(1).getThinkingRaw());
-
-        // parser 只负责产出分片；核心 ChatRequestDesc 发布分片时才写入 aggregationThinking。
-        StringBuilder thinking = new StringBuilder();
-        for (AssistantMessage choice : resp.getContentItems()) {
-            thinking.append(choice.getThinkingRaw());
-        }
-        assertEquals("正在分析请求参数", thinking.toString());
+        assertEquals("正在分析请求参数", resp.getAggregationThinking());
+        assertEquals("正在分析请求参数", resp.getAggregationThinking(),
+                "reasoning delta 应直接进入事件聚合");
     }
 
     @Test
@@ -900,9 +1359,8 @@ public class OpenaiResponsesDialectTest {
                 + "{\"type\":\"response.reasoning_text.delta\",\"delta\":\"补登README目录结构\"}\n"
                 + "{\"type\":\"response.reasoning_text.delta\",\"delta\":\"补登README目录结构(新增composables/)\"}");
 
-        assertEquals("补登README目录结构(新增composables/)",
-                resp.getContentItems().get(0).getThinkingRaw()
-                        + resp.getContentItems().get(1).getThinkingRaw());
+        assertEquals("补登README目录结构(新增composables/)", resp.getAggregationThinking());
+        assertEquals("补登README目录结构(新增composables/)", resp.getAggregationThinking());
     }
 
     @Test
@@ -914,11 +1372,7 @@ public class OpenaiResponsesDialectTest {
                 + "{\"type\":\"response.output_text.delta\",\"delta\":\"好\"}\n"
                 + "{\"type\":\"response.output_text.delta\",\"delta\":\"好的\"}");
 
-        StringBuilder buf = new StringBuilder();
-        for (AssistantMessage choice : resp.getContentItems()) {
-            buf.append(choice.getTextRaw());
-        }
-        assertEquals("好好的", buf.toString());
+        assertEquals("好好的", resp.getAggregationText());
     }
 
     @Test
@@ -930,11 +1384,10 @@ public class OpenaiResponsesDialectTest {
                 + "{\"type\":\"response.output_text.delta\",\"delta\":\"所有代码修改完成。更新任务进度\"}\n"
                 + "{\"type\":\"response.output_text.delta\",\"delta\":\"所有代码修改完成。更新任务进度\"}");
 
-        assertEquals(3, resp.getContentItems().size(), "官方 delta 即使内容相同也都是新增负载");
+        assertEquals(3, resp.getAggregationText().split("所有代码修改完成。", -1).length - 1,
+                "官方 delta 即使内容相同也都是新增负载");
         assertEquals("所有代码修改完成。所有代码修改完成。更新任务进度所有代码修改完成。更新任务进度",
-                resp.getContentItems().get(0).getTextRaw()
-                        + resp.getContentItems().get(1).getTextRaw()
-                        + resp.getContentItems().get(2).getTextRaw());
+                resp.getAggregationText());
     }
     @Test
     public void streamDoneEvents_supplyFinalPayloadWhenDeltasAreMissing() {
@@ -944,8 +1397,8 @@ public class OpenaiResponsesDialectTest {
         parseStream(resp, "{\"type\":\"response.reasoning_summary_text.done\",\"item_id\":\"rs_1\","
                 + "\"summary_index\":0,\"text\":\"summary text\"}");
 
-        assertEquals("done text", resp.getContentItems().get(0).getText());
-        assertEquals("summary text", resp.getContentItems().get(1).getThinking());
+        assertEquals("done text", resp.getAggregationText());
+        assertEquals("summary text", resp.getAggregationThinking());
     }
 
     @Test
@@ -953,7 +1406,7 @@ public class OpenaiResponsesDialectTest {
         ChatAccumulator resp = newResponse(true);
         parseStream(resp, "{\"type\":\"response.content_part.done\",\"item_id\":\"msg_1\","
                 + "\"content_index\":0,\"part\":{\"type\":\"output_text\",\"text\":\"part text\"}}");
-        assertEquals("part text", resp.getContentItems().get(0).getText());
+        assertEquals("part text", resp.getAggregationText());
     }
 
     @Test
@@ -961,7 +1414,7 @@ public class OpenaiResponsesDialectTest {
         ChatAccumulator resp = newResponse(true);
         parseStream(resp, "{\"type\":\"response.refusal.done\",\"item_id\":\"msg_1\","
                 + "\"content_index\":0,\"refusal\":\"拒答内容\"}");
-        assertEquals("拒答内容", resp.getContentItems().get(0).getText());
+        assertEquals("拒答内容", resp.getAggregationText());
     }
 
     @Test
@@ -971,8 +1424,10 @@ public class OpenaiResponsesDialectTest {
                 + "{\"type\":\"message\",\"role\":\"assistant\",\"phase\":\"commentary\","
                 + "\"content\":[{\"type\":\"output_text\",\"text\":\"answer\"}]}]}";
         assertTrue(parse(resp, responseJson));
-        AssistantMessage message = resp.getContentItems().get(0);
-        assertEquals("commentary", message.getMetadata().get("phase"));
+        AssistantMessage message = resp.snapshotTerminal().getMessage();
+        MessageProtocolState state = message.getProtocolState(OpenaiResponsesMessageStateSupport.PROTOCOL_ID);
+        assertNotNull(state, message.toString());
+        assertEquals("commentary", state.getData().get(OpenaiResponsesMessageStateSupport.PHASE));
 
         ONode replay = build(ChatOptions.of(), Collections.singletonList(message));
         assertEquals("commentary", replay.get("input").get(0).get("phase").getString(), replay.toJson());
@@ -1042,9 +1497,7 @@ public class OpenaiResponsesDialectTest {
                 + "{\"type\":\"response.output_text.delta\",\"item_id\":\"msg_1\",\"content_index\":1,\"delta\":\"ijklmnop\"}\n"
                 + "{\"type\":\"response.output_text.delta\",\"item_id\":\"msg_1\",\"content_index\":0,\"delta\":\"abcdefghUPDATED\"}");
 
-        StringBuilder text = new StringBuilder();
-        for (AssistantMessage item : resp.getContentItems()) text.append(item.getTextRaw());
-        assertEquals("abcdefghijklmnopabcdefghUPDATED", text.toString());
+        assertEquals("abcdefghijklmnopabcdefghUPDATED", resp.getAggregationText());
     }
 
     @Test
@@ -1064,12 +1517,38 @@ public class OpenaiResponsesDialectTest {
         parse(resp, "{\"id\":\"resp_1\",\"model\":\"gpt-5.4\",\"status\":\"completed\",\"output\":["
                 + "{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":["
                 + "{\"type\":\"output_audio\",\"data\":\"QUJD\",\"transcript\":\"hello\"}]}]}");
-        AssistantMessage msg = resp.getContentItems().get(0);
+        AssistantMessage msg = resp.snapshotTerminal().getMessage();
         assertEquals("hello", msg.getText());
         assertTrue(msg.getBlocks().get(1) instanceof AudioBlock);
         AudioBlock audio = (AudioBlock) msg.getBlocks().get(1);
         assertEquals("QUJD", audio.getData());
         assertEquals("hello", audio.metas().get("transcript"));
+    }
+
+    @Test
+    public void streamOutputAudioMatchesNonStreamTerminalShape() {
+        String output = "[{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":["
+                + "{\"type\":\"output_audio\",\"data\":\"QUJD\",\"transcript\":\"hello\"}]}]";
+
+        ChatAccumulator call = newResponse(false);
+        parse(call, "{\"id\":\"resp_1\",\"model\":\"gpt-5.4\",\"status\":\"completed\",\"output\":"
+                + output + "}");
+
+        ChatAccumulator stream = newResponse(true);
+        parseStream(stream, "{\"type\":\"response.output_audio.delta\",\"delta\":\"QUJD\"}");
+        parseStream(stream, "{\"type\":\"response.output_audio.done\"}");
+        parseStream(stream, "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"output\":"
+                + output + "}}");
+
+        AssistantMessage callMessage = call.snapshotTerminal().getMessage();
+        AssistantMessage streamMessage = stream.snapshotTerminal().getMessage();
+        assertEquals(callMessage.getText(), streamMessage.getText());
+        assertEquals(1, streamMessage.getBlocks().stream().filter(b -> b instanceof AudioBlock).count());
+        AudioBlock callAudio = (AudioBlock) callMessage.getBlocks().get(1);
+        AudioBlock streamAudio = (AudioBlock) streamMessage.getBlocks().stream()
+                .filter(b -> b instanceof AudioBlock).findFirst().get();
+        assertEquals(callAudio.getData(), streamAudio.getData());
+        assertEquals(callAudio.metas().get("transcript"), streamAudio.metas().get("transcript"));
     }
 
     @Test
@@ -1083,7 +1562,8 @@ public class OpenaiResponsesDialectTest {
                 + "{\"type\":\"message\",\"id\":\"msg_2\",\"status\":\"completed\",\"role\":\"assistant\",\"phase\":\"final_answer\","
                 + "\"content\":[{\"type\":\"output_text\",\"text\":\"done\",\"annotations\":[],\"logprobs\":[]}]}]}");
 
-        ONode replay = build(ChatOptions.of(), Collections.singletonList(resp.getContentItems().get(0)));
+        ONode replay = build(ChatOptions.of(), Collections.singletonList(
+                resp.snapshotTerminal().getMessage()));
         assertEquals("reasoning", replay.get("input").get(0).get("type").getString());
         assertEquals("rs_1", replay.get("input").get(0).get("id").getString());
         assertEquals("commentary", replay.get("input").get(1).get("phase").getString());
@@ -1153,8 +1633,8 @@ public class OpenaiResponsesDialectTest {
                 + "\"content_index\":0,\"delta\":\"abcdefgh\"}\n"
                 + "{\"type\":\"response.reasoning_text.delta\",\"item_id\":\"rs_1\","
                 + "\"content_index\":0,\"delta\":\"abcdefghX\"}");
-        assertEquals("abcdefghabcdefghX", official.getContentItems().get(0).getThinkingRaw()
-                + official.getContentItems().get(1).getThinkingRaw());
+        assertEquals("abcdefghabcdefghX", official.getAggregationThinking());
+        assertEquals("abcdefghabcdefghX", official.getAggregationThinking());
 
         ChatAccumulator compatible = newResponse(true,
                 ChatOptions.of().optionSet("responses_reasoning_delta_mode", "snapshot"));
@@ -1162,8 +1642,8 @@ public class OpenaiResponsesDialectTest {
                 + "\"content_index\":0,\"delta\":\"abcdefgh\"}\n"
                 + "{\"type\":\"response.reasoning_text.delta\",\"item_id\":\"rs_1\","
                 + "\"content_index\":0,\"delta\":\"abcdefghX\"}");
-        assertEquals("abcdefghX", compatible.getContentItems().get(0).getThinkingRaw()
-                + compatible.getContentItems().get(1).getThinkingRaw());
+        assertEquals("abcdefghX", compatible.getAggregationThinking());
+        assertEquals("abcdefghX", compatible.getAggregationThinking());
     }
 
     @Test
@@ -1186,11 +1666,10 @@ public class OpenaiResponsesDialectTest {
                 + "\"content\":[{\"type\":\"reasoning_text\",\"text\":\"think\"}],\"summary\":[]}]}}";
         parseStream(resp, completed);
         parseStream(resp, completed);
-        int thinkingItems = 0;
-        for (AssistantMessage item : resp.getContentItems()) {
-            if (item.isThinking() && (item.getThinkingRaw() != null || item.hasMetadata())) thinkingItems++;
-        }
-        assertEquals(1, thinkingItems);
+        assertEquals("think", resp.getAggregationThinking());
+        AssistantMessage terminal = resp.snapshotTerminal().getMessage();
+        assertNotNull(terminal);
+        assertEquals("think", terminal.getThinking());
     }
 
     @Test
@@ -1201,7 +1680,7 @@ public class OpenaiResponsesDialectTest {
                 + "\"content\":[{\"type\":\"reasoning_text\",\"text\":\"first\"}]},"
                 + "{\"id\":\"rs_2\",\"type\":\"reasoning\",\"content\":[],"
                 + "\"summary\":[{\"type\":\"summary_text\",\"text\":\"second\"}]}]}");
-        assertEquals("firstsecond", resp.getContentItems().get(0).getThinkingRaw());
+        assertEquals("firstsecond", resp.snapshotTerminal().getMessage().getThinkingRaw());
     }
 
     @Test
@@ -1211,7 +1690,8 @@ public class OpenaiResponsesDialectTest {
                 + "{\"id\":\"ws_1\",\"type\":\"web_search_call\",\"status\":\"completed\",\"action\":{\"type\":\"search\",\"query\":\"solon\"}},"
                 + "{\"id\":\"msg_1\",\"type\":\"message\",\"status\":\"completed\",\"role\":\"assistant\","
                 + "\"content\":[{\"type\":\"output_text\",\"text\":\"ok\",\"annotations\":[],\"logprobs\":[]}]}]}");
-        ONode root = build(ChatOptions.of(), Collections.singletonList(resp.getContentItems().get(0)));
+        ONode root = build(ChatOptions.of(), Collections.singletonList(
+                resp.snapshotTerminal().getMessage()));
         assertEquals("web_search_call", root.get("input").get(0).get("type").getString());
         assertEquals("message", root.get("input").get(1).get("type").getString());
         assertEquals("msg_1", root.get("input").get(1).get("id").getString());

@@ -92,6 +92,15 @@ public interface FunctionTool extends Tool {
 
 
     /**
+     * 是否启用严格模式（null 表示交由方言或服务端默认处理）
+     *
+     * @since 4.1
+     */
+    default Boolean strict() {
+        return null;
+    }
+
+    /**
      * 是否直接返回给调用者
      */
      boolean returnDirect();

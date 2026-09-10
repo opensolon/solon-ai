@@ -17,6 +17,7 @@ package org.noear.solon.ai.chat;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
@@ -280,7 +281,10 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         }
 
         //与流式对称：响应体不是 JSON 时给出指向配置的错误，而不是抛一个裸 JSON 解析异常
-        if (Assert.isNotEmpty(respJson) && isModelFrameShape(respJson) == false) {
+        if (Assert.isEmpty(respJson)) {
+            throw new ChatException("LLM response is empty. Check the upstream service and apiUrl config.");
+        }
+        if (isModelFrameShape(respJson) == false) {
             throw new ChatException("LLM response is unrecognizable: not a json body."
                     + " Check the apiUrl and standard/provider config. body: " + abbreviate(respJson));
         }
@@ -295,8 +299,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             throw acc.getError();
         }
 
-        if (acc.hasContentItems()) {
-            AssistantMessage itemMessage = acc.lastItem();
+        AssistantMessage itemMessage = acc.snapshotTerminal().getMessage();
+        if (itemMessage != null) {
             session.addMessage(itemMessage); //添加到记忆
 
             if (options.isAutoToolCall() && Assert.isNotEmpty(itemMessage.getToolCalls())) {
@@ -310,7 +314,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                     itemMessage = dialect.buildAssistantMessageByToolMessages(itemMessage, returnDirectMessages);
                     acc.reset();
                     acc.lastFinishReason = "tool";
-                    acc.addContentItem(itemMessage);
+                    acc.replaceTerminalMessage(itemMessage);
                     session.addMessage(itemMessage); //添加到记忆
                 }
             }
@@ -340,8 +344,9 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             final ChatStreamSession streamSession = new ChatStreamSession();
             final ChatEventNormalizer normalizer = new ChatEventNormalizer();
             final AtomicReference<ChatResponse> lastRespRef = new AtomicReference<>();
-            //方言已自行发过 ERROR 时不重复发（但仍要占用终止门閃）
-            final AtomicBoolean errorEmitted = new AtomicBoolean(false);
+            final AtomicReference<ChatAccumulator> currentAccRef = new AtomicReference<>();
+            // 方言错误事件先暂存，统一在内容/工具/步骤边界收口后作为最后一个事件发出。
+            final AtomicReference<ChatEvent> errorEventRef = new AtomicReference<>();
 
             Flux<ChatEvent> head = Flux.defer(() -> {
                 if (streamSession.markResponseStarted()) {
@@ -352,25 +357,29 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 return Flux.empty();
             });
 
-            Flux<ChatEvent> body = head.concatWith(internalStream(streamSession, lastRespRef))
-                    .concatMapIterable(event -> {
+            Flux<ChatEvent> body = head.concatWith(internalStream(streamSession, lastRespRef, currentAccRef))
+                    .concatMap(event -> {
+                        // ERROR 是终态，必须转成 Reactor 错误信号；tail 会先补齐内容/工具/步骤边界，
+                        // 再把保留原始协议字段的 ERROR 作为最后一个 ChatEvent 发出。
+                        if (event.getType() == ChatEventType.ERROR) {
+                            errorEventRef.compareAndSet(null, event);
+                            ChatException error = event.getError() == null
+                                    ? new ChatException("LLM stream emitted an ERROR event without an error payload")
+                                    : event.getError();
+                            return Flux.error(error);
+                        }
+
                         List<ChatEvent> buf = new ArrayList<>(2);
                         normalizer.apply(event, buf::add);
-
-                        for (ChatEvent e : buf) {
-                            if (e.getType() == ChatEventType.ERROR) {
-                                errorEmitted.set(true);
-                            }
-                        }
-                        return buf;
+                        return Flux.fromIterable(buf);
                     });
 
             //异常终止时也要跑收尾：Flux.concat 在 onError 时不会订阅第二个 publisher，
             //单靠 concatWith(tail) 会让失败路径上的块补齐、STEP 配平与终止事件全部丢失。
             return body.onErrorResume(err ->
-                            tail(streamSession, normalizer, lastRespRef, errorEmitted, err)
+                            tail(streamSession, normalizer, lastRespRef, currentAccRef, errorEventRef, err)
                                     .concatWith(Flux.error(err)))
-                    .concatWith(tail(streamSession, normalizer, lastRespRef, errorEmitted, null))
+                    .concatWith(tail(streamSession, normalizer, lastRespRef, currentAccRef, errorEventRef, null))
                     .filter(filter::test);
         });
     }
@@ -382,32 +391,68 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      */
     private Flux<ChatEvent> tail(ChatStreamSession streamSession, ChatEventNormalizer normalizer,
                                  AtomicReference<ChatResponse> lastRespRef,
-                                 AtomicBoolean errorEmitted, Throwable err) {
+                                 AtomicReference<ChatAccumulator> currentAccRef,
+                                 AtomicReference<ChatEvent> errorEventRef, Throwable err) {
         return Flux.defer(() -> {
-            List<ChatEvent> buf = new ArrayList<>(4);
+            List<ChatEvent> buf = new ArrayList<>(6);
 
-            //归一化收尾：补齐未闭合的内容块、工具调用与步骤
+            if (err != null) {
+                // 失败步骤也必须带可打捞的部分聚合，并在 ERROR 之前配平 STEP。
+                ChatAccumulator currentAcc = currentAccRef.get();
+                if (currentAcc != null) {
+                    ChatResponse partial = currentAcc.snapshotTerminal();
+                    lastRespRef.set(partial);
+                    streamSession.accumulateUsage(currentAcc.getUsage());
+                    normalizer.apply(ChatEventDefault.of(ChatEventType.STEP_END)
+                            .responseId(streamSession.getResponseId())
+                            .step(streamSession.getStep())
+                            .response(partial)
+                            .usage(currentAcc.getUsage())
+                            .build(), buf::add);
+                }
+            }
+
+            //归一化收尾：补齐没有业务步骤载荷可构造的残余边界
             normalizer.complete(buf::add);
 
             //终止事件全流恰好一个：正常为 RESPONSE_END，失败为 ERROR
             if (streamSession.markResponseEnded()) {
+                AiUsage totalUsage = streamSession.getTotalUsage();
                 if (err == null) {
+                    ChatAccumulator currentAcc = currentAccRef.get();
+                    ChatResponse response = currentAcc == null
+                            ? (lastRespRef.get() == null ? null
+                            : new ChatResponseDefault(lastRespRef.get(), totalUsage))
+                            : currentAcc.snapshotTerminal(totalUsage);
                     buf.add(ChatEventDefault.of(ChatEventType.RESPONSE_END)
                             .responseId(streamSession.getResponseId())
                             .step(streamSession.getStep())
-                            .response(lastRespRef.get())
-                            .usage(streamSession.getTotalUsage())
+                            .response(response)
+                            .usage(totalUsage)
                             .build());
-                } else if (errorEmitted.compareAndSet(false, true)) {
-                    //response 携带已完成部分，便于订阅方打捞部分结果
-                    buf.add(ChatEventDefault.of(ChatEventType.ERROR)
+                } else {
+                    ChatEvent source = errorEventRef.get();
+                    ChatEventDefault.Builder errorBuilder = ChatEventDefault.of(ChatEventType.ERROR)
                             .responseId(streamSession.getResponseId())
                             .step(streamSession.getStep())
                             .error(err instanceof ChatException
                                     ? (ChatException) err : new ChatException(err))
                             .response(lastRespRef.get())
-                            .usage(streamSession.getTotalUsage())
-                            .build());
+                            .usage(totalUsage);
+                    if (source != null) {
+                        errorBuilder.rawType(source.getRawType())
+                                .subType(source.getSubType())
+                                .providerResponseId(source.getProviderResponseId())
+                                .itemId(source.getItemId())
+                                .toolCallId(source.getToolCallId())
+                                .index(source.getIndex())
+                                .text(source.getText())
+                                .toolCall(source.getToolCall())
+                                .block(source.getBlock())
+                                .raw(source.getRaw())
+                                .attrs(source.getAttrs());
+                    }
+                    buf.add(errorBuilder.build());
                 }
             }
 
@@ -473,12 +518,13 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     }
 
     private Flux<ChatEvent> internalStream(ChatStreamSession streamSession,
-                                           AtomicReference<ChatResponse> lastRespRef) {
+                                           AtomicReference<ChatResponse> lastRespRef,
+                                           AtomicReference<ChatAccumulator> currentAccRef) {
         //构建请求数据（每次请求重新构建 finalPrompt）
         ChatRequest req = new ChatRequest(config, dialect, options, session, systemMessage, originalPrompt, true);
 
         StreamChain chain = new StreamChain(options.interceptors(),
-                r -> doStream(r, streamSession, lastRespRef));
+                r -> doStream(r, streamSession, lastRespRef, currentAccRef));
 
         return chain.doIntercept(req)
                 .timeout(config.getTimeout())
@@ -501,7 +547,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      * 流响应
      */
     private Flux<ChatEvent> doStream(ChatRequest req, ChatStreamSession streamSession,
-                                     AtomicReference<ChatResponse> lastRespRef) {
+                                     AtomicReference<ChatResponse> lastRespRef,
+                                     AtomicReference<ChatAccumulator> currentAccRef) {
         HttpUtils httpUtils = dialect.createHttpUtils(config, req.isStream());
         if(req.getOptions().httpCustomize() != null){
             req.getOptions().httpCustomize().accept(httpUtils);
@@ -517,7 +564,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 .flatMapMany(resp -> {
                     try {
                         if (resp.code() < 400) {
-                            return parseResp(req, resp, streamSession, lastRespRef);
+                            return parseResp(req, resp, streamSession, lastRespRef, currentAccRef);
                         } else {
                             return Flux.error(resp.createError());
                         }
@@ -529,7 +576,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     }
 
     private Flux<ChatEvent> parseResp(ChatRequest req, HttpResponse httpResp, ChatStreamSession streamSession,
-                                      AtomicReference<ChatResponse> lastRespRef) throws IOException {
+                                      AtomicReference<ChatResponse> lastRespRef,
+                                      AtomicReference<ChatAccumulator> currentAccRef) throws IOException {
         ChatAccumulator acc = new ChatAccumulator(req, true);
         String contentType = httpResp.header("Content-Type");
 
@@ -540,13 +588,11 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             return Flux.error(new ChatException(mimeErr));
         }
 
+        currentAccRef.set(acc);
         return Flux.<ChatEvent>create(sink -> {
             final int step = streamSession.nextStep();
 
-            // 方言 SPI 契约（4.1 起）：内容主干（正文 / 思考 / 工具调用）一律由方言写入内容项，
-            // 核心统一转换为 TEXT_*/THINKING_*/TOOL_CALL_* 事件；方言直接发射的事件仅限
-            // 旁路与元数据（ERROR / HEARTBEAT / CITATION / SERVER_TOOL_* / THINKING_SIGNATURE 等）。
-            // 内容因此只有一条转换路径，不存在第二套「方言自产主干事件」的并行真源。
+            // 方言 SPI 契约（4.1 Event-first）：所有语义事件统一经 ctx.emit，先归并到累积器再投递。
             final ChatStreamContext ctx = newContext(req, acc, streamSession, step, sink::next);
 
             //本步收到的非空帧数，以及其中「形似模型帧」的帧数（守卫二用，见 onComplete）
@@ -596,15 +642,25 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                             try {
                                 //守卫二（响应体边界）：收到了内容，但没有一帧形似模型帧
                                 //→ 响应体不是模型流，不能当成「正常的空流」静默完成
-                                if (frameCount.get() > 0 && modelFrameCount.get() == 0) {
+                                if (frameCount.get() == 0) {
+                                    sink.error(new ChatException("LLM stream response is empty. Check the upstream service and apiUrl config."));
+                                    return;
+                                }
+                                if (modelFrameCount.get() == 0) {
                                     sink.error(new ChatException("LLM stream response is unrecognizable:"
                                             + " no model frame in " + frameCount.get() + " frame(s)."
                                             + " Check the apiUrl and standard/provider config. last frame: "
                                             + abbreviate(acc.getFrameRaw())));
                                     return;
                                 }
+                                if (acc.isFinished() == false) {
+                                    sink.error(new ChatException("LLM stream response ended before a completion signal."
+                                            + " The response may be truncated. last frame: "
+                                            + abbreviate(acc.getFrameRaw())));
+                                    return;
+                                }
 
-                                onEventEnd(ctx, sink, resources, streamSession, lastRespRef);
+                                onEventEnd(ctx, sink, resources, streamSession, lastRespRef, currentAccRef);
                             } catch (Throwable e) {
                                 sink.error(e);
                             }
@@ -619,24 +675,21 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     }
 
     private void onEventEnd(ChatStreamContext ctx, FluxSink<ChatEvent> sink, Disposable.Composite resources,
-                            ChatStreamSession streamSession, AtomicReference<ChatResponse> lastRespRef) {
+                            ChatStreamSession streamSession, AtomicReference<ChatResponse> lastRespRef,
+                            AtomicReference<ChatAccumulator> currentAccRef) {
         ChatAccumulator acc = ctx.getAccumulator();
 
         // 流结束时思考仍未闭合（模型整轮只吐 reasoning，既无正文也无 tool_calls）：
-        // 补一帧 `</think>`，保证聚合文本良构（事件边界另由 ChatEventNormalizer 保证）。
+        // 事件归一化器会在 STEP_END 前补 THINKING_END；这里只关闭解析状态，不再制造空分片消息。
         if (acc.in_thinking) {
             acc.in_thinking = false;
-            acc.reset();
-            AssistantMessage item = new AssistantMessage("", "", true)
-                    .reasoningFieldName(acc.reasoning_field_name);
-            acc.addContentItem(item);
-            publishItem(sink, ctx, item);
         }
 
         boolean memoryWritten = false;
 
         if (acc.getToolCallBuilders().size() > 0) {
-            ToolCallOutcome outcome = buildStreamToolCallMessage(ctx, sink, resources, streamSession, lastRespRef);
+            ToolCallOutcome outcome = buildStreamToolCallMessage(ctx, sink, resources, streamSession,
+                    lastRespRef, currentAccRef);
 
             if (outcome == ToolCallOutcome.RECURSED) {
                 return; // 进入了内部递归流处理，不执行 complete
@@ -654,6 +707,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         }
 
         emitStepEnd(ctx, sink, streamSession, lastRespRef);
+        currentAccRef.compareAndSet(acc, null);
 
         sink.complete();
     }
@@ -704,6 +758,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
         acc.reset();
 
+        long usageVersion = acc.getUsageVersion();
         dialect.parseResponseJson(ctx, event.getData());
 
         if (acc.getError() != null) {
@@ -711,81 +766,33 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             return false;
         }
 
-        if (acc.hasContentItems()) {
-            AssistantMessage itemMessage = acc.lastItem();
-            if (itemMessage != null && Assert.isNotEmpty(itemMessage.getToolCalls())) {
-                buildToolCallBuilder(acc, itemMessage);
-            }
-
-            // 拆分内容项并在当前 Sink 中发射
-            List<AssistantMessage> items = new ArrayList<>(acc.getContentItems());
-            for (AssistantMessage item : items) {
-                acc.reset();
-                acc.addContentItem(item);
-                publishItem(sink, ctx, item);
-            }
-        } else {
-            // 流式仅 media（如 image_generation_call.done）：无内容项也要推。
-            // 取「本帧新增」而非最后一块：一帧可解析出多块（多图），且 acc.mediaBlocks 是跨帧累积、
-            // reset() 不清，直接读末块会漏发其余块，并在后续无内容帧里把同一块反复重发
-            boolean mediaEmitted = emitMediaDone(ctx, sink, acc.getMediaBlocks());
-
-            if (mediaEmitted == false && acc.getUsage() != null) {
-                acc.addContentItem(new AssistantMessage(""));
-                sink.next(ctx.event(ChatEventType.USAGE)
-                        .usage(acc.getUsage())
-                        .response(acc.snapshotFrame())
-                        .build());
-            }
+        // MEDIA_DONE 由方言在发现媒体时直接发射并归并；usage 与内容/媒体是正交事件。
+        // 只能在方言于当前帧提交了新快照时发射，不能把跨帧累计状态当成每帧新事件。
+        if (acc.getUsage() != null && acc.getUsageVersion() != usageVersion) {
+            ctx.emit(ctx.event(ChatEventType.USAGE)
+                    .usage(acc.getUsage())
+                    .response(acc.snapshotFrame())
+                    .build());
         }
 
         return true;
     }
 
-    /**
-     * 发射媒体到达事件（逐块、跨帧去重）
-     *
-     * <p>两个发射点共用：内容项路径（{@link #emitItemEvents}）与「无内容项的侧车媒体」路径。
-     * 去重登记在流上下文（每步一个），因此同一块只会有一个 {@code MEDIA_DONE}，前端不会重复渲染。</p>
-     *
-     * @return 是否发出了新的媒体事件
-     */
-    private boolean emitMediaDone(ChatStreamContext ctx, FluxSink<ChatEvent> sink, List<ContentBlock> blocks) {
+    /** 将 returnDirect 合成消息中的媒体逐块发射为事件。 */
+    private void emitMediaDone(ChatStreamContext ctx, List<ContentBlock> blocks) {
         if (Utils.isEmpty(blocks)) {
-            return false;
+            return;
         }
-
-        ChatAccumulator acc = ctx.getAccumulator();
-        List<ContentBlock> emitted = emittedMediaBlocks(ctx);
-        boolean any = false;
 
         for (ContentBlock block : blocks) {
             if (block == null || block instanceof TextBlock) {
-                //文本不是媒体（走 TEXT_DELTA）
                 continue;
             }
 
-            if (acc.containsEquivalentMedia(emitted, block)) {
-                continue;
-            }
-
-            emitted.add(block);
-            any = true;
-
-            sink.next(ctx.event(ChatEventType.MEDIA_DONE)
+            ctx.emit(ctx.event(ChatEventType.MEDIA_DONE)
                     .block(block)
                     .build());
         }
-
-        return any;
-    }
-
-    /**
-     * 已发过 {@code MEDIA_DONE} 的媒体块（本步）
-     */
-    @SuppressWarnings("unchecked")
-    private List<ContentBlock> emittedMediaBlocks(ChatStreamContext ctx) {
-        return ctx.attrIfAbsent("__emittedMediaBlocks", k -> new ArrayList<ContentBlock>());
     }
 
     /**
@@ -812,7 +819,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
     private ToolCallOutcome buildStreamToolCallMessage(ChatStreamContext ctx, FluxSink<ChatEvent> sink,
                                                        Disposable.Composite resources, ChatStreamSession streamSession,
-                                                       AtomicReference<ChatResponse> lastRespRef) {
+                                                       AtomicReference<ChatResponse> lastRespRef,
+                                                       AtomicReference<ChatAccumulator> currentAccRef) {
         ChatAccumulator acc = ctx.getAccumulator();
 
         try {
@@ -827,15 +835,24 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
             session.addMessage(assistantMessages);
 
+            // 一帧只产出一条聚合消息（思考+正文+工具调用同属该消息）。
+            // 这里不再做“从多条里挑带工具调用的那条”的位置猜测：分词产生多条消息本身就是缺陷，
+            // 会让终态聚合与工具调用载体变成两个对象。
+            AssistantMessage toolCallMessage = assistantMessages.get(0);
+            if (Assert.isEmpty(toolCallMessage.getToolCalls())) {
+                log.debug("The tool call resolution produced no tool call message, ending the streaming response");
+                return ToolCallOutcome.COMPLETE;
+            }
+
             //参数拼接已完成：每个真实工具调用发一个完成信号（在执行之前）
-            emitToolCallEnd(ctx, sink, assistantMessages.get(0));
+            emitToolCallEnd(ctx, toolCallMessage);
 
             if (options.isAutoToolCall()) {
-                AssistantMessage itemMessage = assistantMessages.get(0);
+                AssistantMessage itemMessage = toolCallMessage;
                 //工具执行结果对流可见。
                 //注意：递归分支与 returnDirect 分支都要发，且必须在 STEP_END 之前（工具结果属于本步）
                 List<ToolMessage> returnDirectMessages = buildToolMessage(acc, itemMessage,
-                        (call, tm) -> sink.next(ctx.event(ChatEventType.TOOL_RESULT)
+                        (call, tm) -> ctx.emit(ctx.event(ChatEventType.TOOL_RESULT)
                                 .toolCallId(tm.getToolCallId())
                                 .toolCall(call)
                                 .text(tm.getContent())
@@ -843,16 +860,16 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
                 if (Assert.isEmpty(returnDirectMessages)) {
                     //本步结束（必须在递归产生新的 STEP_START 之前发，以保 STEP 配平）。
-                    //先把组装好的完整工具调用装回累积器：分步聚合取 lastItem().getToolCalls()，
-                    //若仍停在参数分片状态，从 STEP_END 只能读到最后一个参数分片。
+                    //先把组装好的完整工具调用写入终态载体，供 STEP_END 聚合消息与历史回放使用。
                     acc.reset();
                     acc.lastFinishReason = "tool";
-                    acc.addContentItem(itemMessage);
+                    acc.mergeTerminalMessage(itemMessage);
 
                     emitStepEnd(ctx, sink, streamSession, lastRespRef);
+                    currentAccRef.compareAndSet(acc, null);
 
                     // 加入同一个 CompositeDisposable，避免再次 sink.onDispose 导致立即 dispose
-                    Disposable disposable = internalStream(streamSession, lastRespRef).subscribe(
+                    Disposable disposable = internalStream(streamSession, lastRespRef, currentAccRef).subscribe(
                             sink::next,
                             sink::error,
                             sink::complete
@@ -866,21 +883,19 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
                     acc.reset();
                     acc.lastFinishReason = "tool";
-                    acc.addContentItem(message);
-                    publishItem(sink, ctx, message);
+                    acc.replaceTerminalMessage(message);
+                    emitSyntheticMessage(ctx, message);
                     //这条 returnDirect 合成消息尚未入记忆，交由外层收尾写入
                     return ToolCallOutcome.COMPLETE;
                 }
             } else {
-                AssistantMessage message = assistantMessages.get(0);
                 acc.reset();
                 acc.lastFinishReason = "tool";
-                acc.addContentItem(message);
+                acc.mergeTerminalMessage(toolCallMessage);
 
-                // 关闭自动工具调用时，工具调用交回调用方：此处只更新聚合状态，不再发射事件。
-                // 这条组装出来的消息与前面各分片是同一批工具调用，若再走 publishItem 会
-                // 重复发一次 TOOL_CALL_START，并把已流式发送过的完整参数再发一次 ARGS_DELTA。
-                // 完成信号已由 emitToolCallEnd 发过；工具调用本身通过 STEP_END / RESPONSE_END 交付。
+                // 关闭自动工具调用时，工具调用交回调用方：此处只更新聚合状态，不重复发射
+                // TOOL_CALL_START / ARGS_DELTA。完成信号已由 emitToolCallEnd 发过；
+                // 工具调用本身通过 STEP_END / RESPONSE_END 交付。
                 //
                 // 记忆已在上方 session.addMessage(assistantMessages) 写过：外层不能再写，
                 // 否则历史里会出现两条同批 tool_calls 的 assistant 消息。
@@ -893,46 +908,13 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         }
     }
 
-    private void publishItem(FluxSink<ChatEvent> sink, ChatStreamContext ctx, AssistantMessage acm) {
-        publishItem(sink, ctx, acm, true);
+    /** 将 returnDirect 合成的最终消息投影为事件。 */
+    private void emitSyntheticMessage(ChatStreamContext ctx, AssistantMessage acm) {
+        emitSyntheticMessageEvents(ctx, acm);
     }
 
-    /**
-     * 把一个内容项分片发射为事件
-     *
-     * <p>过渡期路径：尚未迁移到事件形态的方言仍用内容项表达内容，由此处统一转成
-     * TEXT_DELTA / THINKING_DELTA / TOOL_CALL_ARGS_DELTA。增量事件只携带增量负载；
-     * 完整响应只出现在 STEP_END / RESPONSE_END。</p>
-     *
-     * @param aggregateText 是否把该消息的文本/思考计入流式聚合（消息文本本身来自聚合结果时必须传 false）
-     */
-    private void publishItem(FluxSink<ChatEvent> sink, ChatStreamContext ctx, AssistantMessage acm,
-                             boolean aggregateText) {
-        ChatAccumulator acc = ctx.getAccumulator();
-
-        if (acm != null) {
-            if (aggregateText) {
-                acc.appendText(acm.getTextRaw());
-                acc.appendThinking(acm.getThinkingRaw());
-            }
-
-            // 流式聚合媒体块（文本已走 textBuilder）
-            if (acm.hasMedia()) {
-                acc.addMediaBlocks(acm.getBlocks());
-            }
-        }
-
-        emitItemEvents(sink, ctx, acm);
-    }
-
-    /**
-     * 发射一个内容项分片对应的事件
-     *
-     * <p>工具调用分片会展开为「首次 START + 每片 ARGS_DELTA」；完成信号（TOOL_CALL_END）
-     * 由 {@link #emitToolCallEnd} 在参数拼接完成处发射，因此订阅方看到的「完成」数量
-     * 等于真实工具调用数，而不是 SSE 分片数。</p>
-     */
-    private void emitItemEvents(FluxSink<ChatEvent> sink, ChatStreamContext ctx, AssistantMessage acm) {
+    /** 发射合成消息中的正文、思考、媒体及工具事件。 */
+    private void emitSyntheticMessageEvents(ChatStreamContext ctx, AssistantMessage acm) {
         if (acm != null && Assert.isNotEmpty(acm.getToolCalls())) {
             Set<String> started = startedToolCalls(ctx);
 
@@ -941,29 +923,36 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
                 if (key == null || started.add(key)) {
                     //该工具调用的首个分片：开始信号（不带快照，不进旧帧投影）
-                    sink.next(ctx.event(ChatEventType.TOOL_CALL_START)
+                    ctx.emit(ctx.event(ChatEventType.TOOL_CALL_START)
                             .toolCall(call)
                             .toolCallId(call.getId())
                             .build());
                 }
 
-                sink.next(ctx.event(ChatEventType.TOOL_CALL_ARGS_DELTA)
-                        .toolCall(call)
-                        .toolCallId(call.getId())
-                        .text(call.getArgumentsStr())
-                        .build());
+                if (Utils.isNotEmpty(call.getArgumentsStr())) {
+                    ctx.emit(ctx.event(ChatEventType.TOOL_CALL_ARGS_DELTA)
+                            .toolCall(call)
+                            .toolCallId(call.getId())
+                            .text(call.getArgumentsStr())
+                            .build());
+                }
             }
-            return;
         }
 
-        //媒体：旧路径只把它们归入聚合 blocks，流式订阅方全程看不到图片/音频的到达
+        // 媒体
         if (acm != null) {
-            emitMediaDone(ctx, sink, acm.getBlocks());
+            emitMediaDone(ctx, acm.getBlocks());
         }
 
-        ChatEvent itemEvent = buildItemEvent(ctx, acm);
-        if (itemEvent != null) {
-            sink.next(itemEvent);
+        if (acm != null && Assert.isNotEmpty(acm.getThinkingRaw())) {
+            ctx.emit(ctx.event(ChatEventType.THINKING_DELTA)
+                    .text(acm.getThinkingRaw())
+                    .build());
+        }
+        if (acm != null && Assert.isNotEmpty(acm.getTextRaw())) {
+            ctx.emit(ctx.event(ChatEventType.TEXT_DELTA)
+                    .text(acm.getTextRaw())
+                    .build());
         }
     }
 
@@ -977,81 +966,17 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      *
      * <p>不携带快照：完成信号是事件模型新增的表达，不对应旧帧。</p>
      */
-    private void emitToolCallEnd(ChatStreamContext ctx, FluxSink<ChatEvent> sink, AssistantMessage acm) {
+    private void emitToolCallEnd(ChatStreamContext ctx, AssistantMessage acm) {
         if (acm == null || Assert.isEmpty(acm.getToolCalls())) {
             return;
         }
 
         for (ToolCall call : acm.getToolCalls()) {
-            sink.next(ctx.event(ChatEventType.TOOL_CALL_END)
+            ctx.emit(ctx.event(ChatEventType.TOOL_CALL_END)
                     .toolCall(call)
                     .toolCallId(call.getId())
                     .text(call.getArgumentsStr())
                     .build());
-        }
-    }
-
-    /**
-     * 把内容项映射为事件
-     *
-     * <p><b>纯信号项不产生内容事件</b>（返回 null）：方言经常用一个空
-     * {@code AssistantMessage} 当信号载体（思考闭合、finishReason 透传、签名携带、空流补位）。
-     * 无条件映射会让这些帧变成 {@code text=""} 的幻影 {@code TEXT_DELTA}，轻则污染正文流，
-     * 重则在仅思考的流末尾凭空开出一个正文块（START/DELTA/END 三联）。
-     * 这里只判「有无内容」，不判方言意图，因此对所有方言一致生效；
-     * 该项仍会正常参与聚合（见 {@link #publishItem}），不影响终态消息。</p>
-     */
-    private ChatEvent buildItemEvent(ChatStreamContext ctx, AssistantMessage acm) {
-        if (acm == null) {
-            return null;
-        }
-
-        if (acm.isThinking()) {
-            if (Assert.isEmpty(acm.getThinkingRaw())) {
-                return null;
-            }
-
-            return ctx.event(ChatEventType.THINKING_DELTA)
-                    .text(acm.getThinkingRaw())
-                    .build();
-        }
-
-        if (Assert.isEmpty(acm.getTextRaw())) {
-            return null;
-        }
-
-        return ctx.event(ChatEventType.TEXT_DELTA)
-                .text(acm.getTextRaw())
-                .build();
-    }
-
-    private void buildToolCallBuilder(ChatAccumulator acc, AssistantMessage acm) {
-        if (Assert.isEmpty(acm.getToolCalls())) {
-            return;
-        }
-
-        for (ToolCall call : acm.getToolCalls()) {
-            ToolCallBuilder callBuilder = acc.getToolCallBuilders().computeIfAbsent(call.getIndex(), k -> new ToolCallBuilder());
-
-            // id 按官方流式协议仅首分片携带（首片胜出）；
-            // 若网关每帧重复下发完整 id，拼接会得到 'call_xxcall_xx' 这类脏值，导致 tool_call_id 对不上
-            if (call.getId() != null && callBuilder.idBuilder.length() == 0) {
-                callBuilder.idBuilder.append(call.getId());
-            }
-
-            // name 保留累积：部分网关/自研端点会把函数名也分片下发，仅跳过完全重复的重发
-            if (call.getName() != null) {
-                if (callBuilder.nameBuilder.length() == 0) {
-                    callBuilder.nameBuilder.append(call.getName());
-                } else if (!call.getName().contentEquals(callBuilder.nameBuilder)) {
-                    callBuilder.nameBuilder.append(call.getName());
-                }
-            }
-
-            // arguments 分片只做字符串累积，不在此处校验 JSON
-            if (call.getArgumentsStr() != null) {
-                callBuilder.argumentsBuilder.append(call.getArgumentsStr());
-            }
         }
     }
 
@@ -1095,8 +1020,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                     throw new ToolCallException("The tool call failed, name: '" + tool + "'", ex);
                 }
             } else {
-                //会存在调用的call实际上不存在的情况
-                log.warn("Tool call not found: {}", call.getName());
+                throw new ToolCallException("Tool call not found: '" + call.getName() + "'");
             }
         }
 

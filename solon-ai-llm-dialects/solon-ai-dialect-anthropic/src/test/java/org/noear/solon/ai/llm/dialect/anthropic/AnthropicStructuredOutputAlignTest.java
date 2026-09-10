@@ -233,6 +233,9 @@ public class AnthropicStructuredOutputAlignTest {
         ONode root = build("claude-sonnet-4-5", strict);
 
         assertEquals(Boolean.TRUE, root.get("tools").get(0).get("strict").getBoolean());
+        ONode strictSchema = root.get("tools").get(0).get("input_schema");
+        assertEquals(Boolean.FALSE, strictSchema.get("additionalProperties").getBoolean());
+        assertEquals(Arrays.asList("city"), stringList(strictSchema.get("required")));
         //合成开关不进请求体
         assertFalse(root.hasKey("strict_tools"));
 
@@ -241,6 +244,35 @@ public class AnthropicStructuredOutputAlignTest {
         ONode plainRoot = build("claude-sonnet-4-5", plain);
         assertFalse(plainRoot.get("tools").get(0).hasKey("strict"),
                 "默认不写 strict，保持既有行为");
+    }
+
+    @Test
+    public void strictToolsNormalizeNestedObjectsRecursively() {
+        ChatOptions options = ChatOptions.of()
+                .optionSet("strict_tools", true)
+                .toolAdd("nested", t -> t.description("d").inputSchema(SCHEMA));
+
+        ONode schema = build("claude-sonnet-4-5", options)
+                .get("tools").get(0).get("input_schema");
+        assertEquals(Boolean.FALSE, schema.get("additionalProperties").getBoolean());
+        assertEquals(Arrays.asList("name", "tags"), stringList(schema.get("required")));
+
+        ONode nested = schema.get("properties").get("tags").get("items");
+        assertEquals(Boolean.FALSE, nested.get("additionalProperties").getBoolean());
+        assertEquals(Arrays.asList("k"), stringList(nested.get("required")));
+    }
+
+    @Test
+    public void strictToolsOverridePermissiveAdditionalProperties() {
+        String permissive = "{\"type\":\"object\",\"additionalProperties\":true,\"properties\":{}}";
+        ONode schema = build("claude-sonnet-4-5", ChatOptions.of()
+                .optionSet("strict_tools", true)
+                .toolAdd("empty", t -> t.description("d").inputSchema(permissive)))
+                .get("tools").get(0).get("input_schema");
+
+        assertEquals(Boolean.FALSE, schema.get("additionalProperties").getBoolean());
+        assertTrue(schema.get("required").isArray());
+        assertEquals(0, schema.get("required").size());
     }
 
     /// ///////////////// beta 能力协商

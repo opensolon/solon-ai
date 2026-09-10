@@ -4,13 +4,15 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatRequest;
-import org.noear.solon.ai.chat.ChatResponseDefault;
-import org.noear.solon.ai.chat.event.ChatStreamContextDefault;
+import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.llm.dialect.openai.OpenaiChatDialect;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -20,11 +22,11 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  */
 public class OpenAiTest {
-    /**
-     * 走方言的唯一解析入口；单测不关心事件，故用「不发事件」的上下文
-     */
+    private List<ChatEvent> events = new java.util.ArrayList<>();
+
     private void parse(OpenaiChatDialect dialect, ChatConfig config, ChatAccumulator acc, String json) {
-        dialect.parseResponseJson(ChatStreamContextDefault.ofNoEmit(config, acc), json);
+        dialect.parseResponseJson(new org.noear.solon.ai.chat.event.ChatStreamContextDefault(
+                config, acc.getRequest(), acc, null, 0, events::add), json);
     }
 
     @Test
@@ -53,7 +55,7 @@ public class OpenAiTest {
         }
 
         // 最后一帧（choices=[] 但带 usage）：终态下必须补位空内容项，且 usage 要落到累积器
-        assertTrue(acc.hasContentItems(), "choices=[] 的 usage 帧仍应补出空内容项");
+        assertNotNull(acc.snapshotTerminal().getMessage(), "choices=[] 的 usage 帧仍应有终态消息");
         assertNotNull(acc.getUsage(), "usage 不应为 null");
         assertEquals(5, acc.getUsage().completionTokens());
         assertEquals(260, acc.getUsage().promptTokens());
@@ -118,35 +120,31 @@ public class OpenAiTest {
         ChatRequest req = new ChatRequest(config, dialect, config.getModelOptions(), InMemoryChatSession.builder().build(), ChatMessage.ofSystem(""), Prompt.of(""), true);
         ChatAccumulator acc = new ChatAccumulator(req, true);
 
-        // Chunk 1：首段思考 → 产出思考开启信号帧（content 为空）+ 思维链消息
-        // 4.1 起边界不再用 <think> 字面量缝进 content，改为空内容的 thinking 信号帧
+        // 流式分片由 ChatEvent 表达，终态消息由 snapshotTerminal 提供。
+        events.clear();
         acc.reset();
         parse(dialect, config, acc, chunks[0]);
-        assertEquals(2, acc.getContentItems().size());
-        assertTrue(acc.getContentItems().get(0).isThinking());
-        assertEquals("", acc.getContentItems().get(0).getContent());
-        assertEquals("第一步思考", acc.getContentItems().get(1).getThinking());
+        assertEquals("第一步思考", events.stream().filter(e -> e.is(ChatEventType.THINKING_DELTA))
+                .findFirst().get().getText());
 
-        // Chunk 2：中间思考增量
+        events.clear();
         acc.reset();
         parse(dialect, config, acc, chunks[1]);
-        assertEquals(1, acc.getContentItems().size());
-        assertEquals("第二步思考", acc.getContentItems().get(0).getThinking());
-        assertTrue(acc.getContentItems().get(0).isThinking());
+        assertEquals("第二步思考", events.stream().filter(e -> e.is(ChatEventType.THINKING_DELTA))
+                .findFirst().get().getText());
 
-        // Chunk 3：思考结束 → 产出思考闭合信号帧（content 为空）+ 正文消息
+        events.clear();
         acc.reset();
         parse(dialect, config, acc, chunks[2]);
-        assertEquals(2, acc.getContentItems().size());
-        assertTrue(acc.getContentItems().get(0).isThinking());
-        assertEquals("", acc.getContentItems().get(0).getContent());
-        assertFalse(acc.getContentItems().get(1).isThinking());
-        assertEquals("正文", acc.getContentItems().get(1).getContent());
+        assertEquals("正文", events.stream().filter(e -> e.is(ChatEventType.TEXT_DELTA))
+                .findFirst().get().getText());
 
-        // Chunk 4：工具调用（取当帧分片消息）
+        events.clear();
         acc.reset();
         parse(dialect, config, acc, chunks[3]);
-        AssistantMessage toolMsg = acc.snapshotFrame().getMessage();
+        AssistantMessage toolMsg = acc.snapshotTerminal().getMessage();
+        assertEquals("第一步思考第二步思考", toolMsg.getThinking());
+        assertEquals("正文", toolMsg.getText());
         assertNotNull(toolMsg.getToolCalls());
         assertEquals("get_weather", toolMsg.getToolCalls().get(0).getName());
     }

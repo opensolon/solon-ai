@@ -25,10 +25,11 @@ import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.event.ChatEvent;
 import org.noear.solon.ai.chat.event.ChatEventGroup;
 import org.noear.solon.ai.chat.event.ChatEventType;
-import org.noear.solon.ai.chat.content.TextBlock;
+
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -201,7 +202,8 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
         // 4. 更新会话状态与快照
         assistantMessage.addMetadata(AgentTrace.META_RUN_ID, trace.getRunId());
-        if (Assert.isNotEmpty(assistantMessage.getContent()) && Assert.isEmpty(assistantMessage.getToolCalls())) {
+        if ((Assert.isNotEmpty(assistantMessage.getContent()) || assistantMessage.hasMedia())
+                && Assert.isEmpty(assistantMessage.getToolCalls())) {
             if (parentTeamTrace == null) {
                 session.addMessage(assistantMessage);
             }
@@ -420,34 +422,65 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                 trace.getMetrics().addUsage(response.getUsage());
             }
 
-            // 团队 Agent 工具 returnDirect：优先用 source 文本，但仍保留 tool 结果中的 media
-            String clearContent;
+            // 纯 thinking 继续降级为普通最终答案；协议回放状态因语义变化而失效，
+            // 但来源与应用 metadata 仍是通用语义，不能随降级静默丢失。
+            if (responseMessage.isThinkingOnly()) {
+                return AssistantMessage.snapshot(
+                        responseMessage.getThinking().trim(), "", null, null,
+                        responseMessage.resolveSearchResults(), responseMessage.getCitations(), null,
+                        responseMessage.getMetadata());
+            }
+
             if (responseMessage.hasContent() && responseMessage.getMetadata().containsKey(Agent.META_AGENT)) {
                 String source = responseMessage.getMetadataAs("source");
-                if (Assert.isNotEmpty(source)) {
-                    clearContent = source;
-                } else {
-                    clearContent = responseMessage.getText();
-                }
-            } else {
-                clearContent = responseMessage.hasContent() ? responseMessage.getText() : "";
-            }
-            // 保留多模态 media blocks，避免生图/纯媒体响应被压成纯文本。
-            // 文本投影用 clearContent；blocks 只带非文本媒体，避免 TextBlock 重复。
-            if (responseMessage.hasMedia()) {
-                List<ContentBlock> mediaBlocks = new ArrayList<>();
-                for (ContentBlock block : responseMessage.getBlocks()) {
-                    if (!(block instanceof TextBlock)) {
-                        mediaBlocks.add(block);
+                if (Assert.isNotEmpty(source) && !source.equals(responseMessage.getText())) {
+                    // source 投影改变了通用正文，任何旧 raw / protocol state 都必须失效；
+                    // 否则原方言可能优先回放修改前的完整协议快照。
+                    String thinking = responseMessage.getThinkingRaw();
+                    if (Assert.isEmpty(thinking) && responseMessage.hasThinking()) {
+                        thinking = responseMessage.getThinking();
                     }
+                    return AssistantMessage.snapshot(
+                            source,
+                            thinking,
+                            responseMessage.getToolCalls(),
+                            projectBlocks(source, responseMessage.getBlocks()),
+                            responseMessage.resolveSearchResults(),
+                            responseMessage.getCitations(),
+                            null,
+                            responseMessage.getMetadata());
                 }
-                return ChatMessage.ofAssistant(clearContent, mediaBlocks);
             }
-            return ChatMessage.ofAssistant(clearContent);
+
+            return responseMessage;
         } else {
             // fallback 到自定义处理器
             return config.getHandler().call(finalPrompt, session);
         }
+    }
+
+    private List<ContentBlock> projectBlocks(String text, List<ContentBlock> sourceBlocks) {
+        if (Utils.isEmpty(sourceBlocks)) {
+            return sourceBlocks;
+        }
+        List<ContentBlock> projected = new ArrayList<>();
+        boolean textWritten = false;
+        for (ContentBlock block : sourceBlocks) {
+            if (block instanceof TextBlock) {
+                if (!textWritten && Utils.isNotEmpty(text)) {
+                    TextBlock replacement = TextBlock.of(text, block.getMimeType());
+                    replacement.metas().putAll(block.metas());
+                    projected.add(replacement);
+                    textWritten = true;
+                }
+            } else if (block != null) {
+                projected.add(block);
+            }
+        }
+        if (!textWritten && Utils.isNotEmpty(text) && !projected.isEmpty()) {
+            projected.add(0, TextBlock.of(text));
+        }
+        return projected;
     }
 
     // Builder 静态方法与内部类保持不变...

@@ -18,8 +18,10 @@ package org.noear.solon.ai.llm.dialect.gemini.models;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
-import org.noear.solon.ai.chat.ChatException;
 import org.noear.solon.ai.chat.ChatAccumulator;
+import org.noear.solon.ai.chat.ChatException;
+import org.noear.solon.ai.chat.event.ChatStreamContext;
+import org.noear.solon.ai.chat.event.ChatStreamContextDefault;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 
 import java.util.List;
@@ -47,12 +49,15 @@ public class GeminiResponseParser {
      * @param json  响应 JSON 字符串
      * @return 是否有有效的选择
      */
+    public boolean parseResponse(ChatStreamContext ctx, String json) {
+        if (ctx.isStream()) return parseStreamResponse(ctx, json);
+        return parseNonStreamResponse(ctx, json);
+    }
+
+    /** @deprecated use the context-based entry point. */
+    @Deprecated
     public boolean parseResponse(ChatAccumulator acc, String json) {
-        if (acc.isStream()) {
-            return parseStreamResponse(acc, json);
-        } else {
-            return parseNonStreamResponse(acc, json);
-        }
+        return parseNonStreamResponse(ChatStreamContextDefault.ofNoEmit(acc), json);
     }
 
     /**
@@ -62,7 +67,8 @@ public class GeminiResponseParser {
      * @param json 响应 JSON 字符串
      * @return 是否有有效的选择
      */
-    public boolean parseStreamResponse(ChatAccumulator acc, String json) {
+    public boolean parseStreamResponse(ChatStreamContext ctx, String json) {
+        ChatAccumulator acc = ctx.getAccumulator();
         if (json == null || json.isEmpty()) {
             return false;
         }
@@ -87,10 +93,8 @@ public class GeminiResponseParser {
             }
 
             if ("[DONE]".equals(jsonData)) {
-                if (acc.isFinished() == false) {
-                    acc.addContentItem(new AssistantMessage(""));
-                    acc.setFinished(true);
-                }
+                thoughtProcessor.completeStream(ctx);
+                acc.setFinished(true);
                 return true;
             }
 
@@ -117,30 +121,20 @@ public class GeminiResponseParser {
             }
 
             ONode oCandidates = oResp.getOrNull("candidates");
-            if (oCandidates != null && oCandidates.isArray()) {
-                for (ONode oChoice1 : oCandidates.getArray()) {
-                    String finishReason = oChoice1.get("finishReason").getString();
+            if (oCandidates != null && oCandidates.isArray() && oCandidates.size() > 0) {
+                ONode oChoice1 = oCandidates.get(0);
+                String finishReason = oChoice1.get("finishReason").getString();
 
-                    if (Utils.isNotEmpty(finishReason)) {
-                        acc.setFinished(true);
-                        acc.lastFinishReason = finishReason;
-                    }
-
-                    ONode oContent = oChoice1.get("content");
-                    List<AssistantMessage> messageList = thoughtProcessor.parse(acc, oContent);
-
-                    for (AssistantMessage msg1 : messageList) {
-                        acc.addContentItem(msg1);
-                        hasContent = true;
-                    }
-
-                    // 若 finishReason 存在但 messageList 为空（如最后一帧仅含 thoughtSignature 而无文本），
-                    // 仍需补充一个空消息，以确保 finished 状态能通过内容项正常传递给订阅者
-                    if (Utils.isNotEmpty(finishReason) && messageList.isEmpty()) {
-                        acc.addContentItem(new AssistantMessage(""));
-                        hasContent = true;
-                    }
+                if (Utils.isNotEmpty(finishReason)) {
+                    acc.setFinished(true);
+                    acc.lastFinishReason = finishReason;
                 }
+
+                ONode oContent = oChoice1.get("content");
+                thoughtProcessor.emitStream(ctx, oContent, 0, Utils.isNotEmpty(finishReason));
+                hasContent = true;
+
+                applyAbnormalFinishReason(acc, oChoice1, finishReason);
             }
 
             // prompt 被安全策略拦截时无 candidates 返回，需显式报错避免静默结束
@@ -157,7 +151,8 @@ public class GeminiResponseParser {
 
             ONode oUsage = oResp.getOrNull("usageMetadata");
             if (oUsage != null && acc.isFinished()) {
-                long promptTokens = oUsage.getOrNull("promptTokenCount") != null ? oUsage.get("promptTokenCount").getLong() : 0;
+                long toolUseTokens = oUsage.getOrNull("toolUsePromptTokenCount") != null ? oUsage.get("toolUsePromptTokenCount").getLong() : 0L;
+                long promptTokens = (oUsage.getOrNull("promptTokenCount") != null ? oUsage.get("promptTokenCount").getLong() : 0L) + toolUseTokens;
                 long completionTokens = oUsage.getOrNull("candidatesTokenCount") != null ? oUsage.get("candidatesTokenCount").getLong() : 0;
                 long totalTokens = oUsage.getOrNull("totalTokenCount") != null ? oUsage.get("totalTokenCount").getLong() : 0;
 
@@ -180,9 +175,15 @@ public class GeminiResponseParser {
      * @return 解析是否成功
      */
     public boolean parseNonStreamResponse(ChatAccumulator acc, String json) {
+        return parseNonStreamResponse(ChatStreamContextDefault.ofNoEmit(acc), json);
+    }
+
+    /** 使用统一事件上下文解析非流式响应。 */
+    public boolean parseNonStreamResponse(ChatStreamContext ctx, String json) {
+        ChatAccumulator acc = ctx.getAccumulator();
         if ("[DONE]".equals(json)) {
             if (acc.isFinished() == false) {
-                acc.addContentItem(new AssistantMessage(""));
+                acc.setTerminalMessage(new AssistantMessage(""));
                 acc.setFinished(true);
             }
             return true;
@@ -211,37 +212,35 @@ public class GeminiResponseParser {
         }
 
         ONode oCandidates = oResp.getOrNull("candidates");
-        if (oCandidates != null && oCandidates.isArray()) {
+        if (oCandidates != null && oCandidates.isArray() && oCandidates.size() > 0) {
+            ONode oChoice1 = oCandidates.get(0);
+            String finishReason = oChoice1.get("finishReason").getString();
 
-            for (ONode oChoice1 : oCandidates.getArray()) {
-                String finishReason = oChoice1.get("finishReason").getString();
+            if (Utils.isEmpty(finishReason)) {
+                finishReason = oChoice1.get("finish_reason").getString();
+            }
 
-                if (Utils.isEmpty(finishReason)) {
-                    finishReason = oChoice1.get("finish_reason").getString();
-                }
+            ONode oContent = oChoice1.get("content");
+            List<AssistantMessage> messageList = thoughtProcessor.parse(acc, oContent);
+            thoughtProcessor.emitMediaEvents(ctx, messageList, 0);
 
-                ONode oContent = oChoice1.get("content");
-                List<AssistantMessage> messageList = thoughtProcessor.parse(acc, oContent);
+            for (AssistantMessage msg1 : messageList) {
+                acc.setTerminalMessage(msg1);
+            }
 
-                for (AssistantMessage msg1 : messageList) {
-                    acc.addContentItem(msg1);
-                }
-
-                if (Utils.isNotEmpty(finishReason)) {
-                    acc.setFinished(true);
-                    acc.lastFinishReason = finishReason;
-                }
+            if (Utils.isNotEmpty(finishReason)) {
+                acc.setFinished(true);
+                acc.lastFinishReason = finishReason;
+                applyAbnormalFinishReason(acc, oChoice1, finishReason);
             }
         }
 
-        if (acc.isFinished()) {
-            if (acc.hasContentItems() == false) {
-                acc.addContentItem(new AssistantMessage(""));
-            }
+        if (acc.isFinished() && acc.isTerminalMessagePresent() == false) {
+            acc.setTerminalMessage(new AssistantMessage(""));
         }
 
         // prompt 被安全策略拦截时无 candidates 返回，需显式报错避免静默返回空响应
-        if (acc.hasContentItems() == false) {
+        if (acc.isTerminalMessagePresent() == false) {
             ONode oPromptFeedback = oResp.getOrNull("promptFeedback");
             if (oPromptFeedback != null) {
                 String blockReason = oPromptFeedback.get("blockReason").getString();
@@ -254,7 +253,8 @@ public class GeminiResponseParser {
 
         ONode oUsage = oResp.getOrNull("usageMetadata");
         if (oUsage != null) {
-            long promptTokens = oUsage.get("promptTokenCount").getLong();
+            long promptTokens = oUsage.get("promptTokenCount").getLong()
+                    + oUsage.get("toolUsePromptTokenCount").getLong();
             long completionTokens = oUsage.get("candidatesTokenCount").getLong();
             long totalTokens = oUsage.get("totalTokenCount").getLong();
 
@@ -266,5 +266,25 @@ public class GeminiResponseParser {
         }
 
         return true;
+    }
+
+    /** 与官方 SDK 的 checkFinishReason 语义一致：STOP/MAX_TOKENS 之外的终止原因可诊断。 */
+    private void applyAbnormalFinishReason(ChatAccumulator acc, ONode candidate, String finishReason) {
+        if (Utils.isEmpty(finishReason)
+                || "STOP".equalsIgnoreCase(finishReason)
+                || "MAX_TOKENS".equalsIgnoreCase(finishReason)
+                || "FINISH_REASON_UNSPECIFIED".equalsIgnoreCase(finishReason)) {
+            return;
+        }
+        String message = candidate.get("finishMessage").getString();
+        if (Utils.isEmpty(message)) {
+            message = candidate.get("finish_message").getString();
+        }
+        if (Utils.isEmpty(message)) {
+            message = "Gemini generation stopped: " + finishReason;
+        } else {
+            message = "Gemini generation stopped (" + finishReason + "): " + message;
+        }
+        acc.setError(new ChatException(message));
     }
 }

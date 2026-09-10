@@ -53,6 +53,17 @@ class SnapshotDeltaNormalizer {
     private final StringBuilder accumulated = new StringBuilder();
     private boolean snapshotMode;
 
+    SnapshotDeltaNormalizer() {
+        this(false);
+    }
+
+    /**
+     * @param deterministicSnapshot 是否从首帧起按确定的累计快照处理
+     */
+    SnapshotDeltaNormalizer(boolean deterministicSnapshot) {
+        this.snapshotMode = deterministicSnapshot;
+    }
+
     /**
      * 是否已判定为累计快照流
      */
@@ -69,6 +80,7 @@ class SnapshotDeltaNormalizer {
 
     /**
      * 归一化一帧：返回本帧真正的新增文本（快照重复帧返回空串），并把新增部分记入累积。
+     * 确定性快照模式下首帧仍原样交付，后续帧不受最小匹配长度限制。
      */
     String normalize(String value) {
         if (Utils.isEmpty(value)) {

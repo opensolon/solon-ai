@@ -25,6 +25,7 @@ import org.noear.solon.ai.chat.dialect.ChatDialects;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.MessageProtocolState;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
@@ -235,7 +236,7 @@ public class AnthropicChatDialect extends AbstractChatDialect {
                 }
             }
 
-            if (hasToolUse) {
+            if (oContent != null && oContent.isArray()) {
                 return parseClaudeAssistantMessage(acc, oMessage, oContent);
             }
         }
@@ -259,9 +260,13 @@ public class AnthropicChatDialect extends AbstractChatDialect {
         String thinkingSignature = null;
         StringBuilder textContent = new StringBuilder();
         List<ToolCall> toolCalls = new ArrayList<>();
-        List<Map> toolCallsRaw = new ArrayList<>();
         List<ContentBlock> mediaBlocks = new ArrayList<>();
         List<String> redactedBlocks = new ArrayList<>();
+
+        List<String> orderedContentBlocks = new ArrayList<>();
+        for (ONode rawBlock : oContent.getArray()) {
+            orderedContentBlocks.add(rawBlock.toJson());
+        }
 
         for (ONode item : oContent.getArray()) {
             String type = item.get("type").getString();
@@ -300,14 +305,6 @@ public class AnthropicChatDialect extends AbstractChatDialect {
 
                 ToolCall toolCall = new ToolCall(toolId, toolId, toolName, inputJson, arguments);
                 toolCalls.add(toolCall);
-                Map<String, Object> toolCallRaw = new HashMap<>();
-                toolCallRaw.put("id", toolId);
-                toolCallRaw.put("type", "function");
-                Map<String, Object> functionData = new HashMap<>();
-                functionData.put("name", toolName);
-                functionData.put("arguments", inputJson);
-                toolCallRaw.put("function", functionData);
-                toolCallsRaw.add(toolCallRaw);
             } else if ("redacted_thinking".equals(type)) {
                 // opaque 安全过滤块：逐块原样保留，供下一轮
                 // AnthropicRequestBuilder#appendRedactedThinkingBlocks 取用。
@@ -320,7 +317,7 @@ public class AnthropicChatDialect extends AbstractChatDialect {
             }
             // server_tool_use / *_tool_result / container_upload 不在此逐块收集：
             // 本方法的入参多为方言自建的中间节点（buildAssistantToolCallMessageNode 的输出），
-            // 其中的服务端块正是从 acc 回填的，再收一遍等于重复。权威来源统一取 acc（见下方 contentRaw）。
+            // 其中的服务端块正是从 acc 回填的，再收一遍等于重复。权威来源统一取 acc（见下方协议状态）。
             //
             // 引用（text.citations）在本旁路无法表达：方法签名没有 ChatStreamContext，发不了 CITATION 事件。
             // 这不构成 call/stream 分叉——真实响应的引用由 parseNonStreamResponse / citations_delta 两条
@@ -328,45 +325,45 @@ public class AnthropicChatDialect extends AbstractChatDialect {
         }
 
         if (acc.in_thinking && acc.isStream()) {
-            messageList.add(new AssistantMessage("","", true).reasoningFieldName(acc.reasoning_field_name));
             acc.in_thinking = false;
         }
 
-        // 构建 AssistantMessage：text/thinking 分离（新接口），不再注入 <think> 标签；
-        // 终态消息（含工具调用）isThinking=false，确保历史回传不被跳过
+        // 构建完整 AssistantMessage：text/thinking 分离，不再注入 <think> 标签。
         String textStr = textContent.toString();
         String thinkingStr = thinkingContent.toString();
 
-        Map<String, Object> contentRaw = null;
-        if (thinkingStr.length() > 0) {
-            contentRaw = new LinkedHashMap<>();
-            contentRaw.put("thinking", thinkingStr);
-            if (thinkingSignature != null) {
-                contentRaw.put("thinkingSignature", thinkingSignature);
-            }
-            if (textStr.length() > 0) {
-                contentRaw.put("content", textStr);
-            }
+        Map<String, Object> protocolData = new LinkedHashMap<>();
+        if (thinkingSignature != null) {
+            protocolData.put("thinkingSignature", thinkingSignature);
+        }
+        if (!orderedContentBlocks.isEmpty()) {
+            protocolData.put(AnthropicResponseParser.CONTENT_BLOCKS_RAW_KEY, orderedContentBlocks);
         }
 
-        // redacted_thinking 分块列表透传到 contentRaw，供多轮逐块回传（拼接会损坏 opaque 数据）；
+        // redacted_thinking 分块列表进入 Anthropic 命名空间状态，供多轮逐块回传；
         // 与 parseNonStreamResponse 对称
         if (redactedBlocks.isEmpty() == false) {
-            if (contentRaw == null) {
-                contentRaw = new LinkedHashMap<>();
-            }
-            contentRaw.put("redactedThinkingBlocks", redactedBlocks);
+            protocolData.put("redactedThinkingBlocks", redactedBlocks);
         }
 
         // 服务端工具原始块与代码执行容器：本轮的工具循环会把这条消息写进历史，下一轮出站时
-        // 由 AnthropicRequestBuilder 从 contentRaw 取回原样回传。不带的话 server_tool_use 与
-        // 其结果块（含 encrypted_content）在第二轮就消失，pause_turn 续跑退化为重跑
-        contentRaw = AnthropicResponseParser.appendServerToolRaw(acc, contentRaw);
+        // 由 AnthropicRequestBuilder 从协议状态取回原样回传。
+        protocolData = AnthropicResponseParser.appendServerToolRaw(acc, protocolData);
 
-        AssistantMessage message = new AssistantMessage(textStr, thinkingStr,
-                false, contentRaw, toolCallsRaw, toolCalls, null, mediaBlocks.isEmpty() ? null : mediaBlocks)
-                .reasoningFieldName("thinking");
-        messageList.add(message);
+        MessageProtocolState existingState = acc.getTerminalProtocolStates() == null
+                ? null : acc.getTerminalProtocolStates().get(AnthropicMessageStateSupport.PROTOCOL_ID);
+        MessageProtocolState protocolState = existingState != null
+                ? existingState : AnthropicMessageStateSupport.createState(protocolData);
+        Map<String, MessageProtocolState> protocolStates = protocolState == null ? null
+                : Collections.singletonMap(AnthropicMessageStateSupport.PROTOCOL_ID, protocolState);
+        messageList.add(AssistantMessage.snapshot(
+                textStr,
+                thinkingStr,
+                toolCalls.isEmpty() ? null : toolCalls,
+                mediaBlocks.isEmpty() ? null : mediaBlocks,
+                null,
+                null,
+                protocolStates));
 
         return messageList;
     }

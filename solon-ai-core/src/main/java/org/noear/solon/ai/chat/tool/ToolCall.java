@@ -36,10 +36,12 @@ public class ToolCall implements Serializable {
     private String argumentsStr;
     private Map<String, Object> arguments;
     /**
-     * 思考签名（Gemini thinking signature，用于多轮工具调用时回传）
+     * 思考签名（Gemini thinking signature，用于旧消息反序列化与兼容回放）。
      *
      * @since Google Gemini 3 models
+     * @deprecated 4.1 新消息使用 AssistantMessage.protocolStates 中的 Gemini 协议状态
      */
+    @Deprecated
     private String thoughtSignature;
 
     public ToolCall() {
@@ -102,12 +104,17 @@ public class ToolCall implements Serializable {
     }
 
     /**
-     * 思考签名（Gemini thoughtSignature，用于多轮工具调用时回传）
+     * @deprecated 4.1 仅用于旧 Gemini 消息兼容
      */
+    @Deprecated
     public String getThoughtSignature() {
         return thoughtSignature;
     }
 
+    /**
+     * @deprecated 4.1 仅为旧 Gemini 消息 JSON Bean 反序列化和源码兼容保留；新解析器不得写入
+     */
+    @Deprecated
     public void setThoughtSignature(String thoughtSignature) {
         this.thoughtSignature = thoughtSignature;
     }

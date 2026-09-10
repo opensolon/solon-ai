@@ -18,8 +18,11 @@ package org.noear.solon.ai.ui.aisdk;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.event.ChatEvent;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.source.Citation;
+import org.noear.solon.ai.chat.source.SearchResult;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.ui.aisdk.part.*;
 import org.noear.solon.ai.ui.aisdk.part.reasoning.*;
@@ -165,17 +168,8 @@ public class AiSdkStreamWrapper {
                     }
                 }
 
-                // 5. 搜索结果引用（如有）
-                List<Map> searchResults = message.getSearchResultsRaw();
-                if (searchResults != null && !searchResults.isEmpty()) {
-                    for (Map<?, ?> sr : searchResults) {
-                        Object url = sr.get("url");
-                        if (url != null) {
-                            String title = sr.get("title") != null ? sr.get("title").toString() : url.toString();
-                            emit(sink, new SourceUrlPart(url.toString(), url.toString(), title));
-                        }
-                    }
-                }
+                // 5. 搜索结果与回答引用（如有）
+                emitMessageSources(sink, message);
 
                 // 6. 正文内容（使用 getResultContent 获取去除思考标签的纯文本）
                 String content = message.getText();
@@ -184,9 +178,20 @@ public class AiSdkStreamWrapper {
                     emit(sink, new TextDeltaPart(textId, content));
                     emit(sink, new TextEndPart(textId));
                 }
+
+                // 7. 非文本内容块（文本块已由正文通道映射，不能重复发为 file）
+                List<ContentBlock> blocks = response.getBlocks();
+                if (blocks != null) {
+                    for (ContentBlock block : blocks) {
+                        if (block != null && !(block instanceof TextBlock)
+                                && !isEmpty(block.getContent())) {
+                            emit(sink, new FilePart(block.getContent(), block.getMimeType()));
+                        }
+                    }
+                }
             }
 
-            // 7. finish（getFinishReason 已归一化，且兼容只在 choice 上给出原始值的端点）
+            // 8. finish（getFinishReason 已归一化，且兼容只在 choice 上给出原始值的端点）
             String finishReason = response.getFinishReason();
             if (finishReason == null || finishReason.isEmpty()) {
                 finishReason = "stop";
@@ -251,23 +256,29 @@ public class AiSdkStreamWrapper {
             return;
         }
 
-        // --- 推理/思考内容 ---
-        if (message.isThinking()) {
-            String content = message.getContent();
-            if (content != null && !content.isEmpty()) {
-                if (!reasoningStarted.get()) {
-                    emit(sink, new ReasoningStartPart(reasoningId));
-                    reasoningStarted.set(true);
-                }
-                emit(sink, new ReasoningDeltaPart(reasoningId, content));
+        // --- 推理/思考内容（读取独立 raw 通道，不再用 isThinking 对整条消息二选一） ---
+        String thinkingDelta = message.getThinkingRaw();
+        if (thinkingDelta != null && !thinkingDelta.isEmpty()) {
+            if (!reasoningStarted.get()) {
+                emit(sink, new ReasoningStartPart(reasoningId));
+                reasoningStarted.set(true);
             }
-            return;
+            emit(sink, new ReasoningDeltaPart(reasoningId, thinkingDelta));
         }
 
-        // 从思考切换到正文：关闭推理阶段
-        if (reasoningStarted.get()) {
-            emit(sink, new ReasoningEndPart(reasoningId));
-            reasoningStarted.set(false);
+        // --- 正文内容 ---
+        // 同一消息同时携带 thinkingRaw/textRaw 时，严格按 thinking 后 text 发射。
+        String textDelta = message.getTextRaw();
+        if (textDelta != null && !textDelta.isEmpty()) {
+            if (reasoningStarted.get()) {
+                emit(sink, new ReasoningEndPart(reasoningId));
+                reasoningStarted.set(false);
+            }
+            if (!textStarted.get()) {
+                emit(sink, new TextStartPart(textId));
+                textStarted.set(true);
+            }
+            emit(sink, new TextDeltaPart(textId, textDelta));
         }
 
         // --- 工具调用 ---
@@ -284,28 +295,9 @@ public class AiSdkStreamWrapper {
             }
         }
 
-        // --- 搜索结果 ---
-        List<Map> searchResults = message.getSearchResultsRaw();
-        if (searchResults != null && !searchResults.isEmpty()) {
-            for (Map<?, ?> sr : searchResults) {
-                Object url = sr.get("url");
-                if (url != null) {
-                    String title = sr.get("title") != null ? sr.get("title").toString() : url.toString();
-                    emit(sink, new SourceUrlPart(url.toString(), url.toString(), title));
-                }
-            }
-        }
+        // --- 搜索结果与回答引用 ---
+        emitMessageSources(sink, message);
 
-        // --- 正文内容 ---
-        // 使用 getContent() 而非 getResultContent()：后者 trim() 会丢失空白 chunk，破坏 Markdown 格式
-        String resultContent = message.getContent();
-        if (resultContent != null && !resultContent.isEmpty()) {
-            if (!textStarted.get()) {
-                emit(sink, new TextStartPart(textId));
-                textStarted.set(true);
-            }
-            emit(sink, new TextDeltaPart(textId, resultContent));
-        }
     }
 
     /**
@@ -350,14 +342,31 @@ public class AiSdkStreamWrapper {
     private void onAgentEvent(FluxSink<SseEvent> sink, Object event, EventState state) {
         if (event == null || sink.isCancelled()) return;
 
-        //内嵌 ChatEvent：直接委托核心状态机（多块/lazy-open/幂等 close/服务端工具补齐全部复用）
-        ChatEvent chatEvent = invokeChatEvent(event);
-        if (chatEvent != null) {
-            onEvent(sink, chatEvent, state);
+        String simpleName = event.getClass().getSimpleName();
+
+        // Supervisor 的内容是内部路由/调度信息，不能混入最终 assistant 正文或推理。
+        if ("SupervisorDeltaEvent".equals(simpleName)) {
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("agentEventType", simpleName);
+            data.put("runId", invoke(event, "getRunId"));
+            data.put("agentName", invoke(event, "getAgentName"));
+            String text = str(invoke(event, "getText"));
+            if (text != null && !text.isEmpty()) data.put("text", text);
+            emitData(sink, "agent-event", data);
             return;
         }
 
-        String simpleName = event.getClass().getSimpleName();
+        // 内嵌 ChatEvent 委托核心状态机；Agent 轮次作为命名空间，避免不同 Reason
+        // 都用 default key 而复用已经结束的 AI SDK part id。
+        ChatEvent chatEvent = invokeChatEvent(event);
+        if (chatEvent != null) {
+            Object reasonId = invoke(event, "getReasonId");
+            Object runId = invoke(event, "getRunId");
+            state.contentNamespace = (runId == null ? "" : runId + ":")
+                    + (reasonId == null ? simpleName : reasonId.toString());
+            onEvent(sink, chatEvent, state);
+            return;
+        }
 
         if ("ToolCallStartEvent".equals(simpleName)) {
             String tcId = str(invoke(event, "getCallId"));
@@ -380,9 +389,15 @@ public class AiSdkStreamWrapper {
             emit(sink, new ToolOutputAvailablePart(tcId, str(invoke(event, "getText"))));
             return;
         }
-        //RunEnd/SimpleEnd/TeamEnd：终态由 onEventComplete 统一收口（finish part），这里不重复发
+        //RunEnd/SimpleEnd/TeamEnd：终态由 onEventComplete 统一收口（finish part），这里不重复发。
+        // ReAct 的 abnormal 终态表示模型/执行失败，不能伪装成正常 stop。
         if ("RunEndEvent".equals(simpleName) || "SimpleEndEvent".equals(simpleName)
                 || "TeamEndEvent".equals(simpleName)) {
+            if (Boolean.TRUE.equals(invoke(event, "isAbnormal"))) {
+                state.errorSeen = true;
+                String text = str(invoke(event, "getText"));
+                state.errorText = text == null || text.isEmpty() ? "Agent run failed" : text;
+            }
             return;
         }
 
@@ -474,6 +489,7 @@ public class AiSdkStreamWrapper {
         /** 服务端工具名（按 itemId/subType 索引） */
         final Map<String, String> serverToolNames = new LinkedHashMap<>();
 
+        String contentNamespace = "";
         String finishReason;
         AiUsage usage;
 
@@ -595,6 +611,10 @@ public class AiSdkStreamWrapper {
                 break;
             }
 
+            case SEARCH_RESULT:
+                emitSearchResult(sink, event.getSearchResult());
+                break;
+
             case CITATION:
                 emitCitation(sink, event);
                 break;
@@ -700,7 +720,7 @@ public class AiSdkStreamWrapper {
     }
 
     private String openText(FluxSink<SseEvent> sink, EventState state, ChatEvent event) {
-        String key = contentKey(event);
+        String key = contentKey(event, state);
         String id = state.textIds.get(key);
         if (id == null) {
             id = idGenerator.ofText();
@@ -713,7 +733,7 @@ public class AiSdkStreamWrapper {
     }
 
     private void closeText(FluxSink<SseEvent> sink, EventState state, ChatEvent event) {
-        String key = contentKey(event);
+        String key = contentKey(event, state);
         String id = state.textIds.get(key);
         if (id != null && state.openText.remove(key)) {
             emit(sink, new TextEndPart(id));
@@ -721,7 +741,7 @@ public class AiSdkStreamWrapper {
     }
 
     private String openReasoning(FluxSink<SseEvent> sink, EventState state, ChatEvent event) {
-        String key = contentKey(event);
+        String key = contentKey(event, state);
         String id = state.reasoningIds.get(key);
         if (id == null) {
             id = idGenerator.ofReasoning();
@@ -734,21 +754,24 @@ public class AiSdkStreamWrapper {
     }
 
     private void closeReasoning(FluxSink<SseEvent> sink, EventState state, ChatEvent event) {
-        String key = contentKey(event);
+        String key = contentKey(event, state);
         String id = state.reasoningIds.get(key);
         if (id != null && state.openReasoning.remove(key)) {
             emit(sink, new ReasoningEndPart(id));
         }
     }
 
-    private static String contentKey(ChatEvent event) {
+    private static String contentKey(ChatEvent event, EventState state) {
+        String prefix = isEmpty(state.contentNamespace) ? "" : state.contentNamespace + ":";
+        prefix += "response:" + (isEmpty(event.getResponseId()) ? "default" : event.getResponseId())
+                + ":step:" + event.getStep() + ":";
         if (isEmpty(event.getItemId()) == false) {
-            return "item:" + event.getItemId();
+            return prefix + "item:" + event.getItemId();
         }
         if (event.getIndex() >= 0) {
-            return "index:" + event.getIndex();
+            return prefix + "index:" + event.getIndex();
         }
-        return "default";
+        return prefix + "default";
     }
 
     /**
@@ -807,7 +830,7 @@ public class AiSdkStreamWrapper {
         if (isEmpty(id) == false) {
             return id;
         }
-        String key = contentKey(event);
+        String key = contentKey(event, state);
         id = state.toolIds.get(key);
         if (id == null) {
             id = idGenerator.ofToolCall();
@@ -834,14 +857,61 @@ public class AiSdkStreamWrapper {
     private static void emitData(FluxSink<SseEvent> sink, String type, Object data) {
         emit(sink, DataPart.of(type, data));
     }
+    private void emitMessageSources(FluxSink<SseEvent> sink, AssistantMessage message) {
+        if (message == null) {
+            return;
+        }
+        for (SearchResult result : message.resolveSearchResults()) {
+            emitSearchResult(sink, result);
+        }
+        if (message.getCitations() != null) {
+            for (Citation citation : message.getCitations()) {
+                emitCitation(sink, citation, null);
+            }
+        }
+    }
+
+    private void emitSearchResult(FluxSink<SseEvent> sink, SearchResult result) {
+        if (result == null || isEmpty(result.getUrl())) {
+            return;
+        }
+        String sourceId = isEmpty(result.getId()) ? result.getUrl() : result.getId();
+        String title = isEmpty(result.getTitle()) ? result.getUrl() : result.getTitle();
+        emit(sink, new SourceUrlPart(sourceId, result.getUrl(), title));
+    }
+
     private void emitCitation(FluxSink<SseEvent> sink, ChatEvent event) {
+        if (event.getCitation() != null) {
+            emitCitation(sink, event.getCitation(), event.getItemId());
+            return;
+        }
+
+        // 旧事件兼容：没有类型化负载时才把 text 当作 URL。
         String url = event.getText();
         String sourceId = event.getItemId() != null ? event.getItemId() : url;
-
         if (isEmpty(url) == false) {
             emit(sink, new SourceUrlPart(sourceId, url, url));
         } else if (isEmpty(sourceId) == false) {
             emit(sink, new SourceDocumentPart(sourceId, event.getSubType(), sourceId));
+        }
+    }
+
+    private void emitCitation(FluxSink<SseEvent> sink, Citation citation, String preferredId) {
+        if (citation == null) {
+            return;
+        }
+        String sourceId = preferredId;
+        if (isEmpty(sourceId)) sourceId = citation.getUrl();
+        if (isEmpty(sourceId)) sourceId = citation.getTitle();
+        if (isEmpty(sourceId)) sourceId = citation.getCitedText();
+        if (isEmpty(sourceId)) return;
+
+        if (isEmpty(citation.getUrl()) == false) {
+            String title = isEmpty(citation.getTitle()) ? citation.getUrl() : citation.getTitle();
+            emit(sink, new SourceUrlPart(sourceId, citation.getUrl(), title));
+        } else {
+            String title = isEmpty(citation.getTitle()) ? sourceId : citation.getTitle();
+            emit(sink, new SourceDocumentPart(sourceId, citation.getType(), title));
         }
     }
 

@@ -21,17 +21,23 @@ import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.event.ChatEvent;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.MessageProtocolState;
+import org.noear.solon.ai.chat.source.Citation;
+import org.noear.solon.ai.chat.source.SearchResult;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.noear.solon.ai.chat.tool.ToolCall;
 
 /**
- * 聊天响应实现（不可变结果）
+ * 聊天响应实现（只读快照）
  *
- * <p>它只承担一个角色：<b>模型调用的结果</b>。所有字段在构造期定死，构造后不可再变。</p>
+ * <p>它只承担一个角色：<b>模型调用的结果</b>。所有顶层字段在构造期确定，且不提供写入方法；
+ * 完整消息由 {@link AssistantMessage#snapshot(String, String, List, List, List, List, Map, Map)}
+ * 在终态边界一次性构造。</p>
  *
  * <p>历史沿革：4.1 之前本类同时是结果对象、可变累积器与协议状态袋；拆分后累积器职责在
  * {@link ChatAccumulator}（框架内部），本类不再有任何写入方法。</p>
@@ -48,7 +54,7 @@ public class ChatResponseDefault implements ChatResponse {
     private final AiUsage usage;
 
     /**
-     * 结果消息（构造期算定：终态为完整聚合，分片帧为当帧分片）
+     * 结果消息（构造期算定；仅终态快照包含完整聚合消息）
      */
     private final AssistantMessage message;
     /**
@@ -60,13 +66,33 @@ public class ChatResponseDefault implements ChatResponse {
      */
     private final List<ChatEvent> events;
 
+    /** 创建带跨步骤累计 usage 的终态响应副本。 */
+    protected ChatResponseDefault(ChatResponse source, AiUsage usage) {
+        this.terminal = true;
+        this.frameRaw = source == null ? null : source.getFrameRaw();
+        this.model = source == null ? null : source.getModel();
+        this.error = source == null ? null : source.getError();
+        this.usage = usage;
+        this.message = source == null ? null : source.getMessage();
+        this.finishReason = source == null ? "stop" : source.getFinishReason();
+        this.events = source == null || source.getEvents().isEmpty()
+                ? Collections.emptyList() : source.getEvents();
+    }
+
     protected ChatResponseDefault(ChatAccumulator acc, boolean terminal) {
+        this(acc, terminal, null);
+    }
+
+    /**
+     * 创建响应快照，并可为全流终态覆盖跨步骤累计用量。
+     */
+    protected ChatResponseDefault(ChatAccumulator acc, boolean terminal, AiUsage usageOverride) {
         this.terminal = terminal;
 
         this.frameRaw = acc.getFrameRaw();
         this.model = acc.getModel();
         this.error = acc.getError();
-        this.usage = acc.getUsage();
+        this.usage = usageOverride == null ? acc.getUsage() : usageOverride;
         this.events = acc.getEvents().isEmpty()
                 ? Collections.emptyList()
                 : Collections.unmodifiableList(new ArrayList<>(acc.getEvents()));
@@ -77,91 +103,117 @@ public class ChatResponseDefault implements ChatResponse {
             String rawFinish = ChatAccumulator.normalizeFinishReason(acc.lastFinishReason);
             this.finishReason = rawFinish != null ? rawFinish : "stop";
         } else {
-            this.message = frameMessage(acc);
+            // 流式语义只由 ChatEvent 承载；分片快照永不伪装成最终 AssistantMessage。
+            this.message = null;
             this.finishReason = ChatAccumulator.normalizeFinishReason(acc.lastFinishReason);
         }
-    }
-
-    /**
-     * 分片帧的消息：优先当帧分片；流式仅 media 尚无内容项时，回落聚合消息
-     */
-    private static AssistantMessage frameMessage(ChatAccumulator acc) {
-        if (acc.hasContentItems()) {
-            return acc.lastItem();
-        }
-
-        // Responses 流式 image_generation_call 等：只收 mediaBlocks 不推内容项
-        if (acc.isStream() && Utils.isNotEmpty(acc.getMediaBlocks())) {
-            return buildAggregationMessage(acc);
-        }
-
-        return null;
     }
 
     /**
      * 终态聚合消息（逻辑与旧 getAggregationMessage 一致，构造期执行一次）
      */
     private static AssistantMessage buildAggregationMessage(ChatAccumulator acc) {
-        if (acc.hasContentItems()) {
-            AssistantMessage lastMsg = acc.lastItem();
-
-            if (acc.isStream()) {
-                List<ContentBlock> aggBlocks = buildAggregationBlocks(acc, lastMsg);
-
-                return new AssistantMessage(
-                        acc.getAggregationText(),
-                        acc.getAggregationThinking(),
-                        acc.getAggregationText().length() == 0 && acc.getAggregationThinking().length() > 0,
-                        lastMsg.getContentRaw(),
-                        lastMsg.getToolCallsRaw(),
-                        lastMsg.getToolCalls(),
-                        lastMsg.getSearchResultsRaw(),
-                        aggBlocks
-                ).reasoningFieldName(lastMsg.getReasoningFieldName())
-                        .addMetadata(acc.getAggregationMetadata());
-            } else {
-                // 非流式：一次响应就是一条结果。方言可能把它拆成多条内容项（如思考项 + 工具调用项），
-                // 取末条——工具调用总在最后一项上，取首条会丢掉 toolCalls。
-                // 这也与 ChatRequestDescDefault 写入记忆时的取值（lastItem）保持同一来源
-                return lastMsg;
-            }
-        } else {
-            if (acc.getAggregationText().length() > 0
-                    || acc.getAggregationThinking().length() > 0
-                    || Utils.isNotEmpty(acc.getMediaBlocks())) {
-                List<ContentBlock> aggBlocks = buildAggregationBlocks(acc, null);
-
-                return new AssistantMessage(
-                        acc.getAggregationText(),
-                        acc.getAggregationThinking(),
-                        false,
-                        null, null, null, null,
-                        aggBlocks)
-                        .reasoningFieldName(acc.reasoning_field_name)
-                        .addMetadata(acc.getAggregationMetadata());
-            } else {
-                return null;
-            }
+        // Event-first：正文与思考优先取事件聚合；完整终态载体只作为旧方言/协议解析的兼容回退。
+        // 不再按 stream 分叉，否则相同事件在 call()/stream() 下会得到不同终态。
+        String text = acc.getAggregationText();
+        if (Utils.isEmpty(text) && acc.getTerminalText() != null) {
+            text = acc.getTerminalText();
         }
+        String thinking = acc.getAggregationThinking();
+        if (Utils.isEmpty(thinking) && acc.getTerminalThinking() != null) {
+            thinking = acc.getTerminalThinking();
+        }
+        if (text == null) text = "";
+        if (thinking == null) thinking = "";
+
+        boolean present = acc.isTerminalMessagePresent()
+                || text.length() > 0
+                || thinking.length() > 0
+                || Utils.isNotEmpty(acc.getMediaBlocks())
+                || Utils.isNotEmpty(acc.getTerminalMediaBlocks())
+                || Utils.isNotEmpty(acc.getAggregationSearchResults())
+                || Utils.isNotEmpty(acc.getTerminalSearchResults())
+                || Utils.isNotEmpty(acc.getAggregationCitations())
+                || Utils.isNotEmpty(acc.getTerminalCitations())
+                || Utils.isNotEmpty(acc.getTerminalProtocolStates());
+        if (!present) {
+            return null;
+        }
+
+        List<ContentBlock> aggBlocks = buildAggregationBlocks(acc, text);
+        java.util.Map<String, Object> metadata = new java.util.LinkedHashMap<>();
+        if (Utils.isNotEmpty(acc.getAggregationMetadata())) metadata.putAll(acc.getAggregationMetadata());
+        if (Utils.isNotEmpty(acc.getTerminalMetadata())) metadata.putAll(acc.getTerminalMetadata());
+
+        AssistantMessage message;
+        boolean legacyCarrier = acc.getTerminalContentRaw() != null
+                || acc.getTerminalToolCallsRaw() != null
+                || acc.getTerminalSearchResultsRaw() != null
+                || acc.getTerminalReasoningFieldName() != null;
+        List<SearchResult> searchResults = Utils.isNotEmpty(acc.getAggregationSearchResults())
+                ? new ArrayList<>(acc.getAggregationSearchResults())
+                : copyOrNull(acc.getTerminalSearchResults());
+        List<Citation> citations = Utils.isNotEmpty(acc.getAggregationCitations())
+                ? new ArrayList<>(acc.getAggregationCitations())
+                : copyOrNull(acc.getTerminalCitations());
+        if (legacyCarrier) {
+            message = AssistantMessage.legacySnapshot(
+                    text,
+                    thinking,
+                    acc.getTerminalContentRaw(),
+                    acc.getTerminalToolCallsRaw(),
+                    acc.getTerminalToolCalls(),
+                    acc.getTerminalSearchResultsRaw(),
+                    acc.getTerminalReasoningFieldName(),
+                    aggBlocks,
+                    searchResults,
+                    citations,
+                    acc.getTerminalProtocolStates(),
+                    metadata);
+        } else {
+            message = AssistantMessage.snapshot(
+                    text,
+                    thinking,
+                    acc.getTerminalToolCalls(),
+                    aggBlocks,
+                    searchResults,
+                    citations,
+                    acc.getTerminalProtocolStates(),
+                    metadata);
+        }
+        return message;
+    }
+
+
+
+    private static <T> List<T> copyOrNull(List<T> source) {
+        return Utils.isEmpty(source) ? null : new ArrayList<>(source);
     }
 
     /**
-     * 构建聚合消息的 blocks：文本投影 + 流中媒体 + 最后一条消息媒体
+     * 构建聚合消息的 blocks。
+     * <p>{@code MEDIA_DONE} 聚合结果是流式与非流式共同的权威来源；仅在没有媒体事件时，
+     * 才回退到完整终态载体中的媒体。方言若从完整消息投影媒体，必须为每个块发出一次
+     * {@code MEDIA_DONE}，因此不能再把两份列表简单相加。</p>
      */
-    private static List<ContentBlock> buildAggregationBlocks(ChatAccumulator acc, AssistantMessage last) {
+    private static List<ContentBlock> buildAggregationBlocks(ChatAccumulator acc, String text) {
         List<ContentBlock> agg = new ArrayList<>();
 
-        // 优先使用流式过程中已收集的 mediaBlocks（publishChoice / 方言终态写入）。
-        // 不再与 last.blocks 叠加，避免同一媒体被聚合两次。
         if (Utils.isNotEmpty(acc.getMediaBlocks())) {
-            agg.addAll(acc.getMediaBlocks());
-        } else if (last != null && last.hasMedia()) {
-            // 兜底：媒体只挂在最后一条消息、未进入 mediaBlocks 的路径
-            for (ContentBlock block : last.getBlocks()) {
-                if (!(block instanceof TextBlock)) {
-                    agg.add(block);
+            // 事件是流式语义的权威来源；正文与媒体按事件到达顺序保留。
+            if (Utils.isNotEmpty(acc.getOrderedBlocks())) {
+                List<ContentBlock> ordered = new ArrayList<>(acc.getOrderedBlocks());
+                if (Utils.isNotEmpty(text) && containsTextBlock(ordered) == false) {
+                    // 非流式兼容方言可能只把媒体投影为事件、正文仍保存在完整终态载体中。
+                    // 此时不能让媒体事件遮蔽正文块；流式正文已有 TEXT_DELTA 时 ordered 中本就包含 TextBlock。
+                    ordered.add(0, TextBlock.of(text));
                 }
+                return ordered;
             }
+            agg.addAll(acc.getMediaBlocks());
+        } else if (Utils.isNotEmpty(acc.getTerminalMediaBlocks())) {
+            // 完整终态载体中的 blocks 已有协议顺序，必须原样保留 TextBlock 与媒体的相对位置。
+            return new ArrayList<>(acc.getTerminalMediaBlocks());
         }
 
         if (Utils.isEmpty(agg)) {
@@ -170,11 +222,20 @@ public class ChatResponseDefault implements ChatResponse {
         }
 
         List<ContentBlock> result = new ArrayList<>();
-        if (Utils.isNotEmpty(acc.getAggregationText())) {
-            result.add(TextBlock.of(acc.getAggregationText()));
+        if (Utils.isNotEmpty(text)) {
+            result.add(TextBlock.of(text));
         }
         result.addAll(agg);
         return result;
+    }
+
+    private static boolean containsTextBlock(List<ContentBlock> blocks) {
+        for (ContentBlock block : blocks) {
+            if (block instanceof TextBlock) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -211,9 +272,13 @@ public class ChatResponseDefault implements ChatResponse {
             return true;
         }
 
-        return message.getContent() == null
+        return Utils.isEmpty(message.getContent())
+                && !message.hasThinking()
                 && Utils.isEmpty(message.getToolCalls())
-                && Utils.isEmpty(message.getBlocks());
+                && Utils.isEmpty(message.getBlocks())
+                && Utils.isEmpty(message.resolveSearchResults())
+                && Utils.isEmpty(message.getCitations())
+                && !message.hasProtocolStates();
     }
 
     @Override
@@ -257,6 +322,25 @@ public class ChatResponseDefault implements ChatResponse {
         }
 
         return Collections.unmodifiableList(message.getBlocks());
+    }
+
+    @Override
+    public List<SearchResult> getSearchResults() {
+        if (message == null) {
+            return Collections.emptyList();
+        }
+        List<SearchResult> results = message.resolveSearchResults();
+        return results.isEmpty() ? Collections.<SearchResult>emptyList()
+                : Collections.unmodifiableList(results);
+    }
+
+    @Override
+    public List<Citation> getCitations() {
+        if (message == null || Utils.isEmpty(message.getCitations())) {
+            return Collections.emptyList();
+        }
+
+        return Collections.unmodifiableList(message.getCitations());
     }
 
     @Override

@@ -108,8 +108,7 @@ public interface ChatRequestDesc {
      * <p>订阅方应 switch 在 {@link ChatEvent#getGroup()} 上并保留 default 分支，
      * 这样后续版本新增具体事件类型时已写的分派逻辑不会漏事件。</p>
      *
-     * <p><b>不变量</b>：{@code RESPONSE_START} 与 {@code RESPONSE_END} 全流各恰好一次
-     * （含异常终止路径）；每轮模型调用对应一对 {@code STEP_START} / {@code STEP_END}；
+     * <p><b>成功流不变量</b>：{@code RESPONSE_START} 与 {@code RESPONSE_END} 全流各恰好一次；每轮模型调用对应一对 {@code STEP_START} / {@code STEP_END}；
      * 每个 {@code TEXT_DELTA} / {@code THINKING_DELTA} 一定被对应的 START/END 包裹；
      * 每个 {@code TOOL_CALL_ARGS_DELTA} 之前必有 {@code TOOL_CALL_START}，流终止前必有 {@code TOOL_CALL_END}。</p>
      *

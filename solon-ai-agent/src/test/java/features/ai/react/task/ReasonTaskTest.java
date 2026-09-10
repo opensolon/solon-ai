@@ -265,8 +265,7 @@ public class ReasonTaskTest {
 
     // ==================== 空响应 + 有思考内容（格式修正） ====================
     //
-    // 「有思考内容」= content 包含 <think> 标签，使 getResultContent() 返回空，
-    //   但 getContent() 返回原始内容（非空）→ 走格式修正分支
+    // 「有思考内容」= 独立 thinking 字段或旧 content 内嵌 <think>，正文投影为空时走格式修正分支
 
     @Test
     @DisplayName("空响应但有思考内容（第 1 次）：注入格式修正提示，设置 route=reason")
@@ -312,9 +311,26 @@ public class ReasonTaskTest {
     }
 
     @Test
-    @DisplayName("空响应只有 <think> 无 </think>：同样 getResultContent 为空，走格式修正")
+    @DisplayName("独立 thinking 字段：保留思考上下文并注入格式修正提示")
+    public void testEmptyResponse_withThinkingField_retry() throws Throwable {
+        AssistantMessage msg = new AssistantMessage("", "field thinking");
+        ChatResponse resp = mockResponse(msg);
+        when(reqDesc.call()).thenReturn(resp);
+
+        reasonTask.run(trace, context);
+
+        assertEquals(1, emptyRetryCounter.get());
+        assertEquals(2, workingMemory.getMessages().size());
+        AssistantMessage preserved = (AssistantMessage) workingMemory.getMessages().get(0);
+        assertEquals("field thinking", preserved.getThinking());
+        assertTrue(workingMemory.getMessages().get(1).getContent().contains("输出格式修正"));
+        verify(trace).setRoute(ReActAgent.ID_REASON);
+    }
+
+    @Test
+    @DisplayName("空响应只有 <think> 无 </think>：同样作为思考上下文走格式修正")
     public void testEmptyResponse_withUnclosedThink() throws Throwable {
-        // <think> 未闭合 → getResultContent() 返回 ""，getContent() 非空
+        // <think> 未闭合 → 正文为空，但仍可恢复 thinking 并保留到重试上下文
         AssistantMessage msg = msgFromJson("{\"role\":\"assistant\",\"content\":\"<think>incomplete\"}");
         ChatResponse resp = mockResponse(msg);
         when(reqDesc.call()).thenReturn(resp);
@@ -393,6 +409,20 @@ public class ReasonTaskTest {
         // 纯思考轮降级用思考内容作答：属正常收口（abnormal=false），不走单参兜底文案
         verify(trace).setFinalAnswer(eq("Still thinking"), eq(false));
         verify(trace, never()).setFinalAnswer(anyString());
+    }
+
+    @Test
+    @DisplayName("独立 thinking 字段达到重试上限：降级为正常最终答案")
+    public void testEmptyResponse_withThinkingField_retriesExhausted() throws Throwable {
+        AssistantMessage msg = new AssistantMessage("", "Field fallback");
+        ChatResponse resp = mockResponse(msg);
+        when(reqDesc.call()).thenReturn(resp);
+        emptyRetryCounter.set(2);
+
+        reasonTask.run(trace, context);
+
+        verify(trace).setRoute(Agent.ID_END);
+        verify(trace).setFinalAnswer("Field fallback", false);
     }
 
     @Test

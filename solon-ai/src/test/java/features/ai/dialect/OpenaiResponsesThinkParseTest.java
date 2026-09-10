@@ -7,6 +7,8 @@ import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRequest;
+import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContextDefault;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -35,6 +37,12 @@ public class OpenaiResponsesThinkParseTest {
      */
     private static void parse(OpenaiResponsesDialect dialect, ChatAccumulator acc, String json) {
         dialect.parseResponseJson(ChatStreamContextDefault.ofNoEmit(new ChatConfig(), acc), json);
+    }
+
+    private static void parse(OpenaiResponsesDialect dialect, ChatAccumulator acc,
+                              List<ChatEvent> events, String json) {
+        dialect.parseResponseJson(new ChatStreamContextDefault(
+                new ChatConfig(), acc.getRequest(), acc, null, 0, events::add), json);
     }
     private static final OpenaiResponsesDialect dialect = OpenaiResponsesDialect.getInstance();
 
@@ -74,10 +82,9 @@ public class OpenaiResponsesThinkParseTest {
                 + "}";
 
         parse(dialect, resp, json);
-        // 4.1 起与 AbstractChatDialect 对齐：思考与正文合并为单条消息（text/thinking 已分离）
-        Assertions.assertEquals(1, resp.getContentItems().size());
-        AssistantMessage msg = resp.getContentItems().get(0);
-        Assertions.assertFalse(msg.isThinking());
+        // 4.1 起与 AbstractChatDialect 对齐：思考与正文合并为单条终态消息（text/thinking 已分离）
+        AssistantMessage msg = resp.snapshotTerminal().getMessage();
+        Assertions.assertNotNull(msg);
         Assertions.assertEquals("让我想想再想想", msg.getThinking());
         Assertions.assertEquals("你好", msg.getText());
         // usage 思考 token 已解析
@@ -103,9 +110,8 @@ public class OpenaiResponsesThinkParseTest {
                 + "}";
 
         parse(dialect, resp, json);
-        Assertions.assertEquals(1, resp.getContentItems().size());
-        AssistantMessage topMsg = resp.getContentItems().get(0);
-        Assertions.assertFalse(topMsg.isThinking());
+        AssistantMessage topMsg = resp.snapshotTerminal().getMessage();
+        Assertions.assertNotNull(topMsg);
         Assertions.assertEquals("顶层思考", topMsg.getThinking());
         Assertions.assertEquals("顶层正文", topMsg.getText());
     }
@@ -133,23 +139,27 @@ public class OpenaiResponsesThinkParseTest {
                         + "\"output_tokens_details\":{\"reasoning_tokens\":8}}}}"
         };
 
+        List<ChatEvent> events = new ArrayList<>();
         for (String line : sse) {
-            parse(dialect, resp, line);
+            parse(dialect, resp, events, line);
         }
 
         Assertions.assertTrue(resp.isFinished());
-        // 既有思考消息、也有非思考消息
-        Assertions.assertTrue(resp.getContentItems().stream().anyMatch(c -> c.isThinking()));
-        Assertions.assertTrue(resp.getContentItems().stream().anyMatch(c -> !c.isThinking()));
+        Assertions.assertTrue(events.stream().anyMatch(e -> e.is(ChatEventType.THINKING_DELTA)));
+        Assertions.assertTrue(events.stream().anyMatch(e -> e.is(ChatEventType.TEXT_DELTA)));
         // 思考增量内容已按序回传
         List<String> thinkDeltas = new ArrayList<>();
-        for (AssistantMessage choice : resp.getContentItems()) {
-            if (choice.isThinking()) {
-                thinkDeltas.add(choice.getContent());
+        for (ChatEvent event : events) {
+            if (event.is(ChatEventType.THINKING_DELTA)) {
+                thinkDeltas.add(event.getText());
             }
         }
         Assertions.assertEquals("让我", thinkDeltas.get(0));
         Assertions.assertEquals("想想", thinkDeltas.get(1));
+        AssistantMessage terminal = resp.snapshotTerminal().getMessage();
+        Assertions.assertNotNull(terminal);
+        Assertions.assertEquals("让我想想", terminal.getThinking());
+        Assertions.assertEquals("你好", terminal.getText());
         // usage 已解析
         Assertions.assertNotNull(resp.getUsage());
         Assertions.assertEquals(8L, resp.getUsage().thinkTokens());
@@ -168,12 +178,16 @@ public class OpenaiResponsesThinkParseTest {
                         + "\"usage\":{\"input_tokens\":10,\"output_tokens\":20,\"total_tokens\":30}}}"
         };
 
+        List<ChatEvent> events = new ArrayList<>();
         for (String line : sse) {
-            parse(dialect, resp, line);
+            parse(dialect, resp, events, line);
         }
 
         Assertions.assertTrue(resp.isFinished());
-        Assertions.assertTrue(resp.hasContentItems());
+        Assertions.assertTrue(events.stream().anyMatch(e -> e.is(ChatEventType.TEXT_DELTA)
+                && "部分内容".equals(e.getText())));
+        Assertions.assertEquals("部分内容", resp.getAggregationText());
+        Assertions.assertEquals("部分内容", resp.snapshotTerminal().getMessage().getText());
     }
 
     /**
@@ -183,7 +197,7 @@ public class OpenaiResponsesThinkParseTest {
     public void buildShouldEmitReasoningItemForThinkingMessage() {
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.ofSystem("你是助手"));
-        messages.add(new AssistantMessage("", "让我先想想", true));
+        messages.add(new AssistantMessage("", "让我先想想"));
         messages.add(ChatMessage.ofUser("你好"));
 
         ONode node = new OpenaiResponsesRequestBuilder().build(new ChatConfig(), ChatOptions.of(), messages, false);
@@ -208,7 +222,7 @@ public class OpenaiResponsesThinkParseTest {
     @Test
     public void buildShouldStripThinkTagsForThinkingMessage() {
         List<ChatMessage> messages = new ArrayList<>();
-        messages.add(new AssistantMessage("", "内部思考", true));
+        messages.add(new AssistantMessage("", "内部思考"));
 
         ONode node = new OpenaiResponsesRequestBuilder().build(new ChatConfig(), ChatOptions.of(), messages, false);
 
@@ -218,24 +232,31 @@ public class OpenaiResponsesThinkParseTest {
     }
 
     /**
-     * 流式：无 reasoning 上下文（缺 output_item.added / content_part.added 前置事件）时，
-     * reasoning_text.delta 应被丢弃而非输出为 thinking 消息（防止非思考内容被误标）
+     * 流式：reasoning_text.delta 即使缺少 output_item/content_part 前置事件，
+     * 也应按官方 Responses 增量语义输出 thinking 事件。
      */
     @Test
-    public void streamShouldDropReasoningDeltaWithoutContext() {
+    public void streamShouldParseReasoningDeltaWithoutContext() {
         ChatAccumulator resp = newAcc(true);
         String[] sse = new String[]{
                 "data: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"孤立增量\"}",
                 "data: {\"type\":\"response.completed\",\"response\":{\"model\":\"m\"}}"
         };
 
+        List<ChatEvent> events = new ArrayList<>();
         for (String line : sse) {
-            parse(dialect, resp, line);
+            parse(dialect, resp, events, line);
         }
 
         Assertions.assertTrue(resp.isFinished());
-        // 不应产生任何 thinking 消息
-        Assertions.assertTrue(resp.getContentItems().stream().noneMatch(c -> c.isThinking()));
+        ChatEvent thinking = events.stream()
+                .filter(e -> e.is(ChatEventType.THINKING_DELTA))
+                .findFirst()
+                .orElse(null);
+        Assertions.assertNotNull(thinking);
+        Assertions.assertEquals("孤立增量", thinking.getText());
+        Assertions.assertEquals("孤立增量", resp.getAggregationThinking());
+        Assertions.assertEquals("孤立增量", resp.snapshotTerminal().getMessage().getThinking());
     }
 
     /**
@@ -253,17 +274,19 @@ public class OpenaiResponsesThinkParseTest {
                 "data: {\"type\":\"response.completed\",\"response\":{\"model\":\"m\"}}"
         };
 
+        List<ChatEvent> events = new ArrayList<>();
         for (String line : sse) {
-            parse(dialect, resp, line);
+            parse(dialect, resp, events, line);
         }
 
         Assertions.assertTrue(resp.isFinished());
-        // 应产生 thinking 消息且内容正确
-        AssistantMessage thinking = resp.getContentItems().stream()
-                .filter(c -> c.isThinking())
+        ChatEvent thinking = events.stream()
+                .filter(e -> e.is(ChatEventType.THINKING_DELTA))
                 .findFirst()
                 .orElse(null);
         Assertions.assertNotNull(thinking);
-        Assertions.assertEquals("思考中", thinking.getContent());
+        Assertions.assertEquals("思考中", thinking.getText());
+        Assertions.assertEquals("思考中", resp.getAggregationThinking());
+        Assertions.assertEquals("思考中", resp.snapshotTerminal().getMessage().getThinking());
     }
 }

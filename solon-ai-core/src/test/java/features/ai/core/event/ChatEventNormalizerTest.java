@@ -189,6 +189,17 @@ public class ChatEventNormalizerTest {
     }
 
     @Test
+    public void duplicateStepStartIsDroppedAndGlobalTerminalClosesStepFirst() {
+        feed(STEP_START);
+        feed(STEP_START);
+        feed(RESPONSE_END);
+
+        assertEquals(java.util.Arrays.asList(STEP_START, STEP_END, RESPONSE_END), types());
+        normalizer.complete(sink);
+        assertEquals(java.util.Arrays.asList(STEP_START, STEP_END, RESPONSE_END), types());
+    }
+
+    @Test
     public void multipleSameGroupBlocksAreTrackedIndependently() {
         normalizer.apply(ChatEventDefault.of(TEXT_DELTA).itemId("a").index(0).text("a1").build(), sink);
         normalizer.apply(ChatEventDefault.of(TEXT_DELTA).itemId("b").index(1).text("b1").build(), sink);
@@ -243,6 +254,7 @@ public class ChatEventNormalizerTest {
         normalizer.apply(ChatEventDefault.of(TEXT_DELTA)
                 .text("a")
                 .responseId("resp-1")
+                .providerResponseId("provider-1")
                 .step(3)
                 .build(), sink);
 
@@ -252,8 +264,30 @@ public class ChatEventNormalizerTest {
 
         for (ChatEvent e : out) {
             assertEquals("resp-1", e.getResponseId(), "responseId 应全流一致: " + e.getType());
+            assertEquals("provider-1", e.getProviderResponseId(), "providerResponseId 应全块一致: " + e.getType());
             assertEquals(3, e.getStep(), "step 应全流一致: " + e.getType());
         }
+    }
+
+    /**
+     * 归一化器补出的事件必须完整保留供应商响应标识与错误负载
+     */
+    @Test
+    public void rebuiltBoundaryKeepsProviderIdentityAndError() {
+        org.noear.solon.ai.chat.ChatException error =
+                new org.noear.solon.ai.chat.ChatException("upstream warning");
+
+        normalizer.apply(ChatEventDefault.of(TEXT_DELTA)
+                .text("a")
+                .responseId("resp-1")
+                .providerResponseId("provider-1")
+                .step(2)
+                .error(error)
+                .build(), sink);
+
+        assertEquals(java.util.Arrays.asList(TEXT_START, TEXT_DELTA), types());
+        assertEquals("provider-1", out.get(0).getProviderResponseId());
+        assertSame(error, out.get(0).getError());
     }
 
     /// //////////////////////////
@@ -283,6 +317,20 @@ public class ChatEventNormalizerTest {
 
         assertEquals(java.util.Arrays.asList(
                 TOOL_CALL_START, TOOL_CALL_START, TOOL_CALL_END, TOOL_CALL_END), types());
+    }
+
+    @Test
+    public void parallelAnonymousToolCallsAreClosedByIndex() {
+        normalizer.apply(ChatEventDefault.of(TOOL_CALL_START).index(0).providerResponseId("p1").build(), sink);
+        normalizer.apply(ChatEventDefault.of(TOOL_CALL_START).index(1).providerResponseId("p1").build(), sink);
+        normalizer.complete(sink);
+
+        assertEquals(java.util.Arrays.asList(
+                TOOL_CALL_START, TOOL_CALL_START, TOOL_CALL_END, TOOL_CALL_END), types());
+        assertEquals(0, out.get(2).getIndex());
+        assertEquals(1, out.get(3).getIndex());
+        assertEquals("p1", out.get(2).getProviderResponseId());
+        assertEquals("p1", out.get(3).getProviderResponseId());
     }
 
     /**
@@ -334,6 +382,18 @@ public class ChatEventNormalizerTest {
 
         assertEquals(java.util.Arrays.asList(
                 TEXT_START, TEXT_DELTA, TEXT_END, TOOL_CALL_START, TOOL_CALL_END), types());
+    }
+
+    /** 终态错误和中止不可被自定义事件过滤器吞掉。 */
+    @Test
+    public void guardedFilterAlwaysKeepsTerminalEvents() {
+        ChatEventFilter filter = ChatEventFilter.guarded(ChatEventFilter.of(TEXT_DELTA));
+
+        assertTrue(filter.test(ChatEventDefault.of(ERROR).build()));
+        assertTrue(filter.test(ChatEventDefault.of(ABORT).build()));
+        assertTrue(filter.test(ChatEventDefault.of(RESPONSE_END).build()));
+        assertTrue(filter.test(ChatEventDefault.of(STEP_END).build()));
+        assertFalse(filter.test(ChatEventDefault.of(CITATION).build()));
     }
 
     /**

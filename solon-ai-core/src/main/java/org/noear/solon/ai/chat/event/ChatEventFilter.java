@@ -17,7 +17,6 @@ package org.noear.solon.ai.chat.event;
 
 import org.noear.solon.lang.Preview;
 
-import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.Set;
 
@@ -50,7 +49,9 @@ public interface ChatEventFilter {
      */
     static boolean isRequired(ChatEvent event) {
         ChatEventGroup group = event.getGroup();
-        return group == ChatEventGroup.LIFECYCLE || group == ChatEventGroup.STEP;
+        return event.isTerminal()
+                || group == ChatEventGroup.LIFECYCLE
+                || group == ChatEventGroup.STEP;
     }
 
     /**
@@ -85,7 +86,17 @@ public interface ChatEventFilter {
      * @param types 事件类型
      */
     static ChatEventFilter of(ChatEventType... types) {
-        Set<ChatEventType> set = EnumSet.copyOf(Arrays.asList(types));
+        if (types == null || types.length == 0) {
+            return event -> false;
+        }
+
+        Set<ChatEventType> set = EnumSet.noneOf(ChatEventType.class);
+        for (ChatEventType type : types) {
+            if (type == null) {
+                throw new IllegalArgumentException("Chat event type must not be null");
+            }
+            set.add(type);
+        }
         return event -> set.contains(event.getType());
     }
 

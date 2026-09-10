@@ -18,20 +18,28 @@ package features.ai.core;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
+import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventDefault;
+import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
+import org.noear.solon.ai.chat.event.ChatStreamContextDefault;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.MessageProtocolState;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 
 import java.util.Collections;
-import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -51,9 +59,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * @author noear
  */
 public class ChatResponseFacadeTest {
-    /**
-     * 终态：getMessage() == 完整聚合（跨分片），且构造期算定、多次取值恒等
-     */
     @Test
     public void terminalMessageIsAggregation() {
         ChatAccumulator acc = newStreamAcc();
@@ -77,19 +82,16 @@ public class ChatResponseFacadeTest {
      * 分片帧：保持旧语义（当帧分片）
      */
     @Test
-    public void frameKeepsLastChunkSemantic() {
-        ChatAccumulator acc = newStreamAcc();
+    public void frameUsesChatEventDeltaSemantic() {
+        ChatEvent frame1 = ChatEventDefault.of(ChatEventType.TEXT_DELTA).text("你好").build();
+        ChatEvent frame2 = ChatEventDefault.of(ChatEventType.TEXT_DELTA).text("，世界").build();
 
-        appendChoice(acc, "你好", "");
-        ChatResponse frame1 = acc.snapshotFrame();
-        appendChoice(acc, "，世界", "");
-        ChatResponse frame2 = acc.snapshotFrame();
+        assertEquals("你好", frame1.getTextOrEmpty(), "流式分片类型与负载应从 ChatEvent 读取");
+        assertEquals("，世界", frame2.getTextOrEmpty());
+        assertTrue(frame1.is(ChatEventType.TEXT_DELTA));
 
-        assertEquals("你好", frame1.getMessage().getContent(), "分片帧应为当帧分片");
-        assertEquals("，世界", frame2.getMessage().getContent());
-
-        //帧之间互不污染（旧实现是同一个被 reset 复用的可变实例）
-        assertEquals("你好", frame1.getMessage().getContent());
+        //事件不可变，帧之间互不污染
+        assertEquals("你好", frame1.getTextOrEmpty());
     }
 
     /**
@@ -118,7 +120,7 @@ public class ChatResponseFacadeTest {
 
         //内容项不再携带完成原因：只有内容项、未记录 lastFinishReason 时，结果是默认终态
         ChatAccumulator acc2 = newStreamAcc();
-        acc2.addContentItem(new AssistantMessage("hi"));
+        acc2.mergeTerminalMessage(new AssistantMessage("hi"));
         assertEquals("stop", acc2.snapshotTerminal().getFinishReason());
 
         //完全无信号时给出默认值
@@ -135,8 +137,7 @@ public class ChatResponseFacadeTest {
         assertEquals(Collections.emptyList(), acc.snapshotTerminal().getToolCalls());
 
         ToolCall call = new ToolCall("0", "call_1", "getWeather", null, null);
-        acc.addContentItem(new AssistantMessage(null, null, false, null, null,
-                        Collections.singletonList(call), null));
+        acc.mergeTerminalMessage(new AssistantMessage(null, null, Collections.singletonList(call), null));
 
         List<ToolCall> calls = acc.snapshotTerminal().getToolCalls();
         assertEquals(1, calls.size());
@@ -151,9 +152,8 @@ public class ChatResponseFacadeTest {
     @Test
     public void nonStreamTakesLastContentItem() {
         ChatAccumulator acc = newCallAcc();
-        acc.addContentItem(new AssistantMessage("首条"));
-        acc.addContentItem(new AssistantMessage("次条"));
-
+        acc.mergeTerminalMessage(new AssistantMessage("首条"));
+        acc.mergeTerminalMessage(new AssistantMessage("次条"));
         ChatResponse terminal = acc.snapshotTerminal();
 
         assertEquals("次条", terminal.getMessage().getContent());
@@ -169,8 +169,8 @@ public class ChatResponseFacadeTest {
     public void nonStreamKeepsToolCallsOnLastItem() {
         ChatAccumulator acc = newCallAcc();
         acc.lastFinishReason = "tool_calls";
-        acc.addContentItem(new AssistantMessage("", "思考中", true));
-        acc.addContentItem(new AssistantMessage(null, null, false, null, null,
+        acc.mergeTerminalMessage(new AssistantMessage("", "思考中"));
+        acc.mergeTerminalMessage(new AssistantMessage(null, null,
                 Collections.singletonList(new ToolCall("0", "call_1", "getWeather", null, null)), null));
 
         ChatResponse terminal = acc.snapshotTerminal();
@@ -189,10 +189,134 @@ public class ChatResponseFacadeTest {
         ChatAccumulator acc = newStreamAcc();
         acc.appendText("分片A");
         acc.appendText("分片B");
-        acc.addContentItem(new AssistantMessage("分片A"));
-        acc.addContentItem(new AssistantMessage("分片B"));
+        acc.mergeTerminalMessage(new AssistantMessage("分片A"));
+        acc.mergeTerminalMessage(new AssistantMessage("分片B"));
 
         assertEquals("分片A分片B", acc.snapshotTerminal().getText());
+        assertNull(acc.snapshotTerminal().getMessage().getContentRaw(),
+                "普通正文不再生成已弃用 contentRaw 镜像");
+    }
+
+    @Test
+    public void terminalProtocolStateAloneProducesNonEmptyMessage() {
+        ChatAccumulator acc = newStreamAcc();
+        acc.putTerminalProtocolState("vendor.protocol",
+                new MessageProtocolState(1, Collections.<String, Object>singletonMap("cursor", "next")));
+
+        ChatResponse terminal = acc.snapshotTerminal();
+
+        assertNotNull(terminal.getMessage());
+        assertFalse(terminal.isEmpty(), "协议续跑状态本身就是有效终态载荷");
+        MessageProtocolState state = terminal.getMessage().getProtocolState("vendor.protocol");
+        assertNotNull(state);
+        assertNotNull(state.getSemanticHash());
+    }
+
+    @Test
+    public void streamProtocolStatesSurviveAndBindFinalSemanticHash() {
+        ChatAccumulator acc = newStreamAcc();
+        AssistantMessage carrier = AssistantMessage.snapshot("", "", null, null, null, null,
+                Collections.singletonMap("anthropic.messages", new MessageProtocolState(1,
+                        Collections.<String, Object>singletonMap("thinkingSignature", "sig_1"))));
+        acc.mergeTerminalMessage(carrier);
+        acc.appendText("final text");
+
+        AssistantMessage terminal = acc.snapshotTerminal().getMessage();
+        assertNotNull(terminal.getProtocolState("anthropic.messages"));
+        assertNotNull(terminal.getProtocolState("anthropic.messages").getSemanticHash());
+        assertEquals("final text", terminal.getText());
+    }
+
+    @Test
+    public void streamProtocolContentRawSurvivesTextFragments() {
+        ChatAccumulator acc = newStreamAcc();
+        AssistantMessage legacyCarrier = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"\"," +
+                        "\"contentRaw\":{\"type\":\"protocol-carrier\"}}");
+        acc.mergeTerminalMessage(legacyCarrier);
+        appendChoice(acc, "分片A", "");
+        appendChoice(acc, "分片B", "");
+
+        AssistantMessage terminal = acc.snapshotTerminal().getMessage();
+        assertEquals("分片A分片B", terminal.getText());
+        assertEquals("protocol-carrier", ((Map<?, ?>) terminal.getContentRaw()).get("type"),
+                "协议型 raw 必须保留");
+    }
+
+    @Test
+    public void streamTerminalCarrierSurvivesContentItemsClear() {
+        ChatAccumulator acc = newStreamAcc();
+        AssistantMessage carrier = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"\"," +
+                        "\"contentRaw\":{\"type\":\"output_text\"}," +
+                        "\"toolCallsRaw\":[{\"id\":\"call_raw\"}]," +
+                        "\"toolCalls\":[{\"index\":\"0\",\"id\":\"call_1\",\"name\":\"search\"}]," +
+                        "\"searchResultsRaw\":[{\"query\":\"solon\"}]," +
+                        "\"reasoningFieldName\":\"reasoning_content\"," +
+                        "\"metadata\":{\"reasoning_item_id\":\"rs_1\"}}");
+
+        acc.mergeTerminalMessage(carrier);
+        acc.mergeTerminalMessage(new AssistantMessage("", "", null,
+                Collections.singletonList(ImageBlock.ofUrl("https://example.com/carrier.png"))));
+        acc.mergeTerminalMessage(new AssistantMessage("", ""));
+        AssistantMessage terminal = acc.snapshotTerminal().getMessage();
+        assertNotNull(terminal);
+        assertEquals("output_text", ((Map<?, ?>) terminal.getContentRaw()).get("type"));
+        assertEquals("call_1", terminal.getToolCalls().get(0).getId());
+        assertEquals("call_raw", terminal.getToolCallsRaw().get(0).get("id"));
+        assertEquals("solon", terminal.getSearchResultsRaw().get(0).get("query"));
+        assertEquals("reasoning_content", terminal.getReasoningFieldName());
+        assertEquals("rs_1", terminal.getMetadataAs("reasoning_item_id"));
+        assertTrue(terminal.hasMedia());
+    }
+
+    @Test
+    public void pureThinkingTerminalIsNotEmpty() {
+        ChatAccumulator acc = newStreamAcc();
+        acc.appendThinking("只思考，不输出正文");
+
+        ChatResponse terminal = acc.snapshotTerminal();
+        assertNotNull(terminal.getMessage());
+        assertFalse(terminal.isEmpty());
+        assertFalse(terminal.hasContent());
+        assertEquals("", terminal.getContent());
+        assertEquals("只思考，不输出正文", terminal.getThinking());
+        assertTrue(terminal.getMessage().isThinkingOnly());
+    }
+
+    @Test
+    public void frameSnapshotNeverContainsFinalMessage() {
+        ChatAccumulator acc = newStreamAcc();
+        acc.appendText("partial");
+        acc.addMediaBlocks(Collections.singletonList(ImageBlock.ofUrl("https://example.com/frame.png")));
+
+        ChatResponse frame = acc.snapshotFrame();
+        assertFalse(frame.isTerminal());
+        assertTrue(frame.isEmpty());
+        assertEquals(null, frame.getMessage());
+    }
+
+    @Test
+    public void streamToolFinalizationMergePreservesProtocolCarrier() {
+        ChatAccumulator acc = newStreamAcc();
+        AssistantMessage legacyCarrier = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"\"," +
+                        "\"contentRaw\":{\"type\":\"reasoning\"}," +
+                        "\"metadata\":{\"reasoning_item_id\":\"rs_1\"}}");
+        acc.mergeTerminalMessage(legacyCarrier);
+        acc.mergeTerminalMessage(new AssistantMessage("", "", null,
+                Collections.singletonList(ImageBlock.ofUrl("https://example.com/tool-carrier.png"))));
+
+        ToolCall call = new ToolCall("0", "call_1", "search", "{}", Collections.emptyMap());
+        acc.mergeTerminalMessage(new AssistantMessage("", "", Collections.singletonList(call), null)
+                .addMetadata("tool_meta", "kept"));
+
+        AssistantMessage terminal = acc.snapshotTerminal().getMessage();
+        assertEquals("reasoning", ((Map<?, ?>) terminal.getContentRaw()).get("type"));
+        assertTrue(terminal.hasMedia());
+        assertEquals("rs_1", terminal.getMetadataAs("reasoning_item_id"));
+        assertEquals("kept", terminal.getMetadataAs("tool_meta"));
+        assertEquals("call_1", terminal.getToolCalls().get(0).getId());
     }
 
     /**
@@ -202,8 +326,7 @@ public class ChatResponseFacadeTest {
     public void collectionViewsAreReadOnly() {
         ChatAccumulator acc = newCallAcc();
         ToolCall call = new ToolCall("0", "call_1", "getWeather", null, null);
-        acc.addContentItem(new AssistantMessage(null, null, false, null, null,
-                        Collections.singletonList(call), null));
+        acc.mergeTerminalMessage(new AssistantMessage(null, null, Collections.singletonList(call), null));
 
         ChatResponse terminal = acc.snapshotTerminal();
 
@@ -222,6 +345,66 @@ public class ChatResponseFacadeTest {
 
         appendChoice(acc, "后续内容", "");
         assertEquals("hi", terminal.getMessage().getContent());
+    }
+
+    @Test
+    public void nonStreamEventFactsSurviveTerminalSnapshot() {
+        ChatAccumulator acc = newCallAcc();
+        ChatStreamContext ctx = ChatStreamContextDefault.ofNoEmit(acc);
+        ImageBlock image = ImageBlock.ofUrl("https://example.com/event.png");
+
+        ctx.emit(ctx.event(ChatEventType.TEXT_DELTA).text("event text").build());
+        ctx.emit(ctx.event(ChatEventType.THINKING_DELTA).text("event thinking").build());
+        ctx.emit(ctx.event(ChatEventType.MEDIA_DONE).block(image).build());
+
+        ChatResponse terminal = acc.snapshotTerminal();
+        assertEquals("event text", terminal.getText());
+        assertEquals("event thinking", terminal.getThinking());
+        assertEquals(1, terminal.getBlocks().stream().filter(b -> !(b instanceof org.noear.solon.ai.chat.content.TextBlock)).count());
+    }
+
+    @Test
+    public void eventFactsTakePriorityAndCarrierIsFallback() {
+        ChatAccumulator acc = newStreamAcc();
+        acc.mergeTerminalMessage(new AssistantMessage("carrier text", "carrier thinking"));
+        ChatStreamContext ctx = ChatStreamContextDefault.ofNoEmit(acc);
+        ctx.emit(ctx.event(ChatEventType.TEXT_DELTA).text("event text").build());
+        ctx.emit(ctx.event(ChatEventType.THINKING_DELTA).text("event thinking").build());
+
+        ChatResponse terminal = acc.snapshotTerminal();
+        assertEquals("event text", terminal.getText());
+        assertEquals("event thinking", terminal.getThinking());
+
+        ChatAccumulator fallback = newStreamAcc();
+        fallback.mergeTerminalMessage(new AssistantMessage("carrier only", "thinking only"));
+        assertEquals("carrier only", fallback.snapshotTerminal().getText());
+        assertEquals("thinking only", fallback.snapshotTerminal().getThinking());
+    }
+
+    @Test
+    public void nonStreamCarrierMediaIsFallbackWhenNoMediaEvent() {
+        ChatAccumulator acc = newCallAcc();
+        acc.setTerminalMessage(new AssistantMessage("", "", null,
+                Collections.singletonList(ImageBlock.ofUrl("https://example.com/carrier.png"))));
+
+        ChatResponse terminal = acc.snapshotTerminal();
+        assertNotNull(terminal.getMessage());
+        assertEquals(1, terminal.getBlocks().size());
+        assertEquals("https://example.com/carrier.png", terminal.getBlocks().get(0).getContent());
+    }
+
+    @Test
+    public void nonStreamCarrierDoesNotDuplicateTextBlock() {
+        ChatAccumulator acc = newCallAcc();
+        acc.setTerminalMessage(new AssistantMessage("hello", "", null,
+                java.util.Arrays.asList(
+                        org.noear.solon.ai.chat.content.TextBlock.of("hello"),
+                        ImageBlock.ofUrl("https://example.com/carrier.png"))));
+
+        ChatResponse terminal = acc.snapshotTerminal();
+        assertEquals(2, terminal.getBlocks().size());
+        assertEquals(1, terminal.getBlocks().stream()
+                .filter(b -> b instanceof org.noear.solon.ai.chat.content.TextBlock).count());
     }
 
     /// //////////////////////////
@@ -257,11 +440,10 @@ public class ChatResponseFacadeTest {
      * 模拟一个分片到达：与 {@code publishItem} 的聚合方式一致（分片入 choice + 计入聚合缓冲）
      */
     private static void appendChoice(ChatAccumulator acc, String text, String thinking) {
-        boolean thinkingOnly = text.isEmpty() && !thinking.isEmpty();
-        AssistantMessage msg = new AssistantMessage(text, thinking, thinkingOnly);
+        AssistantMessage msg = new AssistantMessage(text, thinking);
 
         acc.reset();
-        acc.addContentItem(msg);
+        acc.mergeTerminalMessage(msg);
         acc.appendText(text);
         acc.appendThinking(thinking);
     }

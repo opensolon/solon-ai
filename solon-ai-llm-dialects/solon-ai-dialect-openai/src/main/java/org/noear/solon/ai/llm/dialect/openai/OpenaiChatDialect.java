@@ -24,10 +24,13 @@ import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.tool.ToolCall;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -37,6 +40,14 @@ import java.util.Map;
  * @since 3.1
  */
 public class OpenaiChatDialect extends AbstractChatDialect {
+    /**
+     * 本地方言指令角色策略：auto（默认）/ system / developer。
+     * <p>该选项只控制 Chat Completions 出站角色，不会透传给服务端。</p>
+     *
+     * @since 4.1
+     */
+    public static final String OPTION_INSTRUCTION_ROLE = "openai_instruction_role";
+
     private static final OpenaiChatDialect instance = new OpenaiChatDialect();
     public static OpenaiChatDialect getInstance() {
         return instance;
@@ -45,18 +56,23 @@ public class OpenaiChatDialect extends AbstractChatDialect {
     private static final String SNAPSHOT_STATE_KEY = "OpenaiStreamSnapshotState";
 
     /**
-     * 流式快照归一状态（按请求隔离，内部再按 choice.index 隔离；正文与思考各自独立判定）
+     * 流式快照归一状态（按请求隔离；正文/思考按 choice.index 隔离，工具参数再按调用身份隔离）
      *
      * <p>与官方 SDK 的 ChatCompletionAccumulator 对齐：官方把 messageContents / toolCallBuilders
      * 全部按响应里的 {@code choices[].index} 建 Map，n&gt;1 时各路 choice 的文本互不干扰。若共用一份累积基准，
      * 多路交错下发会把基准搅成 c0f1+c1f1+c0f2…，快照判定失效且存在误截断风险。</p>
      *
-     * <p>注意：这里的 index 是<b>协议字段</b>，只用于本方言内部隔离累积基准；框架的
-     * 框架侧的内容项已不带 index（4.1 取消候选维度）。</p>
+     * <p>工具参数的通道键由 {@code choice.index + tool_call identity} 组成。调用身份优先使用
+     * {@code tool_calls[].index}，其次为 id，最后才退回当前帧数组位置；函数名不参与身份选择，避免同名并行
+     * 调用串线。位置别名同时用于承接 id/index 迟到的兼容端点，使身份补全前后的分片仍共享同一累积基准。</p>
+     *
+     * <p>注意：这里的 index 是<b>协议字段</b>，只用于本方言内部隔离累积基准；框架侧的内容项已不带
+     * choice index（4.1 取消候选维度）。</p>
      */
     private static class SnapshotState {
         private final Map<Integer, SnapshotDeltaNormalizer> contents = new HashMap<>();
         private final Map<Integer, SnapshotDeltaNormalizer> reasonings = new HashMap<>();
+        private final Map<String, SnapshotDeltaNormalizer> toolArguments = new HashMap<>();
 
         SnapshotDeltaNormalizer content(int index) {
             return contents.computeIfAbsent(index, k -> new SnapshotDeltaNormalizer());
@@ -64,6 +80,46 @@ public class OpenaiChatDialect extends AbstractChatDialect {
 
         SnapshotDeltaNormalizer reasoning(int index) {
             return reasonings.computeIfAbsent(index, k -> new SnapshotDeltaNormalizer());
+        }
+
+        SnapshotDeltaNormalizer toolArguments(int choiceIndex, ONode toolCall, int position) {
+            String prefix = "choice:" + choiceIndex + ':';
+            String positionKey = prefix + "position:" + position;
+            String index = identityValue(toolCall.getOrNull("index"));
+            String id = identityValue(toolCall.getOrNull("id"));
+            String indexKey = index == null ? null : prefix + "index:" + index;
+            String idKey = id == null ? null : prefix + "id:" + id;
+
+            SnapshotDeltaNormalizer normalizer = indexKey == null ? null : toolArguments.get(indexKey);
+            if (normalizer == null && idKey != null) {
+                normalizer = toolArguments.get(idKey);
+            }
+            if (normalizer == null) {
+                // 显式身份可能晚于首个参数分片；此时沿用先前按数组位置建立的状态。
+                normalizer = toolArguments.get(positionKey);
+            }
+            if (normalizer == null) {
+                normalizer = new SnapshotDeltaNormalizer();
+            }
+
+            if (indexKey != null) {
+                toolArguments.put(indexKey, normalizer);
+            }
+            if (idKey != null) {
+                toolArguments.put(idKey, normalizer);
+            }
+            // 数组位置是显式身份迟到或后续缺失时的桥接别名，必须始终与 index/id 指向同一状态。
+            toolArguments.put(positionKey, normalizer);
+
+            return normalizer;
+        }
+
+        private String identityValue(ONode node) {
+            if (node == null || node.isValue() == false) {
+                return null;
+            }
+            String value = node.getString();
+            return Utils.isEmpty(value) ? null : value;
         }
     }
 
@@ -92,23 +148,102 @@ public class OpenaiChatDialect extends AbstractChatDialect {
 
     @Override
     public ONode buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
+        String instructionRole = resolveInstructionRole(config, options);
         ONode oNode = super.buildRequestJson(config, options, messages, isStream);
 
-        // 官方流式协议：仅当 stream_options.include_usage=true 时最后一个 chunk 才会携带 usage（否则流式 usage 恒为 null）
-        // 用户已显式配置 stream_options 时不覆盖；OpenAI 官方及主流兼容端点（DeepSeek/vLLM 等）均支持
-        if (isStream && oNode.hasKey("stream_options") == false) {
-            oNode.getOrNew("stream_options").set("include_usage", true);
+        // openai_instruction_role 是方言本地选项，不能作为 OpenAI 请求字段发送。
+        oNode.remove(OPTION_INSTRUCTION_ROLE);
+        if ("developer".equals(instructionRole)) {
+            ONode messageNodes = oNode.getOrNull("messages");
+            if (messageNodes != null && messageNodes.isArray()) {
+                for (ONode messageNode : messageNodes.getArray()) {
+                    if ("system".equals(messageNode.get("role").getString())) {
+                        messageNode.set("role", "developer");
+                    }
+                }
+            }
+        }
+
+        if (isStream) {
+            ONode streamOptions = oNode.getOrNew("stream_options");
+            if (streamOptions.hasKey("include_usage") == false) {
+                streamOptions.set("include_usage", true);
+            }
         }
 
         return oNode;
     }
 
     /**
+     * 将统一的 SystemMessage 映射为 OpenAI Chat Completions 的线协议角色。
+     * <p>OpenAI SDK 说明 o1 及更新模型以 developer 取代 system；自动模式只识别明确的新模型族，
+     * 未知兼容模型保持 system。o1-preview/o1-mini 属于早期模型，不自动转换。</p>
+     */
+    private String resolveInstructionRole(ChatConfig config, ChatOptions options) {
+        Object configured = options == null ? null : options.option(OPTION_INSTRUCTION_ROLE);
+        String policy = configured == null ? "auto" : String.valueOf(configured).trim().toLowerCase(Locale.ROOT);
+        if ("system".equals(policy) || "developer".equals(policy)) {
+            return policy;
+        }
+        if ("auto".equals(policy) == false) {
+            throw new IllegalArgumentException(OPTION_INSTRUCTION_ROLE
+                    + " must be one of: auto, system, developer");
+        }
+
+        String model = config == null ? null : config.getModel();
+        return prefersDeveloperRole(model) ? "developer" : "system";
+    }
+
+    private boolean prefersDeveloperRole(String model) {
+        if (Utils.isEmpty(model)) {
+            return false;
+        }
+
+        String modelName = model.trim().toLowerCase(Locale.ROOT);
+        if (matchesModelFamily(modelName, "o1-preview") || matchesModelFamily(modelName, "o1-mini")) {
+            return false;
+        }
+
+        return matchesModelFamily(modelName, "o1")
+                || matchesModelFamily(modelName, "o3")
+                || matchesModelFamily(modelName, "o4")
+                || matchesModelFamily(modelName, "gpt-5")
+                || matchesModelFamily(modelName, "gpt5")
+                || matchesModelFamily(modelName, "gpt-6")
+                || matchesModelFamily(modelName, "gpt6");
+    }
+
+    private boolean matchesModelFamily(String model, String family) {
+        int fromIndex = 0;
+        while (fromIndex < model.length()) {
+            int start = model.indexOf(family, fromIndex);
+            if (start < 0) {
+                return false;
+            }
+
+            int end = start + family.length();
+            boolean validPrefix = start == 0 || isProviderBoundary(model.charAt(start - 1));
+            boolean validSuffix = end == model.length()
+                    || model.charAt(end) == '-'
+                    || model.charAt(end) == '.';
+            if (validPrefix && validSuffix) {
+                return true;
+            }
+            fromIndex = start + 1;
+        }
+        return false;
+    }
+
+    private boolean isProviderBoundary(char ch) {
+        return ch == '/' || ch == ':' || ch == '.';
+    }
+
+    /**
      * 解析响应（事件形态）
      *
-     * <p>OpenAI chat/completions 协议的流式帧只承载内容增量（正文 / 思考 / 工具调用分片），
-     * 没有独立的生命周期或服务端工具事件，因此内容主干统一交由核心从内容项转换为
-     * TEXT_DELTA / THINKING_DELTA / TOOL_CALL_CHUNK 并保证边界，此处只额外发射拒答与错误事件。</p>
+     * <p>OpenAI chat/completions 协议的流式帧承载正文、思考与工具调用增量；方言直接翻译为
+     * TEXT_DELTA / THINKING_DELTA / TOOL_CALL_*，聚合统一由 ChatAccumulator.acceptEvent 完成，
+     * 此处另行处理拒答与错误事件。</p>
      *
      * <p>每帧只解析一次 JSON：正文解析、拒答事件、错误事件共用同一份 {@link ONode}。</p>
      *
@@ -121,7 +256,7 @@ public class OpenaiChatDialect extends AbstractChatDialect {
         if ("[DONE]".equals(data)) { //不是数据结构
             acc.attrRemove(SNAPSHOT_STATE_KEY);
             if (acc.isFinished() == false) {
-                acc.addContentItem(new AssistantMessage(""));
+                // 终态由事件归一化与 accumulator 快照表达，不再追加空 AssistantMessage。
                 acc.setFinished(true);
             }
             return;
@@ -198,13 +333,25 @@ public class OpenaiChatDialect extends AbstractChatDialect {
                 }
 
                 for (AssistantMessage msg1 : messageList) {
-                    acc.addContentItem(msg1);
+                    if (acc.isStream()) {
+                    // 流式主干直接进入事件通道，聚合由 ChatAccumulator.acceptEvent 统一完成。
+                        publishAssistantMessageEvents(ctx, msg1);
+                        // publish 会把本帧作为事件载体合并到终态；参数归一后该载体只剩增量，
+                        // 因而用 builder 中的完整累计值恢复终态 ToolCall，避免重复终帧覆盖最终参数。
+                        restoreTerminalToolCallArguments(acc, msg1);
+                    } else {
+                        acc.setTerminalMessage(msg1);
+                    }
                 }
 
                 if (Utils.isNotEmpty(finish_reason)) {
                     acc.setFinished(true);
                     acc.lastFinishReason = finish_reason;
                 }
+
+                // ChatResponse 是单结果模型：只消费供应商返回的首个 choice，避免把多个候选
+                // 的正文、思考和工具调用拼成一条消息。
+                break;
             }
         }
 
@@ -214,10 +361,9 @@ public class OpenaiChatDialect extends AbstractChatDialect {
             acc.setFinished(true);
         }
 
-        if (acc.isFinished()) {
-            if (acc.hasContentItems() == false) { //完成时。如果为空，则补位
-                acc.addContentItem(new AssistantMessage(""));
-            }
+        if (acc.isFinished() && acc.isStream() == false && acc.isTerminalMessagePresent() == false) {
+            // 非流式空结果仍需提交一个明确的终态消息。
+            acc.setTerminalMessage(new AssistantMessage(""));
         }
 
         ONode oUsage = oResp.getOrNull("usage");
@@ -327,14 +473,15 @@ public class OpenaiChatDialect extends AbstractChatDialect {
 
     /**
      * 将部分 OpenAI 兼容端点返回的累计快照转换为真正的流式增量。
-     * 核心层无条件追加会得到成倍膨胀的文本。判定与累积均由 {@link SnapshotDeltaNormalizer} 负责：
-     * 按原始报文自行累积（不受 think 标签分流影响），且要求累积长度达阈值后才允许首次判定，
-     * 普通增量不会被改写。</p>
+     * 核心层无条件追加会得到成倍膨胀的文本或工具参数。判定与累积均由
+     * {@link SnapshotDeltaNormalizer} 负责：按原始报文自行累积，且要求累积长度达阈值后才允许首次判定，
+     * 避免改写官方 Chat Completions 的真实增量。</p>
      *
-     * <p>覆盖范围仅限文本字段（content 与 reasoning_content/reasoning）；tool_calls.arguments
-     * 的快照式下发不在此处理（由核心 ToolCallBuilder 累积）。delta.refusal 是官方独有字段（兼容网关
-     * 不实现，无快照风险），不做判定，但核心层会在正文为空时把它投影进文本，因此按同样条件记入正文
-     * 累积基准，保证基准与「已交付文本」一致。</p>
+     * <p>覆盖正文、思考及 {@code delta.tool_calls[].function.arguments}。正文与思考按 choice 隔离；
+     * 工具参数再按调用 index/id/数组位置隔离，既不因同名并行调用串线，也能承接 id 迟到。进入快照模式后，
+     * 完全相等的重复终帧会归一为空参数增量。{@code delta.refusal} 是官方独有字段（兼容网关不实现，
+     * 无快照风险），不做判定，但核心层会在正文为空时把它投影进文本，因此按同样条件记入正文累积基准，
+     * 保证基准与「已交付文本」一致。</p>
      *
      * @param index choice 序号（n&gt;1 时各路 choice 的累积基准必须隔离，与官方 SDK 的按 index 累积一致）
      * @return 归一后的 choice；整帧文本都是已交付过的重复快照且无 tool_calls 时返回 null（表示可整帧丢弃）
@@ -355,14 +502,16 @@ public class OpenaiChatDialect extends AbstractChatDialect {
                 : (delta.hasKey("reasoning") ? "reasoning" : null);
         String reasoningRaw = reasoningKey == null ? null : delta.get(reasoningKey).getString();
         String refusalRaw = delta.get("refusal").getString();
+        ONode oToolCalls = delta.getOrNull("tool_calls");
 
-        if (Utils.isEmpty(contentRaw) && Utils.isEmpty(reasoningRaw) && Utils.isEmpty(refusalRaw)) {
-            return choice; //无文本可判定（role 帧 / 纯 tool_calls 帧）
+        if (Utils.isEmpty(contentRaw) && Utils.isEmpty(reasoningRaw) && Utils.isEmpty(refusalRaw)
+                && (oToolCalls == null || oToolCalls.isArray() == false)) {
+            return choice; //无文本或工具参数可判定（role 帧）
         }
 
         SnapshotState state = acc.attrIfAbsent(SNAPSHOT_STATE_KEY, k -> new SnapshotState());
 
-        boolean changed = false;
+        boolean changed = normalizeToolCallArguments(state, index, oToolCalls);
 
         String contentDelta = contentRaw;
         if (Utils.isNotEmpty(contentRaw)) {
@@ -385,7 +534,6 @@ public class OpenaiChatDialect extends AbstractChatDialect {
             return choice;
         }
 
-        ONode oToolCalls = delta.getOrNull("tool_calls");
         if (Utils.isEmpty(contentDelta) && Utils.isEmpty(reasoningDelta) && Utils.isEmpty(refusalRaw)
                 && (oToolCalls == null || oToolCalls.isNull())) {
             return null;
@@ -400,5 +548,58 @@ public class OpenaiChatDialect extends AbstractChatDialect {
         }
 
         return choice;
+    }
+
+    private void restoreTerminalToolCallArguments(ChatAccumulator acc, AssistantMessage message) {
+        if (message == null || Utils.isEmpty(message.getToolCalls())) {
+            return;
+        }
+        List<ToolCall> terminalCalls = new ArrayList<>();
+        for (ToolCall call : message.getToolCalls()) {
+            if (call == null || Utils.isEmpty(call.getIndex())) {
+                continue;
+            }
+            org.noear.solon.ai.chat.tool.ToolCallBuilder builder = acc.getToolCallBuilders().get(call.getIndex());
+            if (builder == null || builder.argumentsBuilder.length() == 0) {
+                continue;
+            }
+            ToolCall terminal = new ToolCall(call.getIndex(), call.getId(), call.getName(),
+                    builder.argumentsBuilder.toString(), call.getArguments());
+            terminalCalls.add(terminal);
+        }
+        if (terminalCalls.isEmpty() == false) {
+            acc.mergeTerminalMessage(new AssistantMessage(null, null, terminalCalls, null));
+        }
+    }
+
+    /**
+     * 逐个归一工具调用参数。函数名不是调用身份；同一 choice 内优先按 call index/id 隔离，
+     * 缺失显式身份时才使用数组位置，以覆盖同名并行与身份迟到。
+     */
+    private boolean normalizeToolCallArguments(SnapshotState state, int choiceIndex, ONode toolCalls) {
+        if (toolCalls == null || toolCalls.isArray() == false) {
+            return false;
+        }
+
+        boolean changed = false;
+        int position = 0;
+        for (ONode toolCall : toolCalls.getArray()) {
+            ONode function = toolCall.getOrNull("function");
+            if (function != null && function.isObject()) {
+                ONode arguments = function.getOrNull("arguments");
+                if (arguments != null && arguments.isString()) {
+                    String raw = arguments.getString();
+                    if (Utils.isNotEmpty(raw)) {
+                        String normalized = state.toolArguments(choiceIndex, toolCall, position).normalize(raw);
+                        if (raw.equals(normalized) == false) {
+                            function.set("arguments", normalized);
+                            changed = true;
+                        }
+                    }
+                }
+            }
+            position++;
+        }
+        return changed;
     }
 }

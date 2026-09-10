@@ -17,6 +17,8 @@ package org.noear.solon.ai.llm.dialect.anthropic;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.*;
+import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.event.*;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
@@ -69,6 +71,16 @@ public class AnthropicEventTest {
         return null;
     }
 
+    private int countOf(ChatEventType type) {
+        int count = 0;
+        for (ChatEvent event : events) {
+            if (event.getType() == type) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     /**
      * 心跳：旧实现直接 continue，整帧丢弃
      */
@@ -101,8 +113,10 @@ public class AnthropicEventTest {
         assertEquals(0, e.getIndex());
         assertSame(ChatEventGroup.THINKING, e.getGroup());
 
-        //旧字段同时保留（聚合消息仍能拿到签名）
-        assertEquals("sig_abc", ctx.getAccumulator().thinkingSignature);
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_stop\"}");
+        Object contentRaw = AnthropicMessageStateSupport.resolveData(ctx.getAccumulator().snapshotTerminal().getMessage());
+        assertTrue(contentRaw instanceof java.util.Map);
+        assertEquals("sig_abc", ((java.util.Map<?, ?>) contentRaw).get("thinkingSignature"));
     }
 
     /**
@@ -137,8 +151,8 @@ public class AnthropicEventTest {
         assertEquals("srvtoolu_1", e.getItemId());
         assertSame(ChatEventGroup.SERVER_TOOL, e.getGroup());
 
-        //关键：不再把 "[server tool: ...]" 混入正文
-        assertFalse(ctx.getAccumulator().getAggregationText().contains("[server tool:"));
+        //关键：仅服务端工具事件时不应生成终态正文消息
+        assertNull(ctx.getAccumulator().snapshotTerminal().getMessage());
     }
 
     /**
@@ -158,8 +172,13 @@ public class AnthropicEventTest {
         assertEquals("srvtoolu_1", e.getItemId());
         assertEquals("杭州今天晴", e.getText());
 
-        //关键：搜索结果不再被拍平进正文
-        assertFalse(ctx.getAccumulator().getAggregationText().contains("杭州今天晴"));
+        //关键：搜索结果进入类型化终态列表，但不应混入正文
+        ChatResponse terminal = ctx.getAccumulator().snapshotTerminal();
+        assertNotNull(terminal.getMessage());
+        assertEquals("", terminal.getText());
+        assertEquals(1, terminal.getSearchResults().size());
+        assertNull(terminal.getSearchResults().get(0).getSnippet(),
+                "兼容载荷只有 text 时不得把它冒充协议 snippet");
     }
 
     /**
@@ -178,10 +197,10 @@ public class AnthropicEventTest {
     }
 
     /**
-     * 内容主干仍走内容项（由核心统一转事件并保证边界），方言不重复发射内容事件
+     * 正文增量通过 TEXT_DELTA 事件直接表达，并由 ChatAccumulator 聚合。
      */
     @Test
-    public void textDeltaStillGoesThroughChoiceOnly() {
+    public void textDeltaUsesEventFirstPath() {
         ChatStreamContext ctx = newCtx();
 
         parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":0,"
@@ -189,19 +208,17 @@ public class AnthropicEventTest {
         parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":0,"
                 + "\"delta\":{\"type\":\"text_delta\",\"text\":\"hello\"}}");
 
-        assertTrue(ctx.getAccumulator().hasContentItems());
-
-        for (ChatEvent e : events) {
-            assertNotSame(ChatEventType.TEXT_DELTA, e.getType(),
-                    "dialect must not emit content events (core converts content items)");
-        }
+        ChatEvent delta = firstOf(ChatEventType.TEXT_DELTA);
+        assertNotNull(delta);
+        assertEquals("hello", delta.getText());
+        assertEquals("hello", ctx.getAccumulator().snapshotTerminal().getText());
     }
 
     /**
-     * 思考增量仍走内容项，且不被签名事件打断
+     * 思考增量通过 THINKING_DELTA 事件直接表达，并由 ChatAccumulator 聚合。
      */
     @Test
-    public void thinkingDeltaStillGoesThroughChoice() {
+    public void thinkingDeltaUsesEventFirstPath() {
         ChatStreamContext ctx = newCtx();
 
         parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":0,"
@@ -209,10 +226,10 @@ public class AnthropicEventTest {
         parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":0,"
                 + "\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"让我想想\"}}");
 
-        assertTrue(ctx.getAccumulator().hasContentItems());
-
-        //聚合由核心的 publishItem 负责，方言层只产出 choice
-        assertEquals("让我想想", ctx.getAccumulator().lastItem().getThinkingRaw());
+        ChatEvent delta = firstOf(ChatEventType.THINKING_DELTA);
+        assertNotNull(delta);
+        assertEquals("让我想想", delta.getText());
+        assertEquals("让我想想", ctx.getAccumulator().snapshotTerminal().getThinking());
     }
 
     /**
@@ -243,15 +260,58 @@ public class AnthropicEventTest {
         assertEquals("\u676d\u5dde\u4eca\u5929\u6674", result.getText());
 
         //关键：正文只剩模型自述，与流式一致
-        String content = ctx.getAccumulator().lastItem().getContent();
+        ChatResponse terminal = ctx.getAccumulator().snapshotTerminal();
+        assertNotNull(terminal.getMessage());
+        String content = terminal.getText();
         assertEquals("\u4eca\u5929\u5929\u6c14\u4e0d\u9519", content);
         assertFalse(content.contains("[server tool:"));
         assertFalse(content.contains("\u676d\u5dde\u4eca\u5929\u6674"));
     }
 
-    /**
-     * 非流式思考签名：与流式 signature_delta 对称地给出事件，同时保留 contentRaw 兼容
-     */
+    @Test
+    public void nonStreamMcpToolEmitsServerArgsDelta() {
+        ChatStreamContext ctx = newNonStreamCtx();
+        parser.parseNonStreamResponse(ctx, "{\"model\":\"claude-sonnet-4-5\",\"stop_reason\":\"pause_turn\",\"content\":["
+                + "{\"type\":\"mcp_tool_use\",\"id\":\"mcp_1\",\"name\":\"query\",\"input\":{\"q\":1}}]}");
+        ChatEvent event = firstOf(ChatEventType.SERVER_TOOL_ARGS_DELTA);
+        assertNotNull(event);
+        assertEquals("mcp_1", event.getToolCallId());
+        assertEquals("{\"q\":1}", event.getText());
+    }
+
+
+    @Test
+    public void nonStreamThinkingUsesThinkingDeltaEvent() {
+        ChatStreamContext ctx = newNonStreamCtx();
+
+        parser.parseNonStreamResponse(ctx, "{\"model\":\"claude-sonnet-4-5\",\"stop_reason\":\"end_turn\","
+                + "\"content\":[{\"type\":\"thinking\",\"thinking\":\"完整思考\",\"signature\":\"sig_ns\"}]}");
+
+        ChatEvent delta = firstOf(ChatEventType.THINKING_DELTA);
+        assertNotNull(delta, "非流式 thinking 应与流式 thinking_delta 使用同一事件语义");
+        assertEquals("完整思考", delta.getText());
+        assertEquals(0, delta.getIndex());
+        assertEquals("完整思考", ctx.getAccumulator().snapshotTerminal().getThinking());
+    }
+
+    @Test
+    public void nonStreamEmptyToolInputsDoNotEmitArgsDelta() {
+        ChatStreamContext ctx = newNonStreamCtx();
+
+        parser.parseNonStreamResponse(ctx, "{\"model\":\"claude-sonnet-4-5\",\"stop_reason\":\"tool_use\","
+                + "\"content\":["
+                + "{\"type\":\"tool_use\",\"id\":\"toolu_empty\",\"name\":\"local\",\"input\":{}},"
+                + "{\"type\":\"server_tool_use\",\"id\":\"srv_empty\",\"name\":\"web_search\",\"input\":{}}]}");
+
+        assertEquals(0, countOf(ChatEventType.TOOL_CALL_ARGS_DELTA));
+        assertEquals(0, countOf(ChatEventType.SERVER_TOOL_ARGS_DELTA));
+        assertEquals(1, countOf(ChatEventType.TOOL_CALL_START));
+        assertEquals(1, countOf(ChatEventType.TOOL_CALL_END));
+        assertEquals("{}", ctx.getAccumulator().snapshotTerminal().getToolCalls().get(0).getArgumentsStr(),
+                "空 input 不发 delta，但终态工具参数仍须规范化为空对象");
+    }
+
+
     @Test
     public void nonStreamSignatureBecomesEvent() {
         ChatStreamContext ctx = newNonStreamCtx();
@@ -262,7 +322,9 @@ public class AnthropicEventTest {
         ChatEvent e = firstOf(ChatEventType.THINKING_SIGNATURE);
         assertNotNull(e, "non-stream signature should emit THINKING_SIGNATURE");
         assertEquals("sig_ns", e.getText());
-        assertEquals("sig_ns", ctx.getAccumulator().thinkingSignature);
+        Object contentRaw = AnthropicMessageStateSupport.resolveData(ctx.getAccumulator().snapshotTerminal().getMessage());
+        assertTrue(contentRaw instanceof java.util.Map);
+        assertEquals("sig_ns", ((java.util.Map<?, ?>) contentRaw).get("thinkingSignature"));
     }
 
     /**
@@ -278,6 +340,38 @@ public class AnthropicEventTest {
         ChatEvent e = firstOf(ChatEventType.THINKING_REDACTED);
         assertNotNull(e, "non-stream redacted_thinking should emit THINKING_REDACTED");
         assertEquals("b64ns", e.getText());
+    }
+
+    /**
+     * 相同媒体出现在不同 content index 时是两条合法协议项，不能按内容去重。
+     */
+    @Test
+    public void nonStreamDuplicateImagesKeepProtocolIndexes() {
+        ChatStreamContext ctx = newNonStreamCtx();
+
+        parser.parseNonStreamResponse(ctx, "{\"model\":\"claude-sonnet-4-5\",\"stop_reason\":\"end_turn\","
+                + "\"content\":["
+                + "{\"type\":\"image\",\"source\":{\"type\":\"url\",\"url\":\"https://a.dev/same.png\"}},"
+                + "{\"type\":\"text\",\"text\":\"两次引用\"},"
+                + "{\"type\":\"image\",\"source\":{\"type\":\"url\",\"url\":\"https://a.dev/same.png\"}}]}");
+
+        List<ChatEvent> media = new ArrayList<>();
+        for (ChatEvent event : events) {
+            if (event.getType() == ChatEventType.MEDIA_DONE) {
+                media.add(event);
+            }
+        }
+        assertEquals(2, media.size(), "不同协议 index 的相同媒体都应保留");
+        assertEquals(0, media.get(0).getIndex());
+        assertEquals(2, media.get(1).getIndex());
+        assertEquals(media.get(0).getBlock().getContent(), media.get(1).getBlock().getContent());
+        List<org.noear.solon.ai.chat.content.ContentBlock> blocks =
+                ctx.getAccumulator().snapshotTerminal().getMessage().getBlocks();
+        assertEquals(3, blocks.size(), "终态应保留一条文本块和两条合法重复媒体");
+        assertTrue(blocks.get(0) instanceof ImageBlock);
+        assertTrue(blocks.get(1) instanceof TextBlock);
+        assertEquals("两次引用", blocks.get(1).getContent());
+        assertTrue(blocks.get(2) instanceof ImageBlock);
     }
 
     /**

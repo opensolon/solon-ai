@@ -32,11 +32,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * OpenAI chat/completions 方言的事件序列
  *
- * <p>该方言在 {@code parseResponseJson} 里只解析内容主干：流式帧只承载内容增量，
- * 方言自身<b>不</b>发射内容事件，内容主干仍以内容项形态交给核心 {@code publishItem} 统一转换为
- * TEXT_DELTA / THINKING_DELTA / TOOL_CALL_*。本测试锁定这条转换路径的两个契约：
- * 一是「不双发」（方言侧不出现 TEXT / THINKING / TOOL_CALL 组事件），
- * 二是工具调用分片按官方 {@code index} 主键正确累积。</p>
+ * <p>该方言将内容主干直接翻译成 TEXT_DELTA / THINKING_DELTA / TOOL_CALL_*，
+ * 并由 ChatAccumulator 统一归并。本测试锁定事件不重复、工具调用按官方 index 聚合等契约。</p>
  *
  * @author noear
  */
@@ -58,59 +55,22 @@ public class OpenaiChatEventTest {
     }
 
     /**
-     * 模拟核心的逐帧驱动：帧前 reset（清掉上一帧的分片），解析后按核心 {@code buildToolCallBuilder}
-     * 的规则把工具调用分片累积进 {@code acc.getToolCallBuilders()}。
-     *
-     * <p>核心的累积方法是私有的，这里按同一规则镜像一份，用来断言「方言给出的 ToolCall 分片
-     * （index 主键 / id 首片胜出 / arguments 片段）能被正确累积」。</p>
+     * 模拟核心的逐帧驱动：帧前 reset（清掉上一帧错误），解析产生的 ChatEvent
+     * 由 ChatStreamContext 统一归并到 accumulator。
      */
     private void feed(ChatStreamContext ctx, String data) {
-        ChatAccumulator acc = ctx.getAccumulator();
-        acc.reset();
-
+        ctx.getAccumulator().reset();
         dialect.parseResponseJson(ctx, data);
-
-        if (acc.hasContentItems() == false) {
-            return;
-        }
-
-        AssistantMessage msg = acc.lastItem();
-        if (msg == null || msg.getToolCalls() == null || msg.getToolCalls().isEmpty()) {
-            return;
-        }
-
-        for (ToolCall call : msg.getToolCalls()) {
-            ToolCallBuilder builder = acc.getToolCallBuilders()
-                    .computeIfAbsent(call.getIndex(), k -> new ToolCallBuilder());
-
-            if (call.getId() != null && builder.idBuilder.length() == 0) {
-                builder.idBuilder.append(call.getId());
-            }
-            if (call.getName() != null) {
-                if (builder.nameBuilder.length() == 0) {
-                    builder.nameBuilder.append(call.getName());
-                } else if (call.getName().contentEquals(builder.nameBuilder) == false) {
-                    builder.nameBuilder.append(call.getName());
-                }
-            }
-            if (call.getArgumentsStr() != null) {
-                builder.argumentsBuilder.append(call.getArgumentsStr());
-            }
-        }
     }
 
-    /**
-     * 内容事件只能由核心从 choice 转换产出，方言侧不得出现
-     */
-    private void assertNoContentEvents() {
-        for (ChatEvent e : events) {
-            assertNotSame(ChatEventGroup.TEXT, e.getGroup(),
-                    "dialect must not emit TEXT events (core converts content items)");
-            assertNotSame(ChatEventGroup.THINKING, e.getGroup(),
-                    "dialect must not emit THINKING events (core converts content items)");
-            assertNotSame(ChatEventGroup.TOOL_CALL, e.getGroup(),
-                    "dialect must not emit TOOL_CALL events (core converts content items)");
+    private long countOf(ChatEventType type) {
+        long count = 0;
+        for (ChatEvent event : events) {
+            if (event.is(type)) {
+                count++;
+            }
         }
+        return count;
     }
 
     private String textChunk(String content) {
@@ -120,22 +80,33 @@ public class OpenaiChatEventTest {
     }
 
     /**
-     * 文本增量：内容仍走内容项，方言不发内容事件
+     * 文本增量：由方言发出 TEXT_DELTA，并由累积器聚合
      */
     @Test
     public void textDeltaStillGoesThroughChoiceOnly() {
         ChatStreamContext ctx = newCtx();
 
         feed(ctx, textChunk("杭州"));
-        assertTrue(ctx.getAccumulator().hasContentItems());
-        assertEquals("杭州", ctx.getAccumulator().lastItem().getTextRaw());
+        assertEquals("杭州", events.get(events.size() - 1).getText());
+        assertEquals("杭州", ctx.getAccumulator().getAggregationText());
 
         feed(ctx, textChunk("今天晴"));
-        assertTrue(ctx.getAccumulator().hasContentItems());
-        assertEquals("今天晴", ctx.getAccumulator().lastItem().getTextRaw());
+        assertEquals("今天晴", events.get(events.size() - 1).getText());
+        assertEquals("杭州今天晴", ctx.getAccumulator().getAggregationText());
+        assertEquals(2, countOf(ChatEventType.TEXT_DELTA));
+    }
 
-        assertTrue(events.isEmpty(), "content frames must not emit dialect events");
-        assertNoContentEvents();
+    @Test
+    public void multipleChoicesOnlyFirstEntersSingleResultAccumulator() {
+        ChatStreamContext ctx = newCtx();
+
+        feed(ctx, "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"gpt-4o-mini\","
+                + "\"choices\":["
+                + "{\"index\":0,\"delta\":{\"content\":\"first\"},\"finish_reason\":\"stop\"},"
+                + "{\"index\":1,\"delta\":{\"content\":\"second\"},\"finish_reason\":\"stop\"}]}");
+
+        assertEquals("first", ctx.getAccumulator().getAggregationText());
+        assertEquals(1, countOf(ChatEventType.TEXT_DELTA));
     }
 
     /**
@@ -150,14 +121,11 @@ public class OpenaiChatEventTest {
                 + "\"finish_reason\":null}]}");
 
         ChatAccumulator acc = ctx.getAccumulator();
-        assertTrue(acc.hasContentItems());
-        //首帧思考：开启信号帧 + 思考分片帧
-        assertEquals(2, acc.getContentItems().size());
-        assertTrue(acc.lastItem().isThinking());
-        assertEquals("先看天气", acc.lastItem().getThinkingRaw());
+        assertEquals("先看天气", acc.getAggregationThinking());
         assertEquals("reasoning_content", acc.reasoning_field_name);
 
-        assertNoContentEvents();
+        assertEquals(1, countOf(ChatEventType.THINKING_DELTA));
+        assertEquals("先看天气", events.get(events.size() - 1).getText());
     }
 
     /**
@@ -172,12 +140,11 @@ public class OpenaiChatEventTest {
                 + "\"finish_reason\":null}]}");
 
         ChatAccumulator acc = ctx.getAccumulator();
-        assertTrue(acc.hasContentItems());
-        assertTrue(acc.lastItem().isThinking());
-        assertEquals("先看天气", acc.lastItem().getThinkingRaw());
+        assertEquals("先看天气", acc.getAggregationThinking());
         assertEquals("reasoning", acc.reasoning_field_name);
 
-        assertNoContentEvents();
+        assertEquals(1, countOf(ChatEventType.THINKING_DELTA));
+        assertEquals("先看天气", events.get(events.size() - 1).getText());
     }
 
     /**
@@ -194,13 +161,11 @@ public class OpenaiChatEventTest {
         feed(ctx, textChunk("杭州今天晴"));
 
         ChatAccumulator acc = ctx.getAccumulator();
-        assertFalse(acc.in_thinking, "text frame must close the thinking channel");
-        //闭合信号帧 + 正文帧
-        assertEquals(2, acc.getContentItems().size());
-        assertTrue(acc.getContentItems().get(0).isThinking());
-        assertEquals("杭州今天晴", acc.lastItem().getTextRaw());
+        assertEquals("先看天气", acc.getAggregationThinking());
+        assertEquals("杭州今天晴", acc.getAggregationText());
 
-        assertNoContentEvents();
+        assertEquals(1, countOf(ChatEventType.THINKING_DELTA));
+        assertEquals(1, countOf(ChatEventType.TEXT_DELTA));
     }
 
     /**
@@ -234,7 +199,8 @@ public class OpenaiChatEventTest {
         assertTrue(acc.isFinished());
         assertEquals("tool", acc.getLastFinishReasonNormalized());
 
-        assertNoContentEvents();
+        assertEquals(1, countOf(ChatEventType.TOOL_CALL_START));
+        assertEquals(2, countOf(ChatEventType.TOOL_CALL_ARGS_DELTA));
     }
 
     /**
@@ -262,7 +228,8 @@ public class OpenaiChatEventTest {
         assertEquals("call_b", acc.getToolCallBuilders().get("idx:1").idBuilder.toString());
         assertEquals("{\"b\":2}", acc.getToolCallBuilders().get("idx:1").argumentsBuilder.toString());
 
-        assertNoContentEvents();
+        assertEquals(2, countOf(ChatEventType.TOOL_CALL_START));
+        assertEquals(4, countOf(ChatEventType.TOOL_CALL_ARGS_DELTA));
     }
 
     /**
@@ -277,7 +244,7 @@ public class OpenaiChatEventTest {
                 + "\"choices\":[],\"some_future_field\":{\"foo\":\"bar\"}}");
 
         ChatAccumulator acc = ctx.getAccumulator();
-        assertFalse(acc.hasContentItems(), "unknown frame must not produce a choice");
+        assertEquals("", acc.getAggregationText(), "unknown frame must not produce text");
         assertFalse(acc.isFinished());
         assertTrue(acc.getToolCallBuilders().isEmpty());
         assertEquals("", acc.getAggregationText());
@@ -287,7 +254,7 @@ public class OpenaiChatEventTest {
         feed(ctx, "{\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-4o-mini\","
                 + "\"choices\":[{\"index\":0,\"delta\":{\"some_future_field\":\"x\"},\"finish_reason\":null}]}");
 
-        assertFalse(acc.hasContentItems(), "unknown delta field must not produce a choice");
+        assertEquals("", acc.getAggregationText(), "unknown delta field must not produce text");
         assertTrue(acc.getToolCallBuilders().isEmpty());
         assertNull(acc.getError());
 
@@ -309,7 +276,7 @@ public class OpenaiChatEventTest {
         assertNotNull(ctx.getAccumulator().getError());
         assertTrue(ctx.getAccumulator().getError().getMessage().contains("invalid api key"));
 
-        assertNoContentEvents();
+        assertEquals(1, events.size());
     }
 
     /**
@@ -326,7 +293,101 @@ public class OpenaiChatEventTest {
         ChatAccumulator acc = new ChatAccumulator(req, true);
 
         assertDoesNotThrow(() -> dialect.parseResponseJson(ChatStreamContextDefault.ofNoEmit(acc), textChunk("hi")));
-        assertTrue(acc.hasContentItems());
+        assertEquals("hi", acc.getAggregationText());
         assertTrue(events.isEmpty(), "ofNoEmit 上下文不应产出任何事件");
+    }
+
+    /**
+     * 显式 id 先出现，随后切换到 index 或完全匿名位置时，所有别名仍须共享同一参数快照状态。
+     */
+    @Test
+    public void toolArgumentSnapshotIdentityCanSwitchFromIdToIndexAndPosition() {
+        ChatStreamContext ctx = newCtx();
+        feed(ctx, "{\"object\":\"chat.completion.chunk\",\"model\":\"gpt-4o-mini\",\"choices\":["
+                + "{\"index\":0,\"delta\":{\"tool_calls\":[{\"id\":\"call_late\","
+                + "\"function\":{\"name\":\"lookup\",\"arguments\":\"abcdefgh\"}}]},\"finish_reason\":null}]} ");
+        feed(ctx, "{\"object\":\"chat.completion.chunk\",\"model\":\"gpt-4o-mini\",\"choices\":["
+                + "{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,"
+                + "\"function\":{\"arguments\":\"abcdefghA\"}}]},\"finish_reason\":null}]} ");
+        feed(ctx, "{\"object\":\"chat.completion.chunk\",\"model\":\"gpt-4o-mini\",\"choices\":["
+                + "{\"index\":0,\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\"abcdefghAB\"}}]},"
+                + "\"finish_reason\":null}]} ");
+
+        assertEquals(java.util.Arrays.asList("abcdefgh", "A", "B"), argumentDeltas(events));
+    }
+
+    /**
+     * 首片只有数组位置，id 与 index 依次迟到时，后续显式身份须绑定回已有参数快照状态。
+     */
+    @Test
+    public void toolArgumentSnapshotIdentityCanSwitchFromPositionToIdAndIndex() {
+        ChatStreamContext ctx = newCtx();
+        feed(ctx, "{\"object\":\"chat.completion.chunk\",\"model\":\"gpt-4o-mini\",\"choices\":["
+                + "{\"index\":0,\"delta\":{\"tool_calls\":[{\"function\":{\"name\":\"lookup\","
+                + "\"arguments\":\"abcdefgh\"}}]},\"finish_reason\":null}]} ");
+        feed(ctx, "{\"object\":\"chat.completion.chunk\",\"model\":\"gpt-4o-mini\",\"choices\":["
+                + "{\"index\":0,\"delta\":{\"tool_calls\":[{\"id\":\"call_late\","
+                + "\"function\":{\"arguments\":\"abcdefghA\"}}]},\"finish_reason\":null}]} ");
+        feed(ctx, "{\"object\":\"chat.completion.chunk\",\"model\":\"gpt-4o-mini\",\"choices\":["
+                + "{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,"
+                + "\"function\":{\"arguments\":\"abcdefghAB\"}}]},\"finish_reason\":null}]} ");
+
+        assertEquals(java.util.Arrays.asList("abcdefgh", "A", "B"), argumentDeltas(events));
+    }
+
+    /**
+     * 参数快照按 choice + call index 隔离：同名并行调用不能共享函数名基准；id 迟到也不能改变既有通道。
+     */
+    @Test
+    public void toolArgumentSnapshotsAreIsolatedByChoiceAndCallIdentity() {
+        ChatStreamContext ctx = newCtx();
+        feed(ctx, "{\"object\":\"chat.completion.chunk\",\"model\":\"gpt-4o-mini\",\"choices\":["
+                + "{\"index\":0,\"delta\":{\"tool_calls\":["
+                + "{\"index\":0,\"function\":{\"name\":\"lookup\",\"arguments\":\"abcdefgh\"}},"
+                + "{\"index\":1,\"function\":{\"name\":\"lookup\",\"arguments\":\"ijklmnop\"}}"
+                + "]},\"finish_reason\":null}]} ");
+        feed(ctx, "{\"object\":\"chat.completion.chunk\",\"model\":\"gpt-4o-mini\",\"choices\":["
+                + "{\"index\":0,\"delta\":{\"tool_calls\":["
+                + "{\"index\":0,\"id\":\"late_a\",\"function\":{\"arguments\":\"abcdefghA\"}},"
+                + "{\"index\":1,\"id\":\"late_b\",\"function\":{\"arguments\":\"ijklmnopB\"}}"
+                + "]},\"finish_reason\":null}]} ");
+        feed(ctx, "{\"object\":\"chat.completion.chunk\",\"model\":\"gpt-4o-mini\",\"choices\":["
+                + "{\"index\":0,\"delta\":{\"tool_calls\":["
+                + "{\"index\":0,\"function\":{\"arguments\":\"abcdefghA\"}},"
+                + "{\"index\":1,\"function\":{\"arguments\":\"ijklmnopB\"}}"
+                + "]},\"finish_reason\":\"tool_calls\"}]} ");
+
+        ChatAccumulator acc = ctx.getAccumulator();
+        assertEquals("abcdefghA", acc.getToolCallBuilders().get("idx:0").argumentsBuilder.toString());
+        assertEquals("ijklmnopB", acc.getToolCallBuilders().get("idx:1").argumentsBuilder.toString());
+        assertEquals(java.util.Arrays.asList("abcdefgh", "ijklmnop", "A", "B"), argumentDeltas(events));
+        assertEquals("abcdefghA", acc.snapshotTerminal().getToolCalls().get(0).getArgumentsStr());
+        assertEquals("ijklmnopB", acc.snapshotTerminal().getToolCalls().get(1).getArgumentsStr());
+    }
+
+    /**
+     * 单结果响应只消费首个 choice；额外候选的同 index 工具调用不得进入主事件流。
+     */
+    @Test
+    public void additionalChoicesDoNotEnterToolArgumentStream() {
+        ChatStreamContext ctx = newCtx();
+        feed(ctx, "{\"object\":\"chat.completion.chunk\",\"model\":\"gpt-4o-mini\",\"choices\":["
+                + "{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"name\":\"lookup\",\"arguments\":\"choice0-\"}}]},\"finish_reason\":null},"
+                + "{\"index\":1,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"name\":\"lookup\",\"arguments\":\"choice1-\"}}]},\"finish_reason\":null}]} ");
+        feed(ctx, "{\"object\":\"chat.completion.chunk\",\"model\":\"gpt-4o-mini\",\"choices\":["
+                + "{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"choice0-final\"}}]},\"finish_reason\":null},"
+                + "{\"index\":1,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"choice1-final\"}}]},\"finish_reason\":null}]} ");
+
+        assertEquals(java.util.Arrays.asList("choice0-", "final"), argumentDeltas(events));
+    }
+
+    private List<String> argumentDeltas(List<ChatEvent> all) {
+        List<String> result = new ArrayList<>();
+        for (ChatEvent event : all) {
+            if (event.is(ChatEventType.TOOL_CALL_ARGS_DELTA)) {
+                result.add(event.getText());
+            }
+        }
+        return result;
     }
 }

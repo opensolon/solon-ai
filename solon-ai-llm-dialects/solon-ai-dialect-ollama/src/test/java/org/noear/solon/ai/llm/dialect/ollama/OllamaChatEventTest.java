@@ -32,10 +32,9 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Ollama 方言的事件序列
  *
- * <p>该方言在 {@code parseResponseJson} 里只解析内容主干：Ollama chat 帧
- * （{@code message} + {@code done}）只承载内容增量，方言自身<b>不</b>发射内容事件，
- * 内容主干仍以内容项形态交给核心 {@code publishItem} 统一转换为
- * TEXT_DELTA / THINKING_DELTA / TOOL_CALL_*。本测试锁定「不双发」契约与工具调用累积。</p>
+ * <p>Ollama chat 流式帧通过语义 {@link ChatEvent} 表达正文、思考与工具调用，
+ * 并由 {@link ChatAccumulator#acceptEvent(ChatEvent)} 统一聚合。本测试同时锁定事件序列
+ * 与聚合终态，避免同一分片被重复计入。</p>
  *
  * @author noear
  */
@@ -45,65 +44,59 @@ public class OllamaChatEventTest {
     private final List<ChatEvent> events = new ArrayList<>();
 
     private ChatStreamContext newCtx() {
+        return newCtx(ChatOptions.of());
+    }
+
+    private ChatStreamContext newCtx(ChatOptions options) {
+        return newCtx(options, true);
+    }
+
+    private ChatStreamContext newCtx(ChatOptions options, boolean stream) {
         events.clear();
 
         ChatConfig config = new ChatConfig();
         config.setModel("qwen3:8b");
-        ChatRequest req = new ChatRequest(config, dialect, ChatOptions.of(),
-                InMemoryChatSession.builder().build(), ChatMessage.ofSystem("test"), null, true);
+        ChatRequest req = new ChatRequest(config, dialect, options,
+                InMemoryChatSession.builder().build(), ChatMessage.ofSystem("test"), null, stream);
 
-        return new ChatStreamContextDefault(config, req, new ChatAccumulator(req, true),
+        return new ChatStreamContextDefault(config, req, new ChatAccumulator(req, stream),
                 new ChatStreamSession(), 0, events::add);
     }
 
     /**
-     * 模拟核心的逐帧驱动：帧前 reset，解析后按核心 {@code buildToolCallBuilder} 的规则
-     * 把工具调用累积进 {@code acc.getToolCallBuilders()}（核心该方法为私有，此处镜像同一规则）。
+     * 模拟核心的逐帧驱动：帧前 reset，语义事件由流上下文自动归并。
      */
     private void feed(ChatStreamContext ctx, String data) {
-        ChatAccumulator acc = ctx.getAccumulator();
-        acc.reset();
-
+        ctx.getAccumulator().reset();
         dialect.parseResponseJson(ctx, data);
-
-        if (acc.hasContentItems() == false) {
-            return;
-        }
-
-        AssistantMessage msg = acc.lastItem();
-        if (msg == null || msg.getToolCalls() == null || msg.getToolCalls().isEmpty()) {
-            return;
-        }
-
-        for (ToolCall call : msg.getToolCalls()) {
-            ToolCallBuilder builder = acc.getToolCallBuilders()
-                    .computeIfAbsent(call.getIndex(), k -> new ToolCallBuilder());
-
-            if (call.getId() != null && builder.idBuilder.length() == 0) {
-                builder.idBuilder.append(call.getId());
-            }
-            if (call.getName() != null) {
-                if (builder.nameBuilder.length() == 0) {
-                    builder.nameBuilder.append(call.getName());
-                } else if (call.getName().contentEquals(builder.nameBuilder) == false) {
-                    builder.nameBuilder.append(call.getName());
-                }
-            }
-            if (call.getArgumentsStr() != null) {
-                builder.argumentsBuilder.append(call.getArgumentsStr());
-            }
-        }
     }
 
-    private void assertNoContentEvents() {
-        for (ChatEvent e : events) {
-            assertNotSame(ChatEventGroup.TEXT, e.getGroup(),
-                    "dialect must not emit TEXT events (core converts content items)");
-            assertNotSame(ChatEventGroup.THINKING, e.getGroup(),
-                    "dialect must not emit THINKING events (core converts content items)");
-            assertNotSame(ChatEventGroup.TOOL_CALL, e.getGroup(),
-                    "dialect must not emit TOOL_CALL events (core converts content items)");
+    private List<ChatEvent> eventsOf(ChatEventType type) {
+        List<ChatEvent> matches = new ArrayList<>();
+        for (ChatEvent event : events) {
+            if (event.getType() == type) {
+                matches.add(event);
+            }
         }
+        return matches;
+    }
+
+    private List<String> textsOf(ChatEventType type) {
+        List<String> texts = new ArrayList<>();
+        for (ChatEvent event : eventsOf(type)) {
+            texts.add(event.getText());
+        }
+        return texts;
+    }
+
+    private List<String> textsOfIndex(ChatEventType type, int index) {
+        List<String> texts = new ArrayList<>();
+        for (ChatEvent event : eventsOf(type)) {
+            if (event.getIndex() == index) {
+                texts.add(event.getText());
+            }
+        }
+        return texts;
     }
 
     /**
@@ -116,50 +109,43 @@ public class OllamaChatEventTest {
     }
 
     /**
-     * 文本增量：内容仍走内容项，方言不发内容事件
+     * 文本增量通过事件发出，并进入正文聚合。
      */
     @Test
-    public void textDeltaStillGoesThroughChoiceOnly() {
+    public void textDeltaIsEmittedAndAggregated() {
         ChatStreamContext ctx = newCtx();
 
         feed(ctx, frame("\"content\":\"杭州\"", false));
-        assertTrue(ctx.getAccumulator().hasContentItems());
-        assertEquals("杭州", ctx.getAccumulator().lastItem().getTextRaw());
-
         feed(ctx, frame("\"content\":\"今天晴\"", false));
-        assertEquals("今天晴", ctx.getAccumulator().lastItem().getTextRaw());
 
-        assertTrue(events.isEmpty(), "content frames must not emit dialect events");
-        assertNoContentEvents();
+        assertEquals(java.util.Arrays.asList("杭州", "今天晴"), textsOf(ChatEventType.TEXT_DELTA));
+        assertEquals("杭州今天晴", ctx.getAccumulator().getAggregationText());
+        assertEquals("杭州今天晴", ctx.getAccumulator().snapshotTerminal().getText());
     }
 
     /**
-     * 思考增量：Ollama think 模式字段为 thinking，映射到通用 reasoning 管线后仍走内容项
+     * Ollama thinking 字段归一到通用思考事件与聚合。
      */
     @Test
-    public void thinkingDeltaStillGoesThroughChoice() {
+    public void thinkingDeltaIsEmittedAndAggregated() {
         ChatStreamContext ctx = newCtx();
 
         feed(ctx, frame("\"content\":\"\",\"thinking\":\"让我想想\"", false));
 
         ChatAccumulator acc = ctx.getAccumulator();
-        assertTrue(acc.hasContentItems());
-        //首帧思考：开启信号帧 + 思考分片帧
-        assertEquals(2, acc.getContentItems().size());
-        assertTrue(acc.lastItem().isThinking());
-        assertEquals("让我想想", acc.lastItem().getThinkingRaw());
-        //thinking 归一到 reasoning 字段名（回传时按该字段写出）
+        assertEquals(java.util.Collections.singletonList("让我想想"),
+                textsOf(ChatEventType.THINKING_DELTA));
+        assertEquals("让我想想", acc.getAggregationThinking());
         assertEquals("reasoning", acc.reasoning_field_name);
         assertTrue(acc.in_thinking);
-
-        assertNoContentEvents();
+        assertEquals("让我想想", acc.snapshotTerminal().getThinking());
     }
 
     /**
-     * 思考 → 正文的通道切换仍只有 choice
+     * 思考转正文时切换事件通道，同时保留各自聚合结果。
      */
     @Test
-    public void thinkingThenTextStillGoesThroughChoice() {
+    public void thinkingThenTextSwitchesEventChannel() {
         ChatStreamContext ctx = newCtx();
 
         feed(ctx, frame("\"content\":\"\",\"thinking\":\"让我想想\"", false));
@@ -167,19 +153,19 @@ public class OllamaChatEventTest {
 
         ChatAccumulator acc = ctx.getAccumulator();
         assertFalse(acc.in_thinking, "text frame must close the thinking channel");
-        assertEquals(2, acc.getContentItems().size());
-        assertTrue(acc.getContentItems().get(0).isThinking());
-        assertEquals("杭州今天晴", acc.lastItem().getTextRaw());
-
-        assertNoContentEvents();
+        assertEquals(java.util.Collections.singletonList("让我想想"),
+                textsOf(ChatEventType.THINKING_DELTA));
+        assertEquals(java.util.Collections.singletonList("杭州今天晴"),
+                textsOf(ChatEventType.TEXT_DELTA));
+        assertEquals("让我想想", acc.getAggregationThinking());
+        assertEquals("杭州今天晴", acc.getAggregationText());
     }
 
     /**
-     * 工具调用：Ollama 不分片下发 arguments（一帧给出完整对象，且无 id / index），
-     * 方言以函数名为聚合主键；核心据此累积出唯一 builder
+     * 工具调用无 id / index 时，以当前帧 tool_calls 数组位置作为稳定身份。
      */
     @Test
-    public void toolCallAccumulatesByFunctionName() {
+    public void toolCallWithoutIdentityUsesArrayPosition() {
         ChatStreamContext ctx = newCtx();
 
         feed(ctx, frame("\"content\":\"\",\"tool_calls\":[{\"function\":{\"name\":\"get_weather\","
@@ -188,40 +174,174 @@ public class OllamaChatEventTest {
         ChatAccumulator acc = ctx.getAccumulator();
         assertEquals(1, acc.getToolCallBuilders().size());
 
-        ToolCallBuilder builder = acc.getToolCallBuilders().get("get_weather");
-        assertNotNull(builder, "ollama tool calls are keyed by function name (no id/index in protocol)");
+        ToolCallBuilder builder = acc.getToolCallBuilders().get("idx:0");
+        assertNotNull(builder);
         assertEquals("get_weather", builder.nameBuilder.toString());
         assertEquals("", builder.idBuilder.toString(), "ollama does not carry a tool call id");
 
-        //参数已解析成结构化 map（不走字符串分片累积）
-        ToolCall call = acc.lastItem().getToolCalls().get(0);
+        assertEquals(1, eventsOf(ChatEventType.TOOL_CALL_START).size());
+        assertEquals(0, eventsOf(ChatEventType.TOOL_CALL_START).get(0).getIndex());
+        assertEquals(1, eventsOf(ChatEventType.TOOL_CALL_ARGS_DELTA).size());
+        ToolCall call = eventsOf(ChatEventType.TOOL_CALL_START).get(0).getToolCall();
+        assertNotNull(call);
         assertEquals("get_weather", call.getName());
-        assertEquals("杭州", call.getArguments().get("location"));
-
-        assertNoContentEvents();
+        assertEquals("{\"location\":\"杭州\"}",
+                eventsOf(ChatEventType.TOOL_CALL_ARGS_DELTA).get(0).getText());
+        assertEquals("{\"location\":\"杭州\"}", builder.argumentsBuilder.toString());
     }
 
     /**
-     * 两个工具调用在同一帧：按函数名隔离出两个 builder
+     * 同名并行调用不能按函数名合并；无显式身份时分别落到数组位置。
      */
     @Test
-    public void parallelToolCallsAreIsolatedByName() {
+    public void parallelSameNameToolCallsAreIsolatedByPosition() {
         ChatStreamContext ctx = newCtx();
 
         feed(ctx, frame("\"content\":\"\",\"tool_calls\":["
-                + "{\"function\":{\"name\":\"f1\",\"arguments\":{\"a\":1}}},"
-                + "{\"function\":{\"name\":\"f2\",\"arguments\":{\"b\":2}}}]", false));
+                + "{\"function\":{\"name\":\"lookup\",\"arguments\":{\"city\":\"杭州\"}}},"
+                + "{\"function\":{\"name\":\"lookup\",\"arguments\":{\"city\":\"上海\"}}}]", false));
 
         ChatAccumulator acc = ctx.getAccumulator();
         assertEquals(2, acc.getToolCallBuilders().size());
-        assertNotNull(acc.getToolCallBuilders().get("f1"));
-        assertNotNull(acc.getToolCallBuilders().get("f2"));
-
-        assertNoContentEvents();
+        assertEquals("{\"city\":\"杭州\"}",
+                acc.getToolCallBuilders().get("idx:0").argumentsBuilder.toString());
+        assertEquals("{\"city\":\"上海\"}",
+                acc.getToolCallBuilders().get("idx:1").argumentsBuilder.toString());
+        assertEquals("lookup", acc.getToolCallBuilders().get("idx:0").nameBuilder.toString());
+        assertEquals("lookup", acc.getToolCallBuilders().get("idx:1").nameBuilder.toString());
     }
 
     /**
-     * 结束帧：done=true 时统计 usage 并补位 choice，仍不发内容事件
+     * 显式身份优先级为顶层 index、function.index、id；函数名不参与身份选择。
+     */
+    @Test
+    public void toolCallIdentityUsesProtocolPriority() {
+        ChatStreamContext ctx = newCtx();
+
+        feed(ctx, frame("\"content\":\"\",\"tool_calls\":["
+                + "{\"index\":3,\"id\":\"call_top\",\"function\":{\"index\":7,\"name\":\"same\",\"arguments\":{\"a\":1}}},"
+                + "{\"id\":\"call_function\",\"function\":{\"index\":4,\"name\":\"same\",\"arguments\":{\"b\":2}}},"
+                + "{\"id\":\"call_id\",\"function\":{\"name\":\"same\",\"arguments\":{\"c\":3}}}]", false));
+
+        assertNotNull(ctx.getAccumulator().getToolCallBuilders().get("idx:3"));
+        assertNotNull(ctx.getAccumulator().getToolCallBuilders().get("idx:4"));
+        assertNotNull(ctx.getAccumulator().getToolCallBuilders().get("call_id"));
+        assertNull(ctx.getAccumulator().getToolCallBuilders().get("same"));
+    }
+
+    /**
+     * 累计字符串快照只发布新增后缀，重复终帧不再重复追加。
+     */
+    @Test
+    public void cumulativeToolArgumentSnapshotsBecomeExactDeltas() {
+        ChatStreamContext ctx = newCtx(
+                ChatOptions.of().optionSet("ollama_tool_arguments_mode", "snapshot"));
+
+        feed(ctx, frame("\"content\":\"\",\"tool_calls\":[{\"index\":0,\"function\":{"
+                + "\"name\":\"lookup\",\"arguments\":\"{\\\"city\\\":\\\"杭\"}}]", false));
+        feed(ctx, frame("\"content\":\"\",\"tool_calls\":[{\"index\":0,\"function\":{"
+                + "\"name\":\"lookup\",\"arguments\":\"{\\\"city\\\":\\\"杭州\\\"}\"}}]", false));
+        feed(ctx, frame("\"content\":\"\",\"tool_calls\":[{\"index\":0,\"function\":{"
+                + "\"name\":\"lookup\",\"arguments\":\"{\\\"city\\\":\\\"杭州\\\"}\"}}]", true));
+
+        assertEquals(java.util.Arrays.asList("{\"city\":\"杭", "州\"}"),
+                textsOf(ChatEventType.TOOL_CALL_ARGS_DELTA));
+        assertEquals("{\"city\":\"杭州\"}",
+                String.join("", textsOfIndex(ChatEventType.TOOL_CALL_ARGS_DELTA, 0)));
+        ToolCallBuilder builder = ctx.getAccumulator().getToolCallBuilders().get("idx:0");
+        assertNotNull(builder);
+        assertEquals("{\"city\":\"杭州\"}", builder.argumentsBuilder.toString());
+        assertEquals("{\"city\":\"杭州\"}",
+                ctx.getAccumulator().snapshotTerminal().getToolCalls().get(0).getArgumentsStr());
+    }
+
+    /**
+     * 结构化对象参数是完整快照；完全重复帧不得重复追加。
+     */
+    @Test
+    public void duplicatedStructuredToolArgumentSnapshotIsDropped() {
+        ChatStreamContext ctx = newCtx();
+        String body = "\"content\":\"\",\"tool_calls\":[{\"index\":0,\"function\":{"
+                + "\"name\":\"lookup\",\"arguments\":{\"city\":\"杭州\"}}}]";
+
+        feed(ctx, frame(body, false));
+        feed(ctx, frame(body, true));
+
+        assertEquals(java.util.Collections.singletonList("{\"city\":\"杭州\"}"),
+                textsOf(ChatEventType.TOOL_CALL_ARGS_DELTA));
+        assertEquals("{\"city\":\"杭州\"}",
+                ctx.getAccumulator().getToolCallBuilders().get("idx:0").argumentsBuilder.toString());
+    }
+
+    /**
+     * 非前缀关系的真实参数增量保持原样，不能按快照误裁剪。
+     */
+    @Test
+    public void genuineToolArgumentDeltasRemainUnchanged() {
+        ChatStreamContext ctx = newCtx();
+
+        feed(ctx, frame("\"content\":\"\",\"tool_calls\":[{\"index\":0,\"function\":{"
+                + "\"name\":\"lookup\",\"arguments\":\"{\\\"city\\\":\\\"\"}}]", false));
+        feed(ctx, frame("\"content\":\"\",\"tool_calls\":[{\"index\":0,\"function\":{"
+                + "\"name\":\"lookup\",\"arguments\":\"杭州\\\"}\"}}]", false));
+
+        assertEquals(java.util.Arrays.asList("{\"city\":\"", "杭州\"}"),
+                textsOf(ChatEventType.TOOL_CALL_ARGS_DELTA));
+        assertEquals("{\"city\":\"杭州\"}",
+                ctx.getAccumulator().getToolCallBuilders().get("idx:0").argumentsBuilder.toString());
+    }
+
+    /**
+     * 默认字符串参数始终按 delta 处理，即使合法增量恰好是已累积内容的长前缀。
+     */
+    @Test
+    public void longPrefixStringDeltaIsNotGuessedAsSnapshot() {
+        ChatStreamContext ctx = newCtx();
+
+        feed(ctx, frame("\"content\":\"\",\"tool_calls\":[{\"index\":0,\"function\":{"
+                + "\"name\":\"lookup\",\"arguments\":\"abcdefghijklmnop\"}}]", false));
+        feed(ctx, frame("\"content\":\"\",\"tool_calls\":[{\"index\":0,\"function\":{"
+                + "\"name\":\"lookup\",\"arguments\":\"abcdefghijklmnoXYZ\"}}]", false));
+
+        assertEquals("abcdefghijklmnopabcdefghijklmnoXYZ",
+                ctx.getAccumulator().getToolCallBuilders().get("idx:0").argumentsBuilder.toString());
+    }
+    /**
+     * 非流式 thinking + text + media 必须共同保留，且媒体只发一次完成事件。
+     */
+    @Test
+    public void nonStreamThinkingTextAndMediaAreKeptWithSingleMediaDone() {
+        ChatStreamContext ctx = newCtx(ChatOptions.of(), false);
+
+        dialect.parseResponseJson(ctx, frame("\"content\":\"最终答案\",\"thinking\":\"推理过程\","
+                + "\"images\":[\"https://example.com/a.png\"]", true));
+
+        AssistantMessage message = ctx.getAccumulator().snapshotTerminal().getMessage();
+        assertNotNull(message);
+        assertEquals("最终答案", message.getTextRaw());
+        assertEquals("推理过程", message.getThinkingRaw());
+        assertEquals(2, message.getBlocks().size());
+        assertEquals(1, eventsOf(ChatEventType.MEDIA_DONE).size());
+        assertEquals(1, ctx.getAccumulator().getMediaBlocks().size());
+    }
+
+    /**
+     * 流式侧车媒体只发一次 MEDIA_DONE，并正确进入终态聚合。
+     */
+    @Test
+    public void streamingMediaEmitsSingleDoneEventAndAggregates() {
+        ChatStreamContext ctx = newCtx();
+
+        feed(ctx, frame("\"content\":\"图片\",\"images\":[\"https://example.com/a.png\"]", false));
+
+        assertEquals(1, eventsOf(ChatEventType.MEDIA_DONE).size());
+        assertEquals("https://example.com/a.png", eventsOf(ChatEventType.MEDIA_DONE).get(0).getBlock().getContent());
+        assertEquals(1, ctx.getAccumulator().getMediaBlocks().size());
+        assertEquals(2, ctx.getAccumulator().snapshotTerminal().getBlocks().size());
+    }
+
+    /**
+     * 结束帧：done=true 时记录完成状态与 usage，不产生空内容事件。
      */
     @Test
     public void doneFrameFinishesWithoutContentEvents() {
@@ -233,14 +353,39 @@ public class OllamaChatEventTest {
 
         ChatAccumulator acc = ctx.getAccumulator();
         assertTrue(acc.isFinished());
-        assertTrue(acc.hasContentItems());
         assertNotNull(acc.getUsage());
         assertEquals(10, acc.getUsage().promptTokens());
         assertEquals(5, acc.getUsage().completionTokens());
         assertEquals("stop", acc.getLastFinishReasonNormalized());
+        assertTrue(eventsOf(ChatEventType.TEXT_DELTA).isEmpty());
+        assertTrue(eventsOf(ChatEventType.THINKING_DELTA).isEmpty());
+        assertEquals("", acc.getAggregationText());
+        assertEquals("", acc.getAggregationThinking());
+    }
 
-        assertTrue(events.isEmpty(), "done frame must not emit dialect events");
-        assertNoContentEvents();
+    @Test
+    public void crossFrameMediaIsIdempotentButSameFrameDuplicatesRemain() {
+        ChatStreamContext ctx = newCtx();
+        String media = "https://example.com/a.png";
+
+        feed(ctx, frame("\"content\":\"有图\",\"images\":[\"" + media + "\",\"" + media + "\"]", false));
+        feed(ctx, frame("\"content\":\"\",\"images\":[\"" + media + "\",\"" + media + "\"]", true));
+
+        assertEquals(2, eventsOf(ChatEventType.MEDIA_DONE).size());
+        assertEquals(2, ctx.getAccumulator().getMediaBlocks().size());
+    }
+
+    @Test
+    public void growingSnapshotKeepsNewSameMediaPart() {
+        ChatStreamContext ctx = newCtx();
+        String media = "https://example.com/a.png";
+
+        feed(ctx, frame("\"content\":\"\",\"images\":[\"" + media + "\"]", false));
+        feed(ctx, frame("\"content\":\"\",\"images\":[\"" + media + "\",\"" + media + "\"]", false));
+        feed(ctx, frame("\"content\":\"\",\"images\":[\"" + media + "\",\"" + media + "\"]", true));
+
+        assertEquals(2, eventsOf(ChatEventType.MEDIA_DONE).size());
+        assertEquals(2, ctx.getAccumulator().getMediaBlocks().size());
     }
 
     /**
@@ -254,10 +399,10 @@ public class OllamaChatEventTest {
         feed(ctx, frame("\"some_future_field\":{\"foo\":\"bar\"}", false));
 
         ChatAccumulator acc = ctx.getAccumulator();
-        assertFalse(acc.hasContentItems(), "unknown message field must not produce a choice");
         assertFalse(acc.isFinished());
         assertTrue(acc.getToolCallBuilders().isEmpty());
         assertEquals("", acc.getAggregationText());
+        assertEquals("", acc.getAggregationThinking());
         assertNull(acc.getError());
 
         assertTrue(events.isEmpty(), "unknown frames must not emit events");
@@ -278,7 +423,8 @@ public class OllamaChatEventTest {
         assertNotNull(ctx.getAccumulator().getError());
         assertTrue(ctx.getAccumulator().getError().getMessage().contains("not found"));
 
-        assertNoContentEvents();
+        assertEquals("", ctx.getAccumulator().getAggregationText());
+        assertEquals("", ctx.getAccumulator().getAggregationThinking());
     }
 
     /**
@@ -296,7 +442,8 @@ public class OllamaChatEventTest {
 
         assertDoesNotThrow(() -> dialect.parseResponseJson(ChatStreamContextDefault.ofNoEmit(acc),
                 frame("\"content\":\"hi\"", false)));
-        assertTrue(acc.hasContentItems());
-        assertTrue(events.isEmpty(), "ofNoEmit 上下文不应产出任何事件");
+        assertEquals("hi", acc.getAggregationText());
+        assertEquals("hi", acc.snapshotTerminal().getText());
+        assertTrue(events.isEmpty(), "ofNoEmit 上下文不应向 emitter 投递事件");
     }
 }

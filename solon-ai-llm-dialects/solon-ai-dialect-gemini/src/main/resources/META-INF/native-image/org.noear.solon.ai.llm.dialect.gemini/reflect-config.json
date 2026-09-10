@@ -2,5 +2,9 @@
   {
     "name": "org.noear.solon.ai.llm.dialect.gemini.GeminiChatDialect",
     "allDeclaredConstructors": true
+  },
+  {
+    "name": "org.noear.solon.ai.llm.dialect.gemini.GeminiInteractionsDialect",
+    "allDeclaredConstructors": true
   }
 ]

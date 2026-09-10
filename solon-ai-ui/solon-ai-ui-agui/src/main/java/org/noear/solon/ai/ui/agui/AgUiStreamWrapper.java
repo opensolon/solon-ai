@@ -6,6 +6,7 @@
  */
 package org.noear.solon.ai.ui.agui;
 
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.event.ChatEvent;
 import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.tool.ToolCall;
@@ -83,7 +84,28 @@ public class AgUiStreamWrapper {
                                 String threadId, String runId) {
         if (event == null || sink.isCancelled()) return;
 
-        //内嵌 ChatEvent：直接委托核心状态机（多块/lazy-open/幂等 close 全部复用）
+        String simpleName = event.getClass().getSimpleName();
+
+        // Supervisor 的内部决策即使携带 ChatEvent，也只能作为 CUSTOM，不能污染正文或推理。
+        if ("SupervisorDeltaEvent".equals(simpleName)) {
+            CustomEvent custom = new CustomEvent();
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("agentEventType", simpleName);
+            payload.put("runId", invoke(event, "getRunId"));
+            payload.put("agentName", invoke(event, "getAgentName"));
+            payload.put("thinking", invoke(event, "isThinking"));
+            String text = str(invoke(event, "getText"));
+            if (text != null && !text.isEmpty()) payload.put("text", text);
+            ChatEvent supervisorChatEvent = invokeChatEvent(event);
+            if (supervisorChatEvent != null) payload.put("chatEvent", chatEventPayload(supervisorChatEvent));
+            custom.setName("supervisor-delta");
+            custom.setValue(payload);
+            custom.setRawEvent(payload);
+            sink.next(custom);
+            return;
+        }
+
+        // 内嵌 ChatEvent 委托核心状态机，复用多块、lazy-open 与幂等 close 逻辑。
         ChatEvent chatEvent = invokeChatEvent(event);
         if (chatEvent != null) {
             for (Event out : map(chatEvent, state, threadId, runId)) {
@@ -92,7 +114,6 @@ public class AgUiStreamWrapper {
             return;
         }
 
-        String simpleName = event.getClass().getSimpleName();
 
         //Agent 工具事件：ToolCallStart → TOOL_CALL_START；ToolCallEnd → END + RESULT
         if ("ToolCallStartEvent".equals(simpleName)) {
@@ -121,11 +142,15 @@ public class AgUiStreamWrapper {
             sink.next(result);
             return;
         }
-        //RunEnd：记录终态，由 finishSuccess 统一收口（关块 + RunFinished）
+        //RunEnd：记录终态，由 finishSuccess 统一收口（关块 + RunFinished/RunError）
         if ("RunEndEvent".equals(simpleName) || "SimpleEndEvent".equals(simpleName)
                 || "TeamEndEvent".equals(simpleName)) {
             Object resp = invoke(event, "getResponse");
             if (resp != null) state.result = resp;
+            if (Boolean.TRUE.equals(invoke(event, "isAbnormal"))) {
+                String text = str(invoke(event, "getText"));
+                state.agentError = text == null || text.isEmpty() ? "Agent run failed" : text;
+            }
             return;
         }
 
@@ -139,6 +164,8 @@ public class AgUiStreamWrapper {
         if (text != null && !text.isEmpty()) {
             payload.put("text", text);
         }
+        custom.setName(simpleName);
+        custom.setValue(payload);
         custom.setRawEvent(payload);
         sink.next(custom);
     }
@@ -419,6 +446,10 @@ public class AgUiStreamWrapper {
             sink.complete();
             return;
         }
+        if (state.agentError != null) {
+            finishError(sink, state, threadId, runId, new IllegalStateException(state.agentError));
+            return;
+        }
         List<Event> tail = new ArrayList<>();
         closeContents(tail, state);
         for (Event event : tail) sink.next(event);
@@ -455,14 +486,56 @@ public class AgUiStreamWrapper {
 
     private static CustomEvent custom(ChatEvent source, String subtype) {
         CustomEvent event = new CustomEvent();
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("eventType", source.getType().name());
-        if (source.getSubType() != null) payload.put("subType", source.getSubType());
-        if (source.getText() != null) payload.put("text", source.getText());
-        if (source.getAttrs() != null && !source.getAttrs().isEmpty()) payload.put("attrs", source.getAttrs());
-        payload.put("raw", source.getRaw());
+        Map<String, Object> payload = chatEventPayload(source);
+        event.setName(subtype);
+        event.setValue(payload);
+        // 兼容旧客户端继续从 rawEvent 读取 payload；标准客户端使用 name/value。
         event.setRawEvent(payload);
         return event;
+    }
+
+    private static Map<String, Object> chatEventPayload(ChatEvent source) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("eventType", source.getType().name());
+        if (source.getRawType() != null) payload.put("rawType", source.getRawType());
+        if (source.getSubType() != null) payload.put("subType", source.getSubType());
+        if (source.getResponseId() != null) payload.put("responseId", source.getResponseId());
+        if (source.getProviderResponseId() != null) payload.put("providerResponseId", source.getProviderResponseId());
+        payload.put("step", source.getStep());
+        if (source.getItemId() != null) payload.put("itemId", source.getItemId());
+        if (source.getToolCallId() != null) payload.put("toolCallId", source.getToolCallId());
+        if (source.getIndex() >= 0) payload.put("index", source.getIndex());
+        if (source.getText() != null) payload.put("text", source.getText());
+        if (source.getSearchResult() != null) {
+            org.noear.solon.ai.chat.source.SearchResult item = source.getSearchResult();
+            Map<String, Object> value = new LinkedHashMap<>();
+            value.put("index", item.getIndex());
+            value.put("id", item.getId());
+            value.put("title", item.getTitle());
+            value.put("url", item.getUrl());
+            value.put("snippet", item.getSnippet());
+            payload.put("searchResult", value);
+        }
+        if (source.getCitation() != null) {
+            org.noear.solon.ai.chat.source.Citation item = source.getCitation();
+            Map<String, Object> value = new LinkedHashMap<>();
+            value.put("type", item.getType());
+            value.put("title", item.getTitle());
+            value.put("url", item.getUrl());
+            value.put("citedText", item.getCitedText());
+            payload.put("citation", value);
+        }
+        if (source.getAttrs() != null && !source.getAttrs().isEmpty()) payload.put("attrs", source.getAttrs());
+        ContentBlock block = source.getBlock();
+        if (block != null) {
+            Map<String, Object> blockPayload = new LinkedHashMap<>();
+            blockPayload.put("type", block.getClass().getSimpleName());
+            blockPayload.put("content", block.getContent());
+            blockPayload.put("mimeType", block.getMimeType());
+            payload.put("block", blockPayload);
+        }
+        payload.put("raw", source.getRaw());
+        return payload;
     }
 
     private static String toolId(ChatEvent event, State state) {
@@ -492,9 +565,11 @@ public class AgUiStreamWrapper {
     }
 
     private static String contentKey(ChatEvent event) {
-        if (!empty(event.getItemId())) return "item:" + event.getItemId();
-        if (event.getIndex() >= 0) return "index:" + event.getIndex();
-        return "default";
+        String prefix = "response:" + (empty(event.getResponseId()) ? "default" : event.getResponseId())
+                + ":step:" + event.getStep() + ":";
+        if (!empty(event.getItemId())) return prefix + "item:" + event.getItemId();
+        if (event.getIndex() >= 0) return prefix + "index:" + event.getIndex();
+        return prefix + "default";
     }
 
     private static boolean empty(String value) {
@@ -509,6 +584,7 @@ public class AgUiStreamWrapper {
         final Set<String> openReasoning = new LinkedHashSet<>();
         final Set<String> openTools = new LinkedHashSet<>();
         Object result;
+        String agentError;
         boolean terminal;
     }
 }

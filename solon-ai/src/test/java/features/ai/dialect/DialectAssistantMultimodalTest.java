@@ -8,9 +8,12 @@ import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
+import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContextDefault;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.MessageProtocolState;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.tool.ToolCall;
@@ -51,11 +54,16 @@ public class DialectAssistantMultimodalTest {
         dialect.parseResponseJson(ChatStreamContextDefault.ofNoEmit(new ChatConfig(), acc), json);
     }
 
+    private static void parse(ChatDialect dialect, ChatAccumulator acc, List<ChatEvent> events, String json) {
+        dialect.parseResponseJson(new ChatStreamContextDefault(
+                new ChatConfig(), acc.getRequest(), acc, null, 0, events::add), json);
+    }
+
     /**
-     * 取当帧分片消息（方言白盒：非流式即整条结果消息）
+     * 取完整终态消息（用于非流式方言白盒断言）
      */
     private static AssistantMessage messageOf(ChatAccumulator acc) {
-        return acc.snapshotFrame().getMessage();
+        return acc.snapshotTerminal().getMessage();
     }
 
     @Test
@@ -180,9 +188,11 @@ public class DialectAssistantMultimodalTest {
                 + "\"item\":{\"type\":\"image_generation_call\",\"id\":\"ig_stream_1\","
                 + "\"status\":\"completed\",\"result\":\"iVBORw0KGgo=\"}}";
 
-        parse(dialect, resp, streamJson);
-        // 流式 image_generation_call 只收 media，不推空文本 choice
-        Assertions.assertFalse(resp.hasContentItems());
+        List<ChatEvent> events = new ArrayList<>();
+        parse(dialect, resp, events, streamJson);
+        // 流式 image_generation_call 只发媒体事件，不发空文本增量
+        Assertions.assertTrue(events.stream().noneMatch(e -> e.is(ChatEventType.TEXT_DELTA)));
+        Assertions.assertTrue(events.stream().anyMatch(e -> e.is(ChatEventType.MEDIA_DONE)));
         Assertions.assertFalse(resp.getMediaBlocks().isEmpty());
         Assertions.assertTrue(resp.getMediaBlocks().stream().anyMatch(b -> b instanceof ImageBlock));
     }
@@ -202,7 +212,7 @@ public class DialectAssistantMultimodalTest {
                 + "}";
 
         parse(dialect, resp, json);
-        Assertions.assertTrue(resp.hasContentItems());
+        Assertions.assertNotNull(resp.snapshotTerminal().getMessage());
 
         AssistantMessage msg = messageOf(resp);
         Assertions.assertNotNull(msg);
@@ -307,16 +317,10 @@ public class DialectAssistantMultimodalTest {
                 + "}";
 
         parse(dialect, resp, json);
-        Assertions.assertTrue(resp.hasContentItems());
-
-        boolean hasMedia = false;
-        for (AssistantMessage c : resp.getContentItems()) {
-            if (c != null && c.hasMedia()) {
-                hasMedia = true;
-                Assertions.assertTrue(c.getBlocks().stream().anyMatch(b -> b instanceof ImageBlock));
-            }
-        }
-        Assertions.assertTrue(hasMedia);
+        AssistantMessage msg = resp.snapshotTerminal().getMessage();
+        Assertions.assertNotNull(msg);
+        Assertions.assertTrue(msg.hasMedia());
+        Assertions.assertTrue(msg.getBlocks().stream().anyMatch(b -> b instanceof ImageBlock));
     }
 
     @Test
@@ -369,15 +373,9 @@ public class DialectAssistantMultimodalTest {
                 + "}";
 
         parse(dialect, resp, json);
-        Assertions.assertTrue(resp.hasContentItems());
-
-        boolean hasMedia = false;
-        for (AssistantMessage c : resp.getContentItems()) {
-            if (c != null && c.hasMedia()) {
-                hasMedia = true;
-            }
-        }
-        Assertions.assertTrue(hasMedia);
+        AssistantMessage msg = resp.snapshotTerminal().getMessage();
+        Assertions.assertNotNull(msg);
+        Assertions.assertTrue(msg.hasMedia());
     }
 
     @Test
@@ -391,7 +389,7 @@ public class DialectAssistantMultimodalTest {
         config.setModel("gpt-test");
         ONode root = dialect.buildRequestJson(
                 config,
-                ChatOptions.of(),
+                ChatOptions.of().optionSet("responses_input_audio_enabled", true),
                 Collections.singletonList(user),
                 false);
 
@@ -416,7 +414,7 @@ public class DialectAssistantMultimodalTest {
     @Test
     public void anthropicPlainAssistantShouldStripThinkTags() {
         AnthropicChatDialect dialect = AnthropicChatDialect.getInstance();
-        AssistantMessage msg = new AssistantMessage("visible", "secret", false);
+        AssistantMessage msg = new AssistantMessage("visible");
 
         ChatConfig config = new ChatConfig();
         config.setModel("claude-test");
@@ -434,7 +432,7 @@ public class DialectAssistantMultimodalTest {
     @Test
     public void geminiPlainAssistantShouldStripThinkTags() {
         GeminiChatDialect dialect = GeminiChatDialect.getInstance();
-        AssistantMessage msg = new AssistantMessage("visible", "secret", false);
+        AssistantMessage msg = new AssistantMessage("visible");
 
         ChatConfig config = new ChatConfig();
         config.setModel("gemini-test");
@@ -535,7 +533,7 @@ public class DialectAssistantMultimodalTest {
                 + "}";
 
         parse(dialect, resp, json);
-        Assertions.assertTrue(resp.hasContentItems());
+        Assertions.assertNotNull(resp.snapshotTerminal().getMessage());
 
         AssistantMessage msg = messageOf(resp);
         Assertions.assertNotNull(msg);
@@ -638,7 +636,7 @@ public class DialectAssistantMultimodalTest {
                 + "}";
 
         parse(dialect, resp, json);
-        Assertions.assertTrue(resp.hasContentItems());
+        Assertions.assertNotNull(resp.snapshotTerminal().getMessage());
         AssistantMessage msg = messageOf(resp);
         Assertions.assertNotNull(msg);
         Assertions.assertTrue(msg.hasMedia());
@@ -758,7 +756,7 @@ public class DialectAssistantMultimodalTest {
                 + "}";
 
         parse(dialect, resp, json);
-        Assertions.assertTrue(resp.hasContentItems());
+        Assertions.assertNotNull(resp.snapshotTerminal().getMessage());
         AssistantMessage msg = messageOf(resp);
         Assertions.assertNotNull(msg);
         Assertions.assertTrue(msg.hasMedia());
@@ -794,18 +792,8 @@ public class DialectAssistantMultimodalTest {
         // 构造一个含 image + toolCalls 的 AssistantMessage
         List<ToolCall> toolCalls = Collections.singletonList(
                 new ToolCall("get_weather", "call_1", "get_weather", "{\"city\":\"Paris\"}", null));
-        Map<String, Object> funcMap = new HashMap<>();
-        funcMap.put("name", "get_weather");
-        funcMap.put("arguments", "{\"city\":\"Paris\"}");
-        Map<String, Object> rawMap = new HashMap<>();
-        rawMap.put("id", "call_1");
-        rawMap.put("type", "function");
-        rawMap.put("function", funcMap);
-        List<Map> toolCallsRaw = Collections.singletonList(rawMap);
-
         AssistantMessage msg = new AssistantMessage(
-                "I will check", "", false, "I will check",
-                toolCallsRaw, toolCalls, null,
+                "I will check", "", toolCalls,
                 Arrays.asList(
                         TextBlock.of("I will check"),
                         ImageBlock.ofUrl("https://example.com/a.png")));
@@ -847,44 +835,50 @@ public class DialectAssistantMultimodalTest {
                 + "}";
 
         parse(dialect, resp, json);
-        Assertions.assertTrue(resp.hasContentItems());
+        Assertions.assertNotNull(resp.snapshotTerminal().getMessage());
 
         AssistantMessage msg = messageOf(resp);
         Assertions.assertNotNull(msg);
         // 完成原因已统一落在累积器上（内容项不再携带）
         Assertions.assertEquals("tool_use", resp.lastFinishReason);
         Assertions.assertEquals("need tool", msg.getThinking());
-        Assertions.assertTrue(msg.getContentRaw() instanceof Map);
-        Assertions.assertEquals("sig-abc",
-                ((Map<?, ?>) msg.getContentRaw()).get("thinkingSignature"));
+        Assertions.assertNull(msg.getContentRaw(), "新解析结果不得再镜像到 legacy contentRaw");
+        MessageProtocolState state = msg.getProtocolState("anthropic.messages");
+        Assertions.assertNotNull(state);
+        Assertions.assertEquals("sig-abc", state.getData().get("thinkingSignature"));
         Assertions.assertFalse(msg.getToolCalls().isEmpty());
         Assertions.assertEquals("spotIntro", msg.getToolCalls().get(0).getName());
+
+        String persisted = ChatMessage.toJson(msg);
+        Assertions.assertFalse(persisted.contains("contentRaw"));
+        AssistantMessage restored = (AssistantMessage) ChatMessage.fromJson(persisted);
+        Assertions.assertEquals("sig-abc", restored.getProtocolState("anthropic.messages")
+                .getData().get("thinkingSignature"));
+
+        ChatConfig config = new ChatConfig();
+        config.setModel("claude-test");
+        ONode replay = dialect.buildRequestJson(config, ChatOptions.of(),
+                Collections.<ChatMessage>singletonList(restored), false)
+                .get("messages").get(0).get("content");
+        Assertions.assertTrue(replay.isArray());
+        Assertions.assertEquals("thinking", replay.get(0).get("type").getString());
+        Assertions.assertEquals("sig-abc", replay.get(0).get("signature").getString());
+        Assertions.assertEquals("tool_use", replay.get(1).get("type").getString());
+        Assertions.assertEquals("spotIntro", replay.get(1).get("name").getString());
     }
 
     @Test
     public void anthropicBuildThinkingToolUseShouldSkipBlankTextAndEmptySignature() {
         AnthropicChatDialect dialect = AnthropicChatDialect.getInstance();
 
-        List<org.noear.solon.ai.chat.tool.ToolCall> toolCalls = Collections.singletonList(
-                new org.noear.solon.ai.chat.tool.ToolCall("call_1", "call_1", "spotIntro", "{}", Collections.emptyMap()));
-        Map<String, Object> funcMap = new HashMap<>();
-        funcMap.put("name", "spotIntro");
-        funcMap.put("arguments", "{}");
-        Map<String, Object> rawMap = new HashMap<>();
-        rawMap.put("id", "call_1");
-        rawMap.put("type", "function");
-        rawMap.put("function", funcMap);
-        List<Map> toolCallsRaw = Collections.singletonList(rawMap);
-
-        // 模拟非流式：thinking 后无正文，stripThinkTags 会留下 "\n\n"
-        // 无有效 signature 时，tool 多轮不应回传 thinking（兼容网关 EMPTY_RESPONSE）
-        Map<String, Object> contentRaw = new LinkedHashMap<>();
-        contentRaw.put("thinking", "need tool");
-        contentRaw.put("thinkingSignature", ""); // 空 signature 视为无效
-
-        AssistantMessage msg = new AssistantMessage(
-                "", "need tool",
-                true, contentRaw, toolCallsRaw, toolCalls, null, null);
+        // 模拟旧 Session：thinking 后无正文且 signature 为空。
+        AssistantMessage msg = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"\",\"thinking\":\"need tool\"," +
+                        "\"contentRaw\":{\"thinking\":\"need tool\",\"thinkingSignature\":\"\"}," +
+                        "\"toolCallsRaw\":[{\"id\":\"call_1\",\"type\":\"function\"," +
+                        "\"function\":{\"name\":\"spotIntro\",\"arguments\":\"{}\"}}]," +
+                        "\"toolCalls\":[{\"index\":\"call_1\",\"id\":\"call_1\"," +
+                        "\"name\":\"spotIntro\",\"argumentsStr\":\"{}\",\"arguments\":{}}]}");
 
         ChatConfig config = new ChatConfig();
         config.setModel("claude-test");
@@ -923,24 +917,14 @@ public class DialectAssistantMultimodalTest {
     public void anthropicBuildThinkingToolUseShouldWriteValidSignature() {
         AnthropicChatDialect dialect = AnthropicChatDialect.getInstance();
 
-        List<ToolCall> toolCalls = Collections.singletonList(
-                new ToolCall("call_2", "call_2", "currentTime", "{}", Collections.emptyMap()));
-        Map<String, Object> funcMap = new HashMap<>();
-        funcMap.put("name", "currentTime");
-        funcMap.put("arguments", "{}");
-        Map<String, Object> rawMap = new HashMap<>();
-        rawMap.put("id", "call_2");
-        rawMap.put("type", "function");
-        rawMap.put("function", funcMap);
-        List<Map> toolCallsRaw = Collections.singletonList(rawMap);
-
-        Map<String, Object> contentRaw = new LinkedHashMap<>();
-        contentRaw.put("thinking", "call time tool");
-        contentRaw.put("thinkingSignature", "sig-valid-001");
-
-        AssistantMessage msg = new AssistantMessage(
-                "", "call time tool",
-                true, contentRaw, toolCallsRaw, toolCalls, null, null);
+        AssistantMessage msg = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"\",\"thinking\":\"call time tool\"," +
+                        "\"contentRaw\":{\"thinking\":\"call time tool\"," +
+                        "\"thinkingSignature\":\"sig-valid-001\"}," +
+                        "\"toolCallsRaw\":[{\"id\":\"call_2\",\"type\":\"function\"," +
+                        "\"function\":{\"name\":\"currentTime\",\"arguments\":\"{}\"}}]," +
+                        "\"toolCalls\":[{\"index\":\"call_2\",\"id\":\"call_2\"," +
+                        "\"name\":\"currentTime\",\"argumentsStr\":\"{}\",\"arguments\":{}}]}");
 
         ChatConfig config = new ChatConfig();
         config.setModel("claude-test");
@@ -971,7 +955,7 @@ public class DialectAssistantMultimodalTest {
         parse(dialect, resp, "error code: 502");
         Assertions.assertNotNull(resp.getError());
         Assertions.assertTrue(resp.getError().getMessage().contains("error code: 502"));
-        Assertions.assertFalse(resp.hasContentItems());
+        Assertions.assertNull(resp.snapshotTerminal().getMessage());
     }
 
     @Test
@@ -1017,7 +1001,9 @@ public class DialectAssistantMultimodalTest {
             if (p.hasKey("file_data") || p.hasKey("fileData")) {
                 hasFileData = true;
                 ONode fd = p.hasKey("file_data") ? p.get("file_data") : p.get("fileData");
-                Assertions.assertEquals("https://example.com/cloud-file.png", fd.get("file_uri").getString());
+                String uri = fd.get("fileUri").getString();
+                if (uri == null) uri = fd.get("file_uri").getString();
+                Assertions.assertEquals("https://example.com/cloud-file.png", uri);
             }
         }
         Assertions.assertTrue(hasFileData, "URL image should produce file_data");
@@ -1041,15 +1027,11 @@ public class DialectAssistantMultimodalTest {
                 + "}";
 
         parse(dialect, resp, json);
-        Assertions.assertTrue(resp.hasContentItems());
-
-        boolean hasAudio = false;
-        for (AssistantMessage c : resp.getContentItems()) {
-            if (c != null && c.hasMedia()) {
-                hasAudio = c.getBlocks().stream().anyMatch(b -> b instanceof AudioBlock);
-            }
-        }
-        Assertions.assertTrue(hasAudio, "audio/mpeg inline_data should produce AudioBlock");
+        AssistantMessage msg = resp.snapshotTerminal().getMessage();
+        Assertions.assertNotNull(msg);
+        Assertions.assertTrue(msg.hasMedia());
+        Assertions.assertTrue(msg.getBlocks().stream().anyMatch(b -> b instanceof AudioBlock),
+                "audio/mpeg inline_data should produce AudioBlock");
     }
 
     @Test
@@ -1070,15 +1052,11 @@ public class DialectAssistantMultimodalTest {
                 + "}";
 
         parse(dialect, resp, json);
-        Assertions.assertTrue(resp.hasContentItems());
-
-        boolean hasVideo = false;
-        for (AssistantMessage c : resp.getContentItems()) {
-            if (c != null && c.hasMedia()) {
-                hasVideo = c.getBlocks().stream().anyMatch(b -> b instanceof VideoBlock);
-            }
-        }
-        Assertions.assertTrue(hasVideo, "video/mp4 inline_data should produce VideoBlock");
+        AssistantMessage msg = resp.snapshotTerminal().getMessage();
+        Assertions.assertNotNull(msg);
+        Assertions.assertTrue(msg.hasMedia());
+        Assertions.assertTrue(msg.getBlocks().stream().anyMatch(b -> b instanceof VideoBlock),
+                "video/mp4 inline_data should produce VideoBlock");
     }
 
     // ==================== 新增：Gemini Interactions 请求构建 ====================
@@ -1102,8 +1080,9 @@ public class DialectAssistantMultimodalTest {
         Assertions.assertFalse(inputArr.getArray().isEmpty(), "input should not be empty");
 
         String json = root.toJson();
-        Assertions.assertTrue(json.contains("inline_data") || json.contains("inlineData"),
-                "should contain inline_data for base64 image");
+        Assertions.assertTrue(json.contains("\"type\":\"image\""),
+                "Interactions base64 image should use image content type");
+        Assertions.assertFalse(json.contains("inline_data"), json);
         Assertions.assertTrue(json.contains("iVBORw0KGgo="),
                 "should contain the base64 data");
     }
@@ -1146,7 +1125,7 @@ public class DialectAssistantMultimodalTest {
         ChatConfig config = new ChatConfig();
         config.setModel("gpt-test");
         ONode root = dialect.buildRequestJson(
-                config, ChatOptions.of(),
+                config, ChatOptions.of().optionSet("responses_input_audio_enabled", true),
                 Collections.singletonList(msg), false);
 
         ONode content = root.get("input").get(0).get("content");

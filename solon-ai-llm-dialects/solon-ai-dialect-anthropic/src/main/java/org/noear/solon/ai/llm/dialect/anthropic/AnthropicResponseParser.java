@@ -28,7 +28,11 @@ import org.noear.solon.ai.chat.event.ChatEventDefault;
 import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.MessageProtocolState;
+import org.noear.solon.ai.chat.source.Citation;
+import org.noear.solon.ai.chat.source.SearchResult;
 import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,6 +53,8 @@ public class AnthropicResponseParser {
         String toolUseId;
         String toolName;
         StringBuilder toolInput;
+        String initialInput;
+        boolean hasInputDelta;
         boolean serverTool;
     }
 
@@ -60,10 +66,150 @@ public class AnthropicResponseParser {
      */
     private static final String STREAM_TOOL_STATE_KEY = "StreamToolStates";
     private static final String REDACTED_THINKING_DATA_KEY = "redactedThinkingData";
+    /** 完整响应 content blocks 的有序、原始 JSON 载体。 */
+    static final String CONTENT_BLOCKS_RAW_KEY = "anthropicContentBlocks";
+    private static final String STREAM_CONTENT_BLOCKS_KEY = "AnthropicContentBlocks";
+    private static final String EMITTED_TYPED_EVENTS_KEY = "AnthropicEmittedTypedEvents";
+    /**
+     * 流式 thinking signature 的兼容累计状态：按 content block index 隔离。
+     *
+     * <p>Anthropic 官方协议规定每个 thinking 块只发送一个完整的 {@code signature_delta}；
+     * 部分兼容网关却会把 opaque signature 拆成多帧。单帧时追加结果与官方覆盖语义一致，
+     * 多帧时则必须按 index 拼回完整签名，避免不同 thinking 块的分片串扰。</p>
+     */
+    private static final String STREAM_THINKING_SIGNATURES_KEY = "AnthropicThinkingSignatures";
+
+    @SuppressWarnings("unchecked")
+    private static Map<Integer, StringBuilder> streamThinkingSignatures(ChatAccumulator acc) {
+        Map<Integer, StringBuilder> signatures = acc.attrAs(STREAM_THINKING_SIGNATURES_KEY);
+        if (signatures == null) {
+            signatures = new HashMap<>();
+            acc.attrPut(STREAM_THINKING_SIGNATURES_KEY, signatures);
+        }
+        return signatures;
+    }
 
     /**
-     * Claude 思考内容对应的统一推理字段名（与非流式 parseNonStreamResponse 保持一致）
+     * 累计一个 thinking 块的 signature 分片，并同步回原始块载体。
      */
+    private static String appendStreamThinkingSignature(ChatAccumulator acc, int index, String fragment) {
+        StringBuilder signature = streamThinkingSignatures(acc).get(index);
+        if (signature == null) {
+            signature = new StringBuilder();
+            streamThinkingSignatures(acc).put(index, signature);
+        }
+        signature.append(fragment);
+
+        String completeSignature = signature.toString();
+        Map<Integer, ONode> blocks = streamContentBlocks(acc, false);
+        ONode block = blocks == null ? null : blocks.get(index);
+        if (block != null) {
+            block.set("signature", completeSignature);
+        }
+        return completeSignature;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<Integer, ONode> streamContentBlocks(ChatAccumulator acc, boolean create) {
+        Map<Integer, ONode> blocks = acc.attrAs(STREAM_CONTENT_BLOCKS_KEY);
+        if (blocks == null && create) {
+            blocks = new HashMap<>();
+            acc.attrPut(STREAM_CONTENT_BLOCKS_KEY, blocks);
+        }
+        return blocks;
+    }
+
+    private static void captureStreamContentBlock(ChatAccumulator acc, int index, ONode block) {
+        if (block != null && block.isObject()) {
+            streamContentBlocks(acc, true).put(index, ONode.ofJson(block.toJson()));
+        }
+    }
+
+    private static void appendOrderedContentRaw(ChatAccumulator acc, Map<String, Object> raw) {
+        Map<Integer, ONode> blocks = streamContentBlocks(acc, false);
+        if (blocks == null || blocks.isEmpty()) return;
+        List<Integer> indexes = new ArrayList<>(blocks.keySet());
+        Collections.sort(indexes);
+        List<String> ordered = new ArrayList<>();
+        for (Integer index : indexes) ordered.add(blocks.get(index).toJson());
+        raw.put(CONTENT_BLOCKS_RAW_KEY, ordered);
+    }
+
+    private static void updateStreamContentBlock(ChatAccumulator acc, int index, String deltaType, ONode delta) {
+        Map<Integer, ONode> blocks = streamContentBlocks(acc, false);
+        ONode block = blocks == null ? null : blocks.get(index);
+        if (block == null || delta == null) return;
+        if ("text_delta".equals(deltaType)) block.set("text", block.get("text").getString() + delta.get("text").getString());
+        else if ("thinking_delta".equals(deltaType)) block.set("thinking", block.get("thinking").getString() + delta.get("thinking").getString());
+        else if ("citations_delta".equals(deltaType) || "citation_delta".equals(deltaType)) {
+            ONode citation = delta.getOrNull("citation");
+            if (citation != null && citation.isObject()) {
+                // 引用 delta 属于最终 text block 的一部分。深拷贝后按到达顺序追加，
+                // 保证流式终态与非流式 content、下一轮原样回放保持一致。
+                block.getOrNew("citations").asArray().add(ONode.ofJson(citation.toJson()));
+            }
+        } else if ("input_json_delta".equals(deltaType)) {
+            String partial = delta.get("partial_json").getString();
+            Map<Integer, StreamToolState> states = toolStates(acc, false);
+            StreamToolState state = states == null ? null : states.get(index);
+            if (state != null && Utils.isNotEmpty(partial)) {
+                state.hasInputDelta = true;
+                state.toolInput.append(partial);
+                // start 已携带完整 input 时，delta 可能是替代流而不是可直接追加的后缀。
+                // 此类兼容形态延迟到 block_stop 决定最终参数，避免构造 {}{...} 一类非法累计串。
+                if (state.initialInput == null) {
+                    try {
+                        block.set("input", ONode.ofJson(state.toolInput.toString()));
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        }
+    }
+
+    private static String resolveFinalToolInput(StreamToolState state) {
+        if (state == null) {
+            return null;
+        }
+        if (state.initialInput == null) {
+            return state.toolInput.toString();
+        }
+        if (state.hasInputDelta) {
+            String deltaInput = state.toolInput.toString();
+            if (ToolCallJsonSanitizer.isSingleJsonObject(deltaInput)) {
+                return deltaInput;
+            }
+        }
+        return state.initialInput;
+    }
+
+    private static void updateStreamToolBlockInput(ChatAccumulator acc, int index, String inputJson) {
+        if (Utils.isEmpty(inputJson)) {
+            return;
+        }
+        Map<Integer, ONode> blocks = streamContentBlocks(acc, false);
+        ONode block = blocks == null ? null : blocks.get(index);
+        if (block == null) {
+            return;
+        }
+        try {
+            ONode input = ONode.ofJson(inputJson);
+            if (input != null && input.isObject()) {
+                block.set("input", input);
+            }
+        } catch (Exception ignored) {
+            // 最终回放块宁可保留 start 的合法 input，也不能写入损坏 JSON。
+        }
+    }
+
+    /**
+     * 保存流式内容块（按协议 index 排序），供终态和下一轮请求完整回放。
+     */
+    private static void appendStreamContentRaw(ChatAccumulator acc, Map<String, Object> raw) {
+        appendOrderedContentRaw(acc, raw);
+    }
+
+
     private static final String REASONING_FIELD_THINKING = "thinking";
 
     /**
@@ -165,6 +311,27 @@ public class AnthropicResponseParser {
         }
     }
 
+    private static void updateServerToolBlockInput(ChatAccumulator acc, String toolUseId, String inputJson) {
+        if (Utils.isEmpty(toolUseId) || Utils.isEmpty(inputJson)) {
+            return;
+        }
+        List<String> blocks = getServerToolBlocks(acc, false);
+        if (Utils.isEmpty(blocks)) {
+            return;
+        }
+        for (int i = 0; i < blocks.size(); i++) {
+            ONode block = ONode.ofJson(blocks.get(i));
+            if (toolUseId.equals(block.get("id").getString())) {
+                ONode input = ONode.ofJson(inputJson);
+                if (input.isObject()) {
+                    block.set("input", input);
+                    blocks.set(i, block.toJson());
+                }
+                return;
+            }
+        }
+    }
+
     /**
      * 把留存的服务端工具块与容器写入 {@code contentRaw}（供下一轮出站回传）。
      *
@@ -189,32 +356,6 @@ public class AnthropicResponseParser {
     }
 
     /**
-     * 构建一个「工具调用参数分片」内容项。
-     *
-     * <p>核心把内容项里的 {@code ToolCall} 按 {@code index} 累积到 {@code ToolCallBuilder}，并为每个分片
-     * 发一条 {@code TOOL_CALL_ARGS_DELTA}（首片另发 {@code TOOL_CALL_START}）。因此把 Anthropic 的
-     * {@code input_json_delta} 逐片交付出去，订阅方拿到的才是真增量；等到 {@code content_block_stop}
-     * 再一次性交付全量，订阅方只会在块尾收到一条「全量参数」的增量事件，长参数（大段 diff / 代码）
-     * 无法边生成边渲染。</p>
-     *
-     * <p>{@code index} 取 Anthropic 的块序号：它是分片归属的唯一依据（协议保证每个事件都带），
-     * 且同一响应内多个并行 tool_use 块的序号互不相同。</p>
-     *
-     * <p>{@code argsShard} 允许为 null（表示「参数流开始、本片无负载」）：核心仅在非 null 时累积，
-     * 传空串会在极端网关下把 null 与 "" 的语义混同。</p>
-     *
-     * @since 4.1
-     */
-    private static AssistantMessage toolCallShardItem(ChatAccumulator acc, int blockIndex,
-                                                      String toolUseId, String toolName, String argsShard) {
-        List<ToolCall> calls = new ArrayList<>();
-        //arguments 用空 Map 而非 null：分片期参数本就不完整，但订阅方读 getArguments() 不应 NPE
-        calls.add(new ToolCall(String.valueOf(blockIndex), toolUseId, toolName, argsShard, new HashMap<>()));
-        return new AssistantMessage("", "", false, null, null, calls, null)
-                .reasoningFieldName(acc.reasoning_field_name);
-    }
-
-    /**
      * 取 {@code tool_use} / {@code server_tool_use} 块在 {@code content_block_start} 时已给出的参数初值。
      *
      * <p>协议上 {@code input} 是必填字段，标准流式实现里它恒为空对象（真实参数全部走
@@ -233,6 +374,58 @@ public class AnthropicResponseParser {
         return inputNode.toJson();
     }
 
+    @SuppressWarnings("unchecked")
+    private static Set<String> emittedTypedEvents(ChatAccumulator acc) {
+        Set<String> emitted = acc.attrAs(EMITTED_TYPED_EVENTS_KEY);
+        if (emitted == null) {
+            emitted = new HashSet<>();
+            acc.attrPut(EMITTED_TYPED_EVENTS_KEY, emitted);
+        }
+        return emitted;
+    }
+
+    private static boolean markTypedEvent(ChatAccumulator acc, String kind, int blockIndex,
+                                          int itemIndex, ONode payload) {
+        String key = kind + ':' + blockIndex + ':' + itemIndex + ':'
+                + (payload == null ? "null" : payload.toJson());
+        return emittedTypedEvents(acc).add(key);
+    }
+
+    private static Citation parseCitation(ONode citation) {
+        if (citation == null || citation.isObject() == false) {
+            return null;
+        }
+
+        String title = citation.get("document_title").getString();
+        if (Utils.isEmpty(title)) {
+            title = citation.get("title").getString();
+        }
+        return new Citation()
+                .type(citation.get("type").getString())
+                .title(title)
+                .url(citation.get("url").getString())
+                .citedText(citation.get("cited_text").getString());
+    }
+
+    private static boolean emitCitation(ChatStreamContext ctx, String rawType, int blockIndex,
+                                        int citationIndex, ONode citation, ONode raw) {
+        Citation typedCitation = parseCitation(citation);
+        if (typedCitation == null || markTypedEvent(ctx.getAccumulator(), "citation", blockIndex,
+                citationIndex, citation) == false) {
+            return false;
+        }
+
+        ctx.emit(ctx.event(ChatEventType.CITATION)
+                .rawType(rawType)
+                .subType(typedCitation.getType())
+                .index(blockIndex)
+                .text(extractCitationText(citation))
+                .citation(typedCitation)
+                .raw(raw)
+                .build());
+        return true;
+    }
+
     /**
      * 发射 {@code text} 块内嵌的引用（协议 {@code TextBlock.citations}）。
      *
@@ -248,17 +441,13 @@ public class AnthropicResponseParser {
             return;
         }
 
+        int citationIndex = -1;
         for (ONode citation : citations.getArray()) {
+            citationIndex++;
             if (citation == null || citation.isObject() == false) {
                 continue;
             }
-            ctx.emit(ctx.event(ChatEventType.CITATION)
-                    .rawType(rawType)
-                    .subType(citation.get("type").getString())
-                    .index(blockIndex)
-                    .text(extractCitationText(citation))
-                    .raw(citation)
-                    .build());
+            emitCitation(ctx, rawType, blockIndex, citationIndex, citation, citation);
         }
     }
 
@@ -360,9 +549,18 @@ public class AnthropicResponseParser {
         // Anthropic 的 input_tokens 不含缓存部分，需将 cache 两项并入，归一为“全部输入 token”语义（与 OpenAI prompt_tokens 对齐），
         // 否则下游 cacheRate = cacheRead / promptTokens 会被高估并恒定 100%
         long totalInputTokens = inputTokens + cacheCreationInputTokens + cacheReadInputTokens;
-        // 只有在有实际消耗时才返回 usage（服务端工具次数也算消耗：可能出现 0 token 但已计费的搜索轮次）
-        if (inputTokens > 0 || outputTokens > 0 || cacheCreationInputTokens > 0 || cacheReadInputTokens > 0
-                || thinkTokens > 0 || webSearchRequests > 0 || webFetchRequests > 0) {
+        // usage 对象即使所有累计值均为 0 也有语义：message_delta 可用显式 0 修正早期快照。
+        // 只要包含协议字段就构建 AiUsage，不能用“值大于 0”判断字段是否存在。
+        boolean hasUsageFields = usageNode.isObject() && (usageNode.hasKey("input_tokens")
+                || usageNode.hasKey("output_tokens")
+                || usageNode.hasKey("cache_creation_input_tokens")
+                || usageNode.hasKey("cache_read_input_tokens")
+                || usageNode.hasKey("cache_creation")
+                || usageNode.hasKey("output_tokens_details")
+                || usageNode.hasKey("server_tool_use")
+                || usageNode.hasKey("service_tier")
+                || usageNode.hasKey("inference_geo"));
+        if (hasUsageFields) {
             return AiUsage.builder()
                     .promptTokens(totalInputTokens)
                     .thinkTokens(thinkTokens)
@@ -384,8 +582,10 @@ public class AnthropicResponseParser {
     }
 
     /**
-     * 深度合并两个 usage source 节点：数值字段取 max，对象字段递归合并，
-     * 保留 message_start 中的嵌套计费明细（cache_creation/server_tool_use/output_tokens_details）。
+     * 合并两个 usage 累计快照：当前帧明确携带的字段覆盖旧值，缺失字段沿用旧值。
+     *
+     * <p>Anthropic 的 message_delta.usage 是累计快照，不是增量。官方 SDK 按字段存在性覆盖，
+     * 包括显式的 0；server_tool_use / output_tokens_details 等对象同样整体替换，不做递归累加。</p>
      */
     private static ONode mergeUsageSource(ONode prev, ONode curr) {
         if (prev == null || !prev.isObject()) {
@@ -396,15 +596,8 @@ public class AnthropicResponseParser {
         }
         ONode merged = ONode.ofJson(prev.toJson());
         for (Map.Entry<String, ONode> kv : curr.getObject().entrySet()) {
-            ONode oldValue = merged.getOrNull(kv.getKey());
             ONode newValue = kv.getValue();
-            if (oldValue == null || oldValue.isNull()) {
-                merged.set(kv.getKey(), ONode.ofJson(newValue.toJson()));
-            } else if (oldValue.isObject() && newValue.isObject()) {
-                merged.set(kv.getKey(), mergeUsageSource(oldValue, newValue));
-            } else if (oldValue.isNumber() && newValue.isNumber()) {
-                merged.set(kv.getKey(), Math.max(oldValue.getLong(), newValue.getLong()));
-            }
+            merged.set(kv.getKey(), newValue == null ? null : ONode.ofJson(newValue.toJson()));
         }
         return merged;
     }
@@ -424,11 +617,27 @@ public class AnthropicResponseParser {
         }
     }
 
+    private ChatException parseAnthropicError(ONode error) {
+        if (error == null || error.isNull()) {
+            return new ChatException("Anthropic API error");
+        }
+
+        String errorType = error.isObject() ? error.get("type").getString() : null;
+        String errorMsg = error.isObject() ? error.get("message").getString() : error.getString();
+        if (Utils.isEmpty(errorMsg)) {
+            errorMsg = error.toJson();
+        }
+        if (Utils.isNotEmpty(errorType)) {
+            errorMsg = "[" + errorType + "] " + errorMsg;
+        }
+        return new ChatException(errorMsg);
+    }
+
     /**
      * 解析流式响应
      *
-     * <p>内容主干（正文 / 思考 / 工具调用）仍以内容项表达，由核心统一转事件与边界；
-     * 本方法额外发射「旧实现下只能丢弃、拼进正文或寄生 contentRaw」的事件。</p>
+     * <p>正文、思考、工具调用和工具参数均直接通过事件通道交付；本方法仅在终态保存
+     * 无法由事件重建的协议载荷（签名、服务端工具原始块和容器）。</p>
      *
      * @param ctx  流上下文
      * @param json 响应 JSON 字符串
@@ -471,7 +680,7 @@ public class AnthropicResponseParser {
             }
 
             if (oResp.hasKey("error")) {
-                acc.setError(new ChatException(oResp.get("error").getString()));
+                acc.setError(parseAnthropicError(oResp.get("error")));
                 ctx.emit(ctx.event(ChatEventType.ERROR)
                         .rawType("error")
                         .error(acc.getError())
@@ -486,19 +695,7 @@ public class AnthropicResponseParser {
                 acc.attrRemove(STREAM_TOOL_STATE_KEY);
 
                 ONode oError = oResp.get("error");
-                String errorType = oError.get("type").getString();
-                String errorMsg = oError.get("message").getString();
-                if (Utils.isEmpty(errorMsg)) {
-                    errorMsg = oError.getString();
-                }
-
-                // 构建详细的错误信息
-                String detailedError = errorMsg;
-                if (Utils.isNotEmpty(errorType)) {
-                    detailedError = String.format("[%s] %s", errorType, errorMsg);
-                }
-
-                acc.setError(new ChatException(detailedError));
+                acc.setError(parseAnthropicError(oError));
                 ctx.emit(ctx.event(ChatEventType.ERROR)
                         .rawType(eventType)
                         .error(acc.getError())
@@ -526,59 +723,67 @@ public class AnthropicResponseParser {
             } else if ("content_block_start".equals(eventType)) {
                 ONode contentBlock = oResp.get("content_block");
                 if (contentBlock != null) {
+                    captureStreamContentBlock(acc, oResp.get("index").getInt(), contentBlock);
                     String blockType = contentBlock.get("type").getString();
                     if ("thinking".equals(blockType)) {
-                        // 思考内容块开始
-                        if (!acc.in_thinking) {
-                            // 第一次进入思考模式，添加开始标记；同步统一推理字段名（供后续闭合帧/聚合复用）
-                            acc.reasoning_field_name = REASONING_FIELD_THINKING;
-                            acc.addContentItem(new AssistantMessage("", "", true).reasoningFieldName(REASONING_FIELD_THINKING));
-                            acc.in_thinking = true;
-                            hasContent = true;
-                        }
+                        acc.reasoning_field_name = REASONING_FIELD_THINKING;
+                        acc.in_thinking = true;
+                        hasContent = true;
                         String thinking = contentBlock.get("thinking").getString();
                         if (Utils.isNotEmpty(thinking)) {
-                            acc.addContentItem(new AssistantMessage("", thinking, true).reasoningFieldName(REASONING_FIELD_THINKING));
-                            hasContent = true;
+                            ctx.emit(ctx.event(ChatEventType.THINKING_DELTA)
+                                    .rawType(eventType)
+                                    .index(oResp.get("index").getInt())
+                                    .text(thinking)
+                                    .raw(oResp)
+                                    .build());
+                        }
+                        String signature = contentBlock.get("signature").getString();
+                        if (Utils.isNotEmpty(signature)) {
+                            int blockIndex = oResp.get("index").getInt();
+                            streamThinkingSignatures(acc).put(blockIndex, new StringBuilder(signature));
+                            acc.thinkingSignature = signature;
+                            ctx.emit(ctx.event(ChatEventType.THINKING_SIGNATURE)
+                                    .rawType(eventType)
+                                    .index(blockIndex)
+                                    .text(signature)
+                                    .raw(oResp)
+                                    .build());
                         }
                     } else if ("text".equals(blockType)) {
-                        // 如果之前在思考模式，添加结束标记
-                        if (acc.in_thinking) {
-                            acc.addContentItem(new AssistantMessage("", "", true).reasoningFieldName(acc.reasoning_field_name));
-                            acc.in_thinking = false;
-                            hasContent = true;
-                        }
+                        // 思考到正文的边界由 ChatEventNormalizer 根据事件类型补齐。
+                        acc.in_thinking = false;
                         String text = contentBlock.get("text").getString();
                         if (Utils.isNotEmpty(text)) {
-                            acc.addContentItem(new AssistantMessage(text, "", false).reasoningFieldName(acc.reasoning_field_name));
+                            ctx.emit(ctx.event(ChatEventType.TEXT_DELTA)
+                                    .rawType(eventType)
+                                    .index(oResp.get("index").getInt())
+                                    .text(text)
+                                    .raw(oResp)
+                                    .build());
                             hasContent = true;
                         }
-                        //text 块在 start 就可能内嵌 citations（非增量形态），与 citations_delta 同走 CITATION
                         emitTextCitations(ctx, eventType, oResp.get("index").getInt(), contentBlock);
                     } else if ("tool_use".equals(blockType)) {
-                        // 如果之前在思考模式，添加结束标记
-                        if (acc.in_thinking) {
-                            acc.addContentItem(new AssistantMessage("", "", true).reasoningFieldName(acc.reasoning_field_name));
-                            acc.in_thinking = false;
-                            hasContent = true;
-                        }
+                        // 本地工具调用直接进入事件通道，避免 AssistantMessage 充当流式分片载体。
+                        acc.in_thinking = false;
+                        int blockIdx = oResp.get("index").getInt();
                         StreamToolState state = new StreamToolState();
                         state.toolUseId = contentBlock.get("id").getString();
                         state.toolName = contentBlock.get("name").getString();
                         state.toolInput = new StringBuilder();
-
-                        // 按块 index 存储（协议：事件均携带 index，支持多块并行）
-                        int blockIdx = oResp.get("index").getInt();
                         getToolStates(acc, true).put(blockIdx, state);
 
-                        // 首片内容项：核心据此发 TOOL_CALL_START 并开始按 index 累积参数分片。
-                        // input 初值只在非空时带上（标准实现恒为空对象，见 initialToolInput）
                         String initialInput = initialToolInput(contentBlock);
-                        if (initialInput != null) {
-                            state.toolInput.append(initialInput);
-                        }
-                        acc.addContentItem(toolCallShardItem(acc, blockIdx,
-                                state.toolUseId, state.toolName, initialInput));
+                        state.initialInput = initialInput;
+                        ctx.emit(ctx.event(ChatEventType.TOOL_CALL_START)
+                                .rawType(eventType)
+                                .toolCallId(state.toolUseId)
+                                .itemId(state.toolUseId)
+                                .index(blockIdx)
+                                .toolCall(new ToolCall("idx:" + blockIdx, state.toolUseId, state.toolName, null, null))
+                                .raw(oResp)
+                                .build());
                         hasContent = true;
                     } else if ("redacted_thinking".equals(blockType)) {
                         // 安全过滤的推理内容块，原样保留供多轮回传（对齐 Anthropic SDK）
@@ -620,17 +825,7 @@ public class AnthropicResponseParser {
 
                         //start 已给出的 input 初值：不读则该调用的参数在事件流里完全缺失
                         String initialServerInput = initialToolInput(contentBlock);
-                        if (initialServerInput != null) {
-                            serverState.toolInput.append(initialServerInput);
-                            ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_ARGS_DELTA)
-                                    .rawType(eventType)
-                                    .toolCallId(serverState.toolUseId)
-                                    .itemId(serverState.toolUseId)
-                                    .index(serverBlockIdx)
-                                    .text(initialServerInput)
-                                    .raw(oResp)
-                                    .build());
-                        }
+                        serverState.initialInput = initialServerInput;
 
                         //原样留存供下一轮回传（pause_turn 续跑与缓存前缀稳定性）
                         captureServerToolBlock(acc, contentBlock);
@@ -645,6 +840,7 @@ public class AnthropicResponseParser {
                                 .text(extractToolResultText(contentBlock))
                                 .raw(oResp)
                                 .build());
+                        emitWebSearchResults(ctx, eventType, oResp.get("index").getInt(), contentBlock);
 
                         //结果块含 encrypted_content 等无法重建的服务端凭证，必须原样留存
                         captureServerToolBlock(acc, contentBlock);
@@ -683,48 +879,58 @@ public class AnthropicResponseParser {
                 if (delta != null) {
                     String deltaType = delta.get("type").getString();
                     if ("thinking_delta".equals(deltaType)) {
-                        // 思考内容增量更新
-                        // 注意：不能在此处直接 append reasoningBuilder。core 的 publishResponse 会通过
-                        // AssistantMessage(thinking, true).getReasoning() 统一追加一次，若此处再追加，
-                        // 同一 chunk 会被写两次，导致推理内容逐块重复（如 "用户用户要求要求"、
-                        // "solsolononcodecode"），且换网关依旧复现（根因在解析器与 core 的交互）。
+                        updateStreamContentBlock(acc, oResp.get("index").getInt(), deltaType, delta);
                         String thinking = delta.get("thinking").getString();
                         if (Utils.isNotEmpty(thinking)) {
-                            acc.addContentItem(new AssistantMessage("", thinking, true).reasoningFieldName(REASONING_FIELD_THINKING));
+                            ctx.emit(ctx.event(ChatEventType.THINKING_DELTA)
+                                    .rawType(eventType)
+                                    .index(oResp.get("index").getInt())
+                                    .text(thinking)
+                                    .raw(oResp)
+                                    .build());
                             hasContent = true;
                         }
                     } else if ("signature_delta".equals(deltaType)) {
-                        String signature = delta.get("signature").getString();
-                        if (Utils.isNotEmpty(signature)) {
-                            // 幂等覆盖，不能追加：签名是整个 thinking 块的一次性凭证，
-                            // 拼接后的值在下一轮回传时会被服务端判为无效，多轮思考链直接断裂
+                        int blockIndex = oResp.get("index").getInt();
+                        String fragment = delta.get("signature").getString();
+                        if (Utils.isNotEmpty(fragment)) {
+                            String signature = appendStreamThinkingSignature(acc, blockIndex, fragment);
+                            // 官方流只会发送一帧完整签名；兼容网关多帧拆分时，这里保存当前完整累计值。
                             acc.thinkingSignature = signature;
 
-                            // 旧实现下签名只能寄生在 contentRaw 的 "thinkingSignature" 键上，
-                            // 订阅方无从辨识；此处给出专用事件通道（与 contentRaw 出站通道并存）
+                            // THINKING_SIGNATURE 表达当前可回放的完整签名快照，而非网关分片，
+                            // 因而最后一帧事件、acc 与终态 contentRaw 始终一致。
                             ctx.emit(ctx.event(ChatEventType.THINKING_SIGNATURE)
                                     .rawType(eventType)
-                                    .index(oResp.get("index").getInt())
+                                    .index(blockIndex)
                                     .text(signature)
                                     .raw(oResp)
                                     .build());
                         }
                     } else if ("text_delta".equals(deltaType)) {
+                        updateStreamContentBlock(acc, oResp.get("index").getInt(), deltaType, delta);
                         String text = delta.get("text").getString();
                         if (Utils.isNotEmpty(text)) {
-                            acc.addContentItem(new AssistantMessage(text, "", false).reasoningFieldName(acc.reasoning_field_name));
+                            ctx.emit(ctx.event(ChatEventType.TEXT_DELTA)
+                                    .rawType(eventType)
+                                    .index(oResp.get("index").getInt())
+                                    .text(text)
+                                    .raw(oResp)
+                                    .build());
                             hasContent = true;
                         }
                     } else if ("citations_delta".equals(deltaType) || "citation_delta".equals(deltaType)) {
+                        int blockIndex = oResp.get("index").getInt();
                         ONode citation = delta.getOrNull("citation");
-                        ctx.emit(ctx.event(ChatEventType.CITATION)
-                                .rawType(eventType)
-                                .subType(citation == null ? null : citation.get("type").getString())
-                                .index(oResp.get("index").getInt())
-                                .text(extractCitationText(citation))
-                                .raw(oResp)
-                                .build());
+            boolean emitted = emitCitation(ctx, eventType, blockIndex, -1, citation, oResp);
+                        if (emitted) {
+                            updateStreamContentBlock(acc, blockIndex, deltaType, delta);
+                        }
+                        if (citation != null && citation.isObject()) {
+                            hasContent = true;
+                        }
                     } else if ("input_json_delta".equals(deltaType)) {
+                        updateStreamContentBlock(acc, oResp.get("index").getInt(), deltaType, delta);
                         // 工具调用参数增量更新，按需从 map 获取状态
                         String partialJson = delta.get("partial_json").getString();
                         if (Utils.isNotEmpty(partialJson)) {
@@ -733,8 +939,7 @@ public class AnthropicResponseParser {
                                 // 按事件携带的 index 定位所属工具块
                                 int deltaBlockIdx = oResp.get("index").getInt();
                                 StreamToolState state = states.get(deltaBlockIdx);
-                                if (state != null) {
-                                    state.toolInput.append(partialJson);
+                                if (state != null && state.initialInput == null) {
                                     if (state.serverTool) {
                                         ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_ARGS_DELTA)
                                                 .rawType(eventType)
@@ -745,11 +950,14 @@ public class AnthropicResponseParser {
                                                 .raw(oResp)
                                                 .build());
                                     } else {
-                                        // 本地工具：逐片交付内容项，核心据此发真增量 TOOL_CALL_ARGS_DELTA
-                                        // 并按 index 累积到 ToolCallBuilder。分片只带增量负载，
-                                        // 不重复 id/name 之外的任何全量数据
-                                        acc.addContentItem(toolCallShardItem(acc, deltaBlockIdx,
-                                                state.toolUseId, state.toolName, partialJson));
+                                        ctx.emit(ctx.event(ChatEventType.TOOL_CALL_ARGS_DELTA)
+                                                .rawType(eventType)
+                                                .toolCallId(state.toolUseId)
+                                                .itemId(state.toolUseId)
+                                                .index(deltaBlockIdx)
+                                                .text(partialJson)
+                                                .raw(oResp)
+                                                .build());
                                         hasContent = true;
                                     }
                                 }
@@ -772,49 +980,47 @@ public class AnthropicResponseParser {
             } else if ("content_block_stop".equals(eventType)) {
                 // 内容块结束：按 index 精确定位并释放对应工具块状态。
                 //
-                // 本地 tool_use 的参数已在 content_block_start / input_json_delta 处以分片内容项交付（见
-                // toolCallShardItem），此处不能再补一个「全量参数」内容项：核心会把它二次累积进
-                // ToolCallBuilder（得到 {"a":1}{"a":1} 这类脏值），并多发一条内容为全量的
-                // TOOL_CALL_ARGS_DELTA（按增量语义拼接的订阅方会得到双倍参数）。
-                //
-                // 参数的出站净化也不在这里做了：截断损坏的 arguments 由
-                // AnthropicRequestBuilder#buildAssistantToolCallMessageNode 在重建出站消息时
-                // 统一过 ToolCallJsonSanitizer（分片协议的唯一出口）。
+                // 本地 tool_use 的参数已由 TOOL_CALL_* 事件归并；TOOL_CALL_END 由核心在完整参数
+                // 聚合并构建工具消息后统一发出，避免 content_block_stop 与核心各发一次。
                 Map<Integer, StreamToolState> states = getToolStates(acc, false);
                 if (states != null) {
-                    states.remove(oResp.get("index").getInt());
+                    int blockIdx = oResp.get("index").getInt();
+                    StreamToolState state = states.remove(blockIdx);
+                    if (state != null) {
+                        String finalInput = resolveFinalToolInput(state);
+                        if (state.initialInput != null && Utils.isNotEmpty(finalInput)) {
+                            ChatEventType argsType = state.serverTool
+                                    ? ChatEventType.SERVER_TOOL_ARGS_DELTA
+                                    : ChatEventType.TOOL_CALL_ARGS_DELTA;
+                            ctx.emit(ctx.event(argsType)
+                                    .rawType(eventType)
+                                    .toolCallId(state.toolUseId)
+                                    .itemId(state.toolUseId)
+                                    .index(blockIdx)
+                                    .text(finalInput)
+                                    .raw(oResp)
+                                    .build());
+                        }
+                        updateStreamToolBlockInput(acc, blockIdx, finalInput);
+                        if (state.serverTool) {
+                            updateServerToolBlockInput(acc, state.toolUseId, finalInput);
+                        }
+                    }
                 }
             } else if ("message_delta".equals(eventType)) {
-                // 消息增量更新，包含停止原因和用量信息
-                // 协议规范（MessageDeltaUsage）：message_delta.usage 是「整条消息的累计快照」，现已同时携带
-                // input_tokens / cache_* / output_tokens_details / server_tool_use（早期规范里只有 output_tokens）。
-                // 但兼容网关仍可能只给 output_tokens，直接覆盖会丢失 message_start 的输入侧计费数据，
-                // 因此按字段取 max 合并（累计值只会增大；缺失字段沿用 message_start 的值）
-                AiUsage usage = parseUsage(oResp.get("usage"));
-                if (usage != null) {
+                // message_delta.usage 是整条消息截至当前的累计快照。当前帧出现的字段覆盖旧值，
+                // 缺失字段（例如仅 message_start 携带的 service_tier）继续保留；不能相加或取 max，
+                // 否则服务端最终修正为更小值或显式 0 时会保留错误旧值。
+                ONode usageNode = oResp.getOrNull("usage");
+                if (usageNode != null && usageNode.isObject()) {
                     AiUsage prev = acc.getUsage();
-                    if (prev != null) {
-                        usage = usage.toBuilder()
-                                .promptTokens(Math.max(prev.promptTokens(), usage.promptTokens()))
-                                .thinkTokens(Math.max(prev.thinkTokens(), usage.thinkTokens()))
-                                .completionTokens(Math.max(prev.completionTokens(), usage.completionTokens()))
-                                .totalTokens(Math.max(prev.totalTokens(), usage.totalTokens()))
-                                .cacheCreationInputTokens(Math.max(prev.cacheCreationInputTokens(), usage.cacheCreationInputTokens()))
-                                .cacheReadInputTokens(Math.max(prev.cacheReadInputTokens(), usage.cacheReadInputTokens()))
-                                .cacheCreation5mInputTokens(Math.max(prev.cacheCreation5mInputTokens(), usage.cacheCreation5mInputTokens()))
-                                .cacheCreation1hInputTokens(Math.max(prev.cacheCreation1hInputTokens(), usage.cacheCreation1hInputTokens()))
-                                // 服务端工具次数同为累计快照，按 max（不能相加，否则多个 message_delta 会重复计次）
-                                .webSearchRequests(Math.max(prev.webSearchRequests(), usage.webSearchRequests()))
-                                .webFetchRequests(Math.max(prev.webFetchRequests(), usage.webFetchRequests()))
-                                // service_tier / inference_geo 只在 message_start 给（MessageDeltaUsage 无此两字段），
-                                // 不能让本帧解出的 null 覆盖掉已有值
-                                .serviceTier(Utils.isEmpty(usage.serviceTier()) ? prev.serviceTier() : usage.serviceTier())
-                                .inferenceGeo(Utils.isEmpty(usage.inferenceGeo()) ? prev.inferenceGeo() : usage.inferenceGeo())
-                                // 保留 message_start 中的嵌套计费明细（cache_creation/server_tool_use/output_tokens_details）
-                                .source(mergeUsageSource(prev.getSource(), usage.getSource()))
-                                .build();
+                    ONode mergedSource = prev == null
+                            ? usageNode
+                            : mergeUsageSource(prev.getSource(), usageNode);
+                    AiUsage usage = parseUsage(mergedSource);
+                    if (usage != null) {
+                        acc.setUsage(usage);
                     }
-                    acc.setUsage(usage);
                 }
 
                 ONode delta = oResp.getOrNull("delta");
@@ -824,7 +1030,8 @@ public class AnthropicResponseParser {
 
                     String finishReason = delta.get("stop_reason").getString();
                     if (Utils.isNotEmpty(finishReason)) {
-                        acc.setFinished(true);
+                        // stop_reason 是消息终态元数据，不是 SSE 完成信号；只有 message_stop（或兼容
+                        // 网关的 [DONE]）才能证明所有 content block 已完整到达。
                         acc.lastFinishReason = finishReason;
                         emitStopReasonEvent(ctx, eventType, finishReason, delta, oResp);
                     }
@@ -855,6 +1062,61 @@ public class AnthropicResponseParser {
         }
 
         return hasContent;
+    }
+
+    private static SearchResult parseSearchResult(ONode result) {
+        SearchResult searchResult = new SearchResult()
+                .title(result.get("title").getString())
+                .url(result.get("url").getString());
+        if (result.hasKey("id")) {
+            searchResult.id(result.get("id").getString());
+        }
+        if (result.hasKey("index") && result.get("index").isNumber()) {
+            searchResult.index(result.get("index").getInt());
+        }
+        if (result.hasKey("snippet")) {
+            searchResult.snippet(result.get("snippet").getString());
+        }
+        return searchResult;
+    }
+
+    /**
+     * 将 {@code web_search_tool_result.content[]} 中的标准搜索结果逐项投影为类型化事件。
+     */
+    private static void emitWebSearchResults(ChatStreamContext ctx, String rawType, int blockIndex,
+                                             ONode contentBlock) {
+        if (contentBlock == null
+                || "web_search_tool_result".equals(contentBlock.get("type").getString()) == false) {
+            return;
+        }
+        ONode content = contentBlock.getOrNull("content");
+        if (content == null || content.isArray() == false) {
+            return;
+        }
+
+        int resultIndex = -1;
+        for (ONode resultNode : content.getArray()) {
+            resultIndex++;
+            if (resultNode == null || resultNode.isObject() == false
+                    || "web_search_result".equals(resultNode.get("type").getString()) == false
+                    || markTypedEvent(ctx.getAccumulator(), "search_result", blockIndex,
+                    resultIndex, resultNode) == false) {
+                continue;
+            }
+
+            SearchResult searchResult = parseSearchResult(resultNode);
+            ChatEventDefault.Builder event = ctx.event(ChatEventType.SEARCH_RESULT)
+                    .rawType(rawType)
+                    .subType("web_search_result")
+                    .index(blockIndex)
+                    .text(extractResultEntryText(resultNode))
+                    .searchResult(searchResult)
+                    .raw(resultNode);
+            if (Utils.isNotEmpty(searchResult.getId())) {
+                event.itemId(searchResult.getId());
+            }
+            ctx.emit(event.build());
+        }
     }
 
     /**
@@ -1122,8 +1384,8 @@ public class AnthropicResponseParser {
     /**
      * 流式终态收口（幂等）：message_stop 与兼容网关的 [DONE] 双发场景下仅执行一次。
      *
-     * <p>不依赖 acc.isFinished() 判断：message_delta(stop_reason) 会先行置 finished，
-     * 若以它为标记，后续 [DONE] 里的收口（thinkingSignature 载体）会被误跳过。</p>
+     * <p>完成状态只在本方法内设置；message_delta 即使携带 stop_reason 也只更新消息元数据，
+     * 不能掩盖缺失 message_stop 的截断流。</p>
      *
      * @param rawType 触发收口的原始事件类型（message_stop / [DONE]），仅用于事件溯源
      * @since 4.0.4
@@ -1139,84 +1401,39 @@ public class AnthropicResponseParser {
     }
 
     /**
-     * 流式终态收口
-     *
-     * <p><b>为什么不再用「空 AssistantMessage」编码全部终态语义</b>：核心把内容项统一映射成
-     * TEXT_DELTA / THINKING_DELTA（{@code ChatRequestDescDefault#buildItemEvent}），一个
-     * {@code isThinking=false} 的空内容项因此会变成一条文本为空的幻影 TEXT_DELTA，污染订阅方的
-     * 正文流；仅思考的流里它还会在流末凭空开出一个正文块。所以这里按语义分流：</p>
-     * <ol>
-     *   <li><b>thinking 边界闭合</b> → 显式 {@code THINKING_END} 事件。END 相位不计入核心
-     *       「本帧已按事件形态表达内容」的门控（见 {@code ChatEventType#isMainContent}），
-     *       不会连带丢弃本帧内容项；若此刻没有未闭合的思考块，归一化器会自行丢弃它，安全。</li>
-     *   <li><b>finishReason 透传</b> → 不再补帧。finishReason 走 {@code acc.lastFinishReason}
-     *       进入 STEP_END / RESPONSE_END 的终态聚合，空帧对它没有任何贡献。</li>
-     *   <li><b>thinkingSignature 载体</b> → 仍必须留在内容项通道：核心终态聚合以
-     *       {@code lastItem().getContentRaw()} 作为聚合消息的 contentRaw，出站侧
-     *       {@code AnthropicRequestBuilder#resolveThinkingSignature} 正是从这里取签名重建 thinking 块；
-     *       而累积器每帧被 reset，只有「终态帧里的最后一个内容项」能活到聚合期——载体既不能提前，
-     *       也不能取消，否则非工具的多轮 extended thinking 断链。</li>
-     *   <li><b>空流补位</b> → 整条流什么都没产出时保留一个空内容项，使聚合消息不为 null
-     *       （否则记忆与 STEP_END 的 getMessage() 从「空消息」变成 null，属于对外契约变更）。</li>
-     * </ol>
-     *
-     * <p><b>残留代价</b>：载体 / 补位帧本身仍会被核心映射成一条空内容事件——只要内容项还在，
-     * 方言侧就无法在不改核心的前提下让它不产生事件（核心的门控只认 START/DELTA/CHUNK 主干事件，
-     * 为触发门控而补发一个假的主干事件比幻影本身更糟）。因此这里把它归到「流末当前所在的块」：
-     * 思考中就发思考帧、正文中就发正文帧，至少不会关掉当前块又开一个新块。</p>
-     *
-     * @since 4.0.4
+     * 流式终态收口：内容主干已经由事件归并，终态载体只保存事件无法重建的协议字段。
      */
     private void emitTerminalFrame(ChatStreamContext ctx, ChatAccumulator acc, String rawType) {
         boolean wasThinking = acc.in_thinking;
-        // 思考边界在此收口：核心 onEventEnd 见到 in_thinking=false 就不会再补一帧
         acc.in_thinking = false;
 
-        // 工具多轮走另一条出站路径（buildAssistantToolCallMessageNode 直接取 acc.thinkingSignature
-        // 与聚合思考文本），终态内容项对它毫无贡献，只会多一条空内容事件
-        boolean toolPath = acc.hasToolCallBuilders();
-
-        // (a) 签名载体：非工具的多轮回传只能从聚合消息的 contentRaw 取签名
-        boolean signatureCarrier = Utils.isNotEmpty(acc.thinkingSignature);
-        // (a2) 服务端工具块 / 容器载体：pause_turn 续跑要求把上一轮 content 原样回传，
-        //      而服务端工具轮次不产生 ToolCallBuilder（不走下方 toolPath），只能借终态内容项的
-        //      contentRaw 把原始块带到下一轮；否则 encrypted_content / container 逐轮丢失，续跑退化为重跑
-        boolean serverBlockCarrier = Utils.isEmpty(getServerToolBlocks(acc, false)) == false
-                || container(acc) != null;
-        // (b) 仅思考无正文：核心的终态聚合只在「有内容项」分支按 text/thinking 计算 isThinking，
-        //     一个内容项都没有时会硬编码 false，聚合消息的 getContent() 会从思考文本变成空串
-        boolean thinkingOnly = acc.getAggregationText().isEmpty()
-                && acc.getAggregationThinking().isEmpty() == false;
-        // (c) 空流补位：本帧内容项、聚合正文/思考、媒体全空，才算「整条流什么都没产出」
-        //     （hasContentItems 判本帧：核心逐帧 reset，方言单测直连解析入口时不会 reset）
-        boolean emptyStream = acc.hasContentItems() == false
-                && acc.getAggregationText().isEmpty()
-                && acc.getAggregationThinking().isEmpty()
-                && Utils.isEmpty(acc.getMediaBlocks());
-
-        if (toolPath == false && (signatureCarrier || serverBlockCarrier || thinkingOnly || emptyStream)) {
-            Map<String, Object> contentRaw = null;
-            if (signatureCarrier) {
-                // 供核心终态聚合取 lastItem().getContentRaw() 时携带签名，下一轮据此重建 thinking 块
-                contentRaw = new LinkedHashMap<>();
-                contentRaw.put("thinkingSignature", acc.thinkingSignature);
-            }
-            //服务端工具原始块与容器：与签名同乘一个载体帧（两者可共存）
-            contentRaw = appendServerToolRaw(acc, contentRaw);
-
-            // isThinking 跟随流末所在的块，避免为一个空帧关掉当前块又开一个新块；
-            // 这也意味着此处不能再发 THINKING_END：载体帧随后会被核心映射成 THINKING_DELTA，
-            // 排在 END 之后会让归一化器重开一个思考块（订阅方多看到一对空的思考边界）
-            AssistantMessage carrier = new AssistantMessage("", "",
-                    wasThinking, contentRaw, null, null, null, null)
-                    .reasoningFieldName(acc.reasoning_field_name);
-            acc.addContentItem(carrier);
-        } else if (wasThinking) {
-            // 没有载体帧的仅思考流（max_tokens 截断等）：思考闭合改用显式事件表达，
-            // 不再拿空 AssistantMessage 编码边界（那会被核心映射成幻影 TEXT_DELTA）
+        if (wasThinking) {
             ctx.emit(ctx.event(ChatEventType.THINKING_END)
                     .rawType(rawType)
                     .build());
+        }
+
+        Map<String, Object> protocolData = null;
+        if (Utils.isNotEmpty(acc.thinkingSignature)) {
+            protocolData = new LinkedHashMap<>();
+            protocolData.put("thinkingSignature", acc.thinkingSignature);
+        }
+
+        List<String> redactedBlocks = getRedactedBlocks(acc, false);
+        if (Utils.isEmpty(redactedBlocks) == false) {
+            if (protocolData == null) {
+                protocolData = new LinkedHashMap<>();
+            }
+            protocolData.put("redactedThinkingBlocks", new ArrayList<>(redactedBlocks));
+        }
+
+        protocolData = appendServerToolRaw(acc, protocolData);
+        if (protocolData == null) protocolData = new LinkedHashMap<>();
+        appendStreamContentRaw(acc, protocolData);
+
+        MessageProtocolState protocolState = AnthropicMessageStateSupport.createState(protocolData);
+        if (protocolState != null) {
+            acc.putTerminalProtocolState(AnthropicMessageStateSupport.PROTOCOL_ID, protocolState);
         }
     }
 
@@ -1234,7 +1451,7 @@ public class AnthropicResponseParser {
 
         if ("[DONE]".equals(json)) {
             if (acc.isFinished() == false) {
-                acc.addContentItem(new AssistantMessage("").reasoningFieldName(acc.reasoning_field_name));
+                acc.setTerminalMessage(new AssistantMessage("", ""));
                 acc.setFinished(true);
             }
             return true;
@@ -1268,8 +1485,9 @@ public class AnthropicResponseParser {
 
         StringBuilder redactedThinkingData = acc.attrIfAbsent(REDACTED_THINKING_DATA_KEY, (k) -> new StringBuilder());
 
-        // 设置模型信息
+        // 设置模型信息与供应商响应标识；必须在内容事件发射前完成，确保事件自动携带 message id。
         acc.setModel(oResp.get("model").getString());
+        ctx.setProviderResponseId(oResp.get("id").getString());
         // 代码执行容器（协议 Message.container）：与流式 message_start 对称地记录，供多轮复用
         captureContainer(acc, oResp.getOrNull("container"));
         // 先解析 stop_reason 供 lastFinishReason 使用；但停止事件延到内容块遍历之后再发，
@@ -1290,22 +1508,24 @@ public class AnthropicResponseParser {
             StringBuilder normalContent = new StringBuilder();
             List<ContentBlock> mediaBlocks = new ArrayList<>();
             List<ToolCall> allToolCalls = new ArrayList<>();
-            List<Map> allToolCallsRaw = new ArrayList<>();
             List<String> redactedBlocks = new ArrayList<>();
-            //服务端工具块标记：正文可能为空，但仍需保留内容项以透传 finishReason
-            boolean hasServerToolBlocks = false;
             int blockIndex = -1;
 
+            List<String> orderedContentBlocks = new ArrayList<>();
             for (ONode contentItem : contentArray.getArray()) {
+                orderedContentBlocks.add(contentItem.toJson());
                 blockIndex++;
                 String contentType = contentItem.get("type").getString();
                 if ("thinking".equals(contentType)) {
                     String thinking = contentItem.get("thinking").getString();
                     if (Utils.isNotEmpty(thinking)) {
-//                        if (thinkingContent.length() > 0) {
-//                            thinkingContent.append("\n");
-//                        }
                         thinkingContent.append(thinking);
+                        ctx.emit(ctx.event(ChatEventType.THINKING_DELTA)
+                                .rawType(contentType)
+                                .index(blockIndex)
+                                .text(thinking)
+                                .raw(contentItem)
+                                .build());
                     }
                     // 保留 thinking signature，供多轮回传（非流式此前会丢失）
                     String signature = contentItem.get("signature").getString();
@@ -1324,10 +1544,15 @@ public class AnthropicResponseParser {
                 } else if ("text".equals(contentType)) {
                     String text = contentItem.get("text").getString();
                     if (Utils.isNotEmpty(text)) {
-//                        if (normalContent.length() > 0) {
-//                            normalContent.append("\n");
-//                        }
                         normalContent.append(text);
+                        // 非流式也按 content index 进入事件有序块；否则同一响应只要含媒体，
+                        // 终态会优先采用媒体事件列表并遮蔽未事件化的文本。
+                        ctx.emit(ctx.event(ChatEventType.TEXT_DELTA)
+                                .rawType(contentType)
+                                .index(blockIndex)
+                                .text(text)
+                                .raw(contentItem)
+                                .build());
                     }
                     //与流式 citations_delta 对称：非流式的引用直接内嵌在 text 块的 citations 数组里，
                     //旧实现只读 text 字段，使得 call() 根本看不到引用（而 stream() 看得到）
@@ -1336,6 +1561,13 @@ public class AnthropicResponseParser {
                     ContentBlock imageBlock = parseClaudeImageBlock(contentItem);
                     if (imageBlock != null) {
                         mediaBlocks.add(imageBlock);
+                        // 媒体统一走事件通道；协议 index 是合法重复媒体的身份，不能按内容自行去重。
+                        ctx.emit(ctx.event(ChatEventType.MEDIA_DONE)
+                                .rawType(contentType)
+                                .index(blockIndex)
+                                .block(imageBlock)
+                                .raw(contentItem)
+                                .build());
                     }
                 } else if ("tool_use".equals(contentType)) {
                     String toolName = contentItem.get("name").getString();
@@ -1349,16 +1581,38 @@ public class AnthropicResponseParser {
                         inputJson = inputNode.toJson();
                     }
 
-                    allToolCalls.add(new ToolCall(toolId, toolId, toolName, inputJson, arguments));
+                    ToolCall toolCall = new ToolCall(toolId, toolId, toolName, inputJson, arguments);
+                    allToolCalls.add(toolCall);
 
-                    Map<String, Object> toolCallRaw = new HashMap<>();
-                    toolCallRaw.put("id", toolId);
-                    toolCallRaw.put("type", "function");
-                    Map<String, Object> functionData = new HashMap<>();
-                    functionData.put("name", toolName);
-                    functionData.put("arguments", inputJson);
-                    toolCallRaw.put("function", functionData);
-                    allToolCallsRaw.add(toolCallRaw);
+                    // 非流式没有核心流收口补位，必须在完整响应内保留完整工具调用生命周期。
+                    ctx.emit(ctx.event(ChatEventType.TOOL_CALL_START)
+                            .rawType(contentType)
+                            .toolCallId(toolId)
+                            .itemId(toolId)
+                            .index(blockIndex)
+                            .toolCall(new ToolCall("idx:" + blockIndex, toolId, toolName, null, null))
+                            .raw(contentItem)
+                            .build());
+                    if (Utils.isNotEmpty(inputJson) && arguments.isEmpty() == false) {
+                        ctx.emit(ctx.event(ChatEventType.TOOL_CALL_ARGS_DELTA)
+                                .rawType(contentType)
+                                .toolCallId(toolId)
+                                .itemId(toolId)
+                                .index(blockIndex)
+                                .text(inputJson)
+                                .raw(contentItem)
+                                .build());
+                    }
+                    ctx.emit(ctx.event(ChatEventType.TOOL_CALL_END)
+                            .rawType(contentType)
+                            .toolCallId(toolId)
+                            .itemId(toolId)
+                            .index(blockIndex)
+                            .toolCall(toolCall)
+                            .raw(contentItem)
+                            .build());
+
+
                 } else if ("redacted_thinking".equals(contentType)) {
                     // 安全过滤的推理内容块：opaque data，逐块原样保留供多轮回传（对齐 Anthropic SDK）
                     String data = contentItem.get("data").getString();
@@ -1374,10 +1628,9 @@ public class AnthropicResponseParser {
                                 .raw(contentItem)
                                 .build());
                     }
-                } else if ("server_tool_use".equals(contentType)) {
+                } else if ("server_tool_use".equals(contentType) || "mcp_tool_use".equals(contentType)) {
                     // 服务端工具（web_search/code_execution 等）：走事件通道。
                     // 旧实现在此拼 "[server tool: name]" 进正文，导致 call() 与 stream() 的聚合正文分叉
-                    hasServerToolBlocks = true;
                     ChatEventDefault.Builder serverToolStart = ctx.event(ChatEventType.SERVER_TOOL_START)
                             .rawType(contentType)
                             .subType(contentItem.get("name").getString())
@@ -1387,12 +1640,20 @@ public class AnthropicResponseParser {
                     appendServerToolCaller(serverToolStart, contentItem);
                     ctx.emit(serverToolStart.build());
 
+                    // 非流式 server-only 工具同样交付完整参数增量，且绝不进入本地 tool_calls。
+                    String serverInput = initialToolInput(contentItem);
+                    if (serverInput != null) {
+                        ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_ARGS_DELTA)
+                                .rawType(contentType).toolCallId(contentItem.get("id").getString())
+                                .itemId(contentItem.get("id").getString()).index(blockIndex)
+                                .text(serverInput).raw(contentItem).build());
+                    }
+
                     //原样留存供下一轮回传（与流式对称）
                     captureServerToolBlock(acc, contentItem);
                 } else if (contentType != null && contentType.endsWith("_tool_result")) {
                     // web_search_tool_result / web_fetch_tool_result 等：
                     // 旧实现把结果原文拍平进正文，订阅方无法与模型自述区分
-                    hasServerToolBlocks = true;
                     ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_RESULT)
                             .rawType(contentType)
                             .subType(contentType)
@@ -1401,11 +1662,11 @@ public class AnthropicResponseParser {
                             .text(extractToolResultText(contentItem))
                             .raw(contentItem)
                             .build());
+                    emitWebSearchResults(ctx, contentType, blockIndex, contentItem);
 
                     captureServerToolBlock(acc, contentItem);
                 } else if ("container_upload".equals(contentType)) {
                     // 与流式对称：代码执行产出的文件（仅 file_id）
-                    hasServerToolBlocks = true;
                     String fileId = contentItem.get("file_id").getString();
                     ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_RESULT)
                             .rawType(contentType)
@@ -1428,35 +1689,31 @@ public class AnthropicResponseParser {
                 }
             }
 
-            // 构建 AssistantMessage：text/thinking 分离（新接口），不再注入 <think> 标签；
-            // 仅思考无正文时 isThinking=true，与流式聚合（getAggregationMessage）语义对齐
+            // 构建完整非流式终态消息；纯思考语义由 text/thinking 字段自然表达。
             String textStr = normalContent.toString();
             String thinkingStr = thinkingContent.toString();
-            boolean thinkingOnly = thinkingContent.length() > 0 && normalContent.length() == 0;
 
-            Map<String, Object> contentRaw = null;
-            if (thinkingContent.length() > 0) {
-                contentRaw = new LinkedHashMap<>();
-                contentRaw.put("thinking", thinkingContent.toString());
-                if (Utils.isNotEmpty(thinkingSignature)) {
-                    contentRaw.put("thinkingSignature", thinkingSignature);
-                }
-                if (normalContent.length() > 0) {
-                    contentRaw.put("content", normalContent.toString());
-                }
+            Map<String, Object> protocolData = null;
+            if (Utils.isNotEmpty(thinkingSignature)) {
+                protocolData = new LinkedHashMap<>();
+                protocolData.put("thinkingSignature", thinkingSignature);
             }
 
-            // redacted_thinking 分块列表透传到 contentRaw，供多轮逐块回传（拼接会损坏 opaque 数据）
+            // redacted_thinking 分块列表进入 Anthropic 命名空间状态，供多轮逐块回传（拼接会损坏 opaque 数据）
             if (!redactedBlocks.isEmpty()) {
-                if (contentRaw == null) {
-                    contentRaw = new LinkedHashMap<>();
+                if (protocolData == null) {
+                    protocolData = new LinkedHashMap<>();
                 }
-                contentRaw.put("redactedThinkingBlocks", redactedBlocks);
+                protocolData.put("redactedThinkingBlocks", redactedBlocks);
             }
 
             // 服务端工具原始块与代码执行容器：pause_turn 续跑与多轮服务端工具要求原样回传，
             // 不存就只能重跑（搜索/抓取重新计费），且历史前缀每轮缺块还会拉低 prompt cache 命中率
-            contentRaw = appendServerToolRaw(acc, contentRaw);
+            protocolData = appendServerToolRaw(acc, protocolData);
+            if (!orderedContentBlocks.isEmpty()) {
+                if (protocolData == null) protocolData = new LinkedHashMap<>();
+                protocolData.put(CONTENT_BLOCKS_RAW_KEY, orderedContentBlocks);
+            }
 
             List<ContentBlock> blocksForMsg = null;
             if (!mediaBlocks.isEmpty()) {
@@ -1466,7 +1723,6 @@ public class AnthropicResponseParser {
                     blocksForMsg.add(TextBlock.of(textStr));
                 }
                 blocksForMsg.addAll(mediaBlocks);
-                acc.addMediaBlocks(mediaBlocks);
             }
 
             // finishReason：优先用真实 stop_reason；tool 场景兜底 tool_use
@@ -1474,21 +1730,17 @@ public class AnthropicResponseParser {
                     ? stopReason
                     : (!allToolCalls.isEmpty() ? "tool_use" : "stop");
 
-            // 将所有工具调用合并到一个 AssistantMessage 中（带 tool 的终态消息 isThinking=false，确保历史回传不被跳过）
-            if (!allToolCalls.isEmpty()) {
-                AssistantMessage msg = new AssistantMessage(textStr, thinkingStr,
-                        false, contentRaw, allToolCallsRaw, allToolCalls, null, blocksForMsg)
-                        .reasoningFieldName("thinking");
-                acc.addContentItem(msg);
-            } else if (Utils.isNotEmpty(textStr) || contentRaw != null || blocksForMsg != null
-                    || hasServerToolBlocks) {
-                // hasServerToolBlocks：服务端工具内容已改走事件通道，正文可能为空；
-                // 仍补一个内容项，保证 finishReason 与 usage 有承载（对齐迁移前 hasContent 语义）
-                AssistantMessage msg = new AssistantMessage(textStr, thinkingStr,
-                        thinkingOnly, contentRaw, null, null, null, blocksForMsg)
-                        .reasoningFieldName("thinking");
-                acc.addContentItem(msg);
+            // 构建完整非流式终态消息；纯思考语义由 text/thinking 字段自然表达。
+            AssistantMessage msg = new AssistantMessage(textStr, thinkingStr,
+                    allToolCalls.isEmpty() ? null : allToolCalls, blocksForMsg);
+            acc.setTerminalMessage(msg);
+            MessageProtocolState protocolState = AnthropicMessageStateSupport.createState(protocolData);
+            if (protocolState != null) {
+                acc.putTerminalProtocolState(AnthropicMessageStateSupport.PROTOCOL_ID, protocolState);
             }
+        } else {
+            // 响应没有 content 时也要建立空终态，保持完成响应的消息契约。
+            acc.setTerminalMessage(new AssistantMessage("", ""));
         }
         // 同步 lastFinishReason（复用已算好的 choiceFinishReason，避免重复计算）
         acc.lastFinishReason = choiceFinishReason;

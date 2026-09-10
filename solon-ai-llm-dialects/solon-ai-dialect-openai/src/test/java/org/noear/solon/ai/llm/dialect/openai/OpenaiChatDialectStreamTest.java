@@ -73,23 +73,11 @@ public class OpenaiChatDialectStreamTest {
      * 逐帧文本拼接（模拟核心层聚合：把每个 choice 的 textRaw 依次追加）
      */
     private String joinText(ChatAccumulator resp) {
-        StringBuilder buf = new StringBuilder();
-        for (AssistantMessage choice : resp.getContentItems()) {
-            if (choice != null && choice.getTextRaw() != null) {
-                buf.append(choice.getTextRaw());
-            }
-        }
-        return buf.toString();
+        return resp.snapshotTerminal().getMessage().getText();
     }
 
     private String joinThinking(ChatAccumulator resp) {
-        StringBuilder buf = new StringBuilder();
-        for (AssistantMessage choice : resp.getContentItems()) {
-            if (choice != null && choice.getThinkingRaw() != null) {
-                buf.append(choice.getThinkingRaw());
-            }
-        }
-        return buf.toString();
+        return resp.snapshotTerminal().getMessage().getThinking();
     }
 
     @Test
@@ -118,13 +106,13 @@ public class OpenaiChatDialectStreamTest {
 
         parse(resp, chunk("所有代码修改完成。"));
         parse(resp, chunk("所有代码修改完成。更新任务进度"));
-        int choicesBefore = resp.getContentItems().size();
+        String aggregationBefore = resp.getAggregationText();
 
         // 完全重复的快照帧：整帧丢弃，不能给订阅侧多推一条空 delta。
         // 内容项数量不变即为丢弃生效的信号
         parse(resp, chunk("所有代码修改完成。更新任务进度"));
 
-        assertEquals(choicesBefore, resp.getContentItems().size(), "重复快照帧不应产生新的内容项");
+        assertEquals(aggregationBefore, resp.getAggregationText(), "重复快照帧不应改变正文聚合");
         assertEquals("所有代码修改完成。更新任务进度", joinText(resp));
     }
 
@@ -154,19 +142,17 @@ public class OpenaiChatDialectStreamTest {
     }
 
     /**
-     * n&gt;1 时各路 choice 的累计基准必须隔离（与官方 SDK 按 choice.index 累积一致）：
-     * 若共用一份基准，交错下发会把基准搅成 c0f1+c1f1，快照判定随即失效。
+     * 4.1 的单结果契约固定选择 index=0；其他 choice 不得混入正文或后续工具递归。
+     * index=0 自身仍需按其独立累计快照归一化。
      */
     @Test
-    public void multiChoiceSnapshot_isNormalizedPerIndex() {
+    public void multiChoiceSnapshot_keepsOnlyPrimaryChoiceAndNormalizesItsSnapshot() {
         ChatAccumulator resp = newStreamResponse();
 
         parse(resp, twoChoiceChunk("第一路的较长输出内容", "第二路的较长输出内容"));
         parse(resp, twoChoiceChunk("第一路的较长输出内容-续一", "第二路的较长输出内容-续二"));
 
-        // 内容项已无 index（4.1 取消候选维度），改断合并后的到达序列：
-        // 两路各自被正确归一成增量时，合并结果恰为 f1c0 + f1c1 + f2c0增量 + f2c1增量
-        assertEquals("第一路的较长输出内容第二路的较长输出内容-续一-续二", joinText(resp));
+        assertEquals("第一路的较长输出内容-续一", joinText(resp));
     }
 
     /**

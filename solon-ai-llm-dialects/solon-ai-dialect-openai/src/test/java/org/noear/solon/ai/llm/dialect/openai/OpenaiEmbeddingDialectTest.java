@@ -26,9 +26,10 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>对齐协议要点：</p>
  * <ul>
- *   <li>{@code data[]} 映射为 index + 向量</li>
+ *   <li>{@code data[].embedding} 同时支持 float 数组与官方 base64 联合形态</li>
+ *   <li>base64 按 little-endian IEEE-754 float32 解码</li>
  *   <li>{@code data} 缺失或非数组时返回 null 而不是抛异常</li>
- *   <li>{@code usage.total_tokens} 为 optional，缺省用 prompt+completion 兜底</li>
+ *   <li>官方 usage 及兼容端点扩展字段均可解析</li>
  * </ul>
  */
 public class OpenaiEmbeddingDialectTest {
@@ -68,6 +69,35 @@ public class OpenaiEmbeddingDialectTest {
         assertNotNull(resp.getUsage());
         assertEquals(5, resp.getUsage().promptTokens());
         assertEquals(5, resp.getUsage().totalTokens());
+    }
+
+    @Test
+    public void officialBase64Embedding_decodedAsLittleEndianFloat32() {
+        // OpenAI SDK 官方测试向量：[1,2,3,4] <-> AACAPwAAAEAAAEBAAACAQA==
+        String json = "{\"model\":\"text-embedding-3-small\",\"data\":["
+                + "{\"object\":\"embedding\",\"index\":3,\"embedding\":\"AACAPwAAAEAAAEBAAACAQA==\"}],"
+                + "\"usage\":{\"prompt_tokens\":4,\"total_tokens\":4}}";
+
+        EmbeddingResponse resp = dialect.parseResponseJson(newConfig(), json);
+
+        assertEquals(3, resp.getData().get(0).getIndex());
+        assertArrayEquals(new float[]{1F, 2F, 3F, 4F}, resp.getData().get(0).getEmbedding());
+        assertEquals(0, resp.getUsage().completionTokens());
+    }
+
+    @Test
+    public void invalidBase64ByteLength_isRejected() {
+        String json = "{\"data\":[{\"index\":0,\"embedding\":\"AQID\"}]}";
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> dialect.parseResponseJson(newConfig(), json));
+        assertTrue(error.getMessage().contains("byte length"));
+    }
+
+    @Test
+    public void nullError_isNotFailure() {
+        EmbeddingResponse resp = dialect.parseResponseJson(newConfig(), "{\"error\":null,\"data\":[]}");
+        assertNull(resp.getError());
+        assertNotNull(resp.getData());
     }
 
     @Test

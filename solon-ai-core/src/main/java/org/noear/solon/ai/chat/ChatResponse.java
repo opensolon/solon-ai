@@ -19,20 +19,23 @@ import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.event.ChatEvent;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.source.Citation;
+import org.noear.solon.ai.chat.source.SearchResult;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
- * 聊天响应（模型调用的结果，不可变）
+ * 聊天响应（模型调用的只读快照）
  *
  * <p><b>取值只有一个入口</b>：{@link #getMessage()}。无论来自 {@code call()} 还是来自
  * {@code stream()} 的 {@code RESPONSE_END} / {@code STEP_END}，它给出的都是该响应（或该步）的
  * 完整终态；{@link #getText()} / {@link #getThinking()} / {@link #getToolCalls()} /
- * {@link #getBlocks()} 都是它的投影。中间帧（TEXT_DELTA 等）携带的则是当帧分片快照
- * （{@code getMessage()} 为该帧增量），非完整聚合。</p>
+ * {@link #getBlocks()} 都是它的投影。流式中间事件（TEXT_DELTA 等）只由 {@code ChatEvent}
+ * 承载当帧语义；即使事件附带分片响应，其 {@code getMessage()} 也为 {@code null}。</p>
  *
  * <p>4.1 之前本类型同时承担三个角色——用户结果对象、方言的可变累积器与协议状态袋、
  * 请求上下文载体。4.1 起后两个角色拆到框架内部的 {@code ChatAccumulator}，本接口只保留
@@ -78,17 +81,19 @@ public interface ChatResponse {
     AssistantMessage getMessage();
 
     /**
-     * 是否为空（没有内容，也没有工具调用）
+     * 是否为空（没有正文、思考、工具调用、内容块、搜索结果、引用或协议续跑状态）
+     *
+     * <p>用于判断整体消息载荷；只判断正文文本请使用 {@link #hasContent()}。</p>
      */
     boolean isEmpty();
 
     /**
-     * 是否有消息内容
+     * 是否有正文文本（与 {@link #getContent()} 的文本语义一致）
      */
     boolean hasContent();
 
     /**
-     * 获取消息原始内容
+     * 获取正文文本（不是厂商原始 content 载荷）
      */
     String getContent();
 
@@ -115,6 +120,20 @@ public interface ChatResponse {
      * @since 4.1
      */
     List<ContentBlock> getBlocks();
+
+    /**
+     * 获取搜索结果（没有时为空集合，不为 null）。
+     *
+     * @since 4.1
+     */
+    List<SearchResult> getSearchResults();
+
+    /**
+     * 获取回答引用（没有时为空集合，不为 null）。
+     *
+     * @since 4.1
+     */
+    List<Citation> getCitations();
 
     /**
      * 获取完成原因（已归一化：工具调用为 {@code "tool"}、正常结束为 {@code "stop"}，

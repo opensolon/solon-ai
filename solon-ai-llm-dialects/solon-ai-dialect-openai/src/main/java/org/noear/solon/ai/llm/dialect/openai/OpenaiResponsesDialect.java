@@ -25,6 +25,7 @@ import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.MessageProtocolState;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
@@ -103,6 +104,9 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
             ONode formatNode = new ONode();
             try {
                 ONode schemaNode = ONode.ofJson(outputSchema);
+                if (!schemaNode.isObject()) {
+                    throw new IllegalArgumentException("outputSchema must be a JSON object");
+                }
                 applyStrictSchema(schemaNode);
 
                 formatNode.set("type", "json_schema");
@@ -136,14 +140,12 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
 
             ONode propsNode = node.getOrNull("properties");
             if (propsNode != null && propsNode.isObject()) {
-                // 如果 required 为空数组，填充所有 properties 的 key（用 ONode 数组 API 构造，避免手拼 JSON 转义问题）
-                ONode requiredNode = node.getOrNull("required");
-                if (requiredNode == null || (requiredNode.isArray() && requiredNode.getArray().isEmpty())) {
-                    ONode newRequired = node.getOrNew("required").asArray();
-                    for (String key : propsNode.getObject().keySet()) {
-                        newRequired.add(key);
-                    }
+                // strict 模式要求 properties 的每个键都在 required 中；统一重建以修复 partial required。
+                ONode newRequired = new ONode().asArray();
+                for (String key : propsNode.getObject().keySet()) {
+                    newRequired.add(key);
                 }
+                node.set("required", newRequired);
 
                 // 递归处理嵌套的 properties
                 for (Map.Entry<String, ONode> entry : propsNode.getObject().entrySet()) {
@@ -198,7 +200,6 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
 
         ONode toolCallsNode = oMessage.getOrNull("tool_calls");
         List<ToolCall> toolCalls = parseToolCalls(acc, toolCallsNode);
-        List<Map> toolCallsRaw = Utils.isEmpty(toolCalls) ? null : toolCallsNode.toBean(List.class);
 
         // 流式聚合的媒体块（如 image_generation_call）随消息带上，多轮才能按 id 回传
         List<ContentBlock> blocksForMsg = null;
@@ -215,17 +216,24 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
             return Collections.emptyList();
         }
 
-        AssistantMessage message = new AssistantMessage(
+        // Responses 的 reasoning/output item 属于协议回放状态，不污染应用 metadata。
+        // 完成帧已把工作区提升到 terminalProtocolStates 并清理内部键；工具递归必须优先复用该状态。
+        MessageProtocolState replayState = acc.getTerminalProtocolStates() == null ? null
+                : acc.getTerminalProtocolStates().get(OpenaiResponsesMessageStateSupport.PROTOCOL_ID);
+        if (replayState == null) {
+            replayState = OpenaiResponsesMessageStateSupport.fromAggregation(acc.getAggregationMetadata());
+        }
+
+        Map<String, MessageProtocolState> protocolStates = replayState == null ? null
+                : Collections.singletonMap(OpenaiResponsesMessageStateSupport.PROTOCOL_ID, replayState);
+        AssistantMessage message = AssistantMessage.snapshot(
                 text == null ? "" : text,
                 thinking == null ? "" : thinking,
-                false, null, toolCallsRaw, toolCalls, null, blocksForMsg);
-
-        // 官方多轮回放 reasoning 项需要 reasoning_item_id / reasoning_encrypted_content，
-        // 它们来自流式分片 metadata 聚合（节点里不携带）
-        Map<String, Object> aggMetadata = acc.getAggregationMetadata();
-        if (Utils.isNotEmpty(aggMetadata)) {
-            message.addMetadata(aggMetadata);
-        }
+                toolCalls,
+                blocksForMsg,
+                null,
+                null,
+                protocolStates);
 
         acc.in_thinking = false; //本方言不走父类思考状态机，统一复位
 

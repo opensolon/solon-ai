@@ -100,9 +100,9 @@ public interface ChatDialect extends AiModelDialect {
      * 与「解析失败」——有内容就 {@code ctx.emit(...)} 或写入 {@code ctx.getAccumulator()}，
      * 出错就 {@code ctx.getAccumulator().setError(...)}，已消费但无内容则什么都不做。</p>
      *
-     * <p>内容主干（正文 / 思考 / 工具调用）应写入累积器的内容项，由核心统一转成
-     * TEXT_* / THINKING_* / TOOL_CALL_* 事件并保证边界；方言只直接发射旧模型表达不了的
-     * 扩展语义（生命周期、服务端工具、引用、拒答、思考签名等）。</p>
+     * <p>Event-first 契约：语义内容应构造成事件并统一调用 {@code ctx.emit(...)}；上下文会先把
+     * 事件归并到累积器，再向下游投递。已解析的协议 metadata/raw 等终态载体可通过
+     * {@code ctx.getAccumulator().mergeTerminalMessage(...)} 合并；同一语义不得重复发射。</p>
      *
      * @param ctx      流上下文
      * @param respJson 响应数据

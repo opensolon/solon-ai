@@ -11,6 +11,13 @@
 *  mcp channel 概念改为 transport （并保持兼容）???
 
 
+### 4.1.1
+
+* 添加 solon-ai-core `ChatAccumulator` 承担事件归并、终态聚合与方言状态；`ChatDialect` 解析入口调整为 `parseResponseJson(ChatStreamContext, String)`。（**不兼容变更**：第三方方言需同步适配）
+* 优化 solon-ai-core `AssistantMessage` thinking/text 双字段及取值方法；新增版本化 `protocolStates` 与类型化 `SearchResult`/`Citation`，弃用但保留旧 `contentRaw`/raw 字段反序列化兼容。
+* 调整 solon-ai-core `ChatResponse` 为只读终态结果，新增 `getToolCalls()`、`getBlocks()`、`getSearchResults()`、`getCitations()`；移除多候选、累积器、流状态及请求上下文相关旧方法。（**不兼容变更**）
+* 修复 solon-ai-core 空正文、静默空流、工具参数多根/尾随数据、Agent 取消/NPE、Flow 流类型适配、Anthropic 缓存率与叠字等问题；协议状态绑定后深层冻结，OpenAI Responses 解析工作区采用私有命名空间。
+
 ### 4.1.0
 
 * 添加 solon-ai-core  `docs/chat-event-model.md`，说明事件分组、边界约束、取消语义及第三方方言迁移方式。

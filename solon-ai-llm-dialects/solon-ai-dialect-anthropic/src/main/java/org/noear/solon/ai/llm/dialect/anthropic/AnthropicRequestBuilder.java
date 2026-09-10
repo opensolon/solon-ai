@@ -173,6 +173,24 @@ public class AnthropicRequestBuilder {
             "claude[.-](\\d{1,2})(?![\\d])(?:[.-](\\d{1,2})(?![\\d.]))?[.-](?:opus|sonnet|haiku)",
             java.util.regex.Pattern.CASE_INSENSITIVE);
 
+    /** 仅过滤没有正文、工具、媒体或 Anthropic 回放状态的纯思考历史。 */
+    private boolean isSkippableThinkingOnlyMessage(ChatMessage message) {
+        if (message instanceof AssistantMessage == false) {
+            return false;
+        }
+
+        AssistantMessage assistant = (AssistantMessage) message;
+        if (assistant.getText() != null && !assistant.getText().isEmpty()) {
+            return false;
+        }
+        if (assistant.isThinkingOnly() == false) {
+            return false;
+        }
+
+        // 应用 metadata 与其他方言状态都不能让空 Anthropic assistant 消息进入请求。
+        return AnthropicMessageStateSupport.hasReplayableState(assistant) == false;
+    }
+
     /**
      * 构建请求 JSON
      * @author oisin lu
@@ -212,7 +230,7 @@ public class AnthropicRequestBuilder {
         // 提取系统消息（供缓存预算判断与下方 system 节点构建复用，避免重复遍历）
         String systemMessage = extractSystemMessage(messages);
         boolean hasSystem = Utils.isNotEmpty(systemMessage);
-        boolean hasTools = !Utils.isEmpty(options.tools());
+        boolean hasTools = !Utils.isEmpty(options.tools()) || hasNativeTools(options);
 
         // 缓存断点预算分配（Anthropic 每请求上限 CACHE_BREAKPOINT_LIMIT 个）：
         // 渲染顺序为 tools -> system -> messages，打在 system 上的断点会连带缓存 tools。
@@ -243,8 +261,8 @@ public class AnthropicRequestBuilder {
         ONode messagesNode = root.getOrNew("messages").asArray();
         ONode pendingToolResultNode = null; // 用于合并连续的 ToolMessage
         for (ChatMessage message : messages) {
-            // isThinking 的中间帧（无工具调用）不回传；带 toolCalls 的终态消息即使是思考态也必须回传（Claude 工具多轮要求 thinking 块随行）
-            if (message instanceof SystemMessage || (message.isThinking() && message.isToolCalls() == false)) {
+            // 历史通常是完整消息：只过滤无正文/工具/媒体且无回放载体的纯思考消息。
+            if (message instanceof SystemMessage || isSkippableThinkingOnlyMessage(message)) {
                 continue;
             }
 
@@ -333,6 +351,11 @@ public class AnthropicRequestBuilder {
                 continue;
             }
 
+            if ("tools".equals(key) || "server_tools".equals(key) || "anthropic_server_tools".equals(key)) {
+                if (!root.hasKey("tools")) root.set("tools", ONode.ofBean(kv.getValue()));
+                continue;
+            }
+
             // OpenAI 风格但 Anthropic 不接受的字段：在出站前剔除，否则整条请求 400
             if (UNSUPPORTED_OPTION_KEYS.contains(key)) {
                 continue;
@@ -348,9 +371,12 @@ public class AnthropicRequestBuilder {
         
         // 统一 thinking 开关 + reasoning_effort（显式 Map/Number thinking 优先）
         applyUnifiedThinkingOptions(root, config, options, thinkingSwitch);
+        // 所有经典 thinking 入口统一执行协议约束：budget_tokens >= 1024 且严格小于 max_tokens。
+        // adaptive / disabled 不带 budget_tokens，会自然跳过。
+        clampThinkingBudgetToMaxTokens(root, options);
         
         // 如果用户未显式设置 tool_choice 但有 tools，默认使用 auto 语义（由API自行决定）
-        if (!options.options().containsKey("tool_choice") && !Utils.isEmpty(options.tools())) {
+        if (!options.options().containsKey("tool_choice") && Utils.isEmpty(options.tools()) && hasNativeTools(options) == false) {
             // Anthropic 默认行为等同于 auto，无需显式设置
         }
 
@@ -391,7 +417,7 @@ public class AnthropicRequestBuilder {
         }
 
         boolean hasToolChoice = root.hasKey("tool_choice");
-        if (hasToolChoice == false && Utils.isEmpty(options.tools())) {
+        if (hasToolChoice == false && Utils.isEmpty(options.tools()) && hasNativeTools(options) == false) {
             return;
         }
 
@@ -429,19 +455,17 @@ public class AnthropicRequestBuilder {
             if (message instanceof AssistantMessage == false) {
                 continue;
             }
-            Object contentRaw = ((AssistantMessage) message).getContentRaw();
-            if (contentRaw instanceof Map == false) {
+            Map<String, Object> stateData = AnthropicMessageStateSupport.resolveData((AssistantMessage) message);
+            if (stateData == null) {
                 continue;
             }
-            Object value = ((Map<?, ?>) contentRaw).get(AnthropicResponseParser.CONTAINER_RAW_KEY);
-            if (value instanceof String == false || Utils.isEmpty((String) value)) {
+            Object value = stateData.get(AnthropicResponseParser.CONTAINER_RAW_KEY);
+            String containerId = resolveContainerId(value);
+            if (Utils.isEmpty(containerId)) {
                 continue;
             }
 
-            String containerId = resolveContainerId((String) value);
-            if (Utils.isNotEmpty(containerId)) {
-                root.set("container", containerId);
-            }
+            root.set("container", containerId);
             return;
         }
     }
@@ -454,8 +478,15 @@ public class AnthropicRequestBuilder {
      *
      * @since 4.1
      */
-    private static String resolveContainerId(String containerJson) {
-        String trimmed = containerJson.trim();
+    private static String resolveContainerId(Object containerValue) {
+        if (containerValue == null) {
+            return null;
+        }
+        if (containerValue instanceof Map) {
+            Object id = ((Map<?, ?>) containerValue).get("id");
+            return id == null ? null : String.valueOf(id);
+        }
+        String trimmed = String.valueOf(containerValue).trim();
         if (trimmed.startsWith("{") == false) {
             return trimmed;
         }
@@ -530,11 +561,11 @@ public class AnthropicRequestBuilder {
     }
 
     /**
-     * 把 schema 就地补齐为 Anthropic 结构化输出要求的形态。
+     * 把 schema 就地补齐为 Anthropic strict JSON Schema 要求的形态。
      *
-     * <p>两条硬性要求（不满足直接 400）：对象必须显式 {@code additionalProperties:false}；
-     * {@code required} 必须列全所有属性。后者与 OpenAI strict 模式一致——可选字段应改用可空类型表达，
-     * 而不是从 required 里省略。官方各语言 SDK 同样在本地做这层改写。</p>
+     * <p>同时用于 {@code output_config.format.schema} 与 {@code tools[].input_schema + strict=true}。
+     * 对象必须显式 {@code additionalProperties:false}，且 {@code required} 必须列全所有属性；
+     * 可选字段应通过 nullable 类型表达，而不是从 required 中省略。</p>
      *
      * <p>不动数值/字符串长度约束（{@code minimum} / {@code maxLength} 等）：协议声明不支持，
      * 但删掉会静默削弱用户 schema 的语义，宁可让服务端报错、由 {@code structured_outputs=false} 兜住。</p>
@@ -562,17 +593,16 @@ public class AnthropicRequestBuilder {
         boolean typedObject = typeNode != null && typeNode.isString() && "object".equals(typeNode.getString());
 
         if (hasProperties || typedObject) {
-            // additionalProperties 也可能是「子 schema」形态，已存在就不覆盖
-            if (node.hasKey("additionalProperties") == false) {
-                node.set("additionalProperties", false);
-            }
-            if (hasProperties && properties.getObject().isEmpty() == false) {
-                ONode required = new ONode().asArray();
+            // strict 模式不允许额外属性；即使用户原 schema 显式为 true 也必须收紧。
+            node.set("additionalProperties", false);
+            ONode required = new ONode().asArray();
+            if (hasProperties) {
                 for (String name : properties.getObject().keySet()) {
                     required.add(name);
                 }
-                node.set("required", required);
             }
+            // 空对象同样显式给出 required:[]，与官方 strict schema helper 保持一致。
+            node.set("required", required);
         }
 
         if (hasProperties) {
@@ -802,12 +832,19 @@ public class AnthropicRequestBuilder {
         if (value instanceof Map) {
             Map<String, Object> thinkingMap = (Map<String, Object>) value;
 
-            // 检查是否启用思考模式
+            // enabled=false 与 type=disabled 都表示显式关闭。关闭变体只允许 type 字段，
+            // 不能继续携带 budget_tokens / display 等 enabled 专属字段。
             Object enabled = thinkingMap.get("enabled");
-            if (enabled != null && Boolean.TRUE.equals(enabled)) {
+            Object configuredType = thinkingMap.get("type");
+            if (Boolean.FALSE.equals(enabled) || "disabled".equals(String.valueOf(configuredType))) {
+                thinkingNode.set("type", "disabled");
+                return;
+            }
+
+            if (Boolean.TRUE.equals(enabled)) {
                 thinkingNode.set("type", "enabled");
-            } else if (thinkingMap.containsKey("type")) {
-                thinkingNode.set("type", thinkingMap.get("type"));
+            } else if (configuredType != null) {
+                thinkingNode.set("type", configuredType);
             } else {
                 thinkingNode.set("type", "enabled");
             }
@@ -822,6 +859,10 @@ public class AnthropicRequestBuilder {
             }
             if (budgetTokens instanceof Number) {
                 thinkingNode.set("budget_tokens", ((Number) budgetTokens).intValue());
+            } else if ("enabled".equals(thinkingNode.get("type").getString())) {
+                // Map 简化入口声明 enabled 但没给预算时，与 thinking=true 使用相同默认值，
+                // 避免生成缺少必填 budget_tokens 的非法请求。
+                thinkingNode.set("budget_tokens", 10000);
             }
 
             // 思考摘要可见性（协议 ThinkingConfigEnabled.display：summarized | omitted）：
@@ -881,8 +922,6 @@ public class AnthropicRequestBuilder {
                 buildAdaptiveThinking(root, "medium", config);
             } else {
                 buildThinkingNode(root, Boolean.TRUE);
-                // 默认预算同样钳制到 max_tokens
-                clampThinkingBudgetToMaxTokens(root, options);
             }
         }
     }
@@ -890,10 +929,9 @@ public class AnthropicRequestBuilder {
     /**
      * 将统一 reasoning_effort 映射为 Claude thinking。
      * <p>adaptive 模型 → adaptive + 顶层 effort；经典 → enabled + budget_tokens。</p>
-     * <p>Anthropic 经典路径要求 budget_tokens 严格小于 max_tokens。
-     * 当档位预算不小于 max_tokens 时，压到 {@code max_tokens - 1}（至少为 1）；
-     * 若 max_tokens &lt;= 1，无法满足约束则跳过 thinking。
-     * 小 max_tokens 下语义从“档位预算”退化为“尽量占满输出预算”。</p>
+     * <p>Anthropic 经典路径要求 budget_tokens 至少为 1024 且严格小于 max_tokens。
+     * 档位预算不小于 max_tokens 时先压到 {@code max_tokens - 1}，最终由统一校验收口；
+     * 若二者无法同时满足，则不发送 thinking，避免构造服务端必然拒绝的请求。</p>
      *
      * @since 4.0.4
      */
@@ -1259,15 +1297,62 @@ public class AnthropicRequestBuilder {
         return block;
     }
 
+    private List<ONode> resolveOrderedContentBlocks(AssistantMessage assistantMessage) {
+        Map<String, Object> stateData = AnthropicMessageStateSupport.resolveData(assistantMessage);
+        if (stateData == null) return null;
+        Object blocks = stateData.get(AnthropicResponseParser.CONTENT_BLOCKS_RAW_KEY);
+        if (!(blocks instanceof List) || ((List<?>) blocks).isEmpty()) return null;
+
+        List<ONode> out = new java.util.ArrayList<>();
+        for (Object item : (List<?>) blocks) {
+            ONode block = toProtocolNode(item);
+            // 精确回放必须是全有或全无：任一块损坏时整组降级到通用消息语义，
+            // 不能把前半段 raw 与后半段通用字段拼成重复或缺失的混合消息。
+            if (block == null || block.isObject() == false
+                    || Utils.isEmpty(block.get("type").getString())) {
+                return null;
+            }
+            out.add(block);
+        }
+        return out;
+    }
+
+    private boolean appendOrderedContentBlocks(ONode contentArray, AssistantMessage assistantMessage) {
+        List<ONode> blocks = resolveOrderedContentBlocks(assistantMessage);
+        if (blocks == null) return false;
+        for (ONode block : blocks) {
+            contentArray.add(block);
+        }
+        return true;
+    }
+
+    private static ONode toProtocolNode(Object value) {
+        if (value == null) return null;
+        try {
+            if (value instanceof ONode) {
+                return ONode.ofJson(((ONode) value).toJson());
+            }
+            if (value instanceof String) {
+                String json = (String) value;
+                return Utils.isEmpty(json) ? null : ONode.ofJson(json);
+            }
+            return ONode.ofBean(value);
+        } catch (Exception e) {
+            return null;
+        }
+    }
     /**
      * 构建助手消息
-     * @author oisin lu
-     * @date 2026年1月27日
      * @param node 父节点
      * @param assistantMessage 助手消息
      */
     private void buildAssistantToolCallMessageNode(ONode node, AssistantMessage assistantMessage) {
-        if (Utils.isNotEmpty(assistantMessage.getToolCalls())) {
+        if (appendOrderedContentBlocks(node.getOrNew("content").asArray(), assistantMessage)) {
+            return;
+        }
+        List<ToolCall> toolCalls = ToolCallJsonSanitizer.resolveToolCalls(
+                assistantMessage.getToolCalls(), assistantMessage.getToolCallsRaw());
+        if (Utils.isNotEmpty(toolCalls)) {
             ONode contentArray = node.getOrNew("content").asArray();
 
             // 仅当 thinkingSignature 有效时回传 thinking 块。
@@ -1300,12 +1385,12 @@ public class AnthropicRequestBuilder {
             appendAssistantMediaBlocks(contentArray, assistantMessage);
                     
             // 添加工具调用
-            for (ToolCall call : assistantMessage.getToolCalls()) {
+            for (ToolCall call : toolCalls) {
                 contentArray.addNew()
                     .set("type", "tool_use")
                     .set("id", call.getId())
                     .set("name", call.getName())
-                    .set("input", ONode.ofBean(call.getArguments()));
+                    .set("input", ONode.ofJson(ToolCallJsonSanitizer.sanitizeArguments(call)));
             }
         } else if (assistantMessage.isMultiModal()) {
             // 多模态助手消息：content 数组（text + image）
@@ -1339,7 +1424,7 @@ public class AnthropicRequestBuilder {
                 }
             }
         } else {
-            List<String> serverBlocks = resolveServerToolBlocks(assistantMessage);
+            List<Object> serverBlocks = resolveServerToolBlocks(assistantMessage);
             String content = trimToNull(assistantMessage.getText());
 
             if (Utils.isEmpty(serverBlocks) == false) {
@@ -1388,12 +1473,12 @@ public class AnthropicRequestBuilder {
     }
 
     /**
-     * 从 contentRaw 提取 thinking signature（仅非空有效）。
+     * 从 Anthropic 协议状态提取 thinking signature（兼容旧 contentRaw）。
      */
     private String resolveThinkingSignature(AssistantMessage assistantMessage) {
-        Object contentRaw = assistantMessage.getContentRaw();
-        if (contentRaw instanceof Map) {
-            Object sig = ((Map<?, ?>) contentRaw).get("thinkingSignature");
+        Map<String, Object> stateData = AnthropicMessageStateSupport.resolveData(assistantMessage);
+        if (stateData != null) {
+            Object sig = stateData.get("thinkingSignature");
             if (sig instanceof String && Utils.isNotEmpty((String) sig)) {
                 return (String) sig;
             }
@@ -1599,9 +1684,19 @@ public class AnthropicRequestBuilder {
         }
     }
 
+    private boolean hasNativeTools(ChatOptions options) {
+        if (options == null) return false;
+        Object value = options.options().get("tools");
+        if (value == null) value = options.options().get("server_tools");
+        if (value == null) value = options.options().get("anthropic_server_tools");
+        if (value instanceof Collection) return !((Collection<?>) value).isEmpty();
+        if (value instanceof Object[]) return ((Object[]) value).length > 0;
+        return value != null;
+    }
+
+
     /**
      * 构建工具
-     * @author oisin lu
      * @date 2026年1月27日
      * @param root 根节点
      * @param options 聊天选项
@@ -1623,15 +1718,18 @@ public class AnthropicRequestBuilder {
      */
     public void buildToolsNode(ONode root, ChatOptions options, boolean cacheOnTools) {
         Collection<FunctionTool> tools = options.tools();
-
-        if (Utils.isEmpty(tools)) {
-            return;
-        }
-
         CacheControl cacheControl = options.cacheControl();
         // 仅 Anthropic 风格（type 非空）且预算允许时，才在工具定义上打 cache_control 断点
         boolean cacheEnabled = cacheOnTools
                 && (cacheControl != null && Utils.isNotEmpty(cacheControl.getType()));
+
+        if (Utils.isEmpty(tools)) {
+            ONode nativeTools = root.getOrNull("tools");
+            if (cacheEnabled && nativeTools != null && nativeTools.isArray() && nativeTools.size() > 0) {
+                writeCacheControl(nativeTools.get(nativeTools.size() - 1), cacheControl);
+            }
+            return;
+        }
 
         // 严格工具（协议 Tool.strict，与结构化输出同期 GA）：保证入参严格符合 input_schema。
         // 只能显式 opt-in：开启后 schema 不合规的工具会直接被拒，且仅 Claude 4.5+ 支持
@@ -1650,21 +1748,11 @@ public class AnthropicRequestBuilder {
                 toolNode.set("name", func.name());
                 toolNode.set("description", func.descriptionAndMeta());
                 String inputSchema = func.inputSchema();
-                if (Utils.isNotEmpty(inputSchema)) {
-                    try {
-                        ONode schemaNode = ONode.ofJson(inputSchema);
-                        toolNode.set("input_schema", schemaNode);
-                    } catch (Exception e) {
-                        // 如果JSON解析失败，创建一个基本的schema
-                        toolNode.getOrNew("input_schema")
-                            .set("type", "object")
-                            .getOrNew("properties").set("", new ONode());
-                    }
-                } else {
-                    toolNode.getOrNew("input_schema")
-                        .set("type", "object")
-                        .getOrNew("properties").set("", new ONode());
+                ONode schemaNode = buildToolInputSchema(inputSchema);
+                if (strictTools) {
+                    normalizeStructuredSchema(schemaNode);
                 }
+                toolNode.set("input_schema", schemaNode);
 
                 // 严格工具：写在 cache_control 之前，与协议字段顺序无关，仅保持可读
                 if (strictTools) {
@@ -1680,6 +1768,38 @@ public class AnthropicRequestBuilder {
                 }
             });
         }
+    }
+
+    /**
+     * 解析工具输入 schema，并保证根节点是 {@code type=object}。
+     * 合法 JSON 但为数组、标量或非 object schema 时同样回退，避免把必然被 API 拒绝的定义发出。
+     */
+    private static ONode buildToolInputSchema(String inputSchema) {
+        ONode schemaNode = null;
+        if (Utils.isNotEmpty(inputSchema)) {
+            try {
+                schemaNode = ONode.ofJson(inputSchema);
+            } catch (Exception ignored) {
+                // 统一在下方回退为空对象 schema。
+            }
+        }
+
+        if (schemaNode == null || schemaNode.isObject() == false
+                || (Utils.isNotEmpty(schemaNode.get("type").getString())
+                && "object".equals(schemaNode.get("type").getString()) == false)) {
+            schemaNode = new ONode().asObject();
+            schemaNode.set("type", "object");
+            schemaNode.getOrNew("properties").asObject();
+            return schemaNode;
+        }
+
+        if (schemaNode.hasKey("type") == false) {
+            schemaNode.set("type", "object");
+        }
+        if (schemaNode.hasKey("properties") == false) {
+            schemaNode.getOrNew("properties").asObject();
+        }
+        return schemaNode;
     }
 
     /**
@@ -1853,12 +1973,12 @@ public class AnthropicRequestBuilder {
      * @since 4.0.4
      */
     private void appendRedactedThinkingBlocks(ONode contentArray, AssistantMessage assistantMessage) {
-        Object contentRaw = assistantMessage.getContentRaw();
-        if (!(contentRaw instanceof Map)) {
+        Map<String, Object> stateData = AnthropicMessageStateSupport.resolveData(assistantMessage);
+        if (stateData == null) {
             return;
         }
         // 优先分块列表（协议：redacted_thinking 必须逐块原样回传，拼接会损坏 opaque 数据）
-        Object blocks = ((Map<?, ?>) contentRaw).get("redactedThinkingBlocks");
+        Object blocks = stateData.get("redactedThinkingBlocks");
         if (blocks instanceof List) {
             for (Object data : (List<?>) blocks) {
                 if (data instanceof String && Utils.isNotEmpty((String) data)) {
@@ -1869,7 +1989,7 @@ public class AnthropicRequestBuilder {
             }
             return;
         }
-        Object redacted = ((Map<?, ?>) contentRaw).get("redactedThinkingData");
+        Object redacted = stateData.get("redactedThinkingData");
         if (!(redacted instanceof String) || Utils.isEmpty((String) redacted)) {
             return;
         }
@@ -1903,20 +2023,20 @@ public class AnthropicRequestBuilder {
      *
      * @since 4.1
      */
-    private static List<String> resolveServerToolBlocks(AssistantMessage assistantMessage) {
-        Object contentRaw = assistantMessage == null ? null : assistantMessage.getContentRaw();
-        if (contentRaw instanceof Map == false) {
+    private static List<Object> resolveServerToolBlocks(AssistantMessage assistantMessage) {
+        Map<String, Object> stateData = AnthropicMessageStateSupport.resolveData(assistantMessage);
+        if (stateData == null) {
             return null;
         }
-        Object blocks = ((Map<?, ?>) contentRaw).get(AnthropicResponseParser.SERVER_BLOCKS_RAW_KEY);
+        Object blocks = stateData.get(AnthropicResponseParser.SERVER_BLOCKS_RAW_KEY);
         if (blocks instanceof List == false) {
             return null;
         }
 
-        List<String> out = new java.util.ArrayList<>();
+        List<Object> out = new java.util.ArrayList<>();
         for (Object item : (List<?>) blocks) {
-            if (item instanceof String && Utils.isNotEmpty((String) item)) {
-                out.add((String) item);
+            if (toProtocolNode(item) != null) {
+                out.add(item);
             }
         }
         return out;
@@ -1935,19 +2055,15 @@ public class AnthropicRequestBuilder {
      *
      * @since 4.1
      */
-    private void appendServerToolBlocks(ONode contentArray, List<String> serverBlocks) {
+    private void appendServerToolBlocks(ONode contentArray, List<?> serverBlocks) {
         if (Utils.isEmpty(serverBlocks)) {
             return;
         }
 
-        for (String json : serverBlocks) {
-            try {
-                ONode block = ONode.ofJson(json);
-                if (block != null && block.isObject() && Utils.isNotEmpty(block.get("type").getString())) {
-                    contentArray.add(block);
-                }
-            } catch (Exception e) {
-                //单块不可解析不影响其余块的回传
+        for (Object item : serverBlocks) {
+            ONode block = toProtocolNode(item);
+            if (block != null && block.isObject() && Utils.isNotEmpty(block.get("type").getString())) {
+                contentArray.add(block);
             }
         }
     }

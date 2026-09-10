@@ -28,8 +28,11 @@ import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.MessageProtocolState;
+import org.noear.solon.ai.chat.source.SearchResult;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
+import org.noear.solon.ai.llm.dialect.gemini.GeminiMessageStateSupport;
 import org.noear.solon.ai.llm.dialect.gemini.interactions.model.InteractionStepType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,6 +62,7 @@ public class GeminiInteractionsResponseParser {
      * @since 4.1
      */
     private static final String ATTR_STEP_ACCUMULATORS = "gemini.interactions.stepAccumulators";
+    private static final String ATTR_SIGNATURE_BOUND = "gemini.interactions.signatureBound";
 
     private final boolean logEnabled;
 
@@ -154,6 +158,9 @@ public class GeminiInteractionsResponseParser {
             return true;
         }
 
+        // 顶层 id 是非流式响应的供应商响应标识；事件上下文会自动预填到后续事件。
+        ctx.setProviderResponseId(responseIdOf(oResp));
+
         // model
         if (oResp.hasKey("model")) {
             acc.setModel(oResp.get("model").getString());
@@ -166,39 +173,37 @@ public class GeminiInteractionsResponseParser {
         // steps[]: 解析各个 step
         List<AssistantMessage> messages = new ArrayList<>();
         List<ToolCall> toolCalls = new ArrayList<>();
-        String thinkingSignature = null;
+        String firstToolCallSignature = null;
 
         ONode oSteps = oResp.getOrNull("steps");
         if (oSteps != null && oSteps.isArray()) {
             for (ONode oStep : oSteps.getArray()) {
-                //未建模的步骤类型解析为 null：与旧实现落到 default 分支等价，静默跳过
                 InteractionStepType stepType = InteractionStepType.fromApiValue(oStep.get("type").getString());
-                if (stepType == null) continue;
+                if (stepType == null) {
+                    ctx.emit(ctx.event(ChatEventType.RAW).rawType("step")
+                            .subType(oStep.get("type").getString()).raw(oStep).build());
+                    continue;
+                }
 
                 switch (stepType) {
                     case THOUGHT:
+                        String signature = oStep.get("signature").getString();
+                        if (Utils.isNotEmpty(signature)) {
+                            firstToolCallSignature = signature;
+                            acc.thinkingSignature = signature;
+                            ctx.emit(ctx.event(ChatEventType.THINKING_SIGNATURE)
+                                    .rawType("thought").text(signature).raw(oStep).build());
+                        }
                         String thoughtText = extractThoughtSummary(oStep);
                         if (Utils.isNotEmpty(thoughtText)) {
-                            String signature = oStep.get("signature").getString();
-                            if (Utils.isNotEmpty(signature)) {
-                                thinkingSignature = signature;
-                                // 与流式 thought_signature delta 对称：给出专用事件通道
-                                ctx.emit(ctx.event(ChatEventType.THINKING_SIGNATURE)
-                                        .rawType("thought")
-                                        .text(signature)
-                                        .raw(oStep)
-                                        .build());
-                            }
-                            messages.add(new AssistantMessage("",thoughtText, true));
+                            messages.add(new AssistantMessage("", thoughtText));
                         }
                         break;
 
                     case MODEL_OUTPUT:
                         AssistantMessage modelMsg = extractModelOutputMessage(oStep);
                         if (modelMsg != null) {
-                            if (modelMsg.hasMedia()) {
-                                acc.addMediaBlocks(modelMsg.getBlocks());
-                            }
+                            emitMediaEvents(ctx, modelMsg, messages.size());
                             messages.add(modelMsg);
                         }
                         break;
@@ -206,12 +211,18 @@ public class GeminiInteractionsResponseParser {
                     case FUNCTION_CALL:
                         ToolCall toolCall = parseFunctionCallStep(oStep);
                         if (toolCall != null) {
-                            // 第一个 function_call 可能携带 thought_signature
+                            // 兼容早期网关把签名挂在 function_call 上的响应。
                             if (toolCalls.isEmpty() && oStep.hasKey("thought_signature")) {
                                 String sig = oStep.get("thought_signature").getString();
                                 if (Utils.isNotEmpty(sig)) {
-                                    toolCall.setThoughtSignature(sig);
-                                    thinkingSignature = sig;
+                                    firstToolCallSignature = sig;
+                                    acc.thinkingSignature = sig;
+                                    // 与流式 thought_signature delta 对称：签名也必须进入事件通道。
+                                    ctx.emit(ctx.event(ChatEventType.THINKING_SIGNATURE)
+                                            .rawType("function_call")
+                                            .text(sig)
+                                            .raw(oStep)
+                                            .build());
                                 }
                             }
                             toolCalls.add(toolCall);
@@ -219,15 +230,23 @@ public class GeminiInteractionsResponseParser {
                         break;
 
                     case GOOGLE_SEARCH_CALL:
+                    case CODE_EXECUTION_CALL:
+                    case URL_CONTEXT_CALL:
+                    case MCP_SERVER_TOOL_CALL:
+                    case FILE_SEARCH_CALL:
+                    case GOOGLE_MAPS_CALL:
+                        emitServerToolSnapshot(ctx, ChatEventType.SERVER_TOOL_START, stepType, oStep);
+                        break;
                     case GOOGLE_SEARCH_RESULT:
-                        // Google 搜索等服务端工具步骤：旧实现在非流式下整步丢弃，与流式的
-                        // SERVER_TOOL_* 对称地补上
-                        ctx.emit(ctx.event(ChatEventType.SERVER_TOOL_RESULT)
-                                .rawType("step")
-                                .subType(stepType.getApiValue())
-                                .itemId(oStep.get("id").getString())
-                                .raw(oStep)
-                                .build());
+                        emitServerToolSnapshot(ctx, ChatEventType.SERVER_TOOL_RESULT, stepType, oStep);
+                        emitGoogleSearchResults(ctx, oStep, null);
+                        break;
+                    case CODE_EXECUTION_RESULT:
+                    case URL_CONTEXT_RESULT:
+                    case MCP_SERVER_TOOL_RESULT:
+                    case FILE_SEARCH_RESULT:
+                    case GOOGLE_MAPS_RESULT:
+                        emitServerToolSnapshot(ctx, ChatEventType.SERVER_TOOL_RESULT, stepType, oStep);
                         break;
 
                     default:
@@ -236,43 +255,38 @@ public class GeminiInteractionsResponseParser {
             }
         }
 
-        // 保存 thinkingSignature
-        if (Utils.isNotEmpty(thinkingSignature)) {
-            acc.thinkingSignature = thinkingSignature;
+
+        // 合并为唯一终态 AssistantMessage；非流式内容项不再承担分片队列职责。
+        StringBuilder text = new StringBuilder();
+        StringBuilder thinking = new StringBuilder();
+        List<ContentBlock> blocks = new ArrayList<>();
+        for (AssistantMessage message : messages) {
+            if (Utils.isNotEmpty(message.getTextRaw())) text.append(message.getTextRaw());
+            if (Utils.isNotEmpty(message.getThinkingRaw())) thinking.append(message.getThinkingRaw());
+            if (Utils.isNotEmpty(message.getBlocks())) blocks.addAll(message.getBlocks());
         }
 
-        // 发出消息
-        boolean hasContent = false;
-
-        // 先发出 thought 消息
-        for (AssistantMessage thoughtMsg : messages) {
-            acc.addContentItem(thoughtMsg);
-            hasContent = true;
-        }
-
-        // 如果有 tool calls，发出一个空文本的 tool_calls 消息
-        if (!toolCalls.isEmpty()) {
-            // 结束 thinking 状态（如果有）
-            if (acc.in_thinking) {
-                acc.addContentItem(new AssistantMessage("","", true));
-                acc.in_thinking = false;
-                hasContent = true;
+        boolean hasContent = text.length() > 0 || thinking.length() > 0
+                || !toolCalls.isEmpty() || !blocks.isEmpty();
+        if (hasContent || Utils.isNotEmpty(finishReason)) {
+            AssistantMessage terminal = new AssistantMessage(text.toString(), thinking.toString(),
+                    toolCalls.isEmpty() ? null : toolCalls,
+                    blocks.isEmpty() ? null : blocks);
+            acc.setTerminalMessage(terminal);
+            MessageProtocolState signatureState = GeminiMessageStateSupport.createSignatureState(
+                    toolCalls.isEmpty() ? null : toolCalls.get(0), 0, firstToolCallSignature);
+            if (signatureState != null) {
+                acc.putTerminalProtocolState(
+                        GeminiMessageStateSupport.INTERACTIONS_PROTOCOL_ID, signatureState);
             }
-            AssistantMessage toolCallMsg = new AssistantMessage("", "", false, null, null, toolCalls, null);
-            acc.addContentItem(toolCallMsg);
+            acc.in_thinking = false;
             hasContent = true;
         }
 
         // finishReason
-        if (Utils.isNotEmpty(finishReason)) {
+        if (isTerminalStatus(status)) {
             acc.setFinished(true);
             acc.lastFinishReason = finishReason;
-        }
-
-        // 兜底：如果没有内容项但 response 存在（空响应补一个）
-        if (!hasContent && Utils.isNotEmpty(finishReason)) {
-            acc.addContentItem(new AssistantMessage(""));
-            hasContent = true;
         }
 
         // usage
@@ -327,6 +341,8 @@ public class GeminiInteractionsResponseParser {
                 errorMsg = oError.toJson();
             }
             acc.setError(new ChatException(errorMsg));
+            ctx.emit(ctx.event(ChatEventType.ERROR).rawType("error")
+                    .error(acc.getError()).raw(oData).build());
             return true;
         }
 
@@ -362,11 +378,17 @@ public class GeminiInteractionsResponseParser {
                 break;
 
             case "step.stop":
-                hasContent = handleStepStop(ctx, oData);
                 emitStepEvent(ctx, eventType, oData);
+                hasContent = handleStepStop(ctx, oData);
+                break;
+
+            case "interaction.status_update":
+                handleInteractionStatus(ctx, oData);
                 break;
 
             case "interaction.completed":
+                // 供应商响应标识可能在 completed 帧再次出现；非空时更新并自动预填事件。
+                ctx.setProviderResponseId(responseIdOf(oData));
                 handleInteractionCompleted(acc, oData);
                 ctx.emit(ctx.event(ChatEventType.STATUS)
                         .rawType(eventType)
@@ -388,21 +410,25 @@ public class GeminiInteractionsResponseParser {
         return hasContent;
     }
 
-    /**
-     * 取交互 id
-     *
-     * @since 4.1
-     */
-    private static String interactionIdOf(ONode oData) {
+    private static String responseIdOf(ONode oData) {
+        String id = oData.get("id").getString();
+        if (Utils.isNotEmpty(id)) return id;
         ONode interaction = oData.getOrNull("interaction");
         return interaction == null ? null : interaction.get("id").getString();
+    }
+
+    /**
+     * 取交互 id
+     */
+    private static String interactionIdOf(ONode oData) {
+        return responseIdOf(oData);
     }
 
     /**
      * 发射步骤事件
      *
      * <p>Google 搜索等服务端工具步骤在旧实现下只能落成文本或消失，此处给出显式事件；
-     * 内容型步骤（text / thought / function_call）仍由核心从内容项转换，不重复发射。</p>
+     * 内容型步骤（text / thought / function_call）直接发射语义事件并由累积器归并。</p>
      *
      * <p>阶段按原始 event_type 三态映射，而不是「是否 start」的二态：二态会把 step.stop
      * 也当成 delta 发出，服务端工具就永远等不到配对的结束事件，订阅方状态机只能一直停在
@@ -411,29 +437,26 @@ public class GeminiInteractionsResponseParser {
      * @since 4.1
      */
     private void emitStepEvent(ChatStreamContext ctx, String eventType, ONode oData) {
-        ONode step = oData.getOrNull("step");
-        if (step == null) {
-            return;
-        }
-
-        InteractionStepType stepType = InteractionStepType.fromApiValue(step.get("type").getString());
-        if (stepType != InteractionStepType.GOOGLE_SEARCH_CALL
-                && stepType != InteractionStepType.GOOGLE_SEARCH_RESULT) {
-            return;
-        }
-
+        int index = oData.get("index").getInt();
+        StepAccumulator stepAcc = stepAccumulators(ctx).get(index);
+        if (stepAcc == null || !isServerToolStep(stepAcc.stepType)) return;
         ChatEventType phase = serverToolPhaseOf(eventType);
-        if (phase == null) {
-            return;
-        }
-
+        if (phase == null) return;
         ctx.emit(ctx.event(phase)
                 .rawType(eventType)
-                .subType(stepType.getApiValue())
-                .itemId(step.get("id").getString())
-                .index(oData.get("index").getInt())
+                .subType(stepAcc.stepType.getApiValue())
+                .itemId(stepAcc.callId)
+                .index(index)
                 .raw(oData)
                 .build());
+    }
+
+    private boolean isServerToolStep(InteractionStepType type) {
+        return type != null && type != InteractionStepType.USER_INPUT
+                && type != InteractionStepType.MODEL_OUTPUT
+                && type != InteractionStepType.THOUGHT
+                && type != InteractionStepType.FUNCTION_CALL
+                && type != InteractionStepType.FUNCTION_RESULT;
     }
 
     /**
@@ -462,6 +485,7 @@ public class GeminiInteractionsResponseParser {
 
         // 新交互开始，清掉上一交互的残留步骤状态；作用域限于当前流，不会波及并发请求
         stepAccumulators(ctx).clear();
+        ctx.attrPut(ATTR_SIGNATURE_BOUND, false);
         
         ONode interaction = oData.getOrNull("interaction");
         if (interaction != null) {
@@ -489,24 +513,53 @@ public class GeminiInteractionsResponseParser {
 
         // 未建模的类型解析为 null，仍照旧行为登记累积器（只是后绥不会命中任何类型分支）
         StepAccumulator stepAcc = new StepAccumulator(InteractionStepType.fromApiValue(stepTypeValue));
+        if (stepAcc.stepType == null) {
+            ctx.emit(ctx.event(ChatEventType.RAW).rawType("step.start")
+                    .subType(stepTypeValue).index(index).raw(oData).build());
+        }
+        stepAcc.callId = step.get("id").getString();
+        if (Utils.isEmpty(stepAcc.callId)) stepAcc.callId = step.get("call_id").getString();
         stepAccumulators(ctx).put(index, stepAcc);
 
-        // 如果是 thought 类型且尚未进入 thinking 状态，发出开始标记
-        if (InteractionStepType.THOUGHT == stepAcc.stepType && !acc.in_thinking) {
+        if (InteractionStepType.THOUGHT == stepAcc.stepType) {
             acc.in_thinking = true;
-            acc.addContentItem(new AssistantMessage("", "", true));
-            return true;
+            String thought = extractThoughtSummary(step);
+            if (Utils.isNotEmpty(thought)) {
+                ctx.emit(ctx.event(ChatEventType.THINKING_DELTA)
+                        .text(thought).index(index).raw(oData).build());
+                return true;
+            }
+            return false;
         }
 
-        // 如果是 function_call 类型，保存函数名和 id
-        // Interactions API 在 function_call step 中使用 "id" 字段（非 "call_id"）
+        if (InteractionStepType.MODEL_OUTPUT == stepAcc.stepType) {
+            AssistantMessage initial = extractModelOutputMessage(step);
+            if (initial != null) {
+                if (Utils.isNotEmpty(initial.getTextRaw())) {
+                    ctx.emit(ctx.event(ChatEventType.TEXT_DELTA)
+                            .text(initial.getTextRaw()).index(index).raw(oData).build());
+                }
+                emitMediaEvents(ctx, initial, index);
+                return true;
+            }
+        }
+
         if (InteractionStepType.FUNCTION_CALL == stepAcc.stepType) {
-            if (step.hasKey("name")) {
-                stepAcc.functionName = step.get("name").getString();
+            mergeFunctionIdentity(stepAcc, step);
+            ONode arguments = step.getOrNull("arguments");
+            if (arguments != null) {
+                String initialArgs = arguments.isObject() ? arguments.toJson() : arguments.getString();
+                if (Utils.isNotEmpty(initialArgs)) {
+                    stepAcc.argumentsBuilder.append(initialArgs);
+                }
             }
-            if (step.hasKey("id")) {
-                stepAcc.callId = step.get("id").getString();
-            }
+            emitFunctionStartIfReady(ctx, index, stepAcc, false);
+            emitPendingFunctionArguments(ctx, index, stepAcc, oData);
+            return stepAcc.startEmitted;
+        }
+
+        if (InteractionStepType.GOOGLE_SEARCH_RESULT == stepAcc.stepType) {
+            emitGoogleSearchResults(ctx, step, stepAcc.emittedSearchResultKeys);
         }
 
         return false;
@@ -514,14 +567,7 @@ public class GeminiInteractionsResponseParser {
 
     /**
      * 处理 step.delta 事件
-     * <p>
-     * 根据 delta 类型处理不同的内容：
-     * <ul>
-     *   <li>text — 文本增量（model_output content 的一部分）</li>
-     *   <li>thought_signature — 思考签名</li>
-     *   <li>thought_summary — 思考摘要文本</li>
-     *   <li>arguments_delta — 工具调用参数增量</li>
-     * </ul>
+     * <p>根据 delta 类型处理文本、思考摘要、签名和工具参数增量。</p>
      */
     private boolean handleStepDelta(ChatStreamContext ctx, ONode oData) {
         ChatAccumulator acc = ctx.getAccumulator();
@@ -537,48 +583,74 @@ public class GeminiInteractionsResponseParser {
         if ("thought_signature".equals(deltaType)) {
             String signature = delta.get("signature").getString();
             if (Utils.isNotEmpty(signature)) {
-                if (stepAcc != null) {
-                    stepAcc.signature = signature;
-                }
                 acc.thinkingSignature = signature;
             }
             return false;
         }
 
+        ONode step = oData.getOrNull("step");
         if (stepAcc == null) return false;
+        if (InteractionStepType.GOOGLE_SEARCH_RESULT == stepAcc.stepType) {
+            emitGoogleSearchResults(ctx, step, stepAcc.emittedSearchResultKeys);
+            emitGoogleSearchResults(ctx, delta, stepAcc.emittedSearchResultKeys);
+        }
+        if (InteractionStepType.FUNCTION_CALL == stepAcc.stepType && step != null) {
+            mergeFunctionIdentity(stepAcc, step);
+            emitFunctionStartIfReady(ctx, index, stepAcc, false);
+        }
 
         if ("text".equals(deltaType)) {
             String text = delta.get("text").getString();
             if (Utils.isNotEmpty(text)) {
-                // model_output 的 text delta 直接发出
+                // model_output 的 text delta 直接发出，并由 ChatStreamContext 统一归并
                 if (InteractionStepType.MODEL_OUTPUT == stepAcc.stepType) {
                     if (acc.in_thinking) {
-                        acc.addContentItem(new AssistantMessage("", "", true));
                         acc.in_thinking = false;
                     }
-                    acc.addContentItem(new AssistantMessage(text, "", false));
+                    ctx.emit(ctx.event(ChatEventType.TEXT_DELTA)
+                            .text(text)
+                            .index(index)
+                            .raw(oData)
+                            .build());
                     return true;
                 }
             }
         } else if ("thought_summary".equals(deltaType)) {
-            // 提取摘要文本
-            ONode summary = delta.getOrNull("summary");
-            if (summary != null && summary.isArray()) {
+            // 当前协议为单个 content；兼容早期 summary 数组。
+            ONode summary = delta.getOrNull("content");
+            if (summary == null) summary = delta.getOrNull("summary");
+            if (summary != null) {
                 String summaryText = extractContentArrayText(summary);
                 if (Utils.isNotEmpty(summaryText)) {
-                    // thought 的 summary 增量作为 thinking 内容发出
+                    // thought 的 summary 增量直接进入思考事件通道
                     if (!acc.in_thinking) {
-                        acc.addContentItem(new AssistantMessage("", "", true));
                         acc.in_thinking = true;
                     }
-                    acc.addContentItem(new AssistantMessage("",summaryText, true));
+                    ctx.emit(ctx.event(ChatEventType.THINKING_DELTA)
+                            .text(summaryText)
+                            .index(index)
+                            .raw(oData)
+                            .build());
                     return true;
                 }
             }
+        } else if ("image".equals(deltaType) || "audio".equals(deltaType) || "video".equals(deltaType)) {
+            ContentBlock block = parseInteractionContentItem(delta);
+            if (block != null) {
+                ctx.emit(ctx.event(ChatEventType.MEDIA_DONE)
+                        .itemId("step:" + index).index(index).block(block).raw(oData).build());
+                return true;
+            }
+        } else if ("document".equals(deltaType)) {
+            ctx.emit(ctx.event(ChatEventType.RAW).rawType("step.delta")
+                    .subType("document").index(index).raw(oData).build());
         } else if ("arguments_delta".equals(deltaType)) {
+            if (InteractionStepType.FUNCTION_CALL != stepAcc.stepType) return false;
             String argsDelta = delta.get("arguments").getString();
             if (Utils.isNotEmpty(argsDelta)) {
                 stepAcc.argumentsBuilder.append(argsDelta);
+                emitFunctionStartIfReady(ctx, index, stepAcc, false);
+                emitPendingFunctionArguments(ctx, index, stepAcc, oData);
             }
         }
 
@@ -603,11 +675,42 @@ public class GeminiInteractionsResponseParser {
             }
         }
     }
+    private void mergeFunctionIdentity(StepAccumulator stepAcc, ONode step) {
+        if (step == null) return;
+        String name = step.get("name").getString();
+        String id = step.get("id").getString();
+        if (Utils.isEmpty(id)) id = step.get("call_id").getString();
+        if (Utils.isNotEmpty(name)) stepAcc.functionName = name;
+        if (Utils.isNotEmpty(id)) stepAcc.callId = id;
+    }
+
+    private void emitFunctionStartIfReady(ChatStreamContext ctx, int index, StepAccumulator stepAcc,
+                                          boolean allowFallbackId) {
+        if (stepAcc.startEmitted || Utils.isEmpty(stepAcc.functionName)) return;
+        if (Utils.isEmpty(stepAcc.callId)) {
+            if (!allowFallbackId) return;
+            stepAcc.callId = stepAcc.functionName + "_" + index;
+        }
+        ToolCall startCall = new ToolCall("idx:" + index, stepAcc.callId, stepAcc.functionName, null, null);
+        ctx.emit(ctx.event(ChatEventType.TOOL_CALL_START).toolCall(startCall)
+                .toolCallId(stepAcc.callId).index(index).build());
+        stepAcc.startEmitted = true;
+    }
+
+    private void emitPendingFunctionArguments(ChatStreamContext ctx, int index, StepAccumulator stepAcc, ONode raw) {
+        if (!stepAcc.startEmitted || stepAcc.emittedArgumentsLength >= stepAcc.argumentsBuilder.length()) return;
+        String delta = stepAcc.argumentsBuilder.substring(stepAcc.emittedArgumentsLength);
+        stepAcc.emittedArgumentsLength = stepAcc.argumentsBuilder.length();
+        ctx.emit(ctx.event(ChatEventType.TOOL_CALL_ARGS_DELTA)
+                .toolCallId(stepAcc.callId).text(delta).index(index).raw(raw).build());
+    }
+
     /**
      * 处理 step.stop 事件
      * <p>
-     * 完成步骤累积，发出最终消息（如有必要）。
-     * function_call 步骤在此处完成并发出 ToolCall。
+     * 这里只释放步骤私有状态。工具参数已经通过 START/ARGS_DELTA 进入 core 聚合器，
+     * {@code TOOL_CALL_END} 必须由 core 在最终 ToolCall 组装完成后唯一发出。
+     * </p>
      */
     private boolean handleStepStop(ChatStreamContext ctx, ONode oData) {
         ChatAccumulator acc = ctx.getAccumulator();
@@ -616,22 +719,27 @@ public class GeminiInteractionsResponseParser {
         StepAccumulator stepAcc = stepAccumulators(ctx).remove(index);
         if (stepAcc == null) return false;
 
-        // function_call 步骤完成
-        if (InteractionStepType.FUNCTION_CALL == stepAcc.stepType) {
-            // 结束 thinking 状态
-            if (acc.in_thinking) {
-                acc.addContentItem(new AssistantMessage("", "", true));
-                acc.in_thinking = false;
-            }
+        if (InteractionStepType.GOOGLE_SEARCH_RESULT == stepAcc.stepType) {
+            emitGoogleSearchResults(ctx, oData.getOrNull("step"), stepAcc.emittedSearchResultKeys);
+        }
 
-            // 从 step.start 中保存的 call info 构建 ToolCall
-            // call info 应在之前的 step.start 或关联数据中
-            ToolCall toolCall = buildToolCallFromAccumulator(stepAcc);
-            if (toolCall != null) {
-                acc.addContentItem(new AssistantMessage("", "", false, null, null,
-                                Collections.singletonList(toolCall), null));
-                return true;
+        if (InteractionStepType.FUNCTION_CALL == stepAcc.stepType) {
+            mergeFunctionIdentity(stepAcc, oData.getOrNull("step"));
+            emitFunctionStartIfReady(ctx, index, stepAcc, true);
+            emitPendingFunctionArguments(ctx, index, stepAcc, oData);
+            if (Utils.isNotEmpty(acc.thinkingSignature)
+                    && !Boolean.TRUE.equals(ctx.attrAs(ATTR_SIGNATURE_BOUND))) {
+                ToolCall call = new ToolCall("idx:" + index, stepAcc.callId,
+                        stepAcc.functionName, null, null);
+                acc.putTerminalProtocolState(GeminiMessageStateSupport.INTERACTIONS_PROTOCOL_ID,
+                        GeminiMessageStateSupport.createSignatureState(call, 0, acc.thinkingSignature));
+                ctx.attrPut(ATTR_SIGNATURE_BOUND, true);
             }
+        }
+
+        // thinking -> function_call 的边界由事件归一化器根据工具事件自动闭合。
+        if (acc.in_thinking) {
+            acc.in_thinking = false;
         }
 
         return false;
@@ -642,31 +750,31 @@ public class GeminiInteractionsResponseParser {
      */
     private void handleInteractionCompleted(ChatAccumulator acc, ONode oData) {
         ONode interaction = oData.getOrNull("interaction");
-        if (interaction != null) {
-            String status = interaction.get("status").getString();
-            if ("completed".equals(status)) {
-                acc.setFinished(true);
-                acc.lastFinishReason = "stop";
-            } else if ("requires_action".equals(status)) {
-                acc.setFinished(true);
-                acc.lastFinishReason = "tool_calls";
-            } else if ("failed".equals(status)) {
-                ONode oError = interaction.getOrNull("error");
-                if (oError != null) {
-                    String errorMsg = oError.get("message").getString();
-                    if (Utils.isNotEmpty(errorMsg)) {
-                        acc.setError(new ChatException(errorMsg));
-                    }
-                }
-                acc.setFinished(true);
-                acc.lastFinishReason = "error";
-            }
+        if (interaction == null) interaction = oData;
+        applyInteractionStatus(acc, interaction);
+        ONode usage = interaction.getOrNull("usage");
+        if (usage != null) parseUsage(acc, usage);
+    }
 
-            // usage
-            ONode oUsage = interaction.getOrNull("usage");
-            if (oUsage != null) {
-                parseUsage(acc, oUsage);
-            }
+    private void handleInteractionStatus(ChatStreamContext ctx, ONode data) {
+        ONode interaction = data.getOrNull("interaction");
+        if (interaction == null) interaction = data;
+        ctx.setProviderResponseId(responseIdOf(data));
+        applyInteractionStatus(ctx.getAccumulator(), interaction);
+        ctx.emit(ctx.event(ChatEventType.STATUS)
+                .rawType("interaction.status_update")
+                .itemId(responseIdOf(data)).raw(data).build());
+    }
+
+    private void applyInteractionStatus(ChatAccumulator acc, ONode interaction) {
+        String status = interaction.get("status").getString();
+        if (!isTerminalStatus(status)) return;
+        acc.setFinished(true);
+        acc.lastFinishReason = mapStatusToFinishReason(status);
+        if ("failed".equals(status)) {
+            ONode error = interaction.getOrNull("error");
+            String message = error == null ? null : error.get("message").getString();
+            acc.setError(new ChatException(Utils.isEmpty(message) ? "Gemini interaction failed" : message));
         }
     }
 
@@ -705,40 +813,6 @@ public class GeminiInteractionsResponseParser {
         }
 
         return new ToolCall(callId, callId, name, argsStr, argsMap);
-    }
-
-    /**
-     * 从 StepAccumulator 构建 ToolCall
-     */
-    private ToolCall buildToolCallFromAccumulator(StepAccumulator acc) {
-        if (Utils.isEmpty(acc.functionName)) return null;
-
-        String callId = acc.callId;
-        if (Utils.isEmpty(callId)) {
-            callId = acc.functionName + "_" + System.currentTimeMillis();
-        }
-
-        // 流式解析出口净化：截断损坏的 arguments 禁止入历史（会毒化会话）
-        String argsStr = ToolCallJsonSanitizer.sanitizeArguments(
-                acc.argumentsBuilder.length() > 0 ? acc.argumentsBuilder.toString() : null,
-                acc.functionName);
-
-        Map<String, Object> argsMap = null;
-        try {
-            ONode argsNode = ONode.ofJson(argsStr);
-            if (argsNode.isObject()) {
-                argsMap = argsNode.toBean(Map.class);
-            }
-        } catch (Exception e) {
-            // ignore parse error
-        }
-
-        ToolCall toolCall = new ToolCall(callId, callId, acc.functionName, argsStr, argsMap);
-        if (Utils.isNotEmpty(acc.signature)) {
-            toolCall.setThoughtSignature(acc.signature);
-        }
-
-        return toolCall;
     }
 
     /**
@@ -782,7 +856,7 @@ public class GeminiInteractionsResponseParser {
         }
         
         if (media.isEmpty()) {
-            return new AssistantMessage(text.toString(), "", false);
+            return new AssistantMessage(text.toString());
         }
     
         List<ContentBlock> blocksForMsg = new ArrayList<>();
@@ -790,9 +864,31 @@ public class GeminiInteractionsResponseParser {
             blocksForMsg.add(TextBlock.of(text.toString()));
         }
         blocksForMsg.addAll(media);
-        return new AssistantMessage(text.toString(), "",false, null, null, null, null, blocksForMsg);
+        return new AssistantMessage(text.toString(), "", null, blocksForMsg);
     }
     
+    /**
+     * 将消息中的媒体逐块投影为 MEDIA_DONE；事件本身负责写入累积器。
+     */
+    private void emitMediaEvents(ChatStreamContext ctx, AssistantMessage message, int messageIndex) {
+        if (message == null || !message.hasMedia()) {
+            return;
+        }
+
+        int blockIndex = -1;
+        for (ContentBlock block : message.getBlocks()) {
+            blockIndex++;
+            if (block == null || block instanceof TextBlock) {
+                continue;
+            }
+            ctx.emit(ctx.event(ChatEventType.MEDIA_DONE)
+                    .itemId("message:" + messageIndex + ":block:" + blockIndex)
+                    .index(blockIndex)
+                    .block(block)
+                    .build());
+        }
+    }
+
     /**
      * 从 Content[] 数组中提取文本
      * <p>
@@ -861,7 +957,18 @@ public class GeminiInteractionsResponseParser {
             return Utils.isEmpty(text) ? null : TextBlock.of(text);
         }
     
-        if ("inline_data".equals(type) || item.hasKey("data") || item.hasKey("inline_data") || item.hasKey("inlineData")) {
+        if ("image".equals(type) || "audio".equals(type) || "video".equals(type)) {
+            String mime = item.get("mime_type").getString();
+            if (Utils.isEmpty(mime)) mime = item.get("mimeType").getString();
+            String data = item.get("data").getString();
+            String uri = item.get("uri").getString();
+            if (Utils.isEmpty(mime)) {
+                mime = "audio".equals(type) ? "audio/mpeg" : "video".equals(type) ? "video/mp4" : "image/jpeg";
+            }
+            return createMediaByMime(mime, uri, data);
+        }
+
+        if ("inline_data".equals(type) || item.hasKey("inline_data") || item.hasKey("inlineData")) {
             String mime = item.get("mime_type").getString();
             if (Utils.isEmpty(mime)) {
                 mime = item.get("mimeType").getString();
@@ -952,11 +1059,143 @@ public class GeminiInteractionsResponseParser {
                 return "stop";
             case "requires_action":
                 return "tool_calls";
-            case "failed":
-                return "error";
-            default:
-                return status;
+            case "failed": return "error";
+            case "cancelled": return "cancelled";
+            case "incomplete": return "incomplete";
+            case "budget_exceeded": return "length";
+            default: return null;
         }
+    }
+
+    private boolean isTerminalStatus(String status) {
+        return "completed".equals(status) || "requires_action".equals(status)
+                || "failed".equals(status) || "cancelled".equals(status)
+                || "incomplete".equals(status) || "budget_exceeded".equals(status);
+    }
+
+    private void emitServerToolSnapshot(ChatStreamContext ctx, ChatEventType phase,
+                                        InteractionStepType type, ONode step) {
+        ctx.emit(ctx.event(phase).rawType("step").subType(type.getApiValue())
+                .itemId(step.get("id").getString()).raw(step).build());
+    }
+
+    /**
+     * 只投影 google_search_result 中明确存在的逐项网页结果。
+     *
+     * <p>Interactions 当前常见的 result 仅包含 search_suggestions，这属于服务端工具结果载荷，
+     * 不是网页结果列表。只有 result/results/search_results（或其对象包裹层）实际提供数组，且数组项
+     * 能提取 url/uri 时，才发出类型化 SEARCH_RESULT；空的生命周期 step 仍只走 SERVER_TOOL_*。</p>
+     */
+    private void emitGoogleSearchResults(ChatStreamContext ctx, ONode step, Set<String> emittedKeys) {
+        ONode items = findGoogleSearchResultItems(step);
+        if (items == null) {
+            return;
+        }
+
+        int itemIndex = -1;
+        for (ONode item : items.getArray()) {
+            itemIndex++;
+            SearchResult result = parseGoogleSearchResult(item, itemIndex);
+            if (result == null) {
+                continue;
+            }
+
+            String identity = Utils.isNotEmpty(result.getId()) ? "id:" + result.getId() : "url:" + result.getUrl();
+            String key = "index:" + itemIndex + ':' + identity;
+            if (emittedKeys != null && emittedKeys.add(key) == false) {
+                continue;
+            }
+
+            ctx.emit(ctx.event(ChatEventType.SEARCH_RESULT)
+                    .rawType("step")
+                    .subType(InteractionStepType.GOOGLE_SEARCH_RESULT.getApiValue())
+                    .itemId(result.getId())
+                    .index(result.getIndex() == null ? itemIndex : result.getIndex())
+                    .text(result.getUrl())
+                    .searchResult(result)
+                    .raw(item)
+                    .build());
+        }
+    }
+
+    private ONode findGoogleSearchResultItems(ONode step) {
+        if (step == null || step.isObject() == false) {
+            return null;
+        }
+
+        String[] fields = {"result", "results", "search_results"};
+        for (String field : fields) {
+            ONode value = step.getOrNull(field);
+            if (value == null) {
+                continue;
+            }
+            if (value.isArray()) {
+                return value;
+            }
+            if (value.isObject()) {
+                ONode nested = firstArray(value, "results", "search_results", "items");
+                if (nested != null) {
+                    return nested;
+                }
+            }
+        }
+        return null;
+    }
+
+    private ONode firstArray(ONode node, String... fields) {
+        for (String field : fields) {
+            ONode value = node.getOrNull(field);
+            if (value != null && value.isArray()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private SearchResult parseGoogleSearchResult(ONode item, int fallbackIndex) {
+        if (item == null || item.isObject() == false) {
+            return null;
+        }
+
+        ONode source = item;
+        ONode web = item.getOrNull("web");
+        if (web != null && web.isObject()) {
+            source = web;
+        }
+
+        String url = firstNonEmpty(source, "url", "uri");
+        if (Utils.isEmpty(url)) {
+            return null;
+        }
+
+        Integer index = fallbackIndex;
+        if (item.hasKey("index")) {
+            index = item.get("index").getInt();
+        } else if (source != item && source.hasKey("index")) {
+            index = source.get("index").getInt();
+        }
+
+        String id = firstNonEmpty(item, "id");
+        if (Utils.isEmpty(id) && source != item) {
+            id = firstNonEmpty(source, "id");
+        }
+
+        return new SearchResult()
+                .index(index)
+                .id(id)
+                .title(firstNonEmpty(source, "title"))
+                .url(url)
+                .snippet(firstNonEmpty(source, "snippet", "summary", "description"));
+    }
+
+    private String firstNonEmpty(ONode node, String... fields) {
+        for (String field : fields) {
+            String value = node.get(field).getString();
+            if (Utils.isNotEmpty(value)) {
+                return value;
+            }
+        }
+        return null;
     }
 
     /**
@@ -973,11 +1212,32 @@ public class GeminiInteractionsResponseParser {
      * }</pre>
      */
     private void parseUsage(ChatAccumulator acc, ONode oUsage) {
-        long promptTokens = oUsage.get("total_input_tokens").getLong();
+        long toolUseTokens = oUsage.get("total_tool_use_tokens").getLong();
+        long promptTokens = oUsage.get("total_input_tokens").getLong() + toolUseTokens;
+        long thinkingTokens = oUsage.get("total_thought_tokens").getLong();
         long completionTokens = oUsage.get("total_output_tokens").getLong();
         long totalTokens = oUsage.get("total_tokens").getLong();
+        long cachedTokens = oUsage.get("total_cached_tokens").getLong();
+        long webSearchRequests = 0L;
+        ONode groundingCounts = oUsage.getOrNull("grounding_tool_count");
+        if (groundingCounts != null && groundingCounts.isArray()) {
+            for (ONode count : groundingCounts.getArray()) {
+                String type = count.get("type").getString();
+                if (Utils.isNotEmpty(type) && type.toLowerCase().contains("search")) {
+                    webSearchRequests += count.get("count").getLong();
+                }
+            }
+        }
 
-        acc.setUsage(new AiUsage(promptTokens, 0L, completionTokens, totalTokens, oUsage));
+        acc.setUsage(AiUsage.builder()
+                .promptTokens(promptTokens)
+                .thinkTokens(thinkingTokens)
+                .completionTokens(completionTokens)
+                .totalTokens(totalTokens)
+                .cacheReadInputTokens(cachedTokens)
+                .webSearchRequests(webSearchRequests)
+                .source(oUsage)
+                .build());
     }
 
     /**
@@ -988,10 +1248,13 @@ public class GeminiInteractionsResponseParser {
     private static class StepAccumulator {
         // 未建模的步骤类型为 null：后绥按类型分叉时自然不命中，与旧字符串比较等价
         final InteractionStepType stepType;
-        final StringBuilder argumentsBuilder = new StringBuilder();
         String functionName;
         String callId;
-        String signature;
+        final StringBuilder argumentsBuilder = new StringBuilder();
+        int emittedArgumentsLength;
+        final Set<String> emittedSearchResultKeys = new HashSet<>();
+
+        boolean startEmitted;
 
         StepAccumulator(InteractionStepType stepType) {
             this.stepType = stepType;

@@ -2,6 +2,7 @@ package features.ai.react.intercept;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.noear.snack4.ONode;
 import org.mockito.ArgumentCaptor;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentEvent;
@@ -15,8 +16,11 @@ import org.noear.solon.ai.agent.react.intercept.compress.*;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.source.Citation;
+import org.noear.solon.ai.chat.source.SearchResult;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.rag.Document;
@@ -24,7 +28,9 @@ import org.noear.solon.ai.rag.RepositoryStorable;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -116,7 +122,7 @@ public class ContextCompressionInterceptorTest {
 
         // 构造原子对 (Action + Observation)
         List<ToolCall> toolCalls = Arrays.asList(new ToolCall("c1", "c1", "t1", "{}", Utils.asMap()));
-        AssistantMessage action = new AssistantMessage("call","", false, null, null, toolCalls, null);
+        AssistantMessage action = new AssistantMessage("call", "", toolCalls, null);
         workingMemory.addMessage(action);
         workingMemory.addMessage(ChatMessage.ofTool("res", "t1", "c1"));
 
@@ -175,7 +181,7 @@ public class ContextCompressionInterceptorTest {
         }
 
         List<ToolCall> toolCalls = Arrays.asList(new ToolCall("0", "call_1", "t1", "{}", Utils.asMap()));
-        AssistantMessage action = new AssistantMessage("call","", false, null, null, toolCalls, null);
+        AssistantMessage action = new AssistantMessage("call", "", toolCalls, null);
         ToolMessage toolResult = ChatMessage.ofTool("result", "t1", "call_1");
         workingMemory.addMessage(action);
         workingMemory.addMessage(toolResult);
@@ -210,7 +216,7 @@ public class ContextCompressionInterceptorTest {
         }
 
         List<ToolCall> toolCalls = Arrays.asList(new ToolCall("0", "call_1", "t1", "{}", Utils.asMap()));
-        AssistantMessage danglingAction = new AssistantMessage("call", "", false, null, null, toolCalls, null);
+        AssistantMessage danglingAction = new AssistantMessage("call", "", toolCalls, null);
         workingMemory.addMessage(danglingAction);
         workingMemory.addMessage(ChatMessage.ofUser("continue"));
 
@@ -235,7 +241,7 @@ public class ContextCompressionInterceptorTest {
         }
 
         // 模拟 LLM 返回纯思考响应：content 只有 <think> 标签，getResultContent() 为空，无 tool_calls
-        AssistantMessage emptyThought = new AssistantMessage("", "",false, null, null, null, null);
+        AssistantMessage emptyThought = new AssistantMessage("", "");
         workingMemory.addMessage(emptyThought);
         workingMemory.addMessage(ChatMessage.ofUser("continue"));
 
@@ -319,7 +325,7 @@ public class ContextCompressionInterceptorTest {
                 new ToolCall("0", "call_1", "t1", "{}", Utils.asMap()),
                 new ToolCall("1", "call_2", "t2", "{}", Utils.asMap())
         );
-        AssistantMessage action = new AssistantMessage("call", "",false, null, null, toolCalls, null);
+        AssistantMessage action = new AssistantMessage("call", "", toolCalls, null);
         ToolMessage toolResult = ChatMessage.ofTool("result1", "t1", "call_1");
         workingMemory.addMessage(action);
         workingMemory.addMessage(toolResult);
@@ -350,7 +356,7 @@ public class ContextCompressionInterceptorTest {
                 new ToolCall("0", "call_1", "t1", "{}", Utils.asMap()),
                 new ToolCall("1", "call_2", "t2", "{}", Utils.asMap())
         );
-        AssistantMessage action = new AssistantMessage("call", "",false, null, null, toolCalls, null);
+        AssistantMessage action = new AssistantMessage("call", "", toolCalls, null);
         ToolMessage toolResult1 = ChatMessage.ofTool("result1", "t1", "call_1");
         ToolMessage unrelatedToolResult = ChatMessage.ofTool("bad", "bad", "call_bad");
         ToolMessage toolResult2 = ChatMessage.ofTool("result2", "t2", "call_2");
@@ -703,7 +709,7 @@ public class ContextCompressionInterceptorTest {
 
         // 触发工具调用的 Assistant + 一条超大 ToolMessage（模拟读了个超大文件）
         List<ToolCall> toolCalls = Arrays.asList(new ToolCall("0", "call_1", "bash", "{}", Utils.asMap()));
-        AssistantMessage toolCallMsg = new AssistantMessage("call", "",false, null, null, toolCalls, null);
+        AssistantMessage toolCallMsg = new AssistantMessage("call", "", toolCalls, null);
         workingMemory.addMessage(toolCallMsg);
 
         StringBuilder huge = new StringBuilder();
@@ -824,7 +830,7 @@ public class ContextCompressionInterceptorTest {
         }
         String thought = huge.toString();
         List<ToolCall> toolCalls = Arrays.asList(new ToolCall("0", "call_1", "bash", "{}", Utils.asMap()));
-        AssistantMessage am = new AssistantMessage(thought, "",false, null, null, toolCalls, null);
+        AssistantMessage am = new AssistantMessage(thought, "", toolCalls, null);
         workingMemory.addMessage(am);
         // 配对的 ToolMessage，避免被悬挂清理逻辑移除
         workingMemory.addMessage(ChatMessage.ofTool("result", "bash", "call_1"));
@@ -897,6 +903,111 @@ public class ContextCompressionInterceptorTest {
                 "截断应包含标记");
     }
 
+    @Test
+    public void testOversizedThinkingOnlyMessageGetsTruncated() {
+        ChatMessage goal = ChatMessage.ofUser("Goal").addMetadata(AgentTrace.META_FIRST, 1);
+        workingMemory.addMessage(goal);
+
+        String thinking = repeat("thinking-detail ", 5_000);
+        AssistantMessage thinkingOnly = new AssistantMessage("", thinking);
+        thinkingOnly.addMetadata("keep", "yes");
+        thinkingOnly.addMetadata("token_size", 1);
+        workingMemory.addMessage(thinkingOnly);
+
+        interceptor.setPerMessageCap(200);
+        interceptor.onReasonStart(trace, null);
+
+        AssistantMessage after = workingMemory.getMessages().stream()
+                .filter(m -> m instanceof AssistantMessage)
+                .map(m -> (AssistantMessage) m)
+                .findFirst().orElse(null);
+        assertNotNull(after);
+        assertNotSame(thinkingOnly, after);
+        assertEquals("", after.getText());
+        assertTrue(after.getThinking().length() < thinking.length());
+        assertTrue(after.getThinking().contains("内容过大已截断"));
+        assertEquals("yes", after.getMetadataAs("keep"));
+        assertFalse(after.hasMetadata("token_size"));
+    }
+
+    @Test
+    public void testOversizedThinkingOnlyWithProtocolStateIsKeptConservatively() {
+        String thinking = repeat("thinking ", 5_000);
+        AssistantMessage extended = AssistantMessage.snapshot(
+                "", thinking, null, null, null, null,
+                Collections.singletonMap("anthropic.messages", new MessageProtocolState(1,
+                        Utils.<String, Object>asMap("signature", "sig"))));
+        workingMemory.addMessage(ChatMessage.ofUser("Goal").addMetadata(AgentTrace.META_FIRST, 1));
+        workingMemory.addMessage(extended);
+
+        interceptor.setPerMessageCap(200);
+        interceptor.onReasonStart(trace, null);
+
+        assertTrue(workingMemory.getMessages().contains(extended));
+        assertEquals(thinking, extended.getThinking());
+        assertTrue(extended.hasProtocolState("anthropic.messages"));
+    }
+
+    @Test
+    public void testOversizedMixedAssistantMessageIsKeptConservatively() {
+        String text = repeat("answer ", 5_000);
+        String thinking = repeat("thinking ", 5_000);
+        AssistantMessage mixed = new AssistantMessage(text, thinking);
+        workingMemory.addMessage(ChatMessage.ofUser("Goal").addMetadata(AgentTrace.META_FIRST, 1));
+        workingMemory.addMessage(mixed);
+
+        interceptor.setPerMessageCap(200);
+        interceptor.onReasonStart(trace, null);
+
+        assertTrue(workingMemory.getMessages().contains(mixed));
+        assertEquals(text, mixed.getText());
+        assertEquals(thinking, mixed.getThinking());
+    }
+
+    @Test
+    public void testOversizedThinkingOnlyWithProtocolExtensionsIsKeptConservatively() {
+        String thinking = repeat("thinking ", 5_000);
+        ONode legacyJson = new ONode()
+                .set("role", "assistant")
+                .set("text", "")
+                .set("thinking", thinking)
+                .set("contentRaw", "vendor-raw")
+                .set("reasoningFieldName", "reasoning_content");
+        legacyJson.getOrNew("searchResultsRaw").asArray().addNew().set("query", "important");
+        AssistantMessage extended = (AssistantMessage) ChatMessage.fromJson(legacyJson.toJson());
+        workingMemory.addMessage(ChatMessage.ofUser("Goal").addMetadata(AgentTrace.META_FIRST, 1));
+        workingMemory.addMessage(extended);
+
+        interceptor.setPerMessageCap(200);
+        interceptor.onReasonStart(trace, null);
+
+        assertTrue(workingMemory.getMessages().contains(extended));
+        assertEquals(thinking, extended.getThinking());
+        assertEquals("vendor-raw", extended.getContentRaw());
+        assertEquals("important", extended.getSearchResultsRaw().get(0).get("query"));
+        assertEquals("reasoning_content", extended.getReasoningFieldName());
+    }
+
+    @Test
+    public void testOversizedAssistantWithTypedSourcesIsKeptConservatively() {
+        String text = repeat("answer ", 5_000);
+        AssistantMessage extended = AssistantMessage.snapshot(
+                text, "", null, null,
+                Arrays.asList(new SearchResult().title("source").url("https://source.example")),
+                Arrays.asList(new Citation().type("url_citation").citedText("quoted")),
+                null);
+        workingMemory.addMessage(ChatMessage.ofUser("Goal").addMetadata(AgentTrace.META_FIRST, 1));
+        workingMemory.addMessage(extended);
+
+        interceptor.setPerMessageCap(200);
+        interceptor.onReasonStart(trace, null);
+
+        assertTrue(workingMemory.getMessages().contains(extended));
+        assertEquals("https://source.example", extended.getSearchResults().get(0).getUrl());
+        assertEquals("quoted", extended.getCitations().get(0).getCitedText());
+    }
+
+
     /**
      * 测试 CompositeCompressionStrategy 的级联合并行为。
      * 所有子策略应全部执行，结果按顺序以 Markdown 分割线合并。
@@ -961,7 +1072,7 @@ public class ContextCompressionInterceptorTest {
         ToolCall tc = new ToolCall("0", "call_1", "read", "{\"file_path\":\"src/App.java\"}",
                 java.util.Collections.singletonMap("file_path", "src/App.java"));
         List<ToolCall> toolCalls = java.util.Collections.singletonList(tc);
-        AssistantMessage am = new AssistantMessage("","", false, null, null, toolCalls, null);
+        AssistantMessage am = new AssistantMessage("", "", toolCalls, null);
 
         String formatted = CompressionUtil.formatMessageForCompression(am);
 
@@ -976,23 +1087,32 @@ public class ContextCompressionInterceptorTest {
     }
 
     /**
-     * 测试 CompressionUtil.formatMessageForCompression 同时保留 thought 和 tool_call。
+     * 测试 CompressionUtil.formatMessageForCompression 分别保留 thinking、正文与 tool_call。
      */
     @Test
-    public void testCompressionUtil_PreservesThoughtAndAction() {
+    public void testCompressionUtil_PreservesThoughtTextAndAction() {
         ToolCall tc = new ToolCall("0", "call_1", "bash", "{\"command\":\"ls -la\"}",
                 java.util.Collections.singletonMap("command", "ls -la"));
         List<ToolCall> toolCalls = java.util.Collections.singletonList(tc);
-        AssistantMessage am = new AssistantMessage("我需要先查看目录结构", "",false, null, null, toolCalls, null);
+        AssistantMessage am = new AssistantMessage("执行正文", "我需要先查看目录结构", toolCalls, null);
 
         String formatted = CompressionUtil.formatMessageForCompression(am);
 
-        // thought 和 action 都应保留
-        assertTrue(formatted.contains("[Thought]"), "应保留思考文本标记");
-        assertTrue(formatted.contains("我需要先查看目录结构"), "应保留思考内容");
+        // thinking、正文和 action 都应保留且通道不混淆
+        assertTrue(formatted.contains("[Thought]: 我需要先查看目录结构"), "应保留独立思考内容");
+        assertTrue(formatted.contains("[Text]: 执行正文"), "应保留正文内容");
         assertTrue(formatted.contains("[Action]"), "应保留动作标记");
         assertTrue(formatted.contains("bash"), "应保留工具名称");
         assertTrue(formatted.contains("ls -la"), "应保留工具参数");
+    }
+
+    @Test
+    public void testCompressionUtil_ThinkingOnlyDoesNotBecomeEmptyAssistantLine() {
+        String formatted = CompressionUtil.formatMessageForCompression(
+                new AssistantMessage("", "only thinking"));
+
+        assertEquals("[Thought]: only thinking", formatted);
+        assertFalse(formatted.startsWith("ASSISTANT:"));
     }
 
     /**
@@ -1077,7 +1197,7 @@ public class ContextCompressionInterceptorTest {
         List<ToolCall> calls = Arrays.asList(
                 new ToolCall("0", "call_1", "t1", "{}", Utils.asMap()),
                 new ToolCall("1", "call_2", "t2", "{}", Utils.asMap()));
-        AssistantMessage action = new AssistantMessage("call", "",false, null, null, calls, null);
+        AssistantMessage action = new AssistantMessage("call", "", calls, null);
         ToolMessage result1 = ChatMessage.ofTool(repeat("result1 ", 1000), "t1", "call_1");
         ToolMessage result2 = ChatMessage.ofTool(repeat("result2 ", 1000), "t2", "call_2");
         workingMemory.addMessage(action);
@@ -1343,10 +1463,10 @@ public class ContextCompressionInterceptorTest {
         when(cfg.getStyle()).thenReturn(org.noear.solon.ai.agent.react.ReActStyle.NATIVE_TOOL);
         when(trace.getConfig()).thenReturn(cfg);
 
-        AssistantMessage nullIdAction = new AssistantMessage("call", "",false, null, null,
+        AssistantMessage nullIdAction = new AssistantMessage("call", "",
                 Arrays.asList(new ToolCall("0", null, "t1", "{}", Utils.asMap())), null);
         ToolMessage nullIdResult = ChatMessage.ofTool("result", "t1", null);
-        AssistantMessage duplicateIdAction = new AssistantMessage("call", "", false, null, null,
+        AssistantMessage duplicateIdAction = new AssistantMessage("call", "",
                 Arrays.asList(new ToolCall("0", "same", "t1", "{}", Utils.asMap()),
                         new ToolCall("1", "same", "t2", "{}", Utils.asMap())), null);
         ToolMessage duplicateIdResult = ChatMessage.ofTool("result", "t1", "same");
@@ -1375,7 +1495,7 @@ public class ContextCompressionInterceptorTest {
         when(cfg.getStyle()).thenReturn(org.noear.solon.ai.agent.react.ReActStyle.NATIVE_TOOL);
         when(trace.getConfig()).thenReturn(cfg);
 
-        AssistantMessage action = new AssistantMessage("call", "",false, null, null,
+        AssistantMessage action = new AssistantMessage("call", "",
                 Arrays.asList(new ToolCall("0", null, "read", "{}", Utils.asMap()),
                         new ToolCall("1", null, "grep", "{}", Utils.asMap())), null);
         ToolMessage wrongFirst = ChatMessage.ofTool("result1", "grep", null);
@@ -1396,19 +1516,68 @@ public class ContextCompressionInterceptorTest {
     }
 
     @Test
-    public void testCustomStrategyResultIsStandardizedAsSummary() {
-        ChatMessage customSummary = ChatMessage.ofUser("custom summary");
-        CompressionStrategy strategy = (model, retries, currentTrace, messages) -> customSummary;
+    public void testCustomStrategyResultIsStandardizedAsDetachedSummary() throws Exception {
+        AssistantMessage shared = AssistantMessage.snapshot(
+                "custom summary", "", null, null, null, null,
+                Collections.singletonMap("vendor.protocol", new MessageProtocolState(1)));
+        CompressionStrategy strategy = (model, retries, currentTrace, messages) -> shared;
         ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, strategy);
-        workingMemory.addMessage(ChatMessage.ofUser("goal").addMetadata(AgentTrace.META_FIRST, 1));
-        for (int i = 0; i < 20; i++) {
-            workingMemory.addMessage(ChatMessage.ofAssistant("history " + i));
-        }
 
-        custom.onReasonStart(trace, null);
+        ChatMessage summary = invokeSafeCompress(custom, Arrays.<ChatMessage>asList(shared), 1_000);
 
-        assertEquals(Integer.valueOf(1), customSummary.getMetadataAs(ContextCompressionInterceptor.META_COMPRESSED));
-        assertTrue(workingMemory.getMessages().contains(customSummary));
+        assertNotNull(summary);
+        assertNotSame(shared, summary);
+        assertFalse(shared.hasMetadata(ContextCompressionInterceptor.META_COMPRESSED));
+        assertTrue(shared.hasProtocolState("vendor.protocol"));
+        assertEquals(Integer.valueOf(1), summary.getMetadataAs(ContextCompressionInterceptor.META_COMPRESSED));
+        assertFalse(((AssistantMessage) summary).hasProtocolStates());
+    }
+
+    @Test
+    public void testCustomAssistantSummaryDropsLegacyReplayCarriers() throws Exception {
+        ONode strategyNode = ONode.ofJson(
+                "{\"role\":\"assistant\",\"text\":\"new summary\",\"thinking\":\"thinking\"," +
+                        "\"contentRaw\":\"legacy-content\"," +
+                        "\"toolCallsRaw\":[{\"id\":\"legacy-raw\"}]," +
+                        "\"toolCalls\":[{\"index\":\"0\",\"id\":\"call-1\",\"name\":\"lookup\"," +
+                        "\"argumentsStr\":\"{}\",\"arguments\":{}," +
+                        "\"thoughtSignature\":\"legacy-signature\"}]," +
+                        "\"reasoningFieldName\":\"reasoning_content\"," +
+                        "\"protocolStates\":{\"vendor.protocol\":{\"version\":1,\"data\":{}}}}");
+        AssistantMessage strategyResult = (AssistantMessage) ChatMessage.fromJson(strategyNode);
+        CompressionStrategy strategy = (model, retries, currentTrace, messages) -> strategyResult;
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, strategy);
+
+        AssistantMessage summary = (AssistantMessage) invokeSafeCompress(custom,
+                Arrays.<ChatMessage>asList(ChatMessage.ofAssistant("history")), 1_000);
+
+        assertNotNull(summary);
+        assertEquals("new summary", summary.getText());
+        assertNull(summary.getContentRaw());
+        assertNull(summary.getToolCallsRaw());
+        assertNull(summary.getReasoningFieldName());
+        assertFalse(summary.hasProtocolStates());
+        assertNull(summary.getToolCalls().get(0).getThoughtSignature());
+        assertEquals("legacy-signature", strategyResult.getToolCalls().get(0).getThoughtSignature());
+        assertTrue(strategyResult.hasProtocolStates());
+    }
+
+    @Test
+    public void testOversizedUnsafeSummaryFailureDoesNotMutateOriginalHistory() throws Exception {
+        AssistantMessage sharedBase = ChatMessage.ofAssistant(repeat("history ", 500),
+                org.noear.solon.ai.chat.content.ImageBlock.ofUrl("https://example.com/shared.png"));
+        AssistantMessage sharedInput = AssistantMessage.snapshot(
+                sharedBase.getTextRaw(), sharedBase.getThinkingRaw(), sharedBase.getToolCalls(),
+                sharedBase.getBlocks(), null, null,
+                Collections.singletonMap("vendor.protocol", new MessageProtocolState(1)));
+        CompressionStrategy strategy = (model, retries, currentTrace, messages) -> messages.get(0);
+        ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, strategy);
+
+        assertNull(invokeSafeCompress(custom, Arrays.<ChatMessage>asList(sharedInput), 32));
+        assertFalse(sharedInput.hasMetadata(ContextCompressionInterceptor.META_COMPRESSED));
+        assertTrue(sharedInput.hasProtocolState("vendor.protocol"));
+        assertNull(sharedInput.getContentRaw());
+        assertEquals(2, sharedInput.getBlocks().size());
     }
 
     @Test
@@ -1469,7 +1638,7 @@ public class ContextCompressionInterceptorTest {
         when(cfg.getStyle()).thenReturn(org.noear.solon.ai.agent.react.ReActStyle.NATIVE_TOOL);
         when(trace.getConfig()).thenReturn(cfg);
 
-        AssistantMessage action = new AssistantMessage("call","", false, null, null,
+        AssistantMessage action = new AssistantMessage("call", "",
                 Arrays.asList(new ToolCall("0", "call_1", "t1", "{}", Utils.asMap())), null);
         ToolMessage result1 = ChatMessage.ofTool("result1", "t1", "call_1");
         ToolMessage result2 = ChatMessage.ofTool("result2", "t1", "call_1");
@@ -1542,10 +1711,54 @@ public class ContextCompressionInterceptorTest {
     }
 
     @Test
+    public void testAssistantRebuildOnlySupportsSingleSemanticChannel() throws Exception {
+        java.lang.reflect.Method method = ContextCompressionInterceptor.class.getDeclaredMethod(
+                "rebuildWithContent", ChatMessage.class, String.class);
+        method.setAccessible(true);
+
+        AssistantMessage mixed = new AssistantMessage("answer", "thinking", null,
+                Arrays.asList(TextBlock.of("answer")));
+        assertNull(method.invoke(interceptor, mixed, "truncated"),
+                "正文与思考混合消息不得二选一重建");
+
+        AssistantMessage thinkingOnly = new AssistantMessage("", "long thinking");
+        thinkingOnly.addMetadata("keep", "yes");
+        AssistantMessage rebuiltThinking = (AssistantMessage) method.invoke(
+                interceptor, thinkingOnly, "short thinking");
+        assertNotNull(rebuiltThinking);
+        assertEquals("short thinking", rebuiltThinking.getThinking());
+        assertEquals("", rebuiltThinking.getText());
+        assertEquals("yes", rebuiltThinking.getMetadataAs("keep"));
+
+        AssistantMessage textOnly = ChatMessage.ofAssistant("long answer");
+        AssistantMessage rebuiltText = (AssistantMessage) method.invoke(
+                interceptor, textOnly, "short answer");
+        assertNotNull(rebuiltText);
+        assertEquals("short answer", rebuiltText.getText());
+        assertFalse(rebuiltText.hasThinking());
+    }
+
+    @Test
+    public void testThinkingMessageIsNotCleanedAsEmptyShell() throws Exception {
+        AssistantMessage thinkingOnly = new AssistantMessage("", "thinking");
+
+        java.lang.reflect.Method method = ContextCompressionInterceptor.class.getDeclaredMethod(
+                "removeDanglingToolOutputs", List.class, boolean.class);
+        method.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<ChatMessage> result = (List<ChatMessage>) method.invoke(interceptor,
+                Arrays.asList(thinkingOnly), false);
+
+        assertTrue(result.contains(thinkingOnly));
+    }
+
+    @Test
     public void testUnsafeAssistantExtensionsAreNotRebuiltDuringTruncation() throws Exception {
-        List<java.util.Map> searchRaw = Arrays.asList(Utils.asMap("query", "important"));
-        AssistantMessage extended = new AssistantMessage("large content", "",false, "vendor-raw",
-                null, null, searchRaw, null).reasoningFieldName("reasoning_content");
+        AssistantMessage extended = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"large content\"," +
+                        "\"contentRaw\":\"vendor-raw\"," +
+                        "\"searchResultsRaw\":[{\"query\":\"important\"}]," +
+                        "\"reasoningFieldName\":\"reasoning_content\"}");
 
         java.lang.reflect.Method method = ContextCompressionInterceptor.class.getDeclaredMethod(
                 "rebuildWithContent", ChatMessage.class, String.class);
@@ -1609,7 +1822,7 @@ public class ContextCompressionInterceptorTest {
     @Test
     public void testProtocolCleanupDoesNotProtectShiftedVariableMessage() throws Exception {
         ChatMessage fixed = ChatMessage.ofUser("fixed").addMetadata(AgentTrace.META_FIRST, 1);
-        AssistantMessage invalidFixed = new AssistantMessage("", "",false, null, null, null, null);
+        AssistantMessage invalidFixed = new AssistantMessage("", "");
         invalidFixed.addMetadata(AgentTrace.META_FIRST, 1);
         ChatMessage shiftedVariable = ChatMessage.ofAssistant("shifted variable");
         ChatMessage recent = ChatMessage.ofAssistant("recent");
@@ -1665,7 +1878,7 @@ public class ContextCompressionInterceptorTest {
         when(response.hasContent()).thenReturn(true);
         when(response.getContent()).thenReturn("有效摘要");
 
-        AssistantMessage action = new AssistantMessage("call", "",false, null, null,
+        AssistantMessage action = new AssistantMessage("call", "",
                 Arrays.asList(new ToolCall("0", "call_1", "read", "{}", Utils.asMap())), null);
         ToolMessage output = ChatMessage.ofTool("result", "read", "call_1");
         ChatMessage recent = ChatMessage.ofAssistant("recent");
@@ -1675,6 +1888,14 @@ public class ContextCompressionInterceptorTest {
 
         assertNotNull(result);
         verify(request, times(2)).call();
+    }
+
+    private ChatMessage invokeSafeCompress(ContextCompressionInterceptor target,
+                                           List<ChatMessage> messages, int budget) throws Exception {
+        java.lang.reflect.Method method = ContextCompressionInterceptor.class.getDeclaredMethod(
+                "safeCompress", ChatModel.class, ReActTrace.class, List.class, int.class);
+        method.setAccessible(true);
+        return (ChatMessage) method.invoke(target, chatModel, trace, messages, budget);
     }
 
     private FunctionTool mockTool(String name, String description) {

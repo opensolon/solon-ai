@@ -1,6 +1,6 @@
 # Chat 事件模型（4.1）
 
-> `ChatRequestDesc.stream()` 在 4.1 起返回 `Flux<ChatEvent>`。`ChatEvent` 是不可变的语义事件；方言负责把供应商响应解析到 `ChatStreamContext`，核心负责统一内容项、事件边界和终态响应。本文只描述 `solon-ai-core` 中实际提供的 API。
+> `ChatRequestDesc.stream()` 在 4.1 起返回 `Flux<ChatEvent>`。职责边界固定为：`ChatEvent` 表达流式语义，`ChatAccumulator` 负责聚合，`AssistantMessage` 表达最终消息。方言负责把供应商响应解析到 `ChatStreamContext`，核心负责事件边界和终态响应。本文只描述 `solon-ai-core` 中实际提供的 API。
 
 ## 一、从哪里开始
 
@@ -157,7 +157,7 @@ Mono<ChatResponse> response = chatModel.prompt(query).stream()
 | `THINKING` | `THINKING_START`、`THINKING_DELTA`、`THINKING_END`、`THINKING_SIGNATURE`、`THINKING_REDACTED` | 思考增量或签名使用 `getText()` |
 | `TOOL_CALL` | `TOOL_CALL_START`、`TOOL_CALL_ARGS_DELTA`、`TOOL_CALL_END`、`TOOL_RESULT` | `getToolCall()`、`getToolCallId()`、参数增量 `getText()` |
 | `SERVER_TOOL` | `SERVER_TOOL_START`、`SERVER_TOOL_ARGS_DELTA`、`SERVER_TOOL_RESULT` | `getSubType()`、`getRaw()` 等 |
-| `MEDIA` | `CITATION`、`MEDIA_PARTIAL`、`MEDIA_DONE` | `getBlock()` |
+| `MEDIA` | `SEARCH_RESULT`、`CITATION`、`MEDIA_PARTIAL`、`MEDIA_DONE` | `getSearchResult()`、`getCitation()`、`getBlock()` |
 | `SAFETY` | `REFUSAL_DELTA`、`CONTENT_FILTER` | 拒答文本使用 `getText()` |
 | `META` | `USAGE`、`ERROR`、`RAW`、`CUSTOM` | `getUsage()`、`getError()`、`getRaw()` |
 
@@ -197,7 +197,8 @@ void handleToolEvent(ChatEvent e) {
 - `USAGE` 是某一步的用量事件，`getUsage()` 可能为空。
 - `STEP_END` 的 `getUsage()` 是该步用量。
 - `RESPONSE_END` 的 `getUsage()` 是整个 `stream()`（包括自动工具调用多步）的累计用量。
-- `RESPONSE_END` / `STEP_END` 的 `getResponse()` 是完整聚合；增量事件中的响应（如果有）只是当前帧快照。
+- `RESPONSE_END` / `STEP_END` 的 `getResponse()` 是完整聚合，`getMessage()` 为最终 `AssistantMessage`。
+- `USAGE` 可携带分片 `ChatResponse`，但该响应不包含最终 `AssistantMessage`；流式内容读取对应 `ChatEvent` 负载。
 
 ## 四、事件流不变量
 
@@ -252,8 +253,8 @@ void parseResponseJson(ChatStreamContext ctx, String respJson);
 
 方言可以：
 
-- 把正文、思考和工具调用写入 `ctx.getAccumulator()` 的内容项，由核心统一转换成 `TEXT_*`、`THINKING_*`、`TOOL_CALL_*`；
-- 对生命周期、服务端工具、引用、拒答、思考签名等扩展语义，使用 `ctx.emit(...)` 发射事件；
+- 正文、思考、工具调用、搜索结果、引用、媒体和用量通过 `ctx.emit(...)` 发射语义事件，核心会先归并到 `ChatAccumulator` 再投递；
+- 已解析成完整 `AssistantMessage` 的兼容路径可使用核心辅助发布方法；若需单独保存协议 metadata/raw 等终态载体，应使用 `ctx.getAccumulator().mergeTerminalMessage(...)`；
 - 使用 `ctx.event(type)` 创建事件。该构建器已经预填当前 `responseId`、供应商响应 id（如果已设置）和 `step`；
 - 使用 `ctx.attrPut` / `ctx.attrAs` 保存跨帧的方言私有状态；
 - 解析错误时写入 `ctx.getAccumulator().setError(...)`，已消费但没有语义内容时不发事件。
@@ -268,19 +269,30 @@ public void parseResponseJson(ChatStreamContext ctx, String json) {
 
     String text = readTextDelta(json);
     if (text != null && !text.isEmpty()) {
-        ctx.getAccumulator().addContentItem(new AssistantMessage(text));
+        ctx.emit(ctx.event(ChatEventType.TEXT_DELTA)
+                .text(text)
+                .build());
     }
 
-    String citationUrl = readCitation(json);
-    if (citationUrl != null) {
+    Citation citation = readCitation(json);
+    if (citation != null) {
         ctx.emit(ctx.event(ChatEventType.CITATION)
-                .block(buildCitation(citationUrl))
+                .citation(citation)
+                .text(citation.getUrl()) // 兼容只消费 text 的旧订阅方
+                .build());
+    }
+
+    SearchResult result = readSearchResult(json);
+    if (result != null) {
+        ctx.emit(ctx.event(ChatEventType.SEARCH_RESULT)
+                .searchResult(result)
+                .text(result.getUrl())
                 .build());
     }
 }
 ```
 
-方言不要同时把同一份正文、思考或工具调用既写入内容项又通过 `ctx.emit(...)` 发射。内容主干应选择内容项这一条路径，否则订阅方可能收到重复增量，终态聚合也会重复。`ChatEventNormalizer` 可以为第三方方言补齐缺失边界，但兜底不应替代正常的解析设计。
+方言不要对同一份正文、思考、工具参数、搜索结果、引用或媒体重复发射语义事件，否则订阅方会收到重复增量，终态聚合也会重复。累计快照协议应按请求、内容位置和稳定条目标识去重；不能按 URL 做全局去重，因为同一来源可能在答案不同位置被多次引用。`ChatEventNormalizer` 可以为第三方方言补齐缺失边界，但兜底不应替代正常的解析设计。
 
 ## 七、从旧流式用法迁移
 

@@ -25,6 +25,7 @@ import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -250,6 +251,8 @@ public class OpenaiResponsesRequestBuilder {
 
         if (message instanceof AssistantMessage) {
             AssistantMessage assistantMessage = (AssistantMessage) message;
+            // 必须在任何 getText()/isThinkingOnly() 调用前捕获；旧数据的惰性解析会回填 text。
+            boolean legacyThinkInline = assistantMessage.getTextRaw() == null;
 
             // 优先按 Responses 原始 output_index 回放完整 output item，避免按类型重排或字段降级。
             if (appendResponsesOutputItems(inputArray, assistantMessage, replayReasoning)) {
@@ -257,33 +260,18 @@ public class OpenaiResponsesRequestBuilder {
             }
 
             // 1) reasoning 项先行（官方要求 reasoning 在其后续项之前），与正文 / function_call 并列而非二选一：
-            //    4.1 后非流式解析产出的是 text/thinking 合并的单条消息（isThinking=false），
-            //    不能再用 isThinking() 做消息分类，否则 thinking 与 reasoning 元数据会整体丢弃
+        // 完整消息允许同时包含 text/thinking，不能按旧流式分片标记做消息分类。
             boolean reasoningEmitted = replayReasoning
                     && appendReasoningInputItem(inputArray, assistantMessage);
             boolean responseMessagesEmitted = appendResponseMessageItems(inputArray, assistantMessage);
 
-            // 2) 纯思考分片（流式 thinking 消息）：无正文 / 无工具调用时不再补空 assistant 项
-            if (assistantMessage.isThinking()
-                    && Utils.isEmpty(assistantMessage.getTextRaw())
-                    && assistantMessage.isToolCalls() == false
-                    && assistantMessage.isMultiModal() == false) {
+            // 2) 纯思考消息：reasoning 已在上方回放，无正文 / 无工具 / 无媒体时不再补空 assistant 项。
+            if (assistantMessage.isThinkingOnly() && Utils.isEmpty(assistantMessage.getText())) {
                 return;
             }
 
             buildAssistantInputItems(inputArray, assistantMessage, reasoningEmitted,
-                    responseMessagesEmitted, allowInputAudio);
-            return;
-        }
-
-        if (message.isThinking()) {
-            // 非 AssistantMessage 的思考消息（历史兼容）：退化为 reasoning_text
-            String thinkText = message.getContent();
-            if (Utils.isNotEmpty(thinkText)) {
-                ONode reasoningItem = newReasoningItem(inputArray);
-                reasoningItem.getOrNew("content").asArray()
-                        .addNew().set("type", "reasoning_text").set("text", thinkText);
-            }
+                    responseMessagesEmitted, allowInputAudio, legacyThinkInline);
             return;
         }
 
@@ -396,8 +384,9 @@ public class OpenaiResponsesRequestBuilder {
     @SuppressWarnings("unchecked")
     private boolean appendResponsesOutputItems(ONode inputArray, AssistantMessage message,
                                                boolean replayReasoning) {
-        if (!message.hasMetadata()) return false;
-        Object value = message.getMetadata().get("responses_output_items");
+        Map<String, Object> protocolData = OpenaiResponsesMessageStateSupport.resolveData(message);
+        if (protocolData == null) return false;
+        Object value = protocolData.get(OpenaiResponsesMessageStateSupport.OUTPUT_ITEMS);
         if (!(value instanceof Collection)) return false;
 
         List<Map<String, Object>> wrappers = new ArrayList<>();
@@ -446,15 +435,15 @@ public class OpenaiResponsesRequestBuilder {
     }
 
     private boolean appendReasoningInputItem(ONode inputArray, AssistantMessage assistantMessage) {
-        if (assistantMessage.hasMetadata()) {
-            Map<String, Object> metas = assistantMessage.getMetadata();
-            Object replayItems = metas.get("reasoning_items");
+        Map<String, Object> protocolData = OpenaiResponsesMessageStateSupport.resolveData(assistantMessage);
+        if (protocolData != null) {
+            Object replayItems = protocolData.get(OpenaiResponsesMessageStateSupport.REASONING_ITEMS);
             boolean emitted = appendReasoningReplayItems(inputArray, replayItems);
             if (emitted) {
                 return true;
             }
-            Object reasoningId = metas.get("reasoning_item_id");
-            Object encryptedContent = metas.get("reasoning_encrypted_content");
+            Object reasoningId = protocolData.get(OpenaiResponsesMessageStateSupport.REASONING_ITEM_ID);
+            Object encryptedContent = protocolData.get(OpenaiResponsesMessageStateSupport.REASONING_ENCRYPTED_CONTENT);
             String idStr = reasoningId == null ? null : String.valueOf(reasoningId);
             String encStr = encryptedContent == null ? null : String.valueOf(encryptedContent);
 
@@ -508,8 +497,8 @@ public class OpenaiResponsesRequestBuilder {
 
     @SuppressWarnings("unchecked")
     private boolean appendResponseMessageItems(ONode inputArray, AssistantMessage message) {
-        if (!message.hasMetadata()) return false;
-        Object value = message.getMetadata().get("response_message_items");
+        Object value = OpenaiResponsesMessageStateSupport.get(message,
+                OpenaiResponsesMessageStateSupport.MESSAGE_ITEMS);
         if (!(value instanceof Collection) || ((Collection<?>) value).size() <= 1) return false;
         boolean emitted = false;
         for (Object itemObj : (Collection<?>) value) {
@@ -558,6 +547,9 @@ public class OpenaiResponsesRequestBuilder {
 
         if (block instanceof TextBlock) {
             String text = block.getContent();
+            if (stripThink) {
+                text = AssistantMessage.stripThinkTags(text);
+            }
             if (Utils.isNotEmpty(text)) {
                 contentArray.addNew().set("type", "input_text").set("text", text);
             }
@@ -607,7 +599,7 @@ public class OpenaiResponsesRequestBuilder {
      */
     private void buildAssistantInputItems(ONode inputArray, AssistantMessage assistantMessage,
                                            boolean reasoningEmitted, boolean responseMessagesEmitted,
-                                           boolean allowInputAudio) {
+                                           boolean allowInputAudio, boolean legacyThinkInline) {
         // 1) 先回传 image_generation_call 历史项（按官方多轮约定）
         if (Utils.isNotEmpty(assistantMessage.getBlocks())) {
             for (ContentBlock block : assistantMessage.getBlocks()) {
@@ -624,7 +616,9 @@ public class OpenaiResponsesRequestBuilder {
         }
      
         // 2) 文本 / 多模态 content；多 Responses message 已按各自 phase 原样回放时不再聚合重复写入。
-        boolean hasToolCalls = Utils.isNotEmpty(assistantMessage.getToolCalls());
+        List<ToolCall> toolCalls = ToolCallJsonSanitizer.resolveToolCalls(
+                assistantMessage.getToolCalls(), assistantMessage.getToolCallsRaw());
+        boolean hasToolCalls = Utils.isNotEmpty(toolCalls);
         boolean multiModal = assistantMessage.isMultiModal();
 
         if (responseMessagesEmitted == false) {
@@ -637,9 +631,7 @@ public class OpenaiResponsesRequestBuilder {
             ONode contentArray = msgNode.getOrNew("content").asArray();
 
             // 4.1 起 thinking 与 text 已物理分离，TextBlock 里不再内嵌 think 标签；
-            // 仅旧数据（反序列化自 content、textRaw 为 null）才需剔除，
-            // 否则正文恰以 think 标签开头的合法文本会被整段清空
-            boolean legacyThinkInline = assistantMessage.getTextRaw() == null;
+            // legacyThinkInline 已在任何惰性 getText() 调用前捕获，避免旧数据特征被回填覆盖。
 
             for (ContentBlock block : assistantMessage.getBlocks()) {
                 if (block instanceof ImageBlock && isImageGenerationBlock(block)) {
@@ -677,13 +669,12 @@ public class OpenaiResponsesRequestBuilder {
 
         // 3) 工具调用 items（出站兜底净化：截断/双重编码的 arguments 禁止原样回传）
         if (hasToolCalls) {
-            for (ToolCall call : assistantMessage.getToolCalls()) {
+            for (ToolCall call : toolCalls) {
                 inputArray.addNew()
                         .set("type", "function_call")
                         .set("call_id", call.getId())
                         .set("name", call.getName())
-                        .set("arguments", ToolCallJsonSanitizer.sanitizeArguments(
-                                call.getArgumentsStr(), call.getName()));
+                        .set("arguments", ToolCallJsonSanitizer.sanitizeArguments(call));
             }
         }
     }
@@ -722,8 +713,9 @@ public class OpenaiResponsesRequestBuilder {
     }
 
     private void applyAssistantPhase(ONode assistantNode, AssistantMessage message) {
-        if (assistantNode == null || message == null || !message.hasMetadata()) return;
-        Object phase = message.getMetadata().get("phase");
+        if (assistantNode == null || message == null) return;
+        Object phase = OpenaiResponsesMessageStateSupport.get(message,
+                OpenaiResponsesMessageStateSupport.PHASE);
         if (phase != null) {
             String value = String.valueOf(phase).trim();
             if ("commentary".equals(value) || "final_answer".equals(value)) {
@@ -1027,7 +1019,7 @@ public class OpenaiResponsesRequestBuilder {
 
     /**
      * 判断是否可安全自动发送 OpenAI reasoning 配置。
-     * <p>官方 SDK 将该配置限定于 GPT-5 和 o-series；未知模型保持保守，
+     * <p>官方 SDK 将该配置限定于 GPT-5 及后续 GPT 主系列和 o-series；未知模型保持保守，
      * 需要时可通过显式 reasoning 绕过自动判断。</p>
      *
      * @since 4.1
@@ -1039,6 +1031,7 @@ public class OpenaiResponsesRequestBuilder {
 
         String modelName = model.trim().toLowerCase();
         return isModelFamily(modelName, "gpt-5")
+                || isModelFamily(modelName, "gpt-6")
                 || isModelFamily(modelName, "o1")
                 || isModelFamily(modelName, "o3")
                 || isModelFamily(modelName, "o4");
@@ -1049,8 +1042,11 @@ public class OpenaiResponsesRequestBuilder {
             return true;
         }
 
-        // 一些兼容网关把 gpt-5 写成 gpt5；不改写出站 model，只放宽能力判断。
-        return "gpt-5".equals(family) && matchesModelFamily(model, "gpt5");
+        // 一些兼容网关会省略 GPT 主系列名称中的连字符；只放宽能力判断，不改写出站 model。
+        if (family.startsWith("gpt-") && family.length() > 4) {
+            return matchesModelFamily(model, "gpt" + family.substring(4));
+        }
+        return false;
     }
 
     private boolean matchesModelFamily(String model, String family) {
@@ -1162,16 +1158,46 @@ public class OpenaiResponsesRequestBuilder {
                 toolNode.set("name", func.name());
                 toolNode.set("description", func.descriptionAndMeta());
                 String inputSchema = func.inputSchema();
+                ONode schemaNode = null;
                 if (Utils.isNotEmpty(inputSchema)) {
                     try {
-                        ONode schemaNode = ONode.ofJson(inputSchema);
-                        toolNode.set("parameters", schemaNode);
-                    } catch (Exception e) {
-                        // 如果 JSON 解析失败，创建一个基本的 schema
-                        newEmptyParameters(toolNode);
+                        ONode candidate = ONode.ofJson(inputSchema);
+                        if (candidate.isObject()) {
+                            schemaNode = candidate;
+                        }
+                    } catch (Exception ignored) {
+                        // 下方统一回退空参数 schema
                     }
-                } else {
-                    newEmptyParameters(toolNode);
+                }
+                if (schemaNode == null) {
+                    schemaNode = newEmptyParameters();
+                }
+
+                Boolean strict = func.strict();
+                if (Boolean.TRUE.equals(strict)) {
+                    ToolSchemaUtil.validateOpenAiStrictSchema(schemaNode, func.name());
+                }
+                toolNode.set("parameters", schemaNode);
+                // openai-java 4.52.0 Responses FunctionTool 将 strict 定义为必填字段。
+                toolNode.set("strict", strict == null ? false : strict);
+
+                String outputSchema = func.outputSchema();
+                if (Utils.isNotEmpty(outputSchema)) {
+                    ONode outputSchemaNode = null;
+                    try {
+                        ONode candidate = ONode.ofJson(outputSchema);
+                        if (candidate.isObject()) {
+                            outputSchemaNode = candidate;
+                        }
+                    } catch (Exception ignored) {
+                        // 非法 output schema 不应污染请求；输入 schema 仍可正常使用
+                    }
+                    if (outputSchemaNode != null) {
+                        if (Boolean.TRUE.equals(strict)) {
+                            ToolSchemaUtil.validateOpenAiStrictSchema(outputSchemaNode, func.name() + " output");
+                        }
+                        toolNode.set("output_schema", outputSchemaNode);
+                    }
                 }
             });
         }
@@ -1182,10 +1208,11 @@ public class OpenaiResponsesRequestBuilder {
      *
      * @since 4.1
      */
-    private void newEmptyParameters(ONode toolNode) {
-        toolNode.getOrNew("parameters")
-                .set("type", "object")
-                .getOrNew("properties").asObject();
+    private ONode newEmptyParameters() {
+        ONode schema = new ONode();
+        schema.set("type", "object");
+        schema.getOrNew("properties").asObject();
+        return schema;
     }
 
     /**
@@ -1220,8 +1247,8 @@ public class OpenaiResponsesRequestBuilder {
             }
         });
         ONode toolNode = oNode;
-        String phase = acc.getAggregationMetadata().get("phase") == null
-                ? null : String.valueOf(acc.getAggregationMetadata().get("phase"));
+        String phase = acc.getAggregationMetadata().get(OpenaiResponsesMessageStateSupport.AGGREGATION_PHASE) == null
+                ? null : String.valueOf(acc.getAggregationMetadata().get(OpenaiResponsesMessageStateSupport.AGGREGATION_PHASE));
         if ("commentary".equals(phase) || "final_answer".equals(phase)) {
             toolNode.set("phase", phase);
         }

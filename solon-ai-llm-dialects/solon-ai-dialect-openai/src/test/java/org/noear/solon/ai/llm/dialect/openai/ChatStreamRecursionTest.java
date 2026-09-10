@@ -21,11 +21,14 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.ChatException;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.dialect.ChatDialects;
 import org.noear.solon.ai.chat.event.ChatEvent;
 import org.noear.solon.ai.chat.event.ChatEventType;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
+import org.noear.solon.ai.chat.tool.ToolCallException;
 import org.noear.solon.annotation.Param;
 
 import java.io.IOException;
@@ -63,6 +66,22 @@ public class ChatStreamRecursionTest {
             "data: {\"id\":\"c1\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"deviceId\\\":\\\"76-51\\\"}\"}}]}}]}\n\n" +
             "data: {\"id\":\"c1\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n" +
             "data: [DONE]\n\n";
+
+    /** 第一轮：吐一个未注册工具调用 */
+    private static final String UNKNOWN_TOOL_SSE =
+            ROUND1_SSE.replace("get_power_usage", "missing_tool");
+
+    /**
+     * 第一轮：思考、正文与工具调用同帧下发（智谱 glm 形态）
+     *
+     * <p>这种形态下方言会把思考与正文拆成两条消息，工具调用只落在第二条上。
+     * 核心若固定从首条取工具调用，完成信号就会丢失 {@code toolCall}。</p>
+     */
+    private static final String MIXED_THINKING_TOOL_SSE =
+            "data: {\"id\":\"c1\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"先想一下\",\"content\":\"我来帮您查询\",\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"get_power_usage\",\"arguments\":\"\"}}]}}]}\n\n" +
+                    "data: {\"id\":\"c1\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"deviceId\\\":\\\"76-51\\\"}\"}}]}}]}\n\n" +
+                    "data: {\"id\":\"c1\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n" +
+                    "data: [DONE]\n\n";
 
     /** 第二轮（正常）：吐正文并带 usage */
     private static final String ROUND2_SSE =
@@ -111,6 +130,17 @@ public class ChatStreamRecursionTest {
         //把请求体读完，避免连接复用异常
         exchange.getRequestBody().read(new byte[8192]);
 
+        //HTTP 200 但响应体为空；流式保留 SSE 内容类型，让请求进入核心零帧守卫
+        if (round == 1 && ("emptyCall".equals(firstRoundMode.get())
+                || "emptyStream".equals(firstRoundMode.get()))) {
+            String contentType = "emptyStream".equals(firstRoundMode.get())
+                    ? "text/event-stream" : "application/json";
+            exchange.getResponseHeaders().set("Content-Type", contentType);
+            exchange.sendResponseHeaders(200, -1);
+            exchange.close();
+            return;
+        }
+
         //内容类型看上去合法，但响应体没有一帧是模型帧
         if (round == 1 && "opaqueBody".equals(firstRoundMode.get())) {
             byte[] body = "upstream error: bad gateway\nplease retry later\n"
@@ -134,7 +164,10 @@ public class ChatStreamRecursionTest {
             return;
         }
 
-        String sse = ROUND1_SSE;
+        String sse = "unknownTool".equals(firstRoundMode.get()) ? UNKNOWN_TOOL_SSE : ROUND1_SSE;
+        if ("mixedThinkingTool".equals(firstRoundMode.get())) {
+            sse = MIXED_THINKING_TOOL_SSE;
+        }
         if (round >= 2) {
             sse = "sseError".equals(secondRoundMode.get()) ? ROUND2_SSE_ERROR : ROUND2_SSE;
         }
@@ -380,6 +413,149 @@ public class ChatStreamRecursionTest {
         assertEquals(0, countOf(events, ChatEventType.RESPONSE_END), "报错终止不应发 RESPONSE_END");
         assertTrue(errRef.get().getMessage().contains("unrecognizable"),
                 "错误消息应指向配置问题，实际：" + errRef.get().getMessage());
+    }
+
+    /**
+     * 非流式 HTTP 200 空 body 必须由核心层报 ChatException，不能当作成功响应。
+     */
+    @Test
+    public void emptyHttp200BodyMustFailNonStreamCall() {
+        firstRoundMode.set("emptyCall");
+
+        ChatException error = assertThrows(ChatException.class,
+                () -> newChatModel().prompt("hello").call());
+
+        assertTrue(error.getMessage().contains("response is empty"), error.getMessage());
+        assertEquals(1, roundCounter.get(), "空响应不应触发额外请求");
+    }
+
+    /**
+     * 流式 HTTP 200 零帧必须以 ChatException/onError 收尾，不能静默成功。
+     */
+    @Test
+    public void emptyHttp200StreamMustFailInsteadOfComplete() throws Exception {
+        firstRoundMode.set("emptyStream");
+
+        List<ChatEvent> events = new CopyOnWriteArrayList<>();
+        AtomicReference<Throwable> errRef = new AtomicReference<>();
+        AtomicBoolean completed = new AtomicBoolean(false);
+        CountDownLatch latch = new CountDownLatch(1);
+
+        newChatModel().prompt("hello").stream()
+                .subscribe(events::add,
+                        err -> {
+                            errRef.set(err);
+                            latch.countDown();
+                        },
+                        () -> {
+                            completed.set(true);
+                            latch.countDown();
+                        });
+
+        assertTrue(latch.await(30, TimeUnit.SECONDS), "流未在超时内终止");
+        assertTrue(errRef.get() instanceof ChatException,
+                "零帧应报 ChatException，实际：" + errRef.get());
+        assertTrue(errRef.get().getMessage().contains("stream response is empty"),
+                errRef.get().getMessage());
+        assertFalse(completed.get(), "零帧不能走 onComplete");
+        assertEquals(1, roundCounter.get(), "零帧不应触发额外请求");
+        assertEquals(1, countOf(events, ChatEventType.ERROR), "应发出一个 ERROR 终止事件");
+        assertEquals(0, countOf(events, ChatEventType.RESPONSE_END), "失败时不得发 RESPONSE_END");
+    }
+
+    /**
+     * autoToolCall 下模型调用未注册工具时必须立即失败，不能继续递归请求模型。
+     */
+    @Test
+    public void unknownAutoToolCallMustFailWithoutRecursion() throws Exception {
+        firstRoundMode.set("unknownTool");
+
+        List<ChatEvent> events = new CopyOnWriteArrayList<>();
+        AtomicReference<Throwable> errRef = new AtomicReference<>();
+        AtomicBoolean completed = new AtomicBoolean(false);
+        CountDownLatch latch = new CountDownLatch(1);
+
+        newChatModel().prompt("调用缺失工具").stream()
+                .subscribe(events::add,
+                        err -> {
+                            errRef.set(err);
+                            latch.countDown();
+                        },
+                        () -> {
+                            completed.set(true);
+                            latch.countDown();
+                        });
+
+        assertTrue(latch.await(30, TimeUnit.SECONDS), "流未在超时内终止");
+        assertTrue(errRef.get() instanceof ToolCallException,
+                "未注册工具应报 ToolCallException，实际：" + errRef.get());
+        assertTrue(errRef.get().getMessage().contains("missing_tool"), errRef.get().getMessage());
+        assertFalse(completed.get(), "未注册工具不能走 onComplete");
+        assertEquals(1, roundCounter.get(), "未注册工具必须首轮失败，不能递归");
+        assertEquals(0, countOf(events, ChatEventType.TOOL_RESULT), "未注册工具不能产生执行结果");
+        assertEquals(0, countOf(events, ChatEventType.RESPONSE_END), "失败时不得发 RESPONSE_END");
+    }
+
+    /**
+     * 思考、正文与工具调用同帧时，完成信号必须携带 toolCall，且聚合消息三者齐全
+     *
+     * <p>回归背景：该形态下方言曾产出「思考」+「正文+工具调用」两条消息，核心固定
+     * 取首条，拿到的是不含工具调用的那条，{@code TOOL_CALL_END} 因此缺 {@code toolCall}，
+     * 工具也不会被执行。</p>
+     *
+     * <p>修法不在下游按位置挑消息：{@code AssistantMessage} 是最终聚合载体，
+     * 思考/正文/工具调用本就同属一轮输出，方言必须产出单条消息。</p>
+     */
+    @Test
+    public void mixedThinkingAndToolCallFrameKeepsToolCallPayload() throws Exception {
+        firstRoundMode.set("mixedThinkingTool");
+
+        List<ChatEvent> events = new CopyOnWriteArrayList<>();
+        AtomicReference<Throwable> errRef = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+
+        newChatModel().prompt("设备 76-51 的日用电量").stream()
+                .subscribe(events::add,
+                        err -> {
+                            errRef.set(err);
+                            latch.countDown();
+                        },
+                        latch::countDown);
+
+        assertTrue(latch.await(30, TimeUnit.SECONDS), "流未在超时内终止");
+        assertNull(errRef.get(), "正常路径不应报错");
+
+        assertEquals(2, roundCounter.get(), "应发起两轮 LLM 调用");
+
+        ChatEvent end = lastOf(events, ChatEventType.TOOL_CALL_END);
+        assertNotNull(end, "应有工具调用完成信号");
+        assertNotNull(end.getToolCall(), "完成信号必须携带 toolCall（不得因消息拆分而丢失）");
+        assertEquals("call_1", end.getToolCallId(), "完成信号的调用标识");
+        assertEquals("get_power_usage", end.getToolCall().getName(), "完成信号的工具名");
+
+        assertEquals(1, countOf(events, ChatEventType.TOOL_RESULT), "工具应被执行");
+        assertNotNull(lastOf(events, ChatEventType.TOOL_RESULT).getToolCall(), "工具结果应携带 toolCall");
+
+        assertEquals(1, countOf(events, ChatEventType.RESPONSE_END), "RESPONSE_END 恰好一次");
+
+        // 终态聚合必须同时携带思考、正文与工具调用（AssistantMessage 是最终聚合载体）。
+        // 注意：该轮是工具调用步，其聚合由本步 STEP_END 交付；RESPONSE_END 是最末步的聚合。
+        AssistantMessage turn = null;
+        for (ChatEvent e : events) {
+            if (e.getType() != ChatEventType.STEP_END || e.getResponse() == null
+                    || e.getResponse().getMessage() == null) {
+                continue;
+            }
+            AssistantMessage m = e.getResponse().getMessage();
+            if (m.getToolCalls() != null && m.getToolCalls().isEmpty() == false) {
+                turn = m;
+                break;
+            }
+        }
+        assertNotNull(turn, "应能找到携带工具调用的本步聚合");
+        assertEquals("先想一下", turn.getThinking(), "该轮聚合应含思考");
+        assertEquals("我来帮您查询", turn.getText(), "该轮聚合应含正文");
+        assertEquals(1, turn.getToolCalls().size(), "该轮聚合应含工具调用");
     }
 
     private static int countOf(List<ChatEvent> events, ChatEventType type) {

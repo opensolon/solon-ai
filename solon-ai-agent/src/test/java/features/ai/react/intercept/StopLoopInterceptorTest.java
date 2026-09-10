@@ -11,6 +11,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.prompt.PromptImpl;
+import org.noear.solon.core.util.Assert;
 
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -132,7 +133,7 @@ public class StopLoopInterceptorTest {
         AssistantMessage msg = (AssistantMessage) ChatMessage.fromJson(json);
 
         assertNull(msg.getToolCalls());
-        assertNull(msg.getContent());
+        assertTrue(Assert.isEmpty(msg.getContent()));
 
         interceptor.onThought(trace, "", msg);
 

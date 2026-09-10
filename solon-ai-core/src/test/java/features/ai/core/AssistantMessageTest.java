@@ -14,18 +14,311 @@ import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.MessageProtocolState;
+import org.noear.solon.ai.chat.message.MessageSemanticHasher;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
+import org.noear.solon.ai.chat.source.Citation;
+import org.noear.solon.ai.chat.source.SearchResult;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolResult;
 
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 public class AssistantMessageTest {
     @Test
+    public void plainAssistantShouldNotCreateContentRawMirror() {
+        AssistantMessage message = ChatMessage.ofAssistant("hello");
+
+        assertNull(message.getContentRaw());
+        assertFalse(message.hasProtocolStates());
+        ONode json = ONode.ofJson(ChatMessage.toJson(message));
+        assertTrue(json.getOrNull("contentRaw") == null || json.get("contentRaw").isNull());
+    }
+
+    @Test
+    public void hasTextShouldDescribeBodyTextAndRemainCompatibleWithHasContent() {
+        AssistantMessage empty = new AssistantMessage();
+        AssistantMessage blank = new AssistantMessage("");
+        AssistantMessage text = new AssistantMessage("hello");
+        AssistantMessage thinkingOnly = new AssistantMessage("", "analysis");
+        AssistantMessage legacy = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"content\":\"<think>legacy thought</think>answer\"}");
+
+        assertFalse(empty.hasText());
+        assertFalse(blank.hasText());
+        assertTrue(text.hasText());
+        assertFalse(thinkingOnly.hasText());
+        assertTrue(legacy.hasText());
+        assertEquals("answer", legacy.getText());
+
+        assertEquals(empty.hasText(), empty.hasContent());
+        assertEquals(blank.hasText(), blank.hasContent());
+        assertEquals(text.hasText(), text.hasContent());
+        assertEquals(thinkingOnly.hasText(), thinkingOnly.hasContent());
+        assertEquals(legacy.hasText(), legacy.hasContent());
+    }
+
+    @Test
+    public void protocolStatesShouldRoundTripAndKeepLegacyRawReadable() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("thinkingSignature", "sig_new");
+        MessageProtocolState state = new MessageProtocolState(1, data);
+        AssistantMessage message = AssistantMessage.snapshot("answer", "thought", null, null, null, null,
+                java.util.Collections.singletonMap("anthropic.messages", state));
+
+        String json = ChatMessage.toJson(message);
+        AssistantMessage restored = (AssistantMessage) ChatMessage.fromJson(json);
+        MessageProtocolState restoredState = restored.getProtocolState("anthropic.messages");
+        assertNotNull(restoredState, json);
+        assertEquals(1, restoredState.getVersion());
+        assertEquals("sig_new", restoredState.getData().get("thinkingSignature"));
+        assertEquals(message.getProtocolState("anthropic.messages").getSemanticHash(),
+                restoredState.getSemanticHash());
+        assertTrue(MessageSemanticHasher.matches(restored, restoredState));
+        assertNull(restored.getContentRaw(), "新状态不应反向复制到已弃用字段");
+        assertFalse(ONode.ofJson(json).hasKey("contentRaw"), "新状态不得重复写出 contentRaw");
+
+        AssistantMessage legacy = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"answer\",\"contentRaw\":{\"thinkingSignature\":\"sig_old\"}}");
+        assertTrue(legacy.getContentRaw() instanceof Map);
+        assertEquals("sig_old", ((Map<?, ?>) legacy.getContentRaw()).get("thinkingSignature"));
+        assertFalse(legacy.hasProtocolStates());
+    }
+
+    @Test
+    public void legacyGeminiToolCallSignatureShouldRoundTripWithoutCoreMigration() {
+        AssistantMessage restored = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"\"," +
+                        "\"toolCalls\":[{\"index\":\"0\",\"id\":\"call-1\"," +
+                        "\"name\":\"lookup\",\"argumentsStr\":\"{}\"," +
+                        "\"arguments\":{},\"thoughtSignature\":\"sig_old\"}]}");
+
+        ToolCall call = restored.getToolCalls().get(0);
+        assertEquals("sig_old", call.getThoughtSignature());
+        assertFalse(restored.hasProtocolStates(), "Core 不应猜测旧字段所属方言");
+        assertEquals("sig_old", ONode.ofJson(ChatMessage.toJson(restored))
+                .get("toolCalls").get(0).get("thoughtSignature").getString());
+    }
+
+    @Test
+    public void boundProtocolStateShouldBeDeeplyReadOnlyAndDetachedFromInputData() {
+        Map<String, Object> nested = new LinkedHashMap<>();
+        List<Object> values = new java.util.ArrayList<>();
+        values.add("one");
+        nested.put("values", values);
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("nested", nested);
+
+        MessageProtocolState state = new MessageProtocolState(1, input);
+        AssistantMessage message = AssistantMessage.snapshot("answer", "", null, null, null, null,
+                java.util.Collections.singletonMap("vendor.protocol", state));
+
+        values.add("outside");
+        Map<String, Object> stored = message.getProtocolState("vendor.protocol").getData();
+        assertEquals(1, ((List<?>) ((Map<?, ?>) stored.get("nested")).get("values")).size());
+        assertThrows(UnsupportedOperationException.class, () -> stored.put("x", "y"));
+        assertThrows(UnsupportedOperationException.class,
+                () -> ((List<Object>) ((Map<?, ?>) stored.get("nested")).get("values")).add("x"));
+        state.setVersion(2);
+        assertEquals(1, message.getProtocolState("vendor.protocol").getVersion());
+        assertTrue(MessageSemanticHasher.matches(message, message.getProtocolState("vendor.protocol")));
+    }
+
+    @Test
+    public void protocolStateOpaqueDataShouldNotBeCompactedAsMedia() {
+        StringBuilder large = new StringBuilder(ChatMessage.SESSION_INLINE_BASE64_MAX_CHARS + 10);
+        while (large.length() <= ChatMessage.SESSION_INLINE_BASE64_MAX_CHARS) {
+            large.append("opaque-encrypted-data-");
+        }
+        MessageProtocolState state = new MessageProtocolState(1)
+                .dataPut("data", large.toString());
+        AssistantMessage message = AssistantMessage.snapshot("answer", "", null, null, null, null,
+                java.util.Collections.singletonMap("vendor.protocol", state));
+
+        AssistantMessage restored = (AssistantMessage) ChatMessage.fromJson(ChatMessage.toJson(message));
+        assertEquals(large.toString(), restored.getProtocolState("vendor.protocol").getData().get("data"));
+    }
+
+    @Test
+    public void legacyRawShouldSurviveWhenForeignProtocolStateAlsoExists() {
+        AssistantMessage message = historicalMessageWithProtocolState(
+                "{\"role\":\"assistant\",\"text\":\"answer\"," +
+                        "\"contentRaw\":{\"thinkingSignature\":\"sig_old\"}}",
+                "openai.responses", new MessageProtocolState(1).dataPut("itemId", "rs_1"));
+
+        String json = ChatMessage.toJson(message);
+        assertTrue(ONode.ofJson(json).hasKey("contentRaw"), json);
+        AssistantMessage restored = (AssistantMessage) ChatMessage.fromJson(json);
+        assertEquals("sig_old", ((Map<?, ?>) restored.getContentRaw()).get("thinkingSignature"));
+        assertNotNull(restored.getProtocolState("openai.responses"));
+    }
+
+    @Test
+    public void protocolStateSemanticHashShouldRejectChangedMessageSemantics() {
+        AssistantMessage original = AssistantMessage.snapshot("answer", "thought", null, null, null, null,
+                java.util.Collections.singletonMap("anthropic.messages", new MessageProtocolState(1)));
+        MessageProtocolState state = original.getProtocolState("anthropic.messages");
+        assertTrue(MessageSemanticHasher.matches(original, state));
+
+        AssistantMessage changed = AssistantMessage.snapshot("changed", "thought", null, null, null, null,
+                java.util.Collections.singletonMap("anthropic.messages", state));
+        assertFalse(MessageSemanticHasher.matches(changed, state));
+    }
+
+    @Test
+    public void typedSourcesShouldRoundTripAndLegacySearchResultsShouldRemainReadable() {
+        SearchResult result = new SearchResult().index(0).id("r1")
+                .title("Solon").url("https://solon.noear.org").snippet("Java framework");
+        Citation citation = new Citation().type("url_citation")
+                .title("Solon Docs").url("https://solon.noear.org/docs").citedText("Solon AI");
+        AssistantMessage message = AssistantMessage.snapshot("answer", "", null, null,
+                java.util.Collections.singletonList(result), java.util.Collections.singletonList(citation), null);
+
+        AssistantMessage restored = (AssistantMessage) ChatMessage.fromJson(ChatMessage.toJson(message));
+        assertNotNull(restored.getSearchResults());
+        assertEquals("r1", restored.getSearchResults().get(0).getId());
+        assertEquals("Java framework", restored.getSearchResults().get(0).getSnippet());
+        assertNotNull(restored.getCitations());
+        assertEquals("Solon AI", restored.getCitations().get(0).getCitedText());
+        assertNull(restored.getSearchResultsRaw(), "新类型化结果不应反向生成 legacy raw");
+
+        AssistantMessage legacy = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"searchResultsRaw\":[{\"index\":\"2\",\"id\":\"old\"," +
+                        "\"title\":\"Legacy\",\"url\":\"https://old.example\",\"summary\":\"old summary\"}]}"
+        );
+        assertNotNull(legacy.getSearchResultsRaw());
+        assertNull(legacy.getSearchResults());
+        assertEquals(2, legacy.resolveSearchResults().get(0).getIndex());
+        assertEquals("old summary", legacy.resolveSearchResults().get(0).getSnippet());
+        assertTrue(ONode.ofJson(ChatMessage.toJson(legacy)).hasKey("searchResultsRaw"));
+    }
+
+    @Test
+    public void typedSourcesShouldParticipateInProtocolSemanticHash() {
+        AssistantMessage original = AssistantMessage.snapshot("answer", "", null, null, null,
+                java.util.Collections.singletonList(
+                        new Citation().type("url_citation").url("https://a.example")),
+                java.util.Collections.singletonMap("openai.responses", new MessageProtocolState(1)));
+        MessageProtocolState state = original.getProtocolState("openai.responses");
+        assertTrue(MessageSemanticHasher.matches(original, state));
+
+        AssistantMessage changed = AssistantMessage.snapshot("answer", "", null, null, null,
+                java.util.Collections.singletonList(
+                        new Citation().type("url_citation").url("https://b.example")),
+                java.util.Collections.singletonMap("openai.responses", state));
+        assertFalse(MessageSemanticHasher.matches(changed, state));
+    }
+
+    @Test
+    public void thinkingSemanticsShouldDistinguishMixedAndThinkingOnlyMessages() {
+        AssistantMessage thinkingOnly = new AssistantMessage("", "analysis");
+        assertTrue(thinkingOnly.hasThinking());
+        assertTrue(thinkingOnly.isThinkingOnly());
+
+        AssistantMessage textOnlyMixed = new AssistantMessage("answer", "analysis");
+        assertTrue(textOnlyMixed.hasThinking());
+        assertFalse(textOnlyMixed.isThinkingOnly(), "text 字段本身必须阻止纯思考分类");
+
+        AssistantMessage mixed = new AssistantMessage("answer", "analysis", null,
+                Arrays.asList(TextBlock.of("answer")));
+        assertTrue(mixed.hasThinking());
+        assertFalse(mixed.isThinkingOnly(), "含正文的消息不能因旧分片标记而被归类为纯思考");
+
+        AssistantMessage media = new AssistantMessage("", "analysis", null,
+                Arrays.asList(ImageBlock.ofUrl("https://example.com/thinking.png")));
+        assertTrue(media.hasThinking());
+        assertFalse(media.isThinkingOnly(), "媒体载荷必须阻止纯思考分类");
+
+        AssistantMessage rawTool = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"\",\"thinking\":\"analysis\"," +
+                        "\"toolCallsRaw\":[{\"id\":\"call_1\"}]}");
+        assertFalse(rawTool.isThinkingOnly(), "原始工具调用同样属于工具载荷");
+    }
+
+    @Test
+    public void legacyReasoningAndToolCallsRawShouldDeserializeAndReplay() {
+        String json = "{\"role\":\"assistant\",\"text\":\"answer\",\"thinking\":\"legacy thought\","+
+                "\"reasoningFieldName\":\"role\",\"toolCallsRaw\":[{\"id\":\"call_old\",\"type\":\"function\","+
+                "\"function\":{\"name\":\"search\",\"arguments\":\"{\\\"q\\\":\\\"solon\\\"}\"}}]}";
+        AssistantMessage restored = (AssistantMessage) ChatMessage.fromJson(json);
+
+        assertEquals("role", restored.getReasoningFieldName());
+        assertNotNull(restored.getToolCallsRaw());
+        ChatConfig config = new ChatConfig();
+        config.setModel("deepseek-reasoner");
+        ONode outbound = new TestDialect().buildChatMessageNode(config, restored);
+        assertEquals("assistant", outbound.get("role").getString());
+        assertEquals("legacy thought", outbound.get("reasoning_content").getString());
+        assertEquals("call_old", outbound.get("tool_calls").get(0).get("id").getString());
+    }
+
+    @Test
+    public void thinkingSemanticsShouldSupportLegacyDeserialization() {
+        AssistantMessage legacyChunk = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"\",\"thinking\":\"legacy thought\"}");
+        assertTrue(legacyChunk.hasThinking());
+        assertTrue(legacyChunk.isThinkingOnly());
+
+        AssistantMessage legacyInlineOnly = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"content\":\"<think>legacy thought</think>\"}");
+        assertTrue(legacyInlineOnly.hasThinking());
+        assertTrue(legacyInlineOnly.isThinkingOnly());
+
+        AssistantMessage legacyInlineUnclosed = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"content\":\"<think>interrupted thought\"}");
+        assertTrue(legacyInlineUnclosed.hasThinking());
+        assertEquals("interrupted thought", legacyInlineUnclosed.getThinking());
+        assertTrue(legacyInlineUnclosed.isThinkingOnly());
+        assertEquals("", legacyInlineUnclosed.getText());
+
+        AssistantMessage legacyInlineMixed = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"content\":\"<think>legacy thought</think>answer\"}");
+        assertTrue(legacyInlineMixed.hasThinking());
+        assertFalse(legacyInlineMixed.isThinkingOnly());
+    }
+
+    @Test
+    public void legacySearchResultProjectionShouldParticipateInSemanticHash() {
+        AssistantMessage original = historicalMessageWithProtocolState(
+                "{\"role\":\"assistant\",\"text\":\"answer\"," +
+                        "\"searchResultsRaw\":[{\"url\":\"https://a.example\"}]}",
+                "vendor.protocol", new MessageProtocolState(1));
+        MessageProtocolState state = original.getProtocolState("vendor.protocol");
+
+        AssistantMessage changed = historicalMessageWithProtocolState(
+                "{\"role\":\"assistant\",\"text\":\"answer\"," +
+                        "\"searchResultsRaw\":[{\"url\":\"https://b.example\"}]}",
+                "vendor.protocol", state);
+        assertFalse(MessageSemanticHasher.matches(changed, state));
+    }
+
+    @Test
+    public void requestReplayShouldIgnoreMetadataCarrierAndSkipPlainThinkingOnly() {
+        TestDialect dialect = new TestDialect();
+        AssistantMessage thinkingOnly = new AssistantMessage("", "drop");
+        AssistantMessage mixed = new AssistantMessage("answer", "keep thinking", null,
+                Arrays.asList(TextBlock.of("answer")));
+        AssistantMessage carrier = new AssistantMessage("", "keep carrier");
+        carrier.addMetadata("reasoning_item_id", "rs_1");
+
+        ONode root = dialect.buildRequestJson(new ChatConfig(), ChatOptions.of(),
+                Arrays.asList(ChatMessage.ofUser("hi"), thinkingOnly, mixed, carrier), false);
+
+        ONode messages = root.get("messages");
+        assertEquals(2, messages.size(), root.toJson());
+        assertEquals("answer", messages.get(1).get("content").getString());
+    }
+
+    @Test
     public void getReasoningShouldRemoveThinkTagsWhenThinking() {
-        AssistantMessage message = new AssistantMessage("","analysis", true);
+        AssistantMessage message = new AssistantMessage("", "analysis");
 
         Assertions.assertEquals("analysis", message.getThinking());
     }
@@ -36,7 +329,7 @@ public class AssistantMessageTest {
 
         Assertions.assertFalse(message.isMultiModal());
         Assertions.assertFalse(message.hasMedia());
-        Assertions.assertTrue(message.getBlocks().isEmpty());
+        Assertions.assertTrue(message.getBlocks() == null || message.getBlocks().isEmpty());
         Assertions.assertEquals("hello", message.getContent());
     }
 
@@ -79,18 +372,18 @@ public class AssistantMessageTest {
     }
 
     @Test
-    public void addMediaBlocksShouldDeduplicateSameInstance() {
+    public void addMediaBlocksShouldPreserveRepeatedEventInstances() {
         TestResponse tr = new TestResponse();
         ImageBlock image = ImageBlock.ofUrl("https://example.com/once.png");
 
         tr.addMediaBlocks(Arrays.asList(image));
         tr.addMediaBlocks(Arrays.asList(image));
 
-        Assertions.assertEquals(1, tr.getMediaBlocks().size());
+        Assertions.assertEquals(2, tr.getMediaBlocks().size());
     }
 
     @Test
-    public void addMediaBlocksShouldDeduplicateEquivalentContent() {
+    public void addMediaBlocksShouldPreserveEquivalentContentAtDifferentPositions() {
         TestResponse tr = new TestResponse();
         ImageBlock a = ImageBlock.ofUrl("https://example.com/eq.png");
         ImageBlock b = ImageBlock.ofUrl("https://example.com/eq.png");
@@ -98,7 +391,7 @@ public class AssistantMessageTest {
         tr.addMediaBlocks(Arrays.asList(a));
         tr.addMediaBlocks(Arrays.asList(b));
 
-        Assertions.assertEquals(1, tr.getMediaBlocks().size());
+        Assertions.assertEquals(2, tr.getMediaBlocks().size());
     }
 
     @Test
@@ -132,7 +425,7 @@ public class AssistantMessageTest {
         tr.addMediaBlocks(Arrays.asList(image));
 
         AssistantMessage last = ChatMessage.ofAssistant("hello", image);
-        tr.addContentItem(last);
+        tr.mergeTerminalMessage(last);
 
         AssistantMessage agg = tr.snapshotTerminal().getMessage();
         Assertions.assertNotNull(agg);
@@ -243,7 +536,55 @@ public class AssistantMessageTest {
         AssistantMessage msg = list.get(0);
         Assertions.assertEquals("plain", msg.getContent());
         Assertions.assertFalse(msg.isMultiModal());
-        Assertions.assertTrue(msg.getBlocks().isEmpty());
+        Assertions.assertTrue(msg.getBlocks() == null || msg.getBlocks().isEmpty());
+    }
+
+    /**
+     * 同一帧内思考、正文与工具调用必须落在同一条聚合消息上。
+     *
+     * <p>AssistantMessage 是最终聚合载体，思考/正文/工具调用同属一轮模型输出；
+     * 若拆成多条，终态消息与携带工具调用的消息会变成两个对象，下游只能靠位置猜测。</p>
+     */
+    @Test
+    public void sameFrameThinkingTextAndToolCallsShouldStayInOneMessage() {
+        TestDialect dialect = new TestDialect();
+        ChatAccumulator acc = newResp(true);
+
+        ONode oMessage = ONode.ofJson("{"
+                + "\"role\":\"assistant\","
+                + "\"reasoning_content\":\"先想一下\","
+                + "\"content\":\"我来帮您查询\","
+                + "\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\","
+                + "\"function\":{\"name\":\"get_power_usage\",\"arguments\":\"{}\"}}]"
+                + "}");
+
+        List<AssistantMessage> list = dialect.parseAssistantMessage(acc, oMessage);
+
+        Assertions.assertEquals(1, list.size());
+        AssistantMessage msg = list.get(0);
+        Assertions.assertEquals("先想一下", msg.getThinking());
+        Assertions.assertEquals("我来帮您查询", msg.getText());
+        Assertions.assertEquals(1, msg.getToolCalls().size());
+        Assertions.assertEquals("get_power_usage", msg.getToolCalls().get(0).getName());
+    }
+
+    /** 旧版 &lt;think&gt; 标签形态：同一帧的闭合思考与正文合并为一条消息。 */
+    @Test
+    public void sameFrameThinkTagCloseShouldStayInOneMessage() {
+        TestDialect dialect = new TestDialect();
+        ChatAccumulator acc = newResp(true);
+
+        // 先开思考通道（首帧仅 <think> 前缀）
+        dialect.parseAssistantMessage(acc, ONode.ofJson("{\"role\":\"assistant\",\"content\":\"<think>\"}"));
+        Assertions.assertTrue(acc.in_thinking);
+
+        List<AssistantMessage> list = dialect.parseAssistantMessage(acc,
+                ONode.ofJson("{\"role\":\"assistant\",\"content\":\"想法</think>正文\"}"));
+
+        Assertions.assertEquals(1, list.size());
+        AssistantMessage msg = list.get(0);
+        Assertions.assertEquals("想法", msg.getThinking());
+        Assertions.assertEquals("正文", msg.getText());
     }
 
     @Test
@@ -276,7 +617,7 @@ public class AssistantMessageTest {
     public void buildAssistantMessageNodeThinkingOnlyShouldStillEmitContent() {
         TestDialect dialect = new TestDialect();
         // 纯推理轮：只有 <think>（甚至未闭合），没有答案、也没有 tool_calls
-        AssistantMessage msg = new AssistantMessage("", "推理中", true);
+        AssistantMessage msg = new AssistantMessage("", "推理中");
 
         ONode node = dialect.buildChatMessageNode(new ChatConfig(), msg);
         Assertions.assertEquals("", msg.getText());
@@ -302,10 +643,7 @@ public class AssistantMessageTest {
         List<ContentBlock> blocks = Arrays.asList(
                 TextBlock.of("<think>secret</think>answer"),
                 ImageBlock.ofUrl("https://example.com/t.png"));
-        AssistantMessage msg = new AssistantMessage(
-                "answer",
-                "secret",
-                false, null, null, null, null, blocks);
+        AssistantMessage msg = new AssistantMessage("answer", "secret", null, blocks);
 
         ONode node = dialect.buildChatMessageNode(new ChatConfig(), msg);
         Assertions.assertTrue(node.get("content").isArray());
@@ -357,7 +695,7 @@ public class AssistantMessageTest {
         TestResponse tr = new TestResponse();
         tr.appendText("stream text");
         tr.addMediaBlocks(Arrays.asList(ImageBlock.ofUrl("https://example.com/s.png")));
-        tr.addContentItem(ChatMessage.ofAssistant("stream text"));
+        tr.mergeTerminalMessage(ChatMessage.ofAssistant("stream text"));
 
         AssistantMessage agg = tr.snapshotTerminal().getMessage();
         Assertions.assertNotNull(agg);
@@ -401,7 +739,6 @@ public class AssistantMessageTest {
         tr.addMediaBlocks(Arrays.asList(image));
     
         // 无 choice 时，流式仅 media 也应能聚合出消息
-        Assertions.assertFalse(tr.hasContentItems());
         AssistantMessage msg = tr.snapshotTerminal().getMessage();
         Assertions.assertNotNull(msg);
         Assertions.assertTrue(msg.hasMedia());
@@ -440,7 +777,6 @@ public class AssistantMessageTest {
         tr.addMediaBlocks(Arrays.asList(image));
     
         // 仅 media：终态投影下 content 为空串、hasContent 为 false，不抛 NPE
-        Assertions.assertFalse(tr.hasContentItems());
         ChatResponse r = tr.snapshotTerminal();
         Assertions.assertFalse(r.hasContent()); // 仅 media，文本为空
         Assertions.assertEquals("", r.getContent());
@@ -589,6 +925,18 @@ public class AssistantMessageTest {
                 "tool content should fallback to string when media all skipped");
     }
 
+    private static AssistantMessage historicalMessageWithProtocolState(String json, String protocol,
+                                                                        MessageProtocolState state) {
+        AssistantMessage payload = (AssistantMessage) ChatMessage.fromJson(json);
+        if (state.getSemanticHash() == null) {
+            state.setSemanticHash(MessageSemanticHasher.hash(payload));
+        }
+
+        ONode historical = ONode.ofJson(json);
+        historical.set("protocolStates", java.util.Collections.singletonMap(protocol, state));
+        return (AssistantMessage) ChatMessage.fromJson(historical.toJson());
+    }
+
     /**
      * 可实例化的测试方言
      */
@@ -669,12 +1017,12 @@ public class AssistantMessageTest {
 
     @Test
     public void emptyBlocksListShouldNotThrow() {
-        AssistantMessage msg = new AssistantMessage(
-                "", "",false, null, null, null, null, java.util.Collections.emptyList());
+        AssistantMessage msg = new AssistantMessage("", "", null, java.util.Collections.emptyList());
 
         Assertions.assertFalse(msg.isMultiModal());
         Assertions.assertFalse(msg.hasMedia());
-        Assertions.assertTrue(msg.getBlocks().isEmpty());
+        Assertions.assertTrue(msg.getBlocks() == null || msg.getBlocks().isEmpty(),
+                "空 blocks 归一化为 null 后不得抛出异常");
         Assertions.assertEquals("", msg.getContent());
     }
 
@@ -687,24 +1035,16 @@ public class AssistantMessageTest {
         // 构建第二次请求时应回传 reasoning_content（DeepSeek 等模型多轮推理需要），且 content 应为 null
         TestDialect dialect = new TestDialect();
 
-        java.util.List<java.util.Map> toolCallsRaw = new java.util.ArrayList<>();
-        java.util.Map<String, Object> tc = new java.util.HashMap<>();
-        tc.put("id", "call_001");
-        tc.put("type", "function");
-        java.util.Map<String, Object> tcFn = new java.util.HashMap<>();
-        tcFn.put("name", "get_weather");
-        tcFn.put("arguments", "{\"location\": \"杭州\"}");
-        tc.put("function", tcFn);
-        toolCallsRaw.add(tc);
+        AssistantMessage msg = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"\"," +
+                        "\"thinking\":\"用户想知道杭州天气。\"," +
+                        "\"toolCallsRaw\":[{\"id\":\"call_001\",\"type\":\"function\"," +
+                        "\"function\":{\"name\":\"get_weather\"," +
+                        "\"arguments\":\"{\\\"location\\\": \\\"杭州\\\"}\"}}]}");
 
-        // content 含 think 标签和推理文本，getResultContent() 会剥离标签后为空
-        AssistantMessage msg = new AssistantMessage(
-                "",
-                "用户想知道杭州天气。",
-                false, null, toolCallsRaw, null, null, null)
-                .reasoningFieldName("reasoning_content");
-
-        ONode node = dialect.buildChatMessageNode(new ChatConfig(), msg);
+        ChatConfig config = new ChatConfig();
+        config.setModel("deepseek-reasoner");
+        ONode node = dialect.buildChatMessageNode(config, msg);
 
         // 1. 应包含 reasoning_content 字段（DeepSeek 等模型多轮推理需要回传）
         Assertions.assertTrue(node.hasKey("reasoning_content"),
@@ -733,21 +1073,12 @@ public class AssistantMessageTest {
         // 但 content 无 think 标签 -> getReasoning() 为空 -> reasoning_content 不应写出
         TestDialect dialect = new TestDialect();
 
-        java.util.List<java.util.Map> toolCallsRaw = new java.util.ArrayList<>();
-        java.util.Map<String, Object> tc = new java.util.HashMap<>();
-        tc.put("id", "call_002");
-        tc.put("type", "function");
-        java.util.Map<String, Object> tcFn = new java.util.HashMap<>();
-        tcFn.put("name", "search_www");
-        tcFn.put("arguments", "{\"key\": \"天气\"}");
-        tc.put("function", tcFn);
-        toolCallsRaw.add(tc);
-
-        AssistantMessage msg = new AssistantMessage(
-                "让我帮你搜索天气信息。",
-                "",
-                false, null, toolCallsRaw, null, null, null)
-                .reasoningFieldName("reasoning_content");
+        AssistantMessage msg = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"让我帮你搜索天气信息。\"," +
+                        "\"thinking\":\"\",\"reasoningFieldName\":\"reasoning_content\"," +
+                        "\"toolCallsRaw\":[{\"id\":\"call_002\",\"type\":\"function\"," +
+                        "\"function\":{\"name\":\"search_www\"," +
+                        "\"arguments\":\"{\\\"key\\\": \\\"天气\\\"}\"}}]}");
 
         ONode node = dialect.buildChatMessageNode(new ChatConfig(), msg);
 
@@ -771,18 +1102,19 @@ public class AssistantMessageTest {
         // reasoning_content 应回传；content 不写出（无 tool_calls 时不强加 null）
         TestDialect dialect = new TestDialect();
 
-        // 纯推理消息：text 为空、thinking 有值（旧形态为 content 内嵌 think 标签）
-        AssistantMessage msg = new AssistantMessage(
-                "",
-                "仅推理无工具调用",
-                false, null, null, null, null, null)
-                .reasoningFieldName("reasoning_content");
+        AssistantMessage msg = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"\"," +
+                        "\"thinking\":\"仅推理无工具调用\",\"reasoningFieldName\":\"role\"}");
 
-        ONode node = dialect.buildChatMessageNode(new ChatConfig(), msg);
+        ChatConfig config = new ChatConfig();
+        config.setModel("deepseek-reasoner");
+        ONode node = dialect.buildChatMessageNode(config, msg);
 
         // reasoning 内容非空 -> 应回传
         Assertions.assertTrue(node.hasKey("reasoning_content"),
                 "reasoning_content should be written when reasoning is non-empty");
+        Assertions.assertEquals("assistant", node.get("role").getString(),
+                "旧 reasoningFieldName 不得覆盖目标协议 role");
         Assertions.assertEquals("仅推理无工具调用",
                 node.get("reasoning_content").getString());
 

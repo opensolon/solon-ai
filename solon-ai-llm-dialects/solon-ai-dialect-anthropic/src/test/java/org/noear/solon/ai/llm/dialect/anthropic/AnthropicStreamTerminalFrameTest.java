@@ -102,6 +102,16 @@ public class AnthropicStreamTerminalFrameTest {
             "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":20}}\n\n" +
             "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n";
 
+    /** 完整本地工具调用流：方言只发 START/ARGS，核心在参数聚合后发唯一 END。 */
+    private static final String SSE_TOOL_USE =
+            "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_tool\",\"model\":\"claude-sonnet-4-5\",\"usage\":{\"input_tokens\":5,\"output_tokens\":1}}}\n\n" +
+            "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"get_weather\",\"input\":{}}}\n\n" +
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"city\\\":\"}}\n\n" +
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"杭州\\\"}\"}}\n\n" +
+            "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n" +
+            "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":8}}\n\n" +
+            "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n";
+
     private HttpServer server;
     private String apiUrl;
     private final AtomicReference<String> sseBody = new AtomicReference<>(SSE_TEXT_ONLY);
@@ -147,6 +157,7 @@ public class AnthropicStreamTerminalFrameTest {
                 .model("claude-sonnet-4-5")
                 .build()
                 .prompt("杭州天气")
+                .options(o -> o.autoToolCall(false))
                 .stream()
                 .subscribe(events::add,
                         err -> {
@@ -262,22 +273,19 @@ public class AnthropicStreamTerminalFrameTest {
         assertNotNull(sig, "signature_delta 应发 THINKING_SIGNATURE");
         assertEquals("sig_abc", sig.getText(), "签名值");
 
-        //签名同时留在聚合消息的 contentRaw 上：AnthropicRequestBuilder 据此重建 thinking 块
+        //签名同时留在聚合消息的 Anthropic 协议状态上：RequestBuilder 据此重建 thinking 块
         AssistantMessage msg = terminalMessage(events);
         assertNotNull(msg, "终态聚合消息不应为 null");
-        assertTrue(msg.getContentRaw() instanceof Map,
-                "聚合消息 contentRaw 必须是携带签名的 Map，实际为: " + msg.getContentRaw());
-        assertEquals("sig_abc", ((Map<?, ?>) msg.getContentRaw()).get("thinkingSignature"), "回传签名");
+        Map<String, Object> protocolData = AnthropicMessageStateSupport.resolveData(msg);
+        assertNotNull(protocolData, "聚合消息必须携带 Anthropic 协议状态");
+        assertEquals("sig_abc", protocolData.get("thinkingSignature"), "回传签名");
 
         //聚合文本逐字节不变
         assertEquals("杭州今天晴", msg.getText(), "聚合正文");
         assertEquals("让我想想", msg.getThinking(), "聚合思考");
 
-        //已知残留：签名载体必须留在内容项通道，核心会把它映射成一条空内容事件。
-        //它被归到「流末所在的块」（此处为正文），因此最多一条，且不会新开块。
-        //若核心将来支持「静默内容项」，这里应降为 0。
-        assertTrue(countEmptyDelta(events, ChatEventType.TEXT_DELTA) <= 1,
-                "载体帧最多产生一条空 TEXT_DELTA");
+        assertEquals(0, countEmptyDelta(events, ChatEventType.TEXT_DELTA),
+                "协议载荷不得投影为空正文增量");
     }
 
     /**
@@ -300,9 +308,30 @@ public class AnthropicStreamTerminalFrameTest {
         AssistantMessage msg = terminalMessage(events);
         assertNotNull(msg, "终态聚合消息不应为 null");
         assertEquals("让我想想", msg.getThinking(), "聚合思考");
-        assertTrue(msg.getContentRaw() instanceof Map, String.valueOf(msg.getContentRaw()));
-        assertEquals("sig_abc", ((Map<?, ?>) msg.getContentRaw()).get("thinkingSignature"), "回传签名");
+        Map<String, Object> protocolData = AnthropicMessageStateSupport.resolveData(msg);
+        assertNotNull(protocolData, String.valueOf(msg.getProtocolStates()));
+        assertEquals("sig_abc", protocolData.get("thinkingSignature"), "回传签名");
         assertEquals("max_tokens", lastResponseFinishReason(events), "finishReason 仍透传");
+    }
+
+    /**
+     * 完整工具流经过核心聚合后，结束事件只能由核心发出一次。
+     */
+    @Test
+    public void toolUseStream_hasSingleToolCallEnd() throws Exception {
+        List<ChatEvent> events = collect(SSE_TOOL_USE);
+
+        assertEquals(1, countOf(events, ChatEventType.TOOL_CALL_START));
+        assertEquals(2, countOf(events, ChatEventType.TOOL_CALL_ARGS_DELTA));
+        assertEquals(1, countOf(events, ChatEventType.TOOL_CALL_END));
+        assertEquals(1, countOf(events, ChatEventType.RESPONSE_END));
+
+        String args = joinText(events, ChatEventType.TOOL_CALL_ARGS_DELTA);
+        assertEquals("{\"city\":\"杭州\"}", args);
+        AssistantMessage msg = terminalMessage(events);
+        assertNotNull(msg);
+        assertEquals(1, msg.getToolCalls().size());
+        assertEquals("杭州", msg.getToolCalls().get(0).getArguments().get("city"));
     }
 
     /**

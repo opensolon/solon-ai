@@ -12,6 +12,7 @@ import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 
@@ -84,6 +85,14 @@ public class ToolCallJsonSanitizerTest {
         Assertions.assertEquals("{}", ToolCallJsonSanitizer.sanitizeArguments("abc", "bash"));
         Assertions.assertEquals("{}", ToolCallJsonSanitizer.sanitizeArguments("123", "bash"));
         Assertions.assertEquals("{}", ToolCallJsonSanitizer.sanitizeArguments("[1,2,3]", "bash"));
+    }
+
+    @Test
+    public void multipleJsonRootsShouldBeRejected() {
+        Assertions.assertEquals("{}", ToolCallJsonSanitizer.sanitizeArguments(
+                "{\"approved\":false}{\"command\":\"danger\"}", "bash"));
+        Assertions.assertEquals("{}", ToolCallJsonSanitizer.sanitizeArguments(
+                "{\"command\":\"safe\"} trailing", "bash"));
     }
 
     @Test
@@ -181,18 +190,15 @@ public class ToolCallJsonSanitizerTest {
      */
     @Test
     public void poisonedHistoryShouldNotBreakOutboundRequest() {
-        Map<String, Object> fn = new LinkedHashMap<>();
-        fn.put("name", "bash");
-        fn.put("arguments", "{\"command\":\"cd @solon-ai-source && grep -rn " +
-                "\\\"LinkedHashMap\\\\|options()\\\" solon-ai-core/src/main/java/org/noear/solon/ai/chat/ChatOptions");
-
-        Map<String, Object> call = new LinkedHashMap<>();
-        call.put("id", "call_5e615271546f4e549073f418");
-        call.put("type", "function");
-        call.put("function", fn);
-
-        AssistantMessage poisoned = new AssistantMessage("",
-                "", false, null, Arrays.asList(call), null, null);
+        ONode legacy = new ONode().set("role", "assistant").set("text", "").set("thinking", "");
+        legacy.getOrNew("toolCallsRaw").asArray().addNew()
+                .set("id", "call_5e615271546f4e549073f418")
+                .set("type", "function")
+                .getOrNew("function")
+                .set("name", "bash")
+                .set("arguments", "{\"command\":\"cd @solon-ai-source && grep -rn "
+                        + "\"LinkedHashMap\\|options()\" solon-ai-core/src/main/java/org/noear/solon/ai/chat/ChatOptions");
+        AssistantMessage poisoned = (AssistantMessage) ChatMessage.fromJson(legacy.toJson());
 
         TestDialect dialect = new TestDialect();
         ONode node = dialect.buildChatMessageNode(new ChatConfig(), poisoned);
@@ -292,11 +298,10 @@ public class ToolCallJsonSanitizerTest {
 
         Assertions.assertFalse(messages.isEmpty());
         AssistantMessage msg = messages.get(0);
-        Assertions.assertNotNull(msg.getToolCallsRaw());
-
-        Map fn = (Map) msg.getToolCallsRaw().get(0).get("function");
-        //分片原样保留，未被改写为 "{}"
-        Assertions.assertEquals("{\"comm", fn.get("arguments"));
+        Assertions.assertNotNull(msg.getToolCalls());
+        Assertions.assertNull(msg.getToolCallsRaw());
+        // 分片只保存在通用 ToolCall.argumentsStr，未被逐帧净化成 "{}"。
+        Assertions.assertEquals("{\"comm", msg.getToolCalls().get(0).getArgumentsStr());
     }
 
     /**
@@ -317,8 +322,14 @@ public class ToolCallJsonSanitizerTest {
         List<AssistantMessage> messages = dialect.parseAssistantMessage(new TestResponseNonStream(), oMessage);
 
         Assertions.assertFalse(messages.isEmpty());
-        Map fn = (Map) messages.get(0).getToolCallsRaw().get(0).get("function");
-        Assertions.assertEquals("{}", fn.get("arguments"));
+        AssistantMessage message = messages.get(0);
+        Assertions.assertNull(message.getToolCallsRaw(), "新解析消息不再重复生成旧 raw");
+        Assertions.assertEquals("{\"comm", message.getToolCalls().get(0).getArgumentsStr());
+
+        // 非流式历史即使持久化了截断 typed 参数，出站边界也必须净化，避免会话中毒。
+        ONode outbound = dialect.buildChatMessageNode(new ChatConfig(), message);
+        Assertions.assertEquals("{}", outbound.get("tool_calls").get(0)
+                .get("function").get("arguments").getString());
     }
 
     /**
@@ -347,5 +358,63 @@ public class ToolCallJsonSanitizerTest {
         //聚合后是完整参数，不应被兜底成 "{}"
         ONode args = ONode.ofJson(fn.get("arguments").getString());
         Assertions.assertEquals("ls -la", args.get("command").getString());
+    }
+    @Test
+    public void typedToolCallsShouldBePrimaryAndUseStructuredArgumentsFallback() {
+        Map<String, Object> args = new LinkedHashMap<>();
+        args.put("city", "杭州");
+        ToolCall typed = new ToolCall("0", "typed_id", "typed_weather", null, args);
+
+        Map<String, Object> rawFn = new LinkedHashMap<>();
+        rawFn.put("name", "raw_weather");
+        rawFn.put("arguments", "{\"city\":\"上海\"}");
+        Map<String, Object> raw = new LinkedHashMap<>();
+        raw.put("id", "raw_id");
+        raw.put("type", "function");
+        raw.put("function", rawFn);
+
+        List<Map> outbound = ToolCallJsonSanitizer.buildOpenAiCompatibleToolCalls(
+                Arrays.asList(typed), Arrays.asList(raw));
+        Assertions.assertEquals(1, outbound.size());
+        Assertions.assertEquals("typed_id", outbound.get(0).get("id"));
+        Map function = (Map) outbound.get(0).get("function");
+        Assertions.assertEquals("typed_weather", function.get("name"));
+        Assertions.assertEquals("杭州", ONode.ofJson((String) function.get("arguments")).get("city").getString());
+        Assertions.assertFalse(outbound.get(0).containsKey("vendor_trace"));
+    }
+
+    @Test
+    public void typedTruncatedArgumentsShouldNotFallbackToPossiblyRepairedMap() {
+        Map<String, Object> repaired = new LinkedHashMap<>();
+        repaired.put("command", "dangerous-half-command");
+        ToolCall typed = new ToolCall("0", "call_bad", "bash", "{\"command\":\"cd ", repaired);
+
+        List<Map> outbound = ToolCallJsonSanitizer.buildOpenAiCompatibleToolCalls(
+                Arrays.asList(typed), null);
+        Map function = (Map) outbound.get(0).get("function");
+        Assertions.assertEquals("{}", function.get("arguments"));
+    }
+
+    @Test
+    public void legacyRawShouldConvertOnlyFunctionCallsForCrossProtocolRebuild() {
+        Map<String, Object> function = new LinkedHashMap<>();
+        function.put("name", "search");
+        function.put("arguments", "{\"q\":\"solon\"}");
+        Map<String, Object> valid = new LinkedHashMap<>();
+        valid.put("id", "call_1");
+        valid.put("type", "function");
+        valid.put("function", function);
+
+        Map<String, Object> serverTool = new LinkedHashMap<>();
+        serverTool.put("id", "server_1");
+        serverTool.put("type", "web_search");
+        serverTool.put("function", function);
+
+        List<ToolCall> calls = ToolCallJsonSanitizer.parseLegacyToolCallsRaw(
+                Arrays.<Map>asList(valid, serverTool));
+        Assertions.assertEquals(1, calls.size());
+        Assertions.assertEquals("call_1", calls.get(0).getId());
+        Assertions.assertEquals("search", calls.get(0).getName());
+        Assertions.assertEquals("solon", calls.get(0).getArguments().get("q"));
     }
 }

@@ -20,6 +20,7 @@ import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.event.*;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
+import org.noear.solon.ai.chat.source.Citation;
 import org.noear.solon.ai.llm.dialect.gemini.GeminiChatDialect;
 
 import java.util.ArrayList;
@@ -72,6 +73,13 @@ public class GeminiGroundingEventTest {
                 + "{\"web\":{\"uri\":\"https://a.example.com\",\"title\":\"A\"}},"
                 + "{\"web\":{\"uri\":\"https://b.example.com\",\"title\":\"B\"}}"
                 + "]}}]}");
+        // 某些流端点会重复发送累计 grounding 快照，同一位置不得重复聚合。
+        GeminiChatDialect.getInstance().parseResponseJson(ctx, "{\"candidates\":[{"
+                + "\"content\":{\"parts\":[],\"role\":\"model\"},"
+                + "\"groundingMetadata\":{\"groundingChunks\":["
+                + "{\"web\":{\"uri\":\"https://a.example.com\",\"title\":\"A\"}},"
+                + "{\"web\":{\"uri\":\"https://b.example.com\",\"title\":\"B\"}}"
+                + "]}}]}");
 
         List<ChatEvent> citations = allOf(ChatEventType.CITATION);
         assertEquals(2, citations.size(), "each grounding chunk should emit one CITATION");
@@ -80,9 +88,17 @@ public class GeminiGroundingEventTest {
         assertEquals("google_search", citations.get(0).getSubType());
         assertSame(ChatEventGroup.MEDIA, citations.get(0).getGroup());
 
-        //正文仍走内容项，不受影响；元数据事件与正文来自同一响应帧
-        assertTrue(ctx.getAccumulator().hasContentItems());
-        assertEquals("杭州今天晴", ctx.getAccumulator().lastItem().getText());
+        Citation first = citations.get(0).getCitation();
+        assertNotNull(first);
+        assertEquals("google_search", first.getType());
+        assertEquals("A", first.getTitle());
+        assertEquals("https://a.example.com", first.getUrl());
+        assertEquals("A", citations.get(0).getRaw().get("web").get("title").getString());
+
+        //正文与来源均由 ChatAccumulator 统一聚合到终态快照
+        assertEquals("杭州今天晴", ctx.getAccumulator().snapshotTerminal().getText());
+        assertEquals(2, ctx.getAccumulator().snapshotTerminal().getCitations().size());
+        assertSame(first, ctx.getAccumulator().snapshotTerminal().getCitations().get(0));
     }
 
     /**

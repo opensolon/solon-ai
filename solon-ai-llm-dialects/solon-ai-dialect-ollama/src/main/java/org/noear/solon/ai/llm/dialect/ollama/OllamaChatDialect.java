@@ -28,6 +28,7 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatException;
 import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
+import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -43,8 +44,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Ollama 聊天模型方言
@@ -128,14 +132,26 @@ public class OllamaChatDialect extends AbstractChatDialect {
             appendOllamaMediaArrays(oNode, msg.getBlocks());
         }
 
-        //兼容 r1 的 tool-call
-        if (Utils.isNotEmpty(msg.getReasoningFieldName()) && Utils.isNotEmpty(msg.getThinking())) {
-            oNode.set(msg.getReasoningFieldName(), msg.getThinking());
+        // Ollama 原生历史思考字段由目标方言固定为 thinking，不采用源消息字段名。
+        if (Utils.isNotEmpty(msg.getThinking())) {
+            oNode.set("thinking", msg.getThinking());
         }
 
-        if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
-            // 出站兜底净化：截断损坏的 arguments 会被服务端拒绝，统一修复
-            oNode.set("tool_calls", ONode.ofBean(ToolCallJsonSanitizer.sanitizeToolCallsRaw(msg.getToolCallsRaw())));
+        List<ToolCall> outboundToolCalls = ToolCallJsonSanitizer.resolveToolCalls(
+                msg.getToolCalls(), msg.getToolCallsRaw());
+        if (Utils.isNotEmpty(outboundToolCalls)) {
+            oNode.getOrNew("tool_calls").asArray().then(array -> {
+                for (ToolCall call : outboundToolCalls) {
+                    ONode callNode = array.addNew();
+                    if (Utils.isNotEmpty(call.getId())) {
+                        callNode.set("id", call.getId());
+                    }
+                    callNode.set("type", "function");
+                    callNode.getOrNew("function")
+                            .set("name", call.getName())
+                            .set("arguments", ONode.ofJson(ToolCallJsonSanitizer.sanitizeArguments(call)));
+                }
+            });
         }
     }
 
@@ -163,15 +179,14 @@ public class OllamaChatDialect extends AbstractChatDialect {
             return messageList;
         }
 
-        acc.addMediaBlocks(mediaBlocks);
-
         List<AssistantMessage> result = new ArrayList<>(messageList.size());
         boolean mediaMerged = false;
         for (AssistantMessage msg : messageList) {
-            // 仅将媒体合并到非 thinking、非纯 tool_calls 消息
+            // 非流式完整响应可在同一消息保留文本、思考、工具与媒体；
+            // 流式下仍让媒体避开 thinking/tool_calls 事件载体。
             if (!mediaMerged
-                    && !msg.isThinking()
-                    && Utils.isEmpty(msg.getToolCalls())) {
+                    && (!acc.isStream() || (Utils.isEmpty(msg.getThinkingRaw())
+                    && Utils.isEmpty(msg.getToolCalls())))) {
                 List<ContentBlock> blocks = new ArrayList<>();
                 if (Utils.isNotEmpty(msg.getTextRaw())) {
                     blocks.add(TextBlock.of(msg.getTextRaw()));
@@ -185,15 +200,16 @@ public class OllamaChatDialect extends AbstractChatDialect {
                     }
                 }
                 blocks.addAll(mediaBlocks);
-                result.add(new AssistantMessage(
+                AssistantMessage merged = AssistantMessage.snapshot(
                         msg.getTextRaw(),
                         msg.getThinkingRaw(),
-                        msg.isThinking(),
-                        msg.getContentRaw(),
-                        msg.getToolCallsRaw(),
                         msg.getToolCalls(),
-                        msg.getSearchResultsRaw(),
-                        blocks).reasoningFieldName(msg.getReasoningFieldName()));
+                        blocks,
+                        msg.getSearchResults(),
+                        msg.getCitations(),
+                        null,
+                        msg.hasMetadata() ? msg.getMetadata() : null);
+                result.add(merged);
                 mediaMerged = true;
             } else {
                 result.add(msg);
@@ -202,7 +218,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
 
         // 若只有 thinking/tool 消息，补一条带媒体的空文本消息
         if (!mediaMerged) {
-            result.add(new AssistantMessage("","", false, null, null, null, null, mediaBlocks));
+            result.add(new AssistantMessage("", "", null, mediaBlocks));
         }
 
         return result;
@@ -276,6 +292,9 @@ public class OllamaChatDialect extends AbstractChatDialect {
         ONode oNode = new ONode();
         oNode.set("role", "assistant");
         oNode.set("content", acc.getAggregationText());
+        if (Utils.isNotEmpty(acc.getAggregationThinking())) {
+            oNode.set("thinking", acc.getAggregationThinking());
+        }
         oNode.getOrNew("tool_calls").asArray().then(n1 -> {
             for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
                 //有可能没有
@@ -298,8 +317,8 @@ public class OllamaChatDialect extends AbstractChatDialect {
      * 解析响应（事件形态）
      *
      * <p>Ollama chat 协议的流式帧只承载内容增量（正文 / 思考 / 工具调用分片），
-     * 没有独立的生命周期或服务端工具事件，因此内容主干统一交由核心从内容项转换为
-     * TEXT_DELTA / THINKING_DELTA / TOOL_CALL_CHUNK 并保证边界，此处不额外发射事件。</p>
+     * <p>正文、思考与工具调用由方言直接翻译为 TEXT_DELTA / THINKING_DELTA / TOOL_CALL_*，
+     * 终态统一由 ChatAccumulator 聚合。</p>
      *
      * @since 4.1
      */
@@ -314,7 +333,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
             return;
         }
 
-        parseFrameNode(acc, oResp);
+        parseFrameNode(ctx, acc, oResp);
 
         if (acc.getError() != null) {
             ctx.emit(ctx.event(org.noear.solon.ai.chat.event.ChatEventType.ERROR)
@@ -330,7 +349,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
      *
      * @since 4.1
      */
-    private void parseFrameNode(ChatAccumulator acc, ONode oResp) {
+    private void parseFrameNode(ChatStreamContext ctx, ChatAccumulator acc, ONode oResp) {
         if (oResp.hasKey("error")) {
             acc.setError(new ChatException(oResp.get("error").getString()));
         } else {
@@ -339,8 +358,22 @@ public class OllamaChatDialect extends AbstractChatDialect {
             String done_reason = oResp.get("done_reason").getString();
 
             List<AssistantMessage> messageList = parseAssistantMessage(acc, oResp.get("message"));
+            Map<String, Integer> frameOccurrences = new LinkedHashMap<>();
             for (AssistantMessage msg1 : messageList) {
-                acc.addContentItem(msg1);
+                if (acc.isStream()) {
+                    // Ollama 部分实现返回 arguments 累计快照；仅在显式 snapshot 模式下裁剪。
+                    AssistantMessage eventMessage = normalizeToolCallArgumentDeltas(ctx, msg1);
+                    AssistantMessage eventCarrier = withoutMediaBlocks(eventMessage);
+                    publishAssistantMessageEvents(ctx, eventCarrier);
+                    if (eventMessage != msg1) {
+                        // 参数事件只携带增量；终态工具载体仍保留服务端当前完整值。
+                        acc.mergeTerminalMessage(withoutMediaBlocks(msg1));
+                    }
+                    emitMediaDoneEvents(ctx, msg1.getBlocks(), frameOccurrences);
+                } else {
+                    acc.setTerminalMessage(msg1);
+                    emitMediaDoneEvents(ctx, msg1.getBlocks(), frameOccurrences);
+                }
             }
 
             if (Utils.isNotEmpty(done_reason)) {
@@ -348,29 +381,58 @@ public class OllamaChatDialect extends AbstractChatDialect {
             }
 
             if (acc.isFinished()) {
-                long promptTokens = oResp.get("prompt_eval_count").getLong();
-                long completionTokens = oResp.get("eval_count").getLong();
-                long totalTokens = promptTokens + completionTokens;
+                if (oResp.hasKey("prompt_eval_count") || oResp.hasKey("eval_count")) {
+                    long promptTokens = oResp.get("prompt_eval_count").getLong();
+                    long completionTokens = oResp.get("eval_count").getLong();
+                    long totalTokens = promptTokens + completionTokens;
 
-                acc.setUsage(new AiUsage(promptTokens, 0L, completionTokens, totalTokens, oResp));
+                    acc.setUsage(new AiUsage(promptTokens, 0L, completionTokens, totalTokens, oResp));
+                }
 
-                if (acc.hasContentItems() == false) {
-                    acc.addContentItem(new AssistantMessage(""));
+                if (acc.isStream() == false && acc.isTerminalMessagePresent() == false) {
+                    acc.setTerminalMessage(new AssistantMessage(""));
                 }
             }
         }
     }
 
     @Override
+    protected List<ToolCall> parseToolCalls(ChatAccumulator acc, ONode toolCallsNode) {
+        if (toolCallsNode == null || toolCallsNode.isArray() == false) {
+            return null;
+        }
+
+        List<ToolCall> toolCalls = new ArrayList<>();
+        int position = 0;
+        for (ONode toolCallNode : toolCallsNode.getArray()) {
+            toolCalls.add(parseToolCall(acc, toolCallNode, position++));
+        }
+        return toolCalls;
+    }
+
+    @Override
     protected ToolCall parseToolCall(ChatAccumulator acc, ONode n1) {
+        return parseToolCall(acc, n1, 0);
+    }
+
+    private ToolCall parseToolCall(ChatAccumulator acc, ONode n1, int position) {
         String callId = n1.get("id").getString();//可能是空的
 
         ONode n1f = n1.get("function");
         String name = n1f.get("name").getString();
         ONode n1fArgs = n1f.get("arguments");
+        boolean structuredSnapshot = n1fArgs.isObject();
         String argStr = n1fArgs.getString();
 
-        String index = name;
+        // 调用身份：顶层 index > function.index > 稳定 id > 当前帧数组位置。
+        // 函数名不是调用身份，否则同名并行调用会错误合并。
+        String index = readToolCallIndex(n1.getOrNull("index"));
+        if (index == null) {
+            index = readToolCallIndex(n1f.getOrNull("index"));
+        }
+        if (index == null) {
+            index = Utils.isNotEmpty(callId) ? callId : "idx:" + position;
+        }
 
         if (n1fArgs.isValue()) {
             //有可能是 json string（还可能只是流的中间消息）
@@ -391,7 +453,143 @@ public class OllamaChatDialect extends AbstractChatDialect {
             }
         }
 
-        return new ToolCall(index, callId, name, argStr, argMap);
+        return new OllamaToolCall(index, callId, name, argStr, argMap, structuredSnapshot);
+    }
+
+    private String readToolCallIndex(ONode indexNode) {
+        if (indexNode == null || indexNode.isValue() == false) {
+            return null;
+        }
+
+        String value = indexNode.getString();
+        if (Utils.isEmpty(value)) {
+            return null;
+        }
+        return value.startsWith("idx:") ? value : "idx:" + value;
+    }
+
+    private AssistantMessage normalizeToolCallArgumentDeltas(ChatStreamContext ctx, AssistantMessage message) {
+        if (Utils.isEmpty(message.getToolCalls())) {
+            return message;
+        }
+
+        Map<String, ToolArgumentsState> states = ctx.attrIfAbsent(
+                "__ollamaToolArgumentStates", k -> new LinkedHashMap<String, ToolArgumentsState>());
+        boolean snapshotMode = "snapshot".equalsIgnoreCase(String.valueOf(
+                ctx.getRequest().getOptions().option("ollama_tool_arguments_mode")));
+        List<ToolCall> deltaCalls = new ArrayList<>(message.getToolCalls().size());
+        for (ToolCall call : message.getToolCalls()) {
+            String stateKey = ctx.getStep() + ":" + call.getIndex();
+            ToolArgumentsState state = states.computeIfAbsent(stateKey, k -> new ToolArgumentsState(snapshotMode));
+            String delta = state.normalize(call.getArgumentsStr(),
+                    call instanceof OllamaToolCall && ((OllamaToolCall) call).structuredSnapshot);
+            ToolCall deltaCall = new ToolCall(call.getIndex(), call.getId(), call.getName(), delta, call.getArguments());
+            deltaCalls.add(deltaCall);
+        }
+
+        return AssistantMessage.snapshot(
+                message.getTextRaw(),
+                message.getThinkingRaw(),
+                deltaCalls,
+                message.getBlocks(),
+                message.getSearchResults(),
+                message.getCitations(),
+                null,
+                message.hasMetadata() ? message.getMetadata() : null);
+    }
+
+    private AssistantMessage withoutMediaBlocks(AssistantMessage message) {
+        if (message == null || Utils.isEmpty(message.getBlocks())) {
+            return message;
+        }
+        return AssistantMessage.snapshot(
+                message.getTextRaw(),
+                message.getThinkingRaw(),
+                ToolCallJsonSanitizer.resolveToolCalls(
+                        message.getToolCalls(), message.getToolCallsRaw()),
+                null,
+                message.resolveSearchResults(),
+                message.getCitations(),
+                null,
+                message.hasMetadata() ? message.getMetadata() : null);
+    }
+
+    private void emitMediaDoneEvents(ChatStreamContext ctx, List<ContentBlock> blocks,
+                                     Map<String, Integer> frameOccurrences) {
+        if (Utils.isEmpty(blocks)) {
+            return;
+        }
+
+        boolean deltaMode = "delta".equalsIgnoreCase(String.valueOf(
+                ctx.getRequest().getOptions().option("ollama_media_mode")));
+        Set<String> emitted = deltaMode ? null
+                : ctx.attrIfAbsent("__ollamaEmittedMedia", k -> new LinkedHashSet<String>());
+        int index = 0;
+        for (ContentBlock block : blocks) {
+            if (block == null || block instanceof TextBlock) {
+                index++;
+                continue;
+            }
+            String baseKey = block.getClass().getName() + ':' + block.getMimeType() + ':' + block.getContent();
+            Integer occurrence = frameOccurrences.get(baseKey);
+            int rank = occurrence == null ? 0 : occurrence;
+            frameOccurrences.put(baseKey, rank + 1);
+            String key = baseKey + ':' + rank;
+            if (emitted == null || emitted.add(key)) {
+                ctx.emit(ctx.event(ChatEventType.MEDIA_DONE).index(index).block(block).build());
+            }
+            index++;
+        }
+    }
+
+    private static class OllamaToolCall extends ToolCall {
+        private final boolean structuredSnapshot;
+
+        private OllamaToolCall(String index, String id, String name, String argumentsStr,
+                               Map<String, Object> arguments, boolean structuredSnapshot) {
+            super(index, id, name, argumentsStr, arguments);
+            this.structuredSnapshot = structuredSnapshot;
+        }
+    }
+
+    private static class ToolArgumentsState {
+        private final StringBuilder accumulated = new StringBuilder();
+        private boolean snapshotMode;
+
+        private ToolArgumentsState(boolean snapshotMode) {
+            this.snapshotMode = snapshotMode;
+        }
+
+        private String normalize(String current, boolean structuredSnapshot) {
+            if (Utils.isEmpty(current)) {
+                return current;
+            }
+
+            String delta = current;
+            int len = accumulated.length();
+            if (len > 0) {
+                if ((snapshotMode || structuredSnapshot) && startsWithAccumulated(current)) {
+                    snapshotMode = true;
+                    delta = current.substring(len);
+                }
+            }
+
+            accumulated.append(delta);
+            return delta;
+        }
+
+        private boolean startsWithAccumulated(String value) {
+            int len = accumulated.length();
+            if (value.length() < len) {
+                return false;
+            }
+            for (int i = 0; i < len; i++) {
+                if (value.charAt(i) != accumulated.charAt(i)) {
+                    return false;
+                }
+            }
+            return true;
+        }
     }
 
     @Override
@@ -404,9 +602,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
 
             n.getOrNew("messages").then(n1 -> {
                 for (ChatMessage m1 : messages) {
-                    if (m1.isThinking() == false || m1.isToolCalls()) {
-                        n1.add(buildChatMessageNode(config, m1));
-                    }
+                    n1.add(buildChatMessageNode(config, m1));
                 }
             });
 
@@ -431,7 +627,22 @@ public class OllamaChatDialect extends AbstractChatDialect {
             }
 
             for (Map.Entry<String, Object> kv : options.options().entrySet()) {
-                n.set(kv.getKey(), ONode.ofBean(kv.getValue()));
+                String key = kv.getKey();
+                Object value = kv.getValue();
+                // 统一 thinking(Boolean) 映射到 Ollama 原生 think；内部键不得透传。
+                // 调用方显式 optionSet("think", ...) 时保留其原生值并优先。
+                if ("thinking".equals(key)) {
+                    if (value instanceof Boolean && options.options().containsKey("think") == false) {
+                        n.set("think", value);
+                    }
+                    continue;
+                }
+                // 方言本地控制项只影响入站解析，不能透传给 Ollama 供应商。
+                if ("ollama_tool_arguments_mode".equals(key)
+                        || "ollama_media_mode".equals(key)) {
+                    continue;
+                }
+                n.set(key, ONode.ofBean(value));
             }
 
             ChatMessage lastMessage = messages.get(messages.size() - 1);

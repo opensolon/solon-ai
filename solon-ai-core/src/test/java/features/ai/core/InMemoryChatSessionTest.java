@@ -142,18 +142,10 @@ public class InMemoryChatSessionTest {
         // 构造：User -> Assistant(带toolCalls) -> ToolMessage -> ToolMessage -> User -> Assistant
         session.addMessage(ChatMessage.ofUser("u1"));
 
-        // 构造带 toolCalls 的 AssistantMessage
-        java.util.Map<String, Object> funcMap = new java.util.LinkedHashMap<>();
-        java.util.Map<String, String> funcNameMap = new java.util.LinkedHashMap<>();
-        funcNameMap.put("name", "getWeather");
-        funcMap.put("function", funcNameMap);
-
         java.util.Map<String, Object> argMap = new java.util.LinkedHashMap<>();
-
-        AssistantMessage toolCallMsg = new AssistantMessage("", "", false, null,
-                java.util.Collections.singletonList(funcMap),
-                java.util.Collections.singletonList(new org.noear.solon.ai.chat.tool.ToolCall("0", "call_1", "getWeather", "{}", argMap)),
-                null);
+        AssistantMessage toolCallMsg = new AssistantMessage("", "",
+                java.util.Collections.singletonList(new org.noear.solon.ai.chat.tool.ToolCall(
+                        "0", "call_1", "getWeather", "{}", argMap)), null);
         session.addMessage(toolCallMsg);
         session.addMessage(ChatMessage.ofTool("sunny", "getWeather", "call_1"));
         session.addMessage(ChatMessage.ofTool("25°C", "getTemperature", "call_2"));
@@ -230,15 +222,10 @@ public class InMemoryChatSessionTest {
         // 构造：User -> Assistant(带toolCalls) -> ToolMessage -> ToolMessage -> User -> Assistant
         session.addMessage(ChatMessage.ofUser("u1"));
 
-        java.util.Map<String, Object> funcMap = new java.util.LinkedHashMap<>();
-        java.util.Map<String, String> funcNameMap = new java.util.LinkedHashMap<>();
-        funcNameMap.put("name", "getWeather");
-        funcMap.put("function", funcNameMap);
         java.util.Map<String, Object> argMap = new java.util.LinkedHashMap<>();
-        AssistantMessage toolCallMsg = new AssistantMessage("","", false, null,
-                java.util.Collections.singletonList(funcMap),
-                java.util.Collections.singletonList(new org.noear.solon.ai.chat.tool.ToolCall("0", "call_1", "getWeather", "{}", argMap)),
-                null);
+        AssistantMessage toolCallMsg = new AssistantMessage("", "",
+                java.util.Collections.singletonList(new org.noear.solon.ai.chat.tool.ToolCall(
+                        "0", "call_1", "getWeather", "{}", argMap)), null);
         session.addMessage(toolCallMsg);
         session.addMessage(ChatMessage.ofTool("sunny", "getWeather", "call_1"));
         session.addMessage(ChatMessage.ofTool("25C", "getTemp", "call_2"));
@@ -306,15 +293,10 @@ public class InMemoryChatSessionTest {
 
         session.addMessage(ChatMessage.ofUser("u1"));
 
-        java.util.Map<String, Object> funcMap = new java.util.LinkedHashMap<>();
-        java.util.Map<String, String> funcNameMap = new java.util.LinkedHashMap<>();
-        funcNameMap.put("name", "getWeather");
-        funcMap.put("function", funcNameMap);
         java.util.Map<String, Object> argMap = new java.util.LinkedHashMap<>();
-        AssistantMessage toolCallMsg = new AssistantMessage("","", false, null,
-                java.util.Collections.singletonList(funcMap),
-                java.util.Collections.singletonList(new org.noear.solon.ai.chat.tool.ToolCall("0", "call_1", "getWeather", "{}", argMap)),
-                null);
+        AssistantMessage toolCallMsg = new AssistantMessage("", "",
+                java.util.Collections.singletonList(new org.noear.solon.ai.chat.tool.ToolCall(
+                        "0", "call_1", "getWeather", "{}", argMap)), null);
         session.addMessage(toolCallMsg);
         session.addMessage(ChatMessage.ofTool("sunny", "getWeather", "call_1"));
 

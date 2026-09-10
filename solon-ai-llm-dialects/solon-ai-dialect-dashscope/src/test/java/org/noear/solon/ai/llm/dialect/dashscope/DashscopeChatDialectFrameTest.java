@@ -25,8 +25,10 @@ import org.noear.solon.ai.chat.event.ChatEvent;
 import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.event.ChatStreamContextDefault;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
+import org.noear.solon.ai.chat.source.SearchResult;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -82,15 +84,15 @@ public class DashscopeChatDialectFrameTest {
     /// ////////////////////////// 结束标记
 
     /**
-     * [DONE] 不是数据结构：补一个空内容项收口，并置完成
+     * [DONE] 只关闭步骤，不再通过空 AssistantMessage 表达协议边界
      */
     @Test
     public void doneMarkerClosesStep() {
         ChatAccumulator acc = feed(newCtx(), "[DONE]");
 
         assertTrue(acc.isFinished(), "[DONE] 必须置完成");
-        assertEquals(1, acc.getContentItems().size(), "未完成的步需要补空内容项收口");
-        assertEquals("", acc.lastItem().getTextRaw());
+        assertEquals("", acc.getAggregationText());
+        assertEquals("", acc.getAggregationThinking());
         assertNull(acc.getError());
         assertTrue(events.isEmpty(), "[DONE] 不产生事件");
     }
@@ -105,8 +107,10 @@ public class DashscopeChatDialectFrameTest {
         feed(ctx, frame("\"content\":\"杭州今天晴\"", "\"stop\""));
         assertTrue(ctx.getAccumulator().isFinished());
 
+        int eventCount = events.size();
         ChatAccumulator acc = feed(ctx, "[DONE]");
-        assertTrue(acc.getContentItems().isEmpty(), "已完成的步不得再补空内容项");
+        assertEquals("杭州今天晴", acc.getAggregationText(), "[DONE] 不得改变已有正文聚合");
+        assertEquals(eventCount, events.size(), "[DONE] 不得补发空内容事件");
     }
 
     /**
@@ -117,14 +121,14 @@ public class DashscopeChatDialectFrameTest {
         ChatStreamContext ctx = newCtx();
 
         feed(ctx, frame("\"content\":\"" + BASE + "\"", "null"));
-        assertEquals("，气温25度", feed(ctx, frame("\"content\":\"" + BASE + "，气温25度\"", "\"stop\""))
-                .lastItem().getTextRaw(), "同一步内应按快照截断");
+        feed(ctx, frame("\"content\":\"" + BASE + "，气温25度\"", "\"stop\""));
+        assertEquals("，气温25度", lastEventText(ChatEventType.TEXT_DELTA), "同一步内应按快照截断");
 
         feed(ctx, "[DONE]");
 
         //新一步重放同样的首帧：基准已释放，必须原样交付
-        assertEquals(BASE, feed(ctx, frame("\"content\":\"" + BASE + "\"", "null"))
-                .lastItem().getTextRaw(), "[DONE] 之后不得继承上一步的累积基准");
+        feed(ctx, frame("\"content\":\"" + BASE + "\"", "null"));
+        assertEquals(BASE, lastEventText(ChatEventType.TEXT_DELTA), "[DONE] 之后不得继承上一步的累积基准");
     }
 
     /// ////////////////////////// 非数据结构帧
@@ -137,7 +141,8 @@ public class DashscopeChatDialectFrameTest {
         for (String data : new String[]{"[]", "[1,2]", "\"text\"", "123", "true", "null"}) {
             ChatAccumulator acc = feed(newCtx(), data);
 
-            assertFalse(acc.hasContentItems(), "非对象帧不得产出内容项：" + data);
+            assertEquals("", acc.getAggregationText(), "非对象帧不得产出正文：" + data);
+            assertEquals("", acc.getAggregationThinking(), "非对象帧不得产出思考：" + data);
             assertFalse(acc.isFinished(), "非对象帧不得置完成：" + data);
             assertNull(acc.getError(), "非对象帧不得产生错误：" + data);
             assertTrue(events.isEmpty(), "非对象帧不得产生事件：" + data);
@@ -158,7 +163,8 @@ public class DashscopeChatDialectFrameTest {
 
         assertNotNull(acc.getError());
         assertEquals("InvalidApiKey: Invalid API-key provided.", acc.getError().getMessage());
-        assertFalse(acc.hasContentItems(), "错误帧不得产出内容项");
+        assertEquals("", acc.getAggregationText(), "错误帧不得产出正文");
+        assertEquals("", acc.getAggregationThinking(), "错误帧不得产出思考");
 
         assertEquals(1, events.size());
         assertSame(ChatEventType.ERROR, events.get(0).getType());
@@ -176,9 +182,9 @@ public class DashscopeChatDialectFrameTest {
                         + "\"message\":{\"role\":\"assistant\",\"content\":\"杭州今天晴\"}}]}}");
 
         assertNull(acc.getError(), "空 code 不得判定为错误");
-        assertEquals("杭州今天晴", acc.lastItem().getTextRaw());
+        assertEquals("杭州今天晴", acc.getAggregationText());
+        assertEquals("杭州今天晴", lastEventText(ChatEventType.TEXT_DELTA));
         assertTrue(acc.isFinished());
-        assertTrue(events.isEmpty());
     }
 
     /// ////////////////////////// 内容帧的附属字段
@@ -225,19 +231,34 @@ public class DashscopeChatDialectFrameTest {
     }
 
     /**
-     * 联网搜索：search_info 在 output 层级，需注入 message 后由核心解析
+     * 联网搜索：search_info 在 output 层级，注入 message 后由核心解析为类型化结果并发出事件。
      */
     @Test
     public void searchResultsAreInjectedIntoMessage() {
         ChatAccumulator acc = feed(newCtx(),
                 "{\"output\":{\"search_info\":{\"search_results\":["
-                        + "{\"index\":1,\"title\":\"天气\",\"url\":\"https://example.com/1\"}]},"
+                        + "{\"index\":1,\"title\":\"天气\",\"url\":\"https://example.com/1\","
+                        + "\"snippet\":\"杭州天气预报\"}]},"
                         + "\"choices\":[{\"finish_reason\":\"stop\","
                         + "\"message\":{\"role\":\"assistant\",\"content\":\"杭州今天晴\"}}]}}");
 
-        assertNotNull(acc.lastItem().getSearchResultsRaw());
-        assertEquals(1, acc.lastItem().getSearchResultsRaw().size());
-        assertEquals("天气", acc.lastItem().getSearchResultsRaw().get(0).get("title"));
+        AssistantMessage message = acc.snapshotTerminal().getMessage();
+        assertNotNull(message);
+        assertNotNull(message.getSearchResults());
+        assertEquals(1, message.getSearchResults().size());
+        SearchResult result = message.getSearchResults().get(0);
+        assertEquals(Integer.valueOf(1), result.getIndex());
+        assertEquals("天气", result.getTitle());
+        assertEquals("https://example.com/1", result.getUrl());
+        assertEquals("杭州天气预报", result.getSnippet());
+        assertNull(message.getSearchResultsRaw(), "新解析路径不得写旧 raw 字段");
+        assertNull(acc.getTerminalSearchResultsRaw());
+
+        List<ChatEvent> searchEvents = eventsOfType(ChatEventType.SEARCH_RESULT);
+        assertEquals(1, searchEvents.size());
+        assertSame(result, searchEvents.get(0).getSearchResult(), "终态应复用事件聚合的类型化结果");
+        assertEquals(1, searchEvents.get(0).getIndex());
+        assertEquals("天气", searchEvents.get(0).getSearchResult().getTitle());
     }
 
     /**
@@ -250,33 +271,70 @@ public class DashscopeChatDialectFrameTest {
                         + "\"choices\":[{\"finish_reason\":\"stop\","
                         + "\"message\":{\"role\":\"assistant\",\"content\":\"杭州今天晴\"}}]}}");
 
-        assertNull(acc.lastItem().getSearchResultsRaw());
+        assertNull(acc.getTerminalSearchResults());
+        assertNull(acc.getTerminalSearchResultsRaw());
+        assertTrue(eventsOfType(ChatEventType.SEARCH_RESULT).isEmpty());
     }
 
     /**
-     * 结束帧只有 finish_reason、连 message 都没有：仍要补空内容项收口
+     * 非流式搜索结果同样走类型化 message 字段，不发流式事件，也不写旧 raw 字段。
      */
     @Test
-    public void finishFrameWithoutMessageStillProducesItem() {
+    public void nonStreamSearchResultsStayTyped() {
+        ChatConfig config = new ChatConfig();
+        config.setModel("qwen-plus");
+        ChatRequest req = new ChatRequest(config, dialect, ChatOptions.of(),
+                InMemoryChatSession.builder().build(), ChatMessage.ofSystem("test"), null, false);
+        ChatAccumulator acc = new ChatAccumulator(req, false);
+        ChatStreamContext ctx = ChatStreamContextDefault.ofNoEmit(config, acc);
+
+        dialect.parseResponseJson(ctx,
+                "{\"output\":{\"search_info\":{\"search_results\":["
+                        + "{\"index\":2,\"title\":\"气象台\",\"url\":\"https://example.com/2\","
+                        + "\"snippet\":\"今日晴，最高温度25度\"}]},"
+                        + "\"choices\":[{\"finish_reason\":\"stop\","
+                        + "\"message\":{\"role\":\"assistant\",\"content\":\"杭州今天晴\"}}]}}");
+
+        AssistantMessage message = acc.snapshotTerminal().getMessage();
+        assertNotNull(message);
+        assertNotNull(message.getSearchResults());
+        assertEquals(1, message.getSearchResults().size());
+        SearchResult result = message.getSearchResults().get(0);
+        assertEquals(Integer.valueOf(2), result.getIndex());
+        assertEquals("气象台", result.getTitle());
+        assertEquals("https://example.com/2", result.getUrl());
+        assertEquals("今日晴，最高温度25度", result.getSnippet());
+        assertNull(message.getSearchResultsRaw(), "新解析路径不得写旧 raw 字段");
+        assertNull(acc.getTerminalSearchResultsRaw());
+        assertTrue(acc.getAggregationSearchResults().isEmpty(), "非流式路径不应伪造流式事件聚合");
+    }
+
+    /**
+     * 结束帧只有 finish_reason、连 message 都没有：仅更新完成状态
+     */
+    @Test
+    public void finishFrameWithoutMessageOnlyUpdatesState() {
         ChatAccumulator acc = feed(newCtx(),
                 "{\"output\":{\"choices\":[{\"finish_reason\":\"stop\"}]},\"request_id\":\"req-1\"}");
 
         assertTrue(acc.isFinished());
         assertEquals("stop", acc.getLastFinishReasonNormalized());
-        assertEquals(1, acc.getContentItems().size(), "完成但无内容项时必须补空项");
-        assertEquals("", acc.lastItem().getTextRaw());
+        assertEquals("", acc.getAggregationText());
+        assertEquals("", acc.getAggregationThinking());
+        assertTrue(events.isEmpty(), "无内容结束帧不得产生空增量");
     }
 
     /**
-     * 空正文的结束帧：同样走「补空内容项」分支
+     * 空正文的结束帧不得产生空内容事件
      */
     @Test
-    public void finishFrameWithEmptyContentStillProducesItem() {
+    public void finishFrameWithEmptyContentProducesNoDelta() {
         ChatAccumulator acc = feed(newCtx(), frame("\"content\":\"\"", "\"stop\""));
 
         assertTrue(acc.isFinished());
-        assertEquals(1, acc.getContentItems().size());
-        assertEquals("", acc.lastItem().getTextRaw());
+        assertEquals("", acc.getAggregationText());
+        assertEquals("", acc.getAggregationThinking());
+        assertTrue(events.isEmpty());
     }
 
     /// ////////////////////////// 快照归一的字段覆盖面
@@ -290,10 +348,10 @@ public class DashscopeChatDialectFrameTest {
 
         ChatAccumulator acc = feed(ctx, frame("\"content\":\"\",\"reasoning\":\"先查一下杭州天气\"", "null"));
         assertEquals("reasoning", acc.reasoning_field_name);
-        assertEquals("先查一下杭州天气", acc.lastItem().getThinkingRaw());
+        assertEquals("先查一下杭州天气", lastEventText(ChatEventType.THINKING_DELTA));
 
         feed(ctx, frame("\"content\":\"\",\"reasoning\":\"先查一下杭州天气再回答用户\"", "null"));
-        assertEquals("再回答用户", acc.lastItem().getThinkingRaw(), "reasoning 的全量快照也不得重复累加");
+        assertEquals("再回答用户", lastEventText(ChatEventType.THINKING_DELTA), "reasoning 的全量快照也不得重复累加");
     }
 
     /**
@@ -305,8 +363,10 @@ public class DashscopeChatDialectFrameTest {
 
         String body = "\"content\":[{\"text\":\"" + BASE + "\"}]";
 
-        assertEquals(BASE, feed(ctx, frame(body, "null")).lastItem().getTextRaw());
-        assertEquals(BASE, feed(ctx, frame(body, "null")).lastItem().getTextRaw(),
+        feed(ctx, frame(body, "null"));
+        assertEquals(BASE, lastEventText(ChatEventType.TEXT_DELTA));
+        feed(ctx, frame(body, "null"));
+        assertEquals(BASE, lastEventText(ChatEventType.TEXT_DELTA),
                 "数组形态由 incremental_output 保证增量，方言不得截断");
     }
 
@@ -321,28 +381,44 @@ public class DashscopeChatDialectFrameTest {
         feed(ctx, frame("\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\","
                 + "\"function\":{\"name\":\"get_weather\",\"arguments\":\"{}\"}}]", "null"));
 
-        assertEquals("，气温25度", feed(ctx, frame("\"content\":\"" + BASE + "，气温25度\"", "null"))
-                .lastItem().getTextRaw(), "工具帧不得重置或推进正文基准");
+        feed(ctx, frame("\"content\":\"" + BASE + "，气温25度\"", "null"));
+        assertEquals("，气温25度", lastEventText(ChatEventType.TEXT_DELTA), "工具帧不得重置或推进正文基准");
     }
 
     /**
-     * n&gt;1：各路 choice 的快照基准必须彼此隔离（否则会互相串话）
+     * n&gt;1：ChatResponse 是单结果模型，快照归一与事件仅消费首个 choice。
      */
     @Test
-    public void snapshotBaselineIsIsolatedPerChoice() {
+    public void snapshotBaselineUsesOnlyFirstChoice() {
         ChatStreamContext ctx = newCtx();
 
         String other = "另一路的完整正文内容";
 
-        ChatAccumulator acc = feed(ctx, twoChoiceFrame(BASE, other));
-        assertEquals(2, acc.getContentItems().size());
-        assertEquals(BASE, acc.getContentItems().get(0).getTextRaw());
-        assertEquals(other, acc.getContentItems().get(1).getTextRaw());
+        feed(ctx, twoChoiceFrame(BASE, other));
+        assertEquals(1, eventsOfType(ChatEventType.TEXT_DELTA).size());
+        assertEquals(BASE, eventsOfType(ChatEventType.TEXT_DELTA).get(0).getText());
 
-        acc = feed(ctx, twoChoiceFrame(BASE + "甲", other + "乙"));
-        assertEquals(2, acc.getContentItems().size());
-        assertEquals("甲", acc.getContentItems().get(0).getTextRaw(), "choice 0 的增量");
-        assertEquals("乙", acc.getContentItems().get(1).getTextRaw(), "choice 1 的增量");
+        int before = eventsOfType(ChatEventType.TEXT_DELTA).size();
+        feed(ctx, twoChoiceFrame(BASE + "甲", other + "乙"));
+        List<ChatEvent> textEvents = eventsOfType(ChatEventType.TEXT_DELTA);
+        assertEquals(before + 1, textEvents.size());
+        assertEquals("甲", textEvents.get(before).getText(), "仅 choice 0 进入单结果累积器");
+    }
+
+    private String lastEventText(ChatEventType type) {
+        List<ChatEvent> matches = eventsOfType(type);
+        assertFalse(matches.isEmpty(), "缺少事件：" + type);
+        return matches.get(matches.size() - 1).getText();
+    }
+
+    private List<ChatEvent> eventsOfType(ChatEventType type) {
+        List<ChatEvent> matches = new ArrayList<>();
+        for (ChatEvent event : events) {
+            if (event.getType() == type) {
+                matches.add(event);
+            }
+        }
+        return matches;
     }
 
     private String twoChoiceFrame(String content0, String content1) {
@@ -367,11 +443,13 @@ public class DashscopeChatDialectFrameTest {
         String full = frame("\"content\":\"" + BASE + "，气温25度\"", "\"stop\"");
 
         dialect.parseResponseJson(ctx, full);
-        assertEquals(BASE + "，气温25度", acc.lastItem().getTextRaw());
+        assertNotNull(acc.snapshotTerminal().getMessage());
+        assertEquals(BASE + "，气温25度", acc.snapshotTerminal().getText());
 
         acc.reset();
         dialect.parseResponseJson(ctx, full);
-        assertEquals(BASE + "，气温25度", acc.lastItem().getTextRaw());
+        assertNotNull(acc.snapshotTerminal().getMessage());
+        assertEquals(BASE + "，气温25度", acc.snapshotTerminal().getText());
         assertTrue(events.isEmpty(), "ofNoEmit 上下文不得产出事件");
     }
 }

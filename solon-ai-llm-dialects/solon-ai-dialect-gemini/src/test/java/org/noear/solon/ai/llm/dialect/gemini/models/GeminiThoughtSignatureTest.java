@@ -23,11 +23,14 @@ import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRequest;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.MessageProtocolState;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.llm.dialect.gemini.GeminiChatDialect;
+import org.noear.solon.ai.llm.dialect.gemini.GeminiMessageStateSupport;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,8 +41,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * thoughtSignature 跨轮回传链路的离线回归（Gemini Generate Content API）
  *
  * <p>Gemini 3 的 thoughtSignature 位于 part 级别（functionCall 同级），并行调用时仅第一个 part 携带。
- * 入站由 {@link GeminiThoughtProcessor} 写入 ToolCall.thoughtSignature 与 acc.thinkingSignature，
- * 出站由 {@link GeminiRequestBuilder} 从这两条路径任一取回。签名丢失会导致下一轮思考上下文断裂。</p>
+ * 新响应把签名写入协议状态与 acc.thinkingSignature，不再写 deprecated ToolCall 字段；
+ * 出站优先读取有效协议状态，仅在没有对应状态时兼容旧 ToolCall JSON。</p>
  *
  * @author noear
  */
@@ -56,7 +59,7 @@ public class GeminiThoughtSignatureTest {
     }
 
     /**
-     * 入站 → 出站闭环：解析出的 ToolCall.thoughtSignature 在下一轮 parts 上原样回传。
+     * 入站 → 出站闭环：新响应只通过协议状态保存签名，并在下一轮 parts 上原样回传。
      */
     @Test
     public void parsedThoughtSignature_replayedOnFunctionCallPart() {
@@ -68,8 +71,23 @@ public class GeminiThoughtSignatureTest {
 
         AssistantMessage assistantMessage = messages.get(messages.size() - 1);
         ToolCall call = assistantMessage.getToolCalls().get(0);
-        assertEquals("sig_gem", call.getThoughtSignature(), "ToolCall 应携带解析到的 thoughtSignature");
+        assertNull(call.getThoughtSignature(), "新解析消息不得双写 deprecated ToolCall 字段");
+        assertNull(assistantMessage.getContentRaw(), "Generate Content 新响应不得生成 legacy contentRaw");
+        ONode serialized = ONode.ofJson(ChatMessage.toJson(assistantMessage));
+        assertFalse(serialized.hasKey("contentRaw"), "新状态 JSON 不应出现 legacy contentRaw");
+        assertFalse(serialized.get("toolCalls").get(0).hasKey("thoughtSignature"),
+                "新消息 JSON 不应出现 deprecated 签名字段");
+        MessageProtocolState state = assistantMessage.getProtocolState(
+                GeminiMessageStateSupport.GENERATE_CONTENT_PROTOCOL_ID);
+        assertNotNull(state, assistantMessage.toString());
+        assertNotNull(state.getSemanticHash(), assistantMessage.toString());
         assertEquals("sig_gem", acc.thinkingSignature, "acc.thinkingSignature 应同步置位");
+
+        // JSON 恢复后优先从协议状态回放，不依赖运行时对象。
+        AssistantMessage restored = (AssistantMessage) ChatMessage.fromJson(ChatMessage.toJson(assistantMessage));
+        ONode restoredNode = builder.buildMessageNode(restored);
+        assertEquals("sig_gem", restoredNode.get("parts").get(0).get("thoughtSignature").getString(),
+                restoredNode.toJson());
 
         // 出站：part 级别（functionCall 同级）回传
         ONode node = builder.buildMessageNode(assistantMessage);
@@ -90,8 +108,9 @@ public class GeminiThoughtSignatureTest {
         List<AssistantMessage> messages = processor.parse(acc, oContent);
 
         assertEquals("sig_snake", acc.thinkingSignature);
-        assertEquals("sig_snake",
-                messages.get(messages.size() - 1).getToolCalls().get(0).getThoughtSignature());
+        AssistantMessage message = messages.get(messages.size() - 1);
+        assertNull(message.getToolCalls().get(0).getThoughtSignature());
+        assertNotNull(message.getProtocolState(GeminiMessageStateSupport.GENERATE_CONTENT_PROTOCOL_ID));
     }
 
     /**
@@ -149,6 +168,37 @@ public class GeminiThoughtSignatureTest {
 
         assertTrue(args.isObject(), node.toJson());
         assertEquals("杭州", args.get("location").getString(), node.toJson());
+    }
+
+    @Test
+    public void staleProtocolState_doesNotFallBackToLegacySignature() {
+        AssistantMessage original = processor.parse(newAccumulator(false), ONode.ofJson(
+                "{\"parts\":[{\"thoughtSignature\":\"sig_stale\","
+                        + "\"functionCall\":{\"name\":\"getWeather\",\"args\":{},\"id\":\"call-1\"}}]}"))
+                .get(0);
+        original.getToolCalls().get(0).setThoughtSignature("sig_legacy");
+        AssistantMessage changed = AssistantMessage.snapshot(
+                "changed", "", original.getToolCalls(), null, null, null,
+                Collections.singletonMap(
+                        GeminiMessageStateSupport.GENERATE_CONTENT_PROTOCOL_ID,
+                        original.getProtocolState(GeminiMessageStateSupport.GENERATE_CONTENT_PROTOCOL_ID)));
+
+        ONode node = builder.buildMessageNode(changed);
+        assertFalse(node.toJson().contains("thoughtSignature"), node.toJson());
+    }
+
+    @Test
+    public void legacyToolCallJson_replaysSignatureWithoutProtocolState() {
+        AssistantMessage restored = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"\",\"thinking\":\"\"," +
+                        "\"toolCalls\":[{\"index\":\"0\",\"id\":\"call-1\"," +
+                        "\"name\":\"getWeather\",\"argumentsStr\":\"{}\"," +
+                        "\"arguments\":{},\"thoughtSignature\":\"sig_old\"}]}");
+
+        assertFalse(restored.hasProtocolStates());
+        assertEquals("sig_old", restored.getToolCalls().get(0).getThoughtSignature());
+        ONode node = builder.buildMessageNode(restored);
+        assertEquals("sig_old", node.get("parts").get(0).get("thoughtSignature").getString(), node.toJson());
     }
 
     /**

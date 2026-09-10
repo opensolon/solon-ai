@@ -16,6 +16,8 @@
 package org.noear.solon.ai.llm.dialect.gemini.models;
 
 import org.noear.snack4.ONode;
+import org.noear.snack4.Options;
+import org.noear.snack4.json.JsonReader;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
@@ -36,12 +38,11 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
-import org.noear.solon.ai.llm.dialect.gemini.models.model.GenerationConfig;
-import org.noear.solon.ai.llm.dialect.gemini.models.model.ThinkingConfig;
-
+import org.noear.solon.ai.llm.dialect.gemini.GeminiMessageStateSupport;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Gemini 请求构建器
@@ -53,6 +54,14 @@ import java.util.Map;
  * @since 3.1
  */
 public class GeminiRequestBuilder {
+    private static final Set<String> ROOT_OPTION_KEYS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "safetySettings", "labels"));
+
+    /** 纯思考历史没有可安全回放的 Gemini 签名/正文，应用 metadata 与 foreign raw 不应阻止过滤。 */
+    private boolean isSkippableThinkingOnlyMessage(ChatMessage message) {
+        return message instanceof AssistantMessage
+                && ((AssistantMessage) message).isThinkingOnly();
+    }
 
     /**
      * 构建请求 JSON
@@ -66,10 +75,6 @@ public class GeminiRequestBuilder {
     public ONode build(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
         ONode root = new ONode();
 
-        if (Utils.isNotEmpty(config.getModel())) {
-            root.set("model", config.getModel());
-        }
-
         // cachedContent: Google Gemini 显式 Context Caching（针对超长上下文/系统知识库）
         // 允许通过 options.optionSet("cachedContent", "cachedContents/xxx") 或 context_cache_id 传入
         Object cachedContent = options.options().get("cachedContent");
@@ -80,12 +85,10 @@ public class GeminiRequestBuilder {
             root.set("cachedContent", cachedContent.toString());
         }
 
-        // system_instruction：提取 SystemMessage 到顶层（Gemini 的 contents[].role 仅接受 user/model，
-        // 写入 role="system" 会被 API 400 拒绝；官方格式为 system_instruction.parts[].text）
-        // 注：若已挂载 cachedContent，通常 system_instruction 已内嵌在缓存资源中，仍允许追加
+        // systemInstruction：Gemini 的 contents[].role 仅接受 user/model。
         ONode sysInst = buildSystemInstructionNode(messages);
         if (sysInst != null) {
-            root.set("system_instruction", sysInst);
+            root.set("systemInstruction", sysInst);
         }
 
         ONode contentsNode = root.getOrNew("contents").asArray();
@@ -93,22 +96,33 @@ public class GeminiRequestBuilder {
             if (m1 instanceof SystemMessage) {
                 continue; // 已在顶层 system_instruction 处理
             }
-            if (m1.isThinking() == false) {
+            if (isSkippableThinkingOnlyMessage(m1) == false) {
                 contentsNode.add(buildMessageNode(m1));
             }
         }
 
         Object reasoningEffort = null;
         Object thinkingSwitch = null;
+        Object nativeGeneration = options.options().get("generationConfig");
+        if (!(nativeGeneration instanceof Map)) {
+            nativeGeneration = options.options().get("generation_config");
+        }
+        ONode generationConfig = nativeGeneration instanceof Map
+                ? normalizeGenerationConfig((Map<String, Object>) nativeGeneration) : null;
+        if (generationConfig != null) {
+            root.set("generationConfig", generationConfig);
+        }
         for (Map.Entry<String, Object> kv : options.options().entrySet()) {
-            if ("stream".equals(kv.getKey())) {
-                continue;
-            }
-            
             String key = kv.getKey();
             Object value = kv.getValue();
-            
-            // 统一推理水平 / 思考开关延后应用，避免被后续 generationConfig 整段覆盖
+            if ("stream".equals(key)
+                    || "cachedContent".equals(key)
+                    || "context_cache_id".equals(key)
+                    || "tool_choice".equals(key)
+                    || "response_format".equals(key)) {
+                continue;
+            }
+
             if ("reasoning_effort".equals(key)) {
                 reasoningEffort = value;
                 continue;
@@ -117,15 +131,33 @@ public class GeminiRequestBuilder {
                 thinkingSwitch = value;
                 continue;
             }
-                
-            if ("generationConfig".equals(key) && value instanceof Map) {
-                GenerationConfig generationConfig = toGenerationConfig((Map<String, Object>) value);
-                root.set("generationConfig", ONode.ofBean(generationConfig));
-            } else {
+
+            if (("generationConfig".equals(key) || "generation_config".equals(key))
+                    && value instanceof Map) {
+                continue;
+            }
+
+            if (isGenerationOption(key)) {
+                if (generationConfig == null) {
+                    generationConfig = root.getOrNew("generationConfig").asObject();
+                }
+                setGenerationOption(generationConfig, key, value);
+            } else if (ROOT_OPTION_KEYS.contains(key)) {
                 root.set(key, ONode.ofBean(value));
             }
         }
-        
+
+        // outputSchema 使用 Gemini 原生结构化输出，而不只依赖提示词约束。
+        if (Utils.isNotEmpty(options.outputSchema())) {
+            ONode gen = root.getOrNew("generationConfig").asObject();
+            gen.set("responseMimeType", "application/json");
+            try {
+                gen.set("responseJsonSchema", ONode.ofJson(options.outputSchema()));
+            } catch (Exception e) {
+                // 非法 schema 不写入协议字段；上层仍可通过提示词约束输出。
+            }
+        }
+
         // 最后合并 thinking / reasoning_effort，确保不被 generationConfig 反覆盖
         applyUnifiedThinkingOptions(root, config, options, thinkingSwitch, reasoningEffort);
     
@@ -134,8 +166,98 @@ public class GeminiRequestBuilder {
         return root;
     }
 
+    private boolean isGenerationOption(String key) {
+        return "temperature".equals(key)
+                || "top_p".equals(key)
+                || "top_k".equals(key)
+                || "max_tokens".equals(key)
+                || "max_completion_tokens".equals(key)
+                || "frequency_penalty".equals(key)
+                || "presence_penalty".equals(key)
+                || "stop".equals(key)
+                || "response_mime_type".equals(key);
+    }
+
+    private void setGenerationOption(ONode config, String key, Object value) {
+        String target;
+        switch (key) {
+            case "top_p": target = "topP"; break;
+            case "top_k": target = "topK"; break;
+            case "max_tokens": target = "maxOutputTokens"; break;
+            case "max_completion_tokens": target = "maxOutputTokens"; break;
+            case "frequency_penalty": target = "frequencyPenalty"; break;
+            case "presence_penalty": target = "presencePenalty"; break;
+            case "stop": target = "stopSequences"; break;
+            case "response_mime_type": target = "responseMimeType"; break;
+            default: target = key;
+        }
+        config.set(target, normalizedScalar(target, value));
+    }
+
+    /** 完整保留原生 generationConfig，仅修正 YAML 常见字符串标量的 JSON 类型。 */
+    private ONode normalizeGenerationConfig(Map<String, Object> source) {
+        ONode config = ONode.ofBean(source);
+        normalizeNumber(config, "temperature", false);
+        normalizeNumber(config, "topP", false);
+        normalizeNumber(config, "topK", true);
+        normalizeNumber(config, "maxOutputTokens", true);
+        normalizeNumber(config, "candidateCount", true);
+        normalizeNumber(config, "seed", true);
+        normalizeNumber(config, "presencePenalty", false);
+        normalizeNumber(config, "frequencyPenalty", false);
+        normalizeNumber(config, "logprobs", true);
+        normalizeBoolean(config, "responseLogprobs");
+        ONode thinking = config.getOrNull("thinkingConfig");
+        if (thinking != null && thinking.isObject()) {
+            normalizeBoolean(thinking, "includeThoughts");
+            normalizeNumber(thinking, "thinkingBudget", true);
+        }
+        return config;
+    }
+
+    private ONode normalizedScalar(String key, Object value) {
+        if (value instanceof String) {
+            String text = ((String) value).trim();
+            try {
+                if ("maxOutputTokens".equals(key) || "topK".equals(key)) {
+                    return ONode.ofBean(Integer.parseInt(text));
+                }
+                if ("temperature".equals(key) || "topP".equals(key)
+                        || "frequencyPenalty".equals(key) || "presencePenalty".equals(key)) {
+                    return ONode.ofBean(Double.parseDouble(text));
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return ONode.ofBean(value);
+    }
+
+    private void normalizeNumber(ONode node, String key, boolean integer) {
+        ONode value = node.getOrNull(key);
+        if (value == null) return;
+        String text = value.getString();
+        if (Utils.isEmpty(text)) return;
+        try {
+            if (integer) {
+                node.set(key, Integer.parseInt(text));
+            } else {
+                node.set(key, Double.parseDouble(text));
+            }
+        } catch (NumberFormatException ignored) {
+        }
+    }
+
+    private void normalizeBoolean(ONode node, String key) {
+        ONode value = node.getOrNull(key);
+        if (value == null) return;
+        String text = value.getString();
+        if ("true".equalsIgnoreCase(text) || "false".equalsIgnoreCase(text)) {
+            node.set(key, Boolean.parseBoolean(text));
+        }
+    }
+
     /**
-     * 从消息列表中提取 system_instruction 节点（Generate Content API 格式：parts[].text）。
+     * 从消息列表中提取 systemInstruction 节点（Generate Content API 格式：parts[].text）。
      * <p>多个 SystemMessage 合并为一段文本；无 SystemMessage 时返回 null。</p>
      *
      * @param messages 对话消息列表
@@ -238,13 +360,16 @@ public class GeminiRequestBuilder {
      * @param assistantMessage  助手消息
      */
     private void buildAssistantToolCallMessageNode(ONode node, AssistantMessage assistantMessage) {
-        if (Utils.isNotEmpty(assistantMessage.getToolCalls())) {
+        List<ToolCall> toolCalls = ToolCallJsonSanitizer.resolveToolCalls(
+                assistantMessage.getToolCalls(), assistantMessage.getToolCallsRaw());
+        if (Utils.isNotEmpty(toolCalls)) {
             node.getOrNew("parts").asArray().then(n1 -> {
                 // 文本 / 媒体 parts（若有）
                 appendAssistantContentParts(n1, assistantMessage);
                     
-                boolean[] isFirst = {true};
-                for (ToolCall call : assistantMessage.getToolCalls()) {
+                int callPosition = 0;
+                for (ToolCall call : toolCalls) {
+                    final int currentPosition = callPosition++;
                     ONode partNode = n1.addNew();
                     partNode.getOrNew("functionCall").then(n2 -> {
                         n2.set("name", call.getName());
@@ -253,7 +378,7 @@ public class GeminiRequestBuilder {
                             n2.set("id", call.getId());
                         }
                         // 出站兜底净化：截断/双重编码的 arguments 禁止原样回传（args 必须是 object）
-                        String safeArgs = ToolCallJsonSanitizer.sanitizeArguments(call.getArgumentsStr(), call.getName());
+                        String safeArgs = ToolCallJsonSanitizer.sanitizeArguments(call);
                         try {
                             ONode argsNode = ONode.ofJson(safeArgs);
                             n2.set("args", argsNode.isObject() ? argsNode : new ONode().asObject());
@@ -261,11 +386,12 @@ public class GeminiRequestBuilder {
                             n2.set("args", ONode.ofBean(call.getArguments()));
                         }
                     });
-                    // thoughtSignature 位于 part 级别（functionCall 的同级），仅第一个 part 需要
-                    if (isFirst[0] && Utils.isNotEmpty(call.getThoughtSignature())) {
-                        partNode.set("thoughtSignature", call.getThoughtSignature());
+                    // thoughtSignature 位于 part 级别（functionCall 的同级），仅第一个 part 需要。
+                    String signature = GeminiMessageStateSupport.resolveSignature(assistantMessage,
+                            GeminiMessageStateSupport.GENERATE_CONTENT_PROTOCOL_ID, call, currentPosition);
+                    if (currentPosition == 0 && Utils.isNotEmpty(signature)) {
+                        partNode.set("thoughtSignature", signature);
                     }
-                    isFirst[0] = false;
                 }
             });
         } else if (assistantMessage.isMultiModal()) {
@@ -364,15 +490,15 @@ public class GeminiRequestBuilder {
         ONode partNode = partsArr.addNew();
         if (Utils.isNotEmpty(media.getData())) {
             final String finalMime = mime;
-            partNode.getOrNew("inline_data").then(n -> {
-                n.set("mime_type", finalMime);
+            partNode.getOrNew("inlineData").then(n -> {
+                n.set("mimeType", finalMime);
                 n.set("data", media.getData());
             });
         } else {
             final String finalMime = mime;
-            partNode.getOrNew("file_data").then(n -> {
-                n.set("mime_type", finalMime);
-                n.set("file_uri", media.getUrl());
+            partNode.getOrNew("fileData").then(n -> {
+                n.set("mimeType", finalMime);
+                n.set("fileUri", media.getUrl());
             });
         }
     }
@@ -405,10 +531,14 @@ public class GeminiRequestBuilder {
                                     ONode schemaNode = ONode.ofJson(inputSchema);
                                     funcNode.set("parameters", schemaNode);
                                 } catch (Exception e) {
-                                    funcNode.getOrNew("parameters").asArray();
+                                    ONode parameters = funcNode.getOrNew("parameters").asObject();
+                                    parameters.set("type", "object");
+                                    parameters.getOrNew("properties").asObject();
                                 }
                             } else {
-                                funcNode.getOrNew("parameters").asArray();
+                                ONode parameters = funcNode.getOrNew("parameters").asObject();
+                                parameters.set("type", "object");
+                                parameters.getOrNew("properties").asObject();
                             }
                         });
                     });
@@ -469,11 +599,9 @@ public class GeminiRequestBuilder {
                         n2.set("id", builder.idBuilder.toString());
                     }
                     if (builder.argumentsBuilder.length() > 0) {
-                        // Gemini 流式 functionCall.args 是累积完整 JSON（非 OpenAI 增量片段）：
-                        // 同一 functionCall 跨 chunk 重复发送时 append 会产生 {..}{..} 拼接，
-                        // 交给公共净化器读取最后一个完整 JSON 对象，避免取到过期的首帧参数。
-                        // 流式聚合出口净化：截断损坏的 arguments 禁止以字符串形态写入 args
-                        String safeArgs = ToolCallJsonSanitizer.sanitizeArguments(
+                        // Gemini Models 的 args 是累计快照；仅在此方言聚合边界允许从多根拼接中取最后快照。
+                        // 公共 sanitizer 保持“单一 JSON 根”严格语义，不能把该容错泄漏到其他方言。
+                        String safeArgs = sanitizeGeminiSnapshotArguments(
                                 builder.argumentsBuilder.toString(), builder.nameBuilder.toString());
                         try {
                             ONode argsNode = ONode.ofJson(safeArgs);
@@ -496,74 +624,16 @@ public class GeminiRequestBuilder {
         return oNode;
     }
 
-    /**
-     * 转换配置映射为 GenerationConfig 对象
-     *
-     * @param configMap 配置映射
-     * @return GenerationConfig 对象
-     */
-    private GenerationConfig toGenerationConfig(Map<String, Object> configMap) {
-        GenerationConfig config = new GenerationConfig();
-
-        if (configMap.containsKey("temperature")) {
-            Object temp = configMap.get("temperature");
-            if (temp instanceof Number) {
-                config.setTemperature(((Number) temp).doubleValue());
-            } else if (temp instanceof String) {
-                try {
-                    config.setTemperature(Double.parseDouble((String) temp));
-                } catch (NumberFormatException e) {
-                }
+    private String sanitizeGeminiSnapshotArguments(String raw, String functionName) {
+        try {
+            ONode last = new JsonReader(raw, Options.of()).readLast();
+            if (last != null && last.isObject()) {
+                return last.toJson();
             }
+        } catch (Throwable ignored) {
+            // 截断或无完整快照时按公共安全策略降级。
         }
-
-        if (configMap.containsKey("topP")) {
-            Object topP = configMap.get("topP");
-            if (topP instanceof Number) {
-                config.setTopP(((Number) topP).doubleValue());
-            } else if (topP instanceof String) {
-                try {
-                    config.setTopP(Double.parseDouble((String) topP));
-                } catch (NumberFormatException e) {
-                }
-            }
-        }
-
-        if (configMap.containsKey("maxOutputTokens")) {
-            Object maxTokens = configMap.get("maxOutputTokens");
-            if (maxTokens instanceof Number) {
-                config.setMaxOutputTokens(((Number) maxTokens).intValue());
-            } else if (maxTokens instanceof String) {
-                try {
-                    config.setMaxOutputTokens(Integer.parseInt((String) maxTokens));
-                } catch (NumberFormatException e) {
-                }
-            }
-        }
-
-        // 透传 thinkingConfig（若已存在）
-        if (configMap.containsKey("thinkingConfig") && configMap.get("thinkingConfig") instanceof Map) {
-            Map<String, Object> tcMap = (Map<String, Object>) configMap.get("thinkingConfig");
-            ThinkingConfig thinkingConfig = new ThinkingConfig();
-            Object includeThoughts = tcMap.get("includeThoughts");
-            if (includeThoughts instanceof Boolean) {
-                thinkingConfig.setIncludeThoughts((Boolean) includeThoughts);
-            }
-            Object budget = tcMap.get("thinkingBudget");
-            if (budget instanceof Number) {
-                thinkingConfig.setThinkingBudget(((Number) budget).intValue());
-            }
-            Object level = tcMap.get("thinkingLevel");
-            if (level != null) {
-                try {
-                    thinkingConfig.setThinkingLevel(ThinkingConfig.ThinkingLevel.valueOf(String.valueOf(level).toUpperCase()));
-                } catch (Exception ignored) {
-                }
-            }
-            config.setThinkingConfig(thinkingConfig);
-        }
-
-        return config;
+        return "{}";
     }
 
     /**

@@ -18,18 +18,25 @@ package org.noear.solon.ai.llm.dialect.gemini.models;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatAccumulator;
+import org.noear.solon.ai.chat.event.ChatEventType;
+import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.MessageProtocolState;
 import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.ai.llm.dialect.gemini.GeminiMessageStateSupport;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Gemini 思考内容处理器
@@ -72,8 +79,12 @@ public class GeminiThoughtProcessor {
             
             List<ToolCall> toolCalls = new ArrayList<>();
             List<ContentBlock> mediaBlocks = new ArrayList<>();
+            List<ContentBlock> orderedBlocks = new ArrayList<>();
+            StringBuilder thoughtTextAll = new StringBuilder();
+            StringBuilder normalTextAll = new StringBuilder();
             // 同一 chunk 内同名函数并行调用去冲突：首个用 name，后续用 name#n 作为流式聚合 index
             Map<String, Integer> nameCount = new LinkedHashMap<>();
+            String firstToolCallSignature = null;
 
             for (ONode oPart : oParts.getArray()) {
                 ONode thoughtNode = oPart.getOrNull("thought");
@@ -107,6 +118,14 @@ public class GeminiThoughtProcessor {
                     ONode argsNode = functionCallNode.get("args");
                     if (argsNode == null || argsNode.isNull()) {
                         argsNode = functionCallNode.get("arguments");
+                    }
+                    if (argsNode != null && argsNode.isString()) {
+                        try {
+                            ONode parsedArgs = ONode.ofJson(argsNode.getString());
+                            if (parsedArgs.isObject()) argsNode = parsedArgs;
+                        } catch (Exception ignored) {
+                            // 非 JSON 字符串继续按空参数处理
+                        }
                     }
                     // 解析出口净化：仅 object 形态的 args 采纳；字符串（可能内含截断 JSON）等一律归一为空对象，
                     // 避免非法 JSON 进入会话历史后毒化后续请求
@@ -147,7 +166,7 @@ public class GeminiThoughtProcessor {
                         if (thoughtSigNode != null) {
                             String thoughtSignature = thoughtSigNode.getString();
                             if (Utils.isNotEmpty(thoughtSignature)) {
-                                toolCall.setThoughtSignature(thoughtSignature);
+                                firstToolCallSignature = thoughtSignature;
                                 acc.thinkingSignature = thoughtSignature;
                             }
                         }
@@ -156,12 +175,20 @@ public class GeminiThoughtProcessor {
                     toolCalls.add(toolCall);
                 } else if (isThought) {
                     hasThoughtPart = true;
+                    String partText = oPart.get("text").getString();
+                    if (Utils.isNotEmpty(partText)) thoughtTextAll.append(partText);
                 } else if (oPart.hasKey("text")) {
                     hasNormalPart = true;
+                    String partText = oPart.get("text").getString();
+                    if (Utils.isNotEmpty(partText)) {
+                        normalTextAll.append(partText);
+                        orderedBlocks.add(TextBlock.of(partText));
+                    }
                 } else {
                     ContentBlock media = parseMediaPart(oPart);
                     if (media != null) {
                         mediaBlocks.add(media);
+                        orderedBlocks.add(media);
                         hasMediaPart = true;
                     }
                 }
@@ -169,16 +196,19 @@ public class GeminiThoughtProcessor {
                     
             if (!toolCalls.isEmpty()) {
                 if (acc.in_thinking && acc.isStream()) {
-                    messageList.add(new AssistantMessage("", "", true));
+                    messageList.add(new AssistantMessage("", ""));
                 }
                 acc.in_thinking = false;
                         
-                List<ContentBlock> blocksForMsg = null;
-                if (!mediaBlocks.isEmpty()) {
-                    blocksForMsg = new ArrayList<>(mediaBlocks);
-                    acc.addMediaBlocks(mediaBlocks);
-                }
-                AssistantMessage msg = new AssistantMessage("", "",false, null, null, toolCalls, null, blocksForMsg);
+                List<ContentBlock> blocksForMsg = orderedBlocks.isEmpty() ? null : new ArrayList<>(orderedBlocks);
+                MessageProtocolState signatureState = GeminiMessageStateSupport.createSignatureState(
+                        toolCalls.get(0), 0, firstToolCallSignature);
+                Map<String, MessageProtocolState> protocolStates = signatureState == null ? null
+                        : Collections.singletonMap(
+                                GeminiMessageStateSupport.GENERATE_CONTENT_PROTOCOL_ID, signatureState);
+                AssistantMessage msg = AssistantMessage.snapshot(
+                        normalTextAll.toString(), thoughtTextAll.toString(),
+                        toolCalls, blocksForMsg, null, null, protocolStates);
                 messageList.add(msg);
                 return messageList;
             }
@@ -186,7 +216,7 @@ public class GeminiThoughtProcessor {
             if (acc.isStream()) {
                 if (hasThoughtPart && !hasNormalPart && !hasMediaPart) {
                     if (!acc.in_thinking) {
-                        messageList.add(new AssistantMessage("","", true));
+                        messageList.add(new AssistantMessage("", ""));
                         acc.in_thinking = true;
                     }
                         
@@ -197,13 +227,13 @@ public class GeminiThoughtProcessor {
                         if (isThought) {
                             String text = oPart.get("text").getString();
                             if (Utils.isNotEmpty(text)) {
-                                messageList.add(new AssistantMessage("",text, true));
+                                messageList.add(new AssistantMessage("", text));
                             }
                         }
                     }
                 } else if (!hasThoughtPart && (hasNormalPart || hasMediaPart)) {
                     if (acc.in_thinking) {
-                        messageList.add(new AssistantMessage("","", true));
+                        messageList.add(new AssistantMessage("", ""));
                         acc.in_thinking = false;
                     }
 
@@ -219,24 +249,23 @@ public class GeminiThoughtProcessor {
                             if (Utils.isNotEmpty(text)) {
                                 normalContent.append(text);
                                 if (mediaBlocks.isEmpty()) {
-                                    messageList.add(new AssistantMessage(text, "", false));
+                                    messageList.add(new AssistantMessage(text, ""));
                                 }
                             }
                         }
                     }
 
                     if (!mediaBlocks.isEmpty()) {
-                        acc.addMediaBlocks(mediaBlocks);
                         List<ContentBlock> blocks = new ArrayList<>();
                         if (normalContent.length() > 0) {
                             blocks.add(TextBlock.of(normalContent.toString()));
                         }
                         blocks.addAll(mediaBlocks);
-                        messageList.add(new AssistantMessage(normalContent.toString(), "",false, null, null, null, null, blocks));
+                        messageList.add(new AssistantMessage(normalContent.toString(), "", null, blocks));
                     }
                 } else if (hasThoughtPart && (hasNormalPart || hasMediaPart)) {
                     if (!acc.in_thinking) {
-                        messageList.add(new AssistantMessage("", "", true));
+                        messageList.add(new AssistantMessage("", ""));
                     }
 
                     for (ONode oPart : oParts.getArray()) {
@@ -246,12 +275,12 @@ public class GeminiThoughtProcessor {
                         if (isThought) {
                             String text = oPart.get("text").getString();
                             if (Utils.isNotEmpty(text)) {
-                                messageList.add(new AssistantMessage("",text, true));
+                                messageList.add(new AssistantMessage("", text));
                             }
                         }
                     }
 
-                    messageList.add(new AssistantMessage("","", true));
+                    messageList.add(new AssistantMessage("", ""));
                     acc.in_thinking = false;
 
                     // 有媒体时：合并为单条消息；无媒体时按 part 增量推送
@@ -265,20 +294,19 @@ public class GeminiThoughtProcessor {
                             if (Utils.isNotEmpty(text)) {
                                 normalContent.append(text);
                                 if (mediaBlocks.isEmpty()) {
-                                    messageList.add(new AssistantMessage(text,"", false));
+                                    messageList.add(new AssistantMessage(text, ""));
                                 }
                             }
                         }
                     }
 
                     if (!mediaBlocks.isEmpty()) {
-                        acc.addMediaBlocks(mediaBlocks);
                         List<ContentBlock> blocks = new ArrayList<>();
                         if (normalContent.length() > 0) {
                             blocks.add(TextBlock.of(normalContent.toString()));
                         }
                         blocks.addAll(mediaBlocks);
-                        messageList.add(new AssistantMessage(normalContent.toString(), "",false, null, null, null, null, blocks));
+                        messageList.add(new AssistantMessage(normalContent.toString(), "", null, blocks));
                     }
                 }
             } else {
@@ -314,30 +342,19 @@ public class GeminiThoughtProcessor {
                         blocksForMsg.add(TextBlock.of(normalContent.toString()));
                     }
                     blocksForMsg.addAll(mediaBlocks);
-                    acc.addMediaBlocks(mediaBlocks);
                 }
     
                 if (thoughtContent.length() > 0 && normalContent.length() > 0) {
                     String cleanedThought = cleanThoughtContent(thoughtContent.toString());
-    
-                    String fullContent = "\n\n" + cleanedThought + "\n\n" + normalContent.toString();
-    
-                    Map<String, Object> contentRaw = new LinkedHashMap<>();
-                    contentRaw.put("thought", cleanedThought);
-                    contentRaw.put("content", normalContent.toString());
-    
-                    messageList.add(new AssistantMessage(fullContent, "",false, contentRaw, null, null, null, blocksForMsg));
+                    // text/thinking 已是通用语义字段，不再重复生成旧 contentRaw 镜像。
+                    messageList.add(new AssistantMessage(normalContent.toString(), cleanedThought,
+                            null, blocksForMsg));
                 } else if (thoughtContent.length() > 0) {
                     String cleanedThought = cleanThoughtContent(thoughtContent.toString());
-    
-                    String fullContent = "\n\n" + cleanedThought + "\n\n";
-    
-                    Map<String, Object> contentRaw = new LinkedHashMap<>();
-                    contentRaw.put("thought", cleanedThought);
-    
-                    messageList.add(new AssistantMessage(fullContent, "",false, contentRaw, null, null, null, blocksForMsg));
+                    messageList.add(new AssistantMessage("", cleanedThought,
+                            null, blocksForMsg));
                 } else if (normalContent.length() > 0 || blocksForMsg != null) {
-                    messageList.add(new AssistantMessage(normalContent.toString(), "",false, null, null, null, null, blocksForMsg));
+                    messageList.add(new AssistantMessage(normalContent.toString(), "", null, blocksForMsg));
                 }
             }
         }
@@ -425,8 +442,224 @@ public class GeminiThoughtProcessor {
         return Utils.isEmpty(mime) ? ImageBlock.ofUrl(url) : ImageBlock.ofUrl(url, mime);
     }
 
+    private static final String ATTR_FUNCTION_CALL_STATES = "gemini.models.functionCallStates";
+    private static final String ATTR_EMITTED_MEDIA_POSITIONS = "gemini.models.emittedMediaPositions";
+
     /**
-     * 清理思考内容，移除不需要的 markdown 格式
+     * 将 Gemini Models 流式分片直接投影为事件，不写入内容项。
+     *
+     * <p>functionCall.args 是累计快照。调用头和最终参数先按候选与调用位置稳定归并，
+     * 到候选完成时再发出唯一 START 与一个真实 ARGS_DELTA，避免把多个完整 JSON 快照串接。</p>
+     */
+    public void emitStream(ChatStreamContext ctx, ONode oContent) {
+        emitStream(ctx, oContent, 0, false);
+    }
+
+    /**
+     * 按候选位置处理流式内容。
+     *
+     * @param candidateIndex 候选位置
+     * @param completed      当前候选是否已经完成
+     */
+    public void emitStream(ChatStreamContext ctx, ONode oContent, int candidateIndex, boolean completed) {
+        ChatAccumulator acc = ctx.getAccumulator();
+        List<AssistantMessage> messages = parse(acc, oContent);
+        int toolOrdinal = 0;
+
+        for (AssistantMessage message : messages) {
+            if (Utils.isNotEmpty(message.getThinkingRaw())) {
+                ctx.emit(ctx.event(ChatEventType.THINKING_DELTA)
+                        .text(message.getThinkingRaw()).build());
+            }
+            if (Utils.isNotEmpty(message.getTextRaw())) {
+                ctx.emit(ctx.event(ChatEventType.TEXT_DELTA)
+                        .text(message.getTextRaw()).build());
+            }
+            if (message.hasMedia()) {
+                for (ContentBlock block : message.getBlocks()) {
+                    if (block instanceof TextBlock) {
+                        continue;
+                    }
+
+                    int mediaIndex = nextMediaIndex(ctx);
+                    String itemId = "candidate:" + candidateIndex + ":media:" + mediaIndex;
+                    ctx.emit(ctx.event(ChatEventType.MEDIA_DONE)
+                            .itemId(itemId)
+                            .index(mediaIndex)
+                            .block(block).build());
+                }
+            }
+            if (Utils.isNotEmpty(message.getToolCalls())) {
+                int messageToolIndex = 0;
+                for (ToolCall call : message.getToolCalls()) {
+                    String signature = GeminiMessageStateSupport.resolveSignature(message,
+                            GeminiMessageStateSupport.GENERATE_CONTENT_PROTOCOL_ID, call, messageToolIndex++);
+                    String stableKey = resolveFunctionCallKey(ctx, candidateIndex, toolOrdinal++, call);
+                    FunctionCallStreamState state = functionCallStates(ctx)
+                            .computeIfAbsent(stableKey, key -> new FunctionCallStreamState(stableKey, candidateIndex));
+                    state.merge(call);
+
+                    if (Utils.isNotEmpty(signature)) {
+                        state.signature = signature;
+                    }
+                    if (Utils.isNotEmpty(signature) && !state.signatureEmitted) {
+                        state.signatureEmitted = true;
+                        ctx.emit(ctx.event(ChatEventType.THINKING_SIGNATURE)
+                                .itemId(stableKey)
+                                .text(signature).build());
+                    }
+                }
+            }
+        }
+
+        if (completed) {
+            flushFunctionCalls(ctx, candidateIndex);
+        }
+    }
+
+    /** 将非流式解析结果中的媒体也经 MEDIA_DONE 统一归并。 */
+    void emitMediaEvents(ChatStreamContext ctx, List<AssistantMessage> messages, int candidateIndex) {
+        int mediaOrdinal = 0;
+        Set<String> emittedPositions = ctx.attrIfAbsent(ATTR_EMITTED_MEDIA_POSITIONS,
+                key -> new LinkedHashSet<String>());
+
+        for (AssistantMessage message : messages) {
+            if (!message.hasMedia()) {
+                continue;
+            }
+            for (ContentBlock block : message.getBlocks()) {
+                if (block instanceof TextBlock) {
+                    continue;
+                }
+
+                String positionKey = "candidate:" + candidateIndex + ":media:" + mediaOrdinal;
+                if (emittedPositions.add(positionKey)) {
+                    ctx.emit(ctx.event(ChatEventType.MEDIA_DONE)
+                            .itemId(positionKey)
+                            .index(mediaOrdinal)
+                            .block(block).build());
+                }
+                mediaOrdinal++;
+            }
+        }
+    }
+
+    /** 在供应商只用 [DONE] 收尾时提交所有尚未发出的 functionCall 快照。 */
+    public void completeStream(ChatStreamContext ctx) {
+        Map<String, FunctionCallStreamState> states = functionCallStates(ctx);
+        List<Integer> candidateIndexes = new ArrayList<>();
+        for (FunctionCallStreamState state : states.values()) {
+            if (!candidateIndexes.contains(state.candidateIndex)) {
+                candidateIndexes.add(state.candidateIndex);
+            }
+        }
+        for (Integer candidateIndex : candidateIndexes) {
+            flushFunctionCalls(ctx, candidateIndex);
+        }
+    }
+
+    private int nextMediaIndex(ChatStreamContext ctx) {
+        Integer value = ctx.attrAs("gemini.models.mediaSequence");
+        int next = value == null ? 0 : value;
+        ctx.attrPut("gemini.models.mediaSequence", next + 1);
+        return next;
+    }
+
+    private String resolveFunctionCallKey(ChatStreamContext ctx, int candidateIndex, int ordinal, ToolCall call) {
+        Map<String, FunctionCallStreamState> states = functionCallStates(ctx);
+        String base = "candidate:" + candidateIndex + ":function:" + ordinal;
+        FunctionCallStreamState existing = states.get(base);
+        if (existing == null || existing.matches(call)) {
+            return base;
+        }
+
+        String identity = Utils.isNotEmpty(call.getId()) ? call.getId() : call.getName();
+        String candidate = base + ":" + (identity == null ? "next" : identity);
+        int suffix = 1;
+        while (states.containsKey(candidate) && !states.get(candidate).matches(call)) {
+            candidate = base + ":" + (identity == null ? "next" : identity) + ":" + suffix++;
+        }
+        return candidate;
+    }
+
+    private Map<String, FunctionCallStreamState> functionCallStates(ChatStreamContext ctx) {
+        return ctx.attrIfAbsent(ATTR_FUNCTION_CALL_STATES, key -> new LinkedHashMap<String, FunctionCallStreamState>());
+    }
+
+    private void flushFunctionCalls(ChatStreamContext ctx, int candidateIndex) {
+        Map<String, FunctionCallStreamState> states = functionCallStates(ctx);
+        java.util.Iterator<Map.Entry<String, FunctionCallStreamState>> iterator = states.entrySet().iterator();
+        while (iterator.hasNext()) {
+            FunctionCallStreamState state = iterator.next().getValue();
+            if (state.candidateIndex != candidateIndex) {
+                continue;
+            }
+
+            ToolCall call = new ToolCall(state.stableKey, state.callId, state.functionName, null, null);
+            ctx.emit(ctx.event(ChatEventType.TOOL_CALL_START)
+                    .itemId(state.stableKey)
+                    .toolCall(call)
+                    .toolCallId(state.callId)
+                    .build());
+
+            String finalArgs = Utils.isNotEmpty(state.argumentsSnapshot) ? state.argumentsSnapshot : "{}";
+            ToolCall argsCall = new ToolCall(state.stableKey, state.callId, state.functionName, finalArgs, null);
+            ctx.emit(ctx.event(ChatEventType.TOOL_CALL_ARGS_DELTA)
+                    .itemId(state.stableKey)
+                    .toolCall(argsCall)
+                    .toolCallId(state.callId)
+                    .text(finalArgs)
+                    .build());
+            if (Utils.isNotEmpty(state.signature)) {
+                ctx.getAccumulator().putTerminalProtocolState(
+                        GeminiMessageStateSupport.GENERATE_CONTENT_PROTOCOL_ID,
+                        GeminiMessageStateSupport.createSignatureState(call, 0, state.signature));
+            }
+            iterator.remove();
+        }
+    }
+
+    private static final class FunctionCallStreamState {
+        final String stableKey;
+        final int candidateIndex;
+        String functionName;
+        String callId;
+        String argumentsSnapshot;
+        String signature;
+        boolean signatureEmitted;
+
+        FunctionCallStreamState(String stableKey, int candidateIndex) {
+            this.stableKey = stableKey;
+            this.candidateIndex = candidateIndex;
+        }
+
+        boolean matches(ToolCall call) {
+            if (Utils.isNotEmpty(callId) && Utils.isNotEmpty(call.getId())) {
+                return callId.equals(call.getId());
+            }
+            if (Utils.isNotEmpty(functionName) && Utils.isNotEmpty(call.getName())) {
+                return functionName.equals(call.getName());
+            }
+            return true;
+        }
+
+        void merge(ToolCall call) {
+            if (Utils.isNotEmpty(call.getName())) {
+                functionName = call.getName();
+            }
+            if (Utils.isNotEmpty(call.getId())) {
+                callId = call.getId();
+            }
+            if (Utils.isNotEmpty(call.getArgumentsStr())) {
+                argumentsSnapshot = call.getArgumentsStr();
+            } else if (argumentsSnapshot == null) {
+                argumentsSnapshot = "{}";
+            }
+        }
+    }
+
+    /**
+     * 清理思考内容中的冗余 Markdown 格式。
      * <p>
      * Gemini API 返回的思考内容可能包含以下不需要的格式：
      * <ul>

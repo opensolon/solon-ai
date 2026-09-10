@@ -18,16 +18,26 @@ package features.ai.ui.aisdk;
 import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.ChatException;
+import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.content.BlobBlock;
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.event.ChatEvent;
 import org.noear.solon.ai.chat.event.ChatEventDefault;
 import org.noear.solon.ai.chat.event.ChatEventType;
+import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.source.Citation;
+import org.noear.solon.ai.chat.source.SearchResult;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.ui.aisdk.AiSdkStreamWrapper;
 import org.noear.solon.web.sse.SseEvent;
 import reactor.core.publisher.Flux;
 
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 
@@ -76,6 +86,48 @@ public class AiSdkEventMappingTest {
 
     private static ToolCall newCall(String id, String name, String args) {
         return new ToolCall("0", id, name, args, new LinkedHashMap<>());
+    }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    public void legacyResponseStreamUsesIndependentThinkingAndTextChannels() {
+        AssistantMessage mixed = new AssistantMessage("answer", "thinking");
+        String all = joinAll(AiSdkStreamWrapper.of().toAiSdkStreamOfResponses(
+                Flux.just(responseOf(mixed)), null));
+
+        int reasoningDelta = all.indexOf("\"type\":\"reasoning-delta\"");
+        int reasoningEnd = all.indexOf("\"type\":\"reasoning-end\"");
+        int textDelta = all.indexOf("\"type\":\"text-delta\"");
+        assertTrue(reasoningDelta >= 0, all);
+        assertTrue(textDelta >= 0, all);
+        assertTrue(reasoningDelta < reasoningEnd && reasoningEnd < textDelta, all);
+        assertTrue(all.contains("thinking"), all);
+        assertTrue(all.contains("answer"), all);
+    }
+
+    private static ChatResponse responseOf(AssistantMessage message) {
+        return (ChatResponse) Proxy.newProxyInstance(
+                ChatResponse.class.getClassLoader(),
+                new Class<?>[]{ChatResponse.class},
+                (proxy, method, args) -> {
+                    String name = method.getName();
+                    if ("getMessage".equals(name)) {
+                        return message;
+                    }
+                    if ("getFinishReason".equals(name)) {
+                        return "stop";
+                    }
+                    if ("getBlocks".equals(name)) {
+                        return message.getBlocks();
+                    }
+                    if ("getToolCalls".equals(name) || "getEvents".equals(name)) {
+                        return Collections.emptyList();
+                    }
+                    if (method.getReturnType() == boolean.class) {
+                        return false;
+                    }
+                    return null;
+                });
     }
 
     /**
@@ -160,6 +212,70 @@ public class AiSdkEventMappingTest {
     }
 
     @Test
+    public void blockingResponseMapsNonTextBlocksToFiles() {
+        List<ContentBlock> blocks = Arrays.<ContentBlock>asList(
+                TextBlock.of("answer"), BlobBlock.of("aGVsbG8=", "image/png"));
+        AssistantMessage message = new AssistantMessage("answer", "", null, blocks);
+        String all = joinAll(AiSdkStreamWrapper.of().toAiSdkStream(responseOf(message)));
+        assertEquals(1, count(typesOf(AiSdkStreamWrapper.of().toAiSdkStream(responseOf(message))), "file"));
+        assertTrue(all.contains("\"url\":\"aGVsbG8=\""), all);
+        assertTrue(all.contains("\"mediaType\":\"image/png\""), all);
+    }
+
+    @Test
+    public void typedSearchResultsAndCitationsMapToSourceParts() {
+        SearchResult search = new SearchResult().id("s1").title("Solon")
+                .url("https://solon.noear.org");
+        Citation citation = new Citation().type("url_citation").title("Docs")
+                .url("https://solon.noear.org/docs");
+        Flux<ChatEvent> events = Flux.just(
+                ChatEventDefault.of(ChatEventType.SEARCH_RESULT).searchResult(search).build(),
+                ChatEventDefault.of(ChatEventType.CITATION).citation(citation).build());
+
+        String streamed = joinAll(AiSdkStreamWrapper.of().toAiSdkStream(events));
+        assertEquals(2, count(typesOf(AiSdkStreamWrapper.of().toAiSdkStream(events)), "source-url"));
+        assertTrue(streamed.contains("https://solon.noear.org/docs"), streamed);
+        assertTrue(streamed.contains("\"title\":\"Docs\""), streamed);
+
+        AssistantMessage message = AssistantMessage.snapshot(
+                "answer", "", null, null,
+                Collections.singletonList(search), Collections.singletonList(citation), null);
+        String blocking = joinAll(AiSdkStreamWrapper.of().toAiSdkStream(responseOf(message)));
+        assertEquals(2, count(typesOf(AiSdkStreamWrapper.of().toAiSdkStream(responseOf(message))), "source-url"));
+        assertTrue(blocking.contains("https://solon.noear.org"), blocking);
+    }
+
+    @Test
+    public void directContentIdsAreScopedByResponseAndStep() {
+        Flux<ChatEvent> events = Flux.just(
+                ChatEventDefault.of(ChatEventType.TEXT_DELTA).responseId("r1").step(0).itemId("same").text("a").build(),
+                ChatEventDefault.of(ChatEventType.TEXT_END).responseId("r1").step(0).itemId("same").build(),
+                ChatEventDefault.of(ChatEventType.TEXT_DELTA).responseId("r1").step(1).itemId("same").text("b").build(),
+                ChatEventDefault.of(ChatEventType.TEXT_END).responseId("r1").step(1).itemId("same").build(),
+                ChatEventDefault.of(ChatEventType.TEXT_DELTA).responseId("r2").step(0).itemId("same").text("c").build(),
+                ChatEventDefault.of(ChatEventType.TEXT_END).responseId("r2").step(0).itemId("same").build());
+        String all = joinAll(AiSdkStreamWrapper.of().toAiSdkStream(events));
+        List<String> ids = idsOfType(all, "text-start");
+        assertEquals(3, ids.size(), all);
+        assertEquals(3, new HashSet<>(ids).size(), all);
+    }
+
+    private static List<String> idsOfType(String all, String type) {
+        List<String> ids = new ArrayList<>();
+        String marker = "\"type\":\"" + type + "\"";
+        int from = 0;
+        while ((from = all.indexOf(marker, from)) >= 0) {
+            int idAt = all.indexOf("\"id\":\"", from);
+            int start = idAt + 7;
+            int end = all.indexOf('"', start);
+            ids.add(all.substring(start, end));
+            from = end;
+        }
+        return ids;
+    }
+
+
+    @Test
     public void textPartsKeepDistinctItemIds() {
         Flux<ChatEvent> events = Flux.just(
                 ChatEventDefault.of(ChatEventType.TEXT_DELTA).itemId("text_1").text("one").build(),
@@ -167,9 +283,9 @@ public class AiSdkEventMappingTest {
                 ChatEventDefault.of(ChatEventType.TEXT_DELTA).itemId("text_2").text("two").build(),
                 ChatEventDefault.of(ChatEventType.TEXT_END).itemId("text_2").build());
 
-        String all = joinAll(AiSdkStreamWrapper.of().toAiSdkStream(events));
-        assertEquals(2, count(typesOf(AiSdkStreamWrapper.of().toAiSdkStream(events)), "text-start"), all);
-        assertEquals(2, count(typesOf(AiSdkStreamWrapper.of().toAiSdkStream(events)), "text-end"), all);
+        List<String> types = typesOf(AiSdkStreamWrapper.of().toAiSdkStream(events));
+        assertEquals(2, count(types, "text-start"), types.toString());
+        assertEquals(2, count(types, "text-end"), types.toString());
     }
 
 
@@ -216,6 +332,19 @@ public class AiSdkEventMappingTest {
         String all = joinAll(AiSdkStreamWrapper.of().toAiSdkStream(events));
         assertTrue(all.contains("upstream broke"), all);
         assertTrue(all.contains("\"finishReason\":\"error\""), all);
+    }
+
+    @Test
+    public void abnormalAgentEndProducesErrorFinish() {
+        String all = joinAll(AiSdkStreamWrapper.of().toAiSdkAgentStream(
+                Flux.just(new RunEndEvent()), null));
+        assertTrue(all.contains("agent failed"), all);
+        assertTrue(all.contains("\"finishReason\":\"error\""), all);
+    }
+
+    public static class RunEndEvent {
+        public boolean isAbnormal() { return true; }
+        public String getText() { return "agent failed"; }
     }
 
     /**

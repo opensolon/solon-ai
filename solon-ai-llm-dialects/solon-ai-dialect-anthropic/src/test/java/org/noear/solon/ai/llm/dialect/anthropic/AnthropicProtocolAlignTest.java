@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.event.*;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.source.SearchResult;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 
 import java.util.ArrayList;
@@ -68,6 +69,24 @@ public class AnthropicProtocolAlignTest {
         return null;
     }
 
+    @Test
+    public void requestReplayKeepsMixedAndRawCarrierMessages() {
+        ChatConfig config = new ChatConfig();
+        config.setModel("claude-sonnet-4-5");
+        AssistantMessage thinkingOnly = new AssistantMessage("", "drop");
+        AssistantMessage mixed = new AssistantMessage("answer", "thinking");
+        AssistantMessage carrier = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"\",\"thinking\":\"carrier\"," +
+                        "\"contentRaw\":{\"thinkingSignature\":\"sig_x\"}}");
+
+        ONode root = requestBuilder.build(config, ChatOptions.of(),
+                Arrays.asList(thinkingOnly, mixed, carrier), false);
+
+        assertEquals(2, root.get("messages").size(), root.toJson());
+        assertEquals("answer", root.get("messages").get(0).get("content").getString());
+        assertEquals("thinking", root.get("messages").get(1).get("content").get(0).get("type").getString());
+    }
+
     /// ///////////////// 服务端工具结果：真实结构下的文本提取
 
     /**
@@ -78,14 +97,60 @@ public class AnthropicProtocolAlignTest {
     public void webSearchResultTextFromTitleAndUrl() {
         ChatStreamContext ctx = newCtx(true);
 
-        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":1,"
+        String frame = "{\"type\":\"content_block_start\",\"index\":1,"
                 + "\"content_block\":{\"type\":\"web_search_tool_result\",\"tool_use_id\":\"srvtoolu_1\","
-                + "\"content\":[{\"type\":\"web_search_result\",\"title\":\"Solon\",\"url\":\"https://solon.noear.org\"},"
-                + "{\"type\":\"web_search_result\",\"title\":\"Solon AI\",\"url\":\"https://solon.noear.org/ai\"}]}}");
+                + "\"content\":[{\"type\":\"web_search_result\",\"id\":\"result_1\",\"index\":7,"
+                + "\"title\":\"Solon\",\"url\":\"https://solon.noear.org\",\"snippet\":\"Java AI\"},"
+                + "{\"type\":\"web_search_result\",\"title\":\"Solon AI\",\"url\":\"https://solon.noear.org/ai\"}]}}";
+        parser.parseStreamResponse(ctx, frame);
+        parser.parseStreamResponse(ctx, frame);
 
         ChatEvent e = firstOf(ChatEventType.SERVER_TOOL_RESULT);
         assertNotNull(e);
         assertEquals("Solon - https://solon.noear.org\nSolon AI - https://solon.noear.org/ai", e.getText());
+
+        List<ChatEvent> typedEvents = new ArrayList<>();
+        int serverResultCount = 0;
+        for (ChatEvent event : events) {
+            if (event.getType() == ChatEventType.SEARCH_RESULT) {
+                typedEvents.add(event);
+            } else if (event.getType() == ChatEventType.SERVER_TOOL_RESULT) {
+                serverResultCount++;
+            }
+        }
+        assertEquals(2, serverResultCount, "既有 SERVER_TOOL_RESULT 保持逐帧发射语义");
+        assertEquals(2, typedEvents.size(), "重复结果帧不应重复发 SEARCH_RESULT");
+
+        ChatEvent firstEvent = typedEvents.get(0);
+        SearchResult first = firstEvent.getSearchResult();
+        assertNotNull(first);
+        assertEquals(Integer.valueOf(7), first.getIndex());
+        assertEquals("result_1", first.getId());
+        assertEquals("Solon", first.getTitle());
+        assertEquals("https://solon.noear.org", first.getUrl());
+        assertEquals("Java AI", first.getSnippet());
+        assertEquals(1, firstEvent.getIndex(), "事件 index 保留所属 content block 坐标");
+        assertEquals("Solon - https://solon.noear.org", firstEvent.getText());
+        assertEquals("web_search_result", firstEvent.getRaw().get("type").getString());
+
+        SearchResult second = typedEvents.get(1).getSearchResult();
+        assertNotNull(second);
+        assertNull(second.getIndex(), "协议未提供 index 时不得用数组下标伪造");
+        assertNull(second.getId());
+        assertNull(second.getSnippet());
+        assertEquals("Solon AI", second.getTitle());
+        assertEquals("https://solon.noear.org/ai", second.getUrl());
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_stop\"}");
+        ChatResponse terminal = ctx.getAccumulator().snapshotTerminal();
+        assertEquals(2, terminal.getSearchResults().size());
+        assertEquals("result_1", terminal.getSearchResults().get(0).getId());
+
+        Map<String, Object> protocolData = AnthropicMessageStateSupport.resolveData(terminal.getMessage());
+        assertNotNull(protocolData);
+        List<?> serverBlocks = (List<?>) protocolData.get(AnthropicResponseParser.SERVER_BLOCKS_RAW_KEY);
+        assertEquals(1, serverBlocks.size(), "重复帧不得改变完整 anthropic.messages 服务端块状态");
+        assertTrue(String.valueOf(serverBlocks.get(0)).contains("\"index\":7"));
     }
 
     /**
@@ -255,6 +320,14 @@ public class AnthropicProtocolAlignTest {
         assertNotNull(e);
         assertEquals("char_location", e.getSubType());
         assertEquals("\u88ab\u5f15\u7528\u7684\u539f\u6587", e.getText());
+        assertNotNull(e.getCitation());
+        assertEquals("char_location", e.getCitation().getType());
+        assertEquals("\u624b\u518c", e.getCitation().getTitle());
+        assertNull(e.getCitation().getUrl());
+        assertEquals("\u88ab\u5f15\u7528\u7684\u539f\u6587", e.getCitation().getCitedText());
+        assertEquals(0, e.getIndex());
+        assertEquals("content_block_delta", e.getRaw().get("type").getString());
+        assertEquals(1, ctx.getAccumulator().snapshotTerminal().getCitations().size());
     }
 
     /// ///////////////// usage
@@ -274,6 +347,41 @@ public class AnthropicProtocolAlignTest {
                 + "\"usage\":{\"output_tokens\":30,\"output_tokens_details\":{\"thinking_tokens\":12}}}");
 
         AiUsageAssert.assertUsage(ctx.getAccumulator().getUsage());
+        assertEquals(65L, ctx.getAccumulator().getUsage().totalTokens(),
+                "totalTokens 必须由最终 prompt/completion 字段重算");
+    }
+
+    @Test
+    public void messageDeltaDoesNotFinishBeforeMessageStop() {
+        ChatStreamContext ctx = newCtx(true);
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_delta\","
+                + "\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":3}}");
+
+        assertFalse(ctx.getAccumulator().isFinished(),
+                "stop_reason 只是消息元数据，缺少 message_stop 的流仍应被视为截断");
+        assertEquals("end_turn", ctx.getAccumulator().lastFinishReason);
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_stop\"}");
+        assertTrue(ctx.getAccumulator().isFinished());
+    }
+
+    @Test
+    public void messageDeltaUsageOverwritesPresentFieldsIncludingZero() {
+        ChatStreamContext ctx = newCtx(true);
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_start\",\"message\":{\"id\":\"msg_fix\","
+                + "\"model\":\"claude-sonnet-4-5\",\"usage\":{\"input_tokens\":10,\"output_tokens\":20,"
+                + "\"server_tool_use\":{\"web_search_requests\":4},\"service_tier\":\"priority\"}}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},"
+                + "\"usage\":{\"output_tokens\":0,\"server_tool_use\":{\"web_search_requests\":1}}}");
+
+        AiUsage usage = ctx.getAccumulator().getUsage();
+        assertEquals(10L, usage.promptTokens(), "delta 缺失 input_tokens 时沿用 start 快照");
+        assertEquals(0L, usage.completionTokens(), "显式 0 必须覆盖旧值，不能取 max");
+        assertEquals(1L, usage.webSearchRequests(), "累计对象使用最新快照，不能取 max 或累加");
+        assertEquals("priority", usage.serviceTier(), "delta 缺失的 start-only 字段必须保留");
+        assertEquals(10L, usage.totalTokens());
     }
 
     /**
@@ -387,6 +495,21 @@ public class AnthropicProtocolAlignTest {
         assertNotNull(firstOf(ChatEventType.RAW), "unknown non-stream block should emit RAW");
     }
 
+    @Test
+    public void nonStreamResponseIdPropagatesBeforeContentEvents() {
+        ChatStreamContext ctx = newCtx(false);
+
+        parser.parseNonStreamResponse(ctx, "{\"id\":\"msg_nonstream_1\",\"model\":\"claude-sonnet-4-5\","
+                + "\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"text\",\"text\":\"answer\","
+                + "\"citations\":[{\"type\":\"web_search_result_location\",\"url\":\"https://a.dev\"}]}]}");
+
+        assertEquals("msg_nonstream_1", ctx.getProviderResponseId());
+        ChatEvent citation = firstOf(ChatEventType.CITATION);
+        assertNotNull(citation);
+        assertEquals("msg_nonstream_1", citation.getProviderResponseId(),
+                "非流式内容事件必须携带顶层 message id");
+    }
+
     /// ///////////////// 请求侧：缓存断点
 
     /**
@@ -395,11 +518,9 @@ public class AnthropicProtocolAlignTest {
      */
     @Test
     public void cacheBreakpointNeverLandsOnThinkingBlock() {
-        Map<String, Object> contentRaw = new LinkedHashMap<>();
-        contentRaw.put("thinkingSignature", "sig_x");
-
-        AssistantMessage thinkingOnly = new AssistantMessage("", "\u60f3\u4e00\u4e0b",
-                false, contentRaw, null, null, null, null);
+        AssistantMessage thinkingOnly = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"\",\"thinking\":\"想一下\"," +
+                        "\"contentRaw\":{\"thinkingSignature\":\"sig_x\"}}");
 
         List<ChatMessage> messages = Arrays.asList(
                 ChatMessage.ofSystem("sys"),
@@ -684,7 +805,7 @@ public class AnthropicProtocolAlignTest {
                 .parseAssistantMessage(ctx.getAccumulator(), oMessage);
 
         AssistantMessage msg = list.get(list.size() - 1);
-        Object raw = msg.getContentRaw();
+        Object raw = AnthropicMessageStateSupport.resolveData(msg);
         assertTrue(raw instanceof Map);
         Object blocks = ((Map<?, ?>) raw).get("redactedThinkingBlocks");
         assertTrue(blocks instanceof List);
@@ -750,7 +871,8 @@ public class AnthropicProtocolAlignTest {
                 + "\"usage\":{\"output_tokens\":50,\"server_tool_use\":{\"web_search_requests\":2}}}");
 
         AiUsage usage = ctx.getAccumulator().getUsage();
-        assertEquals(2L, usage.webSearchRequests(), "累计快照按 max，相加会重复计次");
+            assertEquals(2L, usage.webSearchRequests(), "累计快照使用最新字段值，不能相加");
+
         assertEquals("batch", usage.serviceTier(), "message_delta 无此字段，不得覆盖为 null");
         assertEquals("eu-west", usage.inferenceGeo());
         assertEquals(50L, usage.completionTokens());
@@ -796,5 +918,68 @@ public class AnthropicProtocolAlignTest {
                 Arrays.asList(ChatMessage.ofUser("hi")), false);
 
         assertFalse(root.get("thinking").hasKey("display"));
+    }
+
+    /**
+     * Number / Map / reasoning_effort 都必须统一满足 budget_tokens >= 1024 且小于 max_tokens。
+     */
+    @Test
+    public void classicThinkingBudgetIsValidatedForEveryEntryPoint() {
+        ChatConfig config = new ChatConfig();
+        config.setModel("claude-sonnet-4-5");
+        List<ChatMessage> messages = Arrays.asList(ChatMessage.ofUser("hi"));
+
+        ONode numberClamped = requestBuilder.build(config,
+                ChatOptions.of().optionSet("thinking", 8192).optionSet("max_tokens", 8192),
+                messages, false);
+        assertEquals(8191, numberClamped.get("thinking").get("budget_tokens").getInt());
+
+        ONode numberTooSmall = requestBuilder.build(config,
+                ChatOptions.of().optionSet("thinking", 1023).optionSet("max_tokens", 8192),
+                messages, false);
+        assertFalse(numberTooSmall.hasKey("thinking"));
+
+        Map<String, Object> mapThinking = new LinkedHashMap<>();
+        mapThinking.put("type", "enabled");
+        mapThinking.put("budgetTokens", 4096);
+        ONode mapClamped = requestBuilder.build(config,
+                ChatOptions.of().optionSet("thinking", mapThinking).optionSet("max_tokens", 2048),
+                messages, false);
+        assertEquals(2047, mapClamped.get("thinking").get("budget_tokens").getInt());
+
+        ONode effortImpossible = requestBuilder.build(config,
+                ChatOptions.of().optionSet("reasoning_effort", "low").optionSet("max_tokens", 1024),
+                messages, false);
+        assertFalse(effortImpossible.hasKey("thinking"),
+                "max_tokens <= 1024 时无法同时满足预算上下限，不应发送 thinking");
+    }
+
+    /**
+     * Map 的 enabled=false 必须保持关闭语义，且 disabled 变体不能携带 enabled 专属字段。
+     */
+    @Test
+    public void mapThinkingDisabledAndEnabledDefaultsAreNormalized() {
+        ChatConfig config = new ChatConfig();
+        config.setModel("claude-sonnet-4-5");
+        List<ChatMessage> messages = Arrays.asList(ChatMessage.ofUser("hi"));
+
+        Map<String, Object> disabled = new LinkedHashMap<>();
+        disabled.put("enabled", false);
+        disabled.put("budget_tokens", 2048);
+        disabled.put("display", "omitted");
+        ONode disabledRoot = requestBuilder.build(config,
+                ChatOptions.of().optionSet("thinking", disabled), messages, false);
+        assertEquals("disabled", disabledRoot.get("thinking").get("type").getString());
+        assertFalse(disabledRoot.get("thinking").hasKey("budget_tokens"));
+        assertFalse(disabledRoot.get("thinking").hasKey("display"));
+
+        Map<String, Object> enabled = new LinkedHashMap<>();
+        enabled.put("enabled", true);
+        ONode enabledRoot = requestBuilder.build(config,
+                ChatOptions.of().optionSet("thinking", enabled).optionSet("max_tokens", 8192),
+                messages, false);
+        assertEquals("enabled", enabledRoot.get("thinking").get("type").getString());
+        assertEquals(8191, enabledRoot.get("thinking").get("budget_tokens").getInt(),
+                "缺省预算应与 thinking=true 一致，并受 max_tokens 钳制");
     }
 }

@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Ollama 入站报文解析规约
  *
- * <p>覆盖 {@code parseAssistantMessage}（thinking→reasoning 归一、images/audios/videos 侧车解析与合并、
+ * <p>覆盖 {@code parseAssistantMessage}（thinking→reasoning 归一、images/audios/videos 侧车解析与消息合并、
  * 只有 thinking/tool 消息时补一条带媒体的空文本消息）与 {@code parseToolCall}
  * （arguments 为对象 / JSON 字符串 / 截断分片三种形态）。</p>
  *
@@ -49,9 +49,13 @@ public class OllamaChatDialectParseTest {
     private final OllamaChatDialect dialect = OllamaChatDialect.getInstance();
 
     private ChatAccumulator accumulator(boolean stream) {
+        return accumulator(stream, ChatOptions.of());
+    }
+
+    private ChatAccumulator accumulator(boolean stream, ChatOptions options) {
         ChatConfig config = new ChatConfig();
         config.setModel("qwen3:8b");
-        ChatRequest req = new ChatRequest(config, dialect, ChatOptions.of(),
+        ChatRequest req = new ChatRequest(config, dialect, options,
                 InMemoryChatSession.builder().build(), ChatMessage.ofSystem("test"), null, stream);
 
         return new ChatAccumulator(req, stream);
@@ -125,7 +129,8 @@ public class OllamaChatDialectParseTest {
 
         assertFalse(oMessage.hasKey("reasoning"));
         assertEquals(1, messages.size());
-        assertFalse(messages.get(0).isThinking());
+        assertFalse(messages.get(0).hasThinking());
+        assertEquals("", messages.get(0).getThinkingRaw());
         assertEquals("杭州今天晴", messages.get(0).getTextRaw());
     }
 
@@ -143,7 +148,7 @@ public class OllamaChatDialectParseTest {
 
         assertEquals(1, messages.size());
         assertTrue(acc.getMediaBlocks().isEmpty());
-        assertTrue(messages.get(0).getBlocks().isEmpty());
+        assertTrue(messages.get(0).getBlocks() == null || messages.get(0).getBlocks().isEmpty());
     }
 
     /**
@@ -168,7 +173,7 @@ public class OllamaChatDialectParseTest {
         assertEquals("QUJD", imageAt(msg, 3).getData(), "裸 base64 应作为 data 解析");
         assertNull(imageAt(msg, 3).getUrl());
 
-        assertEquals(3, acc.getMediaBlocks().size(), "侧车媒体需登记到累积器（终态聚合用）");
+        assertTrue(acc.getMediaBlocks().isEmpty(), "parseAssistantMessage 不得旁路登记媒体");
     }
 
     /**
@@ -186,7 +191,8 @@ public class OllamaChatDialectParseTest {
         assertEquals(1, messages.size());
         AssistantMessage msg = messages.get(0);
         assertEquals("", msg.getTextRaw());
-        assertFalse(msg.isThinking());
+        assertFalse(msg.hasThinking());
+        assertEquals("", msg.getThinkingRaw());
         assertEquals(2, msg.getBlocks().size());
 
         AudioBlock audio = (AudioBlock) msg.getBlocks().get(0);
@@ -223,7 +229,7 @@ public class OllamaChatDialectParseTest {
                 "{\"role\":\"assistant\",\"content\":\"看这个\","
                         + "\"images\":[\"\",\"https://example.com/1.png\"]}"));
 
-        assertEquals(1, acc.getMediaBlocks().size());
+        assertTrue(acc.getMediaBlocks().isEmpty(), "parseAssistantMessage 不得旁路登记媒体");
         assertEquals(2, messages.get(0).getBlocks().size());
     }
 
@@ -241,7 +247,8 @@ public class OllamaChatDialectParseTest {
 
         assertEquals(2, messages.size());
         assertEquals("get_weather", messages.get(0).getToolCalls().get(0).getName());
-        assertTrue(messages.get(0).getBlocks().isEmpty(), "tool_calls 消息不得挂媒体");
+        assertTrue(messages.get(0).getBlocks() == null || messages.get(0).getBlocks().isEmpty(),
+                "tool_calls 消息不得挂媒体");
 
         AssistantMessage mediaMsg = messages.get(1);
         assertEquals("", mediaMsg.getTextRaw());
@@ -261,33 +268,37 @@ public class OllamaChatDialectParseTest {
                 "{\"role\":\"assistant\",\"content\":\"\",\"thinking\":\"让我想想\","
                         + "\"images\":[\"https://example.com/1.png\"]}"));
 
-        assertEquals(3, messages.size(), "开启信号帧 + 思考分片帧 + 媒体补位帧");
-        assertTrue(messages.get(0).isThinking());
-        assertTrue(messages.get(1).isThinking());
-        assertTrue(messages.get(1).getBlocks().isEmpty());
+        assertEquals(2, messages.size(), "思考消息 + 媒体补位消息");
+        AssistantMessage thinkingMsg = messages.get(0);
+        assertTrue(thinkingMsg.hasThinking());
+        assertTrue(thinkingMsg.isThinkingOnly());
+        assertEquals("让我想想", thinkingMsg.getThinkingRaw());
+        assertTrue(thinkingMsg.getBlocks() == null || thinkingMsg.getBlocks().isEmpty());
 
-        AssistantMessage mediaMsg = messages.get(2);
-        assertFalse(mediaMsg.isThinking());
+        AssistantMessage mediaMsg = messages.get(1);
+        assertFalse(mediaMsg.hasThinking());
+        assertEquals("", mediaMsg.getThinkingRaw());
         assertEquals(1, mediaMsg.getBlocks().size());
     }
 
     /**
-     * 非流式思考帧（思考与正文同体、正文为空）：媒体并入该消息，且不补空 TextBlock
+     * 非流式完整响应通过终态快照读取，媒体载体以最后解析出的完整消息为准。
      */
     @Test
-    public void mediaMergedIntoMessageWithoutText() {
+    public void nonStreamMediaUsesTerminalSnapshot() {
         ChatAccumulator acc = accumulator(false);
 
-        List<AssistantMessage> messages = dialect.parseAssistantMessage(acc, ONode.ofJson(
-                "{\"role\":\"assistant\",\"content\":\"\",\"thinking\":\"让我想想\","
-                        + "\"images\":[\"https://example.com/1.png\"]}"));
+        dialect.parseResponseJson(ChatStreamContextDefault.ofNoEmit(acc),
+                "{\"model\":\"qwen3:8b\",\"message\":{\"role\":\"assistant\",\"content\":\"\","
+                        + "\"thinking\":\"让我想想\",\"images\":[\"https://example.com/1.png\"]},"
+                        + "\"done\":true,\"done_reason\":\"stop\"}");
 
-        assertEquals(1, messages.size());
-        AssistantMessage msg = messages.get(0);
+        AssistantMessage msg = acc.snapshotTerminal().getMessage();
+        assertNotNull(msg);
         assertEquals("", msg.getTextRaw());
         assertEquals("让我想想", msg.getThinkingRaw());
-        assertEquals("reasoning", msg.getReasoningFieldName());
-        assertEquals(1, msg.getBlocks().size(), "空文本不应产生 TextBlock");
+        assertEquals(1, msg.getBlocks().size());
+        assertEquals(1, acc.getMediaBlocks().size(), "非流式媒体也必须经 MEDIA_DONE 登记");
         assertEquals("https://example.com/1.png", imageAt(msg, 0).getUrl());
     }
 
@@ -325,7 +336,9 @@ public class OllamaChatDialectParseTest {
         dialect.parseResponseJson(ChatStreamContextDefault.ofNoEmit(acc), "[1,2]");
         dialect.parseResponseJson(ChatStreamContextDefault.ofNoEmit(acc), "\"just-a-string\"");
 
-        assertFalse(acc.hasContentItems());
+        assertEquals("", acc.getAggregationText());
+        assertEquals("", acc.getAggregationThinking());
+        assertNull(acc.snapshotTerminal().getMessage());
         assertNull(acc.getError());
         assertFalse(acc.isFinished());
     }
@@ -334,7 +347,7 @@ public class OllamaChatDialectParseTest {
      * 结束帧已有正文：不再补一条空文本消息（避免重复尾帧）
      */
     @Test
-    public void doneFrameWithTextKeepsSingleContentItem() {
+    public void doneFrameWithTextProducesTerminalSnapshot() {
         ChatAccumulator acc = accumulator(true);
 
         dialect.parseResponseJson(ChatStreamContextDefault.ofNoEmit(acc),
@@ -342,8 +355,10 @@ public class OllamaChatDialectParseTest {
                         + "\"done\":true,\"done_reason\":\"stop\",\"prompt_eval_count\":10,\"eval_count\":5}");
 
         assertTrue(acc.isFinished());
-        assertEquals(1, acc.getContentItems().size());
-        assertEquals("完毕", acc.lastItem().getTextRaw());
+        assertNotNull(acc.snapshotTerminal().getMessage());
+        assertEquals("完毕", acc.snapshotTerminal().getText());
+        assertEquals("", acc.snapshotTerminal().getThinking());
+        assertEquals("stop", acc.snapshotTerminal().getFinishReason());
         assertEquals(15, acc.getUsage().totalTokens());
     }
 
@@ -359,7 +374,7 @@ public class OllamaChatDialectParseTest {
         ToolCall call = dialect.parseToolCall(acc, ONode.ofJson(
                 "{\"id\":\"call_1\",\"function\":{\"name\":\"get_weather\",\"arguments\":{\"city\":\"杭州\"}}}"));
 
-        assertEquals("get_weather", call.getIndex(), "以函数名为聚合主键");
+        assertEquals("call_1", call.getIndex(), "无 index 时稳定 id 作为调用身份");
         assertEquals("call_1", call.getId());
         assertEquals("get_weather", call.getName());
         assertEquals("杭州", call.getArguments().get("city"));
@@ -376,7 +391,7 @@ public class OllamaChatDialectParseTest {
                 "{\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"杭州\\\"}\"}}"));
 
         assertNull(call.getId(), "ollama 协议可以没有 tool call id");
-        assertEquals("get_weather", call.getIndex());
+        assertEquals("idx:0", call.getIndex());
         assertEquals("{\"city\":\"杭州\"}", call.getArgumentsStr());
         assertEquals("杭州", call.getArguments().get("city"));
     }

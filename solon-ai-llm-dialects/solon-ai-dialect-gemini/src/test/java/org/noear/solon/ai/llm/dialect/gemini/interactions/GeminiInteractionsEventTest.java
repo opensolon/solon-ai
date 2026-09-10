@@ -20,7 +20,9 @@ import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.event.*;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
+import org.noear.solon.ai.chat.source.SearchResult;
 import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.llm.dialect.gemini.GeminiInteractionsDialect;
 
 import java.util.ArrayList;
@@ -60,6 +62,16 @@ public class GeminiInteractionsEventTest {
             }
         }
         return null;
+    }
+
+    private List<ChatEvent> allOf(ChatEventType type) {
+        List<ChatEvent> matches = new ArrayList<>();
+        for (ChatEvent event : events) {
+            if (event.getType() == type) {
+                matches.add(event);
+            }
+        }
+        return matches;
     }
 
     /**
@@ -104,13 +116,74 @@ public class GeminiInteractionsEventTest {
     public void googleSearchResultBecomesServerToolResult() {
         ChatStreamContext ctx = newCtx();
 
-        parser.parseStreamResponse(ctx, "{\"event_type\":\"step.stop\",\"index\":1,"
+        parser.parseStreamResponse(ctx, "{\"event_type\":\"step.start\",\"index\":1,"
                 + "\"step\":{\"type\":\"google_search_result\",\"id\":\"gs_1\"}}");
+        parser.parseStreamResponse(ctx, "{\"event_type\":\"step.stop\",\"index\":1}");
 
         ChatEvent e = firstOf(ChatEventType.SERVER_TOOL_RESULT);
         assertNotNull(e, "google_search_result should emit SERVER_TOOL_RESULT");
         assertEquals("google_search_result", e.getSubType());
         assertEquals("gs_1", e.getItemId());
+        assertNull(firstOf(ChatEventType.SEARCH_RESULT),
+                "仅有生命周期字段的 google_search_result 不能伪装成逐项网页结果");
+        assertTrue(ctx.getAccumulator().getAggregationSearchResults().isEmpty());
+    }
+
+    /**
+     * 只有 google_search_result 明确携带可识别的逐项网页结果时才投影 SEARCH_RESULT。
+     */
+    @Test
+    public void recognizableGoogleSearchItemsBecomeTypedResults() {
+        ChatStreamContext ctx = newCtx();
+        String step = "{\"type\":\"google_search_result\",\"id\":\"gs_1\",\"result\":["
+                + "{\"id\":\"r1\",\"title\":\"Solon\",\"url\":\"https://solon.noear.org\","
+                + "\"snippet\":\"Java enterprise framework\"},"
+                + "{\"web\":{\"title\":\"Solon AI\",\"uri\":\"https://solon.noear.org/ai\"}},"
+                + "{\"search_suggestions\":\"<div>suggestions</div>\"}]}";
+
+        parser.parseStreamResponse(ctx, "{\"event_type\":\"step.start\",\"index\":1,\"step\":" + step + "}");
+        // 供应商可能在 stop 帧重放完整 step；同一网页结果不得重复聚合。
+        parser.parseStreamResponse(ctx, "{\"event_type\":\"step.stop\",\"index\":1,\"step\":" + step + "}");
+
+        List<ChatEvent> resultEvents = allOf(ChatEventType.SEARCH_RESULT);
+        assertEquals(2, resultEvents.size());
+
+        ChatEvent firstEvent = resultEvents.get(0);
+        SearchResult first = firstEvent.getSearchResult();
+        assertNotNull(first);
+        assertEquals(Integer.valueOf(0), first.getIndex());
+        assertEquals("r1", first.getId());
+        assertEquals("Solon", first.getTitle());
+        assertEquals("https://solon.noear.org", first.getUrl());
+        assertEquals("Java enterprise framework", first.getSnippet());
+        assertEquals(first.getUrl(), firstEvent.getText());
+        assertEquals("Solon", firstEvent.getRaw().get("title").getString());
+
+        SearchResult second = resultEvents.get(1).getSearchResult();
+        assertEquals("Solon AI", second.getTitle());
+        assertEquals("https://solon.noear.org/ai", second.getUrl());
+
+        assertEquals(2, ctx.getAccumulator().snapshotTerminal().getSearchResults().size());
+        assertSame(first, ctx.getAccumulator().snapshotTerminal().getSearchResults().get(0));
+    }
+
+    @Test
+    public void nonStreamRecognizableGoogleSearchItemsBecomeTypedResults() {
+        events.clear();
+        ChatConfig config = new ChatConfig();
+        ChatRequest req = new ChatRequest(config, GeminiInteractionsDialect.getInstance(), ChatOptions.of(),
+                InMemoryChatSession.builder().build(), ChatMessage.ofSystem("test"), null, false);
+        ChatStreamContext ctx = new ChatStreamContextDefault(config, req, new ChatAccumulator(req, false),
+                new ChatStreamSession(), 0, events::add);
+
+        parser.parseNonStreamResponse(ctx, "{\"status\":\"completed\",\"steps\":["
+                + "{\"type\":\"google_search_result\",\"call_id\":\"gs_1\",\"results\":["
+                + "{\"title\":\"Solon\",\"uri\":\"https://solon.noear.org\",\"summary\":\"framework\"}]}]}");
+
+        ChatEvent event = firstOf(ChatEventType.SEARCH_RESULT);
+        assertNotNull(event);
+        assertEquals("framework", event.getSearchResult().getSnippet());
+        assertEquals(1, ctx.getAccumulator().snapshotTerminal().getSearchResults().size());
     }
 
     /**
@@ -130,6 +203,24 @@ public class GeminiInteractionsEventTest {
                     "dialect must not emit content events (core converts content items)");
             assertNotSame(ChatEventType.THINKING_DELTA, e.getType());
         }
+    }
+
+    /**
+     * step.start 本身可能携带首块内容，不能只登记步骤身份后等待 delta。
+     */
+    @Test
+    public void stepStartPayloadIsDelivered() {
+        ChatStreamContext ctx = newCtx();
+
+        parser.parseStreamResponse(ctx, "{\"event_type\":\"step.start\",\"index\":0,"
+                + "\"step\":{\"type\":\"model_output\",\"content\":[{\"type\":\"text\",\"text\":\"hello \"}]}}");
+        assertEquals("hello ", firstOf(ChatEventType.TEXT_DELTA).getText());
+        assertEquals("hello ", ctx.getAccumulator().getAggregationText());
+
+        parser.parseStreamResponse(ctx, "{\"event_type\":\"step.start\",\"index\":1,"
+                + "\"step\":{\"type\":\"thought\",\"summary\":[{\"type\":\"text\",\"text\":\"think\"}]}}");
+        assertEquals("think", firstOf(ChatEventType.THINKING_DELTA).getText());
+        assertEquals("think", ctx.getAccumulator().getAggregationThinking());
     }
 
     /**
@@ -193,13 +284,13 @@ public class GeminiInteractionsEventTest {
         assertNotNull(sig, "non-stream must emit THINKING_SIGNATURE");
         assertEquals("sig-1", sig.getText());
 
-        ChatEvent tool = firstOf(ChatEventType.SERVER_TOOL_RESULT);
-        assertNotNull(tool, "non-stream must emit SERVER_TOOL_RESULT");
+        ChatEvent tool = firstOf(ChatEventType.SERVER_TOOL_START);
+        assertNotNull(tool, "non-stream call snapshot must emit SERVER_TOOL_START");
         assertEquals("google_search_call", tool.getSubType());
 
-        //内容主干仍走内容项，方言不重复发射内容事件
+        //内容主干保存在终态快照，方言不重复发射内容事件
         assertNull(firstOf(ChatEventType.TEXT_DELTA));
-        assertTrue(ctx.getAccumulator().hasContentItems());
+        assertEquals("杭州今天晴", ctx.getAccumulator().snapshotTerminal().getText());
     }
 
     /**
@@ -233,6 +324,41 @@ public class GeminiInteractionsEventTest {
     }
 
     /**
+     * Interactions 解析器只发 START/ARGS_DELTA，END 由 core 收尾唯一产生。
+     */
+    @Test
+    public void functionCallEndIsOwnedByCore() {
+        List<ChatEvent> normalized = new ArrayList<>();
+        ChatEventNormalizer normalizer = new ChatEventNormalizer();
+
+        ChatConfig config = new ChatConfig();
+        ChatRequest req = new ChatRequest(config, GeminiInteractionsDialect.getInstance(), ChatOptions.of(),
+                InMemoryChatSession.builder().build(), ChatMessage.ofSystem("test"), null, true);
+        ChatAccumulator acc = new ChatAccumulator(req, true);
+        ChatStreamContext ctx = new ChatStreamContextDefault(config, req, acc,
+                new ChatStreamSession(), 0, event -> normalizer.apply(event, normalized::add));
+
+        parser.parseStreamResponse(ctx, "{\"event_type\":\"step.start\",\"index\":0,"
+                + "\"step\":{\"type\":\"function_call\",\"id\":\"call-1\",\"name\":\"getWeather\"}}");
+        parser.parseStreamResponse(ctx, "{\"event_type\":\"step.delta\",\"index\":0,"
+                + "\"delta\":{\"type\":\"arguments_delta\",\"arguments\":\"{\\\"city\\\":\\\"hz\\\"}\"}}");
+        parser.parseStreamResponse(ctx, "{\"event_type\":\"step.stop\",\"index\":0}");
+
+        assertEquals(0L, normalized.stream()
+                .filter(e -> e.getType() == ChatEventType.TOOL_CALL_END).count(),
+                "方言不得在 step.stop 直接发 TOOL_CALL_END");
+
+        ToolCall done = new ToolCall("idx:0", "call-1", "getWeather", "{\"city\":\"hz\"}", null);
+        normalizer.apply(ChatEventDefault.of(ChatEventType.TOOL_CALL_END)
+                .toolCall(done).toolCallId(done.getId()).build(), normalized::add);
+        normalizer.complete(normalized::add);
+
+        assertEquals(1L, normalized.stream()
+                .filter(e -> e.getType() == ChatEventType.TOOL_CALL_END).count(),
+                "core 收尾后每个调用只能有一个 TOOL_CALL_END");
+    }
+
+    /**
      * 并发隔离：两个流的步骤序号都是 0，跨帧状态必须各自独立
      *
      * <p>解析器由静态单例方言持有。跨帧状态放实例字段时，两个并发请求共用同一张按 step index
@@ -259,16 +385,18 @@ public class GeminiInteractionsEventTest {
         parser.parseStreamResponse(ctxA, "{\"event_type\":\"step.stop\",\"index\":0}");
         parser.parseStreamResponse(ctxB, "{\"event_type\":\"step.stop\",\"index\":0}");
 
-        ToolCall callA = accA.lastItem().getToolCalls().get(0);
-        ToolCall callB = accB.lastItem().getToolCalls().get(0);
+        ToolCallBuilder callA = accA.getToolCallBuilders().get("idx:0");
+        ToolCallBuilder callB = accB.getToolCallBuilders().get("idx:0");
 
-        assertEquals("getWeather", callA.getName());
-        assertEquals("call-a", callA.getId());
-        assertEquals("{\"city\":\"hz\"}", callA.getArgumentsStr());
+        assertNotNull(callA);
+        assertNotNull(callB);
+        assertEquals("getWeather", callA.nameBuilder.toString());
+        assertEquals("call-a", callA.idBuilder.toString());
+        assertEquals("{\"city\":\"hz\"}", callA.argumentsBuilder.toString());
 
-        assertEquals("getTime", callB.getName());
-        assertEquals("call-b", callB.getId());
-        assertEquals("{\"city\":\"bj\"}", callB.getArgumentsStr());
+        assertEquals("getTime", callB.nameBuilder.toString());
+        assertEquals("call-b", callB.idBuilder.toString());
+        assertEquals("{\"city\":\"bj\"}", callB.argumentsBuilder.toString());
     }
 
     private ChatAccumulator newAccumulator() {

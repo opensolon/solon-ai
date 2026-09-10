@@ -141,6 +141,70 @@ public class ToolSchemaUtil {
     }
 
     /**
+     * 校验 OpenAI strict function schema 的关键约束。
+     * <p>strict 模式下每个 object 都必须禁止额外属性，并将全部 properties 列入 required；
+     * 可选语义应由调用方使用 nullable 类型表达。</p>
+     *
+     * @param schema   JSON Schema 对象
+     * @param toolName 工具名（用于错误定位）
+     * @since 4.1
+     */
+    public static void validateOpenAiStrictSchema(ONode schema, String toolName) {
+        if (schema == null || !schema.isObject()) {
+            throw new IllegalArgumentException("OpenAI strict tool schema must be a JSON object, tool: " + toolName);
+        }
+        validateOpenAiStrictSchemaDo(schema, toolName, "$");
+    }
+
+    private static void validateOpenAiStrictSchemaDo(ONode schema, String toolName, String path) {
+        if (schema == null || schema.isNull()) {
+            return;
+        }
+        if (schema.isArray()) {
+            int index = 0;
+            for (ONode child : schema.getArray()) {
+                validateOpenAiStrictSchemaDo(child, toolName, path + "[" + index++ + "]");
+            }
+            return;
+        }
+        if (!schema.isObject()) {
+            return;
+        }
+
+        if ("object".equals(schema.get("type").getString())) {
+            ONode properties = schema.getOrNull("properties");
+            ONode required = schema.getOrNull("required");
+            if (properties == null || !properties.isObject() || properties.getObject().isEmpty()) {
+                throw new IllegalArgumentException("OpenAI strict tool schema requires non-empty properties at "
+                        + path + ", tool: " + toolName);
+            }
+            if (!schema.hasKey("additionalProperties") || schema.get("additionalProperties").getBoolean()) {
+                throw new IllegalArgumentException("OpenAI strict tool schema requires additionalProperties=false at "
+                        + path + ", tool: " + toolName);
+            }
+            if (required == null || !required.isArray() || required.getArray().isEmpty()) {
+                throw new IllegalArgumentException("OpenAI strict tool schema requires non-empty required at "
+                        + path + ", tool: " + toolName);
+            }
+
+            Set<String> requiredNames = new HashSet<>();
+            for (ONode item : required.getArray()) {
+                requiredNames.add(item.getString());
+            }
+            for (String propertyName : properties.getObject().keySet()) {
+                if (!requiredNames.contains(propertyName)) {
+                    throw new IllegalArgumentException("OpenAI strict tool schema property '" + propertyName
+                            + "' is not required at " + path + ", tool: " + toolName);
+                }
+            }
+        }
+
+        for (Map.Entry<String, ONode> entry : schema.getObject().entrySet()) {
+            validateOpenAiStrictSchemaDo(entry.getValue(), toolName, path + "/" + entry.getKey());
+        }
+    }
+
+    /**
      * 构建参数申明（支持 @Param 和 @Body 注解）
      */
     public static @Nullable Map<String, ParamDesc> buildInputParams(AnnotatedElement ae, TypeEggg typeEggg, Map<String, Object> binding) {

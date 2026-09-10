@@ -25,7 +25,26 @@ import org.noear.solon.ai.ui.agui.EventType;
  * @see <a href="https://docs.ag-ui.com/concepts/events#custom">AG-UI Custom</a>
  */
 public class CustomEvent extends Event {
+    private String name;
+    private Object value;
+
     public CustomEvent() {
         super(EventType.CUSTOM);
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public Object getValue() {
+        return value;
+    }
+
+    public void setValue(Object value) {
+        this.value = value;
     }
 }

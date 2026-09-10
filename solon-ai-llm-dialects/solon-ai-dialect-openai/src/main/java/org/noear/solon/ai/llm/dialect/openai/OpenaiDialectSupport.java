@@ -27,7 +27,8 @@ class OpenaiDialectSupport {
     private static final java.util.regex.Pattern VERSION_PATTERN = java.util.regex.Pattern.compile("/v\\d+/?$");
 
     /**
-     * 规范化接口地址：去掉 '#' 后缀说明、查询串与结尾斜杠，便于统一做 endsWith 判断。
+     * 规范化接口地址：去掉 fragment、查询串与结尾斜杠，仅用于端点路径比较。
+     * <p>真实请求地址由 {@link #buildApiUrl(String, String)} 构建并保留查询参数。</p>
      *
      * @since 4.1
      */
@@ -37,11 +38,11 @@ class OpenaiDialectSupport {
         }
         String url = apiUrl;
         int hashIndex = url.indexOf('#');
-        if (hashIndex > 0) {
+        if (hashIndex >= 0) {
             url = url.substring(0, hashIndex);
         }
         int queryIndex = url.indexOf('?');
-        if (queryIndex > 0) {
+        if (queryIndex >= 0) {
             url = url.substring(0, queryIndex);
         }
         while (url.endsWith("/")) {
@@ -51,8 +52,8 @@ class OpenaiDialectSupport {
     }
 
     /**
-     * 共享的接口地址自动补全：去掉 '#' 后缀；已带端点路径（如 /chat/completions、/responses）原样返回；
-     * 已带版本号（/v1、/v4 等）则补端点；否则补 /v1 + 端点。
+     * 共享的接口地址自动补全：去掉 fragment；已带端点路径（如 /chat/completions、/responses）原样返回；
+     * 已带版本号（/v1、/v4 等）则补端点；否则补 /v1 + 端点。请求查询参数会原样保留。
      * <p>对齐 OpenAI 官方路径：{@code /v1/chat/completions}、{@code /v1/responses}。</p>
      *
      * @param apiUrl        配置的原始地址
@@ -60,29 +61,34 @@ class OpenaiDialectSupport {
      * @since 4.1
      */
     static String buildApiUrl(String apiUrl, String endpointPath) {
-        // 处理后缀 #
-        int hashIndex = apiUrl == null ? -1 : apiUrl.indexOf('#');
-        if (hashIndex > 0) {
-            apiUrl = apiUrl.substring(0, hashIndex);
-        }
         if (apiUrl == null || apiUrl.isEmpty()) {
             return apiUrl;
         }
 
-        // 先规范化（去 '#' 后缀/查询串/结尾斜杠）再做端点判断，
-        // 避免 ".../responses?x=1" 这类带查询串的地址误走补全分支拼成 "/responses/responses"
+        // fragment 不会发送给服务端；query 则可能承载 api-version、签名或租户信息，必须保留。
+        int hashIndex = apiUrl.indexOf('#');
+        if (hashIndex >= 0) {
+            apiUrl = apiUrl.substring(0, hashIndex);
+        }
+
+        String query = "";
+        int queryIndex = apiUrl.indexOf('?');
+        if (queryIndex >= 0) {
+            query = apiUrl.substring(queryIndex);
+            apiUrl = apiUrl.substring(0, queryIndex);
+        }
+
         String baseUrl = normalizeApiUrl(apiUrl);
-
-        // 已带端点
+        String result;
         if (baseUrl.endsWith("/" + endpointPath)) {
-            return baseUrl;
+            result = baseUrl;
+        } else if (VERSION_PATTERN.matcher(baseUrl).find()) { // 匹配 /v1,/v4/ 等，已带版本
+            result = baseUrl + "/" + endpointPath;
+        } else {
+            result = baseUrl + "/v1/" + endpointPath;
         }
 
-        if (VERSION_PATTERN.matcher(baseUrl).find()) { // 匹配 /v1,/v4/ 等，已带版本
-            return baseUrl + "/" + endpointPath;
-        } else {
-            return baseUrl + "/v1/" + endpointPath;
-        }
+        return result + query;
     }
 
     /**

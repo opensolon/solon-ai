@@ -23,18 +23,20 @@ import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.source.Citation;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.llm.dialect.gemini.models.GeminiRequestBuilder;
 import org.noear.solon.ai.llm.dialect.gemini.models.GeminiResponseParser;
 import org.noear.solon.ai.llm.dialect.gemini.models.GeminiThoughtProcessor;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.net.http.HttpUtils;
-import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Gemini 聊天模型方言
@@ -61,6 +63,7 @@ import java.util.Map;
 public class GeminiChatDialect extends AbstractChatDialect {
     private static final GeminiChatDialect instance = new GeminiChatDialect();
     private static final Logger log = LoggerFactory.getLogger(GeminiChatDialect.class);
+    private static final String GROUNDING_CITATION_EVENT_STATE_KEY = "GeminiGroundingCitationEvents";
 
     private final GeminiResponseParser responseParser;
     private final GeminiRequestBuilder requestBuilder;
@@ -91,11 +94,11 @@ public class GeminiChatDialect extends AbstractChatDialect {
             return true;
         }
 
-        String apiUrl = config.getApiUrl();
+        String apiUrl = stripFragment(config.getApiUrl());
         return Assert.isEmpty(standard)
                 && Utils.isNotEmpty(apiUrl)
-                && apiUrl.contains("/v1beta/models/")
-                && (apiUrl.endsWith("generateContent") || apiUrl.endsWith("streamGenerateContent"));
+                && (apiUrl.contains("/v1/models/") || apiUrl.contains("/v1beta/models/"))
+                && (apiUrl.contains(":generateContent") || apiUrl.contains(":streamGenerateContent"));
     }
 
     @Override
@@ -103,7 +106,6 @@ public class GeminiChatDialect extends AbstractChatDialect {
         String apiUrl = buildApiUrl(config.getApiUrl(), config.getModel(), isStream);
 
         HttpUtils httpUtils = HttpUtils.http(apiUrl)
-                .ssl(HttpSslSupplierAny.getInstance())
                 .timeout((int) config.getTimeout().getSeconds());
 
         if (config.getProxy() != null) {
@@ -145,38 +147,70 @@ public class GeminiChatDialect extends AbstractChatDialect {
      * @param isStream 是否使用流式模式
      * @return 完整的 API 请求 URL
      */
-    private String buildApiUrl(String baseUrl, String model, boolean isStream) {
+    String buildApiUrl(String baseUrl, String model, boolean isStream) {
         if (Utils.isEmpty(baseUrl)) {
             return baseUrl;
         }
 
-        int index = baseUrl.indexOf('#');
-        if (index > 0) {
-            baseUrl = baseUrl.substring(0, index);
+        baseUrl = stripFragment(baseUrl);
+        String query = "";
+        int queryIndex = baseUrl.indexOf('?');
+        if (queryIndex >= 0) {
+            query = baseUrl.substring(queryIndex + 1);
+            baseUrl = baseUrl.substring(0, queryIndex);
         }
 
         if (baseUrl.contains(":generateContent") || baseUrl.contains(":streamGenerateContent")) {
-            if (isStream && !baseUrl.contains("alt=sse")) {
-                return baseUrl + (baseUrl.contains("?") ? "&" : "?") + "alt=sse";
+            baseUrl = baseUrl.replace(":streamGenerateContent", ":generateContent");
+            if (isStream) {
+                baseUrl = baseUrl.replace(":generateContent", ":streamGenerateContent");
+                query = addQueryParameter(query, "alt", "sse");
+            } else {
+                query = removeQueryParameter(query, "alt", "sse");
             }
-            return baseUrl;
+            return query.isEmpty() ? baseUrl : baseUrl + "?" + query;
         }
 
-        StringBuilder urlBuilder = new StringBuilder();
-        urlBuilder.append(baseUrl);
-
+        StringBuilder urlBuilder = new StringBuilder(baseUrl);
         if (!baseUrl.endsWith("/")) {
             urlBuilder.append("/");
         }
-
         if (!baseUrl.contains("v1beta/") && !baseUrl.contains("v1/")) {
             urlBuilder.append("v1beta/");
         }
-
         urlBuilder.append("models/").append(model);
-        urlBuilder.append(isStream ? ":streamGenerateContent?alt=sse" : ":generateContent");
+        urlBuilder.append(isStream ? ":streamGenerateContent" : ":generateContent");
+        if (isStream) {
+            query = addQueryParameter(query, "alt", "sse");
+        }
+        return query.isEmpty() ? urlBuilder.toString() : urlBuilder + "?" + query;
+    }
 
-        return urlBuilder.toString();
+    private static String stripFragment(String url) {
+        if (url == null) return null;
+        int index = url.indexOf('#');
+        return index < 0 ? url : url.substring(0, index);
+    }
+
+    private static String addQueryParameter(String query, String key, String value) {
+        String cleaned = removeQueryParameter(query, key, null);
+        String parameter = key + "=" + value;
+        return cleaned.isEmpty() ? parameter : cleaned + "&" + parameter;
+    }
+
+    private static String removeQueryParameter(String query, String key, String expectedValue) {
+        if (Utils.isEmpty(query)) return "";
+        StringBuilder result = new StringBuilder();
+        for (String item : query.split("&")) {
+            if (item.isEmpty()) continue;
+            String[] pair = item.split("=", 2);
+            boolean sameKey = key.equals(pair[0]);
+            boolean sameValue = expectedValue == null || pair.length > 1 && expectedValue.equals(pair[1]);
+            if (sameKey && sameValue) continue;
+            if (result.length() > 0) result.append('&');
+            result.append(item);
+        }
+        return result.toString();
     }
 
 //    @Override
@@ -190,15 +224,14 @@ public class GeminiChatDialect extends AbstractChatDialect {
 
     @Override
     public void prepareOutputFormatOptions(ChatOptions options) {
-        options.optionSet("response_mime_type", "application/json");
+        // 由请求构建器写入 generationConfig.responseMimeType/responseJsonSchema。
     }
 
     /**
      * 解析响应（事件形态）
      *
-     * <p>Gemini models generateContent 协议的流式帧只承载内容增量（正文 / 思考 / 工具调用分片），
-     * 没有独立的生命周期或服务端工具事件，因此内容主干统一交由核心从内容项转换为
-     * TEXT_DELTA / THINKING_DELTA / TOOL_CALL_CHUNK 并保证边界，此处不额外发射事件。</p>
+     * <p>Gemini models generateContent 直接把流式内容解析为 ChatEvent，终态协议载荷由
+     * ChatAccumulator 的终态状态保存，不再经过 AssistantMessage 分片队列。</p>
      *
      * @since 4.1
      */
@@ -206,8 +239,7 @@ public class GeminiChatDialect extends AbstractChatDialect {
     public void parseResponseJson(ChatStreamContext ctx, String data) {
         ChatAccumulator acc = ctx.getAccumulator();
 
-        // models generateContent 分支的解析器仅有累积器形态（无 ctx 重载）
-        responseParser.parseResponse(acc, data);
+        responseParser.parseResponse(ctx, data);
 
         // 每帧只解析一次 JSON：错误事件与联网来源共用同一份节点
         ONode raw;
@@ -247,39 +279,53 @@ public class GeminiChatDialect extends AbstractChatDialect {
             return;
         }
 
-        int candidateIndex = -1;
-        for (ONode candidate : candidates.getArray()) {
-            candidateIndex++;
+        if (candidates.size() == 0) {
+            return;
+        }
+        ONode candidate = candidates.get(0);
+        int candidateIndex = 0;
+        ONode grounding = candidate.getOrNull("groundingMetadata");
+        if (grounding == null || grounding.isObject() == false) {
+            return;
+        }
 
-            ONode grounding = candidate.getOrNull("groundingMetadata");
-            if (grounding == null || grounding.isObject() == false) {
+        ONode chunks = grounding.getOrNull("groundingChunks");
+        if (chunks == null || chunks.isArray() == false) {
+            return;
+        }
+
+        Set<String> emitted = ctx.attrIfAbsent(GROUNDING_CITATION_EVENT_STATE_KEY,
+                k -> new LinkedHashSet<String>());
+        int chunkIndex = -1;
+        for (ONode chunk : chunks.getArray()) {
+            chunkIndex++;
+            ONode web = chunk.getOrNull("web");
+            if (web == null || web.isObject() == false) {
                 continue;
             }
 
-            ONode chunks = grounding.getOrNull("groundingChunks");
-            if (chunks == null || chunks.isArray() == false) {
+            String uri = web.get("uri").getString();
+            if (Utils.isEmpty(uri)) {
+                continue;
+            }
+            String occurrenceKey = candidateIndex + ":" + chunkIndex + ":" + uri;
+            if (emitted.add(occurrenceKey) == false) {
                 continue;
             }
 
-            for (ONode chunk : chunks.getArray()) {
-                ONode web = chunk.getOrNull("web");
-                if (web == null || web.isObject() == false) {
-                    continue;
-                }
-
-                String uri = web.get("uri").getString();
-                if (Utils.isEmpty(uri)) {
-                    continue;
-                }
-
-                ctx.emit(ctx.event(ChatEventType.CITATION)
-                        .rawType("groundingMetadata")
-                        .subType("google_search")
-                        .index(candidateIndex)
-                        .text(uri)
-                        .raw(chunk)
-                        .build());
-            }
+            Citation citation = new Citation()
+                    .type("google_search")
+                    .title(web.get("title").getString())
+                    .url(uri);
+            ctx.emit(ctx.event(ChatEventType.CITATION)
+                    .rawType("groundingMetadata")
+                    .subType("google_search")
+                    .index(candidateIndex)
+                    .text(uri)
+                    .citation(citation)
+                    .raw(chunk)
+                    .attr("chunk_index", chunkIndex)
+                    .build());
         }
     }
 
@@ -304,21 +350,22 @@ public class GeminiChatDialect extends AbstractChatDialect {
             return;
         }
 
-        int candidateIndex = -1;
-        for (ONode candidate : candidates.getArray()) {
-            candidateIndex++;
+        if (candidates.size() == 0) {
+            return;
+        }
+        ONode candidate = candidates.get(0);
+        int candidateIndex = 0;
+        ONode content = candidate.getOrNull("content");
+        if (content == null || content.isObject() == false) {
+            return;
+        }
 
-            ONode content = candidate.getOrNull("content");
-            if (content == null || content.isObject() == false) {
-                continue;
-            }
+        ONode parts = content.getOrNull("parts");
+        if (parts == null || parts.isArray() == false) {
+            return;
+        }
 
-            ONode parts = content.getOrNull("parts");
-            if (parts == null || parts.isArray() == false) {
-                continue;
-            }
-
-            for (ONode part : parts.getArray()) {
+        for (ONode part : parts.getArray()) {
                 if (part == null || part.isObject() == false) {
                     continue;
                 }
@@ -353,7 +400,6 @@ public class GeminiChatDialect extends AbstractChatDialect {
                             .build());
                 }
             }
-        }
     }
 
     /**

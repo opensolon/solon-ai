@@ -70,13 +70,14 @@ public class ChatStreamContextDefault implements ChatStreamContext {
     }
 
     /**
-     * 创建「不发事件」的上下文
+     * 创建「不投递事件」的上下文
      *
-     * <p>供方言 / 解析器单测直接调解析入口：{@code emit} 为空操作，其余行为与正常上下文一致。
-     * 生产路径一律使用带 emitter 的上下文，不要用它顶替。</p>
+     * <p>供方言 / 解析器单测直接调解析入口：{@code emit} 仍会把事件归并到累积器，
+     * 但不会投递给下游。其余行为与正常上下文一致。生产路径一律使用带 emitter 的上下文，
+     * 不要用它顶替。</p>
      *
-     * <p><b>注意</b>：走这个上下文的解析路径不会有任何事件产出，事件会被静默丢弃且不报错
-     * ——这正是命名为 {@code ofNoEmit} 而非 {@code ofLegacy} 的原因：降级要显性。</p>
+     * <p><b>注意</b>：走这个上下文的解析路径不会有事件流输出，但事件表达的终态状态不会丢失
+     * ——这正是 Event-first 路径在无订阅者场景下仍保持一致的保证。</p>
      *
      * @param acc 响应累积器
      * @since 4.1
@@ -128,7 +129,18 @@ public class ChatStreamContextDefault implements ChatStreamContext {
 
     @Override
     public void emit(ChatEvent event) {
-        if (emitter != null && event != null) {
+        if (event == null) {
+            return;
+        }
+
+        // Event-first 契约：终态归并先于下游投递；没有 emitter 时也必须完成归并。
+        acc.acceptEvent(event);
+        if (!acc.isStream()) {
+            // 非流式没有下游事件流，语义事件随最终 ChatResponse 返回。
+            acc.addEvent(event);
+        }
+
+        if (emitter != null) {
             emitter.emit(event);
         }
     }

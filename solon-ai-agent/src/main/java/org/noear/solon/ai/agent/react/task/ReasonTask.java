@@ -243,9 +243,8 @@ public class ReasonTask {
         // 纯生图等 media-only 响应不算空，避免被当成空响应重试
         // 注：text 用 trim 判定，纯空白（如 "\n\n"）等价于空，否则会 END 出一个空白答案
         //
-        // 【保留原因】不要用 callWithRetry 里的 response.isEmpty()（第 469 行）替代本段：
-        // 1) isEmpty() 是严格 null 判定（getContent()==null），拦不住纯空白文本，会在不重试的
-        //    非流式路径下 END 出空白答案；
+        // 【保留原因】不要用 callWithRetry 里的 response.isEmpty()（第 472 行）替代本段：
+        // 1) isEmpty() 判断整体载荷，拦不住纯空白正文，会在不重试的非流式路径下 END 出空白答案；
         // 2) 本段同时服务于流式与非流式两条路径（位于 callWithRetry 返回之后），且承担
         //    「格式修正/自我反思提示注入」的业务功能，删掉即丢失空响应重试能力。
         if (Assert.isBlank(responseMessage.getText())
@@ -255,8 +254,8 @@ public class ReasonTask {
                 //做3次重复
                 LOG.warn("ReActAgent[{}] responseMessage is empty: {}", trace.getAgentName(), responseMessage);
 
-                if (Assert.isNotEmpty(responseMessage.getContent())) {
-                    trace.getWorkingMemory().addMessage(responseMessage); //有些 llm 不能接受空消息
+                if (responseMessage.hasThinking()) {
+                    trace.getWorkingMemory().addMessage(responseMessage); //保留思考上下文，避免下一轮失忆
                     int retryCount = trace.getEmptyRetryCounter().get();
                     String formatFixPrompt = String.format(
                             "【系统指令：输出格式修正 (Format Correction)】\n" +

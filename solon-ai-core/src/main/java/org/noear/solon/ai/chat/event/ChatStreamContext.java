@@ -28,8 +28,8 @@ import java.util.function.Function;
  *
  * <p>方言解析响应数据时的统一上下文。取代旧解析入口的
  * {@code boolean} 返回值：方言不再需要用返回值区分「有内容」与「解析失败」——
- * 有内容就 {@link #emit(ChatEvent)}，出错就 {@code getResp().setError(...)}，
- * 已消费但无内容则什么都不做。</p>
+     * 有内容就 {@link #emit(ChatEvent)}，出错就发射带异常负载的 {@link ChatEventType#ERROR}，
+     * 已消费但无内容则什么都不做。</p>
  *
  * <p>流式与非流式共用同一条解析路径，通过 {@link #isStream()} 区分。</p>
  *
@@ -70,6 +70,9 @@ public interface ChatStreamContext {
 
     /**
      * 发射事件
+     *
+     * <p>事件会先统一归并到 {@link #getAccumulator()}，再投递给下游。即使当前上下文没有
+     * 事件发射器，归并仍会发生；方言不得在调用本方法后再次写入同一份聚合状态。</p>
      */
     void emit(ChatEvent event);
 
@@ -95,7 +98,7 @@ public interface ChatStreamContext {
     void setProviderResponseId(String id);
 
     /**
-     * 创建事件构建器（已预填 responseId 与 step）
+     * 创建事件构建器（已预填 responseId、providerResponseId 与 step）
      *
      * @param type 事件类型
      */

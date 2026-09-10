@@ -31,6 +31,9 @@ public interface CompressionStrategy {
     /**
      * 对即将移出滑动窗口的消息进行压缩
      *
+     * <p>入参列表及其中消息均视为只读；实现不得修改共享消息，且应优先返回新构造的结果。
+     * 编排器会把返回值投影为脱离原对象的安全压缩消息。</p>
+     *
      * @param messagesToCompress 判定为“过期”的消息段
      * @return 返回一条包含压缩结果的消息（通常是 UserMessage），若返回 null 则仅执行物理截断
      */

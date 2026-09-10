@@ -43,6 +43,22 @@ import static org.junit.jupiter.api.Assertions.*;
 public class GeminiRequestBuilderTest {
     private final GeminiRequestBuilder builder = new GeminiRequestBuilder();
 
+    @Test
+    public void requestReplayKeepsMixedAndCarrierMessages() {
+        ChatConfig config = new ChatConfig();
+        config.setModel("gemini-3-flash");
+        AssistantMessage thinkingOnly = new AssistantMessage("", "drop");
+        AssistantMessage mixed = new AssistantMessage("answer", "thinking");
+        AssistantMessage carrier = new AssistantMessage("", "carrier");
+        carrier.addMetadata("thought_signature", "sig");
+
+        ONode root = builder.build(config, ChatOptions.of(),
+                Arrays.asList(thinkingOnly, mixed, carrier), false);
+
+        assertEquals(1, root.get("contents").size(), root.toJson());
+        assertEquals("answer", root.get("contents").get(0).get("parts").get(0).get("text").getString());
+    }
+
     // ==================== functionResponse.id 回传 ====================
 
     @Test
@@ -124,7 +140,8 @@ public class GeminiRequestBuilderTest {
     public void assistantFunctionCallIdEcho_whenRealServerId() {
         // 历史 Assistant 消息回传：functionCall 需携带服务端生成的 id（Gemini 3+ 多轮关联依据）
         ToolCall call = new ToolCall("getWeather", "call-abc-123", "getWeather", "{}", new HashMap<>());
-        AssistantMessage assistantMessage = new AssistantMessage("", "",false, null, null, Collections.singletonList(call), null, null);
+        AssistantMessage assistantMessage = new AssistantMessage("", "",
+                Collections.singletonList(call), null);
 
         ONode node = builder.buildMessageNode(assistantMessage);
 
@@ -137,7 +154,8 @@ public class GeminiRequestBuilderTest {
     public void assistantFunctionCallIdSkipped_whenFallbackToName() {
         // 无服务端 id（fallback 到 name）时不写 id，兼容 Gemini 2.5
         ToolCall call = new ToolCall("getWeather", "getWeather", "getWeather", "{}", new HashMap<>());
-        AssistantMessage assistantMessage = new AssistantMessage("", "",false, null, null, Collections.singletonList(call), null, null);
+        AssistantMessage assistantMessage = new AssistantMessage("", "",
+                Collections.singletonList(call), null);
 
         ONode node = builder.buildMessageNode(assistantMessage);
 

@@ -41,6 +41,7 @@ public class FunctionToolDesc implements FunctionTool {
     private final List<ParamDesc> params = new ArrayList<>();
     private Type returnType;
     private boolean returnDirect = false;
+    private Boolean strict;
     private ToolHandler doHandler;
     private String inputSchema;
     private String outputSchema;
@@ -100,6 +101,26 @@ public class FunctionToolDesc implements FunctionTool {
      */
     public FunctionToolDesc returnDirect(boolean returnDirect) {
         this.returnDirect = returnDirect;
+        return this;
+    }
+
+    /**
+     * 申明严格模式
+     *
+     * @param strict 是否启用严格模式
+     * @since 4.1
+     */
+    public FunctionToolDesc strict(boolean strict) {
+        return strict(Boolean.valueOf(strict));
+    }
+
+    /**
+     * 申明严格模式（null 表示使用方言默认值）
+     *
+     * @since 4.1
+     */
+    public FunctionToolDesc strict(Boolean strict) {
+        this.strict = strict;
         return this;
     }
 
@@ -272,6 +293,11 @@ public class FunctionToolDesc implements FunctionTool {
         meta.put(key, value);
     }
 
+    @Override
+    public Boolean strict() {
+        return strict;
+    }
+
     /**
      * 是否直接返回给调用者
      */
@@ -359,6 +385,7 @@ public class FunctionToolDesc implements FunctionTool {
                 ", title='" + title + '\'' +
                 ", description='" + description + '\'' +
                 ", returnDirect=" + returnDirect +
+                ", strict=" + strict +
                 ", inputSchema=" + inputSchema() +
                 ", outputSchema=" + outputSchema() +
                 '}';

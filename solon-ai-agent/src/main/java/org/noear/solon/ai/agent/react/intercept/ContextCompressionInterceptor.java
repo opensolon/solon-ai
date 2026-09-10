@@ -27,9 +27,12 @@ import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.content.AbsMedia;
 import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.Contents;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -700,8 +703,16 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             return null;
         }
         try {
-            ChatMessage summary = compressionStrategy.compress(chatModel, Math.max(1, maxRetries), trace, messages);
+            ChatMessage strategyResult = compressionStrategy.compress(chatModel, Math.max(1, maxRetries), trace, messages);
+            if (strategyResult == null) {
+                return null;
+            }
+
+            // 策略结果可能直接引用输入历史或外部共享对象；所有规范化和截断只作用于安全语义副本。
+            ChatMessage summary = detachedCompressionResult(strategyResult);
             if (summary == null) {
+                log.warn("ReActAgent [{}] compression result cannot be safely detached, fallback to safe trimming",
+                        trace.getAgentName());
                 return null;
             }
 
@@ -740,6 +751,72 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                     trace.getAgentName(), e);
             return null;
         }
+    }
+
+    /**
+     * 将策略返回值投影为脱离原对象的通用语义消息。
+     * Assistant 的精确协议状态和 legacy raw 均不复制；旧 raw-only 工具调用先投影为 typed 语义，
+     * ToolCall 也重新构造以确保 deprecated thoughtSignature 不进入压缩产物。
+     */
+    private ChatMessage detachedCompressionResult(ChatMessage origin) {
+        ChatMessage detached;
+        if (origin instanceof AssistantMessage) {
+            AssistantMessage assistant = (AssistantMessage) origin;
+            String thinking = assistant.getThinkingRaw();
+            if (Assert.isEmpty(thinking) && assistant.hasThinking()) {
+                thinking = assistant.getThinking();
+            }
+
+            List<ToolCall> toolCalls = copyToolCallsWithoutProtocolCarriers(
+                    ToolCallJsonSanitizer.resolveToolCalls(assistant.getToolCalls(), assistant.getToolCallsRaw()));
+            AssistantMessage copy = AssistantMessage.snapshot(
+                    assistant.getText(), thinking, toolCalls,
+                    Utils.isEmpty(assistant.getBlocks()) ? null : new ArrayList<>(assistant.getBlocks()),
+                    Utils.isEmpty(assistant.resolveSearchResults())
+                            ? null : new ArrayList<>(assistant.resolveSearchResults()),
+                    Utils.isEmpty(assistant.getCitations())
+                            ? null : new ArrayList<>(assistant.getCitations()),
+                    null);
+            detached = copy;
+        } else if (origin instanceof UserMessage) {
+            UserMessage user = (UserMessage) origin;
+            detached = Utils.isEmpty(user.getBlocks())
+                    ? ChatMessage.ofUser(origin.getContent())
+                    : new UserMessage(new Contents().addBlocks(new ArrayList<>(user.getBlocks())));
+        } else if (origin instanceof ToolMessage) {
+            ToolMessage tool = (ToolMessage) origin;
+            ToolResult result = new ToolResult();
+            if (Utils.isNotEmpty(tool.getBlocks())) {
+                result.addBlocks(new ArrayList<>(tool.getBlocks()));
+            } else {
+                result.addText(origin.getContent());
+            }
+            detached = new ToolMessage(result, tool.getName(), tool.getToolCallId(), tool.isReturnDirect());
+        } else if (origin instanceof SystemMessage) {
+            detached = ChatMessage.ofSystem(origin.getContent());
+        } else {
+            return null;
+        }
+
+        copyMetadataExceptTokenSize(origin, detached);
+        return detached;
+    }
+
+    private List<ToolCall> copyToolCallsWithoutProtocolCarriers(List<ToolCall> source) {
+        if (Utils.isEmpty(source)) {
+            return null;
+        }
+        List<ToolCall> result = new ArrayList<>(source.size());
+        for (ToolCall call : source) {
+            if (call == null) {
+                continue;
+            }
+            Map<String, Object> arguments = call.getArguments() == null
+                    ? null : new LinkedHashMap<>(call.getArguments());
+            result.add(new ToolCall(call.getIndex(), call.getId(), call.getName(),
+                    call.getArgumentsStr(), arguments));
+        }
+        return result.isEmpty() ? null : result;
     }
 
     /** fallback 至少保留最后一条普通消息；若尾部属于工具结果，则保留完整 Action/结果组。 */
@@ -1054,14 +1131,11 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             // native 模式下独立的文本 Observation（非连续于 Assistant(tool_calls) 的）
             // 仍需保留：它们可能携带有效信息，不应静默丢弃。
 
-            // 过滤空壳 AssistantMessage：既无结果内容也无工具调用，且无媒体块
-            // 这类消息通常来自 LLM 的纯思考响应（thinking 标签包裹但无实际输出），
-            // 序列化后为 {"role":"assistant"}，缺少 content 或 tool_calls，
-            // 会被 DeepSeek / OpenAI 等模型 API 拒绝（400 错误）
-            // 注意：仅 media 的 Assistant（如 image_generation）必须保留
+            // 过滤真正的空壳 AssistantMessage；有思考内容的完整消息不是空壳。
             if (msg instanceof AssistantMessage) {
                 AssistantMessage am = (AssistantMessage) msg;
                 if (Assert.isEmpty(am.getText())
+                        && !am.hasThinking()
                         && Assert.isEmpty(am.getToolCalls())
                         && !am.hasMedia()) {
                     continue;
@@ -1147,6 +1221,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             }
 
             String content = msg.getContent();
+            if (msg instanceof AssistantMessage && ((AssistantMessage) msg).isThinkingOnly()) {
+                // getContent() 仅表示正文；纯 thinking 消息必须从独立 thinking 通道截断。
+                content = ((AssistantMessage) msg).getThinking();
+            }
             if (content == null || content.isEmpty()) {
                 result.add(msg);
                 continue;
@@ -1196,7 +1274,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      * <ul>
      *   <li>{@link ToolMessage} —— 超大单条消息的主要来源（工具读取大文件）</li>
      *   <li>{@link UserMessage} —— 用户直接粘贴超长日志/文件（保留 Observation 前缀，因头部从索引 0 起截断）</li>
-     *   <li>{@link AssistantMessage} —— 仅纯文本 thought（无 toolCalls）；含 toolCalls 的不重建，避免损坏推理链</li>
+     *   <li>{@link AssistantMessage} —— 仅单一正文或单一思考且无扩展字段；混合消息不重建</li>
      * </ul>
      * 其它类型返回 null。
      */
@@ -1228,22 +1306,31 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         if (origin instanceof AssistantMessage) {
             AssistantMessage am = (AssistantMessage) origin;
-            // 仅允许没有厂商 raw/搜索/块扩展的纯文本 Assistant，避免截断时静默丢字段。
+            // 仅允许没有厂商 raw/协议状态/搜索/块扩展的纯文本 Assistant，避免截断时静默丢字段。
             // 注意：am.getContent() 可能为 null（无文本内容时），需独立判空后再调用 equals。
             String amContent = am.getContent();
             if (Assert.isNotEmpty(am.getToolCalls())
                     || Assert.isNotEmpty(am.getToolCallsRaw())
+                    || Assert.isNotEmpty(am.getSearchResults())
+                    || Assert.isNotEmpty(am.getCitations())
                     || Assert.isNotEmpty(am.getSearchResultsRaw())
                     || Assert.isNotEmpty(am.getBlocks())
+                    || am.hasProtocolStates()
                     || am.getReasoningFieldName() != null
                     || !(am.getContentRaw() == null || am.getContentRaw() instanceof String
                     && amContent != null && amContent.equals(am.getContentRaw()))) {
                 return null;
             }
-            // thinking 消息：截断内容归 thinking 槽，text 保持空；普通文本消息：截断内容归 text 槽，thinking 保持空
-            String rebuiltText = am.isThinking() ? "" : newContent;
-            String rebuiltThinking = am.isThinking() ? newContent : "";
-            AssistantMessage rebuilt = new AssistantMessage(rebuiltText, rebuiltThinking, am.isThinking());
+            boolean thinkingOnly = am.isThinkingOnly();
+            boolean textOnly = !am.hasThinking() && Assert.isNotEmpty(am.getText());
+            if (!thinkingOnly && !textOnly) {
+                // text + thinking 混合消息，或没有可截断语义文本：保守保持原消息。
+                return null;
+            }
+
+            AssistantMessage rebuilt = thinkingOnly
+                    ? new AssistantMessage("", newContent)
+                    : new AssistantMessage(newContent);
             copyMetadataExceptTokenSize(origin, rebuilt);
             return rebuilt;
         }
@@ -1265,6 +1352,9 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
      * 复制原消息 metadata 到目标消息，跳过 {@link #META_TOKEN_SIZE}（让其按新内容重算）。
      */
     private void copyMetadataExceptTokenSize(ChatMessage origin, ChatMessage target) {
+        if (origin instanceof ChatMessageBase && !((ChatMessageBase<?>) origin).hasMetadata()) {
+            return;
+        }
         Map<String, Object> meta = origin.getMetadata();
         if (meta != null) {
             for (Map.Entry<String, Object> e : meta.entrySet()) {
@@ -1359,6 +1449,10 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
 
         if (message instanceof AssistantMessage) {
             AssistantMessage assistant = (AssistantMessage) message;
+            // getContent() 只表示正文；thinking 是独立通道，必须单独计入上下文预算。
+            if (Assert.isNotEmpty(assistant.getThinking())) {
+                count += ENCODING_FOR_MODEL.countTokens(assistant.getThinking());
+            }
             if (Assert.isNotEmpty(assistant.getToolCalls())) {
                 for (ToolCall tc : assistant.getToolCalls()) {
                     String name = tc.getName() != null ? tc.getName() : "";
@@ -1367,8 +1461,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
                     count += countTextTokens(tc.getId());
                     count += countTextTokens(tc.getThoughtSignature());
                 }
-            }
-            if (Assert.isNotEmpty(assistant.getToolCallsRaw())) {
+            } else if (Assert.isNotEmpty(assistant.getToolCallsRaw())) {
+                // 仅旧 raw-only 消息需要兼容估算；新消息的 typed/raw 双份语义不能重复计费。
                 count += ENCODING_FOR_MODEL.countTokens(String.valueOf(assistant.getToolCallsRaw()));
             }
             count += estimateMediaTokens(assistant.getBlocks());

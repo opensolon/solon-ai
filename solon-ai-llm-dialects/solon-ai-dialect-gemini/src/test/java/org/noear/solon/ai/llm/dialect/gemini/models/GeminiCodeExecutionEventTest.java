@@ -86,8 +86,8 @@ public class GeminiCodeExecutionEventTest {
         assertEquals("code_execution", results.get(0).getSubType());
         assertEquals("2\n", results.get(0).getText());
 
-        //正文仍走内容项，不受影响
-        assertTrue(ctx.getAccumulator().hasContentItems());
+        //正文走 TEXT_DELTA，并由 ChatAccumulator 统一聚合到终态快照
+        assertEquals("结果是 2", ctx.getAccumulator().snapshotTerminal().getText());
     }
 
     /**

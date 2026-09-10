@@ -28,7 +28,7 @@ import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.event.ChatEvent;
-import org.noear.solon.ai.chat.event.ChatEventGroup;
+
 import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -91,11 +91,61 @@ public class ChatStreamMediaEventTest {
                 "本帧无新媒体时，用量事件仍应发出: " + events);
     }
 
+    @Test
+    public void mediaDoneAndUsageFromSameFrameAreBothEmitted() throws Exception {
+        List<ChatEvent> events = streamOf(
+                "{\"media\":[\"https://example.com/same-frame.png\"],\"usage\":1}");
+
+        assertEquals(1L, events.stream().filter(e -> e.is(ChatEventType.MEDIA_DONE)).count());
+        assertEquals(1L, events.stream().filter(e -> e.is(ChatEventType.USAGE)).count(),
+                "同一帧的 MEDIA_DONE 与 USAGE 不得互斥");
+        ChatEvent usage = events.stream().filter(e -> e.is(ChatEventType.USAGE)).findFirst().orElse(null);
+        assertNotNull(usage);
+        assertNotNull(usage.getResponse());
+        assertEquals(null, usage.getMessage(), "USAGE 分片响应不得投影 AssistantMessage");
+    }
+
+    @Test
+    public void usageIsEmittedOnlyWhenCurrentFrameUpdatesUsage() throws Exception {
+        List<ChatEvent> events = streamOf(
+                "{\"usage\":1}",
+                "{\"keep_alive\":1}",
+                "{\"text\":\"done\"}");
+
+        assertEquals(1L, events.stream().filter(e -> e.is(ChatEventType.USAGE)).count(),
+                "累计 usage 不得在后续无 usage 帧重复发射");
+        ChatEvent stepEnd = events.stream().filter(e -> e.is(ChatEventType.STEP_END)).findFirst().orElse(null);
+        assertNotNull(stepEnd);
+        assertNotNull(stepEnd.getUsage(), "消费帧级事件后，步骤终态仍应保留最后 usage");
+    }
+
     /**
-     * 增量帧取值与终态聚合一致：只拿增量帧的 {@code getMessage()} 拼起来，正好是终态，不多也不少
+     * 旧 contentItems 适配路径只生成事件，聚合统一由 ctx.emit 完成，不得把同一分片写两次
+     */
+    @Test
+    public void legacyContentItemAdapterDoesNotDoubleAggregate() throws Exception {
+        List<ChatEvent> events = streamOf("{\"text\":\"once\"}");
+
+        long deltas = events.stream()
+                .filter(e -> e.is(ChatEventType.TEXT_DELTA))
+                .count();
+        ChatResponse terminal = events.stream()
+                .filter(e -> e.is(ChatEventType.RESPONSE_END))
+                .map(ChatEvent::getResponse)
+                .findFirst()
+                .orElse(null);
+
+        assertEquals(1L, deltas, "一个旧内容项应只适配出一个正文增量");
+        assertNotNull(terminal);
+        assertEquals("once", terminal.getText(), "统一归并后终态正文不得重复");
+    }
+
+    /**
+     * 增量事件负载与终态聚合一致：只拼接 TEXT_DELTA 的 text，并收集 MEDIA_DONE 的 block，
+     * 正好得到终态内容，不多也不少
      *
-     * <p>必须先按类型选帧：带响应的帧（{@code STEP_END} / {@code RESPONSE_END} / {@code USAGE}）
-     * 给的是聚合，无条件追加会把正文加好几遍。本例同时锁住这一点。</p>
+     * <p>带完整响应的事件（{@code STEP_END} / {@code RESPONSE_END}）给的是聚合，
+     * {@code USAGE} 只携带无最终消息的分片响应；无条件追加仍会破坏事件语义。本例同时锁住这一点。</p>
      */
     @Test
     public void deltaProjectionMatchesTerminalAggregation() throws Exception {
@@ -108,17 +158,11 @@ public class ChatStreamMediaEventTest {
         List<ContentBlock> blocks = new ArrayList<>();
 
         for (ChatEvent e : events) {
-            if ((e.isGroup(ChatEventGroup.THINKING, ChatEventGroup.TEXT) || e.is(ChatEventType.MEDIA_DONE)) == false) {
-                continue;
+            if (e.is(ChatEventType.TEXT_DELTA)) {
+                text.append(e.getTextOrEmpty());
+            } else if (e.is(ChatEventType.MEDIA_DONE) && e.getBlock() != null) {
+                blocks.add(e.getBlock());
             }
-
-            AssistantMessage m = e.getMessage();
-            if (m == null) {
-                continue;
-            }
-
-            text.append(m.getText());
-            blocks.addAll(m.getBlocks());
         }
 
         ChatResponse terminal = null;
@@ -135,7 +179,7 @@ public class ChatStreamMediaEventTest {
         assertEquals(mediaOf(terminal.getMessage().getBlocks()), mediaOf(blocks),
                 "增量帧的媒体块应与终态聚合一致（终态额外带一个聚合文本块，不参与比较）");
 
-        //带响应的帧给聚合，不是当帧增量：与 ChatEvent#getMessage() 契约一致
+        //终态帧给完整聚合；USAGE 等流式分片不提供最终消息
         for (ChatEvent e : events) {
             if (e.is(ChatEventType.RESPONSE_END)) {
                 assertSame(e.getResponse().getMessage(), e.getMessage(),
@@ -205,7 +249,7 @@ public class ChatStreamMediaEventTest {
     /**
      * 测试方言：只认三种极简帧形状
      *
-     * <p>{@code media} 走「侧车媒体」——只登记到累积器、不产出内容项，正是被测的那条路径。</p>
+     * <p>{@code media} 直接发出 {@code MEDIA_DONE}，由事件统一归并。</p>
      */
     static class MediaDialect extends AbstractChatDialect {
         @Override
@@ -220,20 +264,26 @@ public class ChatStreamMediaEventTest {
             ONode node = ONode.ofJson(data);
 
             if (node.hasKey("media")) {
-                List<ContentBlock> blocks = new ArrayList<>();
+                int index = 0;
                 for (ONode item : node.get("media").getArray()) {
-                    blocks.add(ImageBlock.ofUrl(item.getString()));
+                    ctx.emit(ctx.event(ChatEventType.MEDIA_DONE)
+                            .index(index++)
+                            .block(ImageBlock.ofUrl(item.getString()))
+                            .build());
                 }
-                acc.addMediaBlocks(blocks);
             }
 
             if (node.hasKey("text")) {
-                acc.addContentItem(new AssistantMessage(node.get("text").getString()));
+                ctx.emit(ctx.event(ChatEventType.TEXT_DELTA)
+                        .text(node.get("text").getString()).build());
             }
 
             if (node.hasKey("usage")) {
                 acc.setUsage(new AiUsage(1, 0, 2, 3, null));
             }
+
+            // 测试响应体由本地服务器一次性完整提供；显式提交完成信号以符合 4.1 方言契约。
+            acc.setFinished(true);
         }
     }
 }

@@ -21,6 +21,8 @@ import org.noear.solon.ai.chat.ChatException;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.source.Citation;
+import org.noear.solon.ai.chat.source.SearchResult;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.lang.Nullable;
 
@@ -50,6 +52,8 @@ public class ChatEventDefault implements ChatEvent {
     private final String text;
     private final ToolCall toolCall;
     private final ContentBlock block;
+    private final Citation citation;
+    private final SearchResult searchResult;
     private final AiUsage usage;
     private final ChatException error;
     private final ChatResponse response;
@@ -70,6 +74,8 @@ public class ChatEventDefault implements ChatEvent {
         this.text = b.text;
         this.toolCall = b.toolCall;
         this.block = b.block;
+        this.citation = b.citation;
+        this.searchResult = b.searchResult;
         this.usage = b.usage;
         this.error = b.error;
         this.response = b.response;
@@ -147,6 +153,16 @@ public class ChatEventDefault implements ChatEvent {
     @Override
     public ContentBlock getBlock() {
         return block;
+    }
+
+    @Override
+    public Citation getCitation() {
+        return citation;
+    }
+
+    @Override
+    public SearchResult getSearchResult() {
+        return searchResult;
     }
 
     @Override
@@ -234,6 +250,8 @@ public class ChatEventDefault implements ChatEvent {
         private String text;
         private ToolCall toolCall;
         private ContentBlock block;
+        private Citation citation;
+        private SearchResult searchResult;
         private AiUsage usage;
         private ChatException error;
         private ChatResponse response;
@@ -300,6 +318,16 @@ public class ChatEventDefault implements ChatEvent {
 
         public Builder block(ContentBlock block) {
             this.block = block;
+            return this;
+        }
+
+        public Builder citation(Citation citation) {
+            this.citation = citation;
+            return this;
+        }
+
+        public Builder searchResult(SearchResult searchResult) {
+            this.searchResult = searchResult;
             return this;
         }
 

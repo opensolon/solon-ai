@@ -35,11 +35,13 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
+import org.noear.solon.ai.llm.dialect.gemini.GeminiMessageStateSupport;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Gemini Interactions API 请求构建器
@@ -51,6 +53,15 @@ import java.util.Map;
  * @since 3.1
  */
 public class GeminiInteractionsRequestBuilder {
+    private static final Set<String> ROOT_OPTION_KEYS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "background", "previous_interaction_id", "service_tier", "webhook_config",
+            "environment", "safety_settings", "labels"));
+
+    /** 纯思考历史没有可安全回放的 Gemini 签名/正文，应用 metadata 与 foreign raw 不应阻止过滤。 */
+    private boolean isSkippableThinkingOnlyMessage(ChatMessage message) {
+        return message instanceof AssistantMessage
+                && ((AssistantMessage) message).isThinkingOnly();
+    }
 
     /**
      * 构建请求 JSON
@@ -70,10 +81,10 @@ public class GeminiInteractionsRequestBuilder {
             root.set("model", config.getModel());
         }
 
-        // 2. system_instruction: 从消息中提取第一个 SystemMessage
-        ONode sysInstNode = buildSystemInstruction(messages);
-        if (sysInstNode != null) {
-            root.set("system_instruction", sysInstNode);
+        // 2. system_instruction：当前协议为字符串，合并全部系统消息。
+        String systemInstruction = buildSystemInstruction(messages);
+        if (Utils.isNotEmpty(systemInstruction)) {
+            root.set("system_instruction", systemInstruction);
         }
 
         // 3. input[]: 构建 step 序列（跳过 system message 和 thinking 消息）
@@ -82,8 +93,8 @@ public class GeminiInteractionsRequestBuilder {
             if (msg instanceof SystemMessage) {
                 continue; // system_instruction 已在顶层处理
             }
-            if (msg.isThinking()) {
-                continue; // 跳过思考标记消息
+            if (isSkippableThinkingOnlyMessage(msg)) {
+                continue; // 仅跳过无扩展回放载体的纯思考消息
             }
             List<ONode> steps = buildStepsFromMessage(msg);
             for (ONode step : steps) {
@@ -91,17 +102,18 @@ public class GeminiInteractionsRequestBuilder {
             }
         }
 
-        // 4. config: 从 options.options() 映射
-        ONode configNode = buildConfigNode(options);
+        // 4. generation_config
+        ONode configNode = buildGenerationConfigNode(options);
         if (configNode != null && configNode.size() > 0) {
-            root.set("config", configNode);
+            root.set("generation_config", configNode);
         }
 
         // 5. stream
         root.set("stream", isStream);
 
-        // 6. store: 默认 false（无状态模式）
-        root.set("store", false);
+        // 6. store: 调用方可覆盖；缺省采用无状态模式
+        Object store = options.options().get("store");
+        root.set("store", store == null ? false : ONode.ofBean(store));
 
         // 7. tools
         buildToolsNode(root, options);
@@ -109,18 +121,10 @@ public class GeminiInteractionsRequestBuilder {
         // 8. response_format
         buildResponseFormatNode(root, options);
 
-        // 9. 额外 options（跳过已处理的 key）
+        // 9. 仅透传当前 Interactions 请求契约允许的顶层扩展字段。
         for (Map.Entry<String, Object> kv : options.options().entrySet()) {
-            String key = kv.getKey();
-            if ("stream".equals(key)
-                    || "generationConfig".equals(key)
-                    || "response_format".equals(key)
-                    || "reasoning_effort".equals(key)
-                    || "thinking".equals(key)) {
-                continue;
-            }
-            if (!root.hasKey(key)) {
-                root.set(key, ONode.ofBean(kv.getValue()));
+            if (ROOT_OPTION_KEYS.contains(kv.getKey()) && !root.hasKey(kv.getKey())) {
+                root.set(kv.getKey(), ONode.ofBean(kv.getValue()));
             }
         }
 
@@ -130,20 +134,15 @@ public class GeminiInteractionsRequestBuilder {
     /**
      * 从消息列表中提取 system_instruction
      */
-    private ONode buildSystemInstruction(List<ChatMessage> messages) {
+    private String buildSystemInstruction(List<ChatMessage> messages) {
+        StringBuilder instruction = new StringBuilder();
         for (ChatMessage msg : messages) {
-            if (msg instanceof SystemMessage) {
-                String content = msg.getContent();
-                if (Utils.isNotEmpty(content)) {
-                    ONode node = new ONode();
-                    // system_instruction 在 Interactions API 中是 string 或 Content[]
-                    // 使用字符串形式更简单
-                    node.set("text", content);
-                    return node;
-                }
+            if (msg instanceof SystemMessage && Utils.isNotEmpty(msg.getContent())) {
+                if (instruction.length() > 0) instruction.append("\n\n");
+                instruction.append(msg.getContent());
             }
         }
-        return null;
+        return instruction.length() == 0 ? null : instruction.toString();
     }
 
     /**
@@ -205,7 +204,9 @@ public class GeminiInteractionsRequestBuilder {
     private List<ONode> buildAssistantSteps(AssistantMessage msg) {
         List<ONode> steps = new ArrayList<>();
 
-        if (Utils.isNotEmpty(msg.getToolCalls())) {
+        List<ToolCall> toolCalls = ToolCallJsonSanitizer.resolveToolCalls(
+                msg.getToolCalls(), msg.getToolCallsRaw());
+        if (Utils.isNotEmpty(toolCalls)) {
             // 若有文本/媒体，先写 model_output
             if (msg.isMultiModal() || Utils.isNotEmpty(msg.getContent())) {
                 ONode outputStep = new ONode();
@@ -217,8 +218,16 @@ public class GeminiInteractionsRequestBuilder {
                 }
             }
                 
-            boolean isFirst = true;
-            for (ToolCall call : msg.getToolCalls()) {
+            ToolCall firstCall = toolCalls.get(0);
+            String signature = GeminiMessageStateSupport.resolveSignature(msg,
+                    GeminiMessageStateSupport.INTERACTIONS_PROTOCOL_ID, firstCall, 0);
+            if (Utils.isNotEmpty(signature)) {
+                ONode thought = new ONode();
+                thought.set("type", "thought");
+                thought.set("signature", signature);
+                steps.add(thought);
+            }
+            for (ToolCall call : toolCalls) {
                 ONode step = new ONode();
                 step.set("type", "function_call");
                 step.set("name", call.getName());
@@ -229,18 +238,13 @@ public class GeminiInteractionsRequestBuilder {
                     step.set("id", call.getName() + "_" + System.currentTimeMillis());
                 }
                 // arguments（出站兜底净化：截断/双重编码的 arguments 禁止以字符串形态回传）
-                String safeArgs = ToolCallJsonSanitizer.sanitizeArguments(call.getArgumentsStr(), call.getName());
+                String safeArgs = ToolCallJsonSanitizer.sanitizeArguments(call);
                 try {
                     ONode argsNode = ONode.ofJson(safeArgs);
                     step.set("arguments", argsNode.isObject() ? argsNode : new ONode().asObject());
                 } catch (Exception e) {
                     step.set("arguments", ONode.ofBean(call.getArguments()));
                 }
-                // thought signature 仅放在第一个 function_call step
-                if (isFirst && Utils.isNotEmpty(call.getThoughtSignature())) {
-                    step.set("thought_signature", call.getThoughtSignature());
-                }
-                isFirst = false;
                 steps.add(step);
             }
         } else {
@@ -339,159 +343,132 @@ public class GeminiInteractionsRequestBuilder {
                 }
             }
             
+            if (media instanceof ImageBlock) {
+                node.set("type", "image");
+            } else if (media instanceof AudioBlock) {
+                node.set("type", "audio");
+            } else if (media instanceof VideoBlock) {
+                node.set("type", "video");
+            } else {
+                return new ONode();
+            }
+            node.set("mime_type", mime);
             if (Utils.isNotEmpty(media.getData())) {
-                node.set("type", "inline_data");
-                node.set("mime_type", mime);
                 node.set("data", media.getData());
             } else {
-                node.set("type", "file_data");
-                node.set("mime_type", mime);
-                node.set("file_uri", media.getUrl());
+                node.set("uri", media.getUrl());
             }
         }
         return node;
     }
 
-    /**
-     * 构建 config 节点（从 options 中的 generationConfig 映射）
-     * <p>
-     * 将 Generate Content API 的 generationConfig 字段映射为 Interactions API 的 config 字段：
-     * <ul>
-     *   <li>temperature → config.temperature</li>
-     *   <li>topP → config.top_p</li>
-     *   <li>maxOutputTokens → config.max_output_tokens</li>
-     *   <li>stopSequences → config.stop_sequences</li>
-     *   <li>thinkingConfig.includeThoughts → config.thinking_summaries</li>
-     *   <li>thinkingConfig.thinkingBudget → config.thinking_level (low/medium/high)</li>
-     *   <li>thinkingConfig.thinkingLevel → config.thinking_level</li>
-     *   <li>responseModalities → config.response_modalities</li>
-     * </ul>
-     */
-    private ONode buildConfigNode(ChatOptions options) {
+    /** 构建当前 Interactions API 的 generation_config。 */
+    @SuppressWarnings("unchecked")
+    private ONode buildGenerationConfigNode(ChatOptions options) {
         Map<String, Object> opts = options.options();
-        if (opts.isEmpty()) {
-            return null;
-        }
-
         ONode config = new ONode();
+        Object raw = opts.get("generation_config");
+        if (!(raw instanceof Map)) raw = opts.get("generationConfig");
+        if (raw instanceof Map) {
+            Map<String, Object> source = (Map<String, Object>) raw;
+            copyGenerationField(config, source, "image_config", "imageConfig");
+            copyGenerationField(config, source, "max_output_tokens", "maxOutputTokens");
+            copyGenerationField(config, source, "seed", "seed");
+            copyGenerationField(config, source, "speech_config", "speechConfig");
+            copyGenerationField(config, source, "stop_sequences", "stopSequences");
+            copyGenerationField(config, source, "transcription_config", "transcriptionConfig");
+            copyGenerationField(config, source, "video_config", "videoConfig");
+            copyGenerationField(config, source, "thinking_level", "thinkingLevel");
+            copyGenerationField(config, source, "thinking_summaries", "thinkingSummaries");
+            copyGenerationField(config, source, "tool_choice", "toolChoice");
 
-        // 从 generationConfig 提取配置
-        Map<String, Object> genConfig = null;
-        if (opts.containsKey("generationConfig") && opts.get("generationConfig") instanceof Map) {
-            genConfig = (Map<String, Object>) opts.get("generationConfig");
-        }
-
-        if (genConfig != null) {
-            // temperature
-            if (genConfig.containsKey("temperature")) {
-                config.set("temperature", ONode.ofBean(genConfig.get("temperature")));
-            }
-            // top_p
-            if (genConfig.containsKey("topP")) {
-                config.set("top_p", ONode.ofBean(genConfig.get("topP")));
-            }
-            // max_output_tokens
-            if (genConfig.containsKey("maxOutputTokens")) {
-                config.set("max_output_tokens", ONode.ofBean(genConfig.get("maxOutputTokens")));
-            }
-            // stop_sequences
-            if (genConfig.containsKey("stopSequences")) {
-                config.set("stop_sequences", ONode.ofBean(genConfig.get("stopSequences")));
-            }
-            // response_modalities
-            if (genConfig.containsKey("responseModalities")) {
-                config.set("response_modalities", ONode.ofBean(genConfig.get("responseModalities")));
-            }
-
-            // 思考配置
-            if (genConfig.containsKey("thinkingConfig") && genConfig.get("thinkingConfig") instanceof Map) {
-                Map<String, Object> tc = (Map<String, Object>) genConfig.get("thinkingConfig");
-
-                // thinking_summaries
-                if (tc.containsKey("includeThoughts")) {
-                    config.set("thinking_summaries", ONode.ofBean(tc.get("includeThoughts")));
-                }
-
-                // thinking_level: 优先使用显式指定的 thinkingLevel
-                if (tc.containsKey("thinkingLevel")) {
-                    Object level = tc.get("thinkingLevel");
-                    if (level != null) {
-                        String levelStr = level.toString();
-                        // 处理枚举值 "THINKING_LEVEL_UNSPECIFIED", "LOW", "HIGH" 等
-                        if (levelStr.contains("LOW") || "low".equalsIgnoreCase(levelStr)) {
-                            config.set("thinking_level", "low");
-                        } else if (levelStr.contains("HIGH") || "high".equalsIgnoreCase(levelStr)) {
-                            config.set("thinking_level", "high");
-                        } else if ("medium".equalsIgnoreCase(levelStr)) {
-                            config.set("thinking_level", "medium");
-                        }
-                        // UNSPECIFIED 不设置
-                    }
-                } else if (tc.containsKey("thinkingBudget")) {
-                    // 通过 thinkingBudget 推断 thinking_level
-                    Object budget = tc.get("thinkingBudget");
-                    if (budget instanceof Number) {
-                        int b = ((Number) budget).intValue();
-                        if (b > 8192) {
-                            config.set("thinking_level", "high");
-                        } else if (b > 2048) {
-                            config.set("thinking_level", "medium");
-                        } else {
-                            config.set("thinking_level", "low");
-                        }
-                    }
-                }
+            Object thinking = source.get("thinkingConfig");
+            if (thinking instanceof Map) {
+                Map<String, Object> tc = (Map<String, Object>) thinking;
+                Object include = tc.get("includeThoughts");
+                if (include != null) config.set("thinking_summaries", asBoolean(include) ? "auto" : "none");
+                Object level = tc.get("thinkingLevel");
+                if (level != null) setThinkingLevel(config, level);
+                else if (tc.get("thinkingBudget") != null) setThinkingLevelFromBudget(config, tc.get("thinkingBudget"));
             }
         }
 
-        // 统一 thinking 开关 + reasoning_effort（无 thinkingConfig 时生效）
+        Object maxTokens = opts.get("max_completion_tokens");
+        if (maxTokens == null) maxTokens = opts.get("max_tokens");
+        if (maxTokens != null) config.set("max_output_tokens", integerNode(maxTokens));
+
         Object thinkingSwitch = opts.get("thinking");
-        if (thinkingSwitch instanceof Boolean && !config.hasKey("thinking_level")) {
-            if (Boolean.FALSE.equals(thinkingSwitch)) {
-                config.set("thinking_summaries", false);
-                // 不设 thinking_level：关闭摘要即可；部分模型无真正的 off 档
-            } else if (Boolean.TRUE.equals(thinkingSwitch)) {
-                // 开启：默认 medium，可被 reasoning_effort 覆盖
-                Object effortObj = opts.get("reasoning_effort");
-                if (effortObj != null) {
-                    applyReasoningEffortToConfig(config, effortObj);
-                } else {
-                    config.set("thinking_level", "medium");
-                }
-                if (config.hasKey("thinking_level") && !config.hasKey("thinking_summaries")) {
-                    config.set("thinking_summaries", true);
-                }
-            }
+        Object effort = opts.get("reasoning_effort");
+        if (Boolean.FALSE.equals(thinkingSwitch)) {
+            config.set("thinking_summaries", "none");
         } else {
-            Object effortObj = opts.get("reasoning_effort");
-            if (effortObj != null && !config.hasKey("thinking_level")) {
-                applyReasoningEffortToConfig(config, effortObj);
-                if (config.hasKey("thinking_level") && !config.hasKey("thinking_summaries")) {
-                    config.set("thinking_summaries", true);
-                }
+            if (!config.hasKey("thinking_level") && effort != null) setThinkingLevel(config, effort);
+            if (!config.hasKey("thinking_level") && Boolean.TRUE.equals(thinkingSwitch)) {
+                config.set("thinking_level", "medium");
+            }
+            if ((effort != null || Boolean.TRUE.equals(thinkingSwitch)) && !config.hasKey("thinking_summaries")) {
+                config.set("thinking_summaries", "auto");
             }
         }
-    
-        return config.size() > 0 ? config : null;
+
+        Object toolChoice = opts.get("tool_choice");
+        if (toolChoice != null) config.set("tool_choice", buildToolChoice(toolChoice));
+        return config.size() == 0 ? null : config;
     }
-    
-    /**
-     * reasoning_effort → thinking_level
-     *
-     * @since 4.0.4
-     */
-    private void applyReasoningEffortToConfig(ONode config, Object effortObj) {
-        if (effortObj == null || config == null) {
-            return;
+
+    private void copyGenerationField(ONode target, Map<String, Object> source, String snake, String camel) {
+        Object value = source.containsKey(snake) ? source.get(snake) : source.get(camel);
+        if (value == null) return;
+        if ("max_output_tokens".equals(snake) || "seed".equals(snake)) target.set(snake, integerNode(value));
+        else if ("thinking_level".equals(snake)) setThinkingLevel(target, value);
+        else if ("thinking_summaries".equals(snake) && value instanceof Boolean) {
+            target.set(snake, Boolean.TRUE.equals(value) ? "auto" : "none");
+        } else target.set(snake, ONode.ofBean(value));
+    }
+
+    private ONode integerNode(Object value) {
+        if (value instanceof String) {
+            try { return ONode.ofBean(Integer.parseInt(((String) value).trim())); } catch (NumberFormatException ignored) {}
         }
-        String effort = String.valueOf(effortObj).trim().toLowerCase();
-        if ("low".equals(effort)) {
-            config.set("thinking_level", "low");
-        } else if ("medium".equals(effort)) {
-            config.set("thinking_level", "medium");
-        } else if ("high".equals(effort) || "max".equals(effort)) {
-            config.set("thinking_level", "high");
+        return ONode.ofBean(value);
+    }
+
+    private boolean asBoolean(Object value) {
+        return value instanceof Boolean ? (Boolean) value : Boolean.parseBoolean(String.valueOf(value));
+    }
+
+    private void setThinkingLevelFromBudget(ONode config, Object value) {
+        try {
+            int budget = value instanceof Number ? ((Number) value).intValue() : Integer.parseInt(String.valueOf(value));
+            config.set("thinking_level", budget > 8192 ? "high" : budget > 2048 ? "medium" : "low");
+        } catch (NumberFormatException ignored) {}
+    }
+
+    private void setThinkingLevel(ONode config, Object value) {
+        String effort = String.valueOf(value).trim().toLowerCase();
+        if (effort.contains("minimal") || "min".equals(effort)) config.set("thinking_level", "minimal");
+        else if (effort.contains("low")) config.set("thinking_level", "low");
+        else if (effort.contains("medium")) config.set("thinking_level", "medium");
+        else if (effort.contains("high") || "max".equals(effort)) config.set("thinking_level", "high");
+    }
+
+    private ONode buildToolChoice(Object value) {
+        if (value instanceof String) {
+            String choice = String.valueOf(value).toLowerCase();
+            if ("required".equals(choice)) choice = "any";
+            return ONode.ofBean(choice);
         }
+        if (value instanceof Map) {
+            Object function = ((Map<?, ?>) value).get("function");
+            if (function instanceof Map && ((Map<?, ?>) function).get("name") != null) {
+                ONode choice = new ONode();
+                ONode allowed = choice.getOrNew("allowed_tools");
+                allowed.set("mode", "any");
+                allowed.getOrNew("tools").asArray().addNew().setValue(String.valueOf(((Map<?, ?>) function).get("name")));
+                return choice;
+            }
+        }
+        return ONode.ofBean(value);
     }
 
     /**
@@ -526,10 +503,14 @@ public class GeminiInteractionsRequestBuilder {
                             ONode schemaNode = ONode.ofJson(inputSchema);
                             toolNode.set("parameters", schemaNode);
                         } catch (Exception e) {
-                            toolNode.getOrNew("parameters").asArray();
+                            ONode parameters = toolNode.getOrNew("parameters").asObject();
+                            parameters.set("type", "object");
+                            parameters.getOrNew("properties").asObject();
                         }
                     } else {
-                        toolNode.getOrNew("parameters").asArray();
+                        ONode parameters = toolNode.getOrNew("parameters").asObject();
+                        parameters.set("type", "object");
+                        parameters.getOrNew("properties").asObject();
                     }
                 });
             }
@@ -547,7 +528,8 @@ public class GeminiInteractionsRequestBuilder {
         if (Utils.isNotEmpty(outputSchema)) {
             ONode formatArr = root.getOrNew("response_format").asArray();
             ONode formatItem = formatArr.addNew();
-            formatItem.set("type", "json");
+            formatItem.set("type", "text");
+            formatItem.set("mime_type", "application/json");
             try {
                 formatItem.set("schema", ONode.ofJson(outputSchema));
             } catch (Exception e) {
@@ -569,7 +551,11 @@ public class GeminiInteractionsRequestBuilder {
                                                     Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode arrNode = new ONode().asArray();
 
-        boolean isFirst = true;
+        if (Utils.isNotEmpty(acc.thinkingSignature)) {
+            ONode thought = arrNode.addNew();
+            thought.set("type", "thought");
+            thought.set("signature", acc.thinkingSignature);
+        }
         for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
             ToolCallBuilder builder = kv.getValue();
             ONode step = arrNode.addNew();
@@ -592,11 +578,6 @@ public class GeminiInteractionsRequestBuilder {
                 step.set("arguments", new ONode().asObject());
             }
 
-            // 仅第一个 step 回传 thoughtSignature
-            if (isFirst && Utils.isNotEmpty(acc.thinkingSignature)) {
-                step.set("thought_signature", acc.thinkingSignature);
-            }
-            isFirst = false;
         }
 
         return arrNode;

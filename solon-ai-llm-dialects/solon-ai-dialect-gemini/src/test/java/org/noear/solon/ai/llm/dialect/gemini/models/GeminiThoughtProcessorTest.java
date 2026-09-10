@@ -21,12 +21,19 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRequest;
 import org.noear.solon.ai.chat.ChatAccumulator;
+import org.noear.solon.ai.chat.event.ChatEvent;
+import org.noear.solon.ai.chat.event.ChatEventType;
+import org.noear.solon.ai.chat.event.ChatStreamContext;
+import org.noear.solon.ai.chat.event.ChatStreamContextDefault;
+import org.noear.solon.ai.chat.event.ChatStreamSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.llm.dialect.gemini.GeminiChatDialect;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -62,6 +69,18 @@ public class GeminiThoughtProcessorTest {
         assertEquals("getWeather", call.getName());
     }
 
+    @Test
+    public void parseThoughtAndText_doesNotCreateLegacyContentRawMirror() {
+        ChatAccumulator resp = newResponse(false);
+        ONode content = ONode.ofJson("{\"parts\":["
+                + "{\"thought\":true,\"text\":\"内部思考\"},"
+                + "{\"text\":\"最终答案\"}]}" );
+
+        AssistantMessage message = processor.parse(resp, content).get(0);
+        assertEquals("内部思考", message.getThinking());
+        assertEquals("最终答案", message.getText());
+        assertNull(message.getContentRaw(), "Gemini 新消息不应重复生成 contentRaw 镜像");
+    }
     @Test
     public void parseFunctionCall_withoutServerId_idIsNull() {
         // Gemini 2.5 / OpenAI 兼容网关不返回 id：ToolCall.id 保持 null，
@@ -109,6 +128,99 @@ public class GeminiThoughtProcessorTest {
         ToolCall call2 = m2.get(0).getToolCalls().get(0);
         assertEquals("getWeather", call2.getName(), "续帧应恢复函数名");
         assertEquals("hz", call2.getArguments().get("city"));
+    }
+
+    @Test
+    public void parseFunctionCall_continuationFrame_emitsSingleStart() {
+        ChatConfig config = new ChatConfig();
+        ChatRequest req = new ChatRequest(config, GeminiChatDialect.getInstance(), ChatOptions.of(),
+                InMemoryChatSession.builder().build(), ChatMessage.ofSystem("test"), null, true);
+        List<ChatEvent> events = new ArrayList<>();
+        ChatStreamContext ctx = new ChatStreamContextDefault(config, req, new ChatAccumulator(req, true),
+                new ChatStreamSession(), 0, events::add);
+
+        ONode frame1 = ONode.ofJson("{\"parts\":[{\"functionCall\":{\"name\":\"getWeather\",\"args\":{}}}]}");
+        ONode frame2 = ONode.ofJson("{\"parts\":[{\"functionCall\":{\"name\":\"\",\"args\":{\"city\":\"hz\"}}}]}");
+        processor.emitStream(ctx, frame1);
+        processor.emitStream(ctx, frame2);
+        processor.completeStream(ctx);
+
+        List<ChatEvent> starts = new ArrayList<>();
+        for (ChatEvent event : events) {
+            if (event.getType() == ChatEventType.TOOL_CALL_START) {
+                starts.add(event);
+            }
+        }
+        assertEquals(1, starts.size(), "同一工具跨帧只能发出一个 TOOL_CALL_START");
+        assertEquals("getWeather", starts.get(0).getToolCall().getName());
+        assertTrue(events.stream()
+                        .filter(e -> e.getType() == ChatEventType.TOOL_CALL_ARGS_DELTA)
+                        .anyMatch(e -> e.getText() != null && e.getText().contains("\"city\":\"hz\"")),
+                "续帧参数仍应正常交付");
+    }
+
+    @Test
+    public void cumulativeArgsSnapshotsEmitOnlyFinalDelta() {
+        ChatConfig config = new ChatConfig();
+        ChatRequest req = new ChatRequest(config, GeminiChatDialect.getInstance(), ChatOptions.of(),
+                InMemoryChatSession.builder().build(), ChatMessage.ofSystem("test"), null, true);
+        List<ChatEvent> events = new ArrayList<>();
+        ChatAccumulator acc = new ChatAccumulator(req, true);
+        ChatStreamContext ctx = new ChatStreamContextDefault(config, req, acc,
+                new ChatStreamSession(), 0, events::add);
+
+        processor.emitStream(ctx, ONode.ofJson("{\"parts\":[{\"functionCall\":{\"name\":\"getWeather\","
+                + "\"args\":{\"city\":\"杭\"},\"id\":\"call-1\"}}]}"));
+        processor.emitStream(ctx, ONode.ofJson("{\"parts\":[{\"functionCall\":{\"name\":\"getWeather\","
+                + "\"args\":{\"city\":\"杭州\"},\"id\":\"call-1\"}}]}"));
+        processor.emitStream(ctx, ONode.ofJson("{\"parts\":[{\"functionCall\":{\"name\":\"getWeather\","
+                + "\"args\":{\"city\":\"杭州\"},\"id\":\"call-1\"}}]}"));
+        processor.completeStream(ctx);
+
+        StringBuilder joined = new StringBuilder();
+        long deltaCount = 0;
+        for (ChatEvent event : events) {
+            if (event.getType() == ChatEventType.TOOL_CALL_ARGS_DELTA) {
+                deltaCount++;
+                joined.append(event.getText());
+            }
+        }
+
+        assertEquals(1L, deltaCount, "重复累计快照不得重复当成 ARGS_DELTA");
+        assertEquals("{\"city\":\"杭州\"}", joined.toString(), "拼接事件必须等于最终参数快照");
+        ToolCallBuilder builder = acc.getToolCallBuilders().values().iterator().next();
+        assertEquals(joined.toString(), builder.argumentsBuilder.toString());
+    }
+
+    @Test
+    public void lateFunctionCallIdKeepsStableKeyAndSingleStart() {
+        ChatConfig config = new ChatConfig();
+        ChatRequest req = new ChatRequest(config, GeminiChatDialect.getInstance(), ChatOptions.of(),
+                InMemoryChatSession.builder().build(), ChatMessage.ofSystem("test"), null, true);
+        List<ChatEvent> events = new ArrayList<>();
+        ChatAccumulator acc = new ChatAccumulator(req, true);
+        ChatStreamContext ctx = new ChatStreamContextDefault(config, req, acc,
+                new ChatStreamSession(), 0, events::add);
+
+        processor.emitStream(ctx, ONode.ofJson("{\"parts\":[{\"functionCall\":{\"name\":\"getWeather\","
+                + "\"args\":{\"city\":\"hz\"}}}]}"));
+        processor.emitStream(ctx, ONode.ofJson("{\"parts\":[{\"functionCall\":{\"name\":\"\","
+                + "\"args\":{\"city\":\"hz\"},\"id\":\"call-late\"}}]}"));
+        processor.completeStream(ctx);
+
+        List<ChatEvent> starts = new ArrayList<>();
+        for (ChatEvent event : events) {
+            if (event.getType() == ChatEventType.TOOL_CALL_START) {
+                starts.add(event);
+            }
+        }
+        assertEquals(1, starts.size(), "迟到 id 不得造成重复 TOOL_CALL_START");
+        assertEquals("call-late", starts.get(0).getToolCallId());
+        assertEquals("candidate:0:function:0", starts.get(0).getToolCall().getIndex());
+        assertEquals(1, acc.getToolCallBuilders().size(), "同一位置调用只能聚合到一个 builder");
+        ToolCallBuilder builder = acc.getToolCallBuilders().values().iterator().next();
+        assertEquals("call-late", builder.idBuilder.toString());
+        assertEquals("getWeather", builder.nameBuilder.toString());
     }
 
     @Test

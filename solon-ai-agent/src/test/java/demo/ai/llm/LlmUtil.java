@@ -1,6 +1,7 @@
 package demo.ai.llm;
 
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.dialect.ChatDialects;
 
 /**
  *
@@ -9,10 +10,11 @@ import org.noear.solon.ai.chat.ChatModel;
  */
 public class LlmUtil {
     public static ChatModel getChatModelReasoner() {
-        return ChatModel.of("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions")
-                .apiKey("2d28cb312d3c433fa08c0bfd0810050f.W4xBjtPcjGK9hg7u")
-                .model("GLM-5.1")
-                .build();
+        return  ChatModel.of("https://apihub.agnes-ai.com/v1")
+                .apiKey("sk-bu0RaoVbyiprgX3Pont70xyaoqZDsrvvEW36WmbTZev2wmBz")
+                .standard(ChatDialects.OPENAI_COMPLETIONS)
+                .model("agnes-2.5-flash")
+                .build(); //不支持其它
     }
     public static ChatModel getChatModel() {
 //        return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
@@ -20,10 +22,11 @@ public class LlmUtil {
 //                .model("deepseek-chat") //deepseek-reasoner//deepseek-chat
 //                .build();
 
-        return ChatModel.of("https://open.bigmodel.cn/api/paas/v4/chat/completions")
-                .apiKey("52755d7995a8413783bb70ff6d44f42f.zCAKSzqlo9hmJS7s")
-                .model("glm-4.5-flash")
-                .build();
+        return  ChatModel.of("https://apihub.agnes-ai.com/v1")
+                .apiKey("sk-bu0RaoVbyiprgX3Pont70xyaoqZDsrvvEW36WmbTZev2wmBz")
+                .standard(ChatDialects.OPENAI_COMPLETIONS)
+                .model("agnes-2.5-flash")
+                .build(); //不支持其它
 
 //        return ChatModel.of("https://ai.gitee.com/v1/chat/completions")
 //                .apiKey("PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18")

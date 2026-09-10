@@ -26,10 +26,10 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>对齐协议要点：</p>
  * <ul>
- *   <li>异步端点只回 {@code task_id}，须拼成任务查询地址</li>
- *   <li>同步端点回 {@code data[]}，直接映射为 GenerateContent 列表</li>
- *   <li>两者都缺失时不得臆造数据</li>
- *   <li>{@code usage.total_tokens} 为 optional，缺省用 prompt+completion 兜底</li>
+ *   <li>异步兼容端点只回 {@code task_id}，须拼成任务查询地址</li>
+ *   <li>官方 ImagesResponse 的 {@code b64_json/revised_prompt/output_format} 正确映射</li>
+ *   <li>兼容端点的 {@code data/text/mimeType} 结构继续可用</li>
+ *   <li>官方 {@code input_tokens/output_tokens} 与兼容 usage 字段都可解析</li>
  * </ul>
  */
 public class OpenaiGenerateDialectTest {
@@ -65,7 +65,28 @@ public class OpenaiGenerateDialectTest {
     }
 
     @Test
-    public void syncData_mappedToContentList() {
+    public void officialImagesResponse_mappedToContentsAndUsage() {
+        String json = "{\"created\":1710000000,\"background\":\"transparent\",\"output_format\":\"png\",\"data\":["
+                + "{\"b64_json\":\"QUJD\",\"revised_prompt\":\"a revised prompt\"},"
+                + "{\"url\":\"https://cdn.example.com/a.png\"}],"
+                + "\"usage\":{\"input_tokens\":7,\"input_tokens_details\":{\"image_tokens\":2,\"text_tokens\":5},"
+                + "\"output_tokens\":13,\"total_tokens\":20}}";
+
+        GenerateResponse resp = dialect.parseResponseJson(newConfig(), json);
+
+        assertEquals("gpt-image-1", resp.getModel(), "官方响应无 model 时应回退请求模型");
+        assertEquals(2, resp.getData().size());
+        assertEquals("QUJD", resp.getData().get(0).getData());
+        assertEquals("a revised prompt", resp.getData().get(0).getText());
+        assertEquals("image/png", resp.getData().get(0).getMimeType());
+        assertEquals("https://cdn.example.com/a.png", resp.getData().get(1).getUrl());
+        assertEquals(7, resp.getUsage().promptTokens());
+        assertEquals(13, resp.getUsage().completionTokens());
+        assertEquals(20, resp.getUsage().totalTokens());
+    }
+
+    @Test
+    public void compatibleSyncData_mappedToContentList() {
         String json = "{\"model\":\"gpt-image-1\",\"data\":["
                 + "{\"url\":\"https://cdn.example.com/a.png\",\"mimeType\":\"image/png\"},"
                 + "{\"data\":\"QUJD\",\"mimeType\":\"image/jpeg\"}],"
@@ -106,6 +127,24 @@ public class OpenaiGenerateDialectTest {
         assertNotNull(resp.getUsage());
         assertEquals(10, resp.getUsage().totalTokens(), "total_tokens 缺省应等于 prompt+completion");
         assertEquals(0, resp.getUsage().thinkTokens(), "生成接口无思考 token");
+    }
+
+    @Test
+    public void malformedDataAndEmptyTaskId_returnNoData() {
+        assertNull(dialect.parseResponseJson(newConfig(), "{\"data\":{}}").getData());
+        assertNull(dialect.parseResponseJson(newConfig(), "{\"task_id\":\"\",\"data\":null}").getData());
+
+        GenerateConfig noTaskUrl = new GenerateConfig();
+        noTaskUrl.setModel("gpt-image-1");
+        assertNull(dialect.parseResponseJson(noTaskUrl, "{\"task_id\":\"task_1\"}").getData(),
+                "未配置 taskUrl 时不得生成 nulltask_1");
+    }
+
+    @Test
+    public void nullError_isNotFailure() {
+        GenerateResponse resp = dialect.parseResponseJson(newConfig(), "{\"error\":null,\"data\":[]}");
+        assertNull(resp.getError());
+        assertNotNull(resp.getData());
     }
 
     @Test

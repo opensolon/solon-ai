@@ -19,6 +19,9 @@ import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.ChatConfig;
 
+import java.io.InputStream;
+import java.util.Scanner;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -51,10 +54,9 @@ public class OpenaiDialectSupportTest {
     }
 
     @Test
-    public void normalize_leadingHashOrQuestionMarkNotStripped() {
-        // indexOf > 0 才裁剪：位置 0 的 '#' / '?' 不构成“后缀说明/查询串”
-        assertEquals("#note", OpenaiDialectSupport.normalizeApiUrl("#note"));
-        assertEquals("?x=1", OpenaiDialectSupport.normalizeApiUrl("?x=1"));
+    public void normalize_leadingHashOrQuestionMarkProducesEmptyComparisonPath() {
+        assertEquals("", OpenaiDialectSupport.normalizeApiUrl("#note"));
+        assertEquals("", OpenaiDialectSupport.normalizeApiUrl("?x=1"));
     }
 
     // ==================== buildApiUrl ====================
@@ -86,15 +88,40 @@ public class OpenaiDialectSupportTest {
     public void build_alreadyEndpoint_keptIntact() {
         assertEquals("https://h/v1/responses",
                 OpenaiDialectSupport.buildApiUrl("https://h/v1/responses", "responses"));
-        // 带查询串/尾斜杠时先规范化再判定，避免拼成 /responses/responses
-        assertEquals("https://h/v1/responses",
+        // 带查询串/尾斜杠时先按 path 判定，并保留实际请求所需的 query
+        assertEquals("https://h/v1/responses?x=1",
                 OpenaiDialectSupport.buildApiUrl("https://h/v1/responses/?x=1", "responses"));
+        assertEquals("https://h/v1/responses?api-version=2025-04-01-preview",
+                OpenaiDialectSupport.buildApiUrl("https://h/v1?api-version=2025-04-01-preview", "responses"));
     }
 
     @Test
     public void build_hashSuffixStrippedBeforeJudging() {
         assertEquals("https://h/v1/chat/completions",
                 OpenaiDialectSupport.buildApiUrl("https://h/v1/chat/completions#自定义说明", "chat/completions"));
+        assertEquals("https://h/v1/chat/completions?tenant=a",
+                OpenaiDialectSupport.buildApiUrl("https://h/v1?tenant=a#本地说明", "chat/completions"));
+    }
+
+    @Test
+    public void nativeImageConfig_containsOnlyLoadableDialects() throws Exception {
+        InputStream stream = OpenaiDialectSupportTest.class.getResourceAsStream(
+                "/META-INF/native-image/org.noear.solon.ai.llm.dialect.openai/reflect-config.json");
+        assertNotNull(stream);
+        String json;
+        try (Scanner scanner = new Scanner(stream, "UTF-8").useDelimiter("\\A")) {
+            json = scanner.hasNext() ? scanner.next() : "";
+        }
+        ONode config = ONode.ofJson(json);
+
+        assertTrue(config.isArray());
+        assertEquals(5, config.getArray().size());
+        for (ONode item : config.getArray()) {
+            Class.forName(item.get("name").getString());
+        }
+        assertTrue(config.toJson().contains("OpenaiGenerateDialect"));
+        assertFalse(config.toJson().contains("ClaudeChatDialect"));
+        assertFalse(config.toJson().contains("OpenaiImageDialect"));
     }
 
     /**

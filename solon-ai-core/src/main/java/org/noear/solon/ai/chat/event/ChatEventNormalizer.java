@@ -15,13 +15,8 @@
  */
 package org.noear.solon.ai.chat.event;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
+
 /**
  * 聊天事件归一化器
  *
@@ -48,17 +43,13 @@ import java.util.Set;
  * @since 4.1
  */
 public class ChatEventNormalizer {
-    /**
-     * 匿名工具调用标识（分片协议中后续分片不带 id）
-     */
-    private static final String ANON_TOOL_KEY = "__anon__";
-
     private final Map<ContentKey, ContentKey> openBlocks = new LinkedHashMap<>();
 
     /**
-     * 未闭合的工具调用标识（宽松跟踪，不参与 openBlocks 的严格配对）
+     * 未闭合的工具调用边界。保留完整身份而不是压成字符串 Set：并行匿名调用可通过 index
+     * 区分，重复 START 也必须分别补出 END。
      */
-    private final Set<String> openToolCalls = new LinkedHashSet<>();
+    private final List<ToolBoundary> openToolCalls = new ArrayList<>();
 
     /**
      * 未闭合的步序号
@@ -75,6 +66,7 @@ public class ChatEventNormalizer {
      * 若不回落就会产出 responseId 为 null 的事件，破坏「全流一致」不变量。</p>
      */
     private String lastResponseId;
+    private String lastProviderResponseId;
     private int lastStep;
 
     /**
@@ -95,6 +87,9 @@ public class ChatEventNormalizer {
         if (event.getResponseId() != null) {
             lastResponseId = event.getResponseId();
             lastStep = event.getStep();
+        }
+        if (event.getProviderResponseId() != null) {
+            lastProviderResponseId = event.getProviderResponseId();
         }
 
         if (group == ChatEventGroup.TOOL_CALL) {
@@ -140,7 +135,9 @@ public class ChatEventNormalizer {
         }
 
         if (type == ChatEventType.STEP_START) {
-            openSteps.add(event.getStep());
+            if (!openSteps.add(event.getStep())) {
+                return;
+            }
             out.emit(event);
             return;
         }
@@ -154,6 +151,9 @@ public class ChatEventNormalizer {
 
             if (type == ChatEventType.STEP_END) {
                 openSteps.remove(event.getStep());
+            } else {
+                // RESPONSE_END/ABORT/ERROR 是全局终态，必须先补 STEP_END，再发全局终态。
+                closeOpenSteps(out);
             }
         }
 
@@ -171,16 +171,17 @@ public class ChatEventNormalizer {
         if (type == ChatEventType.TOOL_CALL_START) {
             //正文/思考与工具调用交替时，先关掉未闭合的内容块
             closeOpen(out, event);
-            openToolCalls.add(toolKeyOf(event));
+            openToolCalls.add(ToolBoundary.of(event));
             out.emit(event);
             return;
         }
 
         if (type == ChatEventType.TOOL_CALL_ARGS_DELTA) {
-            if (openToolCalls.isEmpty()) {
-                //第三方方言只发增量、不发开始信号时的安全网
+            if (findToolBoundary(event) == null) {
+                //第三方方言只发增量、不发开始信号时的安全网；即使已有别的并行调用，
+                //当前身份没有 START 也要单独补齐。
                 closeOpen(out, event);
-                openToolCalls.add(toolKeyOf(event));
+                openToolCalls.add(ToolBoundary.of(event));
                 out.emit(rebuild(event, ChatEventType.TOOL_CALL_START, null));
             }
             out.emit(event);
@@ -188,13 +189,12 @@ public class ChatEventNormalizer {
         }
 
         if (type == ChatEventType.TOOL_CALL_END) {
-            if (openToolCalls.remove(toolKeyOf(event)) == false) {
+            ToolBoundary boundary = findToolBoundary(event);
+            if (boundary != null) {
+                openToolCalls.remove(boundary);
+            } else if (openToolCalls.isEmpty() == false) {
                 //标识对不上（分片协议末尾才给出 id）：退化为关闭最早开启的那个
-                Iterator<String> it = openToolCalls.iterator();
-                if (it.hasNext()) {
-                    it.next();
-                    it.remove();
-                }
+                openToolCalls.remove(0);
             }
             out.emit(event);
             return;
@@ -204,14 +204,18 @@ public class ChatEventNormalizer {
         out.emit(event);
     }
 
-    private static String toolKeyOf(ChatEvent event) {
-        if (event.getToolCallId() != null) {
-            return event.getToolCallId();
+    private ToolBoundary findToolBoundary(ChatEvent event) {
+        for (ToolBoundary boundary : openToolCalls) {
+            if (boundary.matches(event)) {
+                return boundary;
+            }
         }
-        if (event.getItemId() != null) {
-            return event.getItemId();
+        // 完全匿名的旧方言仅在只有一个开放调用时才能安全配对。
+        if (event.getToolCallId() == null && event.getItemId() == null && event.getIndex() < 0
+                && openToolCalls.size() == 1) {
+            return openToolCalls.get(0);
         }
-        return ANON_TOOL_KEY;
+        return null;
     }
 
     private void closeOpenToolCalls(ChatEventEmitter out, ChatEvent ref) {
@@ -219,16 +223,24 @@ public class ChatEventNormalizer {
             return;
         }
 
-        for (String key : new ArrayList<>(openToolCalls)) {
-            openToolCalls.remove(key);
+        for (ToolBoundary boundary : new ArrayList<>(openToolCalls)) {
+            openToolCalls.remove(boundary);
 
             ChatEventDefault.Builder b = ChatEventDefault.of(ChatEventType.TOOL_CALL_END)
-                    .toolCallId(ANON_TOOL_KEY.equals(key) ? null : key);
+                    .toolCallId(boundary.toolCallId)
+                    .itemId(boundary.itemId)
+                    .index(boundary.index);
 
             if (ref != null) {
-                b.responseId(ref.getResponseId()).step(ref.getStep());
+                b.responseId(ref.getResponseId())
+                        .providerResponseId(ref.getProviderResponseId() == null
+                                ? boundary.providerResponseId : ref.getProviderResponseId())
+                        .step(ref.getStep());
             } else {
-                b.responseId(lastResponseId).step(lastStep);
+                b.responseId(lastResponseId)
+                        .providerResponseId(boundary.providerResponseId == null
+                                ? lastProviderResponseId : boundary.providerResponseId)
+                        .step(lastStep);
             }
             out.emit(b.build());
         }
@@ -260,6 +272,7 @@ public class ChatEventNormalizer {
             openSteps.remove(step);
             out.emit(ChatEventDefault.of(ChatEventType.STEP_END)
                     .responseId(lastResponseId)
+                    .providerResponseId(lastProviderResponseId)
                     .step(step == null ? lastStep : step)
                     .build());
         }
@@ -311,9 +324,15 @@ public class ChatEventNormalizer {
                 .index(key.index);
 
         if (ref != null) {
-            b.responseId(ref.getResponseId()).step(ref.getStep());
+            b.responseId(ref.getResponseId())
+                    .providerResponseId(ref.getProviderResponseId() == null
+                            ? key.providerResponseId : ref.getProviderResponseId())
+                    .step(ref.getStep());
         } else {
-            b.responseId(lastResponseId).step(lastStep);
+            b.responseId(lastResponseId)
+                    .providerResponseId(key.providerResponseId == null
+                            ? lastProviderResponseId : key.providerResponseId)
+                    .step(lastStep);
         }
         out.emit(b.build());
     }
@@ -340,15 +359,18 @@ public class ChatEventNormalizer {
         private final ChatEventGroup group;
         private final String itemId;
         private final int index;
+        private final String providerResponseId;
 
-        private ContentKey(ChatEventGroup group, String itemId, int index) {
+        private ContentKey(ChatEventGroup group, String itemId, int index, String providerResponseId) {
             this.group = group;
             this.itemId = itemId;
             this.index = index;
+            this.providerResponseId = providerResponseId;
         }
 
         static ContentKey of(ChatEvent event) {
-            return new ContentKey(event.getGroup(), event.getItemId(), event.getIndex());
+            return new ContentKey(event.getGroup(), event.getItemId(), event.getIndex(),
+                    event.getProviderResponseId());
         }
 
         @Override
@@ -365,11 +387,41 @@ public class ChatEventNormalizer {
         }
     }
 
+    private static final class ToolBoundary {
+        private final String toolCallId;
+        private final String itemId;
+        private final int index;
+        private final String providerResponseId;
+
+        private ToolBoundary(String toolCallId, String itemId, int index, String providerResponseId) {
+            this.toolCallId = toolCallId;
+            this.itemId = itemId;
+            this.index = index;
+            this.providerResponseId = providerResponseId;
+        }
+
+        static ToolBoundary of(ChatEvent event) {
+            return new ToolBoundary(event.getToolCallId(), event.getItemId(), event.getIndex(),
+                    event.getProviderResponseId());
+        }
+
+        boolean matches(ChatEvent event) {
+            if (toolCallId != null && event.getToolCallId() != null) {
+                return toolCallId.equals(event.getToolCallId());
+            }
+            if (itemId != null && event.getItemId() != null) {
+                return itemId.equals(event.getItemId());
+            }
+            return index >= 0 && event.getIndex() >= 0 && index == event.getIndex();
+        }
+    }
+
     private ChatEvent rebuild(ChatEvent src, ChatEventType type, String text) {
         return ChatEventDefault.of(type)
                 .rawType(src.getRawType())
                 .subType(src.getSubType())
                 .responseId(src.getResponseId())
+                .providerResponseId(src.getProviderResponseId())
                 .step(src.getStep())
                 .itemId(src.getItemId())
                 .toolCallId(src.getToolCallId())
@@ -378,6 +430,7 @@ public class ChatEventNormalizer {
                 .toolCall(src.getToolCall())
                 .block(src.getBlock())
                 .usage(src.getUsage())
+                .error(src.getError())
                 .response(src.getResponse())
                 .raw(src.getRaw())
                 .attrs(src.getAttrs())

@@ -18,6 +18,7 @@ package org.noear.solon.ai.llm.dialect.dashscope;
 import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.ChatConfig;
+import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.content.BlobBlock;
 import org.noear.solon.ai.chat.content.ContentBlock;
@@ -27,6 +28,7 @@ import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.tool.ToolCall;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -178,8 +180,9 @@ public class DashscopeChatDialectMessageTest {
      */
     @Test
     public void assistantThinkingIsNotSentBack() {
-        AssistantMessage message = new AssistantMessage("结论", "推理过程", false)
-                .reasoningFieldName("reasoning_content");
+        AssistantMessage message = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"结论\",\"thinking\":\"推理过程\"," +
+                        "\"reasoningFieldName\":\"reasoning_content\"}");
 
         ONode oNode = node(message);
 
@@ -193,7 +196,7 @@ public class DashscopeChatDialectMessageTest {
      */
     @Test
     public void assistantMultiModalUsesNativeContentArray() {
-        AssistantMessage message = new AssistantMessage("生成好了", "", false, null, null, null, null,
+        AssistantMessage message = new AssistantMessage("生成好了", "", null,
                 Collections.singletonList((ContentBlock) ImageBlock.ofUrl("https://example.com/b.png")));
 
         ONode content = node(message).get("content");
@@ -209,7 +212,7 @@ public class DashscopeChatDialectMessageTest {
      */
     @Test
     public void assistantTruncatedMediaKeepsTextProjection() {
-        AssistantMessage message = new AssistantMessage("仅剩文本", "", false, null, null, null, null,
+        AssistantMessage message = new AssistantMessage("仅剩文本", "", null,
                 Collections.singletonList((ContentBlock) truncatedImage()));
 
         ONode content = node(message).get("content");
@@ -220,17 +223,23 @@ public class DashscopeChatDialectMessageTest {
     }
 
     /**
-     * 多模态但媒体已截断且无文本：写出空 content 数组（无可投影的文本）
+     * 多模态但媒体已截断且无文本：不得写出空 content 数组；请求主循环应过滤仅剩 role 的消息。
      */
     @Test
-    public void assistantTruncatedMediaWithoutTextYieldsEmptyArray() {
-        AssistantMessage message = new AssistantMessage("", "", false, null, null, null, null,
+    public void assistantTruncatedMediaWithoutTextIsOmittedSafely() {
+        AssistantMessage message = new AssistantMessage("", "", null,
                 Collections.singletonList((ContentBlock) truncatedImage()));
 
-        ONode content = node(message).get("content");
+        ONode messageNode = node(message);
+        assertEquals("assistant", messageNode.get("role").getString());
+        assertFalse(messageNode.hasKey("content"), "无媒体、无正文时不得写 content:[]");
 
-        assertTrue(content.isArray());
-        assertTrue(content.getArray().isEmpty(), "无媒体、无文本时无内容可写");
+        ONode messages = dialect.buildRequestJson(config, ChatOptions.of(),
+                Arrays.asList(ChatMessage.ofUser("前文"), message, ChatMessage.ofUser("继续")), false)
+                .get("input").get("messages");
+        assertEquals(2, messages.size(), "仅剩 role 的 assistant 不得进入请求");
+        assertEquals("前文", messages.get(0).get("content").getString());
+        assertEquals("继续", messages.get(1).get("content").getString());
     }
 
     /**
@@ -261,20 +270,42 @@ public class DashscopeChatDialectMessageTest {
         assertEquals("杭州", ONode.ofJson(arguments).get("location").getString());
     }
 
+    @Test
+    public void typedToolCallsArePrimary() {
+        Map<String, Object> args = new LinkedHashMap<>();
+        args.put("location", "杭州");
+        ToolCall typed = new ToolCall("0", "typed_1", "typed_weather", null, args);
+
+        ONode legacy = ONode.ofJson(ChatMessage.toJson(
+                new AssistantMessage("", "", Collections.singletonList(typed), null)));
+        legacy.set("toolCallsRaw", toolCallsRaw("raw_1", "raw_weather", "{\"location\":\"上海\"}"));
+        AssistantMessage message = (AssistantMessage) ChatMessage.fromJson(legacy.toJson());
+        ONode call = node(message).get("tool_calls").get(0);
+        assertEquals("typed_1", call.get("id").getString());
+        assertEquals("typed_weather", call.get("function").get("name").getString());
+        assertEquals("杭州", ONode.ofJson(call.get("function").get("arguments").getString())
+                .get("location").getString());
+    }
+
     private AssistantMessage assistantWithToolCallArguments(String arguments) {
+        ONode legacy = new ONode().set("role", "assistant").set("text", "").set("thinking", "");
+        legacy.set("toolCallsRaw", toolCallsRaw("call_1", "get_weather", arguments));
+        return (AssistantMessage) ChatMessage.fromJson(legacy.toJson());
+    }
+
+    private List<Map> toolCallsRaw(String id, String name, String arguments) {
         Map<String, Object> function = new LinkedHashMap<>();
-        function.put("name", "get_weather");
+        function.put("name", name);
         function.put("arguments", arguments);
 
         Map<String, Object> call = new LinkedHashMap<>();
-        call.put("id", "call_1");
+        call.put("id", id);
         call.put("type", "function");
         call.put("function", function);
 
         List<Map> toolCallsRaw = new ArrayList<>();
         toolCallsRaw.add(call);
-
-        return new AssistantMessage("", "", false, null, toolCallsRaw, null, null, null);
+        return toolCallsRaw;
     }
 
     /// ////////////////////////// 内容块写出规则

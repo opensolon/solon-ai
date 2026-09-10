@@ -31,9 +31,13 @@ import org.noear.solon.ai.chat.event.ChatEventDefault;
 import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.MessageProtocolState;
+import org.noear.solon.ai.chat.message.MessageSemanticHasher;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.core.util.Assert;
@@ -47,6 +51,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -347,31 +352,110 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
      */
     private AssistantMessage buildFinalAssistantMessage(String result, ReActTrace trace) {
         String text = result == null ? "" : result;
-
-        List<ContentBlock> mediaBlocks = new ArrayList<>();
-
         AssistantMessage lastReason = trace.getLastReasonMessage();
-        if (lastReason != null && lastReason.hasMedia()) {
-            for (ContentBlock block : lastReason.getBlocks()) {
-                if (!(block instanceof TextBlock)) {
-                    mediaBlocks.add(block);
+        List<ContentBlock> finalBlocks = new ArrayList<>();
+        List<ContentBlock> existingMedia = new ArrayList<>();
+        boolean textReplaced = false;
+
+        if (lastReason != null) {
+            List<ContentBlock> sourceBlocks = lastReason.getBlocks();
+            if (sourceBlocks != null) {
+                for (ContentBlock block : sourceBlocks) {
+                    if (block == null) {
+                        continue;
+                    }
+                    if (block instanceof TextBlock) {
+                        // 以原正文块的位置替换正文，并丢弃其它旧正文投影。
+                        if (!textReplaced && !text.isEmpty()) {
+                            TextBlock replacement = TextBlock.of(text, block.getMimeType());
+                            replacement.metas().putAll(block.metas());
+                            finalBlocks.add(replacement);
+                            textReplaced = true;
+                        }
+                    } else {
+                        finalBlocks.add(block);
+                        existingMedia.add(block);
+                    }
                 }
             }
         }
 
+        // returnDirect media 追加到基底 blocks 之后；仅去重追加来源，绝不改写基底自身顺序。
         List<ContentBlock> directMedia = trace.getFinalMediaBlocks();
         if (directMedia != null) {
             for (ContentBlock block : directMedia) {
-                if (!(block instanceof TextBlock) && !mediaBlocks.contains(block)) {
-                    mediaBlocks.add(block);
+                if (block == null || block instanceof TextBlock || containsEquivalentMedia(existingMedia, block)) {
+                    continue;
                 }
+                finalBlocks.add(block);
+                existingMedia.add(block);
             }
         }
 
-        if (!mediaBlocks.isEmpty()) {
-            return ChatMessage.ofAssistant(text, mediaBlocks);
+        // 有媒体但没有正文块时，遵循消息工厂约定将正文投影放在首位；纯文本消息保持无 blocks。
+        if (!textReplaced && !text.isEmpty() && !finalBlocks.isEmpty()) {
+            finalBlocks.add(0, TextBlock.of(text));
         }
-        return ChatMessage.ofAssistant(text);
+
+        List<ContentBlock> messageBlocks = finalBlocks.isEmpty() ? null : finalBlocks;
+        if (lastReason == null) {
+            return new AssistantMessage(text, "", null, messageBlocks);
+        }
+
+        String thinking = lastReason.getThinkingRaw();
+        if (thinking == null && lastReason.hasThinking()) {
+            thinking = lastReason.getThinking();
+        }
+        // 终态消息是通用语义投影：旧工具/搜索载体只用于读取，并转换成类型化字段，
+        // 不再继续传播弃用字段或源方言的回放形态。
+        List<ToolCall> toolCalls = lastReason.getToolCalls();
+        if (Utils.isEmpty(toolCalls) && Utils.isNotEmpty(lastReason.getToolCallsRaw())) {
+            toolCalls = ToolCallJsonSanitizer.parseLegacyToolCallsRaw(lastReason.getToolCallsRaw());
+        }
+        AssistantMessage semanticMessage = AssistantMessage.snapshot(
+                text,
+                thinking,
+                toolCalls,
+                messageBlocks,
+                lastReason.resolveSearchResults(),
+                lastReason.getCitations(),
+                null);
+        Map<String, MessageProtocolState> retainedStates = null;
+        if (lastReason.hasProtocolStates()) {
+            for (Map.Entry<String, MessageProtocolState> entry : lastReason.getProtocolStates().entrySet()) {
+                if (MessageSemanticHasher.matches(semanticMessage, entry.getValue())) {
+                    if (retainedStates == null) {
+                        retainedStates = new LinkedHashMap<>();
+                    }
+                    retainedStates.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+        return AssistantMessage.snapshot(
+                text,
+                thinking,
+                toolCalls,
+                messageBlocks,
+                lastReason.resolveSearchResults(),
+                lastReason.getCitations(),
+                retainedStates,
+                lastReason.getMetadata());
+    }
+
+    /** 判断两个媒体块是否代表同一份媒体载荷。 */
+    private boolean containsEquivalentMedia(List<ContentBlock> mediaBlocks, ContentBlock candidate) {
+        for (ContentBlock existing : mediaBlocks) {
+            if (existing == candidate) {
+                return true;
+            }
+            if (existing != null && existing.getClass() == candidate.getClass()
+                    && Objects.equals(existing.getMimeType(), candidate.getMimeType())
+                    && Objects.equals(existing.getContent(), candidate.getContent())
+                    && candidate.getContent() != null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

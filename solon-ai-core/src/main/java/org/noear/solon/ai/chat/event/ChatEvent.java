@@ -22,6 +22,8 @@ import org.noear.solon.ai.chat.ChatException;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.source.Citation;
+import org.noear.solon.ai.chat.source.SearchResult;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.NonNull;
@@ -163,10 +165,28 @@ public interface ChatEvent extends AiEvent, NonSerializable {
     ToolCall getToolCall();
 
     /**
-     * 内容块负载（媒体、引用）
+     * 内容块负载（媒体）
      */
     @Nullable
     ContentBlock getBlock();
+
+    /**
+     * 回答引用负载。
+     * <p>默认实现用于兼容第三方 ChatEvent 实现；新事件实现应在 CITATION 事件中提供。</p>
+     */
+    @Nullable
+    default Citation getCitation() {
+        return null;
+    }
+
+    /**
+     * 搜索结果负载。
+     * <p>默认实现用于兼容第三方 ChatEvent 实现；新事件实现应在 SEARCH_RESULT 事件中提供。</p>
+     */
+    @Nullable
+    default SearchResult getSearchResult() {
+        return null;
+    }
 
     /**
      * 用量负载
@@ -181,17 +201,17 @@ public interface ChatEvent extends AiEvent, NonSerializable {
     ChatException getError();
 
     /**
-     * 聚合响应。仅终态与收尾帧携带：{@link ChatEventType#RESPONSE_END}（全流终态）与
+     * 聚合响应。{@link ChatEventType#RESPONSE_END}（全流终态）与
      * {@link ChatEventType#STEP_END}（分步终态）为完整聚合，{@link ChatEventType#ERROR} 为
-     * 已完成部分（便于打捞），{@link ChatEventType#USAGE} 为当帧快照
+     * 已完成部分（便于打捞）；{@link ChatEventType#USAGE} 可携带不含最终消息的分片响应
      */
     @Nullable
     ChatResponse getResponse();
 
     /**
-     * 聚合消息。仅终态与收尾帧携带：{@link ChatEventType#RESPONSE_END}（全流终态）与
-     * {@link ChatEventType#STEP_END}（分步终态）为完整聚合，{@link ChatEventType#ERROR} 为
-     * 已完成部分（便于打捞），{@link ChatEventType#USAGE} 为当帧快照
+     * 最终消息。仅 {@link ChatEventType#RESPONSE_END}（全流终态）、
+     * {@link ChatEventType#STEP_END}（分步终态）和带已完成部分的 {@link ChatEventType#ERROR}
+     * 可返回；流式分片事件（包括 {@link ChatEventType#USAGE}）不返回 AssistantMessage
      */
     default @Nullable AssistantMessage getMessage() {
         if (getResponse() == null) {

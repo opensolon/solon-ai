@@ -215,10 +215,10 @@ public class ReasoningEffortMappingTest {
         GeminiInteractionsRequestBuilder builder = new GeminiInteractionsRequestBuilder();
         ChatOptions o = ChatOptions.of().reasoning_effort("medium");
         ONode root = builder.build(config("gemini-3-pro"), o, userMsg(), false);
-        ONode cfg = root.get("config");
+        ONode cfg = root.get("generation_config");
         Assertions.assertNotNull(cfg);
         Assertions.assertEquals("medium", cfg.get("thinking_level").getString());
-        Assertions.assertTrue(cfg.get("thinking_summaries").getBoolean());
+        Assertions.assertEquals("auto", cfg.get("thinking_summaries").getString());
     }
 
     @Test
@@ -230,8 +230,8 @@ public class ReasoningEffortMappingTest {
                 .reasoning_effort("max")
                 .optionSet("generationConfig", Utils.asMap("thinkingConfig", thinking));
         ONode root = builder.build(config("gemini-3-pro"), o, userMsg(), false);
-        Assertions.assertEquals("low", root.get("config").get("thinking_level").getString());
-        Assertions.assertFalse(root.get("config").get("thinking_summaries").getBoolean());
+        Assertions.assertEquals("low", root.get("generation_config").get("thinking_level").getString());
+        Assertions.assertEquals("none", root.get("generation_config").get("thinking_summaries").getString());
     }
 
     // ---------- thinking 开关 ----------
@@ -587,12 +587,12 @@ public class ReasoningEffortMappingTest {
 
         ChatOptions off = ChatOptions.of().thinking(false);
         ONode rootOff = builder.build(config("gemini-3-pro"), off, userMsg(), false);
-        Assertions.assertFalse(rootOff.get("config").get("thinking_summaries").getBoolean());
+        Assertions.assertEquals("none", rootOff.get("generation_config").get("thinking_summaries").getString());
 
         ChatOptions on = ChatOptions.of().thinking(true).reasoning_effort("high");
         ONode rootOn = builder.build(config("gemini-3-pro"), on, userMsg(), false);
-        Assertions.assertEquals("high", rootOn.get("config").get("thinking_level").getString());
-        Assertions.assertTrue(rootOn.get("config").get("thinking_summaries").getBoolean());
+        Assertions.assertEquals("high", rootOn.get("generation_config").get("thinking_level").getString());
+        Assertions.assertEquals("auto", rootOn.get("generation_config").get("thinking_summaries").getString());
     }
 
     // ---------- Gemini 经 OpenAI 兼容端点（中转 / 官方兼容层 / OpenRouter） ----------

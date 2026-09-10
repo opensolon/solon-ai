@@ -21,6 +21,7 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.MultiMap;
 import org.noear.solon.net.http.HttpUtils;
 
@@ -165,24 +166,42 @@ public class DashscopeChatDialectRequestTest {
     }
 
     /**
-     * 思考消息不回传（原生多轮建议不回灌 reasoning_content）
+     * DashScope 不支持历史 thinking 回放：即使模型名包含 deepseek，纯思考消息也必须按最终线能力过滤；
+     * thinking + toolCalls 则保留工具调用，但不回传 thinking。
      */
     @Test
-    public void thinkingMessagesAreNotSentBack() {
+    public void thinkingReplayUsesDashscopeCapabilitiesEvenForDeepseekModel() {
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.ofUser("hi"));
-        messages.add(new AssistantMessage("", "内部思考", true));
+        AssistantMessage thinkingOnly = new AssistantMessage("", "内部思考");
+        AssistantMessage mixed = new AssistantMessage("混合正文", "混合思考");
+        AssistantMessage carrier = new AssistantMessage("", "载体思考");
+        carrier.addMetadata("provider_state", "keep");
+        ToolCall toolCall = new ToolCall("0", "call_1", "get_weather", "{}", Collections.emptyMap());
+        AssistantMessage thinkingWithToolCalls = new AssistantMessage("", "工具前思考",
+                Collections.singletonList(toolCall), null);
+        messages.add(thinkingOnly);
+        messages.add(mixed);
+        messages.add(carrier);
+        messages.add(thinkingWithToolCalls);
         messages.add(ChatMessage.ofAssistant("你好"));
 
         ChatConfig config = new ChatConfig();
-        config.setModel("qwen-plus");
+        config.setModel("deepseek-r1-distill-qwen-32b");
         ONode messagesNode = dialect.buildRequestJson(config, ChatOptions.of(), messages, false)
                 .get("input").get("messages");
 
-        assertEquals(2, messagesNode.getArray().size(), "思考消息必须被过滤");
+        assertEquals(4, messagesNode.getArray().size());
         assertEquals("user", messagesNode.get(0).get("role").getString());
-        assertEquals("assistant", messagesNode.get(1).get("role").getString());
-        assertEquals("你好", messagesNode.get(1).get("content").getString());
+        assertEquals("混合正文", messagesNode.get(1).get("content").getString());
+        assertFalse(messagesNode.get(1).hasKey("reasoning_content"));
+        assertFalse(messagesNode.get(1).hasKey("reasoning"));
+        assertEquals("get_weather", messagesNode.get(2).get("tool_calls").get(0)
+                .get("function").get("name").getString());
+        assertFalse(messagesNode.get(2).hasKey("content"));
+        assertFalse(messagesNode.get(2).hasKey("reasoning_content"));
+        assertFalse(messagesNode.get(2).hasKey("reasoning"));
+        assertEquals("你好", messagesNode.get(3).get("content").getString());
     }
 
     /// ////////////////////////// 思考开关

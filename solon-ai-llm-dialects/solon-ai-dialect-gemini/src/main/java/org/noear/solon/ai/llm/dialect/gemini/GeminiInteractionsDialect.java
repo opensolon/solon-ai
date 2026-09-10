@@ -23,6 +23,7 @@ import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.MessageProtocolState;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
@@ -31,11 +32,11 @@ import org.noear.solon.ai.llm.dialect.gemini.interactions.GeminiInteractionsRequ
 import org.noear.solon.ai.llm.dialect.gemini.interactions.GeminiInteractionsResponseParser;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.net.http.HttpUtils;
-import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -95,8 +96,13 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
         }
 
         if (Assert.isEmpty(standard)) {
-            if (config.getApiUrl().endsWith("/interactions")) {
-                return true;
+            String apiUrl = config.getApiUrl();
+            if (Utils.isNotEmpty(apiUrl)) {
+                int query = apiUrl.indexOf('?');
+                if (query >= 0) apiUrl = apiUrl.substring(0, query);
+                int fragment = apiUrl.indexOf('#');
+                if (fragment >= 0) apiUrl = apiUrl.substring(0, fragment);
+                return apiUrl.endsWith("/interactions");
             }
         }
 
@@ -105,43 +111,32 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
 
     @Override
     protected String getApiUrl(ChatConfig config) {
-        //处理后缀#
-        int index = config.getApiUrl().indexOf('#');
-        if (index > 0) {
-            return config.getApiUrl().substring(0, index);
+        String url = config.getApiUrl();
+        if (Utils.isEmpty(url)) return url;
+        int fragment = url.indexOf('#');
+        if (fragment >= 0) url = url.substring(0, fragment);
+        String query = "";
+        int queryAt = url.indexOf('?');
+        if (queryAt >= 0) {
+            query = url.substring(queryAt + 1);
+            url = url.substring(0, queryAt);
         }
-
-        //自动补全地址
-        if (config.getApiUrl().endsWith("/interactions?alt=sse") || config.getApiUrl().endsWith("/interactions")) {
-            return config.getApiUrl();
-        } else {
-            if (pattern.matcher(config.getApiUrl()).find()) { //匹配 /v1,/v4/ 等
-                //已带版本
-                if (config.getApiUrl().endsWith("/")) {
-                    return config.getApiUrl() + "interactions";
-                } else {
-                    return config.getApiUrl() + "/interactions";
-                }
-            } else {
-                //未带版本
-                if (config.getApiUrl().endsWith("/")) {
-                    return config.getApiUrl() + "v1/interactions";
-                } else {
-                    return config.getApiUrl() + "/v1/interactions";
-                }
-            }
+        if (!url.endsWith("/interactions")) {
+            if (!url.endsWith("/")) url += "/";
+            if (!pattern.matcher(url).find()) url += "v1/";
+            url += "interactions";
         }
+        return query.isEmpty() ? url : url + "?" + query;
     }
 
     @Override
     public HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
         String apiUrl = getApiUrl(config);
-        if (isStream && apiUrl.contains("?") == false) {
-            apiUrl += "?alt=sse";
+        if (isStream && !apiUrl.matches(".*[?&]alt=sse(?:&.*)?$")) {
+            apiUrl += (apiUrl.contains("?") ? "&" : "?") + "alt=sse";
         }
 
         HttpUtils httpUtils = HttpUtils.http(apiUrl)
-                .ssl(HttpSslSupplierAny.getInstance())
                 .timeout((int) config.getTimeout().getSeconds());
 
         if (config.getProxy() != null) {
@@ -197,9 +192,20 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
         // 格式: [{type:"function_call", name:"...", id:"...", arguments:{...}}, ...]
         if (oMessage != null && oMessage.isArray()) {
             List<ToolCall> toolCalls = new ArrayList<>();
+            String pendingThoughtSignature = null;
             int idx = 0;
             for (ONode step : oMessage.getArray()) {
                 String type = step.get("type").getString();
+                if ("thought".equals(type)) {
+                    String signature = step.get("signature").getString();
+                    if (Utils.isEmpty(signature)) {
+                        signature = step.get("thought_signature").getString();
+                    }
+                    if (Utils.isNotEmpty(signature)) {
+                        pendingThoughtSignature = signature;
+                    }
+                    continue;
+                }
                 if ("function_call".equals(type)) {
                     String name = step.get("name").getString();
                     String callId = step.get("id").getString();
@@ -228,12 +234,13 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
 
                     ToolCall toolCall = new ToolCall(String.valueOf(idx), callId, name, argsStr, argsMap);
 
-                    // 第一个 function_call 可能携带 thought_signature
-                    if (idx == 0 && step.hasKey("thought_signature")) {
-                        String sig = step.get("thought_signature").getString();
-                        if (Utils.isNotEmpty(sig)) {
-                            toolCall.setThoughtSignature(sig);
-                        }
+                    // thought step 与 function_call 分离时，签名属于后续首个调用；同时兼容旧的内嵌字段。
+                    String signature = pendingThoughtSignature;
+                    if (Utils.isEmpty(signature) && idx == 0) {
+                        signature = step.get("thought_signature").getString();
+                    }
+                    if (idx == 0 && Utils.isNotEmpty(signature)) {
+                        pendingThoughtSignature = signature;
                     }
 
                     toolCalls.add(toolCall);
@@ -243,7 +250,13 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
 
             List<AssistantMessage> messages = new ArrayList<>();
             if (!toolCalls.isEmpty()) {
-                messages.add(new AssistantMessage("", "",false, null, null, toolCalls, null));
+                MessageProtocolState signatureState = GeminiMessageStateSupport.createSignatureState(
+                        toolCalls.get(0), 0, pendingThoughtSignature);
+                Map<String, MessageProtocolState> protocolStates = signatureState == null ? null
+                        : Collections.singletonMap(
+                                GeminiMessageStateSupport.INTERACTIONS_PROTOCOL_ID, signatureState);
+                messages.add(AssistantMessage.snapshot(
+                        "", "", toolCalls, null, null, null, protocolStates));
             }
             return messages;
         }

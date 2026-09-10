@@ -25,8 +25,11 @@ import org.noear.solon.ai.chat.content.AbsMedia;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.*;
+import org.noear.solon.ai.chat.event.ChatEventType;
+import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.ai.chat.message.*;
+import org.noear.solon.ai.chat.source.SearchResult;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.content.VideoBlock;
@@ -88,12 +91,14 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
     protected void buildAssistantMessageNodeDo(ChatConfig config, ONode oNode, AssistantMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
+        List<Map> outboundToolCalls = ToolCallJsonSanitizer.buildOpenAiCompatibleToolCalls(
+                msg.getToolCalls(), msg.getToolCallsRaw());
 
         if (msg.isMultiModal() == false) {
             // 单模态：保持原有 string content 行为
             if (Utils.isNotEmpty(msg.getText())) {
                 oNode.set("content", msg.getText());
-            } else if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
+            } else if (Utils.isNotEmpty(outboundToolCalls)) {
                 // 有 tool_calls 但无文本内容（如 reasoning-only 后调工具）时，显式设 content=null
                 // OpenAI 规范要求 assistant message 含 tool_calls 时 content 字段存在（可为 null）
                 oNode.set("content", (String) null);
@@ -109,7 +114,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 for (ContentBlock block1 : msg.getBlocks()) {
                     if (block1 instanceof TextBlock) {
                         TextBlock m1Text = (TextBlock) block1;
-                        String text = m1Text.getContent();
+                        String text = AssistantMessage.stripThinkTags(m1Text.getContent());
                         if (Utils.isNotEmpty(text)) {
                             n1.addNew().set("type", "text").set("text", text);
                         }
@@ -165,14 +170,15 @@ public abstract class AbstractChatDialect implements ChatDialect {
             }
         }
 
-        //兼容 r1 的 tool-call(可以再优化，只在最后一条加)
-        if (Utils.isNotEmpty(msg.getReasoningFieldName()) && Utils.isNotEmpty(msg.getThinking())) {
-            oNode.set(msg.getReasoningFieldName(), msg.getThinking());
+        if (Utils.isNotEmpty(msg.getThinking())) {
+            String thinkingField = resolveAssistantThinkingField(config, msg);
+            if (thinkingField != null) {
+                oNode.set(thinkingField, msg.getThinking());
+            }
         }
 
-        if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
-            // 出站兜底净化：历史中截断损坏的 arguments 会被 OpenAI 兼容服务端 400 拒绝（会话中毒），统一修复
-            oNode.set("tool_calls", ONode.ofBean(ToolCallJsonSanitizer.sanitizeToolCallsRaw(msg.getToolCallsRaw())));
+        if (Utils.isNotEmpty(outboundToolCalls)) {
+            oNode.set("tool_calls", ONode.ofBean(outboundToolCalls));
         }
     }
 
@@ -361,11 +367,86 @@ public abstract class AbstractChatDialect implements ChatDialect {
                     n2.getOrNew("function").then(toolNode -> {
                         toolNode.set("name", func.name());
                         toolNode.set("description", func.descriptionAndMeta());
-                        toolNode.set("parameters", ONode.ofJson(func.inputSchema()));
+                        String inputSchema = func.inputSchema();
+                        ONode schemaNode = null;
+                        if (Utils.isNotEmpty(inputSchema)) {
+                            try {
+                                ONode candidate = ONode.ofJson(inputSchema);
+                                if (candidate.isObject()) {
+                                    schemaNode = candidate;
+                                }
+                            } catch (Exception ignored) {
+                                // 下方统一回退空参数 schema
+                            }
+                        }
+                        if (schemaNode == null) {
+                            schemaNode = newEmptyToolParameters();
+                        }
+                        if (Boolean.TRUE.equals(func.strict())) {
+                            ToolSchemaUtil.validateOpenAiStrictSchema(schemaNode, func.name());
+                        }
+                        toolNode.set("parameters", schemaNode);
+                        if (func.strict() != null) {
+                            // Chat Completions 的 strict 位于 tools[].function 内层
+                            toolNode.set("strict", func.strict());
+                        }
                     });
                 });
             }
         });
+    }
+
+    private ONode newEmptyToolParameters() {
+        ONode schema = new ONode();
+        schema.set("type", "object");
+        schema.getOrNew("properties").asObject();
+        return schema;
+    }
+
+    /**
+     * 解析目标 Chat Completions 协议用于回放历史思考的消息字段。
+     * <p>字段由目标配置决定，禁止把历史消息的任意 {@code reasoningFieldName} 直接作为 JSON key。
+     * 未知目标默认不回放；DeepSeek-compatible 使用 {@code reasoning_content}，OpenRouter 使用 {@code reasoning}。</p>
+     *
+     * @since 4.1
+     */
+    protected String resolveAssistantThinkingField(ChatConfig config, AssistantMessage message) {
+        if (message == null || Utils.isEmpty(message.getThinking()) || config == null) {
+            return null;
+        }
+        if (isOpenRouterEndpoint(config)) {
+            return "reasoning";
+        }
+
+        String model = config.getModel() == null ? "" : config.getModel().toLowerCase(Locale.ROOT);
+        String provider = config.getProvider() == null ? "" : config.getProvider().toLowerCase(Locale.ROOT);
+        String apiUrl = config.getApiUrl() == null ? "" : config.getApiUrl().toLowerCase(Locale.ROOT);
+        return containsAny(model, "deepseek")
+                || containsAny(provider, "deepseek")
+                || containsAny(apiUrl, "deepseek") ? "reasoning_content" : null;
+    }
+
+    /**
+     * 是否可在请求回放时跳过纯思考消息。
+     * <p>只有目标方言能把通用 thinking 重建为合法协议字段时才保留。应用 metadata、foreign state、
+     * legacy raw 和源响应字段名都不能单独让无关目标产生空 assistant 消息。</p>
+     *
+     * @since 4.1
+     */
+    protected boolean isSkippableThinkingOnlyMessage(ChatConfig config, ChatMessage message) {
+        if (!(message instanceof AssistantMessage)) {
+            return false;
+        }
+
+        AssistantMessage assistant = (AssistantMessage) message;
+        return assistant.isThinkingOnly()
+                && resolveAssistantThinkingField(config, assistant) == null;
+    }
+
+    /** @deprecated 4.1 使用带目标配置的重载。 */
+    @Deprecated
+    protected boolean isSkippableThinkingOnlyMessage(ChatMessage message) {
+        return isSkippableThinkingOnlyMessage(null, message);
     }
 
     @Override
@@ -377,7 +458,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
             n.getOrNew("messages").then(n1 -> {
                 for (ChatMessage m1 : messages) {
-                    if (m1.isThinking() == false || m1.isToolCalls()) {
+                    if (isSkippableThinkingOnlyMessage(config, m1) == false) {
                         n1.add(buildChatMessageNode(config, m1));
                     }
                 }
@@ -449,6 +530,11 @@ public abstract class AbstractChatDialect implements ChatDialect {
         ONode oNode = new ONode();
         oNode.set("role", "assistant");
         oNode.set("content", acc.getAggregationText());
+        if (Utils.isNotEmpty(acc.getAggregationThinking())) {
+            String field = "reasoning".equals(acc.reasoning_field_name)
+                    ? "reasoning" : "reasoning_content";
+            oNode.set(field, acc.getAggregationThinking());
+        }
         oNode.getOrNew("tool_calls").asArray().then(n1 -> {
             for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
                 //有可能没有
@@ -902,6 +988,107 @@ public abstract class AbstractChatDialect implements ChatDialect {
         return null;
     }
 
+    /**
+     * 将传统结构化解析结果立即发布为 Event-first 事件。
+     *
+     * <p>该辅助方法只供复用 {@link AssistantMessage} 作为解析中间结构的方言使用：它分别检查
+     * thinkingRaw / textRaw 并直接发出增量事件；空边界消息不发增量。消息中的 raw、search、
+     * metadata、reasoningField 与媒体等协议载体会先合并到终态载体。</p>
+     *
+     * <p>工具调用按 index 优先、id 兜底识别；同一调用只发一次 START，参数事件只携带当前分片的
+     * argumentsStr。TOOL_CALL_END 由核心在所有参数聚合完成后统一发出。</p>
+     *
+     * @since 4.1
+     */
+    protected void publishAssistantMessageEvents(ChatStreamContext ctx, AssistantMessage message) {
+        if (ctx == null || message == null) {
+            return;
+        }
+
+        ChatAccumulator acc = ctx.getAccumulator();
+        acc.mergeTerminalMessage(message);
+
+        if (Utils.isNotEmpty(message.getThinkingRaw())) {
+            ctx.emit(ctx.event(ChatEventType.THINKING_DELTA)
+                    .text(message.getThinkingRaw())
+                    .build());
+        }
+        if (Utils.isNotEmpty(message.getTextRaw())) {
+            ctx.emit(ctx.event(ChatEventType.TEXT_DELTA)
+                    .text(message.getTextRaw())
+                    .build());
+        }
+
+        if (Utils.isNotEmpty(message.getToolCalls())) {
+            Set<String> started = ctx.attrIfAbsent("__startedToolCalls", k -> new LinkedHashSet<String>());
+            for (ToolCall call : message.getToolCalls()) {
+                String key = toolCallEventKey(call);
+                if (key == null || started.add(key)) {
+                    ToolCall startCall = new ToolCall(call.getIndex(), call.getId(), call.getName(), null, null);
+                    ctx.emit(toolCallEvent(ctx, ChatEventType.TOOL_CALL_START, startCall, null));
+                }
+
+                if (Utils.isNotEmpty(call.getArgumentsStr())) {
+                    ctx.emit(toolCallEvent(ctx, ChatEventType.TOOL_CALL_ARGS_DELTA,
+                            call, call.getArgumentsStr()));
+                }
+            }
+        }
+
+        if (Utils.isNotEmpty(message.getBlocks())) {
+            for (ContentBlock block : message.getBlocks()) {
+                if (block == null || block instanceof TextBlock) {
+                    continue;
+                }
+                ctx.emit(ctx.event(ChatEventType.MEDIA_DONE).block(block).build());
+            }
+        }
+    }
+
+    private org.noear.solon.ai.chat.event.ChatEvent toolCallEvent(ChatStreamContext ctx,
+                                                                  ChatEventType type,
+                                                                  ToolCall call,
+                                                                  String text) {
+        org.noear.solon.ai.chat.event.ChatEventDefault.Builder event = ctx.event(type)
+                .toolCall(call)
+                .toolCallId(call == null ? null : call.getId())
+                .text(text);
+        int index = toolCallEventIndex(call);
+        if (index >= 0) {
+            event.index(index);
+        }
+        return event.build();
+    }
+
+    private int toolCallEventIndex(ToolCall call) {
+        if (call == null || Utils.isEmpty(call.getIndex())) {
+            return -1;
+        }
+        String index = call.getIndex();
+        if (index.startsWith("idx:")) {
+            index = index.substring(4);
+        }
+        try {
+            return Integer.parseInt(index);
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    private String toolCallEventKey(ToolCall call) {
+        if (call == null) {
+            return null;
+        }
+        if (Utils.isNotEmpty(call.getIndex())) {
+            return "index:" + call.getIndex();
+        }
+        if (Utils.isNotEmpty(call.getId())) {
+            return "id:" + call.getId();
+        }
+        return null;
+    }
+
+
     public List<AssistantMessage> parseAssistantMessage(ChatAccumulator acc, ONode oMessage) {
         List<AssistantMessage> messageList = new ArrayList<>();
 
@@ -923,30 +1110,19 @@ public abstract class AbstractChatDialect implements ChatDialect {
         ONode toolCallsNode = oMessage.getOrNull("tool_calls");
         ONode searchResultsNode = oMessage.getOrNull("search_results");
 
-        List<Map> toolCallsRaw = null;
         List<ToolCall> toolCalls = parseToolCalls(acc, toolCallsNode);
-        List<Map> searchResultsRaw = null;
+        List<SearchResult> searchResults = parseSearchResults(searchResultsNode);
 
         if (Utils.isNotEmpty(toolCalls)) {
             // 流式分片（ChatCompletionMessageToolCallChunk）的 arguments 是 JSON 片段（如 'la'、'{"comm'），
-            // 逐帧净化会误判为非法 JSON 而刷 WARN、并把分片改写成 "{}" 导致订阅侧拿不到增量。
-            // 对齐 openai-java ChatCompletionAccumulator / anthropic MessageAccumulator：
-            // 分片期只做字符串累积不校验，校验统一交给聚合出口（buildAssistantToolCallMessageNode）
-            // 与出站兜底（buildAssistantMessageNodeDo）。
-            List<Map> toolCallsRawOrigin = toolCallsNode.toBean(List.class);
-            toolCallsRaw = acc.isStream() ? toolCallsRawOrigin
-                    : ToolCallJsonSanitizer.sanitizeToolCallsRaw(toolCallsRawOrigin);
-
+            // 分片期只保存在 ToolCall.argumentsStr，并由事件/聚合器累积；不得逐帧净化。
+            // 新消息不再重复生成 toolCallsRaw，旧字段只用于历史 JSON 兼容。
             if (acc.in_thinking && acc.isStream()) {
-                //说明是思考结束立刻调用了工具，需要添加思考的结束标识
-                messageList.add(new AssistantMessage("", "", true).reasoningFieldName(acc.reasoning_field_name));
+                //思考通道由事件类型表达，不再创建空 AssistantMessage 边界项。
             }
             acc.in_thinking = false; //重置状态
         }
 
-        if (searchResultsNode != null) {
-            searchResultsRaw = searchResultsNode.toBean(List.class);
-        }
 
         /**
          * 情况：
@@ -969,33 +1145,20 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
         //非流式：随正文一起双字段构造的思考内容（不再缝合 <think> 标签进 content）
         String pendingThinking = null;
+        //同一帧内的思考与正文合并进一条终态消息，不再拆成多条
+        String splitThinking = null;
 
         if (Utils.isNotEmpty(reasoning_content)) {
             acc.has_reasoning_field = true;
             //有思考专属内容的协议
             if (acc.isStream()) {
-                //如果是流返回（可能要拆成多条流消息）
                 if (Utils.isEmpty(content)) {
-                    if (acc.in_thinking == false) {
-                        //说明是第一次
-                        messageList.add(new AssistantMessage("", "", true).reasoningFieldName(acc.reasoning_field_name));
-                        if (Utils.isNotEmpty(reasoning_content)) {
-                            content = reasoning_content;
-                        }
-                    } else {
-                        content = reasoning_content;
-                    }
-
+                    //只有思考：内容通道承载思考增量，等待后续帧补正文
+                    content = reasoning_content;
                     acc.in_thinking = true;
                 } else {
-                    //同帧同时携带思考与正文（部分网关会这么发）：思考增量先入通道，再发闭合信号；正文由下方 text 通道承载
-                    if (acc.in_thinking == false) {
-                        //首帧即双通道：补开启信号，保持 thinking->text 边界完整
-                        messageList.add(new AssistantMessage("", "", true).reasoningFieldName(acc.reasoning_field_name));
-                    }
-                    messageList.add(new AssistantMessage("", reasoning_content, true).reasoningFieldName(acc.reasoning_field_name));
-                    messageList.add(new AssistantMessage("", "", true).reasoningFieldName(acc.reasoning_field_name));
-
+                    //思考与正文同帧：思考进入聚合消息的 thinking 字段，正文继续走 content
+                    splitThinking = reasoning_content;
                     acc.in_thinking = false;
                 }
             } else {
@@ -1006,10 +1169,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
             if (acc.has_reasoning_field) { //有些情况，后面就没字段了
                 //有推理字段的
                 if (acc.in_thinking) {
-                    if (acc.isStream()) {
-                        //说明是最后一次
-                        messageList.add(new AssistantMessage("", "", true).reasoningFieldName(acc.reasoning_field_name));
-                    }
+                        //正文事件会由归一化器自动闭合 thinking 通道。
 
                     acc.in_thinking = false;
                 }
@@ -1025,22 +1185,12 @@ public abstract class AbstractChatDialect implements ChatDialect {
                         if (acc.in_thinking) {
                             int thinkEnd = content.indexOf("</think>");
                             if (thinkEnd >= 0) {
-                                //闭合标签可能与思考尾巴/正文头粘连在同一分片，拆成单通道帧，避免互相污染
+                                //闭合标签可能与思考尾巴/正文头粘连在同一分片：思考进 thinking 字段，
+                                //正文进 content，二者与 tool_calls 同属这一条聚合消息
                                 acc.in_thinking = false;
 
-                                String thinkPart = content.substring(0, thinkEnd);
-                                if (Utils.isNotEmpty(thinkPart)) {
-                                    messageList.add(new AssistantMessage("", thinkPart, true).reasoningFieldName(acc.reasoning_field_name));
-                                }
-
-                                //闭合信号帧（保持订阅侧 thinking->text 边界）
-                                messageList.add(new AssistantMessage("", "", true).reasoningFieldName(acc.reasoning_field_name));
-
-                                String answerPart = content.substring(thinkEnd + "</think>".length());
-                                if (Utils.isNotEmpty(answerPart)) {
-                                    messageList.add(new AssistantMessage(answerPart, "", false).reasoningFieldName(acc.reasoning_field_name));
-                                }
-                                return messageList;
+                                splitThinking = content.substring(0, thinkEnd);
+                                content = content.substring(thinkEnd + "</think>".length());
                             }
                         }
                     }
@@ -1048,18 +1198,56 @@ public abstract class AbstractChatDialect implements ChatDialect {
             }
         }
 
-        // 有文本 / 思考 / 工具调用 / 多模态媒体时都需要产出消息
-        if (content != null || pendingThinking != null || toolCallsRaw != null || Utils.isNotEmpty(blocksForMsg)) {
-            Object contentRaw = oContent == null || oContent.isNull() ? content : oContent.toBean();
+        // 有文本 / 思考 / 工具调用 / 多模态媒体 / 搜索结果时都需要产出消息。
+        // 一帧只产出一条聚合消息：思考、正文与工具调用同属同一轮模型输出，
+        // 拆成多条会让“终态消息”与“携带工具调用的消息”变成两个对象，下游只能靠位置猜测。
+        if (content != null || pendingThinking != null || splitThinking != null || Utils.isNotEmpty(toolCalls)
+                || Utils.isNotEmpty(blocksForMsg) || Utils.isNotEmpty(searchResults)) {
             String textOut = acc.in_thinking ? "" : (content == null ? "" : content);
-            String thinkingOut = acc.in_thinking ? (content == null ? "" : content) : (pendingThinking == null ? "" : pendingThinking);
-            AssistantMessage message = new AssistantMessage(textOut, thinkingOut, acc.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw, blocksForMsg)
-                    .reasoningFieldName(acc.reasoning_field_name);
+            String thinkingOut;
+            if (acc.in_thinking) {
+                thinkingOut = content == null ? "" : content;
+            } else if (splitThinking != null) {
+                //同帧思考优先于纯思考通道（非流式双字段构造的 pendingThinking）
+                thinkingOut = splitThinking;
+            } else {
+                thinkingOut = pendingThinking == null ? "" : pendingThinking;
+            }
+            // 通用方言只保存可跨协议重建的语义字段；供应商精确回放数据应写入有命名空间的 protocolStates。
+            AssistantMessage message = AssistantMessage.snapshot(
+                    textOut, thinkingOut, toolCalls, blocksForMsg,
+                    searchResults, null, null);
 
             messageList.add(message);
         }
 
         return messageList;
+    }
+
+    /** 将 OpenAI-compatible/DashScope 风格搜索结果投影为通用语义。 */
+    protected List<SearchResult> parseSearchResults(ONode searchResultsNode) {
+        if (searchResultsNode == null || !searchResultsNode.isArray() || searchResultsNode.size() == 0) {
+            return null;
+        }
+
+        List<SearchResult> results = new ArrayList<>();
+        for (ONode item : searchResultsNode.getArray()) {
+            if (item == null || !item.isObject()) {
+                continue;
+            }
+            SearchResult result = new SearchResult();
+            if (item.hasKey("index")) result.setIndex(item.get("index").getInt());
+            if (item.hasKey("id")) result.setId(item.get("id").getString());
+            if (item.hasKey("title")) result.setTitle(item.get("title").getString());
+            if (item.hasKey("url")) result.setUrl(item.get("url").getString());
+            if (item.hasKey("snippet")) {
+                result.setSnippet(item.get("snippet").getString());
+            } else if (item.hasKey("summary")) {
+                result.setSnippet(item.get("summary").getString());
+            }
+            results.add(result);
+        }
+        return results.isEmpty() ? null : results;
     }
 
     /**

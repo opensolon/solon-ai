@@ -204,28 +204,83 @@ public class OllamaChatDialectRequestTest {
     }
 
     /**
-     * 思考消息不回传（会被服务端拒绝），但「思考 + 工具调用」的消息必须保留
+     * 统一 thinking(Boolean) 映射为 Ollama 原生 think，内部 thinking 键不得泄漏。
      */
     @Test
-    public void thinkingMessagesFilteredExceptToolCalls() {
+    public void unifiedThinkingMapsToNativeThink() {
+        ONode enabled = dialect.buildRequestJson(config(), ChatOptions.of().thinking(true),
+                Arrays.asList(ChatMessage.ofUser("你好")), false);
+        assertTrue(enabled.get("think").getBoolean());
+        assertFalse(enabled.hasKey("thinking"));
+
+        ONode disabled = dialect.buildRequestJson(config(), ChatOptions.of().thinking(false),
+                Arrays.asList(ChatMessage.ofUser("你好")), false);
+        assertTrue(disabled.hasKey("think"));
+        assertFalse(disabled.get("think").getBoolean());
+        assertFalse(disabled.hasKey("thinking"));
+    }
+
+    /**
+     * 原生 think 逃生舱保持原值，并优先于统一 thinking 映射。
+     */
+    @Test
+    public void nativeThinkOptionIsPreserved() {
+        ChatOptions options = ChatOptions.of().thinking(true).optionSet("think", false);
+        ONode node = dialect.buildRequestJson(config(), options,
+                Arrays.asList(ChatMessage.ofUser("你好")), false);
+
+        assertTrue(node.hasKey("think"));
+        assertFalse(node.get("think").getBoolean());
+        assertFalse(node.hasKey("thinking"));
+    }
+
+    /**
+     * 方言本地工具参数模式只用于响应解析，不得进入 Ollama 请求体。
+     */
+    @Test
+    public void localToolArgumentModeIsNotPassedThrough() {
+        ONode node = dialect.buildRequestJson(config(), ChatOptions.of()
+                        .optionSet("ollama_tool_arguments_mode", "snapshot")
+                        .optionSet("think", true),
+                Arrays.asList(ChatMessage.ofUser("你好")), true);
+
+        assertFalse(node.hasKey("ollama_tool_arguments_mode"));
+        assertTrue(node.get("think").getBoolean());
+    }
+
+    /**
+     * 思考内容由目标 Ollama 方言统一构建为 thinking，不依赖源 reasoningFieldName。
+     */
+    @Test
+    public void thinkingContentIsWrittenByTargetDialect() {
         List<ToolCall> toolCalls = new ArrayList<>();
         toolCalls.add(new ToolCall("get_weather", "call_1", "get_weather", "{\"city\":\"杭州\"}", null));
 
-        AssistantMessage thinkingOnly = new AssistantMessage("", "让我想想", true);
-        AssistantMessage thinkingWithToolCalls = new AssistantMessage("", "让我想想", true,
-                null, toolCallsRaw("get_weather", "{\"city\":\"杭州\"}"), toolCalls, null, null);
+        AssistantMessage thinkingOnly = new AssistantMessage("", "让我想想");
+        AssistantMessage mixed = new AssistantMessage("混合正文", "混合思考");
+        AssistantMessage carrier = new AssistantMessage("", "载体思考");
+        carrier.addMetadata("provider_state", "keep");
+        AssistantMessage thinkingWithToolCalls = new AssistantMessage("", "让我想想", toolCalls, null);
 
         ONode node = dialect.buildRequestJson(config(), ChatOptions.of(),
-                Arrays.asList(ChatMessage.ofUser("杭州天气"), thinkingOnly, thinkingWithToolCalls,
+                Arrays.asList(ChatMessage.ofUser("杭州天气"), thinkingOnly, mixed, carrier, thinkingWithToolCalls,
                         ChatMessage.ofUser("继续")), false);
 
         List<ONode> messages = arrayOf(node.get("messages"));
-        assertEquals(3, messages.size(), "纯思考消息应被过滤");
+        assertEquals(6, messages.size());
         assertEquals("user", messages.get(0).get("role").getString());
-        assertEquals("assistant", messages.get(1).get("role").getString());
+        assertEquals("让我想想", messages.get(1).get("thinking").getString());
+        assertFalse(messages.get(1).hasKey("reasoning"));
+        assertEquals("混合正文", messages.get(2).get("content").getString());
+        assertEquals("混合思考", messages.get(2).get("thinking").getString());
+        assertFalse(messages.get(2).hasKey("reasoning"));
+        assertEquals("assistant", messages.get(3).get("role").getString(), "metadata 不影响目标字段选择");
+        assertEquals("载体思考", messages.get(3).get("thinking").getString());
+        assertEquals("assistant", messages.get(4).get("role").getString());
+        assertEquals("让我想想", messages.get(4).get("thinking").getString());
         assertEquals("get_weather",
-                arrayOf(messages.get(1).get("tool_calls")).get(0).get("function").get("name").getString());
-        assertEquals("继续", messages.get(2).get("content").getString());
+                arrayOf(messages.get(4).get("tool_calls")).get(0).get("function").get("name").getString());
+        assertEquals("继续", messages.get(5).get("content").getString());
     }
 
     /**
@@ -342,30 +397,34 @@ public class OllamaChatDialectRequestTest {
     }
 
     /**
-     * 助理消息：按 reasoningFieldName 回写思考内容（兼容 r1 的 tool-call）
+     * 助理消息：Ollama 固定使用原生 thinking，旧字段名不能改变目标 key。
      */
     @Test
-    public void assistantThinkingWrittenByReasoningFieldName() {
-        AssistantMessage msg = new AssistantMessage("答案", "推理过程", false)
-                .reasoningFieldName("reasoning");
+    public void assistantThinkingWrittenByTargetDialect() {
+        AssistantMessage msg = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"答案\",\"thinking\":\"推理过程\"," +
+                        "\"reasoningFieldName\":\"reasoning\"}");
 
         ONode node = dialect.buildChatMessageNode(config(), msg);
 
         assertEquals("答案", node.get("content").getString());
-        assertEquals("推理过程", node.get("reasoning").getString());
+        assertEquals("推理过程", node.get("thinking").getString());
+        assertFalse(node.hasKey("reasoning"));
+        assertFalse(node.hasKey("reasoning_content"));
     }
 
     /**
-     * 助理消息：字段名缺失或思考为空时都不写推理字段
+     * 助理消息：思考为空时不写 thinking。
      */
     @Test
-    public void assistantThinkingSkippedWhenFieldNameOrThinkingEmpty() {
+    public void assistantThinkingSkippedWhenThinkingEmpty() {
         ONode noFieldName = dialect.buildChatMessageNode(config(),
-                new AssistantMessage("答案", "推理过程", false));
+                new AssistantMessage("答案", "推理过程"));
+        assertEquals("推理过程", noFieldName.get("thinking").getString());
         assertFalse(noFieldName.hasKey("reasoning"));
 
-        ONode noThinking = dialect.buildChatMessageNode(config(),
-                new AssistantMessage("答案", "", false).reasoningFieldName("reasoning"));
+        ONode noThinking = dialect.buildChatMessageNode(config(), new AssistantMessage("答案", ""));
+        assertFalse(noThinking.hasKey("thinking"));
         assertFalse(noThinking.hasKey("reasoning"));
     }
 
@@ -386,16 +445,32 @@ public class OllamaChatDialectRequestTest {
      */
     @Test
     public void assistantToolCallsRawKeptWhenValid() {
-        AssistantMessage msg = new AssistantMessage("", "", false, null,
-                toolCallsRaw("get_weather", "{\"city\":\"杭州\"}"), null, null, null);
+        AssistantMessage msg = legacyAssistantWithToolCalls(
+                toolCallsRaw("get_weather", "{\"city\":\"杭州\"}"));
 
         ONode node = dialect.buildChatMessageNode(config(), msg);
 
         List<ONode> calls = arrayOf(node.get("tool_calls"));
         assertEquals(1, calls.size());
         assertEquals("call_1", calls.get(0).get("id").getString());
-        assertEquals("{\"city\":\"杭州\"}",
-                calls.get(0).get("function").get("arguments").getString());
+        assertEquals("杭州",
+                calls.get(0).get("function").get("arguments").get("city").getString());
+    }
+
+    @Test
+    public void assistantTypedToolCallsUseObjectArguments() {
+        Map<String, Object> args = new LinkedHashMap<>();
+        args.put("city", "杭州");
+        ToolCall typed = new ToolCall("0", "typed_1", "get_weather", null, args);
+        ONode legacy = ONode.ofJson(ChatMessage.toJson(
+                new AssistantMessage("", "", Arrays.asList(typed), null)));
+        legacy.set("toolCallsRaw", toolCallsRaw("raw_weather", "{\"city\":\"上海\"}"));
+        AssistantMessage msg = (AssistantMessage) ChatMessage.fromJson(legacy.toJson());
+
+        ONode call = dialect.buildChatMessageNode(config(), msg).get("tool_calls").get(0);
+        assertEquals("typed_1", call.get("id").getString());
+        assertEquals("get_weather", call.get("function").get("name").getString());
+        assertEquals("杭州", call.get("function").get("arguments").get("city").getString());
     }
 
     /**
@@ -403,13 +478,19 @@ public class OllamaChatDialectRequestTest {
      */
     @Test
     public void assistantToolCallsRawSanitizedWhenBroken() {
-        AssistantMessage msg = new AssistantMessage("", "", false, null,
-                toolCallsRaw("get_weather", "{\"city\":\"杭"), null, null, null);
+        AssistantMessage msg = legacyAssistantWithToolCalls(
+                toolCallsRaw("get_weather", "{\"city\":\"杭"));
 
         ONode node = dialect.buildChatMessageNode(config(), msg);
 
         assertEquals("{}", arrayOf(node.get("tool_calls")).get(0)
                 .get("function").get("arguments").getString());
+    }
+
+    private AssistantMessage legacyAssistantWithToolCalls(List<Map> toolCallsRaw) {
+        ONode legacy = new ONode().set("role", "assistant").set("text", "").set("thinking", "");
+        legacy.set("toolCallsRaw", toolCallsRaw);
+        return (AssistantMessage) ChatMessage.fromJson(legacy.toJson());
     }
 
     /// ////////////////////// buildAssistantToolCallMessageNode

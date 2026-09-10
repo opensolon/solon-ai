@@ -23,6 +23,9 @@ import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.event.*;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.MessageProtocolState;
+import org.noear.solon.ai.chat.source.Citation;
+import org.noear.solon.ai.chat.source.SearchResult;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolResult;
@@ -87,22 +90,230 @@ public class AnthropicRoundTripAlignTest {
         return requestBuilder.build(config, options, messages, false);
     }
 
-    /**
-     * 取第 idx 个内容项的唯一工具调用
-     */
-    private static ToolCall shardOf(ChatAccumulator acc, int idx) {
-        AssistantMessage item = acc.getContentItems().get(idx);
-        assertNotNull(item.getToolCalls(), "content item " + idx + " should carry a tool call shard");
-        assertEquals(1, item.getToolCalls().size());
-        return item.getToolCalls().get(0);
+    @Test
+    public void nonStreamOrderedBlocksRoundTripExactlyOnce() {
+        String content = "[{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"sig_0\"},"
+                + "{\"type\":\"text\",\"text\":\"A\",\"citations\":[]},"
+                + "{\"type\":\"mcp_tool_use\",\"id\":\"m1\",\"name\":\"query\",\"input\":{\"q\":1},\"server_name\":\"s\"},"
+                + "{\"type\":\"text\",\"text\":\"B\"},"
+                + "{\"type\":\"thinking\",\"thinking\":\"second\",\"signature\":\"sig_2\"}]";
+        ChatStreamContext ctx = newCtx(false);
+        parser.parseNonStreamResponse(ctx, "{\"model\":\"claude-sonnet-4-5\",\"content\":" + content + "}");
+        AssistantMessage message = ctx.getAccumulator().snapshotTerminal().getMessage();
+        assertTrue(message.hasProtocolState(AnthropicMessageStateSupport.PROTOCOL_ID));
+        assertFalse(ChatMessage.toJson(message).contains("contentRaw"));
+        AssistantMessage restored = (AssistantMessage) ChatMessage.fromJson(ChatMessage.toJson(message));
+        ONode replay = build(ChatOptions.of(), Arrays.asList(restored)).get("messages").get(0).get("content");
+        assertEquals(ONode.ofJson(content).toJson(), replay.toJson());
+        assertEquals(5, replay.size(), "完整载体优先回放时不得再追加旧分类载体");
     }
 
-    /// ///////////////// 事件增量：tool_use 参数分片
+    @Test
+    public void foreignOrStaleProtocolStateIsNotReplayed() {
+        AssistantMessage foreignThinking = AssistantMessage.snapshot(
+                "", "foreign", null, null, null, null,
+                Collections.singletonMap("openai.responses", new MessageProtocolState(1,
+                        Collections.<String, Object>singletonMap("reasoningItemId", "rs_1"))));
+        ONode foreignRoot = build(ChatOptions.of(), Arrays.asList(ChatMessage.ofUser("hi"), foreignThinking));
+        assertEquals(1, foreignRoot.get("messages").size(), foreignRoot.toJson());
+
+        Map<String, Object> oldData = new LinkedHashMap<>();
+        oldData.put(AnthropicResponseParser.CONTENT_BLOCKS_RAW_KEY,
+                Collections.singletonList("{\"type\":\"text\",\"text\":\"old\"}"));
+        AssistantMessage unbound = restoreWithProtocolState(
+                "{\"role\":\"assistant\",\"text\":\"new\",\"thinking\":\"\"}",
+                AnthropicMessageStateSupport.PROTOCOL_ID,
+                new MessageProtocolState(AnthropicMessageStateSupport.VERSION, oldData));
+        ONode unboundContent = build(ChatOptions.of(), Collections.<ChatMessage>singletonList(unbound))
+                .get("messages").get(0).get("content");
+        assertEquals("new", unboundContent.getString(), "缺失 semanticHash 的新状态必须 fail-closed");
+
+        AssistantMessage old = AssistantMessage.snapshot(
+                "old", "", null, null, null, null,
+                Collections.singletonMap(AnthropicMessageStateSupport.PROTOCOL_ID,
+                        new MessageProtocolState(AnthropicMessageStateSupport.VERSION, oldData)));
+        AssistantMessage changed = AssistantMessage.snapshot(
+                "new", "", null, null, null, null,
+                Collections.singletonMap(AnthropicMessageStateSupport.PROTOCOL_ID,
+                        old.getProtocolState(AnthropicMessageStateSupport.PROTOCOL_ID)));
+
+        ONode changedContent = build(ChatOptions.of(), Collections.<ChatMessage>singletonList(changed))
+                .get("messages").get(0).get("content");
+        assertEquals("new", changedContent.getString(), "语义变更后必须降级为通用字段重建");
+    }
+
+    @Test
+    public void targetStateWrongVersionFailsClosedEvenWithLegacyRaw() {
+        Map<String, Object> wrongVersionData = new LinkedHashMap<>();
+        wrongVersionData.put(AnthropicResponseParser.CONTENT_BLOCKS_RAW_KEY,
+                Collections.singletonList("{\"type\":\"text\",\"text\":\"wrong-version\"}"));
+        AssistantMessage message = restoreWithProtocolState(
+                "{\"role\":\"assistant\",\"text\":\"generic\"," +
+                        "\"contentRaw\":{\"anthropicContentBlocks\":[" +
+                        "\"{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"legacy\\\"}\"]}}",
+                AnthropicMessageStateSupport.PROTOCOL_ID,
+                new MessageProtocolState(AnthropicMessageStateSupport.VERSION + 1, wrongVersionData));
+
+        ONode content = build(ChatOptions.of(), Collections.<ChatMessage>singletonList(message))
+                .get("messages").get(0).get("content");
+        assertTrue(content.isString(), content.toJson());
+        assertEquals("generic", content.getString(),
+                "目标协议状态存在但版本错误时不得回退到可能同样陈旧的 legacy raw");
+    }
+
+    @Test
+    public void foreignStateDoesNotSuppressLegacyAnthropicRaw() {
+        AssistantMessage message = restoreWithProtocolState(
+                "{\"role\":\"assistant\",\"text\":\"generic\"," +
+                        "\"contentRaw\":{\"anthropicContentBlocks\":[" +
+                        "\"{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"legacy-anthropic\\\"}\"]}}",
+                "openai.responses",
+                new MessageProtocolState(1,
+                        Collections.<String, Object>singletonMap("reasoningItemId", "rs_1")));
+
+        ONode content = build(ChatOptions.of(), Collections.<ChatMessage>singletonList(message))
+                .get("messages").get(0).get("content");
+        assertEquals("legacy-anthropic", content.get(0).get("text").getString(),
+                "外协议状态不能阻止 Anthropic 对自身 legacy raw 的兼容读取");
+    }
+
+    @Test
+    public void foreignAndAnthropicStatesRemainIsolatedOnSameMessage() {
+        Map<String, Object> anthropicData = new LinkedHashMap<>();
+        anthropicData.put(AnthropicResponseParser.CONTENT_BLOCKS_RAW_KEY,
+                Collections.singletonList("{\"type\":\"text\",\"text\":\"anthropic\"}"));
+        Map<String, MessageProtocolState> states = new LinkedHashMap<>();
+        states.put("openai.responses", new MessageProtocolState(7,
+                Collections.<String, Object>singletonMap("item", "foreign")));
+        states.put(AnthropicMessageStateSupport.PROTOCOL_ID,
+                new MessageProtocolState(AnthropicMessageStateSupport.VERSION, anthropicData));
+        AssistantMessage message = AssistantMessage.snapshot(
+                "anthropic", "", null, null, null, null, states);
+
+        ONode content = build(ChatOptions.of(), Collections.<ChatMessage>singletonList(message))
+                .get("messages").get(0).get("content");
+        assertEquals("anthropic", content.get(0).get("text").getString());
+        assertEquals("foreign", message.getProtocolState("openai.responses").getData().get("item"),
+                "读取 Anthropic 状态不得串改同消息上的外协议状态");
+    }
+
+    @Test
+    public void damagedOrderedBlocksFallBackAtomicallyToGenericSemantics() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put(AnthropicResponseParser.CONTENT_BLOCKS_RAW_KEY, Arrays.asList(
+                "{\"type\":\"text\",\"text\":\"stale-prefix\"}",
+                "{broken"));
+        ToolCall call = new ToolCall("0", "toolu_fallback", "fallback_tool", "{}",
+                new LinkedHashMap<String, Object>());
+        AssistantMessage message = AssistantMessage.snapshot(
+                "generic-text", "", Collections.singletonList(call), null,
+                null, null,
+                Collections.singletonMap(AnthropicMessageStateSupport.PROTOCOL_ID,
+                        new MessageProtocolState(AnthropicMessageStateSupport.VERSION, data)));
+
+        ONode content = build(ChatOptions.of(), Collections.<ChatMessage>singletonList(message))
+                .get("messages").get(0).get("content");
+        assertEquals(2, content.size(), content.toJson());
+        assertEquals("generic-text", content.get(0).get("text").getString());
+        assertEquals("tool_use", content.get(1).get("type").getString());
+        assertEquals("fallback_tool", content.get(1).get("name").getString());
+        assertFalse(content.toJson().contains("stale-prefix"),
+                "任一有序块损坏时不得部分回放已通过校验的前缀");
+    }
+
+    @Test
+    public void structuredProtocolStateDataCanBeReplayedAfterJsonRestore() {
+        Map<String, Object> textBlock = new LinkedHashMap<>();
+        textBlock.put("type", "text");
+        textBlock.put("text", "structured");
+        Map<String, Object> container = new LinkedHashMap<>();
+        container.put("id", "cnt_structured");
+        container.put("expires_at", "ignored");
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put(AnthropicResponseParser.CONTENT_BLOCKS_RAW_KEY, Collections.singletonList(textBlock));
+        data.put(AnthropicResponseParser.CONTAINER_RAW_KEY, container);
+        AssistantMessage message = AssistantMessage.snapshot(
+                "structured", "", null, null, null, null,
+                Collections.singletonMap(AnthropicMessageStateSupport.PROTOCOL_ID,
+                        new MessageProtocolState(AnthropicMessageStateSupport.VERSION, data)));
+        AssistantMessage restored = (AssistantMessage) ChatMessage.fromJson(ChatMessage.toJson(message));
+
+        ONode root = build(ChatOptions.of(), Collections.<ChatMessage>singletonList(restored));
+        assertEquals("structured", root.get("messages").get(0).get("content").get(0).get("text").getString());
+        assertEquals("cnt_structured", root.get("container").getString());
+        assertFalse(root.toJson().contains("expires_at"));
+    }
+
+    @Test
+    public void fragmentedStreamSignatureIsAssembledThenReplayed() {
+        ChatStreamContext ctx = newCtx(true);
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"text_delta\",\"text\":\"tail\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"plan\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"sig_\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"mcp_tool_use\",\"id\":\"m1\",\"name\":\"q\",\"input\":{}}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"x\\\":1}\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"abc\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_stop\"}");
+
+        AssistantMessage message = ctx.getAccumulator().snapshotTerminal().getMessage();
+        ONode replay = build(ChatOptions.of(), Arrays.asList(message)).get("messages").get(0).get("content");
+        assertEquals("thinking", replay.get(0).get("type").getString());
+        assertEquals("plan", replay.get(0).get("thinking").getString());
+        assertEquals("sig_abc", replay.get(0).get("signature").getString());
+        assertEquals(1, replay.get(1).get("input").get("x").getInt());
+        assertEquals("tail", replay.get(2).get("text").getString());
+    }
+
+    @Test
+    public void nativeServerOnlyToolsCountForParallelAndCache() {
+        Map<String, Object> tool = new LinkedHashMap<>();
+        tool.put("type", "web_search_20250305");
+        tool.put("name", "web_search");
+        ONode root = build(ChatOptions.of().optionSet("tools", Collections.singletonList(tool))
+                        .optionSet("parallel_tool_calls", false).cacheControl(CacheControl.ofEphemeral()),
+                Collections.singletonList(ChatMessage.ofUser("search")));
+        assertTrue(root.get("tool_choice").get("disable_parallel_tool_use").getBoolean());
+        assertEquals("ephemeral", root.get("tools").get(0).get("cache_control").get("type").getString());
+    }
+
+
 
     /**
-     * 本地 tool_use：每个 input_json_delta 都要落成一个内容项（核心据此发真增量 TOOL_CALL_ARGS_DELTA），
-     * 且 content_block_stop 不得再补一个「全量参数」的内容项——补了会让核心把同一份参数二次累积。
+     * 本地 tool_use 的开始、参数分片和结束都通过 ChatEvent 表达，参数聚合由 ChatAccumulator 完成。
      */
+    @Test
+    public void streamingTextAndToolKeepsRealOrderedStateAcrossSyntheticToolMessage() {
+        ChatStreamContext ctx = newCtx(true);
+        ChatAccumulator acc = ctx.getAccumulator();
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":0,"
+                + "\"content_block\":{\"type\":\"text\",\"text\":\"\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":0,"
+                + "\"delta\":{\"type\":\"text_delta\",\"text\":\"我先查询\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":1,"
+                + "\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"search\",\"input\":{}}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":1,"
+                + "\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"q\\\":\\\"solon\\\"}\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_stop\",\"index\":1}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_stop\"}");
+
+        // 模拟核心工具递归构建的合成 assistant；它不得覆盖真实流式 parser 保存的有序块。
+        ONode syntheticNode = requestBuilder.buildAssistantToolCallMessageNode(acc, acc.getToolCallBuilders());
+        for (AssistantMessage item : AnthropicChatDialect.getInstance().parseAssistantMessage(acc, syntheticNode)) {
+            acc.mergeTerminalMessage(item);
+        }
+
+        AssistantMessage message = acc.snapshotTerminal().getMessage();
+        ONode replay = build(ChatOptions.of(), Collections.<ChatMessage>singletonList(message))
+                .get("messages").get(0).get("content");
+        assertEquals(2, replay.size(), replay.toJson());
+        assertEquals("text", replay.get(0).get("type").getString());
+        assertEquals("我先查询", replay.get(0).get("text").getString());
+        assertEquals("tool_use", replay.get(1).get("type").getString());
+        assertEquals("solon", replay.get(1).get("input").get("q").getString());
+    }
+
     @Test
     public void toolUseArgsDeliveredAsShards() {
         ChatStreamContext ctx = newCtx(true);
@@ -111,32 +322,23 @@ public class AnthropicRoundTripAlignTest {
         parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":0,"
                 + "\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"get_weather\",\"input\":{}}}");
 
-        assertEquals(1, acc.getContentItems().size(), "block start should open the tool call");
-        ToolCall head = shardOf(acc, 0);
-        assertEquals("toolu_1", head.getId());
-        assertEquals("0", head.getIndex(), "分片归属必须用协议的块 index，否则并行工具会串参数");
-        assertEquals("get_weather", head.getName());
-        assertNull(head.getArgumentsStr(), "空对象 input 不能变成 \"{}\" 前缀，否则与后续分片拼成脏值");
+        assertEquals(1, allOf(ChatEventType.TOOL_CALL_START).size(), "block start should open the tool call");
+        assertEquals(0, allOf(ChatEventType.TOOL_CALL_ARGS_DELTA).size(), "empty input must not emit an args delta");
 
         parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":0,"
                 + "\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"city\\\":\"}}");
         parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":0,"
                 + "\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"上海\\\"}\"}}");
 
-        assertEquals(3, acc.getContentItems().size(), "每个 input_json_delta 应各自成项（真增量）");
-        assertEquals("{\"city\":", shardOf(acc, 1).getArgumentsStr());
-        assertEquals("\"上海\"}", shardOf(acc, 2).getArgumentsStr());
+        List<ChatEvent> args = allOf(ChatEventType.TOOL_CALL_ARGS_DELTA);
+        assertEquals(2, args.size(), "每个 input_json_delta 应各自产生事件");
+        assertEquals("{\"city\":", args.get(0).getText());
+        assertEquals("\"上海\"}", args.get(1).getText());
+        assertEquals("{\"city\":\"上海\"}", acc.getToolCallBuilders().get("idx:0").argumentsBuilder.toString());
 
         parser.parseStreamResponse(ctx, "{\"type\":\"content_block_stop\",\"index\":0}");
-        assertEquals(3, acc.getContentItems().size(),
-                "content_block_stop 不能再补全量参数项：核心会二次累积并多发一条全量 ARGS_DELTA");
-
-        //各分片按序拼接即为完整参数（核心 ToolCallBuilder 的累积等价物）
-        StringBuilder joined = new StringBuilder();
-        for (int i = 1; i < acc.getContentItems().size(); i++) {
-            joined.append(shardOf(acc, i).getArgumentsStr());
-        }
-        assertEquals("{\"city\":\"上海\"}", joined.toString());
+        assertEquals(0, allOf(ChatEventType.TOOL_CALL_END).size(),
+                "content_block_stop 只释放协议状态，END 由完整流核心统一发出");
     }
 
     /**
@@ -153,11 +355,79 @@ public class AnthropicRoundTripAlignTest {
                 + "\"input\":{\"a\":1}}}");
         parser.parseStreamResponse(ctx, "{\"type\":\"content_block_stop\",\"index\":2}");
 
-        assertEquals(1, acc.getContentItems().size());
-        ToolCall call = shardOf(acc, 0);
-        assertEquals("2", call.getIndex());
-        assertEquals("{\"a\":1}", call.getArgumentsStr(),
-                "start 携带的 input 初值不读，参数就只剩空对象");
+        assertEquals(1, allOf(ChatEventType.TOOL_CALL_START).size());
+        List<ChatEvent> args = allOf(ChatEventType.TOOL_CALL_ARGS_DELTA);
+        assertEquals(1, args.size(), "start 携带的 input 初值应作为一条参数增量发出");
+        assertEquals("{\"a\":1}", args.get(0).getText());
+        assertEquals(0, allOf(ChatEventType.TOOL_CALL_END).size(),
+                "parser 不应抢在核心完整聚合前发 END");
+        assertEquals("{\"a\":1}", acc.getToolCallBuilders().get("idx:2").argumentsBuilder.toString());
+    }
+
+    @Test
+    public void initialInputFollowedByDeltaUsesOneValidAuthoritativeObject() {
+        ChatStreamContext ctx = newCtx(true);
+        ChatAccumulator acc = ctx.getAccumulator();
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":4,"
+                + "\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_mix\",\"name\":\"f\","
+                + "\"input\":{\"from_start\":1}}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":4,"
+                + "\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"from_delta\\\":2}\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_stop\",\"index\":4}");
+
+        List<ChatEvent> args = allOf(ChatEventType.TOOL_CALL_ARGS_DELTA);
+        assertEquals(1, args.size(), "兼容形态应延迟决策，不能发出 start JSON 后再直接拼 delta JSON");
+        assertEquals("{\"from_delta\":2}", args.get(0).getText());
+        assertEquals("{\"from_delta\":2}",
+                acc.getToolCallBuilders().get("idx:4").argumentsBuilder.toString());
+        assertEquals(1, acc.getToolCallBuilders().size(), "通用工具调用不得因兼容参数形态而静默丢失");
+    }
+
+    @Test
+    public void invalidDeltaAfterInitialInputFallsBackToValidInitialObject() {
+        ChatStreamContext ctx = newCtx(true);
+        ChatAccumulator acc = ctx.getAccumulator();
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":5,"
+                + "\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_partial\",\"name\":\"f\","
+                + "\"input\":{\"safe\":true}}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":5,"
+                + "\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\",\\\"tail\\\":1}\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_stop\",\"index\":5}");
+
+        assertEquals("{\"safe\":true}",
+                acc.getToolCallBuilders().get("idx:5").argumentsBuilder.toString(),
+                "无法可靠解释 delta 时应保留 start 的合法对象，不能生成非法累计串");
+        assertEquals(1, allOf(ChatEventType.TOOL_CALL_START).size());
+    }
+
+    /**
+     * 非流式没有流末核心补位，工具调用必须在完整响应内发出唯一的完整生命周期。
+     */
+    @Test
+    public void nonStreamToolUseEmitsCompleteLifecycle() {
+        ChatStreamContext ctx = newCtx(false);
+
+        parser.parseNonStreamResponse(ctx, "{\"model\":\"claude-sonnet-4-5\",\"stop_reason\":\"tool_use\","
+                + "\"content\":[{\"type\":\"text\",\"text\":\"先查一下\"},"
+                + "{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"get_weather\","
+                + "\"input\":{\"city\":\"杭州\"}}]}");
+
+        List<ChatEvent> starts = allOf(ChatEventType.TOOL_CALL_START);
+        List<ChatEvent> args = allOf(ChatEventType.TOOL_CALL_ARGS_DELTA);
+        List<ChatEvent> ends = allOf(ChatEventType.TOOL_CALL_END);
+        assertEquals(1, starts.size());
+        assertEquals(1, args.size());
+        assertEquals(1, ends.size());
+        assertEquals(1, starts.get(0).getIndex());
+        assertEquals(1, args.get(0).getIndex());
+        assertEquals(1, ends.get(0).getIndex());
+        assertEquals("{\"city\":\"杭州\"}", args.get(0).getText());
+        assertEquals("toolu_1", ends.get(0).getToolCallId());
+        assertEquals("get_weather", ends.get(0).getToolCall().getName());
+        assertEquals("杭州", ends.get(0).getToolCall().getArguments().get("city"));
+        assertEquals(1, ctx.getAccumulator().snapshotTerminal().getToolCalls().size());
     }
 
     /**
@@ -170,14 +440,15 @@ public class AnthropicRoundTripAlignTest {
         parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":0,"
                 + "\"content_block\":{\"type\":\"server_tool_use\",\"id\":\"srv_1\",\"name\":\"web_search\","
                 + "\"input\":{\"query\":\"solon\"}}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_stop\",\"index\":0}");
 
         List<ChatEvent> deltas = allOf(ChatEventType.SERVER_TOOL_ARGS_DELTA);
         assertEquals(1, deltas.size(), "start 里的 input 初值应发一条参数事件");
         assertEquals("{\"query\":\"solon\"}", deltas.get(0).getText());
         assertEquals("srv_1", deltas.get(0).getToolCallId());
 
-        //服务端工具不是本地 function call，不得进入内容项
-        assertTrue(ctx.getAccumulator().hasContentItems() == false);
+        //服务端工具不是本地 function call，不得进入本地工具聚合
+        assertTrue(ctx.getAccumulator().snapshotTerminal().getToolCalls().isEmpty());
     }
 
     /// ///////////////// call/stream 对称：非流式 citations
@@ -199,12 +470,30 @@ public class AnthropicRoundTripAlignTest {
         assertEquals(2, citations.size(), "内嵌 citations 应逐条发 CITATION");
         assertEquals("web_search_result_location", citations.get(0).getSubType());
         assertEquals("https://a.dev/x", citations.get(0).getText());
+        assertEquals(0, citations.get(0).getIndex());
+        assertEquals("web_search_result_location", citations.get(0).getRaw().get("type").getString());
+        Citation webCitation = citations.get(0).getCitation();
+        assertNotNull(webCitation);
+        assertEquals("web_search_result_location", webCitation.getType());
+        assertEquals("A", webCitation.getTitle());
+        assertEquals("https://a.dev/x", webCitation.getUrl());
+        assertNull(webCitation.getCitedText());
         //文档类定位没有 url，取 cited_text
         assertEquals("page_location", citations.get(1).getSubType());
         assertEquals("第 3 页原文", citations.get(1).getText());
+        Citation pageCitation = citations.get(1).getCitation();
+        assertNotNull(pageCitation);
+        assertEquals("page_location", pageCitation.getType());
+        assertEquals("手册", pageCitation.getTitle());
+        assertNull(pageCitation.getUrl());
+        assertEquals("第 3 页原文", pageCitation.getCitedText());
 
-        //正文不受影响
-        assertEquals("据报道", ctx.getAccumulator().lastItem().getContent());
+        ChatResponse terminal = ctx.getAccumulator().snapshotTerminal();
+        assertTrue(terminal.isTerminal());
+        assertEquals("据报道", terminal.getText());
+        assertEquals(2, terminal.getCitations().size());
+        assertEquals("A", terminal.getCitations().get(0).getTitle());
+        assertEquals("手册", terminal.getCitations().get(1).getTitle());
     }
 
     /**
@@ -218,8 +507,68 @@ public class AnthropicRoundTripAlignTest {
                 + "\"content_block\":{\"type\":\"text\",\"text\":\"x\",\"citations\":["
                 + "{\"type\":\"search_result_location\",\"url\":\"https://b.dev\"}]}}");
 
-        assertEquals(1, allOf(ChatEventType.CITATION).size());
-        assertEquals("https://b.dev", allOf(ChatEventType.CITATION).get(0).getText());
+        List<ChatEvent> citations = allOf(ChatEventType.CITATION);
+        assertEquals(1, citations.size());
+        assertEquals("https://b.dev", citations.get(0).getText());
+        assertEquals(0, citations.get(0).getIndex());
+        assertEquals("search_result_location", citations.get(0).getCitation().getType());
+        assertEquals("https://b.dev", citations.get(0).getCitation().getUrl());
+        assertEquals(1, ctx.getAccumulator().snapshotTerminal().getCitations().size());
+    }
+
+    /**
+     * 标准流式 citations_delta 必须合并进最终 text 块，并在下一轮请求中原样回放。
+     */
+    @Test
+    public void streamCitationDeltasLandInTerminalBlocksAndReplay() {
+        ChatStreamContext ctx = newCtx(true);
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":0,"
+                + "\"content_block\":{\"type\":\"text\",\"text\":\"\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":0,"
+                + "\"delta\":{\"type\":\"text_delta\",\"text\":\"据报道\"}}");
+        String firstCitationDelta = "{\"type\":\"content_block_delta\",\"index\":0,"
+                + "\"delta\":{\"type\":\"citations_delta\",\"citation\":{"
+                + "\"type\":\"web_search_result_location\",\"url\":\"https://a.dev/x\","
+                + "\"title\":\"A\",\"cited_text\":\"来源 A\"}}}";
+        assertTrue(parser.parseStreamResponse(ctx, firstCitationDelta));
+        assertTrue(parser.parseStreamResponse(ctx, firstCitationDelta),
+                "兼容网关重放同一 citation delta 时仍应视为已消费，只是不重复发事件或写终态块");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":0,"
+                + "\"delta\":{\"type\":\"citations_delta\",\"citation\":{"
+                + "\"type\":\"page_location\",\"document_index\":1,\"start_page_number\":2,"
+                + "\"end_page_number\":2,\"cited_text\":\"来源 B\",\"document_title\":\"手册\"}}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_stop\"}");
+
+        AssistantMessage message = ctx.getAccumulator().snapshotTerminal().getMessage();
+        Map<?, ?> contentRaw = AnthropicMessageStateSupport.resolveData(message);
+        List<?> blocks = (List<?>) contentRaw.get("anthropicContentBlocks");
+        assertEquals(1, blocks.size());
+
+        ONode terminalBlock = ONode.ofJson((String) blocks.get(0));
+        assertEquals("据报道", terminalBlock.get("text").getString());
+        assertEquals(2, terminalBlock.get("citations").size());
+        assertEquals("https://a.dev/x", terminalBlock.get("citations").get(0).get("url").getString());
+        assertEquals("来源 B", terminalBlock.get("citations").get(1).get("cited_text").getString());
+
+        ONode replay = build(ChatOptions.of(), Collections.singletonList(message))
+                .get("messages").get(0).get("content").get(0);
+        assertEquals(terminalBlock.toJson(), replay.toJson());
+        List<ChatEvent> citationEvents = allOf(ChatEventType.CITATION);
+        assertEquals(2, citationEvents.size(), "重复引用 delta 不应产生重复事件");
+        Citation first = citationEvents.get(0).getCitation();
+        assertNotNull(first);
+        assertEquals("web_search_result_location", first.getType());
+        assertEquals("A", first.getTitle());
+        assertEquals("https://a.dev/x", first.getUrl());
+        assertEquals("来源 A", first.getCitedText());
+        assertEquals(0, citationEvents.get(0).getIndex());
+        assertEquals("content_block_delta", citationEvents.get(0).getRaw().get("type").getString());
+
+        List<Citation> terminalCitations = ctx.getAccumulator().snapshotTerminal().getCitations();
+        assertEquals(2, terminalCitations.size());
+        assertEquals("手册", terminalCitations.get(1).getTitle());
+        assertEquals("来源 B", terminalCitations.get(1).getCitedText());
     }
 
     /// ///////////////// 回环：服务端工具块与容器
@@ -236,10 +585,12 @@ public class AnthropicRoundTripAlignTest {
                 + "\"content\":["
                 + "{\"type\":\"server_tool_use\",\"id\":\"srv_1\",\"name\":\"web_search\",\"input\":{\"query\":\"q\"}},"
                 + "{\"type\":\"web_search_tool_result\",\"tool_use_id\":\"srv_1\",\"content\":["
-                + "{\"type\":\"web_search_result\",\"title\":\"T\",\"url\":\"u\",\"encrypted_content\":\"enc_xyz\"}]}"
+                + "{\"type\":\"web_search_result\",\"id\":\"result_1\",\"index\":4,"
+                + "\"title\":\"T\",\"url\":\"u\",\"snippet\":\"摘要\",\"encrypted_content\":\"enc_xyz\"}]}"
                 + "]}");
 
-        Map<?, ?> contentRaw = (Map<?, ?>) ctx.getAccumulator().lastItem().getContentRaw();
+        ChatResponse terminal = ctx.getAccumulator().snapshotTerminal();
+        Map<?, ?> contentRaw = AnthropicMessageStateSupport.resolveData(terminal.getMessage());
         assertNotNull(contentRaw, "服务端工具轮次必须留下可回传的 contentRaw");
 
         List<?> blocks = (List<?>) contentRaw.get("anthropicServerToolBlocks");
@@ -247,6 +598,14 @@ public class AnthropicRoundTripAlignTest {
         assertTrue(String.valueOf(blocks.get(1)).contains("enc_xyz"),
                 "encrypted_content 是服务端签发的 opaque 凭证，必须原样留存");
         assertTrue(String.valueOf(contentRaw.get("anthropicContainer")).contains("cnt_1"));
+
+        List<SearchResult> searchResults = terminal.getSearchResults();
+        assertEquals(1, searchResults.size());
+        assertEquals(Integer.valueOf(4), searchResults.get(0).getIndex());
+        assertEquals("result_1", searchResults.get(0).getId());
+        assertEquals("T", searchResults.get(0).getTitle());
+        assertEquals("u", searchResults.get(0).getUrl());
+        assertEquals("摘要", searchResults.get(0).getSnippet());
     }
 
     /**
@@ -273,7 +632,8 @@ public class AnthropicRoundTripAlignTest {
         assertEquals(1, status.size());
         assertEquals("pause_turn", status.get(0).getSubType());
 
-        Map<?, ?> contentRaw = (Map<?, ?>) ctx.getAccumulator().lastItem().getContentRaw();
+        ChatResponse terminal = ctx.getAccumulator().snapshotTerminal();
+        Map<?, ?> contentRaw = AnthropicMessageStateSupport.resolveData(terminal.getMessage());
         assertNotNull(contentRaw, "pause_turn 续跑需要一个能带走服务端块的载体帧");
         List<?> blocks = (List<?>) contentRaw.get("anthropicServerToolBlocks");
         assertEquals(2, blocks.size());
@@ -282,18 +642,57 @@ public class AnthropicRoundTripAlignTest {
     }
 
     /**
+     * 流式 server_tool_use 从空 input 起步时，块尾必须把所有 input_json_delta
+     * 回填到终态 contentRaw 的回放块，不能保留最初的空对象。
+     */
+    @Test
+    public void streamServerToolDeltaInputCompletedInTerminalReplayBlock() {
+        ChatStreamContext ctx = newCtx(true);
+
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_start\",\"index\":0,"
+                + "\"content_block\":{\"type\":\"server_tool_use\",\"id\":\"srv_1\","
+                + "\"name\":\"web_search\",\"input\":{}}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":0,"
+                + "\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"query\\\":\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_delta\",\"index\":0,"
+                + "\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"solon\\\"}\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"content_block_stop\",\"index\":0}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"pause_turn\"}}");
+        parser.parseStreamResponse(ctx, "{\"type\":\"message_stop\"}");
+
+        List<ChatEvent> deltas = allOf(ChatEventType.SERVER_TOOL_ARGS_DELTA);
+        assertEquals(2, deltas.size(), "参数分片应逐片交付");
+        assertEquals("{\"query\":", deltas.get(0).getText());
+        assertEquals("\"solon\"}", deltas.get(1).getText());
+
+        ChatResponse terminal = ctx.getAccumulator().snapshotTerminal();
+        Map<?, ?> contentRaw = AnthropicMessageStateSupport.resolveData(terminal.getMessage());
+        assertNotNull(contentRaw, "message_stop 应生成服务端工具终态载体");
+        List<?> blocks = (List<?>) contentRaw.get("anthropicServerToolBlocks");
+        assertEquals(1, blocks.size());
+
+        ONode replayBlock = ONode.ofJson((String) blocks.get(0));
+        assertEquals("server_tool_use", replayBlock.get("type").getString());
+        assertEquals("srv_1", replayBlock.get("id").getString());
+        assertEquals("web_search", replayBlock.get("name").getString());
+        assertEquals("solon", replayBlock.get("input").get("query").getString(),
+                "回放块 input 必须是所有 delta 拼成的完整参数");
+        assertTrue(terminal.getToolCalls().isEmpty(), "server_tool_use 不应进入本地工具调用");
+    }
+
+    /**
      * 出站：历史里的服务端工具块原样回传，位置在 text 之前（与真实响应的块序一致）。
      */
     @Test
     public void serverToolBlocksReplayedInRequest() {
-        Map<String, Object> contentRaw = new LinkedHashMap<>();
-        contentRaw.put("anthropicServerToolBlocks", Arrays.asList(
-                "{\"type\":\"server_tool_use\",\"id\":\"srv_1\",\"name\":\"web_search\",\"input\":{\"query\":\"q\"}}",
-                "{\"type\":\"web_search_tool_result\",\"tool_use_id\":\"srv_1\",\"content\":"
-                        + "[{\"type\":\"web_search_result\",\"url\":\"u\",\"encrypted_content\":\"enc_xyz\"}]}"));
-
-        AssistantMessage history = new AssistantMessage("查到了", "", false,
-                contentRaw, null, null, null);
+        AssistantMessage history = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"查到了\"," +
+                        "\"contentRaw\":{\"anthropicServerToolBlocks\":[" +
+                        "\"{\\\"type\\\":\\\"server_tool_use\\\",\\\"id\\\":\\\"srv_1\\\"," +
+                        "\\\"name\\\":\\\"web_search\\\",\\\"input\\\":{\\\"query\\\":\\\"q\\\"}}\"," +
+                        "\"{\\\"type\\\":\\\"web_search_tool_result\\\",\\\"tool_use_id\\\":\\\"srv_1\\\"," +
+                        "\\\"content\\\":[{\\\"type\\\":\\\"web_search_result\\\",\\\"url\\\":\\\"u\\\"," +
+                        "\\\"encrypted_content\\\":\\\"enc_xyz\\\"}]}\"]}}");
 
         ONode root = build(ChatOptions.of(), Arrays.asList(ChatMessage.ofUser("查一下"), history,
                 ChatMessage.ofUser("继续")));
@@ -311,11 +710,10 @@ public class AnthropicRoundTripAlignTest {
      */
     @Test
     public void containerReplayedAsTopLevelId() {
-        Map<String, Object> contentRaw = new LinkedHashMap<>();
-        contentRaw.put("anthropicContainer", "{\"id\":\"cnt_1\",\"expires_at\":\"2026-01-01T00:00:00Z\"}");
-
-        AssistantMessage history = new AssistantMessage("done", "", false,
-                contentRaw, null, null, null);
+        AssistantMessage history = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"done\"," +
+                        "\"contentRaw\":{\"anthropicContainer\":" +
+                        "\"{\\\"id\\\":\\\"cnt_1\\\",\\\"expires_at\\\":\\\"2026-01-01T00:00:00Z\\\"}\"}}");
 
         ONode root = build(ChatOptions.of(), Arrays.asList(ChatMessage.ofUser("跑个脚本"), history,
                 ChatMessage.ofUser("再跑一次")));
@@ -329,9 +727,9 @@ public class AnthropicRoundTripAlignTest {
      */
     @Test
     public void explicitContainerNotOverridden() {
-        Map<String, Object> contentRaw = new LinkedHashMap<>();
-        contentRaw.put("anthropicContainer", "{\"id\":\"cnt_old\"}");
-        AssistantMessage history = new AssistantMessage("done", "", false, contentRaw, null, null, null);
+        AssistantMessage history = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"done\"," +
+                        "\"contentRaw\":{\"anthropicContainer\":\"{\\\"id\\\":\\\"cnt_old\\\"}\"}}");
 
         ONode root = build(ChatOptions.of().optionSet("container", "cnt_new"),
                 Arrays.asList(ChatMessage.ofUser("hi"), history));
@@ -463,7 +861,40 @@ public class AnthropicRoundTripAlignTest {
         assertEquals("f", tool0.get("name").getString());
         assertEquals("正经描述", tool0.get("description").getString());
         assertEquals("object", tool0.get("input_schema").get("type").getString());
+        assertTrue(tool0.get("input_schema").get("properties").isObject());
+        assertTrue(tool0.get("input_schema").get("properties").getObject().isEmpty(),
+                "无参数工具的 properties 必须是空对象，不能生成空字符串属性名");
         assertFalse(tool0.hasKey("cache_control"));
+    }
+
+    @Test
+    public void emptyOrInvalidToolSchemaFallsBackToEmptyPropertiesObject() {
+        ONode empty = build(ChatOptions.of()
+                        .toolAdd("empty", t -> t.description("d").inputSchema("")),
+                Collections.singletonList(ChatMessage.ofUser("hi")));
+        ONode emptyProperties = empty.get("tools").get(0).get("input_schema").get("properties");
+        assertTrue(emptyProperties.isObject());
+        assertTrue(emptyProperties.getObject().isEmpty());
+
+        ONode invalid = build(ChatOptions.of()
+                        .toolAdd("invalid", t -> t.description("d").inputSchema("{invalid")),
+                Collections.singletonList(ChatMessage.ofUser("hi")));
+        ONode invalidProperties = invalid.get("tools").get(0).get("input_schema").get("properties");
+        assertTrue(invalidProperties.isObject());
+        assertTrue(invalidProperties.getObject().isEmpty());
+    }
+
+    @Test
+    public void nonObjectToolSchemasFallBackToEmptyObject() {
+        for (String schema : Arrays.asList("[]", "\"string\"", "123", "null", "{\"type\":\"string\"}")) {
+            ONode root = build(ChatOptions.of()
+                            .toolAdd("invalid_root", t -> t.description("d").inputSchema(schema)),
+                    Collections.singletonList(ChatMessage.ofUser("hi")));
+            ONode inputSchema = root.get("tools").get(0).get("input_schema");
+            assertEquals("object", inputSchema.get("type").getString(), schema);
+            assertTrue(inputSchema.get("properties").isObject(), schema);
+            assertTrue(inputSchema.get("properties").getObject().isEmpty(), schema);
+        }
     }
 
     /// ///////////////// 请求侧：document 与 image file source
@@ -550,6 +981,36 @@ public class AnthropicRoundTripAlignTest {
     /**
      * tool_result.content 的块变体：document 直传，无对应变体的块退化为 text 而不是静默丢弃。
      */
+    private AssistantMessage restoreWithProtocolState(String json, String protocol,
+                                                      MessageProtocolState state) {
+        ONode node = ONode.ofJson(json);
+        ONode stateNode = node.getOrNew("protocolStates").getOrNew(protocol);
+        stateNode.set("version", state.getVersion());
+        ONode data = stateNode.getOrNew("data");
+        for (Map.Entry<String, Object> entry : state.getData().entrySet()) {
+            data.set(entry.getKey(), plain(entry.getValue()));
+        }
+        return (AssistantMessage) ChatMessage.fromJson(node);
+    }
+
+    private static Object plain(Object value) {
+        if (value instanceof Map) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+                map.put(String.valueOf(entry.getKey()), plain(entry.getValue()));
+            }
+            return map;
+        }
+        if (value instanceof java.util.List) {
+            java.util.List<Object> list = new java.util.ArrayList<>();
+            for (Object item : (java.util.List<?>) value) {
+                list.add(plain(item));
+            }
+            return list;
+        }
+        return value;
+    }
+
     @Test
     public void toolResultSupportsDocumentAndFallback() {
         String pdf = Base64.getEncoder().encodeToString("%PDF".getBytes());

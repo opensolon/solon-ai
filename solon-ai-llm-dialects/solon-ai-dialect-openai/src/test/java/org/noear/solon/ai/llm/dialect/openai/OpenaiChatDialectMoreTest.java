@@ -28,13 +28,16 @@ import org.noear.solon.ai.chat.event.ChatStreamContextDefault;
 import org.noear.solon.ai.chat.event.ChatStreamSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.MessageProtocolState;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.tool.ToolCall;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -76,13 +79,61 @@ public class OpenaiChatDialectMoreTest {
     }
 
     private String joinText(ChatAccumulator acc) {
-        StringBuilder buf = new StringBuilder();
-        for (AssistantMessage item : acc.getContentItems()) {
-            if (item.getTextRaw() != null) {
-                buf.append(item.getTextRaw());
+        return acc.getAggregationText();
+    }
+
+    private long countOf(ChatEventType type) {
+        long count = 0;
+        for (ChatEvent event : events) {
+            if (event.is(type)) {
+                count++;
             }
         }
-        return buf.toString();
+        return count;
+    }
+
+    // ==================== 请求协议隔离 ====================
+
+    @Test
+    public void responsesStateAndLegacyMetadata_doNotLeakIntoChatCompletionsRequest() {
+
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("type", "message");
+        item.put("id", "msg_responses_only");
+        item.put("role", "assistant");
+        item.put("content", Collections.singletonList(
+                Collections.<String, Object>singletonMap("type", "output_text")));
+        Map<String, Object> wrapper = new LinkedHashMap<>();
+        wrapper.put("output_index", 0);
+        wrapper.put("item", item);
+        Map<String, Object> stateData = new LinkedHashMap<>();
+        stateData.put(OpenaiResponsesMessageStateSupport.OUTPUT_ITEMS,
+                Collections.singletonList(wrapper));
+        stateData.put(OpenaiResponsesMessageStateSupport.REASONING_ITEM_ID, "rs_state_only");
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put(OpenaiResponsesMessageStateSupport.OUTPUT_ITEMS,
+                Collections.singletonList(wrapper));
+        metadata.put(OpenaiResponsesMessageStateSupport.REASONING_ITEM_ID, "rs_legacy_only");
+        metadata.put(OpenaiResponsesMessageStateSupport.REASONING_ENCRYPTED_CONTENT, "enc_legacy_only");
+        AssistantMessage message = AssistantMessage.snapshot(
+                "答案", "", null, null, null, null,
+                Collections.singletonMap(OpenaiResponsesMessageStateSupport.PROTOCOL_ID,
+                        new MessageProtocolState(OpenaiResponsesMessageStateSupport.VERSION, stateData)),
+                metadata);
+
+        ChatConfig config = new ChatConfig();
+        config.setModel("gpt-4o");
+        ONode root = dialect.buildRequestJson(config, ChatOptions.of(),
+                Collections.singletonList((ChatMessage) message), false);
+        String json = root.toJson();
+
+        assertEquals("答案", root.get("messages").get(0).get("content").getString(), json);
+        assertFalse(json.contains("openai.responses"), json);
+        assertFalse(json.contains(OpenaiResponsesMessageStateSupport.OUTPUT_ITEMS), json);
+        assertFalse(json.contains(OpenaiResponsesMessageStateSupport.REASONING_ITEM_ID), json);
+        assertFalse(json.contains("rs_state_only"), json);
+        assertFalse(json.contains("rs_legacy_only"), json);
+        assertFalse(json.contains("enc_legacy_only"), json);
     }
 
     // ==================== 流终止与非结构化错误 ====================
@@ -95,12 +146,11 @@ public class OpenaiChatDialectMoreTest {
         dialect.parseResponseJson(ctx, "[DONE]");
 
         assertTrue(acc.isFinished(), "[DONE] 必须结束本步");
-        assertEquals(1, acc.getContentItems().size(), "未收到任何内容时应补一条空消息，避免上层拿到 null");
-        assertEquals("", acc.lastItem().getText());
+        assertNull(acc.snapshotTerminal().getMessage(), "无内容的 [DONE] 不应伪造占位消息");
 
-        // 已完成后再来一次 [DONE]（个别中转会重复下发）：不得再补内容项
+        // 已完成后再来一次 [DONE]（个别中转会重复下发）：不得改变终态
         dialect.parseResponseJson(ctx, "[DONE]");
-        assertEquals(1, acc.getContentItems().size());
+        assertNull(acc.snapshotTerminal().getMessage());
         assertTrue(events.isEmpty(), "[DONE] 不产生方言事件");
     }
 
@@ -112,7 +162,7 @@ public class OpenaiChatDialectMoreTest {
         dialect.parseResponseJson(ctx, contentChunk("你好"));
         dialect.parseResponseJson(ctx, "[DONE]");
 
-        assertEquals(2, acc.getContentItems().size(), "[DONE] 补位帧在正文之后");
+        assertEquals(1, countOf(ChatEventType.TEXT_DELTA));
         assertEquals("你好", joinText(acc));
         assertTrue(acc.isFinished());
     }
@@ -141,7 +191,7 @@ public class OpenaiChatDialectMoreTest {
         dialect.parseResponseJson(ctx, "123");
 
         ChatAccumulator acc = ctx.getAccumulator();
-        assertFalse(acc.hasContentItems());
+        assertEquals("", acc.getAggregationText());
         assertNull(acc.getError());
         assertFalse(acc.isFinished());
         assertTrue(events.isEmpty());
@@ -159,7 +209,7 @@ public class OpenaiChatDialectMoreTest {
         assertEquals("上游过载", ctx.getAccumulator().getError().getMessage());
         assertNotNull(firstOf(ChatEventType.ERROR));
         assertNotNull(firstOf(ChatEventType.ERROR).getRaw(), "JSON 帧应带原始节点");
-        assertFalse(ctx.getAccumulator().hasContentItems(), "错误帧不产生内容项");
+        assertNull(ctx.getAccumulator().snapshotTerminal().getMessage(), "错误帧不产生终态消息");
     }
 
     @Test
@@ -197,9 +247,10 @@ public class OpenaiChatDialectMoreTest {
         assertEquals("gpt-4o", acc.getModel());
         assertEquals("chatcmpl-9", ctx.getProviderResponseId(), "供应商响应标识用于排障关联");
         assertEquals("stop", acc.lastFinishReason);
-        assertTrue(acc.hasContentItems());
-        assertEquals("杭州今天晴", acc.lastItem().getText());
-        assertEquals("先查天气", acc.lastItem().getThinking());
+        AssistantMessage message = acc.snapshotTerminal().getMessage();
+        assertNotNull(message);
+        assertEquals("杭州今天晴", message.getText());
+        assertEquals("先查天气", message.getThinking());
         assertEquals(20, acc.getUsage().totalTokens());
     }
 
@@ -213,7 +264,7 @@ public class OpenaiChatDialectMoreTest {
                 + "\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"ok\"}}]}");
 
         assertTrue(acc.isFinished());
-        assertEquals("ok", acc.lastItem().getText());
+        assertEquals("ok", acc.snapshotTerminal().getMessage().getText());
     }
 
     @Test
@@ -224,8 +275,9 @@ public class OpenaiChatDialectMoreTest {
         dialect.parseResponseJson(ctx, "{\"object\":\"chat.completion\",\"model\":\"m\",\"choices\":[]}");
 
         assertTrue(acc.isFinished());
-        assertEquals(1, acc.getContentItems().size(), "空 choices 也要补位，保证 getMessage() 非 null");
-        assertEquals("", acc.lastItem().getText());
+        AssistantMessage message = acc.snapshotTerminal().getMessage();
+        assertNotNull(message, "空 choices 仍应提交非流式空终态消息");
+        assertEquals("", message.getText());
     }
 
     // ==================== usage 细分字段 ====================
@@ -248,7 +300,7 @@ public class OpenaiChatDialectMoreTest {
         assertEquals(7, acc.getUsage().thinkTokens());
         assertEquals(30, acc.getUsage().cacheReadInputTokens());
         assertEquals(5, acc.getUsage().cacheCreationInputTokens());
-        assertFalse(acc.hasContentItems(), "usage 帧不产生内容项");
+        assertEquals("", acc.getAggregationText(), "usage 帧不产生正文");
     }
 
     @Test
@@ -278,13 +330,13 @@ public class OpenaiChatDialectMoreTest {
 
         dialect.parseResponseJson(ctx, contentChunk("所有代码修改完成。"));
         dialect.parseResponseJson(ctx, contentChunk("所有代码修改完成。更新任务进度"));
-        int before = acc.getContentItems().size();
+        long before = countOf(ChatEventType.TEXT_DELTA);
 
         // 整帧都是重复快照，但带 finish_reason：内容要丢弃，完成流程不能丢
         dialect.parseResponseJson(ctx, "{\"object\":\"chat.completion.chunk\",\"model\":\"gpt-4o\",\"choices\":[{\"index\":0,"
                 + "\"delta\":{\"content\":\"所有代码修改完成。更新任务进度\"},\"finish_reason\":\"stop\"}]}");
 
-        assertEquals(before, acc.getContentItems().size(), "重复快照不得产生新内容项");
+        assertEquals(before, countOf(ChatEventType.TEXT_DELTA), "重复快照不得产生新正文事件");
         assertTrue(acc.isFinished());
         assertEquals("stop", acc.lastFinishReason);
         assertEquals("所有代码修改完成。更新任务进度", joinText(acc));
@@ -304,9 +356,9 @@ public class OpenaiChatDialectMoreTest {
                 + "\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{}\"}}]},"
                 + "\"finish_reason\":null}]}");
 
-        AssistantMessage last = acc.lastItem();
-        assertNotNull(last.getToolCalls(), "工具调用分片不得被快照判定丢弃");
-        ToolCall call = last.getToolCalls().get(0);
+        ChatEvent toolStart = firstOf(ChatEventType.TOOL_CALL_START);
+        assertNotNull(toolStart, "工具调用分片不得被快照判定丢弃");
+        ToolCall call = toolStart.getToolCall();
         assertEquals("call_1", call.getId());
         assertEquals("get_weather", call.getName());
         assertEquals("所有代码修改完成。更新任务进度", joinText(acc), "重复的文本不得再次交付");
@@ -328,7 +380,7 @@ public class OpenaiChatDialectMoreTest {
         assertNotNull(firstOf(ChatEventType.REFUSAL_DELTA), "拒答事件不得被快照判定吞掉");
         assertEquals("后续内容无法提供", firstOf(ChatEventType.REFUSAL_DELTA).getText());
         assertEquals("所有代码修改完成。更新任务进度后续内容无法提供", joinText(acc),
-                "正文只交付一次，拒答文本由核心投影补在后");
+                "正文只交付一次，拒答事件同时进入文本聚合");
     }
 
     @Test
@@ -338,13 +390,13 @@ public class OpenaiChatDialectMoreTest {
 
         dialect.parseResponseJson(ctx, contentChunk("所有代码修改完成。"));
         dialect.parseResponseJson(ctx, contentChunk("所有代码修改完成。更新任务进度"));
-        int before = acc.getContentItems().size();
+        long before = countOf(ChatEventType.TEXT_DELTA);
 
         // tool_calls 显式为 null（官方帧常见写法）等于无工具调用：重复快照帧仍应整帧丢弃
         dialect.parseResponseJson(ctx, "{\"object\":\"chat.completion.chunk\",\"model\":\"gpt-4o\",\"choices\":[{\"index\":0,"
                 + "\"delta\":{\"content\":\"所有代码修改完成。更新任务进度\",\"tool_calls\":null},\"finish_reason\":null}]}");
 
-        assertEquals(before, acc.getContentItems().size(), "空 tool_calls 不能阻止重复快照帧的丢弃");
+        assertEquals(before, countOf(ChatEventType.TEXT_DELTA), "空 tool_calls 不能阻止重复快照帧的丢弃");
         assertEquals("所有代码修改完成。更新任务进度", joinText(acc));
     }
 
@@ -355,7 +407,7 @@ public class OpenaiChatDialectMoreTest {
         dialect.parseResponseJson(ctx, "{\"object\":\"chat.completion.chunk\",\"model\":\"m\","
                 + "\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}");
 
-        assertFalse(ctx.getAccumulator().hasContentItems(), "role 帧无文本可交付");
+        assertEquals("", ctx.getAccumulator().getAggregationText(), "role 帧无文本可交付");
         assertTrue(events.isEmpty());
     }
 
@@ -370,7 +422,7 @@ public class OpenaiChatDialectMoreTest {
 
         assertTrue(acc.isFinished());
         assertEquals("stop", acc.lastFinishReason);
-        assertEquals(1, acc.getContentItems().size(), "完成时无内容应补位");
+        assertNull(acc.snapshotTerminal().getMessage(), "完成时无内容不应伪造占位消息");
         assertTrue(events.isEmpty(), "无 delta / message 时不应发拒答事件");
     }
 
@@ -383,7 +435,7 @@ public class OpenaiChatDialectMoreTest {
                 "{\"object\":\"chat.completion.chunk\",\"model\":\"m\","
                         + "\"choices\":[{\"index\":0,\"delta\":null,\"finish_reason\":null}]}"));
         assertNull(ctx.getAccumulator().getError());
-        assertFalse(ctx.getAccumulator().hasContentItems());
+        assertEquals("", ctx.getAccumulator().getAggregationText());
     }
 
     // ==================== 拒答事件 ====================
@@ -452,7 +504,7 @@ public class OpenaiChatDialectMoreTest {
         ChatEvent e = firstOf(ChatEventType.ERROR);
         assertNotNull(e);
         assertNotNull(e.getRaw());
-        assertFalse(ctx.getAccumulator().hasContentItems(), "错误帧应中止内容解析");
+        assertEquals("", ctx.getAccumulator().getAggregationText(), "错误帧应中止内容解析");
     }
 
     // ==================== 请求构建 ====================
@@ -492,6 +544,111 @@ public class OpenaiChatDialectMoreTest {
                 Arrays.asList(ChatMessage.ofSystem("sys"), ChatMessage.ofUser("hi")), false);
 
         assertFalse(root.hasKey("stream_options"), "非流式不需要 stream_options: " + root.toJson());
+    }
+
+    @Test
+    public void systemMessageRole_autoAdaptsKnownOpenAiModels() {
+        String[] developerModels = {
+                "o1", "o1-2024-12-17", "o3-mini", "o4-mini",
+                "gpt-5", "gpt5.6", "us.openai.gpt-5.6-sol",
+                "gpt-6", "gpt6.1", "us.openai.gpt-6.1-pro"
+        };
+        for (String model : developerModels) {
+            assertEquals("developer", buildInstructionRole(model, ChatOptions.of()), model);
+        }
+
+        String[] systemModels = {
+                "gpt-4o", "gpt-4.1", "o1-preview", "o1-mini",
+                "vendor-model", "not-o3-model", "not-gpt-6-model", "gpt-60"
+        };
+        for (String model : systemModels) {
+            assertEquals("system", buildInstructionRole(model, ChatOptions.of()), model);
+        }
+    }
+
+    @Test
+    public void systemMessageRole_allowsExplicitOverrideWithoutProtocolLeak() {
+        ChatOptions forceSystem = ChatOptions.of()
+                .optionSet(OpenaiChatDialect.OPTION_INSTRUCTION_ROLE, "SYSTEM");
+        ONode systemRoot = buildInstructionRequest("o3", forceSystem);
+        assertEquals("system", systemRoot.get("messages").get(0).get("role").getString());
+        assertFalse(systemRoot.hasKey(OpenaiChatDialect.OPTION_INSTRUCTION_ROLE));
+        assertEquals("SYSTEM", forceSystem.option(OpenaiChatDialect.OPTION_INSTRUCTION_ROLE),
+                "构建请求不应修改调用方 options");
+
+        ChatOptions forceDeveloper = ChatOptions.of()
+                .optionSet(OpenaiChatDialect.OPTION_INSTRUCTION_ROLE, "developer");
+        assertEquals("developer", buildInstructionRole("vendor-model", forceDeveloper));
+    }
+
+    @Test
+    public void systemMessageRole_rejectsInvalidPolicyAndKeepsCoreMessageSemantic() {
+        ChatMessage systemMessage = ChatMessage.ofSystem("sys");
+        ChatOptions invalid = ChatOptions.of()
+                .optionSet(OpenaiChatDialect.OPTION_INSTRUCTION_ROLE, "automatic");
+        ChatConfig config = new ChatConfig();
+        config.setModel("o3");
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> dialect.buildRequestJson(config, invalid,
+                        Arrays.asList(systemMessage, ChatMessage.ofUser("hi")), false));
+        assertTrue(error.getMessage().contains(OpenaiChatDialect.OPTION_INSTRUCTION_ROLE));
+        assertEquals("SYSTEM", systemMessage.getRole().name(),
+                "自动转换只能发生在线协议 JSON，不能改变核心消息角色");
+    }
+
+    @Test
+    public void assistantReasoningFieldIsSelectedByTargetConfig() {
+        AssistantMessage history = (AssistantMessage) ChatMessage.fromJson(
+                "{\"role\":\"assistant\",\"text\":\"answer\",\"thinking\":\"thought\"," +
+                        "\"reasoningFieldName\":\"role\"}");
+
+        ChatConfig deepseek = new ChatConfig();
+        deepseek.setModel("deepseek-reasoner");
+        ONode deepseekMessage = dialect.buildChatMessageNode(deepseek, history);
+        assertEquals("assistant", deepseekMessage.get("role").getString());
+        assertEquals("thought", deepseekMessage.get("reasoning_content").getString());
+        assertFalse(deepseekMessage.hasKey("reasoning"));
+
+        ChatConfig openrouter = new ChatConfig();
+        openrouter.setModel("vendor/reasoner");
+        openrouter.setProvider("openrouter");
+        ONode openrouterMessage = dialect.buildChatMessageNode(openrouter, history);
+        assertEquals("thought", openrouterMessage.get("reasoning").getString());
+        assertFalse(openrouterMessage.hasKey("reasoning_content"));
+
+        ChatConfig openai = new ChatConfig();
+        openai.setModel("gpt-4o");
+        ONode openaiMessage = dialect.buildChatMessageNode(openai, history);
+        assertFalse(openaiMessage.hasKey("reasoning"));
+        assertFalse(openaiMessage.hasKey("reasoning_content"));
+    }
+
+    @Test
+    public void assistantTypedToolCallsAreRebuiltWithoutLegacyRaw() {
+        ToolCall call = new ToolCall("0", "call_typed", "search", null,
+                Collections.<String, Object>singletonMap("q", "solon"));
+        AssistantMessage history = new AssistantMessage("", "",
+                Collections.singletonList(call), null);
+
+        ONode message = dialect.buildChatMessageNode(new ChatConfig(), history);
+        ONode function = message.get("tool_calls").get(0).get("function");
+        assertEquals("call_typed", message.get("tool_calls").get(0).get("id").getString());
+        assertEquals("search", function.get("name").getString());
+        assertEquals("solon", ONode.ofJson(function.get("arguments").getString()).get("q").getString());
+        assertNull(history.getToolCallsRaw());
+    }
+
+    private String buildInstructionRole(String model, ChatOptions options) {
+        return buildInstructionRequest(model, options)
+                .get("messages").get(0).get("role").getString();
+    }
+
+    private ONode buildInstructionRequest(String model, ChatOptions options) {
+        ChatConfig config = new ChatConfig();
+        config.setModel(model);
+        return dialect.buildRequestJson(config, options,
+                Arrays.asList(ChatMessage.ofSystem("sys"), ChatMessage.ofUser("hi")), false);
     }
 
     @Test

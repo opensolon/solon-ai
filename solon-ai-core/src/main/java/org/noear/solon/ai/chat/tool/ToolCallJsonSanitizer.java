@@ -23,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,8 +64,8 @@ public final class ToolCallJsonSanitizer {
         }
 
         try {
-            // 严格解析（不启用 AutoRepair）：截断串返回 null；单引号等宽松格式可解析并重序列化规范化
-            JsonReader reader = new JsonReader(argStr, Options.of());
+            // 严格解析（不启用 AutoRepair）：词法边界已确保只有一个完整 object 根。
+            JsonReader reader = new JsonReader(argStr);
             ONode parsed = reader.readLast();
 
             if (parsed != null && parsed.isObject()) {
@@ -79,6 +80,51 @@ public final class ToolCallJsonSanitizer {
         // 故此处用字面文本描述兜底结果，避免日志把 raw 错位吞掉造成误导
         LOG.warn("Tool call arguments is not a valid JSON object (fn: '{}'), reset to empty object. raw: {}", fnName, raw);
         return "{}";
+    }
+
+    /**
+     * 判断文本是否恰好包含一个完整 JSON object 根；允许 Snack4 支持的单双引号字符串。
+     */
+    public static boolean isSingleJsonObject(String text) {
+        if (Utils.isEmpty(text)) {
+            return false;
+        }
+        int length = text.length();
+        int start = 0;
+        while (start < length && Character.isWhitespace(text.charAt(start))) start++;
+        if (start >= length || text.charAt(start) != '{') return false;
+
+        int depth = 0;
+        char quote = 0;
+        boolean escaped = false;
+        for (int i = start; i < length; i++) {
+            char ch = text.charAt(i);
+            if (quote != 0) {
+                if (escaped) {
+                    escaped = false;
+                } else if (ch == '\\') {
+                    escaped = true;
+                } else if (ch == quote) {
+                    quote = 0;
+                }
+                continue;
+            }
+            if (ch == '"' || ch == '\'') {
+                quote = ch;
+            } else if (ch == '{' || ch == '[') {
+                depth++;
+            } else if (ch == '}' || ch == ']') {
+                depth--;
+                if (depth < 0) return false;
+                if (depth == 0) {
+                    for (int j = i + 1; j < length; j++) {
+                        if (!Character.isWhitespace(text.charAt(j))) return false;
+                    }
+                    return quote == 0;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -118,6 +164,126 @@ public final class ToolCallJsonSanitizer {
             result.add(item);
         }
 
+        return result;
+    }
+
+    /**
+     * 获取通用工具调用。类型化数据优先；仅当其为空时解析旧 {@code toolCallsRaw}。
+     * <p>旧 raw 只识别 OpenAI-compatible 的 function 调用；未知类型和非法结构不会被猜测。</p>
+     *
+     * @since 4.1
+     */
+    public static List<ToolCall> resolveToolCalls(List<ToolCall> toolCalls, List<Map> toolCallsRaw) {
+        if (Utils.isNotEmpty(toolCalls)) {
+            return toolCalls;
+        }
+        return parseLegacyToolCallsRaw(toolCallsRaw);
+    }
+
+    /**
+     * 将类型化工具调用构建为 OpenAI-compatible {@code tool_calls}。
+     * <p>类型化数据存在时不合并旧 raw，避免陈旧 raw 覆盖已经修改过的通用语义；
+     * 仅 raw 存在时保留其未知字段，并只净化 arguments。</p>
+     *
+     * @since 4.1
+     */
+    public static List<Map> buildOpenAiCompatibleToolCalls(List<ToolCall> toolCalls, List<Map> toolCallsRaw) {
+        if (Utils.isEmpty(toolCalls)) {
+            return sanitizeToolCallsRaw(toolCallsRaw);
+        }
+
+        List<Map> result = new ArrayList<>(toolCalls.size());
+        for (ToolCall call : toolCalls) {
+            if (call == null) {
+                continue;
+            }
+
+            Map<String, Object> function = new LinkedHashMap<>();
+            function.put("name", call.getName());
+            function.put("arguments", sanitizeArguments(call));
+
+            Map<String, Object> item = new LinkedHashMap<>();
+            if (Utils.isNotEmpty(call.getId())) {
+                item.put("id", call.getId());
+            }
+            item.put("type", "function");
+            item.put("function", function);
+            result.add(item);
+        }
+        return result;
+    }
+
+    /**
+     * 获取类型化工具调用的安全 JSON object 参数。
+     * <p>{@code argumentsStr} 非空时为权威来源；非法或截断字符串直接降级为空对象，
+     * 不回退到可能由宽松解析得到的半截 Map。字符串为空时才使用结构化 arguments。</p>
+     *
+     * @since 4.1
+     */
+    public static String sanitizeArguments(ToolCall call) {
+        if (call == null) {
+            return "{}";
+        }
+        if (Utils.isNotEmpty(call.getArgumentsStr())) {
+            return sanitizeArguments(call.getArgumentsStr(), call.getName());
+        }
+        if (call.getArguments() == null) {
+            return "{}";
+        }
+
+        ONode argsNode = ONode.ofBean(call.getArguments());
+        return argsNode != null && argsNode.isObject() ? argsNode.toJson() : "{}";
+    }
+
+    /**
+     * 将旧 OpenAI-compatible {@code toolCallsRaw} 投影为通用工具调用。
+     * <p>该方法用于跨协议兼容重建，不保留供应商未知字段；原协议精确回放仍应使用 raw fallback。</p>
+     *
+     * @since 4.1
+     */
+    public static List<ToolCall> parseLegacyToolCallsRaw(List<Map> toolCallsRaw) {
+        if (Utils.isEmpty(toolCallsRaw)) {
+            return Collections.emptyList();
+        }
+
+        List<ToolCall> result = new ArrayList<>(toolCallsRaw.size());
+        for (Map raw : toolCallsRaw) {
+            if (raw == null) {
+                continue;
+            }
+
+            Object type = raw.get("type");
+            if (type != null && !"function".equals(String.valueOf(type))) {
+                continue;
+            }
+
+            Object functionObj = raw.get("function");
+            if (!(functionObj instanceof Map)) {
+                continue;
+            }
+            Map function = (Map) functionObj;
+            Object nameObj = function.get("name");
+            String name = nameObj == null ? null : String.valueOf(nameObj);
+            if (Utils.isEmpty(name)) {
+                continue;
+            }
+
+            String argumentsStr;
+            Map<String, Object> arguments;
+            Object argumentsObj = function.get("arguments");
+            if (argumentsObj instanceof Map) {
+                arguments = new LinkedHashMap<>((Map<String, Object>) argumentsObj);
+                argumentsStr = ONode.ofBean(arguments).toJson();
+            } else {
+                argumentsStr = sanitizeArguments(argumentsObj instanceof String ? (String) argumentsObj : null, name);
+                arguments = ONode.ofJson(argumentsStr).toBean(Map.class);
+            }
+
+            Object indexObj = raw.get("index");
+            Object idObj = raw.get("id");
+            result.add(new ToolCall(indexObj == null ? null : String.valueOf(indexObj),
+                    idObj == null ? null : String.valueOf(idObj), name, argumentsStr, arguments));
+        }
         return result;
     }
 }

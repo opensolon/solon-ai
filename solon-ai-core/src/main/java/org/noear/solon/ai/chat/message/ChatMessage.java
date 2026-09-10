@@ -81,12 +81,6 @@ public interface ChatMessage extends Serializable {
      */
     boolean hasMetadata(String key);
 
-    /**
-     * 是否思考中
-     */
-    default boolean isThinking() {
-        return false;
-    }
 
     /**
      * 是否为工具调用
@@ -112,7 +106,7 @@ public interface ChatMessage extends Serializable {
         }
 
         List<ContentBlock> blocks = contents.getBlocks();
-        return new AssistantMessage(contents.getContent(), "", false, null, null, null, null,
+        return new AssistantMessage(contents.getContent(), "", null,
                 Utils.isEmpty(blocks) ? null : new ArrayList<>(blocks));
     }
 
@@ -146,7 +140,7 @@ public interface ChatMessage extends Serializable {
             finalBlocks.add(0, TextBlock.of(content));
         }
 
-        return new AssistantMessage(content == null ? "" : content, "",false, null, null, null, null, finalBlocks);
+        return new AssistantMessage(content == null ? "" : content, "", null, finalBlocks);
     }
 
     /**
@@ -277,8 +271,27 @@ public interface ChatMessage extends Serializable {
      */
     static String toJson(ChatMessage message, boolean compactLargeMedia) {
         ONode node = ONode.ofBean(message, Feature.Write_EnumUsingName);
+        if (message instanceof AssistantMessage) {
+            AssistantMessage assistant = (AssistantMessage) message;
+            // protocolStates 是新消息的权威协议载体；getContentRaw() 仅保留兼容投影，禁止重复持久化。
+            // 旧消息没有 protocolStates 时仍原样保留 contentRaw，确保历史数据可继续恢复和回放。
+            if (assistant.hasProtocolStates() && assistant.getContentRaw() == null) {
+                node.remove("contentRaw");
+            }
+            // deprecated ToolCall.thoughtSignature 仍须恢复旧数据，但新消息的 null 占位不应写入 JSON。
+            ONode toolCalls = node.getOrNull("toolCalls");
+            if (toolCalls != null && toolCalls.isArray()) {
+                for (ONode toolCall : toolCalls.getArray()) {
+                    ONode signature = toolCall.getOrNull("thoughtSignature");
+                    if (signature == null || signature.isNull()) {
+                        toolCall.remove("thoughtSignature");
+                    }
+                }
+            }
+        }
         if (compactLargeMedia) {
-            compactLargeMediaInNode(node);
+            // 只处理类型化 blocks；协议状态、metadata、工具参数里的同名 data 可能是不可重建的密文或签名。
+            compactLargeMediaInNode(node.getOrNull("blocks"));
         }
         return node.toJson();
     }

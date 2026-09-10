@@ -75,7 +75,7 @@ public class CompressionUtil {
      * 直接把原始 Message 对象（含完整 ToolUseBlock.input）发给 LLM，
      * 而本框架将其序列化为文本行格式。
      * <ul>
-     *     <li>Assistant(thought + tool_calls) → {@code "[Thought]: <content>\n[Action]: 调用工具 <name>，参数: <args>"}</li>
+     *     <li>Assistant(thinking + text + tool_calls) → 分别输出 {@code [Thought]}、{@code [Text]}、{@code [Action]}</li>
      *     <li>Assistant(only tool_calls) → {@code "[Action]: 调用工具 <name>，参数: <args>"}</li>
      *     <li>ToolMessage → {@code "[Observation]: 得到结果 <content>"}（超长内容自动截断）</li>
      *     <li>其它消息 → {@code "<role>: <content>"}</li>
@@ -89,9 +89,13 @@ public class CompressionUtil {
         if (msg instanceof AssistantMessage) {
             AssistantMessage am = (AssistantMessage) msg;
             StringBuilder sb = new StringBuilder();
-            // 保留思考文本（当 Assistant 同时有 thought 和 tool_calls 时，两者都保留）
-            if (Assert.isNotEmpty(am.getContent())) {
-                sb.append("[Thought]: ").append(am.getContent());
+            // thinking、正文与工具调用是三个独立语义通道，压缩输入必须分别保留。
+            if (Assert.isNotEmpty(am.getThinking())) {
+                sb.append("[Thought]: ").append(am.getThinking());
+            }
+            if (Assert.isNotEmpty(am.getText())) {
+                if (sb.length() > 0) sb.append('\n');
+                sb.append("[Text]: ").append(am.getText());
             }
             // 保留所有工具调用及其完整参数（对应 claude-code-java 保留完整 ToolUseBlock.input）
             if (Assert.isNotEmpty(am.getToolCalls())) {
@@ -103,6 +107,25 @@ public class CompressionUtil {
                     if (!args.isEmpty()) {
                         sb.append("，参数: ").append(args);
                     }
+                }
+            }
+            // 来源同样属于可跨模型理解的语义；以确定性文本侧车进入摘要输入，避免整段压缩时静默丢失。
+            for (org.noear.solon.ai.chat.source.SearchResult source : am.resolveSearchResults()) {
+                if (source == null) continue;
+                if (sb.length() > 0) sb.append('\n');
+                sb.append("[Source]");
+                if (source.getTitle() != null) sb.append(" title=").append(source.getTitle());
+                if (source.getUrl() != null) sb.append(" url=").append(source.getUrl());
+                if (source.getSnippet() != null) sb.append(" snippet=").append(source.getSnippet());
+            }
+            if (Assert.isNotEmpty(am.getCitations())) {
+                for (org.noear.solon.ai.chat.source.Citation citation : am.getCitations()) {
+                    if (citation == null) continue;
+                    if (sb.length() > 0) sb.append('\n');
+                    sb.append("[Citation]");
+                    if (citation.getTitle() != null) sb.append(" title=").append(citation.getTitle());
+                    if (citation.getUrl() != null) sb.append(" url=").append(citation.getUrl());
+                    if (citation.getCitedText() != null) sb.append(" text=").append(citation.getCitedText());
                 }
             }
             if (sb.length() > 0) {

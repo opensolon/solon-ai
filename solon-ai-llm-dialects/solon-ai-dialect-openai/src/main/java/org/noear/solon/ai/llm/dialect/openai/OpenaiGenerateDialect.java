@@ -16,7 +16,7 @@
 package org.noear.solon.ai.llm.dialect.openai;
 
 import org.noear.snack4.ONode;
-import org.noear.snack4.codec.TypeRef;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.generate.GenerateContent;
 import org.noear.solon.ai.generate.dialect.AbstractGenerateDialect;
@@ -24,15 +24,18 @@ import org.noear.solon.ai.generate.GenerateConfig;
 import org.noear.solon.ai.generate.GenerateException;
 import org.noear.solon.ai.generate.GenerateResponse;
 
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
+ * OpenAI 生成方言
+ *
  * @author noear
  * @since 3.5
  */
 public class OpenaiGenerateDialect extends AbstractGenerateDialect {
-    private static OpenaiGenerateDialect instance = new OpenaiGenerateDialect();
+    private static final OpenaiGenerateDialect instance = new OpenaiGenerateDialect();
 
     public static OpenaiGenerateDialect getInstance() {
         return instance;
@@ -56,35 +59,90 @@ public class OpenaiGenerateDialect extends AbstractGenerateDialect {
         ONode oResp = ONode.ofJson(respJson);
 
         String model = oResp.get("model").getString();
-
-        if (oResp.hasKey("error")) {
-            return new GenerateResponse(model, new GenerateException(OpenaiDialectSupport.extractErrorMessage(oResp.get("error"))), null, null);
-        } else {
-            List<GenerateContent> data = null;
-
-            if (oResp.hasKey("task_id")) {
-                //异步模式只返回任务 id
-                String url = config.getTaskUrlAndId(oResp.get("task_id").getString());
-                data = Arrays.asList(GenerateContent.builder().url(url).build());
-            } else if (oResp.hasKey("data")) {
-                //同步模式直接有结果
-                data = oResp.get("data").toBean(new TypeRef<List<GenerateContent>>() {
-                });
-            }
-
-            AiUsage usage = null;
-            if (oResp.hasKey("usage")) {
-                ONode oUsage = oResp.get("usage");
-                long prompt_tokens = oUsage.get("prompt_tokens").getLong();
-                long completion_tokens = oUsage.get("completion_tokens").getLong();
-                // 官方 SDK 中 total_tokens 为 optional，缺省时用输入+输出兜底
-                long total_tokens = oUsage.hasKey("total_tokens")
-                        ? oUsage.get("total_tokens").getLong() : (prompt_tokens + completion_tokens);
-
-                usage = new AiUsage(prompt_tokens, 0L, completion_tokens, total_tokens, oUsage);
-            }
-
-            return new GenerateResponse(model, null, data, usage);
+        if (Utils.isEmpty(model)) {
+            // OpenAI ImagesResponse 不返回 model，使用请求配置补位
+            model = config.getModel();
         }
+
+        ONode errorNode = oResp.getOrNull("error");
+        if (errorNode != null && !errorNode.isNull()) {
+            return new GenerateResponse(model,
+                    new GenerateException(OpenaiDialectSupport.extractErrorMessage(errorNode)), null, null);
+        }
+
+        List<GenerateContent> data = parseData(config, oResp);
+        AiUsage usage = parseUsage(oResp.getOrNull("usage"));
+        return new GenerateResponse(model, null, data, usage);
+    }
+
+    private List<GenerateContent> parseData(GenerateConfig config, ONode oResp) {
+        String taskId = oResp.get("task_id").getString();
+        if (Utils.isNotEmpty(taskId) && Utils.isNotEmpty(config.getTaskUrl())) {
+            // 兼容异步生成端点：只返回任务 id
+            return Collections.singletonList(GenerateContent.builder()
+                    .url(config.getTaskUrlAndId(taskId))
+                    .build());
+        }
+
+        ONode dataNode = oResp.getOrNull("data");
+        if (dataNode == null || !dataNode.isArray()) {
+            return null;
+        }
+
+        String defaultMimeType = toImageMimeType(oResp.get("output_format").getString());
+        List<GenerateContent> contents = new ArrayList<>(dataNode.getArray().size());
+        for (ONode item : dataNode.getArray()) {
+            if (item == null || !item.isObject()) {
+                continue;
+            }
+
+            // OpenAI Images API 使用 b64_json/revised_prompt；同时保留兼容端点的 data/text/mimeType。
+            String base64 = item.get("b64_json").getString();
+            if (Utils.isEmpty(base64)) {
+                base64 = item.get("data").getString();
+            }
+            String text = item.get("revised_prompt").getString();
+            if (Utils.isEmpty(text)) {
+                text = item.get("text").getString();
+            }
+            String mimeType = item.get("mimeType").getString();
+            if (Utils.isEmpty(mimeType)) {
+                mimeType = defaultMimeType;
+            }
+
+            contents.add(GenerateContent.builder()
+                    .text(text)
+                    .data(base64)
+                    .url(item.get("url").getString())
+                    .mimeType(mimeType)
+                    .build());
+        }
+        return contents;
+    }
+
+    private AiUsage parseUsage(ONode oUsage) {
+        if (oUsage == null || !oUsage.isObject()) {
+            return null;
+        }
+
+        // OpenAI Images API 使用 input/output_tokens；兼容旧端点的 prompt/completion_tokens。
+        long inputTokens = oUsage.hasKey("input_tokens")
+                ? oUsage.get("input_tokens").getLong() : oUsage.get("prompt_tokens").getLong();
+        long outputTokens = oUsage.hasKey("output_tokens")
+                ? oUsage.get("output_tokens").getLong() : oUsage.get("completion_tokens").getLong();
+        long totalTokens = oUsage.hasKey("total_tokens")
+                ? oUsage.get("total_tokens").getLong() : inputTokens + outputTokens;
+
+        return new AiUsage(inputTokens, 0L, outputTokens, totalTokens, oUsage);
+    }
+
+    private String toImageMimeType(String outputFormat) {
+        if (Utils.isEmpty(outputFormat)) {
+            return null;
+        }
+        if ("jpg".equalsIgnoreCase(outputFormat)) {
+            outputFormat = "jpeg";
+        }
+        return "image/" + outputFormat.toLowerCase(java.util.Locale.ROOT);
     }
 }

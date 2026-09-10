@@ -78,7 +78,17 @@ public enum InteractionStepType {
      * <p>
      * 表示 Google 搜索返回的结果。
      */
-    GOOGLE_SEARCH_RESULT("google_search_result");
+    GOOGLE_SEARCH_RESULT("google_search_result"),
+    CODE_EXECUTION_CALL("code_execution_call"),
+    CODE_EXECUTION_RESULT("code_execution_result"),
+    URL_CONTEXT_CALL("url_context_call"),
+    URL_CONTEXT_RESULT("url_context_result"),
+    MCP_SERVER_TOOL_CALL("mcp_server_tool_call"),
+    MCP_SERVER_TOOL_RESULT("mcp_server_tool_result"),
+    FILE_SEARCH_CALL("file_search_call"),
+    FILE_SEARCH_RESULT("file_search_result"),
+    GOOGLE_MAPS_CALL("google_maps_call"),
+    GOOGLE_MAPS_RESULT("google_maps_result");
 
     private final String apiValue;
 

@@ -147,11 +147,11 @@ public class ActionTaskReturnDirectTest {
 
     private AssistantMessage nativeToolCallMessage(String toolName, Map<String, Object> args) {
         ToolCall call = new ToolCall("0", "call_" + toolName, toolName, null, args);
-        return new AssistantMessage("", "", false, null, null, Collections.singletonList(call), null);
+        return new AssistantMessage("", "", Collections.singletonList(call), null);
     }
 
     private AssistantMessage nativeMultiToolCallMessage(List<ToolCall> calls) {
-        return new AssistantMessage("", "", false, null, null, calls, null);
+        return new AssistantMessage("", "", calls, null);
     }
 
     private AssistantMessage textActionMessage(String toolName, Map<String, Object> args) {
@@ -197,10 +197,9 @@ public class ActionTaskReturnDirectTest {
 
         assertEquals(Agent.ID_END, trace.getRoute());
         assertEquals("晴天 25℃", trace.getFinalAnswer());
-        // 业务直返必须走双参 setFinalAnswer(content, false)，不能误标 abnormal
-        assertEquals(Boolean.TRUE, finalAnswerAbnormal.get(), "业务 returnDirect 成功应为 abnormal=false");
-        verify(trace, times(1)).setFinalAnswer(eq("晴天 25℃"), eq(false));
-        verify(trace, never()).setFinalAnswer(anyString()); // 单参会强制 abnormal=true
+        // 当前终态接口通过单参 setFinalAnswer 写入最终答案
+        assertEquals(Boolean.TRUE, finalAnswerAbnormal.get());
+        verify(trace, times(1)).setFinalAnswer(eq("晴天 25℃"));
         assertEquals(1, toolCallCount.get());
         assertTrue(workingMemory.getMessages().size() >= 2, "应写入 assistant + tool 成套消息");
         assertTrue(workingMemory.getMessages().stream().anyMatch(m -> m instanceof ToolMessage));
@@ -276,7 +275,7 @@ public class ActionTaskReturnDirectTest {
         assertEquals(Agent.ID_END, trace.getRoute());
         assertEquals("晴\n25℃", trace.getFinalAnswer());
         assertEquals(Boolean.TRUE, finalAnswerAbnormal.get());
-        verify(trace).setFinalAnswer(eq("晴\n25℃"), eq(false));
+        verify(trace).setFinalAnswer(eq("晴\n25℃"));
         assertEquals(2, toolCallCount.get());
     }
 
@@ -466,7 +465,7 @@ public class ActionTaskReturnDirectTest {
         assertEquals(Boolean.TRUE, finalAnswerAbnormal.get());
         // 纯 media：finalAnswer 文本为空串
         assertEquals("", trace.getFinalAnswer());
-        verify(trace).setFinalAnswer(eq(""), eq(false));
+        verify(trace).setFinalAnswer(eq(""));
 
         ToolMessage tm = (ToolMessage) workingMemory.getMessages().stream()
                 .filter(m -> m instanceof ToolMessage)
