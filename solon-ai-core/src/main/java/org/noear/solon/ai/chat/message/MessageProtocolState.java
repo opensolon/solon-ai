@@ -102,15 +102,21 @@ public class MessageProtocolState implements Serializable {
         return frozen;
     }
 
-    /** 创建与调用方引用隔离的副本。 */
+    /** 创建与调用方引用隔离、并保留冻结语义的副本。 */
     public MessageProtocolState copy() {
+        MessageProtocolState copy = mutableCopy();
+        if (frozen || semanticHash != null) {
+            copy.freeze();
+        }
+        return copy;
+    }
+
+    /** 创建供消息快照边界绑定语义摘要的可写副本。 */
+    MessageProtocolState mutableCopy() {
         MessageProtocolState copy = new MessageProtocolState();
         copy.version = version;
         copy.semanticHash = semanticHash;
         copy.data = deepCopyMap(data, false);
-        if (frozen || semanticHash != null) {
-            copy.freeze();
-        }
         return copy;
     }
 

@@ -126,7 +126,7 @@ public class GeminiInteractionsEventTest {
         assertEquals("gs_1", e.getItemId());
         assertNull(firstOf(ChatEventType.SEARCH_RESULT),
                 "仅有生命周期字段的 google_search_result 不能伪装成逐项网页结果");
-        assertTrue(ctx.getAccumulator().getAggregationSearchResults().isEmpty());
+        assertTrue(ctx.getAccumulator().snapshotTerminal().getSearchResults().isEmpty());
     }
 
     /**

@@ -26,7 +26,6 @@ import org.noear.solon.ai.chat.source.SearchResult;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 import org.noear.solon.ai.chat.tool.ToolCall;
 
@@ -34,8 +33,7 @@ import org.noear.solon.ai.chat.tool.ToolCall;
  * 聊天响应实现（只读快照）
  *
  * <p>它只承担一个角色：<b>模型调用的结果</b>。所有顶层字段在构造期确定，且不提供写入方法；
- * 完整消息由 {@link AssistantMessage#snapshot(String, String, List, List, List, List, Map, Map)}
- * 在终态边界一次性构造。</p>
+ * 终态消息由 {@link ChatAccumulator} 从累积状态一次性构造，本类只保存完整响应快照。</p>
  *
  * <p>历史沿革：4.1 之前本类同时是结果对象、可变累积器与协议状态袋；拆分后累积器职责在
  * {@link ChatAccumulator}（框架内部），本类不再有任何写入方法。</p>

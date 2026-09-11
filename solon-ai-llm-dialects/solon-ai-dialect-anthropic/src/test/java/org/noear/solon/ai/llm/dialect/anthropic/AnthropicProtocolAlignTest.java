@@ -282,7 +282,7 @@ public class AnthropicProtocolAlignTest {
 
         //服务端工具不是本地 function call，不能被拼进工具调用历史
         parser.parseStreamResponse(ctx, "{\"type\":\"content_block_stop\",\"index\":2}");
-        assertFalse(ctx.getAccumulator().hasToolCallBuilders());
+        assertTrue(ctx.getAccumulator().getToolCallBuilders().isEmpty());
     }
 
     /**

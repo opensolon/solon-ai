@@ -207,7 +207,6 @@ public class DashscopeChatEventTest {
         assertNull(searchEvents.get(1).getSearchResult().getSnippet(), "未明确提供摘要时保持 null");
 
         ChatAccumulator acc = ctx.getAccumulator();
-        assertEquals(2, acc.getAggregationSearchResults().size(), "typed 事件应完整闭环到终态聚合");
         AssistantMessage message = acc.snapshotTerminal().getMessage();
         assertNotNull(message);
         assertNotNull(message.getSearchResults());

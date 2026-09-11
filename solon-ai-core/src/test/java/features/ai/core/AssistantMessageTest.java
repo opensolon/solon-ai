@@ -132,6 +132,20 @@ public class AssistantMessageTest {
     }
 
     @Test
+    public void frozenProtocolStateWithoutHashShouldBindAtSnapshotBoundary() {
+        MessageProtocolState state = new MessageProtocolState(1).dataPut("cursor", "next").freeze();
+
+        AssistantMessage message = assertDoesNotThrow(() -> AssistantMessage.snapshot(
+                "answer", "", null, null, null, null,
+                java.util.Collections.singletonMap("vendor.protocol", state)));
+        MessageProtocolState stored = message.getProtocolState("vendor.protocol");
+
+        assertNotNull(stored.getSemanticHash());
+        assertTrue(stored.isFrozen());
+        assertTrue(MessageSemanticHasher.matches(message, stored));
+    }
+
+    @Test
     public void protocolStateOpaqueDataShouldNotBeCompactedAsMedia() {
         StringBuilder large = new StringBuilder(ChatMessage.SESSION_INLINE_BASE64_MAX_CHARS + 10);
         while (large.length() <= ChatMessage.SESSION_INLINE_BASE64_MAX_CHARS) {

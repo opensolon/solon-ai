@@ -58,8 +58,8 @@ public class ChatAccumulatorEventTest {
         assertEquals("call-1", acc.getToolCallBuilders().get("idx:0").idBuilder.toString());
         assertEquals("weather", acc.getToolCallBuilders().get("idx:0").nameBuilder.toString());
         assertEquals("{\"city\":\"杭州\"}", acc.getToolCallBuilders().get("idx:0").argumentsBuilder.toString());
-        assertEquals(1, acc.getTerminalToolCalls().size());
-        assertSame(done, acc.getTerminalToolCalls().get(0));
+        assertEquals(1, acc.snapshotTerminal().getToolCalls().size());
+        assertSame(done, acc.snapshotTerminal().getToolCalls().get(0));
     }
 
     @Test
@@ -267,7 +267,7 @@ public class ChatAccumulatorEventTest {
                 Arrays.asList(delivered.get(0).getType(), delivered.get(1).getType()));
         assertEquals("reasoning", acc.getAggregationThinking());
         assertEquals("answer", acc.getAggregationText());
-        assertEquals("kept", acc.getTerminalMetadata().get("carrier"));
+        assertEquals("kept", acc.snapshotTerminal().getMessage().getMetadata().get("carrier"));
     }
 
     private static ChatAccumulator newAccumulator(boolean stream) {

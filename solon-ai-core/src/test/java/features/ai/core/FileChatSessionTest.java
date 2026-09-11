@@ -33,6 +33,7 @@ public class FileChatSessionTest {
                     "\"toolCallsRaw\":[{\"id\":\"call-old\",\"type\":\"function\"," +
                     "\"function\":{\"name\":\"lookup\"," +
                     "\"arguments\":\"{\\\"b\\\":2,\\\"a\\\":1}\"}}]," +
+                    "\"searchResultsRaw\":[{\"url\":\"https://legacy.example\"}]," +
                     "\"reasoningFieldName\":\"reasoning_content\"}";
 
     private static String tempDir;
@@ -112,6 +113,7 @@ public class FileChatSessionTest {
         Assertions.assertEquals("next", restored.getProtocolState("vendor.protocol")
                 .getData().get("cursor"));
         Assertions.assertEquals("content", ((Map<?, ?>) restored.getContentRaw()).get("legacy"));
+        Assertions.assertEquals("https://legacy.example", restored.getSearchResultsRaw().get(0).get("url"));
         Assertions.assertEquals("reasoning_content", restored.getReasoningFieldName());
     }
 

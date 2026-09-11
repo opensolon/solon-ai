@@ -126,7 +126,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
      * @since 4.1
      */
     public AssistantMessage(String text, String thinking, List<ToolCall> toolCalls, List<ContentBlock> blocks) {
-        init(text, thinking, toolCalls, null, blocks);
+        init(text, thinking, toolCalls, blocks);
     }
 
     /**
@@ -167,45 +167,12 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
         return message;
     }
 
-    /**
-     * @deprecated 4.1 {@code contentRaw} 仅用于旧数据兼容；新代码请使用通用语义字段与 protocolStates
-     */
-    @Deprecated
-    public AssistantMessage(String text, String thinking, Object contentRaw, List<Map> toolCallsRaw,
-                            List<ToolCall> toolCalls, List<Map> searchResultsRaw) {
-        this(text, thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw, null);
-    }
-
-
-    /**
-     * 支持多模态内容块的构造
-     *
-     * @param text             文本
-     * @param thinking         想法
-     * @param contentRaw       厂商原始 content
-     * @param toolCallsRaw     工具调用原始数据
-     * @param toolCalls        工具调用
-     * @param searchResultsRaw 搜索结果原始数据
-     * @param blocks           多模态内容块（可为 null）
-     * @since 4.1
-     * @deprecated 4.1 {@code contentRaw} 仅用于旧数据兼容；新代码请使用通用语义字段与 protocolStates
-     */
-    @Deprecated
-    public AssistantMessage(String text, String thinking, Object contentRaw, List<Map> toolCallsRaw,
-                            List<ToolCall> toolCalls, List<Map> searchResultsRaw, List<ContentBlock> blocks) {
-        init(text, thinking, toolCalls, searchResultsRaw, blocks);
-        this.contentRaw = contentRaw;
-        this.toolCallsRaw = toolCallsRaw;
-    }
-
-
     private void init(String text, String thinking, List<ToolCall> toolCalls,
-                      List<Map> searchResultsRaw, List<ContentBlock> blocks) {
+                      List<ContentBlock> blocks) {
         this.text = text;
         this.thinking = thinking;
         this.createdAt = System.currentTimeMillis();
         this.toolCalls = copyList(toolCalls);
-        this.searchResultsRaw = copyList(searchResultsRaw);
         this.blocks = copyList(blocks);
     }
 
@@ -382,7 +349,8 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
         Map<String, MessageProtocolState> copy = new LinkedHashMap<>();
         for (Map.Entry<String, MessageProtocolState> entry : source.entrySet()) {
             if (Utils.isNotEmpty(entry.getKey()) && entry.getValue() != null) {
-                copy.put(entry.getKey(), entry.getValue().copy());
+                // 快照边界必须先取得可写副本，才能为“已冻结但尚无摘要”的输入绑定语义摘要。
+                copy.put(entry.getKey(), entry.getValue().mutableCopy());
             }
         }
         return copy.isEmpty() ? null : copy;

@@ -270,8 +270,7 @@ public class DashscopeChatDialectFrameTest {
                         + "\"choices\":[{\"finish_reason\":\"stop\","
                         + "\"message\":{\"role\":\"assistant\",\"content\":\"杭州今天晴\"}}]}}");
 
-        assertNull(acc.getTerminalSearchResults());
-
+        assertTrue(acc.snapshotTerminal().getSearchResults().isEmpty());
         assertTrue(eventsOfType(ChatEventType.SEARCH_RESULT).isEmpty());
     }
 
@@ -305,7 +304,7 @@ public class DashscopeChatDialectFrameTest {
         assertEquals("今日晴，最高温度25度", result.getSnippet());
         assertNull(message.getSearchResultsRaw(), "新解析路径不得写旧 raw 字段");
 
-        assertTrue(acc.getAggregationSearchResults().isEmpty(), "非流式路径不应伪造流式事件聚合");
+        assertTrue(eventsOfType(ChatEventType.SEARCH_RESULT).isEmpty(), "非流式路径不应伪造流式事件");
     }
 
     /**

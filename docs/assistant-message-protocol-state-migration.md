@@ -56,19 +56,19 @@ public class MessageProtocolState implements Serializable {
 private Map<String, MessageProtocolState> protocolStates;
 ```
 
-核心 API：
+消息读取 API：
 
 ```java
 Map<String, MessageProtocolState> getProtocolStates();
 MessageProtocolState getProtocolState(String protocol);
 boolean hasProtocolState(String protocol);
 boolean hasProtocolStates();
-AssistantMessage putProtocolState(String protocol, MessageProtocolState state);
-AssistantMessage removeProtocolState(String protocol);
-AssistantMessage clearProtocolStates();
 ```
 
-Map 支持迁移期并存多个协议投影，但每个解析器默认只写自己的协议状态。
+`AssistantMessage` 不提供协议状态写方法。解析期由框架或方言调用
+`ChatAccumulator.putTerminalProtocolState(...)` 写入可变工作台，终态边界再由
+`AssistantMessage.snapshot(...)` 一次性复制、绑定语义摘要并冻结。Map 支持迁移期并存多个协议投影，
+但每个解析器默认只写自己的协议状态。
 
 ### 3.3 语义摘要
 
@@ -105,7 +105,7 @@ Map 支持迁移期并存多个协议投影，但每个解析器默认只写自�
 private Object contentRaw;
 ```
 
-相关旧构造器和 `getContentRaw()` 同步标记弃用。新推荐构造器不接受 raw，新解析器不再写 raw。
+`getContentRaw()` 保留并标记弃用；接受 raw 的旧构造器已删除。Snack4 通过公开无参构造器实例化消息并反射恢复 Bean 字段，因此旧 ChatSession JSON 的恢复不依赖 raw 全参构造器。新构造器不接受 raw，新解析器不再写 raw。
 
 普通：
 
@@ -209,9 +209,11 @@ getContentRaw() == null
 
 累积器不再保存或生成 `terminalContentRaw`；旧消息中的 `contentRaw` 仅在反序列化与请求回放的兼容读路径中保留。
 
-### 6.2 `ChatResponseDefault`
+### 6.2 终态快照职责
 
-构建最终 `AssistantMessage` 时回填终态 protocol states。普通流式正文不得再次生成正文镜像 raw。
+`ChatAccumulator.buildTerminalMessage()` 只从累积状态构造终态 `AssistantMessage`；
+`ChatAccumulator.snapshotTerminal()` 则生成完整 `ChatResponse`，同时快照 model、usage、error、finishReason 与事件。
+`ChatResponseDefault` 仅保存这些构造期确定的只读结果。普通流式正文不得再次生成正文镜像 raw。
 
 ### 6.3 请求过滤
 
@@ -278,8 +280,8 @@ getContentRaw() == null
 ### M6：`contentRaw` 完成弃用（已完成兼容期收敛）
 
 - 所有新 parser 已停止写入。
-- 新消息构建使用无 raw 构造器；生产读取仅剩各 dialect legacy adapter，以及 Accumulator/Agent/压缩器对历史消息的无损传递和保护。
-- 字段、getter 与旧构造器保留并标记弃用，至少维持一个完整大版本兼容周期；旧 JSON 可恢复并重新序列化。
+- 新消息构建使用无 raw 构造器；生产读取仅剩各 dialect legacy adapter，以及 ChatSession 对历史消息的无损持久化和回放。
+- raw 全参构造器已删除；字段、getter 与公开无参构造器保留，以支持旧 JSON 的 Bean 反序列化、兼容读取和重新序列化。
 
 ### M7：类型化 SearchResult/Citation（已完成）
 
@@ -361,7 +363,7 @@ getContentRaw() == null
 
 - M0 核心兼容基线：普通消息不再生成正文镜像 `contentRaw`；旧 `contentRaw` JSON 仍可恢复和重新序列化。
 - M1 Core 基础设施：已增加 `MessageProtocolState`、`AssistantMessage.protocolStates`、语义摘要、终态聚合与 JSON 持久化支持。
-- `contentRaw` 字段、getter 和旧 raw 构造器已标记弃用，但保留 Bean 字段以恢复旧数据。
+- `contentRaw` 字段与 getter 已标记弃用；旧 raw 构造器已删除，公开无参构造器与 Bean 字段继续支持旧数据恢复。
 - 新协议状态缺少 `semanticHash`、版本不匹配或摘要不匹配时 fail-closed；语义修改后自动降级为通用字段重建。
 - 协议状态不参与媒体大字段紧凑化，避免 signature/encrypted content/opaque data 被静默截断。
 - M2 Anthropic 已迁移：call/stream 新响应写入 `anthropic.messages`，RequestBuilder 优先读取有效新状态并兼容旧 `contentRaw`。
@@ -377,7 +379,7 @@ getContentRaw() == null
 - 工具参数出站策略统一为“`argumentsStr` 权威、结构化 arguments 仅在原始字符串缺失时重建”；截断字符串不得被解析器生成的部分 Map 掩盖。
 - M5 reasoning 已收敛：DeepSeek-compatible、OpenRouter、Ollama 等均由目标配置/方言选择请求字段，旧 `reasoningFieldName` 不再直写 JSON key；未知目标的纯 thinking 消息会安全过滤。
 - `toolCallsRaw` 与 `reasoningFieldName` 字段/API 已弃用但保留反序列化能力；固定旧 JSON fixture 已验证恢复及下一轮请求重建。
-- M6 已完成兼容期收敛：生产解析器不再生成 `contentRaw`，普通构造与消息工厂均使用通用字段；旧字段、getter、构造器及原方言 legacy adapter 保留。
+- M6 已完成兼容期收敛：生产解析器不再生成 `contentRaw`，普通构造与消息工厂均使用通用字段；旧字段、getter 及原方言 legacy adapter 保留，raw 全参构造器已删除。
 - M7 已完成：Core 增加类型化搜索结果/引用、事件负载、终态聚合和响应 facade；`searchResultsRaw` 停止新写并标记弃用，旧 JSON 可继续恢复和懒投影。
 - Anthropic 映射五类 citation 的公共字段及 `web_search_result`；OpenAI Responses 映射 URL/file citation；Gemini 映射 grounding web citation 与 Interactions 明确网页结果；DashScope 映射 `search_info.search_results`。
 - 来源事件保留供应商 raw 与协议位置属性；重复累计快照按方言请求级稳定身份去重，但同一 URL 在不同引用位置不做全局去重。
@@ -410,6 +412,6 @@ getContentRaw() == null
 - OpenAI Responses 的 `aggregationMetadata` 仅是单次解析工作区，键使用 `__openai_responses.*` 私有命名空间；终态消息把已知协议键提升到 protocol state 并清理这些私有键，未知应用键及同名 legacy 公开键不受影响。
 - `MessageProtocolState` 只承诺 Map/List/String/Number/Boolean/null 组成的 JSON 数据树；未知可变 Java 对象不属于受支持的协议状态载荷。
 - Gemini 新响应只写协议状态，不写 deprecated `ToolCall.thoughtSignature`；旧 AssistantMessage/ToolCall JSON 仍通过 Bean 字段恢复，并由 Gemini 请求构建器懒兼容读取。字段物理删除应等待既定兼容周期结束。
-- `contentRaw`、`toolCallsRaw`、`searchResultsRaw`、`reasoningFieldName` 与 `ToolCall.thoughtSignature` 均处于兼容保留期，当前版本不物理删除。
+- `contentRaw`、`toolCallsRaw`、`searchResultsRaw`、`reasoningFieldName` 与 `ToolCall.thoughtSignature` 的 Bean 字段及读取 API 仍处于兼容保留期；raw 全参构造 API 不在保留范围内。
 - Citation 当前只统一稳定公共字段；供应商位置、页码、文件 ID、annotation index 等继续保留在事件 attrs/raw 或 protocol state，待有足够跨协议共性后再演进，避免过早扩张核心模型。
 - 不宣称 Maven 全仓外部服务型测试全部通过；Redis、远程 Embedding 等环境依赖测试应在具备相应服务的环境执行。

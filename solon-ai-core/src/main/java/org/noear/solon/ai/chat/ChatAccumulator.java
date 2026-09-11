@@ -26,6 +26,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.MessageProtocolState;
 import org.noear.solon.ai.chat.source.Citation;
 import org.noear.solon.ai.chat.source.SearchResult;
+import org.noear.solon.lang.Internal;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -38,9 +39,9 @@ import java.util.function.Function;
 /**
  * 聊天响应累积器（框架与方言内部使用）
  *
- * <p>它是流式解析期的<b>可变工作台</b>：事件通过 {@link #acceptEvent(ChatEvent)} 统一归并到
- * 终态状态，并维护协议状态与方言私有附件。它不会对外发布——发布出去的永远是
- * {@link ChatResponseDefault} 构建的不可变快照。</p>
+ * <p>它是框架与方言解析期的<b>可变工作台</b>：事件通过 {@link #acceptEvent(ChatEvent)} 统一归并到
+ * 终态状态，并维护协议状态与方言私有附件。应用层不应创建、持有或发布本类型；发布出去的永远是
+ * {@link ChatResponse} 只读快照。</p>
  *
  * <p>历史沿革：这些职责原在 {@code ChatResponseDefault} 上（结果对象、累积器、协议状态袋
  * 三个角色混在一个类里），4.1 起拆出本类型，{@link ChatResponse} 收窄为纯结果。</p>
@@ -48,6 +49,7 @@ import java.util.function.Function;
  * @author noear
  * @since 4.1
  */
+@Internal
 public class ChatAccumulator {
     private final ChatRequest request;
     private final boolean stream;
@@ -99,23 +101,33 @@ public class ChatAccumulator {
         this.stream = stream;
     }
 
-    /** 从当前状态拍分片帧快照（不包含最终消息；拍完工作台继续累积） */
+    /**
+     * 从当前状态生成分片响应快照（不包含最终消息；生成后工作台继续累积）。
+     * <p>仅供框架响应发布与方言测试使用，应用层不应直接调用。</p>
+     */
     public ChatResponse snapshotFrame() {
         return new ChatResponseDefault(this, false);
     }
 
-    /** 从当前状态拍终态快照，并用跨步骤累计 usage 覆盖本步 usage。 */
+    /**
+     * 从当前状态生成完整终态响应快照，并用跨步骤累计 usage 覆盖本步 usage。
+     * <p>响应快照除终态消息外，还包含 model、usage、error、finishReason 与事件。</p>
+     */
     public ChatResponse snapshotTerminal(AiUsage usage) {
         return new ChatResponseDefault(this, true, usage);
     }
 
-    /** 从当前状态拍终态快照（getMessage() 即完整聚合） */
+    /**
+     * 从当前状态生成完整终态响应快照。
+     * <p>它与 {@link #buildTerminalMessage()} 不同：本方法生成 {@link ChatResponse}；
+     * 后者只负责构造其中的 {@link AssistantMessage}。</p>
+     */
     public ChatResponse snapshotTerminal() {
         return new ChatResponseDefault(this, true);
     }
 
     /**
-     * 从当前累积状态构造终态消息快照。
+     * 从当前累积状态构造终态消息快照，仅供 {@link ChatResponseDefault} 组装完整响应。
      * <p>事件聚合结果优先，完整终态载体作为没有对应事件时的语义回退。</p>
      */
     AssistantMessage buildTerminalMessage() {
@@ -369,13 +381,6 @@ public class ChatAccumulator {
 
     public boolean isTerminalMessagePresent() { return terminalMessagePresent; }
     public Map<String, MessageProtocolState> getTerminalProtocolStates() { return terminalProtocolStates; }
-    public List<ToolCall> getTerminalToolCalls() { return terminalToolCalls; }
-    public List<SearchResult> getTerminalSearchResults() { return terminalSearchResults; }
-    public List<Citation> getTerminalCitations() { return terminalCitations; }
-    public String getTerminalText() { return terminalText; }
-    public String getTerminalThinking() { return terminalThinking; }
-    public Map<String, Object> getTerminalMetadata() { return terminalMetadata; }
-    public List<ContentBlock> getTerminalMediaBlocks() { return terminalMediaBlocks; }
 
 
     public void setError(ChatException error) {
@@ -417,10 +422,6 @@ public class ChatAccumulator {
 
     public boolean isFinished() {
         return finished;
-    }
-
-    public boolean hasToolCallBuilders() {
-        return Utils.isNotEmpty(toolCallBuilders);
     }
 
     public Map<String, ToolCallBuilder> getToolCallBuilders() {
@@ -751,20 +752,8 @@ public class ChatAccumulator {
         return mediaBlocks;
     }
 
-    public List<ContentBlock> getOrderedBlocks() {
-        return orderedBlocks;
-    }
-
     public Map<String, Object> getAggregationMetadata() {
         return aggregationMetadata;
-    }
-
-    public List<SearchResult> getAggregationSearchResults() {
-        return aggregationSearchResults;
-    }
-
-    public List<Citation> getAggregationCitations() {
-        return aggregationCitations;
     }
 
     /// ////////////////////////// 协议状态（方言解析流用）
