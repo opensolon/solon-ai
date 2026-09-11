@@ -18,10 +18,8 @@ package org.noear.solon.ai.chat;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.content.ContentBlock;
-import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.event.ChatEvent;
 import org.noear.solon.ai.chat.message.AssistantMessage;
-import org.noear.solon.ai.chat.message.MessageProtocolState;
 import org.noear.solon.ai.chat.source.Citation;
 import org.noear.solon.ai.chat.source.SearchResult;
 
@@ -98,7 +96,7 @@ public class ChatResponseDefault implements ChatResponse {
                 : Collections.unmodifiableList(new ArrayList<>(acc.getEvents()));
 
         if (terminal) {
-            this.message = buildAggregationMessage(acc);
+            this.message = acc.buildTerminalMessage();
             //终态契约：无任何 finishReason 信号时默认正常结束（与旧 getLastFinishReasonNormalized 一致）
             String rawFinish = ChatAccumulator.normalizeFinishReason(acc.lastFinishReason);
             this.finishReason = rawFinish != null ? rawFinish : "stop";
@@ -107,135 +105,6 @@ public class ChatResponseDefault implements ChatResponse {
             this.message = null;
             this.finishReason = ChatAccumulator.normalizeFinishReason(acc.lastFinishReason);
         }
-    }
-
-    /**
-     * 终态聚合消息（逻辑与旧 getAggregationMessage 一致，构造期执行一次）
-     */
-    private static AssistantMessage buildAggregationMessage(ChatAccumulator acc) {
-        // Event-first：正文与思考优先取事件聚合；完整终态载体只作为旧方言/协议解析的兼容回退。
-        // 不再按 stream 分叉，否则相同事件在 call()/stream() 下会得到不同终态。
-        String text = acc.getAggregationText();
-        if (Utils.isEmpty(text) && acc.getTerminalText() != null) {
-            text = acc.getTerminalText();
-        }
-        String thinking = acc.getAggregationThinking();
-        if (Utils.isEmpty(thinking) && acc.getTerminalThinking() != null) {
-            thinking = acc.getTerminalThinking();
-        }
-        if (text == null) text = "";
-        if (thinking == null) thinking = "";
-
-        boolean present = acc.isTerminalMessagePresent()
-                || text.length() > 0
-                || thinking.length() > 0
-                || Utils.isNotEmpty(acc.getMediaBlocks())
-                || Utils.isNotEmpty(acc.getTerminalMediaBlocks())
-                || Utils.isNotEmpty(acc.getAggregationSearchResults())
-                || Utils.isNotEmpty(acc.getTerminalSearchResults())
-                || Utils.isNotEmpty(acc.getAggregationCitations())
-                || Utils.isNotEmpty(acc.getTerminalCitations())
-                || Utils.isNotEmpty(acc.getTerminalProtocolStates());
-        if (!present) {
-            return null;
-        }
-
-        List<ContentBlock> aggBlocks = buildAggregationBlocks(acc, text);
-        java.util.Map<String, Object> metadata = new java.util.LinkedHashMap<>();
-        if (Utils.isNotEmpty(acc.getAggregationMetadata())) metadata.putAll(acc.getAggregationMetadata());
-        if (Utils.isNotEmpty(acc.getTerminalMetadata())) metadata.putAll(acc.getTerminalMetadata());
-
-        AssistantMessage message;
-        boolean legacyCarrier = acc.getTerminalContentRaw() != null
-                || acc.getTerminalToolCallsRaw() != null
-                || acc.getTerminalSearchResultsRaw() != null
-                || acc.getTerminalReasoningFieldName() != null;
-        List<SearchResult> searchResults = Utils.isNotEmpty(acc.getAggregationSearchResults())
-                ? new ArrayList<>(acc.getAggregationSearchResults())
-                : copyOrNull(acc.getTerminalSearchResults());
-        List<Citation> citations = Utils.isNotEmpty(acc.getAggregationCitations())
-                ? new ArrayList<>(acc.getAggregationCitations())
-                : copyOrNull(acc.getTerminalCitations());
-        if (legacyCarrier) {
-            message = AssistantMessage.legacySnapshot(
-                    text,
-                    thinking,
-                    acc.getTerminalContentRaw(),
-                    acc.getTerminalToolCallsRaw(),
-                    acc.getTerminalToolCalls(),
-                    acc.getTerminalSearchResultsRaw(),
-                    acc.getTerminalReasoningFieldName(),
-                    aggBlocks,
-                    searchResults,
-                    citations,
-                    acc.getTerminalProtocolStates(),
-                    metadata);
-        } else {
-            message = AssistantMessage.snapshot(
-                    text,
-                    thinking,
-                    acc.getTerminalToolCalls(),
-                    aggBlocks,
-                    searchResults,
-                    citations,
-                    acc.getTerminalProtocolStates(),
-                    metadata);
-        }
-        return message;
-    }
-
-
-
-    private static <T> List<T> copyOrNull(List<T> source) {
-        return Utils.isEmpty(source) ? null : new ArrayList<>(source);
-    }
-
-    /**
-     * 构建聚合消息的 blocks。
-     * <p>{@code MEDIA_DONE} 聚合结果是流式与非流式共同的权威来源；仅在没有媒体事件时，
-     * 才回退到完整终态载体中的媒体。方言若从完整消息投影媒体，必须为每个块发出一次
-     * {@code MEDIA_DONE}，因此不能再把两份列表简单相加。</p>
-     */
-    private static List<ContentBlock> buildAggregationBlocks(ChatAccumulator acc, String text) {
-        List<ContentBlock> agg = new ArrayList<>();
-
-        if (Utils.isNotEmpty(acc.getMediaBlocks())) {
-            // 事件是流式语义的权威来源；正文与媒体按事件到达顺序保留。
-            if (Utils.isNotEmpty(acc.getOrderedBlocks())) {
-                List<ContentBlock> ordered = new ArrayList<>(acc.getOrderedBlocks());
-                if (Utils.isNotEmpty(text) && containsTextBlock(ordered) == false) {
-                    // 非流式兼容方言可能只把媒体投影为事件、正文仍保存在完整终态载体中。
-                    // 此时不能让媒体事件遮蔽正文块；流式正文已有 TEXT_DELTA 时 ordered 中本就包含 TextBlock。
-                    ordered.add(0, TextBlock.of(text));
-                }
-                return ordered;
-            }
-            agg.addAll(acc.getMediaBlocks());
-        } else if (Utils.isNotEmpty(acc.getTerminalMediaBlocks())) {
-            // 完整终态载体中的 blocks 已有协议顺序，必须原样保留 TextBlock 与媒体的相对位置。
-            return new ArrayList<>(acc.getTerminalMediaBlocks());
-        }
-
-        if (Utils.isEmpty(agg)) {
-            // 纯文本保持旧形态：不填充 blocks
-            return null;
-        }
-
-        List<ContentBlock> result = new ArrayList<>();
-        if (Utils.isNotEmpty(text)) {
-            result.add(TextBlock.of(text));
-        }
-        result.addAll(agg);
-        return result;
-    }
-
-    private static boolean containsTextBlock(List<ContentBlock> blocks) {
-        for (ContentBlock block : blocks) {
-            if (block instanceof TextBlock) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**

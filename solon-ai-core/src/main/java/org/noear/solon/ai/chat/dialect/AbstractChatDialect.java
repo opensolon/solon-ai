@@ -992,8 +992,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
      * 将传统结构化解析结果立即发布为 Event-first 事件。
      *
      * <p>该辅助方法只供复用 {@link AssistantMessage} 作为解析中间结构的方言使用：它分别检查
-     * thinkingRaw / textRaw 并直接发出增量事件；空边界消息不发增量。消息中的 raw、search、
-     * metadata、reasoningField 与媒体等协议载体会先合并到终态载体。</p>
+     * thinkingRaw / textRaw 并直接发出增量事件；空边界消息不发增量。消息中的工具调用、搜索结果、
+     * metadata、媒体及 protocolStates 会先合并到终态载体。</p>
      *
      * <p>工具调用按 index 优先、id 兜底识别；同一调用只发一次 START，参数事件只携带当前分片的
      * argumentsStr。TOOL_CALL_END 由核心在所有参数聚合完成后统一发出。</p>

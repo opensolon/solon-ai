@@ -34,7 +34,6 @@ import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -228,7 +227,7 @@ public class ChatResponseFacadeTest {
     }
 
     @Test
-    public void streamProtocolContentRawSurvivesTextFragments() {
+    public void streamDropsLegacyContentRawAndKeepsTextFragments() {
         ChatAccumulator acc = newStreamAcc();
         AssistantMessage legacyCarrier = (AssistantMessage) ChatMessage.fromJson(
                 "{\"role\":\"assistant\",\"text\":\"\"," +
@@ -239,12 +238,11 @@ public class ChatResponseFacadeTest {
 
         AssistantMessage terminal = acc.snapshotTerminal().getMessage();
         assertEquals("分片A分片B", terminal.getText());
-        assertEquals("protocol-carrier", ((Map<?, ?>) terminal.getContentRaw()).get("type"),
-                "协议型 raw 必须保留");
+        assertNull(terminal.getContentRaw(), "终态聚合不再生成 legacy raw 载体");
     }
 
     @Test
-    public void streamTerminalCarrierSurvivesContentItemsClear() {
+    public void streamTerminalSemanticCarrierSurvivesContentItemsClear() {
         ChatAccumulator acc = newStreamAcc();
         AssistantMessage carrier = (AssistantMessage) ChatMessage.fromJson(
                 "{\"role\":\"assistant\",\"text\":\"\"," +
@@ -261,11 +259,11 @@ public class ChatResponseFacadeTest {
         acc.mergeTerminalMessage(new AssistantMessage("", ""));
         AssistantMessage terminal = acc.snapshotTerminal().getMessage();
         assertNotNull(terminal);
-        assertEquals("output_text", ((Map<?, ?>) terminal.getContentRaw()).get("type"));
+        assertNull(terminal.getContentRaw());
         assertEquals("call_1", terminal.getToolCalls().get(0).getId());
-        assertEquals("call_raw", terminal.getToolCallsRaw().get(0).get("id"));
-        assertEquals("solon", terminal.getSearchResultsRaw().get(0).get("query"));
-        assertEquals("reasoning_content", terminal.getReasoningFieldName());
+        assertNull(terminal.getToolCallsRaw());
+        assertNull(terminal.getSearchResultsRaw());
+        assertNull(terminal.getReasoningFieldName());
         assertEquals("rs_1", terminal.getMetadataAs("reasoning_item_id"));
         assertTrue(terminal.hasMedia());
     }
@@ -297,7 +295,7 @@ public class ChatResponseFacadeTest {
     }
 
     @Test
-    public void streamToolFinalizationMergePreservesProtocolCarrier() {
+    public void streamToolFinalizationMergeKeepsSemanticCarrier() {
         ChatAccumulator acc = newStreamAcc();
         AssistantMessage legacyCarrier = (AssistantMessage) ChatMessage.fromJson(
                 "{\"role\":\"assistant\",\"text\":\"\"," +
@@ -312,7 +310,7 @@ public class ChatResponseFacadeTest {
                 .addMetadata("tool_meta", "kept"));
 
         AssistantMessage terminal = acc.snapshotTerminal().getMessage();
-        assertEquals("reasoning", ((Map<?, ?>) terminal.getContentRaw()).get("type"));
+        assertNull(terminal.getContentRaw());
         assertTrue(terminal.hasMedia());
         assertEquals("rs_1", terminal.getMetadataAs("reasoning_item_id"));
         assertEquals("kept", terminal.getMetadataAs("tool_meta"));

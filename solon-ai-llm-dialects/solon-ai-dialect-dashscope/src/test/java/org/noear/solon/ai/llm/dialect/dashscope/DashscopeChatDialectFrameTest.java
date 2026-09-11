@@ -252,7 +252,6 @@ public class DashscopeChatDialectFrameTest {
         assertEquals("https://example.com/1", result.getUrl());
         assertEquals("杭州天气预报", result.getSnippet());
         assertNull(message.getSearchResultsRaw(), "新解析路径不得写旧 raw 字段");
-        assertNull(acc.getTerminalSearchResultsRaw());
 
         List<ChatEvent> searchEvents = eventsOfType(ChatEventType.SEARCH_RESULT);
         assertEquals(1, searchEvents.size());
@@ -272,7 +271,7 @@ public class DashscopeChatDialectFrameTest {
                         + "\"message\":{\"role\":\"assistant\",\"content\":\"杭州今天晴\"}}]}}");
 
         assertNull(acc.getTerminalSearchResults());
-        assertNull(acc.getTerminalSearchResultsRaw());
+
         assertTrue(eventsOfType(ChatEventType.SEARCH_RESULT).isEmpty());
     }
 
@@ -305,7 +304,7 @@ public class DashscopeChatDialectFrameTest {
         assertEquals("https://example.com/2", result.getUrl());
         assertEquals("今日晴，最高温度25度", result.getSnippet());
         assertNull(message.getSearchResultsRaw(), "新解析路径不得写旧 raw 字段");
-        assertNull(acc.getTerminalSearchResultsRaw());
+
         assertTrue(acc.getAggregationSearchResults().isEmpty(), "非流式路径不应伪造流式事件聚合");
     }
 

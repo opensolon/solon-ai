@@ -79,17 +79,13 @@ public class ChatAccumulator {
     protected final Map<String, ToolCallBuilder> toolCallBuilders = new LinkedHashMap<>();
 
     /**
-     * 终态消息载体。它独立于流式事件，只保存完整消息所需的协议字段。
+     * 终态消息载体。它独立于流式事件，只保存完整消息所需的通用语义与协议状态。
      */
     private boolean terminalMessagePresent;
-    private Object terminalContentRaw;
     private Map<String, MessageProtocolState> terminalProtocolStates;
-    private List<Map> terminalToolCallsRaw;
     private List<ToolCall> terminalToolCalls;
     private List<SearchResult> terminalSearchResults;
     private List<Citation> terminalCitations;
-    private List<Map> terminalSearchResultsRaw;
-    private String terminalReasoningFieldName;
     private String terminalText;
     private String terminalThinking;
     private Map<String, Object> terminalMetadata;
@@ -116,6 +112,97 @@ public class ChatAccumulator {
     /** 从当前状态拍终态快照（getMessage() 即完整聚合） */
     public ChatResponse snapshotTerminal() {
         return new ChatResponseDefault(this, true);
+    }
+
+    /**
+     * 从当前累积状态构造终态消息快照。
+     * <p>事件聚合结果优先，完整终态载体作为没有对应事件时的语义回退。</p>
+     */
+    AssistantMessage buildTerminalMessage() {
+        String text = getAggregationText();
+        if (Utils.isEmpty(text) && terminalText != null) {
+            text = terminalText;
+        }
+        String thinking = getAggregationThinking();
+        if (Utils.isEmpty(thinking) && terminalThinking != null) {
+            thinking = terminalThinking;
+        }
+        if (text == null) text = "";
+        if (thinking == null) thinking = "";
+
+        boolean present = terminalMessagePresent
+                || text.length() > 0
+                || thinking.length() > 0
+                || Utils.isNotEmpty(mediaBlocks)
+                || Utils.isNotEmpty(terminalMediaBlocks)
+                || Utils.isNotEmpty(aggregationSearchResults)
+                || Utils.isNotEmpty(terminalSearchResults)
+                || Utils.isNotEmpty(aggregationCitations)
+                || Utils.isNotEmpty(terminalCitations)
+                || Utils.isNotEmpty(terminalProtocolStates);
+        if (!present) {
+            return null;
+        }
+
+        List<ContentBlock> blocks = buildTerminalBlocks(text);
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (Utils.isNotEmpty(aggregationMetadata)) metadata.putAll(aggregationMetadata);
+        if (Utils.isNotEmpty(terminalMetadata)) metadata.putAll(terminalMetadata);
+
+        List<SearchResult> searchResults = Utils.isNotEmpty(aggregationSearchResults)
+                ? new ArrayList<>(aggregationSearchResults)
+                : copyOrNull(terminalSearchResults);
+        List<Citation> citations = Utils.isNotEmpty(aggregationCitations)
+                ? new ArrayList<>(aggregationCitations)
+                : copyOrNull(terminalCitations);
+
+        return AssistantMessage.snapshot(text, thinking, terminalToolCalls, blocks,
+                searchResults, citations, terminalProtocolStates, metadata);
+    }
+
+    private List<ContentBlock> buildTerminalBlocks(String text) {
+        List<ContentBlock> blocks = new ArrayList<>();
+
+        if (Utils.isNotEmpty(mediaBlocks)) {
+            // 事件是流式语义的权威来源；正文与媒体按事件到达顺序保留。
+            if (Utils.isNotEmpty(orderedBlocks)) {
+                List<ContentBlock> ordered = new ArrayList<>(orderedBlocks);
+                if (Utils.isNotEmpty(text) && containsTextBlock(ordered) == false) {
+                    // 非流式兼容方言可能只把媒体投影为事件、正文仍保存在完整终态载体中。
+                    ordered.add(0, TextBlock.of(text));
+                }
+                return ordered;
+            }
+            blocks.addAll(mediaBlocks);
+        } else if (Utils.isNotEmpty(terminalMediaBlocks)) {
+            // 完整终态载体中的 blocks 已有协议顺序，必须原样保留。
+            return new ArrayList<>(terminalMediaBlocks);
+        }
+
+        if (Utils.isEmpty(blocks)) {
+            // 纯文本保持旧形态：不填充 blocks。
+            return null;
+        }
+
+        List<ContentBlock> result = new ArrayList<>();
+        if (Utils.isNotEmpty(text)) {
+            result.add(TextBlock.of(text));
+        }
+        result.addAll(blocks);
+        return result;
+    }
+
+    private static boolean containsTextBlock(List<ContentBlock> blocks) {
+        for (ContentBlock block : blocks) {
+            if (block instanceof TextBlock) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static <T> List<T> copyOrNull(List<T> source) {
+        return Utils.isEmpty(source) ? null : new ArrayList<>(source);
     }
 
     public ChatRequest getRequest() {
@@ -178,7 +265,7 @@ public class ChatAccumulator {
     /**
      * 用完整消息替换当前响应的终态与内容聚合。
      * <p>用于 {@code returnDirect} 等“最终结果取代模型当前步骤输出”的场景：旧正文、思考、
-     * 媒体、工具调用及回放载体必须一起清空，避免把工具前导内容或已执行的调用混入最终消息。</p>
+     * 媒体、工具调用及协议状态必须一起清空，避免把工具前导内容或已执行的调用混入最终消息。</p>
      */
     public void replaceTerminalMessage(AssistantMessage message) {
         textBuilder.setLength(0);
@@ -192,14 +279,10 @@ public class ChatAccumulator {
         toolCallBuilders.clear();
 
         terminalMessagePresent = false;
-        terminalContentRaw = null;
         terminalProtocolStates = null;
-        terminalToolCallsRaw = null;
         terminalToolCalls = null;
         terminalSearchResults = null;
         terminalCitations = null;
-        terminalSearchResultsRaw = null;
-        terminalReasoningFieldName = null;
         terminalText = null;
         terminalThinking = null;
         terminalMetadata = null;
@@ -223,25 +306,15 @@ public class ChatAccumulator {
         terminalMessagePresent = true;
         if (replace || message.getTextRaw() != null) terminalText = message.getTextRaw();
         if (replace || message.getThinkingRaw() != null) terminalThinking = message.getThinkingRaw();
-        boolean protocolContentRaw = isProtocolContentRaw(message);
-        if (replace) {
-            // String 正文镜像可丢弃；Map/List 等真实 legacy 载体必须与任意新协议状态正交保留。
-            terminalContentRaw = protocolContentRaw ? message.getContentRaw() : null;
-        } else if (protocolContentRaw) {
-            terminalContentRaw = message.getContentRaw();
-        }
         if (replace) {
             terminalProtocolStates = copyProtocolStates(message.getProtocolStates());
         } else if (message.hasProtocolStates()) {
             if (terminalProtocolStates == null) terminalProtocolStates = new LinkedHashMap<>();
             mergeProtocolStates(terminalProtocolStates, message.getProtocolStates());
         }
-        if (replace || Utils.isNotEmpty(message.getToolCallsRaw())) terminalToolCallsRaw = message.getToolCallsRaw();
         if (replace || Utils.isNotEmpty(message.getToolCalls())) terminalToolCalls = message.getToolCalls();
         if (replace || Utils.isNotEmpty(message.getSearchResults())) terminalSearchResults = message.getSearchResults();
         if (replace || Utils.isNotEmpty(message.getCitations())) terminalCitations = message.getCitations();
-        if (replace || Utils.isNotEmpty(message.getSearchResultsRaw())) terminalSearchResultsRaw = message.getSearchResultsRaw();
-        if (replace || Utils.isNotEmpty(message.getReasoningFieldName())) terminalReasoningFieldName = message.getReasoningFieldName();
         if (replace) {
             terminalMetadata = message.hasMetadata() ? new LinkedHashMap<>(message.getMetadata()) : null;
             terminalMediaBlocks = Utils.isEmpty(message.getBlocks())
@@ -254,33 +327,6 @@ public class ChatAccumulator {
             if (terminalMetadata == null) terminalMetadata = new LinkedHashMap<>();
             terminalMetadata.putAll(message.getMetadata());
         }
-    }
-
-    /**
-     * 兼容旧版本或外部旧构造器生成的 String contentRaw 正文镜像，不把它视为终态协议载体。
-     * 忽略它可避免最后一个文本分片覆盖最终完整正文；Map/List 等旧协议 raw 仍原样保留。
-     */
-    private boolean isProtocolContentRaw(AssistantMessage message) {
-        Object value = message.getContentRaw();
-        if (!hasTerminalValue(value)) {
-            return false;
-        }
-        return !(value instanceof String && Objects.equals(value, message.getContent()));
-    }
-
-    private boolean hasTerminalValue(Object value) {
-        if (value == null) return false;
-        if (value instanceof CharSequence) return ((CharSequence) value).length() > 0;
-        if (value instanceof Map) return Utils.isNotEmpty((Map) value);
-        if (value instanceof List) return Utils.isNotEmpty((List) value);
-        return true;
-    }
-
-    /** 完整覆盖终态工具调用；用于组装完成或 returnDirect 清空旧分片。 */
-    public void setTerminalToolCalls(List<Map> toolCallsRaw, List<ToolCall> toolCalls) {
-        terminalMessagePresent = true;
-        terminalToolCallsRaw = toolCallsRaw;
-        terminalToolCalls = toolCalls;
     }
 
     /**
@@ -322,16 +368,10 @@ public class ChatAccumulator {
     }
 
     public boolean isTerminalMessagePresent() { return terminalMessagePresent; }
-    /** @deprecated 4.1 仅用于旧 contentRaw 兼容。 */
-    @Deprecated
-    public Object getTerminalContentRaw() { return terminalContentRaw; }
     public Map<String, MessageProtocolState> getTerminalProtocolStates() { return terminalProtocolStates; }
-    public List<Map> getTerminalToolCallsRaw() { return terminalToolCallsRaw; }
     public List<ToolCall> getTerminalToolCalls() { return terminalToolCalls; }
     public List<SearchResult> getTerminalSearchResults() { return terminalSearchResults; }
     public List<Citation> getTerminalCitations() { return terminalCitations; }
-    public List<Map> getTerminalSearchResultsRaw() { return terminalSearchResultsRaw; }
-    public String getTerminalReasoningFieldName() { return terminalReasoningFieldName; }
     public String getTerminalText() { return terminalText; }
     public String getTerminalThinking() { return terminalThinking; }
     public Map<String, Object> getTerminalMetadata() { return terminalMetadata; }

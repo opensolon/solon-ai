@@ -213,7 +213,7 @@ public class DashscopeChatEventTest {
         assertNotNull(message.getSearchResults());
         assertEquals(2, message.getSearchResults().size());
         assertNull(message.getSearchResultsRaw(), "新解析路径不得写旧 raw 字段");
-        assertNull(acc.getTerminalSearchResultsRaw());
+
     }
 
     @Test

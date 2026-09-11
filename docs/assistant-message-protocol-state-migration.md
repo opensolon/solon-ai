@@ -207,7 +207,7 @@ getContentRaw() == null
 - `replaceTerminalMessage` 清空旧状态，避免 return-direct 继承上一步状态；
 - metadata 与 protocol states 始终独立。
 
-旧 `terminalContentRaw` 在兼容期保留，只承载旧消息数据，不能作为新状态的主路径。
+累积器不再保存或生成 `terminalContentRaw`；旧消息中的 `contentRaw` 仅在反序列化与请求回放的兼容读路径中保留。
 
 ### 6.2 `ChatResponseDefault`
 

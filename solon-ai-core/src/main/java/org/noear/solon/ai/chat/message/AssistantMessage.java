@@ -168,36 +168,6 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     /**
-     * 构造包含旧版协议载体的终态兼容快照。
-     * <p>仅供核心聚合边界保存第三方旧方言提交的历史字段；新方言不得使用。</p>
-     *
-     * @since 4.1
-     */
-    @SuppressWarnings("deprecation")
-    public static AssistantMessage legacySnapshot(String text,
-                                                   String thinking,
-                                                   Object contentRaw,
-                                                   List<Map> toolCallsRaw,
-                                                   List<ToolCall> toolCalls,
-                                                   List<Map> searchResultsRaw,
-                                                   String reasoningFieldName,
-                                                   List<ContentBlock> blocks,
-                                                   List<SearchResult> searchResults,
-                                                   List<Citation> citations,
-                                                   Map<String, MessageProtocolState> protocolStates,
-                                                   Map<String, Object> metadata) {
-        AssistantMessage message = new AssistantMessage(text, thinking, contentRaw,
-                copyList(toolCallsRaw), toolCalls, copyList(searchResultsRaw), blocks);
-        message.reasoningFieldName = reasoningFieldName;
-        message.searchResults = copyList(searchResults);
-        message.citations = copyList(citations);
-        message.protocolStates = copyProtocolStates(protocolStates);
-        message.metadata = copyMap(metadata);
-        message.bindProtocolStateSemanticHashesInternal();
-        return message;
-    }
-
-    /**
      * @deprecated 4.1 {@code contentRaw} 仅用于旧数据兼容；新代码请使用通用语义字段与 protocolStates
      */
     @Deprecated

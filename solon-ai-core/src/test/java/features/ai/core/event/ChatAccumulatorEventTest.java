@@ -232,7 +232,7 @@ public class ChatAccumulatorEventTest {
     }
 
     @Test
-    public void foreignProtocolStateMustNotDeleteLegacyRawDuringAggregation() {
+    public void terminalAggregationKeepsProtocolStateButDropsLegacyRaw() {
         ChatAccumulator acc = newAccumulator(false);
         String legacyJson = "{\"role\":\"assistant\",\"text\":\"answer\",\"thinking\":\"thought\"," +
                 "\"contentRaw\":{\"thinkingSignature\":\"sig_old\"}}";
@@ -247,7 +247,7 @@ public class ChatAccumulatorEventTest {
         AssistantMessage restored = acc.snapshotTerminal().getMessage();
 
         assertNotNull(restored.getProtocolState("openai.responses"));
-        assertEquals("sig_old", ((java.util.Map<?, ?>) restored.getContentRaw()).get("thinkingSignature"));
+        assertNull(restored.getContentRaw(), "终态聚合不再生成 legacy raw 载体");
     }
 
     @Test
@@ -267,7 +267,6 @@ public class ChatAccumulatorEventTest {
                 Arrays.asList(delivered.get(0).getType(), delivered.get(1).getType()));
         assertEquals("reasoning", acc.getAggregationThinking());
         assertEquals("answer", acc.getAggregationText());
-        assertEquals("reasoning_content", acc.getTerminalReasoningFieldName());
         assertEquals("kept", acc.getTerminalMetadata().get("carrier"));
     }
 

@@ -101,7 +101,7 @@ public interface ChatDialect extends AiModelDialect {
      * 出错就 {@code ctx.getAccumulator().setError(...)}，已消费但无内容则什么都不做。</p>
      *
      * <p>Event-first 契约：语义内容应构造成事件并统一调用 {@code ctx.emit(...)}；上下文会先把
-     * 事件归并到累积器，再向下游投递。已解析的协议 metadata/raw 等终态载体可通过
+     * 事件归并到累积器，再向下游投递。已解析的 metadata、媒体及 protocolStates 等终态载体可通过
      * {@code ctx.getAccumulator().mergeTerminalMessage(...)} 合并；同一语义不得重复发射。</p>
      *
      * @param ctx      流上下文

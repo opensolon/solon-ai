@@ -254,7 +254,7 @@ void parseResponseJson(ChatStreamContext ctx, String respJson);
 方言可以：
 
 - 正文、思考、工具调用、搜索结果、引用、媒体和用量通过 `ctx.emit(...)` 发射语义事件，核心会先归并到 `ChatAccumulator` 再投递；
-- 已解析成完整 `AssistantMessage` 的兼容路径可使用核心辅助发布方法；若需单独保存协议 metadata/raw 等终态载体，应使用 `ctx.getAccumulator().mergeTerminalMessage(...)`；
+- 已解析成完整 `AssistantMessage` 的兼容路径可使用核心辅助发布方法；若需保存 metadata、媒体或 `protocolStates` 等终态载体，应使用 `ctx.getAccumulator().mergeTerminalMessage(...)`；
 - 使用 `ctx.event(type)` 创建事件。该构建器已经预填当前 `responseId`、供应商响应 id（如果已设置）和 `step`；
 - 使用 `ctx.attrPut` / `ctx.attrAs` 保存跨帧的方言私有状态；
 - 解析错误时写入 `ctx.getAccumulator().setError(...)`，已消费但没有语义内容时不发事件。
