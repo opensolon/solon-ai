@@ -149,19 +149,16 @@ public class AnthropicResponseParser {
                 block.getOrNew("citations").asArray().add(ONode.ofJson(citation.toJson()));
             }
         } else if ("input_json_delta".equals(deltaType)) {
-            String partial = delta.get("partial_json").getString();
+            // 参数分片只做字符串累计，不做逐帧 JSON 解析：完成前的累计串几乎必然不是合法 JSON
+            //（截断的对象、裸的键名），逐帧尝试解析是 O(n²) 纯开销；最终 input 统一在
+            // content_block_stop 由 updateStreamToolBlockInput 落定（或流中断时保留 start 初值）。
             Map<Integer, StreamToolState> states = toolStates(acc, false);
             StreamToolState state = states == null ? null : states.get(index);
-            if (state != null && Utils.isNotEmpty(partial)) {
-                state.hasInputDelta = true;
-                state.toolInput.append(partial);
-                // start 已携带完整 input 时，delta 可能是替代流而不是可直接追加的后缀。
-                // 此类兼容形态延迟到 block_stop 决定最终参数，避免构造 {}{...} 一类非法累计串。
-                if (state.initialInput == null) {
-                    try {
-                        block.set("input", ONode.ofJson(state.toolInput.toString()));
-                    } catch (Exception ignored) {
-                    }
+            if (state != null) {
+                String partial = delta.get("partial_json").getString();
+                if (Utils.isNotEmpty(partial)) {
+                    state.hasInputDelta = true;
+                    state.toolInput.append(partial);
                 }
             }
         }
@@ -666,7 +663,8 @@ public class AnthropicResponseParser {
                 continue;
             }
             if ("[DONE]".equals(jsonData)) {
-                acc.attrRemove(STREAM_TOOL_STATE_KEY);
+                // 工具状态由终态收口的 flushPendingToolStates 统一兑底与清理（不能在此先移除，
+                // 否则缺 content_block_stop 的截断流参数永远停在字符串累计阶段）
                 emitTerminalFrameOnce(ctx, "[DONE]");
                 return true;
             }
@@ -1034,19 +1032,18 @@ public class AnthropicResponseParser {
                     }
                 }
             } else if ("message_stop".equals(eventType)) {
-                // 消息结束：清理状态并收口终态（thinking 边界闭合走事件，签名载体走内容项）
-                acc.attrRemove(STREAM_TOOL_STATE_KEY);
+                // 消息结束：收口终态（thinking 边界闭合走事件，签名载体走内容项）。
+                // 工具状态同样由 flushPendingToolStates 统一兑底，不在此提前移除
                 emitTerminalFrameOnce(ctx, eventType);
 
                 acc.setFinished(true);
                 hasContent = true;
             } else if ("ping".equals(eventType)) {
-                // 心跳：旧实现直接 continue（整帧丢弃）；现在以事件透出（默认不投递给订阅方）
+                // 心跳：旧实现直接丢弃；现在以事件透出（默认不投递给订阅方）
                 ctx.emit(ctx.event(ChatEventType.HEARTBEAT)
                         .rawType(eventType)
                         .raw(oResp)
                         .build());
-                continue;
             } else if (Utils.isNotEmpty(eventType)) {
                 // 未建模事件：旧实现静默丢弃，现在以 RAW 透出
                 ctx.emit(ctx.event(ChatEventType.RAW)
@@ -1410,6 +1407,10 @@ public class AnthropicResponseParser {
                     .build());
         }
 
+        // 流中断兑底：缺 content_block_stop 的截断流（网关异常、连接断开）里
+        // tool_use 参数仅停留在字符串累计，在此统一解析落定一次。
+        flushPendingToolStates(acc);
+
         Map<String, Object> protocolData = null;
         if (Utils.isNotEmpty(acc.thinkingSignature)) {
             protocolData = new LinkedHashMap<>();
@@ -1432,6 +1433,31 @@ public class AnthropicResponseParser {
         if (protocolState != null) {
             acc.putTerminalProtocolState(AnthropicMessageStateSupport.PROTOCOL_ID, protocolState);
         }
+    }
+
+    /**
+     * 终态兑底：对未收到 content_block_stop 的工具块补一次参数落定。
+     *
+     * <p>正常流由 content_block_stop 释放状态；截断流（异常断开、兼容网关缺帧）的
+     * 状态残留到终态，这里统一补齐——否则回放载体里 tool_use.input 停留在 start 的空对象，
+     * 下一轮回传会被服务端按 tool_use/tool_result 不配对拒掉。</p>
+     *
+     * @since 4.1
+     */
+    private static void flushPendingToolStates(ChatAccumulator acc) {
+        Map<Integer, StreamToolState> states = toolStates(acc, false);
+        if (states == null || states.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<Integer, StreamToolState> kv : states.entrySet()) {
+            StreamToolState state = kv.getValue();
+            String finalInput = resolveFinalToolInput(state);
+            updateStreamToolBlockInput(acc, kv.getKey(), finalInput);
+            if (state.serverTool) {
+                updateServerToolBlockInput(acc, state.toolUseId, finalInput);
+            }
+        }
+        acc.attrRemove(STREAM_TOOL_STATE_KEY);
     }
 
     /**

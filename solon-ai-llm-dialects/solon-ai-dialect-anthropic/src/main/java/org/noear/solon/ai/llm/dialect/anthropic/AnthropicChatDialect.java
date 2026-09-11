@@ -171,15 +171,6 @@ public class AnthropicChatDialect extends AbstractChatDialect {
     }
 
 
-
-//    @Override
-//    public void prepareOutputSchemaInstruction(ChatOptions options, StringBuilder instructionBuilder) {
-//        instructionBuilder.append("\n\n## [IMPORTANT: OUTPUT FORMAT]\n")
-//                .append("Format your response as a JSON object strictly following this schema:\n")
-//                .append("<output_schema>\n").append(options.outputSchema()).append("\n</output_schema>\n")
-//                .append("Output only the raw JSON, beginning with '{' and ending with '}'.");
-//    }
-
     /**
      * 置空：Anthropic 没有 OpenAI 的 {@code response_format} 字段，基类默认注入的
      * {@code response_format={type:json_object}} 在这里是非法顶层字段（直接 400）。

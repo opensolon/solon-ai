@@ -30,6 +30,8 @@ import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.noear.solon.ai.chat.content.BlobBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -38,6 +40,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Claude 请求构建器
@@ -45,6 +49,15 @@ import java.util.Set;
  * @date 2026年1月27日
  */
 public class AnthropicRequestBuilder {
+    private static final Logger LOG = LoggerFactory.getLogger(AnthropicRequestBuilder.class);
+
+    /**
+     * thinking=true / Map 简化入口未给预算时的默认思考预算。
+     * <p>必须始终小于 max_tokens（见 {@link #clampThinkingBudgetToMaxTokens}）。</p>
+     *
+     * @since 4.1
+     */
+    private static final int DEFAULT_THINKING_BUDGET = 10000;
 
     /**
      * Anthropic 每请求的 cache_control 断点上限。
@@ -169,9 +182,25 @@ public class AnthropicRequestBuilder {
      *
      * @since 4.1
      */
-    private static final java.util.regex.Pattern CLAUDE_VERSION_INVERTED_PATTERN = java.util.regex.Pattern.compile(
+    private static final Pattern CLAUDE_VERSION_INVERTED_PATTERN = java.util.regex.Pattern.compile(
             "claude[.-](\\d{1,2})(?![\\d])(?:[.-](\\d{1,2})(?![\\d.]))?[.-](?:opus|sonnet|haiku)",
-            java.util.regex.Pattern.CASE_INSENSITIVE);
+            Pattern.CASE_INSENSITIVE);
+
+    /** opus-4.7+ 正序命名（含 opus-4-7 / opus-4.8 等后续代次）。 @since 4.0.4 */
+    private static final Pattern OPUS_VERSION_PATTERN = Pattern.compile(
+            "opus-(\\d+)[.-](\\d+)(?:[.@-]|$)", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /** claude-4.7-opus 倒置命名（SAP 等网关）。 @since 4.0.4 */
+    private static final Pattern OPUS_VERSION_INVERTED_PATTERN = Pattern.compile(
+            "claude-(\\d+)[.-](\\d+)-opus(?:[.@-]|$)", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /** sonnet-5+ 正序命名。 @since 4.0.4 */
+    private static final Pattern SONNET_VERSION_PATTERN = Pattern.compile(
+            "sonnet-(\\d+)(?:[.@-]|$)", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /** claude-5-sonnet 倒置命名。 @since 4.0.4 */
+    private static final Pattern SONNET_VERSION_INVERTED_PATTERN = Pattern.compile(
+            "claude-(\\d+)-sonnet(?:[.@-]|$)", java.util.regex.Pattern.CASE_INSENSITIVE);
 
     /** 仅过滤没有正文、工具、媒体或 Anthropic 回放状态的纯思考历史。 */
     private boolean isSkippableThinkingOnlyMessage(ChatMessage message) {
@@ -862,7 +891,7 @@ public class AnthropicRequestBuilder {
             } else if ("enabled".equals(thinkingNode.get("type").getString())) {
                 // Map 简化入口声明 enabled 但没给预算时，与 thinking=true 使用相同默认值，
                 // 避免生成缺少必填 budget_tokens 的非法请求。
-                thinkingNode.set("budget_tokens", 10000);
+                thinkingNode.set("budget_tokens", DEFAULT_THINKING_BUDGET);
             }
 
             // 思考摘要可见性（协议 ThinkingConfigEnabled.display：summarized | omitted）：
@@ -877,7 +906,7 @@ public class AnthropicRequestBuilder {
             // 统一开关 / 简化配置：thinking: true|false
             if (Boolean.TRUE.equals(value)) {
                 thinkingNode.set("type", "enabled");
-                thinkingNode.set("budget_tokens", 10000); // 默认预算必须要小于等于max_token
+                thinkingNode.set("budget_tokens", DEFAULT_THINKING_BUDGET); // 默认预算必须小于等于 max_tokens
             } else {
                 thinkingNode.set("type", "disabled");
             }
@@ -1055,18 +1084,14 @@ public class AnthropicRequestBuilder {
             return false;
         }
         // opus-4.7 / opus-4-7 / opus-4.8 ...
-        java.util.regex.Matcher m1 = java.util.regex.Pattern
-                .compile("opus-(\\d+)[.-](\\d+)(?:[.@-]|$)", java.util.regex.Pattern.CASE_INSENSITIVE)
-                .matcher(model);
+        Matcher m1 = OPUS_VERSION_PATTERN.matcher(model);
         if (m1.find()) {
             int major = Integer.parseInt(m1.group(1));
             int minor = Integer.parseInt(m1.group(2));
             return major > 4 || (major == 4 && minor >= 7);
         }
         // claude-4.7-opus / claude-4-7-opus（SAP 等倒置）
-        java.util.regex.Matcher m2 = java.util.regex.Pattern
-                .compile("claude-(\\d+)[.-](\\d+)-opus(?:[.@-]|$)", java.util.regex.Pattern.CASE_INSENSITIVE)
-                .matcher(model);
+        Matcher m2 = OPUS_VERSION_INVERTED_PATTERN.matcher(model);
         if (m2.find()) {
             int major = Integer.parseInt(m2.group(1));
             int minor = Integer.parseInt(m2.group(2));
@@ -1084,15 +1109,11 @@ public class AnthropicRequestBuilder {
         if (model == null || model.isEmpty()) {
             return false;
         }
-        java.util.regex.Matcher m1 = java.util.regex.Pattern
-                .compile("sonnet-(\\d+)(?:[.@-]|$)", java.util.regex.Pattern.CASE_INSENSITIVE)
-                .matcher(model);
+        Matcher m1 = SONNET_VERSION_PATTERN.matcher(model);
         if (m1.find()) {
             return Integer.parseInt(m1.group(1)) >= 5;
         }
-        java.util.regex.Matcher m2 = java.util.regex.Pattern
-                .compile("claude-(\\d+)-sonnet(?:[.@-]|$)", java.util.regex.Pattern.CASE_INSENSITIVE)
-                .matcher(model);
+        Matcher m2 = SONNET_VERSION_INVERTED_PATTERN.matcher(model);
         if (m2.find()) {
             return Integer.parseInt(m2.group(1)) >= 5;
         }
@@ -1257,9 +1278,17 @@ public class AnthropicRequestBuilder {
      * @since 4.0.4
      */
     private ONode buildToolResultBlock(ToolMessage toolMessage) {
+        // 协议上 tool_use_id 为必填（ToolResultBlockParam.toolUseId 是 required）：
+        // 上游漏带时直接发出会换回服务端晦涩的 400。此处空串仍照发（交给服务端明确拒），
+        // null 则降级为 debug 日志，避免把 null 字面量写进请求体。
+        String toolUseId = toolMessage.getToolCallId();
+        if (toolUseId == null) {
+            LOG.debug("Anthropic tool_result is missing tool_use_id, role=tool message: {}", toolMessage.getContent());
+        }
+
         ONode block = new ONode()
                 .set("type", "tool_result")
-                .set("tool_use_id", toolMessage.getToolCallId());
+                .set("tool_use_id", toolUseId);
 
         // 协议：tool_result.is_error 标记失败结果，供模型前置纠错（经 ToolMessage.metadata 透传）
         Object isError = toolMessage.getMetadataAs("is_error");
@@ -1585,7 +1614,9 @@ public class AnthropicRequestBuilder {
      *
      * <p>{@code text/plain} 走协议的 {@code PlainTextSource}（明文 data）而不是 base64；
      * base64 source 则只允许 {@code application/pdf}。其他 MIME 或损坏的纯文本 base64
-     * 直接拒绝，避免发送必然不符合 DocumentBlockParam schema 的请求。</p>
+     * 直接拒绝（fail-fast 拋 IllegalArgumentException），避免发送必然不符合 DocumentBlockParam
+     * schema 的请求——此处是显式的「让用户在本地发现坏数据」策略，与解析侧的静默跳过
+     * （如 resolveContainerId）不同：请求构建阶段的坏输入重试也必败，静默跳过会掩盖丢失的内容块。</p>
      *
      * @since 4.1
      */
@@ -1903,6 +1934,11 @@ public class AnthropicRequestBuilder {
 
     /**
      * 构建助手消息（用于工具调用）
+     *
+     * <p>合成节点除了 thinking / redacted / 服务端块 / tool_use 外，还必须回写正文 text 块：
+     * 同一轮「先行文后调工具」时模型的自述若不落进历史，多轮上下文里这轮就只剩工具调用。
+     * 真实响应的有序块优先级更高（appendOrderedContentBlocks 原样回放），本方法只在无回放载体时生效。</p>
+     *
      * @author oisin lu
      * @date 2026年1月27日
      * @param toolCallBuilders 工具调用构建器
@@ -1930,6 +1966,14 @@ public class AnthropicRequestBuilder {
         // 回传服务端工具块：同一轮里模型先搜索再调本地工具是常见序列，
         // 不带回去就会出现「结果块缺失但后文引用了它」的不自洽上下文
         appendServerToolBlocks(contentArray, AnthropicResponseParser.getServerToolBlocks(acc, false));
+
+        // 回写本轮正文：位置与真实响应块序一致（行文在 tool_use 之前）
+        String resultContent = emptyToNull(acc.getAggregationText());
+        if (resultContent != null) {
+            contentArray.addNew()
+                    .set("type", "text")
+                    .set("text", resultContent);
+        }
 
         for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
             ToolCallBuilder builder = kv.getValue();
