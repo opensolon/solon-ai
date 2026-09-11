@@ -18,13 +18,20 @@ package org.noear.solon.ai.llm.dialect.openai;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 
+import java.util.regex.Pattern;
+
 /**
  * OpenAI 兼容协议的公共解析工具
  *
  * @since 4.1
  */
 class OpenaiDialectSupport {
-    private static final java.util.regex.Pattern VERSION_PATTERN = java.util.regex.Pattern.compile("/v\\d+/?$");
+    private static final Pattern VERSION_PATTERN = java.util.regex.Pattern.compile("/v\\d+/?$");
+    /**
+     * Azure OpenAI 的部署形态：{@code /openai/deployments/{deployment-name}}。
+     * 该形态不带 /vN 版本段，端点直接拼在部署名之后。
+     */
+    private static final Pattern AZURE_DEPLOYMENTS_PATTERN = Pattern.compile("/openai/deployments/[^/]+/?$");
 
     /**
      * 规范化接口地址：去掉 fragment、查询串与结尾斜杠，仅用于端点路径比较。
@@ -54,7 +61,9 @@ class OpenaiDialectSupport {
     /**
      * 共享的接口地址自动补全：去掉 fragment；已带端点路径（如 /chat/completions、/responses）原样返回；
      * 已带版本号（/v1、/v4 等）则补端点；否则补 /v1 + 端点。请求查询参数会原样保留。
-     * <p>对齐 OpenAI 官方路径：{@code /v1/chat/completions}、{@code /v1/responses}。</p>
+     * <p>对齐 OpenAI 官方路径：{@code /v1/chat/completions}、{@code /v1/responses}；
+     * Azure OpenAI 的部署形态 {@code /openai/deployments/{name}}（不带版本段）只补端点路径，
+     * {@code api-version} 由调用方经查询串携带。</p>
      *
      * @param apiUrl        配置的原始地址
      * @param endpointPath 端点路径（不带前导斜杠，如 "chat/completions"、"responses"）
@@ -82,6 +91,9 @@ class OpenaiDialectSupport {
         String result;
         if (baseUrl.endsWith("/" + endpointPath)) {
             result = baseUrl;
+        } else if (AZURE_DEPLOYMENTS_PATTERN.matcher(baseUrl).find()) {
+            // Azure 部署路径（…/openai/deployments/gpt-4o）：端点直接拼接，不得再补 /v1
+            result = baseUrl + "/" + endpointPath;
         } else if (VERSION_PATTERN.matcher(baseUrl).find()) { // 匹配 /v1,/v4/ 等，已带版本
             result = baseUrl + "/" + endpointPath;
         } else {
@@ -172,6 +184,28 @@ class OpenaiDialectSupport {
             return matchesModelFamily(model, "gpt" + family.substring(4));
         }
         return false;
+    }
+
+    /**
+     * 是否属于已知推理模型族（GPT-5 及后续 GPT 主系列与 o-series）。
+     * <p>统一 Chat Completions 的 developer 角色判断与 Responses 的 reasoning 选项判断两处能力逻辑，
+     * 避免同一模型名在两个方言下得到不同结论；早期模型（o1-preview / o1-mini）的特殊排除由调用方
+     * 在此基础上叠加（见 {@code OpenaiChatDialect#prefersDeveloperRole}）。</p>
+     *
+     * @param model 原始模型名（内部做 trim 与小写化）
+     * @since 4.1
+     */
+    static boolean isReasoningCapableModel(String model) {
+        if (Utils.isEmpty(model)) {
+            return false;
+        }
+
+        String modelName = model.trim().toLowerCase();
+        return isModelFamily(modelName, "gpt-5")
+                || isModelFamily(modelName, "gpt-6")
+                || isModelFamily(modelName, "o1")
+                || isModelFamily(modelName, "o3")
+                || isModelFamily(modelName, "o4");
     }
 
     private static boolean isModelTokenBoundary(char ch) {

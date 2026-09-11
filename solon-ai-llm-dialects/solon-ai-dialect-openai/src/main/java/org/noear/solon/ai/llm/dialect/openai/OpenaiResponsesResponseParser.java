@@ -37,6 +37,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -70,6 +71,8 @@ public class OpenaiResponsesResponseParser {
         final Set<String> emittedMediaItems = new HashSet<>();
         final Set<String> emittedPartialImages = new HashSet<>();
         final Set<String> emittedRefusalParts = new HashSet<>();
+        // 以下三个集合是跨 item 的全局幂等集合：key 已包含完整 item 身份（annotationKey / serverToolTerminalKey），
+        // 刻意不随 ItemSnapshot 保存/恢复，也不会在 activateItemState 切换时清空。
         final Set<String> emittedAnnotations = new HashSet<>();
         final Set<String> emittedServerToolItems = new HashSet<>();
         final Map<Integer, String> outputItemAliases = new HashMap<>();
@@ -112,6 +115,18 @@ public class OpenaiResponsesResponseParser {
     private static final String STREAM_STATE_KEY = "StreamState";
     private static final String RESPONSE_TERMINAL_STATUS_KEY = "ResponsesTerminalStatus";
     private static final String REASONING_SIGNATURE_KEYS = "ResponsesReasoningSignatureKeys";
+    /**
+     * 可回放的 output item 类型（热路径：逐帧逐项判定的静态集合，避免重复建 List）
+     */
+    private static final Set<String> REPLAYABLE_OUTPUT_ITEM_TYPES = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+            "message", "file_search_call", "computer_call", "computer_call_output",
+            "web_search_call", "function_call", "function_call_output", "tool_search_call",
+            "tool_search_output", "additional_tools", "reasoning", "compaction",
+            "image_generation_call", "code_interpreter_call", "local_shell_call",
+            "local_shell_call_output", "shell_call", "shell_call_output", "apply_patch_call",
+            "apply_patch_call_output", "mcp_list_tools", "mcp_approval_request",
+            "mcp_approval_response", "mcp_call", "custom_tool_call_output", "custom_tool_call",
+            "program", "program_output")));
     private static final String RESPONSES_OUTPUT_ITEMS_META = OpenaiResponsesMessageStateSupport.AGGREGATION_OUTPUT_ITEMS;
     private static final String RESPONSE_MESSAGE_ITEMS_META = OpenaiResponsesMessageStateSupport.AGGREGATION_MESSAGE_ITEMS;
     private static final String REASONING_ITEMS_META = OpenaiResponsesMessageStateSupport.AGGREGATION_REASONING_ITEMS;
@@ -138,6 +153,8 @@ public class OpenaiResponsesResponseParser {
                 state.itemStates.put(idKey, state.itemStates.remove(indexKey));
             }
             if (indexKey.equals(state.activeStateKey)) {
+                // 当前活跃项首次拿到 id：必须先把活跃增量落盘再迁到 id 键，
+                // 否则 id 键会恢复到旧快照，丢失 index 活跃期间的增量。
                 saveActiveItemState(state);
                 state.itemStates.put(idKey, state.itemStates.remove(indexKey));
                 state.activeStateKey = null;
@@ -313,7 +330,9 @@ public class OpenaiResponsesResponseParser {
         return eventItemKey(state, event, partName);
     }
 
-    /** 记录真正交付给 ChatAccumulator 的官方正文增量。 */
+    /**
+     * 记录真正交付给 ChatAccumulator 的官方正文增量。
+     */
     private void recordDeliveredText(StreamState state, ONode event, String value) {
         if (state == null || Utils.isEmpty(value)) return;
         activateItemState(state, event.get("item_id").getString(), optionalIndex(event, "output_index"));
@@ -326,7 +345,9 @@ public class OpenaiResponsesResponseParser {
         buf.append(value);
     }
 
-    /** 记录真正交付给 ChatAccumulator 的 reasoning 增量。 */
+    /**
+     * 记录真正交付给 ChatAccumulator 的 reasoning 增量。
+     */
     private void recordDeliveredReasoning(StreamState state, ONode event, String partName, String value) {
         if (state == null || Utils.isEmpty(value)) return;
         activateItemState(state, event.get("item_id").getString(), optionalIndex(event, "output_index"));
@@ -363,7 +384,9 @@ public class OpenaiResponsesResponseParser {
         return value == null ? null : value.toString();
     }
 
-    /** 将最终快照与已经交付的官方 delta 合并，只返回尚未交付的后缀。 */
+    /**
+     * 将最终快照与已经交付的官方 delta 合并，只返回尚未交付的后缀。
+     */
     private String missingSuffix(String finalValue, String deliveredValue) {
         if (Utils.isEmpty(finalValue)) return null;
         if (Utils.isEmpty(deliveredValue)) return finalValue;
@@ -378,7 +401,7 @@ public class OpenaiResponsesResponseParser {
      * 从流式终态帧补齐未交付文本。正文暂保留兼容内容项；思考直接发语义事件。
      */
     private boolean appendStreamFinalText(ChatStreamContext ctx, ChatAccumulator acc, StreamState state, ONode event,
-                                           String value, boolean reasoning, String partName) {
+                                          String value, boolean reasoning, String partName) {
         if (Utils.isEmpty(value)) return false;
         activateItemState(state, event.get("item_id").getString(), optionalIndex(event, "output_index"));
         String itemKey = itemKeyForEvent(state, event);
@@ -412,11 +435,13 @@ public class OpenaiResponsesResponseParser {
         if (node.hasKey("summary_index")) event.attr("summary_index", node.get("summary_index").getInt());
         if (node.hasKey("command_index")) event.attr("command_index", node.get("command_index").getInt());
         if (node.hasKey("annotation_index")) event.attr("annotation_index", node.get("annotation_index").getInt());
-        if (node.hasKey("partial_image_index")) event.attr("partial_image_index", node.get("partial_image_index").getInt());
+        if (node.hasKey("partial_image_index"))
+            event.attr("partial_image_index", node.get("partial_image_index").getInt());
         if (node.hasKey("status")) event.attr("status", node.get("status").getString());
         if (node.hasKey("logprobs")) event.attr("logprobs", node.get("logprobs"));
         return event;
     }
+
     private StreamState stateForFinalOutput(ChatAccumulator acc) {
         StreamState state = getOrCreateState(acc);
         if (state.activeStateKey == null) {
@@ -507,9 +532,9 @@ public class OpenaiResponsesResponseParser {
                         OpenaiDialectSupport.extractErrorMessage(oResp.get("error"))));
                 acc.setFinished(true);
                 ctx.emit(withResponseEventAttrs(ctx.event(ChatEventType.ERROR)
-                                .rawType("error")
-                                .error(acc.getError())
-                                .raw(oResp), oResp)
+                        .rawType("error")
+                        .error(acc.getError())
+                        .raw(oResp), oResp)
                         .build());
                 return true;
             }
@@ -546,9 +571,9 @@ public class OpenaiResponsesResponseParser {
                 acc.setError(new ChatException(OpenaiDialectSupport.extractErrorMessage(oError)));
                 acc.setFinished(true);
                 ctx.emit(withResponseEventAttrs(ctx.event(ChatEventType.ERROR)
-                                .rawType(eventType)
-                                .error(acc.getError())
-                                .raw(oResp), oResp)
+                        .rawType(eventType)
+                        .error(acc.getError())
+                        .raw(oResp), oResp)
                         .build());
                 return true;
             } else if ("response.created".equals(eventType) || "response.in_progress".equals(eventType)
@@ -563,9 +588,9 @@ public class OpenaiResponsesResponseParser {
 
                 // 旧实现下这三类帧被整帧丢弃，订阅方无法感知服务端状态推进
                 ctx.emit(withResponseEventAttrs(ctx.event(ChatEventType.STATUS)
-                                .rawType(eventType)
-                                .itemId(response == null ? null : response.get("id").getString())
-                                .raw(oResp), oResp)
+                        .rawType(eventType)
+                        .itemId(response == null ? null : response.get("id").getString())
+                        .raw(oResp), oResp)
                         .build());
             } else if (isOutputAudioEvent(eventType)) {
                 // 音频本体是 Base64 媒体；转写是文本旁路，二者不能混成普通字符串。
@@ -618,13 +643,13 @@ public class OpenaiResponsesResponseParser {
                 if (state.emittedAnnotations.add(annotationKey)) {
                     ONode annotation = oResp.getOrNull("annotation");
                     ctx.emit(withResponseEventAttrs(ctx.event(ChatEventType.CITATION)
-                                    .rawType(eventType)
-                                    .subType(annotation == null ? null : annotation.get("type").getString())
-                                    .itemId(oResp.get("item_id").getString())
-                                    .index(optionalIndex(oResp, "annotation_index"))
-                                    .text(extractAnnotationText(annotation))
-                                    .citation(parseCitation(annotation))
-                                    .raw(oResp), oResp)
+                            .rawType(eventType)
+                            .subType(annotation == null ? null : annotation.get("type").getString())
+                            .itemId(oResp.get("item_id").getString())
+                            .index(optionalIndex(oResp, "annotation_index"))
+                            .text(extractAnnotationText(annotation))
+                            .citation(parseCitation(annotation))
+                            .raw(oResp), oResp)
                             .build());
                 }
             } else if (eventType != null && isServerToolEvent(eventType)) {
@@ -655,12 +680,12 @@ public class OpenaiResponsesResponseParser {
                 String refusalKey = eventItemKey(state, oResp, "content_index");
                 if (state.emittedRefusalParts.add(refusalKey)) {
                     ctx.emit(withResponseEventAttrs(ctx.event(ChatEventType.CONTENT_FILTER)
-                                    .rawType(eventType)
-                                    .subType("refusal")
-                                    .itemId(oResp.get("item_id").getString())
-                                    .index(optionalIndex(oResp, "output_index"))
-                                    .text(firstNonEmpty(oResp, "refusal", "text"))
-                                    .raw(oResp), oResp)
+                            .rawType(eventType)
+                            .subType("refusal")
+                            .itemId(oResp.get("item_id").getString())
+                            .index(optionalIndex(oResp, "output_index"))
+                            .text(firstNonEmpty(oResp, "refusal", "text"))
+                            .raw(oResp), oResp)
                             .build());
                 }
                 hasContent |= appended;
@@ -813,12 +838,12 @@ public class OpenaiResponsesResponseParser {
                 hasContent |= appendStreamFinalText(ctx, acc, state, oResp, value, true, "summary_index");
                 if (oResp.hasKey("status")) {
                     ctx.emit(withResponseEventAttrs(ctx.event(ChatEventType.STATUS)
-                                    .rawType(eventType)
-                                    .subType("reasoning_summary")
-                                    .itemId(oResp.get("item_id").getString())
-                                    .index(optionalIndex(oResp, "output_index"))
-                                    .text(oResp.get("status").getString())
-                                    .raw(oResp), oResp)
+                            .rawType(eventType)
+                            .subType("reasoning_summary")
+                            .itemId(oResp.get("item_id").getString())
+                            .index(optionalIndex(oResp, "output_index"))
+                            .text(oResp.get("status").getString())
+                            .raw(oResp), oResp)
                             .build());
                 }
             } else if ("response.refusal.delta".equals(eventType)) {
@@ -843,11 +868,11 @@ public class OpenaiResponsesResponseParser {
                     // 旧实现下拒答被当普通正文输出，订阅方无法识别；
                     // 此处另发专用事件，文本降级同时保留（不破坏现有 UI）
                     ctx.emit(withResponseEventAttrs(ctx.event(ChatEventType.REFUSAL_DELTA)
-                                    .rawType(eventType)
-                                    .itemId(oResp.get("item_id").getString())
-                                    .index(optionalIndex(oResp, "output_index"))
-                                    .text(delta)
-                                    .raw(oResp), oResp)
+                            .rawType(eventType)
+                            .itemId(oResp.get("item_id").getString())
+                            .index(optionalIndex(oResp, "output_index"))
+                            .text(delta)
+                            .raw(oResp), oResp)
                             .build());
                 }
             } else if ("response.reasoning_text.delta".equals(eventType)) {
@@ -893,10 +918,10 @@ public class OpenaiResponsesResponseParser {
                     String refusalKey = eventItemKey(state, oResp, "content_index");
                     if (state.emittedRefusalParts.add(refusalKey)) {
                         ctx.emit(withResponseEventAttrs(ctx.event(ChatEventType.CONTENT_FILTER)
-                                        .rawType(eventType).subType("refusal")
-                                        .itemId(oResp.get("item_id").getString())
-                                        .index(optionalIndex(oResp, "output_index"))
-                                        .text(value).raw(oResp), oResp).build());
+                                .rawType(eventType).subType("refusal")
+                                .itemId(oResp.get("item_id").getString())
+                                .index(optionalIndex(oResp, "output_index"))
+                                .text(value).raw(oResp), oResp).build());
                     }
                 }
             } else if ("response.completed".equals(eventType)) {
@@ -1016,11 +1041,11 @@ public class OpenaiResponsesResponseParser {
                 }
                 acc.setFinished(true);
                 ctx.emit(withResponseEventAttrs(ctx.event(ChatEventType.STATUS)
-                                .rawType(eventType)
-                                .subType(reason)
-                                .text(acc.getLastFinishReasonNormalized())
-                                .attr("finish_reason", acc.getLastFinishReasonNormalized())
-                                .raw(oResp), oResp)
+                        .rawType(eventType)
+                        .subType(reason)
+                        .text(acc.getLastFinishReasonNormalized())
+                        .attr("finish_reason", acc.getLastFinishReasonNormalized())
+                        .raw(oResp), oResp)
                         .build());
                 acc.attrPut(RESPONSE_TERMINAL_STATUS_KEY, eventType);
                 hasContent = true;
@@ -1043,9 +1068,9 @@ public class OpenaiResponsesResponseParser {
                     acc.setError(new ChatException("Response failed"));
                 }
                 ctx.emit(withResponseEventAttrs(ctx.event(ChatEventType.ERROR)
-                                .rawType(eventType)
-                                .error(acc.getError())
-                                .raw(oResp), oResp)
+                        .rawType(eventType)
+                        .error(acc.getError())
+                        .raw(oResp), oResp)
                         .build());
                 acc.setFinished(true);
                 // 失败也视为有效处理帧，防止错误被当作解析失败吞掉
@@ -1053,8 +1078,8 @@ public class OpenaiResponsesResponseParser {
             } else {
                 // 未建模事件：旧实现静默丢弃，现在以 RAW 透出（默认不投递，需显式开启）
                 ctx.emit(withResponseEventAttrs(ctx.event(ChatEventType.RAW)
-                                .rawType(eventType)
-                                .raw(oResp), oResp)
+                        .rawType(eventType)
+                        .raw(oResp), oResp)
                         .build());
                 //RAW 是已消费的合法模型帧，不能让调用方误判为不可识别响应。
                 hasContent = true;
@@ -1158,12 +1183,12 @@ public class OpenaiResponsesResponseParser {
             return;
         }
         ctx.emit(withResponseEventAttrs(ctx.event(ChatEventType.SERVER_TOOL_RESULT)
-                        .rawType("response.output_item.done")
-                        .subType(item.get("type").getString())
-                        .itemId(item.get("id").getString())
-                        .index(optionalIndex(event, "output_index"))
-                        .text(extractEventText(item))
-                        .raw(event), event)
+                .rawType("response.output_item.done")
+                .subType(item.get("type").getString())
+                .itemId(item.get("id").getString())
+                .index(optionalIndex(event, "output_index"))
+                .text(extractEventText(item))
+                .raw(event), event)
                 .build());
     }
 
@@ -1238,14 +1263,7 @@ public class OpenaiResponsesResponseParser {
     }
 
     private boolean isReplayableOutputItem(String type) {
-        return Arrays.asList("message", "file_search_call", "computer_call", "computer_call_output",
-                "web_search_call", "function_call", "function_call_output", "tool_search_call",
-                "tool_search_output", "additional_tools", "reasoning", "compaction",
-                "image_generation_call", "code_interpreter_call", "local_shell_call",
-                "local_shell_call_output", "shell_call", "shell_call_output", "apply_patch_call",
-                "apply_patch_call_output", "mcp_list_tools", "mcp_approval_request",
-                "mcp_approval_response", "mcp_call", "custom_tool_call_output", "custom_tool_call",
-                "program", "program_output").contains(type);
+        return REPLAYABLE_OUTPUT_ITEM_TYPES.contains(type);
     }
 
     private void putReplayItem(List<Map<String, Object>> items, Map<String, Object> value) {
@@ -1321,12 +1339,12 @@ public class OpenaiResponsesResponseParser {
         }
 
         ChatEventDefault.Builder event = withResponseEventAttrs(ctx.event(type)
-                        .rawType(eventType)
-                        .subType(subType)
-                        .itemId(oResp.get("item_id").getString())
-                        .index(optionalIndex(oResp, "output_index"))
-                        .text(extractEventText(oResp))
-                        .raw(oResp), oResp);
+                .rawType(eventType)
+                .subType(subType)
+                .itemId(oResp.get("item_id").getString())
+                .index(optionalIndex(oResp, "output_index"))
+                .text(extractEventText(oResp))
+                .raw(oResp), oResp);
         ONode delta = oResp.getOrNull("delta");
         if (delta != null && delta.isObject()) {
             if (delta.hasKey("stdout")) event.attr("stdout", delta.get("stdout").getString());
@@ -1971,11 +1989,11 @@ public class OpenaiResponsesResponseParser {
                     ? state.currentReasoningId : state.currentItemId;
         }
         ctx.emit(withResponseEventAttrs(ctx.event(ChatEventType.THINKING_DELTA)
-                        .rawType(event == null ? null : event.get("type").getString())
-                        .itemId(itemId)
-                        .index(optionalIndex(event, "output_index"))
-                        .text(text)
-                        .raw(event), event)
+                .rawType(event == null ? null : event.get("type").getString())
+                .itemId(itemId)
+                .index(optionalIndex(event, "output_index"))
+                .text(text)
+                .raw(event), event)
                 .build());
     }
 
@@ -2130,10 +2148,10 @@ public class OpenaiResponsesResponseParser {
                                 recordDeliveredText(state, finalEvent, missing);
                                 if (Utils.isEmpty(delivered)) {
                                     ctx.emit(withResponseEventAttrs(ctx.event(ChatEventType.REFUSAL_DELTA)
-                                                    .rawType("response.refusal")
-                                                    .itemId(item.get("id").getString())
-                                                    .index(outputPosition)
-                                                    .text(value).raw(part), finalEvent)
+                                            .rawType("response.refusal")
+                                            .itemId(item.get("id").getString())
+                                            .index(outputPosition)
+                                            .text(value).raw(part), finalEvent)
                                             .build());
                                 }
                             }

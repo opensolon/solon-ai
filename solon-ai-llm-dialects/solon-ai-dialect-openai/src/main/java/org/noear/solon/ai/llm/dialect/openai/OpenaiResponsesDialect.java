@@ -23,6 +23,7 @@ import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
+import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.MessageProtocolState;
@@ -31,7 +32,6 @@ import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.noear.solon.core.util.Assert;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -77,7 +77,7 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
 
         // 先规范化 URL（去尾斜杠/查询串/#后缀）再做 endsWith，避免 https://host/v1/responses/?x 失配
         return "openai-responses".equals(standard) ||
-                (Assert.isEmpty(standard)
+                (Utils.isEmpty(standard)
                         && OpenaiDialectSupport.normalizeApiUrl(config.getApiUrl()).endsWith("/responses"));
     }
 
@@ -87,11 +87,26 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
     @Override
     public void parseResponseJson(ChatStreamContext ctx, String data) {
         //有些中转会直接输出："error xxx" 内容
+        //与 Chat Completions 方言对齐：命中纯文本错误时同步发射 ERROR 事件，订阅方无需等核心层收尾透出
         if (tryParseErrorText(ctx.getAccumulator(), data)) {
+            emitError(ctx, ctx.getAccumulator(), null);
             return;
         }
 
         responseParser.parseResponse(ctx, data);
+    }
+
+    /**
+     * 发射错误事件（与 OpenaiChatDialect 同构）
+     *
+     * @since 4.1
+     */
+    private void emitError(ChatStreamContext ctx, ChatAccumulator acc, ONode raw) {
+        ctx.emit(ctx.event(ChatEventType.ERROR)
+                .rawType("error")
+                .error(acc.getError())
+                .raw(raw)
+                .build());
     }
 
     /**
@@ -128,6 +143,9 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
 
     /**
      * 递归为 strict 模式补充 additionalProperties 和 required
+     * <p>已知边界：仅覆盖 object.properties 与 array.items 内的子 schema；
+     * anyOf / oneOf / allOf 等组合子内的 object 子 schema 不会补全（官方 strict
+     * 对组合子的支持本身受限，需要时应改用扁平结构重写 schema）。</p>
      */
     private void applyStrictSchema(ONode node) {
         if (node == null || !node.isObject()) {

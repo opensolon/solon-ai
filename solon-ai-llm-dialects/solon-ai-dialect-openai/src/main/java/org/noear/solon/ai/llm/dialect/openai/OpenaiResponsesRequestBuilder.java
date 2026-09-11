@@ -1019,22 +1019,13 @@ public class OpenaiResponsesRequestBuilder {
 
     /**
      * 判断是否可安全自动发送 OpenAI reasoning 配置。
-     * <p>官方 SDK 将该配置限定于 GPT-5 及后续 GPT 主系列和 o-series；未知模型保持保守，
-     * 需要时可通过显式 reasoning 绕过自动判断。</p>
+     * <p>与 Chat Completions 的 developer 角色判断共享同一能力模型族清单（
+     * {@link OpenaiDialectSupport#isReasoningCapableModel}），保证两个方言对同一模型名结论一致。</p>
      *
      * @since 4.1
      */
     private boolean supportsReasoningOptions(String model) {
-        if (Utils.isEmpty(model)) {
-            return false;
-        }
-
-        String modelName = model.trim().toLowerCase();
-        return OpenaiDialectSupport.isModelFamily(modelName, "gpt-5")
-                || OpenaiDialectSupport.isModelFamily(modelName, "gpt-6")
-                || OpenaiDialectSupport.isModelFamily(modelName, "o1")
-                || OpenaiDialectSupport.isModelFamily(modelName, "o3")
-                || OpenaiDialectSupport.isModelFamily(modelName, "o4");
+        return OpenaiDialectSupport.isReasoningCapableModel(model);
     }
 
     /**

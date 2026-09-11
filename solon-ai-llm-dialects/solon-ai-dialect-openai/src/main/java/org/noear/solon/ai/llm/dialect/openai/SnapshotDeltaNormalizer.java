@@ -30,6 +30,8 @@ import org.noear.solon.Utils;
  * </ul>
  *
  * <p>累积基准是本类自己 append 的报文文本，不受 think 标签分流、多 TextBlock 拼接等核心层加工影响。</p>
+ * <p>同步提示：solon-ai-dialect-dashscope 模块存在同规则镜像实现（该处因模块独立发布无法跨模块引用），
+ * 判定规则改动请两边同步。</p>
  *
  * @author noear
  * @since 4.1

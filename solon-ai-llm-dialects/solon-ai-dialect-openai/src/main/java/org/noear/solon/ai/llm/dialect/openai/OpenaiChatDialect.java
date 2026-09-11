@@ -25,6 +25,7 @@ import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -204,16 +205,13 @@ public class OpenaiChatDialect extends AbstractChatDialect {
         }
 
         String modelName = model.trim().toLowerCase(Locale.ROOT);
+        // o1-preview / o1-mini 属于早期模型：官方 SDK 仍使用 system，不自动转换为 developer。
         if (OpenaiDialectSupport.isModelFamily(modelName, "o1-preview")
                 || OpenaiDialectSupport.isModelFamily(modelName, "o1-mini")) {
             return false;
         }
 
-        return OpenaiDialectSupport.isModelFamily(modelName, "o1")
-                || OpenaiDialectSupport.isModelFamily(modelName, "o3")
-                || OpenaiDialectSupport.isModelFamily(modelName, "o4")
-                || OpenaiDialectSupport.isModelFamily(modelName, "gpt-5")
-                || OpenaiDialectSupport.isModelFamily(modelName, "gpt-6");
+        return OpenaiDialectSupport.isReasoningCapableModel(modelName);
     }
 
     /**
@@ -276,13 +274,9 @@ public class OpenaiChatDialect extends AbstractChatDialect {
     private void parseFrameNode(ChatStreamContext ctx, ChatAccumulator acc, ONode oResp) {
         // 非官方规范的顶层错误形态（个别兼容端点）与官方 {error:{message,type,code}} 统一走规范提取，
         // 避免 message 为对象时取出 null
-        if ("error".equals(oResp.get("object").getString())) {
+        if ("error".equals(oResp.get("object").getString()) || oResp.hasKey("error")) {
             acc.setError(new ChatException(OpenaiDialectSupport.extractErrorMessage(
                     oResp.hasKey("error") ? oResp.get("error") : oResp.getOrNull("message"))));
-            return;
-        } else if (oResp.hasKey("error")) {
-            // 规范错误提取：error 为对象（{message,type,code}），不能整体序列化为字符串
-            acc.setError(new ChatException(OpenaiDialectSupport.extractErrorMessage(oResp.get("error"))));
             return;
         }
 
@@ -544,7 +538,7 @@ public class OpenaiChatDialect extends AbstractChatDialect {
             if (call == null || Utils.isEmpty(call.getIndex())) {
                 continue;
             }
-            org.noear.solon.ai.chat.tool.ToolCallBuilder builder = acc.getToolCallBuilders().get(call.getIndex());
+            ToolCallBuilder builder = acc.getToolCallBuilders().get(call.getIndex());
             if (builder == null || builder.argumentsBuilder.length() == 0) {
                 continue;
             }
