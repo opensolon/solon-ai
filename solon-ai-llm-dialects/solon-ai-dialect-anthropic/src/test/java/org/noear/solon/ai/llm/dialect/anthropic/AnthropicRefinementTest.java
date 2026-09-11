@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.*;
+import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.event.*;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -36,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>对应 2026-09 审查后落地的改动：流式工具参数延迟解析、模型代次正则常量化、
  * 合成 assistant 节点回写正文 text 块、usage 显式 0 覆盖、max_completion_tokens
  * 与 thinking 预算钳制的联动、container 回填三形态、非流式无 content 空终态、
- * stop 的 String[] 形态。</p>
+ * stop 的 String[] 形态；后续补充：container 损坏 JSON 容错、anthropic-file: 空前缀退回 url 源。</p>
  *
  * <p>已有覆盖（不重复）：parallel_tool_calls 三边界（RoundTripAlignTest）、
  * 非法 ttl 拦截（ProtocolAlignTest）、file_id 误判防线（RoundTripAlignTest）、
@@ -311,5 +312,40 @@ public class AnthropicRefinementTest {
         assertEquals("</done>", root.get("stop_sequences").get(0).getString());
         assertEquals("END", root.get("stop_sequences").get(1).getString());
         assertEquals(2, root.get("stop_sequences").size());
+    }
+
+    /// ///////////////// 八、container / file_id 的边界形态
+
+    /**
+     * resolveContainerId 的容错分支：容器形态是「以 { 开头但不是合法 JSON」的字符串时，
+     * 不能抛异常打挂整条请求，也不得回传残缺值，静默放弃复用即可。
+     */
+    @Test
+    public void containerBackfillSkipsMalformedJsonShape() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put(AnthropicResponseParser.CONTAINER_RAW_KEY, "{cnt_4");
+        AssistantMessage carrier = AssistantMessage.snapshot("上一轮", "", null, null, null, null,
+                Collections.singletonMap(AnthropicMessageStateSupport.PROTOCOL_ID,
+                        new MessageProtocolState(AnthropicMessageStateSupport.VERSION, data)));
+
+        ONode root = build(ChatOptions.of(),
+                Arrays.asList(ChatMessage.ofUser("跑代码"), carrier));
+        assertFalse(root.hasKey("container"), "损坏 JSON 不透传、不抛异常，直接放弃复用");
+    }
+
+    /**
+     * resolveAnthropicFileId 的空前缀分支：{@code anthropic-file:} 后面为空（仅空白）时
+     * 返回 null，该 url 按普通 url 源发出——不产出空 file_id 源（会被服务端拒）。
+     */
+    @Test
+    public void emptyAnthropicFilePrefixFallsBackToUrlSource() {
+        ONode root = build(ChatOptions.of(),
+                Collections.singletonList(ChatMessage.ofUser("看图", ImageBlock.ofUrl("anthropic-file:  "))));
+
+        ONode source = root.get("messages").get(0).get("content").get(1).get("source");
+        assertEquals("url", source.get("type").getString(),
+                "空前缀不能识别为 file 源");
+        assertEquals("anthropic-file:  ", source.get("url").getString(),
+                "原样走 url 源，不得截断成空 file_id");
     }
 }
