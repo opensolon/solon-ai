@@ -32,7 +32,6 @@ import java.util.Map;
 public abstract class AbsToolCallEvent extends AbsReActEvent {
     private final transient String toolName;
     private final transient Map<String, Object> args;
-    private final String reasonId;
     private final String callId;
 
     public AbsToolCallEvent(ReActTrace trace, String callId, String toolName, Map<String, Object> args) {
@@ -46,8 +45,6 @@ public abstract class AbsToolCallEvent extends AbsReActEvent {
         } else {
             this.args = Collections.unmodifiableMap(args);
         }
-
-        this.reasonId = trace.getCurrentReasonId();
     }
 
     public String getCallId() {
@@ -60,9 +57,5 @@ public abstract class AbsToolCallEvent extends AbsReActEvent {
 
     public Map<String, Object> getArgs() {
         return args;
-    }
-
-    public String getReasonId() {
-        return reasonId;
     }
 }

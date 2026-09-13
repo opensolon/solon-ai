@@ -86,9 +86,9 @@ public class ReActTrace implements AgentTrace {
     private String runId;
 
     /**
-     * 当前思考Id
+     * 当前回合Id（构造事件时快照到 {@link AbsReActEvent}，每轮推理前由 ReasonTask 重置）
      */
-    private String currentReasonId;
+    private String currentTurnId;
 
     /**
      * 度量指标
@@ -244,7 +244,7 @@ public class ReActTrace implements AgentTrace {
         this.originalPrompt = originalPrompt;
         this.beginTimeMs = System.currentTimeMillis();
         this.runId = null;
-        this.currentReasonId = null;
+        this.currentTurnId = null;
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("Agent [{}] trace reset for a new task.", getAgentName());
@@ -260,17 +260,23 @@ public class ReActTrace implements AgentTrace {
         return runId;
     }
 
-    public String getCurrentReasonId() {
-        if (currentReasonId == null) {
-            currentReasonId = Utils.uuid();
+    /**
+     * 获取当前回合Id（不存在时懒生成）
+     */
+    public String getCurrentTurnId() {
+        if (currentTurnId == null) {
+            currentTurnId = Utils.uuid();
         }
 
-        return currentReasonId;
+        return currentTurnId;
     }
 
-    public String newCurrentReasonId(){
-        currentReasonId = Utils.uuid();
-        return currentReasonId;
+    /**
+     * 开启新回合并返回新的回合Id
+     */
+    public String newCurrentTurnId() {
+        currentTurnId = Utils.uuid();
+        return currentTurnId;
     }
 
     @Override

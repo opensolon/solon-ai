@@ -187,6 +187,8 @@ public class ReasonTask {
             LOG.debug("ReActAgent SystemPrompt rendered for trace [{}]: {}", trace.getAgentName(), systemPromptBuf);
         }
 
+        //开始新建回合标记
+        trace.newCurrentTurnId();
 
         // [逻辑 2.1: 上下文预处理] 在消息组装前触发，允许拦截器压缩 WorkingMemory
         for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
@@ -199,7 +201,6 @@ public class ReasonTask {
             return;
         }
 
-        trace.newCurrentReasonId();
         String systemPromptStr = systemPromptBuf.toString();
 
         if (trace.hasStreamSink()) {

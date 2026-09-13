@@ -30,13 +30,11 @@ import java.util.List;
 @Preview("3.9.1")
 public class PlanEvent extends AbsReActEvent {
     private final transient PlanStage stage;
-    private final String reasonId;
 
     public PlanEvent(ReActTrace trace, PlanStage stage) {
         super(trace);
 
         this.stage = stage;
-        this.reasonId = trace.getCurrentReasonId();
     }
 
     public List<String> getPlans() {
@@ -49,9 +47,5 @@ public class PlanEvent extends AbsReActEvent {
 
     public int getPlanIndex() {
         return trace.getPlanIndex();
-    }
-
-    public String getReasonId() {
-        return reasonId;
     }
 }

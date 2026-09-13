@@ -33,7 +33,6 @@ public class ReasonEndEvent extends AbsReActEvent {
     private final ChatResponse response;
     private final AssistantMessage message;
     private final long durationMs;
-    private final String reasonId;
 
     public ReasonEndEvent(ReActTrace trace, ChatResponse response, AssistantMessage message, long durationMs) {
         super(trace);
@@ -41,15 +40,10 @@ public class ReasonEndEvent extends AbsReActEvent {
         this.response = response;
         this.message = message;
         this.durationMs = durationMs;
-        this.reasonId = trace.getCurrentReasonId();
     }
 
     public long getDurationMs() {
         return durationMs;
-    }
-
-    public String getReasonId() {
-        return reasonId;
     }
 
     public ChatResponse getResponse() {

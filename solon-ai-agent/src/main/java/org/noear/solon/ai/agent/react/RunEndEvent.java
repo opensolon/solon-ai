@@ -21,6 +21,8 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 /**
  * 任务运行结束块
  *
+ * <p>4.1 起需要显式传入 {@code trace}（基类依赖它快照回合Id）。</p>
+ *
  * @author noear
  * @since 4.0.4
  */

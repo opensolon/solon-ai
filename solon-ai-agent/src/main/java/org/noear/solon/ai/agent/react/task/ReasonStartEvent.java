@@ -27,12 +27,10 @@ import org.noear.solon.ai.chat.prompt.Prompt;
  */
 public class ReasonStartEvent extends AbsReActEvent {
     private final String systemPrompt;
-    private final String reasonId;
 
     public ReasonStartEvent(ReActTrace trace, String systemPrompt) {
         super(trace);
 
-        this.reasonId = trace.getCurrentReasonId();
         this.systemPrompt = systemPrompt;
     }
 
@@ -42,9 +40,5 @@ public class ReasonStartEvent extends AbsReActEvent {
 
     public Prompt getWorkingMemory() {
         return trace.getWorkingMemory();
-    }
-
-    public String getReasonId() {
-        return reasonId;
     }
 }

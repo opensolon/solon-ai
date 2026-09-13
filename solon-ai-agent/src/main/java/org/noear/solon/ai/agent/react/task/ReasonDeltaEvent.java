@@ -38,20 +38,14 @@ import org.noear.solon.lang.Preview;
 @Preview("4.0.4")
 public class ReasonDeltaEvent extends AbsReActEvent {
     private final transient ChatEvent chatEvent;
-    private final String reasonId;
 
     public ReasonDeltaEvent(ReActTrace trace, ChatEvent event) {
         super(trace);
         this.chatEvent = event;
-        this.reasonId = trace.getCurrentReasonId();
     }
 
     public @Nullable ChatEvent getChatEvent() {
         return chatEvent;
-    }
-
-    public String getReasonId() {
-        return reasonId;
     }
 
     /**
