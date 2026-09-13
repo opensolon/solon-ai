@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.intercept;
 
-import org.noear.solon.ai.agent.AbsAgentEvent;
+import org.noear.solon.ai.agent.react.AbsReActEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.lang.Preview;
 
@@ -29,8 +29,7 @@ import org.noear.solon.lang.Preview;
  * @since 4.0.0
  */
 @Preview("4.0.0")
-public class ContextSizeEvent extends AbsAgentEvent {
-    private final ReActTrace trace;
+public class ContextSizeEvent extends AbsReActEvent {
     /**
      * 模型上下文长度
      */
@@ -68,9 +67,8 @@ public class ContextSizeEvent extends AbsAgentEvent {
                             boolean compressed,
                             int beforeMessageCount, int afterMessageCount,
                             int beforeTokenCount, int afterTokenCount) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
+        super(trace);
 
-        this.trace = trace;
         this.contextLength = contextLength;
         this.messageCount = messageCount;
         this.tokenCount = tokenCount;
@@ -79,10 +77,6 @@ public class ContextSizeEvent extends AbsAgentEvent {
         this.afterMessageCount = afterMessageCount;
         this.beforeTokenCount = beforeTokenCount;
         this.afterTokenCount = afterTokenCount;
-    }
-
-    public ReActTrace getTrace() {
-        return trace;
     }
 
     /**

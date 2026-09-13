@@ -15,9 +15,8 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
-import org.noear.solon.ai.agent.AbsAgentEvent;
+import org.noear.solon.ai.agent.react.AbsReActEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.lang.Preview;
 
 import java.util.List;
@@ -29,21 +28,15 @@ import java.util.List;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class PlanEvent extends AbsAgentEvent {
-    private final transient ReActTrace trace;
+public class PlanEvent extends AbsReActEvent {
     private final transient PlanStage stage;
     private final String reasonId;
 
     public PlanEvent(ReActTrace trace, PlanStage stage) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
+        super(trace);
 
-        this.trace = trace;
         this.stage = stage;
         this.reasonId = trace.getCurrentReasonId();
-    }
-
-    public ReActTrace getTrace() {
-        return trace;
     }
 
     public List<String> getPlans() {

@@ -13,18 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.react.task;
+package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.agent.react.AbsReActEvent;
-import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.AbsAgentEvent;
 
 /**
  *
- * @author noear 2026/7/23 created
- *
+ * @author noear
+ * @since 4.1
  */
-public class ActionEndEvent extends AbsReActEvent {
-    public ActionEndEvent(ReActTrace trace) {
-        super(trace);
+public class AbsReActEvent extends AbsAgentEvent {
+    protected final transient ReActTrace trace;
+
+    public AbsReActEvent(ReActTrace trace) {
+        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
+
+        this.trace = trace;
+    }
+
+    public ReActTrace getTrace() {
+        return trace;
     }
 }

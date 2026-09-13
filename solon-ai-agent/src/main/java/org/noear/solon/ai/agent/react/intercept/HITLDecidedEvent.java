@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.intercept;
 
-import org.noear.solon.ai.agent.AbsAgentEvent;
+import org.noear.solon.ai.agent.react.AbsReActEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
@@ -34,8 +34,7 @@ import java.util.Map;
  * @since 4.0.4
  */
 @Preview("4.0.4")
-public class HITLDecidedEvent extends AbsAgentEvent {
-    private final transient ReActTrace trace;
+public class HITLDecidedEvent extends AbsReActEvent {
     /**
      * 关联的工具调用 ID（可与 ToolCallStartEvent/ToolCallEndEvent 对齐）
      */
@@ -62,11 +61,8 @@ public class HITLDecidedEvent extends AbsAgentEvent {
                             String toolName,
                             Map<String, Object> args,
                             HITLDecision decision) {
-        super(trace.getRunId(),
-                trace.getAgentName(),
-                trace.getSession());
+        super(trace);
 
-        this.trace = trace;
         this.callId = callId;
         this.toolName = toolName;
         // 独立浅拷贝：避免与 toolExchanger.args 共享底层 Map，保证 chunk 参数快照不被后续链路修改
@@ -77,10 +73,6 @@ public class HITLDecidedEvent extends AbsAgentEvent {
         }
         this.comment = decision.getComment();
         this.decision = decision;
-    }
-
-    public ReActTrace getTrace() {
-        return trace;
     }
 
     /**

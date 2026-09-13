@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.agent.AbsAgentEvent;
 import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 
@@ -25,12 +24,12 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
  * @author noear
  * @since 4.0.4
  */
-public class RunEndEvent extends AbsAgentEvent {
+public class RunEndEvent extends AbsReActEvent {
     private final transient ReActResponse response;
     private final transient AssistantMessage message;
 
-    public RunEndEvent(ReActResponse resp) {
-        super(resp.getTrace().getRunId(), resp.getTrace().getAgentName(), resp.getSession());
+    public RunEndEvent(ReActTrace trace, ReActResponse resp) {
+        super(trace);
         this.response = resp;
         this.message = resp.getMessage();
     }
@@ -48,15 +47,11 @@ public class RunEndEvent extends AbsAgentEvent {
         return message.getContent();
     }
 
-    public ReActTrace getTrace() {
-        return response.getTrace();
-    }
-
     public Metrics getMetrics() {
-        return response.getMetrics();
+        return trace.getMetrics();
     }
 
     public boolean isAbnormal() {
-        return response.getTrace().isAbnormal();
+        return trace.isAbnormal();
     }
 }

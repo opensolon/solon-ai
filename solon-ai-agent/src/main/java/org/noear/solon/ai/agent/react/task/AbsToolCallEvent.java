@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
-import org.noear.solon.ai.agent.AbsAgentEvent;
+import org.noear.solon.ai.agent.react.AbsReActEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.lang.Preview;
 
@@ -29,17 +29,15 @@ import java.util.Map;
  * @since 3.9.6
  */
 @Preview("3.9.6")
-public abstract class AbsToolCallEvent extends AbsAgentEvent {
-    private final transient ReActTrace trace;
+public abstract class AbsToolCallEvent extends AbsReActEvent {
     private final transient String toolName;
     private final transient Map<String, Object> args;
     private final String reasonId;
     private final String callId;
 
     public AbsToolCallEvent(ReActTrace trace, String callId, String toolName, Map<String, Object> args) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
+        super(trace);
 
-        this.trace = trace;
         this.callId = callId;
 
         this.toolName = toolName;
@@ -48,6 +46,7 @@ public abstract class AbsToolCallEvent extends AbsAgentEvent {
         } else {
             this.args = Collections.unmodifiableMap(args);
         }
+
         this.reasonId = trace.getCurrentReasonId();
     }
 
@@ -61,10 +60,6 @@ public abstract class AbsToolCallEvent extends AbsAgentEvent {
 
     public Map<String, Object> getArgs() {
         return args;
-    }
-
-    public ReActTrace getTrace() {
-        return trace;
     }
 
     public String getReasonId() {

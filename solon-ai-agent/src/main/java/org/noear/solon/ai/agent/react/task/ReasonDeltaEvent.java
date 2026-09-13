@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
-import org.noear.solon.ai.agent.AbsAgentEvent;
+import org.noear.solon.ai.agent.react.AbsReActEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.event.ChatEvent;
@@ -36,20 +36,14 @@ import org.noear.solon.lang.Preview;
  * @since 4.0.4
  */
 @Preview("4.0.4")
-public class ReasonDeltaEvent extends AbsAgentEvent {
-    private final transient ReActTrace trace;
+public class ReasonDeltaEvent extends AbsReActEvent {
     private final transient ChatEvent chatEvent;
     private final String reasonId;
 
     public ReasonDeltaEvent(ReActTrace trace, ChatEvent event) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
-        this.trace = trace;
+        super(trace);
         this.chatEvent = event;
         this.reasonId = trace.getCurrentReasonId();
-    }
-
-    public ReActTrace getTrace() {
-        return trace;
     }
 
     public @Nullable ChatEvent getChatEvent() {

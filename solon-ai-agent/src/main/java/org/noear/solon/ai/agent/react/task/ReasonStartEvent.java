@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
-import org.noear.solon.ai.agent.AbsAgentEvent;
+import org.noear.solon.ai.agent.react.AbsReActEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.prompt.Prompt;
 
@@ -25,21 +25,15 @@ import org.noear.solon.ai.chat.prompt.Prompt;
  * @author noear
  * @since 4.0.4
  */
-public class ReasonStartEvent extends AbsAgentEvent {
-    private final ReActTrace trace;
+public class ReasonStartEvent extends AbsReActEvent {
     private final String systemPrompt;
     private final String reasonId;
 
     public ReasonStartEvent(ReActTrace trace, String systemPrompt) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
+        super(trace);
 
-        this.trace = trace;
         this.reasonId = trace.getCurrentReasonId();
         this.systemPrompt = systemPrompt;
-    }
-
-    public ReActTrace getTrace() {
-        return trace;
     }
 
     public String getSystemPrompt() {

@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
-import org.noear.solon.ai.agent.AbsAgentEvent;
+import org.noear.solon.ai.agent.react.AbsReActEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -29,25 +29,19 @@ import java.util.List;
  * @author noear
  * @since 4.0.4
  */
-public class ReasonEndEvent extends AbsAgentEvent {
-    private final ReActTrace trace;
+public class ReasonEndEvent extends AbsReActEvent {
     private final ChatResponse response;
     private final AssistantMessage message;
     private final long durationMs;
     private final String reasonId;
 
     public ReasonEndEvent(ReActTrace trace, ChatResponse response, AssistantMessage message, long durationMs) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
+        super(trace);
 
-        this.trace = trace;
         this.response = response;
         this.message = message;
         this.durationMs = durationMs;
         this.reasonId = trace.getCurrentReasonId();
-    }
-
-    public ReActTrace getTrace() {
-        return trace;
     }
 
     public long getDurationMs() {

@@ -15,25 +15,14 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.agent.AbsAgentEvent;
-import org.noear.solon.ai.chat.message.ChatMessage;
-
 /**
  * 任务运行开始块
  *
  * @author noear
  * @since 4.0.4
  */
-public class RunStartEvent extends AbsAgentEvent {
-    private final ReActTrace trace;
-
+public class RunStartEvent extends AbsReActEvent {
     public RunStartEvent(ReActTrace trace) {
-        super(trace.getRunId(), trace.getAgentName(), trace.getSession());
-
-        this.trace = trace;
-    }
-
-    public ReActTrace getTrace() {
-        return trace;
+        super(trace);
     }
 }
