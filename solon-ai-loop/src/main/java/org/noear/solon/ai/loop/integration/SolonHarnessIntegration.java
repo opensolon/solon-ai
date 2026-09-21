@@ -1,6 +1,5 @@
 package org.noear.solon.ai.loop.integration;
 
-import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -249,14 +248,11 @@ public class SolonHarnessIntegration {
                 throw new IllegalStateException("HarnessEngine not injected");
             }
             try {
-                ReActAgent agent = harnessEngine.getMainAgent();
-                if (agent != null) {
-                    ReActRequest request = agent.prompt(taskPrompt);
-                    ReActResponse response = request.call();
-                    AssistantMessage message = response.getMessage();
-                    if (message != null) {
-                        return message.getContent();
-                    }
+                ReActRequest request = harnessEngine.prompt(taskPrompt);
+                ReActResponse response = request.call();
+                AssistantMessage message = response.getMessage();
+                if (message != null) {
+                    return message.getContent();
                 }
             } catch (Throwable e) {
                 return "Harness execution error: " + e.getMessage();
