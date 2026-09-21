@@ -41,7 +41,7 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
     private String content;
     private String name;
     private String toolCallId;
-    private transient boolean returnDirect;
+    private boolean returnDirect;
 
     public ToolMessage() {
         //用于序列化
@@ -157,6 +157,14 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
 
         if (toolCallId != null) {
             buf.append(", tool_call_id=").append(toolCallId);
+        }
+
+        if (isError) {
+            buf.append(", isError=").append(isError);
+        }
+
+        if (returnDirect) {
+            buf.append(", returnDirect=").append(returnDirect);
         }
 
         buf.append("}");

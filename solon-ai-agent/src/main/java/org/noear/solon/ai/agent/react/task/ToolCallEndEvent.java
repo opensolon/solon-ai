@@ -31,15 +31,17 @@ import java.util.Map;
 @Preview("4.0.4")
 public class ToolCallEndEvent extends AbsToolCallEvent {
     private final Throwable error;
+    private final boolean resultError;
     private final long durationMs;
     private final ChatMessage result;
 
-    public ToolCallEndEvent(ReActTrace trace, String callId, String toolName, Map<String, Object> args, @Nullable ChatMessage result, @Nullable Throwable error, long durationMs) {
+    public ToolCallEndEvent(ReActTrace trace, String callId, String toolName, Map<String, Object> args, @Nullable ChatMessage result, boolean resultError, @Nullable Throwable error, long durationMs) {
         super(trace, callId, toolName, args);
 
         this.error = error;
         this.durationMs = durationMs;
         this.result = result;
+        this.resultError = resultError;
     }
 
     @Override
@@ -62,6 +64,13 @@ public class ToolCallEndEvent extends AbsToolCallEvent {
 
     public @Nullable Throwable getError() {
         return error;
+    }
+
+    /**
+     * 工具调用是否失败（执行异常或结构化工具错误结果）
+     */
+    public boolean isError() {
+        return error != null || resultError;
     }
 
     public long getDurationMs() {

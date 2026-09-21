@@ -429,9 +429,11 @@ public class ActionTask {
             toolResults.add(observationMessage);
         }
 
-        // 流式客户端通知闭环（使用最终 observation）
+        // 流式客户端通知闭环（使用最终 observation，并保留 ToolResult.error 语义）
         if (trace.hasStreamSink()) {
-            trace.pushAgentEvent(new ToolCallEndEvent(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, error, durationMs));
+            ToolResult toolResult = toolExchanger.getToolResult();
+            boolean resultError = toolResult != null && toolResult.isError();
+            trace.pushAgentEvent(new ToolCallEndEvent(trace, toolExchanger.getCallId(), toolExchanger.getToolName(), toolExchanger.getArgs(), observationMessage, resultError, error, durationMs));
         }
     }
 
@@ -533,11 +535,11 @@ public class ActionTask {
 
                 return result;
             } catch (IllegalArgumentException | StatusException e) {
-                // 引导模型自愈：返回 Schema 错误提示（不直返）
-                return ToolResult.success("Invalid arguments for [" + exchanger.getToolName() + "]. Expected Schema: " + tool.inputSchema() + ". Error: " + e.getMessage());
+                // 引导模型自愈：返回结构化 Schema 错误（不直返）
+                return ToolResult.error("Invalid arguments for [" + exchanger.getToolName() + "]. Expected Schema: " + tool.inputSchema() + ". Error: " + e.getMessage());
             } catch (Throwable e) {
                 LOG.error("Agent [" + config.getName() + "] tool [" + exchanger.getToolName() + "] execution failed", e);
-                return ToolResult.success("Execution error in tool [" + exchanger.getToolName() + "]: " + e.getMessage());
+                return ToolResult.error("Execution error in tool [" + exchanger.getToolName() + "]: " + e.getMessage());
             }
         }
 
@@ -545,7 +547,7 @@ public class ActionTask {
             LOG.warn("Agent [{}] tool [{}] not found", config.getName(), exchanger.getToolName());
         }
 
-        return ToolResult.success("Tool [" + exchanger.getToolName() + "] not found.");
+        return ToolResult.error("Tool [" + exchanger.getToolName() + "] not found.");
     }
 
     /**
