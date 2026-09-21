@@ -37,6 +37,7 @@ import java.util.List;
 public class ToolMessage extends ChatMessageBase<ToolMessage> {
     private final ChatRole role = ChatRole.TOOL;
     private final List<ContentBlock> blocks = new ArrayList<>();
+    private boolean isError;
     private String content;
     private String name;
     private String toolCallId;
@@ -55,6 +56,7 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
         if (toolResult != null) {
             this.blocks.addAll(toolResult.getBlocks());
             this.content = toolResult.getContent();
+            this.isError = toolResult.isError();
 
             if (Assert.isNotEmpty(toolResult.metas())) {
                 this.getMetadata().putAll(toolResult.metas());
@@ -114,6 +116,13 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
      */
     public String getToolCallId() {
         return toolCallId;
+    }
+
+    /**
+     * 工具结果是否失败
+     */
+    public boolean isError() {
+        return isError;
     }
 
     /**
