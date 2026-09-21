@@ -18,13 +18,16 @@ package features.ai.react.task;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActAgentConfig;
 import org.noear.solon.ai.agent.react.ReActOptions;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.task.ActionTask;
+import org.noear.solon.ai.agent.react.task.ToolCallEndEvent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
@@ -358,6 +361,7 @@ public class ActionTaskReturnDirectTest {
     @Test
     @DisplayName("returnDirect=true 但 handler 返回 ToolResult.error：不直返，ToolMessage 不 mark")
     public void testReturnDirect_toolResultError_notEnd() throws Throwable {
+        when(trace.hasStreamSink()).thenReturn(true);
         options.getModelOptions().toolAdd(new FunctionToolDesc("getWeather")
                 .returnDirect(true)
                 .description("天气")
@@ -374,11 +378,24 @@ public class ActionTaskReturnDirectTest {
         // 错误结果仍应进入 WM 作为 observation，供模型自愈
         assertTrue(workingMemory.getMessages().stream()
                 .anyMatch(m -> m.getContent() != null && m.getContent().contains("upstream unavailable")));
-        // ToolMessage.returnDirect 不应为 true（未 mark）
+        // ToolMessage 应同时保留错误状态，且不标记 returnDirect
         workingMemory.getMessages().stream()
                 .filter(m -> m instanceof ToolMessage)
                 .map(m -> (ToolMessage) m)
-                .forEach(tm -> assertFalse(tm.isReturnDirect(), "error 结果不应标记 returnDirect"));
+                .forEach(tm -> {
+                    assertTrue(tm.isError(), "ToolResult.error 应保留到 ToolMessage");
+                    assertFalse(tm.isReturnDirect(), "error 结果不应标记 returnDirect");
+                });
+
+        ArgumentCaptor<AgentEvent> eventCaptor = ArgumentCaptor.forClass(AgentEvent.class);
+        verify(trace, atLeastOnce()).pushAgentEvent(eventCaptor.capture());
+        ToolCallEndEvent endEvent = eventCaptor.getAllValues().stream()
+                .filter(e -> e instanceof ToolCallEndEvent)
+                .map(e -> (ToolCallEndEvent) e)
+                .findFirst()
+                .orElseThrow(AssertionError::new);
+        assertTrue(endEvent.isError(), "ToolResult.error 应传递到 ToolCallEndEvent");
+        assertNull(endEvent.getError(), "结构化工具错误不应伪装成 Throwable");
     }
 
     @Test
