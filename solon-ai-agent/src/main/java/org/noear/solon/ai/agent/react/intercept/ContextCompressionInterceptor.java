@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.react.intercept;
 import com.knuddels.jtokkit.api.Encoding;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentTrace;
+import org.noear.solon.ai.agent.react.PlanContextRenderer;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActOptions;
 import org.noear.solon.ai.agent.react.ReActStyle;
@@ -347,16 +348,18 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         }
 
         int requestPreparationTokens = estimateRequestPreparationReserve(chatModel, compressionTokenThreshold);
+        int planContextTokens = estimatePlanContextTokens(trace);
+        int fixedRequestTokens = toolsTokens + requestPreparationTokens + planContextTokens;
 
         // 事件的 before 口径始终指进入拦截器时的原始工作记忆，不能因 MicroCompact 先发生而漂移。
         int originalMessageCount = originalMessages.size();
-        int originalTokenCount = estimateTokens(originalMessages, systemPrompt) + toolsTokens + requestPreparationTokens;
+        int originalTokenCount = estimateTokens(originalMessages, systemPrompt) + fixedRequestTokens;
 
         long messageSize = messages.stream()
                 .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
                 .count();
 
-        int currentTokens = estimateTokens(messages, systemPrompt) + toolsTokens + requestPreparationTokens;
+        int currentTokens = estimateTokens(messages, systemPrompt) + fixedRequestTokens;
 
         // ⭐ 触发阈值与保留窗口解耦：
         //    触发阈值 = maxMessages × messageTriggerFactor（滞后带），而压缩目标保留窗口仍为 maxMessages。
@@ -385,8 +388,8 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         Set<ChatMessage> protectedMessages = Collections.newSetFromMap(new IdentityHashMap<>());
         protectedMessages.addAll(firstList);
 
-        // 2. 计算固定开销（systemPrompt + 固定前缀 + tools 定义 + 请求准备缓冲），统一复用完整估算公式。
-        int fixedTokens = estimateTokens(firstList, systemPrompt) + toolsTokens + requestPreparationTokens;
+        // 2. 计算固定开销（systemPrompt + 固定前缀 + tools 定义 + 瞬时上下文 + 请求准备缓冲）。
+        int fixedTokens = estimateTokens(firstList, systemPrompt) + fixedRequestTokens;
 
         // 极端场景防御：固定开销超过模型上下文比例或 maxTokens fallback 决定的预算
         int baseBudget = compressionTokenThreshold;
@@ -399,7 +402,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             if (firstList.size() < messages.size()) {
                 trace.getWorkingMemory().replaceMessages(new ArrayList<>(firstList));
             }
-            int afterTokens = estimateTokens(firstList, systemPrompt) + toolsTokens + requestPreparationTokens;
+            int afterTokens = estimateTokens(firstList, systemPrompt) + fixedRequestTokens;
             pushContextChunk(trace, firstList.size(), afterTokens, changed,
                     originalMessageCount, firstList.size(), originalTokenCount, afterTokens);
             return changed;
@@ -424,7 +427,7 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
             // 固定上下文无法进一步压缩时，仍删除所有可变历史，尽可能恢复请求。
             if (firstList.size() < messages.size()) {
                 trace.getWorkingMemory().replaceMessages(new ArrayList<>(firstList));
-                int afterTokens = estimateTokens(firstList, systemPrompt) + toolsTokens + requestPreparationTokens;
+                int afterTokens = estimateTokens(firstList, systemPrompt) + fixedRequestTokens;
                 pushContextChunk(trace, firstList.size(), afterTokens, true,
                         originalMessageCount, firstList.size(), originalTokenCount, afterTokens);
                 return true;
@@ -652,9 +655,9 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         int beforeSize = messages.size();
         compressed = removeDanglingToolOutputs(compressed, nativeToolMode);
         compressed = convergeToBudget(compressed, systemPrompt,
-                toolsTokens + requestPreparationTokens, compressionBudget,
+                fixedRequestTokens, compressionBudget,
                 messageBudget, nativeToolMode, protectedMessages, semanticAnchor);
-        int afterTokens = estimateTokens(compressed, systemPrompt) + toolsTokens + requestPreparationTokens;
+        int afterTokens = estimateTokens(compressed, systemPrompt) + fixedRequestTokens;
         boolean changed = microCompacted || !compressed.equals(messages);
         if (changed) {
             trace.getWorkingMemory().replaceMessages(compressed);
@@ -1432,6 +1435,14 @@ public class ContextCompressionInterceptor implements ReActInterceptor {
         }
 
         return totalTokens + 3;
+    }
+
+    /** 估算请求级瞬时计划上下文的 Token 开销。 */
+    private int estimatePlanContextTokens(ReActTrace trace) {
+        String planContext = PlanContextRenderer.render(trace);
+        return Assert.isEmpty(planContext)
+                ? 0
+                : estimateMessageTokens(ChatMessage.ofUser(planContext)) + 4;
     }
 
     /**

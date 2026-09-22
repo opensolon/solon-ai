@@ -125,51 +125,13 @@ public class ReasonTask {
             }
         }
 
-        // [逻辑 2: 提示词工程] 融合系统角色、执行计划、输出格式约束及协议指令
+        // [逻辑 2: 提示词工程] 组装「稳定」系统提示词（会话级不变量）：系统角色、输出格式约束及协议指令。
+        // 执行计划进度看板属于「回合级易变」内容，作为瞬时消息追加到消息列表末尾，
+        // 以保证 system prompt 作为可缓存前缀块（prompt caching）跨回合稳定命中。
         StringBuilder systemPromptBuf = new StringBuilder();
         String baseSp = config.getSystemPromptFor(trace, context);
         if (baseSp != null) {
             systemPromptBuf.append(baseSp);
-        }
-
-        if (trace.getOptions().isPlanningMode() && trace.hasPlans()) {
-            systemPromptBuf.append("\n\n[执行计划进度看板]\n");
-
-            List<String> plans = trace.getPlans();
-            int currIdx = trace.getPlanIndex();
-            int total = plans.size();
-
-            for (int i = 0; i < total; i++) {
-                String status = (i < currIdx) ? "[√] " : (i == currIdx ? "[●] " : "[ ] ");
-                systemPromptBuf.append(i + 1).append(". ").append(status).append(plans.get(i)).append("\n");
-            }
-
-            systemPromptBuf.append("\n**计划进度同步协议 (Plan Sync Protocol)：**\n");
-            if (currIdx < total) {
-                int currentStepNum = currIdx + 1;
-                int nextStepNum = currIdx + 2;
-
-                systemPromptBuf.append("- **当前状态**: 你正在执行步骤 [").append(currentStepNum).append("]。\n");
-                systemPromptBuf.append("- **正常推进**: 步骤完成后，若结果符合预期，必须调用 `update_plan_progress` 并将 `next_plan_index` 设为 `").append(nextStepNum).append("` ");
-
-                if (currIdx == total - 1) {
-                    systemPromptBuf.append("(标志所有计划已达成)。\n");
-                } else {
-                    systemPromptBuf.append("(切换至下一环节)。\n");
-                }
-
-                // 新增：修订引导，防止盲目推进
-                systemPromptBuf.append("- **动态调整**: 若观察结果（Observation）显示原计划已不可行，必须优先调用 `revise_plan` 修正后续步骤，严禁强行进入错误环节。\n");
-                systemPromptBuf.append("- **禁止跳步**: 在更新进度前，禁止直接提供最终回答。");
-            } else {
-                systemPromptBuf.append("- **目标达成**: 计划看板已全部标记为 [√]。请综合上述执行过程中的所有观察结果，直接给出最终的详细回答。");
-            }
-        }
-
-        if (trace.getSession().isPending()) {
-            // 如果是从挂起状态恢复（例如 HITL 后继续）
-            systemPromptBuf.append("\n\n[Human-In-The-Loop Context]\n" +
-                    "用户已对你的执行流程进行了审核并准许继续。请结合最新的 Observation 反馈调整你的下一步策略。");
         }
 
         if (Assert.isNotEmpty(trace.getOptions().getOutputSchema())) {
@@ -432,6 +394,12 @@ public class ReasonTask {
                         List<ChatMessage> messages = new ArrayList<>();
                         messages.add(ChatMessage.ofSystem(systemPrompt));
                         messages.addAll(trace.getWorkingMemory().getMessages());
+
+                        // 每次物理请求都重新渲染计划状态，避免重试拦截器修改计划后使用旧看板。
+                        String planContext = PlanContextRenderer.render(trace);
+                        if (Assert.isNotEmpty(planContext)) {
+                            messages.add(ChatMessage.ofUser(planContext));
+                        }
 
                         ChatRequestDesc req = buildRequest(trace, messages);
                         final ChatResponse response;

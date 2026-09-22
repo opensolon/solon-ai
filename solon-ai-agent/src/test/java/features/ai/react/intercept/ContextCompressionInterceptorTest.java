@@ -1853,6 +1853,23 @@ public class ContextCompressionInterceptorTest {
     }
 
     @Test
+    public void testPlanContextIsIncludedInTokenBudget() throws Exception {
+        org.noear.solon.ai.agent.react.ReActOptions options = spy(trace.getOptions());
+        doReturn(true).when(options).isPlanningMode();
+        when(trace.getOptions()).thenReturn(options);
+        when(trace.hasPlans()).thenReturn(true);
+        when(trace.getPlans()).thenReturn(Arrays.asList("收集资料", "形成结论"));
+        when(trace.getPlanIndex()).thenReturn(0);
+
+        java.lang.reflect.Method method = ContextCompressionInterceptor.class.getDeclaredMethod(
+                "estimatePlanContextTokens", ReActTrace.class);
+        method.setAccessible(true);
+
+        int tokens = (int) method.invoke(interceptor, trace);
+        assertTrue(tokens > 0, "计划看板应计入上下文 Token 预算");
+    }
+
+    @Test
     public void testTinySummaryBudgetSkipsCompressionStrategy() throws Exception {
         CompressionStrategy strategy = mock(CompressionStrategy.class);
         ContextCompressionInterceptor custom = new ContextCompressionInterceptor(10, strategy);

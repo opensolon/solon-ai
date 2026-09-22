@@ -221,6 +221,81 @@ public class ReasonTaskTest {
 
 
     @Test
+    @DisplayName("计划看板作为瞬时尾部消息发送且不污染系统提示与工作记忆")
+    public void testPlanContextIsTransientTailMessage() throws Throwable {
+        ReActOptions options = spy(new ReActOptions(chatModel));
+        doReturn(true).when(options).isPlanningMode();
+        when(trace.getOptions()).thenReturn(options);
+        when(trace.hasPlans()).thenReturn(true);
+        when(trace.getPlans()).thenReturn(Arrays.asList("收集资料", "形成结论"));
+        when(trace.getPlanIndex()).thenReturn(0);
+
+        List<List<ChatMessage>> snapshots = new ArrayList<>();
+        when(chatModel.prompt(anyList())).thenAnswer(invocation -> {
+            snapshots.add(new ArrayList<>(invocation.getArgument(0)));
+            return reqDesc;
+        });
+        ChatResponse success = mockResponse(
+                msgFromJson("{\"role\":\"assistant\",\"content\":\"done\"}"));
+        when(reqDesc.call()).thenReturn(success);
+
+        reasonTask.run(trace, context);
+
+        assertEquals(1, snapshots.size());
+        List<ChatMessage> requestMessages = snapshots.get(0);
+        assertEquals("System prompt", requestMessages.get(0).getContent());
+        assertFalse(requestMessages.get(0).getContent().contains("执行计划进度看板"));
+        assertTrue(requestMessages.get(requestMessages.size() - 1).getContent().contains("[执行计划进度看板]"));
+        assertTrue(requestMessages.get(requestMessages.size() - 1).getContent().contains("1. [●] 收集资料"));
+        assertTrue(workingMemory.getMessages().isEmpty(), "瞬时计划看板不应写入 WorkingMemory");
+    }
+
+    @Test
+    @DisplayName("物理重试时重新渲染被拦截器修改后的计划看板")
+    public void testPlanContextRebuiltAfterRetry() throws Throwable {
+        AtomicInteger planIndex = new AtomicInteger(0);
+        ReActInterceptor planUpdater = new ReActInterceptor() {
+            @Override
+            public boolean onReasonRetry(ReActTrace trace, Throwable error, int attempt, String systemPrompt) {
+                planIndex.set(1);
+                return true;
+            }
+        };
+        ReActOptions options = spy(new ReActOptions(chatModel));
+        doReturn(true).when(options).isPlanningMode();
+        options.getModelOptions().interceptorAdd(planUpdater);
+        when(trace.getOptions()).thenReturn(options);
+        when(trace.hasPlans()).thenReturn(true);
+        when(trace.getPlans()).thenReturn(Arrays.asList("第一步", "第二步"));
+        when(trace.getPlanIndex()).thenAnswer(invocation -> planIndex.get());
+
+        ChatRequestDesc first = mock(ChatRequestDesc.class);
+        ChatRequestDesc second = mock(ChatRequestDesc.class);
+        when(first.options(any(Consumer.class))).thenReturn(first);
+        when(second.options(any(Consumer.class))).thenReturn(second);
+        when(first.call()).thenThrow(new RuntimeException("temporary failure"));
+        ChatResponse success = mockResponse(
+                msgFromJson("{\"role\":\"assistant\",\"content\":\"done\"}"));
+        when(second.call()).thenReturn(success);
+
+        List<List<ChatMessage>> snapshots = new ArrayList<>();
+        when(chatModel.prompt(anyList())).thenAnswer(invocation -> {
+            snapshots.add(new ArrayList<>(invocation.getArgument(0)));
+            return snapshots.size() == 1 ? first : second;
+        });
+
+        reasonTask.run(trace, context);
+
+        assertEquals(2, snapshots.size());
+        String firstContext = snapshots.get(0).get(snapshots.get(0).size() - 1).getContent();
+        String secondContext = snapshots.get(1).get(snapshots.get(1).size() - 1).getContent();
+        assertTrue(firstContext.contains("1. [●] 第一步"));
+        assertTrue(secondContext.contains("1. [√] 第一步"));
+        assertTrue(secondContext.contains("2. [●] 第二步"));
+        assertFalse(secondContext.contains("Human-In-The-Loop Context"));
+    }
+
+    @Test
     @DisplayName("正常响应（有结果内容）：重置空响应计数器为 0")
     public void testNormalResponse_withResultContent() throws Throwable {
         // getResultContent() 返回非空内容
@@ -553,18 +628,27 @@ public class ReasonTaskTest {
     }
 
     @Test
-    @DisplayName("Session 挂起时提前返回，不触发空响应逻辑")
+    @DisplayName("Session 挂起时提前返回，且不注入含错误审批语义的 HITL 消息")
     public void testSessionPending_earlyReturn() throws Throwable {
         AssistantMessage msg = msgFromJson("{\"role\":\"assistant\"}");
         ChatResponse resp = mockResponse(msg);
         when(reqDesc.call()).thenReturn(resp);
         when(session.isPending()).thenReturn(true);
 
+        List<List<ChatMessage>> snapshots = new ArrayList<>();
+        when(chatModel.prompt(anyList())).thenAnswer(invocation -> {
+            snapshots.add(new ArrayList<>(invocation.getArgument(0)));
+            return reqDesc;
+        });
+
         emptyRetryCounter.set(1);
         reasonTask.run(trace, context);
 
         assertEquals(1, emptyRetryCounter.get(),
                 "session 挂起应提前返回，不修改计数器");
+        assertEquals(1, snapshots.size());
+        assertEquals(1, snapshots.get(0).size(), "无计划时不应额外注入瞬时消息");
+        assertFalse(snapshots.get(0).get(0).getContent().contains("Human-In-The-Loop Context"));
     }
 
     // ==================== 提示内容验证 ====================
