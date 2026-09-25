@@ -31,6 +31,8 @@ import org.noear.solon.ai.chat.resource.ResourcePack;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.ai.chat.prompt.FunctionPrompt;
 import org.noear.solon.ai.chat.resource.FunctionResource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.MonoSink;
 
 import java.util.*;
@@ -42,16 +44,43 @@ import java.util.*;
  * @since 3.9.2
  */
 public class McpResultResponder {
+    private final static Logger LOG = LoggerFactory.getLogger(McpResultResponder.class);
+
     /**
      * 工具调用结果响应
      */
     public static void doToolResultResponse(MonoSink<McpSchema.CallToolResult> sink, McpServerProperties serverProps, FunctionTool fun, Object rst, Throwable err) {
+        try {
+            doToolResultResponse0(sink, serverProps, fun, rst, err);
+        } catch (Throwable t) {
+            // 异常可见
+            LOG.error("MCP tool result response failed", t);
+
+            try {
+                t = Utils.throwableUnwrap(t);
+                McpSchema.CallToolResult result = McpSchema.CallToolResult.builder()
+                        .addTextContent(t.getMessage() == null ? t.toString() : t.getMessage())
+                        .isError(true)
+                        .meta(fun.meta())
+                        .build();
+                sink.success(result);
+            } catch (Throwable ignore) {
+                // 保证 Mono 终止
+                sink.error(t);
+            }
+        }
+    }
+
+    /**
+     * 工具调用结果响应
+     */
+    private static void doToolResultResponse0(MonoSink<McpSchema.CallToolResult> sink, McpServerProperties serverProps, FunctionTool fun, Object rst, Throwable err) {
         final McpSchema.CallToolResult result;
 
         if (err != null) {
             err = Utils.throwableUnwrap(err);
             result = McpSchema.CallToolResult.builder()
-                    .addTextContent(err.getMessage())
+                    .addTextContent(err.getMessage() == null ? err.toString() : err.getMessage())
                     .isError(true)
                     .meta(fun.meta())
                     .build();
