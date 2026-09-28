@@ -2,12 +2,12 @@ package features.ai.talents.cli;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.talents.cli.TerminalTalent;
-import org.noear.solon.ai.talents.mount.FindOptions;
-import org.noear.solon.ai.talents.mount.MountCapabilities;
+import org.noear.solon.ai.talents.mount.source.FindOptions;
+import org.noear.solon.ai.talents.mount.source.MountCapabilities;
 import org.noear.solon.ai.talents.mount.MountEntry;
 import org.noear.solon.ai.talents.mount.source.MountSource;
-import org.noear.solon.ai.talents.mount.MoveOptions;
-import org.noear.solon.ai.talents.mount.WriteOptions;
+import org.noear.solon.ai.talents.mount.source.MoveOptions;
+import org.noear.solon.ai.talents.mount.source.WriteOptions;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;

@@ -2,7 +2,7 @@ package features.ai.talents.mount;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.talents.mount.source.ClasspathMountSource;
-import org.noear.solon.ai.talents.mount.FindOptions;
+import org.noear.solon.ai.talents.mount.source.FindOptions;
 import org.noear.solon.ai.talents.mount.MountEntry;
 
 import java.io.InputStream;
@@ -26,6 +26,7 @@ public class ClasspathMountSourceTest {
         List<MountEntry> entries = source.find("demo", FindOptions.builder()
                 .glob("**/*.md").filesOnly(true).maxDepth(3).build());
         assertEquals(2, entries.size());
+        assertTrue(source.find("demo", FindOptions.builder().maxEntries(0).build()).isEmpty());
         assertThrows(UnsupportedOperationException.class,
                 () -> source.openWrite("demo/new.md", null));
         assertFalse(source.capabilities().isShellAccessible());

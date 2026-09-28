@@ -30,9 +30,9 @@ import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.ai.talents.mount.Mount;
 import org.noear.solon.ai.talents.mount.MountEntry;
 import org.noear.solon.ai.talents.mount.source.MountSource;
-import org.noear.solon.ai.talents.mount.FindOptions;
+import org.noear.solon.ai.talents.mount.source.FindOptions;
 import org.noear.solon.ai.talents.mount.ResolvedResource;
-import org.noear.solon.ai.talents.mount.WriteOptions;
+import org.noear.solon.ai.talents.mount.source.WriteOptions;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 

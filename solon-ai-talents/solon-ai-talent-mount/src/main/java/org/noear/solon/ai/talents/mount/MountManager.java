@@ -38,6 +38,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class MountManager {
     private static final Logger LOG = LoggerFactory.getLogger(MountManager.class);
+    private static final String WORKSPACE_ALIAS = "@workspace";
 
     private static final String USER_HOME = System.getProperty("user.home"); //对应 `～/`
     private final String workDir; //对应 `./`
@@ -163,7 +164,7 @@ public class MountManager {
     public Path resolve(Path workDir, String pStr) {
         if (pStr == null || pStr.isEmpty() || ".".equals(pStr)) return workDir;
 
-        if (pStr.startsWith("@workspace") && isWorkspacePath(pStr)) {
+        if (pStr.startsWith(WORKSPACE_ALIAS) && isWorkspacePath(pStr)) {
             return localWorkspacePath(workDir, pStr.length() == 10 ? "" : pStr.substring(11));
         }
         if (pStr.startsWith("@")) {
@@ -194,31 +195,34 @@ public class MountManager {
     /** 统一解析工作区和挂载来源；非 bash 文件工具应优先使用此 API。 */
     public ResolvedResource resolveResource(String path) {
         if (path == null || path.isEmpty() || ".".equals(path)) {
-            return new ResolvedResource(path == null ? "" : path, "@workspace", null,
+            return new ResolvedResource(path == null ? "" : path, WORKSPACE_ALIAS, null,
                     workspaceSource, "");
         }
-        if (path.startsWith("@workspace") && isWorkspacePath(path)) {
+        if (path.startsWith(WORKSPACE_ALIAS) && isWorkspacePath(path)) {
             String sourcePath = path.length() == 10 ? "" : path.substring(11);
-            return new ResolvedResource(path, "@workspace", null, workspaceSource,
+            return new ResolvedResource(path, WORKSPACE_ALIAS, null, workspaceSource,
                     workspaceSource.normalize(sourcePath));
         }
         if (path.startsWith("@")) {
             int slash = firstSeparator(path);
             String alias = slash < 0 ? path : path.substring(0, slash);
             Mount mount = sourceMountMap.get(alias);
+
             if (mount == null) {
                 throw new SecurityException("权限拒绝：未知的挂载点 " + alias);
             }
+
             if (!mount.isEnabled()) {
                 throw new SecurityException("权限拒绝：挂载点已禁用 " + alias);
             }
+
             String sourcePath = slash < 0 ? "" : path.substring(slash + 1);
             return new ResolvedResource(path, alias, mount, mount.getSource(),
                     mount.getSource().normalize(sourcePath));
         }
         String sourcePath = path.startsWith("./") ? path.substring(2) : path;
         sourcePath = workspaceSource.normalize(sourcePath);
-        return new ResolvedResource(path, "@workspace", null, workspaceSource, sourcePath);
+        return new ResolvedResource(path, WORKSPACE_ALIAS, null, workspaceSource, sourcePath);
     }
 
     private static boolean isWorkspacePath(String path) {
@@ -268,7 +272,7 @@ public class MountManager {
         String value = alias.trim();
         if (value.isEmpty()) throw new IllegalArgumentException("alias must not be empty");
         if (!value.startsWith("@")) value = "@" + value;
-        if ("@".equals(value) || "@workspace".equals(value) || value.indexOf('/') >= 0 || value.indexOf('\\') >= 0
+        if ("@".equals(value) || WORKSPACE_ALIAS.equals(value) || value.indexOf('/') >= 0 || value.indexOf('\\') >= 0
                 || value.matches(".*\\s+.*")) {
             throw new IllegalArgumentException("Invalid mount alias: " + alias);
         }

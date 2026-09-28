@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.talents.mount;
+package org.noear.solon.ai.talents.mount.source;
 
 /** 挂载来源支持的操作能力。 */
 public final class MountCapabilities {

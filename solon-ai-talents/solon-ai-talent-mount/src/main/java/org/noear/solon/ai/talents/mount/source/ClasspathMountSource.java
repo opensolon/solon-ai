@@ -117,6 +117,9 @@ public final class ClasspathMountSource implements MountSource {
     @Override
     public List<MountEntry> find(String path, FindOptions options) throws IOException {
         FindOptions actual = options == null ? FindOptions.defaults() : options;
+        if (actual.getMaxEntries() == 0) {
+            return new ArrayList<>();
+        }
         String base = normalize(path);
         List<MountEntry> result = new ArrayList<>();
         for (Entry entry : entries().values()) {

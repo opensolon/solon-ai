@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.talents.mount;
+package org.noear.solon.ai.talents.mount.source;
 
 /** 来源无关的查找参数。 */
 public final class FindOptions {

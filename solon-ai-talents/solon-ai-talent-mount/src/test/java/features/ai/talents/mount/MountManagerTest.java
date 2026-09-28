@@ -6,6 +6,7 @@ import org.noear.solon.ai.talents.mount.*;
 import org.noear.solon.ai.talents.mount.catalog.DefaultAgentCatalog;
 import org.noear.solon.ai.talents.mount.source.ClasspathMountSource;
 import org.noear.solon.ai.talents.mount.source.FileMountSource;
+import org.noear.solon.ai.talents.mount.source.FindOptions;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -90,6 +91,15 @@ public class MountManagerTest {
         manager.remove("@a");
         assertEquals(3, snapshot.size());
         assertEquals(2, manager.getMountKeySet().size());
+    }
+
+    @Test
+    public void fileMountFindShouldReturnNoEntriesWhenMaxEntriesIsZero() throws Exception {
+        Path root = Files.createDirectory(tempDir.resolve("find-root"));
+        Files.write(root.resolve("file.txt"), "content".getBytes());
+        FileMountSource source = FileMountSource.of(root);
+
+        assertTrue(source.find("", FindOptions.builder().maxEntries(0).build()).isEmpty());
     }
 
     @Test

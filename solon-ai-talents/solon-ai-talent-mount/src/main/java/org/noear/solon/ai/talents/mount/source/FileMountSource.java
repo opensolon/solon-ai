@@ -146,6 +146,9 @@ public final class FileMountSource implements MountSource {
         final FindOptions actual = options == null ? FindOptions.defaults() : options;
         final Path start = resolveChecked(path, false);
         final String base = normalize(path);
+        if (actual.getMaxEntries() == 0) {
+            return new ArrayList<>();
+        }
         final PathMatcher matcher = actual.getGlob() == null ? null
                 : FileSystems.getDefault().getPathMatcher("glob:" + actual.getGlob());
         List<MountEntry> result = new ArrayList<>();
