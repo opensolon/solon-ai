@@ -55,6 +55,16 @@ public interface Command {
     }
 
     /**
+     * 是否允许在会话正在执行任务时运行。
+     * <p>
+     * 默认不允许。中断、插话、排队等只修改当前运行态的命令可以覆写为 true；
+     * 会启动新任务或修改会话结构的命令应保持默认值，避免忙碌会话发生重入。
+     */
+    default boolean runnableWhenBusy() {
+        return false;
+    }
+
+    /**
      * 执行命令
      *
      * @return true 表示已处理该输入（不再触发 Agent 任务）
