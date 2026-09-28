@@ -15,6 +15,11 @@
  */
 package org.noear.solon.ai.talents.mount;
 
+import org.noear.solon.ai.talents.mount.catalog.AgentCatalog;
+import org.noear.solon.ai.talents.mount.catalog.DefaultAgentCatalog;
+import org.noear.solon.ai.talents.mount.catalog.DefaultSkillCatalog;
+import org.noear.solon.ai.talents.mount.catalog.SkillCatalog;
+import org.noear.solon.ai.talents.mount.source.FileMountSource;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,9 +46,23 @@ public class MountManager {
     private final Map<String, Mount> sourceMountMap = new LinkedHashMap<>();
     private final Set<String> disallowSkills = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
 
+    private final AgentCatalog agentCatalog;
+    private final SkillCatalog skillCatalog;
+
     public MountManager(String workDir) {
         this.workDir = workDir;
         this.workspaceSource = FileMountSource.of(workDir);
+
+        this.agentCatalog = new DefaultAgentCatalog(this);
+        this.skillCatalog = new DefaultSkillCatalog(this);
+    }
+
+    public AgentCatalog getAgentCatalog() {
+        return agentCatalog;
+    }
+
+    public SkillCatalog getSkillCatalog() {
+        return skillCatalog;
     }
 
     /** 工作区来源；工作区与普通本地挂载统一使用 FileMountSource。 */
@@ -99,6 +118,7 @@ public class MountManager {
         if (mount == null || mount.getSource() == null) {
             throw new IllegalArgumentException("mount/source must not be null");
         }
+
         String key = normalizeAlias(mount.getAlias());
         Mount normalized = Mount.builder()
                 .alias(key)
@@ -109,7 +129,12 @@ public class MountManager {
                 .writeable(mount.isWriteable())
                 .source(mount.getSource())
                 .build();
+
         sourceMountMap.put(key, normalized);
+
+        skillCatalog.refreshByMount(key);
+        agentCatalog.refreshByMount(key);
+
         LOG.debug("MountSource has been registered: {} -> {}", key, mount.getSource().getScheme());
         return normalized;
     }
@@ -122,7 +147,11 @@ public class MountManager {
     public synchronized Mount remove(String alias) {
         String key = normalizeAlias(alias);
         Mount removed = sourceMountMap.remove(key);
+
         if (removed != null) {
+            skillCatalog.refreshByMount(key);
+            agentCatalog.refreshByMount(key);
+
             LOG.debug("Mount has been removed.: {}", key);
         }
         return removed;

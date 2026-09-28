@@ -2,11 +2,11 @@ package org.noear.solon.ai.talents.cli;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.noear.solon.ai.talents.cli.impl.DefaultSkillCatalog;
-import org.noear.solon.ai.talents.mount.FileMountSource;
-import org.noear.solon.ai.talents.mount.Mount;
-import org.noear.solon.ai.talents.mount.MountManager;
-import org.noear.solon.ai.talents.mount.MountType;
+import org.noear.solon.ai.talents.mount.*;
+import org.noear.solon.ai.talents.mount.catalog.DefaultSkillCatalog;
+import org.noear.solon.ai.talents.mount.catalog.SkillCatalog;
+import org.noear.solon.ai.talents.mount.catalog.SkillContent;
+import org.noear.solon.ai.talents.mount.source.FileMountSource;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -28,7 +28,7 @@ class SkillCatalogTest {
                 .source(FileMountSource.of(root.resolve("first"))).build());
         manager.register(Mount.builder().alias("@second").type(MountType.SKILLS)
                 .source(FileMountSource.of(root.resolve("second"))).build());
-        DefaultSkillCatalog catalog = new DefaultSkillCatalog(manager);
+        SkillCatalog catalog = manager.getSkillCatalog();
         SkillTalent talent = new SkillTalent(catalog);
 
         assertEquals(2, catalog.getSkillCount());

@@ -118,7 +118,7 @@ public interface SkillCatalog {
 
 ## 7. Agent
 
-Agent 扫描由 `AgentCatalog` 承担；`MountManager` 持有单份默认 Catalog，供兼容查询入口和 `AgentManager` 共用。`AgentManager` 保留内置及运行时代理管理；挂载代理按当前目录读取，不缓存解析结果。`AgentMd` 保存 `MountSource + sourcePath`，通过 `openRead` 读取。
+Agent 扫描由 `AgentCatalog` 承担；`MountManager` 持有单份默认 Catalog，供兼容查询入口和 `AgentManager` 共用。`AgentManager` 保留内置及运行时代理管理；挂载代理按当前目录读取，不缓存解析结果。`AgentDescriptor` 保存 `MountSource + sourcePath`，通过 `openRead` 读取。
 
 ## 8. TerminalTalent
 
@@ -181,7 +181,7 @@ Agent 扫描由 `AgentCatalog` 承担；`MountManager` 持有单份默认 Catalo
 - Classpath 来源支持目录/Jar、虚拟目录、只读访问、资源刷新，并明确拒绝 bash。
 - `SkillCatalog`/`DefaultSkillCatalog` 使用 `SkillDescriptor`/`SkillContent` 公共模型；技能来源统一由 MountSource 提供，短名称冲突不会静默覆盖。
 - `SkillProvider` 和 `MountSkillProvider` 已从生产代码删除；Harness、SkillTalent 改用 `SkillCatalog`。
-- Agent 发现已由 `AgentCatalog`/`DefaultAgentCatalog` 承担；`AgentMd` 和 AgentManager 使用 `MountSource + sourcePath`。
+- Agent 发现已由 `AgentCatalog`/`DefaultAgentCatalog` 承担；`AgentDescriptor` 和 AgentManager 使用 `MountSource + sourcePath`。
 - MountManager 的注册、查询、移除 API 统一返回 `Mount`；`MountDir`、`SkillDir` 和旧技能扫描 facade 均已移除。
 - Terminal 的虚拟来源已支持 `ls/read/write/edit/grep/glob`；无本地路径来源不能进入 bash、LSP 或 Path 诊断。
 - 修复虚拟 Terminal 输出中的字面量 `\\n` 问题，恢复真实换行输出。

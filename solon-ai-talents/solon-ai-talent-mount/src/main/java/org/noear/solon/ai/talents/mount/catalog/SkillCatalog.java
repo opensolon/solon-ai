@@ -3,7 +3,7 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  */
-package org.noear.solon.ai.talents.cli;
+package org.noear.solon.ai.talents.mount.catalog;
 
 import java.util.Collection;
 

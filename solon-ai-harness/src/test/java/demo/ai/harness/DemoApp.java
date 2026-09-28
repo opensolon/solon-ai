@@ -7,7 +7,7 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.talents.mount.Mount;
-import org.noear.solon.ai.talents.mount.FileMountSource;
+import org.noear.solon.ai.talents.mount.source.FileMountSource;
 import java.nio.file.Paths;
 import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.talents.mount.MountType;

@@ -3,17 +3,10 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  */
-package org.noear.solon.ai.talents.cli.impl;
+package org.noear.solon.ai.talents.mount.catalog;
 
-import org.noear.solon.ai.talents.cli.SkillCatalog;
-import org.noear.solon.ai.talents.cli.SkillContent;
-import org.noear.solon.ai.talents.cli.SkillDescriptor;
-import org.noear.solon.ai.talents.mount.FindOptions;
-import org.noear.solon.ai.talents.mount.Mount;
-import org.noear.solon.ai.talents.mount.MountEntry;
-import org.noear.solon.ai.talents.mount.MountManager;
-import org.noear.solon.ai.talents.mount.MountSource;
-import org.noear.solon.ai.talents.mount.MountType;
+import org.noear.solon.ai.talents.mount.*;
+import org.noear.solon.ai.talents.mount.source.MountSource;
 import org.noear.solon.ai.util.Markdown;
 import org.noear.solon.ai.util.MarkdownUtil;
 import org.noear.solon.core.util.Assert;

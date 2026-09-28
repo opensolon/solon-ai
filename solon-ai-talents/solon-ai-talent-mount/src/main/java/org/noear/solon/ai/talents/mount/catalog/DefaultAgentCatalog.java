@@ -1,5 +1,6 @@
-package org.noear.solon.ai.talents.mount;
+package org.noear.solon.ai.talents.mount.catalog;
 
+import org.noear.solon.ai.talents.mount.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,7 +14,7 @@ import java.util.Map;
 public final class DefaultAgentCatalog implements AgentCatalog {
     private static final Logger LOG = LoggerFactory.getLogger(DefaultAgentCatalog.class);
     private final MountManager mountManager;
-    private volatile Map<String, AgentMd> agents = Collections.emptyMap();
+    private volatile Map<String, AgentDescriptor> agents = Collections.emptyMap();
 
     public DefaultAgentCatalog(MountManager mountManager) {
         this.mountManager = mountManager;
@@ -22,7 +23,7 @@ public final class DefaultAgentCatalog implements AgentCatalog {
 
     @Override
     public void refresh() {
-        Map<String, AgentMd> discoveredAgents = new LinkedHashMap<>();
+        Map<String, AgentDescriptor> discoveredAgents = new LinkedHashMap<>();
         for (Mount mount : mountManager.getSourceMounts()) {
             if (mount.isEnabled() && mount.getType() == MountType.AGENTS) {
                 scanAgents(mount, discoveredAgents);
@@ -37,18 +38,18 @@ public final class DefaultAgentCatalog implements AgentCatalog {
     }
 
     @Override
-    public Collection<AgentMd> getAgents() {
+    public Collection<AgentDescriptor> getAgents() {
         return agents.values();
     }
 
     @Override
-    public Collection<AgentMd> getAgentsByMount(String mountAlias) {
+    public Collection<AgentDescriptor> getAgentsByMount(String mountAlias) {
         String key = normalizeAlias(mountAlias);
         if (key == null) {
             return Collections.emptyList();
         }
-        java.util.List<AgentMd> result = new java.util.ArrayList<>();
-        for (AgentMd agent : agents.values()) {
+        java.util.List<AgentDescriptor> result = new java.util.ArrayList<>();
+        for (AgentDescriptor agent : agents.values()) {
             if (key.equals(agent.getMountAlias())) {
                 result.add(agent);
             }
@@ -57,11 +58,11 @@ public final class DefaultAgentCatalog implements AgentCatalog {
     }
 
     @Override
-    public AgentMd getAgent(String name) {
+    public AgentDescriptor getAgent(String name) {
         return name == null ? null : agents.get(name);
     }
 
-    private void scanAgents(Mount mount, Map<String, AgentMd> result) {
+    private void scanAgents(Mount mount, Map<String, AgentDescriptor> result) {
         try {
             for (MountEntry entry : mount.getSource().find("", FindOptions.builder()
                     .maxDepth(3).maxEntries(10000).filesOnly(true).build())) {
@@ -69,7 +70,7 @@ public final class DefaultAgentCatalog implements AgentCatalog {
                 String fileName = entry.getName();
                 if (hiddenParent(path) || fileName.startsWith(".") || !fileName.endsWith(".md")) continue;
                 String name = fileName.substring(0, fileName.length() - 3);
-                result.put(name, new AgentMd(name, mount.getAlias(), mount.getSource(), path));
+                result.put(name, new AgentDescriptor(name, mount.getAlias(), mount.getSource(), path));
             }
         } catch (IOException e) {
             LOG.debug("Scan agent mount failed: {}", mount.getAlias(), e);

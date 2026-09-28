@@ -15,8 +15,8 @@
  */
 package org.noear.solon.ai.harness.agent;
 
-import org.noear.solon.ai.talents.mount.AgentCatalog;
-import org.noear.solon.ai.talents.mount.AgentMd;
+import org.noear.solon.ai.talents.mount.catalog.AgentCatalog;
+import org.noear.solon.ai.talents.mount.catalog.AgentDescriptor;
 import org.noear.solon.core.util.ResourceUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,7 +80,7 @@ public class AgentManager {
         }
 
         if (agentCatalog != null) {
-            AgentMd agentMd = agentCatalog.getAgent(agentName);
+            AgentDescriptor agentMd = agentCatalog.getAgent(agentName);
             if (agentMd != null) {
                 return loadFromAgentMd(agentMd);
             }
@@ -110,7 +110,7 @@ public class AgentManager {
 
         // 来源定义不缓存；目录刷新或文件内容变化后，下次查询读取当前内容。
         if (agentCatalog != null) {
-            for (AgentMd agentMd : agentCatalog.getAgents()) {
+            for (AgentDescriptor agentMd : agentCatalog.getAgents()) {
                 if (!all.containsKey(agentMd.getName())) {
                     all.put(agentMd.getName(), loadFromAgentMd(agentMd));
                 }
@@ -150,7 +150,7 @@ public class AgentManager {
     /**
      * 从 AgentMd 解析完整定义
      */
-    private AgentDefinition loadFromAgentMd(AgentMd agentMd) {
+    private AgentDefinition loadFromAgentMd(AgentDescriptor agentMd) {
         try (InputStream input = agentMd.open()) {
             String content = new String(readAll(input), StandardCharsets.UTF_8);
             List<String> lines = Arrays.asList(content.split("\\R", -1));

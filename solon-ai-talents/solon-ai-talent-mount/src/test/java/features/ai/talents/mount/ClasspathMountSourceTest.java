@@ -1,7 +1,7 @@
 package features.ai.talents.mount;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.ai.talents.mount.ClasspathMountSource;
+import org.noear.solon.ai.talents.mount.source.ClasspathMountSource;
 import org.noear.solon.ai.talents.mount.FindOptions;
 import org.noear.solon.ai.talents.mount.MountEntry;
 

@@ -1,4 +1,4 @@
-package org.noear.solon.ai.talents.cli;
+package org.noear.solon.ai.talents.mount.catalog;
 
 import java.util.Objects;
 

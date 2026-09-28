@@ -19,8 +19,9 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.talents.cli.impl.DefaultSkillCatalog;
-import org.noear.solon.ai.talents.mount.MountManager;
+import org.noear.solon.ai.talents.mount.catalog.SkillCatalog;
+import org.noear.solon.ai.talents.mount.catalog.SkillContent;
+import org.noear.solon.ai.talents.mount.catalog.SkillDescriptor;
 import org.noear.solon.annotation.Param;
 
 import java.io.IOException;

@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.talents.mount;
 
+import org.noear.solon.ai.talents.mount.source.MountSource;
+
 import java.nio.file.Path;
 import java.util.Optional;
 

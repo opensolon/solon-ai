@@ -39,12 +39,8 @@ import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionRule;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
-import org.noear.solon.ai.talents.cli.impl.DefaultSkillCatalog;
+import org.noear.solon.ai.talents.mount.*;
 import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
-import org.noear.solon.ai.talents.mount.AgentCatalog;
-import org.noear.solon.ai.talents.mount.AgentMd;
-import org.noear.solon.ai.talents.mount.DefaultAgentCatalog;
-import org.noear.solon.ai.talents.mount.Mount;
 import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.talents.cli.*;
 import org.noear.solon.ai.talents.code.CodeTalent;
@@ -58,6 +54,7 @@ import org.noear.solon.ai.talents.gateway.openapi.ApiSource;
 import org.noear.solon.ai.talents.gateway.openapi.ApiSourceClient;
 import org.noear.solon.ai.talents.gateway.OpenApiGatewayTalent;
 import org.noear.solon.ai.talents.gateway.McpGatewayTalent;
+import org.noear.solon.ai.talents.mount.catalog.*;
 import org.noear.solon.ai.talents.web.CodeSearchTalent;
 import org.noear.solon.ai.talents.web.WebfetchTalent;
 import org.noear.solon.ai.talents.web.WebsearchTalent;
@@ -454,11 +451,11 @@ public class HarnessEngine {
         options.getMountManager().setDisallowSkills(disallowedSkills);
     }
 
-    public Collection<AgentMd> getAgents() {
+    public Collection<AgentDescriptor> getAgents() {
         return agentCatalog.getAgents();
     }
 
-    public Collection<AgentMd> getAgentsByMount(String alias) {
+    public Collection<AgentDescriptor> getAgentsByMount(String alias) {
         return agentCatalog.getAgentsByMount(alias);
     }
 
@@ -823,19 +820,15 @@ public class HarnessEngine {
             String key = mount.getAlias().startsWith("@") ? mount.getAlias() : "@" + mount.getAlias();
             agentManager.removeByMountAlias(key);
         }
-        options.getMountManager().register(mount);
 
-        skillCatalog.refreshByMount(mount.getAlias());
-        agentCatalog.refreshByMount(mount.getAlias());
+        options.getMountManager().register(mount);
     }
 
     public void removeMount(String alias) {
         String key = alias.startsWith("@") ? alias : "@" + alias;
         agentManager.removeByMountAlias(key);
-        options.getMountManager().remove(alias);
 
-        skillCatalog.refreshByMount(key);
-        agentCatalog.refreshByMount(key);
+        options.getMountManager().remove(alias);
     }
 
     public boolean hasMount(String alias) {
@@ -1062,8 +1055,8 @@ public class HarnessEngine {
         }
 
 
-        this.skillCatalog = new DefaultSkillCatalog(options.getMountManager());
-        this.agentCatalog = new DefaultAgentCatalog(options.getMountManager());
+        this.skillCatalog = options.getMountManager().getSkillCatalog();
+        this.agentCatalog = options.getMountManager().getAgentCatalog();
 
         this.todoTalent = new TodoTalent(options.getHarnessSessions());
         this.codeTalent = new CodeTalent(options.getWorkspace(), options.getHarnessHome());

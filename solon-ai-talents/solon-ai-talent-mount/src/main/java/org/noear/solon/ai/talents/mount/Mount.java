@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.talents.mount;
 
+import org.noear.solon.ai.talents.mount.source.MountSource;
+
 /** 挂载配置与内容来源。 */
 public final class Mount {
     private final String alias;

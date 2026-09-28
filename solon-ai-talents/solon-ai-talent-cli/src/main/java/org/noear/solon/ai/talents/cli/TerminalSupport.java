@@ -19,7 +19,7 @@ import org.noear.solon.Utils;
 
 import org.noear.solon.ai.sandbox.config.FilesystemConfig;
 import org.noear.solon.ai.talents.mount.Mount;
-import org.noear.solon.ai.talents.mount.FileMountSource;
+import org.noear.solon.ai.talents.mount.source.FileMountSource;
 import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.ai.talents.mount.ResolvedResource;
 import org.noear.solon.core.util.Assert;
