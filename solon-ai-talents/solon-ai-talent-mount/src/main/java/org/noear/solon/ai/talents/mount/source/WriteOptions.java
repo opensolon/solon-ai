@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2025 noear.org and authors
+ * Copyright 2017-2026 noear.org and authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,15 @@
  */
 package org.noear.solon.ai.talents.mount.source;
 
-/** 文件写入选项。 */
+import org.noear.solon.lang.Preview;
+
+/** 
+ * 文件写入选项。 
+ *
+ * @author noear 
+ * @since 4.1.1
+ */
+@Preview("4.1.1")
 public final class WriteOptions {
     private final boolean append;
     private final boolean createParents;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2025 noear.org and authors
+ * Copyright 2017-2026 noear.org and authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import org.noear.solon.ai.talents.mount.source.MountSource;
 import org.noear.solon.ai.util.Markdown;
 import org.noear.solon.ai.util.MarkdownUtil;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Preview;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -37,7 +38,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/** 基于 MountSource 的默认技能目录。 */
+/** 
+ * 基于 MountSource 的默认技能目录。 
+ *
+ * @author noear 
+ * @since 4.1.1
+ */
+@Preview("4.1.1")
 public class DefaultSkillCatalog implements SkillCatalog {
     private final MountManager mountManager;
     private volatile Map<String, SkillRecord> skills = Collections.emptyMap();

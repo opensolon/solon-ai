@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2025 noear.org and authors
+ * Copyright 2017-2026 noear.org and authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 package org.noear.solon.ai.talents.mount.source;
 
 import org.noear.solon.ai.talents.mount.*;
+import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,7 +25,13 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
-/** 可挂载的虚拟文件来源。 */
+/** 
+ * 可挂载的虚拟文件来源。 
+ * 
+ * @author noear 
+ * @since 4.1.1
+ */
+@Preview("4.1.1")
 public interface MountSource extends AutoCloseable {
     String getScheme();
 

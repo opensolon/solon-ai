@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2025 noear.org and authors
+ * Copyright 2017-2026 noear.org and authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package org.noear.solon.ai.talents.mount.catalog;
 
 import org.noear.solon.ai.talents.mount.*;
 import org.noear.solon.ai.talents.mount.source.FindOptions;
+import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,7 +27,13 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** 基于统一挂载注册表的来源无关 Agent 目录。 */
+/** 
+ * 基于统一挂载注册表的来源无关 Agent 目录。 
+ *
+ * @author noear 
+ * @since 4.1.1
+ */
+@Preview("4.1.1")
 public final class DefaultAgentCatalog implements AgentCatalog {
     private static final Logger LOG = LoggerFactory.getLogger(DefaultAgentCatalog.class);
     private final MountManager mountManager;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2025 noear.org and authors
+ * Copyright 2017-2026 noear.org and authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package org.noear.solon.ai.talents.mount.catalog;
 
 import org.noear.solon.ai.talents.mount.source.FileMountSource;
 import org.noear.solon.ai.talents.mount.source.MountSource;
+import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,7 +27,11 @@ import java.util.Optional;
 /**
  * 已发现的 Agent 来源描述，记录其名称、所属挂载和来源路径，并提供读取来源内容的能力。
  * <p>此对象不表示已解析的 AgentDefinition，也不表示运行时 Agent 实例。</p>
+ *
+ * @author noear 
+ * @since 4.1.1
  */
+@Preview("4.1.1")
 public class AgentDescriptor {
     private final String name;
     private final String mountAlias;

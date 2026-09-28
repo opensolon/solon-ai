@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2025 noear.org and authors
+ * Copyright 2017-2026 noear.org and authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,18 @@
 package org.noear.solon.ai.talents.mount;
 
 import org.noear.solon.ai.talents.mount.source.MountSource;
+import org.noear.solon.lang.Preview;
 
 import java.nio.file.Path;
 import java.util.Optional;
 
-/** 用户逻辑路径解析后的来源资源。 */
+/** 
+ * 用户逻辑路径解析后的来源资源。 
+ *
+ * @author noear 
+ * @since 4.1.1
+ */
+@Preview("4.1.1")
 public final class ResolvedResource {
     private final String logicalPath;
     private final String mountAlias;

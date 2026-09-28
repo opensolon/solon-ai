@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2025 noear.org and authors
+ * Copyright 2017-2026 noear.org and authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 package org.noear.solon.ai.talents.mount.source;
 
 import org.noear.solon.ai.talents.mount.*;
+import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -37,7 +38,13 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 
-/** 本地文件系统挂载来源。 */
+/** 
+ * 本地文件系统挂载来源。
+ *
+ * @author noear 
+ * @since 4.1.1
+ */
+@Preview("4.1.1")
 public final class FileMountSource implements MountSource {
     private final Path rootPath;
     private final MountCapabilities capabilities;

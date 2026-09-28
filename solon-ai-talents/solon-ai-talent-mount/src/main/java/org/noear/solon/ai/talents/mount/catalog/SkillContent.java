@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2025 noear.org and authors
+ * Copyright 2017-2026 noear.org and authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,17 @@
  */
 package org.noear.solon.ai.talents.mount.catalog;
 
+import org.noear.solon.lang.Preview;
+
 import java.util.Objects;
 
-/** 已读取的技能正文及兼容现有工具输出的展示文本。 */
+/** 
+ * 已读取的技能正文及兼容现有工具输出的展示文本。 
+ *
+ * @author noear 
+ * @since 4.1.1
+ */
+@Preview("4.1.1")
 public final class SkillContent {
     private final SkillDescriptor descriptor;
     private final String text;

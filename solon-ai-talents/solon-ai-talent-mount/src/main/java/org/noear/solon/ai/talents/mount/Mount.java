@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2025 noear.org and authors
+ * Copyright 2017-2026 noear.org and authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,16 @@
 package org.noear.solon.ai.talents.mount;
 
 import org.noear.solon.ai.talents.mount.source.MountSource;
+import org.noear.solon.lang.Preview;
 
-/** 挂载配置与内容来源。 */
+/** 
+ * 挂载配置与内容来源。 
+ *
+ * @author noear 
+ * @since 3.9.5
+ * @since 4.1.1
+ */
+@Preview("4.1.1")
 public final class Mount {
     private final String alias;
     private final String description;
