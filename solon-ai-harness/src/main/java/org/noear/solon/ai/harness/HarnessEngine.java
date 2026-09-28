@@ -39,9 +39,12 @@ import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionRule;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
+import org.noear.solon.ai.talents.cli.impl.DefaultSkillCatalog;
 import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
+import org.noear.solon.ai.talents.mount.AgentCatalog;
 import org.noear.solon.ai.talents.mount.AgentMd;
-import org.noear.solon.ai.talents.mount.MountDir;
+import org.noear.solon.ai.talents.mount.DefaultAgentCatalog;
+import org.noear.solon.ai.talents.mount.Mount;
 import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.talents.cli.*;
 import org.noear.solon.ai.talents.code.CodeTalent;
@@ -50,7 +53,7 @@ import org.noear.solon.ai.talents.lsp.LspServerParameters;
 import org.noear.solon.ai.talents.lsp.LspTalent;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.talents.memory.MemoryTalent;
-import org.noear.solon.ai.talents.mount.SkillDir;
+import java.util.stream.Collectors;
 import org.noear.solon.ai.talents.gateway.openapi.ApiSource;
 import org.noear.solon.ai.talents.gateway.openapi.ApiSourceClient;
 import org.noear.solon.ai.talents.gateway.OpenApiGatewayTalent;
@@ -84,6 +87,9 @@ public class HarnessEngine {
     private final ReentrantLock agentLock = new ReentrantLock();
 
     private final HarnessOptions options;
+
+    private final SkillCatalog skillCatalog;
+    private final AgentCatalog agentCatalog;
 
     private final CodeTalent codeTalent;
     private final TodoTalent todoTalent;
@@ -233,8 +239,12 @@ public class HarnessEngine {
         return options.getMemoryProvider();
     }
 
-    public SkillProvider getSkillProvider() {
-        return options.getSkillProvider();
+    public SkillCatalog getSkillCatalog() {
+        return skillTalent.getSkillCatalog();
+    }
+
+    public AgentCatalog getAgentCatalog() {
+        return agentCatalog;
     }
 
     // ========== 配置读取（代理到 options） ==========
@@ -386,24 +396,27 @@ public class HarnessEngine {
         return Collections.unmodifiableCollection(options.getExtensions());
     }
 
-    public Collection<MountDir> getMounts() {
+    public Collection<Mount> getMounts() {
         return options.getMountManager().getMounts();
     }
 
-    public MountDir getMount(String alias) {
+    public Mount getMount(String alias) {
         return options.getMountManager().getMount(alias);
     }
 
-    public SkillDir getSkill(String name) {
-        return options.getMountManager().getSkill(name);
+    public SkillDescriptor getSkill(String name) {
+        return skillTalent.getSkillCatalog().getDescriptor(name);
     }
 
-    public Collection<SkillDir> getSkills() {
-        return options.getMountManager().getSkills();
+    public Collection<SkillDescriptor> getSkills() {
+        return skillTalent.getSkillCatalog().getDescriptors();
     }
 
-    public Collection<SkillDir> getSkillsByMount(String alias) {
-        return options.getMountManager().getSkillsByMount(alias);
+    public Collection<SkillDescriptor> getSkillsByMount(String alias) {
+        String mountAlias = alias.startsWith("@") ? alias : "@" + alias;
+        return getSkills().stream().filter(s -> s.getId().equals(mountAlias)
+                        || s.getId().startsWith(mountAlias + "/"))
+                .collect(Collectors.toList());
     }
 
     /**
@@ -442,11 +455,11 @@ public class HarnessEngine {
     }
 
     public Collection<AgentMd> getAgents() {
-        return options.getMountManager().getAgents();
+        return agentCatalog.getAgents();
     }
 
     public Collection<AgentMd> getAgentsByMount(String alias) {
-        return options.getMountManager().getAgentsByMount(alias);
+        return agentCatalog.getAgentsByMount(alias);
     }
 
     public Map<String, McpServerParameters> getMcpServers() {
@@ -804,14 +817,25 @@ public class HarnessEngine {
     }
 
 
-    public void addMount(MountDir mount) {
+    public void addMount(Mount mount) {
+        // 同别名替换时，清除旧挂载关联的运行时定义。
+        if (mount != null && options.getMountManager().hasMount(mount.getAlias())) {
+            String key = mount.getAlias().startsWith("@") ? mount.getAlias() : "@" + mount.getAlias();
+            agentManager.removeByMountAlias(key);
+        }
         options.getMountManager().register(mount);
+
+        skillCatalog.refreshByMount(mount.getAlias());
+        agentCatalog.refreshByMount(mount.getAlias());
     }
 
     public void removeMount(String alias) {
         String key = alias.startsWith("@") ? alias : "@" + alias;
         agentManager.removeByMountAlias(key);
         options.getMountManager().remove(alias);
+
+        skillCatalog.refreshByMount(key);
+        agentCatalog.refreshByMount(key);
     }
 
     public boolean hasMount(String alias) {
@@ -825,7 +849,14 @@ public class HarnessEngine {
         } else {
             agentManager.clearCustomAgents();
         }
-        options.getMountManager().refresh(alias);
+
+        if (alias == null) {
+            skillCatalog.refresh();
+            agentCatalog.refresh();
+        } else {
+            skillCatalog.refreshByMount(alias);
+            agentCatalog.refreshByMount(alias);
+        }
     }
 
 
@@ -1030,6 +1061,10 @@ public class HarnessEngine {
             initHitlDefault();
         }
 
+
+        this.skillCatalog = new DefaultSkillCatalog(options.getMountManager());
+        this.agentCatalog = new DefaultAgentCatalog(options.getMountManager());
+
         this.todoTalent = new TodoTalent(options.getHarnessSessions());
         this.codeTalent = new CodeTalent(options.getWorkspace(), options.getHarnessHome());
         this.taskTalent = new TaskTalent(this);
@@ -1085,14 +1120,9 @@ public class HarnessEngine {
         }
 
         terminalTalent = new TerminalTalent(options.getMountManager());
+        skillTalent = new SkillTalent(this.skillCatalog);
 
-        if (options.getSkillProvider() == null) {
-            skillTalent = new SkillTalent(options.getMountManager());
-        } else {
-            skillTalent = new SkillTalent(options.getSkillProvider());
-        }
-
-        agentManager = new AgentManager(options.getMountManager());
+        agentManager = new AgentManager(this.agentCatalog);
 
         terminalTalent.setBashAsyncEnabled(options.isBashAsyncEnabled());
         terminalTalent.setSandboxEnabled(options.isSandboxEnabled());
@@ -1241,14 +1271,6 @@ public class HarnessEngine {
          */
         public Builder memoryProvider(MemorySolutionProvider memoryProvider) {
             options.setMemoryProvider(memoryProvider);
-            return this;
-        }
-
-        /**
-         * 技能提供者（如果需要对接数据库，通过此接口适配）
-         */
-        public Builder skillProvider(SkillProvider skillProvider) {
-            options.setSkillProvider(skillProvider);
             return this;
         }
 
@@ -1498,7 +1520,7 @@ public class HarnessEngine {
             return this;
         }
 
-        public Builder mountAdd(MountDir mount) {
+        public Builder mountAdd(Mount mount) {
             options.getMountManager().register(mount);
             return this;
         }

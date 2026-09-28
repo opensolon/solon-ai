@@ -1,0 +1,212 @@
+/*
+ * Copyright 2017-2025 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ */
+package org.noear.solon.ai.talents.cli.impl;
+
+import org.noear.solon.ai.talents.cli.SkillCatalog;
+import org.noear.solon.ai.talents.cli.SkillContent;
+import org.noear.solon.ai.talents.cli.SkillDescriptor;
+import org.noear.solon.ai.talents.mount.FindOptions;
+import org.noear.solon.ai.talents.mount.Mount;
+import org.noear.solon.ai.talents.mount.MountEntry;
+import org.noear.solon.ai.talents.mount.MountManager;
+import org.noear.solon.ai.talents.mount.MountSource;
+import org.noear.solon.ai.talents.mount.MountType;
+import org.noear.solon.ai.util.Markdown;
+import org.noear.solon.ai.util.MarkdownUtil;
+import org.noear.solon.core.util.Assert;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+/** 基于 MountSource 的默认技能目录。 */
+public class DefaultSkillCatalog implements SkillCatalog {
+    private final MountManager mountManager;
+    private volatile Map<String, SkillRecord> skills = Collections.emptyMap();
+    private volatile Map<String, SkillRecord> shortNames = Collections.emptyMap();
+
+    public DefaultSkillCatalog(MountManager mountManager) {
+        this.mountManager = mountManager;
+        refresh();
+    }
+
+    @Override
+    public synchronized void refresh() {
+        Map<String, SkillRecord> result = new LinkedHashMap<>();
+        for (Mount mount : mountManager.getSourceMounts()) {
+            if (mount.isEnabled() && mount.getType() == MountType.SKILLS) {
+                scanMount(mount, result);
+            }
+        }
+        Map<String, SkillRecord> names = new LinkedHashMap<>();
+        Set<String> ambiguous = new HashSet<>();
+        for (SkillRecord record : result.values()) {
+            String name = record.descriptor.getName();
+            if (names.putIfAbsent(name, record) != null) ambiguous.add(name);
+        }
+        for (String name : ambiguous) names.remove(name);
+        shortNames = Collections.unmodifiableMap(names);
+        skills = Collections.unmodifiableMap(result);
+    }
+
+    @Override
+    public void refreshByMount(String mountAlias) {
+        refresh();
+    }
+
+    @Override
+    public int getSkillCount() {
+        return (int) getDescriptors().stream().filter(this::isAllowed).count();
+    }
+
+    @Override
+    public Collection<SkillDescriptor> getDescriptors() {
+        return skills.values().stream().map(record -> record.descriptor).collect(Collectors.toList());
+    }
+
+    @Override
+    public Collection<SkillDescriptor> searchDescriptors(String query) {
+        if (Assert.isEmpty(query)) return Collections.emptyList();
+        String[] keys = query.toLowerCase().trim().split("\\s+");
+        return skills.values().stream().map(record -> record.descriptor)
+                .filter(this::isAllowed)
+                .filter(s -> Arrays.stream(keys).anyMatch(k ->
+                        s.getName().toLowerCase().contains(k)
+                                || s.getDescription().toLowerCase().contains(k)
+                                || s.getId().toLowerCase().contains(k)))
+                .limit(15).collect(Collectors.toList());
+    }
+
+    @Override
+    public SkillDescriptor getDescriptor(String name) {
+        SkillRecord record = find(name);
+        return record == null ? null : record.descriptor;
+    }
+
+    @Override
+    public SkillContent readContent(String name) {
+        SkillRecord record = find(name);
+        if (record == null || !isAllowed(record.descriptor)) return null;
+        try (InputStream input = record.source.openRead(record.markerPath)) {
+            String text = new String(readAll(input), StandardCharsets.UTF_8);
+            return new SkillContent(record.descriptor, text, renderSkillXml(record, text));
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    @Override
+    public boolean isAllowed(SkillDescriptor descriptor) {
+        return descriptor != null && skills.containsKey(descriptor.getId())
+                && !mountManager.isSkillDisallowed(descriptor.getId());
+    }
+
+    private SkillRecord find(String name) {
+        if (name == null) return null;
+        SkillRecord record = skills.get(name);
+        if (record == null && !name.startsWith("@")) record = skills.get("@" + name);
+        if (record == null) record = shortNames.get(name);
+        return record;
+    }
+
+    private void scanMount(Mount mount, Map<String, SkillRecord> result) {
+        MountSource source = mount.getSource();
+        try {
+            List<MountEntry> markers = new ArrayList<>(source.find("", FindOptions.builder()
+                    .glob("**/SKILL.md").maxDepth(3).maxEntries(10000).filesOnly(true).build()));
+            markers.addAll(source.find("", FindOptions.builder()
+                    .glob("**/skill.md").maxDepth(3).maxEntries(10000).filesOnly(true).build()));
+            for (MountEntry marker : markers) {
+                String markerPath = marker.getPath();
+                int slash = markerPath.lastIndexOf('/');
+                String sourcePath = slash < 0 ? "" : markerPath.substring(0, slash);
+                String name = sourcePath.isEmpty() ? mount.getAlias().substring(1) : sourcePath;
+                String id = mount.getAlias() + (sourcePath.isEmpty() ? "" : "/" + sourcePath);
+                Markdown markdown = parseMarkdown(source, markerPath);
+                SkillDescriptor descriptor = new SkillDescriptor(id, name, markdown.getDescription(), markdown.getVersion());
+                result.putIfAbsent(id, new SkillRecord(descriptor, source, sourcePath, markerPath));
+            }
+        } catch (IOException e) {
+            // 单个来源不可用不应阻断其他技能来源。
+        }
+    }
+
+    private Markdown parseMarkdown(MountSource source, String path) {
+        try (InputStream input = source.openRead(path)) {
+            List<String> lines = Arrays.asList(new String(readAll(input), StandardCharsets.UTF_8).split("\\R", -1));
+            return MarkdownUtil.resolve(lines, true);
+        } catch (Throwable e) {
+            return new Markdown();
+        }
+    }
+
+    private String renderSkillXml(SkillRecord record, String content) throws IOException {
+        StringBuilder sb = new StringBuilder("\n<skill_content name=\"")
+                .append(record.descriptor.getName()).append("\">\n");
+        if (record.source.capabilities().isShellAccessible()) {
+            sb.append("[SYSTEM NOTE: Access granted. Use the <alias> paths in 'bash' tool for execution.]\n");
+        } else {
+            sb.append("[SYSTEM NOTE: This mount is readable through file tools but is not directly accessible to bash.]\n");
+        }
+        sb.append("[If this task takes many steps, remember to re-read this skill if you feel uncertain about details.]\n\n");
+        sb.append(content.trim()).append("\n\n<skill_files>\n");
+        sb.append(sampleFiles(record)).append("</skill_files>\n</skill_content>\n");
+        return sb.toString();
+    }
+
+    private String sampleFiles(SkillRecord record) throws IOException {
+        Set<String> ignored = new HashSet<>(Arrays.asList(
+                ".DS_Store", "__pycache__", ".git", ".idea", ".vscode", "node_modules", "venv"));
+        StringBuilder result = new StringBuilder();
+        for (MountEntry entry : record.source.find(record.sourcePath,
+                FindOptions.builder().maxDepth(3).maxEntries(500).filesOnly(true).build())) {
+            String relative = entry.getPath();
+            if (!record.sourcePath.isEmpty() && relative.startsWith(record.sourcePath + "/")) {
+                relative = relative.substring(record.sourcePath.length() + 1);
+            }
+            String name = entry.getName();
+            if (name.equalsIgnoreCase("SKILL.md") || ignored.contains(name) || name.startsWith(".")) continue;
+            result.append("  <file>\n    <rel>").append(relative)
+                    .append("</rel>\n    <logicalPath>")
+                    .append(record.descriptor.getId()).append('/').append(relative)
+                    .append("</logicalPath>\n  </file>\n");
+        }
+        return result.toString();
+    }
+
+    private static byte[] readAll(InputStream input) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int count;
+        while ((count = input.read(buffer)) >= 0) output.write(buffer, 0, count);
+        return output.toByteArray();
+    }
+
+    private static final class SkillRecord {
+        final SkillDescriptor descriptor;
+        final MountSource source;
+        final String sourcePath;
+        final String markerPath;
+
+        SkillRecord(SkillDescriptor descriptor, MountSource source, String sourcePath, String markerPath) {
+            this.descriptor = descriptor;
+            this.source = source;
+            this.sourcePath = sourcePath;
+            this.markerPath = markerPath;
+        }
+    }
+}

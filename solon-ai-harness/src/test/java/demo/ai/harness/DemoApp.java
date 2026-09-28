@@ -6,7 +6,9 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
-import org.noear.solon.ai.talents.mount.MountDir;
+import org.noear.solon.ai.talents.mount.Mount;
+import org.noear.solon.ai.talents.mount.FileMountSource;
+import java.nio.file.Paths;
 import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.talents.mount.MountType;
 
@@ -18,10 +20,10 @@ public class DemoApp {
                 .sessionProvider(InMemoryAgentSession::of)
                 .toolsAdd(ToolName.TOOL_ALL_FULL) //设定工具权限
                 .disallowedToolsAdd(ToolName.TOOL_ALL_FULL)
-                .mountAdd(MountDir.builder()
+                .mountAdd(Mount.builder()
                         .alias("@global-agents")
                         .type(MountType.AGENTS)
-                        .path("~/.soloncode/agents/")
+                        .source(FileMountSource.of(Paths.get(System.getProperty("user.home"), ".soloncode", "agents")))
                         .primary(true)
                         .build())
                 .modelAdd(new ChatConfig().then(slf -> {

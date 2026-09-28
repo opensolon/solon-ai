@@ -140,7 +140,7 @@ solon-ai-harness/                                  # AI 代理编排引擎
 │                                                                                                     │
 │  ┌─ cli ─────────────────────────────────────────────────────────────────────┐                     │
 │  │  TerminalTalent (bash/read/write/edit/glob/grep/ls + 沙箱)  ← options 控制  │                     │
-│  │  SkillTalent (skillread/skillrefresh) ← SkillProvider 或 MountManager       │                     │
+│  │  SkillTalent (skillread/skillrefresh) ← SkillCatalog 或 MountManager       │                     │
 │  │  TodoTalent / ClockTalent ← 文件路径                                        │                     │
 │  │  MountManager ← workspace                                                   │                     │
 │  └────────────────────────────────────────────────────────────────────────────-┘                     │
@@ -240,7 +240,7 @@ solon-ai-harness/                                  # AI 代理编排引擎
 | 编号 | 流向 | 源码位置 |
 |------|------|----------|
 | ① | `HarnessEngine` 构造时，依据 `HarnessOptions` 中的配置初始化全部 Talent 组件，并设置重试、开关等参数 | `HarnessEngine.java:755-838` |
-| ② | `MountManager` 负责扫描所有挂载点（本地目录、远程等），暴露 `MountDir` / `SkillDir` / `AgentMd` 给 `AgentManager` | `solon-ai-talent-cli` → `MountManager` |
+| ② | `MountManager` 管理 `Mount` 与 `MountSource`；`SkillCatalog` 提供 `SkillDescriptor` / `SkillContent`，代理元数据由 `AgentManager` 获取 | `solon-ai-talent-mount` / `solon-ai-talent-cli` |
 | ③ | `AgentManager` 从 `META-INF/solon/ai/harness/*.md` 加载 5 个内置子代理（general/bash/explore/plan/git-summary），并预留挂载代理的按需解析 | `AgentManager.java:55-61` |
 | ④ | `AgentFactory.create()` 根据 `AgentDefinition` 中的 `tools` 清单，通过 `toolAddDo()` 从 engine 各 getter 获取实例，注册到 `ReActAgent.Builder` | `AgentFactory.java:50-118` • `120-246` |
 | ⑤ | `TerminalTalentProxy` 包装 `TerminalTalent`，按白名单选择性暴露文件/命令工具（而不是直接暴露终端） | `AgentFactory.java:82` |
@@ -453,7 +453,8 @@ engine.addApiServer(apiSource);
 engine.addLspServer("java-lsp", lspServerParams);
 
 // 添加挂载点
-engine.addMount(mountDir);
+engine.addMount(Mount.builder().alias("@project-skills").type(MountType.SKILLS)
+    .source(FileMountSource.of(Paths.get("project-skills"))).build());
 
 // 添加扩展（触发主代理重建）
 engine.addExtension((name, builder) -> {

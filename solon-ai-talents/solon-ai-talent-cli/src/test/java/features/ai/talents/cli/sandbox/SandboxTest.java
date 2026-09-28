@@ -10,7 +10,8 @@ import org.noear.solon.ai.sandbox.config.NetworkConfig;
 import org.noear.solon.ai.sandbox.SandboxViolationStore;
 import org.noear.solon.ai.sandbox.SandboxManager;
 import org.noear.solon.ai.sandbox.util.SandboxPathUtils;
-import org.noear.solon.ai.talents.mount.MountDir;
+import org.noear.solon.ai.talents.mount.Mount;
+import org.noear.solon.ai.talents.mount.FileMountSource;
 import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.ai.talents.mount.MountType;
 
@@ -452,17 +453,13 @@ public class SandboxTest {
         assertTrue(containsDenyMount(args, path), "Expected deny mount for " + path + " in " + args);
     }
 
-    private static MountDir mount(String alias, Path realPath, boolean writeable) throws Exception {
-        MountDir mount = MountDir.builder()
+    private static Mount mount(String alias, Path realPath, boolean writeable) {
+        return Mount.builder()
                 .alias(alias)
-                .path(realPath.toString())
+                .source(FileMountSource.of(realPath))
                 .type(MountType.SKILLS)
                 .writeable(writeable)
                 .build();
-        Method method = MountDir.class.getDeclaredMethod("setRealPath", Path.class);
-        method.setAccessible(true);
-        method.invoke(mount, realPath);
-        return mount;
     }
 
     private static void deleteRecursively(Path root) throws Exception {

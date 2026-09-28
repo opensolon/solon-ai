@@ -18,8 +18,10 @@ package org.noear.solon.ai.talents.cli;
 import org.noear.solon.Utils;
 
 import org.noear.solon.ai.sandbox.config.FilesystemConfig;
-import org.noear.solon.ai.talents.mount.MountDir;
+import org.noear.solon.ai.talents.mount.Mount;
+import org.noear.solon.ai.talents.mount.FileMountSource;
 import org.noear.solon.ai.talents.mount.MountManager;
+import org.noear.solon.ai.talents.mount.ResolvedResource;
 import org.noear.solon.core.util.Assert;
 
 import java.io.IOException;
@@ -842,22 +844,30 @@ public class TerminalSupport {
 
         // 1. 如果是逻辑路径（@开头），走 mountManager 逻辑
         if (pStr.startsWith("@")) {
-            Path target = mountManager.resolve(workPath, pStr);
-            String alias = pStr.split("[/\\\\]")[0];
-            MountDir mount = mountManager.getMount(alias);
-
-            if (mount == null || !mount.isEnabled()) {
+            ResolvedResource resource = mountManager.resolveResource(pStr);
+            Optional<Path> localPath = resource.getLocalPath();
+            if (!localPath.isPresent()) {
+                throw new SecurityException("权限拒绝：该挂载来源不支持本地文件操作 " + pStr);
+            }
+            Path target = localPath.get();
+            Mount mount = resource.getMount();
+            if (mount == null && !"@workspace".equals(resource.getMountAlias())) {
                 throw new SecurityException("权限拒绝：未知的挂载点 " + pStr);
             }
-
-            if (writeMode && !mount.isWriteable()) {
+            if (writeMode && (mount != null && !mount.isWriteable()
+                    || !resource.getSource().capabilities().isWritable())) {
                 throw new SecurityException(
                         "权限拒绝：路径 " + pStr + " 属于只读挂载点，禁止写入。请将结果写入工作区的相对路径。");
             }
+            Optional<Path> localRoot = resource.getSource().getLocalPath("");
+            if (!localRoot.isPresent()) {
+                throw new SecurityException("权限拒绝：挂载点没有本地目录 " + pStr);
+            }
+            Path mountRoot = localRoot.get();
 
             // 符号链接防护：解析真实路径
             if (sandboxEnabled) {
-                Path realMountPath = mount.getRealPath().toRealPath();
+                Path realMountPath = mountRoot.toRealPath();
                 Path realTarget;
                 try {
                     realTarget = target.toRealPath();
@@ -869,7 +879,7 @@ public class TerminalSupport {
                 }
             }
 
-            enforceFilesystemPolicy(mount.getRealPath(), target, writeMode, sandboxEnabled, fsConfig);
+            enforceFilesystemPolicy(mountRoot, target, writeMode, sandboxEnabled, fsConfig);
             return target;
         }
 
@@ -1100,8 +1110,9 @@ public class TerminalSupport {
         if (inputPath != null && inputPath.startsWith("@")) {
             String alias = inputPath.split("[/\\\\]")[0];
             // 以挂载根为 relativize 基准，避免 inputPath 带子目录时中间层级丢失
-            MountDir mount = mountManager.getMount(alias);
-            Path base = (mount != null && mount.getRealPath() != null) ? mount.getRealPath() : targetDir;
+            Mount mount = mountManager.getMount(alias);
+            Path base = (mount != null && mount.getSource() instanceof FileMountSource)
+                    ? ((FileMountSource) mount.getSource()).getRootPath() : targetDir;
             return alias + "/" + base.relativize(file).toString().replace("\\", "/");
         }
 
@@ -1129,14 +1140,14 @@ public class TerminalSupport {
 
     String translateCommandToEnv(String command, Map<String, String> envs, boolean sandboxEnabled, boolean sandboxAllowUserHome) {
         String result = command;
-        for (MountDir mount : mountManager.getMounts()) {
-            if (mount.isEnabled()) {
+        for (Mount mount : mountManager.getMounts()) {
+            if (mount.isEnabled() && mount.getSource() instanceof FileMountSource) {
                 String alias = mount.getAlias(); // 例如 @pool1
                 String envKey = toMountEnvKey(alias); // POOL1
 
                 // 仅注入命令中实际使用的环境变量（减少污染）
                 if (result.contains(alias)) {
-                    String realPath = mount.getRealPath().toString();
+                    String realPath = ((FileMountSource) mount.getSource()).getRootPath().toString();
                     envs.put(envKey, realPath);
                     String placeholder = getEnvPlaceholder(envKey);
 
@@ -1245,9 +1256,9 @@ public class TerminalSupport {
     Path getSandboxPolicyRoot(Path workPath, String inputPath) {
         if (inputPath != null && inputPath.startsWith("@")) {
             String alias = inputPath.split("[/\\\\]")[0];
-            MountDir mount = mountManager.getMount(alias);
-            if (mount != null && mount.getRealPath() != null) {
-                return mount.getRealPath();
+            Mount mount = mountManager.getMount(alias);
+            if (mount != null && mount.getSource() instanceof FileMountSource) {
+                return ((FileMountSource) mount.getSource()).getRootPath();
             }
         }
         return workPath;

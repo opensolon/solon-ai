@@ -1,51 +1,41 @@
-/*
- * Copyright 2017-2025 noear.org and authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package org.noear.solon.ai.talents.mount;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Path;
+import java.util.Optional;
 
-/**
- * 代理文件描述（轻量扫描产物）
- *
- * @author noear
- * @since 3.11.0
- */
+/** 代理 Markdown 描述及其来源位置。 */
 public class AgentMd {
-    private final String name;          // 代理名（如 "code-review"，来自文件名去掉 .md 后缀）
-    private final String mountAlias;    // 所属挂载别名（如 "@team"）
-    private final Path filePath;        // .md 文件物理路径
+    private final String name;
+    private final String mountAlias;
+    private final MountSource source;
+    private final String sourcePath;
 
-    AgentMd(String name, String mountAlias, Path filePath) {
+    public AgentMd(String name, String mountAlias, MountSource source, String sourcePath) {
         this.name = name;
         this.mountAlias = mountAlias;
-        this.filePath = filePath;
+        this.source = source;
+        this.sourcePath = source == null ? "" : source.normalize(sourcePath);
     }
 
-    public String getName() {
-        return name;
+    /** 旧 File 挂载构造。 */
+    public AgentMd(String name, String mountAlias, Path filePath) {
+        this(name, mountAlias, FileMountSource.of(filePath.getParent()), filePath.getFileName().toString());
     }
 
-    /**
-     * 挂载别名
-     */
-    public String getMountAlias() {
-        return mountAlias;
+    public String getName() { return name; }
+    public String getMountAlias() { return mountAlias; }
+    public MountSource getSource() { return source; }
+    public String getSourcePath() { return sourcePath; }
+
+    public InputStream open() throws IOException {
+        return source.openRead(sourcePath);
     }
 
+    /** 兼容旧 API；非本地来源返回空。 */
     public Path getFilePath() {
-        return filePath;
+        Optional<Path> path = source.getLocalPath(sourcePath);
+        return path.orElse(null);
     }
 }

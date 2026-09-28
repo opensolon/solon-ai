@@ -25,12 +25,22 @@ import org.noear.solon.ai.sandbox.SandboxViolationStore;
 import org.noear.solon.ai.sandbox.config.FilesystemConfig;
 import org.noear.solon.ai.sandbox.config.NetworkConfig;
 import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
-import org.noear.solon.ai.talents.mount.MountDir;
+import org.noear.solon.ai.talents.mount.FileMountSource;
 import org.noear.solon.ai.talents.mount.MountManager;
+import org.noear.solon.ai.talents.mount.Mount;
+import org.noear.solon.ai.talents.mount.MountEntry;
+import org.noear.solon.ai.talents.mount.MountSource;
+import org.noear.solon.ai.talents.mount.FindOptions;
+import org.noear.solon.ai.talents.mount.ResolvedResource;
+import org.noear.solon.ai.talents.mount.WriteOptions;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.Charset;
@@ -88,6 +98,8 @@ public class TerminalTalent extends AbsTalent {
 
     /** 运行时探测失败后的重试间隔：失败结果在窗口期内直接返回 null，避免每次对话都 fork 探测（最长等 2s 超时） */
     private static final long PROBE_RETRY_INTERVAL_MS = 60_000;
+    /** 虚拟来源每个文件的实际读取上限（字节），与本地 grep 的 10MB 门槛一致。 */
+    private static final int MAX_VIRTUAL_FILE_BYTES = 10 * 1024 * 1024;
 
     private volatile String pythonCmd;
     private volatile String nodeCmd;
@@ -332,15 +344,12 @@ public class TerminalTalent extends AbsTalent {
         }
 
         // 2) 所有挂载点：按可写性加入对应列表（无需 /** 后缀，startsWith 匹配覆盖子路径）
-        for (MountDir mount : mountManager.getMounts()) {
-            if (mount.isEnabled()) {
-                Path realPath = mount.getRealPath();
-                if (realPath != null) {
-                    String pathStr = realPath.toString();
-                    allowRead.add(pathStr);
-                    if (mount.isWriteable()) {
-                        allowWrite.add(pathStr);
-                    }
+        for (Mount mount : mountManager.getMounts()) {
+            if (mount.isEnabled() && mount.getSource() instanceof FileMountSource) {
+                String pathStr = ((FileMountSource) mount.getSource()).getRootPath().toString();
+                allowRead.add(pathStr);
+                if (mount.isWriteable()) {
+                    allowWrite.add(pathStr);
                 }
             }
         }
@@ -557,32 +566,36 @@ public class TerminalTalent extends AbsTalent {
 
         // 动态判断是否有可写挂载点
         boolean hasWriteableMount = mountManager.getMounts().stream()
-                .anyMatch(m->m.isEnabled() && m.isWriteable());
+                .anyMatch(m -> m.isEnabled() && m.isWriteable());
 
         boolean hasMount = mountManager.getMounts().stream()
-                .anyMatch(m->m.isEnabled());
+                .anyMatch(m -> m.isEnabled());
+        boolean hasLocalMount = mountManager.getMounts().stream()
+                .anyMatch(m -> m.isEnabled() && m.getSource() instanceof FileMountSource);
 
         sb.append("- **路径规则**: \n");
         sb.append("  - **工作区（默认作用域）**").append(workspaceNameHint()).append(": 你的主目录，支持读写。所有文件查找（ls/glob/grep/read）与路径解析默认都以工作区为根，使用相对路径访问（如 `src/app.java`）。\n");
 
-        if(hasMount) {
-            sb.append("  - **挂载点（仅按需访问）**: 以 `@` 开头的逻辑路径（如 `@pool1/bin/tool/`），对应一个真实的物理目录。见下方挂载点清单。**仅当用户的提示词中明确提及了具体的挂载点名时**（如 `@global-skills`、`@workspace-agents`），才去对应挂载点下查找。\n");
+        if (hasMount) {
+            sb.append("  - **挂载点（仅按需访问）**: 以 `@` 开头的逻辑路径（如 `@pool1/bin/tool/`）访问来源。见下方挂载点清单。**仅当用户的提示词中明确提及了具体的挂载点名时**（如 `@global-skills`、`@workspace-agents`），才去对应挂载点下查找。\n");
         }
 
         // 挂载点清单表格
         if(hasMount) {
             sb.append("\n<mount_list>\n");
-            for (MountDir mount : mountManager.getMounts()) {
+            for (Mount mount : mountManager.getMounts()) {
                 if (mount.isEnabled()) {
-                    String envKey = support.toMountEnvKey(mount.getAlias());
-                    String envRef = support.getEnvPlaceholder(envKey);
                     sb.append("  <mount alias=\"").append(mount.getAlias()).append("\"");
                     if (Assert.isNotEmpty(mount.getDescription())) {
                         sb.append(" description=\"").append(mount.getDescription()).append("\"");
                     }
                     sb.append(" type=\"").append(mount.getType()).append("\"");
                     sb.append(" writeable=\"").append(mount.isWriteable()).append("\"");
-                    sb.append(" env=\"").append(envRef).append("\"");
+                    if (mount.getSource() instanceof FileMountSource) {
+                        sb.append(" env=\"").append(support.getEnvPlaceholder(support.toMountEnvKey(mount.getAlias()))).append("\"");
+                    } else {
+                        sb.append(" scheme=\"").append(mount.getSource().getScheme()).append("\"");
+                    }
                     sb.append(" />\n");
                 }
             }
@@ -617,14 +630,14 @@ public class TerminalTalent extends AbsTalent {
         }
 
         if (sandboxEnabled) {
-            if (hasMount) {
-                sb.append("- **命令执行**: 在 `bash` 中，直接使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：`ls /users/`）。\n");
+            if (hasLocalMount) {
+                sb.append("- **命令执行**: 在 `bash` 中，本地挂载可使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换；非本地来源只能使用文件工具。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：`ls /users/`）。\n");
             } else {
                 sb.append("- **命令执行**: 在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。\n");
             }
         } else {
-            if (hasMount) {
-                sb.append("- **命令执行**: 在 `bash` 中，直接使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换。也支持绝对路径访问。\n");
+            if (hasLocalMount) {
+                sb.append("- **命令执行**: 在 `bash` 中，本地挂载可使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换；非本地来源只能使用文件工具。也支持绝对路径访问。\n");
             } else {
                 sb.append("- **命令执行**: 在 `bash` 中支持绝对路径访问。\n");
             }
@@ -994,6 +1007,10 @@ public class TerminalTalent extends AbsTalent {
                      @Param(value = "show_hidden", required = false, description = "是否显示隐藏文件") Boolean showHidden,
                      String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
+        ResolvedResource virtual = resolveVirtualResource(path, false);
+        if (virtual != null) {
+            return lsVirtual(virtual, Boolean.TRUE.equals(recursive), Boolean.TRUE.equals(showHidden));
+        }
         Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome, fs());
 
         if (!Files.exists(target)) {
@@ -1018,6 +1035,10 @@ public class TerminalTalent extends AbsTalent {
                        @Param(value = "limit", required = false, description = "（可选）需要读取的最大行数。不传表示完整读取。注意：单次读取受最大物理长度保护，如果触发截断，请根据输出提示调整 offset 分页读取。") Integer limit,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
+        ResolvedResource virtual = resolveVirtualResource(filePath, false);
+        if (virtual != null) {
+            return readVirtual(virtual, offset, limit);
+        }
         Path target = support.resolveSafePath(workPath, filePath, false, sandboxEnabled, sandboxAllowUserHome, fs());
         if (!Files.exists(target)) {
             return "错误：文件不存在";
@@ -1126,6 +1147,10 @@ public class TerminalTalent extends AbsTalent {
                         @Param(value = PARAM_CONTENT, description = "完整文本内容。") String content,
                         String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
+        ResolvedResource virtual = resolveVirtualResource(filePath, true);
+        if (virtual != null) {
+            return writeVirtual(virtual, content);
+        }
         Path target = support.resolveSafePath(workPath, filePath, true, sandboxEnabled, sandboxAllowUserHome, fs());
 
         Files.createDirectories(target.getParent());
@@ -1142,6 +1167,10 @@ public class TerminalTalent extends AbsTalent {
                        @Param(value = PARAM_EDITS, description = "编辑操作列表") List<EditOp> edits,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
+        ResolvedResource virtual = resolveVirtualResource(filePath, true);
+        if (virtual != null) {
+            return editVirtual(virtual, edits);
+        }
         Path target = support.resolveSafePath(workPath, filePath, true, sandboxEnabled, sandboxAllowUserHome, fs());
 
         if (!Files.exists(target)) {
@@ -1223,6 +1252,10 @@ public class TerminalTalent extends AbsTalent {
                        @Param(value = "include", required = false, description = "要包含的文件模式（如 \"*.js\"、\"*.{ts,tsx}\"）") String include,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
+        ResolvedResource virtual = resolveVirtualResource(path, false);
+        if (virtual != null) {
+            return grepVirtual(virtual, pattern, include);
+        }
         Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome, fs());
 
         String pathError = checkSearchPath("grep", path, target);
@@ -1316,6 +1349,10 @@ public class TerminalTalent extends AbsTalent {
                        @Param(value = "path", description = "（单个）目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
+        ResolvedResource virtual = resolveVirtualResource(path, false);
+        if (virtual != null) {
+            return globVirtual(virtual, pattern);
+        }
         Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome, fs());
 
         String pathError = checkSearchPath("glob", path, target);
@@ -1355,6 +1392,212 @@ public class TerminalTalent extends AbsTalent {
         if (results.isEmpty()) return "未找到匹配文件。";
         Collections.sort(results);
         return String.join("\n", results);
+    }
+
+    /** 解析仅能通过 MountSource 访问的虚拟来源；本地来源继续走既有 Path 安全路径。 */
+    private ResolvedResource resolveVirtualResource(String path, boolean write) throws IOException {
+        if (path == null || !path.startsWith("@")) return null;
+        ResolvedResource resource = mountManager.resolveResource(path);
+        if (resource.getLocalPath().isPresent()) return null;
+        Mount mount = resource.getMount();
+        if (mount == null || !mount.isEnabled()) {
+            throw new SecurityException("权限拒绝：挂载点不可用 " + path);
+        }
+        MountSource source = resource.getSource();
+        if (!source.capabilities().isReadable()) {
+            throw new SecurityException("权限拒绝：来源不可读 " + path);
+        }
+        if (write && (!mount.isWriteable() || !source.capabilities().isWritable())) {
+            throw new SecurityException("权限拒绝：该挂载来源为只读，禁止写入 " + path);
+        }
+        return resource;
+    }
+
+    private String lsVirtual(ResolvedResource resource, boolean recursive, boolean showHidden) throws IOException {
+        MountSource source = resource.getSource();
+        String base = resource.getSourcePath();
+        if (source.stat(base) == null) return "错误：路径不存在";
+        List<MountEntry> entries = recursive
+                ? source.find(base, FindOptions.builder().maxDepth(3).maxEntries(500).build())
+                : source.list(base);
+        List<String> lines = new ArrayList<>();
+        for (MountEntry entry : entries) {
+            String name = entry.getName();
+            if (!showHidden && name.startsWith(".")) continue;
+            String display = resource.getMountAlias() + "/" + entry.getPath();
+            lines.add((entry.isDirectory() ? "[DIR] " : "[FILE] ") + display + (entry.isDirectory() ? "/" : ""));
+        }
+        Collections.sort(lines);
+        return lines.isEmpty() ? "(目录为空)" : String.join("\n", lines);
+    }
+
+    private String readVirtual(ResolvedResource resource, Integer offset, Integer limit) throws IOException {
+        MountEntry entry = resource.getSource().stat(resource.getSourcePath());
+        if (entry == null) return "错误：文件不存在";
+        if (entry.isDirectory()) return "错误：目标是目录，无法读取";
+        if (entry.getSize() > MAX_VIRTUAL_FILE_BYTES) return virtualFileTooLarge();
+        byte[] bytes;
+        try (InputStream in = resource.getSource().openRead(resource.getSourcePath())) {
+            bytes = readVirtualBytes(in);
+        } catch (VirtualFileTooLargeException e) {
+            return virtualFileTooLarge();
+        }
+        String text = TerminalSupport.stripUtf8Bom(new String(bytes, fileCharset));
+        String[] lines = text.split("\\R", -1);
+        int start = offset == null || offset < 1 ? 0 : offset - 1;
+        int end = limit == null || limit <= 0 ? lines.length : (int) Math.min(lines.length, (long) start + limit);
+        if (start >= lines.length) return "错误：起始行 (" + (start + 1) + ") 已超出文件范围。";
+        StringBuilder out = new StringBuilder();
+        int lastLine = start;
+        boolean truncated = false;
+        for (int i = start; i < end; i++) {
+            String line = String.format("%6d | %s\n", i + 1, lines[i]);
+            if (out.length() + line.length() > support.maxCharacterLimit) {
+                truncated = true;
+                if (out.length() == 0) {
+                    String prefix = String.format("%6d | ", i + 1);
+                    int chars = Math.max(0, Math.min(lines[i].length(), support.maxCharacterLimit - prefix.length() - 16));
+                    out.append(prefix).append(lines[i], 0, chars).append("…(单行过长已截断)\n");
+                    lastLine = i + 1;
+                }
+                break;
+            }
+            out.append(line);
+            lastLine = i + 1;
+        }
+        out.insert(0, String.format("--- File: %s (Lines: %d - %d, Size: %.2f KB) ---\n--------------------------------------------------\n", resource.getLogicalPath(), start + 1, lastLine, bytes.length / 1024.0));
+        out.append(truncated || lastLine < lines.length
+                ? "\n\n--- [内容未完] ---\n若需继续阅读后续内容，请使用参数：offset=" + (lastLine + 1)
+                : "\n\n--- [文件读取完毕] ---");
+        return out.toString();
+    }
+
+    private String writeVirtual(ResolvedResource resource, String content) throws IOException {
+        try (OutputStream out = resource.getSource().openWrite(resource.getSourcePath(), WriteOptions.replace())) {
+            out.write(content == null ? new byte[0] : content.getBytes(fileCharset));
+        }
+        return "文件成功写入: " + resource.getLogicalPath();
+    }
+
+    private String editVirtual(ResolvedResource resource, List<EditOp> edits) throws IOException {
+        MountEntry entry = resource.getSource().stat(resource.getSourcePath());
+        if (entry == null || entry.isDirectory()) return "错误：文件不存在，无法进行编辑。";
+        if (entry.getSize() > MAX_VIRTUAL_FILE_BYTES) return virtualFileTooLarge();
+        String raw;
+        try (InputStream in = resource.getSource().openRead(resource.getSourcePath())) {
+            raw = new String(readVirtualBytes(in), fileCharset);
+        } catch (VirtualFileTooLargeException e) {
+            return virtualFileTooLarge();
+        }
+        boolean bom = TerminalSupport.hasUtf8Bom(raw);
+        String original = TerminalSupport.stripUtf8Bom(raw);
+        for (int i = 0; i < edits.size(); i++) {
+            EditOp edit = edits.get(i);
+            if (edit.oldStr == null || edit.oldStr.isEmpty()) return "预检查失败（操作 #" + (i + 1) + "): old_str 不能为空。";
+            String old = support.normalizeNewlines(original, edit.oldStr);
+            if (!Boolean.TRUE.equals(edit.replaceAll) && original.indexOf(old) < 0) {
+                return "预检查失败（操作 #" + (i + 1) + "): 内容匹配失败。";
+            }
+            if (Boolean.TRUE.equals(edit.replaceAll) && !original.contains(old)) {
+                return "预检查失败（操作 #" + (i + 1) + "): 全文替换匹配失败。";
+            }
+        }
+        String updated = original;
+        for (Integer index : buildEditExecutionOrder(edits)) {
+            EditOp edit = edits.get(index);
+            updated = support.applyEditLogic(updated, edit.oldStr, edit.newStr == null ? "" : edit.newStr,
+                    Boolean.TRUE.equals(edit.replaceAll), edit.oldStrStartLine);
+        }
+        WriteOptions options = entry.getVersion() == null
+                ? WriteOptions.replace()
+                : WriteOptions.builder().expectedVersion(entry.getVersion()).build();
+        try (OutputStream out = resource.getSource().openWrite(resource.getSourcePath(), options)) {
+            out.write((bom ? TerminalSupport.UTF8_BOM + updated : updated).getBytes(fileCharset));
+        }
+        return "文件 " + resource.getLogicalPath() + " 成功完成 " + edits.size() + " 处修改。";
+    }
+
+    private String grepVirtual(ResolvedResource resource, String pattern, String include) throws IOException {
+        FindOptions options = FindOptions.builder().maxDepth(20).maxEntries(500).filesOnly(true).build();
+        List<MountEntry> entries;
+        MountEntry requested = resource.getSource().stat(resource.getSourcePath());
+        if (requested == null) return "错误：路径不存在";
+        if (requested.isDirectory()) {
+            entries = resource.getSource().find(resource.getSourcePath(), options);
+        } else {
+            entries = Collections.singletonList(requested);
+        }
+        Pattern regex = null;
+        try { regex = Pattern.compile(pattern); } catch (PatternSyntaxException ignored) { }
+        StringBuilder out = new StringBuilder();
+        int skippedLarge = 0;
+        for (MountEntry entry : entries) {
+            if (include != null && !include.isEmpty() && !globMatches(include, entry.getName())) continue;
+            if (entry.getSize() > MAX_VIRTUAL_FILE_BYTES) {
+                skippedLarge++;
+                continue;
+            }
+            byte[] bytes;
+            try (InputStream in = resource.getSource().openRead(entry.getPath())) {
+                bytes = readVirtualBytes(in);
+            } catch (VirtualFileTooLargeException e) {
+                skippedLarge++;
+                continue;
+            }
+            try (BufferedReader reader = new BufferedReader(new java.io.InputStreamReader(new ByteArrayInputStream(bytes), fileCharset))) {
+                String line; int lineNo = 0;
+                while ((line = reader.readLine()) != null) {
+                    lineNo++;
+                    line = TerminalSupport.stripUtf8Bom(line);
+                    if (regex != null ? regex.matcher(line).find() : line.contains(pattern)) {
+                        String display = resource.getMountAlias() + "/" + entry.getPath();
+                        out.append(display).append(":").append(lineNo).append(": ").append(line.trim()).append('\n');
+                        if (out.length() >= support.maxCharacterLimit) return out.substring(0, support.maxCharacterLimit);
+                    }
+                }
+            }
+        }
+        if (skippedLarge > 0) out.append("跳过 ").append(skippedLarge).append(" 个超过单文件读取上限（10MB）的文件。\n");
+        return out.length() == 0 ? "未找到结果。" : out.toString();
+    }
+
+    private String globVirtual(ResolvedResource resource, String pattern) throws IOException {
+        MountEntry requested = resource.getSource().stat(resource.getSourcePath());
+        if (requested == null) return "错误：路径不存在";
+        List<MountEntry> entries;
+        if (requested.isDirectory()) {
+            entries = resource.getSource().find(resource.getSourcePath(),
+                    FindOptions.builder().maxDepth(20).maxEntries(500).filesOnly(true).glob(pattern.replace('\\', '/')).build());
+        } else {
+            entries = Collections.singletonList(requested);
+        }
+        List<String> result = new ArrayList<>();
+        for (MountEntry entry : entries) result.add("[FILE] " + resource.getMountAlias() + "/" + entry.getPath());
+        Collections.sort(result);
+        return result.isEmpty() ? "未找到匹配文件。" : String.join("\n", result);
+    }
+
+    private boolean globMatches(String pattern, String value) {
+        try { return FileSystems.getDefault().getPathMatcher("glob:" + pattern).matches(Paths.get(value)); }
+        catch (RuntimeException e) { return value.equals(pattern); }
+    }
+
+    private static String virtualFileTooLarge() {
+        return "错误：虚拟文件超过单文件读取上限（10MB），请缩小文件范围。";
+    }
+
+    private byte[] readVirtualBytes(InputStream input) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int count;
+        while ((count = input.read(buffer)) != -1) {
+            if (count > MAX_VIRTUAL_FILE_BYTES - output.size()) throw new VirtualFileTooLargeException();
+            output.write(buffer, 0, count);
+        }
+        return output.toByteArray();
+    }
+
+    private static final class VirtualFileTooLargeException extends IOException {
     }
 
     // --- 内部逻辑逻辑 ---

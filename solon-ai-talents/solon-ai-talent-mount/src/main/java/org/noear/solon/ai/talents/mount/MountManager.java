@@ -15,20 +15,15 @@
  */
 package org.noear.solon.ai.talents.mount;
 
-import org.noear.solon.ai.util.Markdown;
-import org.noear.solon.ai.util.MarkdownUtil;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
  * 挂载管理器
@@ -41,21 +36,19 @@ public class MountManager {
 
     private static final String USER_HOME = System.getProperty("user.home"); //对应 `～/`
     private final String workDir; //对应 `./`
+    private final FileMountSource workspaceSource;
 
-    // 逻辑路径前缀 -> 挂载目录信息 (如 "@shared" -> MountDir)
-    private final Map<String, MountDir> mountMap = new ConcurrentHashMap<>();
-
-    private final Set<String> disallowSkills = Collections.newSetFromMap(new ConcurrentHashMap<>());
-
-    // 逻辑全路径 -> 技能目录信息 (如 "video-creator" -> SkillDir)
-    private volatile Map<String, SkillDir> skillMap = new ConcurrentHashMap<>();
-
-    // 代理名 -> 代理文件信息 (如 "code-review" -> AgentMd)
-    private volatile Map<String, AgentMd> agentMap = new ConcurrentHashMap<>();
-
+    private final Map<String, Mount> sourceMountMap = new LinkedHashMap<>();
+    private final Set<String> disallowSkills = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
 
     public MountManager(String workDir) {
         this.workDir = workDir;
+        this.workspaceSource = FileMountSource.of(workDir);
+    }
+
+    /** 工作区来源；工作区与普通本地挂载统一使用 FileMountSource。 */
+    public FileMountSource getWorkspaceSource() {
+        return workspaceSource;
     }
 
     public Set<String> getDisallowSkills() {
@@ -101,93 +94,38 @@ public class MountManager {
         return workDir;
     }
 
-    /**
-     * 注册挂载（并扫描）
-     */
-    public synchronized MountDir register(MountDir mountDir) {
-        String key = mountDir.getAlias();
-        Path realPath = parseRealPath(mountDir.getPath()).toAbsolutePath().normalize();
-        mountDir.setRealPath(realPath);
-
-        mountMap.put(key, mountDir);
-
-        if (mountDir.isEnabled()) {
-            if (Files.exists(realPath) && Files.isDirectory(realPath)) {
-                if (mountDir.getType() == MountType.SKILLS) {
-                    //skill
-                    scanSkillAndCache(mountDir, skillMap);
-                } else if (mountDir.getType() == MountType.AGENTS) {
-                    //agent
-                    scanAgentAndCache(mountDir, agentMap);
-                }
-                LOG.debug("Mount has been loaded.: {} -> {}", key, realPath);
-            } else {
-                String reason = !Files.exists(realPath) ? "The path does not exist." : "Not an effective directory";
-                LOG.debug("Mount loading skip：{} (alias: {}, path: {})", reason, key, mountDir.getPath());
-            }
+    /** 注册挂载来源。 */
+    public synchronized Mount register(Mount mount) {
+        if (mount == null || mount.getSource() == null) {
+            throw new IllegalArgumentException("mount/source must not be null");
         }
-
-        return mountDir;
+        String key = normalizeAlias(mount.getAlias());
+        Mount normalized = Mount.builder()
+                .alias(key)
+                .description(mount.getDescription())
+                .type(mount.getType())
+                .primary(mount.isPrimary())
+                .enabled(mount.isEnabled())
+                .writeable(mount.isWriteable())
+                .source(mount.getSource())
+                .build();
+        sourceMountMap.put(key, normalized);
+        LOG.debug("MountSource has been registered: {} -> {}", key, mount.getSource().getScheme());
+        return normalized;
     }
 
-    /**
-     * 移除挂载（及其关联技能）
-     */
-    public synchronized MountDir remove(String alias) {
-        String key = alias.startsWith("@") ? alias : "@" + alias;
-        MountDir removed = mountMap.remove(key);
+    public synchronized Collection<Mount> getSourceMounts() {
+        return getMounts();
+    }
 
+    /** 移除挂载。 */
+    public synchronized Mount remove(String alias) {
+        String key = normalizeAlias(alias);
+        Mount removed = sourceMountMap.remove(key);
         if (removed != null) {
-            skillMap.entrySet().removeIf(e -> key.equals(e.getValue().getMountAlias()));
-            agentMap.entrySet().removeIf(e -> key.equals(e.getValue().getMountAlias()));
             LOG.debug("Mount has been removed.: {}", key);
         }
         return removed;
-    }
-
-    /**
-     * 刷新指定挂载（增量更新）
-     */
-    public synchronized void refresh(String alias) {
-        if (Assert.isEmpty(alias)) {
-            refresh();
-        } else {
-            String key = alias.startsWith("@") ? alias : "@" + alias;
-            MountDir mountDir = mountMap.get(key);
-
-            if (mountDir == null) {
-                return;
-            }
-
-            if (mountDir.getType() == MountType.SKILLS) {
-                //skill
-                Map<String, SkillDir> tmp = new LinkedHashMap<>();
-                scanSkillAndCache(mountDir, tmp);
-                skillMap.entrySet().removeIf(e -> key.equals(e.getValue().getMountAlias()));
-                skillMap.putAll(tmp);
-            } else if (mountDir.getType() == MountType.AGENTS) {
-                //agent
-                Map<String, AgentMd> tmp = new LinkedHashMap<>();
-                scanAgentAndCache(mountDir, tmp);
-                agentMap.entrySet().removeIf(e -> key.equals(e.getValue().getMountAlias()));
-                agentMap.putAll(tmp);
-            }
-        }
-    }
-
-    /**
-     * 刷新所有挂载（重新扫描）
-     */
-    public synchronized void refresh() {
-        Map<String, SkillDir> tmpSkills = new ConcurrentHashMap<>();
-        Map<String, AgentMd> tmpAgents = new ConcurrentHashMap<>();
-        for (Map.Entry<String, MountDir> entry : mountMap.entrySet()) {
-            scanSkillAndCache(entry.getValue(), tmpSkills);
-            scanAgentAndCache(entry.getValue(), tmpAgents);
-        }
-
-        skillMap = tmpSkills;
-        agentMap = tmpAgents;
     }
 
     /**
@@ -196,172 +134,136 @@ public class MountManager {
     public Path resolve(Path workDir, String pStr) {
         if (pStr == null || pStr.isEmpty() || ".".equals(pStr)) return workDir;
 
+        if (pStr.startsWith("@workspace") && isWorkspacePath(pStr)) {
+            return localWorkspacePath(workDir, pStr.length() == 10 ? "" : pStr.substring(11));
+        }
         if (pStr.startsWith("@")) {
-            for (Map.Entry<String, MountDir> e : mountMap.entrySet()) {
-                String alias = e.getKey();
-                if (pStr.equals(alias) || pStr.startsWith(alias + "/") || pStr.startsWith(alias + "\\")) {
-                    MountDir mountDir = e.getValue();
-                    if (!mountDir.isEnabled()) {
-                        break;
-                    }
-                    String sub = pStr.substring(alias.length()).replaceFirst("^[/\\\\]", "");
-                    return mountDir.getRealPath().resolve(sub).normalize();
-                }
+            int slash = firstSeparator(pStr);
+            String alias = slash > 0 ? pStr.substring(0, slash) : pStr;
+            Mount mount = sourceMountMap.get(alias);
+            if (mount == null) {
+                throw new SecurityException("权限拒绝：未知的挂载点 " + alias);
             }
+            if (!mount.isEnabled()) {
+                throw new SecurityException("权限拒绝：挂载点已禁用 " + alias);
+            }
+            String sub = slash < 0 ? "" : pStr.substring(slash + 1);
+            if (!(mount.getSource() instanceof FileMountSource)) {
+                throw new SecurityException("挂载点不支持本地路径: " + alias);
+            }
+            FileMountSource source = (FileMountSource) mount.getSource();
+            String normalized = source.normalize(sub);
+            Path local = source.getLocalPath(normalized)
+                    .orElseThrow(() -> new SecurityException("挂载点不支持本地路径: " + alias));
+            return checkedLocalPath(source, local);
         }
 
         String cleanPath = pStr.startsWith("./") ? pStr.substring(2) : pStr;
-        return workDir.resolve(cleanPath).normalize();
+        return localWorkspacePath(workDir, cleanPath);
     }
 
-    /**
-     * 获取单个挂载
-     */
-    public MountDir getMount(String alias) {
-        String key = alias.startsWith("@") ? alias : "@" + alias;
-        return mountMap.get(key);
-    }
-
-    public boolean hasMount(String alias) {
-        String key = alias.startsWith("@") ? alias : "@" + alias;
-        return mountMap.containsKey(key);
-    }
-
-    /**
-     * 获取所有挂载
-     */
-    public Collection<MountDir> getMounts() {
-        return Collections.unmodifiableCollection(mountMap.values());
-    }
-
-    public Set<String> getMountKeySet() {
-        return mountMap.keySet();
-    }
-
-    /**
-     * 获取某挂载下的所有技能
-     */
-    public List<SkillDir> getSkillsByMount(String alias) {
-        String key = alias.startsWith("@") ? alias : "@" + alias;
-        return skillMap.values().stream()
-                .filter(s -> key.equals(s.getMountAlias()))
-                .collect(Collectors.toList());
-    }
-
-    public List<AgentMd> getAgentsByMount(String alias) {
-        String key = alias.startsWith("@") ? alias : "@" + alias;
-        return agentMap.values().stream()
-                .filter(s -> key.equals(s.getMountAlias()))
-                .collect(Collectors.toList());
-    }
-
-    public Collection<SkillDir> getSkills() {
-        return skillMap.values();
-    }
-
-    public int getSkillCount() {
-        return skillMap.size();
-    }
-
-    public SkillDir getSkill(String name) {
-        return skillMap.get(name);
-    }
-
-    public Collection<AgentMd> getAgents() {
-        return agentMap.values();
-    }
-
-    public int getAgentCount() {
-        return agentMap.size();
-    }
-
-    public AgentMd getAgent(String name) {
-        return agentMap.get(name);
-    }
-
-
-    private static void scanSkillAndCache(MountDir mountDir, Map<String, SkillDir> map) {
-        if (mountDir.isEnabled() == false || mountDir.getType() != MountType.SKILLS) {
-            return;
+    /** 统一解析工作区和挂载来源；非 bash 文件工具应优先使用此 API。 */
+    public ResolvedResource resolveResource(String path) {
+        if (path == null || path.isEmpty() || ".".equals(path)) {
+            return new ResolvedResource(path == null ? "" : path, "@workspace", null,
+                    workspaceSource, "");
         }
+        if (path.startsWith("@workspace") && isWorkspacePath(path)) {
+            String sourcePath = path.length() == 10 ? "" : path.substring(11);
+            return new ResolvedResource(path, "@workspace", null, workspaceSource,
+                    workspaceSource.normalize(sourcePath));
+        }
+        if (path.startsWith("@")) {
+            int slash = firstSeparator(path);
+            String alias = slash < 0 ? path : path.substring(0, slash);
+            Mount mount = sourceMountMap.get(alias);
+            if (mount == null) {
+                throw new SecurityException("权限拒绝：未知的挂载点 " + alias);
+            }
+            if (!mount.isEnabled()) {
+                throw new SecurityException("权限拒绝：挂载点已禁用 " + alias);
+            }
+            String sourcePath = slash < 0 ? "" : path.substring(slash + 1);
+            return new ResolvedResource(path, alias, mount, mount.getSource(),
+                    mount.getSource().normalize(sourcePath));
+        }
+        String sourcePath = path.startsWith("./") ? path.substring(2) : path;
+        sourcePath = workspaceSource.normalize(sourcePath);
+        return new ResolvedResource(path, "@workspace", null, workspaceSource, sourcePath);
+    }
 
+    private static boolean isWorkspacePath(String path) {
+        return path.length() == 10 || path.charAt(10) == '/' || path.charAt(10) == '\\';
+    }
+
+    private static Path localWorkspacePath(Path workDir, String path) {
+        if (path.startsWith("/") || path.startsWith("\\") || Paths.get(path).isAbsolute()) {
+            throw new SecurityException("工作区不允许绝对路径: " + path);
+        }
+        FileMountSource source = FileMountSource.of(workDir);
+        Path local = source.getLocalPath(source.normalize(path))
+                .orElseThrow(() -> new SecurityException("工作区路径不可访问: " + path));
+        return checkedLocalPath(source, local);
+    }
+
+    private static Path checkedLocalPath(FileMountSource source, Path local) {
+        Path root = source.getRootPath();
+        if (!local.startsWith(root)) throw new SecurityException("路径超出挂载范围: " + local);
         try {
-            Files.walkFileTree(mountDir.getRealPath(), EnumSet.noneOf(FileVisitOption.class), 3, new SimpleFileVisitor<Path>() {
-                @Override
-                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                    if (isSkillDir(dir)) {
-                        String name = mountDir.getRealPath().relativize(dir).toString().replace("\\", "/");
-                        String aliasPath = mountDir.getAlias() + (name.isEmpty() ? "" : "/" + name);
-
-                        Markdown markdown = parseMarkdown(dir);
-                        String description = markdown.getDescription();
-                        String version = markdown.getVersion();
-
-                        map.put(name, new SkillDir(name, mountDir.getAlias(), aliasPath, dir, description, version));
-                        return FileVisitResult.SKIP_SUBTREE;
-                    }
-                    if (dir.getFileName().toString().startsWith(".")) return FileVisitResult.SKIP_SUBTREE;
-                    return FileVisitResult.CONTINUE;
+            if (Files.exists(root)) {
+                Path realRoot = root.toRealPath();
+                Path existing = local;
+                while (existing != null && !Files.exists(existing, LinkOption.NOFOLLOW_LINKS)) {
+                    existing = existing.getParent();
                 }
-            });
+                if (existing != null && !existing.toRealPath().startsWith(realRoot)) {
+                    throw new SecurityException("符号链接超出挂载范围: " + local);
+                }
+            }
         } catch (IOException e) {
-            LOG.error("Scan skill mount failed: {}", mountDir.getRealPath(), e);
+            throw new SecurityException("本地路径不可访问: " + local, e);
         }
+        return local;
     }
 
-
-    private static boolean isSkillDir(Path p) {
-        return Files.exists(p.resolve("SKILL.md")) || Files.exists(p.resolve("skill.md"));
+    private static int firstSeparator(String path) {
+        int slash = path.indexOf('/');
+        int backslash = path.indexOf('\\');
+        if (slash < 0) return backslash;
+        if (backslash < 0) return slash;
+        return Math.min(slash, backslash);
     }
 
-    private static void scanAgentAndCache(MountDir mountDir, Map<String, AgentMd> map) {
-        if (mountDir.isEnabled() == false || mountDir.getType() != MountType.AGENTS) {
-            return;
+    private static String normalizeAlias(String alias) {
+        if (alias == null) throw new IllegalArgumentException("alias must not be null");
+        String value = alias.trim();
+        if (value.isEmpty()) throw new IllegalArgumentException("alias must not be empty");
+        if (!value.startsWith("@")) value = "@" + value;
+        if ("@".equals(value) || "@workspace".equals(value) || value.indexOf('/') >= 0 || value.indexOf('\\') >= 0
+                || value.matches(".*\\s+.*")) {
+            throw new IllegalArgumentException("Invalid mount alias: " + alias);
         }
-
-        Path realPath = mountDir.getRealPath();
-        if (!Files.exists(realPath) || !Files.isDirectory(realPath)) {
-            return;
-        }
-
-        try {
-            Files.walkFileTree(realPath, EnumSet.noneOf(FileVisitOption.class), 3, new SimpleFileVisitor<Path>() {
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                    String fileName = file.getFileName().toString();
-                    if (fileName.endsWith(".md") && !fileName.startsWith(".")) {
-                        String name = fileName.substring(0, fileName.length() - 3);
-                        map.put(name, new AgentMd(name, mountDir.getAlias(), file));
-                    }
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                    if (dir.getFileName().toString().startsWith(".")) return FileVisitResult.SKIP_SUBTREE;
-                    return FileVisitResult.CONTINUE;
-                }
-            });
-        } catch (IOException e) {
-            LOG.error("Scan agent mount failed: {}", mountDir.getRealPath(), e);
-        }
+        return value;
     }
 
-    private static Markdown parseMarkdown(Path dir) {
-        Path md = dir.resolve("SKILL.md");
-        if (!Files.exists(md)) {
-            md = dir.resolve("skill.md");
-        }
-
-        try {
-            List<String> lines = Files.readAllLines(md, StandardCharsets.UTF_8);
-            Markdown markdown = MarkdownUtil.resolve(lines, true);
-            return markdown;
-        } catch (Throwable e) {
-            return new Markdown();
-        }
+    /** 获取单个挂载。 */
+    public synchronized Mount getMount(String alias) {
+        return sourceMountMap.get(normalizeAlias(alias));
     }
 
+    public synchronized boolean hasMount(String alias) {
+        String key = normalizeAlias(alias);
+        return sourceMountMap.containsKey(key);
+    }
+
+    /** 按注册顺序获取挂载快照。 */
+    public synchronized Collection<Mount> getMounts() {
+        return Collections.unmodifiableList(new ArrayList<>(sourceMountMap.values()));
+    }
+
+    public synchronized Set<String> getMountKeySet() {
+        return Collections.unmodifiableSet(new LinkedHashSet<>(sourceMountMap.keySet()));
+    }
 
     /**
      * 内部辅助方法：解析配置路径并支持 "~/" 和 "./" 语法

@@ -15,16 +15,17 @@
  */
 package org.noear.solon.ai.harness.agent;
 
+import org.noear.solon.ai.talents.mount.AgentCatalog;
 import org.noear.solon.ai.talents.mount.AgentMd;
-import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.core.util.ResourceUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -40,15 +41,15 @@ public class AgentManager {
     private static final Logger LOG = LoggerFactory.getLogger(AgentManager.class);
     private static final String AGENT_MD_BASE = "META-INF/solon/ai/harness/";
 
-    private final MountManager mountManager;
+    private final AgentCatalog agentCatalog;
     private final Map<String, AgentDefinition> agentMap = new ConcurrentHashMap<>();
 
 
     /**
-     * 完整构造（支持从 MountManager 加载自定义代理）
+     * 完整构造（支持从 AgentCatalog 加载自定义代理）
      */
-    public AgentManager(MountManager mountManager) {
-        this.mountManager = mountManager;
+    public AgentManager(AgentCatalog agentCatalog) {
+        this.agentCatalog = agentCatalog;
         loadBuiltinAgents();
     }
 
@@ -72,19 +73,16 @@ public class AgentManager {
      * 获取指定名称的代理（支持自定义代理）
      */
     public AgentDefinition getAgent(String agentName) {
-        // 1. 优先从缓存取（含内置 + 已解析的挂载代理）
+        // 内置与运行时注册的代理优先；挂载代理按当前目录读取，避免刷新后返回旧定义。
         AgentDefinition cached = agentMap.get(agentName);
         if (cached != null) {
             return cached;
         }
 
-        // 2. 从 MountManager 的 AgentMd 按需解析
-        if (mountManager != null) {
-            AgentMd agentMd = mountManager.getAgent(agentName);
+        if (agentCatalog != null) {
+            AgentMd agentMd = agentCatalog.getAgent(agentName);
             if (agentMd != null) {
-                AgentDefinition definition = loadFromAgentMd(agentMd);
-                agentMap.put(agentName, definition);
-                return definition;
+                return loadFromAgentMd(agentMd);
             }
         }
 
@@ -98,8 +96,8 @@ public class AgentManager {
         if (agentMap.containsKey(agentName)) {
             return true;
         }
-        if (mountManager != null) {
-            return mountManager.getAgent(agentName) != null;
+        if (agentCatalog != null) {
+            return agentCatalog.getAgent(agentName) != null;
         }
         return false;
     }
@@ -110,13 +108,11 @@ public class AgentManager {
     public Collection<AgentDefinition> getAgents() {
         Map<String, AgentDefinition> all = new LinkedHashMap<>(agentMap);
 
-        // 补充挂载代理（未被缓存的）
-        if (mountManager != null) {
-            for (AgentMd agentMd : mountManager.getAgents()) {
+        // 来源定义不缓存；目录刷新或文件内容变化后，下次查询读取当前内容。
+        if (agentCatalog != null) {
+            for (AgentMd agentMd : agentCatalog.getAgents()) {
                 if (!all.containsKey(agentMd.getName())) {
-                    AgentDefinition def = loadFromAgentMd(agentMd);
-                    all.put(agentMd.getName(), def);
-                    agentMap.put(agentMd.getName(), def); // 顺带缓存
+                    all.put(agentMd.getName(), loadFromAgentMd(agentMd));
                 }
             }
         }
@@ -124,6 +120,16 @@ public class AgentManager {
         return all.values().stream()
                 .filter(a -> !a.getMetadata().isHidden())
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 按挂载别名清理已缓存的代理定义。
+     */
+    public synchronized void removeByMountAlias(String mountAlias) {
+        if (mountAlias == null) {
+            return;
+        }
+        agentMap.entrySet().removeIf(e -> mountAlias.equals(e.getValue().getMountAlias()));
     }
 
     /**
@@ -140,33 +146,14 @@ public class AgentManager {
         agentMap.entrySet().removeIf(e -> e.getValue().getMountAlias() != null);
     }
 
-    /**
-     * 按挂载别名清理已缓存的代理定义
-     */
-    public synchronized void removeByMountAlias(String mountAlias) {
-        if (mountAlias == null) {
-            return;
-        }
-        agentMap.entrySet().removeIf(e -> mountAlias.equals(e.getValue().getMountAlias()));
-    }
-
-    /**
-     * 刷新指定挂载（重新扫描 + 清除缓存），用于与 FileWatchService 对接
-     */
-    public synchronized void refreshByMountAlias(String mountAlias) {
-        if (mountAlias == null) {
-            return;
-        }
-        mountManager.refresh(mountAlias);
-        removeByMountAlias(mountAlias);
-    }
 
     /**
      * 从 AgentMd 解析完整定义
      */
     private AgentDefinition loadFromAgentMd(AgentMd agentMd) {
-        try {
-            List<String> lines = Files.readAllLines(agentMd.getFilePath(), StandardCharsets.UTF_8);
+        try (InputStream input = agentMd.open()) {
+            String content = new String(readAll(input), StandardCharsets.UTF_8);
+            List<String> lines = Arrays.asList(content.split("\\R", -1));
             AgentDefinition definition = AgentDefinition.fromMarkdown(lines);
 
             String name = definition.getName();
@@ -177,9 +164,17 @@ public class AgentManager {
             definition.setMountAlias(agentMd.getMountAlias());
             return definition;
         } catch (IOException e) {
-            LOG.error("Load agent failed from AgentMd: {}", agentMd.getFilePath(), e);
+            LOG.error("Load agent failed from AgentMd: {}:{}", agentMd.getMountAlias(), agentMd.getSourcePath(), e);
             throw new RuntimeException("Failed to load agent: " + agentMd.getName(), e);
         }
+    }
+
+    private static byte[] readAll(InputStream input) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int count;
+        while ((count = input.read(buffer)) >= 0) output.write(buffer, 0, count);
+        return output.toByteArray();
     }
 
     /**

@@ -25,7 +25,7 @@ import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
-import org.noear.solon.ai.talents.cli.SkillProvider;
+import org.noear.solon.ai.talents.cli.SkillCatalog;
 import org.noear.solon.ai.talents.lsp.LspServerParameters;
 import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 import org.noear.solon.ai.talents.mount.MountManager;
@@ -125,7 +125,6 @@ class HarnessOptions implements NonSerializable {
     private StopLoopInterceptor stopLoopInterceptor;
     private HITLInterceptor hitlInterceptor;
     private MemorySolutionProvider memoryProvider;
-    private SkillProvider skillProvider;
 
     HarnessOptions(String workspace, String harnessHome) {
         if (Assert.isEmpty(harnessHome)) {
@@ -618,13 +617,5 @@ class HarnessOptions implements NonSerializable {
 
     void setMemoryProvider(MemorySolutionProvider memoryProvider) {
         this.memoryProvider = memoryProvider;
-    }
-
-    SkillProvider getSkillProvider() {
-        return skillProvider;
-    }
-
-    void setSkillProvider(SkillProvider skillProvider) {
-        this.skillProvider = skillProvider;
     }
 }

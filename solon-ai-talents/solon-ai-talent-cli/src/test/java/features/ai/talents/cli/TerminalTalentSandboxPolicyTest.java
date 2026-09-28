@@ -6,7 +6,8 @@ import org.noear.solon.ai.talents.cli.ShellMode;
 import org.noear.solon.ai.talents.cli.TerminalTalent;
 import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
 import org.noear.solon.ai.sandbox.config.FilesystemConfig;
-import org.noear.solon.ai.talents.mount.MountDir;
+import org.noear.solon.ai.talents.mount.FileMountSource;
+import org.noear.solon.ai.talents.mount.Mount;
 import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.ai.talents.mount.MountType;
 
@@ -60,9 +61,9 @@ public class TerminalTalentSandboxPolicyTest {
         try {
             Files.write(mountDir.resolve("note.txt"), Collections.singletonList("mounted"));
             MountManager mountManager = new MountManager(workDir.toString());
-            mountManager.register(MountDir.builder()
+            mountManager.register(Mount.builder()
                     .alias("@pool")
-                    .path(mountDir.toString())
+                    .source(FileMountSource.of(mountDir))
                     .type(MountType.SKILLS)
                     .writeable(false)
                     .build());
@@ -86,9 +87,9 @@ public class TerminalTalentSandboxPolicyTest {
         Path mountDir = Files.createTempDirectory("solon-ai-terminal-mount-");
         try {
             MountManager mountManager = new MountManager(workDir.toString());
-            mountManager.register(MountDir.builder()
+            mountManager.register(Mount.builder()
                     .alias("@pool")
-                    .path(mountDir.toString())
+                    .source(FileMountSource.of(mountDir))
                     .type(MountType.SKILLS)
                     .writeable(true)
                     .build());
@@ -116,15 +117,15 @@ public class TerminalTalentSandboxPolicyTest {
             Files.write(pool1Dir.resolve("note.txt"), Collections.singletonList("pool1"));
 
             MountManager mountManager = new MountManager(workDir.toString());
-            mountManager.register(MountDir.builder()
+            mountManager.register(Mount.builder()
                     .alias("@pool")
-                    .path(poolDir.toString())
+                    .source(FileMountSource.of(poolDir))
                     .type(MountType.SKILLS)
                     .writeable(false)
                     .build());
-            mountManager.register(MountDir.builder()
+            mountManager.register(Mount.builder()
                     .alias("@pool1")
-                    .path(pool1Dir.toString())
+                    .source(FileMountSource.of(pool1Dir))
                     .type(MountType.SKILLS)
                     .writeable(false)
                     .build());
@@ -149,9 +150,9 @@ public class TerminalTalentSandboxPolicyTest {
         try {
             Files.write(mountDir.resolve("note.txt"), Collections.singletonList("disabled"));
             MountManager mountManager = new MountManager(workDir.toString());
-            mountManager.register(MountDir.builder()
+            mountManager.register(Mount.builder()
                     .alias("@pool")
-                    .path(mountDir.toString())
+                    .source(FileMountSource.of(mountDir))
                     .type(MountType.SKILLS)
                     .enabled(false)
                     .writeable(false)
@@ -184,9 +185,9 @@ public class TerminalTalentSandboxPolicyTest {
             }
 
             MountManager mountManager = new MountManager(workDir.toString());
-            mountManager.register(MountDir.builder()
+            mountManager.register(Mount.builder()
                     .alias("@pool")
-                    .path(mountDir.toString())
+                    .source(FileMountSource.of(mountDir))
                     .type(MountType.SKILLS)
                     .writeable(true)
                     .build());
@@ -239,9 +240,9 @@ public class TerminalTalentSandboxPolicyTest {
         deleteRecursively(mountDir);
         try {
             MountManager mountManager = new MountManager(workDir.toString());
-            mountManager.register(MountDir.builder()
+            mountManager.register(Mount.builder()
                     .alias("@pool")
-                    .path(mountDir.toString())
+                    .source(FileMountSource.of(mountDir))
                     .type(MountType.SKILLS)
                     .writeable(false)
                     .build());
@@ -318,9 +319,9 @@ public class TerminalTalentSandboxPolicyTest {
             }
 
             MountManager mountManager = new MountManager(workDir.toString());
-            mountManager.register(MountDir.builder()
+            mountManager.register(Mount.builder()
                     .alias("@pool")
-                    .path(pool.toString())
+                    .source(FileMountSource.of(pool))
                     .type(MountType.SKILLS)
                     .writeable(true)
                     .build());
@@ -341,9 +342,9 @@ public class TerminalTalentSandboxPolicyTest {
         Path pool = Files.createTempDirectory("solon-ai-terminal-agents-");
         try {
             MountManager mountManager = new MountManager(workDir.toString());
-            mountManager.register(MountDir.builder()
+            mountManager.register(Mount.builder()
                     .alias("@workspace-agents")
-                    .path(pool.toString())
+                    .source(FileMountSource.of(pool))
                     .type(MountType.AGENTS)
                     .build());
 

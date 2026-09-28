@@ -12,7 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.noear.solon.ai.talents.mount.MountDir;
+import org.noear.solon.ai.talents.mount.Mount;
+import org.noear.solon.ai.talents.mount.FileMountSource;
 import org.noear.solon.ai.talents.mount.MountManager;
 
 /**
@@ -34,9 +35,9 @@ public class TerminalTalentMountSpacePathTest {
 
     private TerminalTalent newTalent(Path mountPath, ShellMode mode) {
         MountManager mm = new MountManager(workDir.toString());
-        MountDir mount = MountDir.builder()
+        Mount mount = Mount.builder()
                 .alias("@pool")
-                .path(mountPath.toString())
+                .source(FileMountSource.of(mountPath))
                 .enabled(true)
                 .build();
         mm.register(mount);
