@@ -68,6 +68,10 @@ public final class ClasspathMountSource implements MountSource {
         return new ClasspathMountSource(Thread.currentThread().getContextClassLoader(), basePath);
     }
 
+    public String getBasePath() {
+        return basePath;
+    }
+
     @Override
     public String getScheme() {
         return "classpath";
