@@ -1083,7 +1083,8 @@ public class HarnessEngine {
                 .type(MountType.AGENTS)
                 .enabled(true)
                 .writeable(false)
-                .visible(false)
+                .visible(true)
+                .primary(true)
                 .source(ClasspathMountSource.of(HarnessEngine.class.getClassLoader(), BUILTIN_AGENT_PATH))
                 .build());
 
