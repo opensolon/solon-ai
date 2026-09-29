@@ -16,9 +16,9 @@
 package org.noear.solon.ai.talents.mount.source;
 
 import org.noear.solon.ai.talents.mount.*;
+import org.noear.solon.core.util.ResourceUtil;
 import org.noear.solon.lang.Preview;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -26,6 +26,7 @@ import java.net.JarURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -42,6 +43,7 @@ import java.util.jar.JarFile;
 /**
  * Classpath/Jar 只读挂载来源。
  * 资源路径相对于 basePath，统一使用 '/'，不依赖真实 Path。
+ * 支持 Classpath index 索引
  *
  * @author noear 
  * @since 4.1.1
@@ -75,7 +77,10 @@ public final class ClasspathMountSource implements MountSource {
     public String normalize(String path) {
         if (path == null || path.isEmpty() || ".".equals(path)) return "";
         String value = path.replace('\\', '/');
-        while (value.startsWith("/")) value = value.substring(1);
+        while (value.startsWith("/")) {
+            value = value.substring(1);
+        }
+
         String[] parts = value.split("/");
         List<String> clean = new ArrayList<>();
         for (String part : parts) {
@@ -143,7 +148,7 @@ public final class ClasspathMountSource implements MountSource {
     public InputStream openRead(String path) throws IOException {
         String normalized = normalize(path);
         String resource = resourcePath(normalized);
-        InputStream input = classLoader.getResourceAsStream(resource);
+        InputStream input = ResourceUtil.getResourceAsStream(classLoader, resource);
         if (input == null) throw new IOException("Classpath resource not found: " + normalized);
         return input;
     }
@@ -177,7 +182,7 @@ public final class ClasspathMountSource implements MountSource {
         Map<String, Entry> cached = index;
         if (cached != null) return cached;
         Map<String, Entry> result = new LinkedHashMap<>();
-        Enumeration<URL> resources = classLoader.getResources(basePath);
+        Enumeration<URL> resources = ResourceUtil.getResources(classLoader, basePath);
         while (resources.hasMoreElements()) {
             URL url = resources.nextElement();
             scanUrl(url, result);
@@ -214,7 +219,7 @@ public final class ClasspathMountSource implements MountSource {
     }
 
     private void scanDirectory(Path root, Path current, Map<String, Entry> result) throws IOException {
-        try (java.nio.file.DirectoryStream<Path> stream = Files.newDirectoryStream(current)) {
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(current)) {
             for (Path child : stream) {
                 String relative = root.relativize(child).toString().replace('\\', '/');
                 if (Files.isDirectory(child)) {
@@ -228,13 +233,21 @@ public final class ClasspathMountSource implements MountSource {
     }
 
     private void scanIndex(Map<String, Entry> result, String resource) throws IOException {
-        InputStream input = classLoader.getResourceAsStream(resource);
-        if (input == null) return;
-        try (InputStream in = input) {
-            String text = new String(readAll(in), StandardCharsets.UTF_8);
-            for (String line : text.split("\\R")) {
-                String value = line.trim();
-                if (!value.isEmpty() && !value.startsWith("#")) addEntry(value, false, -1, result);
+        String text = ResourceUtil.getResourceAsString(classLoader, resource, StandardCharsets.UTF_8.name());
+        if (text == null) {
+            return;
+        }
+
+        // index 只是兜底：真实扫描已存在的条目（含真实 size）不被覆盖
+        for (String line : text.split("\\R")) {
+            String value = line.trim();
+            if (value.isEmpty() || value.startsWith("#")) {
+                continue;
+            }
+
+            String normalized = normalize(value);
+            if (!normalized.isEmpty() && !result.containsKey(normalized)) {
+                addEntry(value, false, -1, result);
             }
         }
     }
@@ -284,6 +297,7 @@ public final class ClasspathMountSource implements MountSource {
             if (globMatch(pattern, pi + 1, value, vi)) return true;
             return vi < value.length && globMatch(pattern, pi, value, vi + 1);
         }
+
         return vi < value.length
                 && segmentMatch(pattern[pi], value[vi])
                 && globMatch(pattern, pi + 1, value, vi + 1);
@@ -311,14 +325,6 @@ public final class ClasspathMountSource implements MountSource {
             builder.append(parts[i]);
         }
         return builder.toString();
-    }
-
-    private static byte[] readAll(InputStream input) throws IOException {
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        byte[] buffer = new byte[8192];
-        int count;
-        while ((count = input.read(buffer)) >= 0) output.write(buffer, 0, count);
-        return output.toByteArray();
     }
 
     private static final class Entry {

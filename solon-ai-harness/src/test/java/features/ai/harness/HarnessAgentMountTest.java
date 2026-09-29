@@ -3,6 +3,7 @@ package features.ai.harness;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.talents.mount.source.FileMountSource;
 import org.noear.solon.ai.talents.mount.Mount;
 import org.noear.solon.ai.talents.mount.MountType;
@@ -15,6 +16,22 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class HarnessAgentMountTest {
     @TempDir Path workspace;
+
+    @Test
+    void builtinAgentsUseHiddenClasspathMount() {
+        HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString()).build();
+
+        Mount builtin = engine.getMount("@harness-agents");
+        assertNotNull(builtin);
+        assertFalse(builtin.isVisible());
+        assertTrue(builtin.isEnabled());
+        assertFalse(builtin.isWriteable());
+        assertNotNull(engine.getAgentCatalog().getAgent("plan"));
+        AgentDefinition plan = engine.getAgentManager().getAgent("plan");
+        assertEquals("plan", plan.getName());
+        assertEquals("@harness-agents", engine.getAgentCatalog().getAgent("plan").getMountAlias());
+        assertThrows(IllegalArgumentException.class, () -> engine.removeMount("@harness-agents"));
+    }
 
     @Test
     void mountReplacementRefreshAndRemovalUseCurrentDefinition() throws Exception {

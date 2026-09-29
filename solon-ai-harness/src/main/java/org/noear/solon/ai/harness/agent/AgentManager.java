@@ -17,15 +17,12 @@ package org.noear.solon.ai.harness.agent;
 
 import org.noear.solon.ai.talents.mount.catalog.AgentCatalog;
 import org.noear.solon.ai.talents.mount.catalog.AgentDescriptor;
-import org.noear.solon.core.util.ResourceUtil;
+import org.noear.solon.core.util.IoUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -39,7 +36,7 @@ import java.util.stream.Collectors;
  */
 public class AgentManager {
     private static final Logger LOG = LoggerFactory.getLogger(AgentManager.class);
-    private static final String AGENT_MD_BASE = "META-INF/solon/ai/harness/";
+    private static final String AGENT_MD_BASE = "META-INF/solon/ai/harness/agents/";
 
     private final AgentCatalog agentCatalog;
     private final Map<String, AgentDefinition> agentMap = new ConcurrentHashMap<>();
@@ -50,16 +47,16 @@ public class AgentManager {
      */
     public AgentManager(AgentCatalog agentCatalog) {
         this.agentCatalog = agentCatalog;
-        loadBuiltinAgents();
+        //loadBuiltinAgents();
     }
 
-    private void loadBuiltinAgents() {
-        loadAgentFile("bash", ResourceUtil.getResource(AGENT_MD_BASE + "bash.md"), null);
-        loadAgentFile("explore", ResourceUtil.getResource(AGENT_MD_BASE + "explore.md"), null);
-        loadAgentFile("plan", ResourceUtil.getResource(AGENT_MD_BASE + "plan.md"), null);
-        loadAgentFile("general", ResourceUtil.getResource(AGENT_MD_BASE + "general.md"), null);
-        loadAgentFile("git-summary", ResourceUtil.getResource(AGENT_MD_BASE + "git-summary.md"), null);
-    }
+//    private void loadBuiltinAgents() {
+//        loadAgentFile("bash", ResourceUtil.getResource(AGENT_MD_BASE + "bash.md"), null);
+//        loadAgentFile("explore", ResourceUtil.getResource(AGENT_MD_BASE + "explore.md"), null);
+//        loadAgentFile("plan", ResourceUtil.getResource(AGENT_MD_BASE + "plan.md"), null);
+//        loadAgentFile("general", ResourceUtil.getResource(AGENT_MD_BASE + "general.md"), null);
+//        loadAgentFile("git-summary", ResourceUtil.getResource(AGENT_MD_BASE + "git-summary.md"), null);
+//    }
 
     public void addAgentIfAbsent(AgentDefinition agentDefinition) {
         agentMap.putIfAbsent(agentDefinition.getName(), agentDefinition);
@@ -152,14 +149,9 @@ public class AgentManager {
      */
     private AgentDefinition loadFromAgentMd(AgentDescriptor agentMd) {
         try (InputStream input = agentMd.open()) {
-            String content = new String(readAll(input), StandardCharsets.UTF_8);
+            String content = IoUtil.transferToString(input);
             List<String> lines = Arrays.asList(content.split("\\R", -1));
             AgentDefinition definition = AgentDefinition.fromMarkdown(lines);
-
-            String name = definition.getName();
-            if (name == null || name.isEmpty()) {
-                name = agentMd.getName();
-            }
 
             definition.setMountAlias(agentMd.getMountAlias());
             return definition;
@@ -169,44 +161,36 @@ public class AgentManager {
         }
     }
 
-    private static byte[] readAll(InputStream input) throws IOException {
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        byte[] buffer = new byte[8192];
-        int count;
-        while ((count = input.read(buffer)) >= 0) output.write(buffer, 0, count);
-        return output.toByteArray();
-    }
-
     /**
      * 从 URL 加载代理定义（内置代理用）
      */
-    public void loadAgentFile(String fileName, URL url, String mountAlias) {
-        if (url == null) {
-            return;
-        }
+//    public void loadAgentFile(String fileName, URL url, String mountAlias) {
+//        if (url == null) {
+//            return;
+//        }
+//
+//        try {
+//            String[] fullContent = ResourceUtil.getResourceAsString(url).split("\n");
+//
+//            loadAgentFile(fileName, Arrays.asList(fullContent), mountAlias);
+//        } catch (IOException e) {
+//            LOG.error("Load agent failed, file: {}", url, e);
+//        }
+//    }
 
-        try {
-            String[] fullContent = ResourceUtil.getResourceAsString(url).split("\n");
-
-            loadAgentFile(fileName, Arrays.asList(fullContent), mountAlias);
-        } catch (IOException e) {
-            LOG.error("Load agent failed, file: {}", url, e);
-        }
-    }
-
-    public void loadAgentFile(String fileName, List<String> fullContent, String mountAlias) {
-        AgentDefinition definition = AgentDefinition.fromMarkdown(fullContent);
-
-        String agentTypeName = definition.getName();
-
-        if (agentTypeName == null || agentTypeName.isEmpty()) {
-            agentTypeName = fileName.substring(0, fileName.length() - 3);
-        }
-
-        if (mountAlias != null) {
-            definition.setMountAlias(mountAlias);
-        }
-
-        agentMap.put(agentTypeName, definition);
-    }
+//    public void loadAgentFile(String fileName, List<String> fullContent, String mountAlias) {
+//        AgentDefinition definition = AgentDefinition.fromMarkdown(fullContent);
+//
+//        String agentTypeName = definition.getName();
+//
+//        if (agentTypeName == null || agentTypeName.isEmpty()) {
+//            agentTypeName = fileName.substring(0, fileName.length() - 3);
+//        }
+//
+//        if (mountAlias != null) {
+//            definition.setMountAlias(mountAlias);
+//        }
+//
+//        agentMap.put(agentTypeName, definition);
+//    }
 }

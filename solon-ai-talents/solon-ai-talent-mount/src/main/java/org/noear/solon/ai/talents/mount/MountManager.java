@@ -128,6 +128,7 @@ public class MountManager {
                 .primary(mount.isPrimary())
                 .enabled(mount.isEnabled())
                 .writeable(mount.isWriteable())
+                .visible(mount.isVisible())
                 .source(mount.getSource())
                 .build();
 

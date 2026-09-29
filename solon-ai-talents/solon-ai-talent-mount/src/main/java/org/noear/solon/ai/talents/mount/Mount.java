@@ -33,6 +33,7 @@ public final class Mount {
     private final boolean primary;
     private final boolean enabled;
     private final boolean writeable;
+    private final boolean visible;
     private final MountSource source;
 
     private Mount(Builder builder) {
@@ -42,6 +43,7 @@ public final class Mount {
         this.primary = builder.primary;
         this.enabled = builder.enabled;
         this.writeable = builder.writeable;
+        this.visible = builder.visible;
         this.source = builder.source;
     }
 
@@ -51,6 +53,8 @@ public final class Mount {
     public boolean isPrimary() { return primary; }
     public boolean isEnabled() { return enabled; }
     public boolean isWriteable() { return writeable; }
+    /** 是否在上层展示；不影响挂载的启用、解析和运行时使用。 */
+    public boolean isVisible() { return visible; }
     public MountSource getSource() { return source; }
 
     public static Builder builder() { return new Builder(); }
@@ -62,6 +66,7 @@ public final class Mount {
         private boolean primary;
         private boolean enabled = true;
         private boolean writeable;
+        private boolean visible = true;
         private MountSource source;
 
         public Builder alias(String value) { this.alias = value; return this; }
@@ -70,6 +75,7 @@ public final class Mount {
         public Builder primary(boolean value) { this.primary = value; return this; }
         public Builder enabled(boolean value) { this.enabled = value; return this; }
         public Builder writeable(boolean value) { this.writeable = value; return this; }
+        public Builder visible(boolean value) { this.visible = value; return this; }
         public Builder source(MountSource value) { this.source = value; return this; }
         public Mount build() {
             if (source == null) throw new IllegalArgumentException("source must not be null");

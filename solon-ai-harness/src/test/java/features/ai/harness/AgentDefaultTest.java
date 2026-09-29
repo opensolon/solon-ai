@@ -2,8 +2,8 @@ package features.ai.harness;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
-import org.noear.solon.ai.harness.agent.AgentManager;
 import org.noear.solon.test.SolonTest;
 
 /**
@@ -15,7 +15,8 @@ import org.noear.solon.test.SolonTest;
 public class AgentDefaultTest {
     @Test
     public void case1() {
-        AgentManager agentManager = new AgentManager(null);
+        HarnessEngine engine = HarnessEngine.of(".", ".").build();
+        org.noear.solon.ai.harness.agent.AgentManager agentManager = engine.getAgentManager();
 
         AgentDefinition bash = agentManager.getAgent("bash");
         AgentDefinition explore = agentManager.getAgent("explore");

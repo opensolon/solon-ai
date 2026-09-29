@@ -40,6 +40,7 @@ import org.noear.solon.ai.harness.permission.PermissionRule;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.talents.mount.*;
+import org.noear.solon.ai.talents.mount.source.ClasspathMountSource;
 import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.talents.cli.*;
@@ -78,6 +79,8 @@ import java.util.function.Consumer;
 @Preview("3.10")
 public class HarnessEngine {
     public final static String ATTR_CWD = "__cwd";
+    private static final String BUILTIN_AGENT_MOUNT = "@harness-agents";
+    private static final String BUILTIN_AGENT_PATH = "META-INF/solon/ai/harness/agents/";
     public final static String CTX_MODEL_SELECTED = "_model_selected";
     public final static String CTX_AGENT_SELECTED = "_agent_selected";
 
@@ -815,6 +818,10 @@ public class HarnessEngine {
 
 
     public void addMount(Mount mount) {
+        // 内置挂载不可被同名覆盖
+        if (mount != null && BUILTIN_AGENT_MOUNT.equals(normalizeMountAlias(mount.getAlias()))) {
+            throw new IllegalArgumentException("Built-in mount cannot be replaced: " + BUILTIN_AGENT_MOUNT);
+        }
         // 同别名替换时，清除旧挂载关联的运行时定义。
         if (mount != null && options.getMountManager().hasMount(mount.getAlias())) {
             String key = mount.getAlias().startsWith("@") ? mount.getAlias() : "@" + mount.getAlias();
@@ -825,10 +832,18 @@ public class HarnessEngine {
     }
 
     public void removeMount(String alias) {
+        if (BUILTIN_AGENT_MOUNT.equals(normalizeMountAlias(alias))) {
+            throw new IllegalArgumentException("Built-in mount cannot be removed: " + BUILTIN_AGENT_MOUNT);
+        }
         String key = alias.startsWith("@") ? alias : "@" + alias;
         agentManager.removeByMountAlias(key);
 
         options.getMountManager().remove(alias);
+    }
+
+    private static String normalizeMountAlias(String alias) {
+        if (alias == null) return null;
+        return alias.startsWith("@") ? alias : "@" + alias;
     }
 
     public boolean hasMount(String alias) {
@@ -1055,8 +1070,19 @@ public class HarnessEngine {
         }
 
 
-        this.skillCatalog = options.getMountManager().getSkillCatalog();
-        this.agentCatalog = options.getMountManager().getAgentCatalog();
+        MountManager mountManager = options.getMountManager();
+        mountManager.register(Mount.builder()
+                .alias(BUILTIN_AGENT_MOUNT)
+                .description("Harness built-in agents")
+                .type(MountType.AGENTS)
+                .enabled(true)
+                .writeable(false)
+                .visible(false)
+                .source(ClasspathMountSource.of(HarnessEngine.class.getClassLoader(), BUILTIN_AGENT_PATH))
+                .build());
+
+        this.skillCatalog = mountManager.getSkillCatalog();
+        this.agentCatalog = mountManager.getAgentCatalog();
 
         this.todoTalent = new TodoTalent(options.getHarnessSessions());
         this.codeTalent = new CodeTalent(options.getWorkspace(), options.getHarnessHome());
@@ -1514,6 +1540,9 @@ public class HarnessEngine {
         }
 
         public Builder mountAdd(Mount mount) {
+            if (mount != null && BUILTIN_AGENT_MOUNT.equals(mount.getAlias() == null ? null : (mount.getAlias().startsWith("@") ? mount.getAlias() : "@" + mount.getAlias()))) {
+                throw new IllegalArgumentException("Built-in mount cannot be replaced: " + BUILTIN_AGENT_MOUNT);
+            }
             options.getMountManager().register(mount);
             return this;
         }

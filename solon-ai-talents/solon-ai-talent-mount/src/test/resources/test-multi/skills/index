@@ -1,0 +1,4 @@
+# index file (entries are relative to this base path; lines starting with # are ignored)
+weather/SKILL.md
+translate/SKILL.md
+translate/references/glossary.md

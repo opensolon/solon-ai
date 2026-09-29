@@ -1,0 +1,2 @@
+# Glossary
+term mapping table
