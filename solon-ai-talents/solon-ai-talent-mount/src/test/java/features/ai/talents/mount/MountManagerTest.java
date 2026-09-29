@@ -122,8 +122,8 @@ public class MountManagerTest {
     public void agentCatalogShouldFilterByMountAndRefresh() throws Exception {
         Path first = Files.createDirectory(tempDir.resolve("agents-a"));
         Path second = Files.createDirectory(tempDir.resolve("agents-b"));
-        Files.write(first.resolve("review.md"), "review".getBytes());
-        Files.write(second.resolve("deploy.md"), "deploy".getBytes());
+        Files.write(first.resolve("review.md"), "---\nname: review\ndescription: test\n---\nreview".getBytes());
+        Files.write(second.resolve("deploy.md"), "---\nname: deploy\ndescription: test\n---\ndeploy".getBytes());
         MountManager manager = new MountManager(tempDir.toString());
         manager.register(Mount.builder().alias("agents-a").source(FileMountSource.of(first))
                 .type(MountType.AGENTS).build());
@@ -143,9 +143,25 @@ public class MountManagerTest {
     }
 
     @Test
+    public void agentNameShouldComeFromFrontmatterAndMissingNameShouldBeSkipped() throws Exception {
+        Path pool = Files.createDirectory(tempDir.resolve("named-agents"));
+        Files.write(pool.resolve("file-name.md"), "---\nname: declared-name\ndescription: declared description\n---\nprompt".getBytes());
+        Files.write(pool.resolve("missing-name.md"), "---\ndescription: no name\n---\nprompt".getBytes());
+        MountManager manager = new MountManager(tempDir.toString());
+        manager.register(Mount.builder().alias("named-agents").source(FileMountSource.of(pool))
+                .type(MountType.AGENTS).build());
+        DefaultAgentCatalog catalog = new DefaultAgentCatalog(manager);
+
+        assertNotNull(catalog.getAgent("declared-name"));
+        assertNull(catalog.getAgent("file-name"));
+        assertEquals("declared description", catalog.getAgent("declared-name").getDescription());
+        assertEquals(1, catalog.getAgents().size());
+    }
+
+    @Test
     public void replacingMountShouldUpdateCatalogAfterRefresh() throws Exception {
         Path pool = Files.createDirectory(tempDir.resolve("old"));
-        Files.write(pool.resolve("old.md"), "old".getBytes());
+        Files.write(pool.resolve("old.md"), "---\nname: old\ndescription: test\n---\nold".getBytes());
         MountManager manager = new MountManager(tempDir.toString());
         manager.register(Mount.builder().alias("agents").source(FileMountSource.of(pool))
                 .type(MountType.AGENTS).build());

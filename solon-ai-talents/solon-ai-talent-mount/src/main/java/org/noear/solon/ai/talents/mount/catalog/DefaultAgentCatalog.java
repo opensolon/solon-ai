@@ -92,8 +92,13 @@ public final class DefaultAgentCatalog implements AgentCatalog {
                 String path = entry.getPath();
                 String fileName = entry.getName();
                 if (hiddenParent(path) || fileName.startsWith(".") || !fileName.endsWith(".md")) continue;
-                String name = fileName.substring(0, fileName.length() - 3);
-                result.put(name, new AgentDescriptor(name, mount.getAlias(), mount.getSource(), path));
+                try {
+                    AgentDescriptor descriptor = AgentDescriptor.parse(
+                            mount.getAlias(), mount.getSource(), path);
+                    result.putIfAbsent(descriptor.getName(), descriptor);
+                } catch (IOException e) {
+                    LOG.debug("Skip invalid agent: {}:{}", mount.getAlias(), path, e);
+                }
             }
         } catch (IOException e) {
             LOG.debug("Scan agent mount failed: {}", mount.getAlias(), e);

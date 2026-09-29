@@ -121,24 +121,18 @@ public class AgentDefinition {
     }
 
     /**
-     * 从系统提示词中解析元数据
-     *
-     * @param markdownStr 系统提示词
-     * @return 解析出的元数据对象
+     * 从已解析的 Markdown 文档构建运行时定义。
      */
-    public static AgentDefinition fromMarkdown(String markdownStr) {
+    public static AgentDefinition fromParsedMarkdown(Markdown markdown) {
         AgentDefinition definition = new AgentDefinition();
-
-        if (markdownStr == null || markdownStr.isEmpty()) {
+        if (markdown == null) {
             return definition;
         }
-
-        Markdown markdown = MarkdownUtil.resolve(Arrays.asList(markdownStr.split("\n")));
 
         markdown.getMetadata().bindTo(definition.metadata);
         definition.systemPrompt = markdown.getContent();
 
-        // 手动解析 permissionRules
+        // Snack4 无法直接反序列化 PermissionRule，由运行时模型负责转换。
         ONode rulesNode = markdown.getMetadata().get("permissionRules");
         if (rulesNode != null && rulesNode.isArray()) {
             List<PermissionRule> rules = new ArrayList<>();
@@ -165,49 +159,20 @@ public class AgentDefinition {
         return definition;
     }
 
-    /**
-     * 从文件行列表解析子代理元数据和提示词
-     *
-     * @param lines 文件内容行列表
-     * @return 包含元数据和提示词的对象
-     */
+    /** @deprecated 使用 {@link #fromParsedMarkdown(Markdown)}，Markdown 来源解析应由来源描述完成。 */
+    @Deprecated
+    public static AgentDefinition fromMarkdown(String markdownStr) {
+        return markdownStr == null || markdownStr.isEmpty()
+                ? new AgentDefinition()
+                : fromParsedMarkdown(MarkdownUtil.resolve(Arrays.asList(markdownStr.split("\\n"))));
+    }
+
+    /** @deprecated 使用 {@link #fromParsedMarkdown(Markdown)}，Markdown 来源解析应由来源描述完成。 */
+    @Deprecated
     public static AgentDefinition fromMarkdown(List<String> lines) {
-        AgentDefinition definition = new AgentDefinition();
-
-        if (lines == null || lines.isEmpty()) {
-            return definition;
-        }
-
-        Markdown markdown = MarkdownUtil.resolve(lines);
-
-        markdown.getMetadata().bindTo(definition.metadata);
-        definition.systemPrompt = markdown.getContent();
-
-        // 手动解析 permissionRules（Snack4 无法直接反序列化 PermissionRule）
-        ONode rulesNode = markdown.getMetadata().get("permissionRules");
-        if (rulesNode != null && rulesNode.isArray()) {
-            List<PermissionRule> rules = new ArrayList<>();
-            for (ONode ruleNode : rulesNode.getArray()) {
-                String toolName = ruleNode.get("toolName").getString();
-                if (toolName == null) continue;
-
-                String behaviorStr = ruleNode.get("behavior").getString();
-                if (behaviorStr == null) continue;
-
-                String pattern = ruleNode.get("pattern").getString();
-                int priority = ruleNode.get("priority").getInt();
-                PermissionBehavior behavior = PermissionBehavior.valueOf(behaviorStr.toUpperCase());
-
-                if (pattern != null && !pattern.isEmpty()) {
-                    rules.add(PermissionRule.withPattern(toolName, behavior, pattern, priority));
-                } else {
-                    rules.add(PermissionRule.of(toolName, behavior, priority));
-                }
-            }
-            definition.metadata.setPermissionRules(rules);
-        }
-
-        return definition;
+        return lines == null || lines.isEmpty()
+                ? new AgentDefinition()
+                : fromParsedMarkdown(MarkdownUtil.resolve(lines));
     }
 
 

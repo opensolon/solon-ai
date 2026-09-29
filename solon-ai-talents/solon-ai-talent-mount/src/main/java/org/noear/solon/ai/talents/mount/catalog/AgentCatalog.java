@@ -20,8 +20,8 @@ import org.noear.solon.lang.Preview;
 import java.util.Collection;
 
 /**
- * Agent 来源目录，负责发现、查询和刷新挂载中的 Agent 描述。
- * <p>目录返回的 {@link AgentDescriptor} 表示来源信息，不负责解析或创建运行时 Agent。</p>
+ * Agent 来源目录，负责发现、解析、查询和刷新挂载中的 Agent 描述。
+ * <p>目录返回的 {@link AgentDescriptor} 已包含 Markdown 解析结果，但不表示运行时 Agent。</p>
  *
  * @author noear 
  * @since 4.1.1

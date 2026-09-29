@@ -17,12 +17,6 @@ package org.noear.solon.ai.harness.agent;
 
 import org.noear.solon.ai.talents.mount.catalog.AgentCatalog;
 import org.noear.solon.ai.talents.mount.catalog.AgentDescriptor;
-import org.noear.solon.core.util.IoUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -35,9 +29,6 @@ import java.util.stream.Collectors;
  * @since 3.9.5
  */
 public class AgentManager {
-    private static final Logger LOG = LoggerFactory.getLogger(AgentManager.class);
-    private static final String AGENT_MD_BASE = "META-INF/solon/ai/harness/agents/";
-
     private final AgentCatalog agentCatalog;
     private final Map<String, AgentDefinition> agentMap = new ConcurrentHashMap<>();
 
@@ -145,20 +136,12 @@ public class AgentManager {
 
 
     /**
-     * 从 AgentMd 解析完整定义
+     * 基于目录中已解析的 Markdown 构建运行时定义。
      */
     private AgentDefinition loadFromAgentMd(AgentDescriptor agentMd) {
-        try (InputStream input = agentMd.open()) {
-            String content = IoUtil.transferToString(input);
-            List<String> lines = Arrays.asList(content.split("\\R", -1));
-            AgentDefinition definition = AgentDefinition.fromMarkdown(lines);
-
-            definition.setMountAlias(agentMd.getMountAlias());
-            return definition;
-        } catch (IOException e) {
-            LOG.error("Load agent failed from AgentMd: {}:{}", agentMd.getMountAlias(), agentMd.getSourcePath(), e);
-            throw new RuntimeException("Failed to load agent: " + agentMd.getName(), e);
-        }
+        AgentDefinition definition = AgentDefinition.fromParsedMarkdown(agentMd.getMarkdown());
+        definition.setMountAlias(agentMd.getMountAlias());
+        return definition;
     }
 
     /**
