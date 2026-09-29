@@ -215,6 +215,93 @@ public class MountManagerTest {
         assertFalse(manager.isSkillDisallowed("@skills/demo"));
         manager.setDisallowSkills(java.util.Collections.singleton("@skills/other"));
         assertTrue(manager.isSkillDisallowed("@skills/other"));
+        // 空/null 别名不生效
+        manager.disallowSkill("");
+        manager.allowSkill(null);
+        manager.setDisallowSkills(null);
+        assertTrue(manager.getDisallowSkills().isEmpty());
+    }
+
+    // --- parseRealPath ---
+
+    @Test
+    public void parseRealPathShouldExpandHomeAndWorkspaceSyntax() {
+        MountManager manager = new MountManager(tempDir.toString());
+        String userHome = System.getProperty("user.home");
+
+        // 空/null → 工作区
+        assertEquals(tempDir.toAbsolutePath().normalize(), manager.parseRealPath(null));
+        assertEquals(tempDir.toAbsolutePath().normalize(), manager.parseRealPath(""));
+        assertEquals(tempDir.toAbsolutePath().normalize(), manager.parseRealPath("."));
+
+        // ~/ 展开
+        assertEquals(java.nio.file.Paths.get(userHome).toAbsolutePath().normalize(),
+                manager.parseRealPath("~"));
+        assertEquals(java.nio.file.Paths.get(userHome, "skills").toAbsolutePath().normalize(),
+                manager.parseRealPath("~/skills"));
+
+        // ./ 展开
+        assertEquals(tempDir.resolve("sub").toAbsolutePath().normalize(),
+                manager.parseRealPath("./sub"));
+
+        // 相对路径 → 基于进程 cwd
+        assertEquals(tempDir.toAbsolutePath().normalize(), manager.parseRealPath(tempDir.toString()));
+    }
+
+    // --- resolveResource 分支 ---
+
+    @Test
+    public void resolveResourceShouldHandleBlankDotAndWorkspaceForms() throws Exception {
+        MountManager manager = new MountManager(tempDir.toString());
+
+        // null/空/. → 工作区根
+        assertEquals("", manager.resolveResource(null).getSourcePath());
+        assertEquals("", manager.resolveResource("").getSourcePath());
+        assertEquals("", manager.resolveResource(".").getSourcePath());
+        assertEquals("@workspace", manager.resolveResource(null).getMountAlias());
+        assertSame(manager.getWorkspaceSource(), manager.resolveResource(null).getSource());
+        assertNull(manager.resolveResource(null).getMount());
+
+        // 相对路径 → 工作区子路径
+        assertEquals("a/b.md", manager.resolveResource("a/b.md").getSourcePath());
+        assertEquals("a/b.md", manager.resolveResource("./a/b.md").getSourcePath());
+
+        // @workspace 别名 → 工作区
+        assertEquals("", manager.resolveResource("@workspace").getSourcePath());
+        assertEquals("note.txt", manager.resolveResource("@workspace/note.txt").getSourcePath());
+
+        // @workspace-xxx 不是保留别名，作为普通挂载名查找 → 未注册时拒绝
+        assertThrows(SecurityException.class, () -> manager.resolveResource("@workspace-other/f"));
+    }
+
+    @Test
+    public void resolveResourceShouldRejectEscapeUnderMountAndWorkspace() throws Exception {
+        MountManager manager = new MountManager(tempDir.toString());
+        // ".." 片段保留在归一化结果中 → 拒绝
+        assertThrows(SecurityException.class, () -> manager.resolveResource("../outside"));
+        assertThrows(SecurityException.class, () -> manager.resolveResource("a/../../outside"));
+
+        // 前导 "/" 在 normalize 中被剥离，绝对路径降级为工作区相对路径（与 resolve() 的显式拦截不同）
+        org.noear.solon.ai.talents.mount.ResolvedResource degraded =
+                manager.resolveResource("/absolute/path");
+        assertEquals("absolute/path", degraded.getSourcePath());
+    }
+
+    @Test
+    public void resolveShouldReturnWorkDirForBlankAndDot() {
+        MountManager manager = new MountManager(tempDir.toString());
+        assertEquals(tempDir, manager.resolve(tempDir, null));
+        assertEquals(tempDir, manager.resolve(tempDir, ""));
+        assertEquals(tempDir, manager.resolve(tempDir, "."));
+    }
+
+    @Test
+    public void registerNullMountOrSourceShouldReject() {
+        MountManager manager = new MountManager(tempDir.toString());
+        assertThrows(IllegalArgumentException.class, () -> manager.register(null));
+        assertThrows(IllegalArgumentException.class, () -> manager.register(
+                Mount.builder().alias("@x").build()));
+        assertThrows(IllegalArgumentException.class, () -> manager.getMount(null));
     }
 
     private Mount register(MountManager manager, String alias) {

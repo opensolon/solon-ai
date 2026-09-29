@@ -17,7 +17,6 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
-
 public class ClasspathMountSourceTest {
     @Test
     public void readsAndFindsClasspathResources() throws Exception {
@@ -178,6 +177,161 @@ public class ClasspathMountSourceTest {
             if (entry.getPath().equals(path)) return true;
         }
         return false;
+    }
+
+    // --- normalize 归一化与越界拒绝 ---
+
+    @Test
+    public void normalizeShouldCleanAndRejectEscape() {
+        ClasspathMountSource source = ClasspathMountSource.of(
+                Thread.currentThread().getContextClassLoader(), "test-skills");
+
+        assertEquals("", source.normalize(null));
+        assertEquals("", source.normalize(""));
+        assertEquals("", source.normalize("."));
+        assertEquals("", source.normalize("/"));
+        assertEquals("a/b.md", source.normalize("/a/./b.md"));
+        assertEquals("a/b.md", source.normalize("\\a\\b.md"));
+        // “..” 片段一律拒绝（不同于 FileMountSource 的 normalize 折叠）
+        assertThrows(SecurityException.class, () -> source.normalize("../outside"));
+        assertThrows(SecurityException.class, () -> source.normalize("a/../../outside"));
+    }
+
+    @Test
+    public void basePathShouldBeNormalized() throws Exception {
+        // 尾部/头部斜杠被剥离后统一为 basePath/
+        ClasspathMountSource source = ClasspathMountSource.of(
+                Thread.currentThread().getContextClassLoader(), "/test-skills/");
+        assertEquals("test-skills/", source.getBasePath());
+        assertEquals("test-skills/", source.getLocation());
+        assertEquals("classpath", source.getScheme());
+
+        ClasspathMountSource emptyBase = ClasspathMountSource.of(
+                Thread.currentThread().getContextClassLoader(), null);
+        assertEquals("", emptyBase.getBasePath());
+        assertNotNull(emptyBase.stat(""));
+    }
+
+    // --- 只读能力 ---
+
+    @Test
+    public void readOnlyOperationsShouldBeRejected() {
+        ClasspathMountSource source = ClasspathMountSource.of(
+                Thread.currentThread().getContextClassLoader(), "test-skills");
+
+        MountCapabilitiesAssert.assertReadOnlyVirtual(source);
+    }
+
+    private static final class MountCapabilitiesAssert {
+        static void assertReadOnlyVirtual(ClasspathMountSource source) {
+            assertTrue(source.capabilities().isReadable());
+            assertTrue(source.capabilities().isSearchable());
+            assertFalse(source.capabilities().isWritable());
+            assertFalse(source.capabilities().isEditable());
+            assertFalse(source.capabilities().isDeletable());
+            assertFalse(source.capabilities().isMovable());
+            assertFalse(source.capabilities().isShellAccessible());
+            assertFalse(source.capabilities().isLocalPathAccessible());
+            assertFalse(source.capabilities().isMaterializable());
+
+            assertThrows(UnsupportedOperationException.class, () -> source.openWrite("x", null));
+            assertThrows(UnsupportedOperationException.class, () -> source.delete("x"));
+            assertThrows(UnsupportedOperationException.class, () -> source.move("a", "b", null));
+        }
+    }
+
+    // --- index 兑底语义 ---
+
+    @Test
+    public void indexFallbackShouldSkipCommentsAndDuplicates(@TempDir Path temp) throws Exception {
+        Path jarPath = temp.resolve("skills-index-semantics.jar");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jarPath))) {
+            zip.putNextEntry(new ZipEntry("idx-skills/real/SKILL.md"));
+            zip.write("real".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+            // index 含注释、空行、重复条目、不存在的兑底条目
+            zip.putNextEntry(new ZipEntry("idx-skills/index"));
+            zip.write("# comment\n\n  \nreal/SKILL.md\nghost/SKILL.md\n".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+
+        try (URLClassLoader loader = new URLClassLoader(new URL[]{jarPath.toUri().toURL()}, null)) {
+            ClasspathMountSource source = ClasspathMountSource.of(loader, "idx-skills");
+
+            List<MountEntry> manifests = source.find("", FindOptions.builder()
+                    .glob("**/SKILL.md").filesOnly(true).maxDepth(3).build());
+            // 注释/空行不产生条目；真实扫描优先，index 重复不叠加
+            assertEquals(2, manifests.size());
+            assertTrue(containsPath(manifests, "real/SKILL.md"));
+            assertTrue(containsPath(manifests, "ghost/SKILL.md"));
+
+            // ghost 由 index 兑底：条目存在但 size 未知
+            MountEntry ghost = source.stat("ghost/SKILL.md");
+            assertNotNull(ghost);
+            assertEquals(-1, ghost.getSize());
+        }
+    }
+
+    @Test
+    public void jarWithDirectoryEntriesShouldListSynthesizedParents(@TempDir Path temp) throws Exception {
+        Path jarPath = temp.resolve("skills-with-dir-entries.jar");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jarPath))) {
+            zip.putNextEntry(new ZipEntry("dir-entry-skills/"));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("dir-entry-skills/weather/"));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("dir-entry-skills/weather/SKILL.md"));
+            zip.write("content".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+
+        try (URLClassLoader loader = new URLClassLoader(new URL[]{jarPath.toUri().toURL()}, null)) {
+            ClasspathMountSource source = ClasspathMountSource.of(loader, "dir-entry-skills");
+
+            // 目录条目直接入索引
+            MountEntry dir = source.stat("weather");
+            assertNotNull(dir);
+            assertTrue(dir.isDirectory());
+
+            // list 顶层返回合成目录
+            List<MountEntry> top = source.list("");
+            assertEquals(1, top.size());
+            assertEquals("weather", top.get(0).getName());
+            assertTrue(top.get(0).isDirectory());
+
+            // list 子目录返回文件
+            List<MountEntry> children = source.list("weather");
+            assertEquals(1, children.size());
+            assertEquals("SKILL.md", children.get(0).getName());
+            assertEquals(7, children.get(0).getSize());
+        }
+    }
+
+    @Test
+    public void refreshShouldReenumerateClasspath(@TempDir Path temp) throws Exception {
+        // 基于 file 协议的目录扫描：新建文件后 refresh 可见（验证索引重建）
+        Path scanRoot = Files.createDirectories(temp.resolve("refresh-skills/demo"));
+        Files.write(scanRoot.resolve("SKILL.md"), "v1".getBytes(StandardCharsets.UTF_8));
+
+        try (URLClassLoader loader = new URLClassLoader(new URL[]{temp.toUri().toURL()}, null)) {
+            ClasspathMountSource source = ClasspathMountSource.of(loader, "refresh-skills");
+            assertNotNull(source.stat("demo/SKILL.md"));
+
+            // 索引存在时新增文件不可见
+            Files.write(scanRoot.resolve("EXTRA.md"), "v2".getBytes(StandardCharsets.UTF_8));
+            assertNull(source.stat("demo/EXTRA.md"));
+
+            // refresh 后可见
+            source.refresh();
+            assertNotNull(source.stat("demo/EXTRA.md"));
+        }
+    }
+
+    @Test
+    public void openReadShouldFailForMissingResource() throws Exception {
+        ClasspathMountSource source = ClasspathMountSource.of(
+                Thread.currentThread().getContextClassLoader(), "test-skills");
+        assertThrows(java.io.IOException.class, () -> source.openRead("ghost/SKILL.md"));
     }
 
     private static String readText(InputStream input) throws Exception {

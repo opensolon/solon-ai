@@ -374,10 +374,11 @@ public class TerminalTalentSandboxPolicyTest {
         Path pool = Files.createTempDirectory("solon-ai-terminal-agents-");
         try {
             MountManager mountManager = new MountManager(workDir.toString());
+            // FILES 类型进入 mount_list：验证连字符转合法环境变量名（WORKSPACE_AGENTS）
             mountManager.register(Mount.builder()
                     .alias("@workspace-agents")
                     .source(FileMountSource.of(pool))
-                    .type(MountType.AGENTS)
+                    .type(MountType.FILES)
                     .build());
 
             TerminalTalent talent = new TerminalTalent(mountManager);
@@ -386,6 +387,36 @@ public class TerminalTalentSandboxPolicyTest {
             // 占位符写法随 shell 方言不同（%VAR% / $env:VAR / $VAR），不能硬编码 Unix 形态。
             assertTrue(instruction.contains(expectedEnvPlaceholder("WORKSPACE_AGENTS")), instruction);
             assertFalse(instruction.contains("WORKSPACE-AGENTS"), instruction);
+        } finally {
+            deleteRecursively(workDir);
+            deleteRecursively(pool);
+        }
+    }
+
+    @Test
+    public void agentsTypeMountIsExcludedFromMountList() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
+        Path pool = Files.createTempDirectory("solon-ai-terminal-mount-");
+        try {
+            Files.write(pool.resolve("a.md"), "agent".getBytes());
+            MountManager mountManager = new MountManager(workDir.toString());
+            Mount mount = Mount.builder()
+                    .alias("@user-agents")
+                    .source(FileMountSource.of(pool))
+                    .type(MountType.AGENTS)
+                    .writeable(true)
+                    .build();
+            mountManager.register(mount);
+
+            TerminalTalent talent = new TerminalTalent(mountManager);
+            String instruction = talent.getInstruction(null);
+
+            // AGENTS 类型不进入 mount_list（AgentCatalog 语义，不作为普通文件挂载展示）
+            assertFalse(instruction.contains("<mount_list>"), instruction);
+            assertFalse(instruction.contains("@user-agents"), instruction);
+
+            // 但文件工具与运行时能力不受影响
+            assertTrue(talent.read("@user-agents/a.md", null, null, workDir.toString()).contains("agent"));
         } finally {
             deleteRecursively(workDir);
             deleteRecursively(pool);
