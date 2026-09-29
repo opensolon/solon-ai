@@ -245,7 +245,7 @@ solon-ai-harness/                                  # AI 代理编排引擎
 | ④ | `AgentFactory.create()` 根据 `AgentDefinition` 中的 `tools` 清单，通过 `toolAddDo()` 从 engine 各 getter 获取实例，注册到 `ReActAgent.Builder` | `AgentFactory.java:50-118` • `120-246` |
 | ⑤ | `TerminalTalentProxy` 包装 `TerminalTalent`，按白名单选择性暴露文件/命令工具（而不是直接暴露终端） | `AgentFactory.java:82` |
 | ⑥ | `TaskTalent` / `GenerateTalent` 持有 `HarnessEngine` 引用，通过 `task()`/`multitask()` 获取 `AgentDefinition` → 构建子代理 → 分发执行 | `TaskTalent.java:94-162` • `GenerateTalent.java:50-131` |
-| ⑦ | `HarnessExtension` 的 `configure()` 在 Agent 构建最后被调用，允许外部代码注入自定义拦截器/Talent | `AgentFactory.java:107-109` |
+| ⑦ | `HarnessExtension` 的 `initialize()` 在引擎全部服务装配完成后、主代理懒加载前被回调（仅一次），适合注册挂载/MCP/LSP/权限等引擎级资源；`configure()` 在 Agent 构建最后被调用，允许外部代码注入自定义拦截器/Talent | `HarnessEngine.java` 构造器末尾 • `AgentFactory.java:107-109` |
 | ⑧ | `McpGatewayTalent` / `OpenApiGatewayTalent` 运行时动态管理外部服务连接池，`retryConfig()` 同步引擎重试策略 | `HarnessEngine.java:805-820` |
 
 ### 模块职责

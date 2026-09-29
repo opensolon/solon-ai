@@ -42,7 +42,7 @@ import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.function.Consumer;
 
 /**
- * 马具运行时配置（内部使用）
+ * Harness 运行时配置（内部使用）
  *
  * @author noear
  * @since 4.0.0

@@ -71,7 +71,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 /**
- * 马具引擎
+ * Harness 引擎
  *
  * @author noear
  * @since 4.0
@@ -974,6 +974,12 @@ public class HarnessEngine {
         }
         options.getExtensions().add(extension);
 
+        //与构造器对称：动态添加的扩展也要触发初始化（此刻引擎已装配完毕，任意引擎方法都安全）。
+        //嵌套调用安全：agentLock 可重入，且 mainAgent 尚未构建时重建分支会跳过。
+        if (extension.isEnabled()) {
+            extension.initialize(this);
+        }
+
         agentLock.lock();
         try {
             if (this.mainAgent != null) {
@@ -1540,7 +1546,7 @@ public class HarnessEngine {
         }
 
         public Builder mountAdd(Mount mount) {
-            if (mount != null && BUILTIN_AGENT_MOUNT.equals(mount.getAlias() == null ? null : (mount.getAlias().startsWith("@") ? mount.getAlias() : "@" + mount.getAlias()))) {
+            if (mount != null && BUILTIN_AGENT_MOUNT.equals(normalizeMountAlias(mount.getAlias()))) {
                 throw new IllegalArgumentException("Built-in mount cannot be replaced: " + BUILTIN_AGENT_MOUNT);
             }
             options.getMountManager().register(mount);
@@ -1568,9 +1574,17 @@ public class HarnessEngine {
         }
 
         public HarnessEngine build() {
-            Objects.nonNull(options.getSessionProvider());
+            Objects.requireNonNull(options.getSessionProvider(), "sessionProvider");
 
-            return new HarnessEngine(options);
+            HarnessEngine engine = new HarnessEngine(options);
+
+            for (HarnessExtension extension : options.getExtensions()) {
+                if (extension.isEnabled()) {
+                    extension.initialize(engine);
+                }
+            }
+
+            return engine;
         }
     }
 }
