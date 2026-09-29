@@ -71,6 +71,11 @@ public final class FileMountSource implements MountSource {
     }
 
     @Override
+    public String getLocation() {
+        return rootPath.toString();
+    }
+
+    @Override
     public String getScheme() {
         return "file";
     }

@@ -33,6 +33,10 @@ import java.util.Optional;
  */
 @Preview("4.1.1")
 public interface MountSource extends AutoCloseable {
+    default String getLocation(){
+        return getScheme();
+    }
+
     String getScheme();
 
     String normalize(String path);

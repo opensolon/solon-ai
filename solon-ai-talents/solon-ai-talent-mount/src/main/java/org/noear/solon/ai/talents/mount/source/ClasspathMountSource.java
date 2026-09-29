@@ -73,6 +73,11 @@ public final class ClasspathMountSource implements MountSource {
     }
 
     @Override
+    public String getLocation() {
+        return basePath;
+    }
+
+    @Override
     public String getScheme() {
         return "classpath";
     }
