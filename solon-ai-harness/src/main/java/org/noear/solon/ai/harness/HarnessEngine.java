@@ -1081,10 +1081,10 @@ public class HarnessEngine {
                 .alias(BUILTIN_AGENT_MOUNT)
                 .description("Harness built-in agents")
                 .type(MountType.AGENTS)
+                .primary(true)
                 .enabled(true)
                 .writeable(false)
-                .visible(true)
-                .primary(true)
+                .visible(false)
                 .source(ClasspathMountSource.of(HarnessEngine.class.getClassLoader(), BUILTIN_AGENT_PATH))
                 .build());
 
