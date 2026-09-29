@@ -249,6 +249,11 @@ public final class FileMountSource implements MountSource {
     }
 
     @Override
+    public Optional<Path> getLocalRoot() {
+        return Optional.of(rootPath);
+    }
+
+    @Override
     public Optional<Path> getLocalPath(String path) {
         try {
             return Optional.of(resolveChecked(path, false));

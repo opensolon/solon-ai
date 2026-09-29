@@ -25,7 +25,6 @@ import org.noear.solon.ai.sandbox.SandboxViolationStore;
 import org.noear.solon.ai.sandbox.config.FilesystemConfig;
 import org.noear.solon.ai.sandbox.config.NetworkConfig;
 import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
 import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.ai.talents.mount.Mount;
 import org.noear.solon.ai.talents.mount.MountEntry;
@@ -341,13 +340,21 @@ public class TerminalTalent extends AbsTalent {
             allowRead.add(workDir);
         }
 
-        // 2) 所有挂载点：按可写性加入对应列表（无需 /** 后缀，startsWith 匹配覆盖子路径）
+        // 2) 所有挂载点：凡是 shell 可达的来源（声明了 shellAccessible 且有本地根路径，不限于 FileMountSource），
+        //    按可写性加入对应列表（无需 /** 后缀，startsWith 匹配覆盖子路径）。纯虚拟来源（Classpath / JDBC 等）
+        //    或未开放 shell 的来源不参与 OS 沙盒白名单——文件工具走 MountSource.openRead，本就不依赖 OS 白名单。
+        //    注意：这里按 enabled 判定而非 visible——isVisible 只是展示元数据，隐藏挂载（如内置 @harness）
+        //    的本地根目录仍必须纳入 OS 沙盒白名单，否则隐藏挂载上的 bash 访问会被 OS 层拒绝，
+        //    与 translateCommandToEnv 的翻译范围（同样只按 enabled）出现不一致。
         for (Mount mount : mountManager.getMounts()) {
-            if (mount.isEnabled() && mount.getSource() instanceof FileMountSource) {
-                String pathStr = ((FileMountSource) mount.getSource()).getRootPath().toString();
-                allowRead.add(pathStr);
-                if (mount.isWriteable()) {
-                    allowWrite.add(pathStr);
+            if (mount.isEnabled()) {
+                Path localRoot = TerminalSupport.shellLocalRoot(mount.getSource()).orElse(null);
+                if (localRoot != null) {
+                    String pathStr = localRoot.toString();
+                    allowRead.add(pathStr);
+                    if (mount.isWriteable()) {
+                        allowWrite.add(pathStr);
+                    }
                 }
             }
         }
@@ -562,14 +569,17 @@ public class TerminalTalent extends AbsTalent {
                     .append(support.getEnvPlaceholder("NODE")).append("`)\n");
         }
 
-        // 动态判断是否有可写挂载点
+        // 动态判断是否有可写挂载点。以下三个 has* 均为展示层判定（决定引导词写法），
+        // 必须与 mount_list 的过滤口径一致（enabled + visible），否则会出现“列表里没有挂载、
+        // 引导词却按有挂载的形态描述”的矛盾（如内置 @harness 隐藏后仍触发挂载点说明段落）。
         boolean hasWriteableMount = mountManager.getMounts().stream()
-                .anyMatch(m -> m.isEnabled() && m.isWriteable());
+                .anyMatch(m -> m.isEnabled() && m.isVisible() && m.isWriteable());
 
         boolean hasMount = mountManager.getMounts().stream()
-                .anyMatch(m -> m.isEnabled());
+                .anyMatch(m -> m.isEnabled() && m.isVisible());
         boolean hasLocalMount = mountManager.getMounts().stream()
-                .anyMatch(m -> m.isEnabled() && m.getSource() instanceof FileMountSource);
+                .anyMatch(m -> m.isEnabled() && m.isVisible()
+                        && TerminalSupport.shellLocalRoot(m.getSource()).isPresent());
 
         sb.append("- **路径规则**: \n");
         sb.append("  - **工作区（默认作用域）**").append(workspaceNameHint()).append(": 你的主目录，支持读写。所有文件查找（ls/glob/grep/read）与路径解析默认都以工作区为根，使用相对路径访问（如 `src/app.java`）。\n");
@@ -578,21 +588,24 @@ public class TerminalTalent extends AbsTalent {
             sb.append("  - **挂载点（仅按需访问）**: 以 `@` 开头的逻辑路径（如 `@pool1/bin/tool/`）访问来源。见下方挂载点清单。**仅当用户的提示词中明确提及了具体的挂载点名时**（如 `@global-skills`、`@workspace-agents`），才去对应挂载点下查找。\n");
         }
 
-        // 挂载点清单表格
+        // 挂载点清单表格。shell 属性显式声明该挂载是否可在 bash 命令中使用逻辑路径：
+        // 本地来源（shell=true）经 translateCommandToEnv 翻译为环境变量占位符后可 cd 可执行；
+        // 虚拟来源（shell=false，如 classpath/jdbc）只对文件工具可见，bash 中引用会得到
+        // “No such file or directory”。env/scheme 保持原有语义（bash 占位符名 / 来源类型）。
         if(hasMount) {
             sb.append("\n<mount_list>\n");
             for (Mount mount : mountManager.getMounts()) {
-                if (mount.isEnabled()) {
+                if (mount.isEnabled() && mount.isVisible()) {
                     sb.append("  <mount alias=\"").append(mount.getAlias()).append("\"");
                     if (Assert.isNotEmpty(mount.getDescription())) {
                         sb.append(" description=\"").append(mount.getDescription()).append("\"");
                     }
                     sb.append(" type=\"").append(mount.getType()).append("\"");
                     sb.append(" writeable=\"").append(mount.isWriteable()).append("\"");
-                    if (mount.getSource() instanceof FileMountSource) {
-                        sb.append(" env=\"").append(support.getEnvPlaceholder(support.toMountEnvKey(mount.getAlias()))).append("\"");
+                    if (TerminalSupport.shellLocalRoot(mount.getSource()).isPresent()) {
+                        sb.append(" shell=\"true\" env=\"").append(support.getEnvPlaceholder(support.toMountEnvKey(mount.getAlias()))).append("\"");
                     } else {
-                        sb.append(" scheme=\"").append(mount.getSource().getScheme()).append("\"");
+                        sb.append(" shell=\"false\" scheme=\"").append(mount.getSource().getScheme()).append("\"");
                     }
                     sb.append(" />\n");
                 }
@@ -1396,7 +1409,13 @@ public class TerminalTalent extends AbsTalent {
     private ResolvedResource resolveVirtualResource(String path, boolean write) throws IOException {
         if (path == null || !path.startsWith("@")) return null;
         ResolvedResource resource = mountManager.resolveResource(path);
-        if (resource.getLocalPath().isPresent()) return null;
+        // 本地路径能力只决定是否可以走 Path/Files 快路径，不决定 MountSource 是否能被文件工具使用。
+        // 未声明 localPathAccessible 的来源，即使偶然提供了本地映射，也必须保留其自身的
+        // stat/list/find/openRead/openWrite 实现，避免把文件工具错误地绑定到本地文件系统。
+        if (resource.getSource().capabilities().isLocalPathAccessible()
+                && resource.getLocalPath().isPresent()) {
+            return null;
+        }
         Mount mount = resource.getMount();
         if (mount == null || !mount.isEnabled()) {
             throw new SecurityException("权限拒绝：挂载点不可用 " + path);

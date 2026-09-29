@@ -62,6 +62,10 @@ public interface MountSource extends AutoCloseable {
 
     MountCapabilities capabilities();
 
+    default Optional<Path> getLocalRoot() {
+        return Optional.empty();
+    }
+
     default Optional<Path> getLocalPath(String path) {
         return Optional.empty();
     }

@@ -113,6 +113,40 @@ public class TerminalTalentVirtualMountTest {
     }
 
     @Test
+    public void localMappingDoesNotDisableVirtualToolsWhenLocalPathIsNotAccessible() throws Exception {
+        Path work = Files.createTempDirectory("terminal-local-mapping-virtual");
+        try {
+            VersionedSource source = new VersionedSource() {
+                @Override
+                public java.util.Optional<Path> getLocalPath(String path) {
+                    return java.util.Optional.of(work.resolve(path == null ? "" : path));
+                }
+
+                @Override
+                public MountCapabilities capabilities() {
+                    // 物理映射存在，但该来源不允许按本地路径访问，也不开放 bash。
+                    return new MountCapabilities(true, true, true, true, false, false,
+                            false, false, false, false);
+                }
+            };
+            MountManager manager = new MountManager(work.toString());
+            manager.register(Mount.builder().alias("@mapped").type(MountType.FILES)
+                    .source(source).writeable(true).build());
+            TerminalTalent terminal = new TerminalTalent(manager);
+
+            assertTrue(terminal.read("@mapped/note.txt", null, null, null).contains("original"));
+            TerminalTalent.EditOp edit = new TerminalTalent.EditOp();
+            edit.oldStr = "original";
+            edit.newStr = "edited";
+            edit.oldStrStartLine = 1;
+            assertTrue(terminal.edit("@mapped/note.txt", Collections.singletonList(edit), null).contains("成功"));
+            assertEquals("edited", source.content);
+        } finally {
+            Files.delete(work);
+        }
+    }
+
+    @Test
     public void unknownSizeCannotBypassVirtualReadLimit() throws Exception {
         Path work = Files.createTempDirectory("terminal-unknown-size-mount");
         try {

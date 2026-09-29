@@ -19,9 +19,9 @@ import org.noear.solon.Utils;
 
 import org.noear.solon.ai.sandbox.config.FilesystemConfig;
 import org.noear.solon.ai.talents.mount.Mount;
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
 import org.noear.solon.ai.talents.mount.MountManager;
 import org.noear.solon.ai.talents.mount.ResolvedResource;
+import org.noear.solon.ai.talents.mount.source.MountSource;
 import org.noear.solon.core.util.Assert;
 
 import java.io.IOException;
@@ -859,7 +859,7 @@ public class TerminalSupport {
                 throw new SecurityException(
                         "权限拒绝：路径 " + pStr + " 属于只读挂载点，禁止写入。请将结果写入工作区的相对路径。");
             }
-            Optional<Path> localRoot = resource.getSource().getLocalPath("");
+            Optional<Path> localRoot = resource.getSource().getLocalRoot();
             if (!localRoot.isPresent()) {
                 throw new SecurityException("权限拒绝：挂载点没有本地目录 " + pStr);
             }
@@ -1111,8 +1111,8 @@ public class TerminalSupport {
             String alias = inputPath.split("[/\\\\]")[0];
             // 以挂载根为 relativize 基准，避免 inputPath 带子目录时中间层级丢失
             Mount mount = mountManager.getMount(alias);
-            Path base = (mount != null && mount.getSource() instanceof FileMountSource)
-                    ? ((FileMountSource) mount.getSource()).getRootPath() : targetDir;
+            Path base = (mount != null)
+                    ? mount.getSource().getLocalRoot().orElse(targetDir) : targetDir;
             return alias + "/" + base.relativize(file).toString().replace("\\", "/");
         }
 
@@ -1129,6 +1129,22 @@ public class TerminalSupport {
         }
     }
 
+    /**
+     * shell 可达的本地根路径：需<b>同时</b>满足来源声明 {@code shellAccessible}（策略层，
+     * 由 {@link MountSource#capabilities()} 决定）且存在真实本地根路径（物理层，
+     * {@link MountSource#getLocalPath(String) getLocalPath("")}）。
+     *
+     * <p>二者缺一即返回空：纯虚拟来源（Classpath / 未来的 JDBC）没有本地路径；
+     * 有本地路径但未开放 shell 的来源也不应被 bash 触达。调用方据此决定是否
+     * 纳入 OS 沙盒白名单、是否支持 {@code cd @alias}——其余文件工具不受此限，任何来源皆可用。</p>
+     */
+    static Optional<Path> shellLocalRoot(MountSource source) {
+        if (source != null && source.capabilities().isShellAccessible()) {
+            return source.getLocalRoot();
+        }
+        return Optional.empty();
+    }
+
     String toMountEnvKey(String alias) {
         String raw = alias.startsWith("@") ? alias.substring(1) : alias;
         String envKey = raw.toUpperCase().replaceAll("[^A-Z0-9_]", "_");
@@ -1141,13 +1157,14 @@ public class TerminalSupport {
     String translateCommandToEnv(String command, Map<String, String> envs, boolean sandboxEnabled, boolean sandboxAllowUserHome) {
         String result = command;
         for (Mount mount : mountManager.getMounts()) {
-            if (mount.isEnabled() && mount.getSource() instanceof FileMountSource) {
+            Path localRoot;
+            if (mount.isEnabled() && (localRoot = shellLocalRoot(mount.getSource()).orElse(null)) != null) {
                 String alias = mount.getAlias(); // 例如 @pool1
                 String envKey = toMountEnvKey(alias); // POOL1
 
                 // 仅注入命令中实际使用的环境变量（减少污染）
                 if (result.contains(alias)) {
-                    String realPath = ((FileMountSource) mount.getSource()).getRootPath().toString();
+                    String realPath = localRoot.toString();
                     envs.put(envKey, realPath);
                     String placeholder = getEnvPlaceholder(envKey);
 
@@ -1257,8 +1274,11 @@ public class TerminalSupport {
         if (inputPath != null && inputPath.startsWith("@")) {
             String alias = inputPath.split("[/\\\\]")[0];
             Mount mount = mountManager.getMount(alias);
-            if (mount != null && mount.getSource() instanceof FileMountSource) {
-                return ((FileMountSource) mount.getSource()).getRootPath();
+            if (mount != null) {
+                Path localRoot = mount.getSource().getLocalRoot().orElse(null);
+                if (localRoot != null) {
+                    return localRoot;
+                }
             }
         }
         return workPath;
