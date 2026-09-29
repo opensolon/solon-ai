@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -104,6 +105,37 @@ public class TerminalTalentSandboxPolicyTest {
         } finally {
             deleteRecursively(workDir);
             deleteRecursively(mountDir);
+        }
+    }
+
+    @Test
+    public void missingAgentsMountRootIsListedAsMissingAndCanBeCreatedOnWrite() throws Exception {
+        Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
+        Path mountParent = Files.createTempDirectory("solon-ai-terminal-mount-parent-");
+        Path missingAgentsDir = mountParent.resolve("agents");
+        try {
+            MountManager mountManager = new MountManager(workDir.toString());
+            Mount mount = Mount.builder()
+                    .alias("@user-agents")
+                    .source(FileMountSource.of(missingAgentsDir))
+                    .type(MountType.AGENTS)
+                    .writeable(true)
+                    .build();
+            mountManager.register(mount);
+
+            TerminalTalent talent = new TerminalTalent(mountManager);
+            FilesystemConfig fs = new FilesystemConfig(null, null, Collections.singletonList("."), null, null);
+            talent.setSandboxConfig(new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null));
+
+            assertEquals(MountType.AGENTS, mountManager.getMount("@user-agents").getType());
+            assertTrue(talent.ls("@user-agents", false, false, workDir.toString()).contains("路径不存在"));
+
+            talent.write("@user-agents/agent.md", "agent", workDir.toString());
+            assertTrue(Files.exists(missingAgentsDir.resolve("agent.md")));
+            assertTrue(talent.read("@user-agents/agent.md", null, null, workDir.toString()).contains("agent"));
+        } finally {
+            deleteRecursively(workDir);
+            deleteRecursively(mountParent);
         }
     }
 
@@ -234,7 +266,7 @@ public class TerminalTalentSandboxPolicyTest {
     }
 
     @Test
-    public void readMissingMountRootFailsClosed() throws Exception {
+    public void readMissingMountRootReturnsMissingFile() throws Exception {
         Path workDir = Files.createTempDirectory("solon-ai-terminal-sandbox-");
         Path mountDir = Files.createTempDirectory("solon-ai-terminal-mount-");
         deleteRecursively(mountDir);
@@ -250,8 +282,8 @@ public class TerminalTalentSandboxPolicyTest {
             TerminalTalent talent = new TerminalTalent(mountManager);
             talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
-            assertThrows(java.nio.file.NoSuchFileException.class,
-                    () -> talent.read("@pool/note.txt", 1, null, workDir.toString()));
+            assertTrue(talent.read("@pool/note.txt", 1, null, workDir.toString())
+                    .contains("文件不存在"));
         } finally {
             deleteRecursively(workDir);
             deleteRecursively(mountDir);

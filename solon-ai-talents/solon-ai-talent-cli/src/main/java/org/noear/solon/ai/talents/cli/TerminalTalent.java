@@ -25,12 +25,9 @@ import org.noear.solon.ai.sandbox.SandboxViolationStore;
 import org.noear.solon.ai.sandbox.config.FilesystemConfig;
 import org.noear.solon.ai.sandbox.config.NetworkConfig;
 import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
-import org.noear.solon.ai.talents.mount.MountManager;
-import org.noear.solon.ai.talents.mount.Mount;
-import org.noear.solon.ai.talents.mount.MountEntry;
+import org.noear.solon.ai.talents.mount.*;
 import org.noear.solon.ai.talents.mount.source.MountSource;
 import org.noear.solon.ai.talents.mount.source.FindOptions;
-import org.noear.solon.ai.talents.mount.ResolvedResource;
 import org.noear.solon.ai.talents.mount.source.WriteOptions;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
@@ -347,7 +344,7 @@ public class TerminalTalent extends AbsTalent {
         //    的本地根目录仍必须纳入 OS 沙盒白名单，否则隐藏挂载上的 bash 访问会被 OS 层拒绝，
         //    与 translateCommandToEnv 的翻译范围（同样只按 enabled）出现不一致。
         for (Mount mount : mountManager.getMounts()) {
-            if (mount.isEnabled()) {
+            if (mount.isEnabled() && mount.getType() != MountType.AGENTS) {
                 Path localRoot = TerminalSupport.shellLocalRoot(mount.getSource()).orElse(null);
                 if (localRoot != null) {
                     String pathStr = localRoot.toString();
@@ -573,12 +570,12 @@ public class TerminalTalent extends AbsTalent {
         // 必须与 mount_list 的过滤口径一致（enabled + visible），否则会出现“列表里没有挂载、
         // 引导词却按有挂载的形态描述”的矛盾（如内置 @harness 隐藏后仍触发挂载点说明段落）。
         boolean hasWriteableMount = mountManager.getMounts().stream()
-                .anyMatch(m -> m.isEnabled() && m.isVisible() && m.isWriteable());
+                .anyMatch(m -> m.isEnabled() && m.isVisible() && m.getType() != MountType.AGENTS && m.isWriteable());
 
         boolean hasMount = mountManager.getMounts().stream()
-                .anyMatch(m -> m.isEnabled() && m.isVisible());
+                .anyMatch(m -> m.isEnabled() && m.isVisible() && m.getType() != MountType.AGENTS);
         boolean hasLocalMount = mountManager.getMounts().stream()
-                .anyMatch(m -> m.isEnabled() && m.isVisible()
+                .anyMatch(m -> m.isEnabled() && m.isVisible() && m.getType() != MountType.AGENTS
                         && TerminalSupport.shellLocalRoot(m.getSource()).isPresent());
 
         sb.append("- **路径规则**: \n");
@@ -595,7 +592,7 @@ public class TerminalTalent extends AbsTalent {
         if(hasMount) {
             sb.append("\n<mount_list>\n");
             for (Mount mount : mountManager.getMounts()) {
-                if (mount.isEnabled() && mount.isVisible()) {
+                if (mount.isEnabled() && mount.isVisible() && mount.getType() != MountType.AGENTS) {
                     sb.append("  <mount alias=\"").append(mount.getAlias()).append("\"");
                     if (Assert.isNotEmpty(mount.getDescription())) {
                         sb.append(" description=\"").append(mount.getDescription()).append("\"");

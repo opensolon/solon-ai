@@ -865,18 +865,10 @@ public class TerminalSupport {
             }
             Path mountRoot = localRoot.get();
 
-            // 符号链接防护：解析真实路径
+            // 符号链接防护：解析真实路径。
+            // 挂载根目录可以是尚未创建的用户目录，此时不能直接调用 toRealPath()。
             if (sandboxEnabled) {
-                Path realMountPath = mountRoot.toRealPath();
-                Path realTarget;
-                try {
-                    realTarget = target.toRealPath();
-                } catch (NoSuchFileException e) {
-                    realTarget = resolveExistingAncestor(target).toRealPath();
-                }
-                if (!realTarget.startsWith(realMountPath)) {
-                    throw new SecurityException("权限拒绝：符号链接越界（沙盒模式已开启）。");
-                }
+                checkLocalMountPathSafety(mountRoot, target);
             }
 
             enforceFilesystemPolicy(mountRoot, target, writeMode, sandboxEnabled, fsConfig);
@@ -1259,8 +1251,46 @@ public class TerminalSupport {
         return "$" + envKey;
     }
 
-    private Path resolveExistingAncestor(Path target) throws IOException {
-        Path current = target.getParent();
+    /**
+     * 校验本地挂载路径没有通过符号链接越出挂载根目录。
+     *
+     * <p>挂载根不存在时保留逻辑路径校验，并使用最近的已存在祖先进行真实路径校验。
+     * 这样 ls 可以把不存在的挂载目录作为普通的“不存在”结果处理，同时不放松已存在
+     * 挂载目录的符号链接防护。</p>
+     */
+    private void checkLocalMountPathSafety(Path mountRoot, Path target) throws IOException {
+        Path normalizedRoot = mountRoot.toAbsolutePath().normalize();
+        Path normalizedTarget = target.toAbsolutePath().normalize();
+        if (!normalizedTarget.startsWith(normalizedRoot)) {
+            throw new SecurityException("权限拒绝：路径超出挂载范围。");
+        }
+
+        Path realMountPath;
+        try {
+            realMountPath = normalizedRoot.toRealPath();
+        } catch (NoSuchFileException e) {
+            // 根目录尚不存在：先确认目标的已存在祖先仍位于根目录的已存在祖先内。
+            Path existingRoot = resolveExistingAncestorIncludingSelf(normalizedRoot);
+            Path existingTarget = resolveExistingAncestorIncludingSelf(normalizedTarget);
+            if (!existingTarget.toRealPath().startsWith(existingRoot.toRealPath())) {
+                throw new SecurityException("权限拒绝：符号链接越界（沙盒模式已开启）。");
+            }
+            return;
+        }
+
+        Path realTarget;
+        try {
+            realTarget = normalizedTarget.toRealPath();
+        } catch (NoSuchFileException e) {
+            realTarget = resolveExistingAncestor(normalizedTarget).toRealPath();
+        }
+        if (!realTarget.startsWith(realMountPath)) {
+            throw new SecurityException("权限拒绝：符号链接越界（沙盒模式已开启）。");
+        }
+    }
+
+    private Path resolveExistingAncestorIncludingSelf(Path target) throws IOException {
+        Path current = target;
         while (current != null) {
             if (Files.exists(current)) {
                 return current;
@@ -1268,6 +1298,10 @@ public class TerminalSupport {
             current = current.getParent();
         }
         throw new NoSuchFileException(String.valueOf(target));
+    }
+
+    private Path resolveExistingAncestor(Path target) throws IOException {
+        return resolveExistingAncestorIncludingSelf(target.getParent());
     }
 
     Path getSandboxPolicyRoot(Path workPath, String inputPath) {
