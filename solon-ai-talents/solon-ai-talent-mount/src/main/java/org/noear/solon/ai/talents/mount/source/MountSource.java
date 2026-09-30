@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.talents.mount.source;
 
-import org.noear.solon.ai.talents.mount.*;
 import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
@@ -181,6 +180,19 @@ public interface MountSource extends AutoCloseable {
      */
     default Optional<Path> materialize(String path, Path targetDirectory) throws IOException {
         return Optional.empty();
+    }
+
+    /**
+     * 获取来源内容指纹，用于物化缓存的失效判定；默认返回位置标识。
+     *
+     * <p>同一来源内容变化时指纹应随之变化（如 classpath 的 jar 时间戳/大小、
+     * 未来 JDBC 来源的版本号），使物化缓存能自动淘汰旧快照。实现应保持廉价：
+     * 该方法可能在每次命令翻译时被调用。</p>
+     *
+     * @return 内容指纹
+     */
+    default String getFingerprint() {
+        return getLocation();
     }
 
     /**

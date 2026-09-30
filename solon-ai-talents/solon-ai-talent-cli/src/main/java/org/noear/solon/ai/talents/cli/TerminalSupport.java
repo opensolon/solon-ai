@@ -72,11 +72,22 @@ public class TerminalSupport {
     private final MountManager mountManager;
     private final Set<String> ignoreDirs;
     private final ShellMode shellMode;
+    /** 可物化虚拟来源的执行缓存；null 表示未启用物化（如测试里只构造 support 时）。 */
+    private volatile MountMaterializer materializer;
 
     TerminalSupport(MountManager mountManager, Set<String> ignoreDirs, ShellMode shellMode) {
         this.mountManager = mountManager;
         this.ignoreDirs = ignoreDirs;
         this.shellMode = shellMode;
+    }
+
+    /**
+     * 设置物化缓存管理器（由 TerminalTalent 构造后接线）。
+     *
+     * @param materializer 物化缓存管理器；null 表示禁用物化
+     */
+    void setMaterializer(MountMaterializer materializer) {
+        this.materializer = materializer;
     }
 
     String normalizeNewlines(String context, String text) {
@@ -1060,15 +1071,27 @@ public class TerminalSupport {
 
 
 
+    /**
+     * 物化缓存目录（相对工作区）：存放 Classpath 等虚拟来源落地后的执行快照。
+     *
+     * <p>对文件工具强制拒绝读写：已物化的内容是受信来源的快照，若允许模型侧
+     * 写入或替换，会在下次命令执行时形成 TOCTOU 攻击面（先改脚本、再由
+     * translateCommandToEnv 以“受信”名义执行）。bash 执行不受此清单约束，
+     * 物化目录通过 OS 沙盒的 workDir 白名单可读可执行。</p>
+     */
+    static final String MATERIALIZE_CACHE_DIR = ".soloncode/mcache";
+
     // mandatory deny files (same as dangerous files + cli-specific paths)
+    // 注：mcache 同时登记到 files 与 dirs——dir 分支覆盖“正好等于”与“以下子路径”，
+    // files 分支覆盖路径中任意层级出现的场景，两层匹配口径见 isMandatoryDenyRelativePath。
     private static final List<String> MANDATORY_DENY_FILES = Collections.unmodifiableList(Arrays.asList(
             ".gitconfig", ".gitmodules", ".bashrc", ".bash_profile", ".bash_logout",
             ".zshrc", ".zprofile", ".profile", ".ripgreprc", ".mcp.json",
-            ".soloncode/commands", ".soloncode/agents"
+            ".soloncode/commands", ".soloncode/agents", MATERIALIZE_CACHE_DIR
     ));
 
     private static final List<String> MANDATORY_DENY_DIRS = Collections.unmodifiableList(Arrays.asList(
-            ".vscode", ".idea", ".soloncode/commands", ".soloncode/agents", ".git/hooks"
+            ".vscode", ".idea", ".soloncode/commands", ".soloncode/agents", ".git/hooks", MATERIALIZE_CACHE_DIR
     ));
 
     public static boolean isMandatoryDenyRelativePath(String relativePath) {
@@ -1149,8 +1172,19 @@ public class TerminalSupport {
     String translateCommandToEnv(String command, Map<String, String> envs, boolean sandboxEnabled, boolean sandboxAllowUserHome) {
         String result = command;
         for (Mount mount : mountManager.getMounts()) {
-            Path localRoot;
-            if (mount.isEnabled() && (localRoot = shellLocalRoot(mount.getSource()).orElse(null)) != null) {
+            Path localRoot = shellLocalRoot(mount.getSource()).orElse(null);
+            if (mount.isEnabled()
+                    && localRoot == null
+                    && mount.getSource().capabilities().isMaterializable()
+                    && result.contains(mount.getAlias())) {
+                // 虚拟来源（classpath / 未来 jdbc）的物化执行：命令引用了别名时按需落地到本地缓存，
+                // 之后与 shellAccessible 来源走完全相同的 env 注入 + 占位符替换路径。
+                // 不可物化、物化失败（IO 异常）都返回空——保持命令原样，bash 会报
+                // “No such file or directory”，与未接入物化之前的行为一致。
+                localRoot = materializer == null
+                        ? null : materializer.ensureMaterialized(mount).orElse(null);
+            }
+            if (mount.isEnabled() && localRoot != null) {
                 String alias = mount.getAlias(); // 例如 @pool1
                 String envKey = toMountEnvKey(alias); // POOL1
 

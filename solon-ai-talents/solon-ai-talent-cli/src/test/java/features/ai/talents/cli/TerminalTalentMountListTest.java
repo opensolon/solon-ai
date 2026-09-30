@@ -106,9 +106,10 @@ public class TerminalTalentMountListTest {
             String line = mountLine(instruction, "@cp");
             assertNotNull(line);
 
-            assertTrue(line.contains("shell=\"false\""), line);
+            assertTrue(line.contains("shell=\"materialized\""), line);
             assertTrue(line.contains("scheme=\"classpath\""), line);
-            assertFalse(line.contains("env="), "虚拟来源不应输出 env 属性: " + line);
+            // 物化挂载现在也输出 env 属性（bash 中可直接用 @alias 逻辑路径执行）
+            assertTrue(line.contains("env=\"" + expectedEnvPlaceholder("CP") + "\""), line);
         } finally {
             deleteRecursively(work);
         }

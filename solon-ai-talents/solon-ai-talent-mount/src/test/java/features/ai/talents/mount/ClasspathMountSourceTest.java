@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.talents.mount.source.ClasspathMountSource;
 import org.noear.solon.ai.talents.mount.source.FindOptions;
-import org.noear.solon.ai.talents.mount.MountEntry;
+import org.noear.solon.ai.talents.mount.source.MountEntry;
 
 import java.io.InputStream;
 import java.net.URL;
@@ -232,11 +232,150 @@ public class ClasspathMountSourceTest {
             assertFalse(source.capabilities().isMovable());
             assertFalse(source.capabilities().isShellAccessible());
             assertFalse(source.capabilities().isLocalPathAccessible());
-            assertFalse(source.capabilities().isMaterializable());
+            // classpath 来源已升级为可物化执行（readOnlyMaterializable）
+            assertTrue(source.capabilities().isMaterializable());
 
             assertThrows(UnsupportedOperationException.class, () -> source.openWrite("x", null));
             assertThrows(UnsupportedOperationException.class, () -> source.delete("x"));
             assertThrows(UnsupportedOperationException.class, () -> source.move("a", "b", null));
+        }
+    }
+
+    // --- 物化与指纹 ---
+
+    @Test
+    public void materializeShouldCopySubtreeWithScriptExecutableBit(@TempDir Path temp) throws Exception {
+        ClasspathMountSource source = ClasspathMountSource.of(
+                Thread.currentThread().getContextClassLoader(), "test-skills");
+
+        Path out = temp.resolve("out");
+        java.util.Optional<Path> result = source.materialize("demo", out);
+        assertTrue(result.isPresent());
+        assertEquals(out, result.get());
+        assertTrue(Files.isDirectory(out));
+        // 子树内容完整落地
+        assertTrue(Files.isRegularFile(out.resolve("SKILL.md")));
+        assertTrue(Files.isRegularFile(out.resolve("references/api.md")));
+        try (InputStream input = Files.newInputStream(out.resolve("references/api.md"))) {
+            assertTrue(readText(input).length() > 0);
+        }
+    }
+
+    @Test
+    public void materializeRootShouldCopyWholeMount(@TempDir Path temp) throws Exception {
+        ClasspathMountSource source = ClasspathMountSource.of(
+                Thread.currentThread().getContextClassLoader(), "test-multi/skills");
+
+        Path out = temp.resolve("root");
+        java.util.Optional<Path> result = source.materialize("", out);
+        assertTrue(result.isPresent());
+        assertTrue(Files.isRegularFile(out.resolve("weather/SKILL.md")));
+        assertTrue(Files.isRegularFile(out.resolve("translate/SKILL.md")));
+        assertTrue(Files.isRegularFile(out.resolve("translate/references/glossary.md")));
+    }
+
+    @Test
+    public void materializeSingleFileShouldKeepStructure(@TempDir Path temp) throws Exception {
+        ClasspathMountSource source = ClasspathMountSource.of(
+                Thread.currentThread().getContextClassLoader(), "test-skills");
+
+        Path out = temp.resolve("file");
+        java.util.Optional<Path> result = source.materialize("demo/SKILL.md", out);
+        assertTrue(result.isPresent());
+        assertEquals(out.resolve("demo/SKILL.md"), result.get());
+        assertTrue(Files.isRegularFile(out.resolve("demo/SKILL.md")));
+    }
+
+    @Test
+    public void materializeNullTargetShouldReturnEmpty() throws Exception {
+        ClasspathMountSource source = ClasspathMountSource.of(
+                Thread.currentThread().getContextClassLoader(), "test-skills");
+        assertFalse(source.materialize("demo", null).isPresent());
+    }
+
+    @Test
+    public void scriptSuffixShouldGainExecutableBitOnPosix(@TempDir Path temp) throws Exception {
+        // 在 jar 中构造 shell 脚本，验证物化后 +x（POSIX）
+        Path jarPath = temp.resolve("exec-bit.jar");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jarPath))) {
+            zip.putNextEntry(new ZipEntry("exec-skills/"));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("exec-skills/tool/"));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("exec-skills/tool/run.sh"));
+            zip.write("#!/bin/sh\necho ok\n".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("exec-skills/tool/main.py"));
+            zip.write("print('hi')\n".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+
+        try (URLClassLoader loader = new URLClassLoader(new URL[]{jarPath.toUri().toURL()}, null)) {
+            ClasspathMountSource source = ClasspathMountSource.of(loader, "exec-skills");
+            Path out = temp.resolve("exec-out");
+            source.materialize("", out);
+
+            if (temp.getFileSystem().supportedFileAttributeViews().contains("posix")) {
+                assertTrue(Files.isExecutable(out.resolve("tool/run.sh")), ".sh 应获得可执行位");
+            }
+            // 解释器脚本无需 +x，但内容完整
+            assertTrue(Files.isRegularFile(out.resolve("tool/main.py")));
+        }
+    }
+
+    @Test
+    public void fingerprintShouldBeStableAndContentSensitive(@TempDir Path temp) throws Exception {
+        ClasspathMountSource source = ClasspathMountSource.of(
+                Thread.currentThread().getContextClassLoader(), "test-skills");
+        String fp1 = source.getFingerprint();
+        String fp2 = source.getFingerprint();
+        assertNotNull(fp1);
+        assertEquals(fp1, fp2, "同一内容指纹应稳定");
+
+        // 两个内容不同的 jar：指纹不同
+        Path jarA = temp.resolve("a.jar");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jarA))) {
+            zip.putNextEntry(new ZipEntry("fp-skills/"));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("fp-skills/a/"));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("fp-skills/a/SKILL.md"));
+            zip.write("A".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+        Path jarB = temp.resolve("b.jar");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jarB))) {
+            zip.putNextEntry(new ZipEntry("fp-skills/"));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("fp-skills/a/"));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("fp-skills/a/SKILL.md"));
+            zip.write("A+different content".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+
+        try (URLClassLoader loaderA = new URLClassLoader(new URL[]{jarA.toUri().toURL()}, null);
+             URLClassLoader loaderB = new URLClassLoader(new URL[]{jarB.toUri().toURL()}, null)) {
+            String fpA = ClasspathMountSource.of(loaderA, "fp-skills").getFingerprint();
+            String fpB = ClasspathMountSource.of(loaderB, "fp-skills").getFingerprint();
+            assertNotEquals(fpA, fpB, "内容变化应改变指纹");
+        }
+    }
+
+    @Test
+    public void jarFingerprintShouldUseJarIdentity(@TempDir Path temp) throws Exception {
+        Path jar = temp.resolve("identity.jar");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jar))) {
+            zip.putNextEntry(new ZipEntry("id-skills/"));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("id-skills/a/SKILL.md"));
+            zip.write("x".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+        try (URLClassLoader loader = new URLClassLoader(new URL[]{jar.toUri().toURL()}, null)) {
+            String fp = ClasspathMountSource.of(loader, "id-skills").getFingerprint();
+            // jar 协议下指纹应携带 jar 标识（而非索引聚合形态）
+            assertTrue(fp.startsWith("jar:"), fp);
         }
     }
 

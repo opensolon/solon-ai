@@ -17,6 +17,7 @@ package org.noear.solon.ai.talents.mount.catalog;
 
 import org.noear.solon.ai.talents.mount.*;
 import org.noear.solon.ai.talents.mount.source.FindOptions;
+import org.noear.solon.ai.talents.mount.source.MountEntry;
 import org.noear.solon.ai.talents.mount.source.MountSource;
 import org.noear.solon.ai.util.Markdown;
 import org.noear.solon.ai.util.MarkdownUtil;
@@ -244,6 +245,8 @@ public class DefaultSkillCatalog implements SkillCatalog {
                 .append(record.descriptor.getName()).append("\">\n");
         if (record.source.capabilities().isShellAccessible()) {
             sb.append("[SYSTEM NOTE: Access granted. Use the <alias> paths in 'bash' tool for execution.]\n");
+        } else if (record.source.capabilities().isMaterializable()) {
+            sb.append("[SYSTEM NOTE: Scripts in this skill are executable via 'bash' using the <alias> paths — they are materialized to a local cache automatically on first reference.]\n");
         } else {
             sb.append("[SYSTEM NOTE: This mount is readable through file tools but is not directly accessible to bash.]\n");
         }

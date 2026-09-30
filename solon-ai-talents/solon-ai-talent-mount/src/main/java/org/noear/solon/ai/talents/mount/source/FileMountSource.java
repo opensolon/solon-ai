@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.talents.mount.source;
 
-import org.noear.solon.ai.talents.mount.*;
 import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
@@ -59,8 +58,11 @@ public final class FileMountSource implements MountSource {
             throw new IllegalArgumentException("rootPath must not be null");
         }
         this.rootPath = rootPath.toAbsolutePath().normalize();
+        // materializable=false：本地来源 shell 可达（getLocalRoot 恒有值），物化分支对它是死代码；
+        // 且本类不实现 MountSource#materialize——若误声明 true，直接调用物化器会得到能力位与实现不一致的
+        // 半吊子流程（默认实现返回空却声明可物化）。诚实声明，避免未来误触发。
         this.capabilities = new MountCapabilities(true, true, true, true, true, true,
-                true, true, true, true);
+                true, true, true, false);
     }
 
     /**

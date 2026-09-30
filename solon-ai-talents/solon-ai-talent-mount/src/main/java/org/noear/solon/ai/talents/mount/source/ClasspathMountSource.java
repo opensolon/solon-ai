@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.talents.mount.source;
 
-import org.noear.solon.ai.talents.mount.*;
 import org.noear.solon.core.util.ResourceUtil;
 import org.noear.solon.lang.Preview;
 
@@ -30,6 +29,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFilePermission;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -37,6 +37,7 @@ import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
@@ -52,7 +53,7 @@ import java.util.jar.JarFile;
 public final class ClasspathMountSource implements MountSource {
     private final ClassLoader classLoader;
     private final String basePath;
-    private final MountCapabilities capabilities = MountCapabilities.readOnlyVirtual();
+    private final MountCapabilities capabilities;
     private volatile Map<String, Entry> index;
 
     /**
@@ -64,6 +65,8 @@ public final class ClasspathMountSource implements MountSource {
     public ClasspathMountSource(ClassLoader classLoader, String basePath) {
         this.classLoader = classLoader == null ? Thread.currentThread().getContextClassLoader() : classLoader;
         this.basePath = normalizeBase(basePath);
+        this.capabilities = new MountCapabilities(true, false, true, false, false, false,
+                false, false, false, true);
     }
 
     /**
@@ -284,6 +287,154 @@ public final class ClasspathMountSource implements MountSource {
     }
 
     /**
+     * 将指定路径下的资源子树物化到目标目录。
+     *
+     * <p>基于索引递归复制（openRead → Files.copy），目录条目自动创建；
+     * POSIX 文件系统下对 shell 脚本后缀补可执行位（解释器调用的 .py/.js 等无需 +x）。
+     * 物化产物是内容快照：不回写、不监听，与源的生命周期解耦。</p>
+     *
+     * @param path 相对资源路径（目录或文件）
+     * @param targetDirectory 目标目录
+     * @return 物化后的本地路径；目标目录不可用时为空
+     * @throws IOException 资源读取或复制失败时
+     */
+    @Override
+    public Optional<Path> materialize(String path, Path targetDirectory) throws IOException {
+        if (targetDirectory == null) {
+            return Optional.empty();
+        }
+        String base = normalize(path);
+        Map<String, Entry> snapshot = entries();
+        boolean baseIsDirectory = base.isEmpty()
+                || (snapshot.get(base) != null && snapshot.get(base).directory);
+        if (!baseIsDirectory) {
+            // 具体文件：直接复制，保留相对目录结构
+            try (InputStream input = openRead(base)) {
+                Path target = targetDirectory.resolve(base).getParent();
+                if (target != null) {
+                    Files.createDirectories(target);
+                }
+                Path file = targetDirectory.resolve(base.isEmpty() ? "_" : base);
+                Files.copy(input, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                markExecutableIfScript(file);
+            }
+            return Optional.of(targetDirectory.resolve(base.isEmpty() ? "_" : base));
+        }
+
+        Files.createDirectories(targetDirectory);
+        for (Entry entry : snapshot.values()) {
+            String relative = relative(base, entry.path);
+            if (relative.isEmpty()) continue;
+            if (entry.directory) {
+                Files.createDirectories(targetDirectory.resolve(relative));
+            } else {
+                // 目录内文件：从索引路径读，而不是拼接 prefix（相对路径已剥离基路径）
+                try (InputStream input = openRead(entry.path)) {
+                    Path file = targetDirectory.resolve(relative);
+                    Path parent = file.getParent();
+                    if (parent != null) {
+                        Files.createDirectories(parent);
+                    }
+                    Files.copy(input, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    markExecutableIfScript(file);
+                }
+            }
+        }
+        return Optional.of(targetDirectory);
+    }
+
+    /**
+     * 获取来源内容指纹：jar 协议按 basePath 下条目聚合（条目数+总大小+最新时间
+     * + jar 名），其余按索引条目聚合。
+     *
+     * <p>不用 manifest hash：技能包升级时 manifest 可能不变而资源已变；
+ * 条目聚合对内容变化敏感且无 NPE 风险。仅在缓存未命中时调用，成本可接受。</p>
+     *
+     * @return 内容指纹
+     */
+    @Override
+    public String getFingerprint() {
+        try {
+            Enumeration<URL> resources = ResourceUtil.getResources(classLoader, basePath);
+            while (resources.hasMoreElements()) {
+                URL url = resources.nextElement();
+                if (!"jar".equals(url.getProtocol())) continue;
+                try {
+                    URLConnection connection = url.openConnection();
+                    if (connection instanceof JarURLConnection) {
+                        JarFile jar = ((JarURLConnection) connection).getJarFile();
+                        int count = 0;
+                        long totalSize = 0;
+                        long latestTime = -1;
+                        Enumeration<JarEntry> jarEntries = jar.entries();
+                        while (jarEntries.hasMoreElements()) {
+                            JarEntry jarEntry = jarEntries.nextElement();
+                            if (!jarEntry.getName().startsWith(basePath)) continue;
+                            count++;
+                            long size = jarEntry.getSize();
+                            if (size > 0) totalSize += size;
+                            long time = jarEntry.getTime();
+                            if (time > latestTime) latestTime = time;
+                        }
+                        return "jar:" + jar.getName() + ":" + count + ":" + totalSize + ":" + latestTime;
+                    }
+                } catch (IOException ignored) {
+                    // jar 指纹不可用时退回索引聚合指纹
+                }
+            }
+        } catch (IOException ignored) {
+            // 枚举失败时退回索引聚合指纹
+        }
+        return indexFingerprint();
+    }
+
+    /**
+     * 基于索引条目聚合的指纹：条目数 + 总大小 + 最大修改时间。
+     *
+     * @return 索引指纹；索引不可用时为位置标识
+     */
+    private String indexFingerprint() {
+        try {
+            Map<String, Entry> snapshot = entries();
+            long totalSize = 0;
+            Instant latest = null;
+            for (Entry entry : snapshot.values()) {
+                if (entry.directory) continue;
+                totalSize += Math.max(entry.size, 0);
+                if (entry.modified != null && (latest == null || entry.modified.isAfter(latest))) {
+                    latest = entry.modified;
+                }
+            }
+            return "idx:" + snapshot.size() + ":" + totalSize + ":" + (latest == null ? "-" : latest);
+        } catch (IOException e) {
+            return getLocation();
+        }
+    }
+
+    /**
+     * POSIX 文件系统下为 shell 脚本后缀补可执行位。
+     *
+     * @param file 待标记的文件
+     */
+    private static void markExecutableIfScript(Path file) {
+        String name = file.getFileName().toString();
+        int dot = name.lastIndexOf('.');
+        String suffix = dot < 0 ? "" : name.substring(dot + 1).toLowerCase();
+        if (!("sh".equals(suffix) || "bash".equals(suffix) || "command".equals(suffix))) {
+            return;
+        }
+        try {
+            java.util.Set<PosixFilePermission> permissions = Files.getPosixFilePermissions(file);
+            permissions.add(PosixFilePermission.OWNER_EXECUTE);
+            permissions.add(PosixFilePermission.GROUP_EXECUTE);
+            permissions.add(PosixFilePermission.OTHERS_EXECUTE);
+            Files.setPosixFilePermissions(file, permissions);
+        } catch (UnsupportedOperationException | IOException ignored) {
+            // 非 POSIX 文件系统（如 Windows/ FAT）无此概念，跳过
+        }
+    }
+
+    /**
      * 获取缓存的资源索引，必要时扫描类路径并建立索引。
      *
      * @return 路径到条目的映射
@@ -330,7 +481,10 @@ public final class ClasspathMountSource implements MountSource {
                     String name = jarEntry.getName();
                     if (!name.startsWith(basePath)) continue;
                     String relative = name.substring(basePath.length());
-                    addEntry(relative, jarEntry.isDirectory(), jarEntry.getSize(), result);
+                    long jarTime = jarEntry.getTime();
+                    Instant modified = jarTime < 0 ? null : Instant.ofEpochMilli(jarTime);
+                    addEntry(relative, jarEntry.isDirectory(), jarEntry.getSize(),
+                            modified, result);
                 }
             }
         }
@@ -352,7 +506,8 @@ public final class ClasspathMountSource implements MountSource {
                     addEntry(relative, true, -1, result);
                     scanDirectory(root, child, result);
                 } else {
-                    addEntry(relative, false, Files.size(child), result);
+                    addEntry(relative, false, Files.size(child),
+                            Files.getLastModifiedTime(child).toInstant(), result);
                 }
             }
         }
@@ -394,6 +549,20 @@ public final class ClasspathMountSource implements MountSource {
      * @param result 待填充的索引
      */
     private void addEntry(String path, boolean directory, long size, Map<String, Entry> result) {
+        addEntry(path, directory, size, null, result);
+    }
+
+    /**
+     * 添加资源条目及缺失的父目录条目。
+     *
+     * @param path 相对资源路径
+     * @param directory 是否为目录
+     * @param size 资源大小
+     * @param modified 修改时间
+     * @param result 待填充的索引
+     */
+    private void addEntry(String path, boolean directory, long size, Instant modified,
+                          Map<String, Entry> result) {
         String normalized = normalize(path);
         if (normalized.isEmpty()) return;
         String[] parts = normalized.split("/");
@@ -401,7 +570,7 @@ public final class ClasspathMountSource implements MountSource {
             String parent = join(parts, i);
             result.putIfAbsent(parent, Entry.directory(parent));
         }
-        result.put(normalized, new Entry(normalized, directory, size, null));
+        result.put(normalized, new Entry(normalized, directory, size, modified));
     }
 
     /**

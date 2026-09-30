@@ -87,14 +87,4 @@ public final class MountCapabilities {
     public boolean isLocalPathAccessible() { return localPathAccessible; }
     /** @return 是否可物化 */
     public boolean isMaterializable() { return materializable; }
-
-    /**
-     * 创建仅支持读取和搜索的虚拟挂载能力配置。
-     *
-     * @return 只读虚拟挂载能力配置
-     */
-    public static MountCapabilities readOnlyVirtual() {
-        return new MountCapabilities(true, false, true, false, false, false,
-                false, false, false, false);
-    }
 }

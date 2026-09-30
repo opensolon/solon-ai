@@ -26,6 +26,7 @@ import org.noear.solon.ai.sandbox.config.FilesystemConfig;
 import org.noear.solon.ai.sandbox.config.NetworkConfig;
 import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
 import org.noear.solon.ai.talents.mount.*;
+import org.noear.solon.ai.talents.mount.source.MountEntry;
 import org.noear.solon.ai.talents.mount.source.MountSource;
 import org.noear.solon.ai.talents.mount.source.FindOptions;
 import org.noear.solon.ai.talents.mount.source.WriteOptions;
@@ -120,6 +121,12 @@ public class TerminalTalent extends AbsTalent {
      * 读取后的预热钩子：入参为文件绝对路径。实现方须自行异步化，不得阻塞读取返回。
      */
     private Consumer<Path> fileWarmupHook;
+
+    /**
+     * 虚拟来源的物化执行缓存；workDir 缺失（极端测试场景）时为 null，
+     * 此时 translateCommandToEnv 的物化分支自动退化为“保持原样”。
+     */
+    private final MountMaterializer materializer;
 
     private final Set<String> ignoreDirs = new HashSet<>(Arrays.asList(
             ".soloncode", ".claude", ".opencode",
@@ -447,6 +454,19 @@ public class TerminalTalent extends AbsTalent {
 
         this.support = new TerminalSupport(mountManager, ignoreDirs, shellMode);
         this.support.setMaxCharacterLimit(this.maxCharacterLimit);
+
+        // 虚拟来源（classpath 等）的物化执行缓存：放在 workDir/.soloncode/mcache 下。
+        // 在 workDir 内的好处：① OS 沙盒白名单天然覆盖（buildDynamicFilesystemConfig 已把 workDir
+        // 加入读写白名单），无需额外配置；② 生命周期与工作区一致。
+        // 文件工具侧由 MATERIALIZE_CACHE_DIR 的 mandatoryDeny 拦截读写，glob/grep 由
+        // ignoreDirs 的 ".soloncode" 跳过，不会扫描到缓存副本。
+        String workDir = mountManager.getWorkDir();
+        if (workDir != null) {
+            this.materializer = new MountMaterializer(Paths.get(workDir).resolve(TerminalSupport.MATERIALIZE_CACHE_DIR));
+            this.support.setMaterializer(this.materializer);
+        } else {
+            this.materializer = null;
+        }
         // python/node 探测延迟到首次使用时（惰性），
         // 确保用户在运行期间新安装的运行时也能被识别（配合实时 PATH 注入）
     }
@@ -577,6 +597,10 @@ public class TerminalTalent extends AbsTalent {
         boolean hasLocalMount = mountManager.getMounts().stream()
                 .anyMatch(m -> m.isEnabled() && m.isVisible() && m.getType() != MountType.AGENTS
                         && TerminalSupport.shellLocalRoot(m.getSource()).isPresent());
+        boolean hasMaterializableMount = mountManager.getMounts().stream()
+                .anyMatch(m -> m.isEnabled() && m.isVisible() && m.getType() != MountType.AGENTS
+                        && !TerminalSupport.shellLocalRoot(m.getSource()).isPresent()
+                        && m.getSource().capabilities().isMaterializable());
 
         sb.append("- **路径规则**: \n");
         sb.append("  - **工作区（默认作用域）**").append(workspaceNameHint()).append(": 你的主目录，支持读写。所有文件查找（ls/glob/grep/read）与路径解析默认都以工作区为根，使用相对路径访问（如 `src/app.java`）。\n");
@@ -601,6 +625,11 @@ public class TerminalTalent extends AbsTalent {
                     sb.append(" writeable=\"").append(mount.isWriteable()).append("\"");
                     if (TerminalSupport.shellLocalRoot(mount.getSource()).isPresent()) {
                         sb.append(" shell=\"true\" env=\"").append(support.getEnvPlaceholder(support.toMountEnvKey(mount.getAlias()))).append("\"");
+                    } else if (mount.getSource().capabilities().isMaterializable()) {
+                        // 物化执行：虚拟来源（classpath 等受信来源）引用时会自动落地到本地缓存再执行，
+                        // 模型侧仍直接写 @alias 逻辑路径，与 shell=true 用法一致（可 cd、可作脚本路径）。
+                        sb.append(" shell=\"materialized\" scheme=\"").append(mount.getSource().getScheme())
+                          .append("\" env=\"").append(support.getEnvPlaceholder(support.toMountEnvKey(mount.getAlias()))).append("\"");
                     } else {
                         sb.append(" shell=\"false\" scheme=\"").append(mount.getSource().getScheme()).append("\"");
                     }
@@ -638,14 +667,14 @@ public class TerminalTalent extends AbsTalent {
         }
 
         if (sandboxEnabled) {
-            if (hasLocalMount) {
-                sb.append("- **命令执行**: 在 `bash` 中，本地挂载可使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换；非本地来源只能使用文件工具。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：`ls /users/`）。\n");
+            if (hasLocalMount || hasMaterializableMount) {
+                sb.append("- **命令执行**: 在 `bash` 中，本地挂载与可物化挂载（shell=\"true\" 或 \"materialized\"）均可使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换（物化挂载首次引用时会自动落地到本地缓存后执行）；其余虚拟来源只能使用文件工具。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：`ls /users/`）。\n");
             } else {
                 sb.append("- **命令执行**: 在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。\n");
             }
         } else {
-            if (hasLocalMount) {
-                sb.append("- **命令执行**: 在 `bash` 中，本地挂载可使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换；非本地来源只能使用文件工具。也支持绝对路径访问。\n");
+            if (hasLocalMount || hasMaterializableMount) {
+                sb.append("- **命令执行**: 在 `bash` 中，本地挂载与可物化挂载（shell=\"true\" 或 \"materialized\"）均可使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换（物化挂载首次引用时会自动落地到本地缓存后执行）；其余虚拟来源只能使用文件工具。也支持绝对路径访问。\n");
             } else {
                 sb.append("- **命令执行**: 在 `bash` 中支持绝对路径访问。\n");
             }

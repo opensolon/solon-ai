@@ -2,7 +2,7 @@ package features.ai.talents.mount;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.noear.solon.ai.talents.mount.MountEntry;
+import org.noear.solon.ai.talents.mount.source.MountEntry;
 import org.noear.solon.ai.talents.mount.source.FileMountSource;
 import org.noear.solon.ai.talents.mount.source.FindOptions;
 import org.noear.solon.ai.talents.mount.source.MoveOptions;
@@ -299,6 +299,21 @@ public class FileMountSourceTest {
         assertTrue(source.capabilities().isWritable());
         assertTrue(source.capabilities().isLocalPathAccessible());
         assertTrue(source.capabilities().isShellAccessible());
+    }
+
+    @Test
+    public void localFileSourceIsNotMaterializable() {
+        // 本地来源 shell 可达，物化分支对它是死代码；能力位与实现保持一致——
+        // 声明可物化却不实现 materialize() 的来源会得到半吊子流程
+        FileMountSource source = FileMountSource.of(newSourceDirQuiet("cap-root"));
+        assertFalse(source.capabilities().isMaterializable());
+    }
+
+    @Test
+    public void defaultMaterializeStaysEmptyForLocalSource() throws Exception {
+        // MountSource#materialize 的接口默认实现返回空：即使被误调用也不产生副作用
+        FileMountSource source = FileMountSource.of(newSourceDirQuiet("mat-root"));
+        assertFalse(source.materialize("", java.nio.file.Paths.get("no-such-dir")).isPresent());
     }
 
     private static boolean isWindows() {

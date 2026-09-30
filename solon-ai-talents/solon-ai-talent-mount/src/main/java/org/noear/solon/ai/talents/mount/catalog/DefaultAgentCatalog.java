@@ -17,6 +17,7 @@ package org.noear.solon.ai.talents.mount.catalog;
 
 import org.noear.solon.ai.talents.mount.*;
 import org.noear.solon.ai.talents.mount.source.FindOptions;
+import org.noear.solon.ai.talents.mount.source.MountEntry;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
