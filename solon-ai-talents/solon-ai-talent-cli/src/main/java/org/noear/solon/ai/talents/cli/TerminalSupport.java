@@ -74,6 +74,8 @@ public class TerminalSupport {
     private final ShellMode shellMode;
     /** 可物化虚拟来源的执行缓存；null 表示未启用物化（如测试里只构造 support 时）。 */
     private volatile MountMaterializer materializer;
+    /** 与物化器一致的绝对缓存根，用于文件工具层的路径拒绝。 */
+    private volatile Path materializeCacheRoot;
 
     TerminalSupport(MountManager mountManager, Set<String> ignoreDirs, ShellMode shellMode) {
         this.mountManager = mountManager;
@@ -88,6 +90,7 @@ public class TerminalSupport {
      */
     void setMaterializer(MountMaterializer materializer) {
         this.materializer = materializer;
+        this.materializeCacheRoot = materializer == null ? null : materializer.getCacheRoot();
     }
 
     String normalizeNewlines(String context, String text) {
@@ -894,8 +897,10 @@ public class TerminalSupport {
         if (p.isAbsolute()) {
             // 【沙盒模式】拦截绝对路径
             if (sandboxEnabled) {
-                // sandboxAllowUserHome=true 且原始输入以 /Users/noear 开头 → 放行
-                if (!(sandboxAllowUserHome && pStr.startsWith("~"))) {
+                // 用户目录仅允许通过 ~ 访问；物化缓存是系统内部路径，先放行到统一
+                // mandatory deny 检查，避免因缓存位于用户目录而无法完成安全拒绝。
+                if (!(sandboxAllowUserHome && pStr.startsWith("~"))
+                        && !isMaterializeCachePath(p.normalize())) {
                     throw new SecurityException("权限拒绝：沙盒模式下禁止使用绝对路径。");
                 }
             }
@@ -935,19 +940,13 @@ public class TerminalSupport {
     }
 
     /**
-     * 文件系统策略校验：在沙盒模式下按相对策略根的路径判定 mandatoryDeny / denyRead / allowWrite。
-     *
-     * <p>判定顺序：
-     * <ol>
-     *   <li>mandatoryDeny：始终拦截受保护路径（.bashrc/.vscode 等），与 fsConfig 是否为 null 无关；</li>
-     *   <li>denyRead：命中 denyRead 且未命中 allowRead 白名单 → 拒绝；</li>
-     *   <li>allowWrite：仅写模式，配置了白名单时必须命中，否则拒绝。</li>
-     * </ol>
-     * relPath 基于符号链接 resolve 后的真实路径计算，确保 symlink 指向受保护文件时也能拦截。</p>
+     * 文件系统策略校验：物化缓存属于文件工具自身的保护边界，
+     * 不因 OS 沙盒开关关闭而失效；其它 mandatory deny 和 allow/deny 配置只在沙盒模式下生效。
+     * relPath 基于符号链接 resolve 后的真实路径计算，确保 symlink 指向受保护文件时也能拦截。
      */
     private void enforceFilesystemPolicy(Path policyRoot, Path target, boolean writeMode, boolean sandboxEnabled, FilesystemConfig fs) {
-        if (!sandboxEnabled) {
-            return;
+        if (isMaterializeCachePath(target)) {
+            throw new SecurityException("权限拒绝：路径受保护（物化缓存）");
         }
         String rel = toPolicyRelative(policyRoot, target);
         if (isMandatoryDenyRelativePath(rel)) {
@@ -1030,6 +1029,9 @@ public class TerminalSupport {
         if (isSandboxBoundaryDenied(policyRoot, target, sandboxEnabled)) {
             return true;
         }
+        if (isMaterializeCachePath(target)) {
+            return true;
+        }
         if (!sandboxEnabled) {
             return false;
         }
@@ -1072,14 +1074,53 @@ public class TerminalSupport {
 
 
     /**
-     * 物化缓存目录（相对工作区）：存放 Classpath 等虚拟来源落地后的执行快照。
-     *
-     * <p>对文件工具强制拒绝读写：已物化的内容是受信来源的快照，若允许模型侧
-     * 写入或替换，会在下次命令执行时形成 TOCTOU 攻击面（先改脚本、再由
-     * translateCommandToEnv 以“受信”名义执行）。bash 执行不受此清单约束，
-     * 物化目录通过 OS 沙盒的 workDir 白名单可读可执行。</p>
+     * 用户级物化缓存目录（相对 user.home）：存放 Classpath 等虚拟来源落地后的执行快照。
+     * 缓存跨工作区复用且不随 Talent 生命周期删除。
      */
-    static final String MATERIALIZE_CACHE_DIR = ".soloncode/mcache";
+    static final String MATERIALIZE_CACHE_DIR = ".soloncode/cache/mount";
+
+    /**
+     * 解析默认用户级缓存根；user.home 不可用时回退到工作区，确保脚本执行能力不静默失效。
+     */
+    static Path defaultMaterializeCacheRoot(String workDir) {
+        String userHome = System.getProperty("user.home");
+        if (Assert.isNotEmpty(userHome)) {
+            return Paths.get(userHome).resolve(MATERIALIZE_CACHE_DIR).toAbsolutePath().normalize();
+        }
+        if (Assert.isNotEmpty(workDir)) {
+            return Paths.get(workDir).resolve(MATERIALIZE_CACHE_DIR).toAbsolutePath().normalize();
+        }
+        return null;
+    }
+
+    /**
+     * 判断文件工具目标是否落在当前物化缓存内。使用规范化绝对路径，避免用户级缓存
+     * 因工作区不同而无法通过旧的相对 mandatory deny 规则拦截。
+     */
+    private boolean isMaterializeCachePath(Path target) {
+        Path cacheRoot = materializeCacheRoot;
+        if (cacheRoot == null || target == null) {
+            return false;
+        }
+        Path normalizedRoot = cacheRoot.toAbsolutePath().normalize();
+        Path normalizedTarget = target.toAbsolutePath().normalize();
+        try {
+            if (Files.exists(normalizedRoot)) {
+                normalizedRoot = normalizedRoot.toRealPath();
+            }
+            Path realTarget;
+            if (Files.exists(normalizedTarget)) {
+                realTarget = normalizedTarget.toRealPath();
+            } else {
+                Path ancestor = resolveExistingAncestorIncludingSelf(normalizedTarget);
+                Path relative = ancestor.relativize(normalizedTarget);
+                realTarget = ancestor.toRealPath().resolve(relative).normalize();
+            }
+            return realTarget.equals(normalizedRoot) || realTarget.startsWith(normalizedRoot);
+        } catch (IOException | RuntimeException ignored) {
+            return normalizedTarget.equals(normalizedRoot) || normalizedTarget.startsWith(normalizedRoot);
+        }
+    }
 
     // mandatory deny files (same as dangerous files + cli-specific paths)
     // 注：mcache 同时登记到 files 与 dirs——dir 分支覆盖“正好等于”与“以下子路径”，
@@ -1179,10 +1220,15 @@ public class TerminalSupport {
                     && result.contains(mount.getAlias())) {
                 // 虚拟来源（classpath / 未来 jdbc）的物化执行：命令引用了别名时按需落地到本地缓存，
                 // 之后与 shellAccessible 来源走完全相同的 env 注入 + 占位符替换路径。
-                // 不可物化、物化失败（IO 异常）都返回空——保持命令原样，bash 会报
-                // “No such file or directory”，与未接入物化之前的行为一致。
-                localRoot = materializer == null
-                        ? null : materializer.ensureMaterialized(mount).orElse(null);
+                // 已注册的可物化挂载一旦物化失败必须直接失败，不能把原始 @alias 命令交给 shell，
+                // 否则可能误执行工作区内同名路径，也会把真正的 IO/缓存错误伪装成路径不存在。
+                if (materializer == null) {
+                    throw new MountMaterializer.MaterializationException(
+                            "物化缓存未配置，无法执行挂载 " + mount.getAlias(), null);
+                }
+                localRoot = materializer.ensureMaterialized(mount).orElseThrow(() ->
+                        new MountMaterializer.MaterializationException(
+                                "挂载未生成物化目录 " + mount.getAlias(), null));
             }
             if (mount.isEnabled() && localRoot != null) {
                 String alias = mount.getAlias(); // 例如 @pool1

@@ -21,6 +21,8 @@ import org.noear.solon.lang.Preview;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.net.JarURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
@@ -32,6 +34,7 @@ import java.nio.file.Paths;
 import java.nio.file.attribute.PosixFilePermission;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
@@ -212,9 +215,11 @@ public final class ClasspathMountSource implements MountSource {
             if (actual.isFilesOnly() && entry.directory || actual.isDirectoriesOnly() && !entry.directory) continue;
             if (actual.getGlob() != null && !globMatches(actual.getGlob(), relative)) continue;
             result.add(entry.toMountEntry());
-            if (result.size() >= actual.getMaxEntries()) break;
         }
         result.sort(Comparator.comparing(MountEntry::getPath));
+        if (result.size() > actual.getMaxEntries()) {
+            return new ArrayList<>(result.subList(0, actual.getMaxEntries()));
+        }
         return result;
     }
 
@@ -344,71 +349,74 @@ public final class ClasspathMountSource implements MountSource {
     }
 
     /**
-     * 获取来源内容指纹：jar 协议按 basePath 下条目聚合（条目数+总大小+最新时间
-     * + jar 名），其余按索引条目聚合。
-     *
-     * <p>不用 manifest hash：技能包升级时 manifest 可能不变而资源已变；
- * 条目聚合对内容变化敏感且无 NPE 风险。仅在缓存未命中时调用，成本可接受。</p>
+     * 获取来源内容指纹。指纹覆盖全部 classpath 资源、规范化条目路径和实际文件内容，
+     * 避免同大小/同时间内容替换以及只处理第一个 jar 导致的陈旧缓存。每次计算都会重新
+     * 建立索引，使目录型 classpath 的新增、删除和修改无需依赖调用方显式 refresh。
      *
      * @return 内容指纹
+     * @throws IllegalStateException 资源扫描或读取失败时拒绝使用不可靠的缓存键
      */
     @Override
     public String getFingerprint() {
         try {
+            Map<String, Entry> snapshot = rescanEntries();
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            updateDigest(digest, getScheme());
+            updateDigest(digest, basePath);
+
+            List<String> locations = new ArrayList<>();
             Enumeration<URL> resources = ResourceUtil.getResources(classLoader, basePath);
             while (resources.hasMoreElements()) {
-                URL url = resources.nextElement();
-                if (!"jar".equals(url.getProtocol())) continue;
-                try {
-                    URLConnection connection = url.openConnection();
-                    if (connection instanceof JarURLConnection) {
-                        JarFile jar = ((JarURLConnection) connection).getJarFile();
-                        int count = 0;
-                        long totalSize = 0;
-                        long latestTime = -1;
-                        Enumeration<JarEntry> jarEntries = jar.entries();
-                        while (jarEntries.hasMoreElements()) {
-                            JarEntry jarEntry = jarEntries.nextElement();
-                            if (!jarEntry.getName().startsWith(basePath)) continue;
-                            count++;
-                            long size = jarEntry.getSize();
-                            if (size > 0) totalSize += size;
-                            long time = jarEntry.getTime();
-                            if (time > latestTime) latestTime = time;
-                        }
-                        return "jar:" + jar.getName() + ":" + count + ":" + totalSize + ":" + latestTime;
+                locations.add(resources.nextElement().toExternalForm());
+            }
+            Collections.sort(locations);
+            for (String location : locations) updateDigest(digest, "source:" + location);
+
+            List<String> paths = new ArrayList<>(snapshot.keySet());
+            Collections.sort(paths);
+            byte[] buffer = new byte[8192];
+            for (String path : paths) {
+                Entry entry = snapshot.get(path);
+                updateDigest(digest, (entry.directory ? "dir:" : "file:") + path);
+                if (entry.directory) continue;
+                try (InputStream input = openRead(path)) {
+                    int count;
+                    while ((count = input.read(buffer)) != -1) {
+                        digest.update(buffer, 0, count);
                     }
-                } catch (IOException ignored) {
-                    // jar 指纹不可用时退回索引聚合指纹
                 }
             }
-        } catch (IOException ignored) {
-            // 枚举失败时退回索引聚合指纹
+            return "sha256:" + toHex(digest.digest());
+        } catch (IOException | NoSuchAlgorithmException e) {
+            // 不可退回位置标识：持久缓存可能已经命中同键旧脚本，必须拒绝执行。
+            throw new IllegalStateException("Cannot fingerprint classpath mount: " + basePath, e);
         }
-        return indexFingerprint();
     }
 
-    /**
-     * 基于索引条目聚合的指纹：条目数 + 总大小 + 最大修改时间。
-     *
-     * @return 索引指纹；索引不可用时为位置标识
-     */
-    private String indexFingerprint() {
-        try {
-            Map<String, Entry> snapshot = entries();
-            long totalSize = 0;
-            Instant latest = null;
-            for (Entry entry : snapshot.values()) {
-                if (entry.directory) continue;
-                totalSize += Math.max(entry.size, 0);
-                if (entry.modified != null && (latest == null || entry.modified.isAfter(latest))) {
-                    latest = entry.modified;
-                }
-            }
-            return "idx:" + snapshot.size() + ":" + totalSize + ":" + (latest == null ? "-" : latest);
-        } catch (IOException e) {
-            return getLocation();
+    private Map<String, Entry> rescanEntries() throws IOException {
+        Map<String, Entry> result = new LinkedHashMap<>();
+        Enumeration<URL> resources = ResourceUtil.getResources(classLoader, basePath);
+        while (resources.hasMoreElements()) {
+            scanUrl(resources.nextElement(), result);
         }
+        scanIndex(result, basePath + "index");
+        index = result;
+        return result;
+    }
+
+    private static void updateDigest(MessageDigest digest, String value) {
+        byte[] bytes = value == null ? new byte[0] : value.getBytes(StandardCharsets.UTF_8);
+        digest.update(bytes);
+        digest.update((byte) 0);
+    }
+
+    private static String toHex(byte[] bytes) {
+        StringBuilder result = new StringBuilder(bytes.length * 2);
+        for (byte value : bytes) {
+            result.append(Character.forDigit((value >>> 4) & 0xF, 16));
+            result.append(Character.forDigit(value & 0xF, 16));
+        }
+        return result.toString();
     }
 
     /**
@@ -570,7 +578,10 @@ public final class ClasspathMountSource implements MountSource {
             String parent = join(parts, i);
             result.putIfAbsent(parent, Entry.directory(parent));
         }
-        result.put(normalized, new Entry(normalized, directory, size, modified));
+        // ClassLoader.getResourceAsStream() follows first-resource-wins semantics for
+        // duplicate paths; keep the same source in the index instead of letting a later
+        // classpath root overwrite the entry metadata.
+        result.putIfAbsent(normalized, new Entry(normalized, directory, size, modified));
     }
 
     /**

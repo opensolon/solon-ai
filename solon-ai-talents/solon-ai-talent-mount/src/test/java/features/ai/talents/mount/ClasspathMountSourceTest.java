@@ -363,7 +363,50 @@ public class ClasspathMountSourceTest {
     }
 
     @Test
-    public void jarFingerprintShouldUseJarIdentity(@TempDir Path temp) throws Exception {
+    public void duplicateClasspathResourcesFollowClassLoaderFirstResource(@TempDir Path temp) throws Exception {
+        Path jarA = temp.resolve("first.jar");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jarA))) {
+            zip.putNextEntry(new ZipEntry("duplicate-skills/"));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("duplicate-skills/tool.sh"));
+            zip.write("first".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+        Path jarB = temp.resolve("second.jar");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jarB))) {
+            zip.putNextEntry(new ZipEntry("duplicate-skills/"));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("duplicate-skills/tool.sh"));
+            zip.write("second".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+
+        try (URLClassLoader loader = new URLClassLoader(new URL[]{
+                jarA.toUri().toURL(), jarB.toUri().toURL()}, null)) {
+            ClasspathMountSource source = ClasspathMountSource.of(loader, "duplicate-skills");
+            assertEquals("first", readText(source.openRead("tool.sh")));
+            Path materialized = source.materialize("", temp.resolve("duplicate-out")).get();
+            assertEquals("first", new String(Files.readAllBytes(materialized.resolve("tool.sh")),
+                    StandardCharsets.UTF_8));
+        }
+    }
+
+    @Test
+    public void directoryFingerprintDetectsSameSizeContentChangeWithoutRefresh(@TempDir Path temp) throws Exception {
+        Path root = Files.createDirectories(temp.resolve("live-skills"));
+        Path file = root.resolve("run.sh");
+        Files.write(file, "AA".getBytes(StandardCharsets.UTF_8));
+        try (URLClassLoader loader = new URLClassLoader(new URL[]{temp.toUri().toURL()}, null)) {
+            ClasspathMountSource source = ClasspathMountSource.of(loader, "live-skills");
+            String first = source.getFingerprint();
+            Files.write(file, "BB".getBytes(StandardCharsets.UTF_8));
+            String second = source.getFingerprint();
+            assertNotEquals(first, second, "同大小内容变化也必须失效缓存");
+        }
+    }
+
+    @Test
+    public void jarFingerprintShouldUseContentDigest(@TempDir Path temp) throws Exception {
         Path jar = temp.resolve("identity.jar");
         try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jar))) {
             zip.putNextEntry(new ZipEntry("id-skills/"));
@@ -374,8 +417,9 @@ public class ClasspathMountSourceTest {
         }
         try (URLClassLoader loader = new URLClassLoader(new URL[]{jar.toUri().toURL()}, null)) {
             String fp = ClasspathMountSource.of(loader, "id-skills").getFingerprint();
-            // jar 协议下指纹应携带 jar 标识（而非索引聚合形态）
-            assertTrue(fp.startsWith("jar:"), fp);
+            // 指纹为内容摘要；jar URL 身份已参与摘要输入，而不是暴露路径格式。
+            assertTrue(fp.startsWith("sha256:"), fp);
+            assertEquals(71, fp.length(), fp);
         }
     }
 

@@ -123,8 +123,8 @@ public class TerminalTalent extends AbsTalent {
     private Consumer<Path> fileWarmupHook;
 
     /**
-     * 虚拟来源的物化执行缓存；workDir 缺失（极端测试场景）时为 null，
-     * 此时 translateCommandToEnv 的物化分支自动退化为“保持原样”。
+     * 虚拟来源的物化执行缓存；默认位于用户级 ~/.soloncode/cache/mount，
+     * 测试或特殊部署可通过包内构造器注入其它缓存根。
      */
     private final MountMaterializer materializer;
 
@@ -282,7 +282,14 @@ public class TerminalTalent extends AbsTalent {
                     SandboxManager.initialize(cfg, null);
                 }
             } catch (Exception e) {
-                SandboxLog.debug("Auto sandbox init failed, running without OS sandbox: " + e.getMessage());
+                // sandboxSystemRestrict 是显式的强制安全选项，初始化失败不能降级成裸执行。
+                // initialize() 可能已写入部分全局状态，失败后先复位，允许后续显式重试。
+                try {
+                    SandboxManager.reset();
+                } catch (Exception ignored) {
+                    // 保留原始初始化异常作为工具错误返回
+                }
+                throw new IllegalStateException("OS sandbox initialization failed", e);
             } finally {
                 sandboxInitLock.unlock();
             }
@@ -344,7 +351,17 @@ public class TerminalTalent extends AbsTalent {
             allowRead.add(workDir);
         }
 
-        // 2) 所有挂载点：凡是 shell 可达的来源（声明了 shellAccessible 且有本地根路径，不限于 FileMountSource），
+        // 2) 用户级物化缓存：bash 需要读取/执行其中的脚本；启用 OS 级沙盒时禁止命令写入。
+        // 即使 user.home 整体被 allowWrite 放行，也通过 denyWrite 保持缓存只读。未启用 OS 沙盒时，
+        // MountMaterializer 的 manifest 会在下一次缓存命中时检测并修复普通文件改动。
+        List<String> denyWrite = new ArrayList<>();
+        if (materializer != null) {
+            String cacheRoot = materializer.getCacheRoot().toString();
+            allowRead.add(cacheRoot);
+            denyWrite.add(cacheRoot);
+        }
+
+        // 3) 所有挂载点：凡是 shell 可达的来源（声明了 shellAccessible 且有本地根路径，不限于 FileMountSource），
         //    按可写性加入对应列表（无需 /** 后缀，startsWith 匹配覆盖子路径）。纯虚拟来源（Classpath / JDBC 等）
         //    或未开放 shell 的来源不参与 OS 沙盒白名单——文件工具走 MountSource.openRead，本就不依赖 OS 白名单。
         //    注意：这里按 enabled 判定而非 visible——isVisible 只是展示元数据，隐藏挂载（如内置 @harness）
@@ -363,9 +380,9 @@ public class TerminalTalent extends AbsTalent {
             }
         }
 
-        // 3) 用户主目录：当启用 sandboxAllowUserHome 时加入读写白名单
+        // 4) 用户主目录：当启用 sandboxAllowUserHome 时加入读写白名单
         //    解决 agent-browser（npx ~/.npm/_npx）、npm 缓存（~/.npm/_cacache）
-        //    等工具需要在用户主目录下读写的问题。
+        //    等工具需要在用户主目录下读写的问题；物化缓存仍受 denyWrite 保护。
         if (sandboxAllowUserHome) {
             String userHome = System.getProperty("user.home");
             if (userHome != null && !userHome.isEmpty()) {
@@ -378,7 +395,7 @@ public class TerminalTalent extends AbsTalent {
                 null,                           // denyRead
                 allowRead.isEmpty() ? null : allowRead,
                 allowWrite.isEmpty() ? null : allowWrite,
-                null,                           // denyWrite
+                denyWrite.isEmpty() ? null : denyWrite,
                 true                            // allowGitConfig — 构建工具（Maven git-commit-id-plugin、Gradle git 插件等）需要读取 .git/config
         );
     }
@@ -435,7 +452,8 @@ public class TerminalTalent extends AbsTalent {
     }
 
     public TerminalTalent(MountManager mountManager) {
-        this(mountManager, ShellCommandFactory.detect());
+        this(mountManager, ShellCommandFactory.detect(),
+                TerminalSupport.defaultMaterializeCacheRoot(mountManager.getWorkDir()));
     }
 
     /**
@@ -443,6 +461,12 @@ public class TerminalTalent extends AbsTalent {
      * 三种方言分别验证，不能只依赖当前宿主机的探测结果）。
      */
     TerminalTalent(MountManager mountManager, ShellCommandFactory shellCommandFactory) {
+        this(mountManager, shellCommandFactory,
+                TerminalSupport.defaultMaterializeCacheRoot(mountManager.getWorkDir()));
+    }
+
+    /** 测试/特殊部署用：显式指定用户级物化缓存根，避免测试污染真实用户目录。 */
+    TerminalTalent(MountManager mountManager, ShellCommandFactory shellCommandFactory, Path cacheRoot) {
         if (shellCommandFactory == null) {
             throw new IllegalArgumentException("shellCommandFactory is required");
         }
@@ -455,14 +479,10 @@ public class TerminalTalent extends AbsTalent {
         this.support = new TerminalSupport(mountManager, ignoreDirs, shellMode);
         this.support.setMaxCharacterLimit(this.maxCharacterLimit);
 
-        // 虚拟来源（classpath 等）的物化执行缓存：放在 workDir/.soloncode/mcache 下。
-        // 在 workDir 内的好处：① OS 沙盒白名单天然覆盖（buildDynamicFilesystemConfig 已把 workDir
-        // 加入读写白名单），无需额外配置；② 生命周期与工作区一致。
-        // 文件工具侧由 MATERIALIZE_CACHE_DIR 的 mandatoryDeny 拦截读写，glob/grep 由
-        // ignoreDirs 的 ".soloncode" 跳过，不会扫描到缓存副本。
-        String workDir = mountManager.getWorkDir();
-        if (workDir != null) {
-            this.materializer = new MountMaterializer(Paths.get(workDir).resolve(TerminalSupport.MATERIALIZE_CACHE_DIR));
+        // 虚拟来源（classpath 等）的物化执行缓存默认放在用户级 ~/.soloncode/cache/mount，
+        // 按 alias/fingerprint 复用，不随工作区和 Talent 生命周期删除。
+        if (cacheRoot != null) {
+            this.materializer = new MountMaterializer(cacheRoot);
             this.support.setMaterializer(this.materializer);
         } else {
             this.materializer = null;
@@ -611,8 +631,8 @@ public class TerminalTalent extends AbsTalent {
 
         // 挂载点清单表格。shell 属性显式声明该挂载是否可在 bash 命令中使用逻辑路径：
         // 本地来源（shell=true）经 translateCommandToEnv 翻译为环境变量占位符后可 cd 可执行；
-        // 虚拟来源（shell=false，如 classpath/jdbc）只对文件工具可见，bash 中引用会得到
-        // “No such file or directory”。env/scheme 保持原有语义（bash 占位符名 / 来源类型）。
+        // 虚拟来源（shell=materialized，如 classpath/jdbc）引用时按需物化到用户级持久缓存后执行，
+        // 物化失败会直接返回错误，不会把原始 @alias 路径交给 shell。env/scheme 保持原有语义。
         if(hasMount) {
             sb.append("\n<mount_list>\n");
             for (Mount mount : mountManager.getMounts()) {
@@ -626,7 +646,7 @@ public class TerminalTalent extends AbsTalent {
                     if (TerminalSupport.shellLocalRoot(mount.getSource()).isPresent()) {
                         sb.append(" shell=\"true\" env=\"").append(support.getEnvPlaceholder(support.toMountEnvKey(mount.getAlias()))).append("\"");
                     } else if (mount.getSource().capabilities().isMaterializable()) {
-                        // 物化执行：虚拟来源（classpath 等受信来源）引用时会自动落地到本地缓存再执行，
+                        // 物化执行：虚拟来源（classpath 等受信来源）引用时会按需落地到用户级持久缓存再执行，
                         // 模型侧仍直接写 @alias 逻辑路径，与 shell=true 用法一致（可 cd、可作脚本路径）。
                         sb.append(" shell=\"materialized\" scheme=\"").append(mount.getSource().getScheme())
                           .append("\" env=\"").append(support.getEnvPlaceholder(support.toMountEnvKey(mount.getAlias()))).append("\"");
@@ -668,13 +688,13 @@ public class TerminalTalent extends AbsTalent {
 
         if (sandboxEnabled) {
             if (hasLocalMount || hasMaterializableMount) {
-                sb.append("- **命令执行**: 在 `bash` 中，本地挂载与可物化挂载（shell=\"true\" 或 \"materialized\"）均可使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换（物化挂载首次引用时会自动落地到本地缓存后执行）；其余虚拟来源只能使用文件工具。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：`ls /users/`）。\n");
+                sb.append("- **命令执行**: 在 `bash` 中，本地挂载与可物化挂载（shell=\"true\" 或 \"materialized\"）均可使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换（物化挂载首次引用时会落地到用户级缓存，后续命令可复用）；其余虚拟来源只能使用文件工具。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：`ls /users/`）。\n");
             } else {
                 sb.append("- **命令执行**: 在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。\n");
             }
         } else {
             if (hasLocalMount || hasMaterializableMount) {
-                sb.append("- **命令执行**: 在 `bash` 中，本地挂载与可物化挂载（shell=\"true\" 或 \"materialized\"）均可使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换（物化挂载首次引用时会自动落地到本地缓存后执行）；其余虚拟来源只能使用文件工具。也支持绝对路径访问。\n");
+                sb.append("- **命令执行**: 在 `bash` 中，本地挂载与可物化挂载（shell=\"true\" 或 \"materialized\"）均可使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换（物化挂载首次引用时会落地到用户级缓存，后续命令可复用）；其余虚拟来源只能使用文件工具。也支持绝对路径访问。\n");
             } else {
                 sb.append("- **命令执行**: 在 `bash` 中支持绝对路径访问。\n");
             }
@@ -928,19 +948,24 @@ public class TerminalTalent extends AbsTalent {
             finalCommand = support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
         } catch (SecurityException ex) {
             return "错误：" + ex.getMessage();
+        } catch (MountMaterializer.MaterializationException ex) {
+            return "错误：" + ex.getMessage();
         }
 
         // OS 级沙盒包装（内核级强制隔离：Seatbelt / bwrap）
-        // 仅当 sandboxSystemRestrict=true 时启用，将安全隔离的重活交给 OS 内核
-        // 关闭后仅保留 Java 层最小自保护（kill PID / exit / rm -rf /），减少误伤
-        ensureSandboxInitialized();
-        if (sandboxEnabled && sandboxSystemRestrict && SandboxManager.isSandboxingEnabled()) {
-            try {
+        // 仅当 sandboxSystemRestrict=true 时启用，将安全隔离的重活交给 OS 内核。
+        // 显式要求强制隔离时，初始化或包装失败必须拒绝执行，不能降级成裸命令。
+        try {
+            ensureSandboxInitialized();
+            if (sandboxEnabled && sandboxSystemRestrict) {
+                if (!SandboxManager.isSandboxingEnabled()) {
+                    return "错误：OS 沙盒未启用，拒绝执行命令";
+                }
                 finalCommand = SandboxManager.wrapWithSandbox(
                         finalCommand, null, buildDynamicCustomConfig());
-            } catch (Exception e) {
-                SandboxLog.debug("Sandbox wrap failed, running without OS sandbox: " + e.getMessage());
             }
+        } catch (Exception e) {
+            return "错误：OS 沙盒不可用，拒绝执行命令: " + e.getMessage();
         }
 
         // 与 bash_start 共用 ShellCommandFactory：Unix 直接 shell -lc 执行；Windows 改走 prepare
@@ -996,19 +1021,24 @@ public class TerminalTalent extends AbsTalent {
             finalCommand = support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
         } catch (SecurityException ex) {
             return "错误：" + ex.getMessage();
+        } catch (MountMaterializer.MaterializationException ex) {
+            return "错误：" + ex.getMessage();
         }
 
         // OS 级沙盒包装（内核级强制隔离：Seatbelt / bwrap）
-        // 仅当 sandboxSystemRestrict=true 时启用，将安全隔离的重活交给 OS 内核
-        // 关闭后仅保留 Java 层最小自保护（kill PID / exit / rm -rf /），减少误伤
-        ensureSandboxInitialized();
-        if (sandboxEnabled && sandboxSystemRestrict && SandboxManager.isSandboxingEnabled()) {
-            try {
+        // 仅当 sandboxSystemRestrict=true 时启用，将安全隔离的重活交给 OS 内核。
+        // 显式要求强制隔离时，初始化或包装失败必须拒绝执行，不能降级成裸命令。
+        try {
+            ensureSandboxInitialized();
+            if (sandboxEnabled && sandboxSystemRestrict) {
+                if (!SandboxManager.isSandboxingEnabled()) {
+                    return "错误：OS 沙盒未启用，拒绝执行命令";
+                }
                 finalCommand = SandboxManager.wrapWithSandbox(
                         finalCommand, null, buildDynamicCustomConfig());
-            } catch (Exception e) {
-                SandboxLog.debug("Sandbox wrap failed, running without OS sandbox: " + e.getMessage());
             }
+        } catch (Exception e) {
+            return "错误：OS 沙盒不可用，拒绝执行命令: " + e.getMessage();
         }
 
         TerminalSessionManager.CommandSnapshot snapshot =
