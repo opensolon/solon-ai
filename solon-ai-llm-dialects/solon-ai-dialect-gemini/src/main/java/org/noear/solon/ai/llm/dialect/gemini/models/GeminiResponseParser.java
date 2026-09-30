@@ -45,7 +45,7 @@ public class GeminiResponseParser {
     /**
      * 解析响应 JSON
      *
-     * @param acc  聊天响应对象
+     * @param ctx  流上下文
      * @param json  响应 JSON 字符串
      * @return 是否有有效的选择
      */
@@ -73,7 +73,7 @@ public class GeminiResponseParser {
     /**
      * 解析流式响应
      *
-     * @param acc 聊天响应对象
+     * @param ctx 流上下文
      * @param json 响应 JSON 字符串
      * @return 是否有有效的选择
      */
