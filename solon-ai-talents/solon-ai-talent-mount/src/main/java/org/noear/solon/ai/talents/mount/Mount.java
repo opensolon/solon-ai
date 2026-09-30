@@ -36,6 +36,7 @@ public final class Mount {
     private final boolean visible;
     private final MountSource source;
 
+    /** 根据构建器创建挂载。 */
     private Mount(Builder builder) {
         this.alias = builder.alias;
         this.description = builder.description;
@@ -47,16 +48,24 @@ public final class Mount {
         this.source = builder.source;
     }
 
+    /** 获取挂载别名。 */
     public String getAlias() { return alias; }
+    /** 获取挂载描述。 */
     public String getDescription() { return description; }
+    /** 获取挂载类型。 */
     public MountType getType() { return type; }
+    /** 是否为主挂载。 */
     public boolean isPrimary() { return primary; }
+    /** 挂载是否启用。 */
     public boolean isEnabled() { return enabled; }
+    /** 挂载是否可写。 */
     public boolean isWriteable() { return writeable; }
     /** 是否在上层展示；不影响挂载的启用、解析和运行时使用。 */
     public boolean isVisible() { return visible; }
+    /** 获取挂载内容来源。 */
     public MountSource getSource() { return source; }
 
+    /** 创建挂载构建器。 */
     public static Builder builder() { return new Builder(); }
 
     public static final class Builder {
@@ -69,14 +78,23 @@ public final class Mount {
         private boolean visible = true;
         private MountSource source;
 
+        /** 设置挂载别名。 */
         public Builder alias(String value) { this.alias = value; return this; }
+        /** 设置挂载描述。 */
         public Builder description(String value) { this.description = value; return this; }
+        /** 设置挂载类型。 */
         public Builder type(MountType value) { this.type = value; return this; }
+        /** 设置是否为主挂载。 */
         public Builder primary(boolean value) { this.primary = value; return this; }
+        /** 设置挂载是否启用。 */
         public Builder enabled(boolean value) { this.enabled = value; return this; }
+        /** 设置挂载是否可写。 */
         public Builder writeable(boolean value) { this.writeable = value; return this; }
+        /** 设置是否在上层展示。 */
         public Builder visible(boolean value) { this.visible = value; return this; }
+        /** 设置挂载内容来源。 */
         public Builder source(MountSource value) { this.source = value; return this; }
+        /** 构建挂载；未设置内容来源时抛出异常。 */
         public Mount build() {
             if (source == null) throw new IllegalArgumentException("source must not be null");
             return new Mount(this);

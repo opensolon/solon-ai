@@ -32,6 +32,14 @@ public final class SkillDescriptor {
     private final String description;
     private final String version;
 
+    /**
+     * 创建技能描述信息。
+     *
+     * @param id 可用于读取技能的唯一逻辑路径
+     * @param name 技能名称
+     * @param description 技能描述
+     * @param version 技能版本
+     */
     public SkillDescriptor(String id, String name, String description, String version) {
         this.id = Objects.requireNonNull(id, "id");
         this.name = Objects.requireNonNull(name, "name");
@@ -39,8 +47,31 @@ public final class SkillDescriptor {
         this.version = version == null ? "" : version;
     }
 
+    /**
+     * 获取技能唯一逻辑路径。
+     *
+     * @return 技能唯一逻辑路径
+     */
     public String getId() { return id; }
+
+    /**
+     * 获取技能名称。
+     *
+     * @return 技能名称
+     */
     public String getName() { return name; }
+
+    /**
+     * 获取技能描述。
+     *
+     * @return 技能描述
+     */
     public String getDescription() { return description; }
+
+    /**
+     * 获取技能版本。
+     *
+     * @return 技能版本
+     */
     public String getVersion() { return version; }
 }

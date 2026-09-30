@@ -50,6 +50,11 @@ public class MountManager {
     private final AgentCatalog agentCatalog;
     private final SkillCatalog skillCatalog;
 
+    /**
+     * 创建挂载管理器。
+     *
+     * @param workDir 工作区目录
+     */
     public MountManager(String workDir) {
         this.workDir = workDir;
         this.workspaceSource = FileMountSource.of(workDir);
@@ -58,10 +63,12 @@ public class MountManager {
         this.skillCatalog = new DefaultSkillCatalog(this);
     }
 
+    /** 获取子代理目录。 */
     public AgentCatalog getAgentCatalog() {
         return agentCatalog;
     }
 
+    /** 获取技能目录。 */
     public SkillCatalog getSkillCatalog() {
         return skillCatalog;
     }
@@ -71,12 +78,15 @@ public class MountManager {
         return workspaceSource;
     }
 
+    /** 获取禁用技能的别名路径集合。 */
     public Set<String> getDisallowSkills() {
         return disallowSkills;
     }
 
     /**
-     * 禁用技能（按 aliasPath）
+     * 按别名路径禁用技能；空路径不作处理。
+     *
+     * @param aliasPath 技能别名路径
      */
     public void disallowSkill(String aliasPath) {
         if (Assert.isEmpty(aliasPath) == false) {
@@ -85,7 +95,9 @@ public class MountManager {
     }
 
     /**
-     * 允许技能（按 aliasPath）
+     * 按别名路径允许技能；空路径不作处理。
+     *
+     * @param aliasPath 技能别名路径
      */
     public void allowSkill(String aliasPath) {
         if (Assert.isEmpty(aliasPath) == false) {
@@ -94,7 +106,9 @@ public class MountManager {
     }
 
     /**
-     * 批量设置禁用技能（按 aliasPath）
+     * 替换禁用技能的别名路径集合；传入 null 时清空。
+     *
+     * @param aliasPaths 技能别名路径集合
      */
     public void setDisallowSkills(Collection<String> aliasPaths) {
         disallowSkills.clear();
@@ -104,17 +118,26 @@ public class MountManager {
     }
 
     /**
-     * 技能是否被禁用（按 aliasPath）
+     * 判断技能是否被禁用。
+     *
+     * @param aliasPath 技能别名路径
+     * @return 是否被禁用
      */
     public boolean isSkillDisallowed(String aliasPath) {
         return disallowSkills.contains(aliasPath);
     }
 
+    /** 获取工作区目录。 */
     public String getWorkDir() {
         return workDir;
     }
 
-    /** 注册挂载来源。 */
+    /**
+     * 注册挂载并刷新对应目录；同别名挂载会被替换。
+     *
+     * @param mount 待注册挂载
+     * @return 别名规范化后的挂载
+     */
     public synchronized Mount register(Mount mount) {
         if (mount == null || mount.getSource() == null) {
             throw new IllegalArgumentException("mount/source must not be null");
@@ -141,11 +164,17 @@ public class MountManager {
         return normalized;
     }
 
+    /** 获取按注册顺序排列的挂载快照。 */
     public synchronized Collection<Mount> getSourceMounts() {
         return getMounts();
     }
 
-    /** 移除挂载。 */
+    /**
+     * 按别名移除挂载，并刷新对应目录。
+     *
+     * @param alias 挂载别名
+     * @return 被移除的挂载；不存在时返回 null
+     */
     public synchronized Mount remove(String alias) {
         String key = normalizeAlias(alias);
         Mount removed = sourceMountMap.remove(key);
@@ -160,7 +189,11 @@ public class MountManager {
     }
 
     /**
-     * 将逻辑路径解析为物理路径
+     * 将工作区或本地挂载的逻辑路径解析为受挂载范围约束的物理路径。
+     *
+     * @param workDir 工作区路径
+     * @param pStr 逻辑路径
+     * @return 本地物理路径
      */
     public Path resolve(Path workDir, String pStr) {
         if (pStr == null || pStr.isEmpty() || ".".equals(pStr)) return workDir;
@@ -193,7 +226,12 @@ public class MountManager {
         return localWorkspacePath(workDir, cleanPath);
     }
 
-    /** 统一解析工作区和挂载来源；非 bash 文件工具应优先使用此 API。 */
+    /**
+     * 统一解析工作区和挂载来源；非 bash 文件工具应优先使用此 API。
+     *
+     * @param path 逻辑路径
+     * @return 对应来源及来源内路径
+     */
     public ResolvedResource resolveResource(String path) {
         if (path == null || path.isEmpty() || ".".equals(path)) {
             return new ResolvedResource(path == null ? "" : path, WORKSPACE_ALIAS, null,
@@ -226,10 +264,12 @@ public class MountManager {
         return new ResolvedResource(path, WORKSPACE_ALIAS, null, workspaceSource, sourcePath);
     }
 
+    /** 判断路径是否指向工作区别名或其子路径。 */
     private static boolean isWorkspacePath(String path) {
         return path.length() == 10 || path.charAt(10) == '/' || path.charAt(10) == '\\';
     }
 
+    /** 解析工作区内的本地路径并检查其边界。 */
     private static Path localWorkspacePath(Path workDir, String path) {
         if (path.startsWith("/") || path.startsWith("\\") || Paths.get(path).isAbsolute()) {
             throw new SecurityException("工作区不允许绝对路径: " + path);
@@ -240,6 +280,7 @@ public class MountManager {
         return checkedLocalPath(source, local);
     }
 
+    /** 检查本地路径及已有路径的符号链接是否位于来源范围内。 */
     private static Path checkedLocalPath(FileMountSource source, Path local) {
         Path root = source.getRootPath();
         if (!local.startsWith(root)) throw new SecurityException("路径超出挂载范围: " + local);
@@ -260,6 +301,7 @@ public class MountManager {
         return local;
     }
 
+    /** 获取路径中首个正斜杠或反斜杠的位置。 */
     private static int firstSeparator(String path) {
         int slash = path.indexOf('/');
         int backslash = path.indexOf('\\');
@@ -268,6 +310,7 @@ public class MountManager {
         return Math.min(slash, backslash);
     }
 
+    /** 校验挂载别名并补齐起始的 {@code @}。 */
     private static String normalizeAlias(String alias) {
         if (alias == null) throw new IllegalArgumentException("alias must not be null");
         String value = alias.trim();
@@ -280,27 +323,37 @@ public class MountManager {
         return value;
     }
 
-    /** 获取单个挂载。 */
+    /**
+     * 按别名获取挂载。
+     *
+     * @param alias 挂载别名
+     * @return 对应挂载；不存在时返回 null
+     */
     public synchronized Mount getMount(String alias) {
         return sourceMountMap.get(normalizeAlias(alias));
     }
 
+    /** 判断指定别名的挂载是否存在。 */
     public synchronized boolean hasMount(String alias) {
         String key = normalizeAlias(alias);
         return sourceMountMap.containsKey(key);
     }
 
-    /** 按注册顺序获取挂载快照。 */
+    /** 按注册顺序获取不可修改的挂载快照。 */
     public synchronized Collection<Mount> getMounts() {
         return Collections.unmodifiableList(new ArrayList<>(sourceMountMap.values()));
     }
 
+    /** 按注册顺序获取不可修改的挂载别名快照。 */
     public synchronized Set<String> getMountKeySet() {
         return Collections.unmodifiableSet(new LinkedHashSet<>(sourceMountMap.keySet()));
     }
 
     /**
-     * 内部辅助方法：解析配置路径并支持 "~/" 和 "./" 语法
+     * 解析配置路径，支持 {@code ~/}、{@code ./} 及其反斜杠形式。
+     *
+     * @param rawPath 配置路径；为空时使用工作区目录
+     * @return 规范化的绝对路径
      */
     public Path parseRealPath(String rawPath) {
         if (Assert.isEmpty(rawPath)) {

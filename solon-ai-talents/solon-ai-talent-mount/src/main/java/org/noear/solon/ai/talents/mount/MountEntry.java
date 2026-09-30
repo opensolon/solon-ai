@@ -34,6 +34,16 @@ public final class MountEntry {
     private final Instant lastModified;
     private final String version;
 
+    /**
+     * 创建挂载来源中的条目。
+     *
+     * @param path 条目路径
+     * @param name 条目名称
+     * @param directory 是否为目录
+     * @param size 条目大小
+     * @param lastModified 最后修改时间
+     * @param version 条目版本
+     */
     public MountEntry(String path, String name, boolean directory, long size,
                       Instant lastModified, String version) {
         this.path = path;
@@ -44,10 +54,16 @@ public final class MountEntry {
         this.version = version;
     }
 
+    /** 获取条目路径。 */
     public String getPath() { return path; }
+    /** 获取条目名称。 */
     public String getName() { return name; }
+    /** 是否为目录。 */
     public boolean isDirectory() { return directory; }
+    /** 获取条目大小。 */
     public long getSize() { return size; }
+    /** 获取最后修改时间。 */
     public Instant getLastModified() { return lastModified; }
+    /** 获取条目版本。 */
     public String getVersion() { return version; }
 }

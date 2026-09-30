@@ -49,6 +49,11 @@ public final class FileMountSource implements MountSource {
     private final Path rootPath;
     private final MountCapabilities capabilities;
 
+    /**
+     * 创建本地文件挂载来源。
+     *
+     * @param rootPath 挂载根目录；不可为 null
+     */
     public FileMountSource(Path rootPath) {
         if (rootPath == null) {
             throw new IllegalArgumentException("rootPath must not be null");
@@ -58,28 +63,61 @@ public final class FileMountSource implements MountSource {
                 true, true, true, true);
     }
 
+    /**
+     * 根据根目录路径创建挂载来源。
+     *
+     * @param rootPath 挂载根目录
+     * @return 本地文件挂载来源
+     */
     public static FileMountSource of(Path rootPath) {
         return new FileMountSource(rootPath);
     }
 
+    /**
+     * 根据根目录字符串创建挂载来源。
+     *
+     * @param rootPath 挂载根目录
+     * @return 本地文件挂载来源
+     */
     public static FileMountSource of(String rootPath) {
         return new FileMountSource(java.nio.file.Paths.get(rootPath));
     }
 
+    /**
+     * 获取规范化后的绝对根目录。
+     *
+     * @return 根目录路径
+     */
     public Path getRootPath() {
         return rootPath;
     }
 
+    /**
+     * 获取挂载根目录的位置字符串。
+     *
+     * @return 根目录位置
+     */
     @Override
     public String getLocation() {
         return rootPath.toString();
     }
 
+    /**
+     * 获取文件挂载协议。
+     *
+     * @return file
+     */
     @Override
     public String getScheme() {
         return "file";
     }
 
+    /**
+     * 规范化相对路径并拒绝越过挂载根目录的路径。
+     *
+     * @param path 待处理路径
+     * @return 使用斜杠分隔的相对路径
+     */
     @Override
     public String normalize(String path) {
         if (path == null || path.isEmpty() || ".".equals(path)) {
@@ -97,6 +135,14 @@ public final class FileMountSource implements MountSource {
         return ".".equals(result) ? "" : result;
     }
 
+    /**
+     * 解析并检查路径及已有符号链接是否仍在挂载根目录内。
+     *
+     * @param path 相对路径
+     * @param forWrite 是否检查待写入路径的父目录
+     * @return 已解析的路径
+     * @throws IOException 实际路径解析失败时
+     */
     private Path resolveChecked(String path, boolean forWrite) throws IOException {
         String normalized = normalize(path);
         Path candidate = rootPath.resolve(normalized).normalize();
@@ -123,6 +169,13 @@ public final class FileMountSource implements MountSource {
         return candidate;
     }
 
+    /**
+     * 查询文件或目录的元数据。
+     *
+     * @param path 相对路径
+     * @return 挂载条目；不存在时为 null
+     * @throws IOException 文件属性读取失败时
+     */
     @Override
     public MountEntry stat(String path) throws IOException {
         Path file = resolveChecked(path, false);
@@ -136,6 +189,13 @@ public final class FileMountSource implements MountSource {
                 Instant.ofEpochMilli(attrs.lastModifiedTime().toMillis()), null);
     }
 
+    /**
+     * 列出目录的直接子条目。
+     *
+     * @param path 相对目录路径
+     * @return 按名称排序的子条目
+     * @throws IOException 目录不存在、非目录或读取失败时
+     */
     @Override
     public List<MountEntry> list(String path) throws IOException {
         Path dir = resolveChecked(path, false);
@@ -153,6 +213,14 @@ public final class FileMountSource implements MountSource {
         return result;
     }
 
+    /**
+     * 按查找选项遍历文件树并筛选条目。
+     *
+     * @param path 搜索起点
+     * @param options 查找选项；为 null 时使用默认选项
+     * @return 按路径排序的匹配条目
+     * @throws IOException 文件树遍历失败时
+     */
     @Override
     public List<MountEntry> find(String path, FindOptions options) throws IOException {
         final FindOptions actual = options == null ? FindOptions.defaults() : options;
@@ -169,6 +237,14 @@ public final class FileMountSource implements MountSource {
         }
         Files.walkFileTree(start, EnumSet.noneOf(java.nio.file.FileVisitOption.class), actual.getMaxDepth(),
                 new java.nio.file.SimpleFileVisitor<Path>() {
+                    /**
+                     * 访问非符号链接文件并收集匹配条目。
+                     *
+                     * @param file 当前文件
+                     * @param attrs 文件属性
+                     * @return 继续遍历或达到数量上限后终止
+                     * @throws IOException 条目读取失败时
+                     */
                     @Override
                     public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                         // 枚举时不跟随符号链接，也不因某个越界链接中断整个来源的发现。
@@ -178,6 +254,14 @@ public final class FileMountSource implements MountSource {
                         return result.size() >= actual.getMaxEntries() ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
                     }
 
+                    /**
+                     * 在遍历目录前收集非起点的匹配条目。
+                     *
+                     * @param dir 当前目录
+                     * @param attrs 目录属性
+                     * @return 继续遍历或达到数量上限后终止
+                     * @throws IOException 条目读取失败时
+                     */
                     @Override
                     public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
                         if (!dir.equals(start)) {
@@ -190,6 +274,17 @@ public final class FileMountSource implements MountSource {
         return result;
     }
 
+    /**
+     * 将符合类型和路径模式的条目加入结果集。
+     *
+     * @param file 候选路径
+     * @param directory 是否为目录
+     * @param base 搜索起点的相对路径
+     * @param matcher 路径匹配器；为 null 时不匹配模式
+     * @param options 查找选项
+     * @param result 待填充的结果集
+     * @throws IOException 条目读取失败时
+     */
     private void addIfMatches(Path file, boolean directory, String base, PathMatcher matcher,
                               FindOptions options, List<MountEntry> result) throws IOException {
         if (options.isFilesOnly() && directory || options.isDirectoriesOnly() && !directory) {
@@ -206,11 +301,26 @@ public final class FileMountSource implements MountSource {
         }
     }
 
+    /**
+     * 打开文件输入流。
+     *
+     * @param path 相对文件路径
+     * @return 文件输入流
+     * @throws IOException 文件打开失败时
+     */
     @Override
     public InputStream openRead(String path) throws IOException {
         return Files.newInputStream(resolveChecked(path, false), StandardOpenOption.READ);
     }
 
+    /**
+     * 按选项打开追加或覆盖写入流。
+     *
+     * @param path 相对文件路径
+     * @param options 写入选项；为 null 时覆盖写入
+     * @return 文件输出流
+     * @throws IOException 文件或父目录创建失败时
+     */
     @Override
     public OutputStream openWrite(String path, WriteOptions options) throws IOException {
         WriteOptions actual = options == null ? WriteOptions.replace() : options;
@@ -225,6 +335,12 @@ public final class FileMountSource implements MountSource {
                 StandardOpenOption.TRUNCATE_EXISTING);
     }
 
+    /**
+     * 删除指定文件或空目录，禁止删除挂载根目录。
+     *
+     * @param path 相对路径
+     * @throws IOException 删除失败时
+     */
     @Override
     public void delete(String path) throws IOException {
         Path file = resolveChecked(path, false);
@@ -234,6 +350,14 @@ public final class FileMountSource implements MountSource {
         Files.delete(file);
     }
 
+    /**
+     * 移动条目，并按选项决定是否覆盖目标。
+     *
+     * @param source 来源路径
+     * @param target 目标路径
+     * @param options 移动选项
+     * @throws IOException 移动失败时
+     */
     @Override
     public void move(String source, String target, MoveOptions options) throws IOException {
         Path from = resolveChecked(source, false);
@@ -248,16 +372,32 @@ public final class FileMountSource implements MountSource {
         }
     }
 
+    /**
+     * 获取本地文件挂载能力。
+     *
+     * @return 挂载能力
+     */
     @Override
     public MountCapabilities capabilities() {
         return capabilities;
     }
 
+    /**
+     * 获取本地挂载根目录。
+     *
+     * @return 包含根目录的可选值
+     */
     @Override
     public Optional<Path> getLocalRoot() {
         return Optional.of(rootPath);
     }
 
+    /**
+     * 获取经过边界检查的本地路径。
+     *
+     * @param path 相对路径
+     * @return 包含本地路径的可选值；发生 IO 错误时为空
+     */
     @Override
     public Optional<Path> getLocalPath(String path) {
         try {

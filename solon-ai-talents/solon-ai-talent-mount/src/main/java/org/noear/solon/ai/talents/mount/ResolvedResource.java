@@ -35,6 +35,15 @@ public final class ResolvedResource {
     private final MountSource source;
     private final String sourcePath;
 
+    /**
+     * 创建逻辑路径解析结果。
+     *
+     * @param logicalPath 原始逻辑路径
+     * @param mountAlias 挂载别名
+     * @param mount 对应挂载；工作区路径为 null
+     * @param source 内容来源
+     * @param sourcePath 来源内路径
+     */
     public ResolvedResource(String logicalPath, String mountAlias, Mount mount,
                             MountSource source, String sourcePath) {
         this.logicalPath = logicalPath;
@@ -44,10 +53,16 @@ public final class ResolvedResource {
         this.sourcePath = sourcePath;
     }
 
+    /** 获取原始逻辑路径。 */
     public String getLogicalPath() { return logicalPath; }
+    /** 获取挂载别名。 */
     public String getMountAlias() { return mountAlias; }
+    /** 获取对应挂载；工作区路径返回 null。 */
     public Mount getMount() { return mount; }
+    /** 获取内容来源。 */
     public MountSource getSource() { return source; }
+    /** 获取来源内路径。 */
     public String getSourcePath() { return sourcePath; }
+    /** 获取本地路径；来源不支持本地路径时返回空值。 */
     public Optional<Path> getLocalPath() { return source.getLocalPath(sourcePath); }
 }

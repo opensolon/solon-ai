@@ -42,6 +42,14 @@ public class AgentDescriptor {
     private final String sourcePath;
     private final Markdown markdown;
 
+    /**
+     * 根据已解析的 Markdown 创建 Agent 描述并规范化来源路径。
+     *
+     * @param mountAlias 挂载别名
+     * @param source 来源
+     * @param sourcePath 来源路径
+     * @param markdown 已解析的 Markdown
+     */
     private AgentDescriptor(String mountAlias, MountSource source, String sourcePath, Markdown markdown) {
         this.name = markdown.getName();
         this.description = markdown.getDescription() == null ? "" : markdown.getDescription();
@@ -51,6 +59,15 @@ public class AgentDescriptor {
         this.markdown = markdown;
     }
 
+    /**
+     * 读取并解析来源中的 Markdown，校验 frontmatter 中的名称。
+     *
+     * @param mountAlias 挂载别名
+     * @param source 来源
+     * @param sourcePath Markdown 来源路径
+     * @return 解析后的 Agent 描述
+     * @throws IOException 读取失败或名称缺失、为空时抛出
+     */
     public static AgentDescriptor parse(String mountAlias, MountSource source, String sourcePath) throws IOException {
         Markdown markdown;
         try (InputStream input = source.openRead(sourcePath)) {
@@ -65,13 +82,49 @@ public class AgentDescriptor {
         return new AgentDescriptor(mountAlias, source, sourcePath, markdown);
     }
 
+    /**
+     * 获取 Markdown frontmatter 中的 Agent 名称。
+     *
+     * @return Agent 名称
+     */
     public String getName() { return name; }
+    /**
+     * 获取 Agent 描述。
+     *
+     * @return 描述；未定义时返回空字符串
+     */
     public String getDescription() { return description; }
+    /**
+     * 获取缓存的 Markdown 解析结果。
+     *
+     * @return Markdown 解析结果
+     */
     public Markdown getMarkdown() { return markdown; }
+    /**
+     * 获取所属挂载的别名。
+     *
+     * @return 挂载别名
+     */
     public String getMountAlias() { return mountAlias; }
+    /**
+     * 获取 Agent 的来源。
+     *
+     * @return 挂载来源
+     */
     public MountSource getSource() { return source; }
+    /**
+     * 获取规范化后的来源路径。
+     *
+     * @return 来源路径
+     */
     public String getSourcePath() { return sourcePath; }
 
+    /**
+     * 打开 Agent 来源文件的输入流。
+     *
+     * @return 来源文件的输入流，由调用方关闭
+     * @throws IOException 打开来源文件失败时抛出
+     */
     public InputStream open() throws IOException {
         return source.openRead(sourcePath);
     }

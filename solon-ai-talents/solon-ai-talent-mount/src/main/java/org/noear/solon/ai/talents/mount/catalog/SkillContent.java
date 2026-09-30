@@ -31,13 +31,37 @@ public final class SkillContent {
     private final String text;
     private final String renderedText;
 
+    /**
+     * 创建技能正文内容。
+     *
+     * @param descriptor 技能描述信息
+     * @param text 技能原始正文
+     * @param renderedText 兼容工具输出的展示文本
+     */
     public SkillContent(SkillDescriptor descriptor, String text, String renderedText) {
         this.descriptor = Objects.requireNonNull(descriptor, "descriptor");
         this.text = Objects.requireNonNull(text, "text");
         this.renderedText = Objects.requireNonNull(renderedText, "renderedText");
     }
 
+    /**
+     * 获取技能描述信息。
+     *
+     * @return 技能描述信息
+     */
     public SkillDescriptor getDescriptor() { return descriptor; }
+
+    /**
+     * 获取技能原始正文。
+     *
+     * @return 技能原始正文
+     */
     public String getText() { return text; }
+
+    /**
+     * 获取兼容工具输出的展示文本。
+     *
+     * @return 展示文本
+     */
     public String getRenderedText() { return renderedText; }
 }

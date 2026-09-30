@@ -27,11 +27,19 @@ import org.noear.solon.lang.Preview;
 public final class MoveOptions {
     private final boolean replaceExisting;
 
+    /**
+     * 创建文件移动选项。
+     *
+     * @param replaceExisting 是否替换已有目标
+     */
     private MoveOptions(boolean replaceExisting) {
         this.replaceExisting = replaceExisting;
     }
 
+    /** @return 是否替换已有目标 */
     public boolean isReplaceExisting() { return replaceExisting; }
+    /** @return 不替换已有目标的默认移动选项 */
     public static MoveOptions defaults() { return new MoveOptions(false); }
+    /** @return 替换已有目标的移动选项 */
     public static MoveOptions replaceExisting() { return new MoveOptions(true); }
 }

@@ -28,9 +28,38 @@ import java.util.Collection;
  */
 @Preview("4.1.1")
 public interface AgentCatalog {
+    /**
+     * 重新扫描所有启用的 Agent 挂载并更新目录。
+     */
     void refresh();
+
+    /**
+     * 重新扫描所有 Agent 挂载；当前实现不执行局部刷新。
+     *
+     * @param mountAlias 请求刷新的挂载别名；当前实现不使用此参数
+     */
     void refreshByMount(String mountAlias);
+
+    /**
+     * 获取目录中的全部 Agent 描述。
+     *
+     * @return 全部 Agent 描述
+     */
     Collection<AgentDescriptor> getAgents();
+
+    /**
+     * 获取指定挂载中的 Agent 描述。
+     *
+     * @param mountAlias 挂载别名，可带或不带 {@code @} 前缀
+     * @return 该挂载中的 Agent 描述；别名无效时返回空集合
+     */
     Collection<AgentDescriptor> getAgentsByMount(String mountAlias);
+
+    /**
+     * 按名称查询 Agent 描述。
+     *
+     * @param name Agent 名称
+     * @return 对应的 Agent 描述；不存在或名称为 {@code null} 时返回 {@code null}
+     */
     AgentDescriptor getAgent(String name);
 }
