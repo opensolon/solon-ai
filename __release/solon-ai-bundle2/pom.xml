@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.noear</groupId>
         <artifactId>solon-parent</artifactId>
-        <version>4.1.1</version>
+        <version>4.2.0-SNAPSHOT</version>
         <relativePath />
     </parent>
 
@@ -26,6 +26,10 @@
         <module>../../solon-ai-rag-loaders/solon-ai-load-ppt</module>
         <module>../../solon-ai-rag-loaders/solon-ai-load-word</module>
 
+        <module>../../solon-ai-rag-searchs/solon-ai-search-baidu</module>
+        <module>../../solon-ai-rag-searchs/solon-ai-search-bocha</module>
+        <module>../../solon-ai-rag-searchs/solon-ai-search-tavily</module>
+
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-chroma</module>
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-dashvector</module>
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-dashvector-official</module>
@@ -40,10 +44,5 @@
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-mysql</module>
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-vectorex</module>
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-weaviate</module>
-
-        <module>../../solon-ai-rag-searchs/solon-ai-search-baidu</module>
-        <module>../../solon-ai-rag-searchs/solon-ai-search-bocha</module>
-        <module>../../solon-ai-rag-searchs/solon-ai-search-tavily</module>
-
     </modules>
 </project>
