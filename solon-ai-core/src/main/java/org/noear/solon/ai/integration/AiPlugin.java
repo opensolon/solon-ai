@@ -17,6 +17,8 @@ package org.noear.solon.ai.integration;
 
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.dialect.ChatDialectManager;
+import org.noear.solon.ai.decision.dialect.DecisionDialect;
+import org.noear.solon.ai.decision.dialect.DecisionDialectManager;
 import org.noear.solon.ai.embedding.dialect.EmbeddingDialect;
 import org.noear.solon.ai.embedding.dialect.EmbeddingDialectManager;
 import org.noear.solon.ai.generate.dialect.GenerateDialect;
@@ -33,6 +35,10 @@ import org.noear.solon.core.Plugin;
 public class AiPlugin implements Plugin {
     @Override
     public void start(AppContext context) throws Throwable {
+        context.subBeansOfType(DecisionDialect.class, bean -> {
+            DecisionDialectManager.register(bean);
+        });
+
         context.subBeansOfType(ChatDialect.class, bean -> {
             ChatDialectManager.register(bean);
         });
