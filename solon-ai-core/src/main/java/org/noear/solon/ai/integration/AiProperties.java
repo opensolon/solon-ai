@@ -1,6 +1,7 @@
 package org.noear.solon.ai.integration;
 
 import org.noear.solon.ai.chat.ChatConfig;
+import org.noear.solon.ai.decision.DecisionConfig;
 import org.noear.solon.ai.embedding.EmbeddingConfig;
 import org.noear.solon.ai.reranking.RerankingConfig;
 import org.noear.solon.annotation.BindProps;
@@ -31,6 +32,20 @@ public class AiProperties {
      * 重排模型配置
      */
     private Map<String, RerankingConfig> rerank;
+    /**
+     * 决策模型配置
+     */
+    private Map<String, DecisionConfig> decision;
+
+    /** 获取决策模型配置 */
+    public Map<String, DecisionConfig> getDecision() {
+        return decision;
+    }
+
+    /** 设置决策模型配置 */
+    public void setDecision(Map<String, DecisionConfig> decision) {
+        this.decision = decision;
+    }
 
     public Map<String, ChatConfig> getChat() {
         return chat;

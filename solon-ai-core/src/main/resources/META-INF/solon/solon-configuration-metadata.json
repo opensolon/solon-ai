@@ -1,6 +1,62 @@
 {
   "properties": [
     {
+      "name": "solon.ai.decision.*.apiUrl",
+      "type": "java.lang.String",
+      "description": "模型接口完整地址"
+    },
+    {
+      "name": "solon.ai.decision.*.apiKey",
+      "type": "java.lang.String",
+      "description": "模型接口密钥"
+    },
+    {
+      "name": "solon.ai.decision.*.standard",
+      "type": "java.lang.String",
+      "description": "模型接口规范"
+    },
+    {
+      "name": "solon.ai.decision.*.provider",
+      "type": "java.lang.String",
+      "description": "模型服务提供者"
+    },
+    {
+      "name": "solon.ai.decision.*.model",
+      "type": "java.lang.String",
+      "description": "模型名字"
+    },
+    {
+      "name": "solon.ai.decision.*.timeout",
+      "type": "java.lang.String",
+      "defaultValue": "120s",
+      "description": "请求超时"
+    },
+    {
+      "name": "solon.ai.decision.*.headers",
+      "type": "java.util.Map",
+      "description": "请求头"
+    },
+    {
+      "name": "solon.ai.decision.*.proxy.type",
+      "type": "java.net.Proxy.Type",
+      "description": "请求代理类型"
+    },
+    {
+      "name": "solon.ai.decision.*.proxy.host",
+      "type": "java.lang.String",
+      "description": "请求代理主机"
+    },
+    {
+      "name": "solon.ai.decision.*.proxy.port",
+      "type": "java.lang.Integer",
+      "description": "请求代理端口"
+    },
+    {
+      "name": "solon.ai.decision.*.defaultOptions",
+      "type": "java.util.Map",
+      "description": "默认决策选项（Ollama 支持 keep_alive）"
+    },
+    {
       "name": "solon.ai.chat.*.apiUrl",
       "type": "java.lang.String",
       "description": "模型接口完整地址"
