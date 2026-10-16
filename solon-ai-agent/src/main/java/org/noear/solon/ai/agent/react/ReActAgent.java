@@ -209,8 +209,10 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
                 if (parentTeamTrace == null) {
                     Collection<ChatMessage> history = session.getLatestMessages(options.getSessionWindowSize());
                     for (ChatMessage message : history) {
-                        message.addMetadata(AgentTrace.META_FIRST, 1); //初心
-                        trace.getWorkingMemory().addMessage(message);
+                        ChatMessage cleanMessage = sanitizeHistoryMessage(message);
+
+                        cleanMessage.addMetadata(AgentTrace.META_FIRST, 1); //初心
+                        trace.getWorkingMemory().addMessage(cleanMessage);
                     }
                 }
             }
@@ -336,6 +338,16 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         return assistantMessage;
+    }
+
+    private ChatMessage sanitizeHistoryMessage(ChatMessage message) {
+        if (message instanceof AssistantMessage) {
+            AssistantMessage message1 = (AssistantMessage) message;
+
+            return new AssistantMessage(message1.getText(), "", null, message1.getBlocks());
+        } else {
+            return message;
+        }
     }
 
     /**
