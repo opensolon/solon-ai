@@ -423,7 +423,7 @@ public class ActionTaskReturnDirectTest {
     }
 
     @Test
-    @DisplayName("returnDirect=true 且结果含 media：ToolMessage 保留 blocks，media 上浮 lastReason")
+    @DisplayName("returnDirect=true 且结果含 media：ToolMessage 保留 blocks，media 写入终态")
     public void testReturnDirect_withMedia_preservesBlocks() throws Throwable {
         ImageBlock image = ImageBlock.ofUrl("https://example.com/weather.png", "image/png");
         options.getModelOptions().toolAdd(new FunctionToolDesc("drawWeather")
@@ -466,7 +466,7 @@ public class ActionTaskReturnDirectTest {
     }
 
     @Test
-    @DisplayName("returnDirect=true 纯 media（无文本）：仍 END，FinalAnswer 可为空，media 上浮")
+    @DisplayName("returnDirect=true 纯 media（无文本）：仍 END，FinalAnswer 可为空，media 写入终态")
     public void testReturnDirect_mediaOnly() throws Throwable {
         ImageBlock image = ImageBlock.ofUrl("https://example.com/art.png");
         options.getModelOptions().toolAdd(new FunctionToolDesc("generateImage")

@@ -28,8 +28,7 @@ import static org.mockito.Mockito.*;
 /**
  * ReAct 终态多模态保留回归。
  *
- * <p>终态 media 有两个来源，均由 buildFinalAssistantMessage 合并：
- * lastReason 自带 media（生图 / media-only），以及 trace.finalMediaBlocks（returnDirect 工具产出）。</p>
+ * <p>终态 media 统一通过 trace.finalMediaBlocks 传递；ReActAgent 不从 lastReason 猜测终态内容。</p>
  */
 public class ReActFinalMediaTest {
 
@@ -40,16 +39,15 @@ public class ReActFinalMediaTest {
         return (AssistantMessage) method.invoke(agent, result, trace);
     }
 
-    private ReActTrace mockTrace(AssistantMessage lastReason, List<ContentBlock> finalMedia) {
+    private ReActTrace mockTrace(List<ContentBlock> finalMedia) {
         ReActTrace trace = mock(ReActTrace.class);
-        when(trace.getLastReasonMessage()).thenReturn(lastReason);
         when(trace.getFinalMediaBlocks()).thenReturn(finalMedia);
         return trace;
     }
 
     @Test
-    @DisplayName("终态：保留通用载荷、块顺序并清理失效 legacy 协议投影")
-    public void buildFinalAssistantMessage_preservesBasePayloadAndDeduplicatesMedia() throws Exception {
+    @DisplayName("终态：只保留 finalMediaBlocks 中的媒体")
+    public void buildFinalAssistantMessage_preservesOnlyFinalPayload() throws Exception {
         ReActAgent agent = ReActAgent.of(mock(ChatModel.class)).name("media-final").build();
 
         List<org.noear.solon.ai.chat.tool.ToolCall> toolCalls = Collections.singletonList(
@@ -74,33 +72,26 @@ public class ReActFinalMediaTest {
         AssistantMessage lastReason = (AssistantMessage) ChatMessage.fromJson(legacyJson.toJson());
         lastReason.addMetadata("trace", "kept");
 
-        AssistantMessage finalMsg = invokeBuild(agent, "final", mockTrace(lastReason,
+        AssistantMessage finalMsg = invokeBuild(agent, "final", mockTrace(
                 Arrays.<ContentBlock>asList(directImage, newDirectImage)));
 
         assertEquals("final", finalMsg.getText());
-        assertEquals("thinking", finalMsg.getThinking());
-        assertNull(finalMsg.getContentRaw(), "正文和媒体发生变化后旧 raw 必须失效");
-        assertNull(finalMsg.getToolCallsRaw(), "typed toolCalls 已足够重建，不复制旧 raw");
-        assertEquals("call-1", finalMsg.getToolCalls().get(0).getId());
-        assertNull(finalMsg.getSearchResultsRaw(), "终态语义投影不再传播旧搜索 raw");
-        assertEquals("https://solon.noear.org", finalMsg.getSearchResults().get(0).getUrl());
-        assertEquals("https://solon.noear.org/docs", finalMsg.getCitations().get(0).getUrl());
-        assertNull(finalMsg.getReasoningFieldName(), "目标方言应在用时决定 reasoning 字段");
-        assertEquals("kept", finalMsg.getMetadataAs("trace"));
-        assertNotSame(lastReason.getMetadata(), finalMsg.getMetadata());
+        assertEquals("", finalMsg.getThinking());
+        assertNull(finalMsg.getToolCalls());
+        assertNull(finalMsg.getSearchResults());
+        assertNull(finalMsg.getCitations());
+        assertTrue(finalMsg.getMetadata() == null || finalMsg.getMetadata().isEmpty());
+        assertFalse(finalMsg.hasProtocolStates());
 
-        assertEquals(4, finalMsg.getBlocks().size());
-        assertEquals("https://example.com/same.png", finalMsg.getBlocks().get(0).getContent());
-        assertEquals("final", finalMsg.getBlocks().get(1).getContent());
-        assertEquals("text/markdown", finalMsg.getBlocks().get(1).getMimeType());
-        assertEquals("markdown", finalMsg.getBlocks().get(1).metas().get("format"));
-        assertEquals("https://example.com/same.png", finalMsg.getBlocks().get(2).getContent());
-        assertSame(newDirectImage, finalMsg.getBlocks().get(3));
+        assertEquals(3, finalMsg.getBlocks().size());
+        assertEquals("final", finalMsg.getBlocks().get(0).getContent());
+        assertEquals("https://example.com/same.png", finalMsg.getBlocks().get(1).getContent());
+        assertEquals("https://example.com/new.png", finalMsg.getBlocks().get(2).getContent());
     }
 
 
     @Test
-    @DisplayName("终态：语义未变化时保留协议状态，变化时失效")
+    @DisplayName("终态：不保留任何方言协议状态")
     public void buildFinalAssistantMessage_preservesOnlyMatchingProtocolState() throws Exception {
         ReActAgent agent = ReActAgent.of(mock(ChatModel.class)).name("protocol-final").build();
         AssistantMessage original = AssistantMessage.snapshot(
@@ -108,48 +99,35 @@ public class ReActFinalMediaTest {
                 Collections.singletonMap("anthropic.messages", new MessageProtocolState(1,
                         Collections.<String, Object>singletonMap("signature", "sig"))));
 
-        AssistantMessage same = invokeBuild(agent, "same", mockTrace(original, null));
-        assertNotNull(same.getProtocolState("anthropic.messages"));
+        AssistantMessage same = invokeBuild(agent, "same", mockTrace(null));
+        assertFalse(same.hasProtocolStates());
 
-        AssistantMessage changed = invokeBuild(agent, "changed", mockTrace(original, null));
+        AssistantMessage changed = invokeBuild(agent, "changed", mockTrace(null));
         assertFalse(changed.hasProtocolStates());
     }
 
     @Test
-    @DisplayName("终态：lastReason 有 media 时返回消息保留 blocks")
-    public void buildFinalAssistantMessage_keepsMedia() throws Exception {
+    @DisplayName("中间 lastReason 的 media 不应泄漏到最终消息")
+    public void buildFinalAssistantMessage_ignoresLastReasonMedia() throws Exception {
         ReActAgent agent = ReActAgent.of(mock(ChatModel.class)).name("media-final").build();
+        AssistantMessage finalMsg = invokeBuild(agent, "", mockTrace(null));
 
-        AssistantMessage lastReason = ChatMessage.ofAssistant(
-                "",
-                ImageBlock.ofUrl("https://example.com/final.png"));
-
-        AssistantMessage finalMsg = invokeBuild(agent, "", mockTrace(lastReason, null));
-
-        assertTrue(finalMsg.hasMedia(), "final message should keep media from lastReason");
-        assertEquals(1, finalMsg.getBlocks().stream()
-                .filter(b -> b instanceof ImageBlock)
-                .count());
-        assertEquals("https://example.com/final.png",
-                ((ImageBlock) finalMsg.getBlocks().stream()
-                        .filter(b -> b instanceof ImageBlock)
-                        .findFirst()
-                        .get()).getUrl());
+        assertFalse(finalMsg.hasMedia());
     }
 
     @Test
-    @DisplayName("终态：文本 finalAnswer + media 同时保留")
+    @DisplayName("终态：文本 finalAnswer + 两类 media 同时保留")
     public void buildFinalAssistantMessage_textAndMedia() throws Exception {
         ReActAgent agent = ReActAgent.of(mock(ChatModel.class)).name("media-final").build();
 
-        AssistantMessage lastReason = ChatMessage.ofAssistant(
-                "raw think",
-                ImageBlock.ofUrl("https://example.com/a.png"));
-
-        AssistantMessage finalMsg = invokeBuild(agent, "Final Answer: done", mockTrace(lastReason, null));
+        AssistantMessage finalMsg = invokeBuild(agent, "Final Answer: done", mockTrace(
+                Collections.<ContentBlock>singletonList(ImageBlock.ofUrl("https://example.com/final.png"))));
 
         assertEquals("Final Answer: done", finalMsg.getContent());
         assertTrue(finalMsg.hasMedia());
+        assertEquals(2, finalMsg.getBlocks().size());
+        assertEquals("https://example.com/final.png",
+                ((ImageBlock) finalMsg.getBlocks().get(1)).getUrl());
     }
 
     @Test
@@ -157,9 +135,7 @@ public class ReActFinalMediaTest {
     public void buildFinalAssistantMessage_textOnly() throws Exception {
         ReActAgent agent = ReActAgent.of(mock(ChatModel.class)).name("media-final").build();
 
-        AssistantMessage lastReason = ChatMessage.ofAssistant("hello");
-
-        AssistantMessage finalMsg = invokeBuild(agent, "hello world", mockTrace(lastReason, null));
+        AssistantMessage finalMsg = invokeBuild(agent, "hello world", mockTrace(null));
 
         assertEquals("hello world", finalMsg.getContent());
         assertFalse(finalMsg.hasMedia());
@@ -175,7 +151,7 @@ public class ReActFinalMediaTest {
         List<ContentBlock> directMedia = Collections.singletonList(
                 ImageBlock.ofUrl("https://example.com/direct.png"));
 
-        AssistantMessage finalMsg = invokeBuild(agent, "杭州晴", mockTrace(lastReason, directMedia));
+        AssistantMessage finalMsg = invokeBuild(agent, "杭州晴", mockTrace(directMedia));
 
         assertEquals("杭州晴", finalMsg.getContent());
         assertTrue(finalMsg.hasMedia(), "final message should keep media from trace.finalMediaBlocks");

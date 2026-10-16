@@ -21,6 +21,8 @@ import org.noear.solon.ai.agent.exception.LlmNoReturnException;
 import org.noear.solon.ai.agent.react.*;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.event.ChatEvent;
 import org.noear.solon.ai.chat.event.ChatEventGroup;
 import org.noear.solon.ai.chat.event.ChatEventType;
@@ -298,6 +300,9 @@ public class ReasonTask {
         if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
             // 有文本，或仅有媒体（如生图）时，均视为有效最终输出
             if (Assert.isNotEmpty(clearContent) || responseMessage.hasMedia()) {
+                if (responseMessage.hasMedia()) {
+                    setFinalMediaBlocks(trace, responseMessage);
+                }
                 trace.setRoute(Agent.ID_END);
                 trace.setFinalAnswer(clearContent, false);
                 return;
@@ -319,14 +324,38 @@ public class ReasonTask {
         
         // 2. 任务结束（Finish）
         if (clearContent.contains(config.getFinishMarker())) {
+            if (responseMessage.hasMedia()) {
+                setFinalMediaBlocks(trace, responseMessage);
+            }
             trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer(extractFinalAnswer(clearContent), false);
             return;
         }
 
         // 3. 兜底逻辑：既无明确工具调用也无完成标识，视为直接回复 Final Answer
+        if (responseMessage.hasMedia()) {
+            setFinalMediaBlocks(trace, responseMessage);
+        }
         trace.setRoute(Agent.ID_END);
         trace.setFinalAnswer(extractFinalAnswer(clearContent), false);
+    }
+
+    /** 仅在当前响应已经被判定为最终响应时，提取其媒体内容。 */
+    private static void setFinalMediaBlocks(ReActTrace trace, AssistantMessage responseMessage) {
+        if (responseMessage == null || responseMessage.getBlocks() == null) {
+            return;
+        }
+
+        List<ContentBlock> mediaBlocks = new ArrayList<>();
+        for (ContentBlock block : responseMessage.getBlocks()) {
+            if (block != null && !(block instanceof TextBlock)) {
+                mediaBlocks.add(block);
+            }
+        }
+
+        if (!mediaBlocks.isEmpty()) {
+            trace.setFinalMediaBlocks(mediaBlocks);
+        }
     }
 
     private @Nullable ChatResponse callWithRetry(ReActTrace trace, String systemPrompt) throws RuntimeException {

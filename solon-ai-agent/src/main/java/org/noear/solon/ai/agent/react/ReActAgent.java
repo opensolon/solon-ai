@@ -31,13 +31,9 @@ import org.noear.solon.ai.chat.event.ChatEventDefault;
 import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.message.MessageProtocolState;
-import org.noear.solon.ai.chat.message.MessageSemanticHasher;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.ToolCall;
-import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.core.util.Assert;
@@ -51,7 +47,6 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -344,118 +339,31 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
     }
 
     /**
-     * 构造终态 AssistantMessage：文本用 finalAnswer；并合并两类终态 media：
-     * <ul>
-     *   <li>lastReason 自带 media（ReasonTask 生图 / media-only 终态）；</li>
-     *   <li>trace.finalMediaBlocks（ActionTask returnDirect 工具产出的 media）。</li>
-     * </ul>
+     * 构造终态 AssistantMessage：最终输出只保留通用文本和媒体。
+     * <p>推理内容、工具调用、搜索结果、引用以及方言协议状态属于执行过程，
+     * 不应随最终答案继续进入会话历史或被下一个方言回放。</p>
      */
     private AssistantMessage buildFinalAssistantMessage(String result, ReActTrace trace) {
         String text = result == null ? "" : result;
-        AssistantMessage lastReason = trace.getLastReasonMessage();
         List<ContentBlock> finalBlocks = new ArrayList<>();
-        List<ContentBlock> existingMedia = new ArrayList<>();
-        boolean textReplaced = false;
 
-        if (lastReason != null) {
-            List<ContentBlock> sourceBlocks = lastReason.getBlocks();
-            if (sourceBlocks != null) {
-                for (ContentBlock block : sourceBlocks) {
-                    if (block == null) {
-                        continue;
-                    }
-                    if (block instanceof TextBlock) {
-                        // 以原正文块的位置替换正文，并丢弃其它旧正文投影。
-                        if (!textReplaced && !text.isEmpty()) {
-                            TextBlock replacement = TextBlock.of(text, block.getMimeType());
-                            replacement.metas().putAll(block.metas());
-                            finalBlocks.add(replacement);
-                            textReplaced = true;
-                        }
-                    } else {
-                        finalBlocks.add(block);
-                        existingMedia.add(block);
-                    }
+        // ReasonTask / ActionTask 只在确认本次执行已进入 END 时写入终态 media。
+        // 不读取 lastReason：它可能只是带 tool_call 的中间响应，不能据此猜测 media 是否应对外返回。
+        List<ContentBlock> finalMedia = trace.getFinalMediaBlocks();
+        if (finalMedia != null) {
+            for (ContentBlock block : finalMedia) {
+                if (block != null && !(block instanceof TextBlock)) {
+                    finalBlocks.add(block);
                 }
             }
         }
 
-        // returnDirect media 追加到基底 blocks 之后；仅去重追加来源，绝不改写基底自身顺序。
-        List<ContentBlock> directMedia = trace.getFinalMediaBlocks();
-        if (directMedia != null) {
-            for (ContentBlock block : directMedia) {
-                if (block == null || block instanceof TextBlock || containsEquivalentMedia(existingMedia, block)) {
-                    continue;
-                }
-                finalBlocks.add(block);
-                existingMedia.add(block);
-            }
-        }
-
-        // 有媒体但没有正文块时，遵循消息工厂约定将正文投影放在首位；纯文本消息保持无 blocks。
-        if (!textReplaced && !text.isEmpty() && !finalBlocks.isEmpty()) {
+        if (!text.isEmpty() && !finalBlocks.isEmpty()) {
             finalBlocks.add(0, TextBlock.of(text));
         }
 
-        List<ContentBlock> messageBlocks = finalBlocks.isEmpty() ? null : finalBlocks;
-        if (lastReason == null) {
-            return new AssistantMessage(text, "", null, messageBlocks);
-        }
-
-        String thinking = lastReason.getThinkingRaw();
-        if (thinking == null && lastReason.hasThinking()) {
-            thinking = lastReason.getThinking();
-        }
-        // 终态消息是通用语义投影：旧工具/搜索载体只用于读取，并转换成类型化字段，
-        // 不再继续传播弃用字段或源方言的回放形态。
-        List<ToolCall> toolCalls = lastReason.getToolCalls();
-        if (Utils.isEmpty(toolCalls) && Utils.isNotEmpty(lastReason.getToolCallsRaw())) {
-            toolCalls = ToolCallJsonSanitizer.parseLegacyToolCallsRaw(lastReason.getToolCallsRaw());
-        }
-        AssistantMessage semanticMessage = AssistantMessage.snapshot(
-                text,
-                thinking,
-                toolCalls,
-                messageBlocks,
-                lastReason.resolveSearchResults(),
-                lastReason.getCitations(),
-                null);
-        Map<String, MessageProtocolState> retainedStates = null;
-        if (lastReason.hasProtocolStates()) {
-            for (Map.Entry<String, MessageProtocolState> entry : lastReason.getProtocolStates().entrySet()) {
-                if (MessageSemanticHasher.matches(semanticMessage, entry.getValue())) {
-                    if (retainedStates == null) {
-                        retainedStates = new LinkedHashMap<>();
-                    }
-                    retainedStates.put(entry.getKey(), entry.getValue());
-                }
-            }
-        }
-        return AssistantMessage.snapshot(
-                text,
-                thinking,
-                toolCalls,
-                messageBlocks,
-                lastReason.resolveSearchResults(),
-                lastReason.getCitations(),
-                retainedStates,
-                lastReason.getMetadata());
-    }
-
-    /** 判断两个媒体块是否代表同一份媒体载荷。 */
-    private boolean containsEquivalentMedia(List<ContentBlock> mediaBlocks, ContentBlock candidate) {
-        for (ContentBlock existing : mediaBlocks) {
-            if (existing == candidate) {
-                return true;
-            }
-            if (existing != null && existing.getClass() == candidate.getClass()
-                    && Objects.equals(existing.getMimeType(), candidate.getMimeType())
-                    && Objects.equals(existing.getContent(), candidate.getContent())
-                    && candidate.getContent() != null) {
-                return true;
-            }
-        }
-        return false;
+        return new AssistantMessage(text, "", null,
+                finalBlocks.isEmpty() ? null : finalBlocks);
     }
 
     /**

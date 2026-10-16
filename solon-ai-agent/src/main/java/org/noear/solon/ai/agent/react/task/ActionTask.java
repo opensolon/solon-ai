@@ -581,7 +581,7 @@ public class ActionTask {
      * 本轮工具全部 returnDirect 且均成功时，将结果拼接为 FinalAnswer 并 END。
      * <p>对齐 {@code ChatRequestDescDefault#buildToolMessage}：仅当全员 isReturnDirect 时才直返；
      * 任一 false / 失败 / {@link ToolResult#error} / 空结果 则保持 Observation → Reason。
-     * Feedback 已设 END 时跳过。纯 media 可直返（FinalAnswer 文本可为空，media 上浮到 lastReason）。</p>
+     * Feedback 已设 END 时跳过。纯 media 可直返（FinalAnswer 文本可为空，media 写入 trace.finalMediaBlocks）。</p>
      */
     private void applyReturnDirectIfEligible(ReActTrace trace, Collection<ToolExchanger> exchangers) {
         if (trace.getSession().isPending() || Agent.ID_END.equals(trace.getRoute())) {

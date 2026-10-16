@@ -609,6 +609,7 @@ public class ReasonTaskTest {
         reasonTask.run(trace, context);
 
         assertEquals(0, emptyRetryCounter.get());
+        verify(trace).setFinalMediaBlocks(anyList());
         verify(trace).setRoute(Agent.ID_END);
         verify(trace).setFinalAnswer(anyString(), eq(false));
     }

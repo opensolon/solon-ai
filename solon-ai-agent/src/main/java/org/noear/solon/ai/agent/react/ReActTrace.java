@@ -140,8 +140,8 @@ public class ReActTrace implements AgentTrace {
     private AssistantMessage lastReasonMessage;
 
     /**
-     * returnDirect 工具产出的终态 media（供 {@link ReActAgent} 收口时合并进最终 AssistantMessage）。
-     * <p>不挂到 lastReason，避免污染已入库的 tool_call 推理消息，也避免 media 在 WorkingMemory 中重复落库。</p>
+     * 本次执行已经确认属于最终答案的 media（供 {@link ReActAgent} 收口时合并进最终 AssistantMessage）。
+     * <p>由 ReasonTask 的最终响应分支或 ActionTask 的 returnDirect 分支写入；不挂到 lastReason，避免污染中间 tool_call 推理消息。</p>
      */
     private transient List<ContentBlock> finalMediaBlocks;
 
@@ -195,6 +195,7 @@ public class ReActTrace implements AgentTrace {
         this.session = session;
         this.protocol = protocol;
         this.finalAnswer = null;
+        this.finalMediaBlocks = null;
         this.abnormal = false;
 
         //空响应计数器按“本次执行”隔离：它计的是连续空响应，续跑（HITL 恢复、无 prompt 恢复）
