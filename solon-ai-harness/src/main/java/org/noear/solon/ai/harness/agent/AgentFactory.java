@@ -32,11 +32,11 @@ import org.noear.solon.lang.Nullable;
  */
 public class AgentFactory {
     //**
-    private static String[] TOOL_ALL_FULL = {"read", "write", "edit", "glob", "grep", "ls", "bash", "bash_start", "bash_wait", "bash_stop", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "generate", "mcp", "openapi", "hitl", "lsp", "memory"};
+    private static String[] TOOL_ALL_FULL = {"read", "write", "edit", "glob", "grep", "ls", "bash",  "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "generate", "mcp", "openapi", "hitl", "lsp", "memory"};
     //*
-    private static String[] TOOL_ALL_PUBLIC = {"read", "write", "edit", "glob", "grep", "ls", "bash", "bash_start", "bash_wait", "bash_stop", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "lsp"};
+    private static String[] TOOL_ALL_PUBLIC = {"read", "write", "edit", "glob", "grep", "ls", "bash",  "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "lsp"};
     //pi
-    private static String[] TOOL_PI = {"read", "write", "edit", "bash", "bash_start", "bash_wait", "bash_stop"};
+    private static String[] TOOL_PI = {"read", "write", "edit", "bash"};
 
 
     /**
@@ -187,17 +187,9 @@ public class AgentFactory {
             }
             case "bash": {
                 terminalTalentProxy.addTools("bash");
-                break;
-            }
-            case "bash_start": {
+
                 terminalTalentProxy.addTools("bash_start");
-                break;
-            }
-            case "bash_wait": {
                 terminalTalentProxy.addTools("bash_wait");
-                break;
-            }
-            case "bash_stop": {
                 terminalTalentProxy.addTools("bash_stop");
                 break;
             }
