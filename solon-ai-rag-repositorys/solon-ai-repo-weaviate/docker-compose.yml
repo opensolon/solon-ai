@@ -5,7 +5,7 @@ networks:
     driver: bridge
 services:
   weaviate:
-    image: semitechnologies/weaviate:1.35.6
+    image: semitechnologies/weaviate:1.39.13
     volumes:
       - ./weaviate:/var/lib/weaviate
     environment:
