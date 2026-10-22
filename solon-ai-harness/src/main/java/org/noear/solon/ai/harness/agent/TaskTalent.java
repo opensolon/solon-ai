@@ -19,7 +19,9 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.react.LlmErrorEvent;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.task.ReasonTask;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.RunEndEvent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
@@ -39,6 +41,7 @@ import reactor.core.publisher.FluxSink;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -122,7 +125,7 @@ public class TaskTalent extends AbsTalent {
         taskOp.description = taskSpec.description;
         taskOp.prompt = taskSpec.prompt;
 
-        return runTask(__parentTrace, __cwd, __sessionId, __parentSession, taskOp, 1, false, Utils.uuid());
+        return runTask(__parentTrace, __cwd, __sessionId, __parentSession, taskOp, 1, false, Utils.uuid(), null, null, null);
     }
 
     @ToolMapping(name = TOOL_MULTITASK, description =
@@ -154,10 +157,14 @@ public class TaskTalent extends AbsTalent {
         }
 
         final List<CompletableFuture<String>> futures = new ArrayList<>();
+        final AtomicBoolean rateLimited = new AtomicBoolean();
+        final AtomicBoolean timedOut = new AtomicBoolean();
+        final AtomicBoolean upstreamUnavailable = new AtomicBoolean();
 
         for (MultiTaskOp task : tasks) {
             CompletableFuture<String> future = CompletableFuture.supplyAsync(() ->
-                    runTask(__parentTrace, __cwd, __sessionId, __parentSession, task, tasks.size(), true, Utils.uuid()), RunUtil.io());
+                    runTask(__parentTrace, __cwd, __sessionId, __parentSession, task, tasks.size(), true, Utils.uuid(),
+                            rateLimited, timedOut, upstreamUnavailable), RunUtil.io());
             futures.add(future);
         }
 
@@ -175,6 +182,17 @@ public class TaskTalent extends AbsTalent {
                 }
             }
             compositeResult.append("</multitask_results>");
+            if (rateLimited.get() || upstreamUnavailable.get() || timedOut.get()) {
+                compositeResult.append("\n<multitask_advice>\n");
+                if (rateLimited.get()) {
+                    compositeResult.append("检测到模型服务限流，可能来自中转网关或上游模型服务。后续请优先使用 task 串行执行；如必须使用 multitask，建议降低并发数量。\n");
+                } else if (upstreamUnavailable.get()) {
+                    compositeResult.append("检测到中转网关或上游模型服务暂时不可用，可能与上游限流、服务过载或网关异常有关。请稍后重试，并适当降低 multitask 并发数量。\n");
+                } else {
+                    compositeResult.append("模型服务响应超时。后续请适当降低 multitask 并发数量，必要时改用 task 串行执行。\n");
+                }
+                compositeResult.append("</multitask_advice>");
+            }
             result = compositeResult.toString();
         }
 
@@ -193,7 +211,7 @@ public class TaskTalent extends AbsTalent {
         return t.getMessage() != null ? t.getMessage() : t.toString();
     }
 
-    private String runTask(ReActTrace __parentTrace, String __cwd, String __sessionId, AgentSession __parentSession, MultiTaskOp task, int count, boolean isMultitask, String taskId) {
+    private String runTask(ReActTrace __parentTrace, String __cwd, String __sessionId, AgentSession __parentSession, MultiTaskOp task, int count, boolean isMultitask, String taskId, AtomicBoolean rateLimited, AtomicBoolean timedOut, AtomicBoolean upstreamUnavailable) {
         AgentDefinition agentDefinition = engine.getAgentManager().getAgent(task.agent_name);
         if (agentDefinition == null) {
             return "ERROR: 未知的子代理类型 '" + task.agent_name + "'。";
@@ -228,6 +246,7 @@ public class TaskTalent extends AbsTalent {
                             o.toolContextPut(ChatSession.ATTR_SESSIONID, __sessionId);
                         })
                         .stream()
+                        .doOnNext(chunk -> countLlmError(chunk, rateLimited, timedOut, upstreamUnavailable))
                         .doOnError(err -> {
                             errRef.set(err);
                         })
@@ -240,6 +259,8 @@ public class TaskTalent extends AbsTalent {
                 if (agentEnd == null) {
                     throw new IllegalStateException("子代理未正常完成：未收到正常响应");
                 }
+                countLlmErrorType(agentEnd.getTrace().getExtraAs(LlmErrorEvent.TRACE_ERROR_TYPE_KEY),
+                        rateLimited, timedOut, upstreamUnavailable);
 
                 if (__parentTrace != null) {
                     __parentTrace.getMetrics().addMetrics(agentEnd.getMetrics());
@@ -259,6 +280,7 @@ public class TaskTalent extends AbsTalent {
                         .stream()
                         .takeUntil(r -> sink.isCancelled())
                         .doOnNext(chunk -> {
+                            countLlmError(chunk, rateLimited, timedOut, upstreamUnavailable);
                             // 父流已取消时停止向主会话灌 chunk，避免取消后仍重复输出
                             if (sink.isCancelled()) {
                                 return;
@@ -281,6 +303,8 @@ public class TaskTalent extends AbsTalent {
                     }
                     throw new IllegalStateException("子代理未正常完成：未收到正常响应");
                 }
+                countLlmErrorType(agentEnd.getTrace().getExtraAs(LlmErrorEvent.TRACE_ERROR_TYPE_KEY),
+                        rateLimited, timedOut, upstreamUnavailable);
 
                 __parentTrace.getMetrics().addMetrics(agentEnd.getMetrics());
                 result = agentEnd.getText();
@@ -294,6 +318,7 @@ public class TaskTalent extends AbsTalent {
             return formatTaskResp(task, true, result, isMultitask);
         } catch (Throwable e) {
             LOG.error("任务失败[{}/{} - {}]: {}", task.index, count, task.agent_name, e.getMessage(), e);
+            countLlmErrorType(ReasonTask.classifyException(e), rateLimited, timedOut, upstreamUnavailable);
 
             String result = String.format("ERROR: 任务执行失败: %s", e.getMessage());
 
@@ -301,6 +326,35 @@ public class TaskTalent extends AbsTalent {
         } finally {
             // 必须清理：池线程会被复用，残留标记会误伤后续任务
             TASK_DEPTH.remove();
+        }
+    }
+
+    private static void countLlmError(AgentEvent chunk,
+                                      AtomicBoolean rateLimited,
+                                      AtomicBoolean timedOut,
+                                      AtomicBoolean upstreamUnavailable) {
+        if (!(chunk instanceof LlmErrorEvent)) {
+            return;
+        }
+        countLlmErrorType(((LlmErrorEvent) chunk).getErrorType(), rateLimited, timedOut, upstreamUnavailable);
+    }
+
+    /**
+     * 非流式子代理不会收到 LlmErrorEvent，因此从异常本身补充统计，避免并发建议丢失。
+     */
+    private static void countLlmErrorType(LlmErrorEvent.Type type,
+                                           AtomicBoolean rateLimited,
+                                           AtomicBoolean timedOut,
+                                           AtomicBoolean upstreamUnavailable) {
+        if (type == null || rateLimited == null || timedOut == null || upstreamUnavailable == null) {
+            return;
+        }
+        if (type == LlmErrorEvent.Type.RATE_LIMIT) {
+            rateLimited.set(true);
+        } else if (type == LlmErrorEvent.Type.TIMEOUT) {
+            timedOut.set(true);
+        } else if (type == LlmErrorEvent.Type.UPSTREAM_UNAVAILABLE) {
+            upstreamUnavailable.set(true);
         }
     }
 

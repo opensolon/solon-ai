@@ -38,9 +38,17 @@ import org.noear.solon.net.http.HttpResponseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.EOFException;
 import java.net.ConnectException;
+import java.net.NoRouteToHostException;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
+import java.security.cert.CertPathValidatorException;
+import java.security.cert.CertificateException;
 import java.util.*;
 import java.util.concurrent.TimeoutException;
+import javax.net.ssl.SSLException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -368,33 +376,11 @@ public class ReasonTask {
                     .initialDelayMs(trace.getOptions().getRetryDelayMs())
                     // 流式响应已经对外输出后，重试会造成重复内容；直接保留并抛出原始异常。
                     .retryIf(e -> {
-                        // 1. 已经有流输出了，绝对不能重试，避免重复内容
+                        // 流式响应已经对外输出后，重试会造成重复内容。
                         if (streamEmitted.get()) {
                             return false;
                         }
-
-                        // 2. 深度遍历 Cause 链，寻找特定异常或 HttpResponseException
-                        Throwable cause = e;
-                        while (cause != null) {
-                            // 网络/超时/无返回：网络瞬态故障，安全重试
-                            if (cause instanceof ConnectException ||
-                                    cause instanceof TimeoutException ||
-                                    cause instanceof LlmNoReturnException) {
-                                return true;
-                            }
-
-                            // HTTP 状态码精准控制
-                            if (cause instanceof HttpResponseException) {
-                                int code = ((HttpResponseException) cause).code();
-                                // 429 限流 或 5xx 服务端故障：允许重试；4xx 客户端参数错误：不重试
-                                return code == 429 || code >= 500;
-                            }
-
-                            cause = cause.getCause();
-                        }
-
-                        // 3. 其他未知异常（如 IOException、SocketException 等），默认重试
-                        return true;
+                        return isRetryableException(e);
                     })
                     .onRetry((attempt, e) -> {
                         boolean rebuilt = false;
@@ -531,33 +517,141 @@ public class ReasonTask {
         // 3. 设置终止状态
         trace.setRoute(Agent.ID_END);
 
-        // 4. 精准提炼 Cause 并设置友好的用户提示
-        HttpResponseException httpRespEx = findCause(lastException, HttpResponseException.class);
+        // HTTP 状态码比包装异常和异常文本更可靠，因此必须优先于传输层分类。
+        LlmErrorEvent.Type type = classifyException(lastException);
+        trace.setExtra(LlmErrorEvent.TRACE_ERROR_TYPE_KEY, type);
+        pushLlmErrorEvent(trace, type);
 
-        if (findCause(lastException, LlmNoReturnException.class) != null) {
-            trace.setFinalAnswer("抱歉，模型服务没有内容返回。请稍后重试。");
-        } else if (isTimeoutException(lastException)) {
-            trace.setFinalAnswer("抱歉，模型服务响应超时。请稍后重试。");
-        } else if (isConnectException(lastException)) {
-            trace.setFinalAnswer("抱歉，模型服务连接失败。请稍后重试。");
-        } else if (httpRespEx != null) {
-            trace.setFinalAnswer("抱歉，模型服务响应出错（CODE: " + httpRespEx.code() + "）。请稍后重试。");
+        HttpResponseException httpRespEx = findCause(lastException, HttpResponseException.class);
+        if (httpRespEx != null) {
+            trace.setFinalAnswer(buildHttpErrorMessage(httpRespEx.code(), type));
         } else {
-            // 兜底提示（防止敏感堆栈或 HTML 泄露给终端）
-            trace.setFinalAnswer("抱歉，暂时无法使用模型服务（具体参考日志）。请稍后重试。");
+            trace.setFinalAnswer(buildExceptionErrorMessage(type));
         }
 
         return null;
     }
 
+    private static void pushLlmErrorEvent(ReActTrace trace, LlmErrorEvent.Type type) {
+        if (trace.hasStreamSink()) {
+            trace.pushAgentEvent(new LlmErrorEvent(trace, type));
+        }
+    }
+
+    /**
+     * 按 HTTP 状态码做保守分类：502/503/504 只能说明网关或上游暂时不可用，
+     * 不能仅凭状态码断言一定是上游限流。
+     */
+    private static LlmErrorEvent.Type classifyHttpStatus(int code) {
+        if (code == 429) {
+            return LlmErrorEvent.Type.RATE_LIMIT;
+        }
+        if (code == 408) {
+            return LlmErrorEvent.Type.TIMEOUT;
+        }
+        if (code == 502 || code == 503 || code == 504
+                || code == 520 || code == 521 || code == 522
+                || code == 523 || code == 524 || code == 525
+                || code == 526 || code == 529) {
+            return LlmErrorEvent.Type.UPSTREAM_UNAVAILABLE;
+        }
+        if (code >= 500 && code <= 599) {
+            return LlmErrorEvent.Type.SERVER_ERROR;
+        }
+        return LlmErrorEvent.Type.HTTP;
+    }
+
+    private static String buildHttpErrorMessage(int code, LlmErrorEvent.Type type) {
+        switch (type) {
+            case RATE_LIMIT:
+                return "抱歉，模型服务请求过于频繁或触发了上游限流（CODE: " + code + "）。请稍后重试，或降低并发数量。";
+            case UPSTREAM_UNAVAILABLE:
+                return "抱歉，中转网关或上游模型服务暂时不可用（CODE: " + code + "）。可能是上游限流、服务过载或网关异常，请稍后重试。";
+            case SERVER_ERROR:
+                return "抱歉，模型服务发生内部错误（CODE: " + code + "）。请稍后重试。";
+            case TIMEOUT:
+                return "抱歉，模型服务请求超时（CODE: " + code + "）。请稍后重试。";
+            default:
+                return "抱歉，模型服务响应出错（CODE: " + code + "）。请检查请求参数或服务配置后重试。";
+        }
+    }
+
+    /** 按异常链分类；HTTP 响应优先于包装异常和文本匹配。 */
+    public static LlmErrorEvent.Type classifyException(Throwable e) {
+        if (isSslException(e)) {
+            return LlmErrorEvent.Type.SSL;
+        }
+        if (isDnsException(e)) {
+            return LlmErrorEvent.Type.DNS;
+        }
+
+        HttpResponseException httpRespEx = findCause(e, HttpResponseException.class);
+        if (httpRespEx != null) {
+            return classifyHttpStatus(httpRespEx.code());
+        }
+        if (findCause(e, LlmNoReturnException.class) != null) {
+            return LlmErrorEvent.Type.NO_RETURN;
+        }
+        if (isTimeoutException(e)) {
+            return LlmErrorEvent.Type.TIMEOUT;
+        }
+        if (isConnectionRefused(e)) {
+            return LlmErrorEvent.Type.CONNECTION_REFUSED;
+        }
+        if (isConnectException(e)) {
+            return LlmErrorEvent.Type.CONNECTION;
+        }
+        if (isNetworkException(e)) {
+            return LlmErrorEvent.Type.NETWORK;
+        }
+        return LlmErrorEvent.Type.UNKNOWN;
+    }
+
+    private static boolean isRetryableException(Throwable e) {
+        if (findCause(e, InterruptedException.class) != null
+                || isSslException(e)
+                || isDnsException(e)) {
+            return false;
+        }
+
+        HttpResponseException httpRespEx = findCause(e, HttpResponseException.class);
+        if (httpRespEx != null) {
+            return isRetryableHttpStatus(httpRespEx.code());
+        }
+
+        if (findCause(e, LlmNoReturnException.class) != null
+                || isTimeoutException(e)
+                || isConnectException(e)
+                || isNetworkException(e)) {
+            return true;
+        }
+
+        // 保留历史兼容：上下文压缩、拦截器及 SDK 自定义瞬态异常可能没有统一类型。
+        // 已明确识别的配置/鉴权类错误仍应在各自适配层阻止重试。
+        return true;
+    }
+
+    private static boolean isRetryableHttpStatus(int code) {
+        return code == 408 || code == 429
+                || code == 500 || code == 502 || code == 503 || code == 504
+                || code == 520 || code == 521 || code == 522 || code == 523
+                || code == 524 || code == 529;
+    }
+
     private static boolean isTimeoutException(Throwable e) {
         Throwable cause = e;
         while (cause != null) {
-            if (cause instanceof TimeoutException) {
+            if (cause instanceof TimeoutException || cause instanceof SocketTimeoutException) {
                 return true;
             }
-            if (cause.getMessage() != null && cause.getMessage().toLowerCase(Locale.ROOT).contains("timeout")) {
-                return true;
+            String message = cause.getMessage();
+            if (message != null) {
+                String lower = message.toLowerCase(Locale.ROOT);
+                if (lower.contains("timeout")
+                        || lower.contains("timed out")
+                        || lower.contains("deadline exceeded")) {
+                    return true;
+                }
             }
             cause = cause.getCause();
         }
@@ -566,6 +660,70 @@ public class ReasonTask {
 
     private static boolean isConnectException(Throwable e) {
         return findCause(e, ConnectException.class) != null;
+    }
+
+    private static boolean isConnectionRefused(Throwable e) {
+        ConnectException connectException = findCause(e, ConnectException.class);
+        if (connectException == null || connectException.getMessage() == null) {
+            return false;
+        }
+        return connectException.getMessage().toLowerCase(Locale.ROOT).contains("refused");
+    }
+
+    private static boolean isDnsException(Throwable e) {
+        return findCause(e, UnknownHostException.class) != null;
+    }
+
+    private static boolean isSslException(Throwable e) {
+        Throwable cause = e;
+        while (cause != null) {
+            if (cause instanceof SSLException
+                    || cause instanceof CertificateException
+                    || cause instanceof CertPathValidatorException) {
+                return true;
+            }
+
+            String message = cause.getMessage();
+            if (message != null) {
+                String lowerMessage = message.toLowerCase(Locale.ROOT);
+                if (lowerMessage.contains("ssl")
+                        || lowerMessage.contains("certificate")
+                        || lowerMessage.contains("handshake")
+                        || lowerMessage.contains("pkix")
+                        || lowerMessage.contains("trust anchor")) {
+                    return true;
+                }
+            }
+            cause = cause.getCause();
+        }
+        return false;
+    }
+
+    private static boolean isNetworkException(Throwable e) {
+        return findCause(e, NoRouteToHostException.class) != null
+                || findCause(e, SocketException.class) != null
+                || findCause(e, EOFException.class) != null;
+    }
+
+    private static String buildExceptionErrorMessage(LlmErrorEvent.Type type) {
+        switch (type) {
+            case NO_RETURN:
+                return "抱歉，模型服务没有内容返回。请稍后重试。";
+            case SSL:
+                return "抱歉，模型服务安全连接失败，可能是 SSL 证书或信任链配置问题。请检查模型服务地址、证书有效期、证书信任链、域名匹配及系统时间。";
+            case DNS:
+                return "抱歉，无法解析模型服务地址。请检查服务域名、DNS 配置或网络代理设置。";
+            case TIMEOUT:
+                return "抱歉，模型服务响应超时。请稍后重试。";
+            case CONNECTION_REFUSED:
+                return "抱歉，无法连接模型服务，目标端口可能未开放或服务未启动。请检查模型服务地址、端口及防火墙配置。";
+            case CONNECTION:
+                return "抱歉，模型服务连接失败。请稍后重试。";
+            case NETWORK:
+                return "抱歉，访问模型服务时发生网络错误。请检查网络连接、代理配置或模型服务状态。";
+            default:
+                return "抱歉，暂时无法使用模型服务（具体参考日志）。请稍后重试。";
+        }
     }
 
     @SuppressWarnings("unchecked")
