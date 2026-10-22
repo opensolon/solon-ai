@@ -7,6 +7,7 @@
 package features.ai.react.task;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.agent.react.LlmErrorClassifier;
 import org.noear.solon.ai.agent.react.LlmErrorEvent;
 import org.noear.solon.ai.agent.react.task.ReasonTask;
 
@@ -21,16 +22,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * ReasonTask 模型服务基础设施错误分类测试。
+ * 模型服务基础设施错误分类测试。
  */
 public class ReasonTaskErrorClassificationTest {
     @Test
-    public void classifiesInfrastructureErrors() throws Exception {
-        assertTrue(invoke("isSslException", new SSLHandshakeException("PKIX path building failed")));
-        assertTrue(invoke("isDnsException", new UnknownHostException("llm.example.com")));
-        assertTrue(invoke("isConnectionRefused", new ConnectException("Connection refused")));
-        assertTrue(invoke("isNetworkException", new NoRouteToHostException("No route to host")));
-        assertTrue(invoke("isTimeoutException", new SocketTimeoutException("Read timed out")));
+    public void classifiesInfrastructureErrors() {
+        assertEquals(LlmErrorEvent.Type.SSL,
+                LlmErrorClassifier.classify(new SSLHandshakeException("PKIX path building failed")));
+        assertEquals(LlmErrorEvent.Type.DNS,
+                LlmErrorClassifier.classify(new UnknownHostException("llm.example.com")));
+        assertEquals(LlmErrorEvent.Type.CONNECTION_REFUSED,
+                LlmErrorClassifier.classify(new ConnectException("Connection refused")));
+        assertEquals(LlmErrorEvent.Type.NETWORK,
+                LlmErrorClassifier.classify(new NoRouteToHostException("No route to host")));
+        assertEquals(LlmErrorEvent.Type.TIMEOUT,
+                LlmErrorClassifier.classify(new SocketTimeoutException("Read timed out")));
     }
 
     @Test
@@ -45,14 +51,14 @@ public class ReasonTaskErrorClassificationTest {
     }
 
     @Test
-    public void classifiesGatewayHttpStatuses() throws Exception {
-        assertEquals(LlmErrorEvent.Type.RATE_LIMIT, invokeHttpClassification(429));
-        assertEquals(LlmErrorEvent.Type.UPSTREAM_UNAVAILABLE, invokeHttpClassification(502));
-        assertEquals(LlmErrorEvent.Type.UPSTREAM_UNAVAILABLE, invokeHttpClassification(503));
-        assertEquals(LlmErrorEvent.Type.UPSTREAM_UNAVAILABLE, invokeHttpClassification(504));
-        assertEquals(LlmErrorEvent.Type.SERVER_ERROR, invokeHttpClassification(500));
-        assertEquals(LlmErrorEvent.Type.TIMEOUT, invokeHttpClassification(408));
-        assertEquals(LlmErrorEvent.Type.HTTP, invokeHttpClassification(401));
+    public void classifiesGatewayHttpStatuses() {
+        assertEquals(LlmErrorEvent.Type.RATE_LIMIT, LlmErrorClassifier.classifyHttpStatus(429));
+        assertEquals(LlmErrorEvent.Type.UPSTREAM_UNAVAILABLE, LlmErrorClassifier.classifyHttpStatus(502));
+        assertEquals(LlmErrorEvent.Type.UPSTREAM_UNAVAILABLE, LlmErrorClassifier.classifyHttpStatus(503));
+        assertEquals(LlmErrorEvent.Type.UPSTREAM_UNAVAILABLE, LlmErrorClassifier.classifyHttpStatus(504));
+        assertEquals(LlmErrorEvent.Type.SERVER_ERROR, LlmErrorClassifier.classifyHttpStatus(500));
+        assertEquals(LlmErrorEvent.Type.TIMEOUT, LlmErrorClassifier.classifyHttpStatus(408));
+        assertEquals(LlmErrorEvent.Type.HTTP, LlmErrorClassifier.classifyHttpStatus(401));
     }
 
     @Test
@@ -64,21 +70,9 @@ public class ReasonTaskErrorClassificationTest {
         assertEquals("ssl", LlmErrorEvent.Type.SSL.value());
     }
 
-    private LlmErrorEvent.Type invokeHttpClassification(int code) throws Exception {
-        Method method = ReasonTask.class.getDeclaredMethod("classifyHttpStatus", int.class);
-        method.setAccessible(true);
-        return (LlmErrorEvent.Type) method.invoke(null, code);
-    }
-
     private boolean invokeRetryableHttpStatus(int code) throws Exception {
         Method method = ReasonTask.class.getDeclaredMethod("isRetryableHttpStatus", int.class);
         method.setAccessible(true);
         return (Boolean) method.invoke(null, code);
-    }
-
-    private boolean invoke(String name, Throwable error) throws Exception {
-        Method method = ReasonTask.class.getDeclaredMethod(name, Throwable.class);
-        method.setAccessible(true);
-        return (Boolean) method.invoke(null, error);
     }
 }

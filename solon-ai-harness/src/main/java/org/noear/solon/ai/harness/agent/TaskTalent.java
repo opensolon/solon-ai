@@ -21,7 +21,7 @@ import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.LlmErrorEvent;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.task.ReasonTask;
+import org.noear.solon.ai.agent.react.LlmErrorClassifier;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.RunEndEvent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
@@ -259,7 +259,7 @@ public class TaskTalent extends AbsTalent {
                 if (agentEnd == null) {
                     throw new IllegalStateException("子代理未正常完成：未收到正常响应");
                 }
-                countLlmErrorType(agentEnd.getTrace().getExtraAs(LlmErrorEvent.TRACE_ERROR_TYPE_KEY),
+                countLlmErrorType(agentEnd.getLlmErrorType(),
                         rateLimited, timedOut, upstreamUnavailable);
 
                 if (__parentTrace != null) {
@@ -303,7 +303,7 @@ public class TaskTalent extends AbsTalent {
                     }
                     throw new IllegalStateException("子代理未正常完成：未收到正常响应");
                 }
-                countLlmErrorType(agentEnd.getTrace().getExtraAs(LlmErrorEvent.TRACE_ERROR_TYPE_KEY),
+                countLlmErrorType(agentEnd.getLlmErrorType(),
                         rateLimited, timedOut, upstreamUnavailable);
 
                 __parentTrace.getMetrics().addMetrics(agentEnd.getMetrics());
@@ -318,7 +318,7 @@ public class TaskTalent extends AbsTalent {
             return formatTaskResp(task, true, result, isMultitask);
         } catch (Throwable e) {
             LOG.error("任务失败[{}/{} - {}]: {}", task.index, count, task.agent_name, e.getMessage(), e);
-            countLlmErrorType(ReasonTask.classifyException(e), rateLimited, timedOut, upstreamUnavailable);
+            countLlmErrorType(LlmErrorClassifier.classify(e), rateLimited, timedOut, upstreamUnavailable);
 
             String result = String.format("ERROR: 任务执行失败: %s", e.getMessage());
 

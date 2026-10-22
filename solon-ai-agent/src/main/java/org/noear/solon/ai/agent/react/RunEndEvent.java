@@ -53,6 +53,11 @@ public class RunEndEvent extends AbsReActEvent {
         return trace.getMetrics();
     }
 
+    /** 返回本次运行最后一次模型服务错误的分类。 */
+    public LlmErrorEvent.Type getLlmErrorType() {
+        return trace.getExtraAs(LlmErrorEvent.TRACE_ERROR_TYPE_KEY);
+    }
+
     public boolean isAbnormal() {
         return trace.isAbnormal();
     }

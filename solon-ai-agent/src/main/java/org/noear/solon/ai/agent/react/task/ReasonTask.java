@@ -38,17 +38,7 @@ import org.noear.solon.net.http.HttpResponseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.EOFException;
-import java.net.ConnectException;
-import java.net.NoRouteToHostException;
-import java.net.SocketException;
-import java.net.SocketTimeoutException;
-import java.net.UnknownHostException;
-import java.security.cert.CertPathValidatorException;
-import java.security.cert.CertificateException;
 import java.util.*;
-import java.util.concurrent.TimeoutException;
-import javax.net.ssl.SSLException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -517,8 +507,8 @@ public class ReasonTask {
         // 3. 设置终止状态
         trace.setRoute(Agent.ID_END);
 
-        // HTTP 状态码比包装异常和异常文本更可靠，因此必须优先于传输层分类。
-        LlmErrorEvent.Type type = classifyException(lastException);
+        // 已取得 HTTP 响应时按状态码分类，否则按异常链分类。
+        LlmErrorEvent.Type type = LlmErrorClassifier.classify(lastException);
         trace.setExtra(LlmErrorEvent.TRACE_ERROR_TYPE_KEY, type);
         pushLlmErrorEvent(trace, type);
 
@@ -538,29 +528,6 @@ public class ReasonTask {
         }
     }
 
-    /**
-     * 按 HTTP 状态码做保守分类：502/503/504 只能说明网关或上游暂时不可用，
-     * 不能仅凭状态码断言一定是上游限流。
-     */
-    private static LlmErrorEvent.Type classifyHttpStatus(int code) {
-        if (code == 429) {
-            return LlmErrorEvent.Type.RATE_LIMIT;
-        }
-        if (code == 408) {
-            return LlmErrorEvent.Type.TIMEOUT;
-        }
-        if (code == 502 || code == 503 || code == 504
-                || code == 520 || code == 521 || code == 522
-                || code == 523 || code == 524 || code == 525
-                || code == 526 || code == 529) {
-            return LlmErrorEvent.Type.UPSTREAM_UNAVAILABLE;
-        }
-        if (code >= 500 && code <= 599) {
-            return LlmErrorEvent.Type.SERVER_ERROR;
-        }
-        return LlmErrorEvent.Type.HTTP;
-    }
-
     private static String buildHttpErrorMessage(int code, LlmErrorEvent.Type type) {
         switch (type) {
             case RATE_LIMIT:
@@ -576,41 +543,9 @@ public class ReasonTask {
         }
     }
 
-    /** 按异常链分类；HTTP 响应优先于包装异常和文本匹配。 */
-    public static LlmErrorEvent.Type classifyException(Throwable e) {
-        if (isSslException(e)) {
-            return LlmErrorEvent.Type.SSL;
-        }
-        if (isDnsException(e)) {
-            return LlmErrorEvent.Type.DNS;
-        }
-
-        HttpResponseException httpRespEx = findCause(e, HttpResponseException.class);
-        if (httpRespEx != null) {
-            return classifyHttpStatus(httpRespEx.code());
-        }
-        if (findCause(e, LlmNoReturnException.class) != null) {
-            return LlmErrorEvent.Type.NO_RETURN;
-        }
-        if (isTimeoutException(e)) {
-            return LlmErrorEvent.Type.TIMEOUT;
-        }
-        if (isConnectionRefused(e)) {
-            return LlmErrorEvent.Type.CONNECTION_REFUSED;
-        }
-        if (isConnectException(e)) {
-            return LlmErrorEvent.Type.CONNECTION;
-        }
-        if (isNetworkException(e)) {
-            return LlmErrorEvent.Type.NETWORK;
-        }
-        return LlmErrorEvent.Type.UNKNOWN;
-    }
 
     private static boolean isRetryableException(Throwable e) {
-        if (findCause(e, InterruptedException.class) != null
-                || isSslException(e)
-                || isDnsException(e)) {
+        if (findCause(e, InterruptedException.class) != null) {
             return false;
         }
 
@@ -619,10 +554,15 @@ public class ReasonTask {
             return isRetryableHttpStatus(httpRespEx.code());
         }
 
-        if (findCause(e, LlmNoReturnException.class) != null
-                || isTimeoutException(e)
-                || isConnectException(e)
-                || isNetworkException(e)) {
+        LlmErrorEvent.Type type = LlmErrorClassifier.classify(e);
+        if (type == LlmErrorEvent.Type.SSL || type == LlmErrorEvent.Type.DNS) {
+            return false;
+        }
+        if (type == LlmErrorEvent.Type.NO_RETURN
+                || type == LlmErrorEvent.Type.TIMEOUT
+                || type == LlmErrorEvent.Type.CONNECTION
+                || type == LlmErrorEvent.Type.CONNECTION_REFUSED
+                || type == LlmErrorEvent.Type.NETWORK) {
             return true;
         }
 
@@ -636,73 +576,6 @@ public class ReasonTask {
                 || code == 500 || code == 502 || code == 503 || code == 504
                 || code == 520 || code == 521 || code == 522 || code == 523
                 || code == 524 || code == 529;
-    }
-
-    private static boolean isTimeoutException(Throwable e) {
-        Throwable cause = e;
-        while (cause != null) {
-            if (cause instanceof TimeoutException || cause instanceof SocketTimeoutException) {
-                return true;
-            }
-            String message = cause.getMessage();
-            if (message != null) {
-                String lower = message.toLowerCase(Locale.ROOT);
-                if (lower.contains("timeout")
-                        || lower.contains("timed out")
-                        || lower.contains("deadline exceeded")) {
-                    return true;
-                }
-            }
-            cause = cause.getCause();
-        }
-        return false;
-    }
-
-    private static boolean isConnectException(Throwable e) {
-        return findCause(e, ConnectException.class) != null;
-    }
-
-    private static boolean isConnectionRefused(Throwable e) {
-        ConnectException connectException = findCause(e, ConnectException.class);
-        if (connectException == null || connectException.getMessage() == null) {
-            return false;
-        }
-        return connectException.getMessage().toLowerCase(Locale.ROOT).contains("refused");
-    }
-
-    private static boolean isDnsException(Throwable e) {
-        return findCause(e, UnknownHostException.class) != null;
-    }
-
-    private static boolean isSslException(Throwable e) {
-        Throwable cause = e;
-        while (cause != null) {
-            if (cause instanceof SSLException
-                    || cause instanceof CertificateException
-                    || cause instanceof CertPathValidatorException) {
-                return true;
-            }
-
-            String message = cause.getMessage();
-            if (message != null) {
-                String lowerMessage = message.toLowerCase(Locale.ROOT);
-                if (lowerMessage.contains("ssl")
-                        || lowerMessage.contains("certificate")
-                        || lowerMessage.contains("handshake")
-                        || lowerMessage.contains("pkix")
-                        || lowerMessage.contains("trust anchor")) {
-                    return true;
-                }
-            }
-            cause = cause.getCause();
-        }
-        return false;
-    }
-
-    private static boolean isNetworkException(Throwable e) {
-        return findCause(e, NoRouteToHostException.class) != null
-                || findCause(e, SocketException.class) != null
-                || findCause(e, EOFException.class) != null;
     }
 
     private static String buildExceptionErrorMessage(LlmErrorEvent.Type type) {
