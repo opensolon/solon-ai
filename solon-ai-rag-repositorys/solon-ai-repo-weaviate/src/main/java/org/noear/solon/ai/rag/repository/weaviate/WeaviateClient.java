@@ -6,9 +6,11 @@ import org.noear.solon.core.util.MultiMap;
 import org.noear.solon.net.http.HttpUtils;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 /**
  * Weaviate API 客户端
@@ -18,7 +20,15 @@ import java.util.Map;
  * @since 3.1
  */
 public class WeaviateClient {
+    /**
+     * Weaviate 集成标识请求头（Weaviate 1.38+ 用于统计流量来源，格式为 {name}/{version}）
+     */
+    public static final String INTEGRATION_HEADER = "X-Weaviate-Client-Integration";
 
+    /**
+     * 集成标识值，例如：solon-ai/4.2.0
+     */
+    public static final String INTEGRATION_VALUE = "solon-ai/" + resolveVersion();
 
     private final String baseUrl;
     private final MultiMap<String> headers = new MultiMap<>();
@@ -67,10 +77,33 @@ public class WeaviateClient {
      * 构建 HTTP 工具
      */
     private HttpUtils http(String endpoint) {
+        // 集成标识在用户头之前设置，同名时以用户头为准
         return HttpUtils.http(endpoint)
                 .header("Accept", "application/json")
                 .header("Content-Type", "application/json")
+                .header(INTEGRATION_HEADER, INTEGRATION_VALUE)
                 .headers(headers);
+    }
+
+    /**
+     * 从本模块 jar 内的 Maven pom.properties 读取版本，读取不到时返回 unknown
+     */
+    private static String resolveVersion() {
+        try (InputStream in = WeaviateClient.class.getResourceAsStream(
+                "/META-INF/maven/org.noear/solon-ai-repo-weaviate/pom.properties")) {
+            if (in != null) {
+                Properties props = new Properties();
+                props.load(in);
+                String version = props.getProperty("version");
+                if (Utils.isNotEmpty(version)) {
+                    return version.trim();
+                }
+            }
+        } catch (Throwable ignored) {
+            // 遥测信息不能影响正常使用
+        }
+
+        return "unknown";
     }
 
     /**
