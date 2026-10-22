@@ -34,7 +34,7 @@ public class AgentFactory {
     //**
     private static String[] TOOL_ALL_FULL = {"read", "write", "edit", "glob", "grep", "ls", "bash",  "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "generate", "mcp", "openapi", "hitl", "lsp", "memory"};
     //*
-    private static String[] TOOL_ALL_PUBLIC = {"read", "write", "edit", "glob", "grep", "ls", "bash",  "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "lsp"};
+    private static String[] TOOL_ALL_PUBLIC = {"read", "write", "edit", "glob", "grep", "ls", "bash",  "skill", "todo", "code", "codesearch", "websearch", "webfetch", "lsp"};
     //pi
     private static String[] TOOL_PI = {"read", "write", "edit", "bash"};
 

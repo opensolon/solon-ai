@@ -64,14 +64,12 @@ public class GenerateTalent extends AbsTalent {
                     "- `list`，列出目录内容\n" +
                     "- `bash`，运行 Shell 命令\n" +
                     "- `skill`，调用预定义的技能模块\n" +
-                    "- `lsp`，深度代码理解\n" +
+                    "- `mcp`，MCP 网关工具集\n" +
                     "- `code`，编码指导模块\n" +
                     "- `todo`，任务清单管理\n" +
                     "- `webfetch`，直接抓取特定网页内容\n" +
                     "- `websearch`，互联网通用搜索\n" +
                     "- `codesearch`，互联网代码仓库搜索\n" +
-                    "- `pi`，核心操作能力包（包括：read,write,edit,bash）\n" +
-                    "- `task`，允许其进一步开启下级代理(递归分发)\n" +
                     "- `*`，全量授权") List<String> tools,
             @Param(name = "skills", description = "子代理具备的特定专家能力标识列表", required = false) List<String> skills,
             @Param(name = "saveToFile", description = "是否持久化。如果是通用的、可复用的专家角色，建议设为 true；如果是临时任务助手，设为 false。", defaultValue = "false", required = false) Boolean saveToFile,

@@ -55,6 +55,12 @@ public class TaskTalent extends AbsTalent {
     public static final String TOOL_TASK = "task";
     public static final String TOOL_MULTITASK = "multitask";
 
+    /**
+     * 委派深度标记（防嵌套死锁）：
+     * 子代理任务线程内可见，子代理若再调用 task/multitask 会被拒绝
+     */
+    private static final ThreadLocal<Boolean> TASK_DEPTH = new ThreadLocal<>();
+
     private final HarnessEngine engine;
 
     public TaskTalent(HarnessEngine engine) {
@@ -79,10 +85,20 @@ public class TaskTalent extends AbsTalent {
 
         int maxTasks = engine.getMultitaskMaxTasks();
         sb.append("## 任务分配策略：\n");
-        sb.append("1. **优先并行**: 当任务可以被拆分为互不干扰的独立单元（例如：不同的模块开发、多路搜索）时，**必须**使用 `multitask` 以节省时间。单次建议 2-" + maxTasks + " 个单元。\n");
+        sb.append("1. **优先并行**: 当任务可以被拆分为互不干扰的独立单元（例如：不同的模块开发、多路搜索）时，可使用 `multitask` 节省时间。");
+        if (maxTasks > 0) {
+            sb.append("单次最多 ").append(maxTasks).append(" 个单元。");
+        }
+        sb.append("\n");
         sb.append("2. **原子性**: 每个子任务应具备明确的边界。\n");
         sb.append("3. **上下文感知**: 必须在 prompt 中提供任务所需的全部背景，子代理无法看到主会话的完整历史。\n");
-        sb.append("4. **分批执行**: 如需处理超过 " + maxTasks + " 个任务，请分批调用 `multitask`（每批最多 " + maxTasks + " 个），避免 API 限流与结果过长。\n");
+        if (maxTasks > 0) {
+            sb.append("4. **分批执行**: 如需处理超过 ").append(maxTasks)
+                    .append(" 个任务，请分批调用 `multitask`（每批最多 ")
+                    .append(maxTasks).append(" 个），避免 API 限流与结果过长。\n");
+        } else {
+            sb.append("4. **合理控制规模**: 任务过多时请主动分批调用 `multitask`，避免 API 限流与结果过长。\n");
+        }
 
         return sb.toString();
     }
@@ -94,6 +110,10 @@ public class TaskTalent extends AbsTalent {
             throw new IllegalStateException("__sessionId is required");
         }
 
+        if (TASK_DEPTH.get() != null) {
+            return "ERROR: 子代理不允许再委派子任务（最多一层）。请直接完成当前任务，或把需要的内容整理进 prompt 后自行执行。";
+        }
+
         AgentSession __parentSession = engine.getSession(__sessionId);
         ReActTrace __parentTrace = ReActTrace.getCurrent(__parentSession.getContext());
 
@@ -102,7 +122,7 @@ public class TaskTalent extends AbsTalent {
         taskOp.description = taskSpec.description;
         taskOp.prompt = taskSpec.prompt;
 
-        return taskDo(__parentTrace, __cwd, __sessionId, __parentSession, taskOp, 1, false, Utils.uuid());
+        return runTask(__parentTrace, __cwd, __sessionId, __parentSession, taskOp, 1, false, Utils.uuid());
     }
 
     @ToolMapping(name = TOOL_MULTITASK, description =
@@ -116,50 +136,64 @@ public class TaskTalent extends AbsTalent {
             throw new IllegalStateException("__sessionId is required");
         }
 
+        // 防嵌套死锁：子代理内再委派会形成"共享池自等待"死锁
+        if (TASK_DEPTH.get() != null) {
+            return "ERROR: 子代理不允许再委派子任务（最多一层）。请直接完成当前任务；如需并行，请返回后由主代理统一编排。";
+        }
+
+        int maxTasks = engine.getMultitaskMaxTasks();
+        if (maxTasks > 0 && tasks.size() > maxTasks) {
+            return "ERROR: 单次最多只能执行 " + maxTasks + " 个子任务，请分批调用 multitask。";
+        }
 
         AgentSession __parentSession = engine.getSession(__sessionId);
         ReActTrace __parentTrace = ReActTrace.getCurrent(__parentSession.getContext());
 
-        if (__parentTrace == null) {
-            if (LOG.isWarnEnabled()) {
-                LOG.warn("任务接收[{}, __parentTrace=null]：{}", __sessionId, ONode.serialize(tasks));
-            }
-        } else {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("任务接收[{}]：{}", __sessionId, ONode.serialize(tasks));
-            }
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("任务接收[{}]：{} 个子任务", __sessionId, tasks.size());
         }
 
-
-        List<CompletableFuture<String>> futures = new ArrayList<>();
+        final List<CompletableFuture<String>> futures = new ArrayList<>();
 
         for (MultiTaskOp task : tasks) {
             CompletableFuture<String> future = CompletableFuture.supplyAsync(() ->
-                    taskDo(__parentTrace, __cwd, __sessionId, __parentSession, task, tasks.size(), true, Utils.uuid()), RunUtil.io());
+                    runTask(__parentTrace, __cwd, __sessionId, __parentSession, task, tasks.size(), true, Utils.uuid()), RunUtil.io());
             futures.add(future);
         }
 
-        String result = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                .thenApply(v -> {
-                    StringBuilder compositeResult = new StringBuilder();
-                    compositeResult.append("<multitask_results>\n");
-                    for (CompletableFuture<String> f : futures) {
-                        compositeResult.append(f.join()).append("\n");
-                    }
-                    compositeResult.append("</multitask_results>");
-                    return compositeResult.toString();
-                })
-                .exceptionally(ex -> "ERROR: Multitask aggregate failed: " + ex.getMessage())
-                .join();
+        // 逐任务聚合：单个失败不影响其他任务的结果回收，失败原因逐任务回流
+        String result;
+        {
+            StringBuilder compositeResult = new StringBuilder();
+            compositeResult.append("<multitask_results>\n");
+            for (CompletableFuture<String> f : futures) {
+                try {
+                    compositeResult.append(f.join()).append("\n");
+                } catch (Throwable t) {
+                    compositeResult.append("ERROR: 子任务未完成（失败或被中断）: ")
+                            .append(rootMessage(t)).append("\n");
+                }
+            }
+            compositeResult.append("</multitask_results>");
+            result = compositeResult.toString();
+        }
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("任务完成[{}]：{} 个全部完成", __sessionId, tasks.size());
+            LOG.debug("任务完成[{}]：{} 个子任务结束", __sessionId, tasks.size());
         }
 
         return result;
     }
 
-    private String taskDo(ReActTrace __parentTrace, String __cwd, String __sessionId, AgentSession __parentSession, MultiTaskOp task, int count, boolean isMultitask, String taskId) {
+    private static String rootMessage(Throwable e) {
+        Throwable t = e;
+        while (t.getCause() != null && t.getCause() != t) {
+            t = t.getCause();
+        }
+        return t.getMessage() != null ? t.getMessage() : t.toString();
+    }
+
+    private String runTask(ReActTrace __parentTrace, String __cwd, String __sessionId, AgentSession __parentSession, MultiTaskOp task, int count, boolean isMultitask, String taskId) {
         AgentDefinition agentDefinition = engine.getAgentManager().getAgent(task.agent_name);
         if (agentDefinition == null) {
             return "ERROR: 未知的子代理类型 '" + task.agent_name + "'。";
@@ -169,17 +203,20 @@ public class TaskTalent extends AbsTalent {
             LOG.debug("任务开始[{}/{} - {}]: {}", task.index, count, task.agent_name, ONode.serialize(task));
         }
 
-        String modelSelected = __parentSession.getContext().getAs(HarnessEngine.CTX_MODEL_SELECTED);
-
-        ReActAgent agent = engine.getAgentBuilder(agentDefinition, modelSelected).build();
-        final AgentSession session = InMemoryAgentSession.of(agent.name());
-
-        String result = null;
-        Prompt originalPrompt = Prompt.of(task.prompt);
-        originalPrompt.attrs().computeIfAbsent(ChatSession.ATTR_SESSIONID,
-                k -> session.getSessionId());
-
         try {
+            // 标记委派深度：本线程内再触发 task/multitask 会被拒绝
+            TASK_DEPTH.set(Boolean.TRUE);
+
+            String modelSelected = __parentSession.getContext().getAs(HarnessEngine.CTX_MODEL_SELECTED);
+
+            ReActAgent agent = engine.getAgentBuilder(agentDefinition, modelSelected).build();
+            final AgentSession session = InMemoryAgentSession.of(agent.name());
+
+            String result = null;
+            Prompt originalPrompt = Prompt.of(task.prompt);
+            originalPrompt.attrs().computeIfAbsent(ChatSession.ATTR_SESSIONID,
+                    k -> session.getSessionId());
+
             AtomicReference<Throwable> errRef = new AtomicReference<>();
 
             if (__parentTrace == null || __parentTrace.getOptions() == null || __parentTrace.getOptions().getStreamSink() == null) {
@@ -201,7 +238,7 @@ public class TaskTalent extends AbsTalent {
                 }
 
                 if (agentEnd == null) {
-                    throw new IllegalStateException("子代理未正常完成：未收到未收到正常响应");
+                    throw new IllegalStateException("子代理未正常完成：未收到正常响应");
                 }
 
                 if (__parentTrace != null) {
@@ -258,9 +295,12 @@ public class TaskTalent extends AbsTalent {
         } catch (Throwable e) {
             LOG.error("任务失败[{}/{} - {}]: {}", task.index, count, task.agent_name, e.getMessage(), e);
 
-            result = String.format("ERROR: 任务执行失败: %s", e.getMessage());
+            String result = String.format("ERROR: 任务执行失败: %s", e.getMessage());
 
             return formatTaskResp(task, false, result, isMultitask);
+        } finally {
+            // 必须清理：池线程会被复用，残留标记会误伤后续任务
+            TASK_DEPTH.remove();
         }
     }
 
@@ -322,7 +362,7 @@ public class TaskTalent extends AbsTalent {
         public String toString() {
             return "MultiTaskOp{" +
                     "index='" + index + '\'' +
-                    "agent_name='" + agent_name + '\'' +
+                    ", agent_name='" + agent_name + '\'' +
                     ", description='" + description + '\'' +
                     '}';
         }
