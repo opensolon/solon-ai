@@ -10,6 +10,11 @@
 
 *  mcp channel 概念改为 transport （并保持兼容）???
 
+### 4.2.0
+
+* 调整 solon-ai-mcp 升为 mcp-java-jdk 2.1.0
+* mcp-core 升为 mcp-java-sdk 2.1.0
+* mcp-json-jackson2 升为 mcp-java-sdk 2.1.0
 
 ### 4.1.1
 

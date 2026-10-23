@@ -52,7 +52,7 @@ public class McpHttpClientMixTest6_sse {
 
         assert tools.size() == 1;
 
-        assert ("[FunctionToolDesc{name='getWeather', title='', description='查询天气预报', returnDirect=true, inputSchema={\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"城市位置\"}},\"required\":[\"location\"]}, outputSchema=null}]")
+        assert ("[FunctionToolDesc{name='getWeather', title='', description='查询天气预报', returnDirect=true, strict=null, inputSchema={\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"城市位置\"}},\"required\":[\"location\"]}, outputSchema=null}]")
                 .equals(tools.toString());
     }
 

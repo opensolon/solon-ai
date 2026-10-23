@@ -84,15 +84,14 @@ public class StatelessPromptRegistry implements McpPrimitivesRegistry<FunctionPr
             }
 
             McpStatelessServerFeatures.AsyncPromptSpecification promptSpec = new McpStatelessServerFeatures.AsyncPromptSpecification(
-                    McpSchema.Prompt.builder()
-                            .name(functionPrompt.name())
+                    McpSchema.Prompt.builder(functionPrompt.name())
                             .title(functionPrompt.title()).description(functionPrompt.description())
                             .meta(functionPrompt.meta())
                             .arguments(promptArguments)
                             .build(),
                     (exchange, request) -> {
                         return Mono.create(sink -> {
-                            Context.currentWith(new McpServerContext(null,  exchange), () -> {
+                            Context.currentWith(new McpServerContext(null, exchange), () -> {
                                 functionPrompt.handleAsync(request.arguments()).whenComplete((rst, err) -> {
                                     McpResultResponder.doPromptResultResponse(sink, mcpServerProps, functionPrompt, rst, err);
                                 });

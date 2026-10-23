@@ -161,14 +161,6 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
         return new DefaultMcpTransportSession(onClose);
     }
 
-    private McpTransportSession<Disposable> createClosedSession(McpTransportSession<Disposable> existingSession) {
-        var existingSessionId = Optional.ofNullable(existingSession)
-                .filter(session -> !(session instanceof ClosedMcpTransportSession))
-                .flatMap(McpTransportSession::sessionId)
-                .orElse(null);
-        return new ClosedMcpTransportSession<>(existingSessionId);
-    }
-
     @Override
     public void setExceptionHandler(Consumer<Throwable> handler) {
         logger.debug("Exception handler registered");
@@ -176,10 +168,14 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
     }
 
     private void handleException(Throwable t) {
-        logger.debug("Handling exception for session {}", sessionIdOrPlaceholder(this.activeSession.get()), t);
+        if (logger.isDebugEnabled()) {
+            logger.debug("Handling exception for session " + sessionIdOrPlaceholder(this.activeSession.get()), t);
+        }
         if (t instanceof McpTransportSessionNotFoundException) {
             McpTransportSession<?> invalidSession = this.activeSession.getAndSet(createTransportSession());
-            logger.warn("Server does not recognize session {}. Invalidating.", invalidSession.sessionId());
+            if (logger.isWarnEnabled()) {
+                logger.warn("Server does not recognize session " + invalidSession.sessionId() + ". Invalidating.");
+            }
             invalidSession.close();
         }
         Consumer<Throwable> handler = this.exceptionHandler.get();
@@ -192,7 +188,8 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
     public Mono<Void> closeGracefully() {
         return Mono.defer(() -> {
             logger.debug("Graceful close triggered");
-            McpTransportSession<Disposable> currentSession = this.activeSession.getAndUpdate(this::createClosedSession);
+            McpTransportSession<Disposable> currentSession = this.activeSession
+                    .getAndSet(ClosedMcpTransportSession.INSTANCE);
             if (currentSession != null) {
                 return Mono.from(currentSession.closeGracefully());
             }
@@ -202,8 +199,24 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
 
     private Mono<Disposable> reconnect(McpTransportStream<Disposable> stream) {
         return Mono.deferContextual(ctx -> {
+            Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> rh = this.handler.get();
+            if (rh == null) {
+                logger.warn("Transport has no request handler registered. Remember to call connect!");
+            }
+
+            final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> requestHandler = rh != null
+                    ? rh : msg -> Mono.error(new IllegalStateException("No request handler"));
+
+            final McpTransportSession<Disposable> transportSession = this.activeSession.get();
+
+            if (ClosedMcpTransportSession.INSTANCE.equals(transportSession)) {
+                throw new McpTransportSessionClosedException();
+            }
+
             if (stream != null) {
-                logger.debug("Reconnecting stream {} with lastId {}", stream.streamId(), stream.lastId());
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Reconnecting stream " + stream.streamId() + " with lastId " + stream.lastId());
+                }
             }
             else {
                 logger.debug("Reconnecting with no prior stream");
@@ -213,7 +226,6 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
             // session here and listen for messages. If it doesn't, that's ok, the server
             // is a simple, stateless one.
             final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
-            final McpTransportSession<Disposable> transportSession = this.activeSession.get();
 
 
             Disposable connection = Mono.fromFuture(webClientBuilder.build(this.endpoint)
@@ -261,13 +273,13 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
 //                            });
                         }
                     })
-                    .flatMap(jsonrpcMessage -> this.handler.get().apply(Mono.just(jsonrpcMessage)))
+                    .flatMap(jsonrpcMessage -> requestHandler.apply(Mono.just(jsonrpcMessage)))
                     .onErrorComplete(t -> {
                         this.handleException(t);
                         return true;
                     })
                     .doFinally(s -> {
-                        Disposable ref = disposableRef.getAndSet(null);
+                        @Nullable Disposable ref = disposableRef.getAndSet(null);
                         if (ref != null) {
                             transportSession.removeConnection(ref);
                         }
@@ -293,13 +305,27 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
 
         return Mono.create(sink -> {
             logger.debug("Sending message {}", message);
+
+            Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> rh = this.handler.get();
+            if (rh == null) {
+                logger.warn("Transport has no request handler registered. Remember to call connect!");
+            }
+
+            final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> requestHandler = rh != null
+                    ? rh : msg -> Mono.error(new IllegalStateException("No request handler"));
+
+            final McpTransportSession<Disposable> transportSession = this.activeSession.get();
+
+            if (ClosedMcpTransportSession.INSTANCE.equals(transportSession)) {
+                throw new McpTransportSessionClosedException();
+            }
+
             // Here we attempt to initialize the client.
             // In case the server supports SSE, we will establish a long-running session
             // here and
             // listen for messages.
             // If it doesn't, nothing actually happens here, that's just the way it is...
             final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
-            final McpTransportSession<Disposable> transportSession = this.activeSession.get();
 
             Disposable connection = Mono.deferContextual(ctx -> Mono.fromFuture(webClientBuilder.build(this.endpoint)
                             .accept(MimeType.APPLICATION_JSON_VALUE + ", " + MimeType.TEXT_EVENT_STREAM_VALUE)
@@ -324,9 +350,12 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
                         // 200 OK for notifications
                         if (response.code() >= 200 && response.code() < 300) {
                             String contentType = response.contentType();
+                            Long contentLength = response.contentLength();
+                            boolean emptyContentLength = contentLength != null && contentLength == 0;
                             // Existing SDKs consume notifications with no response body nor
                             // content type
-                            if (contentType == null || contentType.isEmpty() || contentType.length() == 0) {
+                            if (contentType == null || contentType.isEmpty() || emptyContentLength
+                                    || response.code() == StatusCodes.CODE_ACCEPTED) {
                                 logger.trace("Message was successfully sent via POST for session {}",
                                         sessionRepresentation);
                                 // signal the caller that the message was successfully
@@ -360,7 +389,7 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
                             return this.extractError(response, sessionRepresentation);
                         }
                     })
-                    .flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage)))
+                    .flatMap(jsonRpcMessage -> requestHandler.apply(Mono.just(jsonRpcMessage)))
                     .onErrorComplete(t -> {
                         // handle the error first
                         this.handleException(t);
@@ -382,7 +411,9 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
     }
 
     private static Flux<McpSchema.JSONRPCMessage> mcpSessionNotFoundError(String sessionRepresentation) {
-        logger.warn("Session {} was not found on the MCP server", sessionRepresentation);
+        if (logger.isWarnEnabled()) {
+            logger.warn("Session " + sessionRepresentation + " was not found on the MCP server");
+        }
         // inform the stream/connection subscriber
         return Flux.error(new McpTransportSessionNotFoundException(sessionRepresentation));
     }
@@ -425,10 +456,12 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
         });
     }
 
-    private Flux<McpSchema.JSONRPCMessage> eventStream(McpTransportStream<Disposable> stream, HttpResponse response) {
+    private Flux<McpSchema.JSONRPCMessage> eventStream(@Nullable McpTransportStream<Disposable> stream, HttpResponse response) {
         McpTransportStream<Disposable> sessionStream = stream != null ? stream
                 : new DefaultMcpTransportStream<>(this.resumableStreams, this::reconnect);
-        logger.debug("Connected stream {}", sessionStream.streamId());
+        if (logger.isDebugEnabled()) {
+            logger.debug("Connected stream " + sessionStream.streamId());
+        }
 
         var idWithMessages = TextStreamUtil.parseSseStream(response).map(this::parse);
         return Flux.from(sessionStream.consumeSseStream(idWithMessages));
@@ -463,8 +496,10 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
                         String responseMessage = response.bodyAsString();
 
                         if (sentMessage instanceof McpSchema.JSONRPCNotification) {
-                            logger.warn("Notification: {} received non-compliant response: {}", sentMessage,
-                                    Utils.hasText(responseMessage) ? responseMessage : "[empty]");
+                            if (logger.isWarnEnabled()) {
+                                logger.warn("Notification: " + sentMessage + " received non-compliant response: "
+                                        + (Utils.hasText(responseMessage) ? responseMessage : "[empty]"));
+                            }
                             s.complete();
                         } else {
                             McpSchema.JSONRPCMessage jsonRpcResponse = McpSchema.deserializeJsonRpcMessage(jsonMapper,
@@ -481,8 +516,10 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
     private Flux<McpSchema.JSONRPCMessage> newEventStream(HttpResponse response, String sessionRepresentation) {
         McpTransportStream<Disposable> sessionStream = new DefaultMcpTransportStream<>(this.resumableStreams,
                 this::reconnect);
-        logger.trace("Sent POST and opened a stream ({}) for session {}", sessionStream.streamId(),
-                sessionRepresentation);
+        if (logger.isTraceEnabled()) {
+            logger.trace("Sent POST and opened a stream (" + sessionStream.streamId() + ") for session "
+                    + sessionRepresentation);
+        }
         return eventStream(sessionStream, response);
     }
 
@@ -492,22 +529,35 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
     }
 
     private Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> parse(ServerSentEvent event) {
-        if (MESSAGE_EVENT_TYPE.equals(event.getEvent()) || isObjectJsonString(event.getData())) {
+        if (isMessageEvent(event.getEvent())) {
+            String data = event.getData();
+            if (data == null || data.isEmpty()) {
+                // messages without `event:` may be empty and should be ignored
+                logger.debug("Ignoring SSE message event with empty data: {}", event);
+                return Tuples.of(Optional.empty(), Collections.emptyList());
+            }
             try {
                 // We don't support batching ATM and probably won't since the next version
                 // considers removing it.
-                McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.jsonMapper, event.getData());
+                McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.jsonMapper, data);
                 String eventId = event.getId();
                 Optional<String> idOpt = (eventId != null) ? Optional.of(eventId) : Optional.empty();
                 return Tuples.of(idOpt, Arrays.asList(message));
 
             } catch (IOException ioException) {
-                throw new McpTransportException("Error parsing JSON-RPC message: " + event.getData(), ioException);
+                throw new McpTransportException("Error parsing JSON-RPC message: " + data, ioException);
             }
         } else {
-            logger.debug("Received SSE event with type: {}", event);
+            if (logger.isDebugEnabled()) {
+                logger.debug("Received SSE event with type: " + event);
+            }
             return Tuples.of(Optional.empty(), Collections.emptyList());
         }
+    }
+
+    private static boolean isMessageEvent(String eventType) {
+        // Per SSE semantics, missing/blank event type defaults to "message".
+        return eventType == null || eventType.trim().isEmpty() || MESSAGE_EVENT_TYPE.equals(eventType);
     }
 
     public static boolean isObjectJsonString(String str) {

@@ -8,12 +8,7 @@ import org.noear.solon.ai.chat.ChatModel;
  *
  */
 public class LlmUtil {
-    public static ChatModel getChatModelReasoner() {
-        return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
-                .apiKey("sk-011a4dfa2bbe4c7c8339bcaae41c949c")
-                .model("deepseek-reasoner") //deepseek-reasoner//deepseek-chat
-                .build();
-    }
+
     public static ChatModel.Builder getChatModel() {
 //        return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
 //                .apiKey("sk-8cc237b0657c4245a46832b0f6d9f930")
@@ -21,9 +16,9 @@ public class LlmUtil {
 
 
 
-        return ChatModel.of("https://ai.gitee.com/v1/chat/completions")
-                .apiKey("PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18")
-                .model("Qwen3-32B"); //Qwen3-32B, GLM-4.6
+        return ChatModel.of("https://apihub.agnes-ai.com/v1")
+                .apiKey("sk-bu0RaoVbyiprgX3Pont70xyaoqZDsrvvEW36WmbTZev2wmBz")
+                .model("agnes-3.0-flash"); //Qwen3-32B, GLM-4.6
 
 
 //        return ChatModel.of("https://ai.gitee.com/v1/chat/completions")

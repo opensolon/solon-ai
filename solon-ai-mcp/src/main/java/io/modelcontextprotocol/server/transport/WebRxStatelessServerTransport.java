@@ -102,6 +102,9 @@ public class WebRxStatelessServerTransport implements McpStatelessServerTranspor
 	}
 
 	private Entity doHandleGet(Context request) {
+		if (isClosing) {
+			return new Entity().status(StatusCodes.CODE_SERVICE_UNAVAILABLE).body("Server is shutting down");
+		}
 		return new Entity().status(StatusCodes.CODE_METHOD_NOT_ALLOWED);
 	}
 
@@ -127,8 +130,8 @@ public class WebRxStatelessServerTransport implements McpStatelessServerTranspor
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		String acceptHeaders = request.accept();
-		if (!(acceptHeaders.contains(MimeType.APPLICATION_JSON_VALUE)
-				&& acceptHeaders.contains(MimeType.TEXT_EVENT_STREAM_VALUE))) {
+		if (!(acceptAllows(acceptHeaders, MimeType.APPLICATION_JSON_VALUE)
+				&& acceptAllows(acceptHeaders, MimeType.TEXT_EVENT_STREAM_VALUE))) {
 			return RxEntity.badRequest().build();
 		}
 
@@ -146,7 +149,9 @@ public class WebRxStatelessServerTransport implements McpStatelessServerTranspor
 							return RxEntity.ok().contentType(MimeType.APPLICATION_JSON_VALUE).body(json);
 						}
 						catch (IOException e) {
-							logger.error("Failed to serialize response: {}", e.getMessage());
+							if (logger.isErrorEnabled()) {
+								logger.error("Failed to serialize response: " + e.getMessage());
+							}
 							return RxEntity.status(StatusCodes.CODE_INTERNAL_SERVER_ERROR)
 									.body(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
 											.message("Failed to serialize response")
@@ -173,7 +178,27 @@ public class WebRxStatelessServerTransport implements McpStatelessServerTranspor
 						.message("Invalid message format")
 						.build());
 			}
-		}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));
+		}).switchIfEmpty(RxEntity.badRequest().build())
+			.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));
+	}
+
+	/**
+	 * Checks whether the raw {@code Accept} header value allows the given media type.
+	 * Parses the comma-separated list, trimming entries and ignoring media type
+	 * parameters (e.g. {@code ;q=0.9}), matching case-insensitively.
+	 */
+	private static boolean acceptAllows(@Nullable String acceptHeader, String mimeType) {
+		if (acceptHeader == null || acceptHeader.isEmpty()) {
+			return false;
+		}
+		for (String entry : acceptHeader.split(",")) {
+			int paramIdx = entry.indexOf(';');
+			String type = paramIdx >= 0 ? entry.substring(0, paramIdx) : entry;
+			if (mimeType.equalsIgnoreCase(type.trim())) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

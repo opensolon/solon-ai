@@ -83,8 +83,7 @@ public class StatefulPromptRegistry implements McpPrimitivesRegistry<FunctionPro
             }
 
             McpServerFeatures.AsyncPromptSpecification promptSpec = new McpServerFeatures.AsyncPromptSpecification(
-                    McpSchema.Prompt.builder()
-                            .name(functionPrompt.name())
+                    McpSchema.Prompt.builder(functionPrompt.name())
                             .title(functionPrompt.title()).description(functionPrompt.description())
                             .meta(functionPrompt.meta())
                             .arguments(promptArguments)

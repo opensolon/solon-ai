@@ -5346,6 +5346,7 @@ public final class McpSchema {
 		private final Boolean isError;
 
 		@JsonProperty("structuredContent")
+		@JsonInclude(JsonInclude.Include.NON_EMPTY)
 		private final Object structuredContent;
 
 		@JsonProperty("_meta")

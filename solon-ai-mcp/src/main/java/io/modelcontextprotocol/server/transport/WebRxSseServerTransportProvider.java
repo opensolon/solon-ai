@@ -70,6 +70,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * @see McpServerTransportProvider
  * @see org.noear.solon.core.handle.Handler
  */
+/**
+ * @deprecated since 2.0.0, for removal. The SSE transport is superseded by the
+ * Streamable HTTP transport; use
+ * {@link io.modelcontextprotocol.server.transport.WebRxStreamableServerTransportProvider} instead.
+ */
 @Deprecated
 public class WebRxSseServerTransportProvider implements McpServerTransportProvider, IMcpHttpServerTransport {
 
@@ -154,7 +159,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 										   String baseUrl,
 										   String messageEndpoint,
 										   String sseEndpoint,
-										   Duration keepAliveInterval,
+										   @Nullable Duration keepAliveInterval,
 										   McpTransportContextExtractor<Context> contextExtractor,
 										   ServerTransportSecurityValidator securityValidator) {
 		Assert.notNull(jsonMapper, "McpJsonMapper must not be null");
@@ -242,13 +247,16 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 			return Mono.empty();
 		}
 
-		logger.debug("Attempting to broadcast message to {} active sessions", sessions.size());
+		if (logger.isDebugEnabled()) {
+			logger.debug("Attempting to broadcast message to " + this.sessions.size() + " active sessions");
+		}
 
-		return Flux.fromIterable(sessions.values())
-				.flatMap(session -> session.sendNotification(method, params)
-						.doOnError(
-								e -> logger.error("Failed to send message to session {}: {}", session.getId(), e.getMessage()))
-						.onErrorComplete())
+		return Flux.fromIterable(this.sessions.values())
+				.flatMap(session -> session.sendNotification(method, params).doOnError(e -> {
+					if (logger.isErrorEnabled()) {
+						logger.error("Failed to send message to session " + session.getId() + ": " + e.getMessage());
+					}
+				}).onErrorComplete())
 				.then();
 	}
 
@@ -274,7 +282,9 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 		return Mono.defer(() -> {
 			McpServerSession session = this.sessions.get(sessionId);
 			if (session == null) {
-				logger.debug("Session {} not found", sessionId);
+				if (logger.isDebugEnabled()) {
+					logger.debug("Session " + sessionId + " not found");
+				}
 				return Mono.empty();
 			}
 			return session.sendNotification(method, params);
@@ -288,17 +298,17 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	 */
 	@Override
 	public Mono<Void> closeGracefully() {
-		return Flux.fromIterable(sessions.values())
-				.doFirst(() -> logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size()))
-				.flatMap(McpServerSession::closeGracefully)
-				.then()
-				.doOnSuccess(v -> {
-					logger.debug("Graceful shutdown completed");
-					sessions.clear();
-					if (this.keepAliveScheduler != null) {
-						this.keepAliveScheduler.shutdown();
-					}
-				});
+		return Flux.fromIterable(this.sessions.values()).doFirst(() -> {
+			if (logger.isDebugEnabled()) {
+				logger.debug("Initiating graceful shutdown with " + this.sessions.size() + " active sessions");
+			}
+		}).flatMap(McpServerSession::closeGracefully).then().doOnSuccess(v -> {
+			logger.debug("Graceful shutdown completed");
+			this.sessions.clear();
+			if (this.keepAliveScheduler != null) {
+				this.keepAliveScheduler.shutdown();
+			}
+		});
 	}
 
 	public void handleSseConnection(Context ctx) throws Throwable{
@@ -340,15 +350,21 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 
 					sessionTransport.setSessionId(sessionId);
 
-					logger.debug("Created new SSE connection for session: {}", sessionId);
+					if (logger.isDebugEnabled()) {
+						logger.debug("Created new SSE connection for session: " + sessionId);
+					}
 					sessions.put(sessionId, session);
 					sessionRequests.put(sessionId, request);
 
 					// Send initial endpoint event
-					logger.debug("Sending initial endpoint event to session: {}", sessionId);
+					if (logger.isDebugEnabled()) {
+						logger.debug("Sending initial endpoint event to session: " + sessionId);
+					}
 					sink.next(new SseEvent().name(ENDPOINT_EVENT_TYPE).data(buildEndpointUrl(sessionId)));
 					sink.onCancel(() -> {
-						logger.debug("Session {} cancelled", sessionId);
+						if (logger.isDebugEnabled()) {
+							logger.debug("Session " + sessionId + " cancelled");
+						}
 						sessions.remove(sessionId);
 						sessionRequests.remove(sessionId);
 					});
@@ -438,18 +454,22 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 			try {
 				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
 				return session.handle(message).flatMap(response -> RxEntity.ok().build()).onErrorResume(error -> {
-					logger.error("Error processing  message: {}", error.getMessage());
+					if (logger.isErrorEnabled()) {
+						logger.error("Error processing  message: " + error.getMessage());
+					}
 					// TODO: instead of signalling the error, just respond with 200 OK
 					// - the error is signalled on the SSE connection
 					// return ServerResponse.ok().build();
 					return RxEntity.status(StatusCodes.CODE_INTERNAL_SERVER_ERROR)
 							.body(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
-									.message(error.getMessage())
+									.message("Internal server error. Check server logs for details.")
 									.build());
 				});
 			}
 			catch (IllegalArgumentException | IOException e) {
-				logger.error("Failed to deserialize message: {}", e.getMessage());
+				if (logger.isErrorEnabled()) {
+					logger.error("Failed to deserialize message: " + e.getMessage());
+				}
 				return RxEntity.badRequest().body(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
 						.message("Invalid message format")
 						.build());
@@ -485,7 +505,9 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 						.data(jsonText);
 				sink.next(event);
 			}).doOnError(e -> {
-				logger.error("Error sending message for session {}: {}", this.sessionId, e.getMessage());
+				if (logger.isErrorEnabled()) {
+					logger.error("Error sending message for session " + this.sessionId + ": " + e.getMessage());
+				}
 
 				Throwable exception = Exceptions.unwrap(e);
 				sink.error(exception);
@@ -595,7 +617,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 		 * is disabled.
 		 * @return this builder instance
 		 */
-		public Builder keepAliveInterval(Duration keepAliveInterval) {
+		public Builder keepAliveInterval(@Nullable Duration keepAliveInterval) {
 			this.keepAliveInterval = keepAliveInterval;
 			return this;
 		}

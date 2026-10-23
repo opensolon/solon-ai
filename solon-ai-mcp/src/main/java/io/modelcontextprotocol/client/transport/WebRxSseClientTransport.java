@@ -10,6 +10,7 @@ import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.*;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
+import org.jspecify.annotations.Nullable;
 import org.noear.solon.core.util.MimeType;
 import org.noear.solon.net.http.HttpUtilsBuilder;
 import org.noear.solon.net.http.textstream.ServerSentEvent;
@@ -25,6 +26,8 @@ import reactor.util.retry.Retry;
 import reactor.util.retry.Retry.RetrySignal;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.BiConsumer;
@@ -58,6 +61,11 @@ import java.util.function.Function;
  * @see <a href=
  * "https://spec.modelcontextprotocol.io/specification/basic/transports/#http-with-sse">MCP
  * HTTP with SSE Transport Specification</a>
+ */
+/**
+ * @deprecated since 2.0.0, for removal. The SSE transport is superseded by the
+ * Streamable HTTP transport; use
+ * {@link io.modelcontextprotocol.client.transport.WebRxStreamableHttpTransport} instead.
  */
 @Deprecated
 public class WebRxSseClientTransport implements McpClientTransport {
@@ -101,7 +109,7 @@ public class WebRxSseClientTransport implements McpClientTransport {
 	 * Subscription for the SSE connection handling inbound messages. Used for cleanup
 	 * during transport shutdown.
 	 */
-	private Disposable inboundSubscription;
+	private @Nullable Disposable inboundSubscription;
 
 	/**
 	 * Flag indicating if the transport is in the process of shutting down. Used to
@@ -120,6 +128,11 @@ public class WebRxSseClientTransport implements McpClientTransport {
 	 * HTTP POST requests.
 	 */
 	private String sseEndpoint;
+
+	/**
+	 * Validator for the message endpoint.
+	 */
+	private final SseMessageEndpointValidator messageEndpointValidator;
 
 	/**
 	 * Constructs a new SseClientTransport with the specified WebClient builder and
@@ -142,15 +155,31 @@ public class WebRxSseClientTransport implements McpClientTransport {
 	 * @param sseEndpoint the SSE endpoint URI to use for establishing the connection
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
-	public WebRxSseClientTransport(HttpUtilsBuilder webClientBuilder, McpJsonMapper jsonMapper,
-                                   String sseEndpoint) {
+	public WebRxSseClientTransport(HttpUtilsBuilder webClientBuilder, McpJsonMapper jsonMapper, String sseEndpoint) {
+		this(webClientBuilder, jsonMapper, sseEndpoint, new DefaultSseMessageEndpointValidator());
+	}
+
+	/**
+	 * Constructs a new SseClientTransport with the specified WebClient builder and
+	 * ObjectMapper. Initializes both inbound and outbound message processing pipelines.
+	 * @param webClientBuilder the WebClient.Builder to use for creating the WebClient
+	 * instance
+	 * @param jsonMapper the ObjectMapper to use for JSON processing
+	 * @param sseEndpoint the SSE endpoint URI to use for establishing the connection
+	 * @param messageEndpointValidator validator for the message endpoint
+	 * @throws IllegalArgumentException if either parameter is null
+	 */
+	public WebRxSseClientTransport(HttpUtilsBuilder webClientBuilder, McpJsonMapper jsonMapper, String sseEndpoint,
+	                                 SseMessageEndpointValidator messageEndpointValidator) {
 		Assert.notNull(jsonMapper, "jsonMapper must not be null");
 		Assert.notNull(webClientBuilder, "webClientBuilder must not be null");
+		Assert.notNull(messageEndpointValidator, "messageEndpointValidator must not be null");
 		Assert.hasText(sseEndpoint, "SSE endpoint must not be null or empty");
 
 		this.jsonMapper = jsonMapper;
 		this.webClientBuilder = webClientBuilder;
 		this.sseEndpoint = sseEndpoint;
+		this.messageEndpointValidator = messageEndpointValidator;
 	}
 
 	@Override
@@ -185,11 +214,25 @@ public class WebRxSseClientTransport implements McpClientTransport {
 		// -> allow optimizing for eager connection start using a constructor flag
 		Flux<ServerSentEvent> events = eventStream();
 		this.inboundSubscription = events.concatMap(event -> Mono.just(event).<JSONRPCMessage>handle((e, s) -> {
-					if (ENDPOINT_EVENT_TYPE.equals(event.getEvent())) {
-						String messageEndpointUri = event.getData();
-						if (messageEndpointSink.tryEmitValue(messageEndpointUri).isSuccess()) {
-							s.complete();
-						} else {
+				if (ENDPOINT_EVENT_TYPE.equals(event.getEvent())) {
+					String messageEndpointUri = event.getData();
+					try {
+						URI sseUri = new URI(this.sseEndpoint);
+						this.messageEndpointValidator.validate(sseUri, messageEndpointUri);
+					}
+					catch (InvalidSseMessageEndpointException ex) {
+						this.messageEndpointSink.tryEmitError(ex);
+						s.error(ex);
+						return;
+					}
+					catch (URISyntaxException ex) {
+						this.messageEndpointSink.tryEmitError(ex);
+						s.error(ex);
+						return;
+					}
+					if (messageEndpointSink.tryEmitValue(messageEndpointUri).isSuccess()) {
+						s.complete();
+					} else {
 							// TODO: clarify with the spec if multiple events can be
 							// received
 							s.error(new RuntimeException("Failed to handle SSE endpoint event"));
@@ -360,7 +403,9 @@ public class WebRxSseClientTransport implements McpClientTransport {
 
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
 
-		private McpJsonMapper jsonMapper;
+		private @Nullable McpJsonMapper jsonMapper;
+
+		private SseMessageEndpointValidator messageEndpointValidator = new DefaultSseMessageEndpointValidator();
 
 		/**
 		 * Creates a new builder with the specified HttpUtilsBuilder.
@@ -394,13 +439,25 @@ public class WebRxSseClientTransport implements McpClientTransport {
         }
 
 		/**
+		 * Sets the validator that ensure the message endpoint returned over the SSE
+		 * connection is valid.
+		 * @param messageEndpointValidator the validator
+		 * @return this builder
+		 */
+		public Builder messageEndpointValidator(SseMessageEndpointValidator messageEndpointValidator) {
+			Assert.notNull(messageEndpointValidator, "messageEndpointValidator must not be null");
+			this.messageEndpointValidator = messageEndpointValidator;
+			return this;
+		}
+
+		/**
 		 * Builds a new {@link WebRxSseClientTransport} instance.
 		 * @return a new transport instance
 		 */
 		public WebRxSseClientTransport build() {
-			return new WebRxSseClientTransport(webClientBuilder,
-                    jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-                    sseEndpoint);
+			return new WebRxSseClientTransport(this.webClientBuilder,
+					this.jsonMapper == null ? McpJsonDefaults.getMapper() : this.jsonMapper, this.sseEndpoint,
+					this.messageEndpointValidator);
 		}
 	}
 }
