@@ -14,6 +14,7 @@ import reactor.core.scheduler.Schedulers;
 import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.stream.Collectors;
 
 /**
  * MCP server features specification that a particular server can choose to support.
@@ -35,6 +36,7 @@ public class McpServerFeatures {
 	 * @param rootsChangeConsumers The list of consumers that will be notified when the
 	 * roots list changes
 	 * @param instructions The server instructions text
+	 * @param toolFilters The per-request filters deciding which tools are listed
 	 */
 	static final class Async {
 
@@ -56,6 +58,8 @@ public class McpServerFeatures {
 
 		private final String instructions;
 
+		private final List<McpAsyncListFilter<McpSchema.Tool>> toolFilters;
+
 		/**
 		 * Create an instance and validate the arguments.
 		 * @param serverInfo The server implementation details
@@ -67,6 +71,7 @@ public class McpServerFeatures {
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
 		 * @param instructions The server instructions text
+		 * @param toolFilters The per-request filters deciding which tools are listed
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
               List<AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
@@ -74,7 +79,7 @@ public class McpServerFeatures {
               Map<String, AsyncPromptSpecification> prompts,
               Map<McpSchema.CompleteReference, AsyncCompletionSpecification> completions,
               List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
-              String instructions) {
+              String instructions, List<McpAsyncListFilter<McpSchema.Tool>> toolFilters) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -86,10 +91,12 @@ public class McpServerFeatures {
 																					// logging
 																					// by
 																					// default
-							!Utils.isEmpty(prompts) ? new McpSchema.ServerCapabilities.PromptCapabilities(false) : null,
+							!Utils.isEmpty(prompts) ? McpSchema.ServerCapabilities.PromptCapabilities.builder().build()
+									: null,
 							!Utils.isEmpty(resources)
-									? new McpSchema.ServerCapabilities.ResourceCapabilities(false, false) : null,
-							!Utils.isEmpty(tools) ? new McpSchema.ServerCapabilities.ToolCapabilities(false) : null);
+									? McpSchema.ServerCapabilities.ResourceCapabilities.builder().build() : null,
+							!Utils.isEmpty(tools) ? McpSchema.ServerCapabilities.ToolCapabilities.builder().build()
+									: null);
 
 			this.tools = (tools != null) ? tools : Collections.emptyList();
 			this.resources = (resources != null) ? resources : Collections.emptyMap();
@@ -98,55 +105,82 @@ public class McpServerFeatures {
 			this.completions = (completions != null) ? completions : Collections.emptyMap();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : Collections.emptyList();
 			this.instructions = instructions;
+			this.toolFilters = (toolFilters != null) ? toolFilters : Collections.emptyList();
 		}
 
-		public McpSchema.Implementation serverInfo() { return serverInfo; }
+		McpSchema.Implementation serverInfo() {
+			return this.serverInfo;
+		}
 
-		public McpSchema.ServerCapabilities serverCapabilities() { return serverCapabilities; }
+		McpSchema.ServerCapabilities serverCapabilities() {
+			return this.serverCapabilities;
+		}
 
-		public List<AsyncToolSpecification> tools() { return tools; }
+		List<AsyncToolSpecification> tools() {
+			return this.tools;
+		}
 
-		public Map<String, AsyncResourceSpecification> resources() { return resources; }
+		Map<String, AsyncResourceSpecification> resources() {
+			return this.resources;
+		}
 
-		public Map<String, AsyncResourceTemplateSpecification> resourceTemplates() { return resourceTemplates; }
+		Map<String, AsyncResourceTemplateSpecification> resourceTemplates() {
+			return this.resourceTemplates;
+		}
 
-		public Map<String, AsyncPromptSpecification> prompts() { return prompts; }
+		Map<String, AsyncPromptSpecification> prompts() {
+			return this.prompts;
+		}
 
-		public Map<McpSchema.CompleteReference, AsyncCompletionSpecification> completions() { return completions; }
+		Map<McpSchema.CompleteReference, AsyncCompletionSpecification> completions() {
+			return this.completions;
+		}
 
-		public List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers() { return rootsChangeConsumers; }
+		List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers() {
+			return this.rootsChangeConsumers;
+		}
 
-		public String instructions() { return instructions; }
+		String instructions() {
+			return this.instructions;
+		}
+
+		List<McpAsyncListFilter<McpSchema.Tool>> toolFilters() {
+			return this.toolFilters;
+		}
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof Async)) return false;
+			if (this == o) {
+				return true;
+			}
+			if (!(o instanceof Async)) {
+				return false;
+			}
 			Async that = (Async) o;
-			return Objects.equals(serverInfo, that.serverInfo)
-					&& Objects.equals(serverCapabilities, that.serverCapabilities)
-					&& Objects.equals(tools, that.tools)
-					&& Objects.equals(resources, that.resources)
-					&& Objects.equals(resourceTemplates, that.resourceTemplates)
-					&& Objects.equals(prompts, that.prompts)
-					&& Objects.equals(completions, that.completions)
-					&& Objects.equals(rootsChangeConsumers, that.rootsChangeConsumers)
-					&& Objects.equals(instructions, that.instructions);
+			return Objects.equals(this.serverInfo, that.serverInfo)
+					&& Objects.equals(this.serverCapabilities, that.serverCapabilities)
+					&& Objects.equals(this.tools, that.tools) && Objects.equals(this.resources, that.resources)
+					&& Objects.equals(this.resourceTemplates, that.resourceTemplates)
+					&& Objects.equals(this.prompts, that.prompts) && Objects.equals(this.completions, that.completions)
+					&& Objects.equals(this.rootsChangeConsumers, that.rootsChangeConsumers)
+					&& Objects.equals(this.instructions, that.instructions)
+					&& Objects.equals(this.toolFilters, that.toolFilters);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(serverInfo, serverCapabilities, tools, resources, resourceTemplates,
-					prompts, completions, rootsChangeConsumers, instructions);
+			return Objects.hash(this.serverInfo, this.serverCapabilities, this.tools, this.resources,
+					this.resourceTemplates, this.prompts, this.completions, this.rootsChangeConsumers, this.instructions,
+					this.toolFilters);
 		}
 
 		@Override
 		public String toString() {
-			return "Async[serverInfo=" + serverInfo + ", serverCapabilities=" + serverCapabilities
-					+ ", tools=" + tools + ", resources=" + resources
-					+ ", resourceTemplates=" + resourceTemplates + ", prompts=" + prompts
-					+ ", completions=" + completions + ", rootsChangeConsumers=" + rootsChangeConsumers
-					+ ", instructions=" + instructions + "]";
+			return "Async[serverInfo=" + this.serverInfo + ", serverCapabilities=" + this.serverCapabilities + ", tools="
+					+ this.tools + ", resources=" + this.resources + ", resourceTemplates=" + this.resourceTemplates
+					+ ", prompts=" + this.prompts + ", completions=" + this.completions + ", rootsChangeConsumers="
+					+ this.rootsChangeConsumers + ", instructions=" + this.instructions + ", toolFilters="
+					+ this.toolFilters + "]";
 		}
 
 		/**
@@ -187,14 +221,19 @@ public class McpServerFeatures {
 
 			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootChangeConsumers = new ArrayList<>();
 
-			for (BiConsumer<McpSyncServerExchange, List<McpSchema.Root>> rootChangeConsumer : syncSpec.rootsChangeConsumers()) {
+			for (BiConsumer<McpSyncServerExchange, List<McpSchema.Root>> rootChangeConsumer : syncSpec
+					.rootsChangeConsumers()) {
 				rootChangeConsumers.add((exchange, list) -> Mono
 					.<Void>fromRunnable(() -> rootChangeConsumer.accept(new McpSyncServerExchange(exchange), list))
 					.subscribeOn(Schedulers.boundedElastic()));
 			}
 
 			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources, resourceTemplates,
-					prompts, completions, rootChangeConsumers, syncSpec.instructions());
+					prompts, completions, rootChangeConsumers, syncSpec.instructions(),
+					syncSpec.toolFilters()
+						.stream()
+						.map(filter -> McpAsyncListFilter.fromSync(filter, immediateExecution))
+						.collect(Collectors.toList()));
 		}
 	}
 
@@ -231,6 +270,8 @@ public class McpServerFeatures {
 
 		private final String instructions;
 
+		private final List<McpSyncListFilter<McpSchema.Tool>> toolFilters;
+
 		/**
 		 * Create an instance and validate the arguments.
 		 * @param serverInfo The server implementation details
@@ -242,6 +283,7 @@ public class McpServerFeatures {
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
 		 * @param instructions The server instructions text
+		 * @param toolFilters The per-request filters deciding which tools are listed
 		 */
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<SyncToolSpecification> tools,
@@ -249,8 +291,8 @@ public class McpServerFeatures {
 				Map<String, SyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, SyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, SyncCompletionSpecification> completions,
-				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers,
-				String instructions) {
+				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions,
+				List<McpSyncListFilter<McpSchema.Tool>> toolFilters) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -262,10 +304,12 @@ public class McpServerFeatures {
 																					// logging
 																					// by
 																					// default
-							!Utils.isEmpty(prompts) ? new McpSchema.ServerCapabilities.PromptCapabilities(false) : null,
+							!Utils.isEmpty(prompts) ? McpSchema.ServerCapabilities.PromptCapabilities.builder().build()
+									: null,
 							!Utils.isEmpty(resources)
-									? new McpSchema.ServerCapabilities.ResourceCapabilities(false, false) : null,
-							!Utils.isEmpty(tools) ? new McpSchema.ServerCapabilities.ToolCapabilities(false) : null);
+									? McpSchema.ServerCapabilities.ResourceCapabilities.builder().build() : null,
+							!Utils.isEmpty(tools) ? McpSchema.ServerCapabilities.ToolCapabilities.builder().build()
+									: null);
 
 			this.tools = (tools != null) ? tools : new ArrayList<>();
 			this.resources = (resources != null) ? resources : new HashMap<>();
@@ -274,55 +318,82 @@ public class McpServerFeatures {
 			this.completions = (completions != null) ? completions : new HashMap<>();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : new ArrayList<>();
 			this.instructions = instructions;
+			this.toolFilters = (toolFilters != null) ? toolFilters : Collections.emptyList();
 		}
 
-		public McpSchema.Implementation serverInfo() { return serverInfo; }
+		McpSchema.Implementation serverInfo() {
+			return this.serverInfo;
+		}
 
-		public McpSchema.ServerCapabilities serverCapabilities() { return serverCapabilities; }
+		McpSchema.ServerCapabilities serverCapabilities() {
+			return this.serverCapabilities;
+		}
 
-		public List<SyncToolSpecification> tools() { return tools; }
+		List<SyncToolSpecification> tools() {
+			return this.tools;
+		}
 
-		public Map<String, SyncResourceSpecification> resources() { return resources; }
+		Map<String, SyncResourceSpecification> resources() {
+			return this.resources;
+		}
 
-		public Map<String, SyncResourceTemplateSpecification> resourceTemplates() { return resourceTemplates; }
+		Map<String, SyncResourceTemplateSpecification> resourceTemplates() {
+			return this.resourceTemplates;
+		}
 
-		public Map<String, SyncPromptSpecification> prompts() { return prompts; }
+		Map<String, SyncPromptSpecification> prompts() {
+			return this.prompts;
+		}
 
-		public Map<McpSchema.CompleteReference, SyncCompletionSpecification> completions() { return completions; }
+		Map<McpSchema.CompleteReference, SyncCompletionSpecification> completions() {
+			return this.completions;
+		}
 
-		public List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers() { return rootsChangeConsumers; }
+		List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers() {
+			return this.rootsChangeConsumers;
+		}
 
-		public String instructions() { return instructions; }
+		String instructions() {
+			return this.instructions;
+		}
+
+		List<McpSyncListFilter<McpSchema.Tool>> toolFilters() {
+			return this.toolFilters;
+		}
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof Sync)) return false;
+			if (this == o) {
+				return true;
+			}
+			if (!(o instanceof Sync)) {
+				return false;
+			}
 			Sync that = (Sync) o;
-			return Objects.equals(serverInfo, that.serverInfo)
-					&& Objects.equals(serverCapabilities, that.serverCapabilities)
-					&& Objects.equals(tools, that.tools)
-					&& Objects.equals(resources, that.resources)
-					&& Objects.equals(resourceTemplates, that.resourceTemplates)
-					&& Objects.equals(prompts, that.prompts)
-					&& Objects.equals(completions, that.completions)
-					&& Objects.equals(rootsChangeConsumers, that.rootsChangeConsumers)
-					&& Objects.equals(instructions, that.instructions);
+			return Objects.equals(this.serverInfo, that.serverInfo)
+					&& Objects.equals(this.serverCapabilities, that.serverCapabilities)
+					&& Objects.equals(this.tools, that.tools) && Objects.equals(this.resources, that.resources)
+					&& Objects.equals(this.resourceTemplates, that.resourceTemplates)
+					&& Objects.equals(this.prompts, that.prompts) && Objects.equals(this.completions, that.completions)
+					&& Objects.equals(this.rootsChangeConsumers, that.rootsChangeConsumers)
+					&& Objects.equals(this.instructions, that.instructions)
+					&& Objects.equals(this.toolFilters, that.toolFilters);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(serverInfo, serverCapabilities, tools, resources, resourceTemplates,
-					prompts, completions, rootsChangeConsumers, instructions);
+			return Objects.hash(this.serverInfo, this.serverCapabilities, this.tools, this.resources,
+					this.resourceTemplates, this.prompts, this.completions, this.rootsChangeConsumers, this.instructions,
+					this.toolFilters);
 		}
 
 		@Override
 		public String toString() {
-			return "Sync[serverInfo=" + serverInfo + ", serverCapabilities=" + serverCapabilities
-					+ ", tools=" + tools + ", resources=" + resources
-					+ ", resourceTemplates=" + resourceTemplates + ", prompts=" + prompts
-					+ ", completions=" + completions + ", rootsChangeConsumers=" + rootsChangeConsumers
-					+ ", instructions=" + instructions + "]";
+			return "Sync[serverInfo=" + this.serverInfo + ", serverCapabilities=" + this.serverCapabilities + ", tools="
+					+ this.tools + ", resources=" + this.resources + ", resourceTemplates=" + this.resourceTemplates
+					+ ", prompts=" + this.prompts + ", completions=" + this.completions + ", rootsChangeConsumers="
+					+ this.rootsChangeConsumers + ", instructions=" + this.instructions + ", toolFilters="
+					+ this.toolFilters + "]";
 		}
 
 	}
@@ -353,26 +424,34 @@ public class McpServerFeatures {
 			this.callHandler = callHandler;
 		}
 
-		public McpSchema.Tool tool() { return tool; }
+		public McpSchema.Tool tool() {
+			return this.tool;
+		}
 
-		public BiFunction<McpAsyncServerExchange, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler() { return callHandler; }
+		public BiFunction<McpAsyncServerExchange, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler() {
+			return this.callHandler;
+		}
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof AsyncToolSpecification)) return false;
+			if (this == o) {
+				return true;
+			}
+			if (!(o instanceof AsyncToolSpecification)) {
+				return false;
+			}
 			AsyncToolSpecification that = (AsyncToolSpecification) o;
-			return Objects.equals(tool, that.tool) && Objects.equals(callHandler, that.callHandler);
+			return Objects.equals(this.tool, that.tool) && Objects.equals(this.callHandler, that.callHandler);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(tool, callHandler);
+			return Objects.hash(this.tool, this.callHandler);
 		}
 
 		@Override
 		public String toString() {
-			return "AsyncToolSpecification[tool=" + tool + ", callHandler=" + callHandler + "]";
+			return "AsyncToolSpecification[tool=" + this.tool + ", callHandler=" + this.callHandler + "]";
 		}
 
 		static AsyncToolSpecification fromSync(SyncToolSpecification syncToolSpec) {
@@ -389,7 +468,7 @@ public class McpServerFeatures {
 			BiFunction<McpAsyncServerExchange, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler = (
 					exchange, req) -> {
 				Mono<McpSchema.CallToolResult> toolResult = Mono
-					.fromCallable(() -> syncToolSpec.callHandler().apply(new McpSyncServerExchange(exchange), req));
+						.fromCallable(() -> syncToolSpec.callHandler().apply(new McpSyncServerExchange(exchange), req));
 				return immediate ? toolResult : toolResult.subscribeOn(Schedulers.boundedElastic());
 			};
 
@@ -495,26 +574,34 @@ public class McpServerFeatures {
 			this.readHandler = readHandler;
 		}
 
-		public McpSchema.Resource resource() { return resource; }
+		public McpSchema.Resource resource() {
+			return this.resource;
+		}
 
-		public BiFunction<McpAsyncServerExchange, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler() { return readHandler; }
+		public BiFunction<McpAsyncServerExchange, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler() {
+			return this.readHandler;
+		}
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof AsyncResourceSpecification)) return false;
+			if (this == o) {
+				return true;
+			}
+			if (!(o instanceof AsyncResourceSpecification)) {
+				return false;
+			}
 			AsyncResourceSpecification that = (AsyncResourceSpecification) o;
-			return Objects.equals(resource, that.resource) && Objects.equals(readHandler, that.readHandler);
+			return Objects.equals(this.resource, that.resource) && Objects.equals(this.readHandler, that.readHandler);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(resource, readHandler);
+			return Objects.hash(this.resource, this.readHandler);
 		}
 
 		@Override
 		public String toString() {
-			return "AsyncResourceSpecification[resource=" + resource + ", readHandler=" + readHandler + "]";
+			return "AsyncResourceSpecification[resource=" + this.resource + ", readHandler=" + this.readHandler + "]";
 		}
 
 		static AsyncResourceSpecification fromSync(SyncResourceSpecification resource, boolean immediateExecution) {
@@ -566,26 +653,36 @@ public class McpServerFeatures {
 			this.readHandler = readHandler;
 		}
 
-		public McpSchema.ResourceTemplate resourceTemplate() { return resourceTemplate; }
+		public McpSchema.ResourceTemplate resourceTemplate() {
+			return this.resourceTemplate;
+		}
 
-		public BiFunction<McpAsyncServerExchange, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler() { return readHandler; }
+		public BiFunction<McpAsyncServerExchange, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler() {
+			return this.readHandler;
+		}
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof AsyncResourceTemplateSpecification)) return false;
+			if (this == o) {
+				return true;
+			}
+			if (!(o instanceof AsyncResourceTemplateSpecification)) {
+				return false;
+			}
 			AsyncResourceTemplateSpecification that = (AsyncResourceTemplateSpecification) o;
-			return Objects.equals(resourceTemplate, that.resourceTemplate) && Objects.equals(readHandler, that.readHandler);
+			return Objects.equals(this.resourceTemplate, that.resourceTemplate)
+					&& Objects.equals(this.readHandler, that.readHandler);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(resourceTemplate, readHandler);
+			return Objects.hash(this.resourceTemplate, this.readHandler);
 		}
 
 		@Override
 		public String toString() {
-			return "AsyncResourceTemplateSpecification[resourceTemplate=" + resourceTemplate + ", readHandler=" + readHandler + "]";
+			return "AsyncResourceTemplateSpecification[resourceTemplate=" + this.resourceTemplate + ", readHandler="
+					+ this.readHandler + "]";
 		}
 
 		static AsyncResourceTemplateSpecification fromSync(SyncResourceTemplateSpecification resource,
@@ -645,26 +742,34 @@ public class McpServerFeatures {
 			this.promptHandler = promptHandler;
 		}
 
-		public McpSchema.Prompt prompt() { return prompt; }
+		public McpSchema.Prompt prompt() {
+			return this.prompt;
+		}
 
-		public BiFunction<McpAsyncServerExchange, McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler() { return promptHandler; }
+		public BiFunction<McpAsyncServerExchange, McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler() {
+			return this.promptHandler;
+		}
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof AsyncPromptSpecification)) return false;
+			if (this == o) {
+				return true;
+			}
+			if (!(o instanceof AsyncPromptSpecification)) {
+				return false;
+			}
 			AsyncPromptSpecification that = (AsyncPromptSpecification) o;
-			return Objects.equals(prompt, that.prompt) && Objects.equals(promptHandler, that.promptHandler);
+			return Objects.equals(this.prompt, that.prompt) && Objects.equals(this.promptHandler, that.promptHandler);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(prompt, promptHandler);
+			return Objects.hash(this.prompt, this.promptHandler);
 		}
 
 		@Override
 		public String toString() {
-			return "AsyncPromptSpecification[prompt=" + prompt + ", promptHandler=" + promptHandler + "]";
+			return "AsyncPromptSpecification[prompt=" + this.prompt + ", promptHandler=" + this.promptHandler + "]";
 		}
 
 		static AsyncPromptSpecification fromSync(SyncPromptSpecification prompt, boolean immediateExecution) {
@@ -708,26 +813,36 @@ public class McpServerFeatures {
 			this.completionHandler = completionHandler;
 		}
 
-		public McpSchema.CompleteReference referenceKey() { return referenceKey; }
+		public McpSchema.CompleteReference referenceKey() {
+			return this.referenceKey;
+		}
 
-		public BiFunction<McpAsyncServerExchange, McpSchema.CompleteRequest, Mono<McpSchema.CompleteResult>> completionHandler() { return completionHandler; }
+		public BiFunction<McpAsyncServerExchange, McpSchema.CompleteRequest, Mono<McpSchema.CompleteResult>> completionHandler() {
+			return this.completionHandler;
+		}
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof AsyncCompletionSpecification)) return false;
+			if (this == o) {
+				return true;
+			}
+			if (!(o instanceof AsyncCompletionSpecification)) {
+				return false;
+			}
 			AsyncCompletionSpecification that = (AsyncCompletionSpecification) o;
-			return Objects.equals(referenceKey, that.referenceKey) && Objects.equals(completionHandler, that.completionHandler);
+			return Objects.equals(this.referenceKey, that.referenceKey)
+					&& Objects.equals(this.completionHandler, that.completionHandler);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(referenceKey, completionHandler);
+			return Objects.hash(this.referenceKey, this.completionHandler);
 		}
 
 		@Override
 		public String toString() {
-			return "AsyncCompletionSpecification[referenceKey=" + referenceKey + ", completionHandler=" + completionHandler + "]";
+			return "AsyncCompletionSpecification[referenceKey=" + this.referenceKey + ", completionHandler="
+					+ this.completionHandler + "]";
 		}
 
 		/**
@@ -761,20 +876,19 @@ public class McpServerFeatures {
 	 *
 	 * <pre>{@code
 	 * McpServerFeatures.SyncToolSpecification.builder()
-	 * 		.tool(Tool.builder()
-	 * 				.name("calculator")
+	 * 		.tool(Tool.builder("calculator",
+	 * 					Map.of("type", "object", "properties",
+	 * 							Map.of("expression", Map.of("type", "string")),
+	 * 							"required", List.of("expression")))
 	 * 				.title("Performs mathematical calculations")
-	 * 				.inputSchema(new JsonSchemaObject()
-	 * 						.required("expression")
-	 * 						.property("expression", JsonSchemaType.STRING))
-	 * 				.build()
+	 * 				.build())
 	 * 		.toolHandler((exchange, req) -> {
 	 * 			String expr = (String) req.arguments().get("expression");
 	 * 			return CallToolResult.builder()
-	 *                   .content(List.of(new McpSchema.TextContent("Result: " + evaluate(expr))))
+	 *                   .content(List.of(McpSchema.TextContent.builder("Result: " + evaluate(expr)).build()))
 	 *                   .isError(false)
 	 *                   .build();
-	 * 		}))
+	 * 		})
 	 *      .build();
 	 * }</pre>
 	 *
@@ -798,26 +912,34 @@ public class McpServerFeatures {
 			this.callHandler = callHandler;
 		}
 
-		public McpSchema.Tool tool() { return tool; }
+		public McpSchema.Tool tool() {
+			return this.tool;
+		}
 
-		public BiFunction<McpSyncServerExchange, CallToolRequest, McpSchema.CallToolResult> callHandler() { return callHandler; }
+		public BiFunction<McpSyncServerExchange, CallToolRequest, McpSchema.CallToolResult> callHandler() {
+			return this.callHandler;
+		}
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof SyncToolSpecification)) return false;
+			if (this == o) {
+				return true;
+			}
+			if (!(o instanceof SyncToolSpecification)) {
+				return false;
+			}
 			SyncToolSpecification that = (SyncToolSpecification) o;
-			return Objects.equals(tool, that.tool) && Objects.equals(callHandler, that.callHandler);
+			return Objects.equals(this.tool, that.tool) && Objects.equals(this.callHandler, that.callHandler);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(tool, callHandler);
+			return Objects.hash(this.tool, this.callHandler);
 		}
 
 		@Override
 		public String toString() {
-			return "SyncToolSpecification[tool=" + tool + ", callHandler=" + callHandler + "]";
+			return "SyncToolSpecification[tool=" + this.tool + ", callHandler=" + this.callHandler + "]";
 		}
 
 		/**
@@ -921,27 +1043,36 @@ public class McpServerFeatures {
 			this.readHandler = readHandler;
 		}
 
-		public McpSchema.Resource resource() { return resource; }
+		public McpSchema.Resource resource() {
+			return this.resource;
+		}
 
-		public BiFunction<McpSyncServerExchange, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler() { return readHandler; }
+		public BiFunction<McpSyncServerExchange, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler() {
+			return this.readHandler;
+		}
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof SyncResourceSpecification)) return false;
+			if (this == o) {
+				return true;
+			}
+			if (!(o instanceof SyncResourceSpecification)) {
+				return false;
+			}
 			SyncResourceSpecification that = (SyncResourceSpecification) o;
-			return Objects.equals(resource, that.resource) && Objects.equals(readHandler, that.readHandler);
+			return Objects.equals(this.resource, that.resource) && Objects.equals(this.readHandler, that.readHandler);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(resource, readHandler);
+			return Objects.hash(this.resource, this.readHandler);
 		}
 
 		@Override
 		public String toString() {
-			return "SyncResourceSpecification[resource=" + resource + ", readHandler=" + readHandler + "]";
+			return "SyncResourceSpecification[resource=" + this.resource + ", readHandler=" + this.readHandler + "]";
 		}
+
 	}
 
 	/**
@@ -980,27 +1111,38 @@ public class McpServerFeatures {
 			this.readHandler = readHandler;
 		}
 
-		public McpSchema.ResourceTemplate resourceTemplate() { return resourceTemplate; }
+		public McpSchema.ResourceTemplate resourceTemplate() {
+			return this.resourceTemplate;
+		}
 
-		public BiFunction<McpSyncServerExchange, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler() { return readHandler; }
+		public BiFunction<McpSyncServerExchange, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler() {
+			return this.readHandler;
+		}
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof SyncResourceTemplateSpecification)) return false;
+			if (this == o) {
+				return true;
+			}
+			if (!(o instanceof SyncResourceTemplateSpecification)) {
+				return false;
+			}
 			SyncResourceTemplateSpecification that = (SyncResourceTemplateSpecification) o;
-			return Objects.equals(resourceTemplate, that.resourceTemplate) && Objects.equals(readHandler, that.readHandler);
+			return Objects.equals(this.resourceTemplate, that.resourceTemplate)
+					&& Objects.equals(this.readHandler, that.readHandler);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(resourceTemplate, readHandler);
+			return Objects.hash(this.resourceTemplate, this.readHandler);
 		}
 
 		@Override
 		public String toString() {
-			return "SyncResourceTemplateSpecification[resourceTemplate=" + resourceTemplate + ", readHandler=" + readHandler + "]";
+			return "SyncResourceTemplateSpecification[resourceTemplate=" + this.resourceTemplate + ", readHandler="
+					+ this.readHandler + "]";
 		}
+
 	}
 
 	/**
@@ -1046,27 +1188,36 @@ public class McpServerFeatures {
 			this.promptHandler = promptHandler;
 		}
 
-		public McpSchema.Prompt prompt() { return prompt; }
+		public McpSchema.Prompt prompt() {
+			return this.prompt;
+		}
 
-		public BiFunction<McpSyncServerExchange, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler() { return promptHandler; }
+		public BiFunction<McpSyncServerExchange, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler() {
+			return this.promptHandler;
+		}
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof SyncPromptSpecification)) return false;
+			if (this == o) {
+				return true;
+			}
+			if (!(o instanceof SyncPromptSpecification)) {
+				return false;
+			}
 			SyncPromptSpecification that = (SyncPromptSpecification) o;
-			return Objects.equals(prompt, that.prompt) && Objects.equals(promptHandler, that.promptHandler);
+			return Objects.equals(this.prompt, that.prompt) && Objects.equals(this.promptHandler, that.promptHandler);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(prompt, promptHandler);
+			return Objects.hash(this.prompt, this.promptHandler);
 		}
 
 		@Override
 		public String toString() {
-			return "SyncPromptSpecification[prompt=" + prompt + ", promptHandler=" + promptHandler + "]";
+			return "SyncPromptSpecification[prompt=" + this.prompt + ", promptHandler=" + this.promptHandler + "]";
 		}
+
 	}
 
 	/**
@@ -1090,27 +1241,38 @@ public class McpServerFeatures {
 			this.completionHandler = completionHandler;
 		}
 
-		public McpSchema.CompleteReference referenceKey() { return referenceKey; }
+		public McpSchema.CompleteReference referenceKey() {
+			return this.referenceKey;
+		}
 
-		public BiFunction<McpSyncServerExchange, McpSchema.CompleteRequest, McpSchema.CompleteResult> completionHandler() { return completionHandler; }
+		public BiFunction<McpSyncServerExchange, McpSchema.CompleteRequest, McpSchema.CompleteResult> completionHandler() {
+			return this.completionHandler;
+		}
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof SyncCompletionSpecification)) return false;
+			if (this == o) {
+				return true;
+			}
+			if (!(o instanceof SyncCompletionSpecification)) {
+				return false;
+			}
 			SyncCompletionSpecification that = (SyncCompletionSpecification) o;
-			return Objects.equals(referenceKey, that.referenceKey) && Objects.equals(completionHandler, that.completionHandler);
+			return Objects.equals(this.referenceKey, that.referenceKey)
+					&& Objects.equals(this.completionHandler, that.completionHandler);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(referenceKey, completionHandler);
+			return Objects.hash(this.referenceKey, this.completionHandler);
 		}
 
 		@Override
 		public String toString() {
-			return "SyncCompletionSpecification[referenceKey=" + referenceKey + ", completionHandler=" + completionHandler + "]";
+			return "SyncCompletionSpecification[referenceKey=" + this.referenceKey + ", completionHandler="
+					+ this.completionHandler + "]";
 		}
+
 	}
 
 }

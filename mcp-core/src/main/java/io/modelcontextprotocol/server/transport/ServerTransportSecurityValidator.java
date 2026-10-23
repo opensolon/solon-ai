@@ -4,8 +4,12 @@
 
 package io.modelcontextprotocol.server.transport;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Interface for validating HTTP requests in server transports. Implementations can
@@ -13,9 +17,12 @@ import java.util.Map;
  * to the MCP specification.
  *
  * @author Daniel Garnier-Moiroux
- * @see DefaultServerTransportSecurityValidator
+ * @see ServerHttpHeaderValidator
  * @see ServerTransportSecurityException
+ * @deprecated Use {@link ServerHttpHeaderValidator} instead. This interface will be
+ * removed in a future major version.
  */
+@Deprecated
 @FunctionalInterface
 public interface ServerTransportSecurityValidator {
 
@@ -24,6 +31,23 @@ public interface ServerTransportSecurityValidator {
 	 */
 	ServerTransportSecurityValidator NOOP = headers -> {
 	};
+
+	/**
+	 * Adapts a legacy map-based validator to a header accessor validator.
+	 * @param validator the legacy validator to adapt
+	 * @return a header accessor validator delegating to {@code validator}
+	 */
+	static ServerHttpHeaderValidator toHttpHeaderValidator(ServerTransportSecurityValidator validator) {
+		return accessor -> {
+			LinkedHashMap<String, List<String>> collectedHeaders = accessor.getHeaderNames()
+				.stream()
+				.collect(Collectors.toMap(Function.identity(), accessor::getHeader,
+						(a, b) -> {
+							throw new IllegalArgumentException("duplicate header: " + a);
+						}, LinkedHashMap::new));
+			validator.validateHeaders(Collections.unmodifiableMap(collectedHeaders));
+		};
+	}
 
 	/**
 	 * Validates the HTTP headers from an incoming request.

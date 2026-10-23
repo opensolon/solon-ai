@@ -23,6 +23,7 @@ import java.time.Duration;
 import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 
 /**
  * Factory class for creating Model Context Protocol (MCP) servers. MCP servers expose
@@ -62,9 +63,9 @@ import java.util.function.BiFunction;
  * Example of creating a basic synchronous server: <pre>{@code
  * McpServer.sync(transportProvider)
  *     .serverInfo("my-server", "1.0.0")
- *     .toolCall(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
+ *     .toolCall(Tool.builder("calculator", schema).title("Performs calculations").build(),
  *           (exchange, request) -> CallToolResult.builder()
- *                   .content(List.of(new McpSchema.TextContent("Result: " + calculate(request.arguments()))))
+ *                   .content(List.of(McpSchema.TextContent.builder("Result: " + calculate(request.arguments())).build()))
  *                   .isError(false)
  *                   .build())
  *     .build();
@@ -73,10 +74,10 @@ import java.util.function.BiFunction;
  * Example of creating a basic asynchronous server: <pre>{@code
  * McpServer.async(transportProvider)
  *     .serverInfo("my-server", "1.0.0")
- *     .toolCall(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
+ *     .toolCall(Tool.builder("calculator", schema).title("Performs calculations").build(),
  *           (exchange, request) -> Mono.fromSupplier(() -> calculate(request.arguments()))
  *               .map(result -> CallToolResult.builder()
- *                   .content(List.of(new McpSchema.TextContent("Result: " + result)))
+ *                   .content(List.of(McpSchema.TextContent.builder("Result: " + result).build()))
  *                   .isError(false)
  *                   .build()))
  *     .build();
@@ -93,7 +94,7 @@ import java.util.function.BiFunction;
  * 			.tool(calculatorTool)
  *   	    .callTool((exchange, args) -> Mono.fromSupplier(() -> calculate(args.arguments()))
  *                 .map(result -> CallToolResult.builder()
- *                   .content(List.of(new McpSchema.TextContent("Result: " + result)))
+ *                   .content(List.of(McpSchema.TextContent.builder("Result: " + result).build()))
  *                   .isError(false)
  *                   .build()))
  *.         .build(),
@@ -101,7 +102,7 @@ import java.util.function.BiFunction;
  * 	        .tool((weatherTool)
  *          .callTool((exchange, args) -> Mono.fromSupplier(() -> getWeather(args.arguments()))
  *                 .map(result -> CallToolResult.builder()
- *                   .content(List.of(new McpSchema.TextContent("Weather: " + result)))
+ *                   .content(List.of(McpSchema.TextContent.builder("Weather: " + result).build()))
  *                   .isError(false)
  *                   .build()))
  *          .build()
@@ -141,7 +142,8 @@ import java.util.function.BiFunction;
  */
 public interface McpServer {
 
-	McpSchema.Implementation DEFAULT_SERVER_INFO = new McpSchema.Implementation("Java SDK MCP Server", "0.15.0");
+	McpSchema.Implementation DEFAULT_SERVER_INFO = McpSchema.Implementation.builder("Java SDK MCP Server", "0.15.0")
+		.build();
 
 	/**
 	 * Starts building a synchronous MCP server that provides blocking operations.
@@ -233,13 +235,15 @@ public interface McpServer {
 		public McpAsyncServer build() {
 			McpServerFeatures.Async features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
-					this.instructions);
+					this.instructions, this.toolFilters);
 
 			JsonSchemaValidator jsonSchemaValidator = (this.jsonSchemaValidator != null) ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();
 
+			SchemaValidation.validateAsyncToolSchemas(jsonSchemaValidator, this.tools);
+
 			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator);
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
 		}
 
 	}
@@ -261,11 +265,14 @@ public interface McpServer {
 		public McpAsyncServer build() {
 			McpServerFeatures.Async features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
-					this.instructions);
+					this.instructions, this.toolFilters);
 			JsonSchemaValidator jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();
+
+			SchemaValidation.validateAsyncToolSchemas(jsonSchemaValidator, this.tools);
+
 			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator);
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
 		}
 
 	}
@@ -288,6 +295,10 @@ public interface McpServer {
 		String instructions;
 
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
+
+		boolean validateToolInputs = true;
+
+		final List<McpAsyncListFilter<McpSchema.Tool>> toolFilters = new ArrayList<>();
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -389,7 +400,7 @@ public interface McpServer {
 		public AsyncSpecification<S> serverInfo(String name, String version) {
 			Assert.hasText(name, "Name must not be null or empty");
 			Assert.hasText(version, "Version must not be null or empty");
-			this.serverInfo = new McpSchema.Implementation(name, version);
+			this.serverInfo = McpSchema.Implementation.builder(name, version).build();
 			return this;
 		}
 
@@ -414,6 +425,54 @@ public interface McpServer {
 		 */
 		public AsyncSpecification<S> strictToolNameValidation(boolean strict) {
 			this.strictToolNameValidation = strict;
+			return this;
+		}
+
+		/**
+		 * Sets whether to validate tool inputs against the tool's input schema.
+		 * @param validate true to validate inputs and return error on validation failure,
+		 * false to skip validation. Defaults to true.
+		 * @return This builder instance for method chaining
+		 */
+		public AsyncSpecification<S> validateToolInputs(boolean validate) {
+			this.validateToolInputs = validate;
+			return this;
+		}
+
+		/**
+		 * Adds a per-request filter deciding which tools are advertised in
+		 * {@code tools/list}, for example to hide tools the caller is not authorized to
+		 * see. Filters accumulate: a tool is listed only when every registered filter
+		 * accepts it, so a later registration can never widen access.
+		 * <p>
+		 * A hidden tool is omitted from listings only. It remains callable by name, so
+		 * enforce permissions in the tool's call handler. Tools are NOT hidden from
+		 * {@code notifications/tools/list_changed}, as it is a per-client context rather
+		 * than per-request. Consider disabling list changed notifications entirely when
+		 * using filters.
+		 * <p>
+		 * @param toolFilter the filter to add, must not be null
+		 * @return This builder instance for method chaining
+		 * @see McpAsyncListFilter
+		 */
+		public AsyncSpecification<S> addToolFilter(McpAsyncListFilter<McpSchema.Tool> toolFilter) {
+			Assert.notNull(toolFilter, "Tool filter must not be null");
+			this.toolFilters.add(toolFilter);
+			return this;
+		}
+
+		/**
+		 * Applies the given consumer to the list of registered tool filters, allowing
+		 * them to be inspected, reordered or cleared before the server is built.
+		 * @param toolFiltersConsumer consumer of the mutable list of registered filters,
+		 * must not be null
+		 * @return This builder instance for method chaining
+		 * @see #addToolFilter(McpAsyncListFilter)
+		 */
+		public AsyncSpecification<S> toolFilters(
+				Consumer<List<McpAsyncListFilter<McpSchema.Tool>>> toolFiltersConsumer) {
+			Assert.notNull(toolFiltersConsumer, "Tool filters consumer must not be null");
+			toolFiltersConsumer.accept(this.toolFilters);
 			return this;
 		}
 
@@ -807,14 +866,18 @@ public interface McpServer {
 		public McpSyncServer build() {
 			McpServerFeatures.Sync syncFeatures = new McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
 					this.tools, this.resources, this.resourceTemplates, this.prompts, this.completions,
-					this.rootsChangeHandlers, this.instructions);
+					this.rootsChangeHandlers, this.instructions, this.toolFilters);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures,
 					this.immediateExecution);
 
+			JsonSchemaValidator jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
+					: McpJsonDefaults.getSchemaValidator();
+
+			SchemaValidation.validateSyncToolSchemas(jsonSchemaValidator, this.tools);
+
 			McpAsyncServer asyncServer = new McpAsyncServer(transportProvider,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, requestTimeout,
-					uriTemplateManagerFactory,
-					jsonSchemaValidator != null ? jsonSchemaValidator : McpJsonDefaults.getSchemaValidator());
+					uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -838,14 +901,17 @@ public interface McpServer {
 		public McpSyncServer build() {
 			McpServerFeatures.Sync syncFeatures = new McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
 					this.tools, this.resources, this.resourceTemplates, this.prompts, this.completions,
-					this.rootsChangeHandlers, this.instructions);
+					this.rootsChangeHandlers, this.instructions, this.toolFilters);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures,
 					this.immediateExecution);
 			JsonSchemaValidator jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();
+
+			SchemaValidation.validateSyncToolSchemas(jsonSchemaValidator, this.tools);
+
 			McpAsyncServer asyncServer = new McpAsyncServer(transportProvider,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
+					this.uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -867,6 +933,10 @@ public interface McpServer {
 		String instructions;
 
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
+
+		boolean validateToolInputs = true;
+
+		final List<McpSyncListFilter<McpSchema.Tool>> toolFilters = new ArrayList<>();
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -972,7 +1042,7 @@ public interface McpServer {
 		public SyncSpecification<S> serverInfo(String name, String version) {
 			Assert.hasText(name, "Name must not be null or empty");
 			Assert.hasText(version, "Version must not be null or empty");
-			this.serverInfo = new McpSchema.Implementation(name, version);
+			this.serverInfo = McpSchema.Implementation.builder(name, version).build();
 			return this;
 		}
 
@@ -997,6 +1067,55 @@ public interface McpServer {
 		 */
 		public SyncSpecification<S> strictToolNameValidation(boolean strict) {
 			this.strictToolNameValidation = strict;
+			return this;
+		}
+
+		/**
+		 * Sets whether to validate tool inputs against the tool's input schema.
+		 * @param validate true to validate inputs and return error on validation failure,
+		 * false to skip validation. Defaults to true.
+		 * @return This builder instance for method chaining
+		 */
+		public SyncSpecification<S> validateToolInputs(boolean validate) {
+			this.validateToolInputs = validate;
+			return this;
+		}
+
+		/**
+		 * Adds a per-request filter deciding which tools are advertised in
+		 * {@code tools/list}, for example to hide tools the caller is not authorized to
+		 * see. Filters accumulate: a tool is listed only when every registered filter
+		 * accepts it, so a later registration can never widen access.
+		 * <p>
+		 * A hidden tool is omitted from listings only. It remains callable by name, so
+		 * enforce permissions in the tool's call handler. Tools are NOT hidden from
+		 * {@code notifications/tools/list_changed}, as it is a per-client context rather
+		 * than per-request. Consider disabling list changed notifications entirely when
+		 * using filters.
+		 * <p>
+		 * The filter is offloaded to a bounded elastic scheduler unless
+		 * {@link #immediateExecution(boolean)} is set.
+		 * @param toolFilter the filter to add, must not be null
+		 * @return This builder instance for method chaining
+		 * @see McpSyncListFilter
+		 */
+		public SyncSpecification<S> addToolFilter(McpSyncListFilter<McpSchema.Tool> toolFilter) {
+			Assert.notNull(toolFilter, "Tool filter must not be null");
+			this.toolFilters.add(toolFilter);
+			return this;
+		}
+
+		/**
+		 * Applies the given consumer to the list of registered tool filters, allowing
+		 * them to be inspected, reordered or cleared before the server is built.
+		 * @param toolFiltersConsumer consumer of the mutable list of registered filters,
+		 * must not be null
+		 * @return This builder instance for method chaining
+		 * @see #addToolFilter(McpSyncListFilter)
+		 */
+		public SyncSpecification<S> toolFilters(Consumer<List<McpSyncListFilter<McpSchema.Tool>>> toolFiltersConsumer) {
+			Assert.notNull(toolFiltersConsumer, "Tool filters consumer must not be null");
+			toolFiltersConsumer.accept(this.toolFilters);
 			return this;
 		}
 
@@ -1340,7 +1459,7 @@ public interface McpServer {
 		public SyncSpecification<S> rootsChangeHandlers(
 				BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>... handlers) {
 			Assert.notNull(handlers, "Handlers list must not be null");
-			return this.rootsChangeHandlers(Arrays.asList(handlers));
+			return this.rootsChangeHandlers(Collections.unmodifiableList(Arrays.asList(handlers)));
 		}
 
 		/**
@@ -1396,6 +1515,10 @@ public interface McpServer {
 		String instructions;
 
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
+
+		boolean validateToolInputs = true;
+
+		final List<McpAsyncListFilter<McpSchema.Tool>> toolFilters = new ArrayList<>();
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -1498,7 +1621,7 @@ public interface McpServer {
 		public StatelessAsyncSpecification serverInfo(String name, String version) {
 			Assert.hasText(name, "Name must not be null or empty");
 			Assert.hasText(version, "Version must not be null or empty");
-			this.serverInfo = new McpSchema.Implementation(name, version);
+			this.serverInfo = McpSchema.Implementation.builder(name, version).build();
 			return this;
 		}
 
@@ -1523,6 +1646,51 @@ public interface McpServer {
 		 */
 		public StatelessAsyncSpecification strictToolNameValidation(boolean strict) {
 			this.strictToolNameValidation = strict;
+			return this;
+		}
+
+		/**
+		 * Sets whether to validate tool inputs against the tool's input schema.
+		 * @param validate true to validate inputs and return error on validation failure,
+		 * false to skip validation. Defaults to true.
+		 * @return This builder instance for method chaining
+		 */
+		public StatelessAsyncSpecification validateToolInputs(boolean validate) {
+			this.validateToolInputs = validate;
+			return this;
+		}
+
+		/**
+		 * Adds a per-request filter deciding which tools are advertised in
+		 * {@code tools/list}, for example to hide tools the caller is not authorized to
+		 * see. Filters accumulate: a tool is listed only when every registered filter
+		 * accepts it, so a later registration can never widen access.
+		 * <p>
+		 * A hidden tool is omitted from listings only. It remains callable by name, so
+		 * enforce permissions in the tool's call handler.
+		 * <p>
+		 * @param toolFilter the filter to add, must not be null
+		 * @return This builder instance for method chaining
+		 * @see McpAsyncListFilter
+		 */
+		public StatelessAsyncSpecification addToolFilter(McpAsyncListFilter<McpSchema.Tool> toolFilter) {
+			Assert.notNull(toolFilter, "Tool filter must not be null");
+			this.toolFilters.add(toolFilter);
+			return this;
+		}
+
+		/**
+		 * Applies the given consumer to the list of registered tool filters, allowing
+		 * them to be inspected, reordered or cleared before the server is built.
+		 * @param toolFiltersConsumer consumer of the mutable list of registered filters,
+		 * must not be null
+		 * @return This builder instance for method chaining
+		 * @see #addToolFilter(McpAsyncListFilter)
+		 */
+		public StatelessAsyncSpecification toolFilters(
+				Consumer<List<McpAsyncListFilter<McpSchema.Tool>>> toolFiltersConsumer) {
+			Assert.notNull(toolFiltersConsumer, "Tool filters consumer must not be null");
+			toolFiltersConsumer.accept(this.toolFilters);
 			return this;
 		}
 
@@ -1852,10 +2020,15 @@ public interface McpServer {
 
 		public McpStatelessAsyncServer build() {
 			McpStatelessServerFeatures.Async features = new McpStatelessServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
-					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions);
+					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions,
+					this.toolFilters);
+			JsonSchemaValidator jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
+					: McpJsonDefaults.getSchemaValidator();
+
+			SchemaValidation.validateStatelessAsyncToolSchemas(jsonSchemaValidator, this.tools);
+
 			return new McpStatelessAsyncServer(transport, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory,
-					jsonSchemaValidator != null ? jsonSchemaValidator : McpJsonDefaults.getSchemaValidator());
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
 		}
 
 	}
@@ -1879,6 +2052,10 @@ public interface McpServer {
 		String instructions;
 
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
+
+		boolean validateToolInputs = true;
+
+		final List<McpSyncListFilter<McpSchema.Tool>> toolFilters = new ArrayList<>();
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -1981,7 +2158,7 @@ public interface McpServer {
 		public StatelessSyncSpecification serverInfo(String name, String version) {
 			Assert.hasText(name, "Name must not be null or empty");
 			Assert.hasText(version, "Version must not be null or empty");
-			this.serverInfo = new McpSchema.Implementation(name, version);
+			this.serverInfo = McpSchema.Implementation.builder(name, version).build();
 			return this;
 		}
 
@@ -2006,6 +2183,53 @@ public interface McpServer {
 		 */
 		public StatelessSyncSpecification strictToolNameValidation(boolean strict) {
 			this.strictToolNameValidation = strict;
+			return this;
+		}
+
+		/**
+		 * Sets whether to validate tool inputs against the tool's input schema.
+		 * @param validate true to validate inputs and return error on validation failure,
+		 * false to skip validation. Defaults to true.
+		 * @return This builder instance for method chaining
+		 */
+		public StatelessSyncSpecification validateToolInputs(boolean validate) {
+			this.validateToolInputs = validate;
+			return this;
+		}
+
+		/**
+		 * Adds a per-request filter deciding which tools are advertised in
+		 * {@code tools/list}, for example to hide tools the caller is not authorized to
+		 * see. Filters accumulate: a tool is listed only when every registered filter
+		 * accepts it, so a later registration can never widen access.
+		 * <p>
+		 * A hidden tool is omitted from listings only. It remains callable by name, so
+		 * enforce permissions in the tool's call handler.
+		 * <p>
+		 * The filter is offloaded to a bounded elastic scheduler unless
+		 * {@link #immediateExecution(boolean)} is set.
+		 * @param toolFilter the filter to add, must not be null
+		 * @return This builder instance for method chaining
+		 * @see McpSyncListFilter
+		 */
+		public StatelessSyncSpecification addToolFilter(McpSyncListFilter<McpSchema.Tool> toolFilter) {
+			Assert.notNull(toolFilter, "Tool filter must not be null");
+			this.toolFilters.add(toolFilter);
+			return this;
+		}
+
+		/**
+		 * Applies the given consumer to the list of registered tool filters, allowing
+		 * them to be inspected, reordered or cleared before the server is built.
+		 * @param toolFiltersConsumer consumer of the mutable list of registered filters,
+		 * must not be null
+		 * @return This builder instance for method chaining
+		 * @see #addToolFilter(McpSyncListFilter)
+		 */
+		public StatelessSyncSpecification toolFilters(
+				Consumer<List<McpSyncListFilter<McpSchema.Tool>>> toolFiltersConsumer) {
+			Assert.notNull(toolFiltersConsumer, "Tool filters consumer must not be null");
+			toolFiltersConsumer.accept(this.toolFilters);
 			return this;
 		}
 
@@ -2351,13 +2575,55 @@ public interface McpServer {
 
 		public McpStatelessSyncServer build() {
 			McpStatelessServerFeatures.Sync syncFeatures = new McpStatelessServerFeatures.Sync(this.serverInfo, this.serverCapabilities, this.tools,
-					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions);
-			McpStatelessServerFeatures.Async asyncFeatures = McpStatelessServerFeatures.Async.fromSync(syncFeatures, this.immediateExecution);
+					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions,
+					this.toolFilters);
+			McpStatelessServerFeatures.Async asyncFeatures = McpStatelessServerFeatures.Async.fromSync(syncFeatures,
+					this.immediateExecution);
+			JsonSchemaValidator jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
+					: McpJsonDefaults.getSchemaValidator();
+
+			SchemaValidation.validateStatelessSyncToolSchemas(jsonSchemaValidator, this.tools);
+
 			McpStatelessAsyncServer asyncServer = new McpStatelessAsyncServer(transport,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, requestTimeout,
-					uriTemplateManagerFactory,
-					this.jsonSchemaValidator != null ? this.jsonSchemaValidator : McpJsonDefaults.getSchemaValidator());
+					uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
 			return new McpStatelessSyncServer(asyncServer, this.immediateExecution);
+		}
+
+	}
+
+	/**
+	 * Java 8 compatibility helper: holds schema validation logic that cannot live
+	 * directly in this interface because private interface methods require Java 9+.
+	 */
+	final class SchemaValidation {
+
+		private SchemaValidation() {
+		}
+
+		static void validateAsyncToolSchemas(JsonSchemaValidator validator,
+				List<McpServerFeatures.AsyncToolSpecification> tools) {
+			tools.forEach(spec -> validateToolSchema(validator, spec.tool()));
+		}
+
+		static void validateSyncToolSchemas(JsonSchemaValidator validator,
+				List<McpServerFeatures.SyncToolSpecification> tools) {
+			tools.forEach(spec -> validateToolSchema(validator, spec.tool()));
+		}
+
+		static void validateStatelessAsyncToolSchemas(JsonSchemaValidator validator,
+				List<McpStatelessServerFeatures.AsyncToolSpecification> tools) {
+			tools.forEach(spec -> validateToolSchema(validator, spec.tool()));
+		}
+
+		static void validateStatelessSyncToolSchemas(JsonSchemaValidator validator,
+				List<McpStatelessServerFeatures.SyncToolSpecification> tools) {
+			tools.forEach(spec -> validateToolSchema(validator, spec.tool()));
+		}
+
+		static void validateToolSchema(JsonSchemaValidator validator, McpSchema.Tool tool) {
+			validator.assertConforms("Tool '" + tool.name() + "' inputSchema", tool.inputSchema());
+			validator.assertConforms("Tool '" + tool.name() + "' outputSchema", tool.outputSchema());
 		}
 
 	}

@@ -9,6 +9,7 @@ import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -250,7 +251,6 @@ class LifecycleInitializer {
 	 * @param t The exception to handle
 	 */
 	public void handleException(Throwable t) {
-		logger.warn("Handling exception", t);
 		if (t instanceof McpTransportSessionNotFoundException) {
 			DefaultInitialization previous = this.initializationRef.getAndSet(null);
 			if (previous != null) {
@@ -273,10 +273,7 @@ class LifecycleInitializer {
 	public <T> Mono<T> withInitialization(String actionName, Function<Initialization, Mono<T>> operation) {
 		return Mono.deferContextual(ctx -> {
 			DefaultInitialization newInit = new DefaultInitialization();
-			DefaultInitialization previous = this.initializationRef.get();
-			if (previous != null || !this.initializationRef.compareAndSet(null, newInit)) {
-				previous = this.initializationRef.get();
-			}
+			DefaultInitialization previous = Utils.compareAndExchange(this.initializationRef, null, newInit);
 
 			boolean needsToInitialize = previous == null;
 			logger.debug(needsToInitialize ? "Initialization process started" : "Joining previous initialization");
@@ -305,8 +302,9 @@ class LifecycleInitializer {
 
 		String latestVersion = this.protocolVersions.get(this.protocolVersions.size() - 1);
 
-		McpSchema.InitializeRequest initializeRequest = new McpSchema.InitializeRequest(latestVersion,
-				this.clientCapabilities, this.clientInfo);
+		McpSchema.InitializeRequest initializeRequest = McpSchema.InitializeRequest
+			.builder(latestVersion, this.clientCapabilities, this.clientInfo)
+			.build();
 
 		Mono<McpSchema.InitializeResult> result = mcpClientSession.sendRequest(McpSchema.METHOD_INITIALIZE,
 				initializeRequest, McpAsyncClient.INITIALIZE_RESULT_TYPE_REF);

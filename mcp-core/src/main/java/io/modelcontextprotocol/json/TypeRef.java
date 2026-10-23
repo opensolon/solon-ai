@@ -9,7 +9,7 @@ import java.lang.reflect.Type;
 
 /**
  * Captures generic type information at runtime for parameterized JSON (de)serialization.
- * Usage: TypeRef<List<Foo>> ref = new TypeRef<>(){};
+ * Usage: TypeRef&lt;List&lt;Foo&gt;&gt; ref = new TypeRef&lt;List&lt;Foo&gt;&gt;(){};
  */
 public abstract class TypeRef<T> {
 
@@ -19,7 +19,7 @@ public abstract class TypeRef<T> {
 	 * Constructs a new TypeRef instance, capturing the generic type information of the
 	 * subclass. This constructor should be called from an anonymous subclass to capture
 	 * the actual type arguments. For example: <pre>
-	 * TypeRef&lt;List&lt;Foo&gt;&gt; ref = new TypeRef&lt;&gt;(){};
+	 * TypeRef&lt;List&lt;Foo&gt;&gt; ref = new TypeRef&lt;List&lt;Foo&gt;&gt;(){};
 	 * </pre>
 	 * @throws IllegalStateException if TypeRef is not subclassed with actual type
 	 * information

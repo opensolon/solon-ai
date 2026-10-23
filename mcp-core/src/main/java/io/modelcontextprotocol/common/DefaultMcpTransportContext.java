@@ -6,6 +6,7 @@ package io.modelcontextprotocol.common;
 
 import io.modelcontextprotocol.util.Assert;
 
+import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -20,7 +21,7 @@ class DefaultMcpTransportContext implements McpTransportContext {
 
 	DefaultMcpTransportContext(Map<String, Object> metadata) {
 		Assert.notNull(metadata, "The metadata cannot be null");
-		this.metadata = metadata;
+		this.metadata = Collections.unmodifiableMap(new java.util.LinkedHashMap<String, Object>(metadata));
 	}
 
 	@Override

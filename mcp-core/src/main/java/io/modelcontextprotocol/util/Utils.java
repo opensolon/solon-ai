@@ -30,7 +30,59 @@ public final class Utils {
 	 * @see Character#isWhitespace
 	 */
 	public static boolean hasText(@Nullable String str) {
-		return (str != null && !str.trim().isEmpty());
+		return (str != null && !isBlank(str));
+	}
+
+	/**
+	 * Check whether the given {@code String} is blank, i.e. consists of whitespace only
+	 * or is {@code null}.
+	 * <p>
+	 * This method is a Java 8 compatible replacement for {@code String.isBlank()} and
+	 * preserves its Unicode whitespace semantics (see {@link Character#isWhitespace}).
+	 * @param str the {@code String} to check (may be {@code null})
+	 * @return {@code true} if the {@code String} is {@code null} or contains whitespace
+	 * only
+	 * @see Character#isWhitespace
+	 */
+	public static boolean isBlank(@Nullable String str) {
+		if (str == null) {
+			return true;
+		}
+		for (int i = 0; i < str.length(); i++) {
+			if (!Character.isWhitespace(str.charAt(i))) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Atomically sets the value of the given reference to {@code update} if and only if
+	 * the current value {@code == expected}, returning the value observed at the
+	 * linearization point.
+	 * <p>
+	 * This is a Java 8 compatible replacement for
+	 * {@code AtomicReference.compareAndExchange(expected, update)}. The comparison uses
+	 * reference identity (never {@code equals}) and the returned value is the old value
+	 * observed at the moment the operation linearized, exactly like the JDK 9+ API.
+	 * @param reference the atomic reference to update (must not be {@code null})
+	 * @param expected the expected current value (compared by identity)
+	 * @param update the new value to set when the expectation holds
+	 * @return the value observed when the operation linearized: {@code expected} when the
+	 * exchange succeeded, otherwise the current (unchanged) value
+	 * @param <T> the type of the referenced value
+	 */
+	public static <T> T compareAndExchange(java.util.concurrent.atomic.AtomicReference<T> reference, T expected,
+			T update) {
+		for (;;) {
+			T current = reference.get();
+			if (current != expected) {
+				return current;
+			}
+			if (reference.compareAndSet(expected, update)) {
+				return expected;
+			}
+		}
 	}
 
 	/**

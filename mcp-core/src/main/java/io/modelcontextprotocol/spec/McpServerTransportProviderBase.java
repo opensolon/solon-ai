@@ -6,6 +6,7 @@ package io.modelcontextprotocol.spec;
 
 import reactor.core.publisher.Mono;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -83,7 +84,8 @@ public interface McpServerTransportProviderBase {
 	 * @return the protocol version as a string
 	 */
 	default List<String> protocolVersions() {
-		return Collections.singletonList(ProtocolVersions.MCP_2024_11_05);
+		return Collections.unmodifiableList(Arrays.asList(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26,
+				ProtocolVersions.MCP_2025_06_18, ProtocolVersions.MCP_2025_11_25));
 	}
 
 }

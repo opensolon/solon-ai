@@ -12,7 +12,9 @@ import java.util.Objects;
  * defines a method to validate structured content based on the provided output schema.
  *
  * @author Christian Tzolov
+ * @deprecated Use {@link io.modelcontextprotocol.json.schema.JsonSchemaValidator}
  */
+@Deprecated
 public interface JsonSchemaValidator {
 
 	/**
@@ -23,7 +25,7 @@ public interface JsonSchemaValidator {
 	 * @param jsonStructuredOutput The text structured content in JSON format if the
 	 * validation was successful, otherwise null.
 	 */
-	public static final class ValidationResponse {
+	public final class ValidationResponse {
 
 		private final boolean valid;
 
@@ -37,18 +39,6 @@ public interface JsonSchemaValidator {
 			this.jsonStructuredOutput = jsonStructuredOutput;
 		}
 
-		public boolean valid() {
-			return valid;
-		}
-
-		public String errorMessage() {
-			return errorMessage;
-		}
-
-		public String jsonStructuredOutput() {
-			return jsonStructuredOutput;
-		}
-
 		public static ValidationResponse asValid(String jsonStructuredOutput) {
 			return new ValidationResponse(true, null, jsonStructuredOutput);
 		}
@@ -57,26 +47,40 @@ public interface JsonSchemaValidator {
 			return new ValidationResponse(false, message, null);
 		}
 
+		public boolean valid() {
+			return this.valid;
+		}
+
+		public String errorMessage() {
+			return this.errorMessage;
+		}
+
+		public String jsonStructuredOutput() {
+			return this.jsonStructuredOutput;
+		}
+
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof ValidationResponse)) return false;
+			if (this == o) {
+				return true;
+			}
+			if (!(o instanceof ValidationResponse)) {
+				return false;
+			}
 			ValidationResponse that = (ValidationResponse) o;
-			return valid == that.valid
-					&& Objects.equals(errorMessage, that.errorMessage)
-					&& Objects.equals(jsonStructuredOutput, that.jsonStructuredOutput);
+			return this.valid == that.valid && Objects.equals(this.errorMessage, that.errorMessage)
+					&& Objects.equals(this.jsonStructuredOutput, that.jsonStructuredOutput);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(valid, errorMessage, jsonStructuredOutput);
+			return Objects.hash(this.valid, this.errorMessage, this.jsonStructuredOutput);
 		}
 
 		@Override
 		public String toString() {
-			return "ValidationResponse[valid=" + valid
-					+ ", errorMessage=" + errorMessage
-					+ ", jsonStructuredOutput=" + jsonStructuredOutput + "]";
+			return "ValidationResponse[valid=" + this.valid + ", errorMessage=" + this.errorMessage
+					+ ", jsonStructuredOutput=" + this.jsonStructuredOutput + "]";
 		}
 
 	}

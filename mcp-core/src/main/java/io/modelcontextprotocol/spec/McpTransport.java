@@ -6,8 +6,11 @@ package io.modelcontextprotocol.spec;
 
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -40,6 +43,8 @@ import java.util.List;
  */
 public interface McpTransport {
 
+	Logger logger = LoggerFactory.getLogger(McpTransport.class);
+
 	/**
 	 * Closes the transport connection and releases any associated resources.
 	 *
@@ -49,7 +54,24 @@ public interface McpTransport {
 	 * </p>
 	 */
 	default void close() {
-		this.closeGracefully().subscribe();
+		this.closeGracefully().subscribe(ignored -> {
+		}, error -> {
+			if (isPeerClosed(error)) {
+				logger.debug("Error during asynchronous close", error);
+			}
+			else {
+				logger.warn("Error during asynchronous close", error);
+			}
+		});
+	}
+
+	static boolean isPeerClosed(Throwable t) {
+		for (Throwable c = t; c != null; c = c.getCause()) {
+			if (c instanceof java.io.EOFException) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -81,7 +103,8 @@ public interface McpTransport {
 	<T> T unmarshalFrom(Object data, TypeRef<T> typeRef);
 
 	default List<String> protocolVersions() {
-		return Collections.singletonList(ProtocolVersions.MCP_2024_11_05);
+		return Collections.unmodifiableList(Arrays.asList(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26,
+				ProtocolVersions.MCP_2025_06_18, ProtocolVersions.MCP_2025_11_25));
 	}
 
 }

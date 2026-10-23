@@ -7,7 +7,6 @@ package io.modelcontextprotocol.server;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Mono;
 
 import java.util.List;
 
@@ -50,10 +49,10 @@ public class McpStatelessSyncServer {
 
 	/**
 	 * Gracefully closes the server, allowing any in-progress operations to complete.
-	 * @return A Mono that completes when the server has been closed
+	 *
 	 */
-	public Mono<Void> closeGracefully() {
-		return this.asyncServer.closeGracefully();
+	public void closeGracefully() {
+		this.asyncServer.closeGracefully().block();
 	}
 
 	/**

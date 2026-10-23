@@ -5,10 +5,9 @@
 package io.modelcontextprotocol.server.transport;
 
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.Utils;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Default implementation of {@link ServerTransportSecurityValidator} that validates the
@@ -22,7 +21,8 @@ import java.util.Map;
  * @see ServerTransportSecurityValidator
  * @see ServerTransportSecurityException
  */
-public final class DefaultServerTransportSecurityValidator implements ServerTransportSecurityValidator {
+public final class DefaultServerTransportSecurityValidator
+		implements ServerTransportSecurityValidator, ServerHttpHeaderValidator {
 
 	private static final String ORIGIN_HEADER = "Origin";
 
@@ -47,27 +47,24 @@ public final class DefaultServerTransportSecurityValidator implements ServerTran
 	}
 
 	@Override
+	@Deprecated
 	public void validateHeaders(Map<String, List<String>> headers) throws ServerTransportSecurityException {
-		boolean missingHost = true;
-		for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
-			if (ORIGIN_HEADER.equalsIgnoreCase(entry.getKey())) {
-				List<String> values = entry.getValue();
-				if (values == null || values.isEmpty()) {
-					throw new ServerTransportSecurityException(403, "Invalid Origin header");
-				}
-				validateOrigin(values.get(0));
-			}
-			else if (HOST_HEADER.equalsIgnoreCase(entry.getKey())) {
-				missingHost = false;
-				List<String> values = entry.getValue();
-				if (values == null || values.isEmpty()) {
-					throw new ServerTransportSecurityException(421, "Invalid Host header");
-				}
-				validateHost(values.get(0));
-			}
+		validate(new MapHeaderAccessor(headers));
+	}
+
+	@Override
+	public void validate(HeaderAccessor headerAccessor) throws ServerTransportSecurityException {
+		List<String> originValues = headerAccessor.getHeader(ORIGIN_HEADER);
+		if (originValues != null && !originValues.isEmpty()) {
+			validateOrigin(originValues.get(0));
 		}
-		if (!allowedHosts.isEmpty() && missingHost) {
-			throw new ServerTransportSecurityException(421, "Invalid Host header");
+
+		if (!allowedHosts.isEmpty()) {
+			List<String> hostValues = headerAccessor.getHeader(HOST_HEADER);
+			if (hostValues == null || hostValues.isEmpty()) {
+				throw new ServerTransportSecurityException(421, "Invalid Host header");
+			}
+			validateHost(hostValues.get(0));
 		}
 	}
 
@@ -79,7 +76,7 @@ public final class DefaultServerTransportSecurityValidator implements ServerTran
 	 */
 	protected void validateOrigin(String origin) throws ServerTransportSecurityException {
 		// Origin absent = no validation needed (same-origin request)
-		if (origin == null || origin.trim().isEmpty()) {
+		if (origin == null || Utils.isBlank(origin)) {
 			return;
 		}
 
@@ -111,7 +108,7 @@ public final class DefaultServerTransportSecurityValidator implements ServerTran
 		}
 
 		// Host is required
-		if (host == null || host.trim().isEmpty()) {
+		if (host == null || Utils.isBlank(host)) {
 			throw new ServerTransportSecurityException(421, "Invalid Host header");
 		}
 
@@ -137,6 +134,37 @@ public final class DefaultServerTransportSecurityValidator implements ServerTran
 	 */
 	public static Builder builder() {
 		return new Builder();
+	}
+
+	/**
+	 * {@link HeaderAccessor} view over a {@code Map<String, List<String>>}, used to
+	 * bridge the deprecated {@link #validateHeaders(Map)} to
+	 * {@link #validate(HeaderAccessor)}.
+	 */
+	private static final class MapHeaderAccessor implements HeaderAccessor {
+
+		private final Map<String, List<String>> headers;
+
+		private MapHeaderAccessor(Map<String, List<String>> headers) {
+			this.headers = headers;
+		}
+
+		@Override
+		public List<String> getHeader(String name) {
+			return headers.entrySet()
+				.stream()
+				.filter(entry -> entry.getKey().equalsIgnoreCase(name))
+				.map(Map.Entry::getValue)
+				.filter(Objects::nonNull)
+				.findFirst()
+				.orElse(Collections.emptyList());
+		}
+
+		@Override
+		public List<String> getHeaderNames() {
+			return Collections.unmodifiableList(new ArrayList<>(headers.keySet()));
+		}
+
 	}
 
 	/**

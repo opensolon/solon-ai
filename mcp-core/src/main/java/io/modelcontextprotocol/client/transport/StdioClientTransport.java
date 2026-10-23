@@ -24,9 +24,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -42,6 +40,18 @@ import java.util.function.Function;
 public class StdioClientTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(StdioClientTransport.class);
+
+	private static final int DEFAULT_INPUT_MAX_SIZE = 16 * 1024 * 1024; // 16MB
+
+	// @formatter:off
+	private static final Set<Integer> EXIT_SUCCESS_CODES = Collections.unmodifiableSet(
+			new LinkedHashSet<>(Arrays.asList(
+					0,   // success
+					130, // interrupted (SIGINT)
+					141, // pipeline shortcut (SIGPIPE)
+					143  // graceful termination (SIGTERM)
+			)));
+	// @formatter:on
 
 	private final Sinks.Many<JSONRPCMessage> inboundSink;
 
@@ -66,6 +76,8 @@ public class StdioClientTransport implements McpClientTransport {
 
 	private final Sinks.Many<String> errorSink;
 
+	private final int inputMaxSize;
+
 	private volatile boolean isClosing = false;
 
 	// visible for tests
@@ -77,8 +89,21 @@ public class StdioClientTransport implements McpClientTransport {
 	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
 	 */
 	public StdioClientTransport(ServerParameters params, McpJsonMapper jsonMapper) {
+		this(params, jsonMapper, DEFAULT_INPUT_MAX_SIZE);
+	}
+
+	/**
+	 * Creates a new StdioClientTransport with the specified parameters and JsonMapper.
+	 * @param params The parameters for configuring the server process
+	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
+	 * @param inputMaxSize The maximum number of characters read for a single inbound
+	 * message. A peer that sends a longer message (or never terminates a line) has its
+	 * message rejected instead of forcing the transport to buffer it in memory.
+	 */
+	public StdioClientTransport(ServerParameters params, McpJsonMapper jsonMapper, int inputMaxSize) {
 		Assert.notNull(params, "The params can not be null");
 		Assert.notNull(jsonMapper, "The JsonMapper can not be null");
+		Assert.isTrue(inputMaxSize > 0, "inputMaxSize must be positive");
 
 		this.inboundSink = Sinks.many().unicast().onBackpressureBuffer();
 		this.outboundSink = Sinks.many().unicast().onBackpressureBuffer();
@@ -86,6 +111,8 @@ public class StdioClientTransport implements McpClientTransport {
 		this.params = params;
 
 		this.jsonMapper = jsonMapper;
+
+		this.inputMaxSize = inputMaxSize;
 
 		this.errorSink = Sinks.many().unicast().onBackpressureBuffer();
 
@@ -229,16 +256,13 @@ public class StdioClientTransport implements McpClientTransport {
 
 	@Override
 	public Mono<Void> sendMessage(JSONRPCMessage message) {
-		if (this.outboundSink.tryEmitNext(message).isSuccess()) {
-			// TODO: essentially we could reschedule ourselves in some time and make
-			// another attempt with the already read data but pause reading until
-			// success
-			// In this approach we delegate the retry and the backpressure onto the
-			// caller. This might be enough for most cases.
+		try {
+			// busyLooping retries FAIL_NON_SERIALIZED under concurrent senders
+			this.outboundSink.emitNext(message, Sinks.EmitFailureHandler.busyLooping(Duration.ofMillis(100)));
 			return Mono.empty();
 		}
-		else {
-			return Mono.error(new RuntimeException("Failed to enqueue message"));
+		catch (Sinks.EmissionException e) {
+			return Mono.error(new RuntimeException("Failed to enqueue message", e));
 		}
 	}
 
@@ -250,7 +274,7 @@ public class StdioClientTransport implements McpClientTransport {
 		this.inboundScheduler.schedule(() -> {
 			try (BufferedReader processReader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
 				String line;
-				while (!isClosing && (line = processReader.readLine()) != null) {
+				while (!isClosing && (line = readLine(processReader, inputMaxSize)) != null) {
 					try {
 						JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.jsonMapper, line);
 						if (!this.inboundSink.tryEmitNext(message).isSuccess()) {
@@ -268,6 +292,11 @@ public class StdioClientTransport implements McpClientTransport {
 					}
 				}
 			}
+			catch (MaxSizeExceededException e) {
+				if (!isClosing) {
+					logger.error("Inbound message exceeds the maximum allowed size", e);
+				}
+			}
 			catch (IOException e) {
 				if (!isClosing) {
 					logger.error("Error reading from input stream", e);
@@ -278,6 +307,37 @@ public class StdioClientTransport implements McpClientTransport {
 				inboundSink.tryEmitComplete();
 			}
 		});
+	}
+
+	/**
+	 * Reads a single line, mirroring {@link BufferedReader#readLine()}, but aborting once
+	 * more than {@code maxSize} characters have been read without encountering a line
+	 * terminator. This bounds how much memory a single inbound message can occupy.
+	 */
+	static String readLine(BufferedReader reader, int maxSize) throws IOException, MaxSizeExceededException {
+		StringBuilder sb = new StringBuilder();
+		int c;
+		while ((c = reader.read()) != -1) {
+			if (c == '\n') {
+				return sb.toString();
+			}
+			if (c == '\r') {
+				// Consume an optional trailing '\n' so that "\r\n" is treated as a
+				// single terminator, mirroring BufferedReader#readLine().
+				reader.mark(1);
+				int next = reader.read();
+				if (next != '\n' && next != -1) {
+					reader.reset();
+				}
+				return sb.toString();
+			}
+			if (sb.length() >= maxSize) {
+				throw new MaxSizeExceededException(
+						"Inbound message exceeds the maximum allowed size of " + maxSize + " characters");
+			}
+			sb.append((char) c);
+		}
+		return sb.length() == 0 ? null : sb.toString();
 	}
 
 	/**
@@ -349,28 +409,35 @@ public class StdioClientTransport implements McpClientTransport {
 			return Mono.delay(Duration.ofMillis(100)).then();
 		})).then(Mono.defer(() -> {
 			logger.debug("Sending TERM to process");
-			if (this.process != null) {
-				this.process.destroy();
-				CompletableFuture<Process> onExitFuture = CompletableFuture.supplyAsync(() -> {
-					try {
-						process.waitFor();
-					} catch (InterruptedException e) {
-						Thread.currentThread().interrupt();
-					}
-					return process;
-				});
-				return Mono.fromFuture(onExitFuture);
-			}
+				if (this.process != null) {
+					this.process.destroy();
+					// Java 8 compatibility: Process.onExit() (Java 9+) is unavailable;
+					// poll for termination instead.
+					Process terminated = this.process;
+					return Mono.fromFuture(java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+						try {
+							while (terminated.isAlive()) {
+								Thread.sleep(50);
+							}
+							return terminated;
+						}
+						catch (InterruptedException ex) {
+							Thread.currentThread().interrupt();
+							return terminated;
+						}
+					}));
+				}
 			else {
 				logger.warn("Process not started");
 				return Mono.<Process>empty();
 			}
 		})).doOnNext(process -> {
-			if (process.exitValue() != 0) {
-				logger.warn("Process terminated with code {}", process.exitValue());
+			int exitValue = process.exitValue();
+			if (EXIT_SUCCESS_CODES.contains(exitValue)) {
+				logger.info("MCP server completed successfully with code {}", exitValue);
 			}
 			else {
-				logger.info("MCP server process stopped");
+				logger.warn("MCP server process failed with code {}", exitValue);
 			}
 		}).then(Mono.fromRunnable(() -> {
 			try {

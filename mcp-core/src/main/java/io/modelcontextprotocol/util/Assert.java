@@ -32,6 +32,24 @@ public final class Assert {
 	}
 
 	/**
+	 * Assert that the collection contains no {@code null} elements. A {@code null} or
+	 * empty collection passes.
+	 * @param collection the collection to check
+	 * @param message the exception message to use if the assertion fails
+	 * @throws IllegalArgumentException if the collection contains a {@code null} element
+	 */
+	public static void noNullElements(@Nullable Collection<?> collection, String message) {
+		if (collection == null) {
+			return;
+		}
+		for (Object element : collection) {
+			if (element == null) {
+				throw new IllegalArgumentException(message);
+			}
+		}
+	}
+
+	/**
 	 * Assert that an object is not {@code null}.
 	 *
 	 * <pre class="code">
@@ -73,7 +91,7 @@ public final class Assert {
 	 * @see Character#isWhitespace
 	 */
 	public static boolean hasText(@Nullable String str) {
-		return (str != null && !str.trim().isEmpty());
+		return (str != null && !Utils.isBlank(str));
 	}
 
 	/**

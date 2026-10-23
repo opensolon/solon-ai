@@ -121,12 +121,13 @@ public class McpClientSession implements McpSession {
 		this.requestHandlers.putAll(requestHandlers);
 		this.notificationHandlers.putAll(notificationHandlers);
 
-		this.transport.connect(mono -> mono.doOnNext(this::handle)).transform(connectHook).subscribe();
+		this.transport.connect(mono -> mono.doOnNext(this::handle)).transform(connectHook).subscribe(ignored -> {
+		}, error -> logger.warn("Client failed during connect", error));
 	}
 
 	private void dismissPendingResponses() {
 		this.pendingResponses.forEach((id, sink) -> {
-			logger.warn("Abruptly terminating exchange for request {}", id);
+			logger.info("Abruptly terminating exchange for request {}", id);
 			sink.error(new RuntimeException("MCP session with server terminated"));
 		});
 		this.pendingResponses.clear();
@@ -159,20 +160,37 @@ public class McpClientSession implements McpSession {
 				McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError;
 				if (error instanceof McpError) {
 					McpError mcpError = (McpError) error;
-					jsonRpcError = mcpError.getJsonRpcError() != null ? mcpError.getJsonRpcError()
-							// TODO: add error message through the data field
-							: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-									error.getMessage(), McpError.aggregateExceptionMessages(error));
-				} else {
+					if (mcpError.getJsonRpcError() != null) {
+						jsonRpcError = mcpError.getJsonRpcError();
+					}
+					else {
+						// The cause chain may contain internal details: log it, but only send
+						// the message to the server
+						logger.warn("Error handling request {} [{}]", request.id(), request.method(), error);
+						jsonRpcError = new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+								error.getMessage() != null ? error.getMessage() : "Internal error", null);
+					}
+				}
+				else {
+					// The cause chain may contain internal details: log it, but only send
+					// the message to the server
+					logger.warn("Error handling request {} [{}]", request.id(), request.method(), error);
 					jsonRpcError = new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-							error.getMessage(), McpError.aggregateExceptionMessages(error));
+							error.getMessage() != null ? error.getMessage() : "Internal error", null);
 				}
 
-				McpSchema.JSONRPCResponse errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
-						jsonRpcError);
+				McpSchema.JSONRPCResponse errorResponse = McpSchema.JSONRPCResponse.error(request.id(), jsonRpcError);
 				return Mono.just(errorResponse);
 			}).flatMap(this.transport::sendMessage).onErrorComplete(t -> {
-				logger.warn("Issue sending response to the client, ", t);
+				if (t instanceof McpTransportSessionClosedException) {
+					logger.debug("Can't send response to request {} when the transport is closed", request.id());
+				}
+				else if (McpTransport.isPeerClosed(t)) {
+					logger.debug("Can't send response to request {}: connection closed by peer", request.id(), t);
+				}
+				else {
+					logger.warn("Failed to send response to the server", t);
+				}
 				return true;
 			}).subscribe();
 		}
@@ -199,46 +217,73 @@ public class McpClientSession implements McpSession {
 			RequestHandler<?> handler = this.requestHandlers.get(request.method());
 			if (handler == null) {
 				MethodNotFoundError error = getMethodNotFoundError(request.method());
-				return Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
-						new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
-								error.message(), error.data())));
+				return Mono
+					.just(McpSchema.JSONRPCResponse.error(request.id(), new McpSchema.JSONRPCResponse.JSONRPCError(
+							McpSchema.ErrorCodes.METHOD_NOT_FOUND, error.message(), error.data())));
 			}
 
 			return handler.handle(request.params())
-				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null));
+				.map(result -> McpSchema.JSONRPCResponse.result(request.id(), result));
 		});
 	}
 
 	static final class MethodNotFoundError {
+
 		private final String method;
+
 		private final String message;
+
 		private final Object data;
+
 		MethodNotFoundError(String method, String message, Object data) {
 			this.method = method;
 			this.message = message;
 			this.data = data;
 		}
-		public String method() { return method; }
-		public String message() { return message; }
-		public Object data() { return data; }
+
+		String method() {
+			return this.method;
+		}
+
+		String message() {
+			return this.message;
+		}
+
+		Object data() {
+			return this.data;
+		}
+
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof MethodNotFoundError)) return false;
+			if (this == o) {
+				return true;
+			}
+			if (!(o instanceof MethodNotFoundError)) {
+				return false;
+			}
 			MethodNotFoundError that = (MethodNotFoundError) o;
-			return Objects.equals(method, that.method) && Objects.equals(message, that.message) && Objects.equals(data, that.data);
+			return Objects.equals(this.method, that.method) && Objects.equals(this.message, that.message)
+					&& Objects.equals(this.data, that.data);
 		}
+
 		@Override
-		public int hashCode() { return Objects.hash(method, message, data); }
+		public int hashCode() {
+			return Objects.hash(this.method, this.message, this.data);
+		}
+
 		@Override
-		public String toString() { return "MethodNotFoundError[method=" + method + ", message=" + message + ", data=" + data + "]"; }
+		public String toString() {
+			return "MethodNotFoundError[method=" + this.method + ", message=" + this.message + ", data=" + this.data
+					+ "]";
+		}
+
 	}
 
 	private MethodNotFoundError getMethodNotFoundError(String method) {
 		switch (method) {
 			case McpSchema.METHOD_ROOTS_LIST:
 				return new MethodNotFoundError(method, "Roots not supported",
-						Collections.singletonMap("reason", "Client does not have roots capability"));
+					Collections.singletonMap("reason", "Client does not have roots capability"));
 			default:
 				return new MethodNotFoundError(method, "Method not found: " + method, null);
 		}
@@ -284,8 +329,7 @@ public class McpClientSession implements McpSession {
 		return Mono.deferContextual(ctx -> Mono.<McpSchema.JSONRPCResponse>create(pendingResponseSink -> {
 			logger.debug("Sending message for method {}", method);
 			this.pendingResponses.put(requestId, pendingResponseSink);
-			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, method,
-					requestId, requestParams);
+			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(method, requestId, requestParams);
 			this.transport.sendMessage(jsonrpcRequest).contextWrite(ctx).subscribe(v -> {
 			}, error -> {
 				this.pendingResponses.remove(requestId);
@@ -293,7 +337,8 @@ public class McpClientSession implements McpSession {
 			});
 		})).timeout(this.requestTimeout).handle((jsonRpcResponse, deliveredResponseSink) -> {
 			if (jsonRpcResponse.error() != null) {
-				logger.error("Error handling request: {}", jsonRpcResponse.error());
+				logger.info("Server returned a JSON-RPC error when calling method {}: {}", method,
+						jsonRpcResponse.error());
 				deliveredResponseSink.error(new McpError(jsonRpcResponse.error()));
 			}
 			else {
@@ -315,8 +360,7 @@ public class McpClientSession implements McpSession {
 	 */
 	@Override
 	public Mono<Void> sendNotification(String method, Object params) {
-		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
-				method, params);
+		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(method, params);
 		return this.transport.sendMessage(jsonrpcNotification);
 	}
 
