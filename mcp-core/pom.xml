@@ -15,6 +15,8 @@
     <name>${project.artifactId}</name>
     <packaging>jar</packaging>
 
+    <!-- mcp-core v2.1.0 for java8 -->
+
     <dependencies>
         <dependency>
             <groupId>org.noear</groupId>
