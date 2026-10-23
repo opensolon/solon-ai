@@ -30,6 +30,7 @@ import reactor.util.function.Tuple2;
 import reactor.util.function.Tuples;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -115,7 +116,8 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
 
     @Override
     public List<String> protocolVersions() {
-        return supportedProtocolVersions;
+        // defensive copy: prevent callers from mutating the negotiated version list
+        return Collections.unmodifiableList(supportedProtocolVersions);
     }
 
     /**
@@ -231,8 +233,7 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
             Disposable connection = Mono.fromFuture(webClientBuilder.build(this.endpoint)
                             .accept(MimeType.TEXT_EVENT_STREAM_VALUE)
                             .header(HttpHeaders.PROTOCOL_VERSION,
-                                    ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
-                                            this.latestSupportedProtocolVersion))
+                                    negotiatedProtocolVersion(ctx))
                             .fill(http -> {
                                 transportSession.sessionId().ifPresent(id -> http.header(HttpHeaders.MCP_SESSION_ID, id));
                                 if (stream != null) {
@@ -275,7 +276,14 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
                     })
                     .flatMap(jsonrpcMessage -> requestHandler.apply(Mono.just(jsonrpcMessage)))
                     .onErrorComplete(t -> {
-                        this.handleException(t);
+                        try {
+                            this.handleException(t);
+                        }
+                        catch (Exception e) {
+                            if (logger.isErrorEnabled()) {
+                                logger.error("Error handling exception " + t.getMessage(), e);
+                            }
+                        }
                         return true;
                     })
                     .doFinally(s -> {
@@ -330,8 +338,7 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
             Disposable connection = Mono.deferContextual(ctx -> Mono.fromFuture(webClientBuilder.build(this.endpoint)
                             .accept(MimeType.APPLICATION_JSON_VALUE + ", " + MimeType.TEXT_EVENT_STREAM_VALUE)
                             .header(HttpHeaders.PROTOCOL_VERSION,
-                                    ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
-                                            this.latestSupportedProtocolVersion))
+                                    negotiatedProtocolVersion(ctx))
                             .fill(http -> {
                                 transportSession.sessionId().ifPresent(id -> http.header(HttpHeaders.MCP_SESSION_ID, id));
                             })
@@ -392,7 +399,14 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
                     .flatMap(jsonRpcMessage -> requestHandler.apply(Mono.just(jsonRpcMessage)))
                     .onErrorComplete(t -> {
                         // handle the error first
-                        this.handleException(t);
+                        try {
+                            this.handleException(t);
+                        }
+                        catch (Exception e) {
+                            if (logger.isErrorEnabled()) {
+                                logger.error("Error handling exception " + t.getMessage(), e);
+                            }
+                        }
                         // inform the caller of sendMessage
                         sink.error(t);
                         return true;
@@ -435,7 +449,7 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
                 }
                 catch (IOException ex) {
                     toPropagate = new McpTransportException("Sending request failed, " + e.getMessage(), e);
-                    logger.debug("Received content together with {} HTTP code response: {}", response.code(), body);
+                    logger.debug("Received content together with {} HTTP code response: {}", response.code(), new String(body, StandardCharsets.UTF_8));
                 }
 
                 // Some implementations can return 400 when presented with a
@@ -476,7 +490,9 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
     }
 
     private static boolean isEventStream(HttpResponse response) {
-        if (response.code() >= StatusCodes.CODE_OK) {
+        // only 2xx responses with text/event-stream content type are valid SSE streams;
+        // an error page with an SSE-ish content type must not be opened as a stream
+        if (response.code() >= StatusCodes.CODE_OK && response.code() < StatusCodes.CODE_MULTIPLE_CHOICES) {
             String ct = response.contentType();
             if (ct != null && ct.startsWith(MimeType.TEXT_EVENT_STREAM_VALUE)) {
                 return true;
@@ -484,6 +500,14 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
         }
 
         return false;
+    }
+
+    private String negotiatedProtocolVersion(reactor.util.context.ContextView ctx) {
+        // Reactor Context allows null values to be stored under a key, so guard against
+        // a null NEGOTIATED_PROTOCOL_VERSION and fall back to the latest supported one
+        String version = ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
+                this.latestSupportedProtocolVersion);
+        return version != null ? version : this.latestSupportedProtocolVersion;
     }
 
     private static String sessionIdOrPlaceholder(McpTransportSession<?> transportSession) {

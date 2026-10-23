@@ -214,7 +214,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 
 	@Override
 	public List<String> protocolVersions() {
-		return Arrays.asList(ProtocolVersions.MCP_2024_11_05);
+		return Collections.singletonList(ProtocolVersions.MCP_2024_11_05);
 	}
 
 	@Override
@@ -305,6 +305,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 		}).flatMap(McpServerSession::closeGracefully).then().doOnSuccess(v -> {
 			logger.debug("Graceful shutdown completed");
 			this.sessions.clear();
+			this.sessionRequests.clear();
 			if (this.keepAliveScheduler != null) {
 				this.keepAliveScheduler.shutdown();
 			}
@@ -448,7 +449,10 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 							.build());
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.extract(sessionRequest);
+		// Fall back to the current request when the cached SSE connection context is
+		// gone (e.g. cleared on shutdown) to avoid extracting a null context
+		McpTransportContext transportContext = this.contextExtractor
+				.extract(sessionRequest != null ? sessionRequest : request);
 
 		return Mono.just(request.body()).flatMap(body -> {
 			try {
