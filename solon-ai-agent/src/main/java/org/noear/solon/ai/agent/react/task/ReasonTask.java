@@ -533,7 +533,7 @@ public class ReasonTask {
             case RATE_LIMIT:
                 return "抱歉，模型服务请求过于频繁或触发了上游限流（CODE: " + code + "）。请稍后重试，或降低并发数量。";
             case UPSTREAM_UNAVAILABLE:
-                return "抱歉，中转网关或上游模型服务暂时不可用（CODE: " + code + "）。可能是上游限流、服务过载或网关异常，请稍后重试。";
+                return "抱歉，模型服务暂时不可用（CODE: " + code + "）。可能是上游限流、服务过载或网关异常，请稍后重试。";
             case SERVER_ERROR:
                 return "抱歉，模型服务发生内部错误（CODE: " + code + "）。请稍后重试。";
             case TIMEOUT:
