@@ -74,7 +74,7 @@ public class ModelCommand implements Command {
     /**
      * 渲染模型列表（仅含启用模型，每行只输出 nameOrModel，当前模型带 active 标记）
      */
-    static List<String> formatModels(Collection<? extends ChatConfig> models, String currentModel) {
+    public static List<String> formatModels(Collection<? extends ChatConfig> models, String currentModel) {
         List<String> lines = new ArrayList<>();
         lines.add(BOLD + "Models:" + RESET);
 
