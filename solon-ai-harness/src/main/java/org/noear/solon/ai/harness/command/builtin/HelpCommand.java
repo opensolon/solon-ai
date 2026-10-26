@@ -66,7 +66,7 @@ public class HelpCommand implements Command {
     /**
      * 生成帮助文本，单独抽出便于测试，也避免不同渠道各自维护命令清单。
      */
-    static String formatHelp(List<Command> commands, String topic, boolean remote) {
+    public static String formatHelp(List<Command> commands, String topic, boolean remote) {
         if (topic != null && !topic.trim().isEmpty()) {
             for (Command command : commands) {
                 if (command.name().equalsIgnoreCase(topic.trim())) {
