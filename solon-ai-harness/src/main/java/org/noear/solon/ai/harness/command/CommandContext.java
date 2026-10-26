@@ -29,16 +29,17 @@ import java.util.List;
  * @since 2026.4.28
  */
 public interface CommandContext {
+    /**
+     * 是否为远程上下文
+     */
+    default boolean isRemote(){
+        return false;
+    }
 
     /**
      * 获取当前会话
      */
     AgentSession getSession();
-
-    /**
-     * 获取 Agent 运行时
-     */
-    HarnessEngine getEngine();
 
     /**
      * 获取用户原始输入

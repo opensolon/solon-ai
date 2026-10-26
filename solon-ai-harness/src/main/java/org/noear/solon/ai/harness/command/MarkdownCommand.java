@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness.command;
 
+import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.lang.Nullable;
 
 import java.util.List;
@@ -105,7 +106,7 @@ public class MarkdownCommand implements Command {
     }
 
     @Override
-    public void execute(CommandContext ctx) throws Exception {
+    public void execute(HarnessEngine engine, CommandContext ctx) throws Exception {
         // 替换变量得到 prompt
         String prompt = getResolvedPrompt(ctx.getArgs());
 

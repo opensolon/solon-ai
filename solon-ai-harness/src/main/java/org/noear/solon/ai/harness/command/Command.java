@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.harness.command;
 
-import org.noear.solon.lang.Nullable;
+import org.noear.solon.ai.harness.HarnessEngine;
 
 /**
  * 通用命令接口（适用于 CLI、Web 等所有端）
@@ -69,5 +69,5 @@ public interface Command {
      *
      * @return true 表示已处理该输入（不再触发 Agent 任务）
      */
-    void execute(CommandContext ctx) throws Exception;
+    void execute(HarnessEngine engine, CommandContext ctx) throws Exception;
 }
