@@ -1,15 +1,18 @@
 package org.noear.solon.ai.harness.command.builtin;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.harness.session.queue.SessionQueue;
+import org.noear.solon.ai.harness.session.queue.SessionQueueItem;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * /queue 命令编排层测试（fake 端口）：锁定入队参数、容量/长度提示与来源默认值。
+ * /queue 命令编排层测试（直连 SessionQueue，engine 传 null 同既有口径）。
+ * 入队结果与容量/长度上限文案由领域类事实锁定。
  */
 class QueueCommandTest {
-    private final Fakes.StubQueuePort queuePort = new Fakes.StubQueuePort();
-    private final QueueCommand command = new QueueCommand(queuePort);
+    private final QueueCommand command = new QueueCommand();
 
     @Test
     void emptyArgsPrintsUsage() {
@@ -22,8 +25,13 @@ class QueueCommandTest {
     void enqueuesWithImMetadata() {
         Fakes.StubContext ctx = Fakes.StubContext.im("接着跑测试");
         command.execute(null, ctx);
-        assertEquals(1, queuePort.enqueues.size());
-        assertTrue(queuePort.enqueues.get(0).contains("接着跑测试|Feishu|user-1|chat-1|message-1"));
+        assertEquals(1, SessionQueue.pendingSize(ctx.getSession()));
+        SessionQueueItem item = SessionQueue.snapshot(ctx.getSession()).get(0);
+        assertEquals("接着跑测试", item.getText());
+        assertEquals("Feishu", item.getSource());
+        assertEquals("user-1", item.getSourceUserId());
+        assertEquals("chat-1", item.getReplyTarget());
+        assertEquals("message-1", item.getMessageId());
         assertTrue(ctx.output().contains("已加入队列（第 1 位）"));
     }
 
@@ -31,7 +39,8 @@ class QueueCommandTest {
     void localSourceDefaultsToCli() {
         Fakes.StubContext ctx = Fakes.StubContext.local("接着跑测试");
         command.execute(null, ctx);
-        assertTrue(queuePort.enqueues.get(0).contains("|CLI|"));
+        SessionQueueItem item = SessionQueue.snapshot(ctx.getSession()).get(0);
+        assertEquals("CLI", item.getSource());
     }
 
     @Test
@@ -42,16 +51,20 @@ class QueueCommandTest {
         }
         Fakes.StubContext ctx = Fakes.StubContext.im(longText.toString());
         command.execute(null, ctx);
-        assertEquals(0, queuePort.enqueues.size());
+        assertEquals(0, SessionQueue.pendingSize(ctx.getSession()));
         assertTrue(ctx.output().contains("排队内容过长（上限 4096 字符）"));
     }
 
     @Test
     void enqueueFailurePrintsLimit() {
-        queuePort.enqueueResult = -1;
         Fakes.StubContext ctx = Fakes.StubContext.im("接着跑测试");
+        AgentSession session = ctx.getSession();
+        for (int i = 0; i < SessionQueue.MAX_QUEUE_SIZE; i++) {
+            SessionQueue.enqueue(session, "fill-" + i, null);
+        }
         command.execute(null, ctx);
         assertEquals(0, ctx.tasks.size());
-        assertTrue(ctx.output().contains("排队失败（队列已满或持久化失败，上限 20 条）"));
+        assertEquals(SessionQueue.MAX_QUEUE_SIZE, SessionQueue.pendingSize(session));
+        assertTrue(ctx.output().contains("排队失败（队列已满，上限 20 条）"));
     }
 }

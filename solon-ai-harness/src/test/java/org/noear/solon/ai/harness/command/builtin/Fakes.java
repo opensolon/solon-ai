@@ -2,17 +2,15 @@ package org.noear.solon.ai.harness.command.builtin;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
-import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.CommandContext;
-import org.noear.solon.ai.harness.session.steer.SteerInterceptor.SteerResult;
-import org.noear.solon.ai.harness.session.steer.SteerInterceptor.SteerStatus;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * 命令层测试共享桩：记录端口调用与命令输出，不依赖宿主实现。
+ * 命令层测试共享桩：最小命令上下文，收集输出与 runAgentTask 调用，承载渠道元数据。
+ * 命令已直连领域类，不再需要端口桩。
  */
 final class Fakes {
     private Fakes() {
@@ -20,61 +18,6 @@ final class Fakes {
 
     static AgentSession newSession() {
         return InMemoryAgentSession.of();
-    }
-
-    /** 排队端口桩：可注入入队位次，记录 enqueue 调用。 */
-    static class StubQueuePort implements QueuePort {
-        int bindCount;
-        int enqueueResult = 1;
-        final List<String> enqueues = new ArrayList<>();
-
-        @Override
-        public void bindStorage(HarnessEngine engine, AgentSession session) {
-            bindCount++;
-        }
-
-        @Override
-        public int enqueue(AgentSession session, String text, String source,
-                           String sourceUserId, String replyTarget, String messageId) {
-            enqueues.add(text + "|" + source + "|" + sourceUserId + "|" + replyTarget + "|" + messageId);
-            return enqueueResult;
-        }
-
-        @Override
-        public int maxQueueSize() {
-            return 20;
-        }
-
-        @Override
-        public int maxTextLength() {
-            return 4096;
-        }
-
-        @Override
-        public boolean cancelPending(AgentSession session) {
-            return true;
-        }
-    }
-
-    /** 插话端口桩：可注入指定投递结果。 */
-    static class StubSteerPort implements SteerPort {
-        SteerResult result = new SteerResult(SteerStatus.STEERED, "s_1", 0);
-        String lastText;
-        String lastSource;
-        String lastSourceUserId;
-        String lastReplyTarget;
-        String lastMessageId;
-
-        @Override
-        public SteerResult steer(AgentSession session, String text, String source,
-                                 String sourceUserId, String replyTarget, String messageId) {
-            lastText = text;
-            lastSource = source;
-            lastSourceUserId = sourceUserId;
-            lastReplyTarget = replyTarget;
-            lastMessageId = messageId;
-            return result;
-        }
     }
 
     /** 最小命令上下文：收集输出与 runAgentTask 调用，承载渠道元数据。 */

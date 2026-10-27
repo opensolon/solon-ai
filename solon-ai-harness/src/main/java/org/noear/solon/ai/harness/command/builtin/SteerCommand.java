@@ -39,11 +39,6 @@ import org.noear.solon.core.util.Assert;
  * @since 2026.11
  */
 public class SteerCommand implements Command {
-    private final SteerPort steerPort;
-
-    public SteerCommand(SteerPort steerPort) {
-        this.steerPort = steerPort;
-    }
 
     @Override
     public String name() {
@@ -79,8 +74,8 @@ public class SteerCommand implements Command {
         AgentSession session = ctx.getSession();
         String contextSource = ctx.getSource();
         String source = Assert.isNotEmpty(contextSource) ? contextSource : "command";
-        SteerResult result = steerPort.steer(session, text, source, ctx.getSourceUserId(),
-                ctx.getReplyTarget(), ctx.getMessageId());
+        SteerResult result = SteerInterceptor.steer(session, null, null, text, source,
+                ctx.getSourceUserId(), ctx.getReplyTarget(), ctx.getMessageId(), null);
 
         switch (result.getStatus()) {
             case STEERED:

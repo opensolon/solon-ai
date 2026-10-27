@@ -5,13 +5,13 @@
 package org.noear.solon.ai.harness.session.queue;
 
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.flow.FlowContext;
 
-import java.io.IOException;
-import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Session 级唯一排队队列。Web、IM、CLI 只共享此队列，source 仅为元数据。
@@ -19,105 +19,81 @@ import java.util.List;
  * <p>与宿主（CLI/Web/IM 入口）之间的运行时契约是 {@link AgentSession#attrs()} 中的
  * 短横线 key（一字不改，任何一侧不得私自重命名）：</p>
  * <ul>
- *   <li>{@code session.queue}：待执行队列本体（Deque&lt;SessionQueueItem&gt;）</li>
- *   <li>{@code session.queue.path}：持久化文件绝对路径</li>
+ *   <li>{@code session.queue}：待执行队列本体（Deque&lt;SessionQueueItem&gt;，运行态）</li>
  *   <li>{@code session.queue.generation}：清空代际（cancelPending 递增，用于拒绝旧代际 requeue）</li>
  *   <li>{@code session.queue.claim}：领取权（同一时刻仅一个运行者可 poll）</li>
  *   <li>{@code session.queue.inFlight}：当前运行中的任务（RUNNING 状态本体）</li>
- *   <li>{@code session.queue.storageError}：存储读写异常标记</li>
  * </ul>
+ *
+ * <p><b>持久化</b>：队列以 Map 投影（List&lt;Map&gt;，运行中任务在首位）存放于
+ * {@link AgentSession#getContext()} 的 {@code data()}（key：{@code session.queue.items}），
+ * 任何队列变更后调用 {@link AgentSession#updateSnapshot()} 随会话快照一并落盘
+ * ——快照即持久化，不再使用独立的 queue-tasks.json 文件。attrs 为瞬态内存，
+ * 首次访问队列时从快照投影 hydrate（RUNNING 项重置为 PENDING 并恢复到队首）。</p>
  */
 public final class SessionQueue {
     public static final int MAX_QUEUE_SIZE = 20;
     public static final int MAX_TEXT_LENGTH = 4096;
     private static final String ATTR_QUEUE = "session.queue";
-    private static final String ATTR_PATH = "session.queue.path";
     private static final String ATTR_GENERATION = "session.queue.generation";
     private static final String ATTR_CLAIM = "session.queue.claim";
     private static final String ATTR_IN_FLIGHT = "session.queue.inFlight";
+    /** 会话上下文 data() 中的持久化投影 key（List&lt;Map&gt;，运行中任务在首位）。 */
+    private static final String KEY_ITEMS = "session.queue.items";
     private SessionQueue() { }
 
+    /** 运行态队列：attrs 优先，缺失时从快照投影 hydrate（投影有内容即重建，与 create 无关）。
+     *  调用方必须持有 attrs 锁。 */
     @SuppressWarnings("unchecked")
     private static Deque<SessionQueueItem> queue(AgentSession session, boolean create) {
         Object value = session == null ? null : session.attrs().get(ATTR_QUEUE);
         if (value instanceof Deque) return (Deque<SessionQueueItem>) value;
+        Deque<SessionQueueItem> hydrated = hydrateLocked(session);
+        if (!hydrated.isEmpty()) {
+            session.attrs().put(ATTR_QUEUE, hydrated);
+            return hydrated;
+        }
         if (!create) return null;
         Deque<SessionQueueItem> result = new ArrayDeque<>();
         session.attrs().put(ATTR_QUEUE, result);
         return result;
     }
 
-    public static void bindStorage(AgentSession session, Path dir) {
-        if (session == null || dir == null) return;
-        synchronized (session.attrs()) {
-            Path path = dir.resolve(SessionQueueStore.FILE_NAME).toAbsolutePath().normalize();
-            if (path.equals(session.attrs().get(ATTR_PATH)) && session.attrs().get(ATTR_QUEUE) != null) {
-                // 各入口都会 bindStorage；刷新外部入队，但不覆盖当前运行中的任务。
-                reloadPendingLocked(session, dir);
-                return;
-            }
-            session.attrs().put(ATTR_PATH, path);
-            try {
-                session.attrs().put(ATTR_QUEUE, pendingFromStorage(dir, null));
-            } catch (IOException e) {
-                session.attrs().remove(ATTR_PATH);
-                session.attrs().put(ATTR_QUEUE, new ArrayDeque<SessionQueueItem>());
-                session.attrs().put("session.queue.storageError", Boolean.TRUE);
-            }
-        }
-    }
-
-    /** 在外部窗口完成原子写入后刷新待执行视图；当前 claim/in-flight 始终由运行时保留。 */
-    public static void reloadStorage(AgentSession session, Path dir) {
-        if (session == null || dir == null) return;
-        synchronized (session.attrs()) {
-            session.attrs().put(ATTR_PATH, dir.resolve(SessionQueueStore.FILE_NAME).toAbsolutePath().normalize());
-            reloadPendingLocked(session, dir);
-        }
-    }
-
-    private static void reloadPendingLocked(AgentSession session, Path dir) {
-        try {
-            Object flight = session.attrs().get(ATTR_IN_FLIGHT);
-            String flightId = flight instanceof SessionQueueItem ? ((SessionQueueItem) flight).getId() : null;
-            session.attrs().put(ATTR_QUEUE, pendingFromStorage(dir, flightId));
-            session.attrs().remove("session.queue.storageError");
-        } catch (IOException e) {
-            session.attrs().put("session.queue.storageError", Boolean.TRUE);
-        }
-    }
-
-    private static Deque<SessionQueueItem> pendingFromStorage(Path dir, String activeId) throws IOException {
+    /** 从会话上下文快照投影重建队列；上一次进程领取过（RUNNING）的任务恢复到队首。 */
+    private static Deque<SessionQueueItem> hydrateLocked(AgentSession session) {
         Deque<SessionQueueItem> result = new ArrayDeque<>();
-        for (SessionQueueItem item : SessionQueueStore.load(dir)) {
+        Object projection = session == null || session.getContext() == null
+                ? null : session.getContext().data().get(KEY_ITEMS);
+        if (!(projection instanceof List)) return result;
+        List<SessionQueueItem> runnings = new ArrayList<>();
+        List<SessionQueueItem> pendings = new ArrayList<>();
+        for (Object row : (List<?>) projection) {
+            SessionQueueItem item = row instanceof Map ? SessionQueueItem.fromMap((Map<String, Object>) row) : null;
             if (item == null) continue;
-            // RUNNING 只代表上一次进程曾领取过；新进程没有内存中的 in-flight 时必须恢复到队首。
             if ("RUNNING".equals(item.getStatus())) {
-                if (activeId != null && activeId.equals(item.getId())) continue;
+                // RUNNING 只代表上一次进程曾领取过；新进程没有内存中的 in-flight 时必须恢复到队首。
                 item.setStatus("PENDING");
                 item.setClaimedAt(null);
-                result.offerFirst(item);
+                runnings.add(item);
             } else {
-                result.offerLast(item);
+                pendings.add(item);
             }
         }
+        for (SessionQueueItem item : runnings) result.offerLast(item);
+        for (SessionQueueItem item : pendings) result.offerLast(item);
         return result;
     }
 
-    private static boolean persist(AgentSession session, Deque<SessionQueueItem> queue) {
-        Object value = session.attrs().get(ATTR_PATH);
-        if (!(value instanceof Path)) return !Boolean.TRUE.equals(session.attrs().get("session.queue.storageError"));
-        try {
-            SessionQueueStore.save(((Path) value).getParent(), new ArrayList<>(queueWithInFlight(session, queue)));
-            return true;
-        } catch (IOException e) { return false; }
-    }
-
-    private static List<SessionQueueItem> queueWithInFlight(AgentSession session, Deque<SessionQueueItem> queue) {
-        List<SessionQueueItem> result = new ArrayList<>(queue);
+    /** 把队列写入会话上下文投影并保存快照（调用方必须持有 attrs 锁；空队列移除投影）。 */
+    private static void saveLocked(AgentSession session, Deque<SessionQueueItem> queue) {
+        if (session == null || session.getContext() == null) return;
+        List<Map<String, Object>> rows = new ArrayList<>();
         Object inFlight = session.attrs().get(ATTR_IN_FLIGHT);
-        if (inFlight instanceof SessionQueueItem) result.add(0, (SessionQueueItem) inFlight);
-        return result;
+        if (inFlight instanceof SessionQueueItem) rows.add(((SessionQueueItem) inFlight).toMap());
+        for (SessionQueueItem item : queue) if (item != null) rows.add(item.toMap());
+        if (rows.isEmpty()) session.getContext().data().remove(KEY_ITEMS);
+        else session.getContext().data().put(KEY_ITEMS, rows);
+        session.updateSnapshot();
     }
 
     public static int enqueue(AgentSession session, String text, String source) {
@@ -149,7 +125,7 @@ public final class SessionQueue {
                     source, System.currentTimeMillis(), "PENDING", model, reasoningEffort,
                     thinkingMode, selectedAgent, hasFiles, sourceUserId, replyTarget, messageId);
             q.offerLast(item);
-            if (!persist(session, q)) { q.removeLast(); return -1; }
+            saveLocked(session, q);
             return q.size();
         }
     }
@@ -173,13 +149,7 @@ public final class SessionQueue {
             item.setStatus("RUNNING");
             item.setClaimedAt(System.currentTimeMillis());
             session.attrs().put(ATTR_IN_FLIGHT, item);
-            if (!persist(session, q)) {
-                item.setStatus("PENDING");
-                item.setClaimedAt(null);
-                q.offerFirst(item);
-                session.attrs().remove(ATTR_IN_FLIGHT);
-                return null;
-            }
+            saveLocked(session, q);
             return item;
         }
     }
@@ -202,9 +172,8 @@ public final class SessionQueue {
             Object value = session.attrs().get(ATTR_IN_FLIGHT);
             if (!(value instanceof SessionQueueItem) || !id.equals(((SessionQueueItem)value).getId())) return false;
             session.attrs().remove(ATTR_IN_FLIGHT);
-            if (persist(session, queue(session, true))) return true;
-            session.attrs().put(ATTR_IN_FLIGHT, value);
-            return false;
+            saveLocked(session, queue(session, true));
+            return true;
         }
     }
     public static boolean requeueFront(AgentSession session, SessionQueueItem item, long generation) {
@@ -216,12 +185,8 @@ public final class SessionQueue {
             if (q.size() > MAX_QUEUE_SIZE) return false;
             item.setStatus("PENDING"); item.setClaimedAt(null); q.offerFirst(item);
             session.attrs().remove(ATTR_IN_FLIGHT);
-            if (persist(session, q)) return true;
-            q.pollFirst();
-            item.setStatus("RUNNING");
-            item.setClaimedAt(System.currentTimeMillis());
-            session.attrs().put(ATTR_IN_FLIGHT, item);
-            return false;
+            saveLocked(session, q);
+            return true;
         }
     }
     public static boolean cancelItem(AgentSession session, String itemId) {
@@ -233,12 +198,9 @@ public final class SessionQueue {
                 if (itemId.equals(item.getId())) { found = item; break; }
             }
             if (found == null) return false;
-            List<SessionQueueItem> original = new ArrayList<>(q);
             q.remove(found);
-            if (persist(session, q)) return true;
-            q.clear();
-            q.addAll(original);
-            return false;
+            saveLocked(session, q);
+            return true;
         }
     }
 
@@ -249,13 +211,10 @@ public final class SessionQueue {
             SessionQueueItem found = null;
             for (SessionQueueItem item : q) if (itemId.equals(item.getId())) { found = item; break; }
             if (found == null) return false;
-            List<SessionQueueItem> original = new ArrayList<>(q);
             q.remove(found);
             q.offerFirst(found);
-            if (persist(session, q)) return true;
-            q.clear();
-            q.addAll(original);
-            return false;
+            saveLocked(session, q);
+            return true;
         }
     }
 
@@ -263,23 +222,31 @@ public final class SessionQueue {
         if (session == null) return false;
         synchronized (session.attrs()) {
             Deque<SessionQueueItem> q = queue(session, true);
-            List<SessionQueueItem> old = new ArrayList<>(q);
-            Object oldFlight = session.attrs().get(ATTR_IN_FLIGHT);
-            Object oldGeneration = session.attrs().get(ATTR_GENERATION);
-            Object oldClaim = session.attrs().get(ATTR_CLAIM);
+            Object inFlight = session.attrs().get(ATTR_IN_FLIGHT);
+            boolean hadItems = !q.isEmpty() || inFlight instanceof SessionQueueItem;
             q.clear();
             session.attrs().remove(ATTR_IN_FLIGHT);
             session.attrs().put(ATTR_GENERATION, generation(session) + 1);
             session.attrs().remove(ATTR_CLAIM);
-            if (persist(session, q)) return true;
-            q.addAll(old);
-            if (oldFlight != null) session.attrs().put(ATTR_IN_FLIGHT, oldFlight);
-            if (oldGeneration == null) session.attrs().remove(ATTR_GENERATION);
-            else session.attrs().put(ATTR_GENERATION, oldGeneration);
-            if (oldClaim != null) session.attrs().put(ATTR_CLAIM, oldClaim);
-            return false;
+            // 无队列变更（本就空）时不写快照：interrupt 空队列会话不应触发落盘。
+            if (hadItems) saveLocked(session, q);
+            return true;
         }
     }
+
+    /** 统一视图：运行中任务（若有）在首位，其余为待执行（供队列展示接口使用）。 */
+    public static List<SessionQueueItem> view(AgentSession session) {
+        List<SessionQueueItem> result = new ArrayList<>();
+        if (session == null) return result;
+        synchronized (session.attrs()) {
+            Object inFlight = session.attrs().get(ATTR_IN_FLIGHT);
+            if (inFlight instanceof SessionQueueItem) result.add((SessionQueueItem) inFlight);
+            Deque<SessionQueueItem> q = queue(session, false);
+            if (q != null) result.addAll(q);
+        }
+        return result;
+    }
+
     public static List<SessionQueueItem> snapshot(AgentSession session) {
         if (session == null) return new ArrayList<>();
         synchronized (session.attrs()) {
@@ -287,4 +254,61 @@ public final class SessionQueue {
         }
     }
     public static int size(AgentSession session) { if (session == null) return 0; synchronized(session.attrs()) { Deque<SessionQueueItem> q=queue(session,false); return (q == null ? 0 : q.size()) + (session.attrs().get(ATTR_IN_FLIGHT) instanceof SessionQueueItem ? 1 : 0); } }
+
+    /** 该会话是否有任务（含待执行与运行中）。 */
+    public static boolean hasItems(AgentSession session) {
+        if (session == null) return false;
+        synchronized (session.attrs()) {
+            if (session.attrs().get(ATTR_IN_FLIGHT) instanceof SessionQueueItem) return true;
+            Deque<SessionQueueItem> q = queue(session, false);
+            return q != null && !q.isEmpty();
+        }
+    }
+
+    /** 会话上下文中是否存在队列持久化投影（List 非空即有）。 */
+    public static boolean hasPersistedItems(FlowContext context) {
+        if (context == null) return false;
+        Object projection = context.get(KEY_ITEMS);
+        return projection instanceof List && !((List<?>) projection).isEmpty();
+    }
+
+    /**
+     * 旧版 queue-tasks.json / queue.json 的一次性迁移入口：把外部读出的 Map 行导入队列并保存快照。
+     * RUNNING 项重置为 PENDING 并恢复到队首；按 id 去重；队列满即止。
+     *
+     * @return 实际导入条数
+     */
+    public static int importItems(AgentSession session, List<Map<String, Object>> rows) {
+        if (session == null || rows == null || rows.isEmpty()) return 0;
+        synchronized (session.attrs()) {
+            Deque<SessionQueueItem> q = queue(session, true);
+            List<SessionQueueItem> runnings = new ArrayList<>();
+            List<SessionQueueItem> pendings = new ArrayList<>();
+            int total = q.size();
+            for (Map<String, Object> row : rows) {
+                if (total >= MAX_QUEUE_SIZE) break;
+                SessionQueueItem item = SessionQueueItem.fromMap(row);
+                if (item == null) continue;
+                boolean duplicated = false;
+                for (SessionQueueItem existing : q) if (item.getId().equals(existing.getId())) { duplicated = true; break; }
+                for (SessionQueueItem existing : runnings) if (item.getId().equals(existing.getId())) { duplicated = true; break; }
+                for (SessionQueueItem existing : pendings) if (item.getId().equals(existing.getId())) { duplicated = true; break; }
+                if (duplicated) continue;
+                total++;
+                if ("RUNNING".equals(item.getStatus())) {
+                    item.setStatus("PENDING");
+                    item.setClaimedAt(null);
+                    runnings.add(item);
+                } else {
+                    pendings.add(item);
+                }
+            }
+            // RUNNING 项恢复到队首（保持相对顺序），再接原队头与待执行项。
+            for (int i = runnings.size() - 1; i >= 0; i--) q.offerFirst(runnings.get(i));
+            for (SessionQueueItem item : pendings) q.offerLast(item);
+            int imported = runnings.size() + pendings.size();
+            if (imported > 0) saveLocked(session, q);
+            return imported;
+        }
+    }
 }

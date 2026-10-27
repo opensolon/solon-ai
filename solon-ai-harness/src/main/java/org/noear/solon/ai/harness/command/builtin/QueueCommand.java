@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
+import org.noear.solon.ai.harness.session.queue.SessionQueue;
 import org.noear.solon.core.util.Assert;
 
 /**
@@ -26,7 +27,8 @@ import org.noear.solon.core.util.Assert;
  *
  * <p>与 /steer（插话，注入当前任务）不同，/queue 不影响进行中的任务，而是排在其后。
  * Web 前端的排队编排在浏览器完成，IM 渠道（微信/飞书/钉钉）没有前端，故排队入队由此命令
- * 承担，续发调度由宿主的会话网关在任务终态统一 drain。</p>
+ * 承担，续发调度由宿主的会话网关在任务终态统一 drain。队列状态存于会话上下文，
+ * 快照即持久化（无独立文件）。</p>
  *
  * <p>{@link #runnableWhenBusy()} 返回 true，使其可穿透忙碌检查、在任务执行中被受理并入队。
  * 会话空闲时入队后由命令收尾的 drain 立即发起，效果等同于普通发送。</p>
@@ -35,11 +37,6 @@ import org.noear.solon.core.util.Assert;
  * @since 2026.11
  */
 public class QueueCommand implements Command {
-    private final QueuePort queuePort;
-
-    public QueueCommand(QueuePort queuePort) {
-        this.queuePort = queuePort;
-    }
 
     @Override
     public String name() {
@@ -72,24 +69,21 @@ public class QueueCommand implements Command {
             return;
         }
 
-        if (text.length() > queuePort.maxTextLength()) {
-            ctx.println("排队内容过长（上限 " + queuePort.maxTextLength() + " 字符）");
+        if (text.length() > SessionQueue.MAX_TEXT_LENGTH) {
+            ctx.println("排队内容过长（上限 " + SessionQueue.MAX_TEXT_LENGTH + " 字符）");
             return;
         }
 
         AgentSession session = ctx.getSession();
-        if (session != null && engine != null) {
-            queuePort.bindStorage(engine, session);
-        }
         String contextSource = ctx.getSource();
         String source = Assert.isEmpty(contextSource) ? "CLI" : contextSource;
         String sourceUserId = ctx.getSourceUserId();
         String replyTarget = ctx.getReplyTarget();
         String messageId = ctx.getMessageId();
 
-        int n = queuePort.enqueue(session, text, source, sourceUserId, replyTarget, messageId);
+        int n = SessionQueue.enqueue(session, text, source, sourceUserId, replyTarget, messageId);
         if (n < 0) {
-            ctx.println("排队失败（队列已满或持久化失败，上限 " + queuePort.maxQueueSize() + " 条），请稍后再试");
+            ctx.println("排队失败（队列已满，上限 " + SessionQueue.MAX_QUEUE_SIZE + " 条），请稍后再试");
         } else {
             ctx.println("已加入队列（第 " + n + " 位），将按顺序在任务空闲后自动发送");
         }
