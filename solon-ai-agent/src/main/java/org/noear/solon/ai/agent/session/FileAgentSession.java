@@ -26,8 +26,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -40,6 +41,11 @@ import java.util.concurrent.locks.ReentrantLock;
 @Preview("3.9.1")
 public class FileAgentSession implements AgentSession {
     private static final Logger LOG = LoggerFactory.getLogger(FileAgentSession.class);
+
+    private static final String TMP_SUFFIX = ".tmp.";
+
+    /** 陈旧临时文件的判定阈值：短于此时长的临时文件视为其它实例正在写。 */
+    private static final long STALE_TMP_MILLIS = 60_000L;
 
     private final String sessionId;
     private final File messagesFile;
@@ -59,6 +65,9 @@ public class FileAgentSession implements AgentSession {
         this.sessionId = sessionId;
         this.messagesFile = new File(baseDir, sessionId + ".messages.ndjson");
         this.snapshotFile = new File(baseDir, sessionId + ".snapshot.json");
+
+        // 清理上次崩溃遗留的临时文件（原子写残留）
+        cleanupStaleTmp(baseDir);
 
         // --- 1. 初始化快照 ---
         FlowContext snapshot = null;
@@ -130,18 +139,17 @@ public class FileAgentSession implements AgentSession {
     }
 
     /**
-     * 将当前内存缓存中的所有非 System 消息持久化到磁盘（全量覆盖）
+     * 将当前内存缓存中的所有非 System 消息持久化到磁盘（原子全量覆盖）
      */
     private void persistMessages() {
-        try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
-                new FileOutputStream(messagesFile, false), StandardCharsets.UTF_8))) {
+        try {
+            StringBuilder buf = new StringBuilder();
             for (ChatMessage msg : cache.getMessages()) {
                 if (msg.getRole() != ChatRole.SYSTEM) {
-                    writer.write(ChatMessage.toJson(msg));
-                    writer.newLine();
+                    buf.append(ChatMessage.toJson(msg)).append('\n');
                 }
             }
-            writer.flush();
+            writeAtomic(messagesFile.toPath(), buf.toString().getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             LOG.error("Persist messages failed: {}", e.toString());
         }
@@ -183,14 +191,92 @@ public class FileAgentSession implements AgentSession {
     public void updateSnapshot() {
         locker.lock();
         try {
-            // 将缓存中的快照全量持久化
+            // 将缓存中的快照全量持久化（原子写：临时文件 + fsync + ATOMIC_MOVE）
             String json = cache.getContext().toJson();
-            Files.write(snapshotFile.toPath(), json.getBytes(StandardCharsets.UTF_8));
+            writeAtomic(snapshotFile.toPath(), json.getBytes(StandardCharsets.UTF_8));
         } catch (Throwable e) {
             LOG.error("Persistence snapshot failed: {}", e.toString());
         } finally {
             locker.unlock();
         }
+    }
+
+    /**
+     * 原子写入：同目录临时文件 → fsync → 原子重命名覆盖目标。
+     *
+     * <p>用于快照与消息文件的全量覆盖写。若直接覆盖写在中断时留下半截文件，
+     * 消息文件会丢失记录，快照则会连同其他会话级数据（队列、目标等）一并损坏。
+     * 原子重命名可保证目标文件要么是旧内容、要么是完整新内容。</p>
+     */
+    private static void writeAtomic(Path target, byte[] data) throws IOException {
+        Path dir = target.getParent();
+        if (dir != null && !Files.exists(dir)) {
+            Files.createDirectories(dir);
+        }
+
+        Path tmp = target.resolveSibling(target.getFileName() + TMP_SUFFIX + UUID.randomUUID());
+        try {
+            Files.write(tmp, data, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            fsync(tmp);
+
+            try {
+                Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                // 极少数文件系统不支持原子移动，回退为普通覆盖
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            try {
+                Files.deleteIfExists(tmp);
+            } catch (IOException ignored) {
+                // 移动成功时临时文件已不存在；失败时尽力清理
+            }
+        }
+    }
+
+    /** 落盘前的 fsync，避免断电时只有元数据就位；不支持的文件系统忽略。 */
+    private static void fsync(Path path) {
+        try (FileChannel channel = FileChannel.open(path, StandardOpenOption.WRITE)) {
+            channel.force(true);
+        } catch (IOException | UnsupportedOperationException e) {
+            LOG.debug("fsync not supported for {}: {}", path, e.toString());
+        }
+    }
+
+    /**
+     * 清理本会话上次崩溃遗留的临时文件（快照与消息文件）。
+     *
+     * <p>只删除超过 {@link #STALE_TMP_MILLIS} 的临时文件：构造函数执行时本实例尚未持锁，
+     * 同一会话可能有其它进程/实例正在写自己的临时文件，误删会导致对方的原子移动失败。</p>
+     */
+    private void cleanupStaleTmp(File baseDir) {
+        String[] prefixes = {
+                sessionId + ".snapshot.json" + TMP_SUFFIX,
+                sessionId + ".messages.ndjson" + TMP_SUFFIX
+        };
+
+        File[] files = baseDir.listFiles();
+        if (files == null) return;
+
+        long deadline = System.currentTimeMillis() - STALE_TMP_MILLIS;
+        for (File f : files) {
+            if (!isTmpOf(f.getName(), prefixes) || f.lastModified() > deadline) {
+                continue; // 非本会话 tmp，或可能是其它实例正在使用的临时文件
+            }
+            if (!f.delete()) {
+                LOG.debug("Delete stale tmp failed: {}", f.getName());
+            }
+        }
+    }
+
+    private static boolean isTmpOf(String name, String[] prefixes) {
+        for (String prefix : prefixes) {
+            if (name.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
