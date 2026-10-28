@@ -315,4 +315,48 @@ public class MountManagerTest {
                 .type(MountType.SKILLS)
                 .build());
     }
+
+    // --- 跟随外部链接（Windows Junction / 目录重解析点） ---
+
+    @Test
+    public void trustedMountShouldResolveLinkTargetForExplicitAccess() throws Exception {
+        // 前置缺陷：FileMountSource 已放行，但 MountManager.checkedLocalPath 又按真实路径拦一次，
+        // 导致“发现阶段能列出、显式访问 @alias/path 却报 SecurityException”的不一致。
+        org.junit.jupiter.api.Assumptions.assumeTrue(
+                !System.getProperty("os.name", "").toLowerCase().contains("win"));
+        Path root = Files.createDirectory(tempDir.resolve("skills"));
+        Path outside = Files.createTempDirectory("mount-manager-trusted-outside");
+        try {
+            Files.createDirectories(outside.resolve("ego-browser"));
+            Files.write(outside.resolve("ego-browser/SKILL.md"), "# demo".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            Files.createSymbolicLink(root.resolve("ego-browser"), outside.resolve("ego-browser"));
+
+            MountManager strictManager = new MountManager(tempDir.toString());
+            strictManager.register(Mount.builder().alias("@strict").source(FileMountSource.of(root))
+                    .type(MountType.SKILLS).build());
+            assertThrows(SecurityException.class, () -> strictManager.resolve(tempDir, "@strict/ego-browser/SKILL.md"));
+
+            MountManager trustedManager = new MountManager(tempDir.toString());
+            trustedManager.register(Mount.builder().alias("@trusted").source(FileMountSource.of(root, true))
+                    .type(MountType.SKILLS).build());
+
+            Path resolved = trustedManager.resolve(tempDir, "@trusted/ego-browser/SKILL.md");
+            // 注意：macOS 上 /var 与 /private/var 是同一位置的不同写法，两边都取 realpath 再比
+            assertEquals(outside.resolve("ego-browser/SKILL.md").toRealPath().toString(), resolved.toRealPath().toString());
+            assertTrue(Files.exists(resolved));
+        } finally {
+            Files.walk(outside).sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
+        }
+    }
+
+    @Test
+    public void trustedMountShouldStillRejectDotDotInLogicalPath() throws Exception {
+        // 跟随外部链接不等于放弃语法级越界拒绝
+        Path root = Files.createDirectory(tempDir.resolve("skills2"));
+        MountManager manager = new MountManager(tempDir.toString());
+        manager.register(Mount.builder().alias("@trusted2").source(FileMountSource.of(root, true))
+                .type(MountType.SKILLS).build());
+
+        assertThrows(SecurityException.class, () -> manager.resolve(tempDir, "@trusted2/../outside.txt"));
+    }
 }

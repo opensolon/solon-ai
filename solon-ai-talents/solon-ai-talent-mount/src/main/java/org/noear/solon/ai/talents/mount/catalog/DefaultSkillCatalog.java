@@ -23,6 +23,8 @@ import org.noear.solon.ai.util.Markdown;
 import org.noear.solon.ai.util.MarkdownUtil;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -47,6 +49,7 @@ import java.util.stream.Collectors;
  */
 @Preview("4.1.1")
 public class DefaultSkillCatalog implements SkillCatalog {
+    private static final Logger LOG = LoggerFactory.getLogger(DefaultSkillCatalog.class);
     private final MountManager mountManager;
     private volatile Map<String, SkillRecord> skills = Collections.emptyMap();
     private volatile Map<String, SkillRecord> shortNames = Collections.emptyMap();
@@ -157,7 +160,8 @@ public class DefaultSkillCatalog implements SkillCatalog {
         try (InputStream input = record.source.openRead(record.markerPath)) {
             String text = new String(readAll(input), StandardCharsets.UTF_8);
             return new SkillContent(record.descriptor, text, renderSkillXml(record, text));
-        } catch (IOException e) {
+        } catch (Throwable e) {
+            // 读取/展示构建失败（含越界链接、权限不足等运行时异常）只返回空，不向调用方抛异常
             return null;
         }
     }
@@ -196,12 +200,24 @@ public class DefaultSkillCatalog implements SkillCatalog {
      */
     private void scanMount(Mount mount, Map<String, SkillRecord> result) {
         MountSource source = mount.getSource();
+        List<MountEntry> markers = new ArrayList<>();
+        // 发现阶段是尽力而为：任何异常（越界符号链接/Junction、权限不足、来源故障）
+        // 都不能向上冒泡，否则会让挂载注册、乃至整个工作区启动失败。
         try {
-            List<MountEntry> markers = new ArrayList<>(source.find("", FindOptions.builder()
+            markers.addAll(source.find("", FindOptions.builder()
                     .glob("**/SKILL.md").maxDepth(3).maxEntries(10000).filesOnly(true).build()));
+        } catch (Throwable e) {
+            LOG.debug("Scan skill mount failed: {} (SKILL.md)", mount.getAlias(), e);
+        }
+        try {
             markers.addAll(source.find("", FindOptions.builder()
                     .glob("**/skill.md").maxDepth(3).maxEntries(10000).filesOnly(true).build()));
-            for (MountEntry marker : markers) {
+        } catch (Throwable e) {
+            LOG.debug("Scan skill mount failed: {} (skill.md)", mount.getAlias(), e);
+        }
+
+        for (MountEntry marker : markers) {
+            try {
                 String markerPath = marker.getPath();
                 int slash = markerPath.lastIndexOf('/');
                 String sourcePath = slash < 0 ? "" : markerPath.substring(0, slash);
@@ -210,9 +226,10 @@ public class DefaultSkillCatalog implements SkillCatalog {
                 Markdown markdown = parseMarkdown(source, markerPath);
                 SkillDescriptor descriptor = new SkillDescriptor(id, name, markdown.getDescription(), markdown.getVersion());
                 result.putIfAbsent(id, new SkillRecord(descriptor, source, sourcePath, markerPath));
+            } catch (Throwable e) {
+                // 单个技能条目异常时跳过，不影响同一来源的其余技能
+                LOG.debug("Skip invalid skill: {}:{}", mount.getAlias(), marker.getPath(), e);
             }
-        } catch (IOException e) {
-            // 单个来源不可用不应阻断其他技能来源。
         }
     }
 

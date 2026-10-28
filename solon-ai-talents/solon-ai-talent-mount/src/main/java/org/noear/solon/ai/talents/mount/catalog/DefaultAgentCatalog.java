@@ -22,10 +22,10 @@ import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** 
@@ -123,22 +123,28 @@ public final class DefaultAgentCatalog implements AgentCatalog {
      * @param result 用于收录 Agent 的映射；同名时保留已有条目
      */
     private void scanAgents(Mount mount, Map<String, AgentDescriptor> result) {
+        List<MountEntry> entries;
+        // 发现阶段是尽力而为：任何异常都不能向上冒泡，否则会让挂载注册、乃至整个工作区启动失败。
         try {
-            for (MountEntry entry : mount.getSource().find("", FindOptions.builder()
-                    .maxDepth(3).maxEntries(10000).filesOnly(true).build())) {
-                String path = entry.getPath();
-                String fileName = entry.getName();
-                if (hiddenParent(path) || fileName.startsWith(".") || !fileName.endsWith(".md")) continue;
-                try {
-                    AgentDescriptor descriptor = AgentDescriptor.parse(
-                            mount.getAlias(), mount.getSource(), path);
-                    result.putIfAbsent(descriptor.getName(), descriptor);
-                } catch (IOException e) {
-                    LOG.debug("Skip invalid agent: {}:{}", mount.getAlias(), path, e);
-                }
-            }
-        } catch (IOException e) {
+            entries = mount.getSource().find("", FindOptions.builder()
+                    .maxDepth(3).maxEntries(10000).filesOnly(true).build());
+        } catch (Throwable e) {
             LOG.debug("Scan agent mount failed: {}", mount.getAlias(), e);
+            return;
+        }
+
+        for (MountEntry entry : entries) {
+            String path = entry.getPath();
+            String fileName = entry.getName();
+            if (hiddenParent(path) || fileName.startsWith(".") || !fileName.endsWith(".md")) continue;
+            try {
+                AgentDescriptor descriptor = AgentDescriptor.parse(
+                        mount.getAlias(), mount.getSource(), path);
+                result.putIfAbsent(descriptor.getName(), descriptor);
+            } catch (Throwable e) {
+                // 单个 Agent 定义异常时跳过，不影响同一来源的其余定义
+                LOG.debug("Skip invalid agent: {}:{}", mount.getAlias(), path, e);
+            }
         }
     }
 

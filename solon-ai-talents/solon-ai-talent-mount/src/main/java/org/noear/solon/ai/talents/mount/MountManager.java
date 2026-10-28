@@ -284,6 +284,12 @@ public class MountManager {
     private static Path checkedLocalPath(FileMountSource source, Path local) {
         Path root = source.getRootPath();
         if (!local.startsWith(root)) throw new SecurityException("路径超出挂载范围: " + local);
+        if (source.isFollowExternalLinks()) {
+            // 来源显式声明跟随外部链接（如用户自有的技能目录经 Junction 放到其他盘）：
+            // 语法级越界已在 source.normalize / resolveChecked 中拒绝，此处不再按真实路径二次拦截，
+            // 否则会出现"发现阶段可列出、显式访问却拒绝"的不一致。
+            return local;
+        }
         try {
             if (Files.exists(root)) {
                 Path realRoot = root.toRealPath();

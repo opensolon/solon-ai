@@ -46,18 +46,30 @@ import java.util.Optional;
 @Preview("4.1.1")
 public final class FileMountSource implements MountSource {
     private final Path rootPath;
+    private final boolean followExternalLinks;
     private final MountCapabilities capabilities;
+
+    /**
+     * 创建本地文件挂载来源（不跟随指向挂载根之外的符号链接/Junction）。
+     *
+     * @param rootPath 挂载根目录；不可为 null
+     */
+    public FileMountSource(Path rootPath) {
+        this(rootPath, false);
+    }
 
     /**
      * 创建本地文件挂载来源。
      *
      * @param rootPath 挂载根目录；不可为 null
+     * @param followExternalLinks 是否跟随指向挂载根之外的符号链接/Junction
      */
-    public FileMountSource(Path rootPath) {
+    public FileMountSource(Path rootPath, boolean followExternalLinks) {
         if (rootPath == null) {
             throw new IllegalArgumentException("rootPath must not be null");
         }
         this.rootPath = rootPath.toAbsolutePath().normalize();
+        this.followExternalLinks = followExternalLinks;
         // materializable=false：本地来源 shell 可达（getLocalRoot 恒有值），物化分支对它是死代码；
         // 且本类不实现 MountSource#materialize——若误声明 true，直接调用物化器会得到能力位与实现不一致的
         // 半吊子流程（默认实现返回空却声明可物化）。诚实声明，避免未来误触发。
@@ -72,7 +84,18 @@ public final class FileMountSource implements MountSource {
      * @return 本地文件挂载来源
      */
     public static FileMountSource of(Path rootPath) {
-        return new FileMountSource(rootPath);
+        return new FileMountSource(rootPath, false);
+    }
+
+    /**
+     * 根据根目录路径创建挂载来源，并指定是否跟随指到根外的链接。
+     *
+     * @param rootPath 挂载根目录
+     * @param followExternalLinks 是否跟随指向挂载根之外的符号链接/Junction
+     * @return 本地文件挂载来源
+     */
+    public static FileMountSource of(Path rootPath, boolean followExternalLinks) {
+        return new FileMountSource(rootPath, followExternalLinks);
     }
 
     /**
@@ -82,7 +105,27 @@ public final class FileMountSource implements MountSource {
      * @return 本地文件挂载来源
      */
     public static FileMountSource of(String rootPath) {
-        return new FileMountSource(java.nio.file.Paths.get(rootPath));
+        return new FileMountSource(java.nio.file.Paths.get(rootPath), false);
+    }
+
+    /**
+     * 根据根目录字符串创建挂载来源，并指定是否跟随指到根外的链接。
+     *
+     * @param rootPath 挂载根目录
+     * @param followExternalLinks 是否跟随指向挂载根之外的符号链接/Junction
+     * @return 本地文件挂载来源
+     */
+    public static FileMountSource of(String rootPath, boolean followExternalLinks) {
+        return new FileMountSource(java.nio.file.Paths.get(rootPath), followExternalLinks);
+    }
+
+    /**
+     * 是否跟随指向挂载根之外的符号链接/Junction。
+     *
+     * @return 跟随时为 true
+     */
+    public boolean isFollowExternalLinks() {
+        return followExternalLinks;
     }
 
     /**
@@ -150,6 +193,12 @@ public final class FileMountSource implements MountSource {
         Path candidate = rootPath.resolve(normalized).normalize();
         if (!candidate.startsWith(rootPath)) {
             throw new SecurityException("Path escapes mount root: " + path);
+        }
+
+        if (followExternalLinks) {
+            // 用户自有目录（如 ~/.agents/skills）：技能目录常被整体放到其他盘再用 Junction 链回来，
+            // 跟随指到根外的链接是预期行为。仍保留上方 ".."/绝对路径的语法级越界拒绝。
+            return candidate;
         }
 
         if (Files.exists(candidate, LinkOption.NOFOLLOW_LINKS)) {
@@ -237,7 +286,24 @@ public final class FileMountSource implements MountSource {
         if (!Files.exists(start)) {
             return result;
         }
-        Files.walkFileTree(start, EnumSet.noneOf(java.nio.file.FileVisitOption.class), actual.getMaxDepth(),
+        final Path realRoot;
+        if (followExternalLinks) {
+            // 跟随模式下不做真实路径剪枝，无需解析挂载根
+            realRoot = null;
+        } else {
+            try {
+                realRoot = rootPath.toRealPath();
+            } catch (IOException e) {
+                // 挂载根本身不可解析（无权限/瞬时消失）时放弃本次发现，不阻断调用方
+                return result;
+            }
+        }
+
+        Files.walkFileTree(start,
+                followExternalLinks
+                        ? EnumSet.of(java.nio.file.FileVisitOption.FOLLOW_LINKS)
+                        : EnumSet.noneOf(java.nio.file.FileVisitOption.class),
+                actual.getMaxDepth(),
                 new java.nio.file.SimpleFileVisitor<Path>() {
                     /**
                      * 访问非符号链接文件并收集匹配条目。
@@ -245,13 +311,17 @@ public final class FileMountSource implements MountSource {
                      * @param file 当前文件
                      * @param attrs 文件属性
                      * @return 继续遍历或达到数量上限后终止
-                     * @throws IOException 条目读取失败时
                      */
                     @Override
-                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                        // 枚举时不跟随符号链接，也不因某个越界链接中断整个来源的发现。
-                        if (!attrs.isSymbolicLink()) {
-                            addIfMatches(file, false, base, matcher, actual, result);
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                        // 枚举时不跟随符号链接；单个条目异常（越界、无权限、瞬时消失）只跳过该条目，
+                        // 发现阶段是尽力而为，绝不能因一个坏条目中断整个来源的扫描。
+                        if (followExternalLinks || !attrs.isSymbolicLink()) {
+                            try {
+                                addIfMatches(file, false, base, matcher, actual, result);
+                            } catch (IOException | RuntimeException e) {
+                                // skip this entry
+                            }
                         }
                         return result.size() >= actual.getMaxEntries() ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
                     }
@@ -262,18 +332,65 @@ public final class FileMountSource implements MountSource {
                      * @param dir 当前目录
                      * @param attrs 目录属性
                      * @return 继续遍历或达到数量上限后终止
-                     * @throws IOException 条目读取失败时
                      */
                     @Override
-                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
                         if (!dir.equals(start)) {
-                            addIfMatches(dir, true, base, matcher, actual, result);
+                            // 越界目录（Windows junction / 目录重解析点等 NIO 未标识为符号链接的跳转）
+                            // 整棵子树跳过，既避免采集挂载根之外的内容，也避免 stat 抛越界异常。
+                            // 跟随模式下（用户自有目录）不剪枝，交由 resolveChecked 放行。
+                            if (!followExternalLinks && !isWithinRoot(realRoot, dir)) {
+                                return FileVisitResult.SKIP_SUBTREE;
+                            }
+
+                            try {
+                                addIfMatches(dir, true, base, matcher, actual, result);
+                            } catch (IOException | RuntimeException e) {
+                                // skip this entry
+                            }
                         }
                         return result.size() >= actual.getMaxEntries() ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
+                    }
+
+                    /**
+                     * 单个条目访问失败（权限不足、遍历中被删除）时继续遍历其余条目。
+                     *
+                     * @param file 访问失败的路径
+                     * @param exc 失败原因
+                     * @return 始终继续
+                     */
+                    @Override
+                    public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                        return FileVisitResult.CONTINUE;
                     }
                 });
         result.sort(Comparator.comparing(MountEntry::getPath));
         return result;
+    }
+
+    /**
+     * 判断路径解析后的真实位置是否仍位于挂载根之内。
+     *
+     * <p>Windows 的目录 junction（以及其他目录重解析点）在 NIO 中可能不被识别为符号链接，
+     * {@code walkFileTree} 会进入其子树，因此遍历时必须按真实路径再拦一次。</p>
+     *
+     * @param realRoot 挂载根的真实路径
+     * @param path 待判定路径
+     * @return 真实位置位于挂载根之内时为 true
+     */
+    private boolean isWithinRoot(Path realRoot, Path path) {
+        if (realRoot == null || path == null) {
+            return false;
+        }
+        Path candidate = path.toAbsolutePath().normalize();
+        try {
+            if (Files.exists(candidate, LinkOption.NOFOLLOW_LINKS)) {
+                candidate = candidate.toRealPath();
+            }
+            return candidate.startsWith(realRoot);
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     /**

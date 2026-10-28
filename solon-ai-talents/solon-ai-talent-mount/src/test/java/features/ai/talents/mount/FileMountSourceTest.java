@@ -250,6 +250,45 @@ public class FileMountSourceTest {
     // --- 符号链接与安全 ---
 
     @Test
+    public void symlinkEscapeShouldBeFollowedWhenExplicitlyTrusted() throws Exception {
+        // 用户自有目录（如 ~/.agents/skills）常把技能目录整体放到其他盘再 Junction 链回，
+        // 显式声明可信时必须能正常发现与读取（否则 C 盘空间不足的 Windows 用户无法使用技能）。
+        org.junit.jupiter.api.Assumptions.assumeTrue(!isWindows());
+        Path root = newSourceDir("trusted-link-root");
+        Path outside = Files.createTempDirectory("file-mount-trusted-outside");
+        try {
+            Files.createDirectories(outside.resolve("ego-browser"));
+            Files.write(outside.resolve("ego-browser/SKILL.md"), "# demo".getBytes(StandardCharsets.UTF_8));
+            Files.createSymbolicLink(root.resolve("ego-browser"), outside.resolve("ego-browser"));
+
+            FileMountSource strict = FileMountSource.of(root);
+            assertThrows(SecurityException.class, () -> strict.stat("ego-browser/SKILL.md"));
+            assertTrue(strict.find("", FindOptions.builder().glob("**/SKILL.md").maxDepth(3).filesOnly(true).build()).isEmpty());
+
+            FileMountSource trusted = FileMountSource.of(root, true);
+            assertTrue(trusted.isFollowExternalLinks());
+            assertEquals(1, trusted.find("", FindOptions.builder().glob("**/SKILL.md").maxDepth(3).filesOnly(true).build()).size());
+            assertEquals("ego-browser/SKILL.md", trusted.stat("ego-browser/SKILL.md").getPath());
+            try (InputStream in = trusted.openRead("ego-browser/SKILL.md")) {
+                assertEquals("# demo", readText(in));
+            }
+        } finally {
+            Files.walk(outside).sorted(java.util.Comparator.reverseOrder())
+                    .forEach(p -> p.toFile().delete());
+        }
+    }
+
+    @Test
+    public void trustedMountStillRejectsDotDotEscape() {
+        // 跟随外部链接不意味着放弃语法级越界拒绝：".." 仍必须拒绝
+        // （前导 "/" 会被 normalize 剥除后当作根内相对路径，不是越界）
+        Path root = newSourceDirQuiet("dotdot-root");
+        FileMountSource trusted = FileMountSource.of(root, true);
+        assertThrows(SecurityException.class, () -> trusted.stat("../secret.txt"));
+        assertThrows(SecurityException.class, () -> trusted.normalize("a/../../etc/passwd"));
+    }
+
+    @Test
     public void symlinkEscapeShouldBeRejected() throws Exception {
         org.junit.jupiter.api.Assumptions.assumeTrue(!isWindows());
         Path root = newSourceDir("link-root");
