@@ -76,13 +76,13 @@ public class GoalCommand implements Command {
 
     @Override
     public void execute(HarnessEngine engine, CommandContext ctx) throws Exception {
-        String sessionId = ctx.getSession().getSessionId();
-        AgentSession session = goalEngine.sessionOf(sessionId);
+        AgentSession session = ctx.getSession();
         if (session == null) {
             ctx.println(ctx.color(RED + "No active session." + RESET));
             return;
         }
 
+        String sessionId = session.getSessionId();
         String first = ctx.argAt(0);
 
         // 无参：展示当前目标状态

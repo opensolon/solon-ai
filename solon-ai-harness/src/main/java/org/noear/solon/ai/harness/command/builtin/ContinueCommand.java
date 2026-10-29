@@ -56,25 +56,15 @@ public class ContinueCommand implements Command {
     @Override
     public String[] examples() {
         return new String[]{
-                "/continue",
-                "/continue <sessionId>"
+                "/continue"
         };
     }
 
     @Override
     public void execute(HarnessEngine engine, CommandContext ctx) throws Exception {
-        String sessionId = ctx.argAt(0);
-        AgentSession session;
-
-        if (Assert.isNotEmpty(sessionId)) {
-            session = engine.getSession(sessionId);
-        } else {
-            session = ctx.getSession();
-            sessionId = session.getSessionId();
-        }
+        AgentSession session = ctx.getSession();
 
         if (session == null) {
-            ctx.println("会话不存在：" + sessionId);
             return;
         }
 
@@ -108,6 +98,6 @@ public class ContinueCommand implements Command {
         }
 
         // 声明续流意图（prompt 为空 = 续流；装配走引擎 promptDo 的续流分支，不受空输入判空影响）
-        ctx.requestAgentTask(session, null, null);
+        ctx.requestAgentTask(null, null);
     }
 }

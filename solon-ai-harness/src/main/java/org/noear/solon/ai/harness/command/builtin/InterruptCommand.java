@@ -37,8 +37,7 @@ public class InterruptCommand implements Command {
     @Override
     public String[] examples() {
         return new String[]{
-                "/interrupt",
-                "/interrupt <sessionId>"
+                "/interrupt"
         };
     }
 
@@ -49,15 +48,7 @@ public class InterruptCommand implements Command {
 
     @Override
     public void execute(HarnessEngine engine, CommandContext ctx) throws Exception {
-        String sessionId = ctx.argAt(0);
-        AgentSession session;
-
-        if (Assert.isNotEmpty(sessionId)) {
-            session = engine.getSession(sessionId);
-        } else {
-            session = ctx.getSession();
-            sessionId = session.getSessionId();
-        }
+        AgentSession session = ctx.getSession();
 
         if (session == null) {
             return;

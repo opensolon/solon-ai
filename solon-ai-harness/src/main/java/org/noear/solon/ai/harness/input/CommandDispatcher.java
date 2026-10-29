@@ -74,11 +74,10 @@ public final class CommandDispatcher {
         InputOutcome nested = null;
         AgentTaskIntent intent = ctx.getAgentTaskIntent();
         if (intent != null) {
-            AgentSession targetSession = intent.getSession() != null ? intent.getSession() : session;
-            nested = engine.handle(HarnessInput.of(targetSession, intent.getPrompt())
+            nested = engine.handle(HarnessInput.of(session, intent.getPrompt())
                     .commandAware(false)  //命令产物不是用户手输，不再识别命令
                     .resume(intent.isResume())  //正文为空即续流，先于空输入判空生效（/continue）
-                    .agent(selectedAgentOf(targetSession))  //保留会话级子代理选择
+                    .agent(selectedAgentOf(session))  //保留会话级子代理选择
                     .model(intent.getModel()));
         }
 

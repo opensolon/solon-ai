@@ -43,21 +43,12 @@ public class ClearCommand implements Command {
     public String[] examples() {
         return new String[]{
                 "/clear",
-                "/clear <sessionId>"
         };
     }
 
     @Override
     public void execute(HarnessEngine engine, CommandContext ctx) {
-        String sessionId = ctx.argAt(0);
-        AgentSession session;
-
-        if (Assert.isNotEmpty(sessionId)) {
-            session = engine.getSession(sessionId);
-        } else {
-            session = ctx.getSession();
-            sessionId = session.getSessionId();
-        }
+        AgentSession session = ctx.getSession();
 
         if (session == null) {
             return;

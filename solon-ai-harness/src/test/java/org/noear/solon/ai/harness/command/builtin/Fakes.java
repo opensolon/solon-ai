@@ -86,7 +86,7 @@ final class Fakes {
 
         @Override
         public void requestAgentTask(String prompt, String model) {
-            this.intent = new AgentTaskIntent(null, prompt, model);
+            this.intent = new AgentTaskIntent(prompt, model);
             tasks.add(prompt);
         }
 

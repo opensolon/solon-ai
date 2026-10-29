@@ -45,22 +45,13 @@ public class RerunCommand implements Command {
     @Override
     public String[] examples() {
         return new String[]{
-                "/rerun",
-                "/rerun <sessionId>"
+                "/rerun"
         };
     }
 
     @Override
     public void execute(HarnessEngine engine, CommandContext ctx) throws Exception {
-        String sessionId = ctx.argAt(0);
-        AgentSession session;
-
-        if (Assert.isNotEmpty(sessionId)) {
-            session = engine.getSession(sessionId);
-        } else {
-            session = ctx.getSession();
-            sessionId = session.getSessionId();
-        }
+        AgentSession session = ctx.getSession();
 
         if (session == null) {
             return;
@@ -81,7 +72,7 @@ public class RerunCommand implements Command {
 
         if (lastUserInput != null) {
             //声明意图（带目标会话，修正 /rerun <id> 的手术与开流会话错位）
-            ctx.requestAgentTask(session, lastUserInput, null);
+            ctx.requestAgentTask(lastUserInput, null);
         }
     }
 }

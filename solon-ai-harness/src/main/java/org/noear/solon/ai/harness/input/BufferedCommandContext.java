@@ -87,12 +87,7 @@ public class BufferedCommandContext implements CommandContext {
 
     @Override
     public void requestAgentTask(@Nullable String prompt, @Nullable String model) {
-        this.agentTaskIntent = new AgentTaskIntent(null, prompt, model);
-    }
-
-    @Override
-    public void requestAgentTask(@Nullable AgentSession session, @Nullable String prompt, @Nullable String model) {
-        this.agentTaskIntent = new AgentTaskIntent(session, prompt, model);
+        this.agentTaskIntent = new AgentTaskIntent( prompt, model);
     }
 
     @Override

@@ -111,22 +111,6 @@ public interface CommandContext {
     void requestAgentTask(@Nullable String prompt, @Nullable String model);
 
     /**
-     * 声明针对指定会话的 Agent 任务意图（跨会话命令如 {@code /continue <sessionId>}）
-     * <p>
-     * 默认不支持：只有需要跨会话控制的端实现才覆盖。
-     *
-     * @param session 目标任务会话
-     * @param prompt  任务正文；为空表示续流
-     * @param model   命令声明的模型（可空）
-     */
-    default void requestAgentTask(@Nullable AgentSession session, @Nullable String prompt, @Nullable String model) {
-        if (session != null && session != getSession()) {
-            throw new UnsupportedOperationException("Cross-session agent task is not supported by this context");
-        }
-        requestAgentTask(prompt, model);
-    }
-
-    /**
      * 已声明的任务意图（未声明时为 null）
      */
     default @Nullable AgentTaskIntent getAgentTaskIntent() {

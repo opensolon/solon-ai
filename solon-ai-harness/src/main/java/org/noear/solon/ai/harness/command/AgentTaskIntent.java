@@ -36,21 +36,12 @@ import org.noear.solon.lang.Nullable;
  * @since 4.2
  */
 public final class AgentTaskIntent {
-    private final AgentSession session;
     private final String prompt;
     private final String model;
 
-    public AgentTaskIntent(@Nullable AgentSession session, @Nullable String prompt, @Nullable String model) {
-        this.session = session;
+    public AgentTaskIntent(@Nullable String prompt, @Nullable String model) {
         this.prompt = prompt;
         this.model = model;
-    }
-
-    /**
-     * 目标任务会话（为空表示当前上下文会话）
-     */
-    public @Nullable AgentSession getSession() {
-        return session;
     }
 
     /**
