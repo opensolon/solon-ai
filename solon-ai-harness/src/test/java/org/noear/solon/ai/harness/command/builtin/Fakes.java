@@ -2,6 +2,7 @@ package org.noear.solon.ai.harness.command.builtin;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.harness.command.AgentTaskIntent;
 import org.noear.solon.ai.harness.command.CommandContext;
 
 import java.util.ArrayList;
@@ -9,7 +10,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 命令层测试共享桩：最小命令上下文，收集输出与 runAgentTask 调用，承载渠道元数据。
+ * 命令层测试共享桩：最小命令上下文，收集输出与声明的 Agent 任务意图，承载渠道元数据。
  * 命令已直连领域类，不再需要端口桩。
  */
 final class Fakes {
@@ -20,11 +21,12 @@ final class Fakes {
         return InMemoryAgentSession.of();
     }
 
-    /** 最小命令上下文：收集输出与 runAgentTask 调用，承载渠道元数据。 */
+    /** 最小命令上下文：收集输出与任务意图，承载渠道元数据。 */
     static class StubContext implements CommandContext {
         final AgentSession session;
         final List<String> out = new ArrayList<>();
         final List<String> tasks = new ArrayList<>();
+        volatile AgentTaskIntent intent;
         final List<String> args;
         final String source;
         final String sourceUserId;
@@ -83,8 +85,14 @@ final class Fakes {
         }
 
         @Override
-        public void runAgentTask(String prompt, String model) {
+        public void requestAgentTask(String prompt, String model) {
+            this.intent = new AgentTaskIntent(null, prompt, model);
             tasks.add(prompt);
+        }
+
+        @Override
+        public AgentTaskIntent getAgentTaskIntent() {
+            return intent;
         }
 
         @Override

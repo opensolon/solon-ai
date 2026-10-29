@@ -16,6 +16,7 @@
 package org.noear.solon.ai.harness.command;
 
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.lang.Nullable;
 
 import java.util.List;
 
@@ -99,12 +100,48 @@ public interface CommandContext {
     }
 
     /**
-     * 运行 Agent 任务（异步回调）
+     * 声明 Agent 任务意图（纯预处理，不在此开流）
      * <p>
-     * 由 MarkdownCommand 等需要触发 Agent 执行的命令调用。
-     * CLI 端实现为阻塞等待；Web 端实现为返回 Flux 流。
+     * 命令只负责「改会话状态 + 声明意图」；真正的请求装配由分发器交给引擎完成，
+     * 宿主统一经 {@code InputOutcome} 消费，因此三端不必再各自实现回调。
+     *
+     * @param prompt 任务正文；<b>为空表示续流</b>（如 {@code /continue}）
+     * @param model  命令声明的模型（可空，走会话级回退）
      */
-    void runAgentTask(String prompt, String model);
+    void requestAgentTask(@Nullable String prompt, @Nullable String model);
+
+    /**
+     * 声明针对指定会话的 Agent 任务意图（跨会话命令如 {@code /continue <sessionId>}）
+     * <p>
+     * 默认不支持：只有需要跨会话控制的端实现才覆盖。
+     *
+     * @param session 目标任务会话
+     * @param prompt  任务正文；为空表示续流
+     * @param model   命令声明的模型（可空）
+     */
+    default void requestAgentTask(@Nullable AgentSession session, @Nullable String prompt, @Nullable String model) {
+        if (session != null && session != getSession()) {
+            throw new UnsupportedOperationException("Cross-session agent task is not supported by this context");
+        }
+        requestAgentTask(prompt, model);
+    }
+
+    /**
+     * 已声明的任务意图（未声明时为 null）
+     */
+    default @Nullable AgentTaskIntent getAgentTaskIntent() {
+        return null;
+    }
+
+    /**
+     * 命令回执文本
+     * <p>
+     * 采用即时写终端/直接推送的端（如 CLI）无需实现，返回 null 即可；
+     * 缓冲式实现应返回已收集的全部回执行。
+     */
+    default String getCommandOutput() {
+        return null;
+    }
 
     /**
      * 消息来源渠道标识（如 Feishu、DingTalk、WeChat、CLI；Web/本地默认为 null）。

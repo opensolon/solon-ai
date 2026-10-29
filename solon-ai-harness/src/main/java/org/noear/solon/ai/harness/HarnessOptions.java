@@ -109,6 +109,17 @@ class HarnessOptions implements NonSerializable {
     // ========== 缓存控制 ==========
     private volatile CacheControl cacheControl;
 
+    // ========== 输入前缀 ==========
+    /**
+     * 命令前缀（默认 "/"）。支持多字符（如 "::"）。
+     */
+    private volatile String commandPrefix = "/";
+
+    /**
+     * 子代理提及前缀（默认 "@"）。支持多字符（如 "#"）。
+     */
+    private volatile String agentPrefix = "@";
+
     // ========== 集合类配置 ==========
     private final MountManager mountManager;
     private volatile String defaultModel;
@@ -447,6 +458,30 @@ class HarnessOptions implements NonSerializable {
 
     void setCacheControl(CacheControl cacheControl) {
         this.cacheControl = cacheControl;
+    }
+
+    // ========== 输入前缀 ==========
+
+    String getCommandPrefix() {
+        return commandPrefix;
+    }
+
+    void setCommandPrefix(String commandPrefix) {
+        if (Assert.isEmpty(commandPrefix)) {
+            throw new IllegalArgumentException("commandPrefix cannot be empty");
+        }
+        this.commandPrefix = commandPrefix;
+    }
+
+    String getAgentPrefix() {
+        return agentPrefix;
+    }
+
+    void setAgentPrefix(String agentPrefix) {
+        if (Assert.isEmpty(agentPrefix)) {
+            throw new IllegalArgumentException("agentPrefix cannot be empty");
+        }
+        this.agentPrefix = agentPrefix;
     }
 
     List<HarnessExtension> getExtensions() {

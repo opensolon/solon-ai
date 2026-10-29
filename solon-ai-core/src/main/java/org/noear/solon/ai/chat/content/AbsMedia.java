@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.content;
 
 import org.noear.solon.Utils;
+import org.noear.solon.lang.Nullable;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -31,6 +32,11 @@ public abstract class AbsMedia<T extends AbsMedia> implements MediaBlock {
     protected String url;
     protected String mimeType;
     protected Map<String, Object> metas;
+
+    /**
+     * 工作区相对路径，仅元数据不参与请求（详见 {@link MediaBlock#getFilePath()}）
+     */
+    protected String filePath;
 
     @Override
     public Map<String, Object> metas() {
@@ -64,6 +70,15 @@ public abstract class AbsMedia<T extends AbsMedia> implements MediaBlock {
         return url;
     }
 
+    @Nullable
+    public String getFilePath() {
+        return filePath;
+    }
+
+    public T filePath(String filePath) {
+        this.filePath = filePath;
+        return (T) this;
+    }
 
     /**
      * 获取内容
@@ -109,6 +124,7 @@ public abstract class AbsMedia<T extends AbsMedia> implements MediaBlock {
                 "url='" + getUrl() + '\'' +
                 ", data='" + getData() + '\'' +
                 ", mimeType='" + getMimeType() + '\'' +
+                ", filePath='" + getFilePath() + '\'' +
                 '}';
     }
 }

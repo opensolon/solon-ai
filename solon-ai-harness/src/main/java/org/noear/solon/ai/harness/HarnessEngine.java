@@ -21,6 +21,8 @@ import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
+import org.noear.solon.ai.agent.react.intercept.HITL;
+import org.noear.solon.ai.agent.react.intercept.HITLTask;
 import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.agent.react.intercept.StopLoopInterceptor;
@@ -30,9 +32,22 @@ import org.noear.solon.ai.agent.react.intercept.compress.KeyInfoExtractionStrate
 import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.content.Contents;
+import org.noear.solon.ai.chat.content.MediaBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.command.CommandRegistry;
+import org.noear.solon.ai.harness.input.AgentMentions;
+import org.noear.solon.ai.harness.input.BufferedCommandContextFactory;
+import org.noear.solon.ai.harness.input.CommandDispatcher;
+import org.noear.solon.ai.harness.input.CommandContextFactory;
+import org.noear.solon.ai.harness.input.HarnessInput;
+import org.noear.solon.ai.harness.input.InputAttachments;
+import org.noear.solon.ai.harness.input.InputOutcome;
+import org.noear.solon.ai.harness.input.ParsedCommand;
 import org.noear.solon.ai.harness.hitl.BashToolStrategy;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 
@@ -357,6 +372,20 @@ public class HarnessEngine {
 
     public boolean isBashAsyncEnabled() {
         return options.isBashAsyncEnabled();
+    }
+
+    /**
+     * 命令前缀（默认 "/"）
+     */
+    public String getCommandPrefix() {
+        return options.getCommandPrefix();
+    }
+
+    /**
+     * 子代理提及前缀（默认 "@"）
+     */
+    public String getAgentPrefix() {
+        return options.getAgentPrefix();
     }
 
     public int getApiRetries() {
@@ -1280,6 +1309,270 @@ public class HarnessEngine {
         return promptDo(null, targetAgent);
     }
 
+    /**
+     * 完整输入装配：会话 + 提示词 + 模型 + 子代理（引擎内部专用）
+     * <p>
+     * 收敛「取模型 → 取子代理 → 手拼 options」的重复。模型名与子代理名均可为空：
+     * 模型为空时回退会话级选择（{@link #CTX_MODEL_SELECTED}），再回退默认模型；
+     * 子代理为空时使用主代理。
+     * <p>
+     * 对外开放的输入入口只有 {@link #handle(HarnessInput, CommandContextFactory)}
+     * （及其重载）；需要续流时用 {@link HarnessInput#resume(boolean)}。
+     *
+     * @param session   会话（可为空，由 ReActRequest 使用临时会话）
+     * @param prompt    提示词（续流时为空）
+     * @param modelName 模型名（可为空）
+     * @param agentName 子代理名（可为空）
+     */
+    private ReActRequest promptDo(@Nullable AgentSession session, @Nullable Prompt prompt,
+                                 @Nullable String modelName, @Nullable String agentName) {
+        ReActRequest request = promptDo(prompt, getAgentOrMain(agentName));
+
+        if (session != null) {
+            request.session(session);
+        }
+
+        final String realModelName = resolveSessionModelName(session, modelName);
+        if (realModelName != null) {
+            final ChatModel chatModel = getModelOrDefInstance(realModelName);
+            if (chatModel != null) {
+                request.options(o -> o.chatModel(chatModel));
+            }
+        }
+
+        return request;
+    }
+
+    /**
+     * 处理一次输入（文本版）
+     *
+     * @see #handle(HarnessInput, CommandContextFactory)
+     */
+    public InputOutcome handle(AgentSession session, String text) {
+        return handle(HarnessInput.of(session, text), null);
+    }
+
+    /**
+     * 处理一次输入（默认命令上下文：缓冲式，适合 Web/IM 等远程渠道）
+     *
+     * @see #handle(HarnessInput, CommandContextFactory)
+     */
+    public InputOutcome handle(HarnessInput input) {
+        return handle(input, null);
+    }
+
+    /**
+     * 处理一次完整输入（唯一入口）
+     * <p>
+     * 一次调用完成五件事：命令识别与执行、HITL 决策应用、附件装配 + 子代理解析、
+     * Prompt 构建、请求装配。宿主只需关心「回执怎么渲染」与「流怎么消费」。
+     *
+     * <pre>{@code
+     * InputOutcome outcome = engine.handle(HarnessInput.of(session, input).model(model).agent(agent));
+     *
+     * switch (outcome.getKind()) {
+     *     case TASK:   // 有可执行的任务（命令触发的也在这里，回执由 isCommand() 读回）
+     *         if (outcome.hasReply()) {
+     *             render(outcome.getCommandOutput());
+     *         }
+     *         outcome.getRequest().stream().subscribe(event -> render(event));
+     *         break;
+     *     case REPLY:  // 只有回执（含命令在本渠道不可用）
+     *         render(outcome.getCommandOutput());
+     *         break;
+     *     case HITL:   // 决策已写入，是否恢复流由宿主决定
+     *     default:     // IGNORED：无事可做
+     *         break;
+     * }
+     * }</pre>
+     *
+     * <p>不需要 kind 做决策的宿主可直接取流：{@code engine.handle(...).stream()}
+     * （命令回执会以 {@link org.noear.solon.ai.harness.input.InputTextEvent} 进流）。</p>
+     *
+     * @param input   输入上下文
+     * @param factory 命令上下文工厂（为空时使用缓冲式默认实现，命令友好于 Web/IM）
+     */
+    public InputOutcome handle(HarnessInput input, @Nullable CommandContextFactory factory) {
+        final AgentSession session = input.getSession();
+        final InputAttachments attachments = input.getAttachments();
+
+        // ========== 1. HITL 决策（优先于空输入判空：审批请求通常不带文本）==========
+        if (input.isHitlDecision()) {
+            String agentName = input.getSelectedAgent();
+            applyHitlDecision(session, input.getHitlAction(), input.getHitlCallId(), input.getHitlOutput());
+            return InputOutcome.hitl(agentName, resolveSessionModelName(session, input.getModelName()));
+        }
+
+        // ========== 2. 续流（无新输入，按挂起的 tool_calls 继续执行）==========
+        if (input.isResume()) {
+            String agentName = Assert.isNotEmpty(input.getSelectedAgent())
+                    ? input.getSelectedAgent() : input.getExplicitAgent();
+            return InputOutcome.task(null, agentName, resolveSessionModelName(session, input.getModelName()),
+                    promptDo(session, null, input.getModelName(), agentName));
+        }
+
+        if (Assert.isEmpty(input.getText()) && attachments.isEmpty()) {            return InputOutcome.ignored();
+        }
+
+        // ========== 3. 命令识别与执行（有附件或声明非命令语境时不当作命令，与既有口径一致）==========
+        if (input.isCommandAware() && !attachments.hasAny()) {
+            InputOutcome commandOutcome = dispatchCommand(session, input, factory);
+            if (commandOutcome != null) {
+                return commandOutcome;
+            }
+        }
+
+        // ========== 4. 子代理解析 + 附件前缀 ==========
+        //附件由宿主落盘并装配（各端校验规则不同：桌面端有符号链接与总量上限，Web 端只需路径穿越校验），
+        //引擎不再触碰文件系统，只负责提示词装配。
+        final InputAttachments resolved = attachments;
+        String text = input.getText();
+
+        AgentMentions.Mention mention = AgentMentions.parse(this, text,
+                AgentMentions.Options.builder()
+                        .prefix(getAgentPrefix())
+                        .explicitAgent(input.getExplicitAgent())
+                        .selectedAgent(input.getSelectedAgent())
+                        .nameValidator(input.getAgentNameValidator())
+                        .mentionAware(input.isMentionAware())
+                        .trimContent(input.isTrimContent()));
+        String agentName = mention.getAgentName();
+        text = resolved.withFilePrefix(mention.getText());
+
+        if (Assert.isEmpty(text) && !resolved.hasMedia()) {
+            return InputOutcome.ignored();
+        }
+
+        if (Assert.isEmpty(text)) {
+            if (resolved.isAllImages()) {
+                text = resolved.getMediaBlocks().size() > 1 ? "请描述这些图片" : "请描述这张图片";
+            } else {
+                text = "请分析这些媒体文件";
+            }
+        }
+
+        // ========== 5. Prompt 构建 ==========
+        Prompt prompt = buildInputPrompt(text, resolved, input.getSource(), agentName);
+
+        // ========== 6. 请求装配 ==========
+        String modelName = resolveSessionModelName(session, input.getModelName());
+        return InputOutcome.task(prompt, agentName, modelName,
+                promptDo(session, prompt, input.getModelName(), agentName));
+    }
+
+    /**
+     * 构建输入提示词（有多媒体时组装多模态内容，并写入来源 / 附件 / 子代理元数据）
+     */
+    private Prompt buildInputPrompt(String text, InputAttachments attachments, @Nullable String source, @Nullable String agentName) {
+        UserMessage userMsg;
+
+        if (attachments.hasMedia()) {
+            Contents contents = new Contents();
+            contents.addBlock(TextBlock.of(text));
+            for (MediaBlock block : attachments.getMediaBlocks()) {
+                contents.addBlock(block);
+            }
+            userMsg = new UserMessage(contents);
+
+            String attachMeta = attachments.buildAttachmentMeta();
+            if (attachMeta != null) {
+                userMsg.addMetadata("attachments", attachMeta);
+            }
+        } else {
+            userMsg = ChatMessage.ofUser(text);
+        }
+
+        if (source != null) {
+            userMsg.addMetadata("source", source);
+        }
+        if (Assert.isNotEmpty(agentName)) {
+            userMsg.addMetadata("agent", agentName);
+        }
+
+        return Prompt.of(userMsg);
+    }
+
+    /**
+     * 应用 HITL 审批决策
+     *
+     * @param output 工具返回值改写文本（可空），非空时作为决策备注写入，由 HITLInterceptor 覆写工具返回
+     */
+    private void applyHitlDecision(@Nullable AgentSession session, String action, @Nullable String callId,
+                                   @Nullable String output) {
+        if (session == null) {
+            return;
+        }
+
+        HITLTask task = Assert.isNotEmpty(callId)
+                ? HITL.getPendingTaskByCallUuid(session, callId)
+                : HITL.getPendingTask(session);
+
+        if (task == null) {
+            return;
+        }
+
+        boolean approve = "approve".equals(action);
+        if (Assert.isNotEmpty(output)) {
+            // 与三端既有的「批准/拒绝并改写工具返回」口径一致（桌面端 HITL 三段重载）
+            if (approve) {
+                HITL.approve(session, task, output);
+            } else {
+                HITL.reject(session, task, output);
+            }
+        } else {
+            if (approve) {
+                HITL.approve(session, task);
+            } else {
+                HITL.reject(session, task);
+            }
+        }
+    }
+
+    /**
+     * 命令识别与执行（非命令时返回 null）
+     * <p>
+     * 供 {@link #handle} 与宿主的「是不是命令」快速判断共用：后者在普通输入上不应触发
+     * 附件落盘、提及解析与请求装配 —— 那些结果会被宿主丢弃，白跑一遍。
+     */
+    public @Nullable InputOutcome dispatchCommand(AgentSession session, HarnessInput input,
+                                               @Nullable CommandContextFactory factory) {
+        if (input.getText() == null || input.hasAttachments()) {
+            return null;
+        }
+
+        ParsedCommand command = ParsedCommand.parse(input.getText(), options.getCommandPrefix());
+        if (command == null) {
+            return null;
+        }
+
+        CommandContextFactory realFactory = factory != null ? factory : new BufferedCommandContextFactory(input);
+        try {
+            return CommandDispatcher.dispatch(this, session, command, realFactory);
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("Command execute failed: " + command.getName(), e);
+        }
+    }
+
+    /**
+     * 解析生效的模型名：显式入参优先，其次会话级选择
+     */
+    private String resolveSessionModelName(@Nullable AgentSession session, @Nullable String modelName) {
+        if (modelName != null) {
+            return modelName;
+        }
+
+        if (session != null) {
+            String sessionModel = session.getContext().getAs(CTX_MODEL_SELECTED);
+            if (sessionModel != null) {
+                return sessionModel;
+            }
+        }
+
+        return null;
+    }
+
 
     public static Builder of(String workspace, String harnessHome) {
         return new Builder(workspace, harnessHome);
@@ -1586,6 +1879,22 @@ public class HarnessEngine {
 
         public Builder defaultModel(String defaultModel) {
             options.setDefaultModel(defaultModel);
+            return this;
+        }
+
+        /**
+         * 命令前缀（默认 "/"），支持多字符（如 "::"）
+         */
+        public Builder commandPrefix(String commandPrefix) {
+            options.setCommandPrefix(commandPrefix);
+            return this;
+        }
+
+        /**
+         * 子代理提及前缀（默认 "@"），支持多字符（如 "#"）
+         */
+        public Builder agentPrefix(String agentPrefix) {
+            options.setAgentPrefix(agentPrefix);
             return this;
         }
 

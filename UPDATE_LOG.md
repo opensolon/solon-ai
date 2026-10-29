@@ -1,3 +1,40 @@
+### vNEXT
+
+* `MediaBlock` 新增 `getFilePath()`（附件本地副本路径）：
+  * 声明为 `default` 方法返回 null（`@since 4.2.0`），不破坏 3.9.2 以来直接 `implements MediaBlock` 的外部实现；`AbsMedia` 以字段覆盖并提供链式 `filePath(...)`
+  * 语义：工作区相对路径，仅用于历史消息的文件名标签，**不参与任何 dialect 的请求载荷**（请求只读 `data`/`url`/`mimeType`）
+  * 会随 `ChatMessage.toJson` 落盘并在 `fromJson` 恢复，`MediaBlockFilePathTest` 锁死往返与请求隔离
+
+* 重构 soloncode harness 命令体系：删除 `CommandContext.runAgentTask` / `isAgentTask` 回调模式，改为「命令只做预处理、声明意图」——
+  * 新增 `command.AgentTaskIntent`（session/prompt/model 三字段值对象），`CommandContext` 由「回调 + 布尔标记」换成 `requestAgentTask(prompt, model)`、`requestAgentTask(session, prompt, model)`、`getAgentTaskIntent()`；`BufferedCommandContext` 不再持有 `AgentTaskRunner`，CLI/Web 端的上下文实现与工厂也随之瘦身
+  * `CommandDispatcher.dispatch` 在命令执行后，把意图重新交给唯一的 `engine.handle(...)` 完成二段装配（`commandAware(false)` 不再识别命令、`resume(空正文即续流)`、`agent(会话级选择)`），结果作为 `InputOutcome.command(..., nested)` 的新参数；kind 由 nested 推导（有任务即 `TASK`，否则 `REPLY`），调用方不再手工传 boolean。**本次不新增引擎入口**，`HarnessEngine` 对外仍只有 `handle(...)` 系列（送审时曾新增过 `commandAgentTurn` 草稿，现已删除）
+  * 删除 `InputOutcome.isAgentTask()`（kind 已够），`hasRequest()` 降级为派生判定并修正过期注释；`InputOutcome.command()` 第 5 参由 `boolean agentTask` 改为 `@Nullable InputOutcome nested`
+  * 修复 `/continue` 三端静默失效：旧实现把 `(null, null)` 喂给 `input()`，命中空输入判空返回 `IGNORED`，命令只做了 trace 手术、任务从不启动。现在意图带 `resume` 语义，二段走 `input()` 的续流分支（在空输入判空之前生效），三端 `/continue` 从此真正续跑
+  * 修复 `/<cmd> <sessionId>` 跨会话错位：命令在 A 会话做手术、宿主把流开在 B 会话。意图带目标会话后二者统一
+  * 命令产出的提示词统一做 @ 子代理识别（此前仅 CLI 解析，Web/桌面不解析），模型回退统一为「命令声明 → 会话选择 → 默认」
+* `InputOutcome.Kind` 收敛为 4 值：`TASK` / `REPLY` / `HITL` / `IGNORED`（原 6 值 `MESSAGE` / `COMMAND` / `COMMAND_AGENT` / `CLI_ONLY_BLOCKED` / `HITL` / `IGNORED`）。旧设计把两个语义轴混在一个枚举里——`isCommand()` 必须写成三个常量的 OR 才能表达「这是不是命令」这一事实，宿主也因此要写两层派发（先 `isCommand()` 再 `switch(kind)`）。现在 **kind 只回答「宿主该做什么」，命令事实降级为字段谓词**：
+  * `isCommand()` 改判 `commandName != null`（与旧三常量 OR 语义等价，一次性判定）；新增 `hasReply()`
+  * `REPLY` 同时涵盖「命令已执行」与「命令在本渠道不可用（未执行）」，宿主动作相同故合并；`CLI_ONLY_BLOCKED` 这个名字把渠道名与拒绝原因写进结局名，随之一并删除
+  * 命令触发的任务与用户手输的任务共用 `TASK`，差异退化为「有没有回执」这份数据（`hasReply()`），宿主一个 `switch` 即可分完
+  * `InputOutcome.blocked(...)` → `InputOutcome.unavailable(...)`；`CommandDispatcher.CLI_ONLY_HINT` → `COMMAND_UNAVAILABLE_HINT`（提示文案不变，仍点名 CLI，因为它面向用户）
+  * `stream()` 对 `TASK` 改为「回执（若有）后接请求流」的同一条流，使 `.stream()` 真正成为「一次输入的完整事件流」；无回执时仍直接返回 `request.stream()`（与 `getRequest().stream()` 同构）
+* 添加 soloncode harness `CommandAgentTaskTest` 4 例（命令意图 → `TASK` + 请求透传、空正文续流不被 `IGNORED`、无意图仍为 `REPLY`、回执排在任务流之前）与 `CommandDispatcherTest` 4 例（意图记录、续流意图、跨会话语义、kind 推导）。
+* 同步 README 命令扩展示例为 `requestAgentTask` 并说明「宿主按 kind 分路由、不要自己再拼 Prompt 或开流」。
+
+* 命名定稿：`InputResult` → **`InputOutcome`**，`HarnessEngine.input(...)` → **`HarnessEngine.handle(...)`**（4.2 未发布，无兼容影响）
+  * 理由一（避免与既有语义冲突）：本仓 `turn` 专指「一次 agent 执行轮次」（`maxTurns`、`TurnOutcome`、`turnsExecuted`），而 `IGNORED` / `REPLY` 根本不是轮次，三端变量名 `turn` 属术语错误；`Result` 在 soloncode-cli 侧被 30+ 文件用作 `org.noear.solon.core.handle.Result`（HTTP 响应包装），语义冲突
+  * 理由二（对齐产品既有命名家族）：`Outcome` 已是第四处同构用法——`RunOutcome`（`success | interrupt`）、`StreamLoop.TurnOutcome`、`WeChatLink.PollOutcome`，都是「一次处理后归入几类结局」
+  * 理由三（动词更诚实）：旧签名 `input(HarnessInput input, ...)` 一个方法内 `input` 出现三次且身份各异，形似 `getInput()`，而实际是「HITL 写入 + 命令识别与执行（有副作用）+ 附件落盘 + 提及解析 + Prompt 构建 + 请求装配」六步流水线；与纯装配、无副作用的 `prompt(...)` 并列时看不出量级差。`handle` 在本模块已有同义先例（`ExecutionBridge.handle`），且不与 `dispatch` / `dispatchCommand` / `execute` 撞车
+  * 工厂 `InputOutcome.message(...)` → `InputOutcome.task(...)`（它返回的就是 `Kind.TASK`，旧名与 kind 不一致）
+  * 三端变量统一 `turn` → `outcome`（含 `hitlTurn` → `hitlOutcome`）；`InputBoundaryTest` 的源码路径字面量与两个方法名同步（`inputOutcomeMustNotDependOnEngineOrScheduler` / `inputOutcomeStreamMustNotResumeHitl`）
+  * 修正 `HarnessInput` 类注释里过期的两分支示例（原 `if (isCommand()) ... else ...` 在「命令触发任务」时会漏掉执行任务，正是四值改造要消灭的写法），改为 `switch (getKind())` 三分支
+  * 修正 README 两处过期文案：`input(session, "/help")` 返回 `MESSAGE` → 返回 `TASK`；模块树 `InputResult（六态）` → `InputOutcome（四态）`
+
+### 行为变更
+
+* `InputOutcome.Kind` 的常量名与数量变化属编译期破坏（`4.2` 未发布，无兼容影响）：只看 `getKind()` 不再能区分「命令触发」与「用户手输」，改读 `isCommand()` / `getCommandName()`。
+* 远端渠道（Web/IM）现在也会收到 CLI 专属命令的不可用提示的 IM 转发（此前仅 Web 前端可见），属修正：IM 用户执行 `/exit` 至少能看到原因。
+
 ### 可测试目标
 
 * Trae

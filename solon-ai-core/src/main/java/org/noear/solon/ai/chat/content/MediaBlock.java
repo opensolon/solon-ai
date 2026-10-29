@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.chat.content;
 
+import org.noear.solon.lang.Nullable;
+
 /**
  * 多媒体内容块
  *
@@ -22,4 +24,16 @@ package org.noear.solon.ai.chat.content;
  * @since 3.9.2
  */
 public interface MediaBlock extends ContentBlock, MessageBlock {
+    /**
+     * 文件路径
+     * <p>
+     * 工作区相对路径（如 {@code .uploads/a.png}），仅用于历史消息的文件名标签，
+     * 不参与任何 dialect 的请求载荷。未落盘（如 url 形态）时为 null。
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    default String getFilePath() {
+        return null;
+    }
 }

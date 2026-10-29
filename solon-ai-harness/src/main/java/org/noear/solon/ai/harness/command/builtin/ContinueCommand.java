@@ -80,11 +80,10 @@ public class ContinueCommand implements Command {
 
         ReActTrace trace = TraceUtil.getCurrentTrace(session);
 
-        // 前置拦截：无可继续的任务时，以命令回执形式提示并直接返回（不调用 runAgentTask）。
+        // 前置拦截：无可继续的任务时，以命令回执形式提示并直接返回（不声明任务意图）。
         // trace 为 null：rewind 后 __main 被移除、会话重启/刷新后轨迹未还原；
         // originalPrompt 为空：__main 是从未跑过任务的空壳轨迹（如恢复会话时被惰性创建）。
-        // 此两种情况下 runAgentTask(null, null) 只会产生空 Prompt —— ReActAgent 命中
-        // "Prompt is empty!" 分支后不经推理直接空转结束，前端表现为「点了没反应、马上结束」。
+        // 此两种情况下声明「续流意图」只会触发空转结束，前端表现为「点了没反应、马上结束」。
         if (trace == null || Prompt.isEmpty(trace.getOriginalPrompt())) {
             ctx.println("没有可继续的任务");
             return;
@@ -108,6 +107,7 @@ public class ContinueCommand implements Command {
             }
         }
 
-        ctx.runAgentTask(null, null);
+        // 声明续流意图（prompt 为空 = 续流；装配走引擎 promptDo 的续流分支，不受空输入判空影响）
+        ctx.requestAgentTask(session, null, null);
     }
 }

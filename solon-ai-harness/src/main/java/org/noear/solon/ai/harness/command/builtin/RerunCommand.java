@@ -80,7 +80,8 @@ public class RerunCommand implements Command {
         }
 
         if (lastUserInput != null) {
-            ctx.runAgentTask(lastUserInput, null);
+            //声明意图（带目标会话，修正 /rerun <id> 的手术与开流会话错位）
+            ctx.requestAgentTask(session, lastUserInput, null);
         }
     }
 }

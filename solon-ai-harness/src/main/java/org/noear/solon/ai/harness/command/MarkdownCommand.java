@@ -110,7 +110,7 @@ public class MarkdownCommand implements Command {
         // 替换变量得到 prompt
         String prompt = getResolvedPrompt(ctx.getArgs());
 
-        // 作为 Agent 任务执行
-        ctx.runAgentTask(prompt, model());
+        // 作为 Agent 任务执行（只声明意图，装配与开流由引擎/宿主完成）
+        ctx.requestAgentTask(prompt, model());
     }
 }
