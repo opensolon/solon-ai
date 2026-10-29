@@ -1240,9 +1240,12 @@ public class HarnessEngine {
         return AgentFactory.create(this, agentDefinition, sessionModel);
     }
 
-    private ReActRequest promptDo(Prompt prompt) {
-        return getMainAgent()
-                .prompt(prompt)
+    private ReActRequest promptDo(Prompt prompt, ReActAgent targetAgent) {
+        if (targetAgent == null) {
+            targetAgent = getMainAgent();
+        }
+
+        return targetAgent.prompt(prompt)
                 .options(o -> {
                     o.retryConfig(options.getModelRetries());
                     o.maxTurns(options.getMaxTurns());
@@ -1251,17 +1254,30 @@ public class HarnessEngine {
     }
 
     public ReActRequest prompt(Prompt prompt) {
-        return promptDo(prompt);
+        return promptDo(prompt, null);
+    }
+
+    public ReActRequest prompt(Prompt prompt, ReActAgent targetAgent) {
+        return promptDo(prompt, targetAgent);
     }
 
 
     public ReActRequest prompt(String prompt) {
-        return promptDo(Prompt.of(prompt));
+        return promptDo(Prompt.of(prompt), null);
+    }
+
+
+    public ReActRequest prompt(String prompt, ReActAgent targetAgent) {
+        return promptDo(Prompt.of(prompt), targetAgent);
     }
 
 
     public ReActRequest prompt() {
-        return promptDo(null);
+        return promptDo(null, null);
+    }
+
+    public ReActRequest prompt(ReActAgent targetAgent) {
+        return promptDo(null, targetAgent);
     }
 
 
