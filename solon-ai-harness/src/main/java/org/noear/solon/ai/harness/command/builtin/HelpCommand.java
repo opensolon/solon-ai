@@ -55,11 +55,11 @@ public class HelpCommand implements Command {
 
     @Override
     public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
-        boolean remote = ctx.isRemote();
+        boolean terminal = ctx.isTerminal();
         String topic = ctx.argAt(0);
         List<Command> commands = engine.getCommandRegistry().all();
 
-        for (String line : formatHelp(commands, topic, remote).split("\\n", -1)) {
+        for (String line : formatHelp(commands, topic, terminal).split("\\n", -1)) {
             ctx.println(line);
         }
     }
@@ -67,10 +67,11 @@ public class HelpCommand implements Command {
     /**
      * 生成帮助文本，单独抽出便于测试，也避免不同渠道各自维护命令清单。
      *
-     * <p>远程渠道（Web/IM）与 CLI 可见的命令集合不同：{@link Command#cliOnly()} 为 true 的
-     * 命令只在 CLI 生效，远程渠道既不列入清单，也不返回其用法细节，改为明确提示不可用。</p>
+     * <p>具备终端能力的渠道（CLI）与无终端渠道（Web/IM/桌面）可见的命令集合不同：
+     * {@link Command#terminalOnly()} 为 true 的命令只在有终端的渠道生效，
+     * 无终端渠道既不列入清单，也不返回其用法细节，改为明确提示不可用。</p>
      */
-    public static String formatHelp(List<Command> commands, String topic, boolean remote) {
+    public static String formatHelp(List<Command> commands, String topic, boolean terminal) {
         if (topic != null && !topic.trim().isEmpty()) {
             String name = topic.trim();
 
@@ -79,7 +80,7 @@ public class HelpCommand implements Command {
                     continue;
                 }
 
-                if (remote && command.cliOnly()) {
+                if (!terminal && command.terminalOnly()) {
                     return "/" + command.name() + " 仅支持 CLI，Web/IM 端不可用。发送 /help 查看可用命令。";
                 }
 
@@ -103,7 +104,7 @@ public class HelpCommand implements Command {
 
         StringBuilder out = new StringBuilder("可用命令：\n");
         for (Command command : commands) {
-            if (remote && command.cliOnly()) {
+            if (!terminal && command.terminalOnly()) {
                 continue;
             }
             appendCommandLine(out, command);

@@ -26,7 +26,7 @@ import org.noear.solon.lang.Nullable;
  * 命令分发器
  * <p>
  * 统一三端的「解析 → 查找 → 渠道限制拦截 → 执行 → 回执收集」，消除各端实现漂移
- * （其中桌面端曾完全缺失 cliOnly 拦截，导致 /exit 会终止桌面进程）。
+ * （其中桌面端曾完全缺失终端能力拦截，导致 /exit 会终止桌面进程）。
  *
  * @author noear
  * @since 4.2
@@ -43,16 +43,18 @@ public final class CommandDispatcher {
     /**
      * 分发已解析的命令
      *
-     * @param command 解析结果
-     * @param factory 命令上下文工厂
-     * @param origin  本次输入的渠道来源身份（可空，空同 {@link InputOrigin#NONE}）
+     * @param command  解析结果
+     * @param factory  命令上下文工厂
+     * @param origin   本次输入的渠道来源身份（可空，空同 {@link InputOrigin#NONE}）
+     * @param terminal 本次输入所在渠道是否具备终端能力（决定 {@link Command#terminalOnly()} 是否放行）
      * @return 命令处理结果；不是命令（解析为空或命令未注册）时返回 null
      */
     public static @Nullable InputOutcome dispatch(HarnessEngine engine,
                                                   AgentSession session,
                                                   @Nullable ParsedCommand command,
                                                   CommandContextFactory factory,
-                                                  @Nullable InputOrigin origin) throws Exception {
+                                                  @Nullable InputOrigin origin,
+                                                  boolean terminal) throws Exception {
         if (command == null) {
             return null;
         }
@@ -62,15 +64,15 @@ public final class CommandDispatcher {
             return null;
         }
 
-        //渠道受限命令：必须在执行前拦截。CLI 专属命令（如 /exit）会终止进程或依赖终端。
+        //渠道受限命令：必须在执行前拦截。终端专属命令（如 /exit）会终止进程或依赖终端。
         //结局是 REPLY（渲染提示后收尾），不是另一种 Kind —— 渠道限制属于「命令属性 + 本次结局」的组合，
         //由 isCommand() 仍为 true 表达，宿主不必为此写额外分支。
-        if (target.cliOnly() && factory.isRemote()) {
+        if (target.terminalOnly() && !terminal) {
             String hint = "/" + target.name() + COMMAND_UNAVAILABLE_HINT;
             return InputOutcome.unavailable(target.name(), hint, command);
         }
 
-        CommandContext ctx = factory.create(engine, session, command);
+        CommandContext ctx = factory.create(engine, session, command, terminal);
         target.execute(engine, ctx, origin == null ? InputOrigin.NONE : origin);
 
         //二段：命令只声明意图（预处理），装配仍走唯一的 handle 入口（不开嵌式回调）
@@ -80,8 +82,8 @@ public final class CommandDispatcher {
             nested = engine.handle(HarnessInput.of(session, intent.getPrompt())
                     .commandAware(false)  //命令产物不是用户手输，不再识别命令
                     .resume(intent.isResume())  //正文为空即续流，先于空输入判空生效（/continue）
-                    .agent(selectedAgentOf(session))  //保留会话级子代理选择
-                    .model(intent.getModel()));
+                    .selectedAgent(selectedAgentOf(session))  //保留会话级子代理选择
+                    .selectedModel(intent.getModel()));
         }
 
         //任务标记与回执由上下文自己报告，避免分发器 instanceof 具体实现（CLI 的实时上下文不是缓冲式）

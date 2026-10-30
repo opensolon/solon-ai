@@ -47,11 +47,13 @@ public interface Command {
     }
 
     /**
-     * 是否仅 CLI 环境可用
+     * 是否要求宿主具备终端交互能力（默认 false）
      * <p>
-     * 返回 true 时，Web 端将不展示也不执行该命令
+     * 返回 true 时，无终端的渠道（Web/IM/桌面）既不展示也不执行该命令。
+     * 与 {@link org.noear.solon.ai.harness.input.HarnessInput#isTerminal()} 配套：
+     * 能力由每次输入携带，而不是由宿主实现类型推断。
      */
-    default boolean cliOnly() {
+    default boolean terminalOnly() {
         return false;
     }
 

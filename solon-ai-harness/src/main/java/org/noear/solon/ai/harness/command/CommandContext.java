@@ -30,12 +30,14 @@ import java.util.List;
  */
 public interface CommandContext {
     /**
-     * 是否为远程上下文
+     * 本次命令执行所在渠道是否具备终端交互能力
      * <p>
-     * 表示「本次命令执行的渠道是否具备终端能力」，供 /help 等命令裁剪可见命令集；
-     * 与 {@link org.noear.solon.ai.harness.input.InputOrigin} 无关（CLI 有渠道标识但不是远程）。
+     * 供 {@code /help} 等命令裁剪可见命令集；取值与
+     * {@link org.noear.solon.ai.harness.input.HarnessInput#isTerminal()} 同源（由分发器统一传入），
+     * 与 {@link org.noear.solon.ai.harness.input.InputOrigin} 无关（CLI 有渠道标识且具备终端能力，
+     * 桌面是本地进程却无终端能力）。
      */
-    default boolean isRemote(){
+    default boolean isTerminal(){
         return false;
     }
 

@@ -27,40 +27,17 @@ import org.noear.solon.ai.harness.command.CommandContext;
  *
  * <p>本工厂不持有任何渠道元数据：来源身份由分发器经
  * {@link org.noear.solon.ai.harness.command.Command#execute(HarnessEngine, CommandContext, InputOrigin)}
- * 直接交给命令，避免「同一条信息既从 input 嗅探、又从工厂注入」的双通路。</p>
+ * 直接交给命令，终端能力则由分发器按
+ * {@link org.noear.solon.ai.harness.input.HarnessInput#isTerminal()} 传入，
+ * 避免「同一条信息既从 input 嗅探、又从工厂注入」的双通路。</p>
  *
  * @author noear
  * @since 4.2
  */
 public class BufferedCommandContextFactory implements CommandContextFactory {
-    private final boolean remote;
-
-    public BufferedCommandContextFactory() {
-        this(true);
-    }
-
-    public BufferedCommandContextFactory(boolean remote) {
-        this.remote = remote;
-    }
-
     @Override
-    public CommandContext create(HarnessEngine engine, AgentSession session, ParsedCommand command) {
-        if (remote) {
-            return new BufferedCommandContext(session,
-                    command.getRawInput(), command.getName(), command.getArgs());
-        }
-        // 非远程宿主：命令需看到真实的渠道能力（/help 据此裁剪 cliOnly 命令）
+    public CommandContext create(HarnessEngine engine, AgentSession session, ParsedCommand command, boolean terminal) {
         return new BufferedCommandContext(session,
-                command.getRawInput(), command.getName(), command.getArgs()) {
-            @Override
-            public boolean isRemote() {
-                return false;
-            }
-        };
-    }
-
-    @Override
-    public boolean isRemote() {
-        return remote;
+                command.getRawInput(), command.getName(), command.getArgs(), terminal);
     }
 }

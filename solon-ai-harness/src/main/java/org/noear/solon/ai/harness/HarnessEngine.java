@@ -1316,7 +1316,7 @@ public class HarnessEngine {
      * 模型为空时回退会话级选择（{@link #CTX_MODEL_SELECTED}），再回退默认模型；
      * 子代理为空时使用主代理。
      * <p>
-     * 对外开放的输入入口只有 {@link #handle(HarnessInput, CommandContextFactory)}
+     * 对外开放的输入入口只有 {@link #handle(HarnessInput)}
      * （及其重载）；需要续流时用 {@link HarnessInput#resume(boolean)}。
      *
      * @param session   会话（可为空，由 ReActRequest 使用临时会话）
@@ -1346,20 +1346,12 @@ public class HarnessEngine {
     /**
      * 处理一次输入（文本版）
      *
-     * @see #handle(HarnessInput, CommandContextFactory)
+     * @see #handle(HarnessInput)
      */
     public InputOutcome handle(AgentSession session, String text) {
-        return handle(HarnessInput.of(session, text), null);
+        return handle(HarnessInput.of(session, text));
     }
 
-    /**
-     * 处理一次输入（默认命令上下文：缓冲式，适合 Web/IM 等远程渠道）
-     *
-     * @see #handle(HarnessInput, CommandContextFactory)
-     */
-    public InputOutcome handle(HarnessInput input) {
-        return handle(input, null);
-    }
 
     /**
      * 处理一次完整输入（唯一入口）
@@ -1368,7 +1360,8 @@ public class HarnessEngine {
      * Prompt 构建、请求装配。宿主只需关心「回执怎么渲染」与「流怎么消费」。
      *
      * <pre>{@code
-     * InputOutcome outcome = engine.handle(HarnessInput.of(session, input).model(model).agent(agent));
+     * InputOutcome outcome = engine.handle(HarnessInput.of(session, input)
+     *         .selectedModel(model).selectedAgent(agent));
      *
      * switch (outcome.getKind()) {
      *     case TASK:   // 有可执行的任务（命令触发的也在这里，回执由 isCommand() 读回）
@@ -1390,10 +1383,9 @@ public class HarnessEngine {
      * {@code outcome.getCommandOutput()}，两者的先后顺序与订阅时机均由宿主掌握
      * （各端时序要求不同：CLI 即时写终端、Web 要求流门复位早于回执、桌面需要序号回放）。</p>
      *
-     * @param input   输入上下文
-     * @param factory 命令上下文工厂（为空时使用缓冲式默认实现，命令友好于 Web/IM）
+     * @param input 输入上下文（含命令上下文工厂，为空时使用缓冲式默认实现）
      */
-    public InputOutcome handle(HarnessInput input, @Nullable CommandContextFactory factory) {
+    public InputOutcome handle(HarnessInput input) {
         final AgentSession session = input.getSession();
         final InputAttachments attachments = input.getAttachments();
 
@@ -1403,15 +1395,15 @@ public class HarnessEngine {
             //（trace 按代理名分 key，取错代理会取不到挂起的 tool_calls）。
             String agentName = resolveHitlAgent(session, input.getSelectedAgent());
             applyHitlDecision(session, input.getHitlAction(), input.getHitlCallId(), input.getHitlOutput());
-            return InputOutcome.hitl(agentName, resolveSessionModelName(session, input.getModelName()));
+            return InputOutcome.hitl(agentName, resolveSessionModelName(session, input.getSelectedModel()));
         }
 
         // ========== 2. 续流（无新输入，按挂起的 tool_calls 继续执行）==========
         if (input.isResume()) {
             String agentName = Assert.isNotEmpty(input.getSelectedAgent())
                     ? input.getSelectedAgent() : input.getExplicitAgent();
-            return InputOutcome.task(null, agentName, resolveSessionModelName(session, input.getModelName()),
-                    promptDo(session, null, input.getModelName(), agentName));
+            return InputOutcome.task(null, agentName, resolveSessionModelName(session, input.getSelectedModel()),
+                    promptDo(session, null, input.getSelectedModel(), agentName));
         }
 
         if (Assert.isEmpty(input.getText()) && !attachments.hasAny()) {
@@ -1420,7 +1412,7 @@ public class HarnessEngine {
 
         // ========== 3. 命令识别与执行（有附件或声明非命令语境时不当作命令，与既有口径一致）==========
         if (input.isCommandAware() && !attachments.hasAny()) {
-            InputOutcome commandOutcome = dispatchCommand(session, input, factory);
+            InputOutcome commandOutcome = dispatchCommand(session, input);
             if (commandOutcome != null) {
                 return commandOutcome;
             }
@@ -1437,7 +1429,7 @@ public class HarnessEngine {
                         .explicitAgent(input.getExplicitAgent())
                         .selectedAgent(input.getSelectedAgent())
                         .nameValidator(input.getAgentNameValidator())
-                        .mentionAware(input.isMentionAware())
+                        .agentAware(input.isAgentAware())
                         .trimContent(input.isTrimContent()));
         String agentName = mention.getAgentName();
         text = attachments.withFilePrefix(mention.getText());
@@ -1458,9 +1450,9 @@ public class HarnessEngine {
         Prompt prompt = buildInputPrompt(text, attachments, input.getOrigin().getChannel(), agentName);
 
         // ========== 6. 请求装配 ==========
-        String modelName = resolveSessionModelName(session, input.getModelName());
+        String modelName = resolveSessionModelName(session, input.getSelectedModel());
         return InputOutcome.task(prompt, agentName, modelName,
-                promptDo(session, prompt, input.getModelName(), agentName));
+                promptDo(session, prompt, input.getSelectedModel(), agentName));
     }
 
     /**
@@ -1537,8 +1529,7 @@ public class HarnessEngine {
      * 供 {@link #handle} 与宿主的「是不是命令」快速判断共用：后者在普通输入上不应触发
      * 附件落盘、提及解析与请求装配 —— 那些结果会被宿主丢弃，白跑一遍。
      */
-    private @Nullable InputOutcome dispatchCommand(AgentSession session, HarnessInput input,
-                                               @Nullable CommandContextFactory factory) {
+    private @Nullable InputOutcome dispatchCommand(AgentSession session, HarnessInput input) {
         if (input.getText() == null || input.hasAttachments()) {
             return null;
         }
@@ -1548,9 +1539,10 @@ public class HarnessEngine {
             return null;
         }
 
+        CommandContextFactory factory = input.getCommandContextFactory();
         CommandContextFactory realFactory = factory != null ? factory : new BufferedCommandContextFactory();
         try {
-            return CommandDispatcher.dispatch(this, session, command, realFactory, input.getOrigin());
+            return CommandDispatcher.dispatch(this, session, command, realFactory, input.getOrigin(), input.isTerminal());
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {

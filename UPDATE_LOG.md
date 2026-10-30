@@ -1,5 +1,21 @@
 ### vNEXT
 
+* **终端能力上收为输入属性：`HarnessInput.terminal` + `Command.terminalOnly()`**（删除 `CommandContextFactory.isRemote()` 与 `Command.cliOnly()`）：
+  * 问题：原来的“远程”标志放在**工厂**上（`BufferedCommandContextFactory(boolean remote)` + 匿名子类覆盖 `isRemote()`），而工厂的职责是“怎么构造上下文”；更糟的是这个名字与实际语义不符——桌面端 `origin=NONE` 且运行在本地却 remote=true，CLI 有 `InputOrigin.channel("CLI")` 且实际具备终端却 remote=false。每次输入都会变的东西被固化在工厂构造参数里，且 `HarnessInput` 已有的 `origin` 无法推导出它（两者正交）
+  * 改为：`HarnessInput.terminal(boolean)`（默认 false）作唯一真相源，经 `CommandDispatcher.dispatch(..., boolean terminal)` 同时驱动“拦截”与“上下文自述”。`Command.cliOnly()` → `terminalOnly()`（原名里的 “CLI” 指宿主形态，而命令真正需要的是终端能力）；`CommandContext.isRemote()` → `isTerminal()`（消除双关命名）；`CommandContextFactory.create` 增 `boolean terminal` 参，工厂退化为无状态（删字段、删构造参、删匿名子类）
+  * 拦截判据从 `target.cliOnly() && factory.isRemote()` 变为 `target.terminalOnly() && !terminal`——直接可读为“没有终端却要求终端就拦截”；`HelpCommand.formatHelp` 第三参改名为 `terminal` 并取反，两处双重否定（`remote && cliOnly`）一并消除
+  * 宿主侧：`CliShell` 两处 `HarnessInput` 补 `.terminal(true)`（否则 `/exit` 会被拦截、`/help` 裁掉 `terminalOnly` 命令——本次唯一可能导致真实回归的点）；`webCommandFactory()` / `desktopCommandFactory()` 退化为无参 `new BufferedCommandContextFactory()` 且不再注入 boolean（行为不变）；`CliCommandContext` 增 `terminalCapable` 字段（避免与 JLine `Terminal` 撞名）并覆写 `isTerminal()`，保证上下文自述与拦截判据同源
+  * 连带改名：`ExitCommand.cliOnly()` → `terminalOnly()`；`ChatWebController.hints`、`WebChatInputHandler` 两处忙态判定的 `cliOnly()` 同步；`WebChatInputHandler` 原“远程渠道”注释改为终端语义
+  * 存留的 `COMMAND_UNAVAILABLE_HINT`（“仅支持 CLI，Web/IM 端不可用”）未改文案：它是对用户的可读说明，保持稳定
+  * 测试：`CommandDispatcherTest` 改断 `assertFalse(ctx.isTerminal())` 并新增 `bufferedContextHonorsTerminalFlag`（9 例）；`HelpCommandTest` 辅助方法 `cliOnlyCommand` → `terminalOnlyCommand`、四个 `formatHelp` 第三参取值全部取反、用例名改 `nonTerminalHelpListsOnlyCommandsAvailableToIm` / `terminalHelpKeepsTerminalOnlyCommands`（3 例）
+  * 验证：harness 定向 6 类 37 例全绿；harness 全量 376 例 20F+8E（与改动前基线一致，多出 1 例即新增用例）；`soloncode-cli` 全量 1204 例 3 失败均为既有基线/联网类（`ImageReplyLifecycleTest` 异常文案、`AgentSettingsControllerTest` 返回 400、`SkillhubMarketTest.testInstallRealSlug`）
+
+* **`HarnessInput` 命名收敛 + 命令上下文工厂下沉**：
+  * `model(String)` → `selectedModel(String)`（`getModelName` → `getSelectedModel`）、`agent(String)` → `selectedAgent(String)`、`mentionAware(boolean)` → `agentAware(boolean)`（`isMentionAware` → `isAgentAware`）。原本 setter 叫 `model`/`agent` 而 getter 叫 `getModelName`/`getSelectedAgent`、字段叫 `selectedAgent`，三名互不一致；`mentionAware` 实际只解析 `@` 子代理提及，与 `commandAware`（`/` 前缀）不成对。**未保留旧名**（尚未发布），`AgentMentions.Options.mentionAware` 同步改名 `agentAware`（它是同一个开关的内层载体，两者不同名会让插件作者写错）
+  * **删除 `handle(HarnessInput, @Nullable CommandContextFactory)` 两参版本**，改为 `HarnessInput.commandContextFactory(...)` 字段由 `handle(HarnessInput)` 唯一入口读取。与 `commandAware` 配套：前者决定「是否识别命令」，后者决定「识别到命令后回执怎么落地」。`HarnessEngine.dispatchCommand` 相应去掉 `factory` 形参，改为 `input.getCommandContextFactory()`，为空时回退 `BufferedCommandContextFactory`
+  * 受益点：`handle` 从 2 参归一，宿主不再需要在同一行既构造 input 又补第二个参数（CLI/Web/桌面三端各一处）；`InputBoundaryTest` 的「工厂由宿主实现」护栏不受影响（`CommandContextFactory` 仍是接口且仍在 input 包）
+  * 测试：`HarnessInputTest` 改断 `getSelectedModel`，`InputHandleTest.mentionAwareFalseKeepsTextAsIs` → `agentAwareFalseKeepsTextAsIs`，`HitlAgentResolutionTest` 改 `selectedAgent`；harness 定向 10 类 69 例全绿
+
 * **命令渠道来源统一为值对象 `InputOrigin`**（删除 `CommandContext` 上重复的四元组）：
   * 背景：`getSource` / `getSourceUserId` / `getReplyTarget` / `getMessageId` 在全仓以 7 种形状并存（`HarnessInput` 四字段、`CommandContext` 四 default getter、`WebCommandContext` 四 override、`BufferedCommandContextFactory` 四 override、`session.replyRoute` 裸 Map、`SessionQueueItem` 四字段、`SteerMessage` 四字段），且形成「渠道 → 入会话 → 命令 → 队列/插话箱 → 分发器 → 回到 Channel」的闭环，实为同一实体的 7 份副本。实测 28 处签名中 100% 四字段同时出现，不存在单独消费，故合并为单一实体而非拆分
   * 新增 `input.InputOrigin`（不可变，`NONE` 表示本地无渠道来源）：`channel` / `senderId` / `replyTarget` / `messageId`，并提供 `isEmpty` / `isIm`（收编 `WebChatInputHandler.isImSource`）/ `channelOr`（收编 `"CLI"` 与 `"command"` 两处不同兜底）/ `channelIs`（收编各处 `equalsIgnoreCase`）/ `withReplyTarget`（微信 `context_token` 刷新）/ `withChannel` / `toMap` / `fromMap`。`toMap`/`fromMap` **键名沿用历史命名**（source/sourceUserId/replyTarget/messageId），保证队列快照与 `session.replyRoute` 落盘数据向后兼容
@@ -8,7 +24,7 @@
   * 删除 `CommandContext` 的四个 getter、`soloncode-cli` 的 `WebCommandContext` 整个类（改造后无任何逻辑）、`webCommandFactory` 的四参数与匿名实现（缩为 `new BufferedCommandContextFactory(true)`）、桌面端等价匿名工厂、`CliCommandContext.getSource` 硬编码；CLI 入口改由 `CliShell.CLI_ORIGIN` 显式声明来源
   * `SessionQueueItem` / `SteerMessage` 四字段合为 `origin`（旧 getter 转调 + `@Deprecated`），`SessionQueue.enqueue` 与 `SteerInterceptor.steer` 新增 `InputOrigin` 重载。**同时删除 `enqueue(session,text,String)` 与 `steer(...,String source,BooleanSupplier)` 两个 String 重载**：它们与 `InputOrigin` 版本在传 null 时无法区分（编译期 ambiguous），保留即缺陷
   * `WebChatInputHandler.setReplyRoute` 改为接收 `InputOrigin` 并用 `origin.toMap()` 写入 `session.replyRoute`（读取侧仍按 Map，键名不变，避免牵动约 80 处渠道测试断言）；`WebQueueDispatcher` / `WebGate` / `QueueWebController` 改用 `origin`
-  * 顺带纠正：`CommandContext.isRemote()` **不是死方法**（`HelpCommand` 用它裁剪 `cliOnly` 命令），本次保留并补充语义说明；`BufferedCommandContextFactory(false)` 通过匿名子类覆盖 `isRemote` 保持桌面端历史行为
+  * 顺带纠正（已于下一节被取代）：`CommandContext.isRemote()` 当时经核实并非死方法（`HelpCommand` 用它裁剪 `cliOnly` 命令），故保留；本轮已将其连根替换为 `isTerminal()` + `HarnessInput.terminal`，`BufferedCommandContextFactory(boolean)` 与匿名子类覆盖一并删除
   * 测试：新增 `InputOriginTest`（11 例，锁定 legacy 键名往返、渠道大小写、`isIm`、不可变刷新）；`Fakes.StubContext` 去掉四字段改为 `imOrigin()`/`localOrigin()`；`QueueCommandTest`/`SteerCommandTest`/`SessionQueueTest`/`SteerInterceptorTest`/`WebGateRejectedInputTest` 改为 origin 调用；`ImBusySteerContractTest` 源码断言同步（并修正 `indexOf` 起点，避免命中插话之前的注释）
   * 验证：harness 目标域 79 例全绿，全量 375 例 20F+8E 与改动前完全一致（`sessionProvider` NPE 等既有基线）；`soloncode-cli` 全量 1204 例 2 失败均为既有基线（`ImageReplyLifecycleTest` 异常文案、`AgentSettingsControllerTest`）
 

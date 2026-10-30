@@ -39,20 +39,31 @@ public class BufferedCommandContext implements CommandContext {
     private final String rawInput;
     private final String commandName;
     private final List<String> args;
+    private final boolean terminal;
 
     private final StringBuilder outputBuffer = new StringBuilder();
     private volatile AgentTaskIntent agentTaskIntent;
 
     public BufferedCommandContext(AgentSession session, String rawInput, String commandName, List<String> args) {
+        this(session, rawInput, commandName, args, false);
+    }
+
+    /**
+     * @param terminal 本次输入所在渠道是否具备终端能力（由分发器从
+     *                 {@link org.noear.solon.ai.harness.input.HarnessInput#isTerminal()} 传入）
+     */
+    public BufferedCommandContext(AgentSession session, String rawInput, String commandName, List<String> args,
+                                  boolean terminal) {
         this.session = session;
         this.rawInput = rawInput;
         this.commandName = commandName;
         this.args = args;
+        this.terminal = terminal;
     }
 
     @Override
-    public boolean isRemote() {
-        return true;
+    public boolean isTerminal() {
+        return terminal;
     }
 
     @Override

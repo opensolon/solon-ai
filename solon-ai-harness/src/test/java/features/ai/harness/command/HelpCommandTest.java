@@ -32,11 +32,11 @@ class HelpCommandTest {
         return command(name, description, false, examples);
     }
 
-    private static Command cliOnlyCommand(String name, String description, String... examples) {
+    private static Command terminalOnlyCommand(String name, String description, String... examples) {
         return command(name, description, true, examples);
     }
 
-    private static Command command(String name, String description, boolean cliOnly, String... examples) {
+    private static Command command(String name, String description, boolean terminalOnly, String... examples) {
         return new Command() {
             @Override
             public String name() {
@@ -54,8 +54,8 @@ class HelpCommandTest {
             }
 
             @Override
-            public boolean cliOnly() {
-                return cliOnly;
+            public boolean terminalOnly() {
+                return terminalOnly;
             }
 
             @Override
@@ -65,12 +65,12 @@ class HelpCommandTest {
     }
 
     @Test
-    void remoteHelpListsOnlyCommandsAvailableToIm() {
+    void nonTerminalHelpListsOnlyCommandsAvailableToIm() {
         String help = HelpCommand.formatHelp(Arrays.asList(
                 command("help", "查看帮助",  "/help"),
                 command("queue", "排队消息",  "/queue <消息>"),
-                cliOnlyCommand("exit", "退出进程",  "/exit")
-        ), null, true);
+                terminalOnlyCommand("exit", "退出进程",  "/exit")
+        ), null, false);
 
         assertTrue(help.contains("/help - 查看帮助"));
         assertTrue(help.contains("/queue - 排队消息"));
@@ -78,31 +78,31 @@ class HelpCommandTest {
     }
 
     @Test
-    void helpTopicShowsExamplesAndRejectsCliOnlyCommandRemotely() {
+    void helpTopicShowsExamplesAndRejectsTerminalOnlyCommandRemotely() {
         String topicHelp = HelpCommand.formatHelp(Arrays.asList(
                 command("queue", "排队消息",  "/queue <消息>")
-        ), "QUEUE", true);
+        ), "QUEUE", false);
         assertTrue(topicHelp.contains("/queue - 排队消息"));
         assertTrue(topicHelp.contains("/queue <消息>"));
 
-        String cliOnly = HelpCommand.formatHelp(Arrays.asList(
-                cliOnlyCommand("exit", "退出进程",  "/exit")
-        ), "exit", true);
-        assertTrue(cliOnly.contains("仅支持 CLI"));
-        assertFalse(cliOnly.contains("/exit - 退出进程"));
+        String terminalOnly = HelpCommand.formatHelp(Arrays.asList(
+                terminalOnlyCommand("exit", "退出进程",  "/exit")
+        ), "exit", false);
+        assertTrue(terminalOnly.contains("仅支持 CLI"));
+        assertFalse(terminalOnly.contains("/exit - 退出进程"));
     }
 
     @Test
-    void cliHelpKeepsCliOnlyCommands() {
+    void terminalHelpKeepsTerminalOnlyCommands() {
         String help = HelpCommand.formatHelp(Arrays.asList(
                 command("queue", "排队消息",  "/queue <消息>"),
-                cliOnlyCommand("exit", "退出进程",  "/exit")
-        ), null, false);
+                terminalOnlyCommand("exit", "退出进程",  "/exit")
+        ), null, true);
         assertTrue(help.contains("/exit - 退出进程"));
 
         String topicHelp = HelpCommand.formatHelp(Arrays.asList(
-                cliOnlyCommand("exit", "退出进程",  "/exit")
-        ), "exit", false);
+                terminalOnlyCommand("exit", "退出进程",  "/exit")
+        ), "exit", true);
         assertTrue(topicHelp.contains("/exit - 退出进程"));
         assertTrue(topicHelp.contains("/exit"));
     }

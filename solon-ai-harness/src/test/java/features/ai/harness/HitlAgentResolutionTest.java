@@ -60,7 +60,7 @@ class HitlAgentResolutionTest {
         session.getContext().put(HarnessEngine.CTX_AGENT_SELECTED, "coder");
 
         InputOutcome outcome = engine.handle(HarnessInput.of(session, null)
-                .agent("reviewer")
+                .selectedAgent("reviewer")
                 .hitl("approve", null));
 
         assertEquals("reviewer", outcome.getAgentName());

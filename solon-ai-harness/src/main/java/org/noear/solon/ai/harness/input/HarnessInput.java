@@ -34,7 +34,7 @@ import java.util.function.Predicate;
  *         .reference(".uploads/report.pdf");
  *
  * InputOutcome outcome = engine.handle(HarnessInput.of(session, "帮我看看这个 @coder")
- *         .model("gpt-4o")
+ *         .selectedModel("gpt-4o")
  *         .attachments(atts));
  *
  * switch (outcome.getKind()) {
@@ -60,8 +60,9 @@ public final class HarnessInput {
     private final String text;
 
     private InputAttachments attachments;
-    private String modelName;
+    private String selectedModel;
     private String selectedAgent;
+    private CommandContextFactory commandContextFactory;
     private InputOrigin origin = InputOrigin.NONE;
     private String hitlAction;
     private String hitlCallId;
@@ -71,7 +72,8 @@ public final class HarnessInput {
     private boolean trimContent;
     private String explicitAgent;
     private boolean commandAware = true;
-    private boolean mentionAware = true;
+    private boolean agentAware = true;
+    private boolean terminal;
     private boolean resume;
 
     private HarnessInput(AgentSession session, String text) {
@@ -117,8 +119,8 @@ public final class HarnessInput {
     /**
      * 显式指定的模型名（为空时回退会话级选择，再回退默认模型）
      */
-    public String getModelName() {
-        return modelName;
+    public String getSelectedModel() {
+        return selectedModel;
     }
 
     /**
@@ -165,8 +167,8 @@ public final class HarnessInput {
 
     // ========== 链式设置 ==========
 
-    public HarnessInput model(@Nullable String modelName) {
-        this.modelName = modelName;
+    public HarnessInput selectedModel(@Nullable String selectedModel) {
+        this.selectedModel = selectedModel;
         return this;
     }
 
@@ -177,9 +179,28 @@ public final class HarnessInput {
      * 引擎会再次尝试从正文剥离同名前缀；{@code explicitAgent} 表示宿主已自行剥离正文，
      * 引擎不再改动正文。
      */
-    public HarnessInput agent(@Nullable String selectedAgent) {
+    public HarnessInput selectedAgent(@Nullable String selectedAgent) {
         this.selectedAgent = selectedAgent;
         return this;
+    }
+
+    /**
+     * 命令上下文工厂（由宿主实现）。为空时使用缓冲式默认实现
+     * {@link BufferedCommandContextFactory}。
+     * <p>
+     * 与 {@link #commandAware} 配套：前者决定「是否识别命令」，本方法决定
+     * 「识别到命令后回执怎么落地」。两者都为空/默认时，宿主无需关心命令体系。
+     */
+    public HarnessInput commandContextFactory(@Nullable CommandContextFactory commandContextFactory) {
+        this.commandContextFactory = commandContextFactory;
+        return this;
+    }
+
+    /**
+     * 命令上下文工厂；为空表示使用缓冲式默认实现
+     */
+    public CommandContextFactory getCommandContextFactory() {
+        return commandContextFactory;
     }
 
     /**
@@ -273,7 +294,7 @@ public final class HarnessInput {
     /**
      * 请求体显式指定的子代理（优先级高于输入里的提及）。
      * <p>
-     * 与 {@link #agent} 的区别：本方法表示正文已由宿主自行剥离（引擎不再解析 {@code @} 提及），
+     * 与 {@link #selectedAgent} 的区别：本方法表示正文已由宿主自行剥离（引擎不再解析 {@code @} 提及），
      * 仅用作生效子代理；有效性由调用方先行校验。
      */
     public HarnessInput explicitAgent(@Nullable String explicitAgent) {
@@ -303,17 +324,38 @@ public final class HarnessInput {
     /**
      * 是否解析输入开头的子代理提及（默认 true）
      * <p>
+     * 与 {@link #commandAware} 成对：`{@code /}` 前缀表示命令，`{@code @}` 前缀表示子代理。
      * 置为 false 时原文原样保留，子代理只取显式指定值与选择器传入值。适用于「文本由程序生成」
      * 的路径（如 goal objective）：即使以 {@code @xxx} 开头，也不应被当作子代理提及剥离，
      * 而应作为普通提示词交给代理自己识别。
      */
-    public HarnessInput mentionAware(boolean mentionAware) {
-        this.mentionAware = mentionAware;
+    public HarnessInput agentAware(boolean agentAware) {
+        this.agentAware = agentAware;
         return this;
     }
 
-    public boolean isMentionAware() {
-        return mentionAware;
+    public boolean isAgentAware() {
+        return agentAware;
+    }
+
+    /**
+     * 本次输入所在渠道是否具备命令行终端交互能力（默认 false）
+     * <p>
+     * 决定 {@link org.noear.solon.ai.harness.command.Command#terminalOnly()} 的命令能否可见、可执行：
+     * 为 false 时分发器直接拦截并回执统一提示，{@code /help} 也不列出这类命令。
+     * CLI 宿主置 true；Web/IM/桌面等缓冲式宿主保持默认。
+     * <p>
+     * 注意这与 {@link #origin} 无关：桌面端是本地进程但无终端能力，CLI 有渠道标识且具备终端能力。
+     * 引擎读取本值后经分发器交给 {@link org.noear.solon.ai.harness.command.CommandContext#isTerminal()}，
+     * 保证「拦截判据」与「上下文自述」同源。
+     */
+    public HarnessInput terminal(boolean terminal) {
+        this.terminal = terminal;
+        return this;
+    }
+
+    public boolean isTerminal() {
+        return terminal;
     }
 
     /**

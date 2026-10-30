@@ -34,8 +34,8 @@ class HarnessInputTest {
     @Test
     void chainedSettersAreAllReadable() {
         HarnessInput input = HarnessInput.of(null, "/help")
-                .model("gpt-4o")
-                .agent("coder")
+                .selectedModel("gpt-4o")
+                .selectedAgent("coder")
                 .explicitAgent("reviewer")
                 .trimContent(true)
                 .origin(InputOrigin.of("dingtalk", "u1", "chat42", "msg7"))
@@ -43,7 +43,7 @@ class HarnessInputTest {
                 .hitlOutput("tool-result-rewrite");
 
         assertEquals("/help", input.getText());
-        assertEquals("gpt-4o", input.getModelName());
+        assertEquals("gpt-4o", input.getSelectedModel());
         assertEquals("coder", input.getSelectedAgent());
         assertEquals("reviewer", input.getExplicitAgent());
         assertTrue(input.isTrimContent());

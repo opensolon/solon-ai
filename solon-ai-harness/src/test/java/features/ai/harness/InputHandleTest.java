@@ -158,10 +158,10 @@ class InputHandleTest {
     }
 
     @Test
-    void mentionAwareFalseKeepsTextAsIs() {
+    void agentAwareFalseKeepsTextAsIs() {
         //程序生成的文本（如 goal objective）就是普通提示词：@xxx 不被剥离
         AgentSession session = InMemoryAgentSession.of();
-        InputOutcome outcome = engine().handle(HarnessInput.of(session, "@swe 改一下").mentionAware(false));
+        InputOutcome outcome = engine().handle(HarnessInput.of(session, "@swe 改一下").agentAware(false));
 
         assertEquals(InputOutcome.Kind.TASK, outcome.getKind());
         assertNull(outcome.getAgentName());

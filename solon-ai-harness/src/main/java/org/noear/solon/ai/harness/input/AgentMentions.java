@@ -82,7 +82,7 @@ public final class AgentMentions {
         private String selectedAgent;
         private Predicate<String> nameValidator;
         private boolean trimContent;
-        private boolean mentionAware = true;
+        private boolean agentAware = true;
 
         /**
          * 子代理提及前缀（默认 "@"，支持多字符）
@@ -130,13 +130,13 @@ public final class AgentMentions {
         }
 
         /**
-         * 是否解析输入开头的提及（默认 true）。
+         * 是否解析输入开头的子代理提及（默认 true）。
          * 置为 false 时原文原样保留，子代理只取显式指定值与选择器兜底值。
          * 适用于「文本由程序生成」的路径（如 goal objective）：即使以 {@code @xxx} 开头，
          * 也不应被当作子代理提及剥离。
          */
-        public Options mentionAware(boolean mentionAware) {
-            this.mentionAware = mentionAware;
+        public Options agentAware(boolean agentAware) {
+            this.agentAware = agentAware;
             return this;
         }
 
@@ -184,7 +184,7 @@ public final class AgentMentions {
         if (options.explicitAgent != null && !options.explicitAgent.isEmpty()) {
             agentName = options.explicitAgent;
             text = stripMention(text, prefix, agentName);
-        } else if (options.mentionAware && text != null && text.startsWith(prefix)) {
+        } else if (options.agentAware && text != null && text.startsWith(prefix)) {
             // 2. 输入开头的提及：必须是有效子代理名，否则整段保留原文交给主 Agent
             int idx = firstWhitespaceIndex(text);
             if (idx > prefix.length()) {

@@ -54,9 +54,18 @@ class CommandDispatcherTest {
 
         ctx.println("line-1");
         assertEquals("line-1\n", ctx.getCommandOutput());
-        assertTrue(ctx.isRemote(), "缓冲上下文一律视为远程（不接受终端交互）");
+        assertFalse(ctx.isTerminal(), "缓冲上下文默认不具备终端能力（不接受终端交互）");
         assertFalse(ctx.supportsAnsi());
         assertNull(ctx.getAgentTaskIntent(), "未声明意图时为空");
+    }
+
+    @Test
+    void bufferedContextHonorsTerminalFlag() {
+        //终端能力由分发器从 HarnessInput.isTerminal() 传入，上下文须如实自述
+        BufferedCommandContext ctx = new BufferedCommandContext(InMemoryAgentSession.of(),
+                "/exit", "exit", Collections.<String>emptyList(), true);
+
+        assertTrue(ctx.isTerminal(), "CLI 经缓冲工厂构造时同样要如实自述终端能力");
     }
 
     @Test

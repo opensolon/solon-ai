@@ -32,19 +32,12 @@ public interface CommandContextFactory {
     /**
      * 创建命令上下文
      *
-     * @param engine  引擎
-     * @param session 当前会话
-     * @param command 已解析的命令
+     * @param engine   引擎
+     * @param session  当前会话
+     * @param command  已解析的命令
+     * @param terminal 本次输入所在渠道是否具备终端能力（决定
+     *                 {@link org.noear.solon.ai.harness.command.Command#terminalOnly()} 是否放行，
+     *                 并作为 {@link CommandContext#isTerminal()} 的取值来源）
      */
-    CommandContext create(HarnessEngine engine, AgentSession session, ParsedCommand command);
-
-    /**
-     * 是否为远程上下文
-     * <p>
-     * 返回 true 时，{@link org.noear.solon.ai.harness.command.Command#cliOnly()} 的命令会被拦截，
-     * 避免在 Web/IM 端执行会终止进程或依赖终端的命令。
-     */
-    default boolean isRemote() {
-        return false;
-    }
+    CommandContext create(HarnessEngine engine, AgentSession session, ParsedCommand command, boolean terminal);
 }

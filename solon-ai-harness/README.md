@@ -16,11 +16,12 @@
 
 | 你想做什么 | 读哪里 |
 |---|---|
-| 先跑起来看看 | 第一章（五分钟上手）→ **第三章 3.1**（30 行骨架） |
+| 先跑起来看看 | 第一章（五分钟上手）→ **第三章 3.1**（最小骨架） |
 | 接一个真产品 | **第三章**全部（两段式、事件渲染、HITL 续流、四端时序） |
-| 加命令 / 子代理 | 第四章、第五章 |
-| 调优与定制 | 第六～九章（权限、配置、扩展、安全） |
-| 查结构 / 躲坑 | 第十一章（模块图）、第十二章（常见坑） |
+| 加命令 / 子代理 | 第四章、第六章 |
+| 跑 goal / queue / steer | **第五章**（5.1 / 5.2 / 5.3，三个状态型命令的装配与宿主责任） |
+| 调优与定制 | 第七～十章（权限、配置、扩展、安全） |
+| 查结构 / 躲坑 | 第十二章（模块图）、第十三章（常见坑） |
 
 > **全文档只推荐一条取流路径**：`outcome.getRequest().stream()`。不存在「回执 + 任务合成一条流」
 > 的便捷方法，原因见 §3.4 的四端时序对照。
@@ -88,10 +89,9 @@ String answer = engine.handle(HarnessInput.of(session, "总结一下这个仓库
 ### 2.1 唯一的输入入口
 
 ```java
-// HarnessEngine —— 三个重载，实际只有最后一个做事
-public InputOutcome handle(AgentSession session, String text);                       // 便捷：无命令上下文工厂
-public InputOutcome handle(HarnessInput input);                                      // 便捷：传 null 工厂
-public InputOutcome handle(HarnessInput input, @Nullable CommandContextFactory factory);  // 唯一入口
+// HarnessEngine —— 两个重载，实际只有后者做事
+public InputOutcome handle(AgentSession session, String text);   // 便捷：等价于 handle(HarnessInput.of(session, text))
+public InputOutcome handle(HarnessInput input);                  // 唯一入口
 ```
 
 一次 `handle(...)` 内部按固定顺序做七件事，顺序本身是语义的一部分：
@@ -118,10 +118,10 @@ InputAttachments atts = InputAttachments.of()
         .reference(".uploads/report.pdf");
 
 HarnessInput input = HarnessInput.of(session, "帮我看看这个 @coder")
-        .model("deepseek")                             // 显式模型
-        .agent("explore")                              // 选择器兜底（提及未出现时）
+        .selectedModel("deepseek")                     // 显式模型
+        .selectedAgent("explore")                      // 选择器兜底（提及未出现时）
         .attachments(atts)                             // 多媒体项 + 文件引用
-        .route("dingtalk", "u1", "chat42", "msg7")    // IM 回复路由
+        .origin(InputOrigin.of("dingtalk", "u1", "chat42", "msg7"))   // 渠道来源身份（IM 回复路由）
         .trimContent(false);                           // 剥提及后不去空白
 ```
 
@@ -131,24 +131,27 @@ HarnessInput input = HarnessInput.of(session, "帮我看看这个 @coder")
 
 | 方法 | 用途 |
 |---|---|
-| `model(String)` | 显式模型，优先于会话级选择，再回退默认模型 |
-| `agent(String)` | 选择器兜底子代理 |
+| `selectedModel(String)` | 显式模型，优先于会话级选择，再回退默认模型 |
+| `selectedAgent(String)` | 选择器兜底子代理 |
 | `explicitAgent(String)` | 请求体显式指定，**优先级最高**（桌面端用） |
 | `attachments(InputAttachments)` | 附件装配结果（多媒体块 + 文件引用） |
 | `media(MediaBlock)` | 追加多媒体块（便捷写法） |
 | `reference(path)` | 追加文件引用（便捷写法） |
 | `agentNameValidator(Predicate)` | 子代理名格式校验 |
 | `trimContent(boolean)` | 剥提及后去首尾空白（桌面端需要） |
-| `route(...)` | source / sourceUserId / replyTarget / messageId |
+| `origin(InputOrigin)` | 本次输入的渠道来源身份（渠道 / 发送者 / 返回地址 / 入站关联键） |
 | `hitl(action, callId)` + `hitlOutput(text)` | 审批决策与结果改写 |
+| `commandContextFactory(CommandContextFactory)` | 识别到命令后回执怎么落地（默认缓冲式） |
 | `commandAware(boolean)` | 是否把输入当命令识别（默认 `true`） |
-| `mentionAware(boolean)` | 是否解析开头 `@xxx`（默认 `true`） |
+| `agentAware(boolean)` | 是否解析开头 `@xxx`（默认 `true`） |
+| `terminal(boolean)` | 本次渠道是否具备终端交互能力（默认 `false`，决定 `terminalOnly()` 命令是否可见） |
 | `resume(boolean)` | 续流模式（默认 `false`） |
 
-三个容易踩的开关：
+四个容易踩的开关：
 
 - **`commandAware(false)`**——文本来源不是用户手输时使用（定时任务提示词、已受理的排队输入、命令内部自造提示词）。这些即使以 `/` 开头也不应执行。
-- **`mentionAware(false)`**——文本由程序生成时使用（如 goal 的 objective）。即使以 `@xxx` 开头也原样交给代理，不被当作提及剥离。
+- **`agentAware(false)`**——文本由程序生成时使用（如 goal 的 objective）。即使以 `@xxx` 开头也原样交给代理，不被当作提及剥离。与 `commandAware` 成对：`/` 前缀是命令，`@` 前缀是子代理。
+- **`terminal(true)`**——只有命令行宿主才开。它同时决定 `terminalOnly()` 命令是否放行、以及 `CommandContext.isTerminal()` 的返回值；不开则 `/exit` 类命令被统一拦截。与 `origin` 无关：桌面在本地运行但无终端能力。
 - **`resume(true)`**——本次不产生新用户输入，只按会话中挂起的 `tool_calls` 续跑。文本与附件都被忽略。
 
 ### 2.3 `InputOutcome`：处置态
@@ -210,7 +213,9 @@ switch (outcome.getKind()) {
 
 第一段**永不启动推理**。这正是宿主能在两段之间插入自己准备动作（注册忙碌标记、复位流门、开 SSE 响应头、挂取消钩子）的原因，也是引擎不替宿主开流的原因。
 
-### 3.1 最小骨架：30 行跑通一轮
+### 3.1 最小骨架：跑通一轮
+
+> `MinimalHost`（本节）与 `FullHost`（§3.2）都是**文档内的示例类**，没有对应的 `org.noear.*` 可 import——请直接复制到你的项目里改。harness 提供的是 `HarnessEngine` / `HarnessInput` / `InputOutcome` 这些零件，宿主外壳由你自己写。
 
 ```java
 public class MinimalHost {
@@ -232,6 +237,9 @@ public class MinimalHost {
         this.session = engine.getSession("demo");
     }
 
+    /** 只为下方示例注册命令而暴露；真实宿主按自己的架构决定 */
+    public HarnessEngine getEngine() { return engine; }
+
     public void send(String userInput) {
         // ---------- 第一段：一次同步调用，装配出「宿主该做什么」 ----------
         InputOutcome outcome = engine.handle(HarnessInput.of(session, userInput));
@@ -246,7 +254,7 @@ public class MinimalHost {
                         .doOnNext(e -> { if (e.hasText()) System.out.print(e.getText()); })
                         .blockLast();                                // 订阅时机由宿主决定
                 break;
-            case REPLY:                      // 只有回执
+            case REPLY:                      // 只有回执（命令已执行，或命令在本渠道不可用）
                 System.out.print(outcome.getCommandOutput());
                 break;
             case HITL:                       // 决策已写入，续流时机由宿主决定
@@ -265,6 +273,22 @@ host.send("看下当前项目结构");   // TASK    → 跑任务
 host.send("/help");             // 裸引擎未注册命令 → 按普通消息处理，也是 TASK
 host.send("");                  // IGNORED
 ```
+
+**为什么骨架里写了 `REPLY` 分支，上面三行却没有一行命中它？** 因为裸引擎没有注册任何命令（§4.1）。一旦注册，同一个 `/help` 就会走到那个分支：
+
+```java
+host.getEngine().getCommandRegistry().register(new HelpCommand());
+host.send("/help");   // REPLY → 渲染回执后收尾
+```
+
+**注册命令并不需要配 `commandContextFactory`**——这一点是本节曾被误读的地方。引擎在 `dispatchCommand` 里就会兜底创建 `BufferedCommandContextFactory`（`HarnessEngine` 内），回执写入内存、由 `getCommandOutput()` 一次取回；骨架里 `System.out.print(outcome.getCommandOutput())` 的写法**已经**是这个默认工厂的正确消费方式。
+
+只有在需要改动「回执怎么落地」时才提供工厂——CLI 要实时写终端并读键盘（`/help` 分页、`/model` 选择器），这时才用 `commandContextFactory(...)`（§4.4）。因此最小骨架刻意不配它：多配一个默认值的等价物，只会让读者以为「不配就不工作」。
+
+一个值得提前知道的副作用：默认 `terminal=false`，所以 `/help` 会裁掉所有 `terminalOnly()` 命令（如 `/exit`）。
+若你的宿主就是命令行程序，用 `.terminal(true)` 打开即可（§4.4）。
+
+再看 `TASK` 分支里的 `hasReply()`：命令触发的任务（如 `/queue` 排队后立刻开跑）回执与任务并存，那份回执同样出自默认工厂。
 
 > `build()` 只硬校验 `sessionProvider`。「`chatModel is required`」是**首次 `getMainAgent()`** 时由 `ReActAgentConfig` 抛出——所以 `modelAdd` / `defaultModel` 缺失不会在 `build()` 报错，而是在第一次 `handle` 报错。
 
@@ -291,6 +315,11 @@ public class FullHost {
                 .hitlEnabled(true)
                 .build();
         this.session = engine.getSession("demo");
+
+        // 命令必须显式注册（§4.1），不注册则 /help 仍按普通消息处理
+        engine.getCommandRegistry().register(new HelpCommand());
+        engine.getCommandRegistry().register(new ClearCommand());
+        engine.getCommandRegistry().register(new ModelCommand());
     }
 
     /** 一次完整输入：附件由宿主先落盘，再交给引擎装配 */
@@ -298,8 +327,10 @@ public class FullHost {
         // ===== 第一段 =====
         HarnessInput input = HarnessInput.of(session, text)
                 .attachments(attachments)      // 多媒体块 + 文件引用
-                .agent(selectedAgent)          // 选择器兜底；正文里的 @xxx 优先
-                .trimContent(true);
+                .selectedAgent(selectedAgent)   // 选择器兜底；正文里的 @xxx 优先
+                .trimContent(true)
+                // 本宿主是命令行程序：true 让 /help 不要裁掉 terminalOnly 命令，/exit 也不被拦截
+                .terminal(true);
 
         InputOutcome outcome = engine.handle(input);
 
@@ -359,8 +390,8 @@ public class FullHost {
     private void resume(String agentName, String modelName) {
         engine.handle(HarnessInput.of(session, null)
                         .resume(true)
-                        .agent(agentName)     // ★ 必须是 HITL 生效代理，不能换回主代理
-                        .model(modelName))
+                        .selectedAgent(agentName)   // ★ 必须是 HITL 生效代理，不能换回主代理
+                        .selectedModel(modelName))
                 .getRequest().stream()
                 .doOnNext(this::render)
                 .blockLast();
@@ -465,8 +496,8 @@ public class StatusCommand implements Command {
     }
 
     @Override
-    public boolean cliOnly() {
-        return false;                        // true 时 Web/IM 端不展示也不执行
+    public boolean terminalOnly() {
+        return false;                        // true 时无终端能力的渠道（Web/IM/桌面）不展示也不执行
     }
 
     @Override
@@ -475,7 +506,7 @@ public class StatusCommand implements Command {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx) {
+    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
         ctx.println("session = " + ctx.getSession().getSessionId());
         ctx.println("args    = " + ctx.getArgsJoined());
         ctx.println("color   = " + ctx.color("\033[32mOK\033[0m"));
@@ -491,10 +522,14 @@ engine.getCommandRegistry().register(new StatusCommand());
 
 ```java
 @Override
-public void execute(HarnessEngine engine, CommandContext ctx) {
-    ctx.requestAgentTask("请审查本次 diff 里的并发问题", model());
+public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
+    // 第二个参数为模型名；传 null 则走会话级回退
+    ctx.requestAgentTask("请审查本次 diff 里的并发问题", "deepseek");
 }
 ```
+
+> **`execute` 只有三参一形**：`origin` 是本次输入在渠道侧的身份（无来源时为 `InputOrigin.NONE`）。
+> 不需要来源的命令照样写三参、忽略它即可；`/queue`、`/steer` 靠它把来源带到投递链路。
 
 分发器会把这个意图交回引擎的同一个入口 `engine.handle(...)` 完成二段装配（`commandAware(false)` 不再识别命令、`resume(...)` 让空正文成为续流，因此不用另开方法），
 `InputOutcome.getKind()` 因此返回 `TASK`、`isCommand()` 为 true，`getRequest()` 直接可用——
@@ -531,7 +566,8 @@ $ARGUMENTS
 
 ### 4.4 自定义命令上下文（宿主接管回执）
 
-不传 factory 时使用 `BufferedCommandContextFactory`：回执写内存，从 `getCommandOutput()` 一次取回。
+`commandContextFactory(...)` **是可选项**：不设时引擎自动用 `new BufferedCommandContextFactory()`，
+回执写内存、从 `getCommandOutput()` 一次取回——§3.1 的最小骨架就是靠这个默认值跑通 `/help` 的。
 **命令内部声明的 Agent 任务同样会真实执行**——`CommandDispatcher` 在 `dispatch` 尾部直接调
 `engine.handle(...)` 完成二段装配，与是否有自定义工厂无关。
 
@@ -539,11 +575,17 @@ $ARGUMENTS
 
 ```java
 InputOutcome outcome = engine.handle(
-        HarnessInput.of(session, "/help"),
-        (engine0, session0, command) -> new MyTerminalCommandContext(session0, command));
+        HarnessInput.of(session, "/help")
+                .commandContextFactory((engine0, session0, command, terminal) ->
+                        new MyTerminalCommandContext(session0, command, terminal)));
 ```
 
-`CommandContextFactory.isRemote()` 返回 `true` 时，`cliOnly()` 的命令会被统一拦截——这就是桌面端 `/exit` 不会终止进程的原因。
+终端能力是**输入属性**，不是工厂属性。`HarnessInput.terminal(true)` 决定两件事：
+`terminalOnly()` 的命令是否放行，以及 `CommandContext.isTerminal()` 的返回值。
+两者同源——工厂只负责构造上下文，不再持有渠道能力。
+
+> 默认 `terminal=false`。CLI 宿主必须把 `.terminal(true)` 显式打开，否则 `/help` 会裁掉 `terminalOnly` 命令，
+> `/exit` 也会被统一拦截。桌面端虽在本地运行，同样保持默认：它没有命令行终端。
 
 ### 4.5 改前缀
 
@@ -557,9 +599,316 @@ HarnessEngine.of("/data/work", ".solon/")
 
 ---
 
-## 五、完整示例：子代理输入
+## 五、完整示例：goal / queue / steer
 
-### 5.1 三种指定方式与优先级
+这三个命令与前面 `help` / `clear` / `model` 不同：它们不是「打印一段文本就结束」，而是**跨轮维护会话级状态**。命令本身只改状态、只声明意图，真正的执行与投递由宿主装配的领域组件承担——因此每个命令都必须补上对应的宿主侧接线，否则命令会「有回执、无效果」。
+
+| 命令 | 维护的状态 | 宿主必须额外装配 | 缺了会怎样 |
+|---|---|---|---|
+| `/goal` | 会话级目标（每会话一个） | `ExecutionBridge` + `GoalEngine` + `GoalScheduler` + `GoalExtension` | 命令能创建目标，但永远不跑第二轮 |
+| `/queue` | 会话级排队队列 | 任务终态时调用 `SessionQueueDrainer.drainOne(...)` | 命令能入队，但队列永远不动 |
+| `/steer` | 当前任务的插话邮箱 | 请求级挂载 `SteerInterceptor` + 实现 `SteerOutputPort` | 命令能入队，但永不注入 |
+
+三者共同点：`/queue` 与 `/steer` 的 `runnableWhenBusy()` 返回 `true`（能穿透忙碌检查）；`/goal` **不覆写**、保持默认 `false`（它会启动持续轮次，不能在忙时会话里重入）。`/queue`、`/steer` 从 `Command.execute(engine, ctx, origin)` 的第三参拿到 `InputOrigin` 并带到投递链路，三者都**不自己开流**。
+
+### 5.1 `/goal`：会话级有终止判据的持续执行
+
+Goal 是「给它一个目标，它一轮轮自己跑，直到达成 / 预算耗尽 / 熔断」的能力。归属是**会话**，每会话最多一个，状态随会话快照持久化，重启后仍在。
+
+#### 装配四件套
+
+```java
+// 1) 执行桥：goal 与 loop 共用；必须至少有一个 TaskHandler，否则每一轮都会被守卫跳过
+ExecutionBridge bridge = new ExecutionBridge(engine);
+bridge.addBusyChecker(sessionId -> /* 该会话是否还在跑别的任务 */ false);
+bridge.addTaskExecutor((sessionId, prompt, agentName) -> {
+    // 返回最终文本；返回 null 表示「本入口不认领」，会继续问下一个 TaskHandler
+    return engine.handle(HarnessInput.of(engine.getSession(sessionId), prompt)
+                    .commandAware(false)          // 目标正文是程序生成的，即使以 / 开头也不当命令
+                    .agentAware(false)             // 目标正文里的 @xxx 不是子代理提及
+                    .origin(InputOrigin.channel("goal")))
+            .getRequest()
+            .call()
+            .getContent();
+});
+
+// 2) Goal 引擎：预算阈值 + 停滞/错误熔断 + 验证器（验证器绑定工作区，避免跨工作区串味）
+GoalEngine goalEngine = new GoalEngine(
+        bridge,
+        new BudgetThresholds(70, 85),   // 预算提示阈值：警告% / 紧急%
+        3,                              // stagnationThreshold：连续无进展多少轮判定停滞
+        3,                              // maxConsecutiveErrors：连续错误多少次熔断
+        true,                           // validatorEnabled：是否启用完成前验证
+        workspace);                     // 验证器执行目录；传 null 则不注册默认验证器（验证恒通过）
+
+// 3) 调度器：job 名必须带工作区前缀
+//    JobManager 是 JVM 单例，而会话 ID 并不全局唯一（CLI 叫 cli、桌面是 ws_<时间戳>），
+//    不加前缀时多个工作区的同名会话会在全局注册表里互相覆盖。
+GoalScheduler goalScheduler = new GoalScheduler(goalEngine, workspaceId);
+
+// 4) 命令 + 模型侧工具
+engine.getCommandRegistry().register(new GoalCommand(goalEngine, goalScheduler));
+
+GoalExtension goalExtension = new GoalExtension(goalEngine, engine);
+goalExtension.getGoalTalent().setEnabled(true);   // 关掉只影响模型侧工具，不影响 /goal 命令
+engine.addExtension(goalExtension);
+```
+
+`GoalExtension` 只是把 `GoalTalent` 挂到**主代理**上，提供两个工具（创建目标由用户命令或界面驱动，模型侧只读 + 更新）：
+
+| 工具 | 作用 |
+|---|---|
+| `goal_get` | 读当前目标：状态、轮次、剩余轮次、耗时、Token 消耗与预算 |
+| `goal_update(status)` | `complete` 标记完成（需过四道闸，见下）/ `blocked` 声明阻塞 |
+
+`GoalTalent.isSupported()` 要求会话里已有目标，因此不设目标时这两个工具对模型不可见。
+
+#### 命令用法
+
+| 命令 | 行为 |
+|---|---|
+| `/goal` | 打印当前目标状态（状态 / 轮次 / Token / 耗时 / 上次结果）；无目标时打印用法 |
+| `/goal <objective>` | 创建目标并立即调度首轮 |
+| `/goal --max-tokens:2000 <objective>` | 带 Token 预算 |
+| `/goal --max-duration:30 <objective>` | 带时间预算，**单位是分钟** |
+| `/goal --max-iterations:10 <objective>` | 带轮次预算 |
+| `/goal pause` \| `resume` \| `clear` | 暂停 / 恢复 / 清除 |
+
+Flag 格式是 `--key:value`（冒号分隔，不是等号/空格）：缺冒号会打印 `Unknown flag` 并跳过该参数；数值非法直接 `Invalid --xxx value` 返回。`--max-duration` 内部转毫秒（`×60_000`）。三个预算默认都是 `0`，表示不限制。
+
+已有进行中（非终态）的目标时创建会被拒绝：
+
+```
+WARN: 当前会话已有进行中的 Goal，请先清除后再创建
+  Active: <当前目标>
+  Use /goal clear first to replace the goal.
+```
+
+#### 运行机制
+
+调度是**状态驱动**，不是时间表驱动：固定 `fixedDelay = 5s` 轮询，每轮自判还要不要继续。`schedule(sessionId, runNow)` 的 `runNow = true` 时首轮 `initialDelay = 0`（立即跑），否则等一个间隔。
+
+每轮 `runRound(session)` 的守卫顺序（任一条命中就跳过或收尾退出）：
+
+1. 目标不存在或状态非活跃 → 退出并注销 job；
+2. `bridge` 没有 `TaskHandler` → 跳过（日志 `execution bridge unavailable`）；
+3. `bridge.isBusy(sessionId)` 为 true → 跳过（不抢宿主正在跑的任务）；
+4. 轮前预算守卫（时间 / Token / 轮次）→ 命中则先跑一轮「收尾总结」再标记终结态；
+5. CAS 防重入（`session.goal.running`）。
+
+轮内流程：`buildEffectivePrompt` → `bridge.execute(...)` 取 `RoundResult` → 累计 Token / 轮次 / 执行指纹（无进展检测）→ 完成判定复核 → `commit` 落盘。
+
+> **只有一个驱动源**：错误后不再 `delay` 补发，重试靠下一个 5s 轮询。双驱动会叠加轮次。
+
+#### 状态机
+
+```
+PURSUING ⇄ PAUSED
+PURSUING → ACHIEVED | BUDGET_LIMITED | ITERATION_LIMITED   终态，不可恢复
+PURSUING → BLOCKED
+BLOCKED  --resume-->  PURSUING                              可恢复
+```
+
+`BLOCKED` 有两个来源：模型主动 `goal_update(blocked)`，或异常分级熔断（不可恢复错误如 SSL / HTTP_4XX 连续 2 次；同类型错误连续 3 次；连续错误达 `maxConsecutiveErrors`）。熔断后调度自动停，`/goal resume` 可续。
+
+#### 完成判定的四道闸
+
+`goal_update(complete)` 只是**声明**，不是判决。四条全部通过才真正转 `ACHIEVED`：
+
+| # | 闸门 | 不满足时的错误码 |
+|---|---|---|
+| 1 | 模型调用 `goal_update(complete)` | — |
+| 2 | **执行证据**：目标含创建/修改/运行/文件类关键词时，本轮必须有实际工具调用（`goal_get` / `goal_update` 不算证据） | `ACTION_EVIDENCE_REQUIRED` |
+| 3 | **TODO 联动**：任务清单里没有 `- [ ]` 或 `- [/]` 残留项 | `TODO_UNFINISHED` |
+| 4 | **验证器**：按目标条件匹配验证器并执行 | `VALIDATION_FAILED` |
+
+验证器默认注册两个，按目标文本（小写）匹配，多命中按 AND 链式生效：
+
+| 验证器 | 匹配关键词 |
+|---|---|
+| `TestsPassValidator` | `test` / `pass` / `check` / `ensure` / `verify` |
+| `BuildPassValidator` | `build` / `compile` / `implement` / `refactor` / `fix` / `create` / `add` / `write` |
+
+无命中时用 `NoopValidator`（恒通过）。`validatorEnabled = false` 时第 4 道闸整体跳过。
+
+#### 读取与监听
+
+```java
+// 供列表 / 徽章渲染：字段名与前端 goal.* 约定严格对齐（改键名会直接让状态徽章与预算条失效）
+GoalState gs = goalEngine.state(session);
+Map<String, Object> item = goalEngine.toTaskMap(session, gs);   // 与 loop 任务同构，type = "GOAL"
+
+// 生命周期观察者：桌面端用它把后台多轮执行持续推回同一个对话流
+// state 在 removed = true 时仍是清除前的快照
+goalEngine.addListener((sessionId, state, removed) -> { /* push to client */ });
+```
+
+#### 存储分层
+
+与 `SessionQueue` 完全一致：**存储介质是会话实现的细节**（文件 / 内存 / Redis / JDBC），`GoalEngine` 只依赖 `AgentSession`。
+
+| 位置 | 内容 | 是否落盘 |
+|---|---|---|
+| `getContext().data()` 的 `session.goal` | Map 投影（单槽，一条记录） | 是，随 `updateSnapshot()` |
+| `attrs()` 的 `session.goal.state` | 运行态 `GoalState` 实例 | 否（瞬态，首次访问从投影 hydrate） |
+| `attrs()` 的 `session.goal.running` | 轮次防重入标记 | 否 |
+
+### 5.2 `/queue`：把消息排在当前任务之后
+
+`/queue` 与 `/steer` 的分工：**排队不影响进行中的任务**，只是登记一条待执行，等当前任务结束、会话空闲后自动作为新任务发送。
+
+```java
+engine.getCommandRegistry().register(new QueueCommand());   // 无参构造
+```
+
+```
+用户：/queue 接着帮我把文档也更新一下
+回执：已加入队列（第 1 位），将按顺序在任务空闲后自动发送
+```
+
+命令只做一件事——`SessionQueue.enqueue(session, text, origin)`，返回值是队列位置（从 1 计），`-1` 表示失败。所有失败在入队前就被拦下并给出明确文案：
+
+| 限制 | 值 | 触发时文案 |
+|---|---|---|
+| 单条文本长度 | `MAX_TEXT_LENGTH = 4096` | `排队内容过长（上限 4096 字符）` |
+| 队列容量 | `MAX_QUEUE_SIZE = 20` | `排队失败（队列已满，上限 20 条），请稍后再试` |
+
+#### 宿主侧：入队只是登记，续发靠 drain
+
+```java
+// 同步运行者：回调返回即认为执行完毕并确认（CLI 交互循环）
+while (SessionQueueDrainer.drainOne(session, item -> runOneTurn(session, item))) {
+    // claim / poll / ack / requeue 全部由 drainOne 负责，宿主不要自己 poll
+}
+
+// 异步运行者：回调只是「启动」，终态再确认（Web，任务结束才 ack）
+SessionQueueDrainer.drainOne(session, item -> startTurnAsync(session, item), false);
+// ...该轮到达终态时
+SessionQueue.acknowledge(session, item.getId());
+```
+
+`drainOne` 内部顺序：`tryClaim`（同一时刻只允许一个运行者 poll）→ `poll`（队首出队并置为 RUNNING + 记为 in-flight）→ 执行回调 → `acknowledge` / 失败则 `requeueFront` → `releaseClaim`。
+
+三条容易踩的语义：
+
+- `acknowledge` **必须带正确的 item id**——它校验 in-flight 身份，不匹配返回 false；
+- `requeueFront` 受**代际**保护：`cancelPending` 会递增 `session.queue.generation`，旧代际的回队请求被拒绝，避免「用户清了队列又冒出一条」；
+- `pendingSize` **不含** in-flight，所以容量判定按待执行数算——运行中的那条不占容量。
+
+#### 持久化与重启恢复
+
+队列不用独立文件：投影存在 `getContext().data()` 的 `session.queue.items`（`List<Map>`，**运行中的任务在首位**），任何变更即 `updateSnapshot()` 随会话快照一并落盘。
+
+重启后首次访问队列时 hydrate，`RUNNING` 项**重置为 `PENDING` 并恢复到队首**——上一次进程只是「领取过」，不代表执行完了。只读操作（`pendingSize` / `poll` / `view`）同样会 hydrate，因此重启后队列对只读接口依然可见。
+
+```java
+// 启动时探测待恢复的会话
+drainSessionQueue(session);   // 只做两件事：判定 busy、然后 drainOne
+```
+
+> **探测不要实例化会话**：`getSession(id)` 是 `computeIfAbsent` 语义，会把会话连全量历史常驻内存。内存会话用 `SessionQueue.hasItems(session)`；只有快照时用 `SessionQueue.hasPersistedItems(context)`（宿主先把快照反序列化成 `FlowContext` 再判定，存储无关）。
+
+#### attrs 运行时契约
+
+以下 key 在 harness 与宿主之间是**一字不改**的约定，任何一侧不得私自重命名：
+
+| key | 内容 |
+|---|---|
+| `session.queue` | 待执行队列本体（`Deque<SessionQueueItem>`，运行态） |
+| `session.queue.generation` | 清空代际（`cancelPending` 递增） |
+| `session.queue.claim` | 领取权（同一时刻仅一个运行者） |
+| `session.queue.inFlight` | 当前运行中的任务 |
+
+Web 前端的排队编排在浏览器完成，IM 渠道（微信/飞书/钉钉）没有前端，才由本命令承担入队——同一入口不要重复入队。`enqueue` 的 `id` 非空时按 id 去重（含 in-flight），可用于 HTTP 重试幂等。
+
+### 5.3 `/steer`：往正在跑的任务里插一句话
+
+`/steer` 把补充消息注入**当前**任务的工作记忆，由插话拦截器在下一个采样边界消费，**不打断进行中的模型流与工具调用**。
+
+| | `/queue` | `/steer` |
+|---|---|---|
+| 影响对象 | 当前任务之后的新任务 | 当前任务本轮的工作记忆 |
+| 生效时机 | 当前任务结束后 | 下一个推理边界（`onReasonStart`） |
+| 任务未运行 | 照常入队，等空闲续发 | 失败（`NOT_RUNNING` / `TURN_CHANGED`） |
+| 持久化 | 随会话快照落盘 | **零持久化**，不写 ndjson |
+| 容量 | 20 条 | 5 条（`MAX_BOX_SIZE`） |
+| 溢出策略 | 拒绝入队并告知 | 返回 `BOX_FULL`，由调用方决定改排队还是直发 |
+
+高频 steer 会加速上下文膨胀，所以邮箱只有 5 格；超出场景应引导用户改用 `/queue`。
+
+#### 装配
+
+```java
+engine.getCommandRegistry().register(new SteerCommand());   // 无参构造
+```
+
+命令只做投递，**不做降级**：邮箱满、任务未运行、轮次已切换时如实告知原因，由用户自行决定改排队还是直接发送（与 `/web/chat/steer` 的 409 纯语义对齐）。
+
+```java
+// runId 传 null = 绑定「当前活跃任务」（IM 场景没有 runId 概念，直接信任后端权威值）
+// busyRecheck 传 null = 仅按 activeRunId 判定
+SteerInterceptor.SteerResult r = SteerInterceptor.steer(session, null, null, text, origin, null);
+```
+
+| 状态 | 含义 |
+|---|---|
+| `STEERED` | 已入邮箱，等待注入 |
+| `NOT_RUNNING` | 当前没有正在执行的任务 |
+| `TURN_CHANGED` | 调用方所见的 runId 与当前活跃 runId 不一致（Web 防跨任务错投） |
+| `BOX_FULL` | 邮箱已满（5 条） |
+| `DUPLICATE_STEER_ID` | 同 steerId 已在邮箱中 |
+| `EMPTY_TEXT` / `TEXT_TOO_LONG` | 文本为空 / 超过 4096 字符 |
+| `INVALID_STEER_ID` | steerId 超过 128 字符 |
+
+#### 宿主必须挂拦截器（请求级）
+
+```java
+SteerInterceptor<WorkspaceContext> steerInterceptor = new SteerInterceptor<>(outputPort, wsContext);
+
+outcome.getRequest()
+        .options(o -> o.interceptorAdd(steerInterceptor))   // 须排在默认拦截器（含上下文压缩）之后
+        .stream()
+        .doOnNext(this::render)
+        .blockLast();
+```
+
+> **不挂拦截器 = 插话永不生效**：消息能入队，但没人消费，任务结束时由 `onAgentEnd` 清空并转入 dropped。
+
+`options(Consumer)` 是累加语义，且拦截器按 `LinkedHashMap` 插入序排列——天然排在默认的 `ContextCompressionInterceptor` 之后，是向压缩产物尾部追加，不破坏消息序列。
+
+#### 输出端口（宿主实现）
+
+```java
+public interface SteerOutputPort<C> {
+    /** 注入已生效：客户端据此清除待生效态并落气泡，实现方必须尽力送达 */
+    void emitSteerApplied(C wsContext, AgentSession session, String runId, List<SteerMessage> items);
+
+    /** 任务结束时仍有未消费插话的兜底：转入排队并广播，绝不允许「已接受但永不生效」 */
+    void handleDroppedSteers(C wsContext, AgentSession session, Queue<SteerMessage> box, String runId);
+}
+```
+
+泛型 `C` 是**不透明路由令牌**（典型为宿主的工作区上下文）：领域层只透传、不解释，保证 harness 不依赖任何宿主类型。端口为 `null` 时 drop 只记 warn 日志、不通知客户端。
+
+#### 三条注入守卫
+
+1. **首轮不注入**（`turnCount <= 1`）——原始 prompt 必须先被采样，不篡改初始意图；
+2. **尾部 tool_calls 未闭合不注入**——HITL 挂起恢复的窄窗里插 user 消息会打断 `tool_use` / `tool_result` 配对，部分模型直接报错；等 `ActionTask` 补齐结果后自然恢复；
+3. **无悬挂**——`onAgentEnd` 检查残留并交给 `handleDroppedSteers`，绝不允许「已接受但永不生效」。
+
+注入形态：`ChatMessage.ofUser("[用户实时补充] " + text)`，metadata 标记 `source=steer`。不追加 systemPrompt 说明——前缀本身已足够表意。
+
+#### 运行边界
+
+`activeRunId` 在 `onReasonStart` 才写入。所以任务刚被受理、尚未进入推理边界时，steer 会返回 `NOT_RUNNING`（IM 传 null）或 `TURN_CHANGED`（Web 带 runId）——这不是 bug，是「此刻还没有可插话的推理现场」。
+
+插话**零持久化**：不进 `session.addMessage`、不占 `sessionWindowSize`、不会在后续任务里被当作初心重新入场；刷新页面后插话气泡即消失（刻意取舍，展示层由前端在收到 `steer_applied` 时就地渲染进当前流式气泡内部）。
+
+---
+
+## 六、完整示例：子代理输入
+
+### 6.1 三种指定方式与优先级
 
 ```
 explicitAgent（请求体显式）  >  输入开头的 @提及  >  selectedAgent（选择器兜底）
@@ -573,7 +922,7 @@ engine.handle(HarnessInput.of(session, "@bash 列出所有 Java 文件"));
 engine.handle(HarnessInput.of(session, "列出所有 Java 文件").explicitAgent("bash"));
 
 // 方式三：选择器兜底（前两者都没命中时才生效）
-engine.handle(HarnessInput.of(session, "列出所有 Java 文件").agent("bash"));
+engine.handle(HarnessInput.of(session, "列出所有 Java 文件").selectedAgent("bash"));
 
 // 查看实际生效的子代理
 InputOutcome outcome = engine.handle(...);
@@ -590,18 +939,18 @@ System.out.println(outcome.getAgentName());   // "bash" 或 null（主代理）
 - 名字不存在时不剥离，整段交给主代理自己判断；
 - 需要两者一致时加 `.trimContent(true)`。
 
-### 5.2 用引擎装配好的请求执行
+### 6.2 用引擎装配好的请求执行
 
 ```java
 InputOutcome outcome = engine.handle(HarnessInput.of(session, "@explore 找一下限流相关的实现")
-        .model("deepseek"));
+        .selectedModel("deepseek"));
 
 outcome.getRequest().options(o -> {
     o.toolContextPut(HarnessEngine.ATTR_CWD, "/data/work/sub-project");   // 动态换工作区
 }).stream().blockLast();
 ```
 
-### 5.3 直接用内置子代理
+### 6.3 直接用内置子代理
 
 内置定义随包发布在 `META-INF/solon/ai/harness/agents/`：
 
@@ -628,7 +977,7 @@ outcome.getRequest().stream().blockLast();
 > 注意 该路径的 `call()` 声明的异常是 `Throwable`，需自行捕获；
 > 走 `handle` 路径时异常从流的 `doOnError` / `blockLast()` 出来。
 
-### 5.4 运行时创建子代理
+### 6.4 运行时创建子代理
 
 ```java
 // 一行式：复用 general 定义改写（面向 LLM 的 generate 工具走的就是这条）
@@ -655,7 +1004,7 @@ engine.getAgentManager().addAgent(definition);
 engine.handle(HarnessInput.of(session, "分析 src/main.js").explicitAgent("frontend"));
 ```
 
-### 5.5 主代理委派（`task` / `multitask`）
+### 6.5 主代理委派（`task` / `multitask`）
 
 主代理通过工具自动委派，宿主无需写代码：
 
@@ -669,7 +1018,7 @@ engine.setMultitaskMaxTasks(3);
 
 `task` 默认不在 `*`（公有）里，只有 `**`（完整）才包含——这是为了让子代理不能再委派子代理，天然防止无限嵌套。
 
-### 5.6 把子代理定义成文件
+### 6.6 把子代理定义成文件
 
 `<harnessHome>/agents/*.md` 或挂载到 `MountType.AGENTS` 的目录：
 
@@ -710,9 +1059,9 @@ enabled: true
 
 ---
 
-## 六、工具权限
+## 七、工具权限
 
-### 6.1 三级快捷权限
+### 7.1 三级快捷权限
 
 | 权限 | 标识 | 实际展开 |
 |---|---|---|
@@ -722,7 +1071,7 @@ enabled: true
 
 `ToolName` 是当前正解（`@Preview("4.0.4")`），`ToolPermission` 已 `@Deprecated` 但仍可用。
 
-### 6.2 运行时调整
+### 7.2 运行时调整
 
 ```java
 engine.allowTool("bash");            // 触发主代理重建
@@ -732,9 +1081,9 @@ engine.toolPermissionReset(tools, disallowedTools);
 
 ---
 
-## 七、配置项参考
+## 八、配置项参考
 
-### 7.1 构造期
+### 8.1 构造期
 
 | 配置 | 默认值 | 说明 |
 |---|---|---|
@@ -765,7 +1114,7 @@ engine.toolPermissionReset(tools, disallowedTools);
 | `commandPrefix(String)` | `"/"` | 支持多字符 |
 | `agentPrefix(String)` | `"@"` | 支持多字符 |
 
-### 7.2 运行期
+### 8.2 运行期
 
 ```java
 engine.setSandboxEnabled(false);
@@ -786,7 +1135,7 @@ engine.addMount(Mount.builder()
 
 ---
 
-## 八、扩展点
+## 九、扩展点
 
 ```java
 public interface HarnessExtension {
@@ -818,9 +1167,9 @@ engine.addExtension(new HarnessExtension() {
 
 ---
 
-## 九、安全机制
+## 十、安全机制
 
-### 9.1 三套策略
+### 10.1 三套策略
 
 `hitl` 包提供三套内置干预策略：
 
@@ -848,7 +1197,7 @@ engine.getHitlInterceptor()
 
 详见 [`docs/hitl.md`](docs/hitl.md)。
 
-### 9.2 宿主侧拿到审批请求
+### 10.2 宿主侧拿到审批请求
 
 拦截触发时，事件流会推 `HITLPendingEvent`；也可凭会话直接查：
 
@@ -868,7 +1217,7 @@ List<HITLTask> pending = HITL.getPendingTasks(session);
 
 ---
 
-## 十、运行时目录
+## 十一、运行时目录
 
 ```
 {harnessHome}/          # 默认 .solon/
@@ -885,9 +1234,9 @@ List<HITLTask> pending = HITL.getPendingTasks(session);
 
 ---
 
-## 十一、模块结构
+## 十二、模块结构
 
-### 11.1 自有源码（69 个类）
+### 12.1 自有源码（70 个类）
 
 ```
 org.noear.solon.ai.harness
@@ -899,6 +1248,7 @@ org.noear.solon.ai.harness
 │   ├── HarnessInput              ★ 一次输入的完整上下文
 │   ├── InputOutcome              ★ 输入处置（四态，不含流）
 │   ├── InputAttachments          附件装配结果（多媒体块 + 文件引用；落盘由宿主负责）
+│   ├── InputOrigin               渠道来源身份（渠道 / 发送者 / 返回地址 / 入站关联键）
 │   ├── ParsedCommand             前缀感知的命令解析
 │   ├── AgentMentions             提及解析（Options 承载三端差异）
 │   ├── BufferedCommandContext    缓冲式回执（无自定义工厂时的默认实现）
@@ -926,7 +1276,7 @@ org.noear.solon.ai.harness
 └── util/                         追踪工具
 ```
 
-### 11.2 依赖包（能力来源）
+### 12.2 依赖包（能力来源）
 
 | 依赖 | 提供 |
 |---|---|
@@ -942,9 +1292,9 @@ org.noear.solon.ai.harness
 
 ---
 
-## 十二、常见坑
+## 十三、常见坑
 
-1. **裸引擎没有命令**——`/help` 会返回 `TASK`。测试命令必须先 `getCommandRegistry().register(...)`。
+1. **裸引擎没有命令**——`/help` 会返回 `TASK`。测试命令必须先 `getCommandRegistry().register(...)`；注册后**不需要**配 `commandContextFactory`，默认 `BufferedCommandContextFactory` 已经能把回执交给 `getCommandOutput()`。
 2. **HITL 续流必须显式**——`Kind.HITL` 不携带请求；续流用 `.resume(true)`，且**不要**传正文。
 3. **HITL 续流要用 `outcome.getAgentName()`**——它是「本轮生效代理」（显式入参 → `CTX_AGENT_SELECTED` 兜底）。换回主代理会取不到挂起的 `tool_calls`，续跑空转。
 4. **`@` 提及必须带空白边界**——`@bash 内容` 有效，`@bash内容` 走普通文本。
@@ -954,6 +1304,10 @@ org.noear.solon.ai.harness
 8. **`build()` 只校验 `sessionProvider`**——缺模型要到首次 `handle` 才报 `chatModel is required`。
 9. **HITL 默认只绑了 `bash`**——`Write` / `Web` 两套策略需自行 `onTool(...)` 绑定，否则不生效且不报错。
 10. **新建子代理要注册**——`AgentDefinition` 构造完必须 `getAgentManager().addAgent(def)`，否则 `explicitAgent("xxx")` 回落主代理。
+11. **`/goal` 只注册命令不会跑**——还必须有 `ExecutionBridge` 的 `TaskHandler`、`GoalEngine`、`GoalScheduler`（job 名带工作区前缀）与 `GoalExtension`。缺 `TaskHandler` 时每轮都被守卫静默跳过（日志 `execution bridge unavailable`）。
+12. **`/queue` 入队不等于会发送**——宿主必须在任务终态调 `SessionQueueDrainer.drainOne(...)`；并且不要自己 `poll`，claim / ack / requeue 全在 drainer 内，重复实现会丢任务。
+13. **`/steer` 不挂拦截器就永不生效**——报 `STEERED` 只代表已入邮箱；必须在 `outcome.getRequest().options(o -> o.interceptorAdd(new SteerInterceptor(...)))` 的请求级挂载，否则任务结束时转 dropped。
+14. **`GoalScheduler` 的 job 名必须带工作区前缀**——`JobManager` 是 JVM 单例而会话 ID 不全局唯一，不加前缀会让多工作区的同名会话互相覆盖。
 
 ---
 
