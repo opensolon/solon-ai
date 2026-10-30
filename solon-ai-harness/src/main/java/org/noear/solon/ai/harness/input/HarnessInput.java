@@ -16,6 +16,7 @@
 package org.noear.solon.ai.harness.input;
 
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.chat.content.MediaBlock;
 import org.noear.solon.lang.Nullable;
 
@@ -74,8 +75,8 @@ public final class HarnessInput {
     private CommandContextFactory commandContextFactory;
     /** 渠道来源身份；消费于命令分发（回执路由）与 Prompt 的 source 元数据；null 归一化为 {@link InputOrigin#NONE} */
     private InputOrigin origin = InputOrigin.NONE;
-    /** HITL 决策动作：非空即进入决策分支（优先于空输入判空）；除 "approve" 外一律按 reject 处理 */
-    private String hitlAction;
+    /** HITL 决策动作：非空即进入决策分支（优先于空输入判空）；线上字符串到枚举的解析由宿主完成（{@link HITLAction#of}） */
+    private HITLAction hitlAction;
     /** HITL 决策目标任务标识；非空时按 callId 精确取挂起任务，为空时取当前第一个挂起任务 */
     private String hitlCallId;
     /** 工具返回值改写文本；非空时作为决策备注写入，由拦截器覆写工具返回（见 {@link #getHitlOutput()}） */
@@ -161,9 +162,9 @@ public final class HarnessInput {
     }
 
     /**
-     * HITL 决策动作（approve / reject），为空表示本次输入不是审批
+     * HITL 决策动作，为空表示本次输入不是审批
      */
-    public String getHitlAction() {
+    public HITLAction getHitlAction() {
         return hitlAction;
     }
 
@@ -184,8 +185,9 @@ public final class HarnessInput {
         return hitlOutput;
     }
 
+    /** 决策动作非空即本次输入是审批（枚举时代空字符串不存在，无需 isEmpty 判断） */
     public boolean isHitlDecision() {
-        return hitlAction != null && !hitlAction.isEmpty();
+        return hitlAction != null;
     }
 
     // ========== 链式设置 ==========
@@ -270,11 +272,15 @@ public final class HarnessInput {
 
     /**
      * HITL 审批决策
+     * <p>
+     * 线上协议是字符串（WS 报文 / HTTP 参数），解析由宿主在交给引擎前完成：
+     * {@code .hitl(HITLAction.of(action), callId)}，脏值在边界处显式失败。
      *
-     * @param action approve / reject
+     * @param action 决策动作（approve / reject / skip）
      * @param callId 目标任务标识（可为空）
+     * @see HITLAction#of(String)
      */
-    public HarnessInput hitl(@Nullable String action, @Nullable String callId) {
+    public HarnessInput hitl(@Nullable HITLAction action, @Nullable String callId) {
         this.hitlAction = action;
         this.hitlCallId = callId;
         return this;
@@ -283,7 +289,7 @@ public final class HarnessInput {
     /**
      * HITL 决策附带的工具返回值改写文本（可为空，为空时按原决策执行）
      *
-     * @see #hitl(String, String)
+     * @see #hitl(HITLAction, String)
      */
     public HarnessInput hitlOutput(@Nullable String hitlOutput) {
         this.hitlOutput = hitlOutput;
@@ -386,7 +392,7 @@ public final class HarnessInput {
      * <p>
      * 文本与附件均被忽略。两种用法：
      * <ul>
-     * <li>与 {@link #hitl(String, String)} 合用 —— 决策写入后同一次调用完成续流装配，
+     * <li>与 {@link #hitl(HITLAction, String)} 合用 —— 决策写入后同一次调用完成续流装配，
      * 返回 {@link InputOutcome.Kind#TASK}（单卡同步审批，CLI 即此形态）；</li>
      * <li>单独使用 —— 不写决策，直接按挂起状态续跑（如宿主已批量写完全部决策后统一恢复）。</li>
      * </ul>

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
@@ -107,7 +108,7 @@ class InputCommandAwareTest {
         AgentSession session = InMemoryAgentSession.of();
 
         //审批请求通常不带文本：HITL 分支必须先于空输入判空，否则决策被静默丢弃
-        InputOutcome outcome = engine.handle(HarnessInput.of(session, null).hitl("approve", "call-1"));
+        InputOutcome outcome = engine.handle(HarnessInput.of(session, null).hitl(HITLAction.APPROVE, "call-1"));
 
         assertEquals(InputOutcome.Kind.HITL, outcome.getKind());
     }
@@ -118,7 +119,7 @@ class InputCommandAwareTest {
         AgentSession session = InMemoryAgentSession.of();
 
         InputOutcome outcome = engine.handle(HarnessInput.of(session, null)
-                .hitl("approve", "call-2")
+                .hitl(HITLAction.APPROVE, "call-2")
                 .hitlOutput("工具结果改写"));
 
         assertEquals(InputOutcome.Kind.HITL, outcome.getKind());
@@ -131,7 +132,7 @@ class InputCommandAwareTest {
 
         //单卡同步审批：决策写入与续流装配合为一次调用，且只走 handle 一个入口
         InputOutcome outcome = engine.handle(HarnessInput.of(session, null)
-                .hitl("approve", "call-3")
+                .hitl(HITLAction.APPROVE, "call-3")
                 .resume(true)
                 .selectedAgent("coder"));
 

@@ -140,7 +140,7 @@ HarnessInput input = HarnessInput.of(session, "帮我看看这个 @coder")
 | `agentNameValidator(Predicate)` | 子代理名格式校验 |
 | `trimContent(boolean)` | 剥提及后去首尾空白（桌面端需要） |
 | `origin(InputOrigin)` | 本次输入的渠道来源身份（渠道 / 发送者 / 返回地址 / 入站关联键） |
-| `hitl(action, callId)` + `hitlOutput(text)` | 审批决策与结果改写 |
+ | `hitl(action, callId)` + `hitlOutput(text)` | 审批决策与结果改写；`action` 是 `HITLAction` 枚举（APPROVE / REJECT / SKIP），线上字符串由宿主用 `HITLAction.of(action)` 解析，脏值显式报错 |
 | `commandContextFactory(CommandContextFactory)` | 识别到命令后回执怎么落地（默认缓冲式） |
 | `commandAware(boolean)` | 是否把输入当命令识别（默认 `true`） |
 | `agentAware(boolean)` | 是否解析开头 `@xxx`（默认 `true`） |
@@ -297,6 +297,8 @@ host.send("/help");   // REPLY → 渲染回执后收尾
 补上命令回执、附件、子代理、事件渲染与 HITL 续流，就是一个能直接接产品外壳的宿主。
 
 ```java
+import org.noear.solon.ai.agent.react.intercept.HITLAction;
+
 public class FullHost {
     private final HarnessEngine engine;
     private final AgentSession session;
@@ -378,7 +380,7 @@ public class FullHost {
         }
     }
 
-    /** 提交一条审批决策（action 为 "approve" 时其余值视为拒绝）
+    /** 提交一条审批决策（线上字符串由这里解析为枚举，脏值直接报错而不是静默当拒绝）
      *
      * <p>这里是批量审批形态：只写决策、不续流，由 onHitl 在整批齐备后统一 resume。
      * 若是一问一答的单卡审批（如 CLI），直接写成
@@ -386,7 +388,7 @@ public class FullHost {
      */
     public void decide(String callUuid, String action, String note) {
         InputOutcome outcome = engine.handle(HarnessInput.of(session, null)  // 审批通常不带文本
-                .hitl(action, callUuid)
+                .hitl(HITLAction.of(action), callUuid)  // 宿主边界：协议字符串 → 枚举
                 .hitlOutput(note));          // 可选：改写工具返回值
         onHitl(outcome);
     }

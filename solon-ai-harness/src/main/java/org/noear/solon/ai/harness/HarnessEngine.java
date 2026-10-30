@@ -22,6 +22,7 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.HITL;
+import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.agent.react.intercept.HITLTask;
 import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
@@ -1361,7 +1362,9 @@ public class HarnessEngine {
      *
      * <p>HITL 决策与续流可合并为一次调用：{@code .hitl(action, callId).resume(true)} 会在写入决策后
      * 立即完成续流装配并返回 {@link InputOutcome.Kind#TASK}（单卡同步审批，如 CLI）。只写决策不续流时
-     * 不传 {@code resume}，返回 {@link InputOutcome.Kind#HITL}（批量审批，如 Web 逐卡点击后统一恢复）。</p>
+     * 不传 {@code resume}，返回 {@link InputOutcome.Kind#HITL}（批量审批，如 Web 逐卡点击后统一恢复）。
+     * 决策动作是 {@link org.noear.solon.ai.agent.react.intercept.HITLAction} 枚举，
+     * 线上字符串的解析由宿主完成（{@code HITLAction.of(action)}）。</p>
      *
      * <pre>{@code
      * InputOutcome outcome = engine.handle(HarnessInput.of(session, input)
@@ -1504,7 +1507,7 @@ public class HarnessEngine {
      *
      * @param output 工具返回值改写文本（可空），非空时作为决策备注写入，由 HITLInterceptor 覆写工具返回
      */
-    private void applyHitlDecision(@Nullable AgentSession session, String action, @Nullable String callId,
+    private void applyHitlDecision(@Nullable AgentSession session, HITLAction action, @Nullable String callId,
                                    @Nullable String output) {
         if (session == null) {
             return;
@@ -1518,19 +1521,30 @@ public class HarnessEngine {
             return;
         }
 
-        boolean approve = "approve".equals(action);
+        // 与三端既有的「批准/拒绝并改写工具返回」口径一致（桌面端 HITL 三段重载）
         if (Assert.isNotEmpty(output)) {
-            // 与三端既有的「批准/拒绝并改写工具返回」口径一致（桌面端 HITL 三段重载）
-            if (approve) {
-                HITL.approve(session, task, output);
-            } else {
-                HITL.reject(session, task, output);
+            switch (action) {
+                case APPROVE:
+                    HITL.approve(session, task, output);
+                    break;
+                case REJECT:
+                    HITL.reject(session, task, output);
+                    break;
+                case SKIP:
+                    HITL.skip(session, task, output);
+                    break;
             }
         } else {
-            if (approve) {
-                HITL.approve(session, task);
-            } else {
-                HITL.reject(session, task);
+            switch (action) {
+                case APPROVE:
+                    HITL.approve(session, task);
+                    break;
+                case REJECT:
+                    HITL.reject(session, task);
+                    break;
+                case SKIP:
+                    HITL.skip(session, task);
+                    break;
             }
         }
     }

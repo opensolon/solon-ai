@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness.input;
 
+import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.junit.jupiter.api.Test;
 
@@ -24,6 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -39,7 +42,7 @@ class HarnessInputTest {
                 .explicitAgent("reviewer")
                 .trimContent(true)
                 .origin(InputOrigin.of("dingtalk", "u1", "chat42", "msg7"))
-                .hitl("approve", "call-1")
+                .hitl(HITLAction.APPROVE, "call-1")
                 .hitlOutput("tool-result-rewrite");
 
         assertEquals("/help", input.getText());
@@ -51,17 +54,29 @@ class HarnessInputTest {
         assertEquals("u1", input.getOrigin().getSenderId());
         assertEquals("chat42", input.getOrigin().getReplyTarget());
         assertEquals("msg7", input.getOrigin().getMessageId());
-        assertEquals("approve", input.getHitlAction());
+        assertEquals(HITLAction.APPROVE, input.getHitlAction());
         assertEquals("call-1", input.getHitlCallId());
         assertEquals("tool-result-rewrite", input.getHitlOutput());
         assertTrue(input.isHitlDecision());
     }
 
     @Test
-    void hitlDecisionRequiresNonEmptyAction() {
+    void hitlDecisionRequiresNonNullAction() {
+        //枚举时代不再有空字符串：非决策就传 null（线上字符串的解析由宿主 HITLAction.of 完成）
         assertFalse(HarnessInput.of(null, "hi").isHitlDecision());
-        assertFalse(HarnessInput.of(null, "hi").hitl("", null).isHitlDecision());
-        assertTrue(HarnessInput.of(null, "hi").hitl("reject", null).isHitlDecision());
+        assertTrue(HarnessInput.of(null, "hi").hitl(HITLAction.REJECT, null).isHitlDecision());
+    }
+
+    @Test
+    void hitlActionOfParsesProtocolValues() {
+        //宿主边界的解析约定：小写三值；空值非决策；脏值显式失败（不再静默当拒绝）
+        assertNull(HITLAction.of(null));
+        assertNull(HITLAction.of(""));
+        assertEquals(HITLAction.APPROVE, HITLAction.of("approve"));
+        assertEquals(HITLAction.REJECT, HITLAction.of("reject"));
+        assertEquals(HITLAction.SKIP, HITLAction.of("skip"));
+        assertThrows(IllegalArgumentException.class, () -> HITLAction.of("Approve"));
+        assertThrows(IllegalArgumentException.class, () -> HITLAction.of("delete"));
     }
 
     @Test
@@ -110,7 +125,7 @@ class HarnessInputTest {
     }
 
     @Test
-    void blankActionAndNullCallIdAreTolerated() {
+    void nullActionAndNullCallIdAreTolerated() {
         HarnessInput input = HarnessInput.of(null, "x").hitl(null, null);
         assertFalse(input.isHitlDecision());
     }

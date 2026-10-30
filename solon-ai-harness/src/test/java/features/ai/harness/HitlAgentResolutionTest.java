@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.input.HarnessInput;
@@ -47,7 +48,7 @@ class HitlAgentResolutionTest {
         session.getContext().put(HarnessEngine.CTX_AGENT_SELECTED, "coder");
 
         InputOutcome outcome = engine.handle(HarnessInput.of(session, null)
-                .hitl("approve", null));
+                .hitl(HITLAction.APPROVE, null));
 
         assertEquals(InputOutcome.Kind.HITL, outcome.getKind());
         assertEquals("coder", outcome.getAgentName());
@@ -61,7 +62,7 @@ class HitlAgentResolutionTest {
 
         InputOutcome outcome = engine.handle(HarnessInput.of(session, null)
                 .selectedAgent("reviewer")
-                .hitl("approve", null));
+                .hitl(HITLAction.APPROVE, null));
 
         assertEquals("reviewer", outcome.getAgentName());
     }
@@ -72,7 +73,7 @@ class HitlAgentResolutionTest {
         AgentSession session = InMemoryAgentSession.of();
 
         InputOutcome outcome = engine.handle(HarnessInput.of(session, null)
-                .hitl("approve", null));
+                .hitl(HITLAction.APPROVE, null));
 
         assertNull(outcome.getAgentName());
     }
