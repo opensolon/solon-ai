@@ -4,7 +4,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
+import org.noear.solon.ai.agent.react.intercept.HITLTask;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
@@ -130,7 +132,13 @@ class InputCommandAwareTest {
         HarnessEngine engine = engine();
         AgentSession session = InMemoryAgentSession.of();
 
-        //单卡同步审批：决策写入与续流装配合为一次调用，且只走 handle 一个入口
+        //单卡同步审批：决策写入与续流装配合为一次调用，且只走 handle 一个入口。
+        //必须有真实挂起任务：无挂起的审批视为过期卡，引擎拒绝续流（见 HitlResumeSelfCheckTest）
+        HITLTask task = new HITLTask("call-3", "bash",
+                java.util.Collections.singletonMap("command", "ls"), "确认执行");
+        session.getContext().put(HITL.PENDING_TASKS, java.util.Collections.singletonList(task));
+        session.getContext().put(HITL.LAST_INTERVENED, task);
+
         InputOutcome outcome = engine.handle(HarnessInput.of(session, null)
                 .hitl(HITLAction.APPROVE, "call-3")
                 .resume(true)

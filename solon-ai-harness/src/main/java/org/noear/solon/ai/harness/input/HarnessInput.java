@@ -392,10 +392,15 @@ public final class HarnessInput {
      * <p>
      * 文本与附件均被忽略。两种用法：
      * <ul>
-     * <li>与 {@link #hitl(HITLAction, String)} 合用 —— 决策写入后同一次调用完成续流装配，
-     * 返回 {@link InputOutcome.Kind#TASK}（单卡同步审批，CLI 即此形态）；</li>
+     * <li>与 {@link #hitl(HITLAction, String)} 合用 —— 决策写入后<b>尝试</b>续流，
+     * 是否真的续流由引擎自检决定：本批挂起项已齐备时返回 {@link InputOutcome.Kind#TASK}，
+     * 否则返回 {@link InputOutcome.Kind#HITL}（剩余未决数读 {@code getPendingHitlCount()}）。
+     * 批挂起时宿主应逐张提问，直到拿到 {@code TASK}；</li>
      * <li>单独使用 —— 不写决策，直接按挂起状态续跑（如宿主已批量写完全部决策后统一恢复）。</li>
      * </ul>
+     * <p>
+     * 注意：{@code resume} 只表达宿主意愿，不保证续流一定发生。判定条件见
+     * {@link InputOutcome.Kind#HITL} 的三条说明（决策未命中、本批未齐备、未传 resume）。
      */
     public HarnessInput resume(boolean resume) {
         this.resume = resume;

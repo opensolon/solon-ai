@@ -98,7 +98,7 @@ public InputOutcome handle(HarnessInput input);                  // 唯一入口
 
 | 步骤 | 动作 | 说明 |
 |---|---|---|
-| 1 | HITL 决策 | **优先于空输入判空**：审批请求通常不带文本。带 `resume(true)` 时同一次调用完成续流装配 |
+| 1 | HITL 决策 | **优先于空输入判空**：审批请求通常不带文本。带 `resume(true)` 时同一次调用**尝试**续流，是否真的续流由引擎自检决定（见 §2.3） |
 | 2 | 续流分流 | `resume(true)` 直接装配请求，不解析文本 |
 | 3 | 空输入判空 | 无文本且无附件 → `IGNORED` |
 | 4 | 命令识别与执行 | 有附件或 `commandAware(false)` 时不当作命令 |
@@ -145,14 +145,14 @@ HarnessInput input = HarnessInput.of(session, "帮我看看这个 @coder")
 | `commandAware(boolean)` | 是否把输入当命令识别（默认 `true`） |
 | `agentAware(boolean)` | 是否解析开头 `@xxx`（默认 `true`） |
 | `terminal(boolean)` | 本次渠道是否具备终端交互能力（默认 `false`，决定 `terminalOnly()` 命令是否可见） |
-| `resume(boolean)` | 续流模式（默认 `false`）；与 `hitl(...)` 合用可一次调用完成「写决策 + 续流」 |
+| `resume(boolean)` | 续流模式（默认 `false`）；与 `hitl(...)` 合用则一次调用完成「写决策 + 尝试续流」，是否真的续流由引擎自检决定 |
 
 四个容易踩的开关：
 
 - **`commandAware(false)`**——文本来源不是用户手输时使用（定时任务提示词、已受理的排队输入、命令内部自造提示词）。这些即使以 `/` 开头也不应执行。
 - **`agentAware(false)`**——文本由程序生成时使用（如 goal 的 objective）。即使以 `@xxx` 开头也原样交给代理，不被当作提及剥离。与 `commandAware` 成对：`/` 前缀是命令，`@` 前缀是子代理。
 - **`terminal(true)`**——只有命令行宿主才开。它同时决定 `terminalOnly()` 命令是否放行、以及 `CommandContext.isTerminal()` 的返回值；不开则 `/exit` 类命令被统一拦截。与 `origin` 无关：桌面在本地运行但无终端能力。
-- **`resume(true)`**——本次不产生新用户输入，只按会话中挂起的 `tool_calls` 续跑。文本与附件都被忽略。与 `hitl(action, callId)` 合用则一次调用完成「写决策 + 续流装配」（单卡同步审批，如 CLI）；只写决策不续流（批量审批，如 Web 逐卡点击）时不要传它。
+- **`resume(true)`**——本次不产生新用户输入，只按会话中挂起的 `tool_calls` 续跑。文本与附件都被忽略。它与 `hitl(action, callId)` 合用表示「写完决策就试着续流」，但**只是一种意愿表达，不保证续流一定发生**：引擎会在写入决策后自检三项，全部成立才装配请求返回 `TASK`，否则返回 `HITL` 并携带事实（详见 §2.3）。三端的正确写法都是传 `resume(true)` 后只 `switch (kind)`——批挂起时引擎会拒绝过早续流，宿主不必自己判断「整批是否齐备」。
 
 ### 2.3 `InputOutcome`：处置态
 
@@ -167,7 +167,7 @@ switch (outcome.getKind()) {
     case REPLY:   // 只有回执：命令已执行，或命令在本渠道不可用
         render(outcome.getCommandOutput());
         break;
-    case HITL:    // 决策已写入，续流时机由宿主决定
+    case HITL:    // 决策已写入但未续流；后续动作读事实，不只看 kind
     case IGNORED: // 空输入
     default:
         break;
@@ -182,7 +182,7 @@ switch (outcome.getKind()) {
 |---|---|
 | `TASK` | 执行 `getRequest()`；`isCommand()` 为 true 时先渲染 `getCommandOutput()` |
 | `REPLY` | 渲染 `getCommandOutput()` 后收尾 |
-| `HITL` | 决策已写入，续流时机由宿主决定 |
+| `HITL` | 决策已写入但未续流；读 `isHitlApplied()` / `getPendingHitlCount()` 决定后续动作（见下） |
 | `IGNORED` | 无事可做 |
 
 | 成员 | 说明 |
@@ -193,12 +193,25 @@ switch (outcome.getKind()) {
 | `getRequest()` | 装配好的 `ReActRequest`（无任务时为 null） |
 | `getPrompt()` | 装配好的 `Prompt`（含附件前缀与图片块；续流时为 null） |
 | `getAgentName()` / `getModelName()` | 生效的子代理 / 模型（HITL 态下为 `resolveHitlAgent` 解析结果） |
+| `isHitlInput()` | 本次输入是否为审批决策（审批触发的 `TASK` 也为 true） |
+| `isHitlApplied()` | 决策是否真的写入；`false` = 过期审批卡（无匹配挂起任务），非审批输入为 null |
+| `getPendingHitlCount()` | 决策写入后仍待审批的挂起项数量；0 表示本批已齐备 |
+
+**`HITL` 态下的三种情形（必须读事实区分）**：
+
+| 情形 | 判据 | 宿主该做什么 |
+|---|---|---|
+| 本批已齐备但未传 `resume` | `isHitlApplied()==true` 且 `getPendingHitlCount()==0` | 自行决定何时续流：再发一次 `.resume(true)`（传 `getAgentName()` / `getModelName()`） |
+| 本批尚有未决卡 | `isHitlApplied()==true` 且 `getPendingHitlCount()>0` | 展示 / 等待下一张卡；**切勿续流**（会带走未决任务） |
+| 过期审批卡 | `isHitlApplied()==false` | 提示卡已失效并丢弃；**切勿续流**（空提示词会回落 `originalPrompt`，把上一轮问题重跑一遍） |
+
+三种情形都以 `resume(true)` 传入时，前两种会合并为「齐备才续流、不齐备返回 `HITL`」一次调用搞定，宿主只需 `switch`；只有第三种需要额外提示。
 
 **三条刻意不做的事**：
 
 1. **不提供「回执 + 任务合成一条流」的便捷方法**——真实宿主对两者顺序的要求各不相同：CLI 由命令即时写终端（合成会重复打印）、Web 要求「流门复位早于回执」否则回执被前端丢弃、桌面要求序号回放与 HITL 拦截器重挂、ACP 需要 `takeWhile` 取消判定。任何替宿主拼好的流都得被拆开重拼，反而遮住了必须由宿主掌握的时序。取流只有一条路径：`getRequest().stream()`。
 2. **不内置 `subscribeOn`**——调度权归宿主。Web 端必须先注册 `Disposable` 再订阅，否则忙碌判定会出现空闲窗口、同一会话开出第二条流。
-3. **不对 HITL 自动续流**——引擎不会隐式续流。单卡同步审批（CLI）用 `.hitl(action, callId).resume(true)` 一次调用拿到 `TASK`；批量审批（Web 逐卡点击、桌面重挂拦截器）分两次：先多次 `.hitl(...)` 拿到 `HITL` 只写决策，待整批齐备后再 `.resume(true)`。
+3. **不对 HITL 自动续流**——引擎不会隐式续流：没传 `resume` 就只写决策。传了 `resume(true)` 也**不保证**续流：引擎会自检「决策命中挂起任务 + 本批已齐备 + 宿主显式要求」三项，全成立才返回 `TASK`，否则返回 `HITL`。因此三端写法统一——`.hitl(action, callId).resume(true)` 一次调用，然后只 `switch (kind)`，不必自己拼两次。
 
 ---
 
@@ -257,8 +270,10 @@ public class MinimalHost {
             case REPLY:                      // 只有回执（命令已执行，或命令在本渠道不可用）
                 System.out.print(outcome.getCommandOutput());
                 break;
-            case HITL:                       // 决策已写入，续流时机由宿主决定
-                System.out.println("[等待审批] 生效代理=" + outcome.getAgentName());
+            case HITL:                       // 决策已写入但未续流（过期卡 / 本批尚有未决卡）
+                System.out.println("[未续流] 生效代理=" + outcome.getAgentName()
+                        + " , 已生效=" + outcome.isHitlApplied()
+                        + " , 剩余待审=" + outcome.getPendingHitlCount());
                 break;
             case IGNORED:                    // 空输入
                 break;
@@ -297,7 +312,9 @@ host.send("/help");   // REPLY → 渲染回执后收尾
 补上命令回执、附件、子代理、事件渲染与 HITL 续流，就是一个能直接接产品外壳的宿主。
 
 ```java
+import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
+import org.noear.solon.ai.agent.react.intercept.HITLTask;
 
 public class FullHost {
     private final HarnessEngine engine;
@@ -370,30 +387,62 @@ public class FullHost {
         }
     }
 
-    /** HITL 决策已写入会话：整批审批完成后才续流 */
+    /** HITL 决策已写入会话：按事实决定后续动作（不只看 kind） */
     private void onHitl(InputOutcome outcome) {
-        List<HITLTask> pending = HITL.getPendingTasks(session);
-        if (pending.isEmpty()) {
+        if (outcome.isHitlApplied() == Boolean.FALSE) {
+            onText("\n[审批卡已失效]");      // 过期卡：切勿续流，否则会把上一轮问题重跑一遍
+            return;
+        }
+
+        // 本批已齐备但未传 resume：此时自行续流；传了 resume 则本方法不会被调到（引擎已返回 TASK）
+        if (outcome.getPendingHitlCount() == 0) {
             resume(outcome.getAgentName(), outcome.getModelName());
-        } else {
-            pending.forEach(t -> onText("\n[待审批] " + t.getToolName() + " " + t.getArgs()));
+            return;
+        }
+
+        // 本批尚有未决卡：展示下一张（跳过已决策项），等用户继续点
+        for (HITLTask t : HITL.getPendingTasks(session)) {
+            if (HITL.getDecision(session, t) == null) {
+                onText("\n[待审批] " + t.getToolName() + " " + t.getArgs());
+                break;
+            }
         }
     }
 
     /** 提交一条审批决策（线上字符串由这里解析为枚举，脏值直接报错而不是静默当拒绝）
      *
-     * <p>这里是批量审批形态：只写决策、不续流，由 onHitl 在整批齐备后统一 resume。
-     * 若是一问一答的单卡审批（如 CLI），直接写成
-     * {@code .hitl(action, callUuid).resume(true)} 一次调用就能拿到可执行的 TASK。
+     * <p>一次调用完成「写决策 + 尝试续流」，宿主只 switch kind：
+     * <ul>
+     * <li>{@code TASK} —— 本批已齐备，引擎已装配好续流请求，直接执行；</li>
+     * <li>{@code HITL} —— 未续流（过期卡，或本批尚有未决卡），交给 onHitl 读事实处理。</li>
+     * </ul>
+     * <p>不需要自己判断「整批是否齐备」：引擎看得到挂起任务与决策状态，比宿主自己数更准。
      */
     public void decide(String callUuid, String action, String note) {
         InputOutcome outcome = engine.handle(HarnessInput.of(session, null)  // 审批通常不带文本
                 .hitl(HITLAction.of(action), callUuid)  // 宿主边界：协议字符串 → 枚举
-                .hitlOutput(note));          // 可选：改写工具返回值
-        onHitl(outcome);
+                .hitlOutput(note)             // 可选：改写工具返回值
+                .resume(true));               // 齐备则续流，不齐备自动降为 HITL
+
+        if (outcome.getKind() == InputOutcome.Kind.TASK) {
+            markBusy(true);
+            try {
+                outcome.getRequest().stream()
+                        .doOnNext(this::render)
+                        .blockLast();
+            } finally {
+                markBusy(false);
+            }
+        } else {
+            onHitl(outcome);
+        }
     }
 
-    /** 续流：不产生新用户输入，按挂起的 tool_calls 继续跑 */
+    /** 续流：不产生新用户输入，按挂起的 tool_calls 继续跑
+     *
+     * <p>只在「没传 resume 却已齐备」的写法下需要；采用 {@link #decide} 的一次调用形态后，
+     * 引擎会直接返回 TASK，此处不再被调到。
+     */
     private void resume(String agentName, String modelName) {
         engine.handle(HarnessInput.of(session, null)
                         .resume(true)
@@ -457,10 +506,10 @@ public class FullHost {
 
 ### 3.5 HITL 续流的四条不变量
 
-1. **决策与续流可以是一次 `handle`，也可以是两次**——单卡同步审批（CLI）用 `.hitl(action, callId).resume(true)`，一次调用即得 `TASK`；批量审批（Web 逐卡点击）先多次 `.hitl(...)` 得 `HITL`（不携带请求），整批齐备后再 `.resume(true)` 得 `TASK`。
+1. **决策与续流合并为一次 `handle`**——三端统一写法：`.hitl(action, callId).resume(true)`，一次调用后只 `switch (kind)`：`TASK` 即已续流，`HITL` 则读事实处理。**不要自己分两次**（先 `.hitl(...)` 再 `.resume(true)`）：那个序列需宿主自行判断整批是否齐备，而引擎已在写入决策后准确计数。两个一次调用的典型错法：不传 `resume` 导致永远不续流（任务卡死）、或在批未齐备时就调 `.resume(true)` 而不用引擎事实（会带走未决任务）。
 2. **续流要 `.resume(true)` 且不传正文**——传了也会被忽略（见 `InputHandleTest.resumeIgnoresText`）。
 3. **代理名必须沿用 `outcome.getAgentName()`**——它是「本轮生效代理」，由显式入参优先、会话级 `CTX_AGENT_SELECTED` 兜底解析。trace 按代理名分 key，换回主代理会取不到挂起的 `tool_calls`，表现为续跑空转。
-4. **整批还是逐条续流由宿主定**——用 `HITL.getPendingTasks(session)` 判断是否还有未决项，引擎不替你决定。
+4. **续流时机由引擎判定，宿主只管事实**——不要用 `HITL.getPendingTasks(session)` 自己数整批是否齐备（该集合含已决策项，`isEmpty()` 在刚写入首张决策后仍为 false，用它判定会把已经齐备的批永远卡住）；该集合只用于「展示下一张未决卡」。齐备判定统一读 `outcome.getPendingHitlCount()`。
 
 ---
 
@@ -1220,7 +1269,7 @@ if (e instanceof HITLPendingEvent) {
 List<HITLTask> pending = HITL.getPendingTasks(session);
 ```
 
-审批与续流走两段式，见 §3.5。
+审批与续流的宿主写法见 §3.5（一次 `handle` + `switch (kind)`）。
 
 ---
 
@@ -1302,7 +1351,7 @@ org.noear.solon.ai.harness
 ## 十三、常见坑
 
 1. **裸引擎没有命令**——`/help` 会返回 `TASK`。测试命令必须先 `getCommandRegistry().register(...)`；注册后**不需要**配 `commandContextFactory`，默认 `BufferedCommandContextFactory` 已经能把回执交给 `getCommandOutput()`。
-2. **HITL 续流必须显式**——`Kind.HITL` 不携带请求；续流用 `.resume(true)`，且**不要**传正文。宿主若是一问一答的单卡审批，直接用 `.hitl(action, callId).resume(true)` 合并为一次调用，不必自己拼两段。
+2. **HITL 续流必须显式，但一次调用就够**——`Kind.HITL` 不携带请求。三端统一写 `.hitl(action, callId).resume(true)`，引擎自检「决策命中 + 本批齐备 + 显式要求」三项，全成立返回 `TASK`，否则返回 `HITL`（并携带 `isHitlApplied()` / `getPendingHitlCount()` 供宿主判断）。续流时**不要**传正文。
 3. **HITL 续流要用 `outcome.getAgentName()`**——它是「本轮生效代理」（显式入参 → `CTX_AGENT_SELECTED` 兜底）。换回主代理会取不到挂起的 `tool_calls`，续跑空转。
 4. **`@` 提及必须带空白边界**——`@bash 内容` 有效，`@bash内容` 走普通文本。
 5. **有附件时不识别命令**——避免 `/path/to/file.png` 之类被误判；带附件的 `/cmd` 按普通消息处理，附件正常落盘。

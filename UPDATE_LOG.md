@@ -13,12 +13,14 @@
 
 * **HITL 决策与续流合并为一次 `handle`（`InputOutcome.Kind.HITL` 保留为批量审批形态）**：
   * 问题：单卡同步审批的宿主（CLI）必须发两次 `handle`——先 `.hitl(...)` 拿到不携带请求的 `HITL`，再 `.resume(true)` 拿 `TASK`；而 `HITL` 分支原本无条件 `return`，使 `.hitl(...)` 与 `.resume(true)` 不能合用。CLI 因此绕开了唯一入口，直接调 `HITL.approve/reject(session, task)`，连带丢掉 `hitlOutput`（工具返回改写）与引擎的 callId 精确定位能力
-  * 改为：HITL 分支写入决策后检查 `input.isResume()`，成立则同一次调用完成续流装配并返回 `InputOutcome.task(...)`（`Kind.TASK`），不成立仍返回 `Kind.HITL`。未新增引擎入口，只在既有分支内增加组合出口
-  * 批量审批语义不变：Web 逐卡点击只写决策（不传 `resume`），仍得 `Kind.HITL`，待 `allHitlDecided` 后统一 `.resume(true)`；桌面端 HITL 续流同理
+  * 改为：HITL 分支写入决策后**自检三项**，全部成立才同一次调用完成续流并返回 `Kind.TASK`，任一不满足返回 `Kind.HITL`。三个条件：① `applyHitlDecision` 返回 true（决策真的命中挂起任务，改为返回 `boolean`）；② 新增 `pendingHitlCount(session)` == 0（本批已齐备）；③ 宿主显式传 `resume`。未新增引擎入口，只在既有分支内增加组合出口
+  * 为何必须自检而非仅看 `isResume()`：①无命中时续流会因空提示词回落 `trace.getOriginalPrompt()`，把上一轮问题原样重跑（过期审批卡场景）；②批挂起时过早 resume 会把未决卡一起带走。仅有 `isResume()` 判断会把这两个问题留给宿主各写一份
+  * **批量审批语义（旧记录已过时，以本条为准）**：三端统一 `hitl(...).resume(true)` 一次调用，宿主只 `switch (kind)`；不再需要宿主自持 `allHitlDecided`。「无挂起」视为已齐备，故 `resume(true)` 单独使用（宿主批量写完全部决策后统一恢复）的既有语义不变
+  * `InputOutcome` 新增三个事实读取（不改 kind 推导，零兼容风险）：`isHitlInput()`、`isHitlApplied()`（null = 非审批输入，false = 过期审批卡）、`getPendingHitlCount()`；新增 `task(..., boolean hitlApplied)` 与 `hitl(agent, model, applied, pending)` 四参工厂（两参版合并后无调用者，已删除——留着会让 `isHitlApplied()` 返回 null 而非 false，宿主 `== FALSE` 判断被静默跳过）；`Kind.HITL` 与 `HarnessInput.resume` 的 javadoc 补全三种进入方式与「resume 只表达意愿、不保证续流」
   * CLI 侧：`performAgentTask` 的 HITL 循环改为 `handleHitlRound(session, agentName, modelName)`，内部走 `engine.handle(HarnessInput.of(session, null).hitl(action, task.getCallUuid()).resume(true).selectedModel(...).selectedAgent(...))`，返回必含请求的 `InputOutcome` 供下一轮订阅。决策按 `task.getCallUuid()` 精确指定（原实现提交 task 对象，语义相同但多依赖了一轮 `getPendingTask` 定位）；已存在的决策（外部预置 / 上轮残留）不再二次提问
   * 顺带修复 CLI 三处：①`runMessageInput` 的 `.terminal(true)` 与 `.commandContextFactory(...)` 是死配置（`commandAware(false)` 已保证 `dispatchCommand` 不会执行，而这两个字段全仓仅 `dispatchCommand` 读取）——合并时去重为单一 `handleInput(session, text, commandAware, model)`，这两个字段只在 `commandAware=true` 时装配；②`currentPrompt` 死变量（只被赋 null 与判空，内容从不使用）改名为 `isFirstRound`；③每轮 `isTaskCompleted.set(false)` 重置，避免上一轮收尾被当成本轮完成信号（原先靠 `currentPrompt = null` 间接表达）
   * 测试：`InputCommandAwareTest` 新增 `hitlDecisionWithResumeReturnsTaskInOneCall`（断言 `Kind.TASK` + 请求非空 + 代理名透传）与 `resumeAloneStillReturnsTask`；`HitlAgentResolutionTest` 3 例与 `InputCommandAwareTest` 另 4 例继续锁定「不传 resume 仍得 HITL」的批量语义
-  * 文档：README §2.1 决策步骤、§2.2 `resume` 开关说明、§2.3 第三条「不对 HITL 自动续流」、§3.4 `decide` 示例注释、§3.5 不变量第一条、§13 常见坑第 2 条全部改写为「单卡一次 / 批量两次」两种形态；`InputOutcome.Kind.HITL` 与 `HarnessInput.resume` 的 Javadoc 同步
+  * 文档（三端合并后重写，旧「单卡一次 / 批量两次」表述已全部过时）：README §2.1 决策步骤（“同一次调用**尝试**续流”）、§2.2 `resume` 开关（补“只表达意愿、不保证续流”）、§2.3 `Kind.HITL` 宿主动作与新增的「HITL 态三种情形」表（齐备未传 resume / 尚有未决卡 / 过期卡，各列判据与宿主动作）、§2.3 第三条「不对 HITL 自动续流」、§3.1 最小骨架 HITL 分支、§3.2 `decide` 改为一次调用 + `onHitl` 按事实分流、§3.5 不变量第一条与第四条（新增「不要用 `HITL.getPendingTasks().isEmpty()` 判齐备——该集合含已决策项，会把已齐备的批永远卡住」）、§13 常见坑第 2 条；`InputOutcome.Kind.HITL` 与 `HarnessInput.resume` 的 Javadoc 同步
   * 验证：harness 定向 8 类 46 例全绿；harness 全量 378 例 20F+8E（比上轮 376 例多 2 例即本次新增两例，失败数与基线一致）；`soloncode-cli` 全量 1204 例 2 失败均为既有基线（`ImageReplyLifecycleTest` 异常文案、`AgentSettingsControllerTest` 返回 400）
 
 * **终端能力上收为输入属性：`HarnessInput.terminal` + `Command.terminalOnly()`**（删除 `CommandContextFactory.isRemote()` 与 `Command.cliOnly()`）：

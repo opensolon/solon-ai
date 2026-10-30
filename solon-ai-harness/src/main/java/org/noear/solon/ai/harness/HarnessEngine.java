@@ -1361,8 +1361,13 @@ public class HarnessEngine {
      * Prompt 构建、请求装配。宿主只需关心「回执怎么渲染」与「流怎么消费」。
      *
      * <p>HITL 决策与续流可合并为一次调用：{@code .hitl(action, callId).resume(true)} 会在写入决策后
-     * 立即完成续流装配并返回 {@link InputOutcome.Kind#TASK}（单卡同步审批，如 CLI）。只写决策不续流时
-     * 不传 {@code resume}，返回 {@link InputOutcome.Kind#HITL}（批量审批，如 Web 逐卡点击后统一恢复）。
+     * 尝试续流。是否真的续流由引擎自检后决定，宿主只 switch {@link InputOutcome.Kind}：</p>
+     * <ul>
+     * <li>{@link InputOutcome.Kind#TASK} —— 已续流（决策写入，且本批已齐备）；</li>
+     * <li>{@link InputOutcome.Kind#HITL} —— 未续流。再用 {@link InputOutcome#isHitlApplied()} 与
+     * {@link InputOutcome#getPendingHitlCount()} 区分：决策未命中（过期卡）/ 本批尚有未决卡 / 宿主未传 resume。</li>
+     * </ul>
+     * <p>不传 {@code resume} 则只写决策，无论本批是否齐备都返回 {@link InputOutcome.Kind#HITL}。
      * 决策动作是 {@link org.noear.solon.ai.agent.react.intercept.HITLAction} 枚举，
      * 线上字符串的解析由宿主完成（{@code HITLAction.of(action)}）。</p>
      *
@@ -1401,16 +1406,22 @@ public class HarnessEngine {
             //审批请求通常不带 selectedAgent：回退到会话级选择，避免宿主续流时误回主代理
             //（trace 按代理名分 key，取错代理会取不到挂起的 tool_calls）。
             String agentName = resolveHitlAgent(session, input.getSelectedAgent());
-            applyHitlDecision(session, input.getHitlAction(), input.getHitlCallId(), input.getHitlOutput());
+            boolean hitlApplied = applyHitlDecision(session, input.getHitlAction(), input.getHitlCallId(), input.getHitlOutput());
+            int pendingHitl = pendingHitlCount(session);
 
-            if (input.isResume()) {
-                //单卡同步审批：决策写入后同一次调用完成续流装配，宿主无须再发一次 handle。
-                //批量审批（Web 逐卡点击）不传 resume，只写决策，由宿主在整批决策齐备后统一续流。
+            if (input.isResume() && hitlApplied && pendingHitl == 0) {
+                //决策写入后同一次调用完成续流装配，宿主无须再发一次 handle。
+                //三个前置条件缺一不可：
+                //1) hitlApplied —— 无匹配挂起任务时续流会把上一轮问题重跑一遍（空提示词回落 originalPrompt）；
+                //2) pendingHitl == 0 —— 批内仍有未决卡时续流会把它们一并带走；
+                //3) 宿主显式传 resume —— 只写决策的批量场景不自作主张。
                 return InputOutcome.task(null, agentName, resolveSessionModelName(session, input.getSelectedModel()),
-                        promptDo(session, null, input.getSelectedModel(), agentName));
+                        promptDo(session, null, input.getSelectedModel(), agentName), true);
             }
 
-            return InputOutcome.hitl(agentName, resolveSessionModelName(session, input.getSelectedModel()));
+            //未续流的两种情形都归入 HITL，由宿主按 isHitlApplied / getPendingHitlCount 决定后续动作。
+            return InputOutcome.hitl(agentName, resolveSessionModelName(session, input.getSelectedModel()),
+                    hitlApplied, pendingHitl);
         }
 
         // ========== 2. 续流（无新输入，按挂起的 tool_calls 继续执行）==========
@@ -1506,11 +1517,12 @@ public class HarnessEngine {
      * 应用 HITL 审批决策
      *
      * @param output 工具返回值改写文本（可空），非空时作为决策备注写入，由 HITLInterceptor 覆写工具返回
+     * @return 决策是否真的写入；无匹配的挂起任务（过期审批卡）时返回 false
      */
-    private void applyHitlDecision(@Nullable AgentSession session, HITLAction action, @Nullable String callId,
-                                   @Nullable String output) {
+    private boolean applyHitlDecision(@Nullable AgentSession session, HITLAction action, @Nullable String callId,
+                                     @Nullable String output) {
         if (session == null) {
-            return;
+            return false;
         }
 
         HITLTask task = Assert.isNotEmpty(callId)
@@ -1518,7 +1530,7 @@ public class HarnessEngine {
                 : HITL.getPendingTask(session);
 
         if (task == null) {
-            return;
+            return false;
         }
 
         // 与三端既有的「批准/拒绝并改写工具返回」口径一致（桌面端 HITL 三段重载）
@@ -1547,6 +1559,28 @@ public class HarnessEngine {
                     break;
             }
         }
+
+        return true;
+    }
+
+    /**
+     * 决策写入后仍待审批的挂起项数量
+     * <p>
+     * 供 resume 前置自检：批内还有未决卡时不得续流（会带走未决任务）。
+     * 无挂起时返回 0 ——「无挂起」视为「已齐备」，宿主显式 resume 的语义不受影响。
+     */
+    private int pendingHitlCount(@Nullable AgentSession session) {
+        if (session == null) {
+            return 0;
+        }
+
+        int count = 0;
+        for (HITLTask task : HITL.getPendingTasks(session)) {
+            if (HITL.getDecision(session, task) == null) {
+                count++;
+            }
+        }
+        return count;
     }
 
     /**
