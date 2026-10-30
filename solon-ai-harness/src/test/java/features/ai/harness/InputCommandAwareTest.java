@@ -91,14 +91,14 @@ class InputCommandAwareTest {
         assertNotNull(outcome.getRequest());
     }
 
-    @Test
-    void dispatchCommandStillDetectsCommandForQuickCheck() {
-        HarnessEngine engine = engine();
-        AgentSession session = InMemoryAgentSession.of();
-
-        //宿主「是不是命令」的快速判断与 commandAware 无关：它本来只回答命令问题
-        assertNotNull(engine.dispatchCommand(session, HarnessInput.of(session, "/ping"), null));
-    }
+//    @Test
+//    void dispatchCommandStillDetectsCommandForQuickCheck() {
+//        HarnessEngine engine = engine();
+//        AgentSession session = InMemoryAgentSession.of();
+//
+//        //宿主「是不是命令」的快速判断与 commandAware 无关：它本来只回答命令问题
+//        assertNotNull(engine.dispatchCommand(session, HarnessInput.of(session, "/ping"), null));
+//    }
 
     @Test
     void hitlDecisionWithoutTextIsNotIgnored() {

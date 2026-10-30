@@ -71,7 +71,6 @@ class CommandDispatcherTest {
         assertNotNull(ctx.getAgentTaskIntent(), "命令声明任务后必须可被分发器读到");
         assertEquals("go on", ctx.getAgentTaskIntent().getPrompt());
         assertEquals("m1", ctx.getAgentTaskIntent().getModel());
-        assertNull(ctx.getAgentTaskIntent().getSession(), "不带会话的意图表示「当前会话」");
     }
 
     @Test
@@ -86,30 +85,18 @@ class CommandDispatcherTest {
         assertTrue(ctx.getAgentTaskIntent().isResume());
     }
 
-    @Test
-    void bufferedContextCrossSessionIntentKeepsTarget() {
-        AgentSession current = InMemoryAgentSession.of();
-        AgentSession other = InMemoryAgentSession.of();
-        BufferedCommandContext ctx = new BufferedCommandContext(current, "/rerun x", "rerun",
-                Collections.singletonList("x"));
-
-        ctx.requestAgentTask(other, "last input", null);
-
-        assertSame(other, ctx.getAgentTaskIntent().getSession(), "跨会话命令的手术与开流必须落在同一会话");
-    }
-
-    @Test
+       @Test
     void commandResultDerivesKindFromNestedTurn() {
         // kind 由二段装配结果推导，调用方不再手工传 boolean（此处不关心请求内容，只验证推导规则）
         InputOutcome nested = InputOutcome.task(Prompt.of("hi"), "coder", "m1", null);
 
-        InputOutcome agentOutcome = InputOutcome.command(null, "custom", "回执", null, nested);
+        InputOutcome agentOutcome = InputOutcome.command("custom", "回执", null, nested);
         assertEquals(InputOutcome.Kind.TASK, agentOutcome.getKind());
         assertEquals("回执", agentOutcome.getCommandOutput());
         assertEquals("coder", agentOutcome.getAgentName(), "子代理名随二段结果透传");
         assertEquals("m1", agentOutcome.getModelName(), "模型名随二段结果透传");
 
-        InputOutcome plainOutcome = InputOutcome.command(null, "help", "回执", null, null);
+        InputOutcome plainOutcome = InputOutcome.command("help", "回执", null, null);
         assertEquals(InputOutcome.Kind.REPLY, plainOutcome.getKind());
         assertNull(plainOutcome.getRequest());
     }
@@ -118,7 +105,7 @@ class CommandDispatcherTest {
     void nonMessageNestedTurnFallsBackToPlainCommand() {
         // 二段只接受 MESSAGE：其它 kind 说明没有可消费的请求，回执仍要保留
         InputOutcome nested = InputOutcome.ignored();
-        InputOutcome outcome = InputOutcome.command(null, "continue", "没有可执行的任务", null, nested);
+        InputOutcome outcome = InputOutcome.command("continue", "没有可执行的任务", null, nested);
 
         assertEquals(InputOutcome.Kind.REPLY, outcome.getKind());
         assertEquals("没有可执行的任务", outcome.getCommandOutput());

@@ -117,7 +117,6 @@ class InputAttachmentsTest {
     void emptyResultYieldsEmptyEverything() {
         InputAttachments result = InputAttachments.of();
 
-        assertTrue(result.isEmpty());
         assertFalse(result.hasAny());
         assertFalse(result.hasMedia());
         assertTrue(result.getReferences().isEmpty());
@@ -132,7 +131,7 @@ class InputAttachmentsTest {
                 .reference(null)
                 .reference("");
 
-        assertTrue(result.isEmpty());
+        assertFalse(result.hasAny());
     }
 
     @Test

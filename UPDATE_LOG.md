@@ -1,5 +1,15 @@
 ### vNEXT
 
+* 修复 `handle` 的 HITL 决策结果子代理解析：`InputOutcome.hitl(...)` 的 `agentName` 原先只回显入参 `selectedAgent`，而宿主审批请求通常不带该字段（前端只回 callId + action），宿主据此续流会错误回落主代理——trace 按代理名分 key，取错代理取不到挂起的 tool_calls，表现为「点了审批但续跑空转」。现改为「显式入参优先，其次会话级 `CTX_AGENT_SELECTED`」（新增私有 `resolveHitlAgent`；`HitlAgentResolutionTest` 3 例锁定）
+* `InputAttachments.isEmpty()` 删除（与 `hasAny()` 同一判断的两种叫法），`HarnessEngine.handle` 的 `final InputAttachments resolved = attachments` 别名一并去除
+* `InputHandleTest` +1（`commandWithAttachmentIsTreatedAsMessage`）：锁定「带附件的斜杠文本不当命令」——附件是要交给模型的内容，不能因命令分发被静默丢弃；桌面端原实现把命令识别放在附件处理之前，带附件的 `/cmd` 会丢掉附件，现与 Web/引擎口径统一
+* **删除 `InputOutcome.stream()` 与 `InputTextEvent`**（无生产调用者的过度设计，且语义方向与真实宿主需求相反）：
+  * 该 API 承诺「回执 + 任务拼成同一条流，宿主无需分两段消费」，但三端真实需求恰好相反——CLI 由命令即时写终端（合成会重复打印）、Web 要求流门复位早于回执（否则回执被前端静默丢弃）、桌面要求 `streamHub` 序号回放与 HITL 拦截器重挂、ACP 需要 `takeWhile` 取消判定。任何替宿主拼好的流都得被拆开重拼
+  * 发布包袱核查：`InputOutcome` 与 `stream()` 同属本次重构提交，v4.1.1 中均不存在，删除不破坏外部实现
+  * 连带收窄 `InputOutcome`：移除不再需要的 `session` 字段，`command(...)` / `unavailable(...)` 各减一个入参（会话只被删掉的 `stream()` 用来构造回执事件）
+  * 取流口径统一为唯一路径：`getRequest().stream()`；回执读 `getCommandOutput()`，先后顺序由宿主掌握。`HarnessEngine#handle` javadoc 与 README（取用方式、成员表、映射规则表、常见坑、模块树）同步纠正
+  * 测试：`InputStreamTest` 删除（7 例）、新增 `InputHandleTest`（6 例，聚焦 kind 分派与回执取用），`InputPrefixTest`/`CommandAgentTaskTest` 中依赖 `stream()` 的断言改为直接断言 `getCommandOutput()` / `getKind()`
+
 * `MediaBlock` 新增 `getFilePath()`（附件本地副本路径）：
   * 声明为 `default` 方法返回 null（`@since 4.2.0`），不破坏 3.9.2 以来直接 `implements MediaBlock` 的外部实现；`AbsMedia` 以字段覆盖并提供链式 `filePath(...)`
   * 语义：工作区相对路径，仅用于历史消息的文件名标签，**不参与任何 dialect 的请求载荷**（请求只读 `data`/`url`/`mimeType`）

@@ -182,6 +182,13 @@ public final class HarnessInput {
         return this;
     }
 
+    /**
+     * 本次请求生效的子代理（宿主已解析的结果，优先于输入里的 {@code @} 提及）。
+     * <p>
+     * 与 {@link #explicitAgent} 的区别：本方法传入已是「生效名」（含 {@code @} 解析结果），
+     * 引擎会再次尝试从正文剥离同名前缀；{@code explicitAgent} 表示宿主已自行剥离正文，
+     * 引擎不再改动正文。
+     */
     public HarnessInput agent(@Nullable String selectedAgent) {
         this.selectedAgent = selectedAgent;
         return this;
@@ -281,7 +288,9 @@ public final class HarnessInput {
 
     /**
      * 请求体显式指定的子代理（优先级高于输入里的提及）。
-     * 有效性由调用方先行校验；此处只负责生效与剥离。
+     * <p>
+     * 与 {@link #agent} 的区别：本方法表示正文已由宿主自行剥离（引擎不再解析 {@code @} 提及），
+     * 仅用作生效子代理；有效性由调用方先行校验。
      */
     public HarnessInput explicitAgent(@Nullable String explicitAgent) {
         this.explicitAgent = explicitAgent;

@@ -115,13 +115,15 @@ class CommandAgentTaskTest {
     }
 
     @Test
-    void commandAgentStreamCarriesReceiptOnly() {
+    void commandAgentKeepsReceiptAndRequestApart() {
         HarnessEngine engine = engine("mddemo", "跑一下", false);
         AgentSession session = InMemoryAgentSession.of();
 
         InputOutcome outcome = engine.handle(HarnessInput.of(session, "/mddemo"));
 
-        // 回执在 stream() 里排在任务流之前（TASK 分支把两者拼成同一条流）
-        assertEquals("回执-mddemo\n", outcome.stream().blockFirst().getText());
+        // 回执与任务共存于 TASK：回执是数据，任务流来自 getRequest()，先后由宿主决定
+        assertEquals(InputOutcome.Kind.TASK, outcome.getKind());
+        assertEquals("回执-mddemo\n", outcome.getCommandOutput());
+        assertNotNull(outcome.getRequest());
     }
 }

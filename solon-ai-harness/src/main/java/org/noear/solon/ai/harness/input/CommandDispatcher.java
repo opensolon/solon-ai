@@ -64,7 +64,7 @@ public final class CommandDispatcher {
         //由 isCommand() 仍为 true 表达，宿主不必为此写额外分支。
         if (target.cliOnly() && factory.isRemote()) {
             String hint = "/" + target.name() + COMMAND_UNAVAILABLE_HINT;
-            return InputOutcome.unavailable(session, target.name(), hint, command);
+            return InputOutcome.unavailable(target.name(), hint, command);
         }
 
         CommandContext ctx = factory.create(engine, session, command);
@@ -82,7 +82,7 @@ public final class CommandDispatcher {
         }
 
         //任务标记与回执由上下文自己报告，避免分发器 instanceof 具体实现（CLI 的实时上下文不是缓冲式）
-        return InputOutcome.command(session, target.name(), ctx.getCommandOutput(), command, nested);
+        return InputOutcome.command(target.name(), ctx.getCommandOutput(), command, nested);
     }
 
     /**

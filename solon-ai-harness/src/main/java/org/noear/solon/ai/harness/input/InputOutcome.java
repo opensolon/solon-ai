@@ -15,12 +15,9 @@
  */
 package org.noear.solon.ai.harness.input;
 
-import org.noear.solon.ai.agent.AgentEvent;
-import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.Nullable;
-import reactor.core.publisher.Flux;
 
 /**
  * 一次输入的处置结果
@@ -28,13 +25,14 @@ import reactor.core.publisher.Flux;
  * {@link org.noear.solon.ai.harness.HarnessEngine#handle} 的返回值：把「命令识别 / 子代理解析 /
  * 附件装配 / Prompt 构建 / 请求装配」的结果一次性交给宿主。
  *
- * <p>宿主有两种取用方式：
- * <ul>
- *   <li>要「决策」的，读 {@link #getKind()}：一个值对应一个动作，一次 switch 即可分完；</li>
- *   <li>要「结果」的，直接 {@link #stream()}，它把已发生的事忠实映射成一条事件流。</li>
- * </ul>
- * 两者的差别只有一点：{@link #stream()} 不再暴露 kind，因此表达不出
- * 「HITL 决策已写入、续流时机由谁决定」这类需要宿主二次决策的差异。</p>
+ * <p>宿主只有一种取用方式：读 {@link #getKind()} 做一次 switch —— 一个值对应一个动作。
+ * 需要执行任务时，流来自 {@code getRequest().stream()}（宿主自己决定订阅时机），
+ * 回执来自 {@link #getCommandOutput()}（宿主自己决定渲染顺序）。</p>
+ *
+ * <p><b>刻意不提供「回执 + 任务合成一条流」的便捷方法。</b>真实宿主对回执与任务的顺序要求各不相同：
+ * CLI 由命令即时写终端、Web 要求「流门复位早于回执」、桌面要求序号回放与 HITL 拦截器重挂、
+ * ACP 需要 {@code takeWhile} 取消判定。任何替宿主拼好的流都得被拆开重拼，
+ * 反而遮住了这些必须由宿主掌握的时序。</p>
  *
  * <p>命名沿用本产品既有的 {@code *Outcome} 家族（{@code RunOutcome}、{@code TurnOutcome}、
  * {@code PollOutcome}）：都是「一次处理后归入几类结局」的同一类问题。{@code TASK} 表示
@@ -75,7 +73,7 @@ public final class InputOutcome {
         /**
          * HITL 审批决策已应用，宿主决定是否恢复流
          * <p>
-         * 注意：{@link #stream()} 对本类型返回空流（决策已写入，但续流时机由宿主决定），
+         * 本类型不携带请求（决策已写入，但续流时机由宿主决定），
          * 续流请显式调用 {@code engine.handle(HarnessInput.of(session, null).resume(true)...)}。
          */
         HITL,
@@ -86,7 +84,6 @@ public final class InputOutcome {
     }
 
     private final Kind kind;
-    private final AgentSession session;
     private final String commandName;
     private final String commandOutput;
     private final ParsedCommand command;
@@ -95,11 +92,10 @@ public final class InputOutcome {
     private final String modelName;
     private final ReActRequest request;
 
-    private InputOutcome(Kind kind, AgentSession session, String commandName, String commandOutput,
+    private InputOutcome(Kind kind, String commandName, String commandOutput,
                         ParsedCommand command, Prompt prompt, String agentName, String modelName,
                         ReActRequest request) {
         this.kind = kind;
-        this.session = session;
         this.commandName = commandName;
         this.commandOutput = commandOutput;
         this.command = command;
@@ -115,25 +111,22 @@ public final class InputOutcome {
      * 有可执行的任务（普通消息或续流）：宿主执行装配好的请求
      */
     public static InputOutcome task(Prompt prompt, String agentName, String modelName, ReActRequest request) {
-        return new InputOutcome(Kind.TASK, null, null, null, null, prompt, agentName, modelName, request);
+        return new InputOutcome(Kind.TASK, null, null, null, prompt, agentName, modelName, request);
     }
 
     public static InputOutcome ignored() {
-        return new InputOutcome(Kind.IGNORED, null, null, null, null, null, null, null, null);
+        return new InputOutcome(Kind.IGNORED, null, null, null, null, null, null, null);
     }
 
     public static InputOutcome hitl(String agentName, String modelName) {
-        return new InputOutcome(Kind.HITL, null, null, null, null, null, agentName, modelName, null);
+        return new InputOutcome(Kind.HITL, null, null, null, null, agentName, modelName, null);
     }
 
     /**
      * 命令在此渠道不可用（未执行），只有回执
-     *
-     * @param session 会话（{@link #stream()} 需要它来构造回执事件；可空，此时 stream() 为空流）
      */
-    public static InputOutcome unavailable(AgentSession session, String commandName, String output, ParsedCommand command) {
-        return new InputOutcome(Kind.REPLY, session, commandName, output, command,
-                null, null, null, null);
+    public static InputOutcome unavailable(String commandName, String output, ParsedCommand command) {
+        return new InputOutcome(Kind.REPLY, commandName, output, command, null, null, null, null);
     }
 
     /**
@@ -143,17 +136,15 @@ public final class InputOutcome {
      * kind 由它推导：有装配成果即 {@link Kind#TASK}，否则 {@link Kind#REPLY}。
      * 命令回执（{@code output}）与任务并存，由宿主自行定渲染规则。
      *
-     * @param session 会话（{@link #stream()} 需要它来构造回执事件；可空，此时回执不进流）
-     * @param nested  二段装配结果（仅 {@link Kind#TASK} 会被采纳）
+     * @param nested 二段装配结果（仅 {@link Kind#TASK} 会被采纳）
      */
-    public static InputOutcome command(AgentSession session, String commandName, String output,
+    public static InputOutcome command(String commandName, String output,
                                       ParsedCommand command, @Nullable InputOutcome nested) {
         if (nested != null && nested.kind == Kind.TASK) {
-            return new InputOutcome(Kind.TASK, session, commandName, output, command,
+            return new InputOutcome(Kind.TASK, commandName, output, command,
                     nested.prompt, nested.agentName, nested.modelName, nested.request);
         }
-        return new InputOutcome(Kind.REPLY, session, commandName, output, command,
-                null, null, null, null);
+        return new InputOutcome(Kind.REPLY, commandName, output, command, null, null, null, null);
     }
 
     // ========== 查询 ==========
@@ -232,55 +223,12 @@ public final class InputOutcome {
     }
 
     /**
-     * 装配好的请求（可直接 {@code stream()} 消费，也可继续追加 options）
+     * 装配好的请求（宿主自行 {@code options(...)} 补充后 {@code stream()} 消费）
      * <p>
      * 无任务时为 null。
      */
     public ReActRequest getRequest() {
         return request;
-    }
-
-    /**
-     * 把本次输入的处置结果忠实映射成一条事件流
-     * <p>
-     * 只搬运「已经发生的事」，不做任何决策：
-     * <ul>
-     *   <li>{@link Kind#TASK} → 回执（若有，{@link InputTextEvent}）后接请求的流
-     *       （冷流，无请求时只有回执）。命令触发的任务因此「回执 + 任务」是同一条流，
-     *       宿主无需分两段消费</li>
-     *   <li>{@link Kind#REPLY} → 回执事件（回执为空时为空流）</li>
-     *   <li>{@link Kind#HITL} / {@link Kind#IGNORED} → 空流</li>
-     * </ul>
-     *
-     * <p>两点刻意不做：</p>
-     * <ol>
-     *   <li><b>不切换调度器。</b>与 {@code getRequest().stream()} 保持同构 —— 何时订阅、在哪个线程订阅
-     *       由宿主决定（Web 端必须先注册 Disposable 再订阅，否则忙碌判定会出现空闲窗口）。</li>
-     *   <li><b>不对 HITL 自动续流。</b>三端续流时机各不相同（Web 要等整批审批完成、桌面续流要重挂
-     *       HITL 拦截器、CLI 是多轮循环），引擎替任何一端做选择都是错的。审批决策已由
-     *       {@code handle()} 写入，续流请显式调用 {@code engine.handle(...resume(true)...)}。</li>
-     * </ol>
-     */
-    public Flux<AgentEvent> stream() {
-        switch (kind) {
-            case TASK: {
-                if (hasReply() == false) {
-                    // 无回执时直接返回请求自身的流（保持与 getRequest().stream() 同构）
-                    return request == null ? Flux.empty() : request.stream();
-                }
-                Flux<AgentEvent> receipt = Flux.just(new InputTextEvent(session, commandOutput));
-                return request == null ? receipt : Flux.concat(receipt, request.stream());
-            }
-            case REPLY:
-                if (hasReply() == false) {
-                    return Flux.empty();
-                }
-                return Flux.just(new InputTextEvent(session, commandOutput));
-            case HITL:
-            case IGNORED:
-            default:
-                return Flux.empty();
-        }
     }
 
     @Override

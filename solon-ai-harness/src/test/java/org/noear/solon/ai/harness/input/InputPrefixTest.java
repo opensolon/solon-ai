@@ -16,7 +16,6 @@
 package org.noear.solon.ai.harness.input;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.ai.agent.AgentEvent;
 
 import java.util.Collections;
 
@@ -131,18 +130,18 @@ class InputPrefixTest {
 
     @Test
     void inputTurnKindsAreConsistent() {
-        InputOutcome command = InputOutcome.command(null, "help", "output", null, null);
+        InputOutcome command = InputOutcome.command("help", "output", null, null);
         assertTrue(command.isCommand());
         assertEquals(InputOutcome.Kind.REPLY, command.getKind());
         assertFalse(command.hasRequest());
         assertEquals("output", command.getCommandOutput());
 
-        InputOutcome agentTask = InputOutcome.command(null, "continue", null, null,
+        InputOutcome agentTask = InputOutcome.command("continue", null, null,
                 InputOutcome.task(null, "main", "m", null));
         assertEquals(InputOutcome.Kind.TASK, agentTask.getKind());
         assertTrue(agentTask.isCommand());
 
-        InputOutcome unavailable = InputOutcome.unavailable(null, "exit", "hint", null);
+        InputOutcome unavailable = InputOutcome.unavailable("exit", "hint", null);
         assertTrue(unavailable.isCommand());
         assertEquals(InputOutcome.Kind.REPLY, unavailable.getKind());
 
@@ -151,26 +150,20 @@ class InputPrefixTest {
     }
 
     @Test
-    void streamMapsCommandReceiptToTextEvent() {
-        //命令分支：回执进流，不需要宿主再判 kind
-        InputOutcome command = InputOutcome.command(null, "help", "output", null, null);
-        AgentEvent event = command.stream().blockFirst();
+    void receiptIsDataNotACustomEventStream() {
+        //回执只是数据：宿主读 getCommandOutput() 自行渲染（stream() 已删除，不得被重新引入）
+        InputOutcome command = InputOutcome.command("help", "output", null, null);
 
-        assertNotNull(event);
-        assertTrue(event instanceof InputTextEvent);
-        assertEquals("output", event.getText());
+        assertEquals("output", command.getCommandOutput());
+        assertNull(command.getRequest());
     }
 
     @Test
-    void streamIsEmptyForIgnoredAndHitl() {
-        //空输入与审批决策都不产生事件：前者无话可说，后者续流由宿主显式发起
-        assertNull(InputOutcome.ignored().stream().blockFirst());
-        assertNull(InputOutcome.hitl("main", "m").stream().blockFirst());
-    }
+    void silentCommandKeepsNullReceipt() {
+        //命令自己没输出时保持 null，不编造空字符串
+        InputOutcome command = InputOutcome.command("silent", null, null, null);
 
-    @Test
-    void streamIsEmptyWhenCommandOutputIsNull() {
-        //命令自己没输出时，不向流里塞空事件
-        assertNull(InputOutcome.command(null, "silent", null, null, null).stream().blockFirst());
+        assertNull(command.getCommandOutput());
+        assertFalse(command.hasReply());
     }
 }

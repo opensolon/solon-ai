@@ -1386,8 +1386,9 @@ public class HarnessEngine {
      * }
      * }</pre>
      *
-     * <p>不需要 kind 做决策的宿主可直接取流：{@code engine.handle(...).stream()}
-     * （命令回执会以 {@link org.noear.solon.ai.harness.input.InputTextEvent} 进流）。</p>
+     * <p>宿主取流只有一条路径：{@code outcome.getRequest().stream()}。回执读
+     * {@code outcome.getCommandOutput()}，两者的先后顺序与订阅时机均由宿主掌握
+     * （各端时序要求不同：CLI 即时写终端、Web 要求流门复位早于回执、桌面需要序号回放）。</p>
      *
      * @param input   输入上下文
      * @param factory 命令上下文工厂（为空时使用缓冲式默认实现，命令友好于 Web/IM）
@@ -1398,7 +1399,9 @@ public class HarnessEngine {
 
         // ========== 1. HITL 决策（优先于空输入判空：审批请求通常不带文本）==========
         if (input.isHitlDecision()) {
-            String agentName = input.getSelectedAgent();
+            //审批请求通常不带 selectedAgent：回退到会话级选择，避免宿主续流时误回主代理
+            //（trace 按代理名分 key，取错代理会取不到挂起的 tool_calls）。
+            String agentName = resolveHitlAgent(session, input.getSelectedAgent());
             applyHitlDecision(session, input.getHitlAction(), input.getHitlCallId(), input.getHitlOutput());
             return InputOutcome.hitl(agentName, resolveSessionModelName(session, input.getModelName()));
         }
@@ -1411,7 +1414,8 @@ public class HarnessEngine {
                     promptDo(session, null, input.getModelName(), agentName));
         }
 
-        if (Assert.isEmpty(input.getText()) && attachments.isEmpty()) {            return InputOutcome.ignored();
+        if (Assert.isEmpty(input.getText()) && !attachments.hasAny()) {
+            return InputOutcome.ignored();
         }
 
         // ========== 3. 命令识别与执行（有附件或声明非命令语境时不当作命令，与既有口径一致）==========
@@ -1425,7 +1429,6 @@ public class HarnessEngine {
         // ========== 4. 子代理解析 + 附件前缀 ==========
         //附件由宿主落盘并装配（各端校验规则不同：桌面端有符号链接与总量上限，Web 端只需路径穿越校验），
         //引擎不再触碰文件系统，只负责提示词装配。
-        final InputAttachments resolved = attachments;
         String text = input.getText();
 
         AgentMentions.Mention mention = AgentMentions.parse(this, text,
@@ -1437,22 +1440,22 @@ public class HarnessEngine {
                         .mentionAware(input.isMentionAware())
                         .trimContent(input.isTrimContent()));
         String agentName = mention.getAgentName();
-        text = resolved.withFilePrefix(mention.getText());
+        text = attachments.withFilePrefix(mention.getText());
 
-        if (Assert.isEmpty(text) && !resolved.hasMedia()) {
+        if (Assert.isEmpty(text) && !attachments.hasMedia()) {
             return InputOutcome.ignored();
         }
 
         if (Assert.isEmpty(text)) {
-            if (resolved.isAllImages()) {
-                text = resolved.getMediaBlocks().size() > 1 ? "请描述这些图片" : "请描述这张图片";
+            if (attachments.isAllImages()) {
+                text = attachments.getMediaBlocks().size() > 1 ? "请描述这些图片" : "请描述这张图片";
             } else {
                 text = "请分析这些媒体文件";
             }
         }
 
         // ========== 5. Prompt 构建 ==========
-        Prompt prompt = buildInputPrompt(text, resolved, input.getSource(), agentName);
+        Prompt prompt = buildInputPrompt(text, attachments, input.getSource(), agentName);
 
         // ========== 6. 请求装配 ==========
         String modelName = resolveSessionModelName(session, input.getModelName());
@@ -1534,7 +1537,7 @@ public class HarnessEngine {
      * 供 {@link #handle} 与宿主的「是不是命令」快速判断共用：后者在普通输入上不应触发
      * 附件落盘、提及解析与请求装配 —— 那些结果会被宿主丢弃，白跑一遍。
      */
-    public @Nullable InputOutcome dispatchCommand(AgentSession session, HarnessInput input,
+    private @Nullable InputOutcome dispatchCommand(AgentSession session, HarnessInput input,
                                                @Nullable CommandContextFactory factory) {
         if (input.getText() == null || input.hasAttachments()) {
             return null;
@@ -1568,6 +1571,25 @@ public class HarnessEngine {
             if (sessionModel != null) {
                 return sessionModel;
             }
+        }
+
+        return null;
+    }
+
+    /**
+     * 解析 HITL 请求的生效子代理名：审批入参优先，其次会话级选择
+     * <p>
+     * Web 端审批请求通常不携带 selectedAgent，而首轮生效代理（含 {@code @子代理} 解析结果）
+     * 已由宿主写入 {@link #CTX_AGENT_SELECTED}。HITL 续流必须沿用它：trace 按代理名分 key，
+     * 取错代理会取不到挂起的 tool_calls，表现为续跑空转。
+     */
+    private String resolveHitlAgent(@Nullable AgentSession session, @Nullable String selectedAgent) {
+        if (Assert.isNotEmpty(selectedAgent)) {
+            return selectedAgent;
+        }
+
+        if (session != null) {
+            return session.getContext().getAs(CTX_AGENT_SELECTED);
         }
 
         return null;

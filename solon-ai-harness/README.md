@@ -8,9 +8,22 @@
 
 1. 构造 `HarnessEngine`（给工作区、给模型、给工具权限）；
 2. 把用户输入交给 `engine.handle(...)`；
-3. 消费 `InputOutcome`——要决策读 `getKind()`，要结果读 `stream()`。
+3. 消费 `InputOutcome`——按 `getKind()` 一次 `switch` 分派；任务流取 `getRequest().stream()`，回执取 `getCommandOutput()`。
 
 命令识别、子代理解析、附件装配与落盘（由宿主完成）、Prompt 构建、请求装配，在一次调用内串联完成。
+
+### 怎么读这份文档
+
+| 你想做什么 | 读哪里 |
+|---|---|
+| 先跑起来看看 | 第一章（五分钟上手）→ **第三章 3.1**（30 行骨架） |
+| 接一个真产品 | **第三章**全部（两段式、事件渲染、HITL 续流、四端时序） |
+| 加命令 / 子代理 | 第四章、第五章 |
+| 调优与定制 | 第六～九章（权限、配置、扩展、安全） |
+| 查结构 / 躲坑 | 第十一章（模块图）、第十二章（常见坑） |
+
+> **全文档只推荐一条取流路径**：`outcome.getRequest().stream()`。不存在「回执 + 任务合成一条流」
+> 的便捷方法，原因见 §3.4 的四端时序对照。
 
 ---
 
@@ -44,8 +57,8 @@ HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区,
         .build();
 ```
 
-> `build()` 有两处硬校验：`sessionProvider` 与「至少一个可用模型」。裸构造会先抛
-> `sessionProvider`、再抛 `chatModel is required`。
+> `build()` 只硬校验 `sessionProvider`。没配模型不会在 `build()` 报错，而是在**首次 `handle`**
+> 时由 `ReActAgentConfig` 抛 `chatModel is required`。
 
 ### 1.3 跑第一轮对话
 
@@ -53,7 +66,7 @@ HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区,
 AgentSession session = engine.getSession("cli");
 
 InputOutcome outcome = engine.handle(HarnessInput.of(session, "看下当前项目结构"));
-outcome.stream().blockLast();   // 事件流；也可 subscribe 逐条渲染
+outcome.getRequest().stream().blockLast();   // 事件流；也可 subscribe 逐条渲染
 ```
 
 取最终答复文本：
@@ -61,9 +74,12 @@ outcome.stream().blockLast();   // 事件流；也可 subscribe 逐条渲染
 ```java
 String answer = engine.handle(HarnessInput.of(session, "总结一下这个仓库"))
         .getRequest()
-        .call()
+        .call()                       // 注意：call() 声明 throws Throwable
         .getContent();
 ```
+
+> 上面两段是**最简写法**，只为验证环境可用。真产品请直接用 §3.1 的骨架——
+> 它把 `handle` 与 `InputOutcome` 拆成两段并处理了四种 `Kind`，能直接长成宿主外壳。
 
 ---
 
@@ -72,21 +88,25 @@ String answer = engine.handle(HarnessInput.of(session, "总结一下这个仓库
 ### 2.1 唯一的输入入口
 
 ```java
-// HarnessEngine
-public InputOutcome handle(HarnessInput input);
-public InputOutcome handle(HarnessInput input, @Nullable CommandContextFactory factory);
+// HarnessEngine —— 三个重载，实际只有最后一个做事
+public InputOutcome handle(AgentSession session, String text);                       // 便捷：无命令上下文工厂
+public InputOutcome handle(HarnessInput input);                                      // 便捷：传 null 工厂
+public InputOutcome handle(HarnessInput input, @Nullable CommandContextFactory factory);  // 唯一入口
 ```
 
-一次 `input(...)` 内部按固定顺序做六件事，顺序本身是语义的一部分：
+一次 `handle(...)` 内部按固定顺序做七件事，顺序本身是语义的一部分：
 
 | 步骤 | 动作 | 说明 |
 |---|---|---|
 | 1 | HITL 决策 | **优先于空输入判空**：审批请求通常不带文本 |
 | 2 | 续流分流 | `resume(true)` 直接装配请求，不解析文本 |
-| 3 | 命令识别与执行 | 有附件时不当作命令 |
-| 4 | 子代理解析 + 附件前缀 | 解析 `@name` 前缀，文件引用拼 `[附件: x]` |
-| 5 | Prompt 构建 | 多模态内容块、来源/附件/子代理元数据 |
-| 6 | 请求装配 | 模型回退链 + 子代理 + `ReActRequest` |
+| 3 | 空输入判空 | 无文本且无附件 → `IGNORED` |
+| 4 | 命令识别与执行 | 有附件或 `commandAware(false)` 时不当作命令 |
+| 5 | 子代理解析 + 附件前缀 | 解析 `@name` 前缀，文件引用拼 `[附件: x]` |
+| 6 | Prompt 构建 | 多模态内容块、来源/附件/子代理元数据 |
+| 7 | 请求装配 | 模型回退链 + 子代理 + `ReActRequest` |
+
+**第 1–7 步全部同步完成，不自启推理。** 推理只在宿主订阅 `getRequest().stream()` 时才开始——这是两段式设计的根基（详见第三章）。
 
 ### 2.2 `HarnessInput`：一次输入的完整上下文
 
@@ -131,7 +151,7 @@ HarnessInput input = HarnessInput.of(session, "帮我看看这个 @coder")
 - **`mentionAware(false)`**——文本由程序生成时使用（如 goal 的 objective）。即使以 `@xxx` 开头也原样交给代理，不被当作提及剥离。
 - **`resume(true)`**——本次不产生新用户输入，只按会话中挂起的 `tool_calls` 续跑。文本与附件都被忽略。
 
-### 2.3 `InputOutcome`：处置态 + 可选流
+### 2.3 `InputOutcome`：处置态
 
 ```java
 switch (outcome.getKind()) {
@@ -168,28 +188,247 @@ switch (outcome.getKind()) {
 | `isCommand()` / `getCommandName()` / `getCommandOutput()` / `getCommand()` | 命令事实与回执 |
 | `hasRequest()` / `hasReply()` | 有无任务 / 有无回执（派生判定，便捷入口） |
 | `getRequest()` | 装配好的 `ReActRequest`（无任务时为 null） |
-| `getPrompt()` | 装配好的 `Prompt`（含附件前缀与图片块） |
-| `getAgentName()` / `getModelName()` | 生效的子代理 / 模型 |
-| `stream()` | 把已发生的事忠实映射成事件流 |
+| `getPrompt()` | 装配好的 `Prompt`（含附件前缀与图片块；续流时为 null） |
+| `getAgentName()` / `getModelName()` | 生效的子代理 / 模型（HITL 态下为 `resolveHitlAgent` 解析结果） |
 
-`stream()` 的映射规则：
+**三条刻意不做的事**：
 
-| Kind | `stream()` |
-|---|---|
-| `TASK` | 回执（若有）后接 `request.stream()`；两者拼成同一条流 |
-| `REPLY` | `InputTextEvent`（回执为空时为空流） |
-| `HITL` / `IGNORED` | 空流 |
-
-**两条刻意不做的事**：
-
-1. **不内置 `subscribeOn`**——调度权归宿主。Web 端必须先注册 `Disposable` 再订阅，否则忙碌判定会出现空闲窗口、同一会话开出第二条流。
-2. **不对 HITL 自动续流**——三端续流时机不同（Web 要等整批审批完成、桌面要重挂拦截器、CLI 是多轮循环）。续流永远显式：`handle(HarnessInput.of(session, null).resume(true)...)`。
+1. **不提供「回执 + 任务合成一条流」的便捷方法**——真实宿主对两者顺序的要求各不相同：CLI 由命令即时写终端（合成会重复打印）、Web 要求「流门复位早于回执」否则回执被前端丢弃、桌面要求序号回放与 HITL 拦截器重挂、ACP 需要 `takeWhile` 取消判定。任何替宿主拼好的流都得被拆开重拼，反而遮住了必须由宿主掌握的时序。取流只有一条路径：`getRequest().stream()`。
+2. **不内置 `subscribeOn`**——调度权归宿主。Web 端必须先注册 `Disposable` 再订阅，否则忙碌判定会出现空闲窗口、同一会话开出第二条流。
+3. **不对 HITL 自动续流**——三端续流时机不同（Web 要等整批审批完成、桌面要重挂拦截器、CLI 是多轮循环）。续流永远显式：`handle(HarnessInput.of(session, null).resume(true)...)`。
 
 ---
 
-## 三、完整示例：命令
+## 三、完整示例：`handle` + `InputOutcome` 两段式（端到端）
 
-### 3.1 引擎不自带命令，宿主负责注册
+前两章是零件清单，本章把它们拼成能跑的宿主。**两段式**是理解本模块的主线：
+
+| 段 | 谁做 | 做什么 | 是否启动推理 |
+|---|---|---|---|
+| 第一段 | `engine.handle(input)` | HITL 决策 → 续流分流 → 空输入判空 → 命令识别执行 → 子代理解析 + 附件装配 → Prompt 构建 → 请求装配 | **否**，全部同步完成 |
+| 第二段 | 宿主读 `InputOutcome` | 按 `getKind()` 选动作；只有 `TASK` 才订阅 `getRequest().stream()` | 是，时机与线程由宿主决定 |
+
+第一段**永不启动推理**。这正是宿主能在两段之间插入自己准备动作（注册忙碌标记、复位流门、开 SSE 响应头、挂取消钩子）的原因，也是引擎不替宿主开流的原因。
+
+### 3.1 最小骨架：30 行跑通一轮
+
+```java
+public class MinimalHost {
+    private final HarnessEngine engine;
+    private final AgentSession session;
+
+    public MinimalHost(String workspace) {
+        this.engine = HarnessEngine.of(workspace, ".solon/")
+                .sessionProvider(InMemoryAgentSession::of)              // 必填
+                .modelAdd(new ChatConfig().then(cfg -> {
+                    cfg.setName("deepseek");
+                    cfg.setApiUrl("https://api.deepseek.com");
+                    cfg.setApiKey(System.getenv("DEEPSEEK_API_KEY"));
+                    cfg.setModel("deepseek-chat");
+                }))
+                .defaultModel("deepseek")
+                .toolsAdd(ToolName.TOOL_ALL_FULL)
+                .build();
+        this.session = engine.getSession("demo");
+    }
+
+    public void send(String userInput) {
+        // ---------- 第一段：一次同步调用，装配出「宿主该做什么」 ----------
+        InputOutcome outcome = engine.handle(HarnessInput.of(session, userInput));
+
+        // ---------- 第二段：按 kind 分派 ----------
+        switch (outcome.getKind()) {
+            case TASK:                       // 有可执行任务
+                if (outcome.hasReply()) {
+                    System.out.print(outcome.getCommandOutput());   // 命令回执先渲染
+                }
+                outcome.getRequest().stream()
+                        .doOnNext(e -> { if (e.hasText()) System.out.print(e.getText()); })
+                        .blockLast();                                // 订阅时机由宿主决定
+                break;
+            case REPLY:                      // 只有回执
+                System.out.print(outcome.getCommandOutput());
+                break;
+            case HITL:                       // 决策已写入，续流时机由宿主决定
+                System.out.println("[等待审批] 生效代理=" + outcome.getAgentName());
+                break;
+            case IGNORED:                    // 空输入
+                break;
+        }
+    }
+}
+```
+
+```java
+MinimalHost host = new MinimalHost("/data/work");
+host.send("看下当前项目结构");   // TASK    → 跑任务
+host.send("/help");             // 裸引擎未注册命令 → 按普通消息处理，也是 TASK
+host.send("");                  // IGNORED
+```
+
+> `build()` 只硬校验 `sessionProvider`。「`chatModel is required`」是**首次 `getMainAgent()`** 时由 `ReActAgentConfig` 抛出——所以 `modelAdd` / `defaultModel` 缺失不会在 `build()` 报错，而是在第一次 `handle` 报错。
+
+### 3.2 完整宿主：四态都处理到位
+
+补上命令回执、附件、子代理、事件渲染与 HITL 续流，就是一个能直接接产品外壳的宿主。
+
+```java
+public class FullHost {
+    private final HarnessEngine engine;
+    private final AgentSession session;
+
+    public FullHost(String workspace) {
+        this.engine = HarnessEngine.of(workspace, ".solon/")
+                .sessionProvider(InMemoryAgentSession::of)
+                .modelAdd(new ChatConfig().then(cfg -> {
+                    cfg.setName("deepseek");
+                    cfg.setApiUrl("https://api.deepseek.com");
+                    cfg.setApiKey(System.getenv("DEEPSEEK_API_KEY"));
+                    cfg.setModel("deepseek-chat");
+                }))
+                .defaultModel("deepseek")
+                .toolsAdd(ToolName.TOOL_ALL_FULL)      // 含 hitl 才有审批事件
+                .hitlEnabled(true)
+                .build();
+        this.session = engine.getSession("demo");
+    }
+
+    /** 一次完整输入：附件由宿主先落盘，再交给引擎装配 */
+    public void send(String text, InputAttachments attachments, String selectedAgent) {
+        // ===== 第一段 =====
+        HarnessInput input = HarnessInput.of(session, text)
+                .attachments(attachments)      // 多媒体块 + 文件引用
+                .agent(selectedAgent)          // 选择器兜底；正文里的 @xxx 优先
+                .trimContent(true);
+
+        InputOutcome outcome = engine.handle(input);
+
+        // ===== 第二段 =====
+        switch (outcome.getKind()) {
+            case TASK:    onTask(outcome);   break;
+            case REPLY:   onReply(outcome);  break;
+            case HITL:    onHitl(outcome);   break;
+            case IGNORED: break;
+        }
+    }
+
+    private void onTask(InputOutcome outcome) {
+        // 命令触发的任务：回执 + 任务并存，谁先谁后由宿主定（这里选「先回执」）
+        if (outcome.hasReply()) {
+            onText(outcome.getCommandOutput());
+        }
+
+        // ★ 两段之间是唯一的插入点：忙碌标记 / 流门复位 / 响应头，都必须早于订阅
+        markBusy(true);
+        try {
+            outcome.getRequest().stream()
+                    .doOnNext(this::render)
+                    .doOnError(err -> onText("\n[错误] " + err.getMessage()))
+                    .blockLast();
+        } finally {
+            markBusy(false);
+        }
+    }
+
+    private void onReply(InputOutcome outcome) {
+        // 涵盖「命令已执行」与「命令在本渠道不可用」两种事实，宿主动作相同
+        if (outcome.hasReply()) {
+            onText(outcome.getCommandOutput());
+        }
+    }
+
+    /** HITL 决策已写入会话：整批审批完成后才续流 */
+    private void onHitl(InputOutcome outcome) {
+        List<HITLTask> pending = HITL.getPendingTasks(session);
+        if (pending.isEmpty()) {
+            resume(outcome.getAgentName(), outcome.getModelName());
+        } else {
+            pending.forEach(t -> onText("\n[待审批] " + t.getToolName() + " " + t.getArgs()));
+        }
+    }
+
+    /** 提交一条审批决策（action 为 "approve" 时其余值视为拒绝） */
+    public void decide(String callUuid, String action, String note) {
+        InputOutcome outcome = engine.handle(HarnessInput.of(session, null)  // 审批通常不带文本
+                .hitl(action, callUuid)
+                .hitlOutput(note));          // 可选：改写工具返回值
+        onHitl(outcome);
+    }
+
+    /** 续流：不产生新用户输入，按挂起的 tool_calls 继续跑 */
+    private void resume(String agentName, String modelName) {
+        engine.handle(HarnessInput.of(session, null)
+                        .resume(true)
+                        .agent(agentName)     // ★ 必须是 HITL 生效代理，不能换回主代理
+                        .model(modelName))
+                .getRequest().stream()
+                .doOnNext(this::render)
+                .blockLast();
+    }
+
+    /** 事件渲染：只演示最常用的几类，其余可按需追加 */
+    private void render(AgentEvent e) {
+        if (e instanceof ReasonDeltaEvent) {
+            ReasonDeltaEvent d = (ReasonDeltaEvent) e;
+            if (d.isThinking()) {
+                onText("\n[思考] ");
+            } else {
+                onText(d.getText());
+            }
+        } else if (e instanceof ToolCallStartEvent) {
+            onText("\n[调用工具] " + ((ToolCallStartEvent) e).getToolName());
+        } else if (e instanceof HITLPendingEvent) {
+            ((HITLPendingEvent) e).getPendingTasks()
+                    .forEach(t -> onText("\n[待审批] " + t.getToolName()));
+        } else if (e instanceof RunEndEvent) {
+            onText("\n" + ((RunEndEvent) e).getText());     // 最终答复
+        }
+    }
+
+    private void onText(String s)      { System.out.print(s); }
+    private void markBusy(boolean b)   { /* 宿主自管 */ }
+}
+```
+
+### 3.3 事件类型一览
+
+`getRequest().stream()` 推的是同一套 `AgentEvent`，按需 `instanceof` 分流即可：
+
+| 事件类 | 何时推 | 可取 |
+|---|---|---|
+| `ReasonStartEvent` / `ReasonEndEvent` | 一轮推理开始 / 结束 | — |
+| `ReasonDeltaEvent` | 推理增量（逐字） | `getText()`、`isThinking()` |
+| `ActionStartEvent` / `ActionEndEvent` | 一批工具调用开始 / 结束 | `getToolCalls()` |
+| `ToolCallStartEvent` / `ToolCallEndEvent` | 单个工具调用开始 / 结束 | `getToolName()` |
+| `PlanEvent` | 计划阶段 | 计划内容 |
+| `RunStartEvent` / `RunEndEvent` | 整轮运行开始 / 结束 | `RunEndEvent.getText()` 为最终答复，`getMetrics()`、`getLlmErrorType()` |
+| `HITLPendingEvent` | 拦截到待审批工具（需 HITL 三条件齐备） | `getPendingTasks()` → `HITLTask.getCallUuid()/getToolName()/getArgs()` |
+| `LlmErrorEvent` | 模型调用出错 | 错误分类 |
+| `ContextSizeEvent` | 触发历史压缩 | 压缩前后规模 |
+
+### 3.4 两段之间能插什么：三端时序对照
+
+这是「引擎不替宿主开流」的真正原因——同一份 `InputOutcome`，四端在两段之间要做的事完全不同：
+
+| 端 | 两段之间必须做的事 | 跳过会怎样 |
+|---|---|---|
+| CLI | 回执直接写终端；不预注册订阅 | 回执重复打印 |
+| Web | 先复位前端流门、注册 `Disposable` | 回执被前端丢弃；忙碌判定出现空闲窗口、同会话开出第二条流 |
+| 桌面 | `streamHub.begin` 拿序号（供回放）；重挂 HITL 拦截器 | 事件序号错乱；续流时无拦截器 |
+| ACP | 包一层 `takeWhile(ctx::isCancelled)` | 取消请求不生效 |
+
+### 3.5 HITL 续流的四条不变量
+
+1. **决策与续流是两次 `handle`**——审批那次 `Kind` 为 `HITL`，不携带请求；续流那次才返回 `TASK`。
+2. **续流要 `.resume(true)` 且不传正文**——传了也会被忽略（见 `InputHandleTest.resumeIgnoresText`）。
+3. **代理名必须沿用 `outcome.getAgentName()`**——它是「本轮生效代理」，由显式入参优先、会话级 `CTX_AGENT_SELECTED` 兜底解析。trace 按代理名分 key，换回主代理会取不到挂起的 `tool_calls`，表现为续跑空转。
+4. **整批还是逐条续流由宿主定**——用 `HITL.getPendingTasks(session)` 判断是否还有未决项，引擎不替你决定。
+
+---
+
+## 四、完整示例：命令
+
+### 4.1 引擎不自带命令，宿主负责注册
 
 `harness` 提供了命令框架与 `command.builtin` 下的一批实现（`help`/`clear`/`model`/`queue`/`steer`/`goal`/`rewind`/`rerun`/`continue`/`interrupt`），**但不会自动注册**——因为「哪些命令可用」是端特性。裸引擎上 `handle(session, "/help")` 返回 `TASK` 而不是 `REPLY`。
 
@@ -206,7 +445,7 @@ registry.register(new ClearCommand());
 registry.register(new ModelCommand());
 ```
 
-### 3.2 写一个命令（代码方式）
+### 4.2 写一个命令（代码方式）
 
 ```java
 public class StatusCommand implements Command {
@@ -261,10 +500,11 @@ public void execute(HarnessEngine engine, CommandContext ctx) {
 `InputOutcome.getKind()` 因此返回 `TASK`、`isCommand()` 为 true，`getRequest()` 直接可用——
 宿主按 `kind` 分路由即可，不要自己再拼 Prompt 或开流。
 
-意图的三个字段分别对应：`session`（为空表示当前会话，跨会话命令才有值）、
-`prompt`（<b>为空表示续流</b>，如 `/continue`）、`model`（为空走会话级回退）。
+意图只有两个字段：`prompt`（<b>为空表示续流</b>，如 `/continue`）、`model`（为空走会话级回退）。
+「是否续流」由 `prompt` 为空派生（`AgentTaskIntent.isResume()`），不是独立字段——
+引擎侧以 `HarnessInput.resume(true)` 接住，所以宿主不用为续流命令单写分支。
 
-### 3.3 写一个命令（Markdown 方式）
+### 4.3 写一个命令（Markdown 方式）
 
 放在 `<harnessHome>/commands/` 下即自动生效：
 
@@ -289,9 +529,13 @@ $ARGUMENTS
 
 子目录即命名空间：`commands/deploy/staging.md` → `/deploy:staging`。
 
-### 3.4 自定义命令上下文（宿主接管回执）
+### 4.4 自定义命令上下文（宿主接管回执）
 
-不传 factory 时使用 `BufferedCommandContextFactory`：回执写内存，从 `getCommandOutput()` 一次取回，命令内部触发的 Agent 任务**只做标记、不实际执行**。要真正执行，宿主需提供自己的工厂：
+不传 factory 时使用 `BufferedCommandContextFactory`：回执写内存，从 `getCommandOutput()` 一次取回。
+**命令内部声明的 Agent 任务同样会真实执行**——`CommandDispatcher` 在 `dispatch` 尾部直接调
+`engine.handle(...)` 完成二段装配，与是否有自定义工厂无关。
+
+需要接管回执输出方式（实时写终端、自定义分页）时才提供工厂：
 
 ```java
 InputOutcome outcome = engine.handle(
@@ -301,7 +545,7 @@ InputOutcome outcome = engine.handle(
 
 `CommandContextFactory.isRemote()` 返回 `true` 时，`cliOnly()` 的命令会被统一拦截——这就是桌面端 `/exit` 不会终止进程的原因。
 
-### 3.5 改前缀
+### 4.5 改前缀
 
 ```java
 HarnessEngine.of("/data/work", ".solon/")
@@ -313,9 +557,9 @@ HarnessEngine.of("/data/work", ".solon/")
 
 ---
 
-## 四、完整示例：子代理输入
+## 五、完整示例：子代理输入
 
-### 4.1 三种指定方式与优先级
+### 5.1 三种指定方式与优先级
 
 ```
 explicitAgent（请求体显式）  >  输入开头的 @提及  >  selectedAgent（选择器兜底）
@@ -336,13 +580,17 @@ InputOutcome outcome = engine.handle(...);
 System.out.println(outcome.getAgentName());   // "bash" 或 null（主代理）
 ```
 
-提及识别的细节：
+提及识别的细节（两条路径行为不同，容易踩坑）：
 
 - 必须有空白边界（`@bash 内容` 有效，`@bash内容` 无效）；
-- 剥掉前缀名后，其后所有空白一并吃掉；
-- 名字不存在时不剥离，整段交给主代理自己判断。
+- **提及路径**（方式一）剥掉 `@名字` 后**只跳过一个字符**（`text.substring(idx + 1)`），
+  所以 `@bash    x` 剩下的是 `  x`（保留多余空格）；
+- **显式路径**（方式二 `explicitAgent`）走 `stripMention`，会吃掉其后**所有**空白，
+  `@bash    x` 剩下 `x`；
+- 名字不存在时不剥离，整段交给主代理自己判断；
+- 需要两者一致时加 `.trimContent(true)`。
 
-### 4.2 用引擎装配好的请求执行
+### 5.2 用引擎装配好的请求执行
 
 ```java
 InputOutcome outcome = engine.handle(HarnessInput.of(session, "@explore 找一下限流相关的实现")
@@ -353,7 +601,7 @@ outcome.getRequest().options(o -> {
 }).stream().blockLast();
 ```
 
-### 4.3 直接用内置子代理
+### 5.3 直接用内置子代理
 
 内置定义随包发布在 `META-INF/solon/ai/harness/agents/`：
 
@@ -366,15 +614,21 @@ outcome.getRequest().options(o -> {
 | `git-summary` | 无（`hidden: true`） | 生成提交摘要 |
 
 ```java
-AgentDefinition bashDef = engine.getAgentManager().getAgent("bash");
-ReActAgent bashAgent = engine.createSubagent(bashDef).build();   // 注意：不是 bashDef.builder(engine)
+// 方式一（推荐）：走上章的两段式，由引擎装配请求（含附件/命令识别）
+InputOutcome outcome = engine.handle(
+        HarnessInput.of(session, "统计各语言的代码行数")
+                .explicitAgent("bash"));
 
-bashAgent.prompt("统计各语言的代码行数")
-        .session(session)
-        .call();
+outcome.getRequest().stream().blockLast();
 ```
 
-### 4.4 运行时创建子代理
+> 直接用 `createSubagent(def).build()` 拿到的 `ReActAgent` 也能独立调用
+> （`createSubagent` 只是把定义交给 `ReActAgent.Builder`），但那样就绕过了
+> `handle` 的命令识别与附件装配，也只适用于「不走统一入口」的特例场景。
+> 注意 该路径的 `call()` 声明的异常是 `Throwable`，需自行捕获；
+> 走 `handle` 路径时异常从流的 `doOnError` / `blockLast()` 出来。
+
+### 5.4 运行时创建子代理
 
 ```java
 // 一行式：复用 general 定义改写（面向 LLM 的 generate 工具走的就是这条）
@@ -395,10 +649,13 @@ AgentDefinition definition = AgentDefinition.builder()
         .toolsAdd(ToolName.TOOL_READ.getName(), ToolName.TOOL_GREP.getName())
         .build();
 
+// ★ 必须注册，否则下面 handle 里的 "frontend" 不存在，整段会回落到主代理
+engine.getAgentManager().addAgent(definition);
+
 engine.handle(HarnessInput.of(session, "分析 src/main.js").explicitAgent("frontend"));
 ```
 
-### 4.5 主代理委派（`task` / `multitask`）
+### 5.5 主代理委派（`task` / `multitask`）
 
 主代理通过工具自动委派，宿主无需写代码：
 
@@ -412,7 +669,7 @@ engine.setMultitaskMaxTasks(3);
 
 `task` 默认不在 `*`（公有）里，只有 `**`（完整）才包含——这是为了让子代理不能再委派子代理，天然防止无限嵌套。
 
-### 4.6 把子代理定义成文件
+### 5.6 把子代理定义成文件
 
 `<harnessHome>/agents/*.md` 或挂载到 `MountType.AGENTS` 的目录：
 
@@ -453,9 +710,9 @@ enabled: true
 
 ---
 
-## 五、工具权限
+## 六、工具权限
 
-### 5.1 三级快捷权限
+### 6.1 三级快捷权限
 
 | 权限 | 标识 | 实际展开 |
 |---|---|---|
@@ -465,7 +722,7 @@ enabled: true
 
 `ToolName` 是当前正解（`@Preview("4.0.4")`），`ToolPermission` 已 `@Deprecated` 但仍可用。
 
-### 5.2 运行时调整
+### 6.2 运行时调整
 
 ```java
 engine.allowTool("bash");            // 触发主代理重建
@@ -475,9 +732,9 @@ engine.toolPermissionReset(tools, disallowedTools);
 
 ---
 
-## 六、配置项参考
+## 七、配置项参考
 
-### 6.1 构造期
+### 7.1 构造期
 
 | 配置 | 默认值 | 说明 |
 |---|---|---|
@@ -493,6 +750,10 @@ engine.toolPermissionReset(tools, disallowedTools);
 | `compressionDefaultContextLength(Long)` | `128000` | 未知上下文长度时按此估算 |
 | `compressionModel(String)` | `null` | 压缩专用模型（复用主模型） |
 | `memoryEnabled(Boolean)` | `true` | 长期记忆 |
+| `memoryRelevanceCount(int)` | `6` | 相关性召回条数 |
+| `memoryPriorityCount(int)` | `5` | 高优先度条目数 |
+| `memorySummaryLength(int)` | `80` | 条目摘要长度 |
+| `stopLoopInterceptor(...)` | `StopLoopInterceptor(3, 8)` | 重复调用刹车（阈值, 窗口） |
 | `sandboxEnabled(Boolean)` | `true` | 文件系统沙箱 |
 | `sandboxAllowUserHome(Boolean)` | `true` | 允许访问用户主目录 |
 | `sandboxSystemRestrict(Boolean)` | `false` | 禁止访问系统路径 |
@@ -504,7 +765,7 @@ engine.toolPermissionReset(tools, disallowedTools);
 | `commandPrefix(String)` | `"/"` | 支持多字符 |
 | `agentPrefix(String)` | `"@"` | 支持多字符 |
 
-### 6.2 运行期
+### 7.2 运行期
 
 ```java
 engine.setSandboxEnabled(false);
@@ -525,7 +786,7 @@ engine.addMount(Mount.builder()
 
 ---
 
-## 七、扩展点
+## 八、扩展点
 
 ```java
 public interface HarnessExtension {
@@ -557,15 +818,27 @@ engine.addExtension(new HarnessExtension() {
 
 ---
 
-## 八、安全机制
+## 九、安全机制
 
-`hitl` 包提供三套内置干预策略，默认绑定到对应工具：
+### 9.1 三套策略
+
+`hitl` 包提供三套内置干预策略：
 
 | 策略 | 覆盖 |
 |---|---|
 | `BashToolStrategy` | 注入防御、系统命令黑名单、路径边界、环境变更分级、网络零信任、管道安全链、破坏性操作 |
 | `WriteToolStrategy` | 写入路径防御 + 规则引擎 |
 | `WebToolStrategy` | 域名黑名单 + 规则引擎 |
+
+**默认只有 `BashToolStrategy` 绑定到 `bash`**（`initHitlDefault`）。`Write` / `Web` 两套策略需自行绑定，
+且两者构造器都要传 `toolName`：
+
+```java
+engine.getHitlInterceptor()
+        .onTool("write", new WriteToolStrategy("write"))
+        .onTool("edit", new WriteToolStrategy("edit"))
+        .onTool("webfetch", new WebToolStrategy("webfetch"));
+```
 
 启动 HITL 需要**三个条件同时满足**（缺一都不会报错，只是不生效）：
 
@@ -575,9 +848,27 @@ engine.addExtension(new HarnessExtension() {
 
 详见 [`docs/hitl.md`](docs/hitl.md)。
 
+### 9.2 宿主侧拿到审批请求
+
+拦截触发时，事件流会推 `HITLPendingEvent`；也可凭会话直接查：
+
+```java
+// 事件流里拿（推荐，实时）
+if (e instanceof HITLPendingEvent) {
+    for (HITLTask t : ((HITLPendingEvent) e).getPendingTasks()) {
+        renderApproval(t.getCallUuid(), t.getToolName(), t.getArgs());
+    }
+}
+
+// 或从会话里查（重连、刷新后恢复）
+List<HITLTask> pending = HITL.getPendingTasks(session);
+```
+
+审批与续流走两段式，见 §3.5。
+
 ---
 
-## 九、运行时目录
+## 十、运行时目录
 
 ```
 {harnessHome}/          # 默认 .solon/
@@ -594,9 +885,9 @@ engine.addExtension(new HarnessExtension() {
 
 ---
 
-## 十、模块结构
+## 十一、模块结构
 
-### 10.1 自有源码（70 个类）
+### 11.1 自有源码（69 个类）
 
 ```
 org.noear.solon.ai.harness
@@ -606,11 +897,11 @@ org.noear.solon.ai.harness
 │
 ├── input/                        输入装配层
 │   ├── HarnessInput              ★ 一次输入的完整上下文
-│   ├── InputOutcome              ★ 输入处置（四态 + 事件流）
+│   ├── InputOutcome              ★ 输入处置（四态，不含流）
 │   ├── InputAttachments          附件装配结果（多媒体块 + 文件引用；落盘由宿主负责）
-│   ├── InputTextEvent            命令回执事件
 │   ├── ParsedCommand             前缀感知的命令解析
 │   ├── AgentMentions             提及解析（Options 承载三端差异）
+│   ├── BufferedCommandContext    缓冲式回执（无自定义工厂时的默认实现）
 │   └── CommandDispatcher / CommandContextFactory / BufferedCommandContextFactory
 │
 ├── agent/                        代理层
@@ -635,7 +926,7 @@ org.noear.solon.ai.harness
 └── util/                         追踪工具
 ```
 
-### 10.2 依赖包（能力来源）
+### 11.2 依赖包（能力来源）
 
 | 依赖 | 提供 |
 |---|---|
@@ -651,14 +942,18 @@ org.noear.solon.ai.harness
 
 ---
 
-## 十一、常见坑
+## 十二、常见坑
 
 1. **裸引擎没有命令**——`/help` 会返回 `TASK`。测试命令必须先 `getCommandRegistry().register(...)`。
-2. **HITL 续流必须显式**——`Kind.HITL` 的 `stream()` 是空流；续流用 `.resume(true)`，且**不要**传正文。
-3. **`@` 提及必须带空白边界**——`@bash 内容` 有效，`@bash内容` 走普通文本。
-4. **有附件时不识别命令**——避免 `/path/to/file.png` 之类被误判。
-5. **`options(Consumer)` 是累加语义**——`getRequest()` 之后再追加 `options` 是安全的叠加。
-6. **`stream()` 是冷流**——何时订阅、在哪个线程订阅由宿主决定；需要切换线程请自行 `subscribeOn`。
+2. **HITL 续流必须显式**——`Kind.HITL` 不携带请求；续流用 `.resume(true)`，且**不要**传正文。
+3. **HITL 续流要用 `outcome.getAgentName()`**——它是「本轮生效代理」（显式入参 → `CTX_AGENT_SELECTED` 兜底）。换回主代理会取不到挂起的 `tool_calls`，续跑空转。
+4. **`@` 提及必须带空白边界**——`@bash 内容` 有效，`@bash内容` 走普通文本。
+5. **有附件时不识别命令**——避免 `/path/to/file.png` 之类被误判；带附件的 `/cmd` 按普通消息处理，附件正常落盘。
+6. **`options(Consumer)` 是累加语义**——`getRequest()` 之后再追加 `options` 是安全的叠加。
+7. **`getRequest().stream()` 是冷流**——何时订阅、在哪个线程订阅由宿主决定；需要切换线程请自行 `subscribeOn`。
+8. **`build()` 只校验 `sessionProvider`**——缺模型要到首次 `handle` 才报 `chatModel is required`。
+9. **HITL 默认只绑了 `bash`**——`Write` / `Web` 两套策略需自行 `onTool(...)` 绑定，否则不生效且不报错。
+10. **新建子代理要注册**——`AgentDefinition` 构造完必须 `getAgentManager().addAgent(def)`，否则 `explicitAgent("xxx")` 回落主代理。
 
 ---
 

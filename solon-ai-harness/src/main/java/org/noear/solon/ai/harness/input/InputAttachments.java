@@ -122,17 +122,10 @@ public final class InputAttachments {
     }
 
     /**
-     * 是否既无多媒体块也无文件引用
-     */
-    public boolean isEmpty() {
-        return mediaBlocks.isEmpty() && references.isEmpty();
-    }
-
-    /**
-     * 是否含任一附件（多媒体块或文件引用）
+     * 是否既无多媒体块也无文件引用（有任一附件即 false）
      */
     public boolean hasAny() {
-        return !isEmpty();
+        return !mediaBlocks.isEmpty() || !references.isEmpty();
     }
 
     /**

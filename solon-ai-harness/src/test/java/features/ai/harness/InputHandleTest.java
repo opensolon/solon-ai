@@ -17,7 +17,6 @@ package features.ai.harness;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
@@ -25,24 +24,23 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.HarnessInput;
-import org.noear.solon.ai.harness.input.InputTextEvent;
+import org.noear.solon.ai.harness.input.InputAttachments;
 import org.noear.solon.ai.harness.input.InputOutcome;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * InputOutcome#stream()：已发生的事被忠实映射成一条流
+ * handle(...) 的处置态：一次 switch 分完，回执与任务各自取用
  * <p>
- * 这里同时锁定两条「刻意不做」的边界：不切换调度器、不对 HITL 自动续流。
+ * 「回执 + 任务合成一条流」的便捷方法已删除：真实宿主对两者顺序的要求各不相同
+ * （CLI 即时写终端、Web 要求流门复位早于回执、桌面要求序号回放），流只来自
+ * {@code getRequest().stream()}。
  */
-class InputStreamTest {
+class InputHandleTest {
     @TempDir
     Path workspace;
 
@@ -85,36 +83,25 @@ class InputStreamTest {
     }
 
     private InputOutcome handle(HarnessEngine engine, String text) {
+        return handle(engine, text, InputAttachments.of());
+    }
+
+    private InputOutcome handle(HarnessEngine engine, String text, InputAttachments attachments) {
         AgentSession session = InMemoryAgentSession.of();
-        return engine.handle(HarnessInput.of(session, text));
-    }
-
-    private List<String> collect(HarnessEngine engine, String text) {
-        List<String> texts = new ArrayList<>();
-        for (AgentEvent event : handle(engine, text).stream().toIterable()) {
-            texts.add(event.getText());
-        }
-        return texts;
+        return engine.handle(HarnessInput.of(session, text).attachments(attachments));
     }
 
     @Test
-    void commandReceiptArrivesAsEvent() {
-        //命令回执不再需要宿主判断 kind，直接进流
-        List<String> texts = collect(engine(), "/ping");
-
-        assertEquals(1, texts.size());
-        assertEquals("pong\n", texts.get(0));
-    }
-
-    @Test
-    void commandReceiptKeepsCommandName() {
-        //回执事件仍带命令名，宿主想做端口特有渲染时不必回头查 outcome
+    void commandIsReplyWithReceipt() {
+        //纯回执命令：REPLY + 回执文本，无请求可执行
         InputOutcome outcome = handle(engine(), "/ping");
-        AgentEvent event = outcome.stream().blockFirst();
 
-        assertTrue(event instanceof InputTextEvent);
+        assertEquals(InputOutcome.Kind.REPLY, outcome.getKind());
+        assertTrue(outcome.isCommand());
         assertEquals("ping", outcome.getCommandName());
-        assertEquals(outcome.getCommandOutput(), event.getText());
+        assertEquals("pong\n", outcome.getCommandOutput());
+        assertTrue(outcome.hasReply());
+        assertNull(outcome.getRequest());
     }
 
     @Test
@@ -122,13 +109,14 @@ class InputStreamTest {
         //未注册的命令形态文本按普通消息处理：拿得到请求（不执行命令）
         InputOutcome outcome = handle(engine(), "/nope");
         assertEquals(InputOutcome.Kind.TASK, outcome.getKind());
-        assertFalse(outcome.isCommand());
+        assertTrue(outcome.hasRequest());
+        assertNull(outcome.getCommandName());
     }
 
     @Test
-    void emptyInputYieldsEmptyStream() {
-        assertTrue(collect(engine(), "").isEmpty());
-        assertTrue(collect(engine(), null).isEmpty());
+    void emptyInputIsIgnored() {
+        assertEquals(InputOutcome.Kind.IGNORED, handle(engine(), "").getKind());
+        assertEquals(InputOutcome.Kind.IGNORED, handle(engine(), null).getKind());
     }
 
     @Test
@@ -154,6 +142,21 @@ class InputStreamTest {
     }
 
     @Test
+    void commandWithAttachmentIsTreatedAsMessage() {
+        // 带附件的斜杠文本不当命令：附件是要交给模型的内容，不能因命令分发被静默丢弃
+        // （桌面端原实现把命令识别放在附件处理之前，带附件的 /ping 会丢掉附件；现三港口径统一）
+        InputOutcome outcome = handle(engine(), "/ping",
+                InputAttachments.of().reference(".uploads/a.txt"));
+
+        assertEquals(InputOutcome.Kind.TASK, outcome.getKind());
+        assertNull(outcome.getCommandName());
+        assertNull(outcome.getCommandOutput());
+        assertTrue(outcome.hasRequest());
+        // 文件引用以 [附件: path] 前缀进入提示词
+        assertTrue(outcome.getPrompt().getUserContent().contains("[附件: .uploads/a.txt]"));
+    }
+
+    @Test
     void mentionAwareFalseKeepsTextAsIs() {
         //程序生成的文本（如 goal objective）就是普通提示词：@xxx 不被剥离
         AgentSession session = InMemoryAgentSession.of();
@@ -163,14 +166,4 @@ class InputStreamTest {
         assertNull(outcome.getAgentName());
     }
 
-    @Test
-    void messageStreamIsColdAndNotScheduledHere() {
-        //消息分支返回的必须是请求自身的流：引擎不抢调度权（何时用哪个线程订阅由宿主决定）
-        InputOutcome outcome = handle(engine(), "你好");
-        assertEquals(InputOutcome.Kind.TASK, outcome.getKind());
-        assertFalse(outcome.isCommand());
-
-        //冷流：拿两次都是新的、未订阅的流，且不因 getRequest() 而开销
-        assertEquals(outcome.getRequest().stream().toString(), outcome.stream().toString());
-    }
 }
