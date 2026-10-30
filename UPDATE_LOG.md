@@ -1,5 +1,16 @@
 ### vNEXT
 
+* **HITL 决策动作枚举化：`HarnessInput.hitl(String, String)` → `hitl(HITLAction, String)`**（新增 `react/intercept/HITLAction`）:
+  * 问题：字符串动作约束性太弱——引擎侧 `"approve".equals(action)` 把一切非精确匹配值（含 `"Approve"`、拼写错误）静默判为拒绝执行；且 SKIP 在领域里存在（`HITL.skip` / `HITLDecision.ACTION_SKIP`）却从 `handle` 入口永远表达不出，只能二值
+  * 枚举：`APPROVE / REJECT / SKIP` 三值，含边界工厂 `of(String)`——空值返回 null（非决策），小写三值精确匹配，脏值抛 `IllegalArgumentException`；**不做大小写容错**（容错等于把「静默当拒绝」这类 bug 放回来）。放在 `react/intercept` 与 `HITL`/`HITLDecision`/`HITLTask` 同包，依赖方向正确（harness → agent）
+  * 引擎：`applyHitlDecision` 改三值 switch，SKIP 分支接 `HITL.skip(session, task[, comment])`（目标方法本就存在）；`isHitlDecision()` 简化为 `hitlAction != null`（枚举时代无空字符串）
+  * **转换点按约定放宿主侧**（协议层签名 `WorkspaceRuntimePort`/`WebGate` 保持 String 不动）：Web 在 `WebChatInputHandler`（`.hitl(HITLAction.of(hitlAction), hitlCallId)`，脏值落入既有 try-catch），桌面在 `DesktopInputRouter`（同模式，异常由既有 catch 回 socket 错误），CLI 无线上字符串直接写枚举
+  * 顺带修复 CLI 外部预置决策 bug：`existing.isRejected() ? "reject" : "approve"` 漏了 `isSkipped()`，外部预置的 skip 会被升格为 approve 重新提交覆盖原决策；改三态透传
+  * 不用 `HITLDecision` 直接作参数的理由：它是管线内可变实体（携 modifiedArgs/alwaysAllow 等 applyHitlDecision 不消费的字段，类型承诺会静默无效）、无 callId 位置、其 action 本身是 int 常量而非枚举
+  * 测试：`HarnessInputTest` 新增 `hitlActionOfParsesProtocolValues`（空值/三值/脏值抛异常）；既有 10 处调用点迁移，`hitl("", null)` 用例随空字符串语义消失而删除
+  * 行为变化（仅脏值）：非法 action 从「引擎内静默按拒绝执行」变为「宿主解析点显式报错」；合法路径零变化
+  * 验证：harness 定向 3 类 19 例全绿；全量 379 例 20F+8E 与基线一致（20F/8E 为 WriteToolStrategyTest 等既有基线）；`soloncode-cli` compile 通过、全量 1204 例 2 失败与基线完全相同
+
 * **HITL 决策与续流合并为一次 `handle`（`InputOutcome.Kind.HITL` 保留为批量审批形态）**：
   * 问题：单卡同步审批的宿主（CLI）必须发两次 `handle`——先 `.hitl(...)` 拿到不携带请求的 `HITL`，再 `.resume(true)` 拿 `TASK`；而 `HITL` 分支原本无条件 `return`，使 `.hitl(...)` 与 `.resume(true)` 不能合用。CLI 因此绕开了唯一入口，直接调 `HITL.approve/reject(session, task)`，连带丢掉 `hitlOutput`（工具返回改写）与引擎的 callId 精确定位能力
   * 改为：HITL 分支写入决策后检查 `input.isResume()`，成立则同一次调用完成续流装配并返回 `InputOutcome.task(...)`（`Kind.TASK`），不成立仍返回 `Kind.HITL`。未新增引擎入口，只在既有分支内增加组合出口

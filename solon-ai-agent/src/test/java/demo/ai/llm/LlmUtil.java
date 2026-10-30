@@ -9,23 +9,16 @@ import org.noear.solon.ai.chat.dialect.ChatDialects;
  *
  */
 public class LlmUtil {
-    public static ChatModel getChatModelReasoner() {
-        return  ChatModel.of("https://apihub.agnes-ai.com/v1")
-                .apiKey("sk-bu0RaoVbyiprgX3Pont70xyaoqZDsrvvEW36WmbTZev2wmBz")
-                .standard(ChatDialects.OPENAI_COMPLETIONS)
-                .model("agnes-2.5-flash")
-                .build(); //不支持其它
-    }
     public static ChatModel getChatModel() {
 //        return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
 //                .apiKey("sk-251740c893994c57a6536ecdbc33c189")
 //                .model("deepseek-chat") //deepseek-reasoner//deepseek-chat
 //                .build();
 
-        return  ChatModel.of("https://apihub.agnes-ai.com/v1")
+        return ChatModel.of("https://apihub.agnes-ai.com/v1")
                 .apiKey("sk-bu0RaoVbyiprgX3Pont70xyaoqZDsrvvEW36WmbTZev2wmBz")
                 .standard(ChatDialects.OPENAI_COMPLETIONS)
-                .model("agnes-2.5-flash")
+                .model("agnes-3.0-flash")
                 .build(); //不支持其它
 
 //        return ChatModel.of("https://ai.gitee.com/v1/chat/completions")
