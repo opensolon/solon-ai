@@ -6,6 +6,7 @@ import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.core.util.Assert;
 
 import org.slf4j.Logger;
@@ -201,7 +202,7 @@ public class SteerInterceptor<C> implements ReActInterceptor {
     }
 
     /**
-     * 插话入队的统一实现，供 Web（/web/chat/steer）与 IM（SteerCommand / 零前缀默认）复用。
+     * 插话入队的唯一实现，供 Web（/web/chat/steer）与 IM（SteerCommand / 零前缀默认）复用。
      *
      * <p>封装「activeRunId 绑定校验 + computeIfAbsent 邮箱 + offer + offer 后复查回滚」的完整临界逻辑，
      * 杜绝各调用方二次实现导致的竞态偏差。</p>
@@ -211,19 +212,13 @@ public class SteerInterceptor<C> implements ReActInterceptor {
      *                    为 null 时表示「绑定当前活跃任务」（IM 场景，直接信任后端权威 activeRunId）。
      * @param steerId     插话 ID，可为空（由后端生成）
      * @param text        插话文本
-     * @param source      来源通道标识（IM 传 Feishu/DingTalk/WeChat；Web 传 null）
+     * @param origin      来源身份（可空，空同 {@link InputOrigin#NONE}）
      * @param busyRecheck offer 后复查会话是否仍繁忙的回调，可为 null（为 null 时仅依据 activeRunId 判定，
      *                    适用于拿不到繁忙判定器的 IM 命令场景）
      * @return 入队结果（status 与 /web/chat/steer 的应答码同名）
      */
     public static SteerResult steer(AgentSession session, String runId, String steerId, String text,
-                                    String source, BooleanSupplier busyRecheck) {
-        return steer(session, runId, steerId, text, source, null, null, null, busyRecheck);
-    }
-
-    public static SteerResult steer(AgentSession session, String runId, String steerId, String text,
-                                    String source, String sourceUserId, String replyTarget, String messageId,
-                                    BooleanSupplier busyRecheck) {
+                                    InputOrigin origin, BooleanSupplier busyRecheck) {
         if (session == null) {
             return new SteerResult(SteerStatus.NOT_RUNNING, null, 0);
         }
@@ -246,7 +241,7 @@ public class SteerInterceptor<C> implements ReActInterceptor {
         }
 
         Queue<SteerMessage> box;
-        SteerMessage steer = new SteerMessage(steerId, text, source, sourceUserId, replyTarget, messageId);
+        SteerMessage steer = new SteerMessage(steerId, text, origin);
         OfferResult offerResult;
         String boundRunId;
         synchronized (session.attrs()) {

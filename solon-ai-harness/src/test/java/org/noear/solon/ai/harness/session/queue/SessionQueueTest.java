@@ -1,6 +1,7 @@
 package org.noear.solon.ai.harness.session.queue;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.harness.input.InputOrigin;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.FileAgentSession;
@@ -29,8 +30,8 @@ class SessionQueueTest {
     @Test
     void allWindowsUseOneFifoQueue() {
         AgentSession session = InMemoryAgentSession.of();
-        assertEquals(1, SessionQueue.enqueue(session, "first", "WEB"));
-        assertEquals(2, SessionQueue.enqueue(session, "second", "IM"));
+        assertEquals(1, SessionQueue.enqueue(session, "first", InputOrigin.channel("WEB")));
+        assertEquals(2, SessionQueue.enqueue(session, "second", InputOrigin.channel("IM")));
         assertEquals(2, SessionQueue.pendingSize(session));
 
         SessionQueueItem first = SessionQueue.poll(session);
@@ -83,8 +84,8 @@ class SessionQueueTest {
     void fileSessionRestartRecoversQueueFromSnapshot() throws Exception {
         Path dir = tempDir.resolve("session");
         AgentSession session = new FileAgentSession("s-1", dir.toString());
-        assertEquals(1, SessionQueue.enqueue(session, "first", "WEB"));
-        assertEquals(2, SessionQueue.enqueue(session, "second", "WEB"));
+        assertEquals(1, SessionQueue.enqueue(session, "first", InputOrigin.channel("WEB")));
+        assertEquals(2, SessionQueue.enqueue(session, "second", InputOrigin.channel("WEB")));
 
         // 模拟进程重启：同目录重建会话，快照投影应自动 hydrate。
         AgentSession restarted = new FileAgentSession("s-1", dir.toString());

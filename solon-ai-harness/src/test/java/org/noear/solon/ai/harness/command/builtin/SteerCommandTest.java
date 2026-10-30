@@ -1,5 +1,7 @@
 package org.noear.solon.ai.harness.command.builtin;
 
+import org.noear.solon.ai.harness.input.InputOrigin;
+
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.session.steer.SteerInterceptor;
@@ -19,7 +21,7 @@ class SteerCommandTest {
     @Test
     void emptyArgsPrintsUsage() {
         Fakes.StubContext ctx = Fakes.StubContext.im("");
-        command.execute(null, ctx);
+        command.execute(null, ctx, Fakes.StubContext.imOrigin());
         assertTrue(ctx.output().contains("用法：/steer"));
     }
 
@@ -27,7 +29,7 @@ class SteerCommandTest {
     void steeredPrintsPendingCount() {
         Fakes.StubContext ctx = Fakes.StubContext.im("补充要求");
         withActiveRun(ctx.getSession(), "run-1");
-        command.execute(null, ctx);
+        command.execute(null, ctx, Fakes.StubContext.imOrigin());
         assertTrue(ctx.output().contains("已插话，将在下一步注入当前任务（待生效 1 条）"));
     }
 
@@ -36,8 +38,8 @@ class SteerCommandTest {
         Fakes.StubContext ctx = Fakes.StubContext.im("补充要求");
         AgentSession session = ctx.getSession();
         withActiveRun(session, "run-1");
-        SteerInterceptor.steer(session, null, null, "第一条", "command", null, null, null, null);
-        command.execute(null, ctx);
+        SteerInterceptor.steer(session, null, null, "第一条", InputOrigin.channel("command"), null);
+        command.execute(null, ctx, Fakes.StubContext.imOrigin());
         assertTrue(ctx.output().contains("待生效 2 条"));
     }
 
@@ -47,10 +49,10 @@ class SteerCommandTest {
         AgentSession session = ctx.getSession();
         withActiveRun(session, "run-1");
         for (int i = 0; i < SteerInterceptor.MAX_BOX_SIZE; i++) {
-            SteerResult r = SteerInterceptor.steer(session, null, null, "seed-" + i, "command", null, null, null, null);
+            SteerResult r = SteerInterceptor.steer(session, null, null, "seed-" + i, InputOrigin.channel("command"), null);
             assertEquals(SteerStatus.STEERED, r.getStatus());
         }
-        command.execute(null, ctx);
+        command.execute(null, ctx, Fakes.StubContext.imOrigin());
         assertTrue(ctx.output().contains("插话邮箱已满（上限 " + SteerInterceptor.MAX_BOX_SIZE + " 条），可用 /queue 排队"));
         assertEquals(0, queuePending(session));
     }
@@ -58,7 +60,7 @@ class SteerCommandTest {
     @Test
     void notRunningAdvisesQueueWithoutDegrading() {
         Fakes.StubContext ctx = Fakes.StubContext.im("补充要求");
-        command.execute(null, ctx); // 无 activeRunId
+        command.execute(null, ctx, Fakes.StubContext.imOrigin()); // 无 activeRunId
         assertTrue(ctx.output().contains("当前无正在执行的任务可插话，可直接发送或用 /queue 排队"));
         assertTrue(ctx.tasks.isEmpty());
         assertEquals(0, queuePending(ctx.getSession()));
@@ -69,7 +71,7 @@ class SteerCommandTest {
         StringBuilder longText = new StringBuilder();
         for (int i = 0; i < SteerInterceptor.MAX_TEXT_LENGTH + 1; i++) longText.append('x');
         Fakes.StubContext ctx = Fakes.StubContext.im(longText.toString());
-        command.execute(null, ctx);
+        command.execute(null, ctx, Fakes.StubContext.imOrigin());
         assertTrue(ctx.output().contains("上限 " + SteerInterceptor.MAX_TEXT_LENGTH + " 字符"));
     }
 
@@ -78,10 +80,10 @@ class SteerCommandTest {
         Fakes.StubContext ctx = Fakes.StubContext.local("补充要求");
         AgentSession session = ctx.getSession();
         withActiveRun(session, "run-1");
-        command.execute(null, ctx);
+        command.execute(null, ctx, Fakes.StubContext.localOrigin());
         SteerMessage msg = SteerInterceptor.steerBox(session).poll();
         assertNotNull(msg);
-        assertEquals("command", msg.getSource());
+        assertEquals("command", msg.getOrigin().getChannel());
         assertEquals("补充要求", msg.getText());
     }
 
@@ -90,13 +92,13 @@ class SteerCommandTest {
         Fakes.StubContext ctx = Fakes.StubContext.im("补充要求");
         AgentSession session = ctx.getSession();
         withActiveRun(session, "run-1");
-        command.execute(null, ctx);
+        command.execute(null, ctx, Fakes.StubContext.imOrigin());
         SteerMessage msg = SteerInterceptor.steerBox(session).poll();
         assertNotNull(msg);
-        assertEquals("Feishu", msg.getSource());
-        assertEquals("user-1", msg.getSourceUserId());
-        assertEquals("chat-1", msg.getReplyTarget());
-        assertEquals("message-1", msg.getMessageId());
+        assertEquals("Feishu", msg.getOrigin().getChannel());
+        assertEquals("user-1", msg.getOrigin().getSenderId());
+        assertEquals("chat-1", msg.getOrigin().getReplyTarget());
+        assertEquals("message-1", msg.getOrigin().getMessageId());
     }
 
     private static void withActiveRun(AgentSession session, String runId) {

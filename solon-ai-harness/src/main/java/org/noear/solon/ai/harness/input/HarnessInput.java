@@ -62,10 +62,7 @@ public final class HarnessInput {
     private InputAttachments attachments;
     private String modelName;
     private String selectedAgent;
-    private String source;
-    private String sourceUserId;
-    private String replyTarget;
-    private String messageId;
+    private InputOrigin origin = InputOrigin.NONE;
     private String hitlAction;
     private String hitlCallId;
     private String hitlOutput;
@@ -131,20 +128,11 @@ public final class HarnessInput {
         return selectedAgent;
     }
 
-    public String getSource() {
-        return source;
-    }
-
-    public String getSourceUserId() {
-        return sourceUserId;
-    }
-
-    public String getReplyTarget() {
-        return replyTarget;
-    }
-
-    public String getMessageId() {
-        return messageId;
+    /**
+     * 本次输入的渠道来源身份（永不返回 null，无来源时为 {@link InputOrigin#NONE}）
+     */
+    public InputOrigin getOrigin() {
+        return origin;
     }
 
     /**
@@ -229,14 +217,10 @@ public final class HarnessInput {
     }
 
     /**
-     * 回复路由（IM 等远程渠道使用）
+     * 渠道来源身份（IM 等远程渠道使用）
      */
-    public HarnessInput route(@Nullable String source, @Nullable String sourceUserId,
-                              @Nullable String replyTarget, @Nullable String messageId) {
-        this.source = source;
-        this.sourceUserId = sourceUserId;
-        this.replyTarget = replyTarget;
-        this.messageId = messageId;
+    public HarnessInput origin(@Nullable InputOrigin origin) {
+        this.origin = origin == null ? InputOrigin.NONE : origin;
         return this;
     }
 

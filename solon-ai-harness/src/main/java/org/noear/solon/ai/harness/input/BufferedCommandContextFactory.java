@@ -25,49 +25,36 @@ import org.noear.solon.ai.harness.command.CommandContext;
  * 用于宿主未提供工厂的场景：回执写入内存缓冲，由 {@link InputOutcome#getCommandOutput()} 一次取回。
  * 命令内部声明的 Agent 意图由分发器交给引擎装配，因此未提供工厂的宿主（IM 等）同样能触发任务。
  *
+ * <p>本工厂不持有任何渠道元数据：来源身份由分发器经
+ * {@link org.noear.solon.ai.harness.command.Command#execute(HarnessEngine, CommandContext, InputOrigin)}
+ * 直接交给命令，避免「同一条信息既从 input 嗅探、又从工厂注入」的双通路。</p>
+ *
  * @author noear
  * @since 4.2
  */
 public class BufferedCommandContextFactory implements CommandContextFactory {
-    private final HarnessInput input;
     private final boolean remote;
 
-    public BufferedCommandContextFactory(HarnessInput input) {
-        this(input, true);
+    public BufferedCommandContextFactory() {
+        this(true);
     }
 
-    public BufferedCommandContextFactory(HarnessInput input, boolean remote) {
-        this.input = input;
+    public BufferedCommandContextFactory(boolean remote) {
         this.remote = remote;
     }
 
     @Override
     public CommandContext create(HarnessEngine engine, AgentSession session, ParsedCommand command) {
+        if (remote) {
+            return new BufferedCommandContext(session,
+                    command.getRawInput(), command.getName(), command.getArgs());
+        }
+        // 非远程宿主：命令需看到真实的渠道能力（/help 据此裁剪 cliOnly 命令）
         return new BufferedCommandContext(session,
                 command.getRawInput(), command.getName(), command.getArgs()) {
             @Override
             public boolean isRemote() {
-                return remote;
-            }
-
-            @Override
-            public String getSource() {
-                return input.getSource();
-            }
-
-            @Override
-            public String getSourceUserId() {
-                return input.getSourceUserId();
-            }
-
-            @Override
-            public String getReplyTarget() {
-                return input.getReplyTarget();
-            }
-
-            @Override
-            public String getMessageId() {
-                return input.getMessageId();
+                return false;
             }
         };
     }

@@ -5,6 +5,7 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
+import org.noear.solon.ai.harness.input.InputOrigin;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -43,7 +44,7 @@ public class ModelCommand implements Command {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx) throws Exception {
+    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) throws Exception {
         String flag = ctx.argAt(0);
 
         if ("ls".equals(flag) || flag == null || flag.isEmpty()) {

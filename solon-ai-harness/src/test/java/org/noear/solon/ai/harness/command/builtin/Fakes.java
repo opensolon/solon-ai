@@ -4,6 +4,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.command.AgentTaskIntent;
 import org.noear.solon.ai.harness.command.CommandContext;
+import org.noear.solon.ai.harness.input.InputOrigin;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -28,31 +29,28 @@ final class Fakes {
         final List<String> tasks = new ArrayList<>();
         volatile AgentTaskIntent intent;
         final List<String> args;
-        final String source;
-        final String sourceUserId;
-        final String replyTarget;
-        final String messageId;
 
-        StubContext(AgentSession session, List<String> args,
-                    String source, String sourceUserId, String replyTarget, String messageId) {
+        StubContext(AgentSession session, List<String> args) {
             this.session = session;
             this.args = args;
-            this.source = source;
-            this.sourceUserId = sourceUserId;
-            this.replyTarget = replyTarget;
-            this.messageId = messageId;
         }
 
         /** 模拟 IM 渠道（带全部元数据），参数为提示文本。 */
         static StubContext im(String text) {
-            return new StubContext(newSession(), Collections.singletonList(text),
-                    "Feishu", "user-1", "chat-1", "message-1");
+            return new StubContext(newSession(), Collections.singletonList(text));
+        }
+
+        static InputOrigin imOrigin() {
+            return InputOrigin.of("Feishu", "user-1", "chat-1", "message-1");
         }
 
         /** 模拟本地渠道（无元数据）。 */
         static StubContext local(String text) {
-            return new StubContext(newSession(), Collections.singletonList(text),
-                    null, null, null, null);
+            return new StubContext(newSession(), Collections.singletonList(text));
+        }
+
+        static InputOrigin localOrigin() {
+            return InputOrigin.NONE;
         }
 
         String output() {
@@ -93,26 +91,6 @@ final class Fakes {
         @Override
         public AgentTaskIntent getAgentTaskIntent() {
             return intent;
-        }
-
-        @Override
-        public String getSource() {
-            return source;
-        }
-
-        @Override
-        public String getSourceUserId() {
-            return sourceUserId;
-        }
-
-        @Override
-        public String getReplyTarget() {
-            return replyTarget;
-        }
-
-        @Override
-        public String getMessageId() {
-            return messageId;
         }
     }
 }

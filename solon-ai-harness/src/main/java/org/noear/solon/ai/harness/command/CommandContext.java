@@ -31,6 +31,9 @@ import java.util.List;
 public interface CommandContext {
     /**
      * 是否为远程上下文
+     * <p>
+     * 表示「本次命令执行的渠道是否具备终端能力」，供 /help 等命令裁剪可见命令集；
+     * 与 {@link org.noear.solon.ai.harness.input.InputOrigin} 无关（CLI 有渠道标识但不是远程）。
      */
     default boolean isRemote(){
         return false;
@@ -124,37 +127,6 @@ public interface CommandContext {
      * 缓冲式实现应返回已收集的全部回执行。
      */
     default String getCommandOutput() {
-        return null;
-    }
-
-    /**
-     * 消息来源渠道标识（如 Feishu、DingTalk、WeChat、CLI；Web/本地默认为 null）。
-     * <p>
-     * 由 IM 等远程渠道的上下文实现提供，供 /steer、/queue 等命令透传到
-     * 排队/插话元数据。本地上下文不覆盖时返回 null。
-     */
-    default String getSource() {
-        return null;
-    }
-
-    /**
-     * 来源渠道的用户 ID（远程渠道提供，用于消息归属与审计）。
-     */
-    default String getSourceUserId() {
-        return null;
-    }
-
-    /**
-     * 回复目标（如 IM 群/会话 ID），续发或回执时定位投递位置。
-     */
-    default String getReplyTarget() {
-        return null;
-    }
-
-    /**
-     * 触发本条命令的消息 ID（远程渠道提供，用于回复关联与幂等去重）。
-     */
-    default String getMessageId() {
         return null;
     }
 }

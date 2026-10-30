@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
+import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.session.steer.SteerInterceptor;
 import org.noear.solon.ai.harness.session.steer.SteerInterceptor.SteerResult;
 import org.noear.solon.core.util.Assert;
@@ -64,7 +65,7 @@ public class SteerCommand implements Command {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx) {
+    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
         String text = ctx.getArgsJoined();
         if (Assert.isEmpty(text)) {
             ctx.println("用法：/steer <补充内容>（在任务执行中向当前任务插入实时补充）");
@@ -72,10 +73,13 @@ public class SteerCommand implements Command {
         }
 
         AgentSession session = ctx.getSession();
-        String contextSource = ctx.getSource();
-        String source = Assert.isNotEmpty(contextSource) ? contextSource : "command";
-        SteerResult result = SteerInterceptor.steer(session, null, null, text, source,
-                ctx.getSourceUserId(), ctx.getReplyTarget(), ctx.getMessageId(), null);
+        InputOrigin resolved = origin == null ? InputOrigin.NONE : origin;
+        if (resolved.getChannel() == null || resolved.getChannel().isEmpty()) {
+            resolved = InputOrigin.of("command", resolved.getSenderId(),
+                    resolved.getReplyTarget(), resolved.getMessageId());
+        }
+
+        SteerResult result = SteerInterceptor.steer(session, null, null, text, resolved, null);
 
         switch (result.getStatus()) {
             case STEERED:

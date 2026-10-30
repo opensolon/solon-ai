@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
+import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.session.queue.SessionQueue;
 import org.noear.solon.core.util.Assert;
 
@@ -62,7 +63,7 @@ public class QueueCommand implements Command {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx) {
+    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
         String text = ctx.getArgsJoined();
         if (Assert.isEmpty(text)) {
             ctx.println("用法：/queue <消息>（当前任务结束后自动作为新任务发送）");
@@ -75,13 +76,14 @@ public class QueueCommand implements Command {
         }
 
         AgentSession session = ctx.getSession();
-        String contextSource = ctx.getSource();
-        String source = Assert.isEmpty(contextSource) ? "CLI" : contextSource;
-        String sourceUserId = ctx.getSourceUserId();
-        String replyTarget = ctx.getReplyTarget();
-        String messageId = ctx.getMessageId();
+        // 渠道标识统一在此处兜底（原 CLI 硬编码已移出，避免两端各一套默认值）
+        InputOrigin resolved = origin == null ? InputOrigin.NONE : origin;
+        if (resolved.getChannel() == null || resolved.getChannel().isEmpty()) {
+            resolved = InputOrigin.of("CLI", resolved.getSenderId(),
+                    resolved.getReplyTarget(), resolved.getMessageId());
+        }
 
-        int n = SessionQueue.enqueue(session, text, source, sourceUserId, replyTarget, messageId);
+        int n = SessionQueue.enqueue(session, text, resolved);
         if (n < 0) {
             ctx.println("排队失败（队列已满，上限 " + SessionQueue.MAX_QUEUE_SIZE + " 条），请稍后再试");
         } else {

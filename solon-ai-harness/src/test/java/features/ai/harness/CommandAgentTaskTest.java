@@ -9,6 +9,7 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.HarnessInput;
+import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
 
 import java.nio.file.Path;
@@ -63,7 +64,7 @@ class CommandAgentTaskTest {
             }
 
             @Override
-            public void execute(HarnessEngine e, CommandContext ctx) {
+            public void execute(HarnessEngine e, CommandContext ctx, InputOrigin origin) {
                 ctx.println("回执-" + commandName);
                 if (crossSession) {
                     // 纯回执命令：不声明任何任务意图

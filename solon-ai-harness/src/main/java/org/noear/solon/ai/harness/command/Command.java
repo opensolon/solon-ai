@@ -16,6 +16,7 @@
 package org.noear.solon.ai.harness.command;
 
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.input.InputOrigin;
 
 /**
  * 通用命令接口（适用于 CLI、Web 等所有端）
@@ -65,9 +66,12 @@ public interface Command {
     }
 
     /**
-     * 执行命令
+     * 执行命令（带输入来源身份）
+     * <p>
+     * 需要把来源透传到排队/插话/回复链路的命令（{@code /queue}、{@code /steer}）覆写本方法；
+     * 不关心来源的命令保持两参实现即可。默认实现委托给两参版本，保证既有命令零改动。
      *
-     * @return true 表示已处理该输入（不再触发 Agent 任务）
+     * @param origin 本次输入在渠道侧的身份（不为 null，无来源时为 {@link InputOrigin#NONE}）
      */
-    void execute(HarnessEngine engine, CommandContext ctx) throws Exception;
+     void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) throws Exception;
 }

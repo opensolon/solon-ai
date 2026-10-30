@@ -17,30 +17,30 @@ class QueueCommandTest {
     @Test
     void emptyArgsPrintsUsage() {
         Fakes.StubContext ctx = Fakes.StubContext.im("");
-        command.execute(null, ctx);
+        command.execute(null, ctx, Fakes.StubContext.imOrigin());
         assertTrue(ctx.output().contains("用法：/queue"));
     }
 
     @Test
     void enqueuesWithImMetadata() {
         Fakes.StubContext ctx = Fakes.StubContext.im("接着跑测试");
-        command.execute(null, ctx);
+        command.execute(null, ctx, Fakes.StubContext.imOrigin());
         assertEquals(1, SessionQueue.pendingSize(ctx.getSession()));
         SessionQueueItem item = SessionQueue.snapshot(ctx.getSession()).get(0);
         assertEquals("接着跑测试", item.getText());
-        assertEquals("Feishu", item.getSource());
-        assertEquals("user-1", item.getSourceUserId());
-        assertEquals("chat-1", item.getReplyTarget());
-        assertEquals("message-1", item.getMessageId());
+        assertEquals("Feishu", item.getOrigin().getChannel());
+        assertEquals("user-1", item.getOrigin().getSenderId());
+        assertEquals("chat-1", item.getOrigin().getReplyTarget());
+        assertEquals("message-1", item.getOrigin().getMessageId());
         assertTrue(ctx.output().contains("已加入队列（第 1 位）"));
     }
 
     @Test
     void localSourceDefaultsToCli() {
         Fakes.StubContext ctx = Fakes.StubContext.local("接着跑测试");
-        command.execute(null, ctx);
+        command.execute(null, ctx, Fakes.StubContext.localOrigin());
         SessionQueueItem item = SessionQueue.snapshot(ctx.getSession()).get(0);
-        assertEquals("CLI", item.getSource());
+        assertEquals("CLI", item.getOrigin().getChannel());
     }
 
     @Test
@@ -50,7 +50,7 @@ class QueueCommandTest {
             longText.append('x');
         }
         Fakes.StubContext ctx = Fakes.StubContext.im(longText.toString());
-        command.execute(null, ctx);
+        command.execute(null, ctx, Fakes.StubContext.imOrigin());
         assertEquals(0, SessionQueue.pendingSize(ctx.getSession()));
         assertTrue(ctx.output().contains("排队内容过长（上限 4096 字符）"));
     }
@@ -62,7 +62,7 @@ class QueueCommandTest {
         for (int i = 0; i < SessionQueue.MAX_QUEUE_SIZE; i++) {
             SessionQueue.enqueue(session, "fill-" + i, null);
         }
-        command.execute(null, ctx);
+        command.execute(null, ctx, Fakes.StubContext.imOrigin());
         assertEquals(0, ctx.tasks.size());
         assertEquals(SessionQueue.MAX_QUEUE_SIZE, SessionQueue.pendingSize(session));
         assertTrue(ctx.output().contains("排队失败（队列已满，上限 20 条）"));

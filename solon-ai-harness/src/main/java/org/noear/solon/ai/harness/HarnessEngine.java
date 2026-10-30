@@ -1455,7 +1455,7 @@ public class HarnessEngine {
         }
 
         // ========== 5. Prompt 构建 ==========
-        Prompt prompt = buildInputPrompt(text, attachments, input.getSource(), agentName);
+        Prompt prompt = buildInputPrompt(text, attachments, input.getOrigin().getChannel(), agentName);
 
         // ========== 6. 请求装配 ==========
         String modelName = resolveSessionModelName(session, input.getModelName());
@@ -1466,7 +1466,7 @@ public class HarnessEngine {
     /**
      * 构建输入提示词（有多媒体时组装多模态内容，并写入来源 / 附件 / 子代理元数据）
      */
-    private Prompt buildInputPrompt(String text, InputAttachments attachments, @Nullable String source, @Nullable String agentName) {
+    private Prompt buildInputPrompt(String text, InputAttachments attachments, @Nullable String channel, @Nullable String agentName) {
         UserMessage userMsg;
 
         if (attachments.hasMedia()) {
@@ -1485,8 +1485,8 @@ public class HarnessEngine {
             userMsg = ChatMessage.ofUser(text);
         }
 
-        if (source != null) {
-            userMsg.addMetadata("source", source);
+        if (channel != null) {
+            userMsg.addMetadata("source", channel);
         }
         if (Assert.isNotEmpty(agentName)) {
             userMsg.addMetadata("agent", agentName);
@@ -1548,9 +1548,9 @@ public class HarnessEngine {
             return null;
         }
 
-        CommandContextFactory realFactory = factory != null ? factory : new BufferedCommandContextFactory(input);
+        CommandContextFactory realFactory = factory != null ? factory : new BufferedCommandContextFactory();
         try {
-            return CommandDispatcher.dispatch(this, session, command, realFactory);
+            return CommandDispatcher.dispatch(this, session, command, realFactory, input.getOrigin());
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {

@@ -5,6 +5,7 @@
 package org.noear.solon.ai.harness.session.queue;
 
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.flow.FlowContext;
 
 import java.util.ArrayDeque;
@@ -96,18 +97,25 @@ public final class SessionQueue {
         session.updateSnapshot();
     }
 
-    public static int enqueue(AgentSession session, String text, String source) {
-        return enqueue(session, text, source, null, null, null);
-    }
-
-    public static int enqueue(AgentSession session, String text, String source,
-                              String sourceUserId, String replyTarget, String messageId) {
-        return enqueue(session, text, source, sourceUserId, replyTarget, messageId,
-                null, null, null, null, null, false);
+    /**
+     * 入队（携带来源身份）
+     *
+     * <p>不提供 {@code (String source)} 三参重载：它与本方法在传 null 时无法区分。
+     * 三参调用统一走本方法（null 即 {@link InputOrigin#NONE}）。</p>
+     */
+    public static int enqueue(AgentSession session, String text, InputOrigin origin) {
+        return enqueue(session, text, origin, null, null, null, null, null, false);
     }
 
     public static int enqueue(AgentSession session, String text, String source,
                               String sourceUserId, String replyTarget, String messageId,
+                              String id, String model, String reasoningEffort,
+                              String thinkingMode, String selectedAgent, boolean hasFiles) {
+        return enqueue(session, text, InputOrigin.of(source, sourceUserId, replyTarget, messageId),
+                id, model, reasoningEffort, thinkingMode, selectedAgent, hasFiles);
+    }
+
+    public static int enqueue(AgentSession session, String text, InputOrigin origin,
                               String id, String model, String reasoningEffort,
                               String thinkingMode, String selectedAgent, boolean hasFiles) {
         if (session == null || text == null) return -1;
@@ -122,8 +130,8 @@ public final class SessionQueue {
                 if (running instanceof SessionQueueItem && id.equals(((SessionQueueItem) running).getId())) return -1;
             }
             SessionQueueItem item = new SessionQueueItem(id, normalized,
-                    source, System.currentTimeMillis(), "PENDING", model, reasoningEffort,
-                    thinkingMode, selectedAgent, hasFiles, sourceUserId, replyTarget, messageId);
+                    origin, System.currentTimeMillis(), "PENDING", model, reasoningEffort,
+                    thinkingMode, selectedAgent, hasFiles);
             q.offerLast(item);
             saveLocked(session, q);
             return q.size();

@@ -45,11 +45,14 @@ public final class CommandDispatcher {
      *
      * @param command 解析结果
      * @param factory 命令上下文工厂
+     * @param origin  本次输入的渠道来源身份（可空，空同 {@link InputOrigin#NONE}）
      * @return 命令处理结果；不是命令（解析为空或命令未注册）时返回 null
      */
-    public static @Nullable InputOutcome dispatch(HarnessEngine engine, AgentSession session,
+    public static @Nullable InputOutcome dispatch(HarnessEngine engine,
+                                                  AgentSession session,
                                                   @Nullable ParsedCommand command,
-                                                  CommandContextFactory factory) throws Exception {
+                                                  CommandContextFactory factory,
+                                                  @Nullable InputOrigin origin) throws Exception {
         if (command == null) {
             return null;
         }
@@ -68,7 +71,7 @@ public final class CommandDispatcher {
         }
 
         CommandContext ctx = factory.create(engine, session, command);
-        target.execute(engine, ctx);
+        target.execute(engine, ctx, origin == null ? InputOrigin.NONE : origin);
 
         //二段：命令只声明意图（预处理），装配仍走唯一的 handle 入口（不开嵌式回调）
         InputOutcome nested = null;

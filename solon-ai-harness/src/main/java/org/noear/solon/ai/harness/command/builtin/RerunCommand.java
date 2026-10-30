@@ -21,6 +21,7 @@ import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
+import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.core.util.Assert;
 
 import java.util.List;
@@ -50,7 +51,7 @@ public class RerunCommand implements Command {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx) throws Exception {
+    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) throws Exception {
         AgentSession session = ctx.getSession();
 
         if (session == null) {

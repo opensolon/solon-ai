@@ -1,5 +1,7 @@
 package org.noear.solon.ai.harness.session.steer;
 
+import org.noear.solon.ai.harness.input.InputOrigin;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -259,7 +261,7 @@ public class SteerInterceptorTest {
         trace.nextTurn();
 
         SteerInterceptor.SteerResult result = SteerInterceptor.steer(session, null, "once", "补充要求",
-                "Feishu", () -> {
+                InputOrigin.channel("Feishu"), () -> {
                     interceptor.onReasonStart(trace, new StringBuilder()); // 模拟复查前推理线程取走消息
                     return false;
                 });
@@ -278,7 +280,7 @@ public class SteerInterceptorTest {
         trace.nextTurn();
 
         SteerInterceptor.SteerResult result = SteerInterceptor.steer(session, null, "once", "补充要求",
-                "Feishu", () -> {
+                InputOrigin.channel("Feishu"), () -> {
                     interceptor.onReasonStart(trace, new StringBuilder());
                     interceptor.onAgentEnd(trace);
                     return false;
@@ -296,7 +298,7 @@ public class SteerInterceptorTest {
         interceptor.onReasonStart(trace, new StringBuilder());
 
         SteerInterceptor.SteerResult result = SteerInterceptor.steer(session, null, "pending", "补充要求",
-                "Feishu", () -> false);
+                InputOrigin.channel("Feishu"), () -> false);
 
         assertEquals(SteerInterceptor.SteerStatus.NOT_RUNNING, result.getStatus());
         assertTrue(trace.getWorkingMemory().isEmpty());

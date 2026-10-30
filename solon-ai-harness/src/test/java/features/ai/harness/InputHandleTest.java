@@ -25,6 +25,7 @@ import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputAttachments;
+import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
 
 import java.nio.file.Path;
@@ -74,7 +75,7 @@ class InputHandleTest {
             }
 
             @Override
-            public void execute(HarnessEngine engine, CommandContext ctx) {
+            public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
                 ctx.println("pong");
             }
         });

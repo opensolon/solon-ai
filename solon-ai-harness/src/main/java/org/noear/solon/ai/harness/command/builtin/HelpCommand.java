@@ -19,6 +19,7 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.command.CommandRegistry;
+import org.noear.solon.ai.harness.input.InputOrigin;
 
 import java.util.List;
 
@@ -53,7 +54,7 @@ public class HelpCommand implements Command {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx) {
+    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
         boolean remote = ctx.isRemote();
         String topic = ctx.argAt(0);
         List<Command> commands = engine.getCommandRegistry().all();

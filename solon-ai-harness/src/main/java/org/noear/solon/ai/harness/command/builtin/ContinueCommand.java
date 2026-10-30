@@ -25,6 +25,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
+import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.util.TraceUtil;
 import org.noear.solon.core.util.Assert;
 
@@ -61,7 +62,7 @@ public class ContinueCommand implements Command {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx) throws Exception {
+    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) throws Exception {
         AgentSession session = ctx.getSession();
 
         if (session == null) {

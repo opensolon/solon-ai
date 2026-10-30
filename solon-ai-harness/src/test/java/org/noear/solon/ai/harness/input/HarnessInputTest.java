@@ -38,7 +38,7 @@ class HarnessInputTest {
                 .agent("coder")
                 .explicitAgent("reviewer")
                 .trimContent(true)
-                .route("dingtalk", "u1", "chat42", "msg7")
+                .origin(InputOrigin.of("dingtalk", "u1", "chat42", "msg7"))
                 .hitl("approve", "call-1")
                 .hitlOutput("tool-result-rewrite");
 
@@ -47,10 +47,10 @@ class HarnessInputTest {
         assertEquals("coder", input.getSelectedAgent());
         assertEquals("reviewer", input.getExplicitAgent());
         assertTrue(input.isTrimContent());
-        assertEquals("dingtalk", input.getSource());
-        assertEquals("u1", input.getSourceUserId());
-        assertEquals("chat42", input.getReplyTarget());
-        assertEquals("msg7", input.getMessageId());
+        assertEquals("dingtalk", input.getOrigin().getChannel());
+        assertEquals("u1", input.getOrigin().getSenderId());
+        assertEquals("chat42", input.getOrigin().getReplyTarget());
+        assertEquals("msg7", input.getOrigin().getMessageId());
         assertEquals("approve", input.getHitlAction());
         assertEquals("call-1", input.getHitlCallId());
         assertEquals("tool-result-rewrite", input.getHitlOutput());

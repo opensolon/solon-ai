@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
+import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.session.goal.GoalEngine;
 import org.noear.solon.ai.harness.session.goal.GoalScheduler;
 import org.noear.solon.ai.harness.session.goal.GoalState;
@@ -75,7 +76,7 @@ public class GoalCommand implements Command {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx) throws Exception {
+    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) throws Exception {
         AgentSession session = ctx.getSession();
         if (session == null) {
             ctx.println(ctx.color(RED + "No active session." + RESET));

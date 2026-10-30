@@ -18,6 +18,7 @@ package org.noear.solon.ai.harness.command.builtin;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
+import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.core.util.Assert;
 
 /**
@@ -49,7 +50,7 @@ public class RewindCommand implements Command {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx) throws Exception {
+    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) throws Exception {
         String flag = ctx.argAt(0);
         int count = 1;
 

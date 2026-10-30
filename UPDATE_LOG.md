@@ -1,5 +1,18 @@
 ### vNEXT
 
+* **命令渠道来源统一为值对象 `InputOrigin`**（删除 `CommandContext` 上重复的四元组）：
+  * 背景：`getSource` / `getSourceUserId` / `getReplyTarget` / `getMessageId` 在全仓以 7 种形状并存（`HarnessInput` 四字段、`CommandContext` 四 default getter、`WebCommandContext` 四 override、`BufferedCommandContextFactory` 四 override、`session.replyRoute` 裸 Map、`SessionQueueItem` 四字段、`SteerMessage` 四字段），且形成「渠道 → 入会话 → 命令 → 队列/插话箱 → 分发器 → 回到 Channel」的闭环，实为同一实体的 7 份副本。实测 28 处签名中 100% 四字段同时出现，不存在单独消费，故合并为单一实体而非拆分
+  * 新增 `input.InputOrigin`（不可变，`NONE` 表示本地无渠道来源）：`channel` / `senderId` / `replyTarget` / `messageId`，并提供 `isEmpty` / `isIm`（收编 `WebChatInputHandler.isImSource`）/ `channelOr`（收编 `"CLI"` 与 `"command"` 两处不同兜底）/ `channelIs`（收编各处 `equalsIgnoreCase`）/ `withReplyTarget`（微信 `context_token` 刷新）/ `withChannel` / `toMap` / `fromMap`。`toMap`/`fromMap` **键名沿用历史命名**（source/sourceUserId/replyTarget/messageId），保证队列快照与 `session.replyRoute` 落盘数据向后兼容
+  * `HarnessInput` 四字段合为 `origin`；新增 `origin(InputOrigin)`，旧 `route(4 参)` 转调并标 `@Deprecated`，四个旧 getter 同步转为 `origin.getXxx()` 转调
+  * **`Command` 新增三参 `execute(engine, ctx, InputOrigin)` 的 default 委托**（`@since 4.2`）：仅 `/queue`、`/steer` 覆写，其余约 20 个实现零改动。`CommandDispatcher.dispatch` 增加 `origin` 参数，由 `HarnessEngine.dispatchCommand` 直接取 `input.getOrigin()` 传入——这是本次核心：删除了「工厂从 input 嗅探元数据」的第二条注入路径（`BufferedCommandContextFactory` 不再持有 `HarnessInput`）
+  * 删除 `CommandContext` 的四个 getter、`soloncode-cli` 的 `WebCommandContext` 整个类（改造后无任何逻辑）、`webCommandFactory` 的四参数与匿名实现（缩为 `new BufferedCommandContextFactory(true)`）、桌面端等价匿名工厂、`CliCommandContext.getSource` 硬编码；CLI 入口改由 `CliShell.CLI_ORIGIN` 显式声明来源
+  * `SessionQueueItem` / `SteerMessage` 四字段合为 `origin`（旧 getter 转调 + `@Deprecated`），`SessionQueue.enqueue` 与 `SteerInterceptor.steer` 新增 `InputOrigin` 重载。**同时删除 `enqueue(session,text,String)` 与 `steer(...,String source,BooleanSupplier)` 两个 String 重载**：它们与 `InputOrigin` 版本在传 null 时无法区分（编译期 ambiguous），保留即缺陷
+  * `WebChatInputHandler.setReplyRoute` 改为接收 `InputOrigin` 并用 `origin.toMap()` 写入 `session.replyRoute`（读取侧仍按 Map，键名不变，避免牵动约 80 处渠道测试断言）；`WebQueueDispatcher` / `WebGate` / `QueueWebController` 改用 `origin`
+  * 顺带纠正：`CommandContext.isRemote()` **不是死方法**（`HelpCommand` 用它裁剪 `cliOnly` 命令），本次保留并补充语义说明；`BufferedCommandContextFactory(false)` 通过匿名子类覆盖 `isRemote` 保持桌面端历史行为
+  * 测试：新增 `InputOriginTest`（11 例，锁定 legacy 键名往返、渠道大小写、`isIm`、不可变刷新）；`Fakes.StubContext` 去掉四字段改为 `imOrigin()`/`localOrigin()`；`QueueCommandTest`/`SteerCommandTest`/`SessionQueueTest`/`SteerInterceptorTest`/`WebGateRejectedInputTest` 改为 origin 调用；`ImBusySteerContractTest` 源码断言同步（并修正 `indexOf` 起点，避免命中插话之前的注释）
+  * 验证：harness 目标域 79 例全绿，全量 375 例 20F+8E 与改动前完全一致（`sessionProvider` NPE 等既有基线）；`soloncode-cli` 全量 1204 例 2 失败均为既有基线（`ImageReplyLifecycleTest` 异常文案、`AgentSettingsControllerTest`）
+
+
 * 修复 `handle` 的 HITL 决策结果子代理解析：`InputOutcome.hitl(...)` 的 `agentName` 原先只回显入参 `selectedAgent`，而宿主审批请求通常不带该字段（前端只回 callId + action），宿主据此续流会错误回落主代理——trace 按代理名分 key，取错代理取不到挂起的 tool_calls，表现为「点了审批但续跑空转」。现改为「显式入参优先，其次会话级 `CTX_AGENT_SELECTED`」（新增私有 `resolveHitlAgent`；`HitlAgentResolutionTest` 3 例锁定）
 * `InputAttachments.isEmpty()` 删除（与 `hasAny()` 同一判断的两种叫法），`HarnessEngine.handle` 的 `final InputAttachments resolved = attachments` 别名一并去除
 * `InputHandleTest` +1（`commandWithAttachmentIsTreatedAsMessage`）：锁定「带附件的斜杠文本不当命令」——附件是要交给模型的内容，不能因命令分发被静默丢弃；桌面端原实现把命令识别放在附件处理之前，带附件的 `/cmd` 会丢掉附件，现与 Web/引擎口径统一
