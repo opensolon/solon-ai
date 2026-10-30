@@ -98,7 +98,7 @@ public InputOutcome handle(HarnessInput input);                  // 唯一入口
 
 | 步骤 | 动作 | 说明 |
 |---|---|---|
-| 1 | HITL 决策 | **优先于空输入判空**：审批请求通常不带文本 |
+| 1 | HITL 决策 | **优先于空输入判空**：审批请求通常不带文本。带 `resume(true)` 时同一次调用完成续流装配 |
 | 2 | 续流分流 | `resume(true)` 直接装配请求，不解析文本 |
 | 3 | 空输入判空 | 无文本且无附件 → `IGNORED` |
 | 4 | 命令识别与执行 | 有附件或 `commandAware(false)` 时不当作命令 |
@@ -145,14 +145,14 @@ HarnessInput input = HarnessInput.of(session, "帮我看看这个 @coder")
 | `commandAware(boolean)` | 是否把输入当命令识别（默认 `true`） |
 | `agentAware(boolean)` | 是否解析开头 `@xxx`（默认 `true`） |
 | `terminal(boolean)` | 本次渠道是否具备终端交互能力（默认 `false`，决定 `terminalOnly()` 命令是否可见） |
-| `resume(boolean)` | 续流模式（默认 `false`） |
+| `resume(boolean)` | 续流模式（默认 `false`）；与 `hitl(...)` 合用可一次调用完成「写决策 + 续流」 |
 
 四个容易踩的开关：
 
 - **`commandAware(false)`**——文本来源不是用户手输时使用（定时任务提示词、已受理的排队输入、命令内部自造提示词）。这些即使以 `/` 开头也不应执行。
 - **`agentAware(false)`**——文本由程序生成时使用（如 goal 的 objective）。即使以 `@xxx` 开头也原样交给代理，不被当作提及剥离。与 `commandAware` 成对：`/` 前缀是命令，`@` 前缀是子代理。
 - **`terminal(true)`**——只有命令行宿主才开。它同时决定 `terminalOnly()` 命令是否放行、以及 `CommandContext.isTerminal()` 的返回值；不开则 `/exit` 类命令被统一拦截。与 `origin` 无关：桌面在本地运行但无终端能力。
-- **`resume(true)`**——本次不产生新用户输入，只按会话中挂起的 `tool_calls` 续跑。文本与附件都被忽略。
+- **`resume(true)`**——本次不产生新用户输入，只按会话中挂起的 `tool_calls` 续跑。文本与附件都被忽略。与 `hitl(action, callId)` 合用则一次调用完成「写决策 + 续流装配」（单卡同步审批，如 CLI）；只写决策不续流（批量审批，如 Web 逐卡点击）时不要传它。
 
 ### 2.3 `InputOutcome`：处置态
 
@@ -198,7 +198,7 @@ switch (outcome.getKind()) {
 
 1. **不提供「回执 + 任务合成一条流」的便捷方法**——真实宿主对两者顺序的要求各不相同：CLI 由命令即时写终端（合成会重复打印）、Web 要求「流门复位早于回执」否则回执被前端丢弃、桌面要求序号回放与 HITL 拦截器重挂、ACP 需要 `takeWhile` 取消判定。任何替宿主拼好的流都得被拆开重拼，反而遮住了必须由宿主掌握的时序。取流只有一条路径：`getRequest().stream()`。
 2. **不内置 `subscribeOn`**——调度权归宿主。Web 端必须先注册 `Disposable` 再订阅，否则忙碌判定会出现空闲窗口、同一会话开出第二条流。
-3. **不对 HITL 自动续流**——三端续流时机不同（Web 要等整批审批完成、桌面要重挂拦截器、CLI 是多轮循环）。续流永远显式：`handle(HarnessInput.of(session, null).resume(true)...)`。
+3. **不对 HITL 自动续流**——引擎不会隐式续流。单卡同步审批（CLI）用 `.hitl(action, callId).resume(true)` 一次调用拿到 `TASK`；批量审批（Web 逐卡点击、桌面重挂拦截器）分两次：先多次 `.hitl(...)` 拿到 `HITL` 只写决策，待整批齐备后再 `.resume(true)`。
 
 ---
 
@@ -378,7 +378,12 @@ public class FullHost {
         }
     }
 
-    /** 提交一条审批决策（action 为 "approve" 时其余值视为拒绝） */
+    /** 提交一条审批决策（action 为 "approve" 时其余值视为拒绝）
+     *
+     * <p>这里是批量审批形态：只写决策、不续流，由 onHitl 在整批齐备后统一 resume。
+     * 若是一问一答的单卡审批（如 CLI），直接写成
+     * {@code .hitl(action, callUuid).resume(true)} 一次调用就能拿到可执行的 TASK。
+     */
     public void decide(String callUuid, String action, String note) {
         InputOutcome outcome = engine.handle(HarnessInput.of(session, null)  // 审批通常不带文本
                 .hitl(action, callUuid)
@@ -450,7 +455,7 @@ public class FullHost {
 
 ### 3.5 HITL 续流的四条不变量
 
-1. **决策与续流是两次 `handle`**——审批那次 `Kind` 为 `HITL`，不携带请求；续流那次才返回 `TASK`。
+1. **决策与续流可以是一次 `handle`，也可以是两次**——单卡同步审批（CLI）用 `.hitl(action, callId).resume(true)`，一次调用即得 `TASK`；批量审批（Web 逐卡点击）先多次 `.hitl(...)` 得 `HITL`（不携带请求），整批齐备后再 `.resume(true)` 得 `TASK`。
 2. **续流要 `.resume(true)` 且不传正文**——传了也会被忽略（见 `InputHandleTest.resumeIgnoresText`）。
 3. **代理名必须沿用 `outcome.getAgentName()`**——它是「本轮生效代理」，由显式入参优先、会话级 `CTX_AGENT_SELECTED` 兜底解析。trace 按代理名分 key，换回主代理会取不到挂起的 `tool_calls`，表现为续跑空转。
 4. **整批还是逐条续流由宿主定**——用 `HITL.getPendingTasks(session)` 判断是否还有未决项，引擎不替你决定。
@@ -1295,7 +1300,7 @@ org.noear.solon.ai.harness
 ## 十三、常见坑
 
 1. **裸引擎没有命令**——`/help` 会返回 `TASK`。测试命令必须先 `getCommandRegistry().register(...)`；注册后**不需要**配 `commandContextFactory`，默认 `BufferedCommandContextFactory` 已经能把回执交给 `getCommandOutput()`。
-2. **HITL 续流必须显式**——`Kind.HITL` 不携带请求；续流用 `.resume(true)`，且**不要**传正文。
+2. **HITL 续流必须显式**——`Kind.HITL` 不携带请求；续流用 `.resume(true)`，且**不要**传正文。宿主若是一问一答的单卡审批，直接用 `.hitl(action, callId).resume(true)` 合并为一次调用，不必自己拼两段。
 3. **HITL 续流要用 `outcome.getAgentName()`**——它是「本轮生效代理」（显式入参 → `CTX_AGENT_SELECTED` 兜底）。换回主代理会取不到挂起的 `tool_calls`，续跑空转。
 4. **`@` 提及必须带空白边界**——`@bash 内容` 有效，`@bash内容` 走普通文本。
 5. **有附件时不识别命令**——避免 `/path/to/file.png` 之类被误判；带附件的 `/cmd` 按普通消息处理，附件正常落盘。

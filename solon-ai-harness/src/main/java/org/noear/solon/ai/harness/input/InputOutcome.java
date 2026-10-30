@@ -71,10 +71,14 @@ public final class InputOutcome {
          */
         REPLY,
         /**
-         * HITL 审批决策已应用，宿主决定是否恢复流
+         * HITL 审批决策已应用，但本次未续流（未传 {@code resume}）
          * <p>
-         * 本类型不携带请求（决策已写入，但续流时机由宿主决定），
-         * 续流请显式调用 {@code engine.handle(HarnessInput.of(session, null).resume(true)...)}。
+         * 本类型不携带请求，续流时机由宿主决定。批量审批（Web 逐卡点击）用这种形态：
+         * 逐次只写决策，待整批决策齐备后调用
+         * {@code engine.handle(HarnessInput.of(session, null).resume(true)...)} 统一恢复。
+         * <p>
+         * 单卡同步审批（CLI）不经过本类型：{@code .hitl(...).resume(true)} 一次调用即返回
+         * {@link #TASK}。
          */
         HITL,
         /**
@@ -83,13 +87,21 @@ public final class InputOutcome {
         IGNORED
     }
 
+    /** 宿主动作路由值（四值互斥穷尽，语义见 {@link Kind}） */
     private final Kind kind;
+    /** 命令名；非 null 即命令输入（含被渠道拦截未执行的情况），是 {@link #isCommand()} 的判据 */
     private final String commandName;
+    /** 回执文本（命令输出或不可用提示）；null 表示无回执（{@link #hasReply()} 为 false） */
     private final String commandOutput;
+    /** 原始命令解析结果，供宿主做 rewind 等特判；非命令输入为 null */
     private final ParsedCommand command;
+    /** 装配好的提示词；非消息路径（续流任务、纯回执）为 null */
     private final Prompt prompt;
+    /** 生效的子代理名（HITL 分支为 resolveHitlAgent 的解析结果）；主代理时为 null */
     private final String agentName;
+    /** 生效的模型名（显式入参 → 会话级选择解析后的值）；均未设置时为 null */
     private final String modelName;
+    /** 装配好的请求；仅 {@link Kind#TASK} 非空，是 {@link #hasRequest()} 的判据 */
     private final ReActRequest request;
 
     private InputOutcome(Kind kind, String commandName, String commandOutput,

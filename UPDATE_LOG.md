@@ -1,5 +1,15 @@
 ### vNEXT
 
+* **HITL 决策与续流合并为一次 `handle`（`InputOutcome.Kind.HITL` 保留为批量审批形态）**：
+  * 问题：单卡同步审批的宿主（CLI）必须发两次 `handle`——先 `.hitl(...)` 拿到不携带请求的 `HITL`，再 `.resume(true)` 拿 `TASK`；而 `HITL` 分支原本无条件 `return`，使 `.hitl(...)` 与 `.resume(true)` 不能合用。CLI 因此绕开了唯一入口，直接调 `HITL.approve/reject(session, task)`，连带丢掉 `hitlOutput`（工具返回改写）与引擎的 callId 精确定位能力
+  * 改为：HITL 分支写入决策后检查 `input.isResume()`，成立则同一次调用完成续流装配并返回 `InputOutcome.task(...)`（`Kind.TASK`），不成立仍返回 `Kind.HITL`。未新增引擎入口，只在既有分支内增加组合出口
+  * 批量审批语义不变：Web 逐卡点击只写决策（不传 `resume`），仍得 `Kind.HITL`，待 `allHitlDecided` 后统一 `.resume(true)`；桌面端 HITL 续流同理
+  * CLI 侧：`performAgentTask` 的 HITL 循环改为 `handleHitlRound(session, agentName, modelName)`，内部走 `engine.handle(HarnessInput.of(session, null).hitl(action, task.getCallUuid()).resume(true).selectedModel(...).selectedAgent(...))`，返回必含请求的 `InputOutcome` 供下一轮订阅。决策按 `task.getCallUuid()` 精确指定（原实现提交 task 对象，语义相同但多依赖了一轮 `getPendingTask` 定位）；已存在的决策（外部预置 / 上轮残留）不再二次提问
+  * 顺带修复 CLI 三处：①`runMessageInput` 的 `.terminal(true)` 与 `.commandContextFactory(...)` 是死配置（`commandAware(false)` 已保证 `dispatchCommand` 不会执行，而这两个字段全仓仅 `dispatchCommand` 读取）——合并时去重为单一 `handleInput(session, text, commandAware, model)`，这两个字段只在 `commandAware=true` 时装配；②`currentPrompt` 死变量（只被赋 null 与判空，内容从不使用）改名为 `isFirstRound`；③每轮 `isTaskCompleted.set(false)` 重置，避免上一轮收尾被当成本轮完成信号（原先靠 `currentPrompt = null` 间接表达）
+  * 测试：`InputCommandAwareTest` 新增 `hitlDecisionWithResumeReturnsTaskInOneCall`（断言 `Kind.TASK` + 请求非空 + 代理名透传）与 `resumeAloneStillReturnsTask`；`HitlAgentResolutionTest` 3 例与 `InputCommandAwareTest` 另 4 例继续锁定「不传 resume 仍得 HITL」的批量语义
+  * 文档：README §2.1 决策步骤、§2.2 `resume` 开关说明、§2.3 第三条「不对 HITL 自动续流」、§3.4 `decide` 示例注释、§3.5 不变量第一条、§13 常见坑第 2 条全部改写为「单卡一次 / 批量两次」两种形态；`InputOutcome.Kind.HITL` 与 `HarnessInput.resume` 的 Javadoc 同步
+  * 验证：harness 定向 8 类 46 例全绿；harness 全量 378 例 20F+8E（比上轮 376 例多 2 例即本次新增两例，失败数与基线一致）；`soloncode-cli` 全量 1204 例 2 失败均为既有基线（`ImageReplyLifecycleTest` 异常文案、`AgentSettingsControllerTest` 返回 400）
+
 * **终端能力上收为输入属性：`HarnessInput.terminal` + `Command.terminalOnly()`**（删除 `CommandContextFactory.isRemote()` 与 `Command.cliOnly()`）：
   * 问题：原来的“远程”标志放在**工厂**上（`BufferedCommandContextFactory(boolean remote)` + 匿名子类覆盖 `isRemote()`），而工厂的职责是“怎么构造上下文”；更糟的是这个名字与实际语义不符——桌面端 `origin=NONE` 且运行在本地却 remote=true，CLI 有 `InputOrigin.channel("CLI")` 且实际具备终端却 remote=false。每次输入都会变的东西被固化在工厂构造参数里，且 `HarnessInput` 已有的 `origin` 无法推导出它（两者正交）
   * 改为：`HarnessInput.terminal(boolean)`（默认 false）作唯一真相源，经 `CommandDispatcher.dispatch(..., boolean terminal)` 同时驱动“拦截”与“上下文自述”。`Command.cliOnly()` → `terminalOnly()`（原名里的 “CLI” 指宿主形态，而命令真正需要的是终端能力）；`CommandContext.isRemote()` → `isTerminal()`（消除双关命名）；`CommandContextFactory.create` 增 `boolean terminal` 参，工厂退化为无状态（删字段、删构造参、删匿名子类）

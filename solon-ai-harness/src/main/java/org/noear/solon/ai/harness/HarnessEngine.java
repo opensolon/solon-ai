@@ -1359,6 +1359,10 @@ public class HarnessEngine {
      * 一次调用完成五件事：命令识别与执行、HITL 决策应用、附件装配 + 子代理解析、
      * Prompt 构建、请求装配。宿主只需关心「回执怎么渲染」与「流怎么消费」。
      *
+     * <p>HITL 决策与续流可合并为一次调用：{@code .hitl(action, callId).resume(true)} 会在写入决策后
+     * 立即完成续流装配并返回 {@link InputOutcome.Kind#TASK}（单卡同步审批，如 CLI）。只写决策不续流时
+     * 不传 {@code resume}，返回 {@link InputOutcome.Kind#HITL}（批量审批，如 Web 逐卡点击后统一恢复）。</p>
+     *
      * <pre>{@code
      * InputOutcome outcome = engine.handle(HarnessInput.of(session, input)
      *         .selectedModel(model).selectedAgent(agent));
@@ -1373,7 +1377,7 @@ public class HarnessEngine {
      *     case REPLY:  // 只有回执（含命令在本渠道不可用）
      *         render(outcome.getCommandOutput());
      *         break;
-     *     case HITL:   // 决策已写入，是否恢复流由宿主决定
+     *     case HITL:   // 决策已写入但未续流（未传 resume），是否恢复流由宿主决定
      *     default:     // IGNORED：无事可做
      *         break;
      * }
@@ -1395,6 +1399,14 @@ public class HarnessEngine {
             //（trace 按代理名分 key，取错代理会取不到挂起的 tool_calls）。
             String agentName = resolveHitlAgent(session, input.getSelectedAgent());
             applyHitlDecision(session, input.getHitlAction(), input.getHitlCallId(), input.getHitlOutput());
+
+            if (input.isResume()) {
+                //单卡同步审批：决策写入后同一次调用完成续流装配，宿主无须再发一次 handle。
+                //批量审批（Web 逐卡点击）不传 resume，只写决策，由宿主在整批决策齐备后统一续流。
+                return InputOutcome.task(null, agentName, resolveSessionModelName(session, input.getSelectedModel()),
+                        promptDo(session, null, input.getSelectedModel(), agentName));
+            }
+
             return InputOutcome.hitl(agentName, resolveSessionModelName(session, input.getSelectedModel()));
         }
 

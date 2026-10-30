@@ -123,4 +123,32 @@ class InputCommandAwareTest {
 
         assertEquals(InputOutcome.Kind.HITL, outcome.getKind());
     }
+
+    @Test
+    void hitlDecisionWithResumeReturnsTaskInOneCall() {
+        HarnessEngine engine = engine();
+        AgentSession session = InMemoryAgentSession.of();
+
+        //单卡同步审批：决策写入与续流装配合为一次调用，且只走 handle 一个入口
+        InputOutcome outcome = engine.handle(HarnessInput.of(session, null)
+                .hitl("approve", "call-3")
+                .resume(true)
+                .selectedAgent("coder"));
+
+        assertEquals(InputOutcome.Kind.TASK, outcome.getKind());
+        assertNotNull(outcome.getRequest());
+        assertEquals("coder", outcome.getAgentName());
+    }
+
+    @Test
+    void resumeAloneStillReturnsTask() {
+        HarnessEngine engine = engine();
+        AgentSession session = InMemoryAgentSession.of();
+
+        //宿主已批量写完全部决策后统一恢复：不传 hitl，只传 resume
+        InputOutcome outcome = engine.handle(HarnessInput.of(session, null).resume(true));
+
+        assertEquals(InputOutcome.Kind.TASK, outcome.getKind());
+        assertNotNull(outcome.getRequest());
+    }
 }

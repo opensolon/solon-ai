@@ -56,24 +56,47 @@ import java.util.function.Predicate;
  * @since 4.2
  */
 public final class HarnessInput {
+    /** 目标会话；为空时请求装配走临时会话（HITL 决策写入等会话侧操作为空操作） */
     private final AgentSession session;
+    /** 原始输入文本：命令识别、提及解析与 Prompt 构建的数据源；HITL 决策与续流路径不消费 */
     private final String text;
 
+    /** 附件装配结果，永不为 null（构造器初始化，attachments(null) 不覆盖）；有附件时不作命令处理 */
     private InputAttachments attachments;
+    /** 显式指定的模型名；为空时回退会话级选择，再回退默认模型（resolveSessionModelName） */
     private String selectedModel;
+    /**
+     * 选择器传入的子代理名，优先级随路径不同：HITL 决策与续流路径最高
+     * （resolveHitlAgent / handle 第 2 步），消息路径仅作提及未命中时的兜底。
+     */
     private String selectedAgent;
+    /** 命令上下文工厂；为空时 handle 内部落为 BufferedCommandContextFactory（回执缓冲进 commandOutput） */
     private CommandContextFactory commandContextFactory;
+    /** 渠道来源身份；消费于命令分发（回执路由）与 Prompt 的 source 元数据；null 归一化为 {@link InputOrigin#NONE} */
     private InputOrigin origin = InputOrigin.NONE;
+    /** HITL 决策动作：非空即进入决策分支（优先于空输入判空）；除 "approve" 外一律按 reject 处理 */
     private String hitlAction;
+    /** HITL 决策目标任务标识；非空时按 callId 精确取挂起任务，为空时取当前第一个挂起任务 */
     private String hitlCallId;
+    /** 工具返回值改写文本；非空时作为决策备注写入，由拦截器覆写工具返回（见 {@link #getHitlOutput()}） */
     private String hitlOutput;
 
+    /** 子代理名格式校验；对提及名与 selectedAgent 兜底名都生效，不通过或表中不存在均判无效 */
     private Predicate<String> agentNameValidator;
+    /** 剥离提及后是否去掉剩余文本首尾空白；注意即使未命中提及，只要本值为 true 也会 trim 全文 */
     private boolean trimContent;
+    /**
+     * 请求体显式指定的子代理，优先级高于输入里的提及；引擎不再查子代理表
+     * （有效性由宿主先行校验），仅剥离同名前缀；续流路径中作为 selectedAgent 缺席时的回退。
+     */
     private String explicitAgent;
+    /** 是否识别命令前缀（默认 true）；有附件时无论本值如何都不作命令处理 */
     private boolean commandAware = true;
+    /** 是否解析输入开头的 {@code @} 提及（默认 true）；false 时原文保留，只认 explicitAgent 与 selectedAgent */
     private boolean agentAware = true;
+    /** 渠道是否具备终端交互能力（默认 false）；经分发器成为 CommandContext.isTerminal()，控制 terminalOnly 命令 */
     private boolean terminal;
+    /** 续流模式：不产生新输入，仅按会话挂起的 tool_calls 续跑；文本与附件均被忽略 */
     private boolean resume;
 
     private HarnessInput(AgentSession session, String text) {
@@ -361,8 +384,12 @@ public final class HarnessInput {
     /**
      * 续流模式（默认 false）：本次不产生新用户输入，仅按会话中挂起的 tool_calls 继续执行
      * <p>
-     * 文本与附件均被忽略，用于 HITL 决策后的续轮 —— 决策已由 {@link #hitl(String, String)}
-     * 写入，续轮不需要正文。
+     * 文本与附件均被忽略。两种用法：
+     * <ul>
+     * <li>与 {@link #hitl(String, String)} 合用 —— 决策写入后同一次调用完成续流装配，
+     * 返回 {@link InputOutcome.Kind#TASK}（单卡同步审批，CLI 即此形态）；</li>
+     * <li>单独使用 —— 不写决策，直接按挂起状态续跑（如宿主已批量写完全部决策后统一恢复）。</li>
+     * </ul>
      */
     public HarnessInput resume(boolean resume) {
         this.resume = resume;

@@ -49,9 +49,13 @@ public final class InputOrigin implements Serializable {
     /** 无渠道来源（本地/桌面/headless） */
     public static final InputOrigin NONE = new InputOrigin(null, null, null, null);
 
+    /** 渠道标识，取值如 Feishu / DingTalk / WeChat / WEB / Loop / CLI；比较一律忽略大小写 */
     private final String channel;
+    /** 来源渠道的用户标识（IM 提供，用于消息归属与审计） */
     private final String senderId;
+    /** 返回地址：微信为服务端下发的 context_token（单轮有效，会过期）；飞书/钉钉为空，投递时回退绑定用户 */
     private final String replyTarget;
+    /** 入站关联键（去重与回复关联），出站链路不消费 */
     private final String messageId;
 
     private InputOrigin(@Nullable String channel, @Nullable String senderId,
