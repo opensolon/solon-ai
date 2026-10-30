@@ -289,10 +289,6 @@ public class HarnessEngine {
         return options.getHarnessMemory();
     }
 
-    public String getHarnessDownload() {
-        return options.getHarnessDownload();
-    }
-
     public String getHarnessChannels() {
         return options.getHarnessChannels();
     }
@@ -568,9 +564,17 @@ public class HarnessEngine {
         }
     }
 
+    /**
+     * 开启/关闭记忆能力
+     * <p>
+     * 未注入 {@code memoryProvider} 时没有 memory talent 可开关（构建期显式置 null），
+     * 仅写入配置值，不抛异常 —— 与相邻的 setMemoryRelevanceCount 等保持一致的空值守卫。
+     */
     public void setMemoryEnabled(Boolean memoryEnabled) {
         options.setMemoryEnabled(memoryEnabled);
-        memoryTalent.setEnabled(memoryEnabled);
+        if (memoryTalent != null) {
+            memoryTalent.setEnabled(memoryEnabled);
+        }
     }
 
     public void setMemoryRelevanceCount(int n) {
@@ -1114,6 +1118,8 @@ public class HarnessEngine {
                 .primary(true)
                 .enabled(true)
                 .writeable(false)
+                // 内置挂载不在上层展示（隐藏类路径实现细节）；不影响解析与使用
+                .visible(false)
                 .source(ClasspathMountSource.of(HarnessEngine.class.getClassLoader(), BUILTIN_AGENT_PATH))
                 .build());
 

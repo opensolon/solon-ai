@@ -2,6 +2,7 @@ package features.ai.harness;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.agent.react.ReActAgent;
@@ -51,7 +52,8 @@ class HarnessExtensionLifecycleTest {
     }
 
     private HarnessEngine.Builder builder() {
-        return HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString());
+        return HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
+                .sessionProvider(InMemoryAgentSession::of);
     }
 
     @Test

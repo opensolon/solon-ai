@@ -2,6 +2,7 @@ package features.ai.harness;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.talents.mount.source.FileMountSource;
@@ -19,7 +20,7 @@ class HarnessAgentMountTest {
 
     @Test
     void builtinAgentsUseHiddenClasspathMount() {
-        HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString()).build();
+        HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString()).sessionProvider(InMemoryAgentSession::of).build();
 
         Mount builtin = engine.getMount("@harness-agents");
         assertNotNull(builtin);
@@ -43,7 +44,9 @@ class HarnessAgentMountTest {
         writeAgent(other, "other", "other");
 
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .mountAdd(agentMount(first)).build();
+                .sessionProvider(InMemoryAgentSession::of)
+                .mountAdd(agentMount(first))
+                .build();
         assertEquals(1, engine.getAgentsByMount("agents").size());
         engine.addMount(Mount.builder().alias("other").type(MountType.AGENTS)
                 .source(FileMountSource.of(other)).build());

@@ -252,7 +252,13 @@ public class GoalState {
 
     // ===== 序列化 =====
 
-
+    /**
+     * 序列化为 ONode（导出用）
+     * <p>
+     * 运行时连续性字段（lastFingerprint / lastErrorType / lastErrorSummary /
+     * consecutiveSameTypeErrors）不持久化：它们描述的是单一进程内的执行连续性，
+     * 跨进程保留会误判去重与错误熔断。与 {@link #toMap()} 保持同一取舍。
+     */
     public ONode toONode() {
         ONode node = new ONode();
         node.set("id", id);
@@ -273,7 +279,17 @@ public class GoalState {
         return node;
     }
 
+    /**
+     * 从 ONode 重建
+     * <p>
+     * node 为 null 或缺少 status 时返回 null（与 {@link #fromMap(Map)} 对齐），
+     * 调用方必须判空；旧版本此处对缺失 status 会抛 NPE。
+     */
     public static GoalState fromONode(ONode node) {
+        if (node == null || node.getOrNull("status") == null) {
+            return null;
+        }
+
         GoalState gs = new GoalState();
         gs.id = node.get("id").getString();
         gs.condition = node.get("condition").getString();

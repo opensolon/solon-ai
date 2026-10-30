@@ -45,8 +45,37 @@ public class PermissionContext {
      */
     public PermissionContext(Path workingDirectory, List<PermissionRule> rules, List<Path> additionalDirs) {
         this.workingDirectory = workingDirectory;
-        this.rules = Collections.unmodifiableList(new ArrayList<>(rules));
-        this.additionalDirs = Collections.unmodifiableList(new ArrayList<>(additionalDirs));
+        this.rules = Collections.unmodifiableList(normalizeRules(rules));
+        this.additionalDirs = Collections.unmodifiableList(normalizeDirs(additionalDirs));
+    }
+
+    /** 列表归一：null 视为空，剔除 null 元素（null 规则会让权限引擎遍历时 NPE） */
+    private static List<PermissionRule> normalizeRules(List<PermissionRule> src) {
+        if (src == null || src.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<PermissionRule> dst = new ArrayList<>(src.size());
+        for (PermissionRule rule : src) {
+            if (rule != null) {
+                dst.add(rule);
+            }
+        }
+        return dst;
+    }
+
+    private static List<Path> normalizeDirs(List<Path> src) {
+        if (src == null || src.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Path> dst = new ArrayList<>(src.size());
+        for (Path dir : src) {
+            if (dir != null) {
+                dst.add(dir);
+            }
+        }
+        return dst;
     }
 
     public Path workingDirectory() {
@@ -96,8 +125,14 @@ public class PermissionContext {
 
     /**
      * 添加规则
+     *
+     * @param rule 规则；为 null 时忽略（与 HarnessEngine.addPermissionRule 同语义）
      */
     public PermissionContext addRule(PermissionRule rule) {
+        if (rule == null) {
+            return this;
+        }
+
         List<PermissionRule> merged = new ArrayList<>(this.rules);
         merged.add(rule);
         return new PermissionContext(workingDirectory, merged, additionalDirs);
@@ -105,8 +140,14 @@ public class PermissionContext {
 
     /**
      * 批量添加规则
+     *
+     * @param newRules 规则列表；为 null 视为无操作
      */
     public PermissionContext addRules(List<PermissionRule> newRules) {
+        if (newRules == null || newRules.isEmpty()) {
+            return this;
+        }
+
         List<PermissionRule> merged = new ArrayList<>(this.rules);
         merged.addAll(newRules);
         return new PermissionContext(workingDirectory, merged, additionalDirs);
@@ -114,6 +155,8 @@ public class PermissionContext {
 
     /**
      * 替换全部规则
+     *
+     * @param newRules 新规则列表；为 null 等价清空
      */
     public PermissionContext replaceRules(List<PermissionRule> newRules) {
         return new PermissionContext(workingDirectory, newRules, additionalDirs);
@@ -131,8 +174,14 @@ public class PermissionContext {
 
     /**
      * 添加附加目录
+     *
+     * @param dirs 目录列表；为 null 视为无操作
      */
     public PermissionContext addDirectories(List<Path> dirs) {
+        if (dirs == null || dirs.isEmpty()) {
+            return this;
+        }
+
         List<Path> merged = new ArrayList<>(this.additionalDirs);
         merged.addAll(dirs);
         return new PermissionContext(workingDirectory, rules, merged);
@@ -140,8 +189,14 @@ public class PermissionContext {
 
     /**
      * 移除指定目录
+     *
+     * @param dirs 待移除目录；为 null 视为无操作
      */
     public PermissionContext removeDirectories(List<Path> dirs) {
+        if (dirs == null || dirs.isEmpty()) {
+            return this;
+        }
+
         List<Path> remaining = this.additionalDirs.stream()
             .filter(d -> !dirs.contains(d))
             .collect(Collectors.toList());
@@ -189,23 +244,31 @@ public class PermissionContext {
             return this;
         }
 
+        /** 规则列表；为 null 视为空 */
         public Builder rules(List<PermissionRule> rules) {
-            this.rules = new ArrayList<>(rules);
+            this.rules = normalizeRules(rules);
             return this;
         }
 
+        /** 追加规则；为 null 时忽略 */
         public Builder addRule(PermissionRule rule) {
-            this.rules.add(rule);
+            if (rule != null) {
+                this.rules.add(rule);
+            }
             return this;
         }
 
+        /** 附加目录；为 null 视为空 */
         public Builder additionalDirs(List<Path> additionalDirs) {
-            this.additionalDirs = new ArrayList<>(additionalDirs);
+            this.additionalDirs = normalizeDirs(additionalDirs);
             return this;
         }
 
+        /** 追加目录；为 null 时忽略 */
         public Builder addDir(Path dir) {
-            this.additionalDirs.add(dir);
+            if (dir != null) {
+                this.additionalDirs.add(dir);
+            }
             return this;
         }
 

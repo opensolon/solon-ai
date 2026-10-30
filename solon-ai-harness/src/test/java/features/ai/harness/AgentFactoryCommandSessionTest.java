@@ -8,20 +8,24 @@ import org.noear.solon.ai.harness.agent.AgentFactory;
 
 public class AgentFactoryCommandSessionTest {
 
+    /**
+     * 白名单数组里只有归组名 "bash"；bash_start / bash_wait / bash_stop 由
+     * AgentFactory.toolAddDo 的 "bash" 分支动态展开注册（见该处 case "bash"）。
+     * 因此这里断言的是"归组名存在"，而非展开后的工具名。
+     */
     @Test
-    public void publicToolSetIncludesCommandSessionTools() throws Exception {
-        assertTrue(toolSetContains("TOOL_ALL_PUBLIC", "bash_start"));
-        assertTrue(toolSetContains("TOOL_ALL_PUBLIC", "bash_wait"));
-        assertTrue(toolSetContains("TOOL_ALL_PUBLIC", "bash_stop"));
+    public void publicToolSetGroupsBashSessionTools() throws Exception {
+        assertTrue(toolSetContains("TOOL_ALL_PUBLIC", "bash"));
+        // 展开后的三个长命令工具不应以字面量重复出现在白名单里
+        assertTrue(!toolSetContains("TOOL_ALL_PUBLIC", "bash_start"));
         // bash_stdin 已并入 bash_wait(chars)，不再作为独立工具暴露
         assertTrue(!toolSetContains("TOOL_ALL_PUBLIC", "bash_stdin"));
     }
 
     @Test
-    public void piToolSetIncludesCommandSessionTools() throws Exception {
-        assertTrue(toolSetContains("TOOL_PI", "bash_start"));
-        assertTrue(toolSetContains("TOOL_PI", "bash_wait"));
-        assertTrue(toolSetContains("TOOL_PI", "bash_stop"));
+    public void piToolSetGroupsBashSessionTools() throws Exception {
+        assertTrue(toolSetContains("TOOL_PI", "bash"));
+        assertTrue(!toolSetContains("TOOL_PI", "bash_start"));
         assertTrue(!toolSetContains("TOOL_PI", "bash_stdin"));
     }
 

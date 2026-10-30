@@ -1,5 +1,15 @@
 ### vNEXT
 
+* **修复三处真实缺陷（P0/P1/P2）+ 两处清理（P3/P4）**（按用户"重新确认后再修"的要求，上一轮曾误报 4 项，此处仅保留复核后成立者）:
+  * **P0 `HarnessEngine.setMemoryEnabled` 空指针**：`memoryTalent` 只在注入 `memoryProvider` 时构建（否则显式置 null），而该方法无守卫直接解引用；相邻的 `setMemoryRelevanceCount` / `setMemoryPriorityCount` / `setMemorySummaryLength` 三个邻居都有判空。未注入 provider 的宿主调一次开关即 NPE。已补守卫（配置值仍写入 options，无 talent 可开关属正常状态）
+  * **P1 `getDefaultModelConfig` 回落不校验 `enabled`**：显式名路径（`getModelOrNil` / `getModelOrDef` 的命中分支）都检查 `isEnabled()`，回落路径却直接返回 `models.get(defaultModel)` 或 `values().iterator().next()`。后果：模型被禁用但仍是 `defaultModel` 或 Map 首项时，`getModelOrDefInstance` 会真的构建并调用已禁用模型；`/model` 的 active 标记还会指向被 `formatModels` 过滤掉的模型。已改为两条路径都跳过 disabled、全禁用时返回 null；**连带** `AgentFactory.create` 对 null 模型给出明确 `IllegalStateException`（此前会落到 `ReActAgentConfig` 的 `chatModel is required`，无线索）
+  * **P2 `PermissionContext` null 契约不一致**：`addRule(null)` 把 null 真加进列表（`PermissionEngine` 遍历 `rule.toolName()` 会 NPE）；`addRules/replaceRules/addDirectories/removeDirectories/Builder.rules/Builder.additionalDirs` 直接 NPE。统一为「null 列表 = 无操作、null 单元素 = 忽略」，与 `HarnessEngine.addPermissionRule` 的上游守卫同语义；构造器额外剔除 null 元素做兜底
+  * **P3 `GoalState.fromONode` 空状态 NPE**：`fromMap` 缺 status 规范地返回 null，`fromONode` 却 `Status.valueOf(null)` 抛 NPE。已对齐为返回 null；`toONode` 补 javadoc 说明运行时连续性字段（lastFingerprint/lastErrorType/lastErrorSummary/consecutiveSameTypeErrors）**按设计不持久化**——它们描述单一进程内的执行连续性，跨重启保留会误判去重与错误熔断（与 `toMap` 同一取舍）
+  * **P4 清理**：`HarnessOptions.workspace` 去掉 `volatile`（唯一写入在构造器，`volatile` 是死修饰）；删除 `getHarnessDownload()`（`HarnessEngine` + `HarnessOptions` 两侧，全仓零消费者，CLI 那份是 `AgentFlags` 自己的同名字段）
+  * **已撤回的上一轮误报**（记录以免再次误判）：`recordError` 不递增 `consecutiveErrors` 是有意分工（同类型熔断 vs 总数熔断由 `GoalEngine:612/622` 分别取用）；`toONode` 丢 4 字段是有意设计；`Builder.mountAdd(null)` 与 `HarnessEngine.addMount(null)` 行为一致（都抛 `IllegalArgumentException`）；`InMemoryAgentSession.of` 每次新实例是工厂方法正常语义
+  * 测试：`PermissionContextTest` 4 处「锁定 NPE 现状」断言翻转为「锁定正确行为」+ 新增 `constructorStripsNullElements`；`HarnessEngineAccessorTest` 新增 `setMemoryEnabledToleratesMissingMemoryProvider` / `fallbackModelSkipsDisabledConfigs` / `disabledDefaultModelFallsBackToNextEnabled`；`GoalStateTest` 新增 `onodeRoundTripToleratesNullOrMissingStatus` 并改写 2 处旧注释；`HarnessOptionsAccessorTest` 的 disabled 模型断言翻转
+  * 验证：受影响 4 类 81 例全绿；harness 全量 594 例 20F+8E，失败类集合与基线逐项一致（AgentDefault / AgentFactoryCommandSession / BashToolStrategy / HarnessAgentMount / HarnessExtensionLifecycle / HarnessSkillCatalog / WebToolStrategy / WriteToolStrategy，均为既有 `sessionProvider` NPE 类）
+
 * **HITL 决策动作枚举化：`HarnessInput.hitl(String, String)` → `hitl(HITLAction, String)`**（新增 `react/intercept/HITLAction`）:
   * 问题：字符串动作约束性太弱——引擎侧 `"approve".equals(action)` 把一切非精确匹配值（含 `"Approve"`、拼写错误）静默判为拒绝执行；且 SKIP 在领域里存在（`HITL.skip` / `HITLDecision.ACTION_SKIP`）却从 `handle` 入口永远表达不出，只能二值
   * 枚举：`APPROVE / REJECT / SKIP` 三值，含边界工厂 `of(String)`——空值返回 null（非决策），小写三值精确匹配，脏值抛 `IllegalArgumentException`；**不做大小写容错**（容错等于把「静默当拒绝」这类 bug 放回来）。放在 `react/intercept` 与 `HITL`/`HITLDecision`/`HITLTask` 同包，依赖方向正确（harness → agent）

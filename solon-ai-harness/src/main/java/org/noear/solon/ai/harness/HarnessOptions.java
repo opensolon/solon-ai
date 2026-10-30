@@ -52,7 +52,7 @@ class HarnessOptions implements NonSerializable {
 
     // ========== 基础路径 ==========
     private final String harnessHome;
-    private volatile String workspace = "work";
+    private final String workspace;
 
     // ========== 提示词 ==========
     private volatile String systemPrompt;
@@ -172,10 +172,6 @@ class HarnessOptions implements NonSerializable {
 
     String getHarnessMemory() {
         return harnessHome + "memory/";
-    }
-
-    String getHarnessDownload() {
-        return harnessHome + "download/";
     }
 
     String getHarnessChannels() {
@@ -597,18 +593,27 @@ class HarnessOptions implements NonSerializable {
     }
 
     /**
-     * 获取默认模型配置：优先 defaultModel 指定的，否则取 Map 中的第一个值
+     * 获取默认模型配置：优先 defaultModel 指定的，否则取 Map 中第一个启用项
+     * <p>
+     * 与显式名路径（{@link #getModelOrNil}）对齐，都跳过 {@code enabled=false} 的配置；
+     * 全部禁用或全为 null 时返回 null，由调用方给出明确错误（勿静默构建禁用模型）。
      */
     private ChatConfig getDefaultModelConfig() {
         if (Assert.isNotEmpty(defaultModel)) {
             ChatConfig c = models.get(defaultModel);
-            if (c != null) {
+            if (c != null && c.isEnabled()) {
                 return c;
             }
         }
 
-        // fallback 到第一个
-        return models.values().iterator().next();
+        // fallback 到第一个启用项
+        for (ChatConfig c : models.values()) {
+            if (c != null && c.isEnabled()) {
+                return c;
+            }
+        }
+
+        return null;
     }
 
     // ========== 服务注入 getter / setter ==========

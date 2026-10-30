@@ -2,6 +2,7 @@ package features.ai.harness;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.talents.mount.source.FileMountSource;
 import org.noear.solon.ai.talents.mount.Mount;
@@ -21,6 +22,7 @@ class HarnessSkillCatalogTest {
         Path skill = Files.createDirectories(workspace.resolve("skills/demo"));
         Files.write(skill.resolve("SKILL.md"), "# Demo\n\nHello".getBytes(StandardCharsets.UTF_8));
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
+                .sessionProvider(InMemoryAgentSession::of)
                 .mountAdd(Mount.builder().alias("@skills").type(MountType.SKILLS)
                         .source(FileMountSource.of(workspace.resolve("skills"))).build())
                 .build();
