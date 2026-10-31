@@ -661,9 +661,17 @@ HarnessEngine.of("/data/work", ".solon/")
 
 | 命令 | 维护的状态 | 宿主必须额外装配 | 缺了会怎样 |
 |---|---|---|---|
-| `/goal` | 会话级目标（每会话一个） | `ExecutionBridge` + `GoalEngine` + `GoalScheduler` + `GoalExtension` | 命令能创建目标，但永远不跑第二轮 |
-| `/queue` | 会话级排队队列 | 任务终态时调用 `SessionQueueDrainer.drainOne(...)` | 命令能入队，但队列永远不动 |
-| `/steer` | 当前任务的插话邮箱 | 请求级挂载 `SteerInterceptor` + 实现 `SteerOutputPort` | 命令能入队，但永不注入 |
+| `/goal` | 会话级目标（每会话一个） | `GoalExtension.builder(workspaceId)` + `addExtension` | 命令能创建目标，但永远不跑第二轮 |
+| `/queue` | 会话级排队队列 | `QueueExtension` + `addExtension`，任务终态调 `queue.drainOne(...)` | 命令能入队，但队列永远不动 |
+| `/steer` | 当前任务的插话邮箱 | `SteerExtension` + `addExtension`（拦截器由扩展挂载） | 命令能入队，但永不注入 |
+
+**三个能力，三个类**：每个命令从装配到运行期操作宿主都只接触一个 Extension 实例（宿主侧与 harness 的交互面收敛到一个类），不再需要宿主逐个 new `GoalEngine`/`GoalScheduler`/`ExecutionBridge`/`GoalCommand`，也不需要分别操作 `SessionQueue` 与 `SessionQueueDrainer`。命令本身的语法与回执未变，终端用户无感知。
+
+```java
+engine.addExtension(GoalExtension.builder(workspaceId).taskExecutor(myRunner).build());  // /goal
+engine.addExtension(new QueueExtension());                                             // /queue
+engine.addExtension(new SteerExtension<>(() -> mySteerPort));                          // /steer
+```
 
 三者共同点：`/queue` 与 `/steer` 的 `runnableWhenBusy()` 返回 `true`（能穿透忙碌检查）；`/goal` **不覆写**、保持默认 `false`（它会启动持续轮次，不能在忙时会话里重入）。`/queue`、`/steer` 从 `Command.execute(engine, ctx, origin)` 的第三参拿到 `InputOrigin` 并带到投递链路，三者都**不自己开流**。
 
@@ -671,46 +679,65 @@ HarnessEngine.of("/data/work", ".solon/")
 
 Goal 是「给它一个目标，它一轮轮自己跑，直到达成 / 预算耗尽 / 熔断」的能力。归属是**会话**，每会话最多一个，状态随会话快照持久化，重启后仍在。
 
-#### 装配四件套
+#### 装配：一个类搞定
+
+GoalExtension 已把执行桥、引擎、调度器、命令、Talent 全部收进一次装配。宿主要写的只有**一个 builder 链**：
 
 ```java
-// 1) 执行桥：goal 与 loop 共用；必须至少有一个 TaskHandler，否则每一轮都会被守卫跳过
-ExecutionBridge bridge = new ExecutionBridge(engine);
-bridge.addBusyChecker(sessionId -> /* 该会话是否还在跑别的任务 */ false);
-bridge.addTaskExecutor((sessionId, prompt, agentName) -> {
-    // 返回最终文本；返回 null 表示「本入口不认领」，会继续问下一个 TaskHandler
-    return engine.handle(HarnessInput.of(engine.getSession(sessionId), prompt)
-                    .commandAware(false)          // 目标正文是程序生成的，即使以 / 开头也不当命令
-                    .agentAware(false)             // 目标正文里的 @xxx 不是子代理提及
-                    .origin(InputOrigin.channel("goal")))
-            .getRequest()
-            .call()
-            .getContent();
-});
+GoalExtension goal = GoalExtension.builder(workspaceId)   // job 名工作区前缀（跨工作区防撞）
+        .taskExecutor((sessionId, prompt, agentName) -> runOneTurn(sessionId, prompt))
+        .busyChecker(sessionId -> isSessionBusy(sessionId))    // 可选，缺省恒 false
+        .budget(70, 85)                                        // 可选，缺省 70/85
+        .stagnation(3).maxErrors(3).validatorEnabled(true)      // 可选，均为缺省值
+        .workspace(workspacePath)                              // 可选，验证器执行目录；缺省 = workspaceId
+        .build();
 
-// 2) Goal 引擎：预算阈值 + 停滞/错误熔断 + 验证器（验证器绑定工作区，避免跨工作区串味）
-GoalEngine goalEngine = new GoalEngine(
-        bridge,
-        new BudgetThresholds(70, 85),   // 预算提示阈值：警告% / 紧急%
-        3,                              // stagnationThreshold：连续无进展多少轮判定停滞
-        3,                              // maxConsecutiveErrors：连续错误多少次熔断
-        true,                           // validatorEnabled：是否启用完成前验证
-        workspace);                     // 验证器执行目录；传 null 则不注册默认验证器（验证恒通过）
-
-// 3) 调度器：job 名必须带工作区前缀
-//    JobManager 是 JVM 单例，而会话 ID 并不全局唯一（CLI 叫 cli、桌面是 ws_<时间戳>），
-//    不加前缀时多个工作区的同名会话会在全局注册表里互相覆盖。
-GoalScheduler goalScheduler = new GoalScheduler(goalEngine, workspaceId);
-
-// 4) 命令 + 模型侧工具
-engine.getCommandRegistry().register(new GoalCommand(goalEngine, goalScheduler));
-
-GoalExtension goalExtension = new GoalExtension(goalEngine, engine);
-goalExtension.getGoalTalent().setEnabled(true);   // 关掉只影响模型侧工具，不影响 /goal 命令
-engine.addExtension(goalExtension);
+engine.addExtension(goal);   // initialize 内部依次完成：
+                             // bridge → GoalEngine → GoalScheduler → /goal 命令注册 → Talent 挂载
 ```
 
-`GoalExtension` 只是把 `GoalTalent` 挂到**主代理**上，提供两个工具（创建目标由用户命令或界面驱动，模型侧只读 + 更新）：
+要点：
+
+- **`taskExecutor` 是唯一有实际意义的必选项**。缺省实现就是本节原有的 `engine.handle(...).call().getContent()` 模板，所以最小用法是`GoalExtension.builder(workspaceId).build()` + `addExtension`——但那时 goal 轮次只会走通用入口，不会带宿主的专属执行语义（如 Web 的流式通道、CLI 的终端读入）。
+- **`bridge` 与 loop 共享**：宿主已有 `ExecutionBridge` 时用 `.bridge(shared)` 注入，扩展不再自建；TaskHandler / BusyChecker 仍注册到同一桥上，两个能力共用一套执行通道。
+- **job 名带工作区前缀**在扩展内部完成，`JobManager` 是 JVM 单例、会话 ID 不全局唯一（CLI 叫 `cli`、桌面是 `ws_<时间戳>`）——不加前缀时多个工作区会在全局注册表里互相覆盖。
+- **`.scheduler(x)` 三态**：不传 = 缺省新建；传实例 = 宿主自备；**显式传 null = 关闭调度**（纯 JUnit / 无 Solon 容器的宿主，`JobManager.getInstance()` 会 NPE，只能关）。
+- **`.commandEnabled(false)`**：宿主自管命令注册时用；注册本身幂等（已有同名命令则跳过），迁移期双写安全。
+- 存量写法 `new GoalExtension(goalEngine, engine)` 保留并标 `@Deprecated`：只接管外部 GoalEngine、只挂 Talent，不装配命令与调度。
+
+#### 运行期操作：还是这一个类
+
+不必再持 `GoalEngine` / `GoalScheduler` 引用，门面方法直接中转：
+
+```java
+goal.state(session); goal.hasGoal(session);              // 读
+goal.stateOf(sessionId); goal.sessionOf(sessionId);       // 按 id 读（免自己解析会话）
+goal.find(sessionId, taskId);                           // 任务列表行 → GoalState（不是 goal 行返回 null）
+goal.running(session); goal.running(sessionId);           // 是否正在跑一轮
+goal.pause(session, gs); goal.resume(session, gs);        // 控（自动同步调度注销/重挂）
+goal.attachAndSchedule(s, obj, tokens, ms, iter);       // 建 + 挂调度(runNow=true)
+goal.attach(s, obj, tokens, ms, iter);                  // 只建不挂（首轮由宿主流驱动，如桌面端）
+goal.updateAndReschedule(s, gs, obj, tokens, ms, bool);  // 改配置 + 按需恢复调度
+goal.resumeScheduleOnly(sessionId);                     // 只挂 job 不立即跑（重启恢复场景）
+goal.scheduleNow(sessionId); goal.unschedule(sessionId);  // 单独的调度触发/摘除
+goal.runRoundAsync(session);                            // 异步跑一轮（/loop trigger 语义）
+goal.clear(session); goal.stopAll(); goal.hasScheduledGoals(); goal.hasScheduler();
+goal.toTaskMap(session, gs);                              // 列表/徽章视图（与 loop 任务同构）
+goal.addListener(l); goal.registerValidator(matcher, v);   // 扩展点
+goal.getGoalTalent().setEnabled(false);                    // 只关模型侧工具，不影响命令
+```
+
+三个易错点（宿主自己拼调度的老写法踩过）：
+
+- **`resume()` 是 `runNow=true`**。服务重启/工作区恢复时想「静默挂上、等下一轮」必须用 `resumeScheduleOnly()`，否则会对每个活跃 goal 立刻发起一轮执行。
+- **改配置只吞后半段**。「pause → interrupt → 等轮次停 → update → resume」里的中断与等待是宿主的运行时职责（依赖宿主的会话中断端口），门面不代管；`updateAndReschedule` 只覆盖 `update + 时长 commit + resume + schedule`。
+- **`clear()` 内部先摘调度再清状态**，不会留一个已无目标却仍在调度的 job。
+
+确需细粒度访问时 `getGoalEngine()` / `getGoalScheduler()` 仍可取到内部实例。
+
+#### 模型侧工具
+
+`GoalTalent` 被挂到**主代理**上，提供两个工具（创建目标由用户命令或界面驱动，模型侧只读 + 更新）：
 
 | 工具 | 作用 |
 |---|---|
@@ -814,8 +841,11 @@ goalEngine.addListener((sessionId, state, removed) -> { /* push to client */ });
 `/queue` 与 `/steer` 的分工：**排队不影响进行中的任务**，只是登记一条待执行，等当前任务结束、会话空闲后自动作为新任务发送。
 
 ```java
-engine.getCommandRegistry().register(new QueueCommand());   // 无参构造
+QueueExtension queue = new QueueExtension();
+engine.addExtension(queue);   // initialize 内部注册 /queue 命令（幂等）
 ```
+
+`new QueueExtension(false)` = 只保留操作门面、不注册命令（宿主自管注册时用）。
 
 ```
 用户：/queue 接着帮我把文档也更新一下
@@ -831,17 +861,32 @@ engine.getCommandRegistry().register(new QueueCommand());   // 无参构造
 
 #### 宿主侧：入队只是登记，续发靠 drain
 
+所有队列操作都在这一个实例上（内部中转静态实现，`session.queue.*` 契约不变）：
+
 ```java
 // 同步运行者：回调返回即认为执行完毕并确认（CLI 交互循环）
-while (SessionQueueDrainer.drainOne(session, item -> runOneTurn(session, item))) {
+while (queue.drainOne(session, item -> runOneTurn(session, item))) {
     // claim / poll / ack / requeue 全部由 drainOne 负责，宿主不要自己 poll
 }
 
 // 异步运行者：回调只是「启动」，终态再确认（Web，任务结束才 ack）
-SessionQueueDrainer.drainOne(session, item -> startTurnAsync(session, item), false);
+queue.drainOne(session, item -> startTurnAsync(session, item), false);
 // ...该轮到达终态时
-SessionQueue.acknowledge(session, item.getId());
+queue.ack(session, item.getId());
 ```
+
+完整门面一览：
+
+| 方法 | 作用 |
+|---|---|
+| `enqueue(session, text, origin)` | 入队，返回位置（从 1 计），-1 = 失败 |
+| `enqueue(...)` 九参重载 | 带 id 去重 / model / effort / agent / files（HTTP 重试幂等） |
+| `drainOne(session, runner)` | 领取并执行队首一条（同步语义：返回即确认） |
+| `drainOne(session, runner, false)` | 异步语义：终态再 `ack` |
+| `ack(session, itemId)` | 异步终态确认（校验 in-flight 身份） |
+| `pendingSize` / `size` / `hasItems` / `view` | 待执行数 / 含 in-flight 总数 / 是否有任务 / 统一视图 |
+| `hasPersistedItems(context)` | 快照探测（不实例化会话） |
+| `cancelItem` / `promote` / `cancelPending` | 取消单条 / 置顶 / 清空并递增代际 |
 
 `drainOne` 内部顺序：`tryClaim`（同一时刻只允许一个运行者 poll）→ `poll`（队首出队并置为 RUNNING + 记为 in-flight）→ 执行回调 → `acknowledge` / 失败则 `requeueFront` → `releaseClaim`。
 
@@ -895,7 +940,23 @@ Web 前端的排队编排在浏览器完成，IM 渠道（微信/飞书/钉钉�
 #### 装配
 
 ```java
-engine.getCommandRegistry().register(new SteerCommand());   // 无参构造
+SteerExtension<WorkspaceContext> steer =
+        new SteerExtension<>(() -> webGate /* SteerOutputPort */, wsContext);
+engine.addExtension(steer);   // initialize 注册 /steer 命令；configure 把拦截器挂为主代理默认拦截器
+```
+
+参数与变体：
+
+- **供应商惰性解析**：`SteerOutputPort` 在每次事件回调时取值，不在构造期快照。工作区可能在入口绑定之前创建（那时端口还拿不到），惰性供应避开了这个时序坑。
+- **`wsContext` 构造期定值**：它是不透明路由令牌。若同一引擎服务多个工作区、每请求上下文不同，则**保留请求级挂载**（见下方），请求级实例会按 Class 去重覆盖默认实例。
+- **`null` 供应商**：headless 宿主（无前端可通知），dropped 只记 warn 日志。
+- **`new SteerExtension<>(port, ctx, false)`**：不注册命令（宿主自管）。
+
+运行期操作也在这一个实例上：
+
+```java
+steer.steer(session, null, null, text, origin, null);   // 投递（与 /steer 命令、/web/chat/steer 同源）
+steer.cancel(session, steerId);                        // 取消仍在邮箱中的插话
 ```
 
 命令只做投递，**不做降级**：邮箱满、任务未运行、轮次已切换时如实告知原因，由用户自行决定改排队还是直接发送（与 `/web/chat/steer` 的 409 纯语义对齐）。
@@ -916,13 +977,17 @@ SteerInterceptor.SteerResult r = SteerInterceptor.steer(session, null, null, tex
 | `EMPTY_TEXT` / `TEXT_TOO_LONG` | 文本为空 / 超过 4096 字符 |
 | `INVALID_STEER_ID` | steerId 超过 128 字符 |
 
-#### 宿主必须挂拦截器（请求级）
+#### 拦截器挂载：扩展已代劳
+
+`SteerExtension.configure` 会把拦截器挂到**主代理的默认拦截器列表**，宿主无需每请求 new + add。顺序安全：拦截器容器按 Class 去重（`LinkedHashMap<Class, RankEntity>`），AgentFactory 先挂压缩/StopLoop、后轮到 extension 的 configure，因此 steer 拦截器天然排在上下文压缩之后。
+
+只有「一个引擎多工作区、每请求 wsContext 不同」时才需要请求级挂载（如 Web 端 `WebStreamBuilder`）：
 
 ```java
 SteerInterceptor<WorkspaceContext> steerInterceptor = new SteerInterceptor<>(outputPort, wsContext);
 
 outcome.getRequest()
-        .options(o -> o.interceptorAdd(steerInterceptor))   // 须排在默认拦截器（含上下文压缩）之后
+        .options(o -> o.interceptorAdd(steerInterceptor))   // 同 Class 覆盖默认挂载，不会双份
         .stream()
         .doOnNext(this::render)
         .blockLast();
@@ -1360,10 +1425,13 @@ org.noear.solon.ai.harness
 8. **`build()` 只校验 `sessionProvider`**——缺模型要到首次 `handle` 才报 `chatModel is required`。
 9. **HITL 默认只绑了 `bash`**——`Write` / `Web` 两套策略需自行 `onTool(...)` 绑定，否则不生效且不报错。
 10. **新建子代理要注册**——`AgentDefinition` 构造完必须 `getAgentManager().addAgent(def)`，否则 `explicitAgent("xxx")` 回落主代理。
-11. **`/goal` 只注册命令不会跑**——还必须有 `ExecutionBridge` 的 `TaskHandler`、`GoalEngine`、`GoalScheduler`（job 名带工作区前缀）与 `GoalExtension`。缺 `TaskHandler` 时每轮都被守卫静默跳过（日志 `execution bridge unavailable`）。
-12. **`/queue` 入队不等于会发送**——宿主必须在任务终态调 `SessionQueueDrainer.drainOne(...)`；并且不要自己 `poll`，claim / ack / requeue 全在 drainer 内，重复实现会丢任务。
-13. **`/steer` 不挂拦截器就永不生效**——报 `STEERED` 只代表已入邮箱；必须在 `outcome.getRequest().options(o -> o.interceptorAdd(new SteerInterceptor(...)))` 的请求级挂载，否则任务结束时转 dropped。
-14. **`GoalScheduler` 的 job 名必须带工作区前缀**——`JobManager` 是 JVM 单例而会话 ID 不全局唯一，不加前缀会让多工作区的同名会话互相覆盖。
+11. **`/goal` 只注册命令不会跑**——用 `GoalExtension.builder(workspaceId).taskExecutor(...)` + `addExtension` 一次装配（内部建 bridge / engine / scheduler / 命令）。缺 `taskExecutor` 时每轮都被守卫静默跳过（日志 `execution bridge unavailable`）；纯 JUnit 无 Solon 容器时须 `.scheduler(null)` 关闭调度（`JobManager.getInstance()` 会 NPE）。
+12. **`/queue` 入队不等于会发送**——宿主必须在任务终态调 `queue.drainOne(...)`（`QueueExtension` 实例上）；并且不要自己 `poll`，claim / ack / requeue 全在 drainOne 内，重复实现会丢任务。
+13. **`/steer` 不挂拦截器就永不生效**——报 `STEERED` 只代表已入邮箱。`SteerExtension` 已代劳默认挂载；仅当同一引擎多工作区、每请求上下文不同时才需请求级 `o.interceptorAdd(...)`（同 Class 会覆盖默认实例，不会双份），否则任务结束时转 dropped。
+14. **`GoalScheduler` 的 job 名必须带工作区前缀**——`JobManager` 是 JVM 单例而会话 ID 不全局唯一，不加前缀会让多工作区的同名会话互相覆盖（`builder(workspaceId)` 已内置）。
+15. **不要给零旋钮的能力套 builder**——goal 有 8 个可配点才用 builder；queue 零旋钮、steer 一个端口，用无参/单参构造即得。伪一致性只会增加仪式感。
+16. **`resume()` 含 `runNow=true`，恢复期别用**——服务重启/工作区恢复要「静默挂上、等下一轮」时用 `resumeScheduleOnly(sessionId)`，否则每个活跃 goal 会立即多跑一轮。
+17. **改 goal 配置不要整段交给门面**——`pause` → 宿主 `interruptSession` → 等轮次停 → `update` 这条链里，中断与等待是宿主的运行时职责；门面的 `updateAndReschedule` 只覆盖后半段（update + 时长 commit + resume + schedule）。把它整段吞进去会让旧轮次继续跑并回写覆盖刚改的配置。
 
 ---
 

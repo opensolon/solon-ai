@@ -171,8 +171,8 @@ class HarnessEngineBuilderTest {
         // 已废弃的 ToolPermission 重载同样生效
         @SuppressWarnings("deprecation")
         HarnessEngine e2 = builder()
-                .toolsAdd(org.noear.solon.ai.harness.permission.ToolPermission.TOOL_GLOB)
-                .disallowedToolsAdd(org.noear.solon.ai.harness.permission.ToolPermission.TOOL_LS)
+                .toolsAdd(ToolName.TOOL_GLOB)
+                .disallowedToolsAdd(ToolName.TOOL_LS)
                 .build();
         assertTrue(e2.getTools().contains("glob"));
         assertTrue(e2.getDisallowedTools().contains("ls"));

@@ -1,5 +1,30 @@
 ### vNEXT
 
+* **goal 域宿主调用点收敛：宿主内部 41 处 `getGoalEngine()`/`getGoalScheduler()` 清零，全部改走 `GoalExtension` 门面**（P0/P1 落地，仍是宿主内部可维护性改造——Web 端点路径/参数/返回体/状态码一字未改，终端用户无感知）:
+  * 背景：上一轮已把「装配」收敛为一个类，但宿主内部仍有 41 处直接取内部实例、6 个文件。其中约 10 组是**手工复刻门面已封装好的配对动作**（`pause`+`unschedule`、`resume`+`schedule(true)`、`clear`+`unschedule`）——同一语义两套写法并存，是「改了状态忘了挂/摘 job 导致 goal job 泄漏」的唯一来源
+  * **门面补 8 个方法**：`stateOf(id)` / `sessionOf(id)` / `find(id, taskId)`（任务行分流三连收敛）/ `running(session|id)` / `attach(...)`（只建不挂）/ `commit(...)` / `hasScheduler()` / `resumeScheduleOnly(id)` / `scheduleNow(id)` / `runRoundAsync(session)` / `updateAndReschedule(...)`；`clear()` 内部改为**先 unschedule 再 clear**（消除「清完状态但 job 还在」的窗口期）
+  * **两个必须按住的语义（否则会真实改变功能）**：
+    * `resume()` 内含 `schedule(runNow=true)`，而服务重启/工作区恢复原用 `schedule(id, false)`——「静默挂上、等下一轮」。故新增 `resumeScheduleOnly(id)` 专用于 `WebQueueDispatcher.recoverSessionGoals`；若用 `resume()` 顶替，每次重启会对每个活跃 goal 立即多跑一轮
+    * 改 goal 配置是 `pause → 宿主 interruptSession → 等轮次停(200×20ms) → update → resume`，中断与等待是宿主运行时职责（依赖注入进来的中断端口），**不能整段吞进门面**。`updateAndReschedule` 只覆盖后半段，且保留「`maxDurationMs != null` 才 set+commit」的条件分支（否则「只改 prompt 不动时长」会把时长清空）
+  * **宿主改造**（6 文件，41→0）：`LoopWebController` 29 处（pause/resume/clear/status/remove/toggle/trigger/update 分流）、`DesktopGoalController`、`WsGate`、`DesktopInputRouter`、`DesktopGoalBroadcaster`、`WebQueueDispatcher`、`SessionWebController`；`WsGate`/`DesktopGoalController` 字段由 `GoalEngine`+`GoalScheduler` 收敛为单个 `GoalExtension`，`Configurator` 同步；`WorkspaceContext` 新增 `getGoalExtension()` 与 `attachGoal(GoalExtension, bridge)` 重载（旧三参重载保留）
+  * **门面不代管的边界**：`getExecutionBridge()` 保留——WsGate/CliShell 还要往桥上注册 TaskHandler/BusyChecker，桥是 loop 与 goal 共享的横切设施；`GoalState` 作为值对象仍在宿主手中传递（`gs.setXxx` + `commit`）。实际消除的是两个**服务类**的实例依赖
+  * 测试：`GoalExtensionTest` 由 5 例扩到 9 例（`find` 三态返回 null / `find` 命中返回同一实例 / `updateAndReschedule` 不因 null 清空时长与 token / `clear` 后 `state`/`stateOf`/`hasGoal` 全为 null / 无调度器时 `resumeScheduleOnly`+`scheduleNow`+`unschedule` 全 no-op 不 NPE）；新增 `GoalLoopEndpointTest` 12 例锁死 pause/resume/clear/toggle/trigger 五端点行为（分流命中、400/404 分支、以及「调度配对只由门面负责、控制器不再直接操作调度器」）
+  * 验证：`GoalExtensionTest` 9 例、`GoalLoopEndpointTest` 12 例全绿；`soloncode-cli` 全量 **1216 例 4 失败**（= 基线 1204 + 新增 12），失败类与既有基线逐项一致（ImageReply 异常文案 / AgentSettings 400 / Mount 安装目标数 / Skillhub 联网）；harness 全量 736 例 29F+3E 全在 ToolStrategy/Hitl 域，与 goal 域零交集
+  * 文档：README §5.1 运行期门面一览重写（补齐 13 个方法与 3 个易错点：`resume` 的 runNow 语义、改配置只吞后半段、`clear` 先摘后清）；第十三章新增坑 16（恢复期别用 `resume`）与坑 17（改配置别整段交给门面）
+  * 未做（有意）：`getGoalEngine()`/`getGoalScheduler()` 在 harness 侧保留不标 `@Deprecated`——harness 是多宿主复用的库，其他宿主可能自建 `GoalEngine` 做二次集成；`soloncode-cli` 先清零，观测一两个版本后再决定库侧去留
+
+* **goal / queue / steer 三命令：宿主侧与 solon-ai-harness 的交互体验简化——装配与操作各收敛到一个类**（响应「宿主侧接线太复杂」的反馈，功能效果与 attrs 契约零变化）:
+  * 口径：本次改进的是**宿主侧与 solon-ai-harness 的交互面**（宿主开发者要认识并 new 的类、要写的装配样板、运行期要操作的对象），**不是终端用户交互**——`/goal`、`/queue`、`/steer` 三个命令的语法、回执文案、Web/桌面端点与 UI 行为一字未改，终端用户无感知
+  * 问题：README 第五章的三个状态型命令，宿主接触面分别是 5 个类（`ExecutionBridge`+`GoalEngine`+`GoalScheduler`+`GoalExtension`+`GoalCommand`，25 行装配）、2 个静态工具类（`SessionQueue`+`SessionQueueDrainer`）、以及「每请求 new `SteerInterceptor` + `interceptorAdd`」的样板。依赖链是刚性的，宿主真正能定的只有 workspaceId 与一两个 lambda，其余全是可推导的组装步骤
+  * **`GoalExtension` 升级为 builder 一键装配**：`GoalExtension.builder(workspaceId).taskExecutor(...).busyChecker(...).budget(...).stagnation(...).maxErrors(...).validatorEnabled(...).workspace(...).bridge(...).scheduler(...).commandEnabled(...).listener(...).build()` —— `initialize(engine)` 内依次建 `ExecutionBridge`→`GoalEngine`→`GoalScheduler`→注册 `/goal` 命令→预注册 listener，`configure` 仍挂 `GoalTalent` 到主代理。`taskExecutor` 缺省内置 README 原模板（`engine.handle` + `call()`），`busyChecker` 缺省恒 false，其余全有缺省值。既有双参构造保留并标 `@Deprecated`
+  * **`QueueExtension` 新建**：`addExtension` 内幂等注册 `/queue` 命令 + 提供完整操作门面（`enqueue`/`drainOne` 两态/`ack`/`view`/`pendingSize`/`cancelItem`/`promote`/`cancelPending`/`hasPersistedItems`/`importItems`），内部中转两个静态类。**保留「不自动 drain」决策**：Web 端 ack 跨越订阅生命周期，自动化会遮住宿主必须显式掌握的时机
+  * **`SteerExtension` 新建**：`addExtension` 内幂等注册 `/steer` 命令 + `configure` 把拦截器挂为主代理**默认拦截器**。顺序安全性已核验：`LinkedHashMap<Class, RankEntity>` 按 Class 去重，`AgentFactory` 先挂压缩/StopLoop、后轮到 extension 的 configure，天然排在上下文压缩之后；`ReActOptions.copy()` 的 `interceptors.putAll` 使请求级同 Class 挂载覆盖默认实例（不双份），故 Web 多工作区仍可保留请求级挂载。端口用 `Supplier` 惰性解析（默认工作区可能在入口绑定之前创建）
+  * **builder 只给 goal**：goal 有 8 个可配点才值得 builder；queue 零旋钮、steer 一个端口，给它们套 builder 是伪一致性。README 坑 #15 记录此判断
+  * 三命令极简宿主终态：`addExtension(GoalExtension.builder(ws).taskExecutor(r).build())` / `addExtension(new QueueExtension())` / `addExtension(new SteerExtension<>(() -> port))`，运行期操作也只在各自那一个实例上
+  * 测试：`GoalExtensionTest`(5) / `QueueExtensionTest`(5) / `SteerExtensionTest`(5) 共 15 例全绿，覆盖全链装配、共享桥复用、listener 预注册、命令幂等与关闭、门面语义透传（同步/异步 drain 差异）、惰性端口、旧构造兼容；`scheduler(null)` 三态语义修复（缺省新建 / 自备 / 显式关闭，后者供无 Solon 容器环境）
+  * 宿主迁移（`soloncode-cli`）：`WorkspaceManager` 的 goal 四件套改 builder、`/steer`+`/queue` 命令注册改 Extension（WebStreamBuilder 请求级挂载保留，多 wsContext 现实约束）；compile 通过，全量 1204 例 4 失败均为既有基线（Mount/AgentSettings/ImageReply/Skillhub 联网类）
+  * 文档：README 第五章表格与 5.1/5.2/5.3 装配段重写、第十三章坑位 11-15 同步
+
 * **修复三处真实缺陷（P0/P1/P2）+ 两处清理（P3/P4）**（按用户"重新确认后再修"的要求，上一轮曾误报 4 项，此处仅保留复核后成立者）:
   * **P0 `HarnessEngine.setMemoryEnabled` 空指针**：`memoryTalent` 只在注入 `memoryProvider` 时构建（否则显式置 null），而该方法无守卫直接解引用；相邻的 `setMemoryRelevanceCount` / `setMemoryPriorityCount` / `setMemorySummaryLength` 三个邻居都有判空。未注入 provider 的宿主调一次开关即 NPE。已补守卫（配置值仍写入 options，无 talent 可开关属正常状态）
   * **P1 `getDefaultModelConfig` 回落不校验 `enabled`**：显式名路径（`getModelOrNil` / `getModelOrDef` 的命中分支）都检查 `isEnabled()`，回落路径却直接返回 `models.get(defaultModel)` 或 `values().iterator().next()`。后果：模型被禁用但仍是 `defaultModel` 或 Map 首项时，`getModelOrDefInstance` 会真的构建并调用已禁用模型；`/model` 的 active 标记还会指向被 `formatModels` 过滤掉的模型。已改为两条路径都跳过 disabled、全禁用时返回 null；**连带** `AgentFactory.create` 对 null 模型给出明确 `IllegalStateException`（此前会落到 `ReActAgentConfig` 的 `chatModel is required`，无线索）
