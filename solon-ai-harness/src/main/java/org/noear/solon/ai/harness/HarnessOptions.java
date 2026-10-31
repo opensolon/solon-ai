@@ -22,6 +22,7 @@ import org.noear.solon.ai.agent.react.intercept.StopLoopInterceptor;
 import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.permission.PermissionContext;
+import org.noear.solon.ai.harness.agent.TaskTalent;
 import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
@@ -102,7 +103,14 @@ class HarnessOptions implements NonSerializable {
 
     // ========== 并行任务控制 ==========
 
-    private volatile int subagentDefaultConcurrency = 5;
+    /**
+     * 子代理任务默认并发上限。
+     *
+     * <p>取值契约见 {@link TaskTalent#normalizeDefaultConcurrency(int)}：{@code 0} = 未设置
+     * （取 {@link TaskTalent#DEFAULT_CONCURRENCY}），上界 {@link TaskTalent#MAX_CONCURRENCY}，
+     * <b>不存在「不限制」</b>。</p>
+     */
+    private volatile int subagentDefaultConcurrency = TaskTalent.DEFAULT_CONCURRENCY;
 
     // ========== 缓存控制 ==========
     private volatile CacheControl cacheControl;
@@ -394,14 +402,49 @@ class HarnessOptions implements NonSerializable {
         }
     }
 
+    /**
+     * 子代理任务默认并发上限（仅在模型未配置 {@code AiConfig#concurrency} 时生效）
+     *
+     * <p>恒为有限正整数：0 被解释为「未设置」（与 {@code contextLength} 同理），
+     * 本项不提供「不限制」。</p>
+     */
     int getSubagentDefaultConcurrency() {
         return subagentDefaultConcurrency;
     }
 
+    /**
+     * @param subagentDefaultConcurrency 子代理任务默认并发上限；{@code 0} = 未设（取默认 5），
+     *                                   上界 {@link TaskTalent#MAX_CONCURRENCY}，<b>不存在「0 = 不限制」</b>
+     * @throws IllegalArgumentException 传入负数
+     */
     void setSubagentDefaultConcurrency(Integer subagentDefaultConcurrency) {
         if (subagentDefaultConcurrency != null) {
-            this.subagentDefaultConcurrency = subagentDefaultConcurrency;
+            this.subagentDefaultConcurrency = TaskTalent.normalizeDefaultConcurrency(subagentDefaultConcurrency);
         }
+    }
+
+    /**
+     * @deprecated 旧名，已由 {@link #getSubagentDefaultConcurrency()} 取代。
+     */
+    @Deprecated
+    int getMultitaskMaxTasks() {
+        return getSubagentDefaultConcurrency();
+    }
+
+    /**
+     * @deprecated 旧名，请改用 {@link #setSubagentDefaultConcurrency(Integer)}。
+     */
+    @Deprecated
+    void setMultitaskMaxTasks(Integer multitaskMaxTasks) {
+        setSubagentDefaultConcurrency(multitaskMaxTasks);
+    }
+
+    /**
+     * @deprecated 过渡名，请改用 {@link #setSubagentDefaultConcurrency(Integer)}。
+     */
+    @Deprecated
+    void setMultitaskMaxConcurrency(Integer multitaskMaxConcurrency) {
+        setSubagentDefaultConcurrency(multitaskMaxConcurrency);
     }
 
     boolean isBashAsyncEnabled() {

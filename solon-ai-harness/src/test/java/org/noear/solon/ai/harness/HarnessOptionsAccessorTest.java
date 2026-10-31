@@ -2,6 +2,7 @@ package org.noear.solon.ai.harness;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.CacheControl;
+import org.noear.solon.ai.harness.agent.TaskTalent;
 import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionRule;
@@ -17,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -165,24 +167,43 @@ class HarnessOptionsAccessorTest {
         o.setModelRetries(null);
         assertEquals(9, o.getModelRetries());
 
+        // 0 = 未设置：归一为缺省 5，不再表示「不限制」（否则线程数/上游 QPS 会退化为只受任务数约束）
         o.setSubagentDefaultConcurrency(0);
+        assertEquals(TaskTalent.DEFAULT_CONCURRENCY, o.getSubagentDefaultConcurrency(),
+                "0 = 未设置，必须归一为缺省值");
         o.setSubagentDefaultConcurrency(null);
-        assertEquals(0, o.getSubagentDefaultConcurrency());
+        assertEquals(TaskTalent.DEFAULT_CONCURRENCY, o.getSubagentDefaultConcurrency(), "null 不应覆盖已有值");
     }
 
-    /** 旧名 setMultitaskMaxTasks / setMultitaskMaxConcurrency 作为 @Deprecated 桥接保留，必须与新名同效。 */
+    /** 旧名 setMultitaskMaxTasks / setMultitaskMaxConcurrency 作为 @Deprecated 桥接保留（v4.0.5 起已发布），必须与新名同效。 */
+    @SuppressWarnings("deprecation")
     @Test
     void deprecatedMultitaskSettersBridgeToSubagentDefaultConcurrency() {
         HarnessOptions o = fresh();
 
-        o.setSubagentDefaultConcurrency(3);
+        o.setMultitaskMaxTasks(3);
         assertEquals(3, o.getSubagentDefaultConcurrency(), "旧名必须写入同一个字段");
+        assertEquals(3, o.getMultitaskMaxTasks(), "旧 getter 必须读到同一个字段");
+
+        o.setMultitaskMaxConcurrency(4);
+        assertEquals(4, o.getSubagentDefaultConcurrency(), "过渡名必须与新名同效");
 
         o.setSubagentDefaultConcurrency(null);
-        assertEquals(3, o.getSubagentDefaultConcurrency(), "null 不应覆盖已有值");
+        assertEquals(4, o.getSubagentDefaultConcurrency(), "null 不应覆盖已有值");
 
         o.setSubagentDefaultConcurrency(7);
         assertEquals(7, o.getSubagentDefaultConcurrency());
+    }
+
+    /** 默认并发上限恒为有限正整数：0 当未设置、超上界靠上界、负数报错，不存在「不限制」。 */
+    @Test
+    void subagentDefaultConcurrencyIsAlwaysBounded() {
+        HarnessOptions o = fresh();
+
+        o.setSubagentDefaultConcurrency(TaskTalent.MAX_CONCURRENCY + 5);
+        assertEquals(TaskTalent.MAX_CONCURRENCY, o.getSubagentDefaultConcurrency(), "超上界按上界处理");
+
+        assertThrows(IllegalArgumentException.class, () -> o.setSubagentDefaultConcurrency(-1));
     }
 
     @Test

@@ -24,6 +24,8 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.talents.cli.TerminalTalentProxy;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 代理工厂
@@ -31,10 +33,12 @@ import org.noear.solon.lang.Nullable;
  * @author noear 2026/3/20 created
  */
 public class AgentFactory {
+    private static final Logger LOG = LoggerFactory.getLogger(AgentFactory.class);
+
     //**
-    private static String[] TOOL_ALL_FULL = {"read", "write", "edit", "glob", "grep", "ls", "bash",  "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "generate", "mcp", "openapi", "hitl", "lsp", "memory"};
+    private static String[] TOOL_ALL_FULL = {"read", "write", "edit", "glob", "grep", "ls", "bash", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "generate", "mcp", "openapi", "hitl", "lsp", "memory"};
     //*
-    private static String[] TOOL_ALL_PUBLIC = {"read", "write", "edit", "glob", "grep", "ls", "bash",  "skill", "todo", "code", "codesearch", "websearch", "webfetch", "lsp"};
+    private static String[] TOOL_ALL_PUBLIC = {"read", "write", "edit", "glob", "grep", "ls", "bash", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "lsp"};
     //pi
     private static String[] TOOL_PI = {"read", "write", "edit", "bash"};
 
@@ -61,7 +65,7 @@ public class AgentFactory {
 
         ChatModel chatModel = engine.getModelOrDefInstance(selectedModel);
         AgentDefinition.Metadata metadata = agentDefinition.getMetadata();
-
+        boolean isMain = AgentDefinition.AGENT_MAIN.equals(agentDefinition.getMetadata().getName());
         ReActAgent.Builder builder = ReActAgent.of(chatModel);
 
         builder.name(agentDefinition.getName());
@@ -87,18 +91,18 @@ public class AgentFactory {
             for (String toolName : metadata.getTools()) {
                 if ("**".equals(toolName)) {
                     for (String t1 : TOOL_ALL_FULL) {
-                        toolAddDo(engine, builder, terminalTalentProxy, metadata, t1);
+                        toolAddDo(engine, builder, terminalTalentProxy, metadata, t1, isMain);
                     }
                 } else if ("*".equals(toolName)) {
                     for (String t1 : TOOL_ALL_PUBLIC) {
-                        toolAddDo(engine, builder, terminalTalentProxy, metadata, t1);
+                        toolAddDo(engine, builder, terminalTalentProxy, metadata, t1, isMain);
                     }
                 } else if ("pi".equals(toolName)) {
                     for (String t1 : TOOL_PI) {
-                        toolAddDo(engine, builder, terminalTalentProxy, metadata, t1);
+                        toolAddDo(engine, builder, terminalTalentProxy, metadata, t1, isMain);
                     }
                 } else {
-                    toolAddDo(engine, builder, terminalTalentProxy, metadata, toolName);
+                    toolAddDo(engine, builder, terminalTalentProxy, metadata, toolName, isMain);
                 }
             }
 
@@ -145,7 +149,7 @@ public class AgentFactory {
         return builder;
     }
 
-    private static void toolAddDo(HarnessEngine engine, ReActAgent.Builder builder, TerminalTalentProxy terminalTalentProxy, AgentDefinition.Metadata metadata, String toolName) {
+    private static void toolAddDo(HarnessEngine engine, ReActAgent.Builder builder, TerminalTalentProxy terminalTalentProxy, AgentDefinition.Metadata metadata, String toolName, boolean isMain) {
         //当前禁止
         if (metadata.getDisallowedTools().contains(toolName)) {
             return;
@@ -168,8 +172,8 @@ public class AgentFactory {
             case "edit": {
                 terminalTalentProxy.addTools("edit");
 
-                toolAddDo(engine, builder, terminalTalentProxy, metadata, "read");
-                toolAddDo(engine, builder, terminalTalentProxy, metadata, "write");
+                toolAddDo(engine, builder, terminalTalentProxy, metadata, "read", isMain);
+                toolAddDo(engine, builder, terminalTalentProxy, metadata, "write", isMain);
                 break;
             }
             case "glob": {
@@ -254,6 +258,14 @@ public class AgentFactory {
                 break;
             }
             case "hitl": {
+                //仅主代理支持
+                if (isMain == false) {
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("子代理[{}]不挂载 hitl：HITL 仅限主代理", metadata.getName());
+                    }
+                    return;
+                }
+
                 engine.getHitlInterceptor().setEnabled(engine.isHitlEnabled());
 
                 builder.defaultInterceptorAdd(engine.getHitlInterceptor());

@@ -19,25 +19,24 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatConfig;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * multitask 并行上限契约测试
  *
- * <p>锁定三个点：</p>
+ * <p>锁定四个点：</p>
  * <ol>
- *   <li>{@code resolveConcurrency}：模型配置优先，未设置（0）时回退默认值。
- *       不存在"两级取小"那种"配了 8 却只跑 5"的静默降级。</li>
- *   <li>{@code isSerialOnlyByCaps}：串行快路径的条件是"所有任务生效上限都为 1"，
- *       而不是"任一为 1"——后者会让一个 cap=1 的子代理把整批拖成串行。</li>
- *   <li>{@code AiConfig#concurrency}：int + 0=未设置，getter 恒非 null，负数报错。</li>
+ *   <li>{@code resolveConcurrency}：模型配置优先，未设置（0）时回退默认值。</li>
+ *   <li>{@code isSerialOnly}：串行快路径的条件是「所有任务生效上限都为 1」，
+ *       而不是「任一为 1」——后者会让一个 cap=1 的子代理把整批拖成串行。</li>
+ *   <li>默认并发上限恒为有限正整数（0 = 未设置 → 缺省 5，上界 10），不存在「不限制」。</li>
+ *   <li>{@code AiConfig#concurrency}：int + 0=未设置，负数报错。</li>
  * </ol>
  *
  * @author bai
@@ -49,7 +48,6 @@ public class TaskTalentParallelCapTest {
 
     @Test
     public void modelUnsetFallsBackToDefault() {
-        // 模型未配置（0 = 未设置）→ 用默认值
         assertEquals(5, TaskTalent.resolveConcurrency(0, 5));
     }
 
@@ -62,80 +60,95 @@ public class TaskTalentParallelCapTest {
 
     @Test
     public void modelConfigWinsEvenWhenLowerThanDefault() {
-        // 模型配得更低时也以模型为准，这是"按模型配额限流"的初衷
         assertEquals(2, TaskTalent.resolveConcurrency(2, 10));
     }
 
     @Test
-    public void defaultZeroMeansUnlimitedWhenModelUnset() {
-        // 默认值为 0 = 整体放开：模型也没配时就是不限
-        assertEquals(0, TaskTalent.resolveConcurrency(0, 0));
+    public void defaultZeroFallsBackToBuiltInDefault() {
+        assertEquals(TaskTalent.DEFAULT_CONCURRENCY, TaskTalent.resolveConcurrency(0, 0));
     }
 
     @Test
-    public void modelUnlimitedCannotBeExpressedInTwoStateContract() {
-        // 已接受的表达力损失：0 被"未设置"占用，模型级无法单独表达"不限"，
-        // 此时只能靠把默认值设为 0 整体放开
-        assertEquals(5, TaskTalent.resolveConcurrency(0, 5));
+    public void resolveConcurrencyNeverReturnsUnlimited() {
+        // 契约：不管怎么传 0，生效上限恒为正整数
+        assertTrue(TaskTalent.resolveConcurrency(0, 0) > 0);
+        assertTrue(TaskTalent.resolveConcurrency(0, TaskTalent.DEFAULT_CONCURRENCY) > 0);
+        assertTrue(TaskTalent.DEFAULT_CONCURRENCY <= TaskTalent.MAX_CONCURRENCY);
     }
 
     @Test
-    public void negativeDefaultTreatedAsUnlimited() {
-        // 防御分支：配置侧已拦截负数，这里不会把负数当上限
-        assertEquals(0, TaskTalent.resolveConcurrency(0, -1));
+    public void negativeDefaultFallsBackToBuiltInDefault() {
+        // 防御分支：配置侧已拦截负数，纯函数也不把负数当上限
+        assertEquals(TaskTalent.DEFAULT_CONCURRENCY, TaskTalent.resolveConcurrency(0, -1));
     }
 
-    // ---------- isSerialOnlyByCaps ----------
+    @Test
+    public void setterNormalizesToBoundedRange() {
+        TaskTalent t = new TaskTalent(null);
+
+        t.setDefaultConcurrency(0);
+        assertEquals(TaskTalent.DEFAULT_CONCURRENCY, t.getDefaultConcurrency(), "0 = 未设置，取缺省值");
+
+        t.setDefaultConcurrency(TaskTalent.MAX_CONCURRENCY + 1);
+        assertEquals(TaskTalent.MAX_CONCURRENCY, t.getDefaultConcurrency(), "超上界靠上界");
+
+        t.setDefaultConcurrency(3);
+        assertEquals(3, t.getDefaultConcurrency(), "区间内原样保留");
+
+        assertThrows(IllegalArgumentException.class, () -> t.setDefaultConcurrency(-1));
+        assertEquals(3, t.getDefaultConcurrency(), "抛异常不得改动已有值");
+    }
+
+    // ---------- isSerialOnly ----------
 
     @Test
     public void allModelsCapOneIsSerial() {
-        // 所有任务的目标模型生效上限都是 1：走调用线程串行快路径
-        assertTrue(TaskTalent.isSerialOnlyByCaps(caps(1, 1, 1)));
+        assertTrue(TaskTalent.isSerialOnly(plans(1, 1, 1)));
     }
 
     @Test
     public void oneModelCapOneDoesNotForceSerial() {
-        // 核心语义：混合模型时，一个 cap=1 的子代理不能把整批拖成串行。
-        // 若这里判成 true，可 4 并发的那个会被连累，回到"一刀切"缺陷
-        assertFalse(TaskTalent.isSerialOnlyByCaps(caps(1, 4)));
-        assertFalse(TaskTalent.isSerialOnlyByCaps(caps(4, 1)));
+        // 核心语义：混合模型时，一个 cap=1 的子代理不能把整批拖成串行
+        assertFalse(TaskTalent.isSerialOnly(plans(1, 4)));
+        assertFalse(TaskTalent.isSerialOnly(plans(4, 1)));
     }
 
     @Test
-    public void unlimitedModelsAreNotSerial() {
-        assertFalse(TaskTalent.isSerialOnlyByCaps(caps(0, 0)));
+    public void noSlotModelsAreNotSerial() {
+        // 无槽位（未知子代理/模型不可解析）不能断定为串行
+        assertFalse(TaskTalent.isSerialOnly(plans(0, 0)));
     }
 
     @Test
     public void defaultOneMakesAllUnsetModelsSerial() {
-        // 关键回归：模型未配置 + 默认值 1 时，生效上限恒为 1，必须判为串行。
+        // 关键回归：模型未配置 + 默认值 1 时生效上限恒为 1，必须判为串行。
         // 若直接用裸 getConcurrency()（=0）判定，会错走并行路径
-        int DEFAULT = 1;
-        assertTrue(TaskTalent.isSerialOnlyByCaps(
-                caps(TaskTalent.resolveConcurrency(0, DEFAULT), TaskTalent.resolveConcurrency(0, DEFAULT))));
+        assertTrue(TaskTalent.isSerialOnly(plans(
+                TaskTalent.resolveConcurrency(0, 1), TaskTalent.resolveConcurrency(0, 1))));
     }
 
     @Test
-    public void unresolvableModelIsNotSerial() {
-        // 模型全禁用时不能断定串行，交给常规路径的"未知子代理"分支处理
-        assertFalse(TaskTalent.isSerialOnlyByCaps(Collections.<Integer>singletonList(null)));
+    public void emptyBatchIsNotSerial() {
+        assertFalse(TaskTalent.isSerialOnly(Collections.<TaskTalent.TaskPlan>emptyList()));
     }
 
-    @Test
-    public void noResolvedModelIsNotSerial() {
-        // 所有 task 都是未知子代理：没有可判定对象，走常规路径返回错误文案
-        assertFalse(TaskTalent.isSerialOnlyByCaps(Collections.<Integer>emptyList()));
-    }
+    private static List<TaskTalent.TaskPlan> plans(Integer... caps) {
+        List<TaskTalent.TaskPlan> plans = new ArrayList<>(caps.length);
 
-    private static List<Integer> caps(Integer... values) {
-        return new ArrayList<>(Arrays.asList(values));
+        for (Integer cap : caps) {
+            TaskTalent.MultiTaskOp op = new TaskTalent.MultiTaskOp();
+            op.agent_name = "general";
+            plans.add(new TaskTalent.TaskPlan(op, null, null, null, cap, null));
+        }
+
+        return plans;
     }
 
     // ---------- ChatConfig 字段契约 ----------
 
     @Test
     public void chatConfigMaxConcurrencyDefaultsToZero() {
-        // int + 0=未设置，与 AiConfig#contextLength 的 0=未设置 同义；getter 永不返回 null
+        // int + 0=未设置，与 AiConfig#contextLength 同义
         assertEquals(0, new ChatConfig().getConcurrency());
     }
 
@@ -145,9 +158,8 @@ public class TaskTalentParallelCapTest {
         config.setConcurrency(3);
         assertEquals(3, config.getConcurrency());
 
-        // int 契约：没有 null 可言，配错直接炸出来而不是被静默吞掉
+        // 配错直接炸出来而不是被静默吞掉
         assertThrows(IllegalArgumentException.class, () -> config.setConcurrency(-1));
-
         assertEquals(3, config.getConcurrency(), "抛异常后原值不变");
 
         config.setConcurrency(0);
@@ -159,7 +171,6 @@ public class TaskTalentParallelCapTest {
         ChatConfig config = new ChatConfig();
         config.setConcurrency(2);
 
-        // 不构建 ChatModel（会校验 apiUrl），直接验证只读出口透传
         assertEquals(2, new org.noear.solon.ai.chat.ChatConfigReadonly(config).getConcurrency());
     }
 

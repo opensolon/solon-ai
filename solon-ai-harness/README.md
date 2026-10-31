@@ -1133,8 +1133,10 @@ engine.handle(HarnessInput.of(session, "分析 src/main.js").explicitAgent("fron
 // 工具集含 task 时（* 或 ** 或显式 task），主代理可调用：
 //   task      —— 委派单个子代理，串行
 //   multitask —— 并行委派多个子代理，并行度按每个任务实际路由到的模型分别限流
-//                生效上限 = 模型配置 concurrency（0=未设置）?: subagentDefaultConcurrency（默认 5，0=不限）
+//                生效上限 = 模型配置 concurrency（0=未设置，配了就用它）?: subagentDefaultConcurrency（默认 5，取值 1~10）
+//                不存在「不限制」：生效上限恒为有限正整数（具体理由见下方注记）
 //                模型配了就以模型为准；模型没配才用默认值。超限不报错，在调用线程排队，有空位就提交
+//                排队时「谁的目标模型有空配额就提交谁」，低配额模型不会挡住其他模型的任务
 engine.setSubagentEnabled(true);   // 默认 true
 engine.setSubagentDefaultConcurrency(5);   // 子代理任务默认并发上限（模型未配置时生效）
 
@@ -1146,13 +1148,35 @@ config.setConcurrency(2);
 > 4.2 起并行上限的语义与命名都做了收敛：
 > - `multitaskMaxTasks` → `subagentDefaultConcurrency`（旧名 `multitaskMaxTasks`、中间名
 >   `multitaskMaxConcurrency` 均保留为 `@Deprecated` 桥接，行为一致）
+>   **但存量语义已变**：旧版该值只用于生成提示词里「单次建议 2-N 个」的文案，并不真正限流；
+>   新版它是真实的默认并发上限（模型未配置 `concurrency` 时生效），且不再参与提示词。
+>   升级后该值的实际影响力变强，存量配置建议复核。
 > - `ChatConfig#maxParallelTasks` → `AiConfig#concurrency`，且 **0 的含义由「不限制」改为「未设置」**，
 >   与 `contextLength` 对齐：未设置时回退 `subagentDefaultConcurrency`
 > - 不再是「两级同时生效取 min」。此前模型配 8 却只跑 5 且需查日志才知道原因的问题不再存在
 >
-> 注意：`concurrency` 的 0 被「未设置」占用，因此**模型级无法单独表达「不限制」**；
-> 需要整体放开时把 `subagentDefaultConcurrency` 设为 0。
-> 另：`subagentDefaultConcurrency` 仅约束 `multitask` 的并行调度，`task` 单任务调用不经过信号量。
+> 注意：**不存在「不限制」这个档位**——生效上限恒为有限正整数。原因是「不限」在物理上不成立：
+> 线程数、上游 QPS、堆内存会退化为只受任务数约束，恰好是最容易打爆上游（429）与 OOM 的形态；
+> 且信号量一旦缺席，「模型级 `concurrency`」也就形同虚设。
+>
+> `subagentDefaultConcurrency` 的取值契约：`1~10` 原样生效（缺省 5）；**`0` 视为「未设置」取默认 5**
+> （与 `contextLength`、`concurrency` 的 0=未设置 同构）；超出 10 按 10 处理；负数报错。
+> 归一（0 或超上界）都会打 WARN，不会「配了却没生效」而无声。
+> 需要更高并发请显式配置模型级 `AiConfig#concurrency`——那是你为某个模型亲自写下的具体数字，
+> 意图与责任都明确；把「默认值」调大只会让所有未调优模型一起失去护栏。
+> <br/>（若确实需要远超 10 的并发，请逐个模型写 `concurrency`——那不属于「默认值」的职责。）
+>
+> 另：限流是引擎级、跨会话共享的，`task` 单任务调用与 `multitask` 的并行/串行快路径都会取槽——
+> 否则多个会话各跑一个 `task` 时同一个模型上的并发会失去约束。
+>
+> 上限可在运行期调整：调低时不会打断已在跑的任务，但会在在跑数降到新上限之前暂停放行新任务
+> （不会像「新建信号量」那样瞬时超额）。
+>
+> 结果外壳：每个子任务包在 `<task_result>` 里，`<result_content>` 用 CDATA 包裹并**有 20000 字符上限**
+> （超出保留头部并标注原始长度）——否则单个超长的子代理输出就能灌爆父会话上下文。
+> 内容里的 `]]>` 会被拆开而不会提前闭合 CDATA；`description`/`agent_name` 会做 XML 转义。
+> 排队超过 30 秒会打一条 WARN（带模型名），但**不会超时终止**（会误杀长任务）。
+> 用户取消时，父代理不再逐个等到底：会中断在跑的子任务并不再等待剩下的任务。
 
 `task` 默认不在 `*`（公有）里，只有 `**`（完整）才包含——这是为了让子代理不能再委派子代理，天然防止无限嵌套。
 
@@ -1189,11 +1213,13 @@ enabled: true
 | `disallowedTools` | 在 `tools` 结果上做减法 |
 | `model` | 指定模型 |
 | `hidden` | 不在列表里展示 |
-| `primary` | 是否为主代理 |
+| `primary` | 是否为主代理。**只有主代理能使用 `hitl`**：子代理即使配了 `hitl` 或 `**`（会展开出 `hitl`）也不会被挂载，因为子代理挂起后无人能决策，而父代理正阻塞等待它（互等不可解） |
 | `enabled` | 是否启用 |
 | `permissionRules` | 权限规则（`toolName` / `behavior` / `pattern` / `priority`） |
 
 > `skills` / `mcpServers` / `memory` / `hooks` / `background` / `isolation` / `teamName` 已标记 `@Deprecated`，保留字段但不再解析。技能与 MCP 现在走**挂载**与 `engine.addMcpServer(...)`。
+
+> 子代理同样只能用一层委派（不能再 `task` / `multitask`），且**不能使用 `hitl`**（装配期就不会挂载）。
 
 ---
 
@@ -1248,7 +1274,7 @@ engine.toolPermissionReset(tools, disallowedTools);
 | `subagentEnabled(Boolean)` | `true` | 子代理功能 |
 | `bashAsyncEnabled(Boolean)` | `false` | Bash 异步执行 |
 | `apiRetries` / `mcpRetries` / `modelRetries` | `3` | 三类重试 |
-| `subagentDefaultConcurrency(Integer)` | `5` | 子代理任务默认并发上限，0 为不限；仅在模型未配置 `AiConfig#concurrency` 时生效（模型配了以模型为准）。超限任务排队而不报错。仅约束 `multitask`，`task` 不经过信号量。旧名 `multitaskMaxTasks` / `multitaskMaxConcurrency` 已 `@Deprecated` |
+| `subagentDefaultConcurrency(Integer)` | `5` | 子代理任务默认并发上限，取值 `1~10`（`0`=未设置取默认 5，超 10 按 10，负数报错），**不存在「不限制」**；仅在模型未配置 `AiConfig#concurrency` 时生效（模型配了以模型为准）。超限任务排队，不报错。`task` 与 `multitask` 均取槽（信号量引擎级、跨会话共享）。旧名 `multitaskMaxTasks` / `multitaskMaxConcurrency` 已 `@Deprecated` |
 | `commandPrefix(String)` | `"/"` | 支持多字符 |
 | `agentPrefix(String)` | `"@"` | 支持多字符 |
 

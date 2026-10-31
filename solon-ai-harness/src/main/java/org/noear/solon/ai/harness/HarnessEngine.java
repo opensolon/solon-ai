@@ -631,6 +631,9 @@ public class HarnessEngine {
 
     /**
      * 子代理任务默认并发上限（模型未配置 {@code AiConfig#getConcurrency()} 时生效）
+     *
+     * <p>恒为有限正整数，不存在「不限制」；归一规则见
+     * {@link TaskTalent#normalizeDefaultConcurrency(int)}。</p>
      */
     public int getSubagentDefaultConcurrency() {
         return options.getSubagentDefaultConcurrency();
@@ -639,17 +642,54 @@ public class HarnessEngine {
     /**
      * 设置子代理任务默认并发上限
      *
-     * @param subagentDefaultConcurrency 默认并发上限（0 表示不限制，负数报错）
+     * <p>取值：{@code 0} = 未设置（取 {@link TaskTalent#DEFAULT_CONCURRENCY}）；
+     * 上界 {@link TaskTalent#MAX_CONCURRENCY}（超出按上界处理）。
+     * <b>不存在「0 = 不限制」</b>——无限并发会让线程数、上游 QPS、内存退化为只受任务数约束，
+     * 且信号量缺席会让模型级 {@code concurrency} 形同虚设；需要更高并发请显式配置模型级
+     * {@code AiConfig#concurrency}。</p>
+     *
+     * @param subagentDefaultConcurrency 默认并发上限（0 = 未设置；负数报错）
      */
     public void setSubagentDefaultConcurrency(Integer subagentDefaultConcurrency) {
         if (subagentDefaultConcurrency != null) {
-            if (subagentDefaultConcurrency < 0) {
-                throw new IllegalArgumentException("subagentDefaultConcurrency must be >= 0: " + subagentDefaultConcurrency);
-            }
-
             options.setSubagentDefaultConcurrency(subagentDefaultConcurrency);
-            taskTalent.setDefaultConcurrency(subagentDefaultConcurrency);
+            // 推送已归一的生效值：归一（0→默认、超上界→上界）只在 options 那一层做一次，避免重复告警
+            taskTalent.setDefaultConcurrency(options.getSubagentDefaultConcurrency());
         }
+    }
+
+    /**
+     * @deprecated 旧名，已由 {@link #getSubagentDefaultConcurrency()} 取代。
+     */
+    @Deprecated
+    public int getMultitaskMaxTasks() {
+        return getSubagentDefaultConcurrency();
+    }
+
+    /**
+     * 设置子代理任务默认并发上限（旧名，已发布 API，保留桥接）
+     *
+     * <p><b>语义变更</b>：旧版该值仅用于在系统提示词里给出「单次建议 2-N 个」的文案，
+     * 并不真正限制并发；新版它成为真实的默认并发上限（模型未配置 {@code concurrency} 时生效），
+     * 且已不再参与提示词。因此升级后该值的实际影响力变强，存量配置建议复核。</p>
+     *
+     * @param multitaskMaxTasks 默认并发上限（0 = 未设置，不再是「不限制」；负数报错）
+     * @deprecated 请改用 {@link #setSubagentDefaultConcurrency(Integer)}
+     */
+    @Deprecated
+    public void setMultitaskMaxTasks(Integer multitaskMaxTasks) {
+        setSubagentDefaultConcurrency(multitaskMaxTasks);
+    }
+
+    /**
+     * 设置子代理任务默认并发上限（过渡名，保留桥接）
+     *
+     * @param multitaskMaxConcurrency 默认并发上限（0 = 未设置，不再是「不限制」；负数报错）
+     * @deprecated 请改用 {@link #setSubagentDefaultConcurrency(Integer)}
+     */
+    @Deprecated
+    public void setMultitaskMaxConcurrency(Integer multitaskMaxConcurrency) {
+        setSubagentDefaultConcurrency(multitaskMaxConcurrency);
     }
 
 
@@ -1907,12 +1947,22 @@ public class HarnessEngine {
         }
 
         /**
-         * 子代理任务默认并发上限（默认 5；0 表示不限制）
+         * 子代理任务默认并发上限（默认 5，取值 1~{@link TaskTalent#MAX_CONCURRENCY}；
+         * 0 = 未设置即取默认，超出上界按上界处理，<b>不存在「不限制」</b>）
          *
          * <p>仅在模型未配置 {@code AiConfig#concurrency} 时生效；模型配了就以模型为准。</p>
          */
         public Builder subagentDefaultConcurrency(Integer subagentDefaultConcurrency) {
             options.setSubagentDefaultConcurrency(subagentDefaultConcurrency);
+            return this;
+        }
+
+        /**
+         * @deprecated 旧名，请改用 {@link #subagentDefaultConcurrency(Integer)}
+         */
+        @Deprecated
+        public Builder multitaskMaxTasks(Integer multitaskMaxTasks) {
+            options.setSubagentDefaultConcurrency(multitaskMaxTasks);
             return this;
         }
 
