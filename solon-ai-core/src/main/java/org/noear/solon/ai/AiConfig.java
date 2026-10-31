@@ -39,7 +39,8 @@ public class AiConfig implements Serializable {
     //用于管理显示
     protected @Nullable String name;
     protected @Nullable String description;
-    protected long contextLength;
+    protected long contextLength; //上下文长度（0 = 未设置，由调用方取默认值）
+    protected int concurrency; //可并发数（0 = 未设置，由调用方取默认值）
     protected boolean enabled = true;
 
     protected String apiUrl;
@@ -123,6 +124,21 @@ public class AiConfig implements Serializable {
         return contextLength;
     }
 
+    /**
+     * 可并发数
+     *
+     * <p>0 表示<b>未设置</b>，由调用方回退到自己的默认值（与 {@link #getContextLength()} 的
+     * 0=未设置 语义保持一致）；正数表示该接口实例上允许的并发上限。</p>
+     *
+     * <p>当前消费方：harness 的子代理并行调度（{@code multitask}）。其他接口（embedding、
+     * reranking 等）虽可配置，暂未被读取。</p>
+     *
+     * @since 4.2
+     */
+    public int getConcurrency() {
+        return concurrency;
+    }
+
     public Map<String, String> getHeaders() {
         return headers;
     }
@@ -179,6 +195,17 @@ public class AiConfig implements Serializable {
 
     public void setContextLength(long contextLength) {
         this.contextLength = contextLength;
+    }
+
+    /**
+     * @param concurrency 0 = 未设置（回退默认值）；正数 = 并发上限
+     * @throws IllegalArgumentException 传入负数
+     */
+    public void setConcurrency(int concurrency) {
+        if (concurrency < 0) {
+            throw new IllegalArgumentException("concurrency must be >= 0: " + concurrency);
+        }
+        this.concurrency = concurrency;
     }
 
     public void setHeaders(Map<String, String> headers) {
@@ -251,6 +278,8 @@ public class AiConfig implements Serializable {
                 ", headers=" + headers +
                 ", timeout=" + timeout +
                 ", proxy=" + getProxy() +
+                ", contextLength=" + contextLength +
+                ", concurrency=" + concurrency +
                 '}';
     }
 }

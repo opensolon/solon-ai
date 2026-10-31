@@ -101,10 +101,8 @@ class HarnessOptions implements NonSerializable {
     private volatile int modelRetries = 3;
 
     // ========== 并行任务控制 ==========
-    /**
-     * multitask 单次最大并行任务数，0 表示不限制
-     */
-    private volatile int multitaskMaxTasks = 5;
+
+    private volatile int subagentDefaultConcurrency = 5;
 
     // ========== 缓存控制 ==========
     private volatile CacheControl cacheControl;
@@ -396,6 +394,16 @@ class HarnessOptions implements NonSerializable {
         }
     }
 
+    int getSubagentDefaultConcurrency() {
+        return subagentDefaultConcurrency;
+    }
+
+    void setSubagentDefaultConcurrency(Integer subagentDefaultConcurrency) {
+        if (subagentDefaultConcurrency != null) {
+            this.subagentDefaultConcurrency = subagentDefaultConcurrency;
+        }
+    }
+
     boolean isBashAsyncEnabled() {
         return bashAsyncEnabled;
     }
@@ -433,16 +441,6 @@ class HarnessOptions implements NonSerializable {
     void setModelRetries(Integer modelRetries) {
         if (modelRetries != null) {
             this.modelRetries = modelRetries;
-        }
-    }
-
-    int getMultitaskMaxTasks() {
-        return multitaskMaxTasks;
-    }
-
-    void setMultitaskMaxTasks(Integer multitaskMaxTasks) {
-        if (multitaskMaxTasks != null) {
-            this.multitaskMaxTasks = multitaskMaxTasks;
         }
     }
 

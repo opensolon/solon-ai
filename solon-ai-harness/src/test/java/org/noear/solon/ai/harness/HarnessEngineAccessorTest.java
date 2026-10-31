@@ -111,8 +111,15 @@ class HarnessEngineAccessorTest {
         assertEquals(5, e.getMcpRetries());
         e.setApiRetries(6);
         assertEquals(6, e.getApiRetries());
-        e.setMultitaskMaxTasks(2);
-        assertEquals(2, e.getMultitaskMaxTasks());
+        e.setSubagentDefaultConcurrency(2);
+        assertEquals(2, e.getSubagentDefaultConcurrency());
+
+        // 旧名 @Deprecated 桥接：必须与新名同效
+        e.setMultitaskMaxTasks(3);
+        assertEquals(3, e.getSubagentDefaultConcurrency());
+
+        // 桥梁必须同步推送到执行者，否则只写 options 不生效
+        assertEquals(3, e.getTaskTalent().getDefaultConcurrency());
 
         e.setMemoryEnabled(false);
         assertFalse(e.isMemoryEnabled());
@@ -172,7 +179,7 @@ class HarnessEngineAccessorTest {
         assertEquals(3, e.getApiRetries());
         assertEquals(3, e.getMcpRetries());
         assertEquals(3, e.getModelRetries());
-        assertEquals(5, e.getMultitaskMaxTasks());
+        assertEquals(5, e.getSubagentDefaultConcurrency());
         assertNull(e.getSystemPrompt());
         assertNull(e.getUserAgent());
         assertNull(e.getCompressionModel());
@@ -578,7 +585,7 @@ class HarnessEngineAccessorTest {
 
     /** 本类用例已覆盖的公开配置方法（用于上面的巡检比对） */
     private static final List<String> SWEEP_COVERED = Arrays.asList(
-            "setMaxTurns", "setModelRetries", "setMcpRetries", "setApiRetries", "setMultitaskMaxTasks",
+            "setMaxTurns", "setModelRetries", "setMcpRetries", "setApiRetries", "setSubagentDefaultConcurrency", "setMultitaskMaxConcurrency", "setMultitaskMaxTasks",
             "setMemoryEnabled", "setMemoryRelevanceCount", "setMemoryPriorityCount", "setMemorySummaryLength",
             "setSandboxEnabled", "setSandboxAllowUserHome", "setSandboxSystemRestrict",
             "setHitlEnabled", "setSubagentEnabled", "setBashAsyncEnabled", "setSessionWindowSize",

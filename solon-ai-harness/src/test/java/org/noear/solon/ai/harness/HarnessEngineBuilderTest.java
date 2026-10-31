@@ -85,7 +85,7 @@ class HarnessEngineBuilderTest {
                 .apiRetries(1)
                 .mcpRetries(2)
                 .modelRetries(3)
-                .multitaskMaxTasks(4)
+                .subagentDefaultConcurrency(4)
                 .commandPrefix("::")
                 .agentPrefix("#")
                 .build();
@@ -108,7 +108,9 @@ class HarnessEngineBuilderTest {
         assertEquals(1, e.getApiRetries());
         assertEquals(2, e.getMcpRetries());
         assertEquals(3, e.getModelRetries());
-        assertEquals(4, e.getMultitaskMaxTasks());
+        assertEquals(4, e.getSubagentDefaultConcurrency());
+        // Builder 只写 options，构造函数必须把它推送到执行者
+        assertEquals(4, e.getTaskTalent().getDefaultConcurrency());
         assertEquals("::", e.getCommandPrefix());
         assertEquals("#", e.getAgentPrefix());
     }

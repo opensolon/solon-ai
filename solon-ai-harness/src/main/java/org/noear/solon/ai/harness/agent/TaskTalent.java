@@ -26,6 +26,7 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.RunEndEvent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
@@ -33,15 +34,23 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.annotation.Body;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.core.util.RunUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.FluxSink;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -64,10 +73,85 @@ public class TaskTalent extends AbsTalent {
      */
     private static final ThreadLocal<Boolean> TASK_DEPTH = new ThreadLocal<>();
 
+    /** 等待槽位时的轮询间隔：保证取消能及时响应，又不至于空转 */
+    private static final long SLOT_POLL_MS = 200L;
+
     private final HarnessEngine engine;
+
+    /**
+     * 模型级并行槽位：键为 ChatConfig 实例身份（ChatConfig 未重写 equals/hashCode）。
+     *
+     * <p>按实例分组而非按模型名，避免同名不同配置（不同 apiKey/网关）被误合并限流。</p>
+     */
+    private final Map<ChatConfig, ModelSlot> modelSlots = new ConcurrentHashMap<>();
+
+    /**
+     * 子代理任务默认并发上限：模型未提供 {@code AiConfig#getConcurrency()}（0 = 未设置）时使用。
+     *
+     * <p>默认值的语义与 {@code ContextCompressionInterceptor#setDefaultContextLength} 同构：
+     * 仅在配置侧未给出时生效，一旦模型显式配置了并发数就以模型配置为准。
+     * 设为 0 表示整体不限制。</p>
+     */
+    private volatile int defaultConcurrency = 5;
+
+    /**
+     * 子任务执行器（引擎私有，与 RunUtil.io 全局共享池隔离）。
+     *
+     * <p>为何不复用 {@code RunUtil.io()}：它是 JVM 全局共享池，其他模块（如 goal 调度）也会占用。
+     * 若 multitask 的分派线程本身就跑在该池上，等待槽位会把池线程全部占死，
+     * 拿到槽位的任务永远等不到线程执行，许可永不释放，形成死锁。</p>
+     *
+     * <p>线程为守护线程，随 JVM 退出自动回收。</p>
+     */
+    private final ExecutorService taskExecutor;
 
     public TaskTalent(HarnessEngine engine) {
         this.engine = engine;
+        // 必须是 SynchronousQueue（Cached 语义）：若用无界队列配 core=0，
+        // ThreadPoolExecutor 只在 "workerCount < corePoolSize" 时才建新线程，
+        // 而 core=0 永不成立，后续任务全部入队排队，实际并发恒为 1。
+        // 并发量已由信号量卡住（获许可才提交），因此这里的线程数天然有界。
+        this.taskExecutor = new ThreadPoolExecutor(
+                0, Integer.MAX_VALUE,
+                60L, TimeUnit.SECONDS,
+                new SynchronousQueue<Runnable>(),
+                new TaskThreadFactory());
+    }
+
+    /**
+     * @param defaultConcurrency 子代理任务默认并发上限；不能被负数
+     * @see org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor#setDefaultContextLength
+     */
+    public void setDefaultConcurrency(int defaultConcurrency) {
+        if (defaultConcurrency < 0) {
+            throw new IllegalArgumentException("defaultConcurrency must be >= 0: " + defaultConcurrency);
+        }
+        this.defaultConcurrency = defaultConcurrency;
+    }
+
+    /**
+     * 子代理任务默认并发上限（模型未配置时生效；0 = 不限制）
+     */
+    public int getDefaultConcurrency() {
+        return defaultConcurrency;
+    }
+
+    /**
+     * 释放本才能持有的执行器线程（可选调用；线程为守护线程，不调用也不会阻塞 JVM 退出）
+     */
+    public void shutdown() {
+        taskExecutor.shutdown();
+    }
+
+    private static class TaskThreadFactory implements ThreadFactory {
+        private final AtomicInteger seq = new AtomicInteger();
+
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread t = new Thread(r, "solon-ai-multitask-" + seq.incrementAndGet());
+            t.setDaemon(true);
+            return t;
+        }
     }
 
     @Override
@@ -86,22 +170,10 @@ public class TaskTalent extends AbsTalent {
         }
         sb.append("</available_agents>\n\n");
 
-        int maxTasks = engine.getMultitaskMaxTasks();
         sb.append("## 任务分配策略：\n");
         sb.append("1. **优先并行**: 当任务可以被拆分为互不干扰的独立单元（例如：不同的模块开发、多路搜索）时，可使用 `multitask` 节省时间。");
-        if (maxTasks > 0) {
-            sb.append("单次最多 ").append(maxTasks).append(" 个单元。");
-        }
-        sb.append("\n");
         sb.append("2. **原子性**: 每个子任务应具备明确的边界。\n");
         sb.append("3. **上下文感知**: 必须在 prompt 中提供任务所需的全部背景，子代理无法看到主会话的完整历史。\n");
-        if (maxTasks > 0) {
-            sb.append("4. **分批执行**: 如需处理超过 ").append(maxTasks)
-                    .append(" 个任务，请分批调用 `multitask`（每批最多 ")
-                    .append(maxTasks).append(" 个），避免 API 限流与结果过长。\n");
-        } else {
-            sb.append("4. **合理控制规模**: 任务过多时请主动分批调用 `multitask`，避免 API 限流与结果过长。\n");
-        }
 
         return sb.toString();
     }
@@ -144,28 +216,93 @@ public class TaskTalent extends AbsTalent {
             return "ERROR: 子代理不允许再委派子任务（最多一层）。请直接完成当前任务；如需并行，请返回后由主代理统一编排。";
         }
 
-        int maxTasks = engine.getMultitaskMaxTasks();
-        if (maxTasks > 0 && tasks.size() > maxTasks) {
-            return "ERROR: 单次最多只能执行 " + maxTasks + " 个子任务，请分批调用 multitask。";
-        }
-
         AgentSession __parentSession = engine.getSession(__sessionId);
         ReActTrace __parentTrace = ReActTrace.getCurrent(__parentSession.getContext());
 
+        final FluxSink<AgentEvent> parentSink = (__parentTrace != null && __parentTrace.getOptions() != null)
+                ? __parentTrace.getOptions().getStreamSink() : null;
+
+        final int total = tasks.size();
+
+        // 逐任务解析实际会用的模型：子任务可能各自路由到不同模型，
+        // 限流必须按任务自身的模型取槽，否则一个低配额模型会拖垮整批
+        final String sessionModel = __parentSession.getContext()
+                .getAs(HarnessEngine.CTX_MODEL_SELECTED);
+
         if (LOG.isDebugEnabled()) {
-            LOG.debug("任务接收[{}]：{} 个子任务", __sessionId, tasks.size());
+            LOG.debug("任务接收[{}]: {} 个子任务，子代理默认并发上限 {}", __sessionId, total,
+                    defaultConcurrency > 0 ? String.valueOf(defaultConcurrency) : "不限");
         }
 
-        final List<CompletableFuture<String>> futures = new ArrayList<>();
+        final List<CompletableFuture<String>> futures = new ArrayList<>(total);
         final AtomicBoolean rateLimited = new AtomicBoolean();
         final AtomicBoolean timedOut = new AtomicBoolean();
         final AtomicBoolean upstreamUnavailable = new AtomicBoolean();
 
-        for (MultiTaskOp task : tasks) {
-            CompletableFuture<String> future = CompletableFuture.supplyAsync(() ->
-                    runTask(__parentTrace, __cwd, __sessionId, __parentSession, task, tasks.size(), true, Utils.uuid(),
-                            rateLimited, timedOut, upstreamUnavailable), RunUtil.io());
-            futures.add(future);
+        if (isSerialOnly(tasks, sessionModel)) {
+            // 串行快速路径：生效并行度恒为 1 时直接在调用线程逐个执行，
+            // 省去每任务一次线程投递，且与 task 语义完全一致。
+            // 注意：判定条件是「所有任务」上限都为 1，不能是「任一任务」——
+            // 否则一个 cap=1 的子代理会把整批拖成串行，正是本次改造要消除的缺陷
+            for (MultiTaskOp task : tasks) {
+                if (isCancelled(parentSink)) {
+                    futures.add(CompletableFuture.completedFuture(
+                            formatTaskResp(task, false, "主流程已取消，任务未启动", true)));
+                    continue;
+                }
+
+                futures.add(CompletableFuture.completedFuture(
+                        runTask(__parentTrace, __cwd, __sessionId, __parentSession, task, total, true,
+                                Utils.uuid(), rateLimited, timedOut, upstreamUnavailable)));
+            }
+        } else {
+            // 提交前限流：在调用线程取槽，取到才提交到私有执行器。
+            // 这样执行器里永远只有真正在跑的任务，不存在「占着线程等许可」
+            for (MultiTaskOp task : tasks) {
+                if (isCancelled(parentSink)) {
+                    futures.add(CompletableFuture.completedFuture(
+                            formatTaskResp(task, false, "主流程已取消，任务未启动", true)));
+                    continue;
+                }
+
+                AgentDefinition agentDefinition = engine.getAgentManager().getAgent(task.agent_name);
+                if (agentDefinition == null) {
+                    // 未知子代理：不占槽位，交由 runTask 返回原有的错误文案
+                    futures.add(CompletableFuture.completedFuture(
+                            runTask(__parentTrace, __cwd, __sessionId, __parentSession, task, total, true,
+                                    Utils.uuid(), rateLimited, timedOut, upstreamUnavailable)));
+                    continue;
+                }
+
+                Semaphore slot = semaphoreOf(resolveTaskModelConfig(agentDefinition, sessionModel));
+
+                if (slot != null && !acquirePolling(slot, parentSink)) {
+                    futures.add(CompletableFuture.completedFuture(
+                            formatTaskResp(task, false, "主流程已取消，任务未启动", true)));
+                    continue;
+                }
+
+                final CompletableFuture<String> future = new CompletableFuture<>();
+                futures.add(future);
+
+                try {
+                    taskExecutor.execute(() -> {
+                        try {
+                            future.complete(runTask(__parentTrace, __cwd, __sessionId, __parentSession, task,
+                                    total, true, Utils.uuid(), rateLimited, timedOut, upstreamUnavailable));
+                        } catch (Throwable e) {
+                            future.completeExceptionally(e);
+                        } finally {
+                            releaseQuietly(slot);
+                        }
+                    });
+                } catch (Throwable e) {
+                    // 不能只 catch RejectedExecutionException：创建线程时抛 OutOfMemoryError 是 Error，
+                    // 那会导致已到手的许可永久漏掉，该模型后续全部卡死
+                    releaseQuietly(slot);
+                    future.complete(formatTaskResp(task, false, "ERROR: 任务提交失败（执行器已关闭）", true));
+                }
+            }
         }
 
         // 逐任务聚合：单个失败不影响其他任务的结果回收，失败原因逐任务回流
@@ -185,11 +322,11 @@ public class TaskTalent extends AbsTalent {
             if (rateLimited.get() || upstreamUnavailable.get() || timedOut.get()) {
                 compositeResult.append("\n<multitask_advice>\n");
                 if (rateLimited.get()) {
-                    compositeResult.append("检测到模型服务限流，可能来自中转网关或上游模型服务。后续请优先使用 task 串行执行；如必须使用 multitask，建议降低并发数量。\n");
+                    compositeResult.append("检测到模型服务限流，可能来自中转网关或上游模型服务。后续请优先使用 task 串行执行；如必须使用 multitask，可在模型配置中调低 `concurrency`（未配置时调低引擎的 `subagentDefaultConcurrency`）。\n");
                 } else if (upstreamUnavailable.get()) {
-                    compositeResult.append("检测到中转网关或上游模型服务暂时不可用，可能与上游限流、服务过载或网关异常有关。请稍后重试，并适当降低 multitask 并发数量。\n");
+                    compositeResult.append("检测到中转网关或上游模型服务暂时不可用，可能与上游限流、服务过载或网关异常有关。请稍后重试，并适当调低模型配置的 `concurrency` 或引擎的 `subagentDefaultConcurrency`。\n");
                 } else {
-                    compositeResult.append("模型服务响应超时。后续请适当降低 multitask 并发数量，必要时改用 task 串行执行。\n");
+                    compositeResult.append("模型服务响应超时。后续请适当调低模型配置的 `concurrency` 或引擎的 `subagentDefaultConcurrency`，必要时改用 task 串行执行。\n");
                 }
                 compositeResult.append("</multitask_advice>");
             }
@@ -197,10 +334,190 @@ public class TaskTalent extends AbsTalent {
         }
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("任务完成[{}]：{} 个子任务结束", __sessionId, tasks.size());
+            LOG.debug("任务完成[{}]：{} 个子任务结束", __sessionId, total);
         }
 
         return result;
+    }
+
+    /**
+     * 解析生效的并发上限：模型配置优先，未设置（0）时回退到子代理默认值。
+     *
+     * <p>与 {@code ContextCompressionInterceptor#finalContextLength} 同构：先取默认值，
+     * 配置侧给出了才覆盖。因此不存在「两级同时生效取小」那种
+     * 「模型配了 8 却只跑 5」的静默降级。</p>
+     *
+     * @param modelConcurrency   模型级配置（0 = 未设置）
+     * @param defaultConcurrency 子代理默认值（0 = 不限制）
+     * @return 正数 = 生效上限；0 = 不限制
+     */
+    static int resolveConcurrency(int modelConcurrency, int defaultConcurrency) {
+        if (modelConcurrency > 0) {
+            return modelConcurrency;
+        }
+
+        return Math.max(defaultConcurrency, 0);
+    }
+
+    /**
+     * 解析某子任务实际会使用的模型配置。
+     *
+     * <p>必须与 {@code AgentFactory.create(engine, agentDefinition, sessionModel)} 的解析链
+     * 完全一致：AgentDefinition.model 非空则用之，否则用会话选中模型，否则用默认模型。
+     * 两者一旦分叉，限流用的模型和真正跑的模型会对不上，限流静默失效而不报错。</p>
+     *
+     * @return 可能为 null（模型全部禁用且无默认项）
+     */
+    private ChatConfig resolveTaskModelConfig(AgentDefinition agentDefinition, String sessionModel) {
+        final String selectedModel;
+
+        if (Assert.isEmpty(agentDefinition.getModel())) {
+            selectedModel = sessionModel;
+        } else {
+            selectedModel = agentDefinition.getModel();
+        }
+
+        return engine.getModelOrDef(selectedModel);
+    }
+
+    /**
+     * 某模型配置下的生效并发上限（已做好模型优先、默认回退）
+     *
+     * @return 0 表示不限制（含模型不可解析的情况：任务本身会立即失败，不构成并发压力）
+     */
+    private int finalConcurrency(ChatConfig config) {
+        if (config == null) {
+            return 0;
+        }
+
+        return resolveConcurrency(config.getConcurrency(), defaultConcurrency);
+    }
+
+    /**
+     * 取模型对应信号量；生效上限为 0（不限）或配置不可解析时返回 null 表示不限制
+     */
+    private Semaphore semaphoreOf(ChatConfig config) {
+        if (config == null) {
+            return null;
+        }
+
+        final int limit = finalConcurrency(config);
+        if (limit <= 0) {
+            return null;
+        }
+
+        ModelSlot slot = modelSlots.get(config);
+        if (slot != null && slot.limit == limit) {
+            return slot.semaphore;
+        }
+
+        // 两个线程同时重建时只有一个生效（compute 保证原子性），不会许可翻倍；
+        // 上限变更时换新信号量：旧信号量由已在跑的任务释放后自然回收（旧新短暂共存属可接受偏差）
+        final ModelSlot created = new ModelSlot(limit);
+        ModelSlot exist = modelSlots.compute(config, (k, old) -> (old != null && old.limit == limit) ? old : created);
+
+        return exist.semaphore;
+    }
+
+    /**
+     * 轮询式获取：每 {@link #SLOT_POLL_MS} 毫秒醒一次检查取消，
+     * 保证用户按停止后不会僵在原地等到任务跑完
+     *
+     * <p>阻塞在调用线程（而非任务线程）：执行器里永远只有真正在跑的任务。
+     * 只有模型级一把信号量，不存在多级取位的顺序问题，无死锁面。</p>
+     *
+     * @return true 成功（调用方必须在任务结束时 releaseQuietly）；false 主流程已取消或被中断
+     */
+    private boolean acquirePolling(Semaphore sem, FluxSink<AgentEvent> sink) {
+        while (true) {
+            try {
+                if (sem.tryAcquire(SLOT_POLL_MS, TimeUnit.MILLISECONDS)) {
+                    return true;
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+
+            if (isCancelled(sink)) {
+                return false;
+            }
+        }
+    }
+
+    private static void releaseQuietly(Semaphore sem) {
+        if (sem != null) {
+            sem.release();
+        }
+    }
+
+    private static boolean isCancelled(FluxSink<AgentEvent> sink) {
+        return sink != null && sink.isCancelled();
+    }
+
+    /**
+     * 判定是否只能串行：所有任务目标模型的<b>生效</b>上限都为 1。
+     *
+     * <p>两个关键点：</p>
+     * <ol>
+     *   <li>必须是「全部」而非「任一」：任一成立时，一个 cap=1 的子代理就会把整批拖成串行，
+     *       恰好是本次改造要消除的缺陷（混合模型应各自受限、互不拖累）。</li>
+     *   <li>必须用生效上限（已做模型优先、默认回退），不能用裸的 {@code getConcurrency()}：
+     *       否则模型未配置、默认值为 1 时会被当成「未设置/不限」而错走并行路径。</li>
+     * </ol>
+     */
+    private boolean isSerialOnly(List<MultiTaskOp> tasks, String sessionModel) {
+        List<Integer> effectiveCaps = new ArrayList<>(tasks.size());
+
+        for (MultiTaskOp task : tasks) {
+            AgentDefinition agentDefinition = engine.getAgentManager().getAgent(task.agent_name);
+            if (agentDefinition == null) {
+                continue;
+            }
+
+            effectiveCaps.add(finalConcurrency(resolveTaskModelConfig(agentDefinition, sessionModel)));
+        }
+
+        return isSerialOnlyByCaps(effectiveCaps);
+    }
+
+    /**
+     * 串行判定的纯函数形式（抽出来便于锁定「全部而非任一」这条关键语义）。
+     *
+     * @param effectiveCaps 各任务目标模型的生效并发上限（0 = 不限制）
+     * @return true = 生效并行度恒为 1，可走调用线程串行快路径
+     */
+    static boolean isSerialOnlyByCaps(List<Integer> effectiveCaps) {
+        if (effectiveCaps.isEmpty()) {
+            // 全部是未知子代理：没有可判定对象，交给常规路径返回错误文案
+            return false;
+        }
+
+        for (Integer cap : effectiveCaps) {
+            if (cap == null || cap != 1) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * 模型级槽位：limit 与信号量绑定在一起，上限变更时可原子地整体替换。
+     *
+     * <p>不能从 {@code availablePermits()} 反推上限：任务运行中许可被占时，
+     * 可用数必然小于上限，会误判为“上限变了”而反复重建，导致限流失效。</p>
+     *
+     * <p>limit 存的是<b>生效上限</b>（已含模型优先、默认回退），而非模型裸配置值。</p>
+     */
+    private static final class ModelSlot {
+        private final int limit;
+        private final Semaphore semaphore;
+
+        ModelSlot(int limit) {
+            this.limit = limit;
+            this.semaphore = new Semaphore(limit);
+        }
     }
 
     private static String rootMessage(Throwable e) {

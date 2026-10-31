@@ -19,7 +19,6 @@ import org.noear.solon.ai.AiConfig;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.core.util.Assert;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -163,6 +162,8 @@ public class ChatConfig extends AiConfig {
                 ", headers=" + headers +
                 ", timeout=" + timeout +
                 ", proxy=" + getProxy() +
+                ", contextLength=" + contextLength +
+                ", concurrency=" + concurrency +
                 '}';
     }
 }

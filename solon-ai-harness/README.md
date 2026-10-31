@@ -1132,10 +1132,27 @@ engine.handle(HarnessInput.of(session, "分析 src/main.js").explicitAgent("fron
 ```java
 // 工具集含 task 时（* 或 ** 或显式 task），主代理可调用：
 //   task      —— 委派单个子代理，串行
-//   multitask —— 并行委派多个子代理，单次上限 multitaskMaxTasks（默认 5）
+//   multitask —— 并行委派多个子代理，并行度按每个任务实际路由到的模型分别限流
+//                生效上限 = 模型配置 concurrency（0=未设置）?: subagentDefaultConcurrency（默认 5，0=不限）
+//                模型配了就以模型为准；模型没配才用默认值。超限不报错，在调用线程排队，有空位就提交
 engine.setSubagentEnabled(true);   // 默认 true
-engine.setMultitaskMaxTasks(3);
+engine.setSubagentDefaultConcurrency(5);   // 子代理任务默认并发上限（模型未配置时生效）
+
+// 模型级并发上限：按模型配额差异配置（如免费中转 Key 配 2、官方 Key 配 8）
+// 语义与 contextLength 的「0=未设置」一致；配了就完全覆盖默认值，不再取 min
+config.setConcurrency(2);
 ```
+
+> 4.2 起并行上限的语义与命名都做了收敛：
+> - `multitaskMaxTasks` → `subagentDefaultConcurrency`（旧名 `multitaskMaxTasks`、中间名
+>   `multitaskMaxConcurrency` 均保留为 `@Deprecated` 桥接，行为一致）
+> - `ChatConfig#maxParallelTasks` → `AiConfig#concurrency`，且 **0 的含义由「不限制」改为「未设置」**，
+>   与 `contextLength` 对齐：未设置时回退 `subagentDefaultConcurrency`
+> - 不再是「两级同时生效取 min」。此前模型配 8 却只跑 5 且需查日志才知道原因的问题不再存在
+>
+> 注意：`concurrency` 的 0 被「未设置」占用，因此**模型级无法单独表达「不限制」**；
+> 需要整体放开时把 `subagentDefaultConcurrency` 设为 0。
+> 另：`subagentDefaultConcurrency` 仅约束 `multitask` 的并行调度，`task` 单任务调用不经过信号量。
 
 `task` 默认不在 `*`（公有）里，只有 `**`（完整）才包含——这是为了让子代理不能再委派子代理，天然防止无限嵌套。
 
@@ -1231,7 +1248,7 @@ engine.toolPermissionReset(tools, disallowedTools);
 | `subagentEnabled(Boolean)` | `true` | 子代理功能 |
 | `bashAsyncEnabled(Boolean)` | `false` | Bash 异步执行 |
 | `apiRetries` / `mcpRetries` / `modelRetries` | `3` | 三类重试 |
-| `multitaskMaxTasks(Integer)` | `5` | 并行任务上限，0 为不限 |
+| `subagentDefaultConcurrency(Integer)` | `5` | 子代理任务默认并发上限，0 为不限；仅在模型未配置 `AiConfig#concurrency` 时生效（模型配了以模型为准）。超限任务排队而不报错。仅约束 `multitask`，`task` 不经过信号量。旧名 `multitaskMaxTasks` / `multitaskMaxConcurrency` 已 `@Deprecated` |
 | `commandPrefix(String)` | `"/"` | 支持多字符 |
 | `agentPrefix(String)` | `"@"` | 支持多字符 |
 

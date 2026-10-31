@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat;
 
+import org.noear.solon.ai.AiConfig;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -123,6 +124,16 @@ public class ChatConfigReadonly {
 
     public CacheControl getCacheControl() {
         return config.getModelOptions().cacheControl();
+    }
+
+    /**
+     * 可并发数（0 表示未设置，由调用方回退到自己的默认值）
+     *
+     * @see AiConfig#getConcurrency()
+     * @since 4.2
+     */
+    public int getConcurrency() {
+        return config.getConcurrency();
     }
 
     /**

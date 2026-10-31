@@ -1,5 +1,36 @@
 ### vNEXT
 
+* **multitask 并行上限细化：新增模型级 `AiConfig#concurrency`；限流从「超限报错」改为「提交前排队」，并用引擎私有执行器隔离全局共享池**:
+  * 问题一：并行上限只有引擎级一个标量（默认 5），一刀切，无法适配不同模型/API Key 的限流配额差异（免费中转可能只抵 2 并发，官方 Key 可抵 10+）
+  * 问题二：超限直接返回 `ERROR: 单次最多只能执行 N 个子任务，请分批调用 multitask`，逼 LLM 再耗一整轮工具调用重试，白烧 token 与轮次
+  * 问题三（本轮新识别的真缺陷）：`RunUtil.io()` 是 **JVM 全局共享池**（`RunUtil` 静态字段 + `max(cpu*4,16)`），不只属于 harness；goal 调度等其他模块也在用。若 multitask 的分派线程本身就跑在该池上（`GoalExtension` 的 `RunUtil.async` 承载整轮 goal），等待并发空位会把池线程占死，拿到空位的任务永远等不到线程 → 许可永不释放 → 全链路死锁
+  * **配置项语义与命名（发布前收敛，无兼容负担）**：
+    * `HarnessOptions#multitaskMaxTasks` → **`subagentDefaultConcurrency`**：语义从「单次任务数上限（超限报错）」变为「子代理任务的默认并发上限（超限排队）」，故 `MaxTasks` 这个名字已失真。命名风格对齐同文件既有先例 `compressionDefaultContextLength`（`<模块>Default<属性>`），模块词选 `subagent` 以对齐 `subagentEnabled`。旧名 `multitaskMaxTasks` 与中间过渡名 `multitaskMaxConcurrency` 均保留 `@Deprecated` 桥接
+    * `ChatConfig#maxParallelTasks` → **`AiConfig#concurrency`**：字段上移到 `AiConfig` 基类（并发数是所有 AI 接口的通用属性，`EmbeddingConfig`/`GenerateConfig`/`RerankingConfig` 均继承），并去掉 `max` 前缀——「可并发数」本身就是上限，无需再加 max；`ChatConfigReadonly` 同步暴露读取口
+  * **语义从「两级取 min」改为「模型优先、默认回退」**（关键设计变更）：
+    * `AiConfig#concurrency` 的 **0 表示「未设置」**，与 `contextLength` 的 0=未设置 完全同构；模型未设置时回退 `subagentDefaultConcurrency`
+    * 解析规则收敛到单一入口 `resolveConcurrency(model, default)`，与 `ContextCompressionInterceptor#finalContextLength`（先取默认、有配置才覆盖）同构
+    * 收益：旧方案里「模型配了 8 却只跑出 5、必须查日志才知道为什么」的静默降级被彻底消除；用户配多少就是多少
+    * **已接受的表达力损失**：0 被「未设置」占用后，模型级无法单独表达「不限制」。需要整体放开时把 `subagentDefaultConcurrency` 设为 0（默认值即全局逃生门）。此为显式取舍，已写入 README
+    * 连带简化：只剩**一把**信号量，`globalSemaphore`/`globalSemaphoreLimit`/`acquireAll`/`releaseAll` 双许可形态/`globalCapWarned`/诊断日志全部删除。「取槽固定顺序避免死锁」这条约束也随之消失
+  * **默认并发不再是「全局 5」而是「每模型 5」**（该方案的固有代价，已记录）：10 个不同模型时总并发可达 50。原全局 5 是总量硬闸门，现降级为单模型兜底
+  * **配置可达性照抄 `compressionDefaultContextLength` 的三处同步**：`HarnessOptions` 持字段（保留 yaml 绑定）→ `HarnessEngine#setSubagentDefaultConcurrency` 先落配置再推送到 `TaskTalent` → `Builder#subagentDefaultConcurrency`。构造函数里 `new TaskTalent(this)` 之后立即把 `options.getSubagentDefaultConcurrency()` 推给执行者，否则 Builder/yaml 只写 options 不生效
+  * **按任务自身模型取槽**（核心增益）：子任务可能各自路由到不同模型（`AgentDefinition.model` 优先于会话模型）。此前"批大小"是整次调用的单一标量，一个 `cap=1` 的子代理会拖垮整批；现在每个任务按自己会用的模型取槽，低配额模型只约束自己的任务
+  * **提交前限流 + 引擎私有执行器**：在调用线程取到许可后才 `execute` 到 `TaskTalent` 私有 `ThreadPoolExecutor`，执行器里永远只有真正在跑的任务，不存在「占着线程等许可」。私有池与 `RunUtil.io()` 隔离，据此消除上述问题三。线程为守护线程，另提供 `TaskTalent.shutdown()` / `HarnessEngine.shutdown()` 显式回收
+  * **`resolveTaskModelConfig` 与 `AgentFactory` 逐字对齐**（`AgentDefinition.model` → 会话模型 → 默认模型）：两者一旦分叉，限流用的模型和真正跑的模型会对不上，限流静默失效而不报错
+  * **串行快路径的条件是「全部」而非「任一」，且必须用生效上限**：仅当**所有**任务的生效并发上限都为 1 时才在调用线程逐个执行。若写成「任一为 1」，一个 `cap=1` 的子代理会把整批拖成串行；若用裸 `getConcurrency()` 判定，则「模型未配置 + 默认值 1」会被误判为不限而错走并行路径（两点均有单测锁死）
+  * **取消响应**：取槽用 `tryAcquire(200ms)` 轮询而非无界阻塞，保证用户按停止后不会僵在原地；未启动任务填占位 `result_status=failure`，保证 `<multitask_results>` 条目数与任务数 1:1、`<index>` 不错位
+  * **许可泄漏防护**：提交失败的 `catch` 从 `RejectedExecutionException` 改为 `Throwable`——`ThreadPoolExecutor` 创建线程时抛 `OutOfMemoryError` 属 `Error` 而非 `RejectedExecutionException`，只 catch 后者会让许可永久漏掉，该模型后续全部卡死。释放统一走 `releaseQuietly(Semaphore)`（容忍 null，不限并发时槽位就是 null）
+  * **校验对齐参照实现**：`TaskTalent#setDefaultConcurrency` 与 `AiConfig#setConcurrency` 均对负数抛 `IllegalArgumentException`（`ContextCompressionInterceptor#setDefaultContextLength` 即此风格），配错立即暴露而非被静默吞掉
+  * **提示词与文档同步**：`getInstruction` 第 1 条不插入任何具体数字（生效上限是「模型配置或默认值」，提示词无法预先得知），第 4 条去掉硬编码的"不超 10 个"改为"规模与体量"引导；`TOOL_MULTITASK` description 与 instruction 由"自动分批并行执行"改为"自动排队"（实现是提交前排队、完成即释放，**没有分批屏障**）；`<multitask_advice>` 三处改为可操作的真实配置名（`concurrency` / `subagentDefaultConcurrency`）；README §6.5/§8.1 同步重写
+  * **有意不做**：未设"任务数绝对上限仍报错"——会把核心收益（消除报错→重试往返）重新抵掉，上下文防护交给提示词软引导。跨会话约束由模型级信号量本身覆盖（`modelSlots` 是 `TaskTalent` 字段，而 `TaskTalent` 是 `HarnessEngine` 单例字段，天然全引擎共享，不依赖已删除的全局信号量）
+  * 测试：`TaskTalentParallelCapTest` 16 例（`resolveConcurrency` 锁定模型优先/未设置回退/模型低于默认值/默认 0=不限/负数防御；`isSerialOnlyByCaps` 锁定"全部而非任一"、"模型未配置+默认 1 必须串行"、不可解析模型、空集合；`AiConfig#concurrency` 缺省 0 / 负数抛异常 / 只读透传 / `toString`）+ `TaskTalentSlotTest` 12 例（**模型未配置时按默认值限流**、**默认 0=不限**、**模型配置覆盖默认值**、复用与上限变更重建、**运行中许可被占不得重建**、中断退出不多许可、释放幂等含 null、执行器真并发、关闭后拒绝提交）；`HarnessOptionsAccessorTest` 15 例（含旧名桥接等价）、`HarnessEngineAccessorTest` 22 例（含桥梁必须推送到 `TaskTalent` 的断言）、`HarnessEngineBuilderTest` 13 例（含构造函数同步断言）、`TaskTalentGuardTest` 3 例，共 81 例全绿
+  * 过程坑（4 个，均属"静默失效"类）：
+    1. `ThreadPoolExecutor(core=0, max=∞, 无界队列)` 配 `LinkedBlockingQueue` 时**并发恒为 1**：JDK 只在 `workerCount < corePoolSize` 才新建线程，`core=0` 永不成立，后续任务全部入队排队且不报错。必须用 `SynchronousQueue`（Cached 语义），已有用例锁死
+    2. 用 `availablePermits()` 反推"上限是否变了"是错的：任务运行中许可被占，可用数必然小于上限，会被误判为上限变更而反复重建信号量，限流直接失效。改为 `ModelSlot{limit, semaphore}` 显式携带上限、`compute` 原子替换
+    3. `HarnessOptionsAccessorTest`/`HarnessEngineAccessorTest` 各有一次**反射遍历所有 `set*` 方法**的巡检，新 setter 不列入白名单就直接失败。改名/加 setter 时必须同步两处白名单（`@Deprecated` 桥接也是公开 setter，同样要列）
+    4. 改 `solon-ai-core` 后必须先 `mvn install -pl solon-ai-core`，否则 harness 测试跑的是本地仓库旧 jar，会出现「测试明明写了负数校验却没抛异常」的假失败
+
 * **goal 域宿主调用点收敛：宿主内部 41 处 `getGoalEngine()`/`getGoalScheduler()` 清零，全部改走 `GoalExtension` 门面**（P0/P1 落地，仍是宿主内部可维护性改造——Web 端点路径/参数/返回体/状态码一字未改，终端用户无感知）:
   * 背景：上一轮已把「装配」收敛为一个类，但宿主内部仍有 41 处直接取内部实例、6 个文件。其中约 10 组是**手工复刻门面已封装好的配对动作**（`pause`+`unschedule`、`resume`+`schedule(true)`、`clear`+`unschedule`）——同一语义两套写法并存，是「改了状态忘了挂/摘 job 导致 goal job 泄漏」的唯一来源
   * **门面补 8 个方法**：`stateOf(id)` / `sessionOf(id)` / `find(id, taskId)`（任务行分流三连收敛）/ `running(session|id)` / `attach(...)`（只建不挂）/ `commit(...)` / `hasScheduler()` / `resumeScheduleOnly(id)` / `scheduleNow(id)` / `runRoundAsync(session)` / `updateAndReschedule(...)`；`clear()` 内部改为**先 unschedule 再 clear**（消除「清完状态但 job 还在」的窗口期）

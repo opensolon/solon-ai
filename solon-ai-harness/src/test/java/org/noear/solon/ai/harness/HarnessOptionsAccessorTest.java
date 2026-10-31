@@ -85,7 +85,7 @@ class HarnessOptionsAccessorTest {
         assertEquals(3, o.getApiRetries());
         assertEquals(3, o.getMcpRetries());
         assertEquals(3, o.getModelRetries());
-        assertEquals(5, o.getMultitaskMaxTasks());
+        assertEquals(5, o.getSubagentDefaultConcurrency());
         assertEquals("/", o.getCommandPrefix());
         assertEquals("@", o.getAgentPrefix());
         assertNotNull(o.getPermissionContext());
@@ -165,9 +165,24 @@ class HarnessOptionsAccessorTest {
         o.setModelRetries(null);
         assertEquals(9, o.getModelRetries());
 
-        o.setMultitaskMaxTasks(0);
+        o.setSubagentDefaultConcurrency(0);
+        o.setSubagentDefaultConcurrency(null);
+        assertEquals(0, o.getSubagentDefaultConcurrency());
+    }
+
+    /** 旧名 setMultitaskMaxTasks / setMultitaskMaxConcurrency 作为 @Deprecated 桥接保留，必须与新名同效。 */
+    @Test
+    void deprecatedMultitaskSettersBridgeToSubagentDefaultConcurrency() {
+        HarnessOptions o = fresh();
+
+        o.setMultitaskMaxTasks(3);
+        assertEquals(3, o.getSubagentDefaultConcurrency(), "旧名必须写入同一个字段");
+
         o.setMultitaskMaxTasks(null);
-        assertEquals(0, o.getMultitaskMaxTasks());
+        assertEquals(3, o.getSubagentDefaultConcurrency(), "null 不应覆盖已有值");
+
+        o.setMultitaskMaxConcurrency(7);
+        assertEquals(7, o.getSubagentDefaultConcurrency());
     }
 
     @Test
@@ -372,7 +387,7 @@ class HarnessOptionsAccessorTest {
                 "setMemorySummaryLength", "setSandboxEnabled", "setSandboxAllowUserHome",
                 "setSandboxSystemRestrict", "setHitlEnabled", "setPermissionContext",
                 "setSubagentEnabled", "setBashAsyncEnabled", "setApiRetries", "setMcpRetries",
-                "setModelRetries", "setMultitaskMaxTasks", "setCacheControl",
+                "setModelRetries", "setSubagentDefaultConcurrency", "setMultitaskMaxConcurrency", "setMultitaskMaxTasks", "setCacheControl",
                 "setCommandPrefix", "setAgentPrefix", "setDefaultModel",
                 "setSessionProvider", "setCompressionInterceptor", "setStopLoopInterceptor",
                 "setHitlInterceptor", "setMemoryProvider",

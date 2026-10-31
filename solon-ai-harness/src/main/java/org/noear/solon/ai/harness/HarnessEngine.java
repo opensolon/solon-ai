@@ -207,6 +207,16 @@ public class HarnessEngine {
         return taskTalent;
     }
 
+    /**
+     * 释放引擎持有的资源（当前为子代理委派的私有执行器）
+     *
+     * <p>执行器线程为守护线程，不调用也不会阻塞 JVM 退出；
+     * 需要回收线程时（如测试、长驻进程中的引擎热替换）显式调用。</p>
+     */
+    public void shutdown() {
+        taskTalent.shutdown();
+    }
+
     public CodeTalent getCodeTalent() {
         return codeTalent;
     }
@@ -395,19 +405,6 @@ public class HarnessEngine {
 
     public int getModelRetries() {
         return options.getModelRetries();
-    }
-
-    /**
-     * multitask 单次最大并行任务数，0 表示不限制
-     */
-    public int getMultitaskMaxTasks() {
-        return options.getMultitaskMaxTasks();
-    }
-
-    public void setMultitaskMaxTasks(Integer multitaskMaxTasks) {
-        if (multitaskMaxTasks != null) {
-            options.setMultitaskMaxTasks(multitaskMaxTasks);
-        }
     }
 
     public Collection<String> getTools() {
@@ -631,6 +628,30 @@ public class HarnessEngine {
         generateTalent.setEnabled(options.isSubagentEnabled());
         taskTalent.setEnabled(options.isSubagentEnabled());
     }
+
+    /**
+     * 子代理任务默认并发上限（模型未配置 {@code AiConfig#getConcurrency()} 时生效）
+     */
+    public int getSubagentDefaultConcurrency() {
+        return options.getSubagentDefaultConcurrency();
+    }
+
+    /**
+     * 设置子代理任务默认并发上限
+     *
+     * @param subagentDefaultConcurrency 默认并发上限（0 表示不限制，负数报错）
+     */
+    public void setSubagentDefaultConcurrency(Integer subagentDefaultConcurrency) {
+        if (subagentDefaultConcurrency != null) {
+            if (subagentDefaultConcurrency < 0) {
+                throw new IllegalArgumentException("subagentDefaultConcurrency must be >= 0: " + subagentDefaultConcurrency);
+            }
+
+            options.setSubagentDefaultConcurrency(subagentDefaultConcurrency);
+            taskTalent.setDefaultConcurrency(subagentDefaultConcurrency);
+        }
+    }
+
 
     public void setBashAsyncEnabled(Boolean bashAsyncEnabled) {
         options.setBashAsyncEnabled(bashAsyncEnabled);
@@ -1163,6 +1184,8 @@ public class HarnessEngine {
         this.todoTalent = new TodoTalent(options.getHarnessSessions());
         this.codeTalent = new CodeTalent(options.getWorkspace(), options.getHarnessHome());
         this.taskTalent = new TaskTalent(this);
+        // 将配置面的默认并发推送到执行者（yaml / Builder / setter 三种入口都只写 options）
+        this.taskTalent.setDefaultConcurrency(options.getSubagentDefaultConcurrency());
         this.generateTalent = new GenerateTalent(this);
 
         this.clockTalent = new ClockTalent();
@@ -1883,6 +1906,16 @@ public class HarnessEngine {
             return this;
         }
 
+        /**
+         * 子代理任务默认并发上限（默认 5；0 表示不限制）
+         *
+         * <p>仅在模型未配置 {@code AiConfig#concurrency} 时生效；模型配了就以模型为准。</p>
+         */
+        public Builder subagentDefaultConcurrency(Integer subagentDefaultConcurrency) {
+            options.setSubagentDefaultConcurrency(subagentDefaultConcurrency);
+            return this;
+        }
+
         public Builder bashAsyncEnabled(Boolean bashAsyncEnabled) {
             options.setBashAsyncEnabled(bashAsyncEnabled);
             return this;
@@ -1900,14 +1933,6 @@ public class HarnessEngine {
 
         public Builder modelRetries(Integer modelRetries) {
             options.setModelRetries(modelRetries);
-            return this;
-        }
-
-        /**
-         * multitask 单次最大并行任务数（默认 5，0 表示不限制）
-         */
-        public Builder multitaskMaxTasks(Integer multitaskMaxTasks) {
-            options.setMultitaskMaxTasks(multitaskMaxTasks);
             return this;
         }
 
