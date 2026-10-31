@@ -96,6 +96,9 @@ public class SteerCommand extends AbsCommand {
             case TEXT_TOO_LONG:
                 ctx.println("插话内容过长（上限 " + SteerInterceptor.MAX_TEXT_LENGTH + " 字符）");
                 break;
+            case DISABLED:
+                ctx.println("插话能力已停用，可直接发送或使用 /queue 排队");
+                break;
             default:
                 ctx.println("插话未生效：" + result.getStatusCode());
         }

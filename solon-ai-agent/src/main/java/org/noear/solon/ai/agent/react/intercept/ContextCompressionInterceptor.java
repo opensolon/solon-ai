@@ -19,7 +19,7 @@ import com.knuddels.jtokkit.api.Encoding;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.PlanContextRenderer;
-import org.noear.solon.ai.agent.react.ReActInterceptor;
+import org.noear.solon.ai.agent.react.AbsReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActOptions;
 import org.noear.solon.ai.agent.react.ReActStyle;
 import org.noear.solon.ai.agent.react.ReActTrace;
@@ -69,7 +69,7 @@ import java.util.stream.Collectors;
  * @since 4.0.0
  */
 @Preview("3.8.2")
-public class ContextCompressionInterceptor implements ReActInterceptor {
+public class ContextCompressionInterceptor extends AbsReActInterceptor {
     private static final Logger log = LoggerFactory.getLogger(ContextCompressionInterceptor.class);
 
     public final static String META_COMPRESSED = "_compressed";

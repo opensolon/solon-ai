@@ -95,11 +95,32 @@ public class GoalExtension extends AbsHarnessExtension {
         if (goalTalent != null) {
             goalTalent.setEnabled(enabled);
         }
+
+        // 关闭时同步停止调度：否则扩展已「关闭」而 job 仍每 5s 触发 runRound，后台会持续发 LLM 请求。
+        // 只停止未来的调度，不打断正在执行的那一轮（与 {@link GoalEngine#runRound} 的边界一致）。
+        if (enabled != null && enabled.booleanValue() == false && goalScheduler != null) {
+            goalScheduler.stopAll();
+        }
     }
 
     /** builder 入口。@param workspaceId goal job 名前缀（跨工作区防撞）；可空（仅单工作区进程安全） */
     public static Builder builder(String workspaceId) {
         return new Builder(workspaceId);
+    }
+
+    /**
+     * 存量形态：只接管外部已建好的 {@link GoalEngine}，不装配命令与调度。
+     *
+     * <p>适用于宿主自己管理 GoalEngine 生命周期、只借用本类的「Talent 挂载 + 运行期门面」的场景；
+     * 新代码请用 {@link #builder(String)} 一键装配。</p>
+     *
+     * <p>该形态下不注册 /goal 命令（命令依赖内部装配的调度器），{@link #getGoalScheduler()} 为 null。</p>
+     */
+    public static GoalExtension of(GoalEngine goalEngine, HarnessEngine engine) {
+        GoalExtension ext = builder(null).scheduler(null).build();
+        ext.goalEngine = goalEngine;
+        ext.goalTalent = goalEngine == null ? null : new GoalTalent(goalEngine, engine);
+        return ext;
     }
 
     /**
@@ -356,14 +377,14 @@ public class GoalExtension extends AbsHarnessExtension {
      * 此时不能走 {@link #resume}（那是立刻跑一轮），否则重启会对每个活跃 goal 立即发起执行。</p>
      */
     public void resumeScheduleOnly(String sessionId) {
-        if (goalScheduler != null && sessionId != null) {
+        if (goalScheduler != null && sessionId != null && isEnabled()) {
             goalScheduler.schedule(sessionId, false);
         }
     }
 
     /** 立即挂调度并马上跑一轮（桌面端 trigger 语义）；不做状态校验，调用方前置判活跃态。 */
     public void scheduleNow(String sessionId) {
-        if (goalScheduler != null && sessionId != null) {
+        if (goalScheduler != null && sessionId != null && isEnabled()) {
             goalScheduler.schedule(sessionId, true);
         }
     }

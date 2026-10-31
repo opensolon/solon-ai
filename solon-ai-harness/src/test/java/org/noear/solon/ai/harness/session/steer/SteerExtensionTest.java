@@ -46,8 +46,23 @@ class SteerExtensionTest {
         assertNotNull(engine.getCommandRegistry().find("steer"));
 
         HarnessEngine engine2 = newEngine();
-        engine2.addExtension(new SteerExtension<>(() -> null, null, false));
+        SteerExtension<Object> disabled = new SteerExtension<>(() -> null);
+        disabled.setEnabled(false);
+        engine2.addExtension(disabled);
         assertNull(engine2.getCommandRegistry().find("steer"));
+        assertNotNull(engine2.getCommandRegistry().get("steer"), "已注册才能区分停用与未注册");
+    }
+
+    @Test
+    void disabledExtensionRejectsSteer() {
+        SteerExtension<Object> ext = new SteerExtension<>(() -> null);
+        AgentSession session = InMemoryAgentSession.of();
+        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
+
+        ext.setEnabled(false);
+        SteerInterceptor.SteerResult r = ext.steer(session, null, null, "补充", null, null);
+        assertEquals(SteerInterceptor.SteerStatus.DISABLED, r.getStatus());
+        assertEquals(0, r.getQueued());
     }
 
     @Test

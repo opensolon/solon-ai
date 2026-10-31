@@ -55,17 +55,32 @@ public class QueueExtension extends AbsHarnessExtension {
         queueCommand.setEnabled(enabled);
     }
 
+    /**
+     * 开关语义（与命令层一致）：
+     * <ul>
+     *   <li>受控：{@link #enqueue} 与 {@link #drainOne} —— 停用后不再接单、不再续发；</li>
+     *   <li>不受控：ack / cancelItem / promote / cancelPending 等清理类接口 —— 开关不得阻止清理，
+     *       否则停用前已入队的项将永远无法取消。</li>
+     * </ul>
+     */
+
     // ==================== 操作门面（中转静态实现） ====================
 
-    /** 入队（携带来源身份）。@return 队列位置（从 1 计）；-1 表示失败（满/超长/参数空） */
+    /** 入队（携带来源身份）。@return 队列位置（从 1 计）；-1 表示失败（满/超长/参数空/扩展已停用） */
     public int enqueue(AgentSession session, String text, InputOrigin origin) {
+        if (isEnabled() == false) {
+            return -1;
+        }
         return SessionQueue.enqueue(session, text, origin);
     }
 
-    /** 完整参数入队（HTTP 重试幂等用 id 去重；model/effort 等随任务执行）。 */
+    /** 完整参数入队（HTTP 重试幂等用 id 去重；model/effort 等随任务执行）。已停用时返回 -1。 */
     public int enqueue(AgentSession session, String text, InputOrigin origin,
                        String id, String model, String reasoningEffort,
                        String thinkingMode, String selectedAgent, boolean hasFiles) {
+        if (isEnabled() == false) {
+            return -1;
+        }
         return SessionQueue.enqueue(session, text, origin, id, model, reasoningEffort,
                 thinkingMode, selectedAgent, hasFiles);
     }
@@ -102,6 +117,9 @@ public class QueueExtension extends AbsHarnessExtension {
      * @see SessionQueueDrainer#drainOne(AgentSession, SessionQueueDrainer.TaskRunner)
      */
     public boolean drainOne(AgentSession session, SessionQueueDrainer.TaskRunner runner) {
+        if (isEnabled() == false) {
+            return false;
+        }
         return SessionQueueDrainer.drainOne(session, runner);
     }
 
@@ -112,6 +130,9 @@ public class QueueExtension extends AbsHarnessExtension {
      */
     public boolean drainOne(AgentSession session, SessionQueueDrainer.TaskRunner runner,
                             boolean acknowledgeOnReturn) {
+        if (isEnabled() == false) {
+            return false;
+        }
         return SessionQueueDrainer.drainOne(session, runner, acknowledgeOnReturn);
     }
 

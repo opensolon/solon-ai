@@ -8,10 +8,10 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.command.builtin.SteerCommand;
 import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.ai.harness.session.steer.SteerInterceptor.SteerStatus;
 
 import java.util.Queue;
 import java.util.function.Supplier;
@@ -81,6 +81,11 @@ public class SteerExtension<C> extends AbsHarnessExtension {
         interceptor.setEnabled(enabled);
     }
 
+    /**
+     * 开关语义（与命令层一致）：{@link #steer} 在停用时返回
+     * {@link SteerStatus#DISABLED}；{@link #cancel} 等清理类接口不受控（不得阻止取消）。
+     */
+
     // ==================== 操作门面（中转静态实现） ====================
 
     /** 组装好的拦截器（挂载已由扩展完成；仅供确需请求级再挂/细粒度访问的宿主）。 */
@@ -96,6 +101,10 @@ public class SteerExtension<C> extends AbsHarnessExtension {
     public SteerInterceptor.SteerResult steer(AgentSession session, String runId, String steerId,
                                               String text, InputOrigin origin,
                                               java.util.function.BooleanSupplier busyRecheck) {
+        if (isEnabled() == false) {
+            // 停用后仍投递会一直积压在邮箱（消费方拦截器已停用），必须当场拒绝。
+            return new SteerInterceptor.SteerResult(SteerStatus.DISABLED, steerId, 0);
+        }
         return SteerInterceptor.steer(session, runId, steerId, text, origin, busyRecheck);
     }
 

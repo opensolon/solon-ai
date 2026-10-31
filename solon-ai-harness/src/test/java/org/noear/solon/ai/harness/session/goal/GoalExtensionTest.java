@@ -211,11 +211,28 @@ class GoalExtensionTest {
         // 存量形态：外部 GoalEngine 直接接管，不装配命令与调度
         HarnessEngine engine = engineBuilder().build();
         GoalEngine external = new GoalEngine(new ExecutionBridge(engine), BudgetThresholds.defaults(), 3, 3, true);
-        GoalExtension ext = new GoalExtension(external, engine);
+        GoalExtension ext = GoalExtension.of(external, engine);
         engine.addExtension(ext);
 
         assertSame(external, ext.getGoalEngine());
         assertNull(engine.getCommandRegistry().find("goal"), "存量构造不注册命令");
         assertNotNull(ext.getGoalTalent(), "Talent 仍应可用");
+    }
+
+    @Test
+    void disableStopsSchedulerButKeepsCommandRegistered() {
+        // 新语义：命令照常注册，禁用后对用户不可见（而不是不注册）
+        HarnessEngine engine = engineBuilder().build();
+        GoalExtension ext = GoalExtension.builder("ws-switch").scheduler(null).build();
+        engine.addExtension(ext);
+
+        assertNotNull(engine.getCommandRegistry().get("goal"), "命令应已注册");
+        assertTrue(engine.getCommandRegistry().find("goal") != null, "默认启用时可见");
+
+        ext.setEnabled(false);
+
+        assertNull(engine.getCommandRegistry().find("goal"), "禁用后命令不可见");
+        assertNotNull(engine.getCommandRegistry().get("goal"), "禁用后仍可区分“已停用”");
+        assertFalse(ext.isEnabled());
     }
 }

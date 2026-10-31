@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.team.intercept;
 
-import org.noear.solon.ai.agent.team.TeamInterceptor;
+import org.noear.solon.ai.agent.team.AbsTeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
  * </ul>
  */
 @Preview("3.8.1")
-public class LoopingTeamInterceptor implements TeamInterceptor {
+public class LoopingTeamInterceptor extends AbsTeamInterceptor {
     private static final Logger LOG = LoggerFactory.getLogger(LoopingTeamInterceptor.class);
 
     /** 最小检测长度（过滤 "OK", "Done" 等短语干扰） */

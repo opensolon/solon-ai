@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * QueueExtension 一键装配验证：
  * 1. addExtension 后 /queue 命令自动注册；
  * 2. 门面操作与静态实现行为一致（enqueue/view/pendingSize/drainOne/ack 语义透传）；
- * 3. 命令注册幂等；commandEnabled=false 时不注册。
+ * 3. 命令注册幂等；扩展停用后命令不可见（查找时过滤）且不再接单。
  */
 class QueueExtensionTest {
     @TempDir
@@ -100,9 +100,24 @@ class QueueExtensionTest {
         engine.addExtension(queue);
         assertNotNull(engine.getCommandRegistry().find("queue"));
 
-        // 关闭：宿主自管注册
+        // 关闭：命令照常注册但不可见（开关语义在查找时过滤）
         HarnessEngine engine2 = newEngine();
-        engine2.addExtension(new QueueExtension(false));
+        QueueExtension disabled = new QueueExtension();
+        disabled.setEnabled(false);
+        engine2.addExtension(disabled);
         assertEquals(null, engine2.getCommandRegistry().find("queue"));
+        assertNotNull(engine2.getCommandRegistry().get("queue"), "已注册才能区分停用与未注册");
+    }
+
+    @Test
+    void disabledExtensionRejectsEnqueue() {
+        HarnessEngine engine = newEngine();
+        QueueExtension queue = new QueueExtension();
+        engine.addExtension(queue);
+        queue.setEnabled(false);
+
+        AgentSession session = InMemoryAgentSession.of();
+        assertEquals(-1, queue.enqueue(session, "x", null), "停用后不再接单");
+        assertFalse(queue.hasItems(session));
     }
 }

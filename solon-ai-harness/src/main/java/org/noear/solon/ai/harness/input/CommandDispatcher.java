@@ -37,6 +37,11 @@ public final class CommandDispatcher {
      */
     public static final String COMMAND_UNAVAILABLE_HINT = " 仅支持 CLI，Web/IM 端不可用。发送 /help 查看可用命令。";
 
+    /**
+     * 命令已停用（组件被 setEnabled(false) 关闭）时的统一提示
+     */
+    public static final String COMMAND_DISABLED_HINT = " 已停用。发送 /help 查看可用命令。";
+
     private CommandDispatcher() {
     }
 
@@ -59,9 +64,16 @@ public final class CommandDispatcher {
             return null;
         }
 
-        Command target = engine.getCommandRegistry().find(command.getName());
+        Command target = engine.getCommandRegistry().get(command.getName());
         if (target == null) {
             return null;
+        }
+
+        //已停用的命令：不能落成普通输入（否则 "/clear" 原文会被当作用户消息发给模型）。
+        //结局同为 REPLY，与渠道受限一致；isCommand() 仍为 true，宿主不必写额外分支。
+        if (target.isEnabled() == false) {
+            String hint = "/" + target.name() + COMMAND_DISABLED_HINT;
+            return InputOutcome.unavailable(target.name(), hint, command);
         }
 
         //渠道受限命令：必须在执行前拦截。终端专属命令（如 /exit）会终止进程或依赖终端。

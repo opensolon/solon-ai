@@ -60,15 +60,27 @@ public class CommandRegistry {
     }
 
     /**
-     * 查找命令
+     * 查找命令（已启用）
+     * <p>
+     * 未注册与已停用都返回 null —— 需要区分两者的调用方（如命令分发要给出「已停用」回执）
+     * 请改用 {@link #get(String)} 再自行判 {@code isEnabled()}。
      */
     public Command find(String name) {
-        Command tmp = commands.get(name);
+        Command tmp = get(name);
         if (tmp != null && tmp.isEnabled()) {
             return tmp;
         } else {
             return null;
         }
+    }
+
+    /**
+     * 获取命令（不过滤启用状态）
+     * <p>
+     * 用于需要区分「未注册」与「已停用」的场景：前者应视为普通输入，后者应回执不可用提示。
+     */
+    public Command get(String name) {
+        return commands.get(name);
     }
 
     /**
@@ -83,10 +95,13 @@ public class CommandRegistry {
     }
 
     /**
-     * 获取所有命令（排序后）
+     * 获取所有命令（排序后，仅已启用）
+     * <p>
+     * 已停用的命令对用户不可见，/help 列表须与 {@link #names()} 的补全集合一致。
      */
     public List<Command> all() {
         return commands.values().stream()
+                .filter(Command::isEnabled)
                 .sorted(Comparator.comparing(Command::name))
                 .collect(Collectors.toList());
     }
