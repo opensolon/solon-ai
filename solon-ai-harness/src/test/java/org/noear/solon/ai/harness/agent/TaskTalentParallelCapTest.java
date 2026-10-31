@@ -18,23 +18,17 @@ package org.noear.solon.ai.harness.agent;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatConfig;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * multitask 并行上限契约测试
  *
- * <p>锁定四个点：</p>
+ * <p>锁定三个点：</p>
  * <ol>
- *   <li>{@code resolveConcurrency}：模型配置优先，未设置（0）时回退默认值。</li>
- *   <li>{@code isSerialOnly}：串行快路径的条件是「所有任务生效上限都为 1」，
- *       而不是「任一为 1」——后者会让一个 cap=1 的子代理把整批拖成串行。</li>
+ *   <li>{@code resolveConcurrency}：模型配置优先，未设置（0）时回退默认值，<b>且恒不超过上界</b>。</li>
  *   <li>默认并发上限恒为有限正整数（0 = 未设置 → 缺省 5，上界 10），不存在「不限制」。</li>
  *   <li>{@code AiConfig#concurrency}：int + 0=未设置，负数报错。</li>
  * </ol>
@@ -77,6 +71,22 @@ public class TaskTalentParallelCapTest {
     }
 
     @Test
+    public void modelConfigIsClampedToUpperBound() {
+        // 窗口直接决定 worker 线程数：模型配 200 不能真的建 200 个平台线程，
+        // 否则多会话并发时线程数按会话数叠加
+        assertEquals(TaskTalent.MAX_CONCURRENCY, TaskTalent.resolveConcurrency(200, 5));
+        assertEquals(TaskTalent.MAX_CONCURRENCY, TaskTalent.resolveConcurrency(TaskTalent.MAX_CONCURRENCY + 1, 5));
+        // 上界本身与之内原值保留
+        assertEquals(TaskTalent.MAX_CONCURRENCY, TaskTalent.resolveConcurrency(TaskTalent.MAX_CONCURRENCY, 5));
+    }
+
+    @Test
+    public void resolveConcurrencyAlwaysWithinUpperBound() {
+        assertTrue(TaskTalent.resolveConcurrency(1, 100) <= TaskTalent.MAX_CONCURRENCY);
+        assertTrue(TaskTalent.resolveConcurrency(Integer.MAX_VALUE, 100) <= TaskTalent.MAX_CONCURRENCY);
+    }
+
+    @Test
     public void negativeDefaultFallsBackToBuiltInDefault() {
         // 防御分支：配置侧已拦截负数，纯函数也不把负数当上限
         assertEquals(TaskTalent.DEFAULT_CONCURRENCY, TaskTalent.resolveConcurrency(0, -1));
@@ -97,51 +107,6 @@ public class TaskTalentParallelCapTest {
 
         assertThrows(IllegalArgumentException.class, () -> t.setDefaultConcurrency(-1));
         assertEquals(3, t.getDefaultConcurrency(), "抛异常不得改动已有值");
-    }
-
-    // ---------- isSerialOnly ----------
-
-    @Test
-    public void allModelsCapOneIsSerial() {
-        assertTrue(TaskTalent.isSerialOnly(plans(1, 1, 1)));
-    }
-
-    @Test
-    public void oneModelCapOneDoesNotForceSerial() {
-        // 核心语义：混合模型时，一个 cap=1 的子代理不能把整批拖成串行
-        assertFalse(TaskTalent.isSerialOnly(plans(1, 4)));
-        assertFalse(TaskTalent.isSerialOnly(plans(4, 1)));
-    }
-
-    @Test
-    public void noSlotModelsAreNotSerial() {
-        // 无槽位（未知子代理/模型不可解析）不能断定为串行
-        assertFalse(TaskTalent.isSerialOnly(plans(0, 0)));
-    }
-
-    @Test
-    public void defaultOneMakesAllUnsetModelsSerial() {
-        // 关键回归：模型未配置 + 默认值 1 时生效上限恒为 1，必须判为串行。
-        // 若直接用裸 getConcurrency()（=0）判定，会错走并行路径
-        assertTrue(TaskTalent.isSerialOnly(plans(
-                TaskTalent.resolveConcurrency(0, 1), TaskTalent.resolveConcurrency(0, 1))));
-    }
-
-    @Test
-    public void emptyBatchIsNotSerial() {
-        assertFalse(TaskTalent.isSerialOnly(Collections.<TaskTalent.TaskPlan>emptyList()));
-    }
-
-    private static List<TaskTalent.TaskPlan> plans(Integer... caps) {
-        List<TaskTalent.TaskPlan> plans = new ArrayList<>(caps.length);
-
-        for (Integer cap : caps) {
-            TaskTalent.MultiTaskOp op = new TaskTalent.MultiTaskOp();
-            op.agent_name = "general";
-            plans.add(new TaskTalent.TaskPlan(op, null, null, null, cap, null));
-        }
-
-        return plans;
     }
 
     // ---------- ChatConfig 字段契约 ----------

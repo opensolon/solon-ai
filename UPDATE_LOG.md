@@ -1,5 +1,21 @@
 ### vNEXT
 
+* **TaskTalent 调度内核重写：信号量 + 轮询分派 → 单队列 + N 个 worker 自取**（有效代码 668 → 562 行，总行数 1000 → 884；旧调度段 250 → 新调度段约 80）:
+  * **动机**：`Semaphore` + `acquirePolling` + `dispatchParallel` + `tryAcquireReady` + `ModelSlot` 这一套的存在前提是「槽位引擎级、跨会话共享」。槽位一旦改为「按调用算一个数」，就没有待抢的资源，也就不需要抢——**共享与轮询是耦合的，去掉共享顺带去掉轮询**
+  * **新形态**：一批任务进 `ConcurrentLinkedQueue`，起 `min(cap, size)` 个 worker 各自 `poll`；worker 跑完一个立刻取下一个，这正是「首发 cap 个、完成一个补一个」的全部实现，不需要完成回调与计数递减。抽为包级类 `TaskDispatcher`，`TaskTalent#dispatchQueued` 只剩一次调用
+  * **生效上限改为按调用**：取**当前会话所选模型**的 `AiConfig#concurrency`（0 = 未设置 → `subagentDefaultConcurrency`）。不再按任务自身模型分组——`AgentDefinition#model` 路由到其它子代理时，其模型上的 `concurrency` 对本次调用不再生效
+  * **行为变更（有意识地接受）**：① 多会话之间不再共享额度，同一模型的最坏并发 = 会话数 × cap（原设计正是为消除这一点而引入信号量，`UPDATE_LOG` 前文「5 个会话各跑一个 task」即指此）；② 串行快路径删除，cap=1 也走 worker 线程（多一次线程投递，换来串行/并行不再是两个分支）；③ 「未启动」原因不再区分取消与中断，统一为「主流程已取消，任务未启动」
+  * **连带删除**：`CAP_NONE`、`modelSlots`/`ModelSlot`、`semaphoreOf`、`slotKeyOf`、`finalConcurrency`、`isSerialOnly`、`dispatchSerial`、`dispatchParallel`、`tryAcquireReady`、`markNotStarted`、`submitTask`、`acquirePolling`、`releaseQuietly`、`SLOT_WARN_MS`
+  * **顺带消失的一整类缺陷**：没有 permit 就没有「提交失败漏还许可」语义（原先要 `catch Throwable` 兜住建线程时的 `OutOfMemoryError`，否则该模型后续全部卡死）；`SynchronousQueue` 那条「core=0 配无界队列会退化成并发 1」的约束也不再是关键路径
+  * **保留下来的不变式**：`aggregate` 按下标聚合、`<multitask_results>` 与任务数 1:1（任何一个 future 不完成都会让主流程永久挂住，故正常/取消/提交失败/worker 异常四条退出路径都会把剩余项补成占位）；`resolveConcurrency` 与 `normalizeDefaultConcurrency` 契约不变
+  * **顺手改名**：`SLOT_POLL_MS` → `CANCEL_POLL_MS`（它承担的其实是取消检测节拍，旧名是当前最大的认知负担）
+  * **测试**：新增 `TaskDispatcherTest` 6 例（窗口真实生效且完成即补位、cap=1 必须串行、整批已取消、执行中途取消、执行器已关闭、任务体抛异常不留下未完成 future）；`TaskTalentSlotTest` 16 → 3 例（只保留执行器真并发/关闭拒绝/上界截断）；`TaskTalentSchedulingTest` 删除按下标写入与许可归还两例（所锁定的缺陷在新结构里不存在），保留取消聚合与坏条目隔离；`TaskTalentParallelCapTest` 删除 `isSerialOnly` 5 例。定向 28 例全绿；harness 全量 **777 例 29F+3E**，失败仍全部集中在 `ToolStrategyDefaultsTest`/`BashToolStrategyTest`/`WebToolStrategyTest`/`WriteToolStrategyTest`，与既有基线逐项一致
+  * **复审后四项修正**（第三轮）：
+    1. **`resolveConcurrency` 补齐上界截断**（真缺陷）：类注释承诺「上界 `MAX_CONCURRENCY`」，但只对默认值生效——`concurrencyOf` 直返模型配置、`resolveConcurrency` 只判 `> 0`，模型配 200 就会真的 execute 200 个 worker，而执行器是 `core=0/max=MAX_VALUE/SynchronousQueue`，等于真建 200 个平台线程，多会话再按会话数叠加。现改为 `Math.min(modelConcurrency, MAX_CONCURRENCY)`，与默认值归一规则对齐；补两例锁死（`resolveConcurrency(200,5)==MAX_CONCURRENCY`、`resolveConcurrency(Integer.MAX_VALUE,100)<=MAX_CONCURRENCY`）
+    2. **`dispatchQueued` 注释与代码对齐**：原注释称「不可解析的任务不入队」，实际全部下标都交给 `TaskDispatcher`，invalid 条目会入队但被 `runTask` 入口立即短路。现改为如实说明「入队但立即短路」，并注明**不要为此加过滤**——让它们留在队列里才能使「下标 → 结果」与入参完全一致
+    3. **`aggregate` 删除未使用的 `plans` 参数**（全文无引用）；`notStartedReason` 三层重载压成一层；`multitask` 内 `sessionModelOf(__parentSession)` 提取局部变量（两次调用之间配置被换掉会让上限与实例不一致）
+    4. **「未启动」原因注释如实化**：中断判定读的是当前线程标志，worker 线程上的占位补全读到的是 worker 自身状态，可能退化为「主流程已取消」。不引入额外状态传递，但在注释中写明这是有意的取舍（真正常见的只有取消，中断那条是兜底）
+
 * **multitask 并行上限细化：新增模型级 `AiConfig#concurrency`；限流从「超限报错」改为「提交前排队」，并用引擎私有执行器隔离全局共享池**:
   * 问题一：并行上限只有引擎级一个标量（默认 5），一刀切，无法适配不同模型/API Key 的限流配额差异（免费中转可能只抵 2 并发，官方 Key 可抵 10+）
   * 问题二：超限直接返回 `ERROR: 单次最多只能执行 N 个子任务，请分批调用 multitask`，逼 LLM 再耗一整轮工具调用重试，白烧 token 与轮次

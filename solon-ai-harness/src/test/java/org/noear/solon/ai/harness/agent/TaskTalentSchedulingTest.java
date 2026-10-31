@@ -23,22 +23,19 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * multitask 调度契约测试：结果定长对齐、槽位归还、谁有空配额就提交谁、坏条目不拖垮整批。
+ * multitask 调度契约测试：取消后聚合不挂住、坏条目不拖垮整批。
  *
- * <p>这些点的共同特点是「错了也不报错」——结果错位、许可漏还、按顺序阻塞、整批被一个
- * 幻觉名字带崩，都只会表现为难排查的怪现象，因此单独锁定。</p>
+ * <p>这两点的共同特点是「错了也不报错」——永久等待、整批被一个幻觉名字带崩，
+ * 都只会表现为难排查的怪现象，因此单独锁定。队列调度的语义见 {@link TaskDispatcherTest}。</p>
  *
  * @author bai
  * @since 4.2
@@ -56,17 +53,8 @@ public class TaskTalentSchedulingTest {
     }
 
     /** agentDefinition 为 null 时 runTask 走「未知子代理」分支，不触达引擎 */
-    private static TaskTalent.TaskPlan plan(TaskTalent.MultiTaskOp task, Semaphore slot, int cap) {
-        return new TaskTalent.TaskPlan(task, null, null, slot, cap, null);
-    }
-
-    private static void submitTask(TaskTalent talent, int index, TaskTalent.TaskPlan plan,
-                                   List<CompletableFuture<String>> futures,
-                                   Object ctx) throws Exception {
-        Method m = TaskTalent.class.getDeclaredMethod("submitTask", int.class, TaskTalent.TaskPlan.class,
-                List.class, Class.forName("org.noear.solon.ai.harness.agent.TaskTalent$MultitaskContext"));
-        m.setAccessible(true);
-        m.invoke(talent, index, plan, futures, ctx);
+    private static TaskTalent.TaskPlan plan(TaskTalent.MultiTaskOp task) {
+        return new TaskTalent.TaskPlan(task, null, null, null);
     }
 
     private static TaskTalent.MultiTaskOp task(String agent, int index) {
@@ -76,77 +64,6 @@ public class TaskTalentSchedulingTest {
         op.prompt = "p";
         op.index = index;
         return op;
-    }
-
-    // ---------- 结果定长对齐 ----------
-
-    /**
-     * 核心回归：结果必须按下标 set 而不是顺序 add。
-     * 若退回 add，混合模型场景下 &lt;index&gt; 会与 &lt;task_result&gt; 错位。
-     */
-    @Test
-    public void submitTaskWritesResultAtGivenIndex() throws Exception {
-        TaskTalent talent = new TaskTalent(null);
-        talent.shutdown(); // 执行器已关闭 → 走提交失败分支，不会真的跑任务
-
-        List<CompletableFuture<String>> futures = new ArrayList<>(Collections.nCopies(2, null));
-
-        submitTask(talent, 1, plan(task("general", 2), new Semaphore(1), 1), futures, context(2));
-
-        assertNull(futures.get(0), "下标 0 未被提交，必须保持 null（证明是按下标写）");
-        assertNotNull(futures.get(1), "下标 1 应被写入");
-        assertTrue(futures.get(1).join().contains("任务提交失败"),
-                "执行器已关闭应返回提交失败: " + futures.get(1).join());
-        assertTrue(futures.get(1).join().contains("<index>2</index>"), "结果必须携带任务自身 index");
-    }
-
-    /** 提交失败时许可必须归还，否则该模型后续全部卡死 */
-    @Test
-    public void submitFailureReleasesSlot() throws Exception {
-        TaskTalent talent = new TaskTalent(null);
-        talent.shutdown();
-
-        Semaphore slot = new Semaphore(1);
-        slot.acquire(); // 模拟已取到槽位（可用数 0）
-
-        List<CompletableFuture<String>> futures = new ArrayList<>(Collections.nCopies(1, null));
-
-        submitTask(talent, 0, plan(task("general", 1), slot, 1), futures, context(1));
-
-        assertEquals(1, slot.availablePermits(), "提交失败必须归还许可");
-    }
-
-    // ---------- 轮询分派：谁有空配额就提交谁 ----------
-
-    /**
-     * 核心回归：不能按下标顺序阻塞。
-     *
-     * <p>构造 waiting = [0(模型A 已满), 1(模型B 空闲)]。若按下标阻塞，
-     * 必须先等 A 有许可才能提交 1；轮询方式下 1 应立即被挑出。</p>
-     */
-    @Test
-    public void dispatchPicksWhateverHasCapacity() throws Exception {
-        Semaphore busy = new Semaphore(1);
-        busy.acquire();                       // 模型 A 已满
-        Semaphore idle = new Semaphore(1);    // 模型 B 空闲
-
-        List<TaskTalent.TaskPlan> plans = new ArrayList<>();
-        plans.add(plan(task("a", 1), busy, 1));
-        plans.add(plan(task("b", 2), idle, 1));
-        plans.add(plan(task("c", 3), null, 0)); // 无槽位（模型不可解析）：立即可用
-
-        List<Integer> waiting = new ArrayList<>();
-        waiting.add(0);
-        waiting.add(1);
-        waiting.add(2);
-
-        List<Integer> ready = TaskTalent.tryAcquireReady(waiting, plans);
-
-        assertEquals(java.util.Arrays.asList(1, 2), ready,
-                "有空配额的与无槽位的都应被挑出，不能被下标 0 挡住");
-        assertEquals(Collections.singletonList(0), waiting, "未取到槽位的任务应留在待分派队列");
-        assertEquals(0, idle.availablePermits(), "挑出即已取槽");
-        assertEquals(0, busy.availablePermits(), "未取到的槽位不得被动过");
     }
 
     // ---------- 取消 ----------
@@ -163,15 +80,12 @@ public class TaskTalentSchedulingTest {
     public void aggregateReturnsWhenInterrupted() throws Exception {
         TaskTalent talent = new TaskTalent(null);
 
-        List<TaskTalent.TaskPlan> plans = new ArrayList<>();
-        plans.add(plan(task("general", 1), null, 1));
-
         List<CompletableFuture<String>> futures = new ArrayList<>();
         futures.add(new CompletableFuture<>()); // 永不完成
 
         Object ctx = context(1);
 
-        Method m = TaskTalent.class.getDeclaredMethod("aggregate", List.class, List.class,
+        Method m = TaskTalent.class.getDeclaredMethod("aggregate", List.class,
                 Class.forName("org.noear.solon.ai.harness.agent.TaskTalent$MultitaskContext"));
         m.setAccessible(true);
 
@@ -179,7 +93,7 @@ public class TaskTalentSchedulingTest {
         String out = org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(
                 java.time.Duration.ofSeconds(2), () -> {
                     Thread.currentThread().interrupt();
-                    return (String) m.invoke(talent, plans, futures, ctx);
+                    return (String) m.invoke(talent, futures, ctx);
                 });
 
         assertTrue(out.contains("已中断"), "应说明是中断导致放弃等待: " + out);
