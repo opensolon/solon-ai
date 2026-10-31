@@ -256,7 +256,8 @@ class HarnessEngineBuilderTest {
     }
 
     @Test
-    void disabledExtensionSkipsInitializationDuringBuild() {
+    void disabledExtensionStillInitializedDuringBuild() {
+        // 构建期不看启用状态：initialize 属引擎级装配，开关在子组件与执行时生效
         AtomicBoolean initialized = new AtomicBoolean();
         AbsHarnessExtension ext = new AbsHarnessExtension() {
             @Override
@@ -275,7 +276,7 @@ class HarnessEngineBuilderTest {
         };
 
         builder().extensionAdd(ext).build();
-        assertFalse(initialized.get());
+        assertTrue(initialized.get(), "initialize 与启用状态无关");
     }
 
     @Test

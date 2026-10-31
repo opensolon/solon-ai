@@ -1002,6 +1002,42 @@ public class HarnessEngine {
     }
 
 
+    /**
+     * 动态开关一个扩展
+     * <p>
+     * 扩展的开关由两部分组成：
+     * <ul>
+     *   <li>{@code extension.setEnabled(...)}：扩展自己把状态传播给子组件（Talent / 拦截器 / 命令）；</li>
+     *   <li>重建主代理：拦截器与才能是装配期下发的，必须在重建后生效（命令、拦截器内部判断即时生效）。</li>
+     * </ul>
+     * 未加入本引擎的扩展会先被加入（与 {@link #addExtension} 一致），便于「先建后开」的宿主。
+     *
+     * @param extension 目标扩展
+     * @param enabled   true 开 / false 关 / null 不改变
+     */
+    public void setExtensionEnabled(HarnessExtension extension, Boolean enabled) {
+        if (extension == null) {
+            return;
+        }
+
+        if (options.getExtensions().contains(extension) == false) {
+            addExtension(extension);
+            return;
+        }
+
+        extension.setEnabled(enabled);
+
+        //开关影响才能/拦截器装配，必须重建主代理（命令与拦截器的运行期判定本身即时生效）
+        agentLock.lock();
+        try {
+            if (this.mainAgent != null) {
+                this.mainAgent = createMainAgent();
+            }
+        } finally {
+            agentLock.unlock();
+        }
+    }
+
     public void addExtension(HarnessExtension extension) {
         if (extension == null) {
             return;

@@ -449,7 +449,9 @@ class HarnessEngineAccessorTest {
     }
 
     @Test
-    void disabledExtensionSkipsInitializeOnAdd() {
+    void disabledExtensionStillInitializesOnAdd() {
+        // initialize 不再看启用状态：禁用扩展也要完成引擎级装配（注册命令/资源），
+        // 开关只在子组件与执行时生效。否则「构造期关闭」会造成命令未注册、运行期改回 true 也挂不上。
         HarnessEngine e = engine();
         AtomicBoolean initialized = new AtomicBoolean();
 
@@ -470,8 +472,39 @@ class HarnessEngineAccessorTest {
         };
 
         e.addExtension(ext);
-        assertFalse(initialized.get(), "禁用扩展不应触发 initialize");
+        assertTrue(initialized.get(), "禁用扩展仍应完成 initialize 装配");
         assertTrue(e.getExtensions().contains(ext));
+
+        // 运行期开关：不重建主代理也能传播状态（命令/拦截器的运行期判定即时生效）
+        e.setExtensionEnabled(ext, true);
+        assertFalse(ext.isEnabled(), "匿名类覆写了 isEnabled，不受 AbsSwitchable 状态影响");
+    }
+
+    @Test
+    void setExtensionEnabledTogglesAbsExtensionAndRegistersNewOne() {
+        HarnessEngine e = engine();
+        AbsHarnessExtension ext = new AbsHarnessExtension() {
+            @Override
+            public void configure(HarnessEngine engine, String agentName, ReActAgent.Builder builder) {
+            }
+        };
+
+        // 未加入的扩展：先加入（与 addExtension 一致），不静默丢弃
+        e.setExtensionEnabled(ext, false);
+        assertTrue(e.getExtensions().contains(ext));
+        assertTrue(ext.isEnabled(), "新加入时仍为默认启用（setExtensionEnabled 只负责加入）");
+
+        e.setExtensionEnabled(ext, false);
+        assertFalse(ext.isEnabled());
+
+        e.setExtensionEnabled(ext, true);
+        assertTrue(ext.isEnabled());
+
+        e.setExtensionEnabled(ext, null);
+        assertTrue(ext.isEnabled(), "null = 忽略本次设置");
+
+        // null 入参不抛
+        e.setExtensionEnabled(null, false);
     }
 
     // ---------- 技能黑名单 ----------
@@ -555,7 +588,7 @@ class HarnessEngineAccessorTest {
             "allowTool", "allowToolReset", "toolPermissionReset", "disallowTool", "disallowToolReset",
             "addPermissionRule", "addPermissionRules",
             "addMount", "removeMount", "refreshMount", "refreshMainAgent",
-            "addExtension", "removeExtension",
+            "addExtension", "removeExtension", "setExtensionEnabled",
             "disallowSkill", "allowSkill", "disallowSkillReset");
 
     @Test

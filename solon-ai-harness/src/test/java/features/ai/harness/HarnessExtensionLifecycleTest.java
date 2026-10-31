@@ -75,7 +75,9 @@ class HarnessExtensionLifecycleTest {
     }
 
     @Test
-    void disabledExtensionSkipsBothHooks() {
+    void disabledExtensionStillInitializedButConfigureIsNotGated() {
+        // initialize 不再看启用状态（引擎级装配必须完成，否则命令未注册、运行期改回 true 也挂不上）；
+        // configure 同样无条件回调——停用由扩展自己传播给子组件。
         RecordingExtension ext = new RecordingExtension() {
             @Override
             public boolean isEnabled() {
@@ -84,7 +86,7 @@ class HarnessExtensionLifecycleTest {
         };
         HarnessEngine engine = builder().extensionAdd(ext).build();
 
-        assertTrue(ext.events.isEmpty());
+        assertEquals(java.util.Collections.singletonList("initialize"), ext.events);
     }
 
     @Test
