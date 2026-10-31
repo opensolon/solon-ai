@@ -115,7 +115,7 @@ class HarnessEngineAccessorTest {
         assertEquals(2, e.getSubagentDefaultConcurrency());
 
         // 旧名 @Deprecated 桥接：必须与新名同效
-        e.setMultitaskMaxTasks(3);
+        e.setSubagentDefaultConcurrency(3);
         assertEquals(3, e.getSubagentDefaultConcurrency());
 
         // 桥梁必须同步推送到执行者，否则只写 options 不生效

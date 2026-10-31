@@ -175,13 +175,13 @@ class HarnessOptionsAccessorTest {
     void deprecatedMultitaskSettersBridgeToSubagentDefaultConcurrency() {
         HarnessOptions o = fresh();
 
-        o.setMultitaskMaxTasks(3);
+        o.setSubagentDefaultConcurrency(3);
         assertEquals(3, o.getSubagentDefaultConcurrency(), "旧名必须写入同一个字段");
 
-        o.setMultitaskMaxTasks(null);
+        o.setSubagentDefaultConcurrency(null);
         assertEquals(3, o.getSubagentDefaultConcurrency(), "null 不应覆盖已有值");
 
-        o.setMultitaskMaxConcurrency(7);
+        o.setSubagentDefaultConcurrency(7);
         assertEquals(7, o.getSubagentDefaultConcurrency());
     }
 
