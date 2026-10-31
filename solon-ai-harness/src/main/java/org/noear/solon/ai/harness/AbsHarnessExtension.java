@@ -15,24 +15,14 @@
  */
 package org.noear.solon.ai.harness;
 
+import org.noear.solon.ai.AbsSwitchable;
+
 /**
  * Harness 扩展接口基类（提供启用控制）
  *
  * @author noear
  * @since 4.1.1
  */
-public abstract class AbsHarnessExtension implements HarnessExtension {
-    private volatile boolean enabled = true;
+public abstract class AbsHarnessExtension extends AbsSwitchable implements HarnessExtension {
 
-    @Override
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    @Override
-    public void setEnabled(Boolean enabled) {
-        if (enabled != null) {
-            this.enabled = enabled.booleanValue();
-        }
-    }
 }

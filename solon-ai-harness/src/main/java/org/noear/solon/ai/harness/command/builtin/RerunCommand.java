@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.command.AbsCommand;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.InputOrigin;
@@ -32,7 +33,7 @@ import java.util.List;
  * @author noear
  * @since 2026.4.28
  */
-public class RerunCommand implements Command {
+public class RerunCommand extends AbsCommand {
     @Override
     public String name() {
         return "rerun";

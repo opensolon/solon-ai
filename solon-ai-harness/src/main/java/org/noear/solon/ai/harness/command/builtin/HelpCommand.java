@@ -16,12 +16,15 @@
 package org.noear.solon.ai.harness.command.builtin;
 
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.command.AbsCommand;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.input.InputOrigin;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * /help 命令：在 CLI、Web 和 IM 中查看当前工作区可用的斜杠命令。
@@ -29,7 +32,7 @@ import java.util.List;
  * <p>IM 没有前端的命令补全入口，因此帮助内容直接从当前工作区的
  * {@link CommandRegistry} 生成，能够同时覆盖内置命令和用户自定义 commands/ 命令。</p>
  */
-public class HelpCommand implements Command {
+public class HelpCommand extends AbsCommand {
     @Override
     public String name() {
         return "help";

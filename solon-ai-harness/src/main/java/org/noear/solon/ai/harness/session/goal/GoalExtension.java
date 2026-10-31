@@ -2,6 +2,7 @@ package org.noear.solon.ai.harness.session.goal;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
@@ -47,7 +48,7 @@ import java.util.Map;
  * @author noear
  * @since 3.9.2
  */
-public class GoalExtension implements HarnessExtension {
+public class GoalExtension extends AbsHarnessExtension {
     private final String workspaceId;
     private final String workspace;
     private final ExecutionBridge sharedBridge;      // 宿主注入的共享桥（可空）
@@ -59,13 +60,14 @@ public class GoalExtension implements HarnessExtension {
     private final boolean validatorEnabled;
     private final GoalScheduler providedScheduler;   // 宿主自备调度器（可空；高级用法）
     private final boolean schedulerDisabled;         // 显式关闭调度（scheduler(null)）
-    private final boolean commandEnabled;
     private final GoalEngine.GoalListener listener;
 
     private ExecutionBridge bridge;
     private GoalEngine goalEngine;
     private GoalScheduler goalScheduler;
     private GoalTalent goalTalent;
+
+    private GoalCommand goalCommand;
 
     private GoalExtension(Builder b) {
         this.workspaceId = b.workspaceId;
@@ -79,36 +81,20 @@ public class GoalExtension implements HarnessExtension {
         this.validatorEnabled = b.validatorEnabled;
         this.providedScheduler = b.scheduler;
         this.schedulerDisabled = b.schedulerExplicitNull;
-        this.commandEnabled = b.commandEnabled;
         this.listener = b.listener;
     }
 
-    /**
-     * 存量构造：只接管外部已建好的 {@link GoalEngine}，不装配命令与调度。
-     *
-     * <p>仅为兼容旧宿主保留；新代码请用 {@link #builder(String)} 一键装配。</p>
-     *
-     * @deprecated 用 {@code GoalExtension.builder(workspaceId)...build()} 代替
-     */
-    @Deprecated
-    public GoalExtension(GoalEngine goalEngine, HarnessEngine engine) {
-        this.workspaceId = null;
-        this.workspace = null;
-        this.sharedBridge = null;
-        this.taskHandler = null;
-        this.busyChecker = null;
-        this.budgetThresholds = null;
-        this.stagnationThreshold = 0;
-        this.maxConsecutiveErrors = 0;
-        this.validatorEnabled = false;
-        this.providedScheduler = null;
-        this.schedulerDisabled = true;
-        this.commandEnabled = false;
-        this.listener = null;
-        // bridge 留空：initialize 的「外部 GoalEngine 形态」守卫据此提前返回
-        this.goalEngine = goalEngine;
-        // 存量形态不进 initialize 的装配流程，Talent 在此直接构建（configure 仍会挂到主代理）
-        this.goalTalent = goalEngine == null ? null : new GoalTalent(goalEngine, engine);
+    @Override
+    public void setEnabled(Boolean enabled) {
+        super.setEnabled(enabled);
+
+        if (goalCommand != null) {
+            goalCommand.setEnabled(enabled);
+        }
+
+        if (goalTalent != null) {
+            goalTalent.setEnabled(enabled);
+        }
     }
 
     /** builder 入口。@param workspaceId goal job 名前缀（跨工作区防撞）；可空（仅单工作区进程安全） */
@@ -153,10 +139,13 @@ public class GoalExtension implements HarnessExtension {
                     : (schedulerDisabled ? null : new GoalScheduler(goalEngine, workspaceId));
         }
 
-        // ④ /goal 命令（幂等：已注册同名命令时跳过，迁移期双写安全）
-        if (commandEnabled && engine.getCommandRegistry().find("goal") == null) {
-            engine.getCommandRegistry().register(new GoalCommand(goalEngine, goalScheduler));
+        if(goalCommand == null) {
+            goalCommand = new GoalCommand(goalEngine, goalScheduler);
+            goalCommand.setEnabled(this.isEnabled());
         }
+
+        // ④ /goal 命令（幂等：已注册同名命令时跳过，迁移期双写安全）
+        engine.getCommandRegistry().register(goalCommand);
 
         // ⑤ 预注册生命周期观察者
         if (listener != null) {
@@ -189,7 +178,9 @@ public class GoalExtension implements HarnessExtension {
     public void configure(HarnessEngine engine, String agentName, ReActAgent.Builder agentBuilder) {
         if (goalTalent == null && goalEngine != null) {
             goalTalent = new GoalTalent(goalEngine, engine);
+            goalTalent.setEnabled(this.isEnabled());
         }
+
         if (AgentDefinition.AGENT_MAIN.equals(agentName)) {
             agentBuilder.defaultTalentAdd(goalTalent);
         }
@@ -443,7 +434,6 @@ public class GoalExtension implements HarnessExtension {
         private boolean validatorEnabled = true;
         private GoalScheduler scheduler;                            // 缺省 = initialize 时新建
         private boolean schedulerExplicitNull = false;              // 显式关闭调度三态标记
-        private boolean commandEnabled = true;
         private GoalEngine.GoalListener listener;
 
         private Builder(String workspaceId) {
@@ -502,12 +492,6 @@ public class GoalExtension implements HarnessExtension {
         public Builder scheduler(GoalScheduler own) {
             this.scheduler = own;
             this.schedulerExplicitNull = (own == null);
-            return this;
-        }
-
-        /** 是否由扩展注册 /goal 命令（幂等），缺省 true；宿主自管命令时设 false。 */
-        public Builder commandEnabled(boolean enabled) {
-            this.commandEnabled = enabled;
             return this;
         }
 

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat.talent;
 
+import org.noear.solon.ai.AbsSwitchable;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
@@ -29,9 +30,8 @@ import java.util.*;
  * @since 3.8.4
  */
 @Preview("3.8.4")
-public abstract class AbsTalent implements Talent {
+public abstract class AbsTalent extends AbsSwitchable implements Talent {
     private volatile TalentMetadata metadata;
-    private volatile boolean enabled = true;
 
     private final Map<String, FunctionTool> toolMap0;
     private final List<FunctionTool> tools0;
@@ -87,18 +87,6 @@ public abstract class AbsTalent implements Talent {
             }
         }
         return list;
-    }
-
-    @Override
-    public void setEnabled(Boolean enabled) {
-        if (enabled != null) {
-            this.enabled = enabled;
-        }
-    }
-
-    @Override
-    public boolean isEnabled() {
-        return enabled;
     }
 
     @Override

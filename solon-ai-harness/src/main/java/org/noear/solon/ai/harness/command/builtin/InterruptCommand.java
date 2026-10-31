@@ -7,6 +7,7 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.command.AbsCommand;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.InputOrigin;
@@ -24,7 +25,7 @@ import reactor.core.Disposable;
  * @author noear
  * @since 2026.5.15
  */
-public class InterruptCommand implements Command {
+public class InterruptCommand extends AbsCommand {
     @Override
     public String name() {
         return "interrupt";

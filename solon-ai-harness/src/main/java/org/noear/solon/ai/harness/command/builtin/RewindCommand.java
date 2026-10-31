@@ -16,6 +16,7 @@
 package org.noear.solon.ai.harness.command.builtin;
 
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.command.AbsCommand;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.InputOrigin;
@@ -27,7 +28,7 @@ import org.noear.solon.core.util.Assert;
  * @author noear
  * @since 2026.5.8
  */
-public class RewindCommand implements Command {
+public class RewindCommand extends AbsCommand {
     private static final String DIM = "\033[2m";
     private static final String RESET = "\033[0m";
 

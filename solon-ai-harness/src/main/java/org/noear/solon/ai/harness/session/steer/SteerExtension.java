@@ -6,6 +6,7 @@ package org.noear.solon.ai.harness.session.steer;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
@@ -36,34 +37,24 @@ import java.util.function.Supplier;
  * @author noear
  * @since 3.9.4
  */
-public class SteerExtension<C> implements HarnessExtension {
+public class SteerExtension<C> extends AbsHarnessExtension {
 
     private final Supplier<SteerOutputPort<C>> outputPortSupplier;
-    private final boolean commandEnabled;
     private final SteerInterceptor<C> interceptor;
+
+    private final SteerCommand steerCommand = new SteerCommand();
 
     /** @param outputPortSupplier 输出端口惰性供应商（每次事件回调时取值；可为 null） */
     public SteerExtension(Supplier<SteerOutputPort<C>> outputPortSupplier) {
-        this(outputPortSupplier, null, true);
-    }
-
-    /**
-     * @param outputPortSupplier 输出端口惰性供应商（可为 null = headless）
-     * @param wsContext          不透明路由令牌（典型为宿主工作区上下文；可为 null）
-     */
-    public SteerExtension(Supplier<SteerOutputPort<C>> outputPortSupplier, C wsContext) {
-        this(outputPortSupplier, wsContext, true);
+        this(outputPortSupplier, null);
     }
 
     /**
      * @param outputPortSupplier 输出端口惰性供应商（可为 null = headless）
      * @param wsContext          不透明路由令牌（可为 null）
-     * @param commandEnabled     宿主自管 /steer 命令注册时传 false
      */
-    public SteerExtension(Supplier<SteerOutputPort<C>> outputPortSupplier, C wsContext,
-                          boolean commandEnabled) {
+    public SteerExtension(Supplier<SteerOutputPort<C>> outputPortSupplier, C wsContext) {
         this.outputPortSupplier = outputPortSupplier;
-        this.commandEnabled = commandEnabled;
         // 需要动态解析端口：包装为转发端口，拦截器只持有一份（wsContext 一次定值）
         this.interceptor = new SteerInterceptor<>(
                 outputPortSupplier == null ? null : new ForwardingPort<>(outputPortSupplier),
@@ -72,9 +63,7 @@ public class SteerExtension<C> implements HarnessExtension {
 
     @Override
     public void initialize(HarnessEngine engine) {
-        if (commandEnabled && engine.getCommandRegistry().find("steer") == null) {
-            engine.getCommandRegistry().register(new SteerCommand());
-        }
+        engine.getCommandRegistry().register(steerCommand);
     }
 
     /** 挂载到主代理（子代理不挂：插话面向用户任务，子代理上下文无前端邮箱语义）。 */
@@ -83,6 +72,13 @@ public class SteerExtension<C> implements HarnessExtension {
         if (AgentDefinition.AGENT_MAIN.equals(agentName)) {
             agentBuilder.defaultInterceptorAdd(interceptor);
         }
+    }
+
+    @Override
+    public void setEnabled(Boolean enabled) {
+        super.setEnabled(enabled);
+        steerCommand.setEnabled(enabled);
+        interceptor.setEnabled(enabled);
     }
 
     // ==================== 操作门面（中转静态实现） ====================

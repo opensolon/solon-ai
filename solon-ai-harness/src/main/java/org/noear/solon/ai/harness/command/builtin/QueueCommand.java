@@ -17,6 +17,7 @@ package org.noear.solon.ai.harness.command.builtin;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.command.AbsCommand;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.InputOrigin;
@@ -37,7 +38,7 @@ import org.noear.solon.core.util.Assert;
  * @author noear
  * @since 2026.11
  */
-public class QueueCommand implements Command {
+public class QueueCommand extends AbsCommand {
 
     @Override
     public String name() {

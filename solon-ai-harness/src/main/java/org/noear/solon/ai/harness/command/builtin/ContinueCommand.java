@@ -23,6 +23,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.command.AbsCommand;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.InputOrigin;
@@ -43,7 +44,7 @@ import java.util.List;
  * @author noear
  * @since 2026.4.28
  */
-public class ContinueCommand implements Command {
+public class ContinueCommand extends AbsCommand {
     @Override
     public String name() {
         return "continue";

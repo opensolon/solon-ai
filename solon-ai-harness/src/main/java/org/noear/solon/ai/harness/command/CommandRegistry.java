@@ -19,10 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -53,9 +50,12 @@ public class CommandRegistry {
      */
     public void register(Command command) {
         Command existing = commands.putIfAbsent(command.name(), command);
+
         if (existing != null) {
             LOG.warn("Command '{}' already registered by {}, skip: {}",
-                    command.name(), existing.getClass().getSimpleName(), command.getClass().getSimpleName());
+                    command.name(),
+                    existing.getClass().getSimpleName(),
+                    command.getClass().getSimpleName());
         }
     }
 
@@ -63,7 +63,23 @@ public class CommandRegistry {
      * 查找命令
      */
     public Command find(String name) {
-        return commands.get(name);
+        Command tmp = commands.get(name);
+        if (tmp != null && tmp.isEnabled()) {
+            return tmp;
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * 获取命令名列表（用于 Tab 补全）
+     */
+    public List<String> names() {
+        return commands.values().stream()
+                .filter(Command::isEnabled)
+                .map(Command::name)
+                .sorted()
+                .collect(Collectors.toList());
     }
 
     /**
@@ -73,12 +89,5 @@ public class CommandRegistry {
         return commands.values().stream()
                 .sorted(Comparator.comparing(Command::name))
                 .collect(Collectors.toList());
-    }
-
-    /**
-     * 获取命令名列表（用于 Tab 补全）
-     */
-    public List<String> names() {
-        return new ArrayList<>(commands.keySet()).stream().sorted().collect(Collectors.toList());
     }
 }

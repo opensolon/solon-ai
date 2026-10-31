@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * TerminalTalent 代理
+ * TerminalTalent 只读代理（原则上不涉及写）
  *
  * @author noear 2026/3/20 created
  */
@@ -49,6 +49,11 @@ public class TerminalTalentProxy implements Talent {
     @Override
     public boolean isEnabled() {
         return terminalTalent.isEnabled();
+    }
+
+    @Override
+    public void setEnabled(Boolean enabled) {
+        terminalTalent.setEnabled(enabled);
     }
 
     @Override

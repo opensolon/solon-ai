@@ -15,23 +15,13 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.AbsSwitchable;
+
 /**
  *
  * @author noear
  * @since 4.0.0
  */
-public abstract class AbsReActInterceptor implements ReActInterceptor {
-    private volatile boolean enabled = true;
+public abstract class AbsReActInterceptor extends AbsSwitchable implements ReActInterceptor {
 
-    @Override
-    public void setEnabled(Boolean enabled) {
-        if (enabled != null) {
-            this.enabled = enabled;
-        }
-    }
-
-    @Override
-    public boolean isEnabled() {
-        return enabled;
-    }
 }

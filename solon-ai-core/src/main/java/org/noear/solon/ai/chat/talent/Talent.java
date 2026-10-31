@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat.talent;
 
+import org.noear.solon.ai.AiSwitchable;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.lang.Preview;
@@ -33,21 +34,7 @@ import java.util.Collection;
  * @since 4.0.0
  */
 @Preview("3.8.4")
-public interface Talent {
-    /**
-     * 是否启用
-     */
-    default boolean isEnabled() {
-        return true;
-    }
-
-    /**
-     * 设置是否启用
-     */
-    default void setEnabled(Boolean enabled) {
-
-    }
-
+public interface Talent extends AiSwitchable {
     /**
      * 获取才能名称（默认类名）
      */

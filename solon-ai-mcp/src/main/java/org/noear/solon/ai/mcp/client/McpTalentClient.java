@@ -18,6 +18,7 @@ package org.noear.solon.ai.mcp.client;
 import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.AbsSwitchable;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.ai.chat.talent.TalentMetadata;
@@ -40,7 +41,7 @@ import java.util.stream.Stream;
  * @since 3.9.0
  */
 @Preview("3.9.0")
-public class McpTalentClient implements Talent {
+public class McpTalentClient extends AbsSwitchable implements Talent {
     /**
      * MCP 客户端提供者，负责底层的通信协议（如 Stdio, SSE）
      */
@@ -49,8 +50,6 @@ public class McpTalentClient implements Talent {
      * 缓存的才能元信息
      */
     protected TalentMetadata metadata;
-
-    protected volatile boolean enabled = true;
 
     public McpTalentClient(McpClientProvider clientProvider) {
         this.clientProvider = clientProvider;
@@ -75,18 +74,6 @@ public class McpTalentClient implements Talent {
     @Override
     public TalentMetadata metadata() {
         return metadata;
-    }
-
-    @Override
-    public void setEnabled(Boolean enabled) {
-        if (enabled != null) {
-            this.enabled = enabled;
-        }
-    }
-
-    @Override
-    public boolean isEnabled() {
-        return enabled;
     }
 
     /**

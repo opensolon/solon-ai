@@ -3,6 +3,7 @@ package org.noear.solon.ai.harness.command.builtin;
 
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.command.AbsCommand;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.InputOrigin;
@@ -17,7 +18,7 @@ import java.util.List;
  * @author noear
  * @since 2026.4.28
  */
-public class ModelCommand implements Command {
+public class ModelCommand extends AbsCommand {
     private static final String BOLD = "\033[1m";
     private static final String DIM = "\033[2m";
     private static final String GREEN = "\033[32m";

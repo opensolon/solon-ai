@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness.command;
 
+import org.noear.solon.ai.AiSwitchable;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.input.InputOrigin;
 
@@ -22,8 +23,9 @@ import org.noear.solon.ai.harness.input.InputOrigin;
  * 通用命令接口（适用于 CLI、Web 等所有端）
  *
  * @author noear
+ * @since 4.0
  */
-public interface Command {
+public interface Command extends AiSwitchable {
     /**
      * 命令名（不含 / 前缀）
      */

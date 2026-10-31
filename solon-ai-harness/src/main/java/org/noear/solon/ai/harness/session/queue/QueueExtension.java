@@ -5,6 +5,7 @@
 package org.noear.solon.ai.harness.session.queue;
 
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessExtension;
@@ -33,31 +34,25 @@ import java.util.Map;
  * @author noear
  * @since 3.9.4
  */
-public class QueueExtension implements HarnessExtension {
+public class QueueExtension extends AbsHarnessExtension {
 
-    private final boolean commandEnabled;
-
-    /** 默认构造：注册 /queue 命令 + 操作门面。 */
-    public QueueExtension() {
-        this(true);
-    }
-
-    /** @param commandEnabled 宿主自管命令注册时传 false（只保留操作门面） */
-    public QueueExtension(boolean commandEnabled) {
-        this.commandEnabled = commandEnabled;
-    }
+    private final QueueCommand queueCommand = new QueueCommand();
 
     @Override
     public void initialize(HarnessEngine engine) {
-        if (commandEnabled && engine.getCommandRegistry().find("queue") == null) {
-            engine.getCommandRegistry().register(new QueueCommand());
-        }
+        engine.getCommandRegistry().register(queueCommand);
     }
 
     /** configure 无事可做（命令无代理级装配需求）；接口要求必须实现。 */
     @Override
     public void configure(HarnessEngine engine, String agentName, ReActAgent.Builder agentBuilder) {
         // no-op
+    }
+
+    @Override
+    public void setEnabled(Boolean enabled) {
+        super.setEnabled(enabled);
+        queueCommand.setEnabled(enabled);
     }
 
     // ==================== 操作门面（中转静态实现） ====================

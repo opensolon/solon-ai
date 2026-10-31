@@ -17,6 +17,7 @@ package org.noear.solon.ai.harness.command.builtin;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.command.AbsCommand;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.InputOrigin;
@@ -32,7 +33,7 @@ import org.noear.solon.ai.harness.session.goal.GoalState;
  *
  * @author noear
  */
-public class GoalCommand implements Command {
+public class GoalCommand extends AbsCommand {
     private static final String BOLD = "\033[1m";
     private static final String DIM = "\033[2m";
     private static final String GREEN = "\033[32m";

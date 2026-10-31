@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat.interceptor;
 
+import org.noear.solon.ai.AiSwitchable;
 import org.noear.solon.ai.chat.tool.ToolResult;
 
 /**
@@ -23,21 +24,7 @@ import org.noear.solon.ai.chat.tool.ToolResult;
  * @author noear
  * @since 3.8.1
  */
-public interface ToolInterceptor {
-    /**
-     * 是否启用
-     */
-    default boolean isEnabled() {
-        return true;
-    }
-
-    /**
-     * 设置是否启用
-     */
-    default void setEnabled(Boolean enabled) {
-
-    }
-
+public interface ToolInterceptor extends AiSwitchable {
     /**
      * 拦截工具调用
      *

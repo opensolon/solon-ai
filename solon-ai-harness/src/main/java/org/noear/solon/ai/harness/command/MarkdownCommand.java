@@ -36,7 +36,7 @@ import java.util.List;
  * @author noear
  * @since 2026.4.28
  */
-public class MarkdownCommand implements Command {
+public class MarkdownCommand extends AbsCommand implements Command {
     private final String name;
     private final String template;
     private final String description;

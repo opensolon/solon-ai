@@ -333,7 +333,9 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
                         for (RankEntity<SimpleInterceptor> item : options.interceptors()) {
                             //内部已支持启用控制
-                            o.interceptorAdd(item.index, item.target);
+                            if (item.target.isEnabled()) {
+                                o.interceptorAdd(item.index, item.target);
+                            }
                         }
 
                         if (Assert.isNotEmpty(config.getOutputSchema())) {

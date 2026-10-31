@@ -26,6 +26,7 @@ import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.AiSwitchable;
 import org.noear.solon.ai.chat.content.*;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -94,7 +95,7 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.1
  */
-public class McpClientProvider implements ToolProvider, ResourceProvider, PromptProvider, Closeable {
+public class McpClientProvider implements AiSwitchable, ToolProvider, ResourceProvider, PromptProvider, Closeable {
     static final Logger log = LoggerFactory.getLogger(McpClientProvider.class);
 
     private final ReentrantLock LOCKER = new ReentrantLock();
@@ -150,8 +151,10 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         return isEnabled.get();
     }
 
-    public void setEnabled(boolean enabled){
-        isEnabled.set(enabled);
+    public void setEnabled(Boolean enabled) {
+        if (enabled != null) {
+            isEnabled.set(enabled);
+        }
     }
 
     /**

@@ -191,7 +191,9 @@ public class ReasonTask {
         // 触发推理审计事件（传递原始消息对象）
         long durationMs = System.currentTimeMillis() - startMs;
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onReasonEnd(trace, response, responseMessage, durationMs);
+            if (item.target.isEnabled()) {
+                item.target.onReasonEnd(trace, response, responseMessage, durationMs);
+            }
         }
 
         if (trace.hasStreamSink()) {
@@ -279,7 +281,9 @@ public class ReasonTask {
 
         // 触发思考事件（合并原 onReasonEnd + onThought）
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onThought(trace, thoughtContent, responseMessage);
+            if (item.target.isEnabled()) {
+                item.target.onThought(trace, thoughtContent, responseMessage);
+            }
         }
 
         if(trace.getSession().isPending()){

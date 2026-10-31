@@ -1010,9 +1010,7 @@ public class HarnessEngine {
 
         //与构造器对称：动态添加的扩展也要触发初始化（此刻引擎已装配完毕，任意引擎方法都安全）。
         //嵌套调用安全：agentLock 可重入，且 mainAgent 尚未构建时重建分支会跳过。
-        if (extension.isEnabled()) {
-            extension.initialize(this);
-        }
+        extension.initialize(this);
 
         agentLock.lock();
         try {
@@ -1984,9 +1982,7 @@ public class HarnessEngine {
             HarnessEngine engine = new HarnessEngine(options);
 
             for (HarnessExtension extension : options.getExtensions()) {
-                if (extension.isEnabled()) {
-                    extension.initialize(engine);
-                }
+                extension.initialize(engine);
             }
 
             return engine;

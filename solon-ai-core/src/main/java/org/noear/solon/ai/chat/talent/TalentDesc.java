@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat.talent;
 
+import org.noear.solon.ai.AbsSwitchable;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
@@ -42,23 +43,22 @@ import java.util.function.Function;
  * @since 3.8.4
  */
 @Preview("3.8.4")
-public class TalentDesc implements Talent {
-
+public class TalentDesc extends AbsSwitchable implements Talent {
     private final TalentMetadata metadata;
 
     private final Function<Prompt, Boolean> isSupportedHandler;
     private final Function<Prompt, String> getInstructionHandler;
     private final Consumer<Prompt> onAttachHandler;
     private final Function<Prompt, Collection<FunctionTool>> getToolsHandler;
-    private volatile boolean enabled;
 
     public TalentDesc(TalentMetadata metadata, boolean enabled, Function<Prompt, Boolean> isSupportedHandler, Function<Prompt, String> getInstructionHandler, Consumer<Prompt> onAttachHandler, Function<Prompt, Collection<FunctionTool>> getToolsHandler) {
         this.metadata = metadata;
-        this.enabled = enabled;
         this.getToolsHandler = getToolsHandler;
         this.isSupportedHandler = isSupportedHandler;
         this.getInstructionHandler = getInstructionHandler;
         this.onAttachHandler = onAttachHandler;
+
+        setEnabled(enabled);
     }
 
     @Override
@@ -74,18 +74,6 @@ public class TalentDesc implements Talent {
     @Override
     public TalentMetadata metadata() {
         return metadata;
-    }
-
-    @Override
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    @Override
-    public void setEnabled(Boolean enabled) {
-        if (enabled != null) {
-            this.enabled = enabled;
-        }
     }
 
     @Override

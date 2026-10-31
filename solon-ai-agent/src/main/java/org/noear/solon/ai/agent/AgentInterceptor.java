@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent;
 
+import org.noear.solon.ai.AiSwitchable;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -24,5 +25,5 @@ import org.noear.solon.lang.Preview;
  * @since 3.8.4
  */
 @Preview("3.8.4")
-public interface AgentInterceptor {
+public interface AgentInterceptor extends AiSwitchable {
 }

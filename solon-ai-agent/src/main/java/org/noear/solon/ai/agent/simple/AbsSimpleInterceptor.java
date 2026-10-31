@@ -15,23 +15,13 @@
  */
 package org.noear.solon.ai.agent.simple;
 
+import org.noear.solon.ai.AbsSwitchable;
+
 /**
  *
  * @author noear
  * @since 4.0.0
  */
-public abstract class AbsSimpleInterceptor implements SimpleInterceptor{
-    private volatile boolean enabled = true;
+public abstract class AbsSimpleInterceptor extends AbsSwitchable implements SimpleInterceptor{
 
-    @Override
-    public void setEnabled(Boolean enabled) {
-        if (enabled != null) {
-            this.enabled = enabled;
-        }
-    }
-
-    @Override
-    public boolean isEnabled() {
-        return enabled;
-    }
 }

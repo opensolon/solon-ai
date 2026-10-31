@@ -17,6 +17,7 @@ package org.noear.solon.ai.mcp.server;
 
 import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
+import org.noear.solon.ai.AbsSwitchable;
 import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -40,22 +41,7 @@ import java.util.List;
  * @since 3.9.0
  */
 @Preview("3.9.0")
-public abstract class McpTalentServer implements Talent {
-
-    protected volatile boolean enabled = true;
-
-    @Override
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    @Override
-    public void setEnabled(Boolean enabled) {
-        if(enabled != null){
-            this.enabled = enabled;
-        }
-    }
-
+public abstract class McpTalentServer extends AbsSwitchable implements Talent {
     /**
      * 导出才能元数据作为 MCP 资源
      */

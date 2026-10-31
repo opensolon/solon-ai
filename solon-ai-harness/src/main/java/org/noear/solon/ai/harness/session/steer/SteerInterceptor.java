@@ -2,6 +2,7 @@ package org.noear.solon.ai.harness.session.steer;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.react.AbsReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -55,7 +56,7 @@ import java.util.function.BooleanSupplier;
  * @since 2026
  */
 @SuppressWarnings("deprecation")
-public class SteerInterceptor<C> implements ReActInterceptor {
+public class SteerInterceptor<C> extends AbsReActInterceptor implements ReActInterceptor {
     private static final Logger LOG = LoggerFactory.getLogger(SteerInterceptor.class);
     /** 会话级插话邮箱 key（attrs 为 transient Map，不落 snapshot.json） */
     public static final String ATTR_STEER_BOX = "web.steerBox";

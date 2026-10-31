@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness;
 
+import org.noear.solon.ai.AiSwitchable;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.lang.Preview;
 
@@ -35,21 +36,7 @@ import org.noear.solon.lang.Preview;
  * @since 3.10.4
  */
 @Preview("3.10")
-public interface HarnessExtension {
-    /**
-     * 是否启用
-     */
-    default boolean isEnabled() {
-        return true;
-    }
-
-    /**
-     * 设置是否启用
-     */
-    default void setEnabled(Boolean enabled) {
-
-    }
-
+public interface HarnessExtension extends AiSwitchable {
     /**
      * 初始化引擎（仅回调一次；引擎已装配完毕，任意引擎方法均可安全调用）
      */
