@@ -20,6 +20,7 @@
 | 接一个真产品 | **第三章**全部（两段式、事件渲染、HITL 续流、四端时序） |
 | 加命令 / 子代理 | 第四章、第六章 |
 | 跑 goal / queue / steer | **第五章**（5.1 / 5.2 / 5.3，三个状态型命令的装配与宿主责任） |
+| 分清「命令文本 / `handle(HarnessInput)` / 门面」三条路 | **§5 引言**（同一动作的三种写法与返回物差异） |
 | 停 / 改 / 重排的干预闭环 | **§5.4**（`engine.interrupt` + `steer` + `queue`，两个互斥场景） |
 | 运行期开关扩展 | **§5 引言**（`engine.setExtensionEnabled`）+ §8.2 |
 | 调优与定制 | 第七～十章（权限、配置、扩展、安全） |
@@ -737,9 +738,37 @@ SteerExtension steer = new SteerExtension<>(() -> mySteerPort);
 engine.addExtension(steer); // /steer
 ```
 
-三者共同点：`/queue` 与 `/steer` 的 `runnableWhenBusy()` 返回 `true`（能穿透忙碌检查）；`/goal` **不覆写**、保持默认 `false`（它会启动持续轮次，不能在忙时会话里重入）。`/queue`、`/steer` 从 `Command.execute(engine, ctx, origin)` 的第三参拿到 `InputOrigin` 并带到投递链路，三者都**不自己开流**。
+三者共同点：`/queue` 与 `/steer` 的 `runnableWhenBusy()` 返回 `true`（宿主据此允许它们在任务执行中被受理）；`/goal` **不覆写**、保持默认 `false`（它会启动持续轮次，不能在忙时会话里重入）。注意这只是**给宿主读的声明**，引擎内部不做忙碌拦截（详见下文边界）。`/queue`、`/steer` 从 `Command.execute(engine, ctx, origin)` 的第三参拿到 `InputOrigin` 并带到投递链路，三者都**不自己开流**。
 
-**编程调用比命令更短**：每个能力都有一个“最简两参”形态，与命令走同一条写路径（§5.4 还给出了“运行中干预”与“停下来重排”两个互斥场景）：
+**同一个动作，三条到达路径**：命令不是另一套实现，它是「文本入口」。同一能力既可以由文本进来（终端用户敲、IM 渠道转发），也可以由代码直接进门面；中间还有一条「代码把文本交给引擎」。以 `/queue` 为例三者并排：
+
+```java
+// ① 文本入口：终端用户敲的那一条（IM 转发也是它）
+InputOutcome o = engine.handle(HarnessInput.of(session, "/queue 顺便更新 README")
+        .origin(InputOrigin.channel("wechat")));   // Kind.REPLY，回执在 o.getCommandOutput()
+
+// ② 同一段文本，由代码交给引擎：前缀识别、命令切分、回执文案全由引擎与命令产出
+InputOutcome o2 = engine.handle(HarnessInput.of(session, "/queue 顺便更新 README"));
+// 与 ① 唯一差别：origin 未给（回执归由宿主自己路由）
+
+// ③ 直接调门面：跳过文本，宿主自己编排（命令内部调的就是它）
+int pos = queue.enqueue(session, "顺便更新 README");  // 2 参，返回队列位置（从 1 计），-1 = 失败
+```
+
+①② 是文本路径，③ 是对象路径，**动作等价但返回物性质不同**：前两者给你一段供人读的回执，后者给你一个可判定的值。对照如下：
+
+| 维度 | ① / ② `engine.handle(HarnessInput.of(session, "/queue …"))` | ③ `queue.enqueue(session, text)` |
+|---|---|---|
+| 参数由谁解析 | 引擎（命令前缀 + `ParsedCommand` 切分） | 宿主（直接给强类型值） |
+| 返回值 | `InputOutcome`：`Kind.REPLY` + `getCommandOutput()` | `int` / `SteerResult` / `GoalState` |
+| 失败如何得知 | 回执文本里（人读：「排队失败（队列已满，上限 20 条）」） | 返回值（程序判定：`-1` / 状态码） |
+| 回执文案 | 命令内置，可直接渲染 | **没有**，要展示得宿主自己写 |
+| 停用拦截点 | `CommandDispatcher` 判 `isEnabled()` → 直接回 `REPLY` | 门面内 `isEnabled() == false` → `-1` / `false` / `DISABLED` |
+| 来源身份 | `HarnessInput.origin(...)`，命令再按渠道兜底 | 最简重载给缺省值（`queue` 补 `channel("queue")`、`steer` 用 `NONE`、`goal` 不带） |
+| 忙碌放行 | 宿主读 `Command#runnableWhenBusy()` 决定要不要受理 | 宿主自行判定 |
+| 需要 `.terminal(true)` 吗 | 不需要（这四个命令都不是 `terminalOnly`） | 不适用 |
+
+四个能力的最简门面形态（① 内部最终都落到这里，与命令走同一条写路径；§5.4 还给出了“运行中干预”与“停下来重排”两个互斥场景）：
 
 ```java
 goal.attachAndSchedule(session, "让测试全绿");   // 2 参，返回 GoalState
@@ -750,6 +779,20 @@ SteerResult r = steer.steer(session, "改用 PostgreSQL 方言");  // 2 参
 
 engine.interrupt(session);                       // 1 参，true = 确实停了
 ```
+
+**同源是可验证的**，不是口头承诺——三条命令的实现体就是这三个方法，文档里不必写两套语义：
+
+| 命令 | 命令内部的实际调用 |
+|---|---|
+| `/goal <obj>` | 解析 flag 得到 `GoalSpec` 后 `goal.attachAndSchedule(session, spec)`（`GoalCommand` 注释明写「命令行与编程调用的唯一汇合点」） |
+| `/queue <msg>` | `SessionQueue.enqueue(session, text, resolved)`——`QueueExtension.enqueue` 转调的就是这个静态方法 |
+| `/steer <msg>` | `SteerInterceptor.steer(session, null, null, text, origin, null)`——正是 `steer.steer(session, text, origin)` 的三参实现 |
+
+三条由此推出的边界：
+
+- **这三个命令的 `Kind` 恒为 `REPLY`**：它们只改会话状态、不声明 Agent 任务意图，所以命令路径下不会出现 `TASK`。`/goal` 虽然会自己起持续轮次，但那是调度器驱动的、不在本次 `handle` 的返回里——别等 `getRequest()`。
+- **忙碌放行不会自动发生**：`runnableWhenBusy()` 只是一个可读声明，引擎在任何路径上都不做忙碌拦截（`HarnessEngine` 与 `input` 包内零 busy 引用）。宿主不论走 ①② 还是 ③，都得自己先判“会话是否正忙”再决定受理——差别只在于 ①② 能直接读 `engine.getCommandRegistry().get("queue").runnableWhenBusy()`，③ 需自己写死这个知识。
+- **不要两条路都走**：宿主若已用门面完成了动作，就不要再把同样的文本拼成 `/queue …` 交给 `handle`，那会入队两次（命令路径没有幂等保护，`id` 去重只对带 `id` 的 `enqueue` 生效）。
 
 除了 `attachAndSchedule`（失败时抛 `IllegalStateException`），其余三个入口都**用返回值报告失败、不抛异常**，宿主应按返回值分流（命令路径的每种失败文案就是据此产生的）：
 
@@ -1736,6 +1779,7 @@ org.noear.solon.ai.harness
 22. **`interrupt` 之后不要再 `steer`**——`activeRunId` 已随任务结束被清掉，此时只能拿到 `NOT_RUNNING`；「停下来重来」请直接用 `queue.enqueue`。「运行中改主意」才用 steer，两者是互斥场景而非串行步骤。
 23. **`.scheduler(null)` 之后调度类方法全是空操作**——`hasScheduler()` 为 `false`，`scheduleNow` / `resumeScheduleOnly` / `unschedule` / `stopAll` 静默返回。纯测试宿主排查「调了 `scheduleNow` 却没跑」先看这里。
 24. **`GoalExtension.of(...)` 不建命令也不建调度**——它是存量入口（未标 `@Deprecated`），适合宿主已有 `GoalEngine`、只借 Talent 与门面的场景；`getGoalScheduler()` 为 `null`，与 builder 形态的能力不等价。
+25. **命令文本与门面调用是同一个动作，别把两者的返回值当一回事**——`engine.handle(HarnessInput.of(s, "/queue 跑测试"))` 得到的是 `Kind.REPLY` + 人读回执，`queue.enqueue(s, "跑测试")` 得到的是位置 `int`（`-1` = 失败）。宿主要程序判定就走门面，要现成文案就走文本路径；**两条都走会入队两次**（命令路径无幂等保护）。
 
 ---
 

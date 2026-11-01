@@ -1047,12 +1047,12 @@ public class HarnessEngine {
             return;
         }
 
+        extension.setEnabled(enabled);
+
         if (options.getExtensions().contains(extension) == false) {
             addExtension(extension);
             return;
         }
-
-        extension.setEnabled(enabled);
 
         //开关影响才能/拦截器装配，必须重建主代理（命令与拦截器的运行期判定本身即时生效）
         agentLock.lock();
