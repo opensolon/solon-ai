@@ -11,7 +11,7 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.command.builtin.SteerCommand;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.session.steer.SteerInterceptor.SteerStatus;
+import org.noear.solon.ai.harness.session.steer.SteerStatus;
 
 import java.util.Queue;
 import java.util.function.Supplier;
@@ -98,12 +98,12 @@ public class SteerExtension<C> extends AbsHarnessExtension {
      *
      * @see SteerInterceptor#steer(AgentSession, String, String, String, InputOrigin, java.util.function.BooleanSupplier)
      */
-    public SteerInterceptor.SteerResult steer(AgentSession session, String runId, String steerId,
+    public SteerResult steer(AgentSession session, String runId, String steerId,
                                               String text, InputOrigin origin,
                                               java.util.function.BooleanSupplier busyRecheck) {
         if (isEnabled() == false) {
             // 停用后仍投递会一直积压在邮箱（消费方拦截器已停用），必须当场拒绝。
-            return new SteerInterceptor.SteerResult(SteerStatus.DISABLED, steerId, 0);
+            return new SteerResult(SteerStatus.DISABLED, steerId, 0);
         }
         return SteerInterceptor.steer(session, runId, steerId, text, origin, busyRecheck);
     }
@@ -117,12 +117,12 @@ public class SteerExtension<C> extends AbsHarnessExtension {
      * <p>来源缺省为 {@link InputOrigin#NONE}；需保留渠道身份时用三参重载。
      * 结果仍用 {@code isSteered/isBoxFull/isNotRunning()} 判断，本方法不做降级。</p>
      */
-    public SteerInterceptor.SteerResult steer(AgentSession session, String text) {
+    public SteerResult steer(AgentSession session, String text) {
         return steer(session, text, InputOrigin.NONE);
     }
 
     /** 向当前活跃任务插话，携带来源身份（runId / steerId / busyRecheck 省略）。 */
-    public SteerInterceptor.SteerResult steer(AgentSession session, String text, InputOrigin origin) {
+    public SteerResult steer(AgentSession session, String text, InputOrigin origin) {
         return steer(session, null, null, text, origin == null ? InputOrigin.NONE : origin, null);
     }
 

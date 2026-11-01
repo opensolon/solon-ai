@@ -60,8 +60,8 @@ class SteerExtensionTest {
         session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
 
         ext.setEnabled(false);
-        SteerInterceptor.SteerResult r = ext.steer(session, null, null, "补充", null, null);
-        assertEquals(SteerInterceptor.SteerStatus.DISABLED, r.getStatus());
+        SteerResult r = ext.steer(session, null, null, "补充", null, null);
+        assertEquals(SteerStatus.DISABLED, r.getStatus());
         assertEquals(0, r.getQueued());
     }
 
@@ -83,12 +83,12 @@ class SteerExtensionTest {
         AgentSession session = InMemoryAgentSession.of();
 
         // 无活跃任务：NOT_RUNNING（与 /steer 命令、Web API 同语义）
-        SteerInterceptor.SteerResult r = ext.steer(session, null, null, "补充", null, null);
-        assertEquals(SteerInterceptor.SteerStatus.NOT_RUNNING, r.getStatus());
+        SteerResult r = ext.steer(session, null, null, "补充", null, null);
+        assertEquals(SteerStatus.NOT_RUNNING, r.getStatus());
 
         // 模拟任务运行边界：写入 activeRunId 后可入邮箱
         session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
-        SteerInterceptor.SteerResult ok = ext.steer(session, null, null, "补充内容", null, null);
+        SteerResult ok = ext.steer(session, null, null, "补充内容", null, null);
         assertTrue(ok.isSteered());
         assertEquals(1, ok.getQueued());
 
@@ -102,11 +102,11 @@ class SteerExtensionTest {
         AgentSession session = InMemoryAgentSession.of();
 
         // 无活跃任务：NOT_RUNNING（与 6 参形态同语义）
-        assertEquals(SteerInterceptor.SteerStatus.NOT_RUNNING, ext.steer(session, "补充").getStatus());
+        assertEquals(SteerStatus.NOT_RUNNING, ext.steer(session, "补充").getStatus());
 
         // 有活跃任务：两参形态直接投递（runId/steerId/busyRecheck 均省略）
         session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
-        SteerInterceptor.SteerResult ok = ext.steer(session, "补充内容");
+        SteerResult ok = ext.steer(session, "补充内容");
         assertTrue(ok.isSteered());
         assertEquals(1, ok.getQueued());
         assertNotNull(ok.getSteerId(), "steerId 应由框架生成");
@@ -119,10 +119,10 @@ class SteerExtensionTest {
         session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
 
         // 便捷重载不得绕过入参校验与开关语义
-        assertEquals(SteerInterceptor.SteerStatus.EMPTY_TEXT, ext.steer(session, "   ").getStatus());
+        assertEquals(SteerStatus.EMPTY_TEXT, ext.steer(session, "   ").getStatus());
 
         ext.setEnabled(false);
-        assertEquals(SteerInterceptor.SteerStatus.DISABLED, ext.steer(session, "补充").getStatus());
+        assertEquals(SteerStatus.DISABLED, ext.steer(session, "补充").getStatus());
     }
 
     @Test
@@ -131,7 +131,7 @@ class SteerExtensionTest {
         AgentSession session = InMemoryAgentSession.of();
         session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
 
-        SteerInterceptor.SteerResult ok = ext.steer(session, "补充", null);
+        SteerResult ok = ext.steer(session, "补充", null);
         assertTrue(ok.isSteered(), "null 来源应回落 InputOrigin.NONE 而非报错");
     }
 

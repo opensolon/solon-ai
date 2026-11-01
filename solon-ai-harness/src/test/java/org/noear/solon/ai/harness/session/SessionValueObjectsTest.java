@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.session.queue.SessionQueueItem;
 import org.noear.solon.ai.harness.session.steer.SteerInterceptor;
+import org.noear.solon.ai.harness.session.steer.SteerResult;
+import org.noear.solon.ai.harness.session.steer.SteerStatus;
 
 import java.util.Map;
 
@@ -132,15 +134,15 @@ class SessionValueObjectsTest {
 
     @Test
     void steerStatusCodesMatchNames() {
-        for (SteerInterceptor.SteerStatus s : SteerInterceptor.SteerStatus.values()) {
+        for (SteerStatus s : SteerStatus.values()) {
             assertEquals(s.name(), s.code());
         }
     }
 
     @Test
     void steerResultPredicates() {
-        SteerInterceptor.SteerResult steered =
-                new SteerInterceptor.SteerResult(SteerInterceptor.SteerStatus.STEERED, "s1", 2);
+        SteerResult steered =
+                new SteerResult(SteerStatus.STEERED, "s1", 2);
         assertTrue(steered.isSteered());
         assertFalse(steered.isBoxFull());
         assertFalse(steered.isNotRunning());
@@ -148,17 +150,17 @@ class SessionValueObjectsTest {
         assertEquals(2, steered.getQueued());
         assertEquals("STEERED", steered.getStatusCode());
 
-        SteerInterceptor.SteerResult full =
-                new SteerInterceptor.SteerResult(SteerInterceptor.SteerStatus.BOX_FULL, "s2", 5);
+        SteerResult full =
+                new SteerResult(SteerStatus.BOX_FULL, "s2", 5);
         assertTrue(full.isBoxFull());
         assertFalse(full.isSteered());
 
         // NOT_RUNNING 与 TURN_CHANGED 都视为「未在运行」
-        assertTrue(new SteerInterceptor.SteerResult(
-                SteerInterceptor.SteerStatus.NOT_RUNNING, null, 0).isNotRunning());
-        assertTrue(new SteerInterceptor.SteerResult(
-                SteerInterceptor.SteerStatus.TURN_CHANGED, null, 0).isNotRunning());
-        assertFalse(new SteerInterceptor.SteerResult(
-                SteerInterceptor.SteerStatus.EMPTY_TEXT, null, 0).isNotRunning());
+        assertTrue(new SteerResult(
+                SteerStatus.NOT_RUNNING, null, 0).isNotRunning());
+        assertTrue(new SteerResult(
+                SteerStatus.TURN_CHANGED, null, 0).isNotRunning());
+        assertFalse(new SteerResult(
+                SteerStatus.EMPTY_TEXT, null, 0).isNotRunning());
     }
 }

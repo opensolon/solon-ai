@@ -260,13 +260,13 @@ public class SteerInterceptorTest {
         interceptor.onReasonStart(trace, new StringBuilder()); // 建立当前 runId
         trace.nextTurn();
 
-        SteerInterceptor.SteerResult result = SteerInterceptor.steer(session, null, "once", "补充要求",
+        SteerResult result = SteerInterceptor.steer(session, null, "once", "补充要求",
                 InputOrigin.channel("Feishu"), () -> {
                     interceptor.onReasonStart(trace, new StringBuilder()); // 模拟复查前推理线程取走消息
                     return false;
                 });
 
-        assertEquals(SteerInterceptor.SteerStatus.STEERED, result.getStatus());
+        assertEquals(SteerStatus.STEERED, result.getStatus());
         assertEquals(1, trace.getWorkingMemory().getMessages().size());
         assertTrue(trace.getWorkingMemory().getMessages().get(0).getContent().contains("补充要求"));
         assertNull(SteerInterceptor.steerBox(session), "消费后空邮箱可被清理");
@@ -279,14 +279,14 @@ public class SteerInterceptorTest {
         interceptor.onReasonStart(trace, new StringBuilder());
         trace.nextTurn();
 
-        SteerInterceptor.SteerResult result = SteerInterceptor.steer(session, null, "once", "补充要求",
+        SteerResult result = SteerInterceptor.steer(session, null, "once", "补充要求",
                 InputOrigin.channel("Feishu"), () -> {
                     interceptor.onReasonStart(trace, new StringBuilder());
                     interceptor.onAgentEnd(trace);
                     return false;
                 });
 
-        assertEquals(SteerInterceptor.SteerStatus.STEERED, result.getStatus());
+        assertEquals(SteerStatus.STEERED, result.getStatus());
         assertEquals(1, trace.getWorkingMemory().getMessages().size());
         assertNull(session.attrs().get(SteerInterceptor.ATTR_ACTIVE_RUN_ID));
     }
@@ -297,10 +297,10 @@ public class SteerInterceptorTest {
         trace.nextTurn();
         interceptor.onReasonStart(trace, new StringBuilder());
 
-        SteerInterceptor.SteerResult result = SteerInterceptor.steer(session, null, "pending", "补充要求",
+        SteerResult result = SteerInterceptor.steer(session, null, "pending", "补充要求",
                 InputOrigin.channel("Feishu"), () -> false);
 
-        assertEquals(SteerInterceptor.SteerStatus.NOT_RUNNING, result.getStatus());
+        assertEquals(SteerStatus.NOT_RUNNING, result.getStatus());
         assertTrue(trace.getWorkingMemory().isEmpty());
         assertNull(SteerInterceptor.steerBox(session));
     }

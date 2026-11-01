@@ -5,8 +5,8 @@ import org.noear.solon.ai.harness.input.InputOrigin;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.session.steer.SteerInterceptor;
-import org.noear.solon.ai.harness.session.steer.SteerInterceptor.SteerResult;
-import org.noear.solon.ai.harness.session.steer.SteerInterceptor.SteerStatus;
+import org.noear.solon.ai.harness.session.steer.SteerResult;
+import org.noear.solon.ai.harness.session.steer.SteerStatus;
 import org.noear.solon.ai.harness.session.steer.SteerMessage;
 
 import static org.junit.jupiter.api.Assertions.*;

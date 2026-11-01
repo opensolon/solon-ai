@@ -272,9 +272,9 @@ public int enqueue(AgentSession session, String text, InputOrigin origin) {
 **SteerExtension** —— `steer()` 返回既有失败态，`cancel()` 保持可用（清理不受开关影响）：
 
 ```java
-public SteerInterceptor.SteerResult steer(...) {
+public SteerResult steer(...) {
     if (isEnabled() == false) {
-        return SteerInterceptor.SteerResult.rejected("steer extension disabled");
+        return SteerResult.rejected("steer extension disabled");
     }
     ...
 }

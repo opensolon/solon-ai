@@ -296,45 +296,6 @@ public class SteerInterceptor<C> extends AbsReActInterceptor implements ReActInt
     }
 
     /**
-     * 插话入队结果。status 取值与 /web/chat/steer 应答码同名：
-     * STEERED / NOT_RUNNING / TURN_CHANGED / BOX_FULL / DUPLICATE_STEER_ID /
-     * EMPTY_TEXT / TEXT_TOO_LONG / INVALID_STEER_ID / DISABLED。
-     */
-    public enum SteerStatus {
-        STEERED("STEERED"), NOT_RUNNING("NOT_RUNNING"), TURN_CHANGED("TURN_CHANGED"),
-        BOX_FULL("BOX_FULL"), DUPLICATE_STEER_ID("DUPLICATE_STEER_ID"),
-        EMPTY_TEXT("EMPTY_TEXT"), TEXT_TOO_LONG("TEXT_TOO_LONG"), INVALID_STEER_ID("INVALID_STEER_ID"),
-        /** 插话能力已被关闭（扩展/拦截器 setEnabled(false)），本次未入队。 */
-        DISABLED("DISABLED");
-
-        private final String code;
-        SteerStatus(String code) { this.code = code; }
-        public String code() { return code; }
-    }
-
-    public static final class SteerResult {
-        private final SteerStatus status;
-        private final String steerId;
-        private final int queued;
-
-        public SteerResult(SteerStatus status, String steerId, int queued) {
-            this.status = status;
-            this.steerId = steerId;
-            this.queued = queued;
-        }
-
-        public SteerStatus getStatus() { return status; }
-        public String getStatusCode() { return status.code(); }
-        public String getSteerId() { return steerId; }
-        public int getQueued() { return queued; }
-        public boolean isSteered() { return status == SteerStatus.STEERED; }
-        public boolean isBoxFull() { return status == SteerStatus.BOX_FULL; }
-        public boolean isNotRunning() {
-            return status == SteerStatus.NOT_RUNNING || status == SteerStatus.TURN_CHANGED;
-        }
-    }
-
-    /**
      * 仅取消仍留在邮箱中的插话。若消费线程已经 poll 出该项，则返回 false，调用方不得宣称取消成功。
      */
     public static boolean cancel(Queue<SteerMessage> box, String steerId) {

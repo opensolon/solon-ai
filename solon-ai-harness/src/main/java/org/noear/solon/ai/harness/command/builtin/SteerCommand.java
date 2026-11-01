@@ -22,7 +22,7 @@ import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.session.steer.SteerInterceptor;
-import org.noear.solon.ai.harness.session.steer.SteerInterceptor.SteerResult;
+import org.noear.solon.ai.harness.session.steer.SteerResult;
 import org.noear.solon.core.util.Assert;
 
 /**
