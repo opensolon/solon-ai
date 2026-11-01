@@ -202,10 +202,11 @@ public class AiConfig implements Serializable {
      * @throws IllegalArgumentException 传入负数
      */
     public void setConcurrency(int concurrency) {
-        if (concurrency < 0) {
-            throw new IllegalArgumentException("concurrency must be >= 0: " + concurrency);
+        if (concurrency > 0) {
+            this.concurrency = concurrency;
+        } else {
+            this.concurrency = 0;
         }
-        this.concurrency = concurrency;
     }
 
     public void setHeaders(Map<String, String> headers) {
