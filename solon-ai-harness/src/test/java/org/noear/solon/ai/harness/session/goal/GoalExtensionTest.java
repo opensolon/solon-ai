@@ -104,8 +104,10 @@ class GoalExtensionTest {
         // 先手动注册（模拟迁移期宿主双写）
         HarnessEngine engine = engineBuilder().build();
         GoalEngine manual = new GoalEngine(new ExecutionBridge(engine), BudgetThresholds.defaults(), 3, 3, true);
+        // 命令只持 GoalExtension（存量形态 of(...) 不装配命令与调度，正好用于手工注册）
+        GoalExtension manualExt = GoalExtension.of(manual, engine);
         engine.getCommandRegistry().register(
-                new org.noear.solon.ai.harness.command.builtin.GoalCommand(manual, null));
+                new org.noear.solon.ai.harness.command.builtin.GoalCommand(manualExt));
 
         GoalExtension ext = GoalExtension.builder("ws-dup")
                 .taskExecutor((sid, p, a) -> "x")
@@ -117,12 +119,15 @@ class GoalExtensionTest {
         assertSame(manual, commandEngineOf(engine), "已注册的同名命令应保持原实例");
     }
 
+    /** 从已注册的 /goal 命令里取出其 GoalExtension 背后的 GoalEngine（字段名已由 goalEngine 改为 goal）。 */
     private Object commandEngineOf(HarnessEngine engine) {
         try {
-            java.lang.reflect.Field f = engine.getCommandRegistry().find("goal").getClass()
-                    .getDeclaredField("goalEngine");
+            Object command = engine.getCommandRegistry().find("goal");
+            java.lang.reflect.Field f = command.getClass().getDeclaredField("goal");
             f.setAccessible(true);
-            return f.get(engine.getCommandRegistry().find("goal"));
+            org.noear.solon.ai.harness.session.goal.GoalExtension holder =
+                    (org.noear.solon.ai.harness.session.goal.GoalExtension) f.get(command);
+            return holder.getGoalEngine();
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

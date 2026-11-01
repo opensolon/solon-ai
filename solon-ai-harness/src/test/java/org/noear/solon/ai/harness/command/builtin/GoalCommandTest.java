@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class GoalCommandTest {
     @Test
     void shouldExposeGoalMetadata() {
-        GoalCommand command = new GoalCommand(null, null);
+        GoalCommand command = new GoalCommand(null);
 
         assertEquals("goal", command.name());
         assertEquals("/goal <objective>", command.examples()[0]);
@@ -38,7 +38,7 @@ class GoalCommandTest {
 
     @Test
     void descriptionShouldNotReferenceLoop() {
-        GoalCommand command = new GoalCommand(null, null);
+        GoalCommand command = new GoalCommand(null);
 
         assertFalse(command.description().toLowerCase().contains("loop"),
                 "goal 是独立能力，描述不应再引用 loop");
@@ -50,7 +50,7 @@ class GoalCommandTest {
 
     @Test
     void examplesShouldCoverControlSubcommands() {
-        GoalCommand command = new GoalCommand(null, null);
+        GoalCommand command = new GoalCommand(null);
 
         String joined = String.join(" ", command.examples());
         assertTrue(joined.contains("pause"), "应提供 pause 用法");

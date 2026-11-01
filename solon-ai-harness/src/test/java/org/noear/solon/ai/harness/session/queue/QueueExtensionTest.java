@@ -63,6 +63,27 @@ class QueueExtensionTest {
     }
 
     @Test
+    void twoArgEnqueueDefaultsOriginWithoutExtraMetadata() {
+        QueueExtension queue = new QueueExtension();
+        AgentSession session = InMemoryAgentSession.of();
+
+        // 程序宿主不必为一个必填参数编造渠道标识
+        assertEquals(1, queue.enqueue(session, "最简入队"));
+        assertEquals("最简入队", queue.view(session).get(0).getText());
+        assertNotNull(queue.view(session).get(0).getOrigin(), "缺省来源不得为 null（与静态实现契约一致）");
+        assertEquals("queue", queue.view(session).get(0).getOrigin().getChannel());
+    }
+
+    @Test
+    void twoArgEnqueueRespectsDisabledState() {
+        QueueExtension queue = new QueueExtension();
+        queue.setEnabled(false);
+
+        assertEquals(-1, queue.enqueue(InMemoryAgentSession.of(), "x"),
+                "便捷重载不得绕过开关语义");
+    }
+
+    @Test
     void asyncDrainDefersAckUntilExplicitAcknowledge() {
         QueueExtension queue = new QueueExtension();
         AgentSession session = InMemoryAgentSession.of();

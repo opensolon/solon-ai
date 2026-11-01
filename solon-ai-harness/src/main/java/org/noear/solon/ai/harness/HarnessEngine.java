@@ -51,6 +51,7 @@ import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.input.ParsedCommand;
 import org.noear.solon.ai.harness.hitl.BashToolStrategy;
 import org.noear.solon.ai.harness.permission.PermissionContext;
+import org.noear.solon.ai.harness.session.interrupt.SessionInterrupt;
 
 import org.noear.solon.ai.harness.permission.PermissionRule;
 import org.noear.solon.ai.harness.permission.ToolPermission;
@@ -1399,13 +1400,41 @@ public class HarnessEngine {
     }
 
 
+    /**
+     * @deprecated 4.2.0 {@link #resume()}
+     */
+    @Deprecated
     public ReActRequest prompt() {
         return promptDo(null, null);
     }
 
+    /**
+     * @deprecated 4.2.0 {@link #resume(ReActAgent)}
+     */
+    @Deprecated
     public ReActRequest prompt(ReActAgent targetAgent) {
         return promptDo(null, targetAgent);
     }
+
+    /**
+     * 恢复执行（最近一个工作记忆）
+     *
+     * @since 4.2.0
+     */
+    public ReActRequest resume() {
+        return promptDo(null, null);
+    }
+
+    /**
+     * 恢复执行（最近一个工作记忆）
+     *
+     * @since 4.2.0
+     */
+    public ReActRequest resume(ReActAgent targetAgent) {
+        return promptDo(null, targetAgent);
+    }
+
+
 
     /**
      * 完整输入装配：会话 + 提示词 + 模型 + 子代理（引擎内部专用）
@@ -1744,6 +1773,29 @@ public class HarnessEngine {
         return null;
     }
 
+
+    /**
+     * 中断会话当前正在执行的任务（程序化 /interrupt）。
+     *
+     * <p>收敛此前只存在于 {@code /interrupt} 命令里的内部细节：清空排队项、释放宿主订阅时
+     * 存入 {@code session.attrs("disposable")} 的流句柄、补写取消消息（带 runId 元数据）与快照。
+     * 命令实现与本方法同源（{@link SessionInterrupt}），不存在第二套中断逻辑。</p>
+     *
+     * <p><b>先清队列再停流</b>：停流后宿主常在终态回调里续发队首，顺序颠倒会把刚被停掉的任务
+     * 重新推起来。queue / steer 的干预闭环因此是完整的：
+     * {@code interrupt} 停、{@code steer} 改、{@code queue} 重排。</p>
+     *
+     * <pre>{@code
+     * if (engine.interrupt(session)) {
+     *     queue.enqueue(session, "改用 PostgreSQL 方言重写迁移脚本");
+     * }
+     * }</pre>
+     *
+     * @return true = 已中断；false = 当前无正在执行的任务（会话为 null 时也返回 false）
+     */
+    public boolean interrupt(@Nullable AgentSession session) {
+        return SessionInterrupt.interrupt(session);
+    }
 
     public static Builder of(String workspace, String harnessHome) {
         return new Builder(workspace, harnessHome);

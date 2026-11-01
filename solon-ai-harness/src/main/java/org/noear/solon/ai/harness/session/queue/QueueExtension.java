@@ -74,6 +74,18 @@ public class QueueExtension extends AbsHarnessExtension {
         return SessionQueue.enqueue(session, text, origin);
     }
 
+    /**
+     * 入队（来源缺省为 {@code channel("queue")}）。
+     *
+     * <p>程序宿主调用时通常不关心来源元数据，不必为一个必填参数编造渠道标识
+     * （与 {@code /queue} 命令的内部兜底同口径）。
+     *
+     * @return 队列位置（从 1 计）；-1 表示失败
+     */
+    public int enqueue(AgentSession session, String text) {
+        return enqueue(session, text, InputOrigin.channel("queue"));
+    }
+
     /** 完整参数入队（HTTP 重试幂等用 id 去重；model/effort 等随任务执行）。已停用时返回 -1。 */
     public int enqueue(AgentSession session, String text, InputOrigin origin,
                        String id, String model, String reasoningEffort,

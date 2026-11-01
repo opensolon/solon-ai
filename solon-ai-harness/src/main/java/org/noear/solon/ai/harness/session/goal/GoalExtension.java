@@ -161,7 +161,8 @@ public class GoalExtension extends AbsHarnessExtension {
         }
 
         if(goalCommand == null) {
-            goalCommand = new GoalCommand(goalEngine, goalScheduler);
+            // 命令只持扩展实例：pause/resume/clear 与创建全部走门面同一条路径
+            goalCommand = new GoalCommand(this);
             goalCommand.setEnabled(this.isEnabled());
         }
 
@@ -186,7 +187,6 @@ public class GoalExtension extends AbsHarnessExtension {
                                 .commandAware(false)
                                 .agentAware(false)
                                 .origin(InputOrigin.channel("goal")))
-                        .getRequest()
                         .call()
                         .getContent();
             } catch (Throwable e) {
@@ -290,6 +290,16 @@ public class GoalExtension extends AbsHarnessExtension {
         return goalEngine.attach(session, objective, maxTokens, maxDurationMs, maxIterations);
     }
 
+    /**
+     * 创建 goal（<b>不挂调度</b>），参数对象版。
+     *
+     * <p>与 5 裸参重载同源（{@link GoalSpec} 只是载荷），单槽校验异常原样透出。</p>
+     */
+    public GoalState attach(AgentSession session, GoalSpec spec) {
+        return attach(session, spec.getObjective(),
+                spec.getMaxTokens(), spec.getMaxDurationMs(), spec.getMaxIterations());
+    }
+
     /** 持久化状态变更并广播（修改 {@link GoalState} 字段后必须调用）。 */
     public void commit(AgentSession session, GoalState gs) {
         if (goalEngine != null) {
@@ -313,6 +323,31 @@ public class GoalExtension extends AbsHarnessExtension {
         GoalState gs = goalEngine.attach(session, objective, maxTokens, maxDurationMs, maxIterations);
         scheduleNow(session.getSessionId());
         return gs;
+    }
+
+    /**
+     * 创建 goal 并立即挂上调度（{@code runNow=true}），参数对象版。
+     *
+     * <p>命令行与编程调用的唯一汇合点：{@code GoalCommand} 解析出 {@link GoalSpec} 后走本方法，
+     * 与宿主程序调用走的是同一条路径。</p>
+     */
+    public GoalState attachAndSchedule(AgentSession session, GoalSpec spec) {
+        return attachAndSchedule(session, spec.getObjective(),
+                spec.getMaxTokens(), spec.getMaxDurationMs(), spec.getMaxIterations());
+    }
+
+    /**
+     * 最简形态：创建 goal 并挂调度，不设任何预算（= 不限制）。
+     *
+     * <p>等价于 {@code attachAndSchedule(session, GoalSpec.of(objective))}。</p>
+     */
+    public GoalState attachAndSchedule(AgentSession session, String objective) {
+        return attachAndSchedule(session, GoalSpec.of(objective));
+    }
+
+    /** 最简形态：创建 goal（不挂调度），不设任何预算。 */
+    public GoalState attach(AgentSession session, String objective) {
+        return attach(session, GoalSpec.of(objective));
     }
 
     /**

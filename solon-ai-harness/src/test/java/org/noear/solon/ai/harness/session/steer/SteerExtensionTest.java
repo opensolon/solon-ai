@@ -97,6 +97,45 @@ class SteerExtensionTest {
     }
 
     @Test
+    void twoArgSteerIsSimplestEquivalentForm() {
+        SteerExtension<Object> ext = new SteerExtension<>(() -> null);
+        AgentSession session = InMemoryAgentSession.of();
+
+        // 无活跃任务：NOT_RUNNING（与 6 参形态同语义）
+        assertEquals(SteerInterceptor.SteerStatus.NOT_RUNNING, ext.steer(session, "补充").getStatus());
+
+        // 有活跃任务：两参形态直接投递（runId/steerId/busyRecheck 均省略）
+        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
+        SteerInterceptor.SteerResult ok = ext.steer(session, "补充内容");
+        assertTrue(ok.isSteered());
+        assertEquals(1, ok.getQueued());
+        assertNotNull(ok.getSteerId(), "steerId 应由框架生成");
+    }
+
+    @Test
+    void twoArgSteerKeepsDisabledAndEmptyTextGuards() {
+        SteerExtension<Object> ext = new SteerExtension<>(() -> null);
+        AgentSession session = InMemoryAgentSession.of();
+        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
+
+        // 便捷重载不得绕过入参校验与开关语义
+        assertEquals(SteerInterceptor.SteerStatus.EMPTY_TEXT, ext.steer(session, "   ").getStatus());
+
+        ext.setEnabled(false);
+        assertEquals(SteerInterceptor.SteerStatus.DISABLED, ext.steer(session, "补充").getStatus());
+    }
+
+    @Test
+    void threeArgSteerDefaultsNullOrigin() {
+        SteerExtension<Object> ext = new SteerExtension<>(() -> null);
+        AgentSession session = InMemoryAgentSession.of();
+        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
+
+        SteerInterceptor.SteerResult ok = ext.steer(session, "补充", null);
+        assertTrue(ok.isSteered(), "null 来源应回落 InputOrigin.NONE 而非报错");
+    }
+
+    @Test
     void lazyOutputPortResolvesAtEventTimeNotConstruction() {
         // 供应商先为 null 端口（headless 构造期），后切换为可送达端口——转发端口每次回调取最新值
         SteerExtension<Object> ext = new SteerExtension<>(() -> null);

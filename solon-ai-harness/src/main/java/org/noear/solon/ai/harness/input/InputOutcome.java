@@ -15,9 +15,12 @@
  */
 package org.noear.solon.ai.harness.input;
 
+import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.react.ReActRequest;
+import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.Nullable;
+import reactor.core.publisher.Flux;
 
 /**
  * 一次输入的处置结果
@@ -27,7 +30,8 @@ import org.noear.solon.lang.Nullable;
  *
  * <p>宿主只有一种取用方式：读 {@link #getKind()} 做一次 switch —— 一个值对应一个动作。
  * 需要执行任务时，流来自 {@code getRequest().stream()}（宿主自己决定订阅时机），
- * 回执来自 {@link #getCommandOutput()}（宿主自己决定渲染顺序）。</p>
+ * 回执来自 {@link #getCommandOutput()}（宿主自己决定渲染顺序）。
+ * 不做额外准备时可用 {@link #call()} / {@link #stream()} 直接收束（仅转发，不改语义）。</p>
  *
  * <p><b>刻意不提供「回执 + 任务合成一条流」的便捷方法。</b>真实宿主对回执与任务的顺序要求各不相同：
  * CLI 由命令即时写终端、Web 要求「流门复位早于回执」、桌面要求序号回放与 HITL 拦截器重挂、
@@ -279,6 +283,38 @@ public final class InputOutcome {
      */
     public ReActRequest getRequest() {
         return request;
+    }
+
+    /**
+     * 终态收束（仅 {@link Kind#TASK} 有效）：转发 {@link #getRequest()} 的阻塞调用。
+     *
+     * <p>命名对齐本产品既有惯例：{@code call()} 阻塞聚合、{@link #stream()} 真流式
+     * （与 {@link ReActRequest#call()} / {@link ReActRequest#stream()} 同语义）。
+     * 只是一层转发，不改变 {@link Kind} 的取值，也不替宿主决定订阅时机。</p>
+     *
+     * <p><b>刻意不合成「回执 + 任务」流</b>（见类注释）：回执仍读 {@link #getCommandOutput()}，
+     * 渲染顺序仍由宿主掌握。本方法只消除「先判 {@code getRequest() != null} 再调用」的重复样板。</p>
+     *
+     * @throws IllegalStateException 当前不是 {@link Kind#TASK}
+     */
+    public ReActResponse call() throws Throwable {
+        if (kind != Kind.TASK || request == null) {
+            throw new IllegalStateException("call() requires Kind.TASK, but was " + kind);
+        }
+        return request.call();
+    }
+
+    /**
+     * 终态收束（仅 {@link Kind#TASK} 有效）：转发 {@link #getRequest()} 的响应式流。
+     *
+     * <p>与 {@link #call()} 同一边界；非 {@link Kind#TASK} 时返回 {@code Flux.error}
+     * （响应式语义下不抛同步异常）。</p>
+     */
+    public Flux<AgentEvent> stream() {
+        if (kind != Kind.TASK || request == null) {
+            return Flux.error(new IllegalStateException("stream() requires Kind.TASK, but was " + kind));
+        }
+        return request.stream();
     }
 
     /**

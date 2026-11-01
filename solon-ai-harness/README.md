@@ -8,7 +8,7 @@
 
 1. 构造 `HarnessEngine`（给工作区、给模型、给工具权限）；
 2. 把用户输入交给 `engine.handle(...)`；
-3. 消费 `InputOutcome`——按 `getKind()` 一次 `switch` 分派；任务流取 `getRequest().stream()`，回执取 `getCommandOutput()`。
+3. 消费 `InputOutcome`——按 `getKind()` 一次 `switch` 分派；任务流取 `getRequest().stream()`（或直接 `outcome.stream()`），回执取 `getCommandOutput()`。
 
 命令识别、子代理解析、附件装配与落盘（由宿主完成）、Prompt 构建、请求装配，在一次调用内串联完成。
 
@@ -20,11 +20,13 @@
 | 接一个真产品 | **第三章**全部（两段式、事件渲染、HITL 续流、四端时序） |
 | 加命令 / 子代理 | 第四章、第六章 |
 | 跑 goal / queue / steer | **第五章**（5.1 / 5.2 / 5.3，三个状态型命令的装配与宿主责任） |
+| 停 / 改 / 重排的干预闭环 | **§5.4**（`engine.interrupt` + `steer` + `queue` 三件套） |
 | 调优与定制 | 第七～十章（权限、配置、扩展、安全） |
 | 查结构 / 躲坑 | 第十二章（模块图）、第十三章（常见坑） |
 
-> **全文档只推荐一条取流路径**：`outcome.getRequest().stream()`。不存在「回执 + 任务合成一条流」
-> 的便捷方法，原因见 §3.4 的四端时序对照。
+> **全文档只推荐一条取流路径**：`outcome.getRequest().stream()`（等价简写 `outcome.stream()`，
+> 仅 `Kind.TASK` 有效）。不存在「回执 + 任务合成一条流」的便捷方法，原因见 §3.4 的四端时序对照。
+> 需要一次性拿最终文本时用 `outcome.call()`，它只转发 `getRequest().call()`，不做任何时序决策。
 
 ---
 
@@ -74,8 +76,7 @@ outcome.getRequest().stream().blockLast();   // 事件流；也可 subscribe 逐
 
 ```java
 String answer = engine.handle(HarnessInput.of(session, "总结一下这个仓库"))
-        .getRequest()
-        .call()                       // 注意：call() 声明 throws Throwable
+        .call()                       // 等价 getRequest().call()；非 TASK 立即 IllegalStateException
         .getContent();
 ```
 
@@ -162,7 +163,7 @@ switch (outcome.getKind()) {
         if (outcome.hasReply()) {
             render(outcome.getCommandOutput());   // 命令回执（若有），任务继续跑
         }
-        outcome.getRequest().stream().subscribe(e -> render(e));
+        outcome.stream().subscribe(e -> render(e));   // 等价 getRequest().stream()
         break;
     case REPLY:   // 只有回执：命令已执行，或命令在本渠道不可用
         render(outcome.getCommandOutput());
@@ -191,6 +192,7 @@ switch (outcome.getKind()) {
 | `isCommand()` / `getCommandName()` / `getCommandOutput()` / `getCommand()` | 命令事实与回执 |
 | `hasRequest()` / `hasReply()` | 有无任务 / 有无回执（派生判定，便捷入口） |
 | `getRequest()` | 装配好的 `ReActRequest`（无任务时为 null） |
+| `call()` / `stream()` | 终态收束：前转 `getRequest().call()` / `.stream()`，仅 `TASK` 有效（非 TASK 抛 `IllegalStateException` / 返回 `Flux.error`） |
 | `getPrompt()` | 装配好的 `Prompt`（含附件前缀与图片块；续流时为 null） |
 | `getAgentName()` / `getModelName()` | 生效的子代理 / 模型（HITL 态下为 `resolveHitlAgent` 解析结果） |
 | `isHitlInput()` | 本次输入是否为审批决策（审批触发的 `TASK` 也为 true） |
@@ -210,6 +212,14 @@ switch (outcome.getKind()) {
 **三条刻意不做的事**：
 
 1. **不提供「回执 + 任务合成一条流」的便捷方法**——真实宿主对两者顺序的要求各不相同：CLI 由命令即时写终端（合成会重复打印）、Web 要求「流门复位早于回执」否则回执被前端丢弃、桌面要求序号回放与 HITL 拦截器重挂、ACP 需要 `takeWhile` 取消判定。任何替宿主拼好的流都得被拆开重拼，反而遮住了必须由宿主掌握的时序。取流只有一条路径：`getRequest().stream()`。
+
+   ⚠️ `outcome.call()` / `outcome.stream()` 与本条**不矛盾**：它们只是 `getRequest()` 的**空判包一层**（`Kind.TASK` 之外立即失败），既不合成流、也不替宿主选订阅时机与线程。需要「回执先落地、流门先复位」的宿主照旧分两步写：
+
+   ```java
+   render(outcome.getCommandOutput());   // 先回执
+   resetStreamGate();                    // 再复位门
+   outcome.stream().subscribe(...);      // 最后订阅（与 getRequest().stream() 等价）
+   ```
 2. **不内置 `subscribeOn`**——调度权归宿主。Web 端必须先注册 `Disposable` 再订阅，否则忙碌判定会出现空闲窗口、同一会话开出第二条流。
 3. **不对 HITL 自动续流**——引擎不会隐式续流：没传 `resume` 就只写决策。传了 `resume(true)` 也**不保证**续流：引擎会自检「决策命中挂起任务 + 本批已齐备 + 宿主显式要求」三项，全成立才返回 `TASK`，否则返回 `HITL`。因此三端写法统一——`.hitl(action, callId).resume(true)` 一次调用，然后只 `switch (kind)`，不必自己拼两次。
 
@@ -655,7 +665,7 @@ HarnessEngine.of("/data/work", ".solon/")
 
 ---
 
-## 五、完整示例：goal / queue / steer
+## 五、完整示例：goal / queue / steer（+ 中断干预）
 
 这三个命令与前面 `help` / `clear` / `model` 不同：它们不是「打印一段文本就结束」，而是**跨轮维护会话级状态**。命令本身只改状态、只声明意图，真正的执行与投递由宿主装配的领域组件承担——因此每个命令都必须补上对应的宿主侧接线，否则命令会「有回执、无效果」。
 
@@ -664,6 +674,7 @@ HarnessEngine.of("/data/work", ".solon/")
 | `/goal` | 会话级目标（每会话一个） | `GoalExtension.builder(workspaceId)` + `addExtension` | 命令能创建目标，但永远不跑第二轮 |
 | `/queue` | 会话级排队队列 | `QueueExtension` + `addExtension`，任务终态调 `queue.drainOne(...)` | 命令能入队，但队列永远不动 |
 | `/steer` | 当前任务的插话邮箱 | `SteerExtension` + `addExtension`（拦截器由扩展挂载） | 命令能入队，但永不注入 |
+| `/interrupt` | 无状态（只停） | 无（现成的 `engine.interrupt(session)` 即可） | 不装命令就只能由宿主自带停止按钮 |
 
 **三个能力，三个类**：每个命令从装配到运行期操作宿主都只接触一个 Extension 实例（宿主侧与 harness 的交互面收敛到一个类），不再需要宿主逐个 new `GoalEngine`/`GoalScheduler`/`ExecutionBridge`/`GoalCommand`，也不需要分别操作 `SessionQueue` 与 `SessionQueueDrainer`。命令本身的语法与回执未变，终端用户无感知。
 
@@ -674,6 +685,15 @@ engine.addExtension(new SteerExtension<>(() -> mySteerPort));                   
 ```
 
 三者共同点：`/queue` 与 `/steer` 的 `runnableWhenBusy()` 返回 `true`（能穿透忙碌检查）；`/goal` **不覆写**、保持默认 `false`（它会启动持续轮次，不能在忙时会话里重入）。`/queue`、`/steer` 从 `Command.execute(engine, ctx, origin)` 的第三参拿到 `InputOrigin` 并带到投递链路，三者都**不自己开流**。
+
+**编程调用比命令更短**：每个能力都有一个“最简两参”形态，与命令走同一条写路径（§5.4 还给出了停/改/重排的完整闭环）：
+
+```java
+goal.attachAndSchedule(session, "让测试全绿");   // 2 参
+queue.enqueue(session, "顺便更新 README");       // 2 参
+steer.steer(session, "改用 PostgreSQL 方言");    // 2 参
+engine.interrupt(session);                       // 1 参
+```
 
 ### 5.1 `/goal`：会话级有终止判据的持续执行
 
@@ -715,8 +735,11 @@ goal.stateOf(sessionId); goal.sessionOf(sessionId);       // 按 id 读（免自
 goal.find(sessionId, taskId);                           // 任务列表行 → GoalState（不是 goal 行返回 null）
 goal.running(session); goal.running(sessionId);           // 是否正在跑一轮
 goal.pause(session, gs); goal.resume(session, gs);        // 控（自动同步调度注销/重挂）
-goal.attachAndSchedule(s, obj, tokens, ms, iter);       // 建 + 挂调度(runNow=true)
-goal.attach(s, obj, tokens, ms, iter);                  // 只建不挂（首轮由宿主流驱动，如桌面端）
+goal.attachAndSchedule(s, objective);                   // 建 + 挂调度（最简形态，不设预算）
+goal.attachAndSchedule(s, spec);                        //   同上，参数对象（GoalSpec）
+goal.attachAndSchedule(s, obj, tokens, ms, iter);       //   同上，五裸参（存量写法，保留）
+goal.attach(s, objective);                              // 只建不挂（首轮由宿主流驱动，如桌面端）
+goal.attach(s, spec); goal.attach(s, obj, tokens, ms, iter);   //   同上另两种形态
 goal.updateAndReschedule(s, gs, obj, tokens, ms, bool);  // 改配置 + 按需恢复调度
 goal.resumeScheduleOnly(sessionId);                     // 只挂 job 不立即跑（重启恢复场景）
 goal.scheduleNow(sessionId); goal.unschedule(sessionId);  // 单独的调度触发/摘除
@@ -727,10 +750,32 @@ goal.addListener(l); goal.registerValidator(matcher, v);   // 扩展点
 goal.getGoalTalent().setEnabled(false);                    // 只关模型侧工具，不影响命令
 ```
 
+#### 创建：优先用 `GoalSpec`，而不是五个裸参
+
+编程调用的创建入口有三个形态，**推荐参数对象**：
+
+```java
+// 最简：不设任何预算（= 不限制），等价于 GoalSpec.of(objective) 全缺省
+goal.attachAndSchedule(session, "让测试全绿");
+
+// 带预算：单位自描述，可选参数自然缺省
+goal.attachAndSchedule(session, GoalSpec.of("修复登录模块的鉴权缺陷")
+        .maxTokens(2000)
+        .maxDuration(Duration.ofMinutes(30))    // 不再写 30 * 60_000L
+        .maxIterations(5));
+
+// 存量：五裸参，第四个是毫秒（靠 javadoc 才能看出单位）
+goal.attachAndSchedule(session, "修复登录模块的鉴权缺陷", 2000, 1_800_000L, 5);
+```
+
+`GoalSpec` 的口径与命令完全一致：未设置为 `0` 表示不限制；负数一律夹到 `0`；空正文在 `GoalSpec.of(...)` 当场抛 `IllegalArgumentException`。
+
+**命令行与编程 API 走同一条写路径**：`/goal` 命令把 `--flag:value` 解析成 `GoalSpec` 后调的就是 `attachAndSchedule(session, spec)`，`GoalCommand` 自身不再持有 `GoalEngine` / `GoalScheduler`（`pause` / `resume` / `clear` 也是直接转调扩展方法），因此不存在「命令能跑但门面行为不同」的双实现漂移。
+
 三个易错点（宿主自己拼调度的老写法踩过）：
 
 - **`resume()` 是 `runNow=true`**。服务重启/工作区恢复时想「静默挂上、等下一轮」必须用 `resumeScheduleOnly()`，否则会对每个活跃 goal 立刻发起一轮执行。
-- **改配置只吞后半段**。「pause → interrupt → 等轮次停 → update → resume」里的中断与等待是宿主的运行时职责（依赖宿主的会话中断端口），门面不代管；`updateAndReschedule` 只覆盖 `update + 时长 commit + resume + schedule`。
+- **改配置只吞后半段**。「pause → interrupt → 等轮次停 → update → resume」里的中断与等待是宿主的运行时职责，门面不代管；`updateAndReschedule` 只覆盖 `update + 时长 commit + resume + schedule`。中断本身现在有引擎级入口 `engine.interrupt(session)`（§5.4），不用再拼 `/interrupt` 文本，但**「什么时候中断」仍由宿主决定**。
 - **`clear()` 内部先摘调度再清状态**，不会留一个已无目标却仍在调度的 job。
 
 确需细粒度访问时 `getGoalEngine()` / `getGoalScheduler()` 仍可取到内部实例。
@@ -757,7 +802,9 @@ goal.getGoalTalent().setEnabled(false);                    // 只关模型侧工
 | `/goal --max-iterations:10 <objective>` | 带轮次预算 |
 | `/goal pause` \| `resume` \| `clear` | 暂停 / 恢复 / 清除 |
 
-Flag 格式是 `--key:value`（冒号分隔，不是等号/空格）：缺冒号会打印 `Unknown flag` 并跳过该参数；数值非法直接 `Invalid --xxx value` 返回。`--max-duration` 内部转毫秒（`×60_000`）。三个预算默认都是 `0`，表示不限制。
+Flag 格式是 `--key:value`（冒号分隔，不是等号/空格）：缺冒号会打印 `Unknown flag` 并跳过该参数；数值非法直接 `Invalid --xxx value` 返回。`--max-duration` 内部转毫秒（`×60_000`，**唯一换算点**）。三个预算默认都是 `0`，表示不限制。若正文为空，回执会同时打印 Usage 与一行最简示例。
+
+> 命令行的 `--max-duration:30` 在 `GoalCommand#parseSpec` 里就被换算成 `GoalSpec.maxDurationMs(1_800_000)`，之后一路是同一个 `GoalSpec` ——文本 flag 形态到此为止，不会再往下传。
 
 已有进行中（非终态）的目标时创建会被拒绝：
 
@@ -879,7 +926,8 @@ queue.ack(session, item.getId());
 
 | 方法 | 作用 |
 |---|---|
-| `enqueue(session, text, origin)` | 入队，返回位置（从 1 计），-1 = 失败 |
+| `enqueue(session, text)` | 入队，返回位置（从 1 计），-1 = 失败；来源缺省为 `channel("queue")` |
+| `enqueue(session, text, origin)` | 入队，携带渠道来源（命令路径用） |
 | `enqueue(...)` 九参重载 | 带 id 去重 / model / effort / agent / files（HTTP 重试幂等） |
 | `drainOne(session, runner)` | 领取并执行队首一条（同步语义：返回即确认） |
 | `drainOne(session, runner, false)` | 异步语义：终态再 `ack` |
@@ -955,9 +1003,13 @@ engine.addExtension(steer);   // initialize 注册 /steer 命令；configure 把
 运行期操作也在这一个实例上：
 
 ```java
-steer.steer(session, null, null, text, origin, null);   // 投递（与 /steer 命令、/web/chat/steer 同源）
+steer.steer(session, "改用 PostgreSQL 方言");              // 最简：投给当前活跃任务
+steer.steer(session, "改用 PostgreSQL 方言", origin);      // 带渠道来源
+steer.steer(session, null, null, text, origin, null);   // 全参（与 /steer 命令、/web/chat/steer 同源）
 steer.cancel(session, steerId);                        // 取消仍在邮箱中的插话
 ```
+
+两参重载把 `runId` / `steerId` / `busyRecheck` 三个高级参数全缺省：`runId=null` = 不比对轮次、绑当前活跃任务，`steerId=null` = 框架生成，`busyRecheck=null` = 仅按 `activeRunId` 判定。它**不降级、不改语义**，返回的仍是同一个 `SteerResult`。
 
 命令只做投递，**不做降级**：邮箱满、任务未运行、轮次已切换时如实告知原因，由用户自行决定改排队还是直接发送（与 `/web/chat/steer` 的 409 纯语义对齐）。
 
@@ -1024,6 +1076,54 @@ public interface SteerOutputPort<C> {
 `activeRunId` 在 `onReasonStart` 才写入。所以任务刚被受理、尚未进入推理边界时，steer 会返回 `NOT_RUNNING`（IM 传 null）或 `TURN_CHANGED`（Web 带 runId）——这不是 bug，是「此刻还没有可插话的推理现场」。
 
 插话**零持久化**：不进 `session.addMessage`、不占 `sessionWindowSize`、不会在后续任务里被当作初心重新入场；刷新页面后插话气泡即消失（刻意取舍，展示层由前端在收到 `steer_applied` 时就地渲染进当前流式气泡内部）。
+
+### 5.4 停 / 改 / 重排：三件套的干预闭环
+
+goal / queue / steer 各自只解决一个方向。真实场景里用户往往先「停」、再「改」、最后「重排」，这三步应该能用纯编程 API 完成：
+
+```java
+if (engine.interrupt(session)) {                                // 停（连带清队列）
+    steer.steer(session, "先别改了，回到上一个方案");               // 改（任务已停 → 返回 NOT_RUNNING）
+    queue.enqueue(session, "回到上一个方案并跑一遍测试");          // 重排
+}
+```
+
+#### `engine.interrupt(session)`
+
+```java
+boolean engine.interrupt(@Nullable AgentSession session);
+```
+
+`true` = 确实中断了一个正在执行的任务；`false` = 当前没有在跑的任务（会话为 `null` 也返回 `false`）。
+
+它与此前的 `/interrupt` 命令**同源**（都调 `SessionInterrupt.interrupt`），内部四步顺序是语义的一部分：
+
+| # | 动作 | 为何要这个顺序 |
+|---|---|---|
+| ① | 清排队（`SessionQueue.cancelPending`，含已被 drain 暂存的项） | **必须早于停流**：停流后宿主常在终态回调里续发队首，顺序颠倒会把刚停掉的任务重新推起来 |
+| ② | 释放 `attrs("disposable")` 流句柄 | 句柄为 `null` 时直接返回 `false`，不写取消消息 |
+| ③ | 补写取消消息（带 `META_RUN_ID`） | 让前端把气泡挂到正确轮次 |
+| ④ | `updateSnapshot()` | 中断时 agent 收尾被跳过，trace 与取消消息需一并持久化 |
+
+> **行为变更点**：早期 `/interrupt` 只停当前流、队列里排着的任务之后还会继续跑；现在「停」是彻底的（队列一并清空）。这正是 `//todl: SessionQueue.cancelPending(session)` 那条旧待办的本意——「停了还在跑」比「停得干净」更违反直觉。
+
+宿主已有的停止入口可以改成调它，不必再拼 `"/interrupt"` 文本或自己复刻 `attrs().remove("disposable") + dispose()`：
+
+```java
+// 之前：session.attrs().remove("disposable") → dispose() → 自己补消息与快照
+// 现在：
+if (engine.interrupt(session)) { /* 通知前端已停止 */ }
+```
+
+#### 三者的职责边界
+
+| 能力 | 入口 | 语义 | 任务未运行时 |
+|---|---|---|---|
+| 停 | `engine.interrupt(session)` | 立即终止当前流，**并清空队列** | 返回 `false`，不写任何消息 |
+| 改 | `steer.steer(session, text)` | 注入当前任务的工作记忆，下一采样边界生效 | 返回 `NOT_RUNNING` / `TURN_CHANGED` |
+| 重排 | `queue.enqueue(session, text)` | 登记一条待执行，等空闲后续发 | 照常入队 |
+
+三者都**不自己开流、不做跨能力降级**：steer 邮箱满或任务未运行时如实返回状态码，要不要改走 queue 由调用方决定（`SteerMessage` 的「已接受但永不生效」由 `SteerOutputPort#handleDroppedSteers` 兜底，不在此列）。
 
 ---
 
@@ -1286,6 +1386,9 @@ engine.setDefaultModel("deepseek");      // 触发主代理重建
 engine.addModel(new ChatConfig(...));
 engine.removeModel("gpt-4");
 
+engine.interrupt(session);               // 中断当前任务（连带清队列），true = 确实停了
+engine.resume();                         // 恢复最近一个工作记忆（旧名 prompt()，已 @Deprecated）
+
 engine.addMcpServer("slack", mcpServerParams);
 engine.addApiServer(apiSource);
 engine.addLspServer("java-lsp", lspServerParams);
@@ -1400,7 +1503,7 @@ List<HITLTask> pending = HITL.getPendingTasks(session);
 
 ## 十二、模块结构
 
-### 12.1 自有源码（70 个类）
+### 12.1 自有源码（76 个类）
 
 ```
 org.noear.solon.ai.harness
@@ -1434,7 +1537,8 @@ org.noear.solon.ai.harness
 ├── session/                      会话级能力
 │   ├── queue/                    排队
 │   ├── steer/                    插话
-│   └── goal/                     目标循环（含校验器）
+│   ├── goal/                     目标循环（含 GoalSpec 参数对象与校验器）
+│   └── interrupt/                中断（SessionInterrupt：命令与 engine.interrupt 的唯一实现）
 ├── runtime/                      执行桥（ExecutionBridge / RoundResult / ErrorClassifier）
 ├── channel/                      IM 通道接口
 └── util/                         追踪工具
@@ -1473,8 +1577,11 @@ org.noear.solon.ai.harness
 13. **`/steer` 不挂拦截器就永不生效**——报 `STEERED` 只代表已入邮箱。`SteerExtension` 已代劳默认挂载；仅当同一引擎多工作区、每请求上下文不同时才需请求级 `o.interceptorAdd(...)`（同 Class 会覆盖默认实例，不会双份），否则任务结束时转 dropped。
 14. **`GoalScheduler` 的 job 名必须带工作区前缀**——`JobManager` 是 JVM 单例而会话 ID 不全局唯一，不加前缀会让多工作区的同名会话互相覆盖（`builder(workspaceId)` 已内置）。
 15. **不要给零旋钮的能力套 builder**——goal 有 8 个可配点才用 builder；queue 零旋钮、steer 一个端口，用无参/单参构造即得。伪一致性只会增加仪式感。
-16. **`resume()` 含 `runNow=true`，恢复期别用**——服务重启/工作区恢复要「静默挂上、等下一轮」时用 `resumeScheduleOnly(sessionId)`，否则每个活跃 goal 会立即多跑一轮。
-17. **改 goal 配置不要整段交给门面**——`pause` → 宿主 `interruptSession` → 等轮次停 → `update` 这条链里，中断与等待是宿主的运行时职责；门面的 `updateAndReschedule` 只覆盖后半段（update + 时长 commit + resume + schedule）。把它整段吞进去会让旧轮次继续跑并回写覆盖刚改的配置。
+16. **`GoalExtension.resume()` 含 `runNow=true`，恢复期别用**——服务重启/工作区恢复要「静默挂上、等下一轮」时用 `resumeScheduleOnly(sessionId)`，否则每个活跃 goal 会立即多跑一轮。（注意与 `HarnessEngine.resume()` 同名但无关：后者是「恢复最近一个工作记忆」的请求入口，即 `prompt()` 的新名字。）
+17. **改 goal 配置不要整段交给门面**——`pause` → `engine.interrupt(session)` → 等轮次停 → `update` 这条链里，「何时中断」仍是宿主的运行时职责；门面的 `updateAndReschedule` 只覆盖后半段（update + 时长 commit + resume + schedule）。把它整段吞进去会让旧轮次继续跑并回写覆盖刚改的配置。
+18. **`engine.interrupt()` 会连带清队列**——它不是「只停当前流」。早期 `/interrupt` 保留队列，现在「停」是彻底的（这也补上了 `SessionQueue.cancelPending` 那条旧待办）。若你需要「停当前、留队列」，只停药那一条流，别调 `engine.interrupt`。
+19. **`outcome.call()` / `outcome.stream()` 只在 `TASK` 上有意义**——它们在 `REPLY` / `HITL` / `IGNORED` 上会立即失败（前者抛 `IllegalStateException`、后者返回 `Flux.error`）。不要用它们取代 `switch (kind)`：先判 kind 再取流，顺序不能颠倒。
+20. **`GoalSpec` 的负数会被夹到 0**——`maxTokens(-1)` 不是「报错」而是「不限制」；命令行的 `--max-tokens:-1` 也一样（`Long.parseLong` 通过后交给 `GoalSpec` 再夹到 0）。想表达「非法参数」请在调用前/解析层自己校验。
 
 ---
 

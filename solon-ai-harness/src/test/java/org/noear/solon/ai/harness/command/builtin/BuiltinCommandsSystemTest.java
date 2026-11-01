@@ -12,6 +12,7 @@ import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.session.goal.BudgetThresholds;
 import org.noear.solon.ai.harness.session.goal.GoalEngine;
+import org.noear.solon.ai.harness.session.goal.GoalExtension;
 import org.noear.solon.ai.harness.util.TraceKeys;
 
 import java.nio.file.Path;
@@ -60,7 +61,7 @@ class BuiltinCommandsSystemTest {
         engine.getCommandRegistry().register(new ModelCommand());
         engine.getCommandRegistry().register(new QueueCommand());
         engine.getCommandRegistry().register(new SteerCommand());
-        engine.getCommandRegistry().register(new GoalCommand(goalEngine, null));
+        engine.getCommandRegistry().register(new GoalCommand(GoalExtension.of(goalEngine, engine)));
         return engine;
     }
 

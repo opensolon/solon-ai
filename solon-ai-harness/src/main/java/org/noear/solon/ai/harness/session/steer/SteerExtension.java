@@ -108,6 +108,24 @@ public class SteerExtension<C> extends AbsHarnessExtension {
         return SteerInterceptor.steer(session, runId, steerId, text, origin, busyRecheck);
     }
 
+    /**
+     * 向当前活跃任务插话（省略 runId / steerId / busyRecheck 三个高级参数）。
+     *
+     * <p>「投给现在这条任务」是最常见语义：runId、steerId 均传 null 表示不比对轮次、
+     * 由框架生成 id；busyRecheck 供宿主做二次忙判定，绝大多数调用方不需要。</p>
+     *
+     * <p>来源缺省为 {@link InputOrigin#NONE}；需保留渠道身份时用三参重载。
+     * 结果仍用 {@code isSteered/isBoxFull/isNotRunning()} 判断，本方法不做降级。</p>
+     */
+    public SteerInterceptor.SteerResult steer(AgentSession session, String text) {
+        return steer(session, text, InputOrigin.NONE);
+    }
+
+    /** 向当前活跃任务插话，携带来源身份（runId / steerId / busyRecheck 省略）。 */
+    public SteerInterceptor.SteerResult steer(AgentSession session, String text, InputOrigin origin) {
+        return steer(session, null, null, text, origin == null ? InputOrigin.NONE : origin, null);
+    }
+
     /** 取消仍留在邮箱中的插话（消费线程已 poll 出则返回 false，不得宣称取消成功）。 */
     public boolean cancel(AgentSession session, String steerId) {
         Queue<SteerMessage> box = SteerInterceptor.steerBox(session);
