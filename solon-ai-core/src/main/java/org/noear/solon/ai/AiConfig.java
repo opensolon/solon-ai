@@ -199,7 +199,6 @@ public class AiConfig implements Serializable {
 
     /**
      * @param concurrency 0 = 未设置（回退默认值）；正数 = 并发上限
-     * @throws IllegalArgumentException 传入负数
      */
     public void setConcurrency(int concurrency) {
         if (concurrency > 0) {

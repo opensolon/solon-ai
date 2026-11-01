@@ -54,6 +54,7 @@ HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区,
             cfg.setApiKey(System.getenv("DEEPSEEK_API_KEY"));
             cfg.setModel("deepseek-chat");
             cfg.setContextLength(128_000);
+            cfg.setConcurrency(5);
         }))
         .defaultModel("deepseek")
         .toolsAdd(ToolName.TOOL_ALL_FULL)                           // 主代理工具权限
@@ -122,7 +123,7 @@ HarnessInput input = HarnessInput.of(session, "帮我看看这个 @coder")
         .selectedModel("deepseek")                     // 显式模型
         .selectedAgent("explore")                      // 选择器兜底（提及未出现时）
         .attachments(atts)                             // 多媒体项 + 文件引用
-        .origin(InputOrigin.of("dingtalk", "u1", "chat42", "msg7"))   // 渠道来源身份（IM 回复路由）
+        .origin(InputOrigin.of("dingtalk", "u1", "chat42", "msg7"))   // 渠道来源身份（IM 回复路由）。可选
         .trimContent(false);                           // 剥提及后不去空白
 ```
 
