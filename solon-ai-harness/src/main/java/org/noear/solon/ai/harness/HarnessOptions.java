@@ -105,12 +105,8 @@ class HarnessOptions implements NonSerializable {
 
     /**
      * 子代理任务默认并发上限。
-     *
-     * <p>取值契约见 {@link TaskTalent#normalizeDefaultConcurrency(int)}：{@code 0} = 未设置
-     * （取 {@link TaskTalent#DEFAULT_CONCURRENCY}），上界 {@link TaskTalent#MAX_CONCURRENCY}，
-     * <b>不存在「不限制」</b>。</p>
      */
-    private volatile int subagentDefaultConcurrency = TaskTalent.DEFAULT_CONCURRENCY;
+    private volatile int subagentDefaultConcurrency = 5;
 
     // ========== 缓存控制 ==========
     private volatile CacheControl cacheControl;
@@ -421,30 +417,6 @@ class HarnessOptions implements NonSerializable {
         if (subagentDefaultConcurrency != null) {
             this.subagentDefaultConcurrency = TaskTalent.normalizeDefaultConcurrency(subagentDefaultConcurrency);
         }
-    }
-
-    /**
-     * @deprecated 旧名，已由 {@link #getSubagentDefaultConcurrency()} 取代。
-     */
-    @Deprecated
-    int getMultitaskMaxTasks() {
-        return getSubagentDefaultConcurrency();
-    }
-
-    /**
-     * @deprecated 旧名，请改用 {@link #setSubagentDefaultConcurrency(Integer)}。
-     */
-    @Deprecated
-    void setMultitaskMaxTasks(Integer multitaskMaxTasks) {
-        setSubagentDefaultConcurrency(multitaskMaxTasks);
-    }
-
-    /**
-     * @deprecated 过渡名，请改用 {@link #setSubagentDefaultConcurrency(Integer)}。
-     */
-    @Deprecated
-    void setMultitaskMaxConcurrency(Integer multitaskMaxConcurrency) {
-        setSubagentDefaultConcurrency(multitaskMaxConcurrency);
     }
 
     boolean isBashAsyncEnabled() {

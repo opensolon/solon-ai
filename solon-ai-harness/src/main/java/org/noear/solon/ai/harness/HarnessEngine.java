@@ -658,41 +658,6 @@ public class HarnessEngine {
         }
     }
 
-    /**
-     * @deprecated 旧名，已由 {@link #getSubagentDefaultConcurrency()} 取代。
-     */
-    @Deprecated
-    public int getMultitaskMaxTasks() {
-        return getSubagentDefaultConcurrency();
-    }
-
-    /**
-     * 设置子代理任务默认并发上限（旧名，已发布 API，保留桥接）
-     *
-     * <p><b>语义变更</b>：旧版该值仅用于在系统提示词里给出「单次建议 2-N 个」的文案，
-     * 并不真正限制并发；新版它成为真实的默认并发上限（模型未配置 {@code concurrency} 时生效），
-     * 且已不再参与提示词。因此升级后该值的实际影响力变强，存量配置建议复核。</p>
-     *
-     * @param multitaskMaxTasks 默认并发上限（0 = 未设置，不再是「不限制」；负数报错）
-     * @deprecated 请改用 {@link #setSubagentDefaultConcurrency(Integer)}
-     */
-    @Deprecated
-    public void setMultitaskMaxTasks(Integer multitaskMaxTasks) {
-        setSubagentDefaultConcurrency(multitaskMaxTasks);
-    }
-
-    /**
-     * 设置子代理任务默认并发上限（过渡名，保留桥接）
-     *
-     * @param multitaskMaxConcurrency 默认并发上限（0 = 未设置，不再是「不限制」；负数报错）
-     * @deprecated 请改用 {@link #setSubagentDefaultConcurrency(Integer)}
-     */
-    @Deprecated
-    public void setMultitaskMaxConcurrency(Integer multitaskMaxConcurrency) {
-        setSubagentDefaultConcurrency(multitaskMaxConcurrency);
-    }
-
-
     public void setBashAsyncEnabled(Boolean bashAsyncEnabled) {
         options.setBashAsyncEnabled(bashAsyncEnabled);
 
