@@ -54,7 +54,7 @@ public class TaskTalentSchedulingTest {
 
     /** agentDefinition 为 null 时 runTask 走「未知子代理」分支，不触达引擎 */
     private static TaskTalent.TaskPlan plan(TaskTalent.MultiTaskOp task) {
-        return new TaskTalent.TaskPlan(task, null, null, null);
+        return new TaskTalent.TaskPlan(task, null, null);
     }
 
     private static TaskTalent.MultiTaskOp task(String agent, int index) {

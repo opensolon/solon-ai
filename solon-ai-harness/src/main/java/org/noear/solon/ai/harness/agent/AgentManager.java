@@ -38,16 +38,7 @@ public class AgentManager {
      */
     public AgentManager(AgentCatalog agentCatalog) {
         this.agentCatalog = agentCatalog;
-        //loadBuiltinAgents();
     }
-
-//    private void loadBuiltinAgents() {
-//        loadAgentFile("bash", ResourceUtil.getResource(AGENT_MD_BASE + "bash.md"), null);
-//        loadAgentFile("explore", ResourceUtil.getResource(AGENT_MD_BASE + "explore.md"), null);
-//        loadAgentFile("plan", ResourceUtil.getResource(AGENT_MD_BASE + "plan.md"), null);
-//        loadAgentFile("general", ResourceUtil.getResource(AGENT_MD_BASE + "general.md"), null);
-//        loadAgentFile("git-summary", ResourceUtil.getResource(AGENT_MD_BASE + "git-summary.md"), null);
-//    }
 
     public void addAgentIfAbsent(AgentDefinition agentDefinition) {
         agentMap.putIfAbsent(agentDefinition.getName(), agentDefinition);
@@ -55,6 +46,24 @@ public class AgentManager {
 
     public void addAgent(AgentDefinition agentDefinition) {
         agentMap.put(agentDefinition.getName(), agentDefinition);
+    }
+
+
+    public AgentDefinition getAgentOrNil(String agentName) {
+        // 内置与运行时注册的代理优先；挂载代理按当前目录读取，避免刷新后返回旧定义。
+        AgentDefinition cached = agentMap.get(agentName);
+        if (cached != null) {
+            return cached;
+        }
+
+        if (agentCatalog != null) {
+            AgentDescriptor agentMd = agentCatalog.getAgent(agentName);
+            if (agentMd != null) {
+                return loadFromAgentMd(agentMd);
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -143,37 +152,4 @@ public class AgentManager {
         definition.setMountAlias(agentMd.getMountAlias());
         return definition;
     }
-
-    /**
-     * 从 URL 加载代理定义（内置代理用）
-     */
-//    public void loadAgentFile(String fileName, URL url, String mountAlias) {
-//        if (url == null) {
-//            return;
-//        }
-//
-//        try {
-//            String[] fullContent = ResourceUtil.getResourceAsString(url).split("\n");
-//
-//            loadAgentFile(fileName, Arrays.asList(fullContent), mountAlias);
-//        } catch (IOException e) {
-//            LOG.error("Load agent failed, file: {}", url, e);
-//        }
-//    }
-
-//    public void loadAgentFile(String fileName, List<String> fullContent, String mountAlias) {
-//        AgentDefinition definition = AgentDefinition.fromMarkdown(fullContent);
-//
-//        String agentTypeName = definition.getName();
-//
-//        if (agentTypeName == null || agentTypeName.isEmpty()) {
-//            agentTypeName = fileName.substring(0, fileName.length() - 3);
-//        }
-//
-//        if (mountAlias != null) {
-//            definition.setMountAlias(mountAlias);
-//        }
-//
-//        agentMap.put(agentTypeName, definition);
-//    }
 }

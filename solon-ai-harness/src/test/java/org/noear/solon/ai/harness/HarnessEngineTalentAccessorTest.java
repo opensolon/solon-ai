@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
+import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.input.HarnessInput;
 
 import java.nio.file.Path;
@@ -118,8 +119,7 @@ class HarnessEngineTalentAccessorTest {
         HarnessEngine e = engine();
         assertNotNull(e.getMainModel());
         assertNotNull(e.getModelOrMain(e.getDefaultModel()));
-        assertNotNull(e.createSubagent(
-                org.noear.solon.ai.harness.agent.AgentDefinition.builder().name("sub").build()));
+        assertNotNull(e.getAgentBuilder(AgentDefinition.builder().name("sub").build()));
     }
 
     // ---------- HarnessInput 链式配置 ----------

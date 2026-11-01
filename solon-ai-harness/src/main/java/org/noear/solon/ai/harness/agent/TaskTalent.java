@@ -144,14 +144,10 @@ public class TaskTalent extends AbsTalent {
         }
 
         if (value == 0) {
-            LOG.warn("subagentDefaultConcurrency=0 不再表示「不限制」，已按「未设置」处理并取默认 {}；"
-                    + "需要更高并发请显式配置模型级 AiConfig#concurrency", DEFAULT_CONCURRENCY);
             return DEFAULT_CONCURRENCY;
         }
 
         if (value > MAX_CONCURRENCY) {
-            LOG.warn("subagentDefaultConcurrency={} 超出默认值上界 {}，已按 {} 处理；"
-                    + "需要更高并发请显式配置模型级 AiConfig#concurrency", value, MAX_CONCURRENCY, MAX_CONCURRENCY);
             return MAX_CONCURRENCY;
         }
 
@@ -187,8 +183,8 @@ public class TaskTalent extends AbsTalent {
 
         sb.append("## 当前可用的子代理\n");
         sb.append("<available_agents>\n");
-        for (AgentDefinition agentDefinition : engine.getAgentManager().getAgents()) {
-            sb.append(String.format("  - \"%s\": %s\n", agentDefinition.getName(), agentDefinition.getDescription()));
+        for (AgentDefinition agent : engine.getAgentManager().getAgents()) {
+            sb.append(String.format("  - \"%s\": %s\n", agent.getName(), agent.getDescription()));
         }
         sb.append("</available_agents>\n\n");
 
@@ -219,8 +215,7 @@ public class TaskTalent extends AbsTalent {
         taskOp.description = taskSpec.description;
         taskOp.prompt = taskSpec.prompt;
 
-        MultitaskContext ctx = new MultitaskContext(__parentTrace, __cwd, __sessionId, __parentSession, 1,
-                null, null, null);
+        MultitaskContext ctx = new MultitaskContext(__parentTrace, __cwd, __sessionId,1, null, null, null);
 
         TaskPlan plan = preparePlan(taskOp, sessionModelOf(__parentSession));
 
@@ -247,8 +242,7 @@ public class TaskTalent extends AbsTalent {
         ReActTrace __parentTrace = ReActTrace.getCurrent(__parentSession.getContext());
         final FluxSink<AgentEvent> parentSink = streamSinkOf(__parentTrace);
 
-        final MultitaskContext ctx = new MultitaskContext(__parentTrace, __cwd, __sessionId, __parentSession,
-                tasks.size(), new AtomicBoolean(), new AtomicBoolean(), new AtomicBoolean());
+        final MultitaskContext ctx = new MultitaskContext(__parentTrace, __cwd, __sessionId, tasks.size(), new AtomicBoolean(), new AtomicBoolean(), new AtomicBoolean());
 
         // 会话模型只解析一次：两次调用之间配置可能被换掉，算出来的上限与取到的实例会不一致
         final String sessionModel = sessionModelOf(__parentSession);
@@ -276,16 +270,13 @@ public class TaskTalent extends AbsTalent {
     /** 一个子任务的执行计划：预解析产物，供分派与执行共用 */
     static final class TaskPlan {
         final MultiTaskOp op;
-        final AgentDefinition agentDefinition;
-        /** 已解析出的具体模型名（可为 null） */
-        final String modelName;
+        final ReActAgent.Builder agentBuilder;
         /** 非空表示任务定义本身不可用，直接回该文案 */
         final String invalidReason;
 
-        TaskPlan(MultiTaskOp op, AgentDefinition agentDefinition, String modelName, String invalidReason) {
+        TaskPlan(MultiTaskOp op, ReActAgent.Builder agentBuilder, String invalidReason) {
             this.op = op;
-            this.agentDefinition = agentDefinition;
-            this.modelName = modelName;
+            this.agentBuilder = agentBuilder;
             this.invalidReason = invalidReason;
         }
     }
@@ -303,8 +294,7 @@ public class TaskTalent extends AbsTalent {
                 empty.agent_name = "";
                 empty.description = "";
                 empty.prompt = "";
-                plans.add(new TaskPlan(empty, null, null,
-                        "ERROR: 第 " + (i + 1) + " 个任务定义为空（null），已跳过。"));
+                plans.add(new TaskPlan(empty, null,"ERROR: 第 " + (i + 1) + " 个任务定义为空（null），已跳过。"));
                 continue;
             }
 
@@ -315,28 +305,22 @@ public class TaskTalent extends AbsTalent {
     }
 
     private TaskPlan preparePlan(MultiTaskOp op, String sessionModel) {
-        final AgentDefinition agentDefinition;
+        final ReActAgent.Builder agentBuilder;
 
         try {
-            // getAgent 对未知名称是抛异常而非返回 null，必须先 hasAgent：
-            // 否则模型幻觉一个 agent 名就会让整批任务全废
-            agentDefinition = engine.getAgentManager().hasAgent(op.agent_name)
-                    ? engine.getAgentManager().getAgent(op.agent_name) : null;
+            agentBuilder = engine.getAgentBuilderOrNil(op.agent_name, sessionModel);
         } catch (Throwable e) {
             // 名称存在但定义加载失败：同样只废这一条
-            return new TaskPlan(op, null, null,
-                    "ERROR: 子代理 '" + op.agent_name + "' 定义加载失败: " + e.getMessage());
+            return new TaskPlan(op, null, "ERROR: 子代理 '" + op.agent_name + "' 定义加载失败: " + e.getMessage());
         }
 
-        if (agentDefinition == null) {
+        if (agentBuilder == null) {
             // 走 invalidReason 而非裸文本：否则 multitask 里会出现没有外壳、无法对位的一行
-            return new TaskPlan(op, null, null, unknownAgentReason(op));
+            return new TaskPlan(op, null, unknownAgentReason(op));
         }
 
-        ChatConfig taskModelConfig = resolveTaskModelConfig(agentDefinition, sessionModel);
 
-        return new TaskPlan(op, agentDefinition,
-                taskModelConfig == null ? null : taskModelConfig.getNameOrModel(), null);
+        return new TaskPlan(op, agentBuilder, null);
     }
 
     private static String unknownAgentReason(MultiTaskOp op) {
@@ -455,19 +439,17 @@ public class TaskTalent extends AbsTalent {
         private final ReActTrace parentTrace;
         private final String cwd;
         private final String sessionId;
-        private final AgentSession parentSession;
         private final int total;
         private final AtomicBoolean rateLimited;
         private final AtomicBoolean timedOut;
         private final AtomicBoolean upstreamUnavailable;
 
-        MultitaskContext(ReActTrace parentTrace, String cwd, String sessionId, AgentSession parentSession,
+        MultitaskContext(ReActTrace parentTrace, String cwd, String sessionId,
                          int total, AtomicBoolean rateLimited, AtomicBoolean timedOut,
                          AtomicBoolean upstreamUnavailable) {
             this.parentTrace = parentTrace;
             this.cwd = cwd;
             this.sessionId = sessionId;
-            this.parentSession = parentSession;
             this.total = total;
             this.rateLimited = rateLimited;
             this.timedOut = timedOut;
@@ -510,18 +492,6 @@ public class TaskTalent extends AbsTalent {
         return defaultConcurrency > 0 ? defaultConcurrency : DEFAULT_CONCURRENCY;
     }
 
-    /**
-     * 解析子任务实际会使用的模型配置。
-     *
-     * @return 可能为 null（模型全部禁用且无默认项）
-     */
-    private ChatConfig resolveTaskModelConfig(AgentDefinition agentDefinition, String sessionModel) {
-        final String selectedModel = Assert.isEmpty(agentDefinition.getModel())
-                ? sessionModel : agentDefinition.getModel();
-
-        return engine.getModelOrDef(selectedModel);
-    }
-
     private static boolean isCancelled(FluxSink<AgentEvent> sink) {
         return sink != null && sink.isCancelled();
     }
@@ -539,7 +509,7 @@ public class TaskTalent extends AbsTalent {
             return formatTaskResp(plan.op, false, plan.invalidReason, isMultitask);
         }
 
-        if (plan.agentDefinition == null) {
+        if (plan.agentBuilder == null) {
             // 保底：统一走外壳，不返回裸文本（否则会混进 <multitask_results> 里错位）
             return formatTaskResp(plan.op, false, unknownAgentReason(plan.op), isMultitask);
         }
@@ -552,7 +522,7 @@ public class TaskTalent extends AbsTalent {
             // 标记委派深度：本线程内再触发 task/multitask 会被拒绝
             TASK_DEPTH.set(Boolean.TRUE);
 
-            ReActAgent agent = engine.getAgentBuilder(plan.agentDefinition, plan.modelName).build();
+            ReActAgent agent = plan.agentBuilder.build();
             final AgentSession session = InMemoryAgentSession.of(agent.name());
 
             Prompt originalPrompt = Prompt.of(plan.op.prompt);

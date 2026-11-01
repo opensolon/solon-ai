@@ -1313,9 +1313,25 @@ public class HarnessEngine {
         return options.getSessionProvider().getSession(instanceId);
     }
 
+    /**
+     * @deprecated 4.2
+     * @since {@link #getAgentBuilder(AgentDefinition)}
+     */
+    @Deprecated
     public ReActAgent.Builder createSubagent(AgentDefinition definition) {
-        return AgentFactory.create(this, definition, null);
+        return getAgentBuilder(definition);
     }
+
+    /**
+     * @deprecated 4.2
+     * @since {@link #getAgentBuilder(AgentDefinition)}
+     */
+    @Deprecated
+    public ReActAgent.Builder createSubagent(AgentDefinition definition, String sessionModel) {
+        return getAgentBuilder(definition, sessionModel);
+    }
+
+
 
     public ChatModel getMainModel() {
         return getMainAgent().getModel();
@@ -1363,14 +1379,27 @@ public class HarnessEngine {
             return getMainAgent();
         } else if (agentManager.hasAgent(agentName)) {
             AgentDefinition definition = agentManager.getAgent(agentName);
-            return AgentFactory.create(this, definition, null).build();
+            return getAgentBuilder(definition, null).build();
         } else {
             return getMainAgent();
         }
     }
 
-    public ReActAgent.Builder getAgentBuilder(AgentDefinition agentDefinition, @Nullable String sessionModel) {
-        return AgentFactory.create(this, agentDefinition, sessionModel);
+    public ReActAgent.Builder getAgentBuilder(AgentDefinition definition) {
+        return getAgentBuilder(definition, null);
+    }
+
+    public ReActAgent.Builder getAgentBuilder(AgentDefinition definition, @Nullable String sessionModel) {
+        return AgentFactory.create(this, definition, sessionModel);
+    }
+
+    public ReActAgent.Builder getAgentBuilderOrNil(String agentName, String sessionModel) {
+        AgentDefinition definition = agentManager.getAgentOrNil(agentName);
+        if (definition == null) {
+            return null;
+        }
+
+        return getAgentBuilder(definition, sessionModel);
     }
 
     private ReActRequest promptDo(Prompt prompt, ReActAgent targetAgent) {

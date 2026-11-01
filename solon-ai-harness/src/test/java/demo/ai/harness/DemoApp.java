@@ -76,7 +76,7 @@ public class DemoApp {
         definition.setSystemPrompt("xxx"); //系统提示词
         definition.getMetadata().addTools(ToolName.TOOL_BASH); //工具权限
 
-        ReActAgent subagent = engine.createSubagent(definition).build();
+        ReActAgent subagent = engine.getAgentBuilder(definition).build();
         subagent.prompt(prompt)
                 .session(session) //没有，则为临时会话
                 .options(o -> {

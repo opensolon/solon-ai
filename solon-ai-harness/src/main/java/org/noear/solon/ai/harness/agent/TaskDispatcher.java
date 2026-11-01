@@ -115,7 +115,9 @@ final class TaskDispatcher {
         return true;
     }
 
-    /** 队列里剩下的任务全部按占位结束，保证调用方不会永久等待 */
+    /**
+     * 队列里剩下的任务全部按占位结束，保证调用方不会永久等待
+     */
     private static void drain(ConcurrentLinkedQueue<Integer> queue,
                               List<CompletableFuture<String>> results,
                               Function<Integer, String> placeholder) {
