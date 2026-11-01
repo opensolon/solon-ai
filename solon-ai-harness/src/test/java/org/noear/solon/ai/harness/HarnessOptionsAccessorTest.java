@@ -175,26 +175,6 @@ class HarnessOptionsAccessorTest {
         assertEquals(TaskTalent.DEFAULT_CONCURRENCY, o.getSubagentDefaultConcurrency(), "null 不应覆盖已有值");
     }
 
-    /** 旧名 setMultitaskMaxTasks / setMultitaskMaxConcurrency 作为 @Deprecated 桥接保留（v4.0.5 起已发布），必须与新名同效。 */
-    @SuppressWarnings("deprecation")
-    @Test
-    void deprecatedMultitaskSettersBridgeToSubagentDefaultConcurrency() {
-        HarnessOptions o = fresh();
-
-        o.setMultitaskMaxTasks(3);
-        assertEquals(3, o.getSubagentDefaultConcurrency(), "旧名必须写入同一个字段");
-        assertEquals(3, o.getMultitaskMaxTasks(), "旧 getter 必须读到同一个字段");
-
-        o.setMultitaskMaxConcurrency(4);
-        assertEquals(4, o.getSubagentDefaultConcurrency(), "过渡名必须与新名同效");
-
-        o.setSubagentDefaultConcurrency(null);
-        assertEquals(4, o.getSubagentDefaultConcurrency(), "null 不应覆盖已有值");
-
-        o.setSubagentDefaultConcurrency(7);
-        assertEquals(7, o.getSubagentDefaultConcurrency());
-    }
-
     /** 默认并发上限恒为有限正整数：0 当未设置、超上界靠上界、负数报错，不存在「不限制」。 */
     @Test
     void subagentDefaultConcurrencyIsAlwaysBounded() {

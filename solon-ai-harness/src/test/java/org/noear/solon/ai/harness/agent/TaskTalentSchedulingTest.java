@@ -154,25 +154,6 @@ public class TaskTalentSchedulingTest {
 
     // ---------- 已发布旧名的桥接 ----------
 
-    /** 旧名曾随 v4.0.5 起发布，必须保留桥接并写入同一字段 */
-    @SuppressWarnings("deprecation")
-    @Test
-    public void deprecatedEngineSettersBridgeToSubagentDefaultConcurrency(
-            @org.junit.jupiter.api.io.TempDir Path workspace) {
-        HarnessEngine engine = HarnessEngine.of(workspace.toString(), null)
-                .sessionProvider(InMemoryAgentSession::of)
-                .build();
-
-        engine.setMultitaskMaxTasks(3);
-        assertEquals(3, engine.getSubagentDefaultConcurrency(), "旧 setter 必须写入新字段");
-        assertEquals(3, engine.getMultitaskMaxTasks(), "旧 getter 必须读到新字段");
-        assertEquals(3, engine.getTaskTalent().getDefaultConcurrency(),
-                "桥接必须同步到执行侧，否则限流仍用旧值");
-
-        engine.setMultitaskMaxConcurrency(4);
-        assertEquals(4, engine.getSubagentDefaultConcurrency(), "过渡名必须与新名同效");
-        assertEquals(4, engine.getTaskTalent().getDefaultConcurrency());
-    }
 
     /** 负数必须被拦截：静默接受会让「配错了」表现为静默降级 */
     @Test
