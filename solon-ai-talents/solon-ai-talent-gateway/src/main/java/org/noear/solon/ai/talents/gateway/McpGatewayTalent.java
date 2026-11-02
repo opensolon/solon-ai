@@ -477,21 +477,6 @@ public class McpGatewayTalent extends AbsTalent {
         return view;
     }
 
-    /** 工具是否落在本次选中的服务范围内（供 call_tool 做执行侧校验） */
-    private boolean isToolInScope(String toolKey, List<String> scope) {
-        if (scope.isEmpty()) {
-            return true;
-        }
-
-        for (String serverName : scope) {
-            Map<String, FunctionTool> tools = categoryTools.get(serverName);
-            if (tools != null && tools.containsKey(toolKey)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     // ========== 中转工具方法（由 AbsTalent 的 MethodToolProvider 自动扫描） ==========
 
     @ToolMapping(name = "search_tools", description = "搜索MCP工具。支持多个关键词用空隔隔开（如：'杭州 旅游'）")
@@ -603,12 +588,7 @@ public class McpGatewayTalent extends AbsTalent {
                 return ToolResult.success("错误：未找到MCP工具 '" + tool_name + "'");
             }
 
-            // 视野校验：call_tool 是中转入口，模型可能绕过 getTools 的过滤直接点名未选中的服务。
-            // ToolRequest 构造时已把 toolContext 合并进 args，所以这里能读到 _mcps_selected。
-            List<String> scope = getSelected(args);
-            if (gatewayTalent.isToolInScope(tool.name().toLowerCase(), scope) == false) {
-                return ToolResult.success("错误：工具 '" + tool_name + "' 不在本次选中的 MCP 服务范围内");
-            }
+            // selected 是视野不是权限：call_tool 是点名调用，不做执行侧硬控。
 
             try {
                 return RetryUtil.callWithRetry(gatewayTalent.maxRetries, gatewayTalent.retryDelayMs, gatewayTalent.retryDelayMs * 4, () -> tool.call(finalToolArgs));

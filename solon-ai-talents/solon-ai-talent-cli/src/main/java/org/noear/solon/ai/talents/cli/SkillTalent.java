@@ -210,9 +210,16 @@ public class SkillTalent extends AbsTalent {
         return getToolAry();
     }
 
-    @ToolMapping(name = "skilllist", description = "列出本地所有挂载点中的可用技能清单。")
+    /** 便捷入口（非工具注册，供内部/测试直接调用）：无视野约束 */
     public String skilllist() {
-        Collection<SkillDescriptor> skillList = availableSkills(null);
+        return skilllist(null);
+    }
+
+    @ToolMapping(name = "skilllist", description = "列出本地所有挂载点中的可用技能清单。")
+    public String skilllist(List<String> _skills_selected) {
+        // _skills_selected 由 toolContext 隐式注入（无 selected 时为 null），模型不可见；
+        // 与指令清单同口径：只列视野内的技能
+        Collection<SkillDescriptor> skillList = availableSkills(_skills_selected);
         if (skillList.isEmpty()) {
             return "当前没有可用的技能。";
         }
@@ -268,11 +275,13 @@ public class SkillTalent extends AbsTalent {
      * 否则被选技能的 SKILL.md 里引用另一个技能时会断链。</p>
      */
     private Collection<SkillDescriptor> availableSkills(@Nullable Prompt prompt) {
-        List<String> selected = getSelected(prompt);
+        return availableSkills(getSelected(prompt));
+    }
 
+    private Collection<SkillDescriptor> availableSkills(@Nullable List<String> selected) {
         return skillCatalog.getDescriptors().stream()
                 .filter(skillCatalog::isAllowed)
-                .filter(s -> selected.isEmpty() || matchesSelected(s, selected))
+                .filter(s -> selected == null || selected.isEmpty() || matchesSelected(s, selected))
                 .collect(Collectors.toList());
     }
 
