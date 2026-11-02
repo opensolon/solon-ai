@@ -12,12 +12,10 @@ import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.command.builtin.SteerCommand;
 import org.noear.solon.ai.harness.input.InputOrigin;
 
-import java.util.function.Supplier;
-
 /**
  * Steer 一键装配扩展 —— steer 能力从头到尾只接触这一个类。
  *
- * <p>{@code engine.addExtension(new SteerExtension(() -> outputPort))} 一步完成：
+ * <p>{@code engine.addExtension(new SteerExtension())} 一步完成：
  * 注册 /steer 命令（幂等）+ 把 {@link SteerInterceptor} 挂为主代理<b>默认拦截器</b>。
  * 宿主不再需要每请求 {@code new SteerInterceptor(...) + interceptorAdd(...)}。</p>
  *
@@ -26,10 +24,15 @@ import java.util.function.Supplier;
  * 因此本扩展挂载的 steer 拦截器天然排在上下文压缩之后——注入是向压缩产物尾部追加，
  * 不破坏消息序列。同类型按 Class 去重，重复挂载无双份。</p>
  *
- * <p><b>端口供应商是「延迟初始化」，不是「随工作区切换」</b>：宿主入口端口（如 Web 网关）
- * 常在引擎创建之后才绑定，构造期取不到，故每次事件回调时解析。<b>投递路由由 session 承载</b>
- * （见 {@link SteerOutputPort}），端口实例本身不需要按工作区更换。传 {@code null}
- * 供应商时 drop 只记 warn 日志、不通知客户端（纯 headless 场景）。</p>
+ * <p><b>输出走 AgentEvent</b>：{@code steer_applied} / {@code steer_dropped} 以
+ * {@link SteerAppliedEvent} / {@link SteerDroppedEvent} 推入流，与 HITL、上下文压缩
+ * 同一范式。宿主按事件类型映射为自身协议（Web 映射为 {@code system.steer_applied} /
+ * {@code system.steer_dropped}），不认识的宿主零成本忽略。因此本扩展不需要任何
+ * 端口注入、不需要每请求 {@code new SteerInterceptor(...)}，{@code new SteerExtension()}
+ * 一个构造器适配全部宿主。</p>
+ *
+ * <p><b>未消费插话的持久化在 harness 内完成</b>（转 {@code SessionQueue}），
+ * 与有没有订阅者无关：CLI / Desktop 也能把残留插话转为排队任务，不会丢。</p>
  *
  * <p>插话投递（Web API / IM 命令共用）与取消直接在本类上中转。</p>
  *
@@ -38,20 +41,14 @@ import java.util.function.Supplier;
  */
 public class SteerExtension extends AbsHarnessExtension {
 
-    private final SteerInterceptor interceptor;
+    private final SteerInterceptor interceptor = new SteerInterceptor();
 
     private final SteerCommand steerCommand = new SteerCommand();
 
     /**
-     * @param outputPortSupplier 输出端口供应商（每次事件回调时解析，可为 null = headless）
+     * 唯一构造器：输出走 AgentEvent，无需注入任何宿主端口。
      */
-    public SteerExtension(Supplier<SteerOutputPort> outputPortSupplier) {
-        this.interceptor = new SteerInterceptor(outputPortSupplier);
-    }
-
-    /** 纯 headless 宿主：插话残留只记 warn，不通知客户端。 */
     public SteerExtension() {
-        this(null);
     }
 
     @Override

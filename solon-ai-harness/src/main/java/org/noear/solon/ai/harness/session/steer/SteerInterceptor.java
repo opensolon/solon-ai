@@ -8,6 +8,7 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.ai.harness.session.queue.SessionQueue;
 import org.noear.solon.core.util.Assert;
 
 import org.slf4j.Logger;
@@ -19,8 +20,6 @@ import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.BooleanSupplier;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 /**
  * 运行中插话拦截器（Steering）
@@ -52,9 +51,15 @@ import java.util.function.Supplier;
  *       绝不允许"已接受但永不生效"（Codex issue #15842 教训）。</li>
  * </ul>
  *
- * <p><b>输出路由</b>：两个事件出口都以 {@link AgentSession} 定位投递目标，不持有任何人造令牌。
- * 宿主需要工作区/连接池时自行从 {@code session.attrs()} 取。两个出口共用
- * {@link #withPort} 的守卫与异常边界——结构上不可能再出现「一个出口判令牌、另一个不判」的不对称。</p>
+ * <p><b>输出走 AgentEvent</b>：两个出口都以 {@link ReActTrace#pushAgentEvent} 推出
+ * {@link SteerAppliedEvent} / {@link SteerDroppedEvent}，与 HITL、上下文压缩、Run 起止
+ * 同一范式。harness 不认识任何宿主类型，宿主按事件类型映射为自身协议
+ * （Web 映射为 {@code system.steer_applied}/{@code system.steer_dropped}），
+ * 不认识的宿主零成本忽略。</p>
+ *
+ * <p><b>展示与持久化分离</b>：未消费插话转 {@code SessionQueue} 在 harness 内完成
+ * （{@link #enqueueIntoSessionQueue}），不看有没有订阅者；事件只负责展示。
+ * 因此「已接受但永不生效」的兜底在任何宿主下都成立，且非流式运行时不会丢插话。</p>
  *
  * @author noear
  * @since 2026
@@ -90,42 +95,7 @@ public class SteerInterceptor extends AbsReActInterceptor implements ReActInterc
     /** 插话消息的 metadata 标记值（{@code source=steer}） */
     public static final String STEER_SOURCE = "steer";
 
-    /** 输出端口供应商：每次事件回调时解析（入口端口可能晚于引擎创建，故不在构造期快照）。 */
-    private final Supplier<SteerOutputPort> outputPortSupplier;
-
-    public SteerInterceptor(Supplier<SteerOutputPort> outputPortSupplier) {
-        this.outputPortSupplier = outputPortSupplier;
-    }
-
-    /**
-     * 端口解析 + 空判 + 异常吞没的唯一入口。
-     *
-     * <p>applied 与 dropped 两条出口都必须经此方法：既保证守卫一致（端口为空时一律跳过），
-     * 也保证实现方异常不会沿拦截器链冒泡（{@code onAgentEnd} 的调用方没有 try）。</p>
-     *
-     * @return 端口是否存在并已执行回调
-     */
-    private boolean withPort(Consumer<SteerOutputPort> action) {
-        if (outputPortSupplier == null) {
-            return false;
-        }
-        SteerOutputPort port;
-        try {
-            port = outputPortSupplier.get();
-        } catch (Throwable e) {
-            LOG.warn("[SteerInterceptor] resolve steer output port failed: {}", e.toString());
-            return false;
-        }
-        if (port == null) {
-            return false;
-        }
-        try {
-            action.accept(port);
-            return true;
-        } catch (Throwable e) {
-            LOG.warn("[SteerInterceptor] steer output port failed: {}", e.toString());
-            return false;
-        }
+    public SteerInterceptor() {
     }
 
     @Override
@@ -171,7 +141,8 @@ public class SteerInterceptor extends AbsReActInterceptor implements ReActInterc
 
         // 必须广播 applied：它是「注入已生效」的唯一信号。前端据此清除待生效态并落气泡；
         // 客户端不会用超时猜测终态，避免把已执行过的插话再次入队。
-        emitSteerApplied(session, trace.getRunId(), messages);
+        // 无 sink（非流式 / 订阅已取消）时 pushAgentEvent 静默丢弃——本事件无副作用，可以丢。
+        trace.pushAgentEvent(new SteerAppliedEvent(trace, messages));
     }
 
     @Override
@@ -195,16 +166,15 @@ public class SteerInterceptor extends AbsReActInterceptor implements ReActInterc
 
         if (box != null && !box.isEmpty()) {
             // 残留兜底：任务已结束（单轮直接回答、守卫持续跳过后 END 等），
-            // 未消费的插话绝不能静默丢弃——交由入口端口转排队（Web 广播 dropped，前端转为排队消息发送）
+            // 未消费的插话绝不能静默丢弃。
             List<SteerMessage> dropped = drain(box);
             if (!dropped.isEmpty()) {
-                ConcurrentLinkedQueue<SteerMessage> droppedBox = new ConcurrentLinkedQueue<>(dropped);
-                boolean handled = withPort(port -> port.handleDroppedSteers(session, droppedBox, trace.getRunId()));
-                // 端口为空（纯 headless 场景）时无客户端可通知，仅记日志后丢弃
-                if (handled == false) {
-                    LOG.warn("[SteerInterceptor] {} unconsumed steers dropped without output port for session {}",
-                            dropped.size(), session.getSessionId());
-                }
+                // 先落盘再广播：持久化不看有没有订阅者，事件只做展示。
+                List<SteerMessage> failed = enqueueIntoSessionQueue(session, dropped);
+                List<SteerMessage> queued = new ArrayList<>(dropped);
+                queued.removeAll(failed);
+
+                trace.pushAgentEvent(new SteerDroppedEvent(trace, queued, failed));
             }
         }
     }
@@ -378,10 +348,43 @@ public class SteerInterceptor extends AbsReActInterceptor implements ReActInterc
     }
 
     /**
-     * 推送插话已生效事件（steer_applied），由入口端口负责具体协议呈现。
+     * 把未消费插话转入 session 队列（唯一实现，任务收尾与宿主开流清理共用）。
+     *
+     * <p>只依赖 session 与 {@link SessionQueue}，不看流式 sink、不看宿主类型——
+     * 因此「绝不静默丢弃」在任何宿主下都成立（CLI / Desktop 没有订阅者也能排队）。</p>
+     *
+     * <p>channel 为空的 origin 原样入队，harness 不做归一：空 channel 在队列与视图侧的
+     * 呈现语义即「本地 / Web」（见宿主 toSourceLabel），而 harness 不该知道 "WEB" 这种方言值。</p>
+     *
+     * @return 转入失败的插话（已回填到易失邮箱，待下次开流重试；永不为 null）
      */
-    private void emitSteerApplied(AgentSession session, String runId, List<SteerMessage> items) {
-        // 不额外判 wsContext：路由身份已归 session，端口存在即应投递
-        withPort(port -> port.emitSteerApplied(session, runId, items));
+    public static List<SteerMessage> enqueueIntoSessionQueue(AgentSession session, List<SteerMessage> items) {
+        List<SteerMessage> failed = new ArrayList<>();
+        if (session == null || items == null || items.isEmpty()) {
+            return failed;
+        }
+
+        for (SteerMessage message : items) {
+            if (SessionQueue.enqueue(session, message.getText(), message.getOrigin()) < 0) {
+                failed.add(message);
+            }
+        }
+
+        if (failed.isEmpty() == false) {
+            // 回填易失邮箱：下一次开流仍可重试，绝不静默丢弃（Codex issue #15842 教训）
+            synchronized (session.attrs()) {
+                @SuppressWarnings("unchecked")
+                Queue<SteerMessage> box = (Queue<SteerMessage>) session.attrs().get(ATTR_STEER_BOX);
+                if (box == null) {
+                    box = new ConcurrentLinkedQueue<>();
+                    session.attrs().put(ATTR_STEER_BOX, box);
+                }
+                box.addAll(failed);
+            }
+            LOG.warn("[SteerInterceptor] {} unconsumed steers could not be queued for session {}",
+                    failed.size(), session.getSessionId());
+        }
+
+        return failed;
     }
 }

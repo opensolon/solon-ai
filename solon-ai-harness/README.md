@@ -771,7 +771,7 @@ engine.addExtension(goal); // /goal
 QueueExtension queue = new QueueExtension();
 engine.addExtension(queue); // /queue
 
-SteerExtension steer = new SteerExtension(() -> mySteerPort);
+SteerExtension steer = new SteerExtension();
 engine.addExtension(steer); // /steer
 ```
 
@@ -1224,16 +1224,17 @@ Web 前端的排队编排在浏览器完成，IM 渠道（微信/飞书/钉钉�
 #### 装配
 
 ```java
-SteerExtension steer = new SteerExtension(() -> webGate /* SteerOutputPort */);
+SteerExtension steer = new SteerExtension();
 engine.addExtension(steer);   // initialize 注册 /steer 命令；configure 把拦截器挂为主代理默认拦截器
 ```
 
-参数与变体：
+**装配就这一行，没有任何端口要注入。** 输出走 `AgentEvent`：
 
-- **供应商是「延迟初始化」**：`SteerOutputPort` 在每次事件回调时取值，不在构造期快照。宿主入口端口（如 Web 网关）常在引擎创建之后才绑定，构造期取不到，延迟解析避开了这个时序坑。**它不是「随工作区切换」**——投递路由由 session 承载，端口实例无需按工作区更换。
-- **路由身份即 session**：`SteerOutputPort` 的两个方法都接收 `AgentSession`，harness 不接受任何宿主类型的不透明令牌。宿主若需工作区/连接池，自行从 `session.attrs()` 取（在轮次边界写入），harness 不解释。因此**不再需要请求级挂载**：默认实例已能正确定位工作区。
-- **`null` 供应商 / 无参构造**：headless 宿主（无前端可通知），dropped 只记 warn 日志。
-- **只有两个构造器**：`(Supplier)` 与 `()`，**没有关闭命令注册的第三参**。`initialize` 里无条件 `register`；要整体下线用 `engine.setExtensionEnabled(steer, false)`——它会同时停命令、停拦截器（`steer()` 返回 `DISABLED`），`cancel` 等清理接口不受控。
+- **`steer_applied` → `SteerAppliedEvent`**：插话已注入工作记忆。这是「已生效」的唯一信号，客户端据此清除待生效态并落气泡。
+- **`steer_dropped` → `SteerDroppedEvent`**：任务结束时仍有未消费插话。`getQueued()` 已转入 session 队列（客户端应清除气泡），`getFailed()` 未入队且已回填易失邮箱待下次开流重试（客户端应保留并提示尚未排队）。
+- **展示与持久化分离**：转 `SessionQueue` 在 harness 内完成，**不看有没有订阅者**。`pushAgentEvent` 在非流式（无 sink）或订阅已取消时静默丢弃——`steer_applied` 无副作用可以丢，但 `steer_dropped` 的排队动作在推事件之前已完成，因此「已接受但永不生效」在任何宿主下都不会发生（CLI / Desktop 也能把残留插话转为排队任务）。
+- **宿主零成本接入**：Web 在 `WebEventMapper` 加两个类型分支映射为 `system.steer_applied` / `system.steer_dropped`；不认识的宿主不写任何代码即自然忽略。**不需要实现端口接口、不需要每请求挂载拦截器**。
+- **专用构造器只有一个 `()`**：没有注入入口，也就没有「漏传端口」这种陷阱。要整体下线用 `engine.setExtensionEnabled(steer, false)`——它会同时停命令、停拦截器（`steer()` 返回 `DISABLED`），`cancel` 等清理接口不受控。
 
 运行期操作也在这一个实例上：
 
@@ -1281,31 +1282,35 @@ SteerResult r = SteerInterceptor.steer(session, null, null, text, origin, null);
 
 `SteerExtension.configure` 会把拦截器挂到**主代理的默认拦截器列表**，宿主无需每请求 new + add。顺序安全：拦截器容器按 Class 去重（`LinkedHashMap<Class, RankEntity>`），AgentFactory 先挂压缩/StopLoop、后轮到 extension 的 configure，因此 steer 拦截器天然排在上下文压缩之后。
 
-**不再需要请求级挂载**。旧版在这里保留一种多工作区用法（每请求 `new SteerInterceptor(outputPort, wsContext)` 覆盖默认实例），现在路由身份改由 session 承载，默认实例本身就能定位正确工作区：宿主在轮次边界把入口上下文写进 `session.attrs()` 即可。该写法的存留意义仅在于“同一会话想换一个拦截器策略”，与工作区无关。
+**不再需要请求级挂载**：输出走 `AgentEvent`，路由信息由事件消费方（如 Web 的 `WebEventMapper`，构造时就持有工作区）自带，宿主无需在 `session.attrs()` 上打任何标，也不需要每请求 `new SteerInterceptor(...)`。
 
 > **不挂拦截器 = 插话永不生效**：消息能入队，但没人消费，任务结束时由 `onAgentEnd` 清空并转入 dropped。
 
-#### 输出端口（宿主实现）
+#### 输出事件（宿主按类型映射，无需实现接口）
 
 ```java
-public interface SteerOutputPort {
-    /** 注入已生效：客户端据此清除待生效态并落气泡，实现方必须尽力送达 */
-    void emitSteerApplied(AgentSession session, String runId, List<SteerMessage> items);
+public class SteerAppliedEvent extends AbsReActEvent {
+    List<SteerMessage> getItems();          // 已注入工作记忆的插话
+}
 
-    /** 任务结束时仍有未消费插话的兜底：转入排队并广播，绝不允许「已接受但永不生效」 */
-    void handleDroppedSteers(AgentSession session, Queue<SteerMessage> box, String runId);
+public class SteerDroppedEvent extends AbsReActEvent {
+    List<SteerMessage> getQueued();         // 已转入 session 队列（转排队任务）
+    List<SteerMessage> getFailed();         // 未入队，已回填易失邮箱待下次开流重试
+    boolean hasFailed();
 }
 ```
 
-**路由身份即 session**：两个方法都以 `AgentSession` 定位投递目标，harness 不接受任何宿主类型的不透明令牌。实现方若需工作区/连接池，自行从 `session.attrs()` 取——宿主在轮次边界写入（soloncode 的做法是 `WebSessionRunner#beginStreamTurn` 写 `ATTR_REPLY_WORKSPACE`，与 IM 渠道的 `session.replyRoute` 同型）。
+三个要点：
 
-端口为 `null` 时 drop 只记 warn 日志、不通知客户端。两条出口共用同一个守卫与异常边界（`SteerInterceptor#withPort`），因此实现方抛异常不会沿拦截器链冒泡。
+1. **事件只是展示，持久化在 harness 内**。`SteerInterceptor#enqueueIntoSessionQueue` 先完成转排队、再推 `SteerDroppedEvent`。`pushAgentEvent` 在非流式或订阅已取消时静默丢弃，顺序颠倒就会在无订阅者时丢插话。
+2. **不覆写 `getText()`**。这两个事件不属于文本流；一旦给出文本，按文本兜底渲染的宿主（ACP 的 `concatMap` 收尾分支、Desktop 的 frame 转换）会把插话内容顺手打进对话。需要展示的宿主必须显式按类型分支。
+3. **映射即接入**。soloncode 的做法是在 `WebEventMapper` 加两个 `instanceof` 分支（→ `system.steer_applied` / `system.steer_dropped`），其余宿主不写代码即自然忽略。**harness 不认识任何宿主类型**，也没有端口接口可实现。
 
 #### 三条注入守卫
 
 1. **首轮不注入**（`turnCount <= 1`）——原始 prompt 必须先被采样，不篡改初始意图；
 2. **尾部 tool_calls 未闭合不注入**——HITL 挂起恢复的窄窗里插 user 消息会打断 `tool_use` / `tool_result` 配对，部分模型直接报错；等 `ActionTask` 补齐结果后自然恢复；
-3. **无悬挂**——`onAgentEnd` 检查残留并交给 `handleDroppedSteers`，绝不允许「已接受但永不生效」。
+3. **无悬挂**——`onAgentEnd` 检查残留并交给 `SteerInterceptor#enqueueIntoSessionQueue` 转排队，绝不允许「已接受但永不生效」。
 
 注入形态：`ChatMessage.ofUser("[用户实时补充] " + text)`，metadata 标记 `source=steer`。不追加 systemPrompt 说明——前缀本身已足够表意。
 
@@ -1395,7 +1400,7 @@ if (engine.interrupt(session)) { /* 通知前端已停止 */ }
 - **“改”的前置条件比“停”窄**：“停”只需流句柄存在，“改”需要已进入推理边界。所以任务刚被受理、模型还没开口的那一小段时间，interrupt 能成功而 steer 会失败——这不是 bug。
 - **“停”与“重排”有副作用叠加**：`interrupt` 里的 `cancelPending` 会把队列一起清掉。若宿主想“只停当前、保留已有排队”，不要调 `engine.interrupt`，只释放那一条流（但那就回到了手动复刻内部约定的老路，需自行权衡）。
 
-三者都**不自己开流、不做跨能力降级**：steer 邮箱满或任务未运行时如实返回状态码，要不要改走 queue 由调用方决定（`SteerMessage` 的「已接受但永不生效」由 `SteerOutputPort#handleDroppedSteers` 兜底，不在此列）。场景 A 里的那次降级就是宿主侧完成的，不是框架代做。
+三者都**不自己开流、不做跨能力降级**：steer 邮箱满或任务未运行时如实返回状态码，要不要改走 queue 由调用方决定（`SteerMessage` 的「已接受但永不生效」由 `SteerInterceptor#enqueueIntoSessionQueue` 在 harness 内兜底，不在此列）。场景 A 里的那次降级就是宿主侧完成的，不是框架代做。
 
 ---
 

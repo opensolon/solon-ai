@@ -1,10 +1,12 @@
 package org.noear.solon.ai.harness.session.steer;
 
 import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.ai.harness.session.queue.SessionQueue;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
@@ -36,18 +38,36 @@ public class SteerInterceptorTest {
     private AgentSession session;
     private ReActTrace trace;
     private SteerInterceptor interceptor;
+    /** 捕获的事件（ReActTrace#pushAgentEvent 被覆写为记录，不依赖流式 sink） */
+    private final List<AgentEvent> pushed = new ArrayList<>();
 
     @BeforeEach
     public void setUp() {
         session = InMemoryAgentSession.of();
+        pushed.clear();
         trace = new ReActTrace() {
             @Override
             public AgentSession getSession() {
                 return session;
             }
+
+            @Override
+            public void pushAgentEvent(AgentEvent event) {
+                pushed.add(event);
+            }
         };
-        // 端口供应商传 null：事件推送为 no-op，聚焦注入逻辑
-        interceptor = new SteerInterceptor(null);
+        // 输出走事件：拦截器无依赖，直接无参构造
+        interceptor = new SteerInterceptor();
+    }
+
+    private <T> List<T> eventsOf(Class<T> type) {
+        List<T> result = new ArrayList<>();
+        for (AgentEvent event : pushed) {
+            if (type.isInstance(event)) {
+                result.add(type.cast(event));
+            }
+        }
+        return result;
     }
 
     private ConcurrentLinkedQueue<SteerMessage> newBox(String... texts) {
@@ -320,108 +340,123 @@ public class SteerInterceptorTest {
         assertEquals(1, newBox.size(), "旧任务结束不得丢弃新任务插话");
     }
 
-    // ==================== 输出端口行为（守卫收口与路由取 session） ====================
 
-    /** 记录型端口：把每次回调的 session / runId 原样记下，用于断言真实到达。 */
-    private static final class RecordingPort implements SteerOutputPort {
-        final List<String> appliedRunIds = new ArrayList<>();
-        final List<String> droppedRunIds = new ArrayList<>();
-        final List<Object> appliedSessions = new ArrayList<>();
-        final List<Object> droppedSessions = new ArrayList<>();
-        boolean throwOnDropped;
+    // ==================== 输出事件行为（applied / dropped 走 AgentEvent） ====================
 
-        @Override
-        public void emitSteerApplied(AgentSession session, String runId, List<SteerMessage> items) {
-            appliedSessions.add(session);
-            appliedRunIds.add(runId);
-        }
+    @Test
+    @DisplayName("applied: 非首轮注入时必须推出 SteerAppliedEvent（runId 与 items 原样）")
+    public void applied_eventPushed() {
+        newBox("改用方案B");
+        trace.nextTurn();
+        trace.nextTurn();
 
-        @Override
-        public void handleDroppedSteers(AgentSession session, Queue<SteerMessage> box, String runId) {
-            droppedSessions.add(session);
-            droppedRunIds.add(runId);
-            box.clear();
-            if (throwOnDropped) {
-                throw new IllegalStateException("boom-dropped");
+        interceptor.onReasonStart(trace, new StringBuilder());
+
+        List<SteerAppliedEvent> applied = eventsOf(SteerAppliedEvent.class);
+        assertEquals(1, applied.size(), "注入生效后必须发出一次 applied 事件");
+        assertEquals(trace.getRunId(), applied.get(0).getRunId());
+        assertEquals(1, applied.get(0).getItems().size());
+        assertEquals("改用方案B", applied.get(0).getItems().get(0).getText());
+        assertSame(session, applied.get(0).getSession(), "事件自带 session，宿主据此定位投递目标");
+    }
+
+    @Test
+    @DisplayName("applied: 守卫跳过时不推事件（首轮 / tool_calls 未闭合）")
+    public void applied_notPushedWhenGuardSkips() {
+        newBox("改用方案B");
+        trace.nextTurn();
+        interceptor.onReasonStart(trace, new StringBuilder());
+        assertTrue(eventsOf(SteerAppliedEvent.class).isEmpty(), "首轮不得推出 applied");
+
+        trace.getWorkingMemory().addMessage(toolCallMessage());
+        trace.nextTurn();
+        interceptor.onReasonStart(trace, new StringBuilder());
+        assertTrue(eventsOf(SteerAppliedEvent.class).isEmpty(), "tool_calls 未闭合不得推出 applied");
+    }
+
+    @Test
+    @DisplayName("dropped: 任务结束残留必须转入 session 队列（不依赖订阅者）")
+    public void dropped_enqueuesIntoSessionQueue() {
+        ConcurrentLinkedQueue<SteerMessage> box = newBox("未消费1", "未消费2");
+        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, trace.getRunId());
+
+        interceptor.onAgentEnd(trace);
+
+        assertTrue(box.isEmpty(), "残留必须清出易失邮箱");
+        assertEquals(2, SessionQueue.pendingSize(session), "残留必须转入 session 队列，绝不静默丢弃");
+
+        List<SteerDroppedEvent> dropped = eventsOf(SteerDroppedEvent.class);
+        assertEquals(1, dropped.size(), "转排队后必须推出一次 dropped 事件");
+        assertEquals(2, dropped.get(0).getQueued().size());
+        assertFalse(dropped.get(0).hasFailed());
+        assertEquals(trace.getRunId(), dropped.get(0).getRunId());
+    }
+
+    @Test
+    @DisplayName("dropped: 无事件消费者（非流式）时队列仍必须增长")
+    public void dropped_noSubscriberStillQueues() {
+        // pushAgentEvent 在无 sink 时静默丢弃，事件不能承载业务动作——持久化必须在 harness 内完成
+        ReActTrace silent = new ReActTrace() {
+            @Override
+            public AgentSession getSession() {
+                return session;
             }
-        }
-    }
-
-    @Test
-    @DisplayName("applied: 非首轮注入时必须真实到达端口")
-    public void applied_reachesPort() {
-        RecordingPort port = new RecordingPort();
-        SteerInterceptor it = new SteerInterceptor(() -> port);
-        newBox("改用方案B");
-        trace.nextTurn();
-        trace.nextTurn();
-
-        it.onReasonStart(trace, new StringBuilder());
-
-        assertEquals(1, port.appliedRunIds.size(), "注入生效后必须发出一次 applied");
-        assertEquals(trace.getRunId(), port.appliedRunIds.get(0));
-        assertSame(session, port.appliedSessions.get(0), "路由身份必须是本次 trace 的 session");
-    }
-
-    @Test
-    @DisplayName("dropped: 任务结束残留必须真实到达端口，runId 与 session 原样透传")
-    public void dropped_reachesPort() {
-        RecordingPort port = new RecordingPort();
-        SteerInterceptor it = new SteerInterceptor(() -> port);
-        ConcurrentLinkedQueue<SteerMessage> box = newBox("未消费");
-        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, trace.getRunId());
-
-        it.onAgentEnd(trace);
-
-        assertTrue(box.isEmpty());
-        assertEquals(1, port.droppedRunIds.size(), "残留必须交给端口，不得静默丢弃");
-        assertEquals(trace.getRunId(), port.droppedRunIds.get(0));
-        assertSame(session, port.droppedSessions.get(0));
-    }
-
-    @Test
-    @DisplayName("端口异常不得冒泡：dropped 抛错时 onAgentEnd 仍完成清理")
-    public void portException_doesNotBreakInterceptorChain() {
-        RecordingPort port = new RecordingPort();
-        port.throwOnDropped = true;
-        SteerInterceptor it = new SteerInterceptor(() -> port);
+        };
         newBox("未消费");
+        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, silent.getRunId());
+
+        interceptor.onAgentEnd(silent);
+
+        assertEquals(1, SessionQueue.pendingSize(session), "无订阅者也必须完成转排队");
+    }
+
+    @Test
+    @DisplayName("dropped: 队列满时失败项回填易失邮箱，并标记 failed")
+    public void dropped_queueFullKeepsInMailbox() {
+        for (int i = 0; i < SessionQueue.MAX_QUEUE_SIZE; i++) {
+            assertTrue(SessionQueue.enqueue(session, "task " + i, InputOrigin.channel("WEB")) > 0);
+        }
+        newBox("do not lose me");
         session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, trace.getRunId());
 
-        // 拦截器链遍历处（ReActAgent）没有 try，此处抛错会中断后续拦截器的 onAgentEnd
-        it.onAgentEnd(trace);
+        interceptor.onAgentEnd(trace);
 
-        assertNull(session.attrs().get(SteerInterceptor.ATTR_STEER_BOX), "清理不受实现方异常影响");
+        assertEquals(SessionQueue.MAX_QUEUE_SIZE, SessionQueue.pendingSize(session), "队列不得超上限");
+        Queue<SteerMessage> refilled = SteerInterceptor.steerBox(session);
+        assertNotNull(refilled, "失败项必须回填易失邮箱待下次重试");
+        assertEquals("s0", refilled.peek().getId());
+
+        List<SteerDroppedEvent> dropped = eventsOf(SteerDroppedEvent.class);
+        assertEquals(1, dropped.size());
+        assertTrue(dropped.get(0).getQueued().isEmpty());
+        assertTrue(dropped.get(0).hasFailed(), "失败项必须在事件中可辨识");
     }
 
     @Test
-    @DisplayName("null 端口：只记 warn，不抛错也不影响注入")
-    public void nullPort_onlyWarns() {
-        SteerInterceptor it = new SteerInterceptor(() -> null);
-        newBox("改用方案B");
-        trace.nextTurn();
-        trace.nextTurn();
-
-        it.onReasonStart(trace, new StringBuilder());
-        it.onAgentEnd(trace);
-
-        assertEquals(1, trace.getWorkingMemory().getMessages().size(), "无端口不影响注入本身");
+    @DisplayName("enqueueIntoSessionQueue: 空邮箱 / null 会话零行为，不抛异常")
+    public void enqueueIntoSessionQueue_noop() {
+        assertTrue(SteerInterceptor.enqueueIntoSessionQueue(null, new ArrayList<>()).isEmpty());
+        assertTrue(SteerInterceptor.enqueueIntoSessionQueue(session, null).isEmpty());
+        assertTrue(SteerInterceptor.enqueueIntoSessionQueue(session, new ArrayList<>()).isEmpty());
+        assertEquals(0, SessionQueue.pendingSize(session));
     }
 
     @Test
-    @DisplayName("端口供应商在事件时解析：构造期 null、后续就位也能送达")
-    public void portResolvedAtEventTimeNotConstruction() {
-        Object[] holder = new Object[1];
-        RecordingPort port = new RecordingPort();
-        SteerInterceptor it = new SteerInterceptor(() -> (SteerOutputPort) holder[0]);
-        newBox("改用方案B");
-        trace.nextTurn();
+    @DisplayName("onAgentEnd: 入队失败不得冒泡（拦截器链遍历处没有 try）")
+    public void enqueueFailure_doesNotBreakInterceptorChain() {
+        // 超长文本会被 SessionQueue 拒绝（>MAX_TEXT_LENGTH），制造真实的入队失败路径
+        ConcurrentLinkedQueue<SteerMessage> box = new ConcurrentLinkedQueue<>();
+        StringBuilder huge = new StringBuilder();
+        for (int i = 0; i < SessionQueue.MAX_TEXT_LENGTH + 10; i++) {
+            huge.append('x');
+        }
+        box.offer(new SteerMessage("s0", huge.toString()));
+        session.attrs().put(SteerInterceptor.ATTR_STEER_BOX, box);
+        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, trace.getRunId());
 
-        // 构造后、事件前才就位（复刻入口端口晚于引擎绑定的时序）
-        holder[0] = port;
-        trace.nextTurn();
-        it.onReasonStart(trace, new StringBuilder());
+        assertDoesNotThrow(() -> interceptor.onAgentEnd(trace), "入队失败不得沿拦截器链冒泡");
 
-        assertEquals(1, port.appliedRunIds.size(), "事件时解析才能拿到后置绑定的端口");
+        assertEquals(0, SessionQueue.pendingSize(session), "超长文本不得入队");
+        assertEquals(1, SteerInterceptor.pending(session).size(), "失败项必须回填易失邮箱待重试");
     }
 }
