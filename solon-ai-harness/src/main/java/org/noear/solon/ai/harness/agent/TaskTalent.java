@@ -28,9 +28,12 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatSession;
+import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.talents.cli.SkillTalent;
+import org.noear.solon.ai.talents.gateway.McpGatewayTalent;
 import org.noear.solon.annotation.Body;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
@@ -39,6 +42,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.FluxSink;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -443,6 +447,9 @@ public class TaskTalent extends AbsTalent {
         private final AtomicBoolean rateLimited;
         private final AtomicBoolean timedOut;
         private final AtomicBoolean upstreamUnavailable;
+        /** 父代理本次生效的技能 / MCP 视野（子代理必须继承，否则父子行为不一致） */
+        private final List<String> skillsSelected;
+        private final List<String> mcpsSelected;
 
         MultitaskContext(ReActTrace parentTrace, String cwd, String sessionId,
                          int total, AtomicBoolean rateLimited, AtomicBoolean timedOut,
@@ -454,6 +461,20 @@ public class TaskTalent extends AbsTalent {
             this.rateLimited = rateLimited;
             this.timedOut = timedOut;
             this.upstreamUnavailable = upstreamUnavailable;
+            // 只解析一次，多个子任务共享同一份视野快照
+            this.skillsSelected = SkillTalent.getSelected(parentTrace.getOptions().getToolContext());
+            this.mcpsSelected = McpGatewayTalent.getSelected(parentTrace.getOptions().getToolContext());
+        }
+
+        /** 把继承到的视野写进子代理的 toolContext */
+        private void applyScope(ModelOptionsAmend<?, ?> options) {
+            if (skillsSelected.isEmpty() == false) {
+                options.toolContextPut(SkillTalent.CTX_SKILLS_SELECTED, skillsSelected);
+            }
+
+            if (mcpsSelected.isEmpty() == false) {
+                options.toolContextPut(McpGatewayTalent.CTX_MCPS_SELECTED, mcpsSelected);
+            }
         }
     }
 
@@ -539,6 +560,7 @@ public class TaskTalent extends AbsTalent {
                         .options(o -> {
                             o.toolContextPut(HarnessEngine.ATTR_CWD, ctx.cwd);
                             o.toolContextPut(ChatSession.ATTR_SESSIONID, ctx.sessionId);
+                            ctx.applyScope(o);
                         })
                         .stream()
                         .doOnNext(chunk -> countLlmError(chunk, ctx.rateLimited, ctx.timedOut,
@@ -553,6 +575,7 @@ public class TaskTalent extends AbsTalent {
                         .options(o -> {
                             o.toolContextPut(HarnessEngine.ATTR_CWD, ctx.cwd);
                             o.toolContextPut(ChatSession.ATTR_SESSIONID, ctx.sessionId);
+                            ctx.applyScope(o);
                         })
                         .stream()
                         .takeUntil(r -> sink.isCancelled())

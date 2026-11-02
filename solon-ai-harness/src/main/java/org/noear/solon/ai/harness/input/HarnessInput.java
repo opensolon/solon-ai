@@ -20,6 +20,11 @@ import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.chat.content.MediaBlock;
 import org.noear.solon.lang.Nullable;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.function.Predicate;
 
 /**
@@ -71,6 +76,15 @@ public final class HarnessInput {
      * （resolveHitlAgent / handle 第 2 步），消息路径仅作提及未命中时的兜底。
      */
     private String selectedAgent;
+    /**
+     * 本次请求显式选中的技能（标识支持 aliasPath / {@code @aliasPath} / 唯一短名）。
+     * <p>
+     * null 表示不限制（沿用全量技能目录）。空数组归一为 null：
+     * 「传空数组」与「不传」等价，避免误把全部技能关掉；要禁用技能请直接禁用技能 Talent。
+     */
+    private List<String> selectedSkills;
+    /** 本次请求显式选中的 MCP 服务名；null 表示不限制（沿用全部已注册服务） */
+    private List<String> selectedMcps;
     /** 命令上下文工厂；为空时 handle 内部落为 BufferedCommandContextFactory（回执缓冲进 commandOutput） */
     private CommandContextFactory commandContextFactory;
     /** 渠道来源身份；消费于命令分发（回执路由）与 Prompt 的 source 元数据；null 归一化为 {@link InputOrigin#NONE} */
@@ -155,6 +169,36 @@ public final class HarnessInput {
     }
 
     /**
+     * 本次输入选中的技能清单（未指定时返回空集合，永不返回 null）
+     * <p>
+     * 空集合的语义是「不限制」，不是「全部禁用」。
+     */
+    public List<String> getSelectedSkills() {
+        return selectedSkills == null ? Collections.emptyList() : selectedSkills;
+    }
+
+    /**
+     * 本次输入是否显式指定了技能视野（区分「未指定」与「指定了但被归一为空」）
+     */
+    public boolean hasSkillSelection() {
+        return selectedSkills != null;
+    }
+
+    /**
+     * 本次输入选中的 MCP 服务名清单（未指定时返回空集合，永不返回 null）
+     */
+    public List<String> getSelectedMcps() {
+        return selectedMcps == null ? Collections.emptyList() : selectedMcps;
+    }
+
+    /**
+     * 本次输入是否显式指定了 MCP 视野
+     */
+    public boolean hasMcpSelection() {
+        return selectedMcps != null;
+    }
+
+    /**
      * 本次输入的渠道来源身份（永不返回 null，无来源时为 {@link InputOrigin#NONE}）
      */
     public InputOrigin getOrigin() {
@@ -207,6 +251,59 @@ public final class HarnessInput {
     public HarnessInput selectedAgent(@Nullable String selectedAgent) {
         this.selectedAgent = selectedAgent;
         return this;
+    }
+
+    /**
+     * 本次请求生效的技能视野（宿主选择器 / 前端勾选的结果）
+     *
+     * <p>传入技能标识，支持三种写法：完整 aliasPath（{@code @user-skills/x}）、
+     * 带前缀写法、唯一短名（{@code x}）。引擎不做前缀补全也不做存在性校验，
+     * 解析口径统一交给 {@code SkillCatalog}；不存在的名称会被忽略（不抛异常），
+     * 以免一个过期技能名打死整轮对话。</p>
+     *
+     * <p>不调用本方法 = 不限制；调用但传空 = 重置为不限制。</p>
+     *
+     */
+    public HarnessInput selectedSkill(@Nullable String... names) {
+        this.selectedSkills = normalizeSelection(names);
+        return this;
+    }
+
+    /**
+     * 本次请求生效的 MCP 服务视野（按 {@code addMcpServer} 时的配置名匹配）
+     *
+     * <p>不调用本方法 = 不限制（全部已注册服务可见）；调用但传空 = 重置为不限制。</p>
+     *
+     */
+    public HarnessInput selectedMcp(@Nullable String... names) {
+        this.selectedMcps = normalizeSelection(names);
+        return this;
+    }
+
+    /**
+     * 空数组归一为 null（= 不限制），而不是空集合：
+     * 「显式传空」与「不传」等价，避免宿主序列化空列表时把孩子技能全关掉。
+     */
+    private static List<String> normalizeSelection(@Nullable String[] names) {
+        if (names == null || names.length == 0) {
+            return null;
+        }
+
+        // trim + 丢空 + 去重保序：宿主从前端勾选传上来的值带空格或重复是常态；
+        // 返回值必须不可变（Talent 侧多请求共享读取），否则调用方能反手改掉视野。
+        Set<String> normalized = new LinkedHashSet<>(names.length);
+        for (String name : names) {
+            if (name == null) {
+                continue;
+            }
+
+            String trimmed = name.trim();
+            if (trimmed.length() > 0) {
+                normalized.add(trimmed);
+            }
+        }
+
+        return normalized.isEmpty() ? null : Collections.unmodifiableList(new ArrayList<>(normalized));
     }
 
     /**

@@ -19,8 +19,13 @@ import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.talents.cli.SkillTalent;
+import org.noear.solon.ai.talents.gateway.McpGatewayTalent;
 import org.noear.solon.lang.Nullable;
 import reactor.core.publisher.Flux;
+
+import java.util.Collections;
+import java.util.List;
 
 /**
  * 一次输入的处置结果
@@ -239,6 +244,23 @@ public final class InputOutcome {
      */
     public String getCommandName() {
         return commandName;
+    }
+
+    /**
+     * 本次生效的技能视野（未指定、非消息路径或续流时返回空集合）
+     * <p>
+     * 从 Prompt attrs 派生（输入事实），供宿主在 UI 上展示「本次可见范围」，
+     * 也是排查「选了没反应」的最便宜可观测点。
+     */
+    public List<String> getSelectedSkills() {
+        return SkillTalent.getSelected(prompt);
+    }
+
+    /**
+     * 本次生效的 MCP 服务视野（未指定、非消息路径或续流时返回空集合）
+     */
+    public List<String> getSelectedMcps() {
+        return McpGatewayTalent.getSelected(prompt);
     }
 
     /**

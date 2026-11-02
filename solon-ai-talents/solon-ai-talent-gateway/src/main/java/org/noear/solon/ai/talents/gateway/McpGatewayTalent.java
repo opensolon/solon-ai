@@ -13,10 +13,10 @@ import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.lang.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -37,6 +37,60 @@ import java.util.stream.Collectors;
  */
 public class McpGatewayTalent extends AbsTalent {
     private static final Logger LOG = LoggerFactory.getLogger(McpGatewayTalent.class);
+    public static final String CTX_MCPS_SELECTED = "_mcps_selected";
+    public static List<String> getSelected(Prompt prompt) {
+        if (prompt == null) {
+            return Collections.emptyList();
+        }
+
+        return getSelected(prompt.attrs());
+    }
+
+    public static List<String> getSelected(Map<String,Object> toolContext) {
+        return toSelected(toolContext, CTX_MCPS_SELECTED);
+    }
+
+    /**
+     * 弱类型读取视野：toolContext 本质是 {@code Map<String,Object>}，强转会在类型不符时
+     * 抛 ClassCastException 打死整轮对话。
+     */
+    public static List<String> toSelected(Map<String,Object> map, String key) {
+        if (map == null) {
+            return Collections.emptyList();
+        }
+
+        Object tmp = map.get(key);
+        if (tmp == null) {
+            return Collections.emptyList();
+        }
+
+        List<String> result = new ArrayList<>();
+        if (tmp instanceof Collection) {
+            for (Object item : (Collection<?>) tmp) {
+                if (item != null && item.toString().trim().length() > 0) {
+                    result.add(item.toString().trim());
+                }
+            }
+        } else if (tmp instanceof String[]) {
+            for (String item : (String[]) tmp) {
+                if (item != null && item.trim().length() > 0) {
+                    result.add(item.trim());
+                }
+            }
+        } else {
+            for (String item : tmp.toString().split(",")) {
+                if (item.trim().length() > 0) {
+                    result.add(item.trim());
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public static void putSelected(Prompt prompt, List<String> mcpServerNames){
+        prompt.attrPut(CTX_MCPS_SELECTED, mcpServerNames);
+    }
 
     // 工具索引（自建，完全由本类管理）
     private final Map<String, Map<String, FunctionTool>> categoryTools = new ConcurrentHashMap<>();
@@ -304,12 +358,13 @@ public class McpGatewayTalent extends AbsTalent {
 
     @Override
     public boolean isSupported(Prompt prompt) {
-        return allTools.size() > 0;
+        return viewTools(prompt).isEmpty() == false;
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
-        final int size = allTools.size();
+        final Map<String, Map<String, FunctionTool>> view = viewCategories(prompt);
+        final int size = viewTools(prompt).size();
         StringBuilder sb = new StringBuilder();
         sb.append("## MCP工具发现规范 (共 ").append(size).append(" 个工具)\n");
 
@@ -326,7 +381,7 @@ public class McpGatewayTalent extends AbsTalent {
             sb.append("- **Step 3 (执行)**: 确认参数后，通过 `call_tool` 提交执行。\n\n");
 
             sb.append("#### 可用MCP工具清单:\n");
-            categoryTools.forEach((serverName, tools) -> {
+            view.forEach((serverName, tools) -> {
                 sb.append("- **[").append(serverName).append("]**:\n");
                 tools.values().forEach(t ->
                         sb.append("  - `").append(t.name()).append("`: ").append(t.description()).append("\n")
@@ -341,7 +396,7 @@ public class McpGatewayTalent extends AbsTalent {
             sb.append("- **Step 3 (执行)**: 确认参数后，通过 `call_tool` 提交执行。\n\n");
 
             sb.append("#### 可用MCP工具列表 (按服务展示):\n");
-            categoryTools.forEach((serverName, tools) -> {
+            view.forEach((serverName, tools) -> {
                 String names = String.join(", ", tools.keySet());
                 sb.append("- **").append(serverName).append("**: `").append(names).append("`\n");
             });
@@ -362,11 +417,12 @@ public class McpGatewayTalent extends AbsTalent {
 
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
-        int size = allTools.size();
+        Map<String, FunctionTool> view = viewTools(prompt);
+        int size = view.size();
 
         // FULL 模式：直接交付原始工具
         if (size <= dynamicThreshold) {
-            return allTools.values();
+            return view.values();
         }
 
         // SUMMARY 模式：上下文已包含摘要，无需搜索功能，只需提供详情与代理工具
@@ -378,6 +434,62 @@ public class McpGatewayTalent extends AbsTalent {
 
         // LIST & SEARCH 模式：提供完整的中转工具集（包含 search_tools）
         return this.getToolAry();
+    }
+
+    // ========== 视野（per-request 选择） ==========
+
+    /**
+     * 本次请求的 MCP 服务视野（未选择时返回全量）
+     * <p>
+     * 空视图<b>不</b>回退全量：选中一个不存在 / 已移除的服务时应当没有工具可用，
+     * 回退全量会让「我明明只勾了一个服务」变成「全都开着」，属于静默越权。
+     */
+    private Map<String, Map<String, FunctionTool>> viewCategories(@Nullable Prompt prompt) {
+        List<String> selected = getSelected(prompt);
+        if (selected.isEmpty()) {
+            return categoryTools;
+        }
+
+        Map<String, Map<String, FunctionTool>> view = new LinkedHashMap<>();
+        for (String serverName : selected) {
+            Map<String, FunctionTool> tools = categoryTools.get(serverName);
+            if (tools != null) {
+                view.put(serverName, tools);
+            }
+        }
+        return view;
+    }
+
+    /** 本次请求可见的工具（toolKey 小写） */
+    private Map<String, FunctionTool> viewTools(@Nullable Prompt prompt) {
+        List<String> selected = getSelected(prompt);
+        if (selected.isEmpty()) {
+            return allTools;
+        }
+
+        Map<String, FunctionTool> view = new LinkedHashMap<>();
+        for (String serverName : selected) {
+            Map<String, FunctionTool> tools = categoryTools.get(serverName);
+            if (tools != null) {
+                view.putAll(tools);
+            }
+        }
+        return view;
+    }
+
+    /** 工具是否落在本次选中的服务范围内（供 call_tool 做执行侧校验） */
+    private boolean isToolInScope(String toolKey, List<String> scope) {
+        if (scope.isEmpty()) {
+            return true;
+        }
+
+        for (String serverName : scope) {
+            Map<String, FunctionTool> tools = categoryTools.get(serverName);
+            if (tools != null && tools.containsKey(toolKey)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ========== 中转工具方法（由 AbsTalent 的 MethodToolProvider 自动扫描） ==========
@@ -489,6 +601,13 @@ public class McpGatewayTalent extends AbsTalent {
 
             if (tool == null) {
                 return ToolResult.success("错误：未找到MCP工具 '" + tool_name + "'");
+            }
+
+            // 视野校验：call_tool 是中转入口，模型可能绕过 getTools 的过滤直接点名未选中的服务。
+            // ToolRequest 构造时已把 toolContext 合并进 args，所以这里能读到 _mcps_selected。
+            List<String> scope = getSelected(args);
+            if (gatewayTalent.isToolInScope(tool.name().toLowerCase(), scope) == false) {
+                return ToolResult.success("错误：工具 '" + tool_name + "' 不在本次选中的 MCP 服务范围内");
             }
 
             try {

@@ -23,6 +23,7 @@ import org.noear.solon.ai.talents.mount.catalog.SkillCatalog;
 import org.noear.solon.ai.talents.mount.catalog.SkillContent;
 import org.noear.solon.ai.talents.mount.catalog.SkillDescriptor;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.lang.Nullable;
 
 import java.io.IOException;
 import java.util.*;
@@ -37,10 +38,76 @@ import java.util.stream.Collectors;
  * 3. SEARCH: 数量 > searchThreshold。强制搜索模式。
  */
 public class SkillTalent extends AbsTalent {
+    public final static String CTX_SKILLS_SELECTED = "_skills_selected";
+    public static List<String> getSelected(Prompt prompt) {
+        if (prompt == null) {
+            return Collections.emptyList();
+        }
+
+        return getSelected(prompt.attrs());
+    }
+
+    public static List<String> getSelected(Map<String,Object> toolContext) {
+        return toSelected(toolContext, CTX_SKILLS_SELECTED);
+    }
+
+    /**
+     * 弱类型读取视野：toolContext 本质是 {@code Map<String,Object>}，
+     * 宿主可能写 Collection / 数组 / 逗号分隔字符串。强转会在类型不符时
+     * 抛 ClassCastException 打死整轮对话，所以统一归一化。
+     */
+    public static List<String> toSelected(Map<String,Object> map, String key) {
+        if (map == null) {
+            return Collections.emptyList();
+        }
+
+        Object tmp = map.get(key);
+        if (tmp == null) {
+            return Collections.emptyList();
+        }
+
+        List<String> result = new ArrayList<>();
+        if (tmp instanceof Collection) {
+            for (Object item : (Collection<?>) tmp) {
+                if (item != null && item.toString().trim().length() > 0) {
+                    result.add(item.toString().trim());
+                }
+            }
+        } else if (tmp instanceof String[]) {
+            for (String item : (String[]) tmp) {
+                if (item != null && item.trim().length() > 0) {
+                    result.add(item.trim());
+                }
+            }
+        } else {
+            // 单值（含逗号分隔）兑底
+            for (String item : tmp.toString().split(",")) {
+                if (item.trim().length() > 0) {
+                    result.add(item.trim());
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public static void putSelected(Prompt prompt, List<String> skillNames){
+         prompt.attrPut(CTX_SKILLS_SELECTED, skillNames);
+    }
+
+
     private volatile SkillCatalog skillCatalog;
 
     private int listThreshold = 30;
     private int searchThreshold = 100;
+    /**
+     * 选中技能的预加载字符预算（默认 12000，0 表示不预加载）
+     * <p>
+     * 显式选中的技能通常意味着「本次就要用它」，预加载可以省掉模型的一个 skillread 来回；
+     * 但技能正文可能很大，因此按字符做预算：超预算的技能降级为「仅列名」，
+     * 由模型自行 skillread。
+     */
+    private int preloadCharLimit = 12000;
 
     public SkillTalent(SkillCatalog skillCatalog) {
         this.skillCatalog = Objects.requireNonNull(skillCatalog, "skillCatalog");
@@ -64,6 +131,14 @@ public class SkillTalent extends AbsTalent {
         return this;
     }
 
+    /**
+     * 选中技能的预加载字符预算（默认 12000，0 表示只收窄清单、不预加载）
+     */
+    public SkillTalent preloadCharLimit(int val) {
+        this.preloadCharLimit = Math.max(0, val);
+        return this;
+    }
+
     @Override
     public String description() {
         return "技能管理器。支持从本地或挂载点发现并加载技能 (SKILL.md)。";
@@ -71,13 +146,16 @@ public class SkillTalent extends AbsTalent {
 
     @Override
     public String getInstruction(Prompt prompt) {
-        Collection<SkillDescriptor> skillList = availableSkills();
+        Collection<SkillDescriptor> skillList = availableSkills(prompt);
         if (skillList.isEmpty()) return null;
 
         int total = skillList.size();
         StringBuilder sb = new StringBuilder();
 
         sb.append("优先使用合适的技能解决问题（不确定用什么技能时，可通过 skillsearch 搜索）。**注意：在执行任务中，请务必通过 `skillread` 读取或回顾规约。**\n\n");
+
+        // 显式选中的技能：先给正文，再给清单（让模型不必为一个已选技能多跑一次 skillread）
+        appendPreloadedSkills(prompt, sb);
 
         sb.append("## 技能库执行规约 (当前可用技能: " + total + ")\n");
 
@@ -112,7 +190,7 @@ public class SkillTalent extends AbsTalent {
 
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
-        Collection<SkillDescriptor> skillList = availableSkills();
+        Collection<SkillDescriptor> skillList = availableSkills(prompt);
         if (skillList.isEmpty()) return null;
 
         int total = skillList.size();
@@ -134,7 +212,7 @@ public class SkillTalent extends AbsTalent {
 
     @ToolMapping(name = "skilllist", description = "列出本地所有挂载点中的可用技能清单。")
     public String skilllist() {
-        Collection<SkillDescriptor> skillList = availableSkills();
+        Collection<SkillDescriptor> skillList = availableSkills(null);
         if (skillList.isEmpty()) {
             return "当前没有可用的技能。";
         }
@@ -183,9 +261,75 @@ public class SkillTalent extends AbsTalent {
         return "Error: " + name + " 不是有效的技能目录 (缺少 SKILL.md)";
     }
 
-    private Collection<SkillDescriptor> availableSkills() {
+    /**
+     * 当前视野内的技能：未指定选择时返回全部允许项；指定时按标识收窄
+     *
+     * <p>注意这是「视野」而不是「权限」：{@code skillread} 仍按 catalog 的 isAllowed 口径放行，
+     * 否则被选技能的 SKILL.md 里引用另一个技能时会断链。</p>
+     */
+    private Collection<SkillDescriptor> availableSkills(@Nullable Prompt prompt) {
+        List<String> selected = getSelected(prompt);
+
         return skillCatalog.getDescriptors().stream()
-                .filter(skillCatalog::isAllowed).collect(Collectors.toList());
+                .filter(skillCatalog::isAllowed)
+                .filter(s -> selected.isEmpty() || matchesSelected(s, selected))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 与 {@code DefaultSkillCatalog#find} 同口径的匹配：完整 id / 短名 / 无前缀写入时的 @id
+     */
+    private static boolean matchesSelected(SkillDescriptor descriptor, List<String> selected) {
+        String id = descriptor.getId();
+        String name = descriptor.getName();
+
+        for (String item : selected) {
+            if (item.equals(id) || item.equals(name)) {
+                return true;
+            }
+            
+            if (item.startsWith("@") == false && ("@" + item).equals(id)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * 预加载选中技能的正文（受 {@link #preloadCharLimit} 约束）
+     */
+    private void appendPreloadedSkills(@Nullable Prompt prompt, StringBuilder sb) {
+        List<String> selected = getSelected(prompt);
+        if (selected.isEmpty() || preloadCharLimit <= 0) {
+            return;
+        }
+
+        int remaining = preloadCharLimit;
+        StringBuilder block = new StringBuilder();
+
+        for (String name : selected) {
+            SkillContent content = skillCatalog.readContent(name);
+            if (content == null) {
+                // 不存在的选择名忽略，不报错：一个过期技能名不应打死整轮对话
+                continue;
+            }
+
+            if (content.getRenderedText().length() > remaining) {
+                block.append("<preloaded_skill name=\"").append(content.getDescriptor().getId())
+                        .append("\" skipped=\"over_budget\" />\n");
+                continue;
+            }
+
+            remaining -= content.getRenderedText().length();
+            block.append("<preloaded_skill name=\"").append(content.getDescriptor().getId()).append("\">\n")
+                    .append(content.getRenderedText().trim()).append("\n</preloaded_skill>\n");
+        }
+
+        if (block.length() > 0) {
+            sb.append("### 已选技能（正文已预加载，无需再次 skillread）\n");
+            sb.append(block).append("\n");
+        }
     }
 
     @ToolMapping(name = "skillrefresh", description = "重新扫描所有挂载点，更新技能列表。")

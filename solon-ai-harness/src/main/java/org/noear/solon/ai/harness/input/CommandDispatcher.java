@@ -60,6 +60,19 @@ public final class CommandDispatcher {
                                                   CommandContextFactory factory,
                                                   @Nullable InputOrigin origin,
                                                   boolean terminal) throws Exception {
+        return dispatch(engine, session, command, factory, origin, terminal, null);
+    }
+
+    /**
+     * @param input 原输入上下文（可为空）；非空时把它的技能 / MCP 视野透传给命令二段任务
+     */
+    public static @Nullable InputOutcome dispatch(HarnessEngine engine,
+                                                  AgentSession session,
+                                                  @Nullable ParsedCommand command,
+                                                  CommandContextFactory factory,
+                                                  @Nullable InputOrigin origin,
+                                                  boolean terminal,
+                                                  @Nullable HarnessInput input) throws Exception {
         if (command == null) {
             return null;
         }
@@ -91,11 +104,25 @@ public final class CommandDispatcher {
         InputOutcome nested = null;
         AgentTaskIntent intent = ctx.getAgentTaskIntent();
         if (intent != null) {
-            nested = engine.handle(HarnessInput.of(session, intent.getPrompt())
+            HarnessInput nestedInput = HarnessInput.of(session, intent.getPrompt())
                     .commandAware(false)  //命令产物不是用户手输，不再识别命令
                     .resume(intent.isResume())  //正文为空即续流，先于空输入判空生效（/continue）
                     .selectedAgent(selectedAgentOf(session))  //保留会话级子代理选择
-                    .selectedModel(intent.getModel()));
+                    .selectedModel(intent.getModel());
+
+            //视野透传：命令触发的任务与手输消息必须看得见同一批资源，否则同一个 /xxx 在主路径与
+            //命令路径上行为不一致（这类差异极难定位）。
+            if (input != null) {
+                if (input.hasSkillSelection()) {
+                    nestedInput.selectedSkill(input.getSelectedSkills().toArray(new String[0]));
+                }
+
+                if (input.hasMcpSelection()) {
+                    nestedInput.selectedMcp(input.getSelectedMcps().toArray(new String[0]));
+                }
+            }
+
+            nested = engine.handle(nestedInput);
         }
 
         //任务标记与回执由上下文自己报告，避免分发器 instanceof 具体实现（CLI 的实时上下文不是缓冲式）

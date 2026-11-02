@@ -1443,6 +1443,9 @@ public class HarnessEngine {
      * 模型为空时回退会话级选择（{@link #CTX_MODEL_SELECTED}），再回退默认模型；
      * 子代理为空时使用主代理。
      * <p>
+     * {@code input} 非空时把本次技能 / MCP 视野写入 toolContext：续流路径 {@code prompt} 为空，
+     * attrs 无处可写，只能依靠 toolContext（ReAct 的 activeTalents 会把它覆盖回 originalPrompt.attrs）。
+     * <p>
      * 对外开放的输入入口只有 {@link #handle(HarnessInput)}
      * （及其重载）；需要续流时用 {@link HarnessInput#resume(boolean)}。
      *
@@ -1450,14 +1453,29 @@ public class HarnessEngine {
      * @param prompt    提示词（续流时为空）
      * @param modelName 模型名（可为空）
      * @param agentName 子代理名（可为空）
+     * @param selectedSkills 选择 skill name
+     * @param selectedMcps 选择 mcp server name
      */
     private ReActRequest promptDo(@Nullable AgentSession session, @Nullable Prompt prompt,
-                                 @Nullable String modelName, @Nullable String agentName) {
+                                  @Nullable String modelName,
+                                  @Nullable String agentName,
+                                  @Nullable List<String> selectedSkills,
+                                  @Nullable List<String> selectedMcps) {
         ReActRequest request = promptDo(prompt, getAgentOrMain(agentName));
 
         if (session != null) {
             request.session(session);
         }
+
+
+        if (Assert.isNotEmpty(selectedSkills)) {
+            request.options(o -> o.toolContextPut(SkillTalent.CTX_SKILLS_SELECTED, selectedSkills));
+        }
+
+        if (Assert.isNotEmpty(selectedMcps)) {
+            request.options(o -> o.toolContextPut(McpGatewayTalent.CTX_MCPS_SELECTED, selectedMcps));
+        }
+
 
         final String realModelName = resolveSessionModelName(session, modelName);
         if (realModelName != null) {
@@ -1542,7 +1560,7 @@ public class HarnessEngine {
                 //2) pendingHitl == 0 —— 批内仍有未决卡时续流会把它们一并带走；
                 //3) 宿主显式传 resume —— 只写决策的批量场景不自作主张。
                 return InputOutcome.task(null, agentName, resolveSessionModelName(session, input.getSelectedModel()),
-                        promptDo(session, null, input.getSelectedModel(), agentName), true);
+                        promptDo(session, null, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps()), true);
             }
 
             //未续流的两种情形都归入 HITL，由宿主按 isHitlApplied / getPendingHitlCount 决定后续动作。
@@ -1555,7 +1573,7 @@ public class HarnessEngine {
             String agentName = Assert.isNotEmpty(input.getSelectedAgent())
                     ? input.getSelectedAgent() : input.getExplicitAgent();
             return InputOutcome.task(null, agentName, resolveSessionModelName(session, input.getSelectedModel()),
-                    promptDo(session, null, input.getSelectedModel(), agentName));
+                    promptDo(session, null, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps()));
         }
 
         if (Assert.isEmpty(input.getText()) && !attachments.hasAny()) {
@@ -1599,18 +1617,19 @@ public class HarnessEngine {
         }
 
         // ========== 5. Prompt 构建 ==========
-        Prompt prompt = buildInputPrompt(text, attachments, input.getOrigin().getChannel(), agentName);
+        Prompt prompt = buildInputPrompt(text, attachments, input.getOrigin().getChannel(), agentName, input);
 
         // ========== 6. 请求装配 ==========
         String modelName = resolveSessionModelName(session, input.getSelectedModel());
         return InputOutcome.task(prompt, agentName, modelName,
-                promptDo(session, prompt, input.getSelectedModel(), agentName));
+                promptDo(session, prompt, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps()));
     }
 
     /**
-     * 构建输入提示词（有多媒体时组装多模态内容，并写入来源 / 附件 / 子代理元数据）
+     * 构建输入提示词（有多媒体时组装多模态内容，并写入来源 / 附件 / 子代理 / 视野元数据）
      */
-    private Prompt buildInputPrompt(String text, InputAttachments attachments, @Nullable String channel, @Nullable String agentName) {
+    private Prompt buildInputPrompt(String text, InputAttachments attachments, @Nullable String channel,
+                                    @Nullable String agentName, @Nullable HarnessInput input) {
         UserMessage userMsg;
 
         if (attachments.hasMedia()) {
@@ -1636,7 +1655,21 @@ public class HarnessEngine {
             userMsg.addMetadata("agent", agentName);
         }
 
-        return Prompt.of(userMsg);
+        Prompt prompt = Prompt.of(userMsg);
+
+        if (input != null) {
+            // 双写：attrs 是「本次输入选了什么」的事实（供回执 / 日志 / 宿主回读），
+            // toolContext 是「本次执行生效什么」（promptDo 写入）。两者冲突时 toolContext 优先。
+            if (input.hasSkillSelection()) {
+                SkillTalent.putSelected(prompt, input.getSelectedSkills());
+            }
+
+            if (input.hasMcpSelection()) {
+                McpGatewayTalent.putSelected(prompt, input.getSelectedMcps());
+            }
+        }
+
+        return prompt;
     }
 
     /**
@@ -1728,7 +1761,7 @@ public class HarnessEngine {
         CommandContextFactory factory = input.getCommandContextFactory();
         CommandContextFactory realFactory = factory != null ? factory : new BufferedCommandContextFactory();
         try {
-            return CommandDispatcher.dispatch(this, session, command, realFactory, input.getOrigin(), input.isTerminal());
+            return CommandDispatcher.dispatch(this, session, command, realFactory, input.getOrigin(), input.isTerminal(), input);
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
