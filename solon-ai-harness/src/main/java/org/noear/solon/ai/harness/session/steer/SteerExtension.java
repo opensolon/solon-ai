@@ -132,6 +132,16 @@ public class SteerExtension<C> extends AbsHarnessExtension {
         return SteerInterceptor.cancel(box, steerId);
     }
 
+    /**
+     * 待生效的插话快照（按投递顺序；无邮箱时返回空集合）
+     * <p>
+     * 与 {@link #cancel} 配对：宿主刷新/重连后靠它重建「可取消」列表，
+     * 否则 steerId 只存在于投递返回值中，页面一刷就永远取消不了。
+     */
+    public java.util.List<SteerMessage> pending(AgentSession session) {
+        return SteerInterceptor.pending(session);
+    }
+
     /** 每次事件回调时从供应商取最新端口并转发（端口实例可随工作区重建而更换）。 */
     private static final class ForwardingPort<C> implements SteerOutputPort<C> {
         private final Supplier<SteerOutputPort<C>> supplier;

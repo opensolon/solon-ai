@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -183,6 +184,23 @@ public class SteerInterceptor<C> extends AbsReActInterceptor implements ReActInt
     @SuppressWarnings("unchecked")
     public static Queue<SteerMessage> steerBox(AgentSession session) {
         return (Queue<SteerMessage>) session.attrs().get(ATTR_STEER_BOX);
+    }
+
+    /**
+     * 当前仍留在邮箱中的插话快照（按投递顺序，不创建邮箱）
+     * <p>
+     * 供宿主渲染「待生效插话」列表与定位可取消项：{@link #cancel(Queue, String)} 需要 steerId，
+     * 而 steerId 只出现在投递返回值里——不提供本方法时，宿主重启或刷新后就再也无法取消
+     * 一条尚未生效的插话。
+     * <p>
+     * 返回副本：遍历期间的消费（推理线程 poll）不影响调用方，也不长期持有邮箱。
+     */
+    public static List<SteerMessage> pending(AgentSession session) {
+        Queue<SteerMessage> box = steerBox(session);
+        if (box == null || box.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return new ArrayList<>(box);
     }
 
     /** 容量校验、ID 去重与入队必须在同一邮箱的短临界区内完成。 */

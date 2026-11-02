@@ -7,6 +7,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -133,6 +134,44 @@ class SteerExtensionTest {
 
         SteerResult ok = ext.steer(session, "补充", null);
         assertTrue(ok.isSteered(), "null 来源应回落 InputOrigin.NONE 而非报错");
+    }
+
+    @Test
+    void pendingListsUnappliedSteersAndCancelUsesThoseIds() {
+        SteerExtension<Object> ext = new SteerExtension<>(() -> null);
+        AgentSession session = InMemoryAgentSession.of();
+
+        // 邮箱未创建时返回空集合（不是 null），宿主可以直接 for-each
+        assertTrue(ext.pending(session).isEmpty());
+
+        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
+        SteerResult a = ext.steer(session, "第一条");
+        SteerResult b = ext.steer(session, "第二条");
+        assertTrue(a.isSteered());
+        assertTrue(b.isSteered());
+
+        // pending 按投递顺序，且带出 cancel 所需的 steerId
+        assertEquals(2, ext.pending(session).size());
+        assertEquals(a.getSteerId(), ext.pending(session).get(0).getId());
+        assertEquals("第二条", ext.pending(session).get(1).getText());
+
+        // 用 pending 里的 id 取消，不依赖投递时保存的返回值（刷新页面场景）
+        assertTrue(ext.cancel(session, ext.pending(session).get(0).getId()));
+        assertEquals(1, ext.pending(session).size());
+    }
+
+    @Test
+    void pendingReturnsSnapshotCopy() {
+        AgentSession session = InMemoryAgentSession.of();
+        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
+
+        SteerInterceptor.steer(session, null, null, "补充", null, null);
+        List<SteerMessage> snapshot = SteerInterceptor.pending(session);
+
+        // 清掉真实邮箱，快照不应跟着变（返回的是副本，不是活动视图）
+        SteerInterceptor.steerBox(session).clear();
+        assertEquals(1, snapshot.size());
+        assertTrue(SteerInterceptor.pending(session).isEmpty());
     }
 
     @Test

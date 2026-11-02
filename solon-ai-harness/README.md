@@ -190,6 +190,8 @@ HarnessInput input = HarnessInput.of(session, "帮我看看这个 @coder")
 | `agentNameValidator(Predicate)` | 子代理名格式校验 |
 | `trimContent(boolean)` | 剥提及后去首尾空白（桌面端需要） |
 | `origin(InputOrigin)` | 本次输入的渠道来源身份（渠道 / 发送者 / 返回地址 / 入站关联键） |
+| `selectedSkill(String...)` | 本次请求的技能视野（收窄技能清单 + 预加载选中技能正文） |
+| `selectedMcp(String...)` | 本次请求的 MCP 服务视野（按 `addMcpServer` 的配置名匹配） |
  | `hitl(action, callId)` + `hitlOutput(text)` | 审批决策与结果改写；`action` 是 `HITLAction` 枚举（APPROVE / REJECT / SKIP），线上字符串由宿主用 `HITLAction.of(action)` 解析，脏值显式报错 |
 | `commandContextFactory(CommandContextFactory)` | 识别到命令后回执怎么落地（默认缓冲式） |
 | `commandAware(boolean)` | 是否把输入当命令识别（默认 `true`） |
@@ -203,6 +205,40 @@ HarnessInput input = HarnessInput.of(session, "帮我看看这个 @coder")
 - **`agentAware(false)`**——文本由程序生成时使用（如 goal 的 objective）。即使以 `@xxx` 开头也原样交给代理，不被当作提及剥离。与 `commandAware` 成对：`/` 前缀是命令，`@` 前缀是子代理。
 - **`terminal(true)`**——只有命令行宿主才开。它同时决定 `terminalOnly()` 命令是否放行、以及 `CommandContext.isTerminal()` 的返回值；不开则 `/exit` 类命令被统一拦截。与 `origin` 无关：桌面在本地运行但无终端能力。
 - **`resume(true)`**——本次不产生新用户输入，只按会话中挂起的 `tool_calls` 续跑。文本与附件都被忽略。它与 `hitl(action, callId)` 合用表示「写完决策就试着续流」，但**只是一种意愿表达，不保证续流一定发生**：引擎会在写入决策后自检三项，全部成立才装配请求返回 `TASK`，否则返回 `HITL` 并携带事实（详见 §2.3）。三端的正确写法都是传 `resume(true)` 后只 `switch (kind)`——批挂起时引擎会拒绝过早续流，宿主不必自己判断「整批是否齐备」。
+
+#### 视野选择：`selectedSkill` / `selectedMcp`
+
+这两个方法解决的是一类问题：**技能与 MCP 服务是引擎级全局挂载的，但用户常常只想让某一次对话看见其中几个**。它们按**请求**收窄，不改全局装配，因此天然线程安全（Talent 是引擎级单例，选择随 `Prompt` 走）。
+
+```java
+HarnessInput.of(session, "用那个技能查一下订单表")
+        .selectedSkill("@user-skills/investment-report")   // 只开放这一个技能
+        .selectedMcp("mysql", "slack");                    // 只开放这两个 MCP 服务
+```
+
+语义三条（都有测试锁定）：
+
+| 写法 | 含义 |
+|---|---|
+| 不调用 | 不限制，沿用全量目录 / 全部已注册服务 |
+| 传空数组 | **等价于不调用**（归一为不限制），避免序列化空列表时把资源全关掉 |
+| 传名称 | 收窄到这些项；trim + 去重保序，返回值不可变 |
+
+两个容易误解的点：
+
+- **它不校验存在性**。传错 / 过期的名字只是「匹配不到」，不会抛异常——一个拼错的技能名不该打死整轮对话。宿主若需要严格校验，请自己先查 `SkillCatalog`。
+- **技能标识不做前缀补全**。`@user-skills/a`、`user-skills/a`、唯一短名 `a` 三种写法都接受，解析口径统一在 `SkillCatalog`；`selectedSkill("a")` 不会因为书写形态不同而失效。
+
+生效方式不是「过滤掉工具」，而是两层：
+
+1. **收窄视野**：`SkillTalent` 的清单、档位判断、`skilllist` 输出都跟着变；`McpGatewayTalent` 的四档模式按**收窄后**的工具数重新分档——只勾一个服务时工具数通常 ≤ `dynamicThreshold`，于是自动落入 FULL 模式，模型拿到完整 schema 直接调用，省掉 `search_tools → get_tool_detail → call_tool` 三跳。
+2. **预加载正文**：选中的技能正文会拼进指令，省掉一次 `skillread` 往返。按字符预算（`preloadCharLimit`，默认 12000）控制，超预算的技能降级为 `skipped="over_budget"` 只留名字。
+
+> **`skillread` 故意不受视野限制**：被选技能的 `SKILL.md` 里引用另一个技能时，限制读取会直接断链。视野是「模型无需搜索就能看到什么」，不是权限边界。
+
+MCP 侧另有一处执行侧校验：`call_tool` 是中转入口，模型可能绕过 `getTools` 的过滤直接点名未选中的服务，因此它在执行前会比对视野并拒绝越界调用（`工具 'x' 不在本次选中的 MCP 服务范围内`）。
+
+**穿透范围**：子代理（`task` / `multitask`）与命令触发的二段任务会**继承**父级视野。否则会出现「主代理只看得到 A 技能、子代理却能看见全部」的静默不一致。
 
 ### 2.3 `InputOutcome`：处置态
 
@@ -244,6 +280,7 @@ switch (outcome.getKind()) {
 | `call()` / `stream()` | 终态收束：前转 `getRequest().call()` / `.stream()`，仅 `TASK` 有效（非 TASK 抛 `IllegalStateException` / 返回 `Flux.error`） |
 | `getPrompt()` | 装配好的 `Prompt`（含附件前缀与图片块；续流时为 null） |
 | `getAgentName()` / `getModelName()` | 生效的子代理 / 模型（HITL 态下为 `resolveHitlAgent` 解析结果） |
+| `getSelectedSkills()` / `getSelectedMcps()` | 本次生效的技能 / MCP 视野（未指定、非消息路径或续流时为空集合） |
 | `isHitlInput()` | 本次输入是否为审批决策（审批触发的 `TASK` 也为 true） |
 | `isHitlApplied()` | 决策是否真的写入；`false` = 过期审批卡（无匹配挂起任务），非审批输入为 null |
 | `getPendingHitlCount()` | 决策写入后仍待审批的挂起项数量；0 表示本批已齐备 |
@@ -1080,6 +1117,43 @@ queue.ack(session, item.getId());
 | `cancelItem` / `promote` / `cancelPending` | 取消单条 / 置顶 / 清空并递增代际 |
 | `importItems(session, rows)` | 旧 `queue-tasks.json` 一次性迁移，返回实际导入条数 |
 
+#### 运行期操作：任务在跑时改队列
+
+排队只在「当前任务结束、会话空闲」时才被消费，所以任务运行期间队列里的东西都是**可以改的**——这正是 `/queue` 的可操作窗口，比 `/steer` 宽得多（后者只在推理边界可用）。
+
+```java
+// ① 看：运行中任务在首位（status = RUNNING），其余为 PENDING
+List<SessionQueueItem> items = queue.view(session);
+for (SessionQueueItem it : items) {
+    System.out.println(it.getId() + " " + it.getStatus() + " " + it.getText());
+}
+
+// ② 取消某一条待执行任务（只能取消 PENDING；运行中那条不在队列里，取消返回 false）
+queue.cancelItem(session, itemId);
+
+// ③ 把某条提到队首（下一个就执行它）
+queue.promote(session, itemId);
+
+// ④ 清空全部待执行，包括已被 drain 暂存的那条；in-flight 不受影响
+queue.cancelPending(session);
+```
+
+三个语义细节：
+
+- **`cancelItem` / `promote` 都只能作用于 PENDING**。运行中那条已从队列出队并记为 in-flight，不在 `Deque` 里，对它的 id 调用一律返回 `false`。要停运行中那条，用 `engine.interrupt(session)`。
+- **`cancelPending` 会递增代际**（`session.queue.generation`）：它之后到达的 `requeueFront`（旧代际的回队请求）会被拒绝，避免「用户清了队列又冒出一条」。但它**不动 in-flight**，所以“清队列”不等于“停任务”。
+- **`promote` 没有重排位次的概念**：只有置顶，没有“插到第 3 位”。需要精确排序请 `cancelItem` 后重新 `enqueue`。
+
+**任务在跑时“再插一条”就是普通 `enqueue`**——它不需要任何特殊入口，也不会打扰运行中的任务：
+
+```java
+// 任务正在跑，用户又补了一句：直接入队，等当前任务结束后自动续发
+int pos = queue.enqueue(session, "跑完顺便把文档也更新一下");
+// pos = 队列位置（从 1 计）；-1 = 已满 / 超长 / 扩展已停用
+```
+
+这也是 §5.4 场景 A 的降级目标：`steer` 返回 `BOX_FULL` 或 `NOT_RUNNING` 时改走 `enqueue`，语义上就是从「注入当前任务」变成「排在它后面」。
+
 `drainOne` 内部顺序：`tryClaim`（同一时刻只允许一个运行者 poll）→ `poll`（队首出队并置为 RUNNING + 记为 in-flight）→ 执行回调 → **按分支收尾**（见下表）→ `releaseClaim`。
 
 | 分支 | 行为 | 返回值 |
@@ -1168,8 +1242,20 @@ engine.addExtension(steer);   // initialize 注册 /steer 命令；configure 把
 steer.steer(session, "改用 PostgreSQL 方言");              // 最简：投给当前活跃任务
 steer.steer(session, "改用 PostgreSQL 方言", origin);      // 带渠道来源
 steer.steer(session, null, null, text, origin, null);   // 全参（与 /steer 命令、/web/chat/steer 同源）
+steer.pending(session);                                // 待生效插话快照（按投递顺序，不创建邮箱）
 steer.cancel(session, steerId);                        // 取消仍在邮箱中的插话
 ```
+
+四个方法的相对关系：
+
+| 场景 | 入口 | 返回值 |
+|---|---|---|
+| 任务在跑，插一句 | `steer(session, text)` | `SteerResult`（`STEERED` 才算入队） |
+| 刷新/重连后看还有哪几条未生效 | `pending(session)` | `List<SteerMessage>`（副本，不持锁） |
+| 取消其中一条 | `cancel(session, steerId)` | `boolean`，`false` = 已被消费或 id 不存在 |
+| 全不要了 | 逐条 `cancel`（无批量入口） | — |
+
+**为什么需要 `pending`**：`cancel` 需要 `steerId`，而 `steerId` 只出现在投递返回值里。没有 `pending` 时，宿主一旦刷新页面或重连，就再也无法取消一条尚未生效的插话——它还会在下一个推理边界被注入，用户“明明取消了却生效”。`pending` 返回的是副本，推理线程同时 `poll` 不会影响遍历，宿主也不该拿它当持久数据。
 
 两参重载把 `runId` / `steerId` / `busyRecheck` 三个高级参数全缺省：`runId=null` = 不比对轮次、绑当前活跃任务，`steerId=null` = 框架生成，`busyRecheck=null` = 仅按 `activeRunId` 判定。它**不降级、不改语义**，返回的仍是同一个 `SteerResult`。两参版的来源缺省为 `InputOrigin.NONE`，要保留渠道身份用三参版。
 
@@ -1297,6 +1383,23 @@ if (engine.interrupt(session)) { /* 通知前端已停止 */ }
 | 停 | `engine.interrupt(session)` | 立即终止当前流，**并清空队列** | 有在跑的流（`attrs("disposable")`） | 返回 `false`，不写任何消息 |
 | 改 | `steer.steer(session, text)` | 注入当前任务的工作记忆，下一采样边界生效 | `activeRunId` 已建立（首轮推理开始后） | 返回 `NOT_RUNNING` / `TURN_CHANGED` |
 | 重排 | `queue.enqueue(session, text)` | 登记一条待执行，等空闲后续发 | 无 | 照常入队 |
+
+#### 运行期操作速查
+
+三个能力各自的「运行中能做什么」分散在 §5.1/5.2/5.3，这里汇总成一张表，方便宿主对着写控制面板：
+
+| 能力 | 能看什么 | 能改什么 | 入口 |
+|---|---|---|---|
+| goal | `goal.state(session)` / `goal.running(session)` / `goal.toTaskMap(...)` | 暂停 / 恢复 / 改配置 / 清除 | `pause` · `resume` · `updateAndReschedule` · `clear`（§5.1） |
+| queue | `queue.view(session)`（运行中在首位） | 取消单条 / 置顶 / 清空 / 再入队 | `cancelItem` · `promote` · `cancelPending` · `enqueue`（§5.2） |
+| steer | `steer.pending(session)` | 取消单条（无批量） | `steer` · `cancel`（§5.3） |
+| 停 | — | 停流 + 清队列 | `engine.interrupt(session)`（本节） |
+
+三个容易搞混的边界：
+
+- **goal 的暂停与 queue 的清空不会停当前这轮**。它们只影响「下一轮还跑不跑」：goal 的 `pause` 是状态机转 `PAUSED`，当前轮内已经在执行的工具调用不会被打断；queue 的 `cancelPending` 不动 in-flight。真正“现在立刻停”只有 `engine.interrupt`。
+- **steer 没有“改”的能力**。已入邮箱的插话只能取消后重新投递，不支持就地编辑——文本不可变，且邮箱里若已满 5 条，取消一条才能再投一条。
+- **goal 与 queue/steer 不同层**。goal 是会话级持续轮次，queue/steer 服务于单次任务；一个会话可以有 goal 同时又有排队任务，但 goal 的每轮也会走 `bridge.isBusy` 守卫，不与宿主正在跑的任务抢。
 
 从这张表可以直接推出两个宿主要自己处理的边界：
 
@@ -1780,6 +1883,7 @@ org.noear.solon.ai.harness
 23. **`.scheduler(null)` 之后调度类方法全是空操作**——`hasScheduler()` 为 `false`，`scheduleNow` / `resumeScheduleOnly` / `unschedule` / `stopAll` 静默返回。纯测试宿主排查「调了 `scheduleNow` 却没跑」先看这里。
 24. **`GoalExtension.of(...)` 不建命令也不建调度**——它是存量入口（未标 `@Deprecated`），适合宿主已有 `GoalEngine`、只借 Talent 与门面的场景；`getGoalScheduler()` 为 `null`，与 builder 形态的能力不等价。
 25. **命令文本与门面调用是同一个动作，别把两者的返回值当一回事**——`engine.handle(HarnessInput.of(s, "/queue 跑测试"))` 得到的是 `Kind.REPLY` + 人读回执，`queue.enqueue(s, "跑测试")` 得到的是位置 `int`（`-1` = 失败）。宿主要程序判定就走门面，要现成文案就走文本路径；**两条都走会入队两次**（命令路径无幂等保护）。
+26. **`steer` 取消了也可能已经生效**——`cancel(session, steerId)` 返回 `false` 不代表出错，只代表那条已被推理线程 `poll` 出去了（已经或即将注入）。同理 `pending(session)` 是快照，读到的下一瞬就可能被消费；宿主不要用它做“一定还能取消”的保证，只能作为 UI 展示依据。
 
 ---
 
