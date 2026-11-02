@@ -59,7 +59,12 @@ public final class SessionInterrupt {
      * <p>运行句柄的登记已上收到 {@code ReActRequest}（经 {@link SessionRuns}），
      * 宿主无需再往 {@code session.attrs()} 里写 key。</p>
      *
-     * @return true = 确有运行中的任务被中断；false = 当前没有正在执行的任务
+     * <p><b>返回 {@code false} 不代表没有发生任何事</b>：取消代数依然推进
+     * （见 {@link SessionRuns#cancelAll(AgentSession)}）。宿主可能刚把订阅调度到别的线程、
+     * 句柄尚未登记，此刻的中断必须能拦住那条「随后才到」的流。
+     * 返回 {@code false} 只意味着「调用时没有已登记的活跃流」，不是「用户可以重试」。</p>
+     *
+     * @return true = 确有运行中的任务被中断；false = 调用时没有已登记的活跃流（但取消代数已推进）
      */
     public static boolean interrupt(AgentSession session) {
         if (session == null) {

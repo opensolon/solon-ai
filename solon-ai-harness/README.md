@@ -1356,13 +1356,17 @@ boolean engine.interrupt(@Nullable AgentSession session);
 | # | 动作 | 为何要这个顺序 |
 |---|---|---|
 | ① | 清排队（`SessionQueue.cancelPending`，含已被 drain 暂存的项） | **必须早于停流**：停流后宿主常在终态回调里续发队首，顺序颠倒会把刚停掉的任务重新推起来 |
-| ② | 释放 `attrs("disposable")` 流句柄 | 句柄为 `null` 时直接返回 `false`，不写取消消息 |
+| ② | 取消 `SessionRuns` 登记的全部运行句柄 | 无活跃句柄时直接返回 `false`，不写取消消息（但**取消代数仍会推进**，见下） |
 | ③ | 补写取消消息（带 `META_RUN_ID`） | 让前端把气泡挂到正确轮次 |
 | ④ | `updateSnapshot()` | 中断时 agent 收尾被跳过，trace 与取消消息需一并持久化 |
 
+> **返回 `false` ≠ 什么都没发生**：取消代数（`SessionRuns.cancelCount`）依然推进。这是刻意的——
+> 宿主可能刚把订阅调度到别的线程、句柄尚未登记，此刻的 `interrupt` 必须能拦住那条「随后才到」的流。
+> 不要用 `false` 去判断「用户这次点击无效」，它只表示「点击时没有已登记的活跃流」。
+
 > **行为变更点**：早期 `/interrupt` 只停当前流、队列里排着的任务之后还会继续跑；现在「停」是彻底的（队列一并清空）。这正是 `//todl: SessionQueue.cancelPending(session)` 那条旧待办的本意——「停了还在跑」比「停得干净」更违反直觉。
 
-宿主已有的停止入口可以改成调它，不必再拼 `"/interrupt"` 文本或自己复刻 `attrs().remove("disposable") + dispose()`：
+宿主已有的停止入口可以改成调它，不必再拼 `"/interrupt"` 文本，也不必关心句柄存在哪里：
 
 ```java
 // 之前：session.attrs().remove("disposable") → dispose() → 自己补消息与快照
@@ -1370,11 +1374,15 @@ boolean engine.interrupt(@Nullable AgentSession session);
 if (engine.interrupt(session)) { /* 通知前端已停止 */ }
 ```
 
+> **句柄登记已上收到框架**：`ReActRequest#stream()` 订阅时会自动登记到 `SessionRuns`，
+> 结束时按值注销，宿主<b>不需要（也不应该）</b>往 `session.attrs()` 里写任何 key。
+> 早期版本要求宿主写 `attrs("disposable")`，那个约定已废弃；现在写它不会生效，也不会报错。
+
 #### 三者的职责边界
 
 | 能力 | 入口 | 语义 | 前置条件 | 任务未运行时 |
 |---|---|---|---|---|
-| 停 | `engine.interrupt(session)` | 立即终止当前流，**并清空队列** | 有在跑的流（`attrs("disposable")`） | 返回 `false`，不写任何消息 |
+| 停 | `engine.interrupt(session)` | 立即终止当前流，**并清空队列** | 有在跑的流（`SessionRuns.isBusy(session)`） | 返回 `false`，不写任何消息（但推进取消代数） |
 | 改 | `steer.steer(session, text)` | 注入当前任务的工作记忆，下一采样边界生效 | `activeRunId` 已建立（首轮推理开始后） | 返回 `NOT_RUNNING` / `TURN_CHANGED` |
 | 重排 | `queue.enqueue(session, text)` | 登记一条待执行，等空闲后续发 | 无 | 照常入队 |
 

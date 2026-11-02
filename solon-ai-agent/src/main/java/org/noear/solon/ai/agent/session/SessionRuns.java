@@ -166,7 +166,11 @@ public final class SessionRuns {
      * 换槽与取消之间不存在「取消了却仍能被 add 进来」的空隙，正因如此，
      * 「已创建、未订阅」的流在随后 attach 时会直接落到已取消的槽上。</p>
      *
-     * @return true = 确有活跃流被停掉；false = 当时没有活跃流
+     * <p><b>返回 false 不代表什么都没发生</b>：取消代数依然推进。宿主可能刚把订阅
+     * 调度到别的线程、句柄尚未登记，此刻的取消必须能拦住那条「随后才到」的流，
+     * 否则会出现一条取消不掉的幽灵流。因此不要把 false 当作「用户可以重试」的依据。</p>
+     *
+     * @return true = 确有活跃流被停掉；false = 当时没有活跃流（但取消代数已推进）
      */
     public static boolean cancelAll(AgentSession session) {
         Disposable.Composite claimed = claim(session);
@@ -186,7 +190,7 @@ public final class SessionRuns {
      *
      * <p>调用者必须负责 dispose 返回值（可直接 {@link Disposable#dispose()}）。</p>
      *
-     * @return 被认领的句柄集合；null = 当时没有活跃流
+     * @return 被认领的句柄集合；null = 当时没有活跃流（但取消代数已推进）
      */
     public static Disposable.Composite claim(AgentSession session) {
         return cancel(session, true);
