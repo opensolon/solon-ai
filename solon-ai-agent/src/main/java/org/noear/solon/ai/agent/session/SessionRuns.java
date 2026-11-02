@@ -170,10 +170,16 @@ public final class SessionRuns {
      * 调度到别的线程、句柄尚未登记，此刻的取消必须能拦住那条「随后才到」的流，
      * 否则会出现一条取消不掉的幽灵流。因此不要把 false 当作「用户可以重试」的依据。</p>
      *
+     * <p><b>取消依赖执行线程可中断</b>：本方法只能「尽力让任务停下来」——句柄的实现是
+     * 向执行线程发中断，而不是强制杀线程。若任务卡在不可中断的阻塞（socket 读、native 调用、
+     * 同步锁）上，它会在该阻塞点返回后才看到中断，期间不会停止。这是有意的取舍：
+     * 任务可能持续数天，用超时强行切断会把「还在正常干活」误判为失败；
+     * 所以宁可让取消是「请求」，也不做成「处决」。宿主如需硬保证，应自行给具体 IO 设超时。</p>
+     *
      * @return true = 确有活跃流被停掉；false = 当时没有活跃流（但取消代数已推进）
      */
     public static boolean cancelAll(AgentSession session) {
-        Disposable.Composite claimed = claim(session);
+        Disposable.Composite claimed = cancel(session, true);
         if (claimed == null) {
             return false;
         }
@@ -188,12 +194,41 @@ public final class SessionRuns {
      * 都走到后续的持久化与回执上（重复写取消消息、重复领 IM 终态）。
      * 本方法返回非空只对第一个调用者成立，语义等价于原实现的 {@code attrs().remove(...)}。</p>
      *
-     * <p>调用者必须负责 dispose 返回值（可直接 {@link Disposable#dispose()}）。</p>
+     * <p>返回值是框架自己的 {@link Claim}（而非 Reactor 类型）：调用方只欠一个「用完释放」，
+     * 用 try-with-resources 或 {@code close()} 均可，不必知道句柄内部是谁的实现。</p>
      *
      * @return 被认领的句柄集合；null = 当时没有活跃流（但取消代数已推进）
      */
-    public static Disposable.Composite claim(AgentSession session) {
-        return cancel(session, true);
+    public static Claim claim(AgentSession session) {
+        Disposable.Composite claimed = cancel(session, true);
+        return claimed == null ? null : new Claim(claimed);
+    }
+
+    /**
+     * 已认领的运行句柄集合。
+     *
+     * <p>存在意义是把 Reactor 类型关在框架内：宿主表达的是「我领了一段需要停下来并释放的东西」，
+     * 而不是「我拿到了一个 Disposable」。语义上是一个必须关闭的凭证，故实现 {@link AutoCloseable}。</p>
+     *
+     * <p>闲等释放（{@link #close()}）与 {@link #dispose()} 等价，且可重复调用：
+     * 底层 {@link Disposable.Composite#dispose()} 本身幂等。</p>
+     */
+    public static final class Claim implements AutoCloseable {
+        private final Disposable.Composite runs;
+
+        private Claim(Disposable.Composite runs) {
+            this.runs = runs;
+        }
+
+        /** 释放（停掉）已认领的全部运行流。 */
+        public void dispose() {
+            disposeQuietly(runs);
+        }
+
+        @Override
+        public void close() {
+            dispose();
+        }
     }
 
     /**

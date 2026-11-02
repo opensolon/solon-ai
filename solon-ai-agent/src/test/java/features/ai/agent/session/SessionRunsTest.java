@@ -221,11 +221,11 @@ class SessionRunsTest {
         AgentSession session = InMemoryAgentSession.of("run-claim");
         SessionRuns.attach(session, handle(new AtomicInteger()));
 
-        reactor.core.Disposable.Composite first = SessionRuns.claim(session);
+        SessionRuns.Claim first = SessionRuns.claim(session);
         assertNotNull(first, "首个认领者必须拿到句柄");
         assertNull(SessionRuns.claim(session), "第二个认领者不得再拿到句柄");
 
-        first.dispose();
+        first.close();
         assertFalse(SessionRuns.isBusy(session));
     }
 

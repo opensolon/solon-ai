@@ -28,13 +28,18 @@ import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.agent.react.RunEndEvent;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -204,5 +209,163 @@ class ReActRequestCancelTest {
 
         SessionRuns.cancelAll(session);
         assertTrue(firstDone.await(5, TimeUnit.SECONDS), "二次订阅后取消仍须生效");
+    }
+
+    /**
+     * 取消后不向上游抛中断、直接往上抛的 agent（模拟框架内部未捕获 InterruptedException）。
+     */
+    private static ReActAgent propagatingAgent(CountDownLatch entered) {
+        return new ReActAgent(sampleConfig("cancel-propagating")) {
+            @Override
+            protected AssistantMessage call(Prompt prompt, AgentSession session, ReActOptions options) {
+                entered.countDown();
+                try {
+                    Thread.sleep(30_000L);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException("interrupted-in-call", e);
+                }
+                return ChatMessage.ofAssistant("never");
+            }
+        };
+    }
+
+    /**
+     * 抛出异常时<b>保留</b>中断位的 agent。
+     *
+     * <p>关键点：{@code Thread.sleep} 抛出 {@link InterruptedException} 时会自行清除中断状态，
+     * 所以普通“抛异常”的桩测不出中断位残留。这里在 catch 里显式重置后再抛，
+     * 才能模拟“agent 内部没清中断位就一路抛出”的真实情况。</p>
+     */
+    private static ReActAgent interruptPreservingAgent(CountDownLatch entered) {
+        return new ReActAgent(sampleConfig("cancel-keep-flag")) {
+            @Override
+            protected AssistantMessage call(Prompt prompt, AgentSession session, ReActOptions options) {
+                entered.countDown();
+                try {
+                    Thread.sleep(30_000L);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("interrupted-with-flag", e);
+                }
+                return ChatMessage.ofAssistant("never");
+            }
+        };
+    }
+
+    @Test
+    @DisplayName("取消以 complete 收尾而非 error：宿主不得把主动停止呈现为执行失败")
+    void cancelCompletesInsteadOfErroring() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch completed = new CountDownLatch(1);
+        AtomicReference<Throwable> error = new AtomicReference<>();
+        ReActAgent agent = propagatingAgent(entered);
+        AgentSession session = InMemoryAgentSession.of("cancel-signal");
+
+        agent.prompt("go").session(session).stream()
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnComplete(completed::countDown)
+                .doOnError(error::set)
+                .subscribe(e -> {
+                }, e -> {
+                });
+
+        assertTrue(entered.await(5, TimeUnit.SECONDS));
+        SessionRuns.cancelAll(session);
+
+        assertTrue(completed.await(5, TimeUnit.SECONDS), "取消必须给出终止信号（否则下游 doFinally 不执行）");
+        assertNull(error.get(),
+                "取消不得以 onError 终止：否则 CLI 打印 Error 段落、headless 退出码非 0、Web/桌面补发 error 帧");
+    }
+
+    @Test
+    @DisplayName("取消后执行线程的中断位被清除：不污染被复用的池化线程")
+    void cancelClearsInterruptFlagOnWorkerThread() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch completed = new CountDownLatch(1);
+        AtomicReference<Boolean> flagAtTermination = new AtomicReference<>();
+        AtomicReference<Thread> workerRef = new AtomicReference<>();
+        ReActAgent agent = blockingAgent(entered);
+        AgentSession session = InMemoryAgentSession.of("cancel-interrupt-flag");
+
+        agent.prompt("go").session(session).stream()
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnNext(e -> {
+                })
+                .doOnComplete(() -> {
+                    // 终止信号到达时，框架必须已清除中断位：
+                    // 宿主的收尾常在此处落库/写快照，带中断位的线程会让文件 IO 抛 ClosedByInterruptException
+                    workerRef.set(Thread.currentThread());
+                    flagAtTermination.set(Thread.currentThread().isInterrupted());
+                    completed.countDown();
+                })
+                .subscribe(e -> {
+                }, e -> {
+                });
+
+        assertTrue(entered.await(5, TimeUnit.SECONDS));
+        SessionRuns.cancelAll(session);
+        assertTrue(completed.await(5, TimeUnit.SECONDS), "取消必须给出终止信号");
+
+        assertFalse(flagAtTermination.get(),
+                "取消后不得把中断位留给 worker 线程：boundedElastic 会复用线程，"
+                        + "残留标志会让下一个不相干任务在首个阻塞点随机抛 InterruptedException");
+        assertFalse(workerRef.get().isInterrupted(), "回合结束后 worker 线程的中断位必须已清除");
+    }
+
+    @Test
+    @DisplayName("取消经异常路径收尾时也清除中断位：agent 未捕获 InterruptedException 的分支")
+    void cancelViaErrorPathAlsoClearsInterruptFlag() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch completed = new CountDownLatch(1);
+        AtomicReference<Boolean> flagAtTermination = new AtomicReference<>();
+        // 保留中断位再抛异常：普通抛异常的桩测不出残留（sleep 会自行清除中断状态）
+        ReActAgent agent = interruptPreservingAgent(entered);
+        AgentSession session = InMemoryAgentSession.of("cancel-interrupt-flag-error");
+
+        agent.prompt("go").session(session).stream()
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnComplete(() -> {
+                    flagAtTermination.set(Thread.currentThread().isInterrupted());
+                    completed.countDown();
+                })
+                .subscribe(e -> {
+                }, e -> {
+                });
+
+        assertTrue(entered.await(5, TimeUnit.SECONDS));
+        SessionRuns.cancelAll(session);
+        assertTrue(completed.await(5, TimeUnit.SECONDS), "取消必须给出终止信号");
+
+        assertFalse(flagAtTermination.get(),
+                "异常路径收尾时也必须清除中断位：宿主的收尾落库/快照写盘会因中断位抛 ClosedByInterruptException");
+    }
+
+    @Test
+    @DisplayName("取消后不再推送 RunEndEvent：agent 吞掉中断并返回占位文本时不得当成正常答复")
+    void cancelDoesNotPushRunEndEvent() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch completed = new CountDownLatch(1);
+        AtomicInteger runEndCount = new AtomicInteger();
+        ReActAgent agent = blockingAgent(entered);   // 内部吞掉中断并返回 "interrupted"
+        AgentSession session = InMemoryAgentSession.of("cancel-no-run-end");
+
+        agent.prompt("go").session(session).stream()
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnNext(event -> {
+                    if (event instanceof RunEndEvent) {
+                        runEndCount.incrementAndGet();
+                    }
+                })
+                .doOnComplete(completed::countDown)
+                .subscribe(e -> {
+                }, e -> {
+                });
+
+        assertTrue(entered.await(5, TimeUnit.SECONDS));
+        SessionRuns.cancelAll(session);
+
+        assertTrue(completed.await(5, TimeUnit.SECONDS));
+        assertEquals(0, runEndCount.get(),
+                "已取消的轮次不得推送 RunEndEvent，否则占位文本会被落库或外发成最终答复");
     }
 }

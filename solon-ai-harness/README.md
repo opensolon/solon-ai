@@ -840,6 +840,14 @@ engine.interrupt(session);                       // 1 参，true = 确实停了
 | `interrupt` | 返回 `false`：当前没有在跑的流 | 不写取消消息、不改快照；**但队列已被 `cancelPending` 清空**（见 §5.4 第 ① 步） |
 | `attachAndSchedule` | 抛 `IllegalStateException`：已有进行中 goal | 回 409，提示先 `/goal clear` |
 
+**取消是「请求」，不是「处决」**：`interrupt` / `cancelAll` 的实现是向执行线程发中断（`Thread#interrupt`），而不是强制终止线程。因此——
+
+- 任务卡在**可中断**的阻塞点（`sleep`、`wait`、`FileChannel` IO、多数网络 IO）时，取消会立即生效；
+- 任务卡在**不可中断**的阻塞点（部分 socket 读、native 调用、`synchronized` 等锁）时，取消只会在该阻塞点返回后才被看到，期间任务仍在跑；
+- 这是有意的取舍：任务可能持续数天，用超时强行切断会把「还在正常干活」误判成失败。**宁可让取消是「请求」，也不做成「处决」**。宿主若需要硬保证，应自己在具体的 IO 上设超时，而不是指望 `interrupt` 能穿透一切。
+
+取消的终止信号是 `onComplete`（不是 `onError`）：框架把「用户主动停止」当成正常结束，宿主不得据此判定执行失败（`CliShell` 不打印 Error 段、headless 退出码为 0、Web/桌面不补发 error 帧）。同时框架会在收尾前**清除执行线程的中断位**——`boundedElastic` 会复用线程，残留的中断标志会让下一个不相干的任务在首个阻塞点随机抛 `InterruptedException`。
+
 **运行期开关：统一走引擎，不要 `new` 一个关着的扩展**
 
 三个扩展都继承 `AbsSwitchable`，`setEnabled(null)` 表示“不改变”。推荐入口是引擎级方法，它会**先传播给扩展的子组件（命令 / Talent / 拦截器），再重建主代理**（Talent 与拦截器是装配期下发的，不重建就不会生效）：
@@ -1363,6 +1371,19 @@ boolean engine.interrupt(@Nullable AgentSession session);
 > **返回 `false` ≠ 什么都没发生**：取消代数（`SessionRuns.cancelCount`）依然推进。这是刻意的——
 > 宿主可能刚把订阅调度到别的线程、句柄尚未登记，此刻的 `interrupt` 必须能拦住那条「随后才到」的流。
 > 不要用 `false` 去判断「用户这次点击无效」，它只表示「点击时没有已登记的活跃流」。
+>
+> **取消以 `onComplete` 收尾，不以 `onError` 收尾**：`ReActRequest#stream()` 被取消时，
+> 下游看到的是**正常终止**，不是异常。原因有两条：
+> ①框架的取消句柄只打断执行线程、不 `cancel` 上游，因此 `sink.isCancelled()` 为 `false`，
+> 中断异常本会一路传成 `onError`；②即便 agent 捕获了 `InterruptedException` 并正常返回，
+> 那也不是本轮的有效答复。
+>
+> 宿主因此要遵守两个约定：
+> * **不要把 `doOnError` 当作「本轮失败」**——用户主动停止不会走它；
+> * **不要在取消时再发终态帧**——中断入口已同步发过（Web 的 `error`+`done`、桌面的
+>   `reason`+`done`）。判断方式是在 `stream()` 之前取 `SessionRuns.cancelCount(session)`，
+>   在 `doOnComplete` 里用 `SessionRuns.isCancelledSince(session, gen)` 判定。
+> * 取消的轮次**不会**推 `RunEndEvent`，避免把占位文本当成最终答复落库或外发。
 
 > **行为变更点**：早期 `/interrupt` 只停当前流、队列里排着的任务之后还会继续跑；现在「停」是彻底的（队列一并清空）。这正是 `//todl: SessionQueue.cancelPending(session)` 那条旧待办的本意——「停了还在跑」比「停得干净」更违反直觉。
 

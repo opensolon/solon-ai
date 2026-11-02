@@ -194,6 +194,16 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
 
                     options.setStreamSink(sink);
                     AssistantMessage message = agent.call(prompt, session, options);
+
+                    if (cancelRequested.get()) {
+                        // 已取消：agent 可能捕获了 InterruptedException 后正常返回（如返回占位文本）。
+                        // 此时不得推送 RunEndEvent —— 否则宿主会把占位文本当成“本轮正常答复”落库或外发。
+                        // 终止信号仍必须给出，否则下游 doFinally 不执行，句柄永久残留在登记表里。
+                        clearInterrupt();
+                        sink.complete();
+                        return;
+                    }
+
                     ReActTrace trace = agent.getTrace(session);
 
                     ReActResponse resp = new ReActResponse(session, trace, message);
@@ -203,9 +213,22 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
                         sink.complete();
                     }
                 } catch (Throwable e) {
-                    if (!sink.isCancelled()) {
+                    // 取消导致的异常不是失败：句柄只打断线程、不 cancel 上游，
+                    // 因此 sink.isCancelled() 为 false，中断异常会一路传到这里。
+                    // 若直接 sink.error(e)，宿主会把「用户主动停止」呈现成执行失败
+                    // （CLI 打印 Error 段落、headless 退出码非 0、Web/桌面补发 error 帧）。
+                    // 故取消一律以 complete 收尾，与旧实现「取消不产生 error」的语义对齐。
+                    if (cancelRequested.get()) {
+                        clearInterrupt();
+                        sink.complete();
+                    } else if (!sink.isCancelled()) {
                         sink.error(e);
                     }
+                } finally {
+                    // 兜底：本回合无论以何种方式结束，都不把中断位还给池化线程。
+                    // boundedElastic 会复用线程，残留的中断位会让下一个不相干的任务
+                    // 在首个阻塞点直接抛 InterruptedException，是最难定位的一类串扰。
+                    clearInterrupt();
                 }
             })
             .doOnSubscribe(subscription -> {
@@ -246,5 +269,21 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
                 SessionRuns.detach(session, runRef.get());
             });
         });
+    }
+
+    /**
+     * 清除当前线程的中断位。
+     *
+     * <p>取消的实现是「中断 worker 线程」，而池化线程（boundedElastic）会复用：
+     * 中断位一旦残留，下一个毫不相干的任务会在首个阻塞点（IO、sleep、锁）直接抛
+     * {@code InterruptedException}，表现为随机、不可复现的失败。
+     * 因此本回合结束前必须把它清掉。</p>
+     *
+     * <p>调用点都在 worker 线程上（create 回调与 sink 终止信号同一线程），
+     * 所以这里不需要再比对线程身份。</p>
+     */
+    private static void clearInterrupt() {
+        // Thread.interrupted() 读取并清除当前线程的中断标志（返回旧值，此处不需要）
+        Thread.interrupted();
     }
 }
