@@ -9,7 +9,6 @@ import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessExtension;
-import org.noear.solon.ai.harness.command.builtin.QueueCommand;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.agent.react.ReActAgent;
 

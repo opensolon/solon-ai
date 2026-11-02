@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.harness.command.builtin;
+package org.noear.solon.ai.harness.session.goal;
 
 import org.junit.jupiter.api.Test;
 

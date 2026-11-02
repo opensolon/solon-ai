@@ -13,16 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.harness.command.builtin;
+package org.noear.solon.ai.harness.session.goal;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.AbsCommand;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.session.goal.GoalExtension;
-import org.noear.solon.ai.harness.session.goal.GoalSpec;
-import org.noear.solon.ai.harness.session.goal.GoalState;
 
 /**
  * /goal 命令 —— 会话级目标的独立命令（不再经由 loop 命令转发）。

@@ -12,48 +12,48 @@ import java.util.List;
 
 /**
  * 命令层测试共享桩：最小命令上下文，收集输出与声明的 Agent 任务意图，承载渠道元数据。
- * 命令已直连领域类，不再需要端口桩。
+ * 命令已直连领域类，不再需要端口桩。公开给 session 域包下的命令测试共用。
  */
-final class Fakes {
+public final class Fakes {
     private Fakes() {
     }
 
-    static AgentSession newSession() {
+    public static AgentSession newSession() {
         return InMemoryAgentSession.of();
     }
 
     /** 最小命令上下文：收集输出与任务意图，承载渠道元数据。 */
-    static class StubContext implements CommandContext {
+    public static class StubContext implements CommandContext {
         final AgentSession session;
-        final List<String> out = new ArrayList<>();
-        final List<String> tasks = new ArrayList<>();
+        public final List<String> out = new ArrayList<>();
+        public final List<String> tasks = new ArrayList<>();
         volatile AgentTaskIntent intent;
         final List<String> args;
 
-        StubContext(AgentSession session, List<String> args) {
+        public StubContext(AgentSession session, List<String> args) {
             this.session = session;
             this.args = args;
         }
 
         /** 模拟 IM 渠道（带全部元数据），参数为提示文本。 */
-        static StubContext im(String text) {
+        public static StubContext im(String text) {
             return new StubContext(newSession(), Collections.singletonList(text));
         }
 
-        static InputOrigin imOrigin() {
+        public static InputOrigin imOrigin() {
             return InputOrigin.of("Feishu", "user-1", "chat-1", "message-1");
         }
 
         /** 模拟本地渠道（无元数据）。 */
-        static StubContext local(String text) {
+        public static StubContext local(String text) {
             return new StubContext(newSession(), Collections.singletonList(text));
         }
 
-        static InputOrigin localOrigin() {
+        public static InputOrigin localOrigin() {
             return InputOrigin.NONE;
         }
 
-        String output() {
+        public String output() {
             return String.join("\n", out);
         }
 

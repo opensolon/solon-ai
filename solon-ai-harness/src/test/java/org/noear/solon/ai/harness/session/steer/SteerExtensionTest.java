@@ -42,7 +42,7 @@ class SteerExtensionTest {
     @Test
     void commandRegistrationIsIdempotentAndCanBeDisabled() {
         HarnessEngine engine = newEngine();
-        engine.getCommandRegistry().register(new org.noear.solon.ai.harness.command.builtin.SteerCommand());
+        engine.getCommandRegistry().register(new SteerCommand());
         engine.addExtension(new SteerExtension());
         assertNotNull(engine.getCommandRegistry().find("steer"));
 

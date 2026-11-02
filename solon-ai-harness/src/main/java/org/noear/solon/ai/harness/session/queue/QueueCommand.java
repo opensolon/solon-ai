@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.harness.command.builtin;
+package org.noear.solon.ai.harness.session.queue;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
@@ -21,7 +21,6 @@ import org.noear.solon.ai.harness.command.AbsCommand;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.session.queue.SessionQueue;
 import org.noear.solon.core.util.Assert;
 
 /**

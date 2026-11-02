@@ -1,5 +1,12 @@
 ### vNEXT
 
+* **会话域命令自包含：GoalCommand/QueueCommand/SteerCommand/InterruptCommand 迁出 command.builtin，随域包就位（消除 command.builtin ↔ session.* 双向引用环）**:
+  * **动机**：域包通过 Extension 装配命令（GoalExtension import GoalCommand…），命令又 import 域类，形成集中在装配点的双向环。每个能力自包含（域 + 命令 + Extension）后，`command.builtin` 只留通用基础命令，职责名副其实
+  * **移动**：GoalCommand→`session.goal`、QueueCommand→`session.queue`、SteerCommand→`session.steer`、InterruptCommand→`session.interrupt`（均改 package 声明、删升为同包的 import）；三个 Extension 的对应 import 删除，装配代码零改动（命令注册本就由 Extension 完成）
+  * **测试随迁**：四个 CommandTest 同步移入域包；`Fakes`/`ContinueCommandTest`（含 newTrace/setOriginalPrompt）公开为 public 供跨包测试共用；`BuiltinCommandsSystemTest` 补显式 import；`GoalBoundaryTest` 硬编码路径同步；三个 ExtensionTest 的全限定名改简名
+  * **宿主（soloncode-cli）**：WorkspaceManager 的 `command.builtin.*` 通配 import 保持不动（InterruptCommand 单独 import，因通配已不覆盖它）；宿主 SteerCommandTest 改 import session.steer；IM SOP 表格同步
+  * **包名不重命名**：`command.builtin` 余下 6 个（help/clear/model/rewind/rerun/continue）均为通用基础命令，名实相符；README §4.1 已同步两段式描述
+  * **验证**：harness 定向 43 例全绿（四命令测试+系统测试+护栏）；全量 818 例的 31F+5E 经 `git stash -u` 基线对照逐项一致（ToolStrategy/TaskTalent/Accessor，均为既有问题）；宿主 clean 后定向全绿（首次运行的 SteerCommandTest Error 系陈旧字节码，clean 消除）
 * **steer 输出改为 AgentEvent：删掉端口接口与全部宿主装配**（净删约 110 行 harness + 60 行宿主，修三处真实缺陷；取代本条此前记录的「端口 + session 打标」中间态）:
   * **问题（设计层）**：`SteerOutputPort` 是为「拦截器要把消息送到前端」而造的一层接口，但同一件事在本仓其他组件里根本不需要接口——HITL、上下文压缩、Run 起止全都直接 `trace.pushAgentEvent(...)`。**steer 是唯一特例**，为此多出泛型令牌 + Supplier + 宿主 instanceof 三层间接。而真正决定「投递到哪」的工作区，其实在事件消费方（`WebEventMapper` 构造时就持有 `wsContext`）手上，根本不需要从 session 里翻
   * **问题（实现层，三处真缺陷）**：

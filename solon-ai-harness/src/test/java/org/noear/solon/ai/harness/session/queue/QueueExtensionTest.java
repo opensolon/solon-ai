@@ -116,7 +116,7 @@ class QueueExtensionTest {
     void commandRegistrationIsIdempotentAndCanBeDisabled() {
         // 幂等：宿主先注册，扩展不覆盖
         HarnessEngine engine = newEngine();
-        engine.getCommandRegistry().register(new org.noear.solon.ai.harness.command.builtin.QueueCommand());
+        engine.getCommandRegistry().register(new QueueCommand());
         QueueExtension queue = new QueueExtension();
         engine.addExtension(queue);
         assertNotNull(engine.getCommandRegistry().find("queue"));

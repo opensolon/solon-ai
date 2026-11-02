@@ -9,7 +9,6 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
-import org.noear.solon.ai.harness.command.builtin.SteerCommand;
 import org.noear.solon.ai.harness.input.InputOrigin;
 
 /**

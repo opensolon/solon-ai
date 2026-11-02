@@ -1,9 +1,8 @@
-package org.noear.solon.ai.harness.command.builtin;
+package org.noear.solon.ai.harness.session.queue;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.harness.session.queue.SessionQueue;
-import org.noear.solon.ai.harness.session.queue.SessionQueueItem;
+import org.noear.solon.ai.harness.command.builtin.Fakes;
 
 import static org.junit.jupiter.api.Assertions.*;
 

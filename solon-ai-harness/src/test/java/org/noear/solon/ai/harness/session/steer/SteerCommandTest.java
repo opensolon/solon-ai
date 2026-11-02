@@ -1,13 +1,10 @@
-package org.noear.solon.ai.harness.command.builtin;
+package org.noear.solon.ai.harness.session.steer;
 
 import org.noear.solon.ai.harness.input.InputOrigin;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.harness.session.steer.SteerInterceptor;
-import org.noear.solon.ai.harness.session.steer.SteerResult;
-import org.noear.solon.ai.harness.session.steer.SteerStatus;
-import org.noear.solon.ai.harness.session.steer.SteerMessage;
+import org.noear.solon.ai.harness.command.builtin.Fakes;
 
 import static org.junit.jupiter.api.Assertions.*;
 

@@ -1,4 +1,4 @@
-package org.noear.solon.ai.harness.command.builtin;
+package org.noear.solon.ai.harness.session.interrupt;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
@@ -6,6 +6,8 @@ import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.harness.command.builtin.ContinueCommandTest;
+import org.noear.solon.ai.harness.command.builtin.Fakes;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.util.TraceKeys;
 import reactor.core.Disposable;

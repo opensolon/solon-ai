@@ -613,7 +613,7 @@ public class FullHost {
 
 ### 4.1 引擎不自带命令，宿主负责注册
 
-`harness` 提供了命令框架与 `command.builtin` 下的一批实现（`help`/`clear`/`model`/`queue`/`steer`/`goal`/`rewind`/`rerun`/`continue`/`interrupt`），**但不会自动注册**——因为「哪些命令可用」是端特性。裸引擎上 `handle(session, "/help")` 返回 `TASK` 而不是 `REPLY`。
+`harness` 提供了命令框架与一批实现：通用基础命令在 `command.builtin`（`help`/`clear`/`model`/`rewind`/`rerun`/`continue`），会话埴命令随域包自包含（`session.goal.GoalCommand`、`session.queue.QueueCommand`、`session.steer.SteerCommand`、`session.interrupt.InterruptCommand`，由各域 Extension 注册），**但不会自动注册**——因为「哪些命令可用」是端特性。裸引擎上 `handle(session, "/help")` 返回 `TASK` 而不是 `REPLY`。
 
 ```java
 CommandRegistry registry = engine.getCommandRegistry();

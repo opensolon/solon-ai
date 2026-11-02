@@ -11,8 +11,12 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.session.goal.BudgetThresholds;
+import org.noear.solon.ai.harness.session.goal.GoalCommand;
 import org.noear.solon.ai.harness.session.goal.GoalEngine;
 import org.noear.solon.ai.harness.session.goal.GoalExtension;
+import org.noear.solon.ai.harness.session.interrupt.InterruptCommand;
+import org.noear.solon.ai.harness.session.queue.QueueCommand;
+import org.noear.solon.ai.harness.session.steer.SteerCommand;
 import org.noear.solon.ai.harness.util.TraceKeys;
 
 import java.nio.file.Path;

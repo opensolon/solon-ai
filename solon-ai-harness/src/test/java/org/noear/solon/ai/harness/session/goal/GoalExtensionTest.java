@@ -107,7 +107,7 @@ class GoalExtensionTest {
         // 命令只持 GoalExtension（存量形态 of(...) 不装配命令与调度，正好用于手工注册）
         GoalExtension manualExt = GoalExtension.of(manual, engine);
         engine.getCommandRegistry().register(
-                new org.noear.solon.ai.harness.command.builtin.GoalCommand(manualExt));
+                new GoalCommand(manualExt));
 
         GoalExtension ext = GoalExtension.builder("ws-dup")
                 .taskExecutor((sid, p, a) -> "x")

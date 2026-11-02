@@ -6,7 +6,6 @@ import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
-import org.noear.solon.ai.harness.command.builtin.GoalCommand;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.runtime.ExecutionBridge;

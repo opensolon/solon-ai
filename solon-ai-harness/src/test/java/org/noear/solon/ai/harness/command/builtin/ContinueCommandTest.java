@@ -27,8 +27,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>
  * 覆盖：无可继续任务（无 trace / 空壳 trace）、END 轨迹重置回思考点、
  * 连续 Assistant 尾部消息弹出、续流意图声明（prompt 为空 = isResume）。
+ * 公开反射工具 newTrace/setOriginalPrompt 供 session 域包下的命令测试共用。
  */
-class ContinueCommandTest {
+public class ContinueCommandTest {
     private final ContinueCommand command = new ContinueCommand();
 
     @Test
@@ -124,7 +125,7 @@ class ContinueCommandTest {
 
     // ---------- 反射构造工具（仓库先例：HITLBatchUnitTest.newTrace） ----------
 
-    static ReActTrace newTrace(AgentSession session) {
+    public static ReActTrace newTrace(AgentSession session) {
         ReActTrace trace = new ReActTrace();
         try {
             Field f = ReActTrace.class.getDeclaredField("session");
@@ -136,7 +137,7 @@ class ContinueCommandTest {
         }
     }
 
-    static void setOriginalPrompt(ReActTrace trace, Prompt prompt) {
+    public static void setOriginalPrompt(ReActTrace trace, Prompt prompt) {
         try {
             Field f = ReActTrace.class.getDeclaredField("originalPrompt");
             f.setAccessible(true);
