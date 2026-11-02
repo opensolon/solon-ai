@@ -18,11 +18,13 @@ package org.noear.solon.ai.harness.session.interrupt;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.harness.session.queue.SessionQueue;
 import org.noear.solon.ai.harness.util.TraceUtil;
-import reactor.core.Disposable;
+
+import java.util.Objects;
 
 /**
  * 会话中断的唯一实现。
@@ -42,10 +44,8 @@ import reactor.core.Disposable;
  * @since 4.2
  */
 public final class SessionInterrupt {
-    /** 宿主订阅流时写入的运行句柄 key（跨端约定，不得重命名） */
-    private static final String ATTR_DISPOSABLE = "disposable";
     /** 中断补写的收尾文本 */
-    private static final String CANCEL_TEXT = "用户已取消任务.";
+    public static final String CANCEL_TEXT = "用户已取消任务.";
 
     private SessionInterrupt() {
     }
@@ -53,10 +53,13 @@ public final class SessionInterrupt {
     /**
      * 中断会话当前正在执行的任务。
      *
-     * <p>四步：清队列（待执行与已被 drain 暂存的消息）→ 释放流句柄 → 补取消消息（带 runId 元数据）
-     * → 补快照（中断时 agent 收尾被跳过，trace 与取消消息需一并持久化）。</p>
+     * <p>三步：清队列（待执行与已被 drain 暂存的消息）→ 停运行流（框架自行登记过的句柄）
+     * → 补收尾（取消消息 + 快照）。</p>
      *
-     * @return true = 释放了运行中的流（确有任务被中断）；false = 当前没有正在执行的任务
+     * <p>运行句柄的登记已上收到 {@code ReActRequest}（经 {@link SessionRuns}），
+     * 宿主无需再往 {@code session.attrs()} 里写 key。</p>
+     *
+     * @return true = 确有运行中的任务被中断；false = 当前没有正在执行的任务
      */
     public static boolean interrupt(AgentSession session) {
         if (session == null) {
@@ -66,23 +69,54 @@ public final class SessionInterrupt {
         // ① 清排队：无论当前流句柄是否还在，排队项都必须取消（否则停流后又被续发）
         SessionQueue.cancelPending(session);
 
-        // ② 停当前流
-        Disposable disposable = (Disposable) session.attrs().remove(ATTR_DISPOSABLE);
-        if (disposable == null) {
+        // ② 停当前运行（新路径优先；旧宿主兼容路径回退）
+        boolean interrupted = SessionRuns.cancelAll(session);
+        if (interrupted == false) {
             return false;
         }
-        disposable.dispose();
 
-        // ③ 补取消消息（保留 runId 归属，前端据此挂到正确的轮次气泡）
-        ReActTrace trace = TraceUtil.getCurrentTrace(session);
-        AssistantMessage assistantMessage = ChatMessage.ofAssistant(CANCEL_TEXT);
-        if (trace != null) {
-            assistantMessage.addMetadata(AgentTrace.META_RUN_ID, trace.getRunId());
-        }
-        session.addMessage(assistantMessage);
-
-        // ④ 补快照：中断时 agent 收尾被跳过，需将当前 trace 与取消消息一并持久化，避免重载后 trace 丢失
-        session.updateSnapshot();
+        // ③ 补收尾：取消消息 + 快照
+        //    框架已尽力让 agent 自然收尾，但取消发生在流内部时，宿主的收尾链仍可能被跳过；
+        //    这里做幂等式补齐（已有同 runId 的取消消息则不重复写入）。
+        writeCancelMessage(session);
         return true;
+    }
+
+    /**
+     * 补取消消息与快照（幂等：同一 runId 已有取消消息时不再重复写入）。
+     *
+     * <p>供需要自己控制事件时序的宿主（如 Web 端要求“先落库、后回执”）单独调用；
+     * 不中断流，也不清队列。</p>
+     */
+    public static void writeCancel(AgentSession session) {
+        if (session == null) {
+            return;
+        }
+        writeCancelMessage(session);
+    }
+
+    /**
+     * 补取消消息与快照（幂等：同一 runId 已有取消消息时不再重复写入）。
+     */
+    private static void writeCancelMessage(AgentSession session) {
+        ReActTrace trace = TraceUtil.getCurrentTrace(session);
+        String runId = trace == null ? null : trace.getRunId();
+
+        AssistantMessage assistantMessage = ChatMessage.ofAssistant(CANCEL_TEXT);
+        if (runId != null) {
+            assistantMessage.addMetadata(AgentTrace.META_RUN_ID, runId);
+        }
+
+        // 幂等：避免重复中断又补一条取消消息
+        for (ChatMessage message : session.getMessages()) {
+            if (CANCEL_TEXT.equals(message.getContent())
+                    && Objects.equals(runId, message.getMetadata().get(AgentTrace.META_RUN_ID))) {
+                session.updateSnapshot();
+                return;
+            }
+        }
+
+        session.addMessage(assistantMessage);
+        session.updateSnapshot();
     }
 }

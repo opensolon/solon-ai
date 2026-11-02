@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.session.interrupt.SessionInterrupt;
@@ -62,6 +63,19 @@ class SessionInterruptTest {
     }
 
     @Test
+    void interruptsFrameworkRegisteredRunWithoutHostAttrs() {
+        // 新路径：宿主（CLI/Web/桌面）完全不写 attrs，句柄由 ReActRequest 自行登记
+        AgentSession session = InMemoryAgentSession.of();
+        AtomicInteger disposed = new AtomicInteger();
+        SessionRuns.attach(session, countingDisposable(disposed));
+
+        assertTrue(SessionInterrupt.interrupt(session));
+        assertEquals(1, disposed.get(), "框架登记的句柄必须被释放");
+        assertFalse(SessionRuns.isBusy(session));
+        assertEquals(1, session.getMessages().size());
+    }
+
+    @Test
     void nullSessionIsSafeAndReturnsFalse() {
         assertFalse(SessionInterrupt.interrupt(null));
     }
@@ -78,7 +92,7 @@ class SessionInterruptTest {
     void disposesExactlyOnceAndAppendsCancelMessage() {
         AgentSession session = InMemoryAgentSession.of();
         AtomicInteger disposed = new AtomicInteger();
-        session.attrs().put("disposable", countingDisposable(disposed));
+        SessionRuns.attach(session, countingDisposable(disposed));
 
         assertTrue(SessionInterrupt.interrupt(session));
         assertEquals(1, disposed.get());
@@ -93,7 +107,7 @@ class SessionInterruptTest {
         // runId 惰性生成：trace 只需放入 __main 即可被 TraceUtil 取到
         ReActTrace trace = new ReActTrace();
         session.getContext().put(TraceKeys.TRACE_KEY_MAIN, trace);
-        session.attrs().put("disposable", countingDisposable(new AtomicInteger()));
+        SessionRuns.attach(session, countingDisposable(new AtomicInteger()));
 
         SessionInterrupt.interrupt(session);
 
@@ -105,7 +119,7 @@ class SessionInterruptTest {
     @Test
     void repeatedInterruptDoesNotDuplicateMessage() {
         AgentSession session = InMemoryAgentSession.of();
-        session.attrs().put("disposable", countingDisposable(new AtomicInteger()));
+        SessionRuns.attach(session, countingDisposable(new AtomicInteger()));
 
         assertTrue(SessionInterrupt.interrupt(session));
         // 第二次：句柄已被移除 → 无任务分支，不得再写消息
@@ -118,7 +132,7 @@ class SessionInterruptTest {
         AgentSession session = InMemoryAgentSession.of();
         SessionQueue.enqueue(session, "排队一", InputOrigin.channel("test"));
         SessionQueue.enqueue(session, "排队二", InputOrigin.channel("test"));
-        session.attrs().put("disposable", countingDisposable(new AtomicInteger()));
+        SessionRuns.attach(session, countingDisposable(new AtomicInteger()));
 
         assertTrue(SessionQueue.hasItems(session));
         assertTrue(SessionInterrupt.interrupt(session));
