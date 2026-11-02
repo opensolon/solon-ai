@@ -1368,19 +1368,6 @@ public class HarnessEngine {
         return getAgentBuilder(definition, sessionModel);
     }
 
-    private ReActRequest promptDo(Prompt prompt, ReActAgent targetAgent) {
-        if (targetAgent == null) {
-            targetAgent = getMainAgent();
-        }
-
-        return targetAgent.prompt(prompt)
-                .options(o -> {
-                    o.retryConfig(options.getModelRetries());
-                    o.maxTurns(options.getMaxTurns());
-                    o.sessionWindowSize(options.getSessionWindowSize());
-                });
-    }
-
     public ReActRequest prompt(Prompt prompt) {
         return promptDo(prompt, null);
     }
@@ -1436,32 +1423,33 @@ public class HarnessEngine {
 
 
 
+    private ReActRequest promptDo(Prompt prompt, ReActAgent targetAgent) {
+        if (targetAgent == null) {
+            targetAgent = getMainAgent();
+        }
+
+        return targetAgent.prompt(prompt)
+                .options(o -> {
+                    o.retryConfig(options.getModelRetries());
+                    o.maxTurns(options.getMaxTurns());
+                    o.sessionWindowSize(options.getSessionWindowSize());
+                });
+    }
+
+
     /**
-     * 完整输入装配：会话 + 提示词 + 模型 + 子代理（引擎内部专用）
-     * <p>
-     * 收敛「取模型 → 取子代理 → 手拼 options」的重复。模型名与子代理名均可为空：
-     * 模型为空时回退会话级选择（{@link #CTX_MODEL_SELECTED}），再回退默认模型；
-     * 子代理为空时使用主代理。
-     * <p>
-     * {@code input} 非空时把本次技能 / MCP 视野写入 toolContext：续流路径 {@code prompt} 为空，
-     * attrs 无处可写，只能依靠 toolContext（ReAct 的 activeTalents 会把它覆盖回 originalPrompt.attrs）。
-     * <p>
-     * 对外开放的输入入口只有 {@link #handle(HarnessInput)}
-     * （及其重载）；需要续流时用 {@link HarnessInput#resume(boolean)}。
-     *
-     * @param session   会话（可为空，由 ReActRequest 使用临时会话）
-     * @param prompt    提示词（续流时为空）
-     * @param modelName 模型名（可为空）
-     * @param agentName 子代理名（可为空）
-     * @param selectedSkills 选择 skill name
-     * @param selectedMcps 选择 mcp server name
+     * @param selectedModel 选中的模型名
+     * @param selectedAgent 选中的智能体名
+     * @param selectedSkills 选中的技能名
+     * @param selectedMcps  选中的连接名
+     * @since 4.2.0
      */
     private ReActRequest promptDo(@Nullable AgentSession session, @Nullable Prompt prompt,
-                                  @Nullable String modelName,
-                                  @Nullable String agentName,
+                                  @Nullable String selectedModel,
+                                  @Nullable String selectedAgent,
                                   @Nullable List<String> selectedSkills,
                                   @Nullable List<String> selectedMcps) {
-        ReActRequest request = promptDo(prompt, getAgentOrMain(agentName));
+        ReActRequest request = promptDo(prompt, getAgentOrMain(selectedAgent));
 
         if (session != null) {
             request.session(session);
@@ -1477,7 +1465,7 @@ public class HarnessEngine {
         }
 
 
-        final String realModelName = resolveSessionModelName(session, modelName);
+        final String realModelName = resolveSessionModelName(session, selectedModel);
         if (realModelName != null) {
             final ChatModel chatModel = getModelOrDefInstance(realModelName);
             if (chatModel != null) {

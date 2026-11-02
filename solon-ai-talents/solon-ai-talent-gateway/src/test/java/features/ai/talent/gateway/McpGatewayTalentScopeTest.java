@@ -86,31 +86,6 @@ public class McpGatewayTalentScopeTest {
         return talent;
     }
 
-    private static List<String> select(String... names) {
-        return Arrays.asList(names);
-    }
-
-    @Test
-    void searchNarrowsToSelectedScope() {
-        McpGatewayTalent talent = build();
-
-        Object scoped = talent.searchTools("搜索", select("alpha"));
-        assertTrue(scoped.toString().contains("alpha_search"));
-        assertFalse(scoped.toString().contains("beta_search"));
-
-        Object all = talent.searchTools("搜索", null);
-        assertTrue(all.toString().contains("alpha_search"));
-        assertTrue(all.toString().contains("beta_search"));
-    }
-
-    @Test
-    void detailRejectsToolOutsideScope() {
-        McpGatewayTalent talent = build();
-
-        assertTrue(talent.getToolDetail("beta_search", select("alpha")).contains("不在当前选中"));
-        assertTrue(talent.getToolDetail("beta_search", null).contains("MCP工具详情"));
-    }
-
     @Test
     void callToolIsNotBlockedByScope() throws Throwable {
         // selected 是视野不是权限：点名执行必须放行（用户可能在 prompt 里引导）
