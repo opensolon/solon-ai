@@ -1,5 +1,19 @@
 ### vNEXT
 
+* **steer 输出端口去令牌化：路由身份归还 session，守卫与异常边界收口到一处**（修三处真实缺陷 + 净删约 45 行）:
+  * **问题（设计层）**：`SteerOutputPort<C>` 的泛型 `C`（典型为宿主 `WorkspaceContext`）被当作“路由令牌”在 `SteerInterceptor` 构造期定值，且用 `Supplier` 包装成 `ForwardingPort` 延迟解析。但两个可变轴只有一个是真的：端口实例（如 soloncode 的 `WebGate`）是**进程级单例，从不更换**，Supplier 解决的是一条永不变化的轴；真正每轮都变的 `wsContext` 反而被构造期冻结
+  * **问题（实现层，两处真缺陷）**：
+    1. **两条出口守卫不对称**：`emitSteerApplied` 判 `outputPort != null && wsContext != null`，`handleDroppedSteers` 只判 `outputPort != null`。而单参构造器把 `wsContext` 传 `null`——于是默认实例路径上 **`steer_applied` 永不发出**（前端插话气泡永远停在 pending），dropped 却照旧带着 `null` 往下走。受影响路径：Web 队列派发 / 自动任务 / Loop / 命令触发（主对话因请求级挂载带正确令牌而完好）
+    2. **`onAgentEnd` 的 dropped 调用无 try-catch**：宿主实现拿到 `null` 路由后在 `WebGate.emitToClient` 的 `wsContext.getConnections()` 炸 NPE，并沿 `ReActAgent` 的拦截器遍历（同样无 try）冒泡，导致后续拦截器的 `onAgentEnd` 全部不执行
+  * **方案**：`SteerOutputPort` 去掉泛型与首参，两个方法都以 `AgentSession` 定位投递目标——**session 天然属于唯一工作区且是事件发生时唯一确定可得的东西**。宿主需工作区/连接池时自行从 `session.attrs()` 取（在轮次边界写入，与既有 `session.replyRoute` 同型）。不用“按 sessionId 反查工作区”是因为数字会话 ID 在不同项目间会碰撞（`SessionWebController` 已有此注释）
+  * **守卫收口**：新增 `SteerInterceptor#withPort(Consumer)` —— 供应商解析 + 空判 + 异常吞没三件事收敛为一个入口，`applied` 与 `dropped` 共用。**结构上不可能再出现守卫不对称**，且以后新增出口也不会漏掉异常边界
+  * **删除清单**（harness）：`ForwardingPort` 内部类（29 行）、`wsContext` 字段、两参构造器、`outputPortSupplier` 字段；`SteerExtension` 改为 `(Supplier)` + 无参 headless 两态（语义清晰：有端口/无端口），不再有“单参构造是陷阱”
+  * **宿主侧（soloncode-cli）**：`WebGate` 实现新签名并从 `session.attrs().get(ATTR_REPLY_WORKSPACE)` 取路由（`WebSessionRunner#beginStreamTurn` 每轮写入，与 IM 的 `replyRoute` 同型）；**把 dropped 的「转排队」与「广播」拆开**——排队纯靠 session，无路由时仍必须完成（否则丢插话），广播才需要路由（NPE 由此结构性消除）；删除 `WebStreamBuilder` 的每请求 `new SteerInterceptor(...)` + `interceptorAdd` 样板
+  * **行为等价性**：正常路径（Web 主对话插话 → applied 落气泡、任务结束 → dropped 转排队）一字未变；CLI/headless 仍是“无端口记 warn”；Desktop 仍不参与。改变的是原先失效/崩溃的三条路径
+  * **测试**：`SteerInterceptorTest` 14 → 20 例，新增记录型端口验证**真实到达**（`applied_reachesPort` / `dropped_reachesPort`）、异常不冒泡（`portException_doesNotBreakInterceptorChain`）、空端口仅 warn、供应商事件时解析；原有 `lazyOutputPortResolvesAtEventTimeNotConstruction` 名不副实（只断言构造不 NPE，`() -> null` 全程空转）已重写。`WebGateRejectedInputTest` 新增 `droppedSteerWithoutRouteStillQueuesAndDoesNotThrow`（复现 NPE）与 `steerEventsRouteBySessionAttr`（复现 applied 不发）
+  * 验证：harness steer 域 39 例全绿；`soloncode-cli` 全量 1224 例 3 失败，与基线（stash 后复现）逐项一致（ImageReply 异常文案 / AgentSettings 400 / Mount 安装目标数），均为既有问题
+  * 文档：README §5.3 装配段与输出端口契约重写（删「wsContext 构造期定值」，把「惰性」改为准确的「延迟初始化」），§9 拦截器挂载段删除请求级挂载示例，第十三章坑 13/21 同步；`docs/ai-switchable-audit.md` 中相关构造器描述已过时（属历史审计快照，未改）
+
 * **TaskTalent 调度内核重写：信号量 + 轮询分派 → 单队列 + N 个 worker 自取**（有效代码 668 → 562 行，总行数 1000 → 884；旧调度段 250 → 新调度段约 80）:
   * **动机**：`Semaphore` + `acquirePolling` + `dispatchParallel` + `tryAcquireReady` + `ModelSlot` 这一套的存在前提是「槽位引擎级、跨会话共享」。槽位一旦改为「按调用算一个数」，就没有待抢的资源，也就不需要抢——**共享与轮询是耦合的，去掉共享顺带去掉轮询**
   * **新形态**：一批任务进 `ConcurrentLinkedQueue`，起 `min(cap, size)` 个 worker 各自 `poll`；worker 跑完一个立刻取下一个，这正是「首发 cap 个、完成一个补一个」的全部实现，不需要完成回调与计数递减。抽为包级类 `TaskDispatcher`，`TaskTalent#dispatchQueued` 只剩一次调用

@@ -11,54 +11,47 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.command.builtin.SteerCommand;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.session.steer.SteerStatus;
 
-import java.util.Queue;
 import java.util.function.Supplier;
 
 /**
  * Steer 一键装配扩展 —— steer 能力从头到尾只接触这一个类。
  *
- * <p>{@code engine.addExtension(new SteerExtension<>(() -> outputPort))} 一步完成：
+ * <p>{@code engine.addExtension(new SteerExtension(() -> outputPort))} 一步完成：
  * 注册 /steer 命令（幂等）+ 把 {@link SteerInterceptor} 挂为主代理<b>默认拦截器</b>。
  * 宿主不再需要每请求 {@code new SteerInterceptor(...) + interceptorAdd(...)}。</p>
  *
  * <p><b>挂载顺序安全</b>：拦截器按 {@code LinkedHashMap} 插入序 + RankEntity 稳定排序，
  * AgentFactory 先挂默认拦截器（压缩/StopLoop）、后轮到 extension 的 configure，
- * 因此本扩展挂载的 steer 拦截器天然排在上下文压缩之后——与请求级挂载语义一致，
- * 注入是向压缩产物尾部追加，不破坏消息序列。同类型按 Class 去重，重复挂载无双份。</p>
+ * 因此本扩展挂载的 steer 拦截器天然排在上下文压缩之后——注入是向压缩产物尾部追加，
+ * 不破坏消息序列。同类型按 Class 去重，重复挂载无双份。</p>
  *
- * <p>{@code outputPort} 用 {@code Supplier} 惰性解析：默认工作区可能在入口绑定之前创建，
- * 构造期拿不到端口（与 soloncode 宿主既有做法一致）。传 {@code null} 供应商时
- * drop 只记 warn 日志、不通知客户端（纯 headless 场景）。</p>
+ * <p><b>端口供应商是「延迟初始化」，不是「随工作区切换」</b>：宿主入口端口（如 Web 网关）
+ * 常在引擎创建之后才绑定，构造期取不到，故每次事件回调时解析。<b>投递路由由 session 承载</b>
+ * （见 {@link SteerOutputPort}），端口实例本身不需要按工作区更换。传 {@code null}
+ * 供应商时 drop 只记 warn 日志、不通知客户端（纯 headless 场景）。</p>
  *
  * <p>插话投递（Web API / IM 命令共用）与取消直接在本类上中转。</p>
  *
  * @author noear
  * @since 3.9.4
  */
-public class SteerExtension<C> extends AbsHarnessExtension {
+public class SteerExtension extends AbsHarnessExtension {
 
-    private final Supplier<SteerOutputPort<C>> outputPortSupplier;
-    private final SteerInterceptor<C> interceptor;
+    private final SteerInterceptor interceptor;
 
     private final SteerCommand steerCommand = new SteerCommand();
 
-    /** @param outputPortSupplier 输出端口惰性供应商（每次事件回调时取值；可为 null） */
-    public SteerExtension(Supplier<SteerOutputPort<C>> outputPortSupplier) {
-        this(outputPortSupplier, null);
+    /**
+     * @param outputPortSupplier 输出端口供应商（每次事件回调时解析，可为 null = headless）
+     */
+    public SteerExtension(Supplier<SteerOutputPort> outputPortSupplier) {
+        this.interceptor = new SteerInterceptor(outputPortSupplier);
     }
 
-    /**
-     * @param outputPortSupplier 输出端口惰性供应商（可为 null = headless）
-     * @param wsContext          不透明路由令牌（可为 null）
-     */
-    public SteerExtension(Supplier<SteerOutputPort<C>> outputPortSupplier, C wsContext) {
-        this.outputPortSupplier = outputPortSupplier;
-        // 需要动态解析端口：包装为转发端口，拦截器只持有一份（wsContext 一次定值）
-        this.interceptor = new SteerInterceptor<>(
-                outputPortSupplier == null ? null : new ForwardingPort<>(outputPortSupplier),
-                wsContext);
+    /** 纯 headless 宿主：插话残留只记 warn，不通知客户端。 */
+    public SteerExtension() {
+        this(null);
     }
 
     @Override
@@ -88,8 +81,8 @@ public class SteerExtension<C> extends AbsHarnessExtension {
 
     // ==================== 操作门面（中转静态实现） ====================
 
-    /** 组装好的拦截器（挂载已由扩展完成；仅供确需请求级再挂/细粒度访问的宿主）。 */
-    public SteerInterceptor<C> getInterceptor() {
+    /** 组装好的拦截器（挂载已由扩展完成；仅供确需细粒度访问的宿主）。 */
+    public SteerInterceptor getInterceptor() {
         return interceptor;
     }
 
@@ -128,8 +121,7 @@ public class SteerExtension<C> extends AbsHarnessExtension {
 
     /** 取消仍留在邮箱中的插话（消费线程已 poll 出则返回 false，不得宣称取消成功）。 */
     public boolean cancel(AgentSession session, String steerId) {
-        Queue<SteerMessage> box = SteerInterceptor.steerBox(session);
-        return SteerInterceptor.cancel(box, steerId);
+        return SteerInterceptor.cancel(SteerInterceptor.steerBox(session), steerId);
     }
 
     /**
@@ -140,36 +132,5 @@ public class SteerExtension<C> extends AbsHarnessExtension {
      */
     public java.util.List<SteerMessage> pending(AgentSession session) {
         return SteerInterceptor.pending(session);
-    }
-
-    /** 每次事件回调时从供应商取最新端口并转发（端口实例可随工作区重建而更换）。 */
-    private static final class ForwardingPort<C> implements SteerOutputPort<C> {
-        private final Supplier<SteerOutputPort<C>> supplier;
-
-        ForwardingPort(Supplier<SteerOutputPort<C>> supplier) {
-            this.supplier = supplier;
-        }
-
-        private SteerOutputPort<C> delegate() {
-            return supplier.get();
-        }
-
-        @Override
-        public void emitSteerApplied(C wsContext, AgentSession session, String runId,
-                                     java.util.List<SteerMessage> items) {
-            SteerOutputPort<C> port = delegate();
-            if (port != null) {
-                port.emitSteerApplied(wsContext, session, runId, items);
-            }
-        }
-
-        @Override
-        public void handleDroppedSteers(C wsContext, AgentSession session,
-                                        Queue<SteerMessage> box, String runId) {
-            SteerOutputPort<C> port = delegate();
-            if (port != null) {
-                port.handleDroppedSteers(wsContext, session, box, runId);
-            }
-        }
     }
 }

@@ -771,7 +771,7 @@ engine.addExtension(goal); // /goal
 QueueExtension queue = new QueueExtension();
 engine.addExtension(queue); // /queue
 
-SteerExtension steer = new SteerExtension<>(() -> mySteerPort);
+SteerExtension steer = new SteerExtension(() -> mySteerPort);
 engine.addExtension(steer); // /steer
 ```
 
@@ -1224,17 +1224,16 @@ Web 前端的排队编排在浏览器完成，IM 渠道（微信/飞书/钉钉�
 #### 装配
 
 ```java
-SteerExtension<WorkspaceContext> steer =
-        new SteerExtension<>(() -> webGate /* SteerOutputPort */, wsContext);
+SteerExtension steer = new SteerExtension(() -> webGate /* SteerOutputPort */);
 engine.addExtension(steer);   // initialize 注册 /steer 命令；configure 把拦截器挂为主代理默认拦截器
 ```
 
 参数与变体：
 
-- **供应商惰性解析**：`SteerOutputPort` 在每次事件回调时取值，不在构造期快照。工作区可能在入口绑定之前创建（那时端口还拿不到），惰性供应避开了这个时序坑。内部实现是包装了一个转发端口，拦截器只持有一份。
-- **`wsContext` 构造期定值**：它是不透明路由令牌。若同一引擎服务多个工作区、每请求上下文不同，则**保留请求级挂载**（见下方），请求级实例会按 Class 去重覆盖默认实例。
-- **`null` 供应商**：headless 宿主（无前端可通知），dropped 只记 warn 日志。
-- **只有两个构造器**：`(Supplier)` 与 `(Supplier, C)`，**没有关闭命令注册的第三参**。`initialize` 里无条件 `register`；要整体下线用 `engine.setExtensionEnabled(steer, false)`——它会同时停命令、停拦截器（`steer()` 返回 `DISABLED`），`cancel` 等清理接口不受控。
+- **供应商是「延迟初始化」**：`SteerOutputPort` 在每次事件回调时取值，不在构造期快照。宿主入口端口（如 Web 网关）常在引擎创建之后才绑定，构造期取不到，延迟解析避开了这个时序坑。**它不是「随工作区切换」**——投递路由由 session 承载，端口实例无需按工作区更换。
+- **路由身份即 session**：`SteerOutputPort` 的两个方法都接收 `AgentSession`，harness 不接受任何宿主类型的不透明令牌。宿主若需工作区/连接池，自行从 `session.attrs()` 取（在轮次边界写入），harness 不解释。因此**不再需要请求级挂载**：默认实例已能正确定位工作区。
+- **`null` 供应商 / 无参构造**：headless 宿主（无前端可通知），dropped 只记 warn 日志。
+- **只有两个构造器**：`(Supplier)` 与 `()`，**没有关闭命令注册的第三参**。`initialize` 里无条件 `register`；要整体下线用 `engine.setExtensionEnabled(steer, false)`——它会同时停命令、停拦截器（`steer()` 返回 `DISABLED`），`cancel` 等清理接口不受控。
 
 运行期操作也在这一个实例上：
 
@@ -1278,39 +1277,29 @@ SteerResult r = SteerInterceptor.steer(session, null, null, text, origin, null);
 | `INVALID_STEER_ID` | steerId 超过 128 字符 |
 | `DISABLED` | 扩展/拦截器已 `setEnabled(false)`，本次未入队 |
 
-#### 拦截器挂载：扩展已代劳
+#### 拦截器挂载：扩展已代劳，无需请求级挂载
 
 `SteerExtension.configure` 会把拦截器挂到**主代理的默认拦截器列表**，宿主无需每请求 new + add。顺序安全：拦截器容器按 Class 去重（`LinkedHashMap<Class, RankEntity>`），AgentFactory 先挂压缩/StopLoop、后轮到 extension 的 configure，因此 steer 拦截器天然排在上下文压缩之后。
 
-只有「一个引擎多工作区、每请求 wsContext 不同」时才需要请求级挂载（如 Web 端 `WebStreamBuilder`）：
-
-```java
-SteerInterceptor<WorkspaceContext> steerInterceptor = new SteerInterceptor<>(outputPort, wsContext);
-
-outcome.getRequest()
-        .options(o -> o.interceptorAdd(steerInterceptor))   // 同 Class 覆盖默认挂载，不会双份
-        .stream()
-        .doOnNext(this::render)
-        .blockLast();
-```
+**不再需要请求级挂载**。旧版在这里保留一种多工作区用法（每请求 `new SteerInterceptor(outputPort, wsContext)` 覆盖默认实例），现在路由身份改由 session 承载，默认实例本身就能定位正确工作区：宿主在轮次边界把入口上下文写进 `session.attrs()` 即可。该写法的存留意义仅在于“同一会话想换一个拦截器策略”，与工作区无关。
 
 > **不挂拦截器 = 插话永不生效**：消息能入队，但没人消费，任务结束时由 `onAgentEnd` 清空并转入 dropped。
-
-`options(Consumer)` 是累加语义，且拦截器按 `LinkedHashMap` 插入序排列——天然排在默认的 `ContextCompressionInterceptor` 之后，是向压缩产物尾部追加，不破坏消息序列。
 
 #### 输出端口（宿主实现）
 
 ```java
-public interface SteerOutputPort<C> {
+public interface SteerOutputPort {
     /** 注入已生效：客户端据此清除待生效态并落气泡，实现方必须尽力送达 */
-    void emitSteerApplied(C wsContext, AgentSession session, String runId, List<SteerMessage> items);
+    void emitSteerApplied(AgentSession session, String runId, List<SteerMessage> items);
 
     /** 任务结束时仍有未消费插话的兜底：转入排队并广播，绝不允许「已接受但永不生效」 */
-    void handleDroppedSteers(C wsContext, AgentSession session, Queue<SteerMessage> box, String runId);
+    void handleDroppedSteers(AgentSession session, Queue<SteerMessage> box, String runId);
 }
 ```
 
-泛型 `C` 是**不透明路由令牌**（典型为宿主的工作区上下文）：领域层只透传、不解释，保证 harness 不依赖任何宿主类型。端口为 `null` 时 drop 只记 warn 日志、不通知客户端。
+**路由身份即 session**：两个方法都以 `AgentSession` 定位投递目标，harness 不接受任何宿主类型的不透明令牌。实现方若需工作区/连接池，自行从 `session.attrs()` 取——宿主在轮次边界写入（soloncode 的做法是 `WebSessionRunner#beginStreamTurn` 写 `ATTR_REPLY_WORKSPACE`，与 IM 渠道的 `session.replyRoute` 同型）。
+
+端口为 `null` 时 drop 只记 warn 日志、不通知客户端。两条出口共用同一个守卫与异常边界（`SteerInterceptor#withPort`），因此实现方抛异常不会沿拦截器链冒泡。
 
 #### 三条注入守卫
 
@@ -1870,7 +1859,7 @@ org.noear.solon.ai.harness
 10. **新建子代理要注册**——`AgentDefinition` 构造完必须 `getAgentManager().addAgent(def)`，否则 `explicitAgent("xxx")` 回落主代理。
 11. **`/goal` 只注册命令不会跑**——用 `GoalExtension.builder(workspaceId).taskExecutor(...)` + `addExtension` 一次装配（内部建 bridge / engine / scheduler / 命令）。缺 `taskExecutor` 时每轮都被守卫静默跳过（日志 `execution bridge unavailable`）；纯 JUnit 无 Solon 容器时须 `.scheduler(null)` 关闭调度（`JobManager.getInstance()` 会 NPE）。
 12. **`/queue` 入队不等于会发送**——宿主必须在任务终态调 `queue.drainOne(...)`（`QueueExtension` 实例上）；并且不要自己 `poll`，claim / ack / requeue 全在 drainOne 内，重复实现会丢任务。
-13. **`/steer` 不挂拦截器就永不生效**——报 `STEERED` 只代表已入邮箱。`SteerExtension` 已代劳默认挂载；仅当同一引擎多工作区、每请求上下文不同时才需请求级 `o.interceptorAdd(...)`（同 Class 会覆盖默认实例，不会双份），否则任务结束时转 dropped。
+13. **`/steer` 不挂拦截器就永不生效**——报 `STEERED` 只代表已入邮箱。`SteerExtension` 已代劳默认挂载，**无需请求级挂载**：投递路由已改由 session 承载（宿主在轮次边界把工作区写进 `session.attrs()`），默认实例即能定位正确工作区；实现方不写路由也不丢数据（dropped 仍排入 session 队列，只是不广播）。
 14. **`GoalScheduler` 的 job 名必须带工作区前缀**——`JobManager` 是 JVM 单例而会话 ID 不全局唯一，不加前缀会让多工作区的同名会话互相覆盖（`builder(workspaceId)` 已内置）。
 15. **不要给零旋钮的能力套 builder**——goal 有 8 个可配点才用 builder；queue 零旋钮（**只有无参构造**）、steer 一个端口，用无参/单参构造即得。伪一致性只会增加仪式感。
 16. **`GoalExtension.resume()` 含 `runNow=true`，恢复期别用**——服务重启/工作区恢复要「静默挂上、等下一轮」时用 `resumeScheduleOnly(sessionId)`，否则每个活跃 goal 会立即多跑一轮。（注意与 `HarnessEngine.resume()` 同名但无关：后者是「恢复最近一个工作记忆」的请求入口，即 `prompt()` 的新名字。）
@@ -1878,7 +1867,7 @@ org.noear.solon.ai.harness
 18. **`engine.interrupt()` 会连带清队列**——它不是「只停当前流」。早期 `/interrupt` 保留队列，现在「停」是彻底的（这也补上了 `SessionQueue.cancelPending` 那条旧待办）。若你需要「停当前、留队列」，只停药那一条流，别调 `engine.interrupt`。
 19. **`outcome.call()` / `outcome.stream()` 只在 `TASK` 上有意义**——它们在 `REPLY` / `HITL` / `IGNORED` 上会立即失败（前者抛 `IllegalStateException`、后者返回 `Flux.error`）。不要用它们取代 `switch (kind)`：先判 kind 再取流，顺序不能颠倒。
 20. **`GoalSpec` 的负数会被夹到 0**——`maxTokens(-1)` 不是「报错」而是「不限制」；命令行的 `--max-tokens:-1` 也一样（`Long.parseLong` 通过后交给 `GoalSpec` 再夹到 0）。想表达「非法参数」请在调用前/解析层自己校验。
-21. **三个扩展都没有「只关命令」的开关**——`QueueExtension` 只有无参构造，`SteerExtension` 只有 `(Supplier)` / `(Supplier, C)`，`GoalExtension` 的构造器私有且 builder 无 `commandEnabled`；`initialize` 里一律 `register`（幂等）。要下线只有 `engine.setExtensionEnabled(ext, false)` 一条路，它是「命令 + 门面」一起关；且**未加入引擎的扩展会先被加入再直接返回**，初始状态请在 `addExtension` 前用 `ext.setEnabled(false)`。
+21. **三个扩展都没有「只关命令」的开关**——`QueueExtension` 只有无参构造，`SteerExtension` 只有 `(Supplier)` / `()`，`GoalExtension` 的构造器私有且 builder 无 `commandEnabled`；`initialize` 里一律 `register`（幂等）。要下线只有 `engine.setExtensionEnabled(ext, false)` 一条路，它是「命令 + 门面」一起关；且**未加入引擎的扩展会先被加入再直接返回**，初始状态请在 `addExtension` 前用 `ext.setEnabled(false)`。
 22. **`interrupt` 之后不要再 `steer`**——`activeRunId` 已随任务结束被清掉，此时只能拿到 `NOT_RUNNING`；「停下来重来」请直接用 `queue.enqueue`。「运行中改主意」才用 steer，两者是互斥场景而非串行步骤。
 23. **`.scheduler(null)` 之后调度类方法全是空操作**——`hasScheduler()` 为 `false`，`scheduleNow` / `resumeScheduleOnly` / `unschedule` / `stopAll` 静默返回。纯测试宿主排查「调了 `scheduleNow` 却没跑」先看这里。
 24. **`GoalExtension.of(...)` 不建命令也不建调度**——它是存量入口（未标 `@Deprecated`），适合宿主已有 `GoalEngine`、只借 Talent 与门面的场景；`getGoalScheduler()` 为 `null`，与 builder 形态的能力不等价。

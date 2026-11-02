@@ -34,7 +34,7 @@ class SteerExtensionTest {
     @Test
     void extensionRegistersSteerCommandOnAdd() {
         HarnessEngine engine = newEngine();
-        engine.addExtension(new SteerExtension<>(() -> null));
+        engine.addExtension(new SteerExtension(() -> null));
 
         assertNotNull(engine.getCommandRegistry().find("steer"), "/steer 命令应自动注册");
     }
@@ -43,11 +43,11 @@ class SteerExtensionTest {
     void commandRegistrationIsIdempotentAndCanBeDisabled() {
         HarnessEngine engine = newEngine();
         engine.getCommandRegistry().register(new org.noear.solon.ai.harness.command.builtin.SteerCommand());
-        engine.addExtension(new SteerExtension<>(() -> null));
+        engine.addExtension(new SteerExtension(() -> null));
         assertNotNull(engine.getCommandRegistry().find("steer"));
 
         HarnessEngine engine2 = newEngine();
-        SteerExtension<Object> disabled = new SteerExtension<>(() -> null);
+        SteerExtension disabled = new SteerExtension(() -> null);
         disabled.setEnabled(false);
         engine2.addExtension(disabled);
         assertNull(engine2.getCommandRegistry().find("steer"));
@@ -56,7 +56,7 @@ class SteerExtensionTest {
 
     @Test
     void disabledExtensionRejectsSteer() {
-        SteerExtension<Object> ext = new SteerExtension<>(() -> null);
+        SteerExtension ext = new SteerExtension(() -> null);
         AgentSession session = InMemoryAgentSession.of();
         session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
 
@@ -80,7 +80,7 @@ class SteerExtensionTest {
 
     @Test
     void facadeSteerFollowsSameSemanticsAsStaticEntry() {
-        SteerExtension<Object> ext = new SteerExtension<>(() -> null);
+        SteerExtension ext = new SteerExtension(() -> null);
         AgentSession session = InMemoryAgentSession.of();
 
         // 无活跃任务：NOT_RUNNING（与 /steer 命令、Web API 同语义）
@@ -99,7 +99,7 @@ class SteerExtensionTest {
 
     @Test
     void twoArgSteerIsSimplestEquivalentForm() {
-        SteerExtension<Object> ext = new SteerExtension<>(() -> null);
+        SteerExtension ext = new SteerExtension(() -> null);
         AgentSession session = InMemoryAgentSession.of();
 
         // 无活跃任务：NOT_RUNNING（与 6 参形态同语义）
@@ -115,7 +115,7 @@ class SteerExtensionTest {
 
     @Test
     void twoArgSteerKeepsDisabledAndEmptyTextGuards() {
-        SteerExtension<Object> ext = new SteerExtension<>(() -> null);
+        SteerExtension ext = new SteerExtension(() -> null);
         AgentSession session = InMemoryAgentSession.of();
         session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
 
@@ -128,7 +128,7 @@ class SteerExtensionTest {
 
     @Test
     void threeArgSteerDefaultsNullOrigin() {
-        SteerExtension<Object> ext = new SteerExtension<>(() -> null);
+        SteerExtension ext = new SteerExtension(() -> null);
         AgentSession session = InMemoryAgentSession.of();
         session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
 
@@ -138,7 +138,7 @@ class SteerExtensionTest {
 
     @Test
     void pendingListsUnappliedSteersAndCancelUsesThoseIds() {
-        SteerExtension<Object> ext = new SteerExtension<>(() -> null);
+        SteerExtension ext = new SteerExtension(() -> null);
         AgentSession session = InMemoryAgentSession.of();
 
         // 邮箱未创建时返回空集合（不是 null），宿主可以直接 for-each
@@ -175,10 +175,9 @@ class SteerExtensionTest {
     }
 
     @Test
-    void lazyOutputPortResolvesAtEventTimeNotConstruction() {
-        // 供应商先为 null 端口（headless 构造期），后切换为可送达端口——转发端口每次回调取最新值
-        SteerExtension<Object> ext = new SteerExtension<>(() -> null);
-        // 构造期未触发 NPE 即通过；拦截器持有的是 ForwardingPort
+    void headlessConstructionNeedsNoPortSupplier() {
+        // 无参构造 = headless 宿主（drop 只记 warn）；端口不再有"构造期令牌"可漏传
+        SteerExtension ext = new SteerExtension();
         assertNotNull(ext.getInterceptor());
     }
 }

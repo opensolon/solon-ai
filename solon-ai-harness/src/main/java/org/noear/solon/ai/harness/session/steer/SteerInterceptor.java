@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * 运行中插话拦截器（Steering）
@@ -50,14 +52,15 @@ import java.util.function.BooleanSupplier;
  *       绝不允许"已接受但永不生效"（Codex issue #15842 教训）。</li>
  * </ul>
  *
- * <p>泛型参数 {@code C} 是不透明的路由令牌（典型为宿主的工作区上下文），领域层只透传、
- * 不解释，随 {@link SteerOutputPort} 回到宿主实现。</p>
+ * <p><b>输出路由</b>：两个事件出口都以 {@link AgentSession} 定位投递目标，不持有任何人造令牌。
+ * 宿主需要工作区/连接池时自行从 {@code session.attrs()} 取。两个出口共用
+ * {@link #withPort} 的守卫与异常边界——结构上不可能再出现「一个出口判令牌、另一个不判」的不对称。</p>
  *
  * @author noear
  * @since 2026
  */
 @SuppressWarnings("deprecation")
-public class SteerInterceptor<C> extends AbsReActInterceptor implements ReActInterceptor {
+public class SteerInterceptor extends AbsReActInterceptor implements ReActInterceptor {
     private static final Logger LOG = LoggerFactory.getLogger(SteerInterceptor.class);
     /** 会话级插话邮箱 key（attrs 为 transient Map，不落 snapshot.json） */
     public static final String ATTR_STEER_BOX = "web.steerBox";
@@ -87,12 +90,42 @@ public class SteerInterceptor<C> extends AbsReActInterceptor implements ReActInt
     /** 插话消息的 metadata 标记值（{@code source=steer}） */
     public static final String STEER_SOURCE = "steer";
 
-    private final SteerOutputPort<C> outputPort;
-    private final C wsContext;
+    /** 输出端口供应商：每次事件回调时解析（入口端口可能晚于引擎创建，故不在构造期快照）。 */
+    private final Supplier<SteerOutputPort> outputPortSupplier;
 
-    public SteerInterceptor(SteerOutputPort<C> outputPort, C wsContext) {
-        this.outputPort = outputPort;
-        this.wsContext = wsContext;
+    public SteerInterceptor(Supplier<SteerOutputPort> outputPortSupplier) {
+        this.outputPortSupplier = outputPortSupplier;
+    }
+
+    /**
+     * 端口解析 + 空判 + 异常吞没的唯一入口。
+     *
+     * <p>applied 与 dropped 两条出口都必须经此方法：既保证守卫一致（端口为空时一律跳过），
+     * 也保证实现方异常不会沿拦截器链冒泡（{@code onAgentEnd} 的调用方没有 try）。</p>
+     *
+     * @return 端口是否存在并已执行回调
+     */
+    private boolean withPort(Consumer<SteerOutputPort> action) {
+        if (outputPortSupplier == null) {
+            return false;
+        }
+        SteerOutputPort port;
+        try {
+            port = outputPortSupplier.get();
+        } catch (Throwable e) {
+            LOG.warn("[SteerInterceptor] resolve steer output port failed: {}", e.toString());
+            return false;
+        }
+        if (port == null) {
+            return false;
+        }
+        try {
+            action.accept(port);
+            return true;
+        } catch (Throwable e) {
+            LOG.warn("[SteerInterceptor] steer output port failed: {}", e.toString());
+            return false;
+        }
     }
 
     @Override
@@ -165,12 +198,10 @@ public class SteerInterceptor<C> extends AbsReActInterceptor implements ReActInt
             // 未消费的插话绝不能静默丢弃——交由入口端口转排队（Web 广播 dropped，前端转为排队消息发送）
             List<SteerMessage> dropped = drain(box);
             if (!dropped.isEmpty()) {
-                if (outputPort != null) {
-                    ConcurrentLinkedQueue<SteerMessage> droppedBox = new ConcurrentLinkedQueue<>(dropped);
-                    outputPort.handleDroppedSteers(wsContext, session, droppedBox, trace.getRunId());
-                }
-                // 端口为空（纯 headless 测试场景）时无客户端可通知，仅记日志后丢弃
-                else {
+                ConcurrentLinkedQueue<SteerMessage> droppedBox = new ConcurrentLinkedQueue<>(dropped);
+                boolean handled = withPort(port -> port.handleDroppedSteers(session, droppedBox, trace.getRunId()));
+                // 端口为空（纯 headless 场景）时无客户端可通知，仅记日志后丢弃
+                if (handled == false) {
                     LOG.warn("[SteerInterceptor] {} unconsumed steers dropped without output port for session {}",
                             dropped.size(), session.getSessionId());
                 }
@@ -350,12 +381,7 @@ public class SteerInterceptor<C> extends AbsReActInterceptor implements ReActInt
      * 推送插话已生效事件（steer_applied），由入口端口负责具体协议呈现。
      */
     private void emitSteerApplied(AgentSession session, String runId, List<SteerMessage> items) {
-        try {
-            if (outputPort != null && wsContext != null) {
-                outputPort.emitSteerApplied(wsContext, session, runId, items);
-            }
-        } catch (Throwable e) {
-            LOG.warn("[SteerInterceptor] emit steer event failed: {}", e.toString());
-        }
+        // 不额外判 wsContext：路由身份已归 session，端口存在即应投递
+        withPort(port -> port.emitSteerApplied(session, runId, items));
     }
 }
