@@ -6,6 +6,7 @@ import io.modelcontextprotocol.server.transport.ServerTransportSecurityValidator
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.mcp.server.HttpHeaderValidatorAdapter;
+import org.noear.solon.ai.mcp.server.manager.McpServerHost;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -51,24 +52,25 @@ public class HttpHeaderValidatorAdapterTest {
 
     @Test
     public void case2_noopDetection() {
-        //未配置（null）
-        Assertions.assertTrue(HttpHeaderValidatorAdapter.isNoop(null));
+        //判定口径：只把“哨兵常量”视为未配置（null / 旧 NOOP / 新 NOOP 经适配），
+        //无法从外部判断自实现体是否为空，故 headers -> {} 仍算“已配置”
+        Assertions.assertTrue(McpServerHost.isNoop(null));
 
         //旧接口 NOOP
-        Assertions.assertTrue(HttpHeaderValidatorAdapter.isNoop(ServerTransportSecurityValidator.NOOP));
+        Assertions.assertTrue(McpServerHost.isNoop(ServerTransportSecurityValidator.NOOP));
 
         //新接口 NOOP（经适配）
-        Assertions.assertTrue(HttpHeaderValidatorAdapter.isNoop(
+        Assertions.assertTrue(McpServerHost.isNoop(
                 new HttpHeaderValidatorAdapter(ServerHttpHeaderValidator.NOOP)));
 
         //真实校验器
         ServerTransportSecurityValidator real = headers -> {
         };
-        Assertions.assertFalse(HttpHeaderValidatorAdapter.isNoop(real));
+        Assertions.assertFalse(McpServerHost.isNoop(real));
 
         ServerHttpHeaderValidator real2 = accessor -> {
         };
-        Assertions.assertFalse(HttpHeaderValidatorAdapter.isNoop(new HttpHeaderValidatorAdapter(real2)));
+        Assertions.assertFalse(McpServerHost.isNoop(new HttpHeaderValidatorAdapter(real2)));
     }
 
     @Test

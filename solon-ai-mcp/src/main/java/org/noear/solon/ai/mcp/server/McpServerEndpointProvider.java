@@ -47,7 +47,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
     private final McpServerHost serverHost;
 
     public McpServerEndpointProvider(Properties properties) {
-        this(Props.from(properties).bindTo(new McpServerProperties()), (ServerTransportSecurityValidator) null);
+        this(Props.from(properties).bindTo(new McpServerProperties()), ServerTransportSecurityValidator.NOOP);
     }
 
     private McpServerEndpointProvider(McpServerProperties serverProps, ServerTransportSecurityValidator securityValidator) {
@@ -307,7 +307,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
     public static class Builder {
         private McpServerProperties props = new McpServerProperties();
-        private ServerTransportSecurityValidator securityValidator;
+        private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
 
         public Builder from(Class<?> endpointClz, McpServerEndpoint endpointAnno) {
             //支持${配置}

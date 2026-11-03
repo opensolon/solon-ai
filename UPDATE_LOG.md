@@ -2,11 +2,11 @@
 
 * **Mcp 服务端：未配置传输安全校验器时启动 warn 提示，并补上 `ServerHttpHeaderValidator` 接入**:
   * **背景**：`mcp-core` 已将 `ServerHttpHeaderValidator` 定为 `ServerTransportSecurityValidator` 的替代接口，但 `solon-ai-mcp` 的三个 Web 传输实现仍只认旧接口；用户按新接口实现校验器会被**静默忽略**，实际生效的是 NOOP，且启动日志完全看不出“到底有没有校验”
-  * **新增 `HttpHeaderValidatorAdapter`**（`org.noear.solon.ai.mcp.server`）：把 `ServerHttpHeaderValidator` 适配为旧接口，内置大小写不敏感的 `MapHeaderAccessor`；`isNoop(...)` 统一判定“未配置 / 旧 NOOP / 新 NOOP 经适配”三种等价于不校验的情形
-  * **`McpServerEndpointProvider`**：`Builder.securityValidator` 默认值由 `ServerTransportSecurityValidator.NOOP` 改为 `null`（`Properties` 构造器同步），从而能区分“没配”与“显式配了 NOOP”；新增 `Builder.httpHeaderValidator(ServerHttpHeaderValidator)`（刻意**不**重载 `securityValidator`，否则同时实现两接口的 `DefaultServerTransportSecurityValidator` 会调用歧义）；宿主处 `null → NOOP` 的降级保持不变
-  * **启动提示**：`StatefulMcpServerHost` / `StatelessMcpServerHost` 在既有 INFO 之后追加一条 warn（仅 HTTP 通道，stdio 不打），带 name/channel/endpoint 与建议方案；`build()` 本身幂等，故单实例只提示一次
+  * **新增 `HttpHeaderValidatorAdapter`**（`org.noear.solon.ai.mcp.server`）：把 `ServerHttpHeaderValidator` 适配为旧接口，内置大小写不敏感的 `MapHeaderAccessor`
+  * **`McpServerEndpointProvider`**：新增 `Builder.httpHeaderValidator(ServerHttpHeaderValidator)`（刻意**不**重载 `securityValidator`，否则同时实现两接口的 `DefaultServerTransportSecurityValidator` 会调用歧义）；`Builder` 与 `Properties` 构造器的默认值均保持为 `NOOP` 不变（判定只看哨兵常量，无需区分“没配”与“显式配了 NOOP”），故对既有调用方零影响
+  * **启动提示**：新增 `McpServerHost.warnIfNoop(...)` 统一判定与文案（`isNoop` 一并从适配器移入此处，适配器只负责接口转换），`StatefulMcpServerHost` / `StatelessMcpServerHost` 在既有 INFO 之后各调一行；仅 HTTP 通道提示（stdio 无 HTTP 头），带 name/channel/endpoint 与建议方案；`build()` 本身幂等，故单实例只提示一次
   * **`McpPlugin`**：`@McpServerEndpoint` bean 若实现新接口，走 `httpHeaderValidator` 接入（旧接口分支保留在前）
-  * **验证**：新增 `HttpHeaderValidatorAdapterTest` 3 例（新接口适配生效/大小写不敏感/缺头拦截、三种 NOOP 判定、header 访问语义）；`McpStartTest`/`McpPropsTest(2)`/`McpContextPathTest`/`McpHttpAuth2Test`/`McpToolMixTest`/`McpInitClientTest`/`McpChangeSyncTest` 均绿；`McpHttpClientMixTest7_sse/10_stateless` 的 `prompt1` 失败经 `git stash -u` 基线对照复现，属既有问题
+  * **验证**：新增 `HttpHeaderValidatorAdapterTest` 3 例（新接口适配生效/大小写不敏感/缺头拦截、哨兵 NOOP 判定、header 访问语义）；`McpStartTest`/`McpPropsTest(2)`/`McpContextPathTest`/`McpHttpAuth2Test` 均绿（24 例）；实测启动日志中 17 个 HTTP 端点告警 15 条，已配校验器的 `McpServerAuth2` 与两个 stdio 端点均不告警；`McpHttpClientMixTest7_sse/10_stateless` 的 `prompt1` 失败经 `git stash -u` 基线对照复现，属既有问题
 
 * **会话域命令自包含：GoalCommand/QueueCommand/SteerCommand/InterruptCommand 迁出 command.builtin，随域包就位（消除 command.builtin ↔ session.* 双向引用环）**:
   * **动机**：域包通过 Extension 装配命令（GoalExtension import GoalCommand…），命令又 import 域类，形成集中在装配点的双向环。每个能力自包含（域 + 命令 + Extension）后，`command.builtin` 只留通用基础命令，职责名副其实

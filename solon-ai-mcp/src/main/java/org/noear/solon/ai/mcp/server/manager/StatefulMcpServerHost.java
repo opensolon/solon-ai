@@ -25,7 +25,6 @@ import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.mcp.McpChannel;
-import org.noear.solon.ai.mcp.server.HttpHeaderValidatorAdapter;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.ai.chat.prompt.FunctionPrompt;
 import org.noear.solon.ai.chat.resource.FunctionResource;
@@ -203,12 +202,7 @@ public class StatefulMcpServerHost implements McpServerHost {
             }
 
             //启动时提示：未配置传输安全校验器（仅 web 通道有效）
-            if (HttpHeaderValidatorAdapter.isNoop(securityValidator) && !McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
-                log.warn("Mcp-Server has no transport security validator, HTTP headers (Origin/Host) will NOT be validated, name={}, channel={}, endpoint={}. Suggest configuring a ServerHttpHeaderValidator (e.g. DefaultServerTransportSecurityValidator) if this endpoint is exposed to browsers or the Internet",
-                        serverProperties.getName(),
-                        serverProperties.getChannel(),
-                        this.mcpEndpoint);
-            }
+            McpServerHost.warnIfNoop(log, serverProperties, this.mcpEndpoint, securityValidator);
         }
 
         return mcpTransportProvider;

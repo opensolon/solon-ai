@@ -55,23 +55,6 @@ public class HttpHeaderValidatorAdapter implements ServerTransportSecurityValida
     }
 
     /**
-     * 是否为“不做任何校验”的校验器
-     *
-     * <p>用于启动时判断是否提示安全配置缺失，避免把显式配置的 NOOP 误判为已配置。</p>
-     */
-    public static boolean isNoop(ServerTransportSecurityValidator validator) {
-        if (validator == null || validator == ServerTransportSecurityValidator.NOOP) {
-            return true;
-        }
-
-        if (validator instanceof HttpHeaderValidatorAdapter) {
-            return ((HttpHeaderValidatorAdapter) validator).getValidator() == ServerHttpHeaderValidator.NOOP;
-        }
-
-        return false;
-    }
-
-    /**
      * {@link Map} 视图的 {@link HeaderAccessor}（头名大小写不敏感，与 Servlet 语义一致）
      */
     public static class MapHeaderAccessor implements HeaderAccessor {

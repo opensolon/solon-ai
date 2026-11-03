@@ -15,11 +15,16 @@
  */
 package org.noear.solon.ai.mcp.server.manager;
 
+import io.modelcontextprotocol.server.transport.ServerHttpHeaderValidator;
 import io.modelcontextprotocol.server.transport.ServerTransportSecurityValidator;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.prompt.FunctionPrompt;
 import org.noear.solon.ai.chat.resource.FunctionResource;
+import org.noear.solon.ai.mcp.McpChannel;
+import org.noear.solon.ai.mcp.server.HttpHeaderValidatorAdapter;
+import org.noear.solon.ai.mcp.server.McpServerProperties;
+import org.slf4j.Logger;
 
 /**
  * MCP 服务端包装器
@@ -28,6 +33,43 @@ import org.noear.solon.ai.chat.resource.FunctionResource;
  * @since 3.8.0
  */
 public interface McpServerHost {
+    /**
+     * 是否为“不做任何校验”的校验器
+     *
+     * <p>只以哨兵常量为准（未配置 / 旧 NOOP / 新 NOOP 经适配），无法从外部判断自实现体是否为空。</p>
+     */
+    static boolean isNoop(ServerTransportSecurityValidator securityValidator) {
+        if (securityValidator == null || securityValidator == ServerTransportSecurityValidator.NOOP) {
+            return true;
+        }
+
+        if (securityValidator instanceof HttpHeaderValidatorAdapter) {
+            return ((HttpHeaderValidatorAdapter) securityValidator).getValidator() == ServerHttpHeaderValidator.NOOP;
+        }
+
+        return false;
+    }
+
+    /**
+     * 启动时提示：web 通道未配置传输安全校验器（stdio 通道无 HTTP 头，不提示）
+     *
+     * <p>必须在 build 幂等区内调用，避免重复输出。</p>
+     */
+    static void warnIfNoop(Logger log, McpServerProperties serverProperties, String mcpEndpoint, ServerTransportSecurityValidator securityValidator) {
+        if (McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
+            return;
+        }
+
+        if (isNoop(securityValidator) == false) {
+            return;
+        }
+
+        log.warn("Mcp-Server has no transport security validator, HTTP headers (Origin/Host) will NOT be validated, name={}, channel={}, endpoint={}. Suggest configuring a ServerHttpHeaderValidator (e.g. DefaultServerTransportSecurityValidator) if this endpoint is exposed to browsers or the Internet",
+                serverProperties.getName(),
+                serverProperties.getChannel(),
+                mcpEndpoint);
+    }
+
     /**
      * 设置日志级别
      */
