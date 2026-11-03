@@ -82,11 +82,13 @@ public class TaskTalent extends AbsTalent {
     public static final String TOOL_TASK = "task";
     public static final String TOOL_MULTITASK = "multitask";
 
-    /** 超长子任务结果的落盘召回工具（与 task/multitask 同 Talent 挂载，自动注册） */
-    public static final String TOOL_TASK_RESULT_READ = "task_result_read";
-
-    /** 超长结果落盘目录（相对 harnessHome） */
-    static final String SPILL_DIR = "task-spill";
+    /**
+     * 超长结果落盘目录（相对 workspace）。
+     *
+     * <p>{@code .files} 是与宿主共享的 workspace 级文件根（宿主把上传附件落 {@code .files/uploads}），
+     * 引擎把超长子任务结果放同一根下（{@code .files/task/<taskId>/result.txt}），可统一忽略与浏览。</p>
+     */
+    static final String SPILL_DIR = ".files/task";
 
     /** 默认并发上限的缺省值：配置为 0（未设置）时使用 */
     public static final int DEFAULT_CONCURRENCY = 5;
@@ -719,8 +721,9 @@ public class TaskTalent extends AbsTalent {
      *
      * <p>顺序不能反——先转义再截断可能把 {@code ]]>} 的转义产物切成半个，反而提前闭合。</p>
      *
-     * <p>超限内容会先尝试落盘（见 {@link #trySpill}），落盘成功后头部保留截断说明并附带
-     * {@link #TOOL_TASK_RESULT_READ} 召回指引；落盘不可用（无 engine / 写入失败）时保持纯截断，
+     * <p>超限内容会先尝试落盘（见 {@link #trySpill}），落盘成功后头部保留截断说明并给出
+     * workspace 相对路径，供宿主的文件读取工具分页读回（工具无关——harness 不假设宿主
+     * 一定有 read 工具，也无专属召回工具）；落盘不可用（无 engine / 写入失败）时保持纯截断，
      * 行为与历史版本一致。</p>
      */
     private String toCdata(MultiTaskOp op, String taskId, String text) {
@@ -744,8 +747,7 @@ public class TaskTalent extends AbsTalent {
         String spillRef = trySpill(op, taskId, text);
         if (spillRef != null) {
             body = head + "\n...[内容过长已截断：原始长度 " + text.length() + " 字符，此处保留前 " + cut
-                    + " 字符；完整结果已落盘（" + spillRef + "），用 " + TOOL_TASK_RESULT_READ
-                    + " 工具按 task_id=\"" + taskId + "\" 分页读取，不要重新委派该任务]";
+                    + " 字符；完整结果已落盘到 " + spillRef + "，可按需读取文件]";
             LOG.info("子任务结果超限已落盘: task_id={}, agent={}, 原始长度 {} 字符",
                     taskId, op.agent_name, text.length());
         } else {
@@ -757,12 +759,12 @@ public class TaskTalent extends AbsTalent {
     }
 
     /**
-     * 超长结果落盘。返回相对 harnessHome 的展示路径（如 {@code task-spill/<taskId>/result.txt}），
+     * 超长结果落盘。返回 workspace 相对展示路径（如 {@code .files/task/<taskId>/result.txt}），
      * 不可用时返回 null（降级为纯截断）。
      *
-     * <p>落盘目录相对 <b>workspace</b> 解析（先于 harnessHome）——harnessHome 常配置为相对路径
-     * （如 {@code .soloncode/}），直接 {@code Paths.get(harnessHome)} 会相对 JVM CWD 写错位置。
-     * 与 {@code TodoTalent#getWorkPath} 的解析口径一致。</p>
+     * <p>落盘目录相对 <b>workspace</b> 解析（不在 harnessHome 内）——{@code .files} 是与宿主
+     * 共享的约定根，宿主上传附件也落在其下（{@code .files/uploads}）；直接 {@code Paths.get}
+     * 相对 JVM CWD 会写错位置，与 {@code TodoTalent#getWorkPath} 的解析口径一致。</p>
      */
     private String trySpill(MultiTaskOp op, String taskId, String text) {
         try {
@@ -784,14 +786,14 @@ public class TaskTalent extends AbsTalent {
         }
     }
 
-    /** 落盘文件路径；workspace/harnessHome 不可用或 taskId 非法时返回 null */
+    /** 落盘文件路径；workspace 不可用或 taskId 非法时返回 null */
     private Path spillFile(String taskId) {
-        if (engine == null || Assert.isEmpty(engine.getWorkspace()) || Assert.isEmpty(engine.getHarnessHome())) {
+        if (engine == null || Assert.isEmpty(engine.getWorkspace())) {
             return null;
         }
 
-        // 与 getWorkPath 同口径：workspace 为根，harnessHome（相对）拼在其后
-        return Paths.get(engine.getWorkspace(), engine.getHarnessHome(), SPILL_DIR, safeSegment(taskId))
+        // 与 getWorkPath 同口径：以 workspace 为根（.files 是与宿主共享的约定根，不在 harnessHome 内）
+        return Paths.get(engine.getWorkspace(), SPILL_DIR, safeSegment(taskId))
                 .toAbsolutePath()
                 .normalize()
                 .resolve("result.txt");
@@ -803,56 +805,6 @@ public class TaskTalent extends AbsTalent {
             return "unknown";
         }
         return raw.replaceAll("[^A-Za-z0-9_.-]", "_");
-    }
-
-    @ToolMapping(name = TOOL_TASK_RESULT_READ, description =
-            "读取被截断的子任务结果的完整内容（按字符分页）。仅当 task_result 中出现「已落盘」提示时使用；"
-                    + "不要用它替代正常的 task 调用，也不要为了看完整结果而重新委派同一任务。")
-    public String taskResultRead(
-            @Param(name = "task_id", description = "截断提示中给出的 task_id") String taskId,
-            @Param(value = "offset", required = false, description = "起始字符偏移（默认 0）") Integer offset,
-            @Param(value = "limit", required = false, defaultValue = "20000", description = "本次读取字符数上限（默认 20000，最大 20000）") Integer limit) {
-        if (engine == null) {
-            return "ERROR: 引擎不可用，无落盘结果可读。";
-        }
-        if (Assert.isEmpty(taskId)) {
-            return "ERROR: 缺少 task_id。";
-        }
-
-        int off = (offset == null || offset < 0) ? 0 : offset;
-        int len = (limit == null || limit <= 0) ? MAX_RESULT_CHARS : Math.min(limit, MAX_RESULT_CHARS);
-
-        try {
-            Path file = spillFile(taskId);
-            if (file == null) {
-                return "ERROR: 当前引擎未配置 workspace/harnessHome，无落盘结果可读。";
-            }
-            if (!Files.isRegularFile(file)) {
-                return "ERROR: 未找到 task_id='" + taskId + "' 的落盘结果（可能未被截断落盘，或已清理）。";
-            }
-
-            String all = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
-            if (off >= all.length()) {
-                return "ERROR: offset " + off + " 超出范围（总长 " + all.length() + " 字符）。";
-            }
-
-            int end = Math.min(all.length(), off + len);
-            if (end < all.length() && Character.isHighSurrogate(all.charAt(end - 1))) {
-                end--; // 不切断代理对
-            }
-
-            StringBuilder sb = new StringBuilder();
-            sb.append(all.substring(off, end));
-            if (end < all.length()) {
-                sb.append("\n...[本次 ").append(off).append("-").append(end).append(" / 共 ").append(all.length())
-                        .append(" 字符；继续读取请传 offset=").append(end).append("]");
-            } else {
-                sb.append("\n...[已读到末尾，共 ").append(all.length()).append(" 字符]");
-            }
-            return sb.toString();
-        } catch (Throwable e) {
-            return "ERROR: 读取落盘结果失败: " + e.getMessage();
-        }
     }
 
     public static class SingleTaskOp {

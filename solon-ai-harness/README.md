@@ -1546,7 +1546,6 @@ engine.handle(HarnessInput.of(session, "分析 src/main.js").explicitAgent("fron
 // 工具集含 task 时（* 或 ** 或显式 task），主代理可调用：
 //   task              —— 委派单个子代理，串行
 //   multitask         —— 并行委派多个子代理，并行度按每个任务实际路由到的模型分别限流
-//   task_result_read  —— 分页读取超限落盘的子任务结果（仅在结果外壳出现「已落盘」提示时使用）
 //                生效上限 = 模型配置 concurrency（0=未设置，配了就用它）?: subagentDefaultConcurrency（默认 5，取值 1~10）
 //                不存在「不限制」：生效上限恒为有限正整数（具体理由见下方注记）
 //                模型配了就以模型为准；模型没配才用默认值。超限不报错，在调用线程排队，有空位就提交
@@ -1588,9 +1587,11 @@ config.setConcurrency(2);
 >
 > 结果外壳：每个子任务包在 `<task_result>` 里，`<result_content>` 用 CDATA 包裹并**有 20000 字符上限**
 > ——否则单个超长的子代理输出就能灌爆父会话上下文。
-> 超出上限时完整结果会落盘到 `<workspace>/<harnessHome>/task-spill/<task_id>/result.txt`，
-> 头部保留截断说明并给出 `task_result_read` 召回指引（按 `task_id` + `offset`/`limit` 分页读回，无需重新委派）；
+> 超出上限时完整结果会落盘到 `<workspace>/.files/task/<task_id>/result.txt`，
+> 头部保留截断说明并给出该 workspace 相对路径，供宿主的文件读取工具（如 read）按 offset/limit
+> 分页读回，无需重新委派（harness 不提供专属召回工具，也不假设宿主一定有文件工具）；
 > 落盘不可用（无 workspace 或写入失败）时退回纯截断，行为与历史版本一致。
+> `{@code .files}` 是与宿主共享的 workspace 级文件根（宿主的上传附件落 `.files/uploads`）。
 > 内容里的 `]]>` 会被拆开而不会提前闭合 CDATA；`description`/`agent_name` 会做 XML 转义。
 > 排队超过 30 秒会打一条 WARN（带模型名），但**不会超时终止**（会误杀长任务）。
 > 用户取消时，父代理不再逐个等到底：会中断在跑的子任务并不再等待剩下的任务。
