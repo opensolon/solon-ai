@@ -8,9 +8,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.agent.react.ReActAgent;
 
 import java.util.List;
 import java.util.Map;
@@ -38,14 +36,8 @@ public class QueueExtension extends AbsHarnessExtension {
     private final QueueCommand queueCommand = new QueueCommand();
 
     @Override
-    public void initialize(HarnessEngine engine) {
+    public void onAttach(HarnessEngine engine) {
         engine.getCommandRegistry().register(queueCommand);
-    }
-
-    /** configure 无事可做（命令无代理级装配需求）；接口要求必须实现。 */
-    @Override
-    public void configure(HarnessEngine engine, String agentName, ReActAgent.Builder agentBuilder) {
-        // no-op
     }
 
     @Override

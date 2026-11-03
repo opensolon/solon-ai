@@ -76,11 +76,11 @@ public class TerminalTalent extends AbsTalent {
     //沙盒模式：只能访问相对路径或逻辑路径；（否则为）开放模式：可以访问绝对路径
     private boolean sandboxEnabled = true;
     //允许访问用户主目录（~ 路径）。仅在 sandboxEnabled=true 时有意义；默认 true 保持向后兼容
-    private boolean sandboxAllowUserHome = true;
+    private boolean sandboxAllowUserHome = false;
     //OS 内核级沙盒限制：是否启用 Seatbelt/bwrap 等系统级强制隔离。
     //关闭后仅依赖 Java 层自保护 + 系统提示词软约束，可减少误伤（如构建工具被拦截）。
     //仅在 sandboxEnabled=true 时有意义；默认 false（轻量模式）
-    private boolean sandboxSystemRestrict = false;
+    private boolean sandboxSystemRestrict = true;
     /**
      * 单次读取/搜索的最大物理长度限制（字符数）。
      * 默认 128KB (128 * 1024)。

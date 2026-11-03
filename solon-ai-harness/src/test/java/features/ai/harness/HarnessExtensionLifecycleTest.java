@@ -30,7 +30,7 @@ class HarnessExtensionLifecycleTest {
         boolean failOnInitialize;
 
         @Override
-        public void initialize(HarnessEngine engine) {
+        public void onAttach(HarnessEngine engine) {
             events.add("initialize");
             if (failOnInitialize) {
                 throw new IllegalStateException("boom");
@@ -46,8 +46,13 @@ class HarnessExtensionLifecycleTest {
         }
 
         @Override
-        public void configure(HarnessEngine engine, String agentName, ReActAgent.Builder agentBuilder) {
+        public void onAgentBuild(HarnessEngine engine, String agentName, ReActAgent.Builder agentBuilder) {
             events.add("configure:" + agentName);
+        }
+
+        @Override
+        public void onDetach(HarnessEngine engine) {
+            events.add("detach");
         }
     }
 
@@ -97,6 +102,25 @@ class HarnessExtensionLifecycleTest {
         assertThrows(IllegalStateException.class, () -> builder().extensionAdd(ext).build());
         // 失败发生在 initialize，尚未触发任何 configure
         assertEquals(java.util.Collections.singletonList("initialize"), ext.events);
+    }
+
+    @Test
+    void detachCalledOnRemoveAndShutdown() {
+        RecordingExtension ext = new RecordingExtension();
+        HarnessEngine engine = builder().extensionAdd(ext).build();
+        ext.events.clear();
+
+        // removeExtension：先移除再回调（此刻已收不到任何输入/请求钩子）
+        engine.removeExtension(ext);
+        assertEquals(java.util.Collections.singletonList("detach"), ext.events);
+        assertTrue(engine.getExtensions().isEmpty());
+
+        // shutdown：遍历回调（与 isEnabled 无关）
+        RecordingExtension ext2 = new RecordingExtension();
+        HarnessEngine engine2 = builder().extensionAdd(ext2).build();
+        ext2.events.clear();
+        engine2.shutdown();
+        assertEquals(java.util.Collections.singletonList("detach"), ext2.events);
     }
 
     @Test

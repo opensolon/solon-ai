@@ -243,12 +243,12 @@ class HarnessEngineBuilderTest {
         AtomicBoolean initialized = new AtomicBoolean();
         AbsHarnessExtension ext = new AbsHarnessExtension() {
             @Override
-            public void initialize(HarnessEngine engine) {
+            public void onAttach(HarnessEngine engine) {
                 initialized.set(true);
             }
 
             @Override
-            public void configure(HarnessEngine engine, String agentName, ReActAgent.Builder agentBuilder) {
+            public void onAgentBuild(HarnessEngine engine, String agentName, ReActAgent.Builder agentBuilder) {
             }
         };
 
@@ -268,12 +268,12 @@ class HarnessEngineBuilderTest {
             }
 
             @Override
-            public void initialize(HarnessEngine engine) {
+            public void onAttach(HarnessEngine engine) {
                 initialized.set(true);
             }
 
             @Override
-            public void configure(HarnessEngine engine, String agentName, ReActAgent.Builder agentBuilder) {
+            public void onAgentBuild(HarnessEngine engine, String agentName, ReActAgent.Builder agentBuilder) {
             }
         };
 

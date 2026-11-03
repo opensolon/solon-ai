@@ -431,12 +431,12 @@ class HarnessEngineAccessorTest {
             }
 
             @Override
-            public void initialize(HarnessEngine engine) {
+            public void onAttach(HarnessEngine engine) {
                 initialized.set(true);
             }
 
             @Override
-            public void configure(HarnessEngine engine, String agentName, ReActAgent.Builder builder) {
+            public void onAgentBuild(HarnessEngine engine, String agentName, ReActAgent.Builder builder) {
                 configured.set(true);
             }
         };
@@ -469,12 +469,12 @@ class HarnessEngineAccessorTest {
             }
 
             @Override
-            public void initialize(HarnessEngine engine) {
+            public void onAttach(HarnessEngine engine) {
                 initialized.set(true);
             }
 
             @Override
-            public void configure(HarnessEngine engine, String agentName, ReActAgent.Builder builder) {
+            public void onAgentBuild(HarnessEngine engine, String agentName, ReActAgent.Builder builder) {
             }
         };
 
@@ -492,7 +492,7 @@ class HarnessEngineAccessorTest {
         HarnessEngine e = engine();
         AbsHarnessExtension ext = new AbsHarnessExtension() {
             @Override
-            public void configure(HarnessEngine engine, String agentName, ReActAgent.Builder builder) {
+            public void onAgentBuild(HarnessEngine engine, String agentName, ReActAgent.Builder builder) {
             }
         };
 

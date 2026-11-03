@@ -110,7 +110,7 @@ builder 的可选配置一览（`of(workspace, harnessHome)` 与 `sessionProvide
 | 前缀 | `agentPrefix(String)` | `"@"` | 子代理提及前缀，支持多字符（§4.5） |
 | 刹车 | `stopLoopInterceptor(StopLoopInterceptor)` | `StopLoopInterceptor(3, 8)` | 重复调用刹车；不配时构造期自建 |
 
-> 三个拦截器位（压缩 / 刹车 / HITL）不配时都会在**构造期自建默认实现**，自建时机早于 `build()` 末尾的 `extension.initialize(engine)`——所以扩展在 `initialize` 里通过 `engine.getCompressionInterceptor()` 等拿到的必是最终实例。
+> 三个拦截器位（压缩 / 刹车 / HITL）不配时都会在**构造期自建默认实现**，自建时机早于 `build()` 末尾的 `extension.onAttach(engine)`——所以扩展在 `onAttach` 里通过 `engine.getCompressionInterceptor()` 等拿到的必是最终实例。
 
 ### 1.3 跑第一轮对话
 
@@ -863,7 +863,7 @@ engine.setExtensionEnabled(goal,  true);    // 重新启用
 
 - **未加入引擎的扩展会先被加入**（再直接返回），所以 `setExtensionEnabled` 可以用于“先建后开”，但第一次调用不会立即应用 `enabled`——想控制初始状态请在 `addExtension` **之前**调 `ext.setEnabled(false)`；
 - **命令停用不等于退化为普通输入**：`/queue` 会回 `REPLY`（`/queue 已停用。发送 /help 查看可用命令。`），且 `isCommand()` 仍为 `true`，宿主不必写额外分支；
-- **“只保留门面、不注册命令”这一档目前不可达**：三个扩展的构造器/builder 都没有关闭命令注册的开关，`initialize` 里一律 `register`（注册本身幂等，已有同名命令则跳过）。要让整个能力下线只有 `setExtensionEnabled(..., false)` 一条路，它是“命令 + 门面”一起关。
+- **“只保留门面、不注册命令”这一档目前不可达**：三个扩展的构造器/builder 都没有关闭命令注册的开关，`onAttach` 里一律 `register`（注册本身幂等，已有同名命令则跳过）。要让整个能力下线只有 `setExtensionEnabled(..., false)` 一条路，它是“命令 + 门面”一起关。
 
 ### 5.1 `/goal`：会话级有终止判据的持续执行
 
@@ -882,8 +882,9 @@ GoalExtension goal = GoalExtension.builder(workspaceId)   // job 名工作区前
         .workspace(workspacePath)                              // 可选，验证器执行目录；缺省 = workspaceId
         .build();
 
-engine.addExtension(goal);   // initialize 内部依次完成：
-                             // bridge → GoalEngine → GoalScheduler → /goal 命令注册 → Talent 挂载
+engine.addExtension(goal);   // onAttach 内部依次完成：
+                             // bridge → GoalEngine → GoalScheduler → /goal 命令注册；
+                             // GoalTalent 在 onRequestAssemble 挂（每次顶层请求）
 ```
 
 要点：
@@ -1069,10 +1070,10 @@ goal.addListener((sessionId, state, removed) -> { /* push to client */ });
 
 ```java
 QueueExtension queue = new QueueExtension();   // 零旋钮，无参构造即全部缺省
-engine.addExtension(queue);                    // initialize 内部注册 /queue 命令（幂等）
+engine.addExtension(queue);                    // onAttach 内部注册 /queue 命令（幂等）
 ```
 
-`QueueExtension` **只有隐式无参构造器**，没有 `(boolean)` 变体，也没有关闭命令注册的 builder——`initialize` 里无条件 `register`。要让 `/queue` 从命令表中消失，只能整体停用：
+`QueueExtension` **只有隐式无参构造器**，没有 `(boolean)` 变体，也没有关闭命令注册的 builder——`onAttach` 里无条件 `register`。要让 `/queue` 从命令表中消失，只能整体停用：
 
 ```java
 engine.setExtensionEnabled(queue, false);
@@ -1233,7 +1234,7 @@ Web 前端的排队编排在浏览器完成，IM 渠道（微信/飞书/钉钉�
 
 ```java
 SteerExtension steer = new SteerExtension();
-engine.addExtension(steer);   // initialize 注册 /steer 命令；configure 把拦截器挂为主代理默认拦截器
+engine.addExtension(steer);   // onAttach 注册 /steer 命令；onRequestAssemble 每次顶层请求挂拦截器
 ```
 
 **装配就这一行，没有任何端口要注入。** 输出走 `AgentEvent`：
@@ -1288,9 +1289,15 @@ SteerResult r = SteerInterceptor.steer(session, null, null, text, origin, null);
 
 #### 拦截器挂载：扩展已代劳，无需请求级挂载
 
-`SteerExtension.configure` 会把拦截器挂到**主代理的默认拦截器列表**，宿主无需每请求 new + add。顺序安全：拦截器容器按 Class 去重（`LinkedHashMap<Class, RankEntity>`），AgentFactory 先挂压缩/StopLoop、后轮到 extension 的 configure，因此 steer 拦截器天然排在上下文压缩之后。
+#### 拦截器挂载：扩展已代劳，无需宿主请求级挂载
 
-**不再需要请求级挂载**：输出走 `AgentEvent`，路由信息由事件消费方（如 Web 的 `WebEventMapper`，构造时就持有工作区）自带，宿主无需在 `session.attrs()` 上打任何标，也不需要每请求 `new SteerInterceptor(...)`。
+`SteerExtension.onRequestAssemble` 会在**每次顶层请求**的装配阶段把拦截器挂到请求级 options（`isDelegated == false` 时），宿主无需每请求 new + add。
+
+**为何不是「主代理默认拦截器」**：面板/`@` 提及选中的子代理也是一个**顶层请求**，只是目标代理不是主代理。挂在主代理默认拦截器上的话，这种请求根本命不中，`onReasonStart` 不会执行、`activeRunId` 恒为 null，用户插话会被 `/web/chat/steer` 判为 `TURN_CHANGED` 并静默降级为排队——表现为「选了子代理就不能插话」。挂到请求级 options 后，无论目标代理是主代理还是面板子代理都能命中。
+
+**为何排除委派任务**：`task`/`multitask` 的子代理任务（`isDelegated = true`）跑在临时 `InMemoryAgentSession` 上，与前端会话无关，没有插话邮箱语义，挂了只会往临时会话写无用状态。
+
+**顺序安全**：请求级 options 的拦截器在 AgentFactory 的代理默认拦截器（压缩/StopLoop）之后追加，因此 steer 拦截器天然排在上下文压缩之后——注入是向压缩产物尾部追加，不破坏消息序列。同类型按 Class 去重，重复挂载无双份。
 
 > **不挂拦截器 = 插话永不生效**：消息能入队，但没人消费，任务结束时由 `onAgentEnd` 清空并转入 dropped。
 
@@ -1537,8 +1544,9 @@ engine.handle(HarnessInput.of(session, "分析 src/main.js").explicitAgent("fron
 
 ```java
 // 工具集含 task 时（* 或 ** 或显式 task），主代理可调用：
-//   task      —— 委派单个子代理，串行
-//   multitask —— 并行委派多个子代理，并行度按每个任务实际路由到的模型分别限流
+//   task              —— 委派单个子代理，串行
+//   multitask         —— 并行委派多个子代理，并行度按每个任务实际路由到的模型分别限流
+//   task_result_read  —— 分页读取超限落盘的子任务结果（仅在结果外壳出现「已落盘」提示时使用）
 //                生效上限 = 模型配置 concurrency（0=未设置，配了就用它）?: subagentDefaultConcurrency（默认 5，取值 1~10）
 //                不存在「不限制」：生效上限恒为有限正整数（具体理由见下方注记）
 //                模型配了就以模型为准；模型没配才用默认值。超限不报错，在调用线程排队，有空位就提交
@@ -1579,7 +1587,10 @@ config.setConcurrency(2);
 > （不会像「新建信号量」那样瞬时超额）。
 >
 > 结果外壳：每个子任务包在 `<task_result>` 里，`<result_content>` 用 CDATA 包裹并**有 20000 字符上限**
-> （超出保留头部并标注原始长度）——否则单个超长的子代理输出就能灌爆父会话上下文。
+> ——否则单个超长的子代理输出就能灌爆父会话上下文。
+> 超出上限时完整结果会落盘到 `<workspace>/<harnessHome>/task-spill/<task_id>/result.txt`，
+> 头部保留截断说明并给出 `task_result_read` 召回指引（按 `task_id` + `offset`/`limit` 分页读回，无需重新委派）；
+> 落盘不可用（无 workspace 或写入失败）时退回纯截断，行为与历史版本一致。
 > 内容里的 `]]>` 会被拆开而不会提前闭合 CDATA；`description`/`agent_name` 会做 XML 转义。
 > 排队超过 30 秒会打一条 WARN（带模型名），但**不会超时终止**（会误杀长任务）。
 > 用户取消时，父代理不再逐个等到底：会中断在跑的子任务并不再等待剩下的任务。
@@ -1708,6 +1719,9 @@ engine.resume();                         // 恢复最近一个工作记忆（旧
 // 扩展开关：true/false/null（null = 不改变）；会先传播给子组件，再重建主代理
 engine.setExtensionEnabled(goalExtension, false);
 
+// 引擎释放：遍历回调每个扩展的 onDetach（扩展自己回收引擎之外的资源）+ 关闭子代理执行器
+engine.shutdown();
+
 engine.addMcpServer("slack", mcpServerParams);
 engine.addApiServer(apiSource);
 engine.addLspServer("java-lsp", lspServerParams);
@@ -1724,32 +1738,114 @@ engine.addMount(Mount.builder()
 ## 九、扩展点
 
 ```java
-public interface HarnessExtension {
-    /** 引擎级初始化：服务装配完成后、首次懒加载主代理前，仅回调一次 */
-    default void initialize(HarnessEngine engine) { }
+public interface HarnessExtension extends AiSwitchable {
+    /** ① 引擎级装配：build() 一次 + addExtension 再一次（此刻任意引擎方法可安全调用） */
+    default void onAttach(HarnessEngine engine) { }
 
-    /** 代理级配置：每次构建代理（含主代理）时触发 */
-    void configure(HarnessEngine engine, String agentName, ReActAgent.Builder agentBuilder);
+    /** ⑤ 引擎级清理：removeExtension / shutdown 时回调（回收引擎外部资源） */
+    default void onDetach(HarnessEngine engine) { }
+
+    /** ② 代理级配置：每次构建代理（含主代理、含按请求新建的子代理）时触发 */
+    default void onAgentBuild(HarnessEngine engine, String agentName, ReActAgent.Builder agentBuilder) { }
+
+    /** ③ 输入级观察：handle() 第一步，早于 HITL/续流/判空/命令分发 */
+    default void onInput(HarnessEngine engine, HarnessInput input) { }
+
+    /** ④ 请求级装配：每次 ReActRequest 装配（覆盖用户输入/HITL 恢复/续流/命令产物/子代理委派） */
+    default void onRequestAssemble(HarnessEngine engine, boolean isDelegated,
+                                   String agentName, ReActOptionsAmend optionsAmend) { }
 }
 ```
+
+**五个钩子全部 default**，只覆写要用的那几个：
 
 ```java
 engine.addExtension(new HarnessExtension() {
     @Override
-    public void initialize(HarnessEngine engine) {
-        // 注册挂载、MCP/LSP、权限规则等引擎级资源
+    public void onAttach(HarnessEngine engine) {
+        // 注册命令 / 挂载 / MCP·LSP 连接 / 建调度器等引擎级资源
     }
 
     @Override
-    public void configure(HarnessEngine engine, String agentName, ReActAgent.Builder builder) {
+    public void onDetach(HarnessEngine engine) {
+        // 停掉 onAttach 里建到引擎之外的调度 job、线程池、长连接
+    }
+
+    @Override
+    public void onAgentBuild(HarnessEngine engine, String agentName, ReActAgent.Builder builder) {
+        // 代理级默认值：只影响该代理实例的每次请求
         if (AgentDefinition.AGENT_MAIN.equals(agentName)) {
             builder.defaultInterceptorAdd(myInterceptor);
+        }
+    }
+
+    @Override
+    public void onRequestAssemble(HarnessEngine engine, boolean isDelegated,
+                                  String agentName, ReActOptionsAmend o) {
+        // 请求级装配：isDelegated=true 是 task/multitask 委派（临时会话），会话级能力不要挂
+        if (isDelegated == false) {
+            o.interceptorAdd(myRequestInterceptor);
         }
     }
 });
 ```
 
-> 注意：`addExtension` 会触发一次 `initialize`，此刻引擎已装配完毕，任意引擎方法都可安全调用。
+#### 钩子时序与调用点
+
+```
+引擎构建 ──onAttach──> [引擎就绪] ──onAgentBuild──> [代理实例]
+                                        │
+                          每次输入进入 ──onInput──────────> [HITL/命令/委派]
+                          每次请求装配 ──onRequestAssemble──> [ReActRequest]
+                                        │
+                          removeExtension/shutdown ──onDetach──> [清理]
+```
+
+| 钩子 | 调用点 | 判 `isEnabled()` |
+|---|---|---|
+| `onAttach` | `Builder.build()`；`addExtension()` | **否**（装配必须完成，停用时改回 true 才能挂上） |
+| `onDetach` | `removeExtension()`；`shutdown()` | **否**（清理不得被开关阻止） |
+| `onAgentBuild` | `AgentFactory.create()` 末尾，无条件 | **否**（停用由扩展自己传播给子组件） |
+| `onInput` | `handle()` 第一步 | 是 |
+| `onRequestAssemble` | `ReActRequest.options(...)` 内 | 是 |
+
+#### `onAgentBuild` vs `onRequestAssemble` 的分工
+
+这是最容易选错的一对：
+
+| | `onAgentBuild` | `onRequestAssemble` |
+|---|---|---|
+| 作用域 | **代理实例**（同一代理的每次请求都生效） | **单次请求** |
+| 触发频率 | 主代理重建时（改模型/开关扩展）+ 每次子代理新建 | 每次请求（含 HITL 恢复、`/continue`、命令产物、委派任务） |
+| 常用方法 | `defaultTalentAdd` / `defaultInterceptorAdd` / `systemPrompt` | `talentAdd` / `interceptorAdd` / `maxTurns` / `retryConfig` |
+| 能否区分「委派任务」 | **不能**（不知道本次是谁在跑） | **能**（`isDelegated`） |
+| 热路径约束 | 是（子代理按请求新建，须廉价） | 是 |
+
+**选型口诀**：要「这个代理每次都带上」→ `onAgentBuild`；要「只挂这一次」或「子代理不挂」→ `onRequestAssemble`。
+
+#### `onRequestAssemble` 覆盖的四类请求
+
+| 场景 | `isDelegated` | `agentName` | 会话 |
+|---|---|---|---|
+| 用户新输入（主代理） | `false` | 主代理名 | 业务会话 |
+| 用户新输入（**面板/`@` 选中的子代理**） | `false` | **子代理名** | 业务会话 |
+| HITL 恢复 / `/continue` / 队列续发 | `false` | 生效代理名 | 业务会话 |
+| `task` / `multitask` 委派 | **`true`** | 子代理名 | 临时 `InMemoryAgentSession` |
+
+> **为什么面板选中的子代理是 `isDelegated = false`**：它是**顶层请求**，只是目标代理换成了子代理。
+> 会话能力（如 steer 插话、queue 排队）必须对它生效——这正是把插话拦截器从「主代理默认拦截器」
+> 迁到请求级 `onRequestAssemble` 的原因：挂在主代理上时，选了子代理就再也命不中，插话会被静默降级为排队。
+> 反过来，`isDelegated = true` 的委派任务跑在临时会话上，没有前端邮箱语义，必须排除。
+
+#### `onInput` 的能力边界
+
+返回 `void`——**只能观察与就地改写，不能否决**（想「拦截并改成另一种结局」请走命令分发或代理侧拦截器）。
+`HarnessInput` 的模型/代理/技能等选择项有 setter，可在钩子内补默认值，这是 `void` 签名下唯一能改变后续行为的方式。
+
+命令会经内层 `handle` 再走一次（命令产物任务），因此 `onInput` 对「命令 + 其产物」会触发**两次**，实现须能容忍重复。
+
+> 注意：`addExtension` 会触发一次 `onAttach`，此刻引擎已装配完毕，任意引擎方法都可安全调用。
+> `shutdown()` 会遍历回调 `onDetach`（逐个 try/catch，清理期异常不会打断其余扩展与执行器回收）。
 
 ---
 
@@ -1901,7 +1997,7 @@ org.noear.solon.ai.harness
 18. **`engine.interrupt()` 会连带清队列**——它不是「只停当前流」。早期 `/interrupt` 保留队列，现在「停」是彻底的（这也补上了 `SessionQueue.cancelPending` 那条旧待办）。若你需要「停当前、留队列」，只停药那一条流，别调 `engine.interrupt`。
 19. **`outcome.call()` / `outcome.stream()` 只在 `TASK` 上有意义**——它们在 `REPLY` / `HITL` / `IGNORED` 上会立即失败（前者抛 `IllegalStateException`、后者返回 `Flux.error`）。不要用它们取代 `switch (kind)`：先判 kind 再取流，顺序不能颠倒。
 20. **`GoalSpec` 的负数会被夹到 0**——`maxTokens(-1)` 不是「报错」而是「不限制」；命令行的 `--max-tokens:-1` 也一样（`Long.parseLong` 通过后交给 `GoalSpec` 再夹到 0）。想表达「非法参数」请在调用前/解析层自己校验。
-21. **三个扩展都没有「只关命令」的开关**——`QueueExtension` 只有无参构造，`SteerExtension` 只有 `(Supplier)` / `()`，`GoalExtension` 的构造器私有且 builder 无 `commandEnabled`；`initialize` 里一律 `register`（幂等）。要下线只有 `engine.setExtensionEnabled(ext, false)` 一条路，它是「命令 + 门面」一起关；且**未加入引擎的扩展会先被加入再直接返回**，初始状态请在 `addExtension` 前用 `ext.setEnabled(false)`。
+21. **三个扩展都没有「只关命令」的开关**——`QueueExtension` 只有无参构造，`SteerExtension` 只有 `(Supplier)` / `()`，`GoalExtension` 的构造器私有且 builder 无 `commandEnabled`；`onAttach` 里一律 `register`（幂等）。要下线只有 `engine.setExtensionEnabled(ext, false)` 一条路，它是「命令 + 门面」一起关；且**未加入引擎的扩展会先被加入再直接返回**，初始状态请在 `addExtension` 前用 `ext.setEnabled(false)`。
 22. **`interrupt` 之后不要再 `steer`**——`activeRunId` 已随任务结束被清掉，此时只能拿到 `NOT_RUNNING`；「停下来重来」请直接用 `queue.enqueue`。「运行中改主意」才用 steer，两者是互斥场景而非串行步骤。
 23. **`.scheduler(null)` 之后调度类方法全是空操作**——`hasScheduler()` 为 `false`，`scheduleNow` / `resumeScheduleOnly` / `unschedule` / `stopAll` 静默返回。纯测试宿主排查「调了 `scheduleNow` 却没跑」先看这里。
 24. **`GoalExtension.of(...)` 不建命令也不建调度**——它是存量入口（未标 `@Deprecated`），适合宿主已有 `GoalEngine`、只借 Talent 与门面的场景；`getGoalScheduler()` 为 `null`，与 builder 形态的能力不等价。

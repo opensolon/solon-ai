@@ -6,6 +6,8 @@ package org.noear.solon.ai.harness.session.steer;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActOptionsAmend;
+import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
@@ -15,13 +17,19 @@ import org.noear.solon.ai.harness.input.InputOrigin;
  * Steer 一键装配扩展 —— steer 能力从头到尾只接触这一个类。
  *
  * <p>{@code engine.addExtension(new SteerExtension())} 一步完成：
- * 注册 /steer 命令（幂等）+ 把 {@link SteerInterceptor} 挂为主代理<b>默认拦截器</b>。
+ * 注册 /steer 命令（幂等）+ 在<b>每次顶层请求</b>装配时挂上 {@link SteerInterceptor}。
  * 宿主不再需要每请求 {@code new SteerInterceptor(...) + interceptorAdd(...)}。</p>
  *
- * <p><b>挂载顺序安全</b>：拦截器按 {@code LinkedHashMap} 插入序 + RankEntity 稳定排序，
- * AgentFactory 先挂默认拦截器（压缩/StopLoop）、后轮到 extension 的 configure，
- * 因此本扩展挂载的 steer 拦截器天然排在上下文压缩之后——注入是向压缩产物尾部追加，
- * 不破坏消息序列。同类型按 Class 去重，重复挂载无双份。</p>
+ * <p><b>为何走请求级挂载（而非默认拦截器）</b>：面板/提及选中的子代理也是一个顶层请求，
+ * 此时目标代理不是主代理，挂在主代理默认拦截器上的组件根本不会生效，就会出现
+ * 「选了子代理就不能插话」（steer 回 TURN_CHANGED 后被降级为排队）。
+ * 挂到请求级 options 后，无论目标代理是主代理还是面板子代理都能命中；
+ * 同时按 {@code isDelegated} 排除 {@code task}/{@code multitask} 委派任务——
+ * 那些任务跑在临时会话上，没有前端邮箱语义，不应挂。</p>
+ *
+ * <p><b>挂载顺序安全</b>：请求级 options 的拦截器在 AgentFactory 的代理默认拦截器
+ * （压缩/StopLoop）之后追加，因此 steer 拦截器天然排在上下文压缩之后——注入是向压缩产物
+ * 尾部追加，不破坏消息序列。同类型按 Class 去重，重复挂载无双份。</p>
  *
  * <p><b>输出走 AgentEvent</b>：{@code steer_applied} / {@code steer_dropped} 以
  * {@link SteerAppliedEvent} / {@link SteerDroppedEvent} 推入流，与 HITL、上下文压缩
@@ -51,15 +59,14 @@ public class SteerExtension extends AbsHarnessExtension {
     }
 
     @Override
-    public void initialize(HarnessEngine engine) {
+    public void onAttach(HarnessEngine engine) {
         engine.getCommandRegistry().register(steerCommand);
     }
 
-    /** 挂载到主代理（子代理不挂：插话面向用户任务，子代理上下文无前端邮箱语义）。 */
     @Override
-    public void configure(HarnessEngine engine, String agentName, ReActAgent.Builder agentBuilder) {
-        if (AgentDefinition.AGENT_MAIN.equals(agentName)) {
-            agentBuilder.defaultInterceptorAdd(interceptor);
+    public void onRequestAssemble(HarnessEngine engine, boolean isDelegated, String agentName, ReActOptionsAmend optionsAmend) {
+        if (isDelegated == false) {
+            optionsAmend.interceptorAdd(interceptor);
         }
     }
 

@@ -80,6 +80,8 @@ import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.noear.solon.net.http.HttpUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.net.Proxy;
@@ -95,6 +97,8 @@ import java.util.function.Consumer;
  */
 @Preview("3.10")
 public class HarnessEngine {
+    private static final Logger LOG = LoggerFactory.getLogger(HarnessEngine.class);
+
     public final static String ATTR_CWD = "__cwd";
     private static final String BUILTIN_AGENT_MOUNT = "@harness-agents";
     private static final String BUILTIN_AGENT_PATH = "META-INF/solon/ai/harness/agents/";
@@ -209,12 +213,30 @@ public class HarnessEngine {
     }
 
     /**
-     * 释放引擎持有的资源（当前为子代理委派的私有执行器）
+     * 释放引擎持有的资源
+     *
+     * <p>两件事：① 通知全部扩展 {@link HarnessExtension#onDetach}（让扩展回收自己在
+     * onAttach 里建到<b>引擎之外</b>的资源，如 JVM 单例调度器上的 job、独立线程池、长连接——
+     * 引擎本身不知道这些资源的存在）；② 关闭子代理委派的私有执行器。</p>
+     *
+     * <p>顺序：先扩展后执行器——扩展的清理动作（如停调度）不应与执行器回收并发。</p>
      *
      * <p>执行器线程为守护线程，不调用也不会阻塞 JVM 退出；
      * 需要回收线程时（如测试、长驻进程中的引擎热替换）显式调用。</p>
+     *
+     * <p>本方法幂等：重复调用只是重复回调 onDetach（各实现应保持幂等）与重复 shutdown 执行器。</p>
      */
     public void shutdown() {
+        // 不判 isEnabled()：清理不得被开关阻止（与 removeExtension 同口径）
+        for (HarnessExtension extension : options.getExtensions()) {
+            try {
+                extension.onDetach(this);
+            } catch (Throwable e) {
+                // 清理期异常不得打断其余扩展与执行器回收
+                LOG.warn("HarnessExtension onDetach failed on shutdown: {}", extension.getClass().getName(), e);
+            }
+        }
+
         taskTalent.shutdown();
     }
 
@@ -1073,7 +1095,7 @@ public class HarnessEngine {
 
         //与构造器对称：动态添加的扩展也要触发初始化（此刻引擎已装配完毕，任意引擎方法都安全）。
         //嵌套调用安全：agentLock 可重入，且 mainAgent 尚未构建时重建分支会跳过。
-        extension.initialize(this);
+        extension.onAttach(this);
 
         agentLock.lock();
         try {
@@ -1092,7 +1114,9 @@ public class HarnessEngine {
         if (extension == null) {
             return;
         }
+
         options.getExtensions().remove(extension);
+        extension.onDetach(this);
 
         // 重建 mainAgent 以应用变更，使用 agentLock 保证线程安全
         agentLock.lock();
@@ -1428,11 +1452,19 @@ public class HarnessEngine {
             targetAgent = getMainAgent();
         }
 
+        final String agentName = targetAgent.name();
+
         return targetAgent.prompt(prompt)
                 .options(o -> {
                     o.retryConfig(options.getModelRetries());
                     o.maxTurns(options.getMaxTurns());
                     o.sessionWindowSize(options.getSessionWindowSize());
+
+                    for (HarnessExtension extension : getExtensions()) {
+                        if (extension.isEnabled()) {
+                            extension.onRequestAssemble(this, false, agentName, o);
+                        }
+                    }
                 });
     }
 
@@ -1530,6 +1562,12 @@ public class HarnessEngine {
      * @param input 输入上下文（含命令上下文工厂，为空时使用缓冲式默认实现）
      */
     public InputOutcome handle(HarnessInput input) {
+        for(HarnessExtension extension: options.getExtensions()) {
+            if (extension.isEnabled()) {
+                extension.onInput(this, input);
+            }
+        }
+
         final AgentSession session = input.getSession();
         final InputAttachments attachments = input.getAttachments();
 
@@ -2160,7 +2198,7 @@ public class HarnessEngine {
             HarnessEngine engine = new HarnessEngine(options);
 
             for (HarnessExtension extension : options.getExtensions()) {
-                extension.initialize(engine);
+                extension.onAttach(engine);
             }
 
             return engine;

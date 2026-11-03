@@ -116,7 +116,7 @@ public class AgentFactory {
         // 无条件回调：扩展自己在 setEnabled 里把开关传播给子组件（Talent/Interceptor/Command），
         // 因此「挂上但处于停用」比「不挂」更容易在运行期恢复（不挂就再也挂不回来了）。
         for (HarnessExtension extension : engine.getExtensions()) {
-            extension.configure(engine, agentDefinition.getName(), builder);
+            extension.onAgentBuild(engine, agentDefinition.getName(), builder);
         }
 
         // 注入 Agent 级权限 delta（仅 agent 自身的规则，不含全局规则）

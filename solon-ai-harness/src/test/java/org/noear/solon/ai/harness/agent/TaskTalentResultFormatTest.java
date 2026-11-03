@@ -16,8 +16,16 @@
 package org.noear.solon.ai.harness.agent;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.harness.HarnessEngine;
+
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -137,5 +145,99 @@ public class TaskTalentResultFormatTest {
         assertTrue(out.contains("<![CDATA[a < b && c > d]]></result_content>"),
                 "CDATA 内的 < & 无需转义，不能改写内容: " + out);
         assertTrue(out.contains("<result_status>failure</result_status>"), "失败状态应写入 failure");
+    }
+
+    // ---------- 超长结果落盘召回 ----------
+
+    private static TaskTalent.MultiTaskOp op() {
+        TaskTalent.MultiTaskOp op = new TaskTalent.MultiTaskOp();
+        op.agent_name = "general";
+        op.description = "d";
+        op.index = 1;
+        return op;
+    }
+
+    private static String repeat(char c, int n) {
+        StringBuilder sb = new StringBuilder(n);
+        for (int i = 0; i < n; i++) {
+            sb.append(c);
+        }
+        return sb.toString();
+    }
+
+    /** 落盘成功：头部保留 + 召回指引；磁盘内容与原文完全一致；可分页读回 */
+    @Test
+    public void oversizedResultSpillsAndIsRecallable(@TempDir Path workspace) throws Exception {
+        HarnessEngine engine = HarnessEngine.of(workspace.toString(), "home")
+                .sessionProvider(InMemoryAgentSession::of)
+                .build();
+        TaskTalent talent = engine.getTaskTalent();
+
+        String raw = repeat('x', 30000);
+        String taskId = "spill-test-1";
+
+        String out = talent.formatTaskResp(op(), taskId, true, raw, false);
+
+        assertTrue(out.contains("内容过长已截断"), "应保留截断说明: " + out.length());
+        assertTrue(out.contains("完整结果已落盘"), "应给出落盘指引: " + out);
+        assertTrue(out.contains("task_result_read"), "应给出召回工具名: " + out);
+        assertTrue(out.contains(taskId), "应给出 task_id 供召回: " + out);
+        assertTrue(out.length() < 30000, "外壳仍必须短于原始长度: " + out.length());
+
+        Path file = workspace.resolve("home").resolve("task-spill").resolve(taskId).resolve("result.txt");
+        assertTrue(Files.isRegularFile(file), "落盘文件应存在: " + file);
+        assertEquals(30000,
+                new String(Files.readAllBytes(file), StandardCharsets.UTF_8).length(),
+                "磁盘内容必须完整保留原文");
+
+        // 分页读回：第一页给满 20000 并提示续读偏移
+        String page1 = talent.taskResultRead(taskId, null, null);
+        assertTrue(page1.startsWith("x"), "第一页应从 0 开始");
+        assertTrue(page1.contains("继续读取请传 offset=20000"),
+                "应提示下一页偏移: " + page1.substring(page1.length() - 100));
+
+        // 尾页读到末尾
+        String page2 = talent.taskResultRead(taskId, 20000, null);
+        assertTrue(page2.endsWith("已读到末尾，共 30000 字符]"), "尾页应报告读完: " + page2);
+
+        // 越界 offset 报错而非越界访问
+        assertTrue(talent.taskResultRead(taskId, 99999, null).startsWith("ERROR"),
+                "越界 offset 应报错");
+    }
+
+    /** 短结果不落盘：不能为普通任务制造文件系统副作用 */
+    @Test
+    public void shortResultDoesNotSpill(@TempDir Path workspace) {
+        HarnessEngine engine = HarnessEngine.of(workspace.toString(), "home")
+                .sessionProvider(InMemoryAgentSession::of)
+                .build();
+        TaskTalent talent = engine.getTaskTalent();
+
+        talent.formatTaskResp(op(), "spill-test-2", true, "ok", false);
+
+        assertFalse(Files.exists(workspace.resolve("home").resolve("task-spill")),
+                "短结果不应创建 task-spill 目录");
+    }
+
+    /** taskId 净化：含路径分隔符/上跳的 id 不得逃出 task-spill 目录（路径穿越防护） */
+    @Test
+    public void taskIdIsSanitizedAgainstPathTraversal(@TempDir Path workspace) {
+        HarnessEngine engine = HarnessEngine.of(workspace.toString(), "home")
+                .sessionProvider(InMemoryAgentSession::of)
+                .build();
+        TaskTalent talent = engine.getTaskTalent();
+
+        String evil = "../../escape";
+        talent.formatTaskResp(op(), evil, true, repeat('y', 30000), false);
+
+        // 落盘位置在 task-spill 内（分隔符被替换为 _），workspace 之外不得出现文件
+        Path sanitized = workspace.resolve("home").resolve("task-spill").resolve(".._.._escape");
+        assertTrue(Files.exists(sanitized), "净化后的落盘位置: " + sanitized);
+        assertFalse(Files.exists(workspace.resolve("escape")), "不得逃出 task-spill 目录");
+        assertFalse(Files.exists(workspace.getParent().resolve("escape")), "不得上跳");
+
+        // 读取侧同样走净化，能读到同一文件
+        assertTrue(talent.taskResultRead(evil, null, null).startsWith("y"),
+                "读与写必须用同一份净化规则");
     }
 }

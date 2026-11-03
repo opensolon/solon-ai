@@ -88,8 +88,8 @@ class HarnessOptions implements NonSerializable {
 
     // ========== 安全与模式 ==========
     private volatile boolean sandboxEnabled = true;
-    private volatile boolean sandboxAllowUserHome = true;
-    private volatile boolean sandboxSystemRestrict = false;
+    private volatile boolean sandboxAllowUserHome = false;
+    private volatile boolean sandboxSystemRestrict = true;
 
     private volatile boolean hitlEnabled = false;
     private volatile PermissionContext permissionContext = PermissionContext.create();

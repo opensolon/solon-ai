@@ -48,7 +48,7 @@ public class GoalCommand extends AbsCommand {
     private final GoalExtension goal;
 
     /**
-     * @param goal goal 扩展（由 {@link GoalExtension#initialize} 以自身实例注入）
+     * @param goal goal 扩展（由 {@link GoalExtension#onAttach} 以自身实例注入）
      */
     public GoalCommand(GoalExtension goal) {
         this.goal = goal;

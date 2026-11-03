@@ -93,7 +93,7 @@ public Command find(String name) {
 | `configure()` | **看**（`AgentFactory.java:112-116` 仍是 `if (extension.isEnabled())`） |
 
 后果：
-1. 构造期加一个 `enabled=false` 的扩展 → `initialize` 照跑（注册命令、建调度器、建 GoalEngine），`configure` 跳过（Talent 不挂）。半开半闭。
+1. 构造期加一个 `enabled=false` 的扩展 → `onAttach` 照跑（注册命令、建调度器、建 GoalEngine），`configure` 跳过（Talent 不挂）。半开半闭。
 2. 运行期把扩展从 false 改回 true → `configure` 不会重跑，被跳过的 Talent/Interceptor **永远不会挂上**，除非重建 mainAgent。
 
 这个不对称是当前最容易被宿主踩到的语义坑。
@@ -302,7 +302,7 @@ public void setEnabled(Boolean enabled) {
 
 > `GoalScheduler` 需要一个 `unscheduleAll()`（或复用 `unschedule(sessionId)` 遍历 `scheduled` 集合，`GoalScheduler.java:50` 有这个 Set）。**注意**：`setEnabled(false)` 应只停「未来调度」，不介入当前正在跑的那一轮。
 
-### P1-2 消除 `initialize` / `configure` 的 isEnabled 不对称
+### P1-2 消除 `onAttach` / `configure` 的 isEnabled 不对称
 
 二选一，建议**选 A**（改 `configure` 侧）：
 
@@ -314,7 +314,7 @@ for (HarnessExtension extension : engine.getExtensions()) {
 ```
 
 理由：
-- `initialize` 已经无条件调用（本 commit 改的），把 `configure` 也改成无条件，两条生命周期口径一致；
+- `onAttach` 已经无条件调用（本 commit 改的），把 `configure` 也改成无条件，两条生命周期口径一致；
 - 扩展内部已经把 `enabled` 传播给它的 Command/Talent/Interceptor（Goal/Queue/Steer 都做了），**挂上去但内部是 disabled**，比「不挂」更容易在运行期重新启用（因为 `setEnabled(true)` 立即生效，无需重建 agent）；
 - 唯一的成本是：未传播 enabled 的第三方扩展，「禁用」会失效。所以配套要在 `AbsSwitchable` 的 javadoc 里写清「若你向外暴露子组件，必须在 setEnabled 里传播」。
 

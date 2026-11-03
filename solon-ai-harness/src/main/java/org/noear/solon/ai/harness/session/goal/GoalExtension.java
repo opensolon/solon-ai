@@ -1,11 +1,9 @@
 package org.noear.solon.ai.harness.session.goal;
 
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.HarnessExtension;
-import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.runtime.ExecutionBridge;
@@ -18,7 +16,7 @@ import java.util.Map;
  * Goal 一键装配扩展 —— goal 能力从头到尾只接触这一个类。
  *
  * <p><b>推荐用法</b>（builder，装配在 {@code engine.addExtension(...)} 触发的
- * {@link #initialize(HarnessEngine)} 里一次完成）：</p>
+ * {@link #onAttach(HarnessEngine)} 里一次完成）：</p>
  * <pre>{@code
  * GoalExtension goal = GoalExtension.builder(workspaceId)
  *         .taskExecutor((sessionId, prompt, agentName) -> runOneTurn(sessionId, prompt))  // 唯一必填
@@ -126,10 +124,11 @@ public class GoalExtension extends AbsHarnessExtension {
      * 引擎级装配（addExtension 时回调一次；此刻引擎已装配完毕，任意引擎方法可安全调用）。
      *
      * <p>顺序：桥（注入或自建 + 注册回调）→ GoalEngine → GoalScheduler → /goal 命令注册 →
-     * 预注册 listener。{@link #configure} 负责把 GoalTalent 挂到主代理。</p>
+     * 预注册 listener。GoalTalent 的挂载不在这里，而在 {@link #onRequestAssemble}
+     * （每次顶层请求挂一次，子代理委派不挂）。</p>
      */
     @Override
-    public void initialize(HarnessEngine engine) {
+    public void onAttach(HarnessEngine engine) {
         if (goalEngine != null && bridge == null) {
             return; // 存量形态（外部 GoalEngine）：不重复装配
         }
@@ -159,7 +158,7 @@ public class GoalExtension extends AbsHarnessExtension {
                     : (schedulerDisabled ? null : new GoalScheduler(goalEngine, workspaceId));
         }
 
-        if(goalCommand == null) {
+        if (goalCommand == null) {
             // 命令只持扩展实例：pause/resume/clear 与创建全部走门面同一条路径
             goalCommand = new GoalCommand(this);
             goalCommand.setEnabled(this.isEnabled());
@@ -172,6 +171,30 @@ public class GoalExtension extends AbsHarnessExtension {
         if (listener != null) {
             goalEngine.addListener(listener);
         }
+
+        if (goalTalent == null) {
+            goalTalent = new GoalTalent(goalEngine, engine);
+            goalTalent.setEnabled(this.isEnabled());
+        }
+    }
+
+    @Override
+    public void onRequestAssemble(HarnessEngine engine, boolean isDelegated, String agentName, ReActOptionsAmend optionsAmend) {
+        // 子代理委派走临时会话，goal 是会话级能力，不挂
+        if (isDelegated == false) {
+            optionsAmend.talentAdd(goalTalent);
+        }
+    }
+
+    /**
+     * 摘除时停掉本扩展建在 {@link org.noear.solon.ai.harness.session.goal.GoalScheduler} 上的全部 job。
+     *
+     * <p>JobManager 是 JVM 单例，不停则 job 会带着已废引擎的引用在全局调度器里空转；
+     * 与 {@link #setEnabled} 的停用分支、{@link #stopAll()} 门面共用同一个实现。</p>
+     */
+    @Override
+    public void onDetach(HarnessEngine engine) {
+        stopAll();
     }
 
     /** 缺省 TaskHandler：目标正文走唯一输入入口同步取回最终文本（commandAware/agentAware 关闭，程序生成的 prompt 不再解析命令与 @提及）。 */
@@ -192,18 +215,6 @@ public class GoalExtension extends AbsHarnessExtension {
                 return "error: " + (e.getMessage() != null ? e.getMessage() : e.toString());
             }
         };
-    }
-
-    @Override
-    public void configure(HarnessEngine engine, String agentName, ReActAgent.Builder agentBuilder) {
-        if (goalTalent == null && goalEngine != null) {
-            goalTalent = new GoalTalent(goalEngine, engine);
-            goalTalent.setEnabled(this.isEnabled());
-        }
-
-        if (AgentDefinition.AGENT_MAIN.equals(agentName)) {
-            agentBuilder.defaultTalentAdd(goalTalent);
-        }
     }
 
     // ==================== 运行期门面（中转 GoalEngine / GoalScheduler） ====================

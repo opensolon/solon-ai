@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -17,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * SteerExtension 一键装配验证：
  * 1. addExtension 后 /steer 命令自动注册（幂等）；
- * 2. 拦截器经 configure 挂载（源码契约：configure 分支含 defaultInterceptorAdd）；
+ * 2. 拦截器经 onRequestAssemble 挂载（源码契约：只挂顶层请求，排除 isDelegated）；
  * 3. 输出走 AgentEvent：无需注入任何宿主端口，单一构造器适配全部宿主；
  * 4. 门面 steer/cancel 中转语义正确。
  */
@@ -67,15 +68,21 @@ class SteerExtensionTest {
     }
 
     @Test
-    void configureMountsInterceptorAsDefaultForMainAgent() throws Exception {
-        // 源码契约：挂载逻辑必须存在且只针对主代理（无 chatModel 无法真实构建代理，锁源码形态）
+    void requestAssembleMountsInterceptorForTopLevelRequestsOnly() throws Exception {
+        // 源码契约：挂载逻辑必须在 onRequestAssemble 上，且以 isDelegated 排除 task/multitask 委派；
+        // 不能退回「主代理默认拦截器」——那样面板选中的子代理（同为顶层请求）就命不中，
+        // 插话会被判 TURN_CHANGED 后静默降级为排队（无 chatModel 无法真实构建代理，锁源码形态）。
         String src = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(
                 "src/main/java/org/noear/solon/ai/harness/session/steer/SteerExtension.java")),
                 java.nio.charset.StandardCharsets.UTF_8);
-        assertTrue(src.contains("agentBuilder.defaultInterceptorAdd(interceptor)"),
-                "configure 必须把拦截器挂为主代理默认拦截器");
-        assertTrue(src.contains("AgentDefinition.AGENT_MAIN.equals(agentName)"),
-                "只挂主代理");
+        assertTrue(src.contains("optionsAmend.interceptorAdd(interceptor)"),
+                "onRequestAssemble 必须把拦截器挂到请求级 options");
+        assertTrue(src.contains("public void onRequestAssemble"),
+                "挂载点必须是 onRequestAssemble");
+        assertTrue(src.contains("isDelegated == false"),
+                "必须排除 task/multitask 委派的子代理任务（临时会话无插话语义）");
+        assertFalse(src.contains("agentBuilder.defaultInterceptorAdd(interceptor)"),
+                "不得退回主代理默认拦截器（会丢失面板选中子代理的场景）");
     }
 
     @Test

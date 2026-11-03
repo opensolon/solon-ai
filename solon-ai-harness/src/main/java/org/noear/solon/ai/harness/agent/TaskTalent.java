@@ -32,6 +32,7 @@ import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.talents.cli.SkillTalent;
 import org.noear.solon.ai.talents.gateway.McpGatewayTalent;
 import org.noear.solon.annotation.Body;
@@ -41,8 +42,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.FluxSink;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -77,6 +81,12 @@ public class TaskTalent extends AbsTalent {
 
     public static final String TOOL_TASK = "task";
     public static final String TOOL_MULTITASK = "multitask";
+
+    /** 超长子任务结果的落盘召回工具（与 task/multitask 同 Talent 挂载，自动注册） */
+    public static final String TOOL_TASK_RESULT_READ = "task_result_read";
+
+    /** 超长结果落盘目录（相对 harnessHome） */
+    static final String SPILL_DIR = "task-spill";
 
     /** 默认并发上限的缺省值：配置为 0（未设置）时使用 */
     public static final int DEFAULT_CONCURRENCY = 5;
@@ -561,6 +571,12 @@ public class TaskTalent extends AbsTalent {
                             o.toolContextPut(HarnessEngine.ATTR_CWD, ctx.cwd);
                             o.toolContextPut(ChatSession.ATTR_SESSIONID, ctx.sessionId);
                             ctx.applyScope(o);
+
+                            for (HarnessExtension extension : engine.getExtensions()) {
+                                if (extension.isEnabled()) {
+                                    extension.onRequestAssemble(engine, true, agent.name(), o);
+                                }
+                            }
                         })
                         .stream()
                         .doOnNext(chunk -> countLlmError(chunk, ctx.rateLimited, ctx.timedOut,
@@ -576,6 +592,12 @@ public class TaskTalent extends AbsTalent {
                             o.toolContextPut(HarnessEngine.ATTR_CWD, ctx.cwd);
                             o.toolContextPut(ChatSession.ATTR_SESSIONID, ctx.sessionId);
                             ctx.applyScope(o);
+
+                            for (HarnessExtension extension : engine.getExtensions()) {
+                                if (extension.isEnabled()) {
+                                    extension.onRequestAssemble(engine, true, agent.name(), o);
+                                }
+                            }
                         })
                         .stream()
                         .takeUntil(r -> sink.isCancelled())
@@ -664,6 +686,10 @@ public class TaskTalent extends AbsTalent {
     }
 
     String formatTaskResp(MultiTaskOp task, boolean successful, String result, boolean isMultitask) {
+        return formatTaskResp(task, Utils.uuid(), successful, result, isMultitask);
+    }
+
+    String formatTaskResp(MultiTaskOp task, String taskId, boolean successful, String result, boolean isMultitask) {
         StringBuilder buf = new StringBuilder();
 
         buf.append("<task_result>");
@@ -673,7 +699,7 @@ public class TaskTalent extends AbsTalent {
         buf.append("<description>").append(escapeXml(task.description)).append("</description>");
         buf.append("<agent_name>").append(escapeXml(task.agent_name)).append("</agent_name>");
         buf.append("<result_status>").append(successful ? "success" : "failure").append("</result_status>");
-        buf.append("<result_content><![CDATA[").append(toCdata(result)).append("]]></result_content>");
+        buf.append("<result_content><![CDATA[").append(toCdata(task, taskId, result)).append("]]></result_content>");
         buf.append("</task_result>");
 
         return buf.toString();
@@ -692,25 +718,141 @@ public class TaskTalent extends AbsTalent {
      * 塞进 CDATA：先截断、再处理终止符。
      *
      * <p>顺序不能反——先转义再截断可能把 {@code ]]>} 的转义产物切成半个，反而提前闭合。</p>
+     *
+     * <p>超限内容会先尝试落盘（见 {@link #trySpill}），落盘成功后头部保留截断说明并附带
+     * {@link #TOOL_TASK_RESULT_READ} 召回指引；落盘不可用（无 engine / 写入失败）时保持纯截断，
+     * 行为与历史版本一致。</p>
      */
-    private static String toCdata(String text) {
+    private String toCdata(MultiTaskOp op, String taskId, String text) {
         if (text == null) {
             return "";
         }
 
-        String body = text;
-        if (body.length() > MAX_RESULT_CHARS) {
-            int cut = MAX_RESULT_CHARS;
-            // 不要把代理对切成单个 char（会输出乱码）
-            if (Character.isHighSurrogate(body.charAt(cut - 1))) {
-                cut--;
-            }
-            body = body.substring(0, cut)
-                    + "\n...[内容过长已截断，原始长度 " + text.length() + " 字符]";
+        if (text.length() <= MAX_RESULT_CHARS) {
+            return text.replace("]]>", "]]]]><![CDATA[>");
+        }
+
+        int cut = MAX_RESULT_CHARS;
+        // 不要把代理对切成单个 char（会输出乱码）
+        if (Character.isHighSurrogate(text.charAt(cut - 1))) {
+            cut--;
+        }
+
+        String head = text.substring(0, cut);
+        String body;
+
+        String spillRef = trySpill(op, taskId, text);
+        if (spillRef != null) {
+            body = head + "\n...[内容过长已截断：原始长度 " + text.length() + " 字符，此处保留前 " + cut
+                    + " 字符；完整结果已落盘（" + spillRef + "），用 " + TOOL_TASK_RESULT_READ
+                    + " 工具按 task_id=\"" + taskId + "\" 分页读取，不要重新委派该任务]";
+            LOG.info("子任务结果超限已落盘: task_id={}, agent={}, 原始长度 {} 字符",
+                    taskId, op.agent_name, text.length());
+        } else {
+            body = head + "\n...[内容过长已截断，原始长度 " + text.length() + " 字符]";
         }
 
         // CDATA 里只有终止符 ]]> 需要拆开，其余字符（含 < &）无需转义
         return body.replace("]]>", "]]]]><![CDATA[>");
+    }
+
+    /**
+     * 超长结果落盘。返回相对 harnessHome 的展示路径（如 {@code task-spill/<taskId>/result.txt}），
+     * 不可用时返回 null（降级为纯截断）。
+     *
+     * <p>落盘目录相对 <b>workspace</b> 解析（先于 harnessHome）——harnessHome 常配置为相对路径
+     * （如 {@code .soloncode/}），直接 {@code Paths.get(harnessHome)} 会相对 JVM CWD 写错位置。
+     * 与 {@code TodoTalent#getWorkPath} 的解析口径一致。</p>
+     */
+    private String trySpill(MultiTaskOp op, String taskId, String text) {
+        try {
+            if (engine == null || Assert.isEmpty(taskId)) {
+                return null;
+            }
+
+            Path file = spillFile(taskId);
+            if (file == null) {
+                return null;
+            }
+
+            Files.createDirectories(file.getParent());
+            Files.write(file, text.getBytes(StandardCharsets.UTF_8));
+            return SPILL_DIR + "/" + safeSegment(taskId) + "/result.txt";
+        } catch (Throwable e) {
+            LOG.warn("子任务结果落盘失败，降级为纯截断: task_id={}, 原因: {}", taskId, e.getMessage());
+            return null;
+        }
+    }
+
+    /** 落盘文件路径；workspace/harnessHome 不可用或 taskId 非法时返回 null */
+    private Path spillFile(String taskId) {
+        if (engine == null || Assert.isEmpty(engine.getWorkspace()) || Assert.isEmpty(engine.getHarnessHome())) {
+            return null;
+        }
+
+        // 与 getWorkPath 同口径：workspace 为根，harnessHome（相对）拼在其后
+        return Paths.get(engine.getWorkspace(), engine.getHarnessHome(), SPILL_DIR, safeSegment(taskId))
+                .toAbsolutePath()
+                .normalize()
+                .resolve("result.txt");
+    }
+
+    /** taskId 可能含路径分隔符或上跳（..）：只保留文件名安全字符，避免路径穿越 */
+    private static String safeSegment(String raw) {
+        if (raw == null || raw.isEmpty()) {
+            return "unknown";
+        }
+        return raw.replaceAll("[^A-Za-z0-9_.-]", "_");
+    }
+
+    @ToolMapping(name = TOOL_TASK_RESULT_READ, description =
+            "读取被截断的子任务结果的完整内容（按字符分页）。仅当 task_result 中出现「已落盘」提示时使用；"
+                    + "不要用它替代正常的 task 调用，也不要为了看完整结果而重新委派同一任务。")
+    public String taskResultRead(
+            @Param(name = "task_id", description = "截断提示中给出的 task_id") String taskId,
+            @Param(value = "offset", required = false, description = "起始字符偏移（默认 0）") Integer offset,
+            @Param(value = "limit", required = false, defaultValue = "20000", description = "本次读取字符数上限（默认 20000，最大 20000）") Integer limit) {
+        if (engine == null) {
+            return "ERROR: 引擎不可用，无落盘结果可读。";
+        }
+        if (Assert.isEmpty(taskId)) {
+            return "ERROR: 缺少 task_id。";
+        }
+
+        int off = (offset == null || offset < 0) ? 0 : offset;
+        int len = (limit == null || limit <= 0) ? MAX_RESULT_CHARS : Math.min(limit, MAX_RESULT_CHARS);
+
+        try {
+            Path file = spillFile(taskId);
+            if (file == null) {
+                return "ERROR: 当前引擎未配置 workspace/harnessHome，无落盘结果可读。";
+            }
+            if (!Files.isRegularFile(file)) {
+                return "ERROR: 未找到 task_id='" + taskId + "' 的落盘结果（可能未被截断落盘，或已清理）。";
+            }
+
+            String all = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+            if (off >= all.length()) {
+                return "ERROR: offset " + off + " 超出范围（总长 " + all.length() + " 字符）。";
+            }
+
+            int end = Math.min(all.length(), off + len);
+            if (end < all.length() && Character.isHighSurrogate(all.charAt(end - 1))) {
+                end--; // 不切断代理对
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.append(all.substring(off, end));
+            if (end < all.length()) {
+                sb.append("\n...[本次 ").append(off).append("-").append(end).append(" / 共 ").append(all.length())
+                        .append(" 字符；继续读取请传 offset=").append(end).append("]");
+            } else {
+                sb.append("\n...[已读到末尾，共 ").append(all.length()).append(" 字符]");
+            }
+            return sb.toString();
+        } catch (Throwable e) {
+            return "ERROR: 读取落盘结果失败: " + e.getMessage();
+        }
     }
 
     public static class SingleTaskOp {

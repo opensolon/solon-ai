@@ -5,6 +5,7 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.talents.mount.Mount;
 import org.noear.solon.ai.talents.mount.source.FileMountSource;
@@ -32,8 +33,11 @@ public class DemoApp {
                     slf.setModel("deepseek-v4-flash");
                     slf.setContextLength(128_000);
                 })) //设定大模型配置
-                .extensionAdd((e,name, builder) -> {
-                    //...
+                .extensionAdd(new HarnessExtension() {
+                    @Override
+                    public void onAgentBuild(HarnessEngine engine, String agentName, ReActAgent.Builder agentBuilder) {
+                        HarnessExtension.super.onAgentBuild(engine, agentName, agentBuilder);
+                    }
                 })
                 .build();
 
