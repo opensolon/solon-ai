@@ -23,6 +23,7 @@ import io.modelcontextprotocol.spec.McpStatelessServerTransport;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.mcp.server.HttpHeaderValidatorAdapter;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.ai.chat.prompt.FunctionPrompt;
 import org.noear.solon.ai.chat.resource.FunctionResource;
@@ -49,12 +50,18 @@ public class StatelessMcpServerHost implements McpServerHost {
 
     private final McpServerProperties serverProperties;
 
+    /**
+     * 传输安全校验器（用于启动时检测）
+     */
+    private final ServerTransportSecurityValidator securityValidator;
+
     private final McpStatelessServerTransport mcpTransportProvider;
     private final McpServer.StatelessAsyncSpecification mcpServerSpec;
     private McpStatelessAsyncServer server;
 
     public StatelessMcpServerHost(McpSchema.ServerCapabilities serverCapabilities, McpServerProperties serverProps, ServerTransportSecurityValidator securityValidator) {
         this.serverProperties = serverProps;
+        this.securityValidator = securityValidator;
 
         //streamable
         if (Utils.isEmpty(serverProps.getMcpEndpoint())) {
@@ -121,6 +128,14 @@ public class StatelessMcpServerHost implements McpServerHost {
                     toolManager.count(),
                     resourceManager.count(),
                     promptManager.count());
+
+            //启动时提示：未配置传输安全校验器
+            if (HttpHeaderValidatorAdapter.isNoop(securityValidator)) {
+                log.warn("Mcp-Server has no transport security validator, HTTP headers (Origin/Host) will NOT be validated, name={}, channel={}, endpoint={}. Suggest configuring a ServerHttpHeaderValidator (e.g. DefaultServerTransportSecurityValidator) if this endpoint is exposed to browsers or the Internet",
+                        serverProperties.getName(),
+                        serverProperties.getChannel(),
+                        this.mcpEndpoint);
+            }
         }
 
         return mcpTransportProvider;

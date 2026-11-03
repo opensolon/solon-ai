@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.integration;
 
+import io.modelcontextprotocol.server.transport.ServerHttpHeaderValidator;
 import io.modelcontextprotocol.server.transport.ServerTransportSecurityValidator;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.mcp.server.McpServerEndpointProvider;
@@ -39,10 +40,17 @@ public class McpPlugin implements Plugin {
 
 
             //构建端点提供者
-            McpServerEndpointProvider serverEndpointProvider = McpServerEndpointProvider.builder()
-                    .from(clz, anno)
-                    .securityValidator(bw.raw() instanceof ServerTransportSecurityValidator ? bw.raw() : null)
-                    .build();
+            McpServerEndpointProvider.Builder builder = McpServerEndpointProvider.builder()
+                    .from(clz, anno);
+
+            //支持作为校验器的 bean 实现（新接口优先适配）
+            if (bw.raw() instanceof ServerTransportSecurityValidator) {
+                builder.securityValidator(bw.raw());
+            } else if (bw.raw() instanceof ServerHttpHeaderValidator) {
+                builder.httpHeaderValidator(bw.raw());
+            }
+
+            McpServerEndpointProvider serverEndpointProvider = builder.build();
 
             //添加工具
             serverEndpointProvider.addTool(new MethodToolProvider(bw));

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server;
 
+import io.modelcontextprotocol.server.transport.ServerHttpHeaderValidator;
 import io.modelcontextprotocol.server.transport.ServerTransportSecurityValidator;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.Solon;
@@ -46,7 +47,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
     private final McpServerHost serverHost;
 
     public McpServerEndpointProvider(Properties properties) {
-        this(Props.from(properties).bindTo(new McpServerProperties()), ServerTransportSecurityValidator.NOOP);
+        this(Props.from(properties).bindTo(new McpServerProperties()), (ServerTransportSecurityValidator) null);
     }
 
     private McpServerEndpointProvider(McpServerProperties serverProps, ServerTransportSecurityValidator securityValidator) {
@@ -306,7 +307,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
     public static class Builder {
         private McpServerProperties props = new McpServerProperties();
-        private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
+        private ServerTransportSecurityValidator securityValidator;
 
         public Builder from(Class<?> endpointClz, McpServerEndpoint endpointAnno) {
             //支持${配置}
@@ -424,8 +425,24 @@ public class McpServerEndpointProvider implements LifecycleBean {
             return this;
         }
 
+        /**
+         * 设置传输安全校验器（为空表示不做校验）
+         */
         public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
             this.securityValidator = securityValidator;
+            return this;
+        }
+
+        /**
+         * 设置 HTTP 头校验器（新接口，内部适配为 {@link ServerTransportSecurityValidator}）
+         *
+         * <p>注：不重载 {@link #securityValidator(ServerTransportSecurityValidator)}，
+         * 因为同时实现两个接口的校验器（如 DefaultServerTransportSecurityValidator）会导致调用歧义。</p>
+         *
+         * @since 4.2
+         */
+        public Builder httpHeaderValidator(ServerHttpHeaderValidator securityValidator) {
+            this.securityValidator = securityValidator == null ? null : new HttpHeaderValidatorAdapter(securityValidator);
             return this;
         }
 
