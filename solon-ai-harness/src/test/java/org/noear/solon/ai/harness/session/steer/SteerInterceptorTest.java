@@ -74,7 +74,7 @@ public class SteerInterceptorTest {
         for (int i = 0; i < texts.length; i++) {
             box.offer(new SteerMessage("s" + i, texts[i]));
         }
-        session.attrs().put(SteerInterceptor.ATTR_STEER_BOX, box);
+        session.attrs().put(SteerHelper.ATTR_STEER_BOX, box);
         return box;
     }
 
@@ -102,7 +102,7 @@ public class SteerInterceptorTest {
         assertTrue(trace.getWorkingMemory().isEmpty(), "首轮不应注入工作记忆");
         assertEquals(1, box.size(), "邮箱应保留");
         assertEquals("base", sp.toString(), "systemPrompt 不应追加说明");
-        assertNotNull(session.attrs().get(SteerInterceptor.ATTR_ACTIVE_RUN_ID), "runId 仍应被记录");
+        assertNotNull(session.attrs().get(SteerHelper.ATTR_ACTIVE_RUN_ID), "runId 仍应被记录");
     }
 
     @Test
@@ -117,14 +117,14 @@ public class SteerInterceptorTest {
 
         List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
         assertEquals(2, messages.size());
-        assertTrue(messages.get(0).getContent().contains(SteerInterceptor.STEER_PREFIX));
+        assertTrue(messages.get(0).getContent().contains(SteerHelper.STEER_PREFIX));
         assertTrue(messages.get(0).getContent().contains("改用方案B"));
         assertEquals("steer", messages.get(0).getMetadata().get("source"));
         assertEquals("user", messages.get(0).getRole().name().toLowerCase());
         // 注入消息自带 STEER_PREFIX 已足够表意，不再追加 systemPrompt（避免重复提示）
         assertEquals("base", sp.toString(), "systemPrompt 不应被修改");
         assertTrue(box.isEmpty(), "注入后邮箱应清空");
-        assertEquals(trace.getRunId(), session.attrs().get(SteerInterceptor.ATTR_ACTIVE_RUN_ID));
+        assertEquals(trace.getRunId(), session.attrs().get(SteerHelper.ATTR_ACTIVE_RUN_ID));
     }
 
     @Test
@@ -172,21 +172,21 @@ public class SteerInterceptorTest {
     @DisplayName("onAgentEnd 残留兜底：未消费文本清空邮箱并清理 attrs（dropped 事件由通知通道发出）")
     public void agentEnd_droppedAndCleaned() {
         ConcurrentLinkedQueue<SteerMessage> box = newBox("未消费1", "未消费2");
-        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, trace.getRunId());
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, trace.getRunId());
 
         interceptor.onAgentEnd(trace);
 
         assertTrue(box.isEmpty(), "残留应被清出（交由前端转排队）");
-        assertNull(session.attrs().get(SteerInterceptor.ATTR_STEER_BOX), "邮箱标记应移除");
-        assertNull(session.attrs().get(SteerInterceptor.ATTR_ACTIVE_RUN_ID), "runId 标记应移除");
+        assertNull(session.attrs().get(SteerHelper.ATTR_STEER_BOX), "邮箱标记应移除");
+        assertNull(session.attrs().get(SteerHelper.ATTR_ACTIVE_RUN_ID), "runId 标记应移除");
     }
 
     @Test
     @DisplayName("onAgentEnd 无残留：静默清理，不抛异常")
     public void agentEnd_noResidue_clean() {
-        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, trace.getRunId());
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, trace.getRunId());
         interceptor.onAgentEnd(trace);
-        assertNull(session.attrs().get(SteerInterceptor.ATTR_STEER_BOX));
+        assertNull(session.attrs().get(SteerHelper.ATTR_STEER_BOX));
     }
 
     @Test
@@ -194,10 +194,10 @@ public class SteerInterceptorTest {
     public void cancelById_removesOnlyTarget() {
         ConcurrentLinkedQueue<SteerMessage> box = newBox("相同文本", "相同文本");
 
-        assertTrue(SteerInterceptor.cancel(box, "s0"));
+        assertTrue(SteerHelper.cancel(box, "s0"));
         assertEquals(1, box.size());
         assertEquals("s1", box.peek().getId());
-        assertFalse(SteerInterceptor.cancel(box, "s0"), "重复取消不得误删另一条同文本插话");
+        assertFalse(SteerHelper.cancel(box, "s0"), "重复取消不得误删另一条同文本插话");
     }
 
     @Test
@@ -213,8 +213,8 @@ public class SteerInterceptorTest {
                 final int index = i;
                 futures.add(pool.submit(() -> {
                     start.await();
-                    if (SteerInterceptor.offer(box, new SteerMessage("s" + index, "text"))
-                            == SteerInterceptor.OfferResult.OFFERED) {
+                    if (SteerHelper.offer(box, new SteerMessage("s" + index, "text"))
+                            == SteerHelper.OfferResult.OFFERED) {
                         offered.incrementAndGet();
                     }
                     return null;
@@ -226,8 +226,8 @@ public class SteerInterceptorTest {
             pool.shutdownNow();
         }
 
-        assertEquals(SteerInterceptor.MAX_BOX_SIZE, offered.get());
-        assertEquals(SteerInterceptor.MAX_BOX_SIZE, box.size());
+        assertEquals(SteerHelper.MAX_BOX_SIZE, offered.get());
+        assertEquals(SteerHelper.MAX_BOX_SIZE, box.size());
     }
 
     @Test
@@ -242,8 +242,8 @@ public class SteerInterceptorTest {
             for (int i = 0; i < 16; i++) {
                 futures.add(pool.submit(() -> {
                     start.await();
-                    if (SteerInterceptor.offer(box, new SteerMessage("same", "text"))
-                            == SteerInterceptor.OfferResult.OFFERED) {
+                    if (SteerHelper.offer(box, new SteerMessage("same", "text"))
+                            == SteerHelper.OfferResult.OFFERED) {
                         offered.incrementAndGet();
                     }
                     return null;
@@ -263,14 +263,14 @@ public class SteerInterceptorTest {
     @DisplayName("满邮箱中的重复 ID：优先返回重复，不能误报容量已满")
     public void fullBox_duplicateIdStillReportedAsDuplicate() {
         ConcurrentLinkedQueue<SteerMessage> box = new ConcurrentLinkedQueue<>();
-        for (int i = 0; i < SteerInterceptor.MAX_BOX_SIZE; i++) {
-            assertEquals(SteerInterceptor.OfferResult.OFFERED,
-                    SteerInterceptor.offer(box, new SteerMessage("s" + i, "text")));
+        for (int i = 0; i < SteerHelper.MAX_BOX_SIZE; i++) {
+            assertEquals(SteerHelper.OfferResult.OFFERED,
+                    SteerHelper.offer(box, new SteerMessage("s" + i, "text")));
         }
 
-        assertEquals(SteerInterceptor.OfferResult.DUPLICATE_ID,
-                SteerInterceptor.offer(box, new SteerMessage("s0", "retry")));
-        assertEquals(SteerInterceptor.MAX_BOX_SIZE, box.size());
+        assertEquals(SteerHelper.OfferResult.DUPLICATE_ID,
+                SteerHelper.offer(box, new SteerMessage("s0", "retry")));
+        assertEquals(SteerHelper.MAX_BOX_SIZE, box.size());
     }
 
     @Test
@@ -280,7 +280,7 @@ public class SteerInterceptorTest {
         interceptor.onReasonStart(trace, new StringBuilder()); // 建立当前 runId
         trace.nextTurn();
 
-        SteerResult result = SteerInterceptor.steer(session, null, "once", "补充要求",
+        SteerResult result = SteerHelper.steer(session, null, "once", "补充要求",
                 InputOrigin.channel("Feishu"), () -> {
                     interceptor.onReasonStart(trace, new StringBuilder()); // 模拟复查前推理线程取走消息
                     return false;
@@ -289,7 +289,7 @@ public class SteerInterceptorTest {
         assertEquals(SteerStatus.STEERED, result.getStatus());
         assertEquals(1, trace.getWorkingMemory().getMessages().size());
         assertTrue(trace.getWorkingMemory().getMessages().get(0).getContent().contains("补充要求"));
-        assertNull(SteerInterceptor.steerBox(session), "消费后空邮箱可被清理");
+        assertNull(SteerHelper.steerBox(session), "消费后空邮箱可被清理");
     }
 
     @Test
@@ -299,7 +299,7 @@ public class SteerInterceptorTest {
         interceptor.onReasonStart(trace, new StringBuilder());
         trace.nextTurn();
 
-        SteerResult result = SteerInterceptor.steer(session, null, "once", "补充要求",
+        SteerResult result = SteerHelper.steer(session, null, "once", "补充要求",
                 InputOrigin.channel("Feishu"), () -> {
                     interceptor.onReasonStart(trace, new StringBuilder());
                     interceptor.onAgentEnd(trace);
@@ -308,7 +308,7 @@ public class SteerInterceptorTest {
 
         assertEquals(SteerStatus.STEERED, result.getStatus());
         assertEquals(1, trace.getWorkingMemory().getMessages().size());
-        assertNull(session.attrs().get(SteerInterceptor.ATTR_ACTIVE_RUN_ID));
+        assertNull(session.attrs().get(SteerHelper.ATTR_ACTIVE_RUN_ID));
     }
 
     @Test
@@ -317,12 +317,12 @@ public class SteerInterceptorTest {
         trace.nextTurn();
         interceptor.onReasonStart(trace, new StringBuilder());
 
-        SteerResult result = SteerInterceptor.steer(session, null, "pending", "补充要求",
+        SteerResult result = SteerHelper.steer(session, null, "pending", "补充要求",
                 InputOrigin.channel("Feishu"), () -> false);
 
         assertEquals(SteerStatus.NOT_RUNNING, result.getStatus());
         assertTrue(trace.getWorkingMemory().isEmpty());
-        assertNull(SteerInterceptor.steerBox(session));
+        assertNull(SteerHelper.steerBox(session));
     }
 
     @Test
@@ -330,12 +330,12 @@ public class SteerInterceptorTest {
     public void oldAgentEnd_doesNotClearNewRunState() {
         String newRunId = trace.getRunId() + "-new";
         ConcurrentLinkedQueue<SteerMessage> newBox = newBox("新任务插话");
-        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, newRunId);
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, newRunId);
 
         interceptor.onAgentEnd(trace);
 
-        assertEquals(newRunId, session.attrs().get(SteerInterceptor.ATTR_ACTIVE_RUN_ID));
-        assertSame(newBox, session.attrs().get(SteerInterceptor.ATTR_STEER_BOX));
+        assertEquals(newRunId, session.attrs().get(SteerHelper.ATTR_ACTIVE_RUN_ID));
+        assertSame(newBox, session.attrs().get(SteerHelper.ATTR_STEER_BOX));
         assertEquals(1, newBox.size(), "旧任务结束不得丢弃新任务插话");
     }
 
@@ -377,7 +377,7 @@ public class SteerInterceptorTest {
     @DisplayName("dropped: 任务结束残留必须转入 session 队列（不依赖订阅者）")
     public void dropped_enqueuesIntoSessionQueue() {
         ConcurrentLinkedQueue<SteerMessage> box = newBox("未消费1", "未消费2");
-        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, trace.getRunId());
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, trace.getRunId());
 
         interceptor.onAgentEnd(trace);
 
@@ -402,7 +402,7 @@ public class SteerInterceptorTest {
             }
         };
         newBox("未消费");
-        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, silent.getRunId());
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, silent.getRunId());
 
         interceptor.onAgentEnd(silent);
 
@@ -416,12 +416,12 @@ public class SteerInterceptorTest {
             assertTrue(QueueHelper.enqueue(session, "task " + i, InputOrigin.channel("WEB")) > 0);
         }
         newBox("do not lose me");
-        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, trace.getRunId());
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, trace.getRunId());
 
         interceptor.onAgentEnd(trace);
 
         assertEquals(QueueHelper.MAX_QUEUE_SIZE, QueueHelper.pendingSize(session), "队列不得超上限");
-        Queue<SteerMessage> refilled = SteerInterceptor.steerBox(session);
+        Queue<SteerMessage> refilled = SteerHelper.steerBox(session);
         assertNotNull(refilled, "失败项必须回填易失邮箱待下次重试");
         assertEquals("s0", refilled.peek().getId());
 
@@ -434,9 +434,9 @@ public class SteerInterceptorTest {
     @Test
     @DisplayName("enqueueIntoSessionQueue: 空邮箱 / null 会话零行为，不抛异常")
     public void enqueueIntoSessionQueue_noop() {
-        assertTrue(SteerInterceptor.enqueueIntoSessionQueue(null, new ArrayList<>()).isEmpty());
-        assertTrue(SteerInterceptor.enqueueIntoSessionQueue(session, null).isEmpty());
-        assertTrue(SteerInterceptor.enqueueIntoSessionQueue(session, new ArrayList<>()).isEmpty());
+        assertTrue(SteerHelper.enqueueIntoSessionQueue(null, new ArrayList<>()).isEmpty());
+        assertTrue(SteerHelper.enqueueIntoSessionQueue(session, null).isEmpty());
+        assertTrue(SteerHelper.enqueueIntoSessionQueue(session, new ArrayList<>()).isEmpty());
         assertEquals(0, QueueHelper.pendingSize(session));
     }
 
@@ -450,12 +450,12 @@ public class SteerInterceptorTest {
             huge.append('x');
         }
         box.offer(new SteerMessage("s0", huge.toString()));
-        session.attrs().put(SteerInterceptor.ATTR_STEER_BOX, box);
-        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, trace.getRunId());
+        session.attrs().put(SteerHelper.ATTR_STEER_BOX, box);
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, trace.getRunId());
 
         assertDoesNotThrow(() -> interceptor.onAgentEnd(trace), "入队失败不得沿拦截器链冒泡");
 
         assertEquals(0, QueueHelper.pendingSize(session), "超长文本不得入队");
-        assertEquals(1, SteerInterceptor.pending(session).size(), "失败项必须回填易失邮箱待重试");
+        assertEquals(1, SteerHelper.pending(session).size(), "失败项必须回填易失邮箱待重试");
     }
 }

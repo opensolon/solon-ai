@@ -78,21 +78,21 @@ public class SteerCommand extends AbsCommand {
                     resolved.getReplyTarget(), resolved.getMessageId());
         }
 
-        SteerResult result = SteerInterceptor.steer(session, null, null, text, resolved, null);
+        SteerResult result = SteerHelper.steer(session, null, null, text, resolved, null);
 
         switch (result.getStatus()) {
             case STEERED:
                 ctx.println("已插话，将在下一步注入当前任务（待生效 " + result.getQueued() + " 条）");
                 break;
             case BOX_FULL:
-                ctx.println("插话邮箱已满（上限 " + SteerInterceptor.MAX_BOX_SIZE + " 条），可用 /queue 排队");
+                ctx.println("插话邮箱已满（上限 " + SteerHelper.MAX_BOX_SIZE + " 条），可用 /queue 排队");
                 break;
             case NOT_RUNNING:
             case TURN_CHANGED:
                 ctx.println("当前无正在执行的任务可插话，可直接发送或用 /queue 排队");
                 break;
             case TEXT_TOO_LONG:
-                ctx.println("插话内容过长（上限 " + SteerInterceptor.MAX_TEXT_LENGTH + " 字符）");
+                ctx.println("插话内容过长（上限 " + SteerHelper.MAX_TEXT_LENGTH + " 字符）");
                 break;
             case DISABLED:
                 ctx.println("插话能力已停用，可直接发送或使用 /queue 排队");

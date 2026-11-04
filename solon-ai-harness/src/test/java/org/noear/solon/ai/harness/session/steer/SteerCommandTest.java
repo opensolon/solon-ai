@@ -10,7 +10,7 @@ import org.noear.solon.ai.harness.session.queue.QueueHelper;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * /steer 命令编排层测试（直连 SteerInterceptor，engine 传 null 同既有口径）。
+ * /steer 命令编排层测试（直连 SteerHelper，engine 传 null 同既有口径）。
  * 场景：需要先在 attrs 中建立 activeRunId（模拟运行中任务），未建立时为 NOT_RUNNING。
  */
 class SteerCommandTest {
@@ -36,7 +36,7 @@ class SteerCommandTest {
         Fakes.StubContext ctx = Fakes.StubContext.im("补充要求");
         AgentSession session = ctx.getSession();
         withActiveRun(session, "run-1");
-        SteerInterceptor.steer(session, null, null, "第一条", InputOrigin.channel("command"), null);
+        SteerHelper.steer(session, null, null, "第一条", InputOrigin.channel("command"), null);
         command.execute(null, ctx, Fakes.StubContext.imOrigin());
         assertTrue(ctx.output().contains("待生效 2 条"));
     }
@@ -46,12 +46,12 @@ class SteerCommandTest {
         Fakes.StubContext ctx = Fakes.StubContext.im("补充要求");
         AgentSession session = ctx.getSession();
         withActiveRun(session, "run-1");
-        for (int i = 0; i < SteerInterceptor.MAX_BOX_SIZE; i++) {
-            SteerResult r = SteerInterceptor.steer(session, null, null, "seed-" + i, InputOrigin.channel("command"), null);
+        for (int i = 0; i < SteerHelper.MAX_BOX_SIZE; i++) {
+            SteerResult r = SteerHelper.steer(session, null, null, "seed-" + i, InputOrigin.channel("command"), null);
             assertEquals(SteerStatus.STEERED, r.getStatus());
         }
         command.execute(null, ctx, Fakes.StubContext.imOrigin());
-        assertTrue(ctx.output().contains("插话邮箱已满（上限 " + SteerInterceptor.MAX_BOX_SIZE + " 条），可用 /queue 排队"));
+        assertTrue(ctx.output().contains("插话邮箱已满（上限 " + SteerHelper.MAX_BOX_SIZE + " 条），可用 /queue 排队"));
         assertEquals(0, queuePending(session));
     }
 
@@ -67,10 +67,10 @@ class SteerCommandTest {
     @Test
     void textTooLongPrintsLimit() {
         StringBuilder longText = new StringBuilder();
-        for (int i = 0; i < SteerInterceptor.MAX_TEXT_LENGTH + 1; i++) longText.append('x');
+        for (int i = 0; i < SteerHelper.MAX_TEXT_LENGTH + 1; i++) longText.append('x');
         Fakes.StubContext ctx = Fakes.StubContext.im(longText.toString());
         command.execute(null, ctx, Fakes.StubContext.imOrigin());
-        assertTrue(ctx.output().contains("上限 " + SteerInterceptor.MAX_TEXT_LENGTH + " 字符"));
+        assertTrue(ctx.output().contains("上限 " + SteerHelper.MAX_TEXT_LENGTH + " 字符"));
     }
 
     @Test
@@ -79,7 +79,7 @@ class SteerCommandTest {
         AgentSession session = ctx.getSession();
         withActiveRun(session, "run-1");
         command.execute(null, ctx, Fakes.StubContext.localOrigin());
-        SteerMessage msg = SteerInterceptor.steerBox(session).poll();
+        SteerMessage msg = SteerHelper.steerBox(session).poll();
         assertNotNull(msg);
         assertEquals("command", msg.getOrigin().getChannel());
         assertEquals("补充要求", msg.getText());
@@ -91,7 +91,7 @@ class SteerCommandTest {
         AgentSession session = ctx.getSession();
         withActiveRun(session, "run-1");
         command.execute(null, ctx, Fakes.StubContext.imOrigin());
-        SteerMessage msg = SteerInterceptor.steerBox(session).poll();
+        SteerMessage msg = SteerHelper.steerBox(session).poll();
         assertNotNull(msg);
         assertEquals("Feishu", msg.getOrigin().getChannel());
         assertEquals("user-1", msg.getOrigin().getSenderId());
@@ -100,7 +100,7 @@ class SteerCommandTest {
     }
 
     private static void withActiveRun(AgentSession session, String runId) {
-        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, runId);
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, runId);
     }
 
     private static int queuePending(AgentSession session) {

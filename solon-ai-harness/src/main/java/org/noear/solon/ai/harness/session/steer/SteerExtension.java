@@ -92,7 +92,7 @@ public class SteerExtension extends AbsHarnessExtension {
     /**
      * 插话入队（唯一实现的中转，与 Web /web/chat/steer、/steer 命令同源）。
      *
-     * @see SteerInterceptor#steer(AgentSession, String, String, String, InputOrigin, java.util.function.BooleanSupplier)
+     * @see SteerHelper#steer(AgentSession, String, String, String, InputOrigin, java.util.function.BooleanSupplier)
      */
     public SteerResult steer(AgentSession session, String runId, String steerId,
                                               String text, InputOrigin origin,
@@ -101,7 +101,7 @@ public class SteerExtension extends AbsHarnessExtension {
             // 停用后仍投递会一直积压在邮箱（消费方拦截器已停用），必须当场拒绝。
             return new SteerResult(SteerStatus.DISABLED, steerId, 0);
         }
-        return SteerInterceptor.steer(session, runId, steerId, text, origin, busyRecheck);
+        return SteerHelper.steer(session, runId, steerId, text, origin, busyRecheck);
     }
 
     /**
@@ -124,7 +124,7 @@ public class SteerExtension extends AbsHarnessExtension {
 
     /** 取消仍留在邮箱中的插话（消费线程已 poll 出则返回 false，不得宣称取消成功）。 */
     public boolean cancel(AgentSession session, String steerId) {
-        return SteerInterceptor.cancel(SteerInterceptor.steerBox(session), steerId);
+        return SteerHelper.cancel(SteerHelper.steerBox(session), steerId);
     }
 
     /**
@@ -134,7 +134,7 @@ public class SteerExtension extends AbsHarnessExtension {
      * 否则 steerId 只存在于投递返回值中，页面一刷就永远取消不了。
      */
     public java.util.List<SteerMessage> pending(AgentSession session) {
-        return SteerInterceptor.pending(session);
+        return SteerHelper.pending(session);
     }
 
     /**
@@ -153,7 +153,7 @@ public class SteerExtension extends AbsHarnessExtension {
         }
 
         synchronized (session.attrs()) {
-            Object value = session.attrs().get(SteerInterceptor.ATTR_ACTIVE_RUN_ID);
+            Object value = session.attrs().get(SteerHelper.ATTR_ACTIVE_RUN_ID);
             return value instanceof String ? (String) value : null;
         }
     }
@@ -178,8 +178,8 @@ public class SteerExtension extends AbsHarnessExtension {
 
         java.util.Queue<SteerMessage> staleBox;
         synchronized (session.attrs()) {
-            session.attrs().remove(SteerInterceptor.ATTR_ACTIVE_RUN_ID);
-            Object box = session.attrs().remove(SteerInterceptor.ATTR_STEER_BOX);
+            session.attrs().remove(SteerHelper.ATTR_ACTIVE_RUN_ID);
+            Object box = session.attrs().remove(SteerHelper.ATTR_STEER_BOX);
             staleBox = box instanceof java.util.Queue ? (java.util.Queue<SteerMessage>) box : null;
         }
 
@@ -188,7 +188,7 @@ public class SteerExtension extends AbsHarnessExtension {
         }
 
         java.util.List<SteerMessage> stale = new java.util.ArrayList<>(staleBox);
-        java.util.List<SteerMessage> failed = SteerInterceptor.enqueueIntoSessionQueue(session, stale);
+        java.util.List<SteerMessage> failed = SteerHelper.enqueueIntoSessionQueue(session, stale);
         java.util.List<SteerMessage> queued = new java.util.ArrayList<>(stale);
         queued.removeAll(failed);
 
@@ -231,12 +231,12 @@ public class SteerExtension extends AbsHarnessExtension {
 
     /** 单条插话的最大字符数（宿主做入参校验用，与拦截器实际截断口径一致） */
     public static int maxTextLength() {
-        return SteerInterceptor.MAX_TEXT_LENGTH;
+        return SteerHelper.MAX_TEXT_LENGTH;
     }
 
     /** steerId 的最大字符数 */
     public static int maxIdLength() {
-        return SteerInterceptor.MAX_ID_LENGTH;
+        return SteerHelper.MAX_ID_LENGTH;
     }
 
     /**
@@ -252,8 +252,8 @@ public class SteerExtension extends AbsHarnessExtension {
         }
 
         String content = message.getContent();
-        boolean marked = SteerInterceptor.STEER_SOURCE.equals(message.getMetadataAs("source"));
-        boolean prefixed = content != null && content.startsWith(SteerInterceptor.STEER_PREFIX);
+        boolean marked = SteerHelper.STEER_SOURCE.equals(message.getMetadataAs("source"));
+        boolean prefixed = content != null && content.startsWith(SteerHelper.STEER_PREFIX);
         return marked || prefixed;
     }
 
@@ -268,8 +268,8 @@ public class SteerExtension extends AbsHarnessExtension {
             return null;
         }
 
-        if (content.startsWith(SteerInterceptor.STEER_PREFIX)) {
-            return content.substring(SteerInterceptor.STEER_PREFIX.length());
+        if (content.startsWith(SteerHelper.STEER_PREFIX)) {
+            return content.substring(SteerHelper.STEER_PREFIX.length());
         }
 
         return content;

@@ -823,7 +823,7 @@ engine.interrupt(session);                       // 1 参，true = 确实停了
 |---|---|
 | `/goal <obj>` | 解析 flag 得到 `GoalSpec` 后 `goal.attachAndSchedule(session, spec)`（`GoalCommand` 注释明写「命令行与编程调用的唯一汇合点」） |
 | `/queue <msg>` | `QueueHelper.enqueue(session, text, resolved)`——`QueueExtension.enqueue` 转调的就是这个静态方法 |
-| `/steer <msg>` | `SteerInterceptor.steer(session, null, null, text, origin, null)`——正是 `steer.steer(session, text, origin)` 的三参实现 |
+ | `/steer <msg>` | `SteerHelper.steer(session, null, null, text, origin, null)`——正是 `steer.steer(session, text, origin)` 的三参实现 |
 
 三条由此推出的边界：
 
@@ -1273,7 +1273,7 @@ steer.cancel(session, steerId);                        // 取消仍在邮箱中�
 ```java
 // runId 传 null = 绑定「当前活跃任务」（IM 场景没有 runId 概念，直接信任后端权威值）
 // busyRecheck 传 null = 仅按 activeRunId 判定
-SteerResult r = SteerInterceptor.steer(session, null, null, text, origin, null);
+ SteerResult r = SteerHelper.steer(session, null, null, text, origin, null);
 ```
 
 | 状态 | 含义 |
@@ -1317,7 +1317,7 @@ public class SteerDroppedEvent extends AbsReActEvent {
 
 三个要点：
 
-1. **事件只是展示，持久化在 harness 内**。`SteerInterceptor#enqueueIntoSessionQueue` 先完成转排队、再推 `SteerDroppedEvent`。`pushAgentEvent` 在非流式或订阅已取消时静默丢弃，顺序颠倒就会在无订阅者时丢插话。
+ 1. **事件只是展示，持久化在 harness 内**。`SteerHelper#enqueueIntoSessionQueue` 先完成转排队、再推 `SteerDroppedEvent`。`pushAgentEvent` 在非流式或订阅已取消时静默丢弃，顺序颠倒就会在无订阅者时丢插话。
 2. **不覆写 `getText()`**。这两个事件不属于文本流；一旦给出文本，按文本兜底渲染的宿主（ACP 的 `concatMap` 收尾分支、Desktop 的 frame 转换）会把插话内容顺手打进对话。需要展示的宿主必须显式按类型分支。
 3. **映射即接入**。soloncode 的做法是在 `WebEventMapper` 加两个 `instanceof` 分支（→ `system.steer_applied` / `system.steer_dropped`），其余宿主不写代码即自然忽略。**harness 不认识任何宿主类型**，也没有端口接口可实现。
 
@@ -1325,7 +1325,7 @@ public class SteerDroppedEvent extends AbsReActEvent {
 
 1. **首轮不注入**（`turnCount <= 1`）——原始 prompt 必须先被采样，不篡改初始意图；
 2. **尾部 tool_calls 未闭合不注入**——HITL 挂起恢复的窄窗里插 user 消息会打断 `tool_use` / `tool_result` 配对，部分模型直接报错；等 `ActionTask` 补齐结果后自然恢复；
-3. **无悬挂**——`onAgentEnd` 检查残留并交给 `SteerInterceptor#enqueueIntoSessionQueue` 转排队，绝不允许「已接受但永不生效」。
+ 3. **无悬挂**——`onAgentEnd` 检查残留并交给 `SteerHelper#enqueueIntoSessionQueue` 转排队，绝不允许「已接受但永不生效」。
 
 注入形态：`ChatMessage.ofUser("[用户实时补充] " + text)`，metadata 标记 `source=steer`。不追加 systemPrompt 说明——前缀本身已足够表意。
 
@@ -1447,7 +1447,7 @@ if (engine.interrupt(session)) { /* 通知前端已停止 */ }
 - **“改”的前置条件比“停”窄**：“停”只需流句柄存在，“改”需要已进入推理边界。所以任务刚被受理、模型还没开口的那一小段时间，interrupt 能成功而 steer 会失败——这不是 bug。
 - **“停”与“重排”有副作用叠加**：`interrupt` 里的 `cancelPending` 会把队列一起清掉。若宿主想“只停当前、保留已有排队”，用 `engine.interruptStream(session)`——只停流、不写取消消息、不动队列（自动循环被新目标顶掉旧轮次的场景用它，避免历史里出现假“用户已取消”）。
 
-三者都**不自己开流、不做跨能力降级**：steer 邮箱满或任务未运行时如实返回状态码，要不要改走 queue 由调用方决定（`SteerMessage` 的「已接受但永不生效」由 `SteerInterceptor#enqueueIntoSessionQueue` 在 harness 内兜底，不在此列）。场景 A 里的那次降级就是宿主侧完成的，不是框架代做。
+ 三者都**不自己开流、不做跨能力降级**：steer 邮箱满或任务未运行时如实返回状态码，要不要改走 queue 由调用方决定（`SteerMessage` 的「已接受但永不生效」由 `SteerHelper#enqueueIntoSessionQueue` 在 harness 内兜底，不在此列）。场景 A 里的那次降级就是宿主侧完成的，不是框架代做。
 
 ---
 
@@ -1963,7 +1963,7 @@ org.noear.solon.ai.harness
 ├── permission/                   权限引擎（Rule / Context / Decision）
 ├── session/                      会话级能力
 │   ├── queue/                    排队
-│   ├── steer/                    插话
+│   ├── steer/                    插话（SteerHelper：邮箱契约与投递内核；SteerInterceptor：运行时消费边界）
 │   ├── goal/                     目标循环（含 GoalSpec 参数对象与校验器）
 │   └── interrupt/                中断（InterruptHelper：命令与 engine.interrupt 一族的唯一实现）
 ├── runtime/                      执行桥（ExecutionBridge / RoundResult / ErrorClassifier）

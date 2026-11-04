@@ -59,7 +59,7 @@ class SteerExtensionTest {
     void disabledExtensionRejectsSteer() {
         SteerExtension ext = new SteerExtension();
         AgentSession session = InMemoryAgentSession.of();
-        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, "run-1");
 
         ext.setEnabled(false);
         SteerResult r = ext.steer(session, null, null, "补充", null, null);
@@ -95,7 +95,7 @@ class SteerExtensionTest {
         assertEquals(SteerStatus.NOT_RUNNING, r.getStatus());
 
         // 模拟任务运行边界：写入 activeRunId 后可入邮箱
-        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, "run-1");
         SteerResult ok = ext.steer(session, null, null, "补充内容", null, null);
         assertTrue(ok.isSteered());
         assertEquals(1, ok.getQueued());
@@ -113,7 +113,7 @@ class SteerExtensionTest {
         assertEquals(SteerStatus.NOT_RUNNING, ext.steer(session, "补充").getStatus());
 
         // 有活跃任务：两参形态直接投递（runId/steerId/busyRecheck 均省略）
-        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, "run-1");
         SteerResult ok = ext.steer(session, "补充内容");
         assertTrue(ok.isSteered());
         assertEquals(1, ok.getQueued());
@@ -124,7 +124,7 @@ class SteerExtensionTest {
     void twoArgSteerKeepsDisabledAndEmptyTextGuards() {
         SteerExtension ext = new SteerExtension();
         AgentSession session = InMemoryAgentSession.of();
-        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, "run-1");
 
         // 便捷重载不得绕过入参校验与开关语义
         assertEquals(SteerStatus.EMPTY_TEXT, ext.steer(session, "   ").getStatus());
@@ -137,7 +137,7 @@ class SteerExtensionTest {
     void threeArgSteerDefaultsNullOrigin() {
         SteerExtension ext = new SteerExtension();
         AgentSession session = InMemoryAgentSession.of();
-        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, "run-1");
 
         SteerResult ok = ext.steer(session, "补充", null);
         assertTrue(ok.isSteered(), "null 来源应回落 InputOrigin.NONE 而非报错");
@@ -151,7 +151,7 @@ class SteerExtensionTest {
         // 邮箱未创建时返回空集合（不是 null），宿主可以直接 for-each
         assertTrue(ext.pending(session).isEmpty());
 
-        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, "run-1");
         SteerResult a = ext.steer(session, "第一条");
         SteerResult b = ext.steer(session, "第二条");
         assertTrue(a.isSteered());
@@ -170,15 +170,15 @@ class SteerExtensionTest {
     @Test
     void pendingReturnsSnapshotCopy() {
         AgentSession session = InMemoryAgentSession.of();
-        session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, "run-1");
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, "run-1");
 
-        SteerInterceptor.steer(session, null, null, "补充", null, null);
-        List<SteerMessage> snapshot = SteerInterceptor.pending(session);
+        SteerHelper.steer(session, null, null, "补充", null, null);
+        List<SteerMessage> snapshot = SteerHelper.pending(session);
 
         // 清掉真实邮箱，快照不应跟着变（返回的是副本，不是活动视图）
-        SteerInterceptor.steerBox(session).clear();
+        SteerHelper.steerBox(session).clear();
         assertEquals(1, snapshot.size());
-        assertTrue(SteerInterceptor.pending(session).isEmpty());
+        assertTrue(SteerHelper.pending(session).isEmpty());
     }
 
     @Test
