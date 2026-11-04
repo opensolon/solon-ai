@@ -19,12 +19,15 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.SessionRuns;
+import org.noear.solon.ai.agent.session.SessionRuns.Claim;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.harness.session.queue.QueueHelper;
 import org.noear.solon.ai.harness.util.TraceUtil;
+import org.noear.solon.lang.Nullable;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 会话中断的唯一实现。
@@ -44,8 +47,8 @@ import java.util.Objects;
  * @since 4.2
  */
 public final class InterruptHelper {
-    /** 中断补写的收尾文本 */
-    public static final String CANCEL_TEXT = "用户已取消任务.";
+    /** 中断补写的收尾文本（已上提到门面 {@link InterruptPlan#CANCEL_TEXT}，此处保留为兼容别名） */
+    public static final String CANCEL_TEXT = InterruptPlan.CANCEL_TEXT;
 
     private InterruptHelper() {
     }
@@ -67,24 +70,43 @@ public final class InterruptHelper {
      * @return true = 确有运行中的任务被中断；false = 调用时没有已登记的活跃流（但取消代数已推进）
      */
     public static boolean interrupt(AgentSession session) {
-        if (session == null) {
+        InterruptPlan plan = prepareInterrupt(session);
+        if (plan == null) {
             return false;
+        }
+        return plan.commit();
+    }
+
+    /**
+     * 两段式中断的第一段：清队列 + 原子认领运行句柄（不停流、不写取消消息）。
+     *
+     * <p>与 {@link #interrupt(AgentSession)} 的差别是给宿主留出<b>编排窗口</b>：
+     * 在停流之前发送渠道事件（如 Web 的「error → trace → done」包序），
+     * 结束时用 {@link InterruptPlan#commit()} 提交。时序要求见 {@link InterruptPlan}。</p>
+     *
+     * <p>内部顺序与 {@link #interrupt} 一致（先清队列再认领）。「判定忙碌」与「摘下句柄」
+     * 由 {@link SessionRuns#claim(AgentSession)} 在同一临界区完成：两个并发的停止只会有一者
+     * 拿到 {@code hasActiveRun()==true} 的 plan，不会重复写取消消息、重复领终态。</p>
+     *
+     * <p>会话为 null 时返回 null（安全，无副作用）。</p>
+     *
+     * @return 中断计划；null 仅当会话为 null。无活跃流时返回 {@code hasActiveRun()==false}
+     *         的 plan（队列与取消代数已处理完，宿主走空态出口即可）
+     * @since 4.2.0
+     */
+    @Nullable
+    public static InterruptPlan prepareInterrupt(AgentSession session) {
+        if (session == null) {
+            return null;
         }
 
         // ① 清排队：无论当前流句柄是否还在，排队项都必须取消（否则停流后又被续发）
         QueueHelper.cancelPending(session);
 
-        // ② 停当前运行（新路径优先；旧宿主兼容路径回退）
-        boolean interrupted = SessionRuns.cancelAll(session);
-        if (interrupted == false) {
-            return false;
-        }
+        // ② 原子认领：摘下句柄与推进取消代数是同一临界区，并发停止只一者成功
+        Claim claim = SessionRuns.claim(session);
 
-        // ③ 补收尾：取消消息 + 快照
-        //    框架已尽力让 agent 自然收尾，但取消发生在流内部时，宿主的收尾链仍可能被跳过；
-        //    这里做幂等式补齐（已有同 runId 的取消消息则不重复写入）。
-        writeCancelMessage(session);
-        return true;
+        return new InterruptPlanImpl(claim, session);
     }
 
     /**
@@ -140,6 +162,62 @@ public final class InterruptHelper {
             return;
         }
         writeCancelMessage(session);
+    }
+
+    /**
+     * {@link InterruptPlan} 的唯一实现：认领凭证闭合后补收尾与停流，全部幂等。
+     */
+    private static final class InterruptPlanImpl implements InterruptPlan {
+        private final AgentSession session;
+        private final @Nullable Claim claim;
+        private final AtomicBoolean done = new AtomicBoolean();
+        /** 取消消息是否已落库（窗口内提前写与 commit 内部写共用一个开关，保证只落盘一次） */
+        private final AtomicBoolean cancelWritten = new AtomicBoolean();
+
+        private InterruptPlanImpl(@Nullable Claim claim, AgentSession session) {
+            this.claim = claim;
+            this.session = session;
+        }
+
+        @Override
+        public boolean hasActiveRun() {
+            return claim != null;
+        }
+
+        @Override
+        public boolean writeCancelEarly() {
+            if (claim == null || done.get()) {
+                return false;
+            }
+            if (cancelWritten.compareAndSet(false, true) == false) {
+                return false;
+            }
+            writeCancelMessage(session);
+            return true;
+        }
+
+        @Override
+        public boolean commit() {
+            if (done.compareAndSet(false, true) == false) {
+                return false;
+            }
+
+            boolean hadActiveRun = claim != null;
+            if (hadActiveRun) {
+                // 补收尾（若窗口内已提前写则跳过，保证一次中断只落盘一次），再停流。
+                if (cancelWritten.compareAndSet(false, true)) {
+                    writeCancelMessage(session);
+                }
+                claim.dispose();
+            }
+            return hadActiveRun;
+        }
+
+        @Override
+        public void close() {
+            // 兜底与提交等价：close 幂等且不抛异常，已提交过则是空操作
+            commit();
+        }
     }
 
     /**

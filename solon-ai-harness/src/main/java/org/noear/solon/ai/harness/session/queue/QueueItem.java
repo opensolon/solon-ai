@@ -29,25 +29,6 @@ public final class QueueItem {
     private String selectedAgent;
     private boolean hasFiles;
 
-    public QueueItem(String id, String text, String source, long createdAt, String status) {
-        this(id, text, source, createdAt, status, null, null, null, null, false);
-    }
-
-    public QueueItem(String id, String text, String source, long createdAt, String status,
-                     String model, String reasoningEffort, String thinkingMode,
-                     String selectedAgent, boolean hasFiles) {
-        this(id, text, source, createdAt, status, model, reasoningEffort, thinkingMode,
-                selectedAgent, hasFiles, null, null, null);
-    }
-
-    public QueueItem(String id, String text, String source, long createdAt, String status,
-                     String model, String reasoningEffort, String thinkingMode,
-                     String selectedAgent, boolean hasFiles,
-                     String sourceUserId, String replyTarget, String messageId) {
-        this(id, text, InputOrigin.of(source, sourceUserId, replyTarget, messageId), createdAt, status,
-                model, reasoningEffort, thinkingMode, selectedAgent, hasFiles);
-    }
-
     public QueueItem(String id, String text, InputOrigin origin, long createdAt, String status) {
         this(id, text, origin, createdAt, status, null, null, null, null, false);
     }
@@ -77,8 +58,23 @@ public final class QueueItem {
     public String getThinkingMode() { return thinkingMode; }
     public String getSelectedAgent() { return selectedAgent; }
     public boolean hasFiles() { return hasFiles; }
-    public void setStatus(String status) { this.status = "RUNNING".equalsIgnoreCase(status) ? "RUNNING" : "PENDING"; }
-    public void setClaimedAt(Long claimedAt) { this.claimedAt = claimedAt; }
+    /** 运行状态：仅 harness 队列内核可写（宿主不得改写 in-flight 状态）。 */
+    void setStatus(String status) { this.status = "RUNNING".equalsIgnoreCase(status) ? "RUNNING" : "PENDING"; }
+
+    /** 领取时间：仅 harness 队列内核可写。 */
+    void setClaimedAt(Long claimedAt) { this.claimedAt = claimedAt; }
+
+    /**
+     * 对外展示视图（宿主 HTTP / UI 的唯一合法来源）。
+     *
+     * <p>与 {@code toMap()} 的差别是契约责任不同：这里字段集合可以随产品需求演进，
+     * 与存储格式解耦。包含前端渲染所需字段（含 {@code displayText} 与运行状态）。</p>
+     *
+     * <p>包内可见：宿主经 {@code QueueExtension#viewRows} 获取，不直接构造视图。</p>
+     */
+    QueueItemView toView() {
+        return new QueueItemView(this);
+    }
 
     /**
      * 来源身份（永不为 null）
@@ -86,7 +82,14 @@ public final class QueueItem {
     public InputOrigin getOrigin() { return origin; }
 
 
-    public Map<String, Object> toMap() {
+    /**
+     * 持久化投影（落盘格式，仅供 harness 内部与快照使用）。
+     *
+     * <p><b>包内可见，非对外 API</b>：键名是存储契约的一部分，为保证旧数据可读而冻结。
+     * 宿主对外展示一律走 {@code QueueExtension#viewRows}（返回 {@link QueueItemView}），
+     * 否则存储格式的演进会被 HTTP 契约锁死。</p>
+     */
+    Map<String, Object> toMap() {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("id", id);
         map.put("text", text);
@@ -103,11 +106,11 @@ public final class QueueItem {
         return map;
     }
 
-    public static QueueItem fromMap(Map<String, Object> map) {
+    static QueueItem fromMap(Map<String, Object> map) {
         return fromMap(map, null);
     }
 
-    public static QueueItem fromMap(Map<String, Object> map, String fallbackSource) {
+    static QueueItem fromMap(Map<String, Object> map, String fallbackSource) {
         if (map == null) return null;
         String text = value(map.get("text"));
         if (text == null || text.trim().isEmpty() || text.trim().length() > QueueHelper.MAX_TEXT_LENGTH) return null;

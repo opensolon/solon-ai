@@ -24,6 +24,7 @@ import org.noear.solon.ai.harness.session.goal.validate.TestsPassValidator;
 import org.noear.solon.ai.harness.runtime.ErrorClassifier;
 import org.noear.solon.ai.harness.runtime.ExecutionBridge;
 import org.noear.solon.ai.harness.runtime.RoundResult;
+import org.noear.solon.flow.FlowContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -417,10 +418,10 @@ public class GoalEngine {
     /** 从会话上下文投影重建 goal；无投影返回 null。 */
     private GoalState hydrate(AgentSession session) {
         if (session.getContext() == null) return null;
-        Object projection = session.getContext().data().get(KEY_GOAL);
-        if (!(projection instanceof Map)) return null;
+        GoalProjection projection = GoalProjection.from(session.getContext());
+        if (projection == null) return null;
         try {
-            GoalState gs = GoalState.fromMap((Map<?, ?>) projection);
+            GoalState gs = GoalState.fromMap(projection.toMap());
             if (gs != null) {
                 gs.setThresholds(budgetThresholds);
             }
@@ -767,5 +768,18 @@ public class GoalEngine {
         } catch (Throwable e) {
             return false;
         }
+    }
+
+    /**
+     * 快照上下文中的 goal 投影状态（类型化读取，不涉状态名字符串）。
+     *
+     * <p>供宿主在会话尚未实例化时做启动恢复判定；判定本身用
+     * {@link GoalProjection#isActive()}，不再让宿主自己比较字符串。</p>
+     *
+     * @return null = 无 goal 投影或投影不可用
+     * @since 4.2.1
+     */
+    public static GoalProjection projectionOf(FlowContext context) {
+        return GoalProjection.from(context);
     }
 }

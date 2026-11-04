@@ -46,14 +46,16 @@ public final class SessionStatus {
     private final int pendingHitl;
     private final int queuedCount;
     private final int cancelGeneration;
+    private final boolean admitting;
 
     private SessionStatus(boolean busy, int activeRunCount, int pendingHitl,
-                          int queuedCount, int cancelGeneration) {
+                          int queuedCount, int cancelGeneration, boolean admitting) {
         this.busy = busy;
         this.activeRunCount = activeRunCount;
         this.pendingHitl = pendingHitl;
         this.queuedCount = queuedCount;
         this.cancelGeneration = cancelGeneration;
+        this.admitting = admitting;
     }
 
     /**
@@ -61,7 +63,7 @@ public final class SessionStatus {
      */
     public static SessionStatus of(@Nullable AgentSession session) {
         if (session == null) {
-            return new SessionStatus(false, 0, 0, 0, 0);
+            return new SessionStatus(false, 0, 0, 0, 0, false);
         }
 
         int activeRunCount = SessionRuns.activeCount(session);
@@ -70,7 +72,7 @@ public final class SessionStatus {
         int cancelGeneration = SessionRuns.cancelCount(session);
 
         return new SessionStatus(activeRunCount > 0, activeRunCount, pendingHitl,
-                queuedCount, cancelGeneration);
+                queuedCount, cancelGeneration, InputGate.isAdmitting(session));
     }
 
     /**
@@ -115,7 +117,17 @@ public final class SessionStatus {
      * 但此时新输入会顶掉挂起任务，必须算作占用。</p>
      */
     public boolean isOccupied() {
-        return busy || pendingHitl > 0;
+        return admitting || busy || pendingHitl > 0;
+    }
+
+    /**
+     * 是否正处在「输入已受理、运行流尚未登记」的窗口内。
+     *
+     * @see InputGate
+     * @since 4.2.1
+     */
+    public boolean isAdmitting() {
+        return admitting;
     }
 
     /**
@@ -128,6 +140,7 @@ public final class SessionStatus {
     @Override
     public String toString() {
         return "SessionStatus{busy=" + busy + ", runs=" + activeRunCount
-                + ", hitl=" + pendingHitl + ", queued=" + queuedCount + "}";
+                + ", hitl=" + pendingHitl + ", queued=" + queuedCount
+                + ", admitting=" + admitting + "}";
     }
 }

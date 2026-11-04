@@ -48,10 +48,10 @@ class QueueExtensionTest {
         assertEquals(1, queue.enqueue(session, "第一条", null));
         assertEquals(2, queue.enqueue(session, "第二条", null));
         assertEquals(2, queue.pendingSize(session));
-        assertEquals(2, queue.size(session));
+        assertEquals(2, queue.viewRows(session).size());
         assertTrue(queue.hasItems(session));
 
-        List<QueueItem> view = queue.view(session);
+        List<QueueItemView> view = queue.viewRows(session);
         assertEquals(2, view.size());
         assertEquals("第一条", view.get(0).getText());
 
@@ -69,9 +69,8 @@ class QueueExtensionTest {
 
         // 程序宿主不必为一个必填参数编造渠道标识
         assertEquals(1, queue.enqueue(session, "最简入队"));
-        assertEquals("最简入队", queue.view(session).get(0).getText());
-        assertNotNull(queue.view(session).get(0).getOrigin(), "缺省来源不得为 null（与静态实现契约一致）");
-        assertEquals("queue", queue.view(session).get(0).getOrigin().getChannel());
+        assertEquals("最简入队", queue.viewRows(session).get(0).getText());
+        assertEquals("queue", queue.viewRows(session).get(0).getSource(), "缺省来源不得为 null（与静态实现契约一致）");
     }
 
     @Test
@@ -84,20 +83,20 @@ class QueueExtensionTest {
     }
 
     @Test
-    void asyncDrainDefersAckUntilExplicitAcknowledge() {
+    void asyncClaimDefersSettlementUntilExplicitAcknowledge() {
         QueueExtension queue = new QueueExtension();
         AgentSession session = InMemoryAgentSession.of();
         queue.enqueue(session, "异步任务", null);
 
-        // 异步语义：回调只启动，不确认
-        assertTrue(queue.drainOne(session, item -> { }, false));
+        // 异步语义：callback 只启动，收取口句柄
+        AtomicReference<QueueClaim> ref = new AtomicReference<>();
+        assertEquals(DrainStatus.STARTED, queue.claimNext(session, ref::set));
         assertEquals(0, queue.pendingSize(session), "in-flight 不计待执行");
-        assertEquals(1, queue.size(session), "size 含 in-flight");
+        assertEquals(1, queue.viewRows(session).size(), "viewRows 含 in-flight");
 
-        // ack 带 id 才能确认
-        List<QueueItem> view = queue.view(session);
-        assertTrue(queue.ack(session, view.get(0).getId()));
-        assertEquals(0, queue.size(session));
+        // 终态由 claim 收口（宿主不再需要 ack(itemId)）
+        assertTrue(ref.get().acknowledge());
+        assertEquals(0, queue.viewRows(session).size());
     }
 
     @Test

@@ -40,6 +40,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.agent.*;
+import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.input.AgentMentions;
 import org.noear.solon.ai.harness.input.BufferedCommandContextFactory;
@@ -52,8 +53,11 @@ import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.input.ParsedCommand;
 import org.noear.solon.ai.harness.hitl.BashToolStrategy;
 import org.noear.solon.ai.harness.permission.PermissionContext;
+import org.noear.solon.ai.harness.session.HarnessAttrs;
 import org.noear.solon.ai.harness.session.SessionStatus;
+import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.session.interrupt.InterruptHelper;
+import org.noear.solon.ai.harness.session.interrupt.InterruptPlan;
 
 import org.noear.solon.ai.harness.permission.PermissionRule;
 import org.noear.solon.ai.harness.permission.ToolPermission;
@@ -106,6 +110,18 @@ public class HarnessEngine {
     private static final String BUILTIN_AGENT_PATH = "META-INF/solon/ai/harness/agents/";
     public final static String CTX_MODEL_SELECTED = "_model_selected";
     public final static String CTX_AGENT_SELECTED = "_agent_selected";
+
+    /**
+     * 会话属性：本轮实际生效的子代理名（含 {@code @子代理} 解析结果）。
+     *
+     * <p>由 {@code handle} 在返回 {@link InputOutcome.Kind#TASK TASK} 时自动写入，
+     * 主代理归一为 {@code "main"}。HITL 续流（审批请求通常不带 selectedAgent）
+     * 与事件侧「源代理判定」均以它为准：trace 按代理名分 key，取错代理会取不到挂起的
+     * tool_calls，表现为续跑空转。无状态宿主（如 Web 的跨请求审批）不必再自建记忆。</p>
+     *
+     * @since 4.2.0
+     */
+    public final static String ATTR_AGENT_EFFECTIVE = HarnessAttrs.AGENT_EFFECTIVE;
 
     private final ReentrantLock agentLock = new ReentrantLock();
 
@@ -1623,6 +1639,7 @@ public class HarnessEngine {
                 //1) hitlApplied —— 无匹配挂起任务时续流会把上一轮问题重跑一遍（空提示词回落 originalPrompt）；
                 //2) pendingHitl == 0 —— 批内仍有未决卡时续流会把它们一并带走；
                 //3) 宿主显式传 resume —— 只写决策的批量场景不自作主张。
+                rememberEffectiveAgent(session, agentName);
                 return InputOutcome.task(null, agentName, resolveSessionModelName(session, input.getSelectedModel()),
                         promptDo(session, null, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps()), true);
             }
@@ -1634,8 +1651,11 @@ public class HarnessEngine {
 
         // ========== 2. 续流（无新输入，按挂起的 tool_calls 继续执行）==========
         if (input.isResume()) {
+            //生效代理的会话级记忆：续流未显式指定时回填上一轮生效值（无状态宿主跨请求续流的关键）
             String agentName = Assert.isNotEmpty(input.getSelectedAgent())
-                    ? input.getSelectedAgent() : input.getExplicitAgent();
+                    ? input.getSelectedAgent() : Assert.isNotEmpty(input.getExplicitAgent())
+                    ? input.getExplicitAgent() : effectiveAgentOf(session);
+            rememberEffectiveAgent(session, agentName);
             return InputOutcome.task(null, agentName, resolveSessionModelName(session, input.getSelectedModel()),
                     promptDo(session, null, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps()));
         }
@@ -1685,8 +1705,35 @@ public class HarnessEngine {
 
         // ========== 6. 请求装配 ==========
         String modelName = resolveSessionModelName(session, input.getSelectedModel());
+        rememberEffectiveAgent(session, agentName);
         return InputOutcome.task(prompt, agentName, modelName,
                 promptDo(session, prompt, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps()));
+    }
+
+    /**
+     * 记录本轮生效代理到会话属性（主代理归一为 "main"）。
+     *
+     * <p>写入时机与流启动同步：发生在 handle 返回 TASK 后、宿主订阅前，与 Web 端原先
+     * 「StreamBuilder 每轮写入」等价。HITL 挂起期间不覆盖（决策分支仅在真正续流时写入）。</p>
+     */
+    private static void rememberEffectiveAgent(@Nullable AgentSession session, @Nullable String agentName) {
+        if (session == null) {
+            return;
+        }
+        session.attrs().put(ATTR_AGENT_EFFECTIVE,
+                Assert.isNotEmpty(agentName) ? agentName : AgentDefinition.AGENT_MAIN);
+    }
+
+    /**
+     * 读取生效代理的会话级记忆（未记忆过时为 null）。
+     */
+    @Nullable
+    private static String effectiveAgentOf(@Nullable AgentSession session) {
+        if (session == null) {
+            return null;
+        }
+        return session.attrs().get(ATTR_AGENT_EFFECTIVE) instanceof String
+                ? (String) session.attrs().get(ATTR_AGENT_EFFECTIVE) : null;
     }
 
     /**
@@ -1876,6 +1923,35 @@ public class HarnessEngine {
     }
 
     /**
+     * 两段式中断的第一段：清队列 + 原子认领运行句柄（不停流、不写取消消息）。
+     *
+     * <p>给需要自定义终态时序的宿主（如 Web 的「先落库 → error → done → 最后停流」）留出
+     * 编排窗口；编排完调用 {@link InterruptPlan#commit()} 提交。不需要自定义时序的宿主
+     * 继续用 {@link #interrupt(AgentSession)} 即可（等价于 prepare + commit）。</p>
+     *
+     * <p>计划必须闭合：用 try-with-resources 持有，或确保任何路径上都调
+     * {@link InterruptPlan#close()}（与 commit 等价且幂等）——忘记闭合会留下一条
+     * 无法再次取消的孤儿流。</p>
+     *
+     * <pre>{@code
+     * try (InterruptPlan plan = engine.prepareInterrupt(session)) {
+     *     if (plan == null || !plan.hasActiveRun()) { emitFallbackDone(); return; }
+     *     emitError(cancelText);
+     *     emitDone();
+     *     plan.commit();
+     * }
+     * }</pre>
+     *
+     * @return 中断计划；null 仅当会话为 null。无活跃流时返回 {@code hasActiveRun()==false}
+     *         的计划（队列与取消代数已处理，宿主走空态出口）
+     * @since 4.2.0
+     */
+    @Nullable
+    public InterruptPlan prepareInterrupt(@Nullable AgentSession session) {
+        return InterruptHelper.prepareInterrupt(session);
+    }
+
+    /**
      * 只停当前运行流，不补取消消息、不清队列（程序化「停流」）。
      *
      * <p>与 {@link #interrupt(AgentSession)} 的差别仅在于<b>不写历史</b>：适合轮次由程序接管、
@@ -1916,6 +1992,53 @@ public class HarnessEngine {
      */
     public SessionStatus status(@Nullable AgentSession session) {
         return SessionStatus.of(session);
+    }
+
+    /**
+     * 输入是否为「忙碌可穿透」的斜杠命令。
+     *
+     * <p>宿主的受理控制需要回答「这条输入能不能在任务运行中被受理」。答案不该由宿主
+     * 复刻「解析命令名 → 查注册表 → 读 terminalOnly/runnableWhenBusy」这条链——
+     * 三处口径任一漂移（前缀、大小写、参数切分），忙态旁路就会静默失效。
+     * 本方法把该判定收归引擎，宿主只需一个布尔。</p>
+     *
+     * <p>判定口径：输入以引擎命令前缀开头、能解析出命令名、且该命令已注册、
+     * 非 {@link Command#terminalOnly()} 且声明 {@link Command#runnableWhenBusy()}。</p>
+     *
+     * <p><b>注意</b>：本方法只回答「忙态是否放行」，不回答「空闲时能否启动任务」。
+     * 后者（如 {@code /steer}）仍由宿主按自己的占位闩语义处理。</p>
+     *
+     * @see Command#runnableWhenBusy()
+     * @since 4.2.1
+     */
+    public boolean isBusyBypassCommand(@Nullable String input) {
+        Command command = resolveCommand(input);
+        return command != null && !command.terminalOnly() && command.runnableWhenBusy();
+    }
+
+    /**
+     * 解析输入对应的已注册命令（未以命令前缀开头、只有前缀、或未注册时返回 null）。
+     *
+     * <p>宿主在忙态/空闲态之间分流前常需先知道「这是不是一条命令」，
+     * 但不应自行解析前缀与参数。命名/前缀口径的唯一实现留在引擎侧。</p>
+     *
+     * @since 4.2.1
+     */
+    @Nullable
+    public Command resolveCommand(@Nullable String input) {
+        if (input == null || commandRegistry == null) {
+            return null;
+        }
+        String trimmed = input.trim();
+        ParsedCommand parsed = ParsedCommand.parse(trimmed, options.getCommandPrefix());
+        if (parsed == null) {
+            return null;
+        }
+        Command command = commandRegistry.find(parsed.getName());
+        if (command == null || command.isEnabled() == false) {
+            return null;
+        }
+        return command;
     }
 
     public static Builder of(String workspace, String harnessHome) {

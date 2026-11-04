@@ -327,6 +327,34 @@ public final class QueueHelper {
     //==============
 
 
+    /**
+     * 领取队首一条并交给 handler（一次领取 = 一个 {@link QueueClaim}）。
+     *
+     * <p>与 {@link #drainOne} 的差别：代际在领取瞬间绑定到 claim，宿主终态不再现取
+     * （现取会让代际防线恒真，导致被 cancelPending 清空的任务重新入队）。handler 抛异常
+     * 等价于启动失败，由内核用领取时快照的代际回滚。</p>
+     *
+     * @return STARTED / NO_TASK / START_FAILED
+     */
+    public static DrainStatus claimNext(AgentSession session, QueueClaimHandler handler) {
+        if (session == null || handler == null || !tryClaim(session)) return DrainStatus.NO_TASK;
+        QueueItem item = poll(session);
+        if (item == null) {
+            releaseClaim(session);
+            return DrainStatus.NO_TASK;
+        }
+        QueueClaim claim = new QueueClaim(session, item, generation(session));
+        try {
+            handler.run(claim);
+            return DrainStatus.STARTED;
+        } catch (Throwable e) {
+            claim.rollback();
+            return DrainStatus.START_FAILED;
+        } finally {
+            releaseClaim(session);
+        }
+    }
+
     public static boolean drainOne(AgentSession session, QueueTaskRunner runner) {
         return drainOne(session, runner, true);
     }

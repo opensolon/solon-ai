@@ -20,12 +20,16 @@ import java.util.Map;
  * （幂等）+ 提供队列操作门面。宿主不再分别接触 {@link QueueHelper} 静态工具类——本类内部中转，静态实现与
  * {@code session.queue.*} attrs 契约零改动。</p>
  *
- * <p>装配后宿主只需掌握两个时机（这是队列的宿主职责，扩展不代管）：</p>
- * <ul>
- *   <li>任务终态：{@code drainOne(...)} 续发队首（同步运行者回调返回即确认；
- *       异步运行者传 {@code acknowledgeOnReturn=false}，终态再 {@code ack(...)）}；</li>
- *   <li>启动恢复：先 {@code hasItems/hasPersistedItems} 探测，再 drain。</li>
- * </ul>
+ * <p>装配后宿主只需掌握一个时机：任务终态续发。首选 {@link #drainLoop}（自动套领取循环 +
+ * 三态终止），单条控制用 {@link #claimNext}；二者都把「一次领取」封成 {@link QueueClaim}，
+ * 代际快照与终态收口（{@code acknowledge}/{@code rollback}）归 harness。
+ * 启动恢复用 {@link #isPersisted} 探测后直接 drain。</p>
+ *
+ * <p>历史上曾有一组「异步 drain + 宿主自管代际」的接口
+ * （{@code drainOne(runner, false)} / {@code ack} / {@code generation} /
+ * {@code isGenerationActive} / {@code requeueFront}）：宿主要在终态<b>现取</b>代际，
+ * 而 {@code cancelPending} 会递代，现取必然拿到新代际 → 代际防线弧真 →
+ * 被用户 Stop 的任务会重新入队继续执行。这些方法已随 {@link QueueClaim} 落地全部移除。</p>
  *
  * @author noear
  * @since 3.9.4
@@ -48,8 +52,9 @@ public class QueueExtension extends AbsHarnessExtension {
     /**
      * 开关语义（与命令层一致）：
      * <ul>
-     *   <li>受控：{@link #enqueue} 与 {@link #drainOne} —— 停用后不再接单、不再续发；</li>
-     *   <li>不受控：ack / cancelItem / promote / cancelPending 等清理类接口 —— 开关不得阻止清理，
+     *   <li>受控：{@link #enqueue} 与 {@link #drainOne}/{@link #claimNext}/{@link #drainLoop}
+     *       —— 停用后不再接单、不再续发；</li>
+     *   <li>不受控：cancelItem / promote / cancelPending 等清理类接口 —— 开关不得阻止清理，
      *       否则停用前已入队的项将永远无法取消。</li>
      * </ul>
      */
@@ -92,55 +97,126 @@ public class QueueExtension extends AbsHarnessExtension {
         return QueueHelper.pendingSize(session);
     }
 
-    /** 总数（含 in-flight）。 */
-    public int size(AgentSession session) {
-        return QueueHelper.size(session);
-    }
-
     /** 是否有任务（含待执行与运行中）。 */
     public boolean hasItems(AgentSession session) {
         return QueueHelper.hasItems(session);
     }
 
-    /** 快照中是否存在队列投影（不为探测而实例化会话）。 */
-    public boolean hasPersistedItems(FlowContext context) {
+    /**
+     * 快照投影中是否存在队列（静态探测，供宿主在会话尚未实例化时使用）。
+     *
+     * <p>替代宿主直接依赖内核 {@code QueueHelper} 静态方法；不需要扩展实例。</p>
+     *
+     * @since 4.2.1
+     */
+    public static boolean isPersisted(FlowContext context) {
         return QueueHelper.hasPersistedItems(context);
     }
 
-    /** 统一视图：运行中任务（若有）在首位，其余待执行。 */
-    public List<QueueItem> view(AgentSession session) {
-        return QueueHelper.view(session);
+    /**
+     * 统一展示视图（对外 API / UI 契约）。
+     *
+     * <p>返回视图对象而非领域对象：宿主不得拿 {@code QueueItem.toMap()}
+     * （持久化投影）当 HTTP 响应体，否则存储格式的演进会被 HTTP 契约锁死。</p>
+     *
+     * <p>本方法是队列展示的<b>唯一</b>入口（原 {@code view()} 返回领域对象，
+     * 会诱导宿主直接读 {@code QueueItem}，已移除）。</p>
+     *
+     * @since 4.2.1
+     */
+    public List<QueueItemView> viewRows(AgentSession session) {
+        List<QueueItemView> rows = new java.util.ArrayList<>();
+        for (QueueItem item : QueueHelper.view(session)) {
+            rows.add(item.toView());
+        }
+        return rows;
+    }
+
+    /**
+     * 领取并执行队首一条（一次领取 = 一个 {@link QueueClaim}）。
+     *
+     * <p><b>宿主首选入口</b>：handler 拿到 claim 后，既可以直接取 {@code claim.getItem()}
+     * 拿任务本体，也可以在任意线程、任意时刻用 {@code claim.acknowledge()} /
+     * {@code claim.rollback()} 收口——不需要往会话 attrs 里塞 QueueItem，也不需要在终态现取代际。</p>
+     *
+     * @see QueueHelper#claimNext(AgentSession, QueueClaimHandler)
+     * @since 4.2.1
+     */
+    public DrainStatus claimNext(AgentSession session, QueueClaimHandler handler) {
+        if (isEnabled() == false) {
+            return DrainStatus.NO_TASK;
+        }
+        return QueueHelper.claimNext(session, handler);
+    }
+
+    /**
+     * 连续领取直到「本轮真的一启动了任务」或「队列空」或「不能再接单」。
+     *
+     * <p><b>为何要有这个方法</b>：队列续发不是一个简单循环——它需要回答三个问题：
+     * 现在能不能接（宿主自己的占位闩语义，harness 无从得知）、上一条是否真的启动成功
+     * （{@link DrainStatus#START_FAILED} 时立即重试会形成死循环）、启动后还要不要继续。
+     * 此前每个宿主都得自己写一遍递归 + 三态判定，写错任何一处就是要么漏发、要么狂循环。
+     * 本方法把循环与终止条件收归 harness，只把「能不能接」作为谓词留给宿主。</p>
+     *
+     * <p>终止条件（任一成立即返回）：
+     * <ul>
+     *   <li>{@code canDrain} 返回 false（会话忙/被占）——返回上一次状态；</li>
+     *   <li>领取结果为 {@link DrainStatus#START_FAILED}——任务已回队首，<b>不立即重试</b>；</li>
+     *   <li>领取结果为 {@link DrainStatus#NO_TASK}（队空）；</li>
+     *   <li>启动成功后队列已无待执行项（运行中的那条不占容量，不必再发）。</li>
+     * </ul>
+     *
+     * <p>与 {@link #claimNext} 的关系：本方法是它的循环包装，语义完全一致。
+     * 需要自己对每次领取做额外决策的宿主仍可直接用 {@code claimNext}。</p>
+     *
+     * @param canDrain 现在能不能接单（传 null 表示不预判，完全由队列状态决定）；
+     *                 同步命令会在回调返回前就结束，宿主通常在这里传「当前是否忙」
+     * @param handler  单次领取的启动者（终态收口由 {@link QueueClaim} 负责）
+     * @return 最后一次领取的结果（未发生领取时为 {@link DrainStatus#NO_TASK}）
+     * @since 4.2.1
+     */
+    public DrainStatus drainLoop(AgentSession session, java.util.function.Predicate<AgentSession> canDrain,
+                                QueueClaimHandler handler) {
+        if (isEnabled() == false || session == null || handler == null) {
+            return DrainStatus.NO_TASK;
+        }
+
+        DrainStatus last = DrainStatus.NO_TASK;
+        // 单次调用最多续发一轮队列容量：正常情况下每条领取都会消耗一个待执行项，
+        // 这里的上限只是防御「宿主 handler 把同一项反复塞回」的失控情形，不应被触达。
+        for (int guard = 0; guard <= QueueHelper.MAX_QUEUE_SIZE; guard++) {
+            if (canDrain != null && !canDrain.test(session)) {
+                return last;
+            }
+
+            DrainStatus status = QueueHelper.claimNext(session, handler);
+            if (status != DrainStatus.STARTED) {
+                return status;
+            }
+
+            last = status;
+            if (QueueHelper.pendingSize(session) <= 0) {
+                return last;
+            }
+        }
+        return last;
     }
 
     /**
      * 领取并执行队首一条（同步语义：回调返回即确认）。
      *
+     * <p><b>只适用于同步回调</b>：命令类任务（如 {@code /status}）在回调返回前就跑完了。
+     * 回调若只是「启动一个异步任务就返回」，必须用 {@link #claimNext}——本方法会在启动瞬间
+     * 就把任务确认为完成，异步失败将永远无法回滚。</p>
+     *
      * @return true = 已领取并执行；false = 无任务或领取失败
-     * @see QueueHelper#drainOne(AgentSession, QueueTaskRunner)
+     * @see #claimNext(AgentSession, QueueClaimHandler)
      */
     public boolean drainOne(AgentSession session, QueueTaskRunner runner) {
         if (isEnabled() == false) {
             return false;
         }
         return QueueHelper.drainOne(session, runner);
-    }
-
-    /**
-     * 领取并执行队首一条（异步语义：回调只负责启动，终态再 {@link #ack}）。
-     *
-     * @see QueueHelper#drainOne(AgentSession, QueueTaskRunner, boolean)
-     */
-    public boolean drainOne(AgentSession session, QueueTaskRunner runner,
-                            boolean acknowledgeOnReturn) {
-        if (isEnabled() == false) {
-            return false;
-        }
-        return QueueHelper.drainOne(session, runner, acknowledgeOnReturn);
-    }
-
-    /** 异步终态确认：必须带正确的 item id（校验 in-flight 身份，不匹配返回 false）。 */
-    public boolean ack(AgentSession session, String itemId) {
-        return QueueHelper.acknowledge(session, itemId);
     }
 
     /** 取消单条待执行任务。 */
@@ -161,40 +237,5 @@ public class QueueExtension extends AbsHarnessExtension {
     /** 旧版 queue-tasks.json 的一次性迁移入口。@return 实际导入条数 */
     public int importItems(AgentSession session, List<Map<String, Object>> rows) {
         return QueueHelper.importItems(session, rows);
-    }
-
-    // ==================== 代际与回滚（异步运行者的终态竞态判定） ====================
-
-    /**
-     * 当前队列代际。
-     *
-     * <p>异步运行者（领取一条任务、在另一个线程跑、终态再确认）需要在<b>领取前</b>记下代际，
-     * 终态时回传：期间如果发生过 {@link #cancelPending}（清空待执行会递增代际），
-     * 那次回写就是陈旧的，必须丢弃而不是把已取消的任务重新塞回队列。</p>
-     */
-    public long generation(AgentSession session) {
-        return QueueHelper.generation(session);
-    }
-
-    /**
-     * 给定代际是否仍然有效（= 期间未被 {@link #cancelPending} 推进）。
-     *
-     * <p>与 {@link #generation} 配对使用：领取前取快照，终态时用本方法判定是否还该回写。</p>
-     */
-    public boolean isGenerationActive(AgentSession session, long generation) {
-        return QueueHelper.isGenerationActive(session, generation);
-    }
-
-    /**
-     * 把一条任务放回队首（异步运行者的「启动失败」回滚）。
-     *
-     * <p>与 {@link #ack} 是同一枚硬币的两面：领取成功并启动 → 终态 {@code ack}；
-     * 领取成功但启动失败 → {@code requeueFront} 回滚，任务不能因为一次启动失败就消失。</p>
-     *
-     * @param generation 领取前 {@link #generation} 的快照；代际已变则拒绝回滚（返回 false）
-     * @return true = 已放回队首；false = 代际已变或参数不合法
-     */
-    public boolean requeueFront(AgentSession session, QueueItem item, long generation) {
-        return QueueHelper.requeueFront(session, item, generation);
     }
 }

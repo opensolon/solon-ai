@@ -16,7 +16,6 @@
 package org.noear.solon.ai.harness.session.goal;
 
 import org.noear.snack4.ONode;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -317,54 +316,30 @@ public class GoalState {
 
     // ===== 会话快照投影（FlowContext.data() 中以 Map 存放，存储实现无关） =====
 
-    /** 转为会话快照投影（键名与前端的 goal.* 消费字段对齐）。 */
+    /** 转为投影 Map（键名即持久化契约，字段名唯一出处见 {@link GoalProjection}）。 */
     public Map<String, Object> toMap() {
-        Map<String, Object> map = new LinkedHashMap<>();
-        map.put("goalId", id);
-        map.put("objective", condition);
-        map.put("condition", condition);
-        map.put("status", status.name());
-        map.put("consumedTokens", consumedTokens);
-        map.put("maxTokens", maxTokens);
-        map.put("maxIterations", maxIterations);
-        map.put("startEpochMs", startEpochMs);
-        map.put("maxDurationMs", maxDurationMs);
-        map.put("currentIteration", currentIteration);
-        if (lastResult != null) map.put("lastResult", lastResult);
-        if (lastExecutedAt > 0) map.put("lastExecutedAt", lastExecutedAt);
-        if (stagnationCount > 0) map.put("stagnationCount", stagnationCount);
-        if (consecutiveErrors > 0) map.put("consecutiveErrors", consecutiveErrors);
-        return map;
+        return GoalProjection.ofState(this).toMap();
     }
 
-    /** 从会话快照投影重建。 */
+    /** 从会话快照投影重建（字段名解析委托 {@link GoalProjection}，与写入侧同源）。 */
     public static GoalState fromMap(Map<?, ?> map) {
-        if (map == null) return null;
-        Object statusValue = map.get("status");
-        if (statusValue == null) return null;
+        GoalProjection projection = GoalProjection.from((Object) map);
+        if (projection == null) return null;
 
         GoalState gs = new GoalState();
-        gs.id = str(map.get("goalId"));
-        gs.condition = map.get("condition") != null ? str(map.get("condition")) : str(map.get("objective"));
-        gs.status = Status.valueOf(str(statusValue));
-        gs.consumedTokens = lng(map.get("consumedTokens"));
-        gs.maxTokens = lng(map.get("maxTokens"));
-        gs.maxIterations = (int) lng(map.get("maxIterations"));
-        gs.startEpochMs = lng(map.get("startEpochMs"));
-        gs.maxDurationMs = lng(map.get("maxDurationMs"));
-        gs.currentIteration = (int) lng(map.get("currentIteration"));
-        gs.lastResult = map.get("lastResult") != null ? str(map.get("lastResult")) : null;
-        gs.lastExecutedAt = lng(map.get("lastExecutedAt"));
-        gs.stagnationCount = (int) lng(map.get("stagnationCount"));
-        gs.consecutiveErrors = (int) lng(map.get("consecutiveErrors"));
+        gs.id = projection.getGoalId();
+        gs.condition = projection.getCondition();
+        gs.status = projection.getStatus();
+        gs.consumedTokens = projection.getConsumedTokens();
+        gs.maxTokens = projection.getMaxTokens();
+        gs.maxIterations = projection.getMaxIterations();
+        gs.startEpochMs = projection.getStartEpochMs();
+        gs.maxDurationMs = projection.getMaxDurationMs();
+        gs.currentIteration = projection.getCurrentIteration();
+        gs.lastResult = projection.getLastResult();
+        gs.lastExecutedAt = projection.getLastExecutedAt();
+        gs.stagnationCount = projection.getStagnationCount();
+        gs.consecutiveErrors = projection.getConsecutiveErrors();
         return gs;
-    }
-
-    private static String str(Object value) {
-        return value == null ? null : String.valueOf(value);
-    }
-
-    private static long lng(Object value) {
-        return value instanceof Number ? ((Number) value).longValue() : 0L;
     }
 }
