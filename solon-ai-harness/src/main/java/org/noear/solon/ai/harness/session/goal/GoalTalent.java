@@ -154,8 +154,11 @@ public class GoalTalent extends AbsTalent {
 
         // ---- complete ----
         if ("complete".equals(status)) {
-            Boolean hasActionEvidence = engine == null ? null
-                    : goalEngine.currentRoundHasActionEvidence(__sessionId);
+            // 提示性优化，不是权威校验：本方法在工具执行阶段运行，此时本轮结果尚未回流，
+            // 证据恒为 null（executeRound 已在调用 execute 前置空），故这里一般放行。
+            // 仅当引擎已为「上一轮」写入 FALSE 时提前拦截，省掉模型白跑一轮；
+            // 真正的完成判定是 GoalEngine.executeRound 对返回结果的复核（rejectAchievement）。
+            Boolean hasActionEvidence = goalEngine.currentRoundHasActionEvidence(session);
             if (GoalEngine.requiresActionEvidence(gs.getCondition())
                     && Boolean.FALSE.equals(hasActionEvidence)) {
                 return errJson("ACTION_EVIDENCE_REQUIRED",

@@ -48,7 +48,7 @@ class BuiltinCommandsSystemTest {
      *  goal 传（真 GoalEngine, null Scheduler）：GoalScheduler 依赖 solon 容器的 JobManager 单例，
      *  纯 JUnit 环境无容器会初始化失败；无目标会话的状态/子命令路径不触达 scheduler */
     private HarnessEngine engineWithBuiltins() {
-        GoalEngine goalEngine = new GoalEngine(new org.noear.solon.ai.harness.runtime.ExecutionBridge(null),
+        GoalEngine goalEngine = new GoalEngine((org.noear.solon.ai.harness.HarnessEngine) null,
                 BudgetThresholds.defaults(), 3, 3, false);
 
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())

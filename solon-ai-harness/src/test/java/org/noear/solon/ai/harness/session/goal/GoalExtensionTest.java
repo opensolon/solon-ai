@@ -5,7 +5,8 @@ import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.runtime.ExecutionBridge;
+import org.noear.solon.ai.harness.session.goal.GoalEngine;
+import org.noear.solon.ai.harness.runtime.RoundResult;
 
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -22,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 1. builder 形态经 addExtension 后完成 bridge→GoalEngine→GoalScheduler→/goal 命令全链装配；
  * 2. 无 Solon 容器（纯 JUnit）时 scheduler(null) 关闭调度仍可装配（JobManager 不可用场景）；
  * 3. 共享 bridge 注入时不自建（与 loop 共用组合根资源）；
- * 4. TaskHandler/BusyChecker 注册到位；listener 预注册生效；
+ * 4. TaskHandler 注册到位（宿主不传时内置缺省）；listener 预注册生效；
  * 5. 门面操作中转正确（state/attach 走组装出的 GoalEngine）；
  * 6. 命令注册幂等（宿主已注册同名命令时不覆盖）。
  */
@@ -30,7 +31,7 @@ class GoalExtensionTest {
     @TempDir
     Path workspace;
 
-    /** 会话实例共享（与 ExecutionBridgeTest 同口径）：::of 会忽略 id 每次新建，sessionOf(id) 将解析不到已 attach 的会话。 */
+    /** 会话实例共享：::of 会忽略 id 每次新建，sessionOf(id) 将解析不到已 attach 的会话。 */
     private final java.util.Map<String, AgentSession> sessions = new java.util.concurrent.ConcurrentHashMap<>();
 
     private HarnessEngine.Builder engineBuilder() {
@@ -42,9 +43,9 @@ class GoalExtensionTest {
     void builderAssemblesFullChainAndRegistersCommand() {
         AtomicInteger executed = new AtomicInteger();
         GoalExtension ext = GoalExtension.builder("ws-test")
-                .taskExecutor((sid, prompt, agent) -> {
+                .taskExecutor((sid, prompt) -> {
                     executed.incrementAndGet();
-                    return "done";
+                    return RoundResult.ofText("done");
                 })
                 .scheduler(null)   // 纯 JUnit 无 Solon 容器：JobManager.getInstance() 会 NPE，显式关闭
                 .build();
@@ -64,24 +65,63 @@ class GoalExtensionTest {
     }
 
     @Test
-    void sharedBridgeIsReusedNotRebuilt() {
+    void taskExecutorIsRegisteredOnGoalEngine() {
         HarnessEngine engine = engineBuilder().build();
-        ExecutionBridge shared = new ExecutionBridge(engine);
         AtomicInteger calls = new AtomicInteger();
 
         GoalExtension ext = GoalExtension.builder("ws-share")
-                .bridge(shared)
-                .taskExecutor((sid, prompt, agent) -> {
+                .taskExecutor((sid, prompt) -> {
                     calls.incrementAndGet();
-                    return "ok";
+                    return RoundResult.ofText("ok");
                 })
                 .scheduler(null)
                 .build();
         engine.addExtension(ext);
 
-        // 经共享桥执行一轮：TaskHandler 应已注册到注入的桥上
-        shared.execute("any-session", "prompt", null);
-        assertEquals(1, calls.get(), "taskExecutor 应注册到宿主注入的共享桥");
+        // 执行通道已内联进 GoalEngine（不再有跨域共享桥）
+        ext.getGoalEngine().execute("any-session", "prompt");
+        assertEquals(1, calls.get(), "host taskExecutor 应注册到 GoalEngine 自己的执行通道");
+    }
+
+    /**
+     * 宿主执行器必须优先于内置兜底中被考虑。
+     *
+     * <p>扩展在 {@code addExtension} 时装配、宿主入口（WsGate / CliShell）在构造时注册，
+     * 因而宿主注册总是晚于内置兜底。若两者同在「按顺序取首个认领者」的同一个列表里，
+     * 恒认领的兜底排在首位，宿主的流式投递永无机会被调用——而这一失败完全静默（仍能跑完轮次，
+     * 只是输出丢失推流）。本用例锁定「兑底只能是最后一个被考虑的」。</p>
+     */
+    @Test
+    void hostExecutorWinsOverDefaultFallback() {
+        AtomicInteger fallbackCalls = new AtomicInteger();
+        GoalExtension ext = GoalExtension.builder("ws-priority")
+                .taskExecutor((sid, prompt) -> RoundResult.ofText("host"))
+                .scheduler(null)
+                .build();
+        engineBuilder().extensionAdd(ext).build();
+
+        GoalEngine ge = ext.getGoalEngine();
+        // 模拟内置兑底（恒认领）——即使它先于宿主执行器存在，也不得抢走回合
+        ge.setDefaultTaskExecutor((sid, prompt) -> {
+            fallbackCalls.incrementAndGet();
+            return RoundResult.ofText("fallback");
+        });
+
+        RoundResult r = ge.execute("any", "p");
+
+        assertEquals("host", r.getFinalResult(), "宿主执行器必须优先");
+        assertEquals(0, fallbackCalls.get(), "兑底不得被调用");
+    }
+
+    @Test
+    void defaultTaskExecutorIsInstalledWhenHostProvidesNone() {
+        GoalExtension ext = GoalExtension.builder("ws-default")
+                .scheduler(null)
+                .build();
+        engineBuilder().extensionAdd(ext).build();
+
+        assertTrue(ext.getGoalEngine().hasTaskHandler(),
+                "宿主未提供执行者时必须装入内置缺省，否则单测/无宿主场景无法跑轮次");
     }
 
     @Test
@@ -103,14 +143,14 @@ class GoalExtensionTest {
     void commandRegistrationIsIdempotentWhenHostAlreadyRegistered() {
         // 先手动注册（模拟迁移期宿主双写）
         HarnessEngine engine = engineBuilder().build();
-        GoalEngine manual = new GoalEngine(new ExecutionBridge(engine), BudgetThresholds.defaults(), 3, 3, true);
+        GoalEngine manual = new GoalEngine(engine, BudgetThresholds.defaults(), 3, 3, true);
         // 命令只持 GoalExtension（存量形态 of(...) 不装配命令与调度，正好用于手工注册）
         GoalExtension manualExt = GoalExtension.of(manual, engine);
         engine.getCommandRegistry().register(
                 new GoalCommand(manualExt));
 
         GoalExtension ext = GoalExtension.builder("ws-dup")
-                .taskExecutor((sid, p, a) -> "x")
+                .taskExecutor((sid, p) -> RoundResult.ofText("x"))
                 .scheduler(null)
                 .build();
         engine.addExtension(ext);
@@ -215,7 +255,7 @@ class GoalExtensionTest {
     void legacyConstructorStillAttachesTalentOnly() {
         // 存量形态：外部 GoalEngine 直接接管，不装配命令与调度
         HarnessEngine engine = engineBuilder().build();
-        GoalEngine external = new GoalEngine(new ExecutionBridge(engine), BudgetThresholds.defaults(), 3, 3, true);
+        GoalEngine external = new GoalEngine(engine, BudgetThresholds.defaults(), 3, 3, true);
         GoalExtension ext = GoalExtension.of(external, engine);
         engine.addExtension(ext);
 

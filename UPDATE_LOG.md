@@ -1,5 +1,15 @@
 ### vNEXT
 
+* **执行通道归属复位：`ExecutionBridge` 删除，goal 自持通道；补回 CLI / Web 的 goal 流式投递**（破坏性 API 变更，4.2.0 未发布故无适配层）:
+  * **删除 `runtime.ExecutionBridge`**（唯一个同时被 harness 的 `GoalEngine` 与宿主 loop 调度器使用的类）。它把五件不相干的东西装在一起：执行投递、忙判定、轮次度量、session 解析、`_loop_*` 键定义。跨域共享 → 两个域都不愿意拥有它 → 只能不停往上挂东西，这就是通用轮次度量被命名为 `_loop_*` 的原因
+  * **`GoalEngine` 自持执行通道**：`List<TaskHandler> taskHandlers` + `setDefaultTaskExecutor`（**单独字段**，不靠_注册顺序_保证「宿主优先」）+ `addTaskExecutor` / `hasTaskHandler` / `execute`（包内）/ `sessionOf`。替代 `ExecutionBridge` 的对应能力，无交叉兜底
+  * **`TaskHandler` 返回类型 `String` → `RoundResult`**（破坏性）：这是 `_loop_*` 键 与 `reportRoundMetrics` / `resetRoundToolEvidence` 全套时序约定的存在理由——`String` 装不下 token 与工具证据，只能写 attrs 再读回来。改后全部删除（**不是改名**）。`RoundResult` 同时更正 javadoc：只服务 goal，loop 自己用 `String`
+  * **`agentName` 参数移除**：`TaskHandler.handle(sessionId, prompt)`。两侧共 4 处调用点原本全部恒传 `null`，宿主里「拼 `@agentName` 前缀」的分支从未执行；子代理归属的真实来源一直是会话属性 `CTX_AGENT_SELECTED`
+  * **busy 判定不再由宿主编谓词**：`BusyChecker` 删除。`GoalEngine.shouldSkipSession` 改为从会话快照单向派生（`engine.status(session).isOccupied() || getQueuedCount() > 0`）。`isOccupied()` 含 HITL 挂起，顺带修掉「审批挂起时仍注入回合顶掉未决 trace」这一同型缺陷
+  * **`GoalState.lastHasToolCalls` 随轮次提交落投影**：`goal_update(complete)` 的轮内提示性校验读它；**权威判定仍在 `executeRound` 的结果复核**。`executeRound` 在调用 `execute` **之前**先置空该字段——`goal_update` 是工具、在 `execute` 内部读取，不置空就会读到**上一轮**的值（上轮有工具调用、本轮无 → 误放行 → 白跑一轮后被复核拒绝）
+  * **无认领不再静默（goal 侧）**：`GoalEngine.executeRound` 在 `result == null`（既无宿主执行器认领、也无缺省）时**不再记 `"ok"`、也不清零连续错误计数**，而是写一条用户可见的 `error [no-executor]` 说明并提交。旧写法有两个后果：① 目标看起来一直在跑（`lastResult` 有值、时间戳在刷）实际什么都没做；② `resetConsecutiveErrors()` 每轮把熔断计数清零，**异常分级熔断永远不触发**。与 loop 侧「无认领不记 ok」同口径。新增 `unclaimedRoundMustNotRecordOkNorResetErrorCounter`，反向验证：改回旧写法时准确报出 `expected: <false> but was: <true>`
+  * **验证**：harness 全量 **869 例，33F+5E**，与基线逐项一致（新增 1 例「证据不跨轮泄漏」）；`Goal*Test` 定向全绿
+
 * **SteerInterceptor 拆分：静态内核独立为 SteerHelper，补齐 queue/steer/interrupt 三域「内核 + 门面」分层的最后一块**（零行为变更，纯机械搬移；配套 README、CODE.md 同步）:
   * **拆分边界**：插话的投递/校验/取消/残留转排队（`steer`、`steerBox`、`pending`、`cancel`、`offer`+`OfferResult`、`drain`、`enqueueIntoSessionQueue`）与 7 个公开常量（`ATTR_STEER_BOX`/`ATTR_ACTIVE_RUN_ID`/`MAX_BOX_SIZE`/`MAX_TEXT_LENGTH`/`MAX_ID_LENGTH`/`STEER_PREFIX`/`STEER_SOURCE`）迁入 `SteerHelper`（`public final` + 私有构造，与 `QueueHelper` 同构）；`SteerInterceptor` 瘦身为纯运行时消费边界（onReasonStart 守卫注入 + onAgentEnd 残留兜底，389→142 行），拦截器内部改调 SteerHelper
   * **刻意的取舍**：按「未承诺稳定性、直接改签名」的既定决策，拦截器上不留常量别名（曾一度写入又被删除）；`drain`/`hasOpenToolCalls` 这类仅拦截器使用的成员不外深；`OfferResult` 保持 package-private，测试同包引用随迁零改动

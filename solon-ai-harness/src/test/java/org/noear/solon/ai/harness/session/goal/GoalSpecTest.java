@@ -20,6 +20,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.runtime.RoundResult;
 
 import java.nio.file.Path;
 import java.time.Duration;
@@ -48,7 +49,7 @@ class GoalSpecTest {
 
     private GoalExtension newExtension() {
         GoalExtension ext = GoalExtension.builder("ws-spec")
-                .taskExecutor((sid, p, a) -> "x")
+                .taskExecutor((sid, p) -> RoundResult.ofText("x"))
                 .scheduler(null)   // 纯 JUnit 无 Solon 容器：JobManager.getInstance() 会 NPE
                 .build();
 

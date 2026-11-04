@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.harness.session.goal.validate.GoalValidator;
 import org.noear.solon.ai.harness.session.goal.validate.NoopValidator;
 import org.noear.solon.ai.harness.session.goal.validate.TestsPassValidator;
-import org.noear.solon.ai.harness.runtime.ExecutionBridge;
+
 
 import java.lang.reflect.Field;
 import java.util.List;
@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class GoalValidatorIsolationTest {
 
     private GoalEngine newEngine(String workspace) {
-        return new GoalEngine(new ExecutionBridge(null), BudgetThresholds.defaults(), 3, 3, true, workspace);
+        return new GoalEngine((org.noear.solon.ai.harness.HarnessEngine) null, BudgetThresholds.defaults(), 3, 3, true, workspace);
     }
 
     @Test

@@ -3,7 +3,7 @@ package org.noear.solon.ai.harness.session.goal;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
-import org.noear.solon.ai.harness.runtime.ExecutionBridge;
+
 
 import java.util.Map;
 
@@ -20,7 +20,7 @@ class GoalEngineTest {
 
     private GoalEngine newEngine() {
         // bridge 传 null 引擎：本轮测试不涉及执行
-        return new GoalEngine(new ExecutionBridge(null), BudgetThresholds.defaults(), 3, 3, false);
+        return new GoalEngine((org.noear.solon.ai.harness.HarnessEngine) null, BudgetThresholds.defaults(), 3, 3, false);
     }
 
     private AgentSession newSession() {

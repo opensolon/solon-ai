@@ -21,9 +21,10 @@ import org.noear.solon.ai.harness.session.goal.validate.BuildPassValidator;
 import org.noear.solon.ai.harness.session.goal.validate.GoalValidator;
 import org.noear.solon.ai.harness.session.goal.validate.NoopValidator;
 import org.noear.solon.ai.harness.session.goal.validate.TestsPassValidator;
+import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.runtime.ErrorClassifier;
-import org.noear.solon.ai.harness.runtime.ExecutionBridge;
 import org.noear.solon.ai.harness.runtime.RoundResult;
+import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.flow.FlowContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,8 +49,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * 这与排队（QueueHelper）的既有分层完全一致：<b>存储介质是会话实现的细节</b>
  * （文件 / 内存 / Redis / JDBC），本类只依赖 {@link AgentSession} 接口。</p>
  *
- * <p><b>独立性</b>：本类不依赖任何调度体系的具体类型。与调度侧唯一的交汇点是
- * {@link ExecutionBridge}（执行一轮 + 繁忙判定），由组合根注入。</p>
+ * <p><b>执行通道自持</b>：本类不依赖任何调度体系的具体类型，也不与 loop 共享任何执行通道。
+ * 「一轮怎么执行」由宿主通过 {@link #addTaskExecutor(TaskHandler)} 注册（可覆盖），
+ * 缺省走引擎自身的同步回合。「能不能执行」由会话快照单向派生（{@link SessionStatus}），
+ * 宿主不得提供忙判定谓词——那会让引擎职责外推且必然与真实状态漂移。</p>
  *
  * @author noear
  * @since 3.9.4
@@ -75,7 +78,33 @@ public class GoalEngine {
         void onChanged(String sessionId, GoalState state, boolean removed);
     }
 
-    private final ExecutionBridge bridge;
+    /**
+     * 执行者：执行一轮 prompt 并返回本轮客观事实（null = 本入口不认领）。
+     *
+     * <p>返回值同时携带 token 消耗与工具证据，因此不再需要在会话 attrs 里落
+     * 「上一轮指标」这类跨模块旁路键，也就没有「轮前重置 / 读完即删」那套无人能强制的时序约定。</p>
+     *
+     * <p><b>没有 agentName 参数</b>：子代理归属是<b>会话属性</b>（{@code CTX_AGENT_SELECTED}，
+     * 由宿主／{@code /goal} 命令／自动化任务写入会话上下文），执行者从 session 读即可。
+     * 旧签名带该参数，但引擎内两处调用恒传 {@code null}——宿主里「拼 {@code @agentName} 前缀」
+     * 的分支从未执行（{@code WsGate} 实际走的是 {@code CTX_AGENT_SELECTED} 回退读取）。</p>
+     */
+    @FunctionalInterface
+    public interface TaskHandler {
+        RoundResult handle(String sessionId, String prompt);
+    }
+
+    private final HarnessEngine engine;
+    /** 宿主注册的执行者（按注册顺序取首个认领者）。 */
+    private final List<TaskHandler> taskHandlers = new CopyOnWriteArrayList<>();
+    /**
+     * 内置兜底执行者（程序生成的 prompt 同步回合）。
+     *
+     * <p>单独存放而不入 {@link #taskHandlers} 列表，是因为列表是「按顺序取首个认领者」——
+     * 兜底恒认领，若排在首位则宿主注册的执行者永远轮不到（装配顺序上扩展先于入口构造，
+     * 靠「宿主后注册」是不成立的外部不变量）。现在兜底只能是最后一个被考虑的。</p>
+     */
+    private volatile TaskHandler defaultTaskHandler;
     private final List<GoalListener> listeners = new CopyOnWriteArrayList<>();
     private final BudgetThresholds budgetThresholds;
     private final GoalPromptBuilder promptBuilder;
@@ -91,18 +120,19 @@ public class GoalEngine {
      */
     private final List<ValidatorRegistration> validators = new CopyOnWriteArrayList<>();
 
-    public GoalEngine(ExecutionBridge bridge, BudgetThresholds budgetThresholds,
+    public GoalEngine(HarnessEngine engine, BudgetThresholds budgetThresholds,
                       int stagnationThreshold, int maxConsecutiveErrors, boolean validatorEnabled) {
-        this(bridge, budgetThresholds, stagnationThreshold, maxConsecutiveErrors, validatorEnabled, null);
+        this(engine, budgetThresholds, stagnationThreshold, maxConsecutiveErrors, validatorEnabled, null);
     }
 
     /**
+     * @param engine    引擎（解析会话、读取会话占用状态；测试可为 null）
      * @param workspace 验证器执行目录（null 时不注册默认验证器，验证恒通过）
      */
-    public GoalEngine(ExecutionBridge bridge, BudgetThresholds budgetThresholds,
+    public GoalEngine(HarnessEngine engine, BudgetThresholds budgetThresholds,
                       int stagnationThreshold, int maxConsecutiveErrors, boolean validatorEnabled,
                       String workspace) {
-        this.bridge = bridge;
+        this.engine = engine;
         this.budgetThresholds = budgetThresholds != null ? budgetThresholds : BudgetThresholds.defaults();
         this.stagnationThreshold = stagnationThreshold;
         this.maxConsecutiveErrors = maxConsecutiveErrors;
@@ -136,9 +166,79 @@ public class GoalEngine {
         return Boolean.TRUE.equals(session.attrs().get(ATTR_RUNNING));
     }
 
-    /** 按 sessionId 解析会话（委派执行桥，不另持 resolver；桥缺失或无会话时返回 null）。 */
+    /** 注册/追加执行者（宿主覆盖；按注册顺序取首个认领者）。 */
+    public void addTaskExecutor(TaskHandler handler) {
+        if (handler != null) {
+            taskHandlers.add(handler);
+        }
+    }
+
+    /**
+     * 设置内置兜底执行者（只在前面的执行者全不认领时考虑）。
+     *
+     * <p>与 {@link #addTaskExecutor} 分开，才能保证「宿主注册的总是优先」不依赖装配顺序。</p>
+     */
+    public void setDefaultTaskExecutor(TaskHandler handler) {
+        this.defaultTaskHandler = handler;
+    }
+
+    /** 是否已有可用执行者（宿主注册或内置兜底任一）。 */
+    public boolean hasTaskHandler() {
+        return !taskHandlers.isEmpty() || defaultTaskHandler != null;
+    }
+
+    /** 按 sessionId 解析会话（引擎未就绪或解析失败时返回 null）。 */
     public AgentSession sessionOf(String sessionId) {
-        return bridge == null ? null : bridge.sessionOf(sessionId);
+        if (engine == null || sessionId == null) return null;
+        try {
+            return engine.getSession(sessionId);
+        } catch (Throwable e) {
+            LOG.debug("resolve session '{}' failed: {}", sessionId, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 执行一轮：按注册顺序取首个认领者；全部不认领时返回 null。
+     *
+     * <p>不含任何业务判定（预算、熔断、完成条件都在调用方），只做「投递 + 取回事实」。</p>
+     */
+    RoundResult execute(String sessionId, String prompt) {
+        for (TaskHandler handler : taskHandlers) {
+            RoundResult result = handler.handle(sessionId, prompt);
+            if (result != null) {
+                return result;
+            }
+        }
+        TaskHandler fallback = defaultTaskHandler;
+        if (fallback != null) {
+            return fallback.handle(sessionId, prompt);
+        }
+
+        // 落到这里意味着配置错误：既无任何宿主执行器认领，也无内置兜底。
+        // 不得静默——否则表现为「目标一直在跑却什么都不做」。
+        LOG.debug("Goal round not claimed by any executor (session={}); no default executor configured", sessionId);
+        return null;
+    }
+
+    /**
+     * 会话是否应跳过本轮注入。
+     *
+     * <p>口径为「占用或有积压」：HITL 挂起时没有活跃流，但此时注入会顶掉未决审批，
+     * 必须算作占用（{@link SessionStatus#isOccupied()} 已含此项）；队列压着任务时
+     * 注入等于插队，也一并跳过。</p>
+     */
+    boolean shouldSkipSession(String sessionId) {
+        if (engine == null) return false;
+        try {
+            AgentSession session = engine.getSession(sessionId);
+            if (session == null) return true;
+            SessionStatus status = engine.status(session);
+            return status == null || status.isOccupied() || status.getQueuedCount() > 0;
+        } catch (Throwable e) {
+            LOG.debug("status check failed for session '{}': {}", sessionId, e.getMessage());
+            return true;
+        }
     }
 
     // ==================== 验证器（实例级注册表） ====================
@@ -454,12 +554,13 @@ public class GoalEngine {
         if (gs == null || !gs.getStatus().isActive()) {
             return false;
         }
-        if (bridge == null || !bridge.hasTaskHandler()) {
-            LOG.debug("Goal round skipped: execution bridge unavailable");
+        if (!hasTaskHandler()) {
+            // 无执行者 = 装配错误（GoalExtension 恒会装入缺省执行者），不得计入迭代
+            LOG.debug("Goal round skipped: no task executor registered");
             return false;
         }
-        if (bridge.isBusy(sessionId)) {
-            LOG.debug("Goal round skipped: session '{}' busy", sessionId);
+        if (shouldSkipSession(sessionId)) {
+            LOG.debug("Goal round skipped: session '{}' occupied or backlogged", sessionId);
             return false;
         }
 
@@ -532,18 +633,39 @@ public class GoalEngine {
         String sessionId = session.getSessionId();
         String effectivePrompt = promptBuilder.buildEffectivePrompt(gs);
 
-        RoundResult result = bridge.execute(sessionId, effectivePrompt, null);
+        // 必须先置空：本轮证据要到 execute 返回才知道，而 goal_update(complete) 是在
+        // execute 内部（工具调用阶段）读取的。若不置空，它会读到上一轮的值——上轮有
+        // 工具调用、本轮没有时会被误放行，本轮白跑一轮后又被复核拒绝。
+        // 置空后本轮读取恒为 null（提示性校验放行），权威判定交给下方结果复核。
+        gs.setLastHasToolCalls(null);
 
-        String finalResult = result != null ? result.getFinalResult() : null;
+        RoundResult result = execute(sessionId, effectivePrompt);
+
+        if (result == null) {
+            // 无执行器认领 = 装配/环境问题，不是「本轮成功但无产出」。
+            // 必须不记 ok、不清零连续错误计数：否则目标看起来一直在跑、实际什么都不做，
+            // 且异常分级熔断被这轮流重置，永远不触发。
+            // 与 loop 侧「无认领不记 ok」同口径。
+            String unclaimed = "error [no-executor]: 本轮未被执行器认领，目标无法推进。";
+            if (unclaimed.equals(gs.getLastResult()) == false) {
+                LOG.warn("Goal '{}' round not claimed by any executor (session '{}')", gs.getId(), sessionId);
+            }
+            gs.updateLastExecution(unclaimed);
+            commit(session, gs);
+            return gs.getStatus().isActive();
+        }
+
+        String finalResult = result.getFinalResult();
         gs.updateLastExecution(finalResult != null ? finalResult : "ok");
+        gs.setLastHasToolCalls(result.isHasToolCalls());
         gs.resetConsecutiveErrors();
 
-        if (result != null && result.isCompleted()) {
+        if (result.isCompleted()) {
             gs.incrementIteration();
         }
 
         // Token 累计
-        if (result != null && result.getTokensUsed() > 0) {
+        if (result.getTokensUsed() > 0) {
             gs.addTokens(result.getTokensUsed());
         }
 
@@ -561,7 +683,7 @@ public class GoalEngine {
         // 完成判定（由 goal_update(complete) 驱动，此处只做证据复核）
         boolean achieved = gs.getStatus() == GoalState.Status.ACHIEVED;
         if (achieved && requiresActionEvidence(gs.getCondition())
-                && result != null && !result.isHasToolCalls()) {
+                && !result.isHasToolCalls()) {
             gs.rejectAchievement();
             gs.updateLastExecution("完成声明被拒绝：本轮没有实际工具执行证据，请继续完成并验证目标。");
             achieved = false;
@@ -599,7 +721,7 @@ public class GoalEngine {
     private void executeBudgetWrapUp(AgentSession session, GoalState gs) {
         try {
             String wrapUpPrompt = promptBuilder.buildBudgetLimitPrompt(gs);
-            bridge.execute(session.getSessionId(), wrapUpPrompt, null);
+            execute(session.getSessionId(), wrapUpPrompt);
         } catch (Exception e) {
             LOG.warn("Goal '{}' wrap-up turn failed: {}", gs.getId(), e.getMessage());
         }
@@ -650,9 +772,20 @@ public class GoalEngine {
         commit(session, gs);
     }
 
-    /** 当前轮次的工具证据标记（null = 当前入口未提供证据追踪）。 */
-    public Boolean currentRoundHasActionEvidence(String sessionId) {
-        return bridge.currentRoundHasActionEvidence(sessionId);
+    /**
+     * 最近一轮已完成的工具证据标记。
+     *
+     * <p>取值来自上一轮 {@link #execute} 的返回值，不经会话 attrs 旁路——旁路方案下
+     * CLI/Web 因未写键而恒为 null，等于完成校验静默失效。</p>
+     *
+     * <p><b>时序语义</b>：本值只在轮次<b>结束后</b>写入。因此在工具执行阶段（如
+     * {@code goal_update(complete)} 内部）读到的是 null——{@code executeRound} 已在
+     * 调用 {@code execute} 前显式置空，确保不会拿到上一轮的陈旧值。也就是说该方法
+     * 在轮内仅作「提示性」判断，权威判定是 {@code executeRound} 对返回结果的复核。</p>
+     */
+    public Boolean currentRoundHasActionEvidence(AgentSession session) {
+        GoalState gs = state(session);
+        return gs == null ? null : gs.getLastHasToolCalls();
     }
 
     // ==================== 判定辅助 ====================

@@ -57,6 +57,13 @@ public class GoalState {
     private volatile int currentIteration;
     /** 最近一次执行结果摘要。 */
     private volatile String lastResult;
+    /**
+     * 最近一轮是否有工具调用证据（瞬态，不参与快照投影）。
+     *
+     * <p>由 {@code GoalEngine.executeRound} 从上一轮返回结果直接赋值，不经会话 attrs 旁路。
+     * null = 无信息（重启 hydrate 后或该轮未产生结果）。</p>
+     */
+    private volatile Boolean lastHasToolCalls;
     /** 最近一次执行时间（epoch ms，0 = 未执行）。 */
     private volatile long lastExecutedAt;
     /** 连续无进展轮次。 */
@@ -203,6 +210,9 @@ public class GoalState {
     public void setMaxDurationMs(long maxDurationMs) { this.maxDurationMs = maxDurationMs; }
 
     public String getLastResult() { return lastResult; }
+
+    public Boolean getLastHasToolCalls() { return lastHasToolCalls; }
+    public void setLastHasToolCalls(Boolean lastHasToolCalls) { this.lastHasToolCalls = lastHasToolCalls; }
 
     /** 记录一次执行结果与时间。 */
     public void updateLastExecution(String result) {

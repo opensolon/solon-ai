@@ -28,7 +28,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * Goal 调度器 —— 把会话级 goal 挂到定时 job 上驱动轮次。
  *
  * <p>调度语义是<b>状态驱动</b>（每轮自判续行），与按时间表独立执行的任务不同，
- * 因此各自持有调度装配；二者仅共享 {@link org.noear.solon.ai.harness.runtime.ExecutionBridge}。</p>
+ * 因此各自持有调度装配，且<b>不存在任何共享执行通道</b>——goal 执行通道在
+ * {@link GoalEngine} 内部，loop 执行通道在宿主（cli 域）。</p>
  *
  * <p><b>job 名必须带工作区前缀</b>：JobManager 是 JVM 单例，而会话 ID
  * 并不全局唯一（CLI 会话就叫 {@code cli}、桌面会话是 {@code ws_<时间戳>}），

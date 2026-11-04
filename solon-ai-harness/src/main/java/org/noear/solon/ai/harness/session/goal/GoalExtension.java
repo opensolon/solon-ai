@@ -6,7 +6,7 @@ import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.runtime.ExecutionBridge;
+import org.noear.solon.ai.harness.runtime.RoundResult;
 import org.noear.solon.ai.harness.session.goal.validate.GoalValidator;
 import org.noear.solon.core.util.RunUtil;
 
@@ -19,20 +19,21 @@ import java.util.Map;
  * {@link #onAttach(HarnessEngine)} 里一次完成）：</p>
  * <pre>{@code
  * GoalExtension goal = GoalExtension.builder(workspaceId)
- *         .taskExecutor((sessionId, prompt, agentName) -> runOneTurn(sessionId, prompt))  // 唯一必填
- *         .busyChecker(sessionId -> isBusy(sessionId))
+ *         .taskExecutor((sessionId, prompt) -> runOneTurn(...))  // 可选覆盖
  *         .budget(70, 85)
  *         .build();
  * engine.addExtension(goal);
- * // initialize 内部：ExecutionBridge → GoalEngine → GoalScheduler → /goal 命令注册 → GoalTalent 挂载
+ * // onAttach 内部：GoalEngine → GoalScheduler → /goal 命令注册 → GoalTalent 挂载
  * }</pre>
  *
  * <p>不传 {@code taskExecutor} 时使用内置缺省：经 {@code engine.handle} + 同步取回最终文本
- * （README §5.1 的模板实现）。{@code busyChecker} 缺省恒 false。</p>
+ * （README §5.1 的模板实现）。<b>忙判定不由宿主提供</b>：一律由会话快照派生
+ * （{@code SessionStatus.isOccupied()}），HITL 挂起与队列积压均算占用。</p>
  *
- * <p><b>与 loop 共享执行桥</b>：宿主已有 {@link ExecutionBridge}（loop 与 goal 共用的组合根资源）
- * 时用 {@link Builder#bridge(ExecutionBridge)} 注入，扩展不再自建——TaskHandler/BusyChecker
- * 仍会注册到共享桥上。</p>
+ * <p><b>与 loop 无共享</b>：loop 是宿主调度能力（cli 域），goal 是引擎能力（harness 域），
+ * 二者各持自己的执行通道与自己的宿。曾共用的 {@code ExecutionBridge} 已删除——
+ * 它把「执行投递」「忙判定」「轮次度量」三件不相干的事装在一个类里，
+ * 导致 loop 的语义渗进了 harness（上下划痕迹见 {@code _loop_*} 键的历史）。</p>
  *
  * <p><b>高级用法</b>：{@link Builder#scheduler(GoalScheduler)} 允许宿主自备调度器
  * （如测试环境无 Solon 容器、{@code JobManager.getInstance()} 不可用时传 null 关闭调度，
@@ -48,9 +49,7 @@ import java.util.Map;
 public class GoalExtension extends AbsHarnessExtension {
     private final String workspaceId;
     private final String workspace;
-    private final ExecutionBridge sharedBridge;      // 宿主注入的共享桥（可空）
-    private final ExecutionBridge.TaskHandler taskHandler;
-    private final ExecutionBridge.BusyChecker busyChecker;
+    private final GoalEngine.TaskHandler taskHandler;
     private final BudgetThresholds budgetThresholds;
     private final int stagnationThreshold;
     private final int maxConsecutiveErrors;
@@ -59,7 +58,6 @@ public class GoalExtension extends AbsHarnessExtension {
     private final boolean schedulerDisabled;         // 显式关闭调度（scheduler(null)）
     private final GoalEngine.GoalListener listener;
 
-    private ExecutionBridge bridge;
     private GoalEngine goalEngine;
     private GoalScheduler goalScheduler;
     private GoalTalent goalTalent;
@@ -69,9 +67,7 @@ public class GoalExtension extends AbsHarnessExtension {
     private GoalExtension(Builder b) {
         this.workspaceId = b.workspaceId;
         this.workspace = b.workspace;
-        this.sharedBridge = b.bridge;
         this.taskHandler = b.taskHandler;
-        this.busyChecker = b.busyChecker;
         this.budgetThresholds = b.budgetThresholds;
         this.stagnationThreshold = b.stagnationThreshold;
         this.maxConsecutiveErrors = b.maxConsecutiveErrors;
@@ -129,27 +125,23 @@ public class GoalExtension extends AbsHarnessExtension {
      */
     @Override
     public void onAttach(HarnessEngine engine) {
-        if (goalEngine != null && bridge == null) {
+        if (goalEngine != null) {
             return; // 存量形态（外部 GoalEngine）：不重复装配
         }
 
-        // ① 执行桥：优先复用宿主与 loop 共享的桥，否则自建
-        ExecutionBridge effectiveBridge = sharedBridge != null ? sharedBridge : new ExecutionBridge(engine);
-        // TaskHandler 缺省走 engine.handle 模板（README §5.1 的内置化）；注册在宿主回调之后，
-        // 共享桥场景 loop 的认领式 handler 先执行，本缺省恒认领兜底
-        effectiveBridge.addTaskExecutor(taskHandler != null ? taskHandler
-                : defaultTaskExecutor(engine));
-        if (busyChecker != null) {
-            effectiveBridge.addBusyChecker(busyChecker);
-        }
-        this.bridge = effectiveBridge;
-
-        // ② Goal 引擎
+        // ① Goal 引擎（执行通道自持：缺省 handler 注册在其内部，宿主可再覆盖）
         if (goalEngine == null) {
-            goalEngine = new GoalEngine(effectiveBridge,
+            goalEngine = new GoalEngine(engine,
                     budgetThresholds != null ? budgetThresholds : BudgetThresholds.defaults(),
                     stagnationThreshold, maxConsecutiveErrors, validatorEnabled,
                     workspace != null ? workspace : workspaceId);
+        }
+
+        // 宿主未提供执行者时，缺省走引擎同步回合（程序生成的 prompt 不解析命令与 @提及）。
+        // 作为编底单独设置：若宿主提供了执行者，它必须优先于同步回合被考虑。
+        goalEngine.setDefaultTaskExecutor(defaultTaskExecutor(engine));
+        if (taskHandler != null) {
+            goalEngine.addTaskExecutor(taskHandler);
         }
 
         // ③ 调度器（宿主自备优先；显式关闭时不建——纯 JUnit/无容器宿主 JobManager 不可用）
@@ -197,22 +189,33 @@ public class GoalExtension extends AbsHarnessExtension {
         stopAll();
     }
 
-    /** 缺省 TaskHandler：目标正文走唯一输入入口同步取回最终文本（commandAware/agentAware 关闭，程序生成的 prompt 不再解析命令与 @提及）。 */
-    private static ExecutionBridge.TaskHandler defaultTaskExecutor(HarnessEngine engine) {
-        return (sessionId, prompt, agentName) -> {
+    /**
+     * 缺省 TaskHandler：目标正文走唯一输入入口同步取回最终文本。
+     *
+     * <p>token 与工具证据直接取自本次响应：{@code metrics.getTotalTokens()} 与 trace 的工具调用数，
+     * 不再要求宿主往会话 attrs 里写「上一轮指标」再读回来——旁路方案下 CLI/Web 因未写键而
+     * 恒无工具证据，等于完成校验静默失效。</p>
+     */
+    private static GoalEngine.TaskHandler defaultTaskExecutor(HarnessEngine engine) {
+        return (sessionId, prompt) -> {
             AgentSession session = engine.getSession(sessionId);
             if (session == null) {
                 return null;
             }
             try {
-                return engine.handle(HarnessInput.of(session, prompt)
-                                .commandAware(false)
-                                .agentAware(false)
-                                .origin(InputOrigin.channel("goal")))
-                        .call()
-                        .getContent();
+                org.noear.solon.ai.agent.react.ReActResponse response =
+                        engine.handle(HarnessInput.of(session, prompt)
+                                        .commandAware(false)
+                                        .agentAware(false)
+                                        .origin(InputOrigin.channel("goal")))
+                                .call();
+                String text = response.getContent();
+                boolean hasToolCalls = response.getTrace() != null
+                        && response.getTrace().getToolCallCount() > 0;
+                long tokens = response.getMetrics() != null ? response.getMetrics().getTotalTokens() : 0L;
+                return RoundResult.of(hasToolCalls, tokens, text);
             } catch (Throwable e) {
-                return "error: " + (e.getMessage() != null ? e.getMessage() : e.toString());
+                return RoundResult.ofText("error: " + (e.getMessage() != null ? e.getMessage() : e.toString()));
             }
         };
     }
@@ -491,9 +494,7 @@ public class GoalExtension extends AbsHarnessExtension {
     public static class Builder {
         private final String workspaceId;
         private String workspace;                                   // 缺省 = workspaceId
-        private ExecutionBridge bridge;                             // 缺省 = 自建（goal 专用）
-        private ExecutionBridge.TaskHandler taskHandler;            // 缺省 = engine.handle 模板
-        private ExecutionBridge.BusyChecker busyChecker;            // 缺省 = 恒 false
+        private GoalEngine.TaskHandler taskHandler;                 // 缺省 = engine.handle 模板
         private BudgetThresholds budgetThresholds = BudgetThresholds.defaults();
         private int stagnationThreshold = 3;
         private int maxConsecutiveErrors = 3;
@@ -506,21 +507,9 @@ public class GoalExtension extends AbsHarnessExtension {
             this.workspaceId = workspaceId;
         }
 
-        /** 任务执行器：执行一轮 prompt 并返回最终文本（null = 本入口不认领）。不设则用内置缺省。 */
-        public Builder taskExecutor(ExecutionBridge.TaskHandler handler) {
+        /** 任务执行者：执行一轮 prompt 并返回本轮客观事实（null = 本入口不认领）。不设则用内置缺省。 */
+        public Builder taskExecutor(GoalEngine.TaskHandler handler) {
             this.taskHandler = handler;
-            return this;
-        }
-
-        /** 忙判定：会话正在跑其它任务时跳过本轮。缺省恒 false。 */
-        public Builder busyChecker(ExecutionBridge.BusyChecker checker) {
-            this.busyChecker = checker;
-            return this;
-        }
-
-        /** 复用宿主（与 loop 共享）的执行桥；不设则自建。 */
-        public Builder bridge(ExecutionBridge shared) {
-            this.bridge = shared;
             return this;
         }
 
