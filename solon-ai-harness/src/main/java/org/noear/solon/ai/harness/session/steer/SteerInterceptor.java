@@ -3,12 +3,11 @@ package org.noear.solon.ai.harness.session.steer;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.AbsReActInterceptor;
-import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.session.queue.SessionQueue;
+import org.noear.solon.ai.harness.session.queue.QueueHelper;
 import org.noear.solon.core.util.Assert;
 
 import org.slf4j.Logger;
@@ -57,7 +56,7 @@ import java.util.function.BooleanSupplier;
  * （Web 映射为 {@code system.steer_applied}/{@code system.steer_dropped}），
  * 不认识的宿主零成本忽略。</p>
  *
- * <p><b>展示与持久化分离</b>：未消费插话转 {@code SessionQueue} 在 harness 内完成
+ * <p><b>展示与持久化分离</b>：未消费插话转排队（QueueHelper）在 harness 内完成
  * （{@link #enqueueIntoSessionQueue}），不看有没有订阅者；事件只负责展示。
  * 因此「已接受但永不生效」的兜底在任何宿主下都成立，且非流式运行时不会丢插话。</p>
  *
@@ -350,7 +349,7 @@ public class SteerInterceptor extends AbsReActInterceptor {
     /**
      * 把未消费插话转入 session 队列（唯一实现，任务收尾与宿主开流清理共用）。
      *
-     * <p>只依赖 session 与 {@link SessionQueue}，不看流式 sink、不看宿主类型——
+     * <p>只依赖 session 与 {@link QueueHelper}，不看流式 sink、不看宿主类型——
      * 因此「绝不静默丢弃」在任何宿主下都成立（CLI / Desktop 没有订阅者也能排队）。</p>
      *
      * <p>channel 为空的 origin 原样入队，harness 不做归一：空 channel 在队列与视图侧的
@@ -365,7 +364,7 @@ public class SteerInterceptor extends AbsReActInterceptor {
         }
 
         for (SteerMessage message : items) {
-            if (SessionQueue.enqueue(session, message.getText(), message.getOrigin()) < 0) {
+            if (QueueHelper.enqueue(session, message.getText(), message.getOrigin()) < 0) {
                 failed.add(message);
             }
         }

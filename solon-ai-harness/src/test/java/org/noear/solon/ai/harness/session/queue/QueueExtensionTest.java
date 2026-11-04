@@ -51,7 +51,7 @@ class QueueExtensionTest {
         assertEquals(2, queue.size(session));
         assertTrue(queue.hasItems(session));
 
-        List<SessionQueueItem> view = queue.view(session);
+        List<QueueItem> view = queue.view(session);
         assertEquals(2, view.size());
         assertEquals("第一条", view.get(0).getText());
 
@@ -95,7 +95,7 @@ class QueueExtensionTest {
         assertEquals(1, queue.size(session), "size 含 in-flight");
 
         // ack 带 id 才能确认
-        List<SessionQueueItem> view = queue.view(session);
+        List<QueueItem> view = queue.view(session);
         assertTrue(queue.ack(session, view.get(0).getId()));
         assertEquals(0, queue.size(session));
     }

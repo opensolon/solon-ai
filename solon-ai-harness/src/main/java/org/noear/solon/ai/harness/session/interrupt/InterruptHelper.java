@@ -21,7 +21,7 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.harness.session.queue.SessionQueue;
+import org.noear.solon.ai.harness.session.queue.QueueHelper;
 import org.noear.solon.ai.harness.util.TraceUtil;
 
 import java.util.Objects;
@@ -43,11 +43,11 @@ import java.util.Objects;
  * @author noear
  * @since 4.2
  */
-public final class SessionInterrupt {
+public final class InterruptHelper {
     /** 中断补写的收尾文本 */
     public static final String CANCEL_TEXT = "用户已取消任务.";
 
-    private SessionInterrupt() {
+    private InterruptHelper() {
     }
 
     /**
@@ -72,7 +72,7 @@ public final class SessionInterrupt {
         }
 
         // ① 清排队：无论当前流句柄是否还在，排队项都必须取消（否则停流后又被续发）
-        SessionQueue.cancelPending(session);
+        QueueHelper.cancelPending(session);
 
         // ② 停当前运行（新路径优先；旧宿主兼容路径回退）
         boolean interrupted = SessionRuns.cancelAll(session);
@@ -85,6 +85,48 @@ public final class SessionInterrupt {
         //    这里做幂等式补齐（已有同 runId 的取消消息则不重复写入）。
         writeCancelMessage(session);
         return true;
+    }
+
+    /**
+     * 只停当前运行流：不清队列，也不补取消消息。
+     *
+     * <p>对应「这一轮的停止是程序行为，不是用户取消」的场景：轮次由程序接管、随后会重新发起
+     * 新一轮（如自动循环的上一轮被新目标顶掉）。此时若照 {@link #interrupt} 的完整语义补写
+     * 取消消息，会话历史里就会出现「用户已取消」的假象，与真实的用户取消混为一谈；
+     * 若顺带清队列，宿主刚排好的下一批任务也会被一并抹掉。</p>
+     *
+     * <p><b>返回 {@code false} 不代表什么都没发生</b>：取消代数依然推进，取消掉的是一条
+     * 「已创建、尚未订阅」的流也能被随后拦住（同 {@link org.noear.solon.ai.agent.session.SessionRuns#cancelAll}）。
+     * 返回 {@code false} 只意味着「调用时没有已登记的活跃流」。</p>
+     *
+     * @return true = 确有运行中的流被停掉；false = 调用时没有已登记的活跃流（但取消代数已推进）
+     * @since 4.2.0
+     */
+    public static boolean interruptStreamOnly(AgentSession session) {
+        if (session == null) {
+            return false;
+        }
+
+        return SessionRuns.cancelAll(session);
+    }
+
+    /**
+     * 只停当前运行流，且<b>不推进取消代数</b>。
+     *
+     * <p>与 {@link #interruptStreamOnly} 的差别在于「这次停流算不算取消」：
+     * 推进代数后，被顶掉的旧流能据此判定「自己是被取消的」，从而不再发终态帧（适合 Stop）；
+     * 不推进代数则用于「新轮次顶掉旧轮次」——旧流本身就该自然结束，只是不再被需要，
+     * 若把它当成被取消，会把新轮次的收尾也牵连进去。</p>
+     *
+     * @return true = 确有活跃流被停掉
+     * @since 4.2.0
+     */
+    public static boolean interruptStreamActive(AgentSession session) {
+        if (session == null) {
+            return false;
+        }
+
+        return SessionRuns.cancelActive(session);
     }
 
     /**

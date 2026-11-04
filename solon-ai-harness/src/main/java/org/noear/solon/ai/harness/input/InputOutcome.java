@@ -130,10 +130,13 @@ public final class InputOutcome {
     private final Boolean hitlApplied;
     /** 决策写入后仍待审批的挂起项数量（仅审批决策路径有意义，其余为 0） */
     private final int pendingHitl;
+    /** 本批挂起卡快照（仅审批决策路径有意义；其余为空集合，永不为 null） */
+    private final List<HitlCard> hitlCards;
 
     private InputOutcome(Kind kind, String commandName, String commandOutput,
                         ParsedCommand command, Prompt prompt, String agentName, String modelName,
-                        ReActRequest request, Boolean hitlApplied, int pendingHitl) {
+                        ReActRequest request, Boolean hitlApplied, int pendingHitl,
+                        List<HitlCard> hitlCards) {
         this.kind = kind;
         this.commandName = commandName;
         this.commandOutput = commandOutput;
@@ -144,6 +147,7 @@ public final class InputOutcome {
         this.request = request;
         this.hitlApplied = hitlApplied;
         this.pendingHitl = pendingHitl;
+        this.hitlCards = hitlCards == null ? Collections.emptyList() : hitlCards;
     }
 
     // ========== 工厂 ==========
@@ -152,7 +156,7 @@ public final class InputOutcome {
      * 有可执行的任务（普通消息或续流）：宿主执行装配好的请求
      */
     public static InputOutcome task(Prompt prompt, String agentName, String modelName, ReActRequest request) {
-        return new InputOutcome(Kind.TASK, null, null, null, prompt, agentName, modelName, request, null, 0);
+        return new InputOutcome(Kind.TASK, null, null, null, prompt, agentName, modelName, request, null, 0, null);
     }
 
     /**
@@ -163,11 +167,11 @@ public final class InputOutcome {
     public static InputOutcome task(Prompt prompt, String agentName, String modelName, ReActRequest request,
                                    boolean hitlApplied) {
         return new InputOutcome(Kind.TASK, null, null, null, prompt, agentName, modelName, request,
-                hitlApplied, 0);
+                hitlApplied, 0, null);
     }
 
     public static InputOutcome ignored() {
-        return new InputOutcome(Kind.IGNORED, null, null, null, null, null, null, null, null, 0);
+        return new InputOutcome(Kind.IGNORED, null, null, null, null, null, null, null, null, 0, null);
     }
 
     /**
@@ -177,15 +181,25 @@ public final class InputOutcome {
      * @param pendingHitl  仍待审批的挂起项数量（0 表示本批已齐备）
      */
     public static InputOutcome hitl(String agentName, String modelName, boolean hitlApplied, int pendingHitl) {
+        return hitl(agentName, modelName, hitlApplied, pendingHitl, null);
+    }
+
+    /**
+     * 审批决策已受理但本次未续流（携带剩余未决数与本批卡快照）
+     *
+     * @param hitlCards 本批挂起卡（含已决策项）；null 视为空集合
+     */
+    public static InputOutcome hitl(String agentName, String modelName, boolean hitlApplied, int pendingHitl,
+                                    List<HitlCard> hitlCards) {
         return new InputOutcome(Kind.HITL, null, null, null, null, agentName, modelName, null,
-                hitlApplied, pendingHitl);
+                hitlApplied, pendingHitl, hitlCards);
     }
 
     /**
      * 命令在此渠道不可用（未执行），只有回执
      */
     public static InputOutcome unavailable(String commandName, String output, ParsedCommand command) {
-        return new InputOutcome(Kind.REPLY, commandName, output, command, null, null, null, null, null, 0);
+        return new InputOutcome(Kind.REPLY, commandName, output, command, null, null, null, null, null, 0, null);
     }
 
     /**
@@ -201,9 +215,9 @@ public final class InputOutcome {
                                       ParsedCommand command, @Nullable InputOutcome nested) {
         if (nested != null && nested.kind == Kind.TASK) {
             return new InputOutcome(Kind.TASK, commandName, output, command,
-                    nested.prompt, nested.agentName, nested.modelName, nested.request, null, 0);
+                    nested.prompt, nested.agentName, nested.modelName, nested.request, null, 0, null);
         }
-        return new InputOutcome(Kind.REPLY, commandName, output, command, null, null, null, null, null, 0);
+        return new InputOutcome(Kind.REPLY, commandName, output, command, null, null, null, null, null, 0, null);
     }
 
     // ========== 查询 ==========
@@ -366,6 +380,39 @@ public final class InputOutcome {
      */
     public int getPendingHitlCount() {
         return pendingHitl;
+    }
+
+    /**
+     * 是否仍有待审批的挂起卡
+     */
+    public boolean hasPendingHitl() {
+        return pendingHitl > 0;
+    }
+
+    /**
+     * 本批挂起卡（含已决策项；非审批路径为空集合，永不为 null）
+     *
+     * <p>与 {@link #getPendingHitlCount()} 配对：计数告诉宿主「要不要继续等」，
+     * 快照告诉宿主「该问哪一张」。</p>
+     */
+    public List<HitlCard> getHitlCards() {
+        return hitlCards;
+    }
+
+    /**
+     * 下一张该处理的卡（已决策项跳过；整批已决策时回退首项；无挂起时为 null）
+     *
+     * <p>逐卡交互的宿主（CLI、桌面）靠它取下一张，不必自己遍历挂起任务再查决策；
+     * 回退首项是为了让「残留决策」仍能透传给引擎续流——返回 null 会让任务卡死。</p>
+     */
+    public HitlCard getNextHitl() {
+        for (HitlCard card : hitlCards) {
+            if (card.isDecided() == false) {
+                return card;
+            }
+        }
+
+        return hitlCards.isEmpty() ? null : hitlCards.get(0);
     }
 
     @Override

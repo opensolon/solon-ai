@@ -1,7 +1,7 @@
 package org.noear.solon.ai.harness.session.steer;
 
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.session.queue.SessionQueue;
+import org.noear.solon.ai.harness.session.queue.QueueHelper;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -12,7 +12,6 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 
 import java.util.ArrayList;
@@ -383,7 +382,7 @@ public class SteerInterceptorTest {
         interceptor.onAgentEnd(trace);
 
         assertTrue(box.isEmpty(), "残留必须清出易失邮箱");
-        assertEquals(2, SessionQueue.pendingSize(session), "残留必须转入 session 队列，绝不静默丢弃");
+        assertEquals(2, QueueHelper.pendingSize(session), "残留必须转入 session 队列，绝不静默丢弃");
 
         List<SteerDroppedEvent> dropped = eventsOf(SteerDroppedEvent.class);
         assertEquals(1, dropped.size(), "转排队后必须推出一次 dropped 事件");
@@ -407,21 +406,21 @@ public class SteerInterceptorTest {
 
         interceptor.onAgentEnd(silent);
 
-        assertEquals(1, SessionQueue.pendingSize(session), "无订阅者也必须完成转排队");
+        assertEquals(1, QueueHelper.pendingSize(session), "无订阅者也必须完成转排队");
     }
 
     @Test
     @DisplayName("dropped: 队列满时失败项回填易失邮箱，并标记 failed")
     public void dropped_queueFullKeepsInMailbox() {
-        for (int i = 0; i < SessionQueue.MAX_QUEUE_SIZE; i++) {
-            assertTrue(SessionQueue.enqueue(session, "task " + i, InputOrigin.channel("WEB")) > 0);
+        for (int i = 0; i < QueueHelper.MAX_QUEUE_SIZE; i++) {
+            assertTrue(QueueHelper.enqueue(session, "task " + i, InputOrigin.channel("WEB")) > 0);
         }
         newBox("do not lose me");
         session.attrs().put(SteerInterceptor.ATTR_ACTIVE_RUN_ID, trace.getRunId());
 
         interceptor.onAgentEnd(trace);
 
-        assertEquals(SessionQueue.MAX_QUEUE_SIZE, SessionQueue.pendingSize(session), "队列不得超上限");
+        assertEquals(QueueHelper.MAX_QUEUE_SIZE, QueueHelper.pendingSize(session), "队列不得超上限");
         Queue<SteerMessage> refilled = SteerInterceptor.steerBox(session);
         assertNotNull(refilled, "失败项必须回填易失邮箱待下次重试");
         assertEquals("s0", refilled.peek().getId());
@@ -438,7 +437,7 @@ public class SteerInterceptorTest {
         assertTrue(SteerInterceptor.enqueueIntoSessionQueue(null, new ArrayList<>()).isEmpty());
         assertTrue(SteerInterceptor.enqueueIntoSessionQueue(session, null).isEmpty());
         assertTrue(SteerInterceptor.enqueueIntoSessionQueue(session, new ArrayList<>()).isEmpty());
-        assertEquals(0, SessionQueue.pendingSize(session));
+        assertEquals(0, QueueHelper.pendingSize(session));
     }
 
     @Test
@@ -447,7 +446,7 @@ public class SteerInterceptorTest {
         // 超长文本会被 SessionQueue 拒绝（>MAX_TEXT_LENGTH），制造真实的入队失败路径
         ConcurrentLinkedQueue<SteerMessage> box = new ConcurrentLinkedQueue<>();
         StringBuilder huge = new StringBuilder();
-        for (int i = 0; i < SessionQueue.MAX_TEXT_LENGTH + 10; i++) {
+        for (int i = 0; i < QueueHelper.MAX_TEXT_LENGTH + 10; i++) {
             huge.append('x');
         }
         box.offer(new SteerMessage("s0", huge.toString()));
@@ -456,7 +455,7 @@ public class SteerInterceptorTest {
 
         assertDoesNotThrow(() -> interceptor.onAgentEnd(trace), "入队失败不得沿拦截器链冒泡");
 
-        assertEquals(0, SessionQueue.pendingSize(session), "超长文本不得入队");
+        assertEquals(0, QueueHelper.pendingSize(session), "超长文本不得入队");
         assertEquals(1, SteerInterceptor.pending(session).size(), "失败项必须回填易失邮箱待重试");
     }
 }

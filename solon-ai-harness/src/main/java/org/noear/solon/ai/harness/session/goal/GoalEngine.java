@@ -44,7 +44,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * {@link AgentSession#getContext()} 的 {@code data()}（key：{@value #KEY_GOAL}），
  * 任何变更后调用 {@link AgentSession#updateSnapshot()} 随会话快照一并落盘。
  * 运行态实例存放于 {@code attrs()}（瞬态，不落盘），首次访问时从投影 hydrate。
- * 这与 {@code SessionQueue} 的既有分层完全一致：<b>存储介质是会话实现的细节</b>
+ * 这与排队（QueueHelper）的既有分层完全一致：<b>存储介质是会话实现的细节</b>
  * （文件 / 内存 / Redis / JDBC），本类只依赖 {@link AgentSession} 接口。</p>
  *
  * <p><b>独立性</b>：本类不依赖任何调度体系的具体类型。与调度侧唯一的交汇点是

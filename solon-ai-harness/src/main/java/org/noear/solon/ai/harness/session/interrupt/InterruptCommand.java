@@ -28,7 +28,7 @@ import org.noear.solon.ai.harness.input.InputOrigin;
  * 但在 IM 渠道（微信/飞书/钉钉）中缺少中断途径。此命令为 IM 场景提供
  * 统一的中断能力，也适用于所有终端。</p>
  *
- * <p>实现退化为 {@link SessionInterrupt#interrupt(AgentSession)} 的薄壳：
+ * <p>实现退化为 {@link InterruptHelper#interrupt(AgentSession)} 的薄壳：
  * 中断语义只有一处实现，程序宿主用 {@code engine.interrupt(session)} 与之同源。</p>
  *
  * @author noear
@@ -65,7 +65,7 @@ public class InterruptCommand extends AbsCommand {
             return;
         }
 
-        if (SessionInterrupt.interrupt(session)) {
+        if (InterruptHelper.interrupt(session)) {
             ctx.println("用户已取消任务（或中断）");
         } else {
             ctx.println("当前没有正在执行的任务");

@@ -4,9 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.session.queue.SessionQueue;
-import org.noear.solon.ai.harness.session.queue.SessionQueueDrainer;
-import org.noear.solon.ai.harness.session.queue.SessionQueueItem;
+import org.noear.solon.ai.harness.session.queue.QueueHelper;
+import org.noear.solon.ai.harness.session.queue.QueueItem;
 import org.noear.solon.ai.harness.session.steer.SteerMessage;
 
 import java.util.ArrayList;
@@ -64,19 +63,19 @@ class SessionQueueSteerTest {
 
     /** 入队统一走 enqueue（它负责归一化、上限与去重），不直接构造 item。 */
     private static void offer(AgentSession session, String text) {
-        SessionQueue.enqueue(session, text, InputOrigin.NONE);
+        QueueHelper.enqueue(session, text, InputOrigin.NONE);
     }
 
     @Test
     void drainOneReturnsFalseWhenEmpty() {
         AgentSession s = session();
-        assertFalse(SessionQueueDrainer.drainOne(s, i -> { }));
+        assertFalse(QueueHelper.drainOne(s, i -> { }));
     }
 
     @Test
     void drainOneReturnsFalseOnNullArgs() {
-        assertFalse(SessionQueueDrainer.drainOne(null, i -> { }));
-        assertFalse(SessionQueueDrainer.drainOne(session(), null));
+        assertFalse(QueueHelper.drainOne(null, i -> { }));
+        assertFalse(QueueHelper.drainOne(session(), null));
     }
 
     @Test
@@ -85,7 +84,7 @@ class SessionQueueSteerTest {
         offer(s, "第一条");
 
         List<String> seen = new ArrayList<>();
-        boolean drained = SessionQueueDrainer.drainOne(s, i -> seen.add(i.getText()));
+        boolean drained = QueueHelper.drainOne(s, i -> seen.add(i.getText()));
 
         assertTrue(drained);
         assertEquals(1, seen.size());
@@ -99,12 +98,12 @@ class SessionQueueSteerTest {
         offer(s, "第二条");
 
         List<String> seen = new ArrayList<>();
-        SessionQueueDrainer.drainOne(s, i -> seen.add(i.getText()));
+        QueueHelper.drainOne(s, i -> seen.add(i.getText()));
 
         assertEquals(1, seen.size(), "一次只取一项，剩余留给下一轮");
         // 成功返回即确认（acknowledgeOnReturn=true），剩余一项留在队列
-        assertEquals(1, SessionQueue.size(s));
-        assertEquals("第二条", SessionQueue.poll(s).getText());
+        assertEquals(1, QueueHelper.size(s));
+        assertEquals("第二条", QueueHelper.poll(s).getText());
     }
 
     @Test
@@ -113,7 +112,7 @@ class SessionQueueSteerTest {
         offer(s, "会失败");
 
         try {
-            SessionQueueDrainer.drainOne(s, i -> {
+            QueueHelper.drainOne(s, i -> {
                 throw new IllegalStateException("boom");
             });
         } catch (Exception expected) {
@@ -121,18 +120,18 @@ class SessionQueueSteerTest {
         }
 
         // 认领必须已释放，否则队列会永久卡住（可再次认领即证明已释放）
-        assertTrue(SessionQueue.tryClaim(s));
-        SessionQueue.releaseClaim(s);
+        assertTrue(QueueHelper.tryClaim(s));
+        QueueHelper.releaseClaim(s);
     }
 
     @Test
     void drainOneSkipsWhenAlreadyClaimed() {
         AgentSession s = session();
         offer(s, "x");
-        assertTrue(SessionQueue.tryClaim(s));
+        assertTrue(QueueHelper.tryClaim(s));
 
         List<String> seen = new ArrayList<>();
-        assertFalse(SessionQueueDrainer.drainOne(s, i -> seen.add(i.getText())));
+        assertFalse(QueueHelper.drainOne(s, i -> seen.add(i.getText())));
         assertTrue(seen.isEmpty());
     }
 
@@ -144,13 +143,13 @@ class SessionQueueSteerTest {
         offer(s, "a");
         offer(s, "b");
 
-        SessionQueueItem first = SessionQueue.poll(s);
+        QueueItem first = QueueHelper.poll(s);
         assertEquals("a", first.getText());
         // poll 会把条目置为 in-flight；未确认前不再取下一项（严格串行执行）
-        assertNull(SessionQueue.poll(s));
+        assertNull(QueueHelper.poll(s));
 
-        SessionQueue.acknowledge(s, first.getId());
-        assertEquals("b", SessionQueue.poll(s).getText());
+        QueueHelper.acknowledge(s, first.getId());
+        assertEquals("b", QueueHelper.poll(s).getText());
     }
 
     @Test
@@ -159,13 +158,13 @@ class SessionQueueSteerTest {
         offer(s, "a");
         offer(s, "b");
 
-        SessionQueueItem first = SessionQueue.poll(s);
+        QueueItem first = QueueHelper.poll(s);
         assertEquals("a", first.getText());
         assertEquals("RUNNING", first.getStatus());
 
-        SessionQueue.acknowledge(s, first.getId());
+        QueueHelper.acknowledge(s, first.getId());
         // 确认后队列仍有剩余项
-        assertTrue(SessionQueue.hasItems(s));
+        assertTrue(QueueHelper.hasItems(s));
     }
 
     @Test
@@ -173,10 +172,10 @@ class SessionQueueSteerTest {
         AgentSession s = session();
         offer(s, "a");
         offer(s, "b");
-        assertEquals(2, SessionQueue.size(s));
+        assertEquals(2, QueueHelper.size(s));
 
-        SessionQueue.cancelPending(s);
-        assertFalse(SessionQueue.hasItems(s));
+        QueueHelper.cancelPending(s);
+        assertFalse(QueueHelper.hasItems(s));
     }
 
     @Test
@@ -185,24 +184,24 @@ class SessionQueueSteerTest {
         AgentSession b = InMemoryAgentSession.of("qb");
         offer(a, "只给 a");
 
-        assertFalse(SessionQueue.hasItems(b));
-        assertEquals(1, SessionQueue.size(a));
+        assertFalse(QueueHelper.hasItems(b));
+        assertEquals(1, QueueHelper.size(a));
     }
 
     @Test
     void enqueueNormalizesAndRejectsEmpty() {
         AgentSession s = session();
-        assertEquals(-1, SessionQueue.enqueue(s, "   ", InputOrigin.NONE));
-        assertEquals(-1, SessionQueue.enqueue(s, null, InputOrigin.NONE));
+        assertEquals(-1, QueueHelper.enqueue(s, "   ", InputOrigin.NONE));
+        assertEquals(-1, QueueHelper.enqueue(s, null, InputOrigin.NONE));
 
-        assertEquals(1, SessionQueue.enqueue(s, "  hello  ", InputOrigin.NONE));
-        assertEquals("hello", SessionQueue.poll(s).getText());
+        assertEquals(1, QueueHelper.enqueue(s, "  hello  ", InputOrigin.NONE));
+        assertEquals("hello", QueueHelper.poll(s).getText());
     }
 
     @Test
     void enqueueRejectsDuplicateId() {
         AgentSession s = session();
-        assertEquals(1, SessionQueue.enqueue(s, "a", InputOrigin.NONE, "id-1", null, null, null, null, false));
-        assertEquals(-1, SessionQueue.enqueue(s, "b", InputOrigin.NONE, "id-1", null, null, null, null, false));
+        assertEquals(1, QueueHelper.enqueue(s, "a", InputOrigin.NONE, "id-1", null, null, null, null, false));
+        assertEquals(-1, QueueHelper.enqueue(s, "b", InputOrigin.NONE, "id-1", null, null, null, null, false));
     }
 }

@@ -16,6 +16,7 @@ import org.noear.solon.ai.harness.session.goal.GoalEngine;
 import org.noear.solon.ai.harness.session.goal.GoalExtension;
 import org.noear.solon.ai.harness.session.interrupt.InterruptCommand;
 import org.noear.solon.ai.harness.session.queue.QueueCommand;
+import org.noear.solon.ai.harness.session.queue.QueueHelper;
 import org.noear.solon.ai.harness.session.steer.SteerCommand;
 import org.noear.solon.ai.harness.util.TraceKeys;
 
@@ -250,7 +251,7 @@ class BuiltinCommandsSystemTest {
 
         assertEquals(InputOutcome.Kind.REPLY, outcome.getKind());
         assertTrue(outcome.getCommandOutput().contains("已加入队列（第 1 位）"));
-        assertEquals(1, org.noear.solon.ai.harness.session.queue.SessionQueue.pendingSize(session));
+        assertEquals(1, QueueHelper.pendingSize(session));
     }
 
     @Test

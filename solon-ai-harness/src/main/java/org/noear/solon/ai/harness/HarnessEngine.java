@@ -46,12 +46,14 @@ import org.noear.solon.ai.harness.input.BufferedCommandContextFactory;
 import org.noear.solon.ai.harness.input.CommandDispatcher;
 import org.noear.solon.ai.harness.input.CommandContextFactory;
 import org.noear.solon.ai.harness.input.HarnessInput;
+import org.noear.solon.ai.harness.input.HitlCard;
 import org.noear.solon.ai.harness.input.InputAttachments;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.input.ParsedCommand;
 import org.noear.solon.ai.harness.hitl.BashToolStrategy;
 import org.noear.solon.ai.harness.permission.PermissionContext;
-import org.noear.solon.ai.harness.session.interrupt.SessionInterrupt;
+import org.noear.solon.ai.harness.session.SessionStatus;
+import org.noear.solon.ai.harness.session.interrupt.InterruptHelper;
 
 import org.noear.solon.ai.harness.permission.PermissionRule;
 import org.noear.solon.ai.harness.permission.ToolPermission;
@@ -440,6 +442,42 @@ public class HarnessEngine {
 
     public Collection<HarnessExtension> getExtensions() {
         return Collections.unmodifiableCollection(options.getExtensions());
+    }
+
+    /**
+     * 按类型取已挂载的扩展（宿主取用扩展门面的唯一方式）
+     *
+     * <p>在 {@link #getExtensions()} 之上补一个类型化取用入口：扩展在 {@code addExtension} 之后
+     * 原本只能通过遍历 + {@code instanceof} 找回，宿主每写一个扩展就要写一遍这段样板，
+     * 且取不到时无统一口径可依。</p>
+     *
+     * <pre>{@code
+     * QueueExtension queue = engine.getExtension(QueueExtension.class);
+     * if (queue != null) {
+     *     queue.enqueue(session, "接着改文档");
+     * }
+     * }</pre>
+     *
+     * <p>多个同类实例时返回<b>首个</b>（与 {@code removeExtension} 只移除首个同口径）；
+     * 未挂载或类型不匹配时返回 {@code null}（不抛异常——「没有这个能力」是正常状态，
+     * 宿主据此决定是否降级，不该被迫用异常做分支）。</p>
+     *
+     * @param type 扩展类型
+     * @return 已挂载的扩展实例；未挂载时为 null
+     * @since 4.2.0
+     */
+    public <T extends HarnessExtension> Optional<T> getExtension(Class<T> type) {
+        if (type == null) {
+            return Optional.empty();
+        }
+
+        for (HarnessExtension extension : options.getExtensions()) {
+            if (type.isInstance(extension)) {
+                return Optional.of(type.cast(extension));
+            }
+        }
+
+        return Optional.empty();
     }
 
     public Collection<Mount> getMounts() {
@@ -1577,7 +1615,7 @@ public class HarnessEngine {
             //（trace 按代理名分 key，取错代理会取不到挂起的 tool_calls）。
             String agentName = resolveHitlAgent(session, input.getSelectedAgent());
             boolean hitlApplied = applyHitlDecision(session, input.getHitlAction(), input.getHitlCallId(), input.getHitlOutput());
-            int pendingHitl = pendingHitlCount(session);
+            int pendingHitl = HitlCard.pendingCount(session);
 
             if (input.isResume() && hitlApplied && pendingHitl == 0) {
                 //决策写入后同一次调用完成续流装配，宿主无须再发一次 handle。
@@ -1591,7 +1629,7 @@ public class HarnessEngine {
 
             //未续流的两种情形都归入 HITL，由宿主按 isHitlApplied / getPendingHitlCount 决定后续动作。
             return InputOutcome.hitl(agentName, resolveSessionModelName(session, input.getSelectedModel()),
-                    hitlApplied, pendingHitl);
+                    hitlApplied, pendingHitl, HitlCard.list(session));
         }
 
         // ========== 2. 续流（无新输入，按挂起的 tool_calls 继续执行）==========
@@ -1748,25 +1786,6 @@ public class HarnessEngine {
         return true;
     }
 
-    /**
-     * 决策写入后仍待审批的挂起项数量
-     * <p>
-     * 供 resume 前置自检：批内还有未决卡时不得续流（会带走未决任务）。
-     * 无挂起时返回 0 ——「无挂起」视为「已齐备」，宿主显式 resume 的语义不受影响。
-     */
-    private int pendingHitlCount(@Nullable AgentSession session) {
-        if (session == null) {
-            return 0;
-        }
-
-        int count = 0;
-        for (HITLTask task : HITL.getPendingTasks(session)) {
-            if (HITL.getDecision(session, task) == null) {
-                count++;
-            }
-        }
-        return count;
-    }
 
     /**
      * 命令识别与执行（非命令时返回 null）
@@ -1838,7 +1857,7 @@ public class HarnessEngine {
      *
      * <p>收敛此前只存在于 {@code /interrupt} 命令里的内部细节：清空排队项、释放宿主订阅时
      * 存入 {@code session.attrs("disposable")} 的流句柄、补写取消消息（带 runId 元数据）与快照。
-     * 命令实现与本方法同源（{@link SessionInterrupt}），不存在第二套中断逻辑。</p>
+     * 命令实现与本方法同源（{@link InterruptHelper}），不存在第二套中断逻辑。</p>
      *
      * <p><b>先清队列再停流</b>：停流后宿主常在终态回调里续发队首，顺序颠倒会把刚被停掉的任务
      * 重新推起来。queue / steer 的干预闭环因此是完整的：
@@ -1853,7 +1872,50 @@ public class HarnessEngine {
      * @return true = 已中断；false = 当前无正在执行的任务（会话为 null 时也返回 false）
      */
     public boolean interrupt(@Nullable AgentSession session) {
-        return SessionInterrupt.interrupt(session);
+        return InterruptHelper.interrupt(session);
+    }
+
+    /**
+     * 只停当前运行流，不补取消消息、不清队列（程序化「停流」）。
+     *
+     * <p>与 {@link #interrupt(AgentSession)} 的差别仅在于<b>不写历史</b>：适合轮次由程序接管、
+     * 后续会重新发起新一轮的场景（如自动循环的上一轮被新目标顶掉）。这类场景若补写取消消息，
+     * 会在会话历史里留下「用户已取消」的假象，与真实的用户取消混淆。</p>
+     *
+     * <p>返回 {@code false} 同样不代表什么都没发生：取消代数依然推进（见
+     * {@link InterruptHelper#interruptStreamOnly(AgentSession)}）。</p>
+     *
+     * @return true = 确有运行中的流被停掉；false = 调用时没有已登记的活跃流
+     * @since 4.2.0
+     */
+    public boolean interruptStream(@Nullable AgentSession session) {
+        return InterruptHelper.interruptStreamOnly(session);
+    }
+
+    /**
+     * 只停当前运行流，且不推进取消代数（新轮次顶掉旧轮次用）。
+     *
+     * <p>与 {@link #interruptStream(AgentSession)} 的差别在于「这次停流算不算取消」：
+     * 推进代数后，被顶掉的旧流能据此判定自己是被取消的、不再发终态帧（适合 Stop）；
+     * 不推进代数则适合「新一轮腾位」——旧流本该自然结束，若当成被取消会把新一轮收尾牵连进去。</p>
+     *
+     * @return true = 确有活跃流被停掉
+     * @since 4.2.0
+     */
+    public boolean interruptStreamActive(@Nullable AgentSession session) {
+        return InterruptHelper.interruptStreamActive(session);
+    }
+
+    /**
+     * 读取会话运行态快照（忙碌 / 待审批 / 排队数一次读全）
+     *
+     * <p>宿主的「能不能接新输入」判定需要同时看运行流、挂起卡、队列三项，
+     * 三者原本散在三个包里。读一次快照即可，不要自己拼。</p>
+     *
+     * @since 4.2.0
+     */
+    public SessionStatus status(@Nullable AgentSession session) {
+        return SessionStatus.of(session);
     }
 
     public static Builder of(String workspace, String harnessHome) {

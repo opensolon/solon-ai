@@ -25,7 +25,7 @@ import java.util.List;
 /**
  * 任务结束时仍有未消费插话（steer_dropped）。
  *
- * <p><b>本事件只是「结果展示」，不是「兜底动作」</b>：转 {@code SessionQueue} 的持久化
+ * <p><b>本事件只是「结果展示」，不是「兜底动作」</b>：转排队（QueueHelper）的持久化
  * 已由 {@link SteerInterceptor} 在调用本事件之前完成（见
  * {@link SteerInterceptor#enqueueIntoSessionQueue}）。因此即使本事件因无 sink
  * 被丢弃，"已接受但永不生效"也不会发生——这是与「用事件承载业务动作」的关键分界。</p>

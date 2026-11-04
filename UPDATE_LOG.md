@@ -1,5 +1,17 @@
 ### vNEXT
 
+* **宿主接入面收敛：Session* 内核类改名 + 引擎级门面补齐**（配套 README §5 全量同步；取代此前「静态工具类 + instanceof 遍历」的接入方式）:
+  * **改名清单（零行为变更，纯重命名 + 包内迁移）**：`SessionQueue → QueueHelper`、`SessionQueueItem → QueueItem`、`SessionQueueDrainer → 并入 QueueHelper.drainOne`、`SessionInterrupt → InterruptHelper`（迁至 `session/interrupt/`）；静态方法签名与语义均未变，仅类名与归属包。规约沉淀在 harness `CODE.md`（`Session*` 前缀只留给 `AgentSession`/`SessionStatus`）
+  * **新增 `HarnessEngine.getExtension(Class<T>)`**：替代 `getExtensions() + instanceof` 遍历（此前宿主取 QueueExtension/SteerExtension/GoalExtension 只能强转，WebSettingsController 的 instanceof 循环已改直取）
+  * **中断四形态**（`InterruptHelper` + 引擎对应入口）：`interrupt`（清队列+停流+补消息，原有）/ 新增 `interruptStream`（只停流，推代数，不写历史——goal 轮次被顶掉时用，避免假「用户已取消」）/ 新增 `interruptStreamActive`（只停流且不推代数——新一轮腾位，避免旧流把新轮收尾牵连）/ 既有 `writeCancel`（只补取消消息，Web 崩溃恢复用）。四入口语义对照表已补进 README §5.4
+  * **新增 `HitlCard`（input 包）**：`HITLTask` 的稳定投影值对象。`list/undecided/next/pendingCount` 四个静态入口收拢了宿主四处自写的「首个未决策项、整批已决策回退首项」判定（旧 `HITL.getPendingTasks + getDecision` 过滤不再需要）；`isBash/getCommand` 供 CLI 确认界面直接用；宿主不再接触 React 引擎内部实体 `HITLTask`
+  * **新增 `SessionStatus`（session 包）**：`isBusy/hasPendingHitl/queuedCount` 一次读全，取代宿主自拼 `SessionRuns.isBusy || HITL.isHitl || pendingSize>0`；入口 `engine.status(session)`
+  * **SteerExtension 补齐**：实例方法 `activeRunId(session)`（取代宿主直读 `SteerInterceptor.ATTR_ACTIVE_RUN_ID`）、`handover(session)`（把「残留插话转排队」的 12 行 attrs 内务收进 harness，WebSessionRunner 原地删）；静态访问器 `maxTextLength/maxIdLength/isSteerMessage/stripSteerPrefix`（取代宿主引用内部常量，LastTraceService 的元数据嗅探改语义化调用）
+  * **QueueExtension 补齐**：`generation/isGenerationActive/requeueFront/importItems`（WebQueueDispatcher 两阶段 drain 的代际校验不再穿透静态内核）
+  * **宿主修复（本次发现的三处行为收窄）**：`CliShell:450/486`、`DesktopStreamTurn:164` 的 HITL 判据由 `status().hasPendingHitl()` 改为 `HitlCard.next() != null`——残留决策（整批已决策但续流未发生，如崩溃恢复窗口）也会进审批循环透传给引擎，不再直接 done 掉导致决策永远等不到续流
+  * **同步**：README 11 处旧类名、§5.4 四形态对照表、FAQ 18 重写（「停当前留队列」从权衡题变为 `interruptStream` 正解）、模块图；harness `CODE.md` 新建（命名规约 + 门面分层 + 域边界提醒）；`InputOrigin` javadoc 同步
+  * **验证**：harness `mvn clean install` 通过（38 例失败经 `git stash` 基线比对全部为既有，与本轮无关）；cli `mvn clean test-compile` 零错误；定向契约测试 16 例全绿（DesktopStreamTurnCancelTest 3 + SessionActivityTest 3 + SteerCancelWebContractTest 2 + TaskQueueDockWebContractTest 3 + ImBusySteerContractTest 5）
+
 * **Mcp 服务端：未配置传输安全校验器时启动 warn 提示，并补上 `ServerHttpHeaderValidator` 接入**:
   * **背景**：`mcp-core` 已将 `ServerHttpHeaderValidator` 定为 `ServerTransportSecurityValidator` 的替代接口，但 `solon-ai-mcp` 的三个 Web 传输实现仍只认旧接口；用户按新接口实现校验器会被**静默忽略**，实际生效的是 NOOP，且启动日志完全看不出“到底有没有校验”
   * **新增 `HttpHeaderValidatorAdapter`**（`org.noear.solon.ai.mcp.server`）：把 `ServerHttpHeaderValidator` 适配为旧接口，内置大小写不敏感的 `MapHeaderAccessor`
@@ -22,7 +34,7 @@
     2. **`onAgentEnd` 的 dropped 调用无 try-catch**：`null` 路由送进 `WebGate.emitToClient` 的 `wsContext.getConnections()`（在 try 之外）炸 NPE，并沿 `ReActAgent` 的拦截器遍历冒泡，导致后续拦截器 `onAgentEnd` 全部不执行
     3. **双写路径的投递乱序**：`steer_applied` 走拦截器线程直写 socket，与 flux 管线的 `doOnNext` 是两条独立写入路径，顺序无保证
   * **方案**：新增 `SteerAppliedEvent` / `SteerDroppedEvent`（均继承 `AbsReActEvent`），由 `SteerInterceptor` 直接 `pushAgentEvent`。宿主按事件类型映射（Web 加两个 `instanceof` 分支 → `system.steer_applied` / `system.steer_dropped`），不认识的宿主零成本忽略。投递与 `reason.delta` 走同一条 flux，乱序问题随之消失
-  * **展示与持久化分离（关键）**：`pushAgentEvent` 在非流式（无 sink）或订阅已取消时**静默丢弃**，所以事件绝不能承载业务动作。新增 `SteerInterceptor#enqueueIntoSessionQueue`，把「未消费插话转 `SessionQueue`」上移到 harness 并**先落盘、再推事件**。附带收益：CLI / Desktop 也获得了把残留插话转为排队任务的能力（此前是丢弃 + warn）
+  * **展示与持久化分离（关键）**：`pushAgentEvent` 在非流式（无 sink）或订阅已取消时**静默丢弃**，所以事件绝不能承载业务动作。新增 `SteerInterceptor#enqueueIntoSessionQueue`，把「未消费插话转 `QueueHelper`」上移到 harness 并**先落盘、再推事件**。附带收益：CLI / Desktop 也获得了把残留插话转为排队任务的能力（此前是丢弃 + warn）
   * **两个事件刻意不覆写 `getText()`**：它们不属于文本流。一旦给出文本，按文本兜底渲染的宿主（ACP 的 `concatMap` 收尾分支、Desktop 的 frame 转换）会把插话内容顺手打进对话。需要展示的宿主必须显式按类型分支
   * **删除清单（harness）**：`SteerOutputPort` 整个接口（53 行）、`SteerInterceptor` 的 `outputPortSupplier` / `withPort` / `emitSteerApplied`（约 47 行）、`SteerExtension` 的 `(Supplier)` 构造器。`new SteerExtension()` 成为唯一构造器——没有注入入口，也就没有「漏传端口」这种陷阱
   * **删除清单（soloncode-cli）**：`WebGate` 的 `SteerOutputPort` 实现 + `routeOf` + `ATTR_REPLY_WORKSPACE`（约 60 行）、`WorkspaceManager` 的 lambda 装配、`WebStreamBuilder` 的每请求 `new SteerInterceptor(...)` + `interceptorAdd` 样板、`WebSessionRunner#beginStreamTurn` 的 session 打标（改为直接复用 `enqueueIntoSessionQueue`，排队逻辑只有一处）
@@ -140,7 +152,7 @@
 
 * **goal / queue / steer 三命令：宿主侧与 solon-ai-harness 的交互体验简化——装配与操作各收敛到一个类**（响应「宿主侧接线太复杂」的反馈，功能效果与 attrs 契约零变化）:
   * 口径：本次改进的是**宿主侧与 solon-ai-harness 的交互面**（宿主开发者要认识并 new 的类、要写的装配样板、运行期要操作的对象），**不是终端用户交互**——`/goal`、`/queue`、`/steer` 三个命令的语法、回执文案、Web/桌面端点与 UI 行为一字未改，终端用户无感知
-  * 问题：README 第五章的三个状态型命令，宿主接触面分别是 5 个类（`ExecutionBridge`+`GoalEngine`+`GoalScheduler`+`GoalExtension`+`GoalCommand`，25 行装配）、2 个静态工具类（`SessionQueue`+`SessionQueueDrainer`）、以及「每请求 new `SteerInterceptor` + `interceptorAdd`」的样板。依赖链是刚性的，宿主真正能定的只有 workspaceId 与一两个 lambda，其余全是可推导的组装步骤
+  * 问题：README 第五章的三个状态型命令，宿主接触面分别是 5 个类（`ExecutionBridge`+`GoalEngine`+`GoalScheduler`+`GoalExtension`+`GoalCommand`，25 行装配）、2 个静态工具类（`QueueHelper`）、以及「每请求 new `SteerInterceptor` + `interceptorAdd`」的样板。依赖链是刚性的，宿主真正能定的只有 workspaceId 与一两个 lambda，其余全是可推导的组装步骤
   * **`GoalExtension` 升级为 builder 一键装配**：`GoalExtension.builder(workspaceId).taskExecutor(...).busyChecker(...).budget(...).stagnation(...).maxErrors(...).validatorEnabled(...).workspace(...).bridge(...).scheduler(...).commandEnabled(...).listener(...).build()` —— `initialize(engine)` 内依次建 `ExecutionBridge`→`GoalEngine`→`GoalScheduler`→注册 `/goal` 命令→预注册 listener，`configure` 仍挂 `GoalTalent` 到主代理。`taskExecutor` 缺省内置 README 原模板（`engine.handle` + `call()`），`busyChecker` 缺省恒 false，其余全有缺省值。既有双参构造保留并标 `@Deprecated`
   * **`QueueExtension` 新建**：`addExtension` 内幂等注册 `/queue` 命令 + 提供完整操作门面（`enqueue`/`drainOne` 两态/`ack`/`view`/`pendingSize`/`cancelItem`/`promote`/`cancelPending`/`hasPersistedItems`/`importItems`），内部中转两个静态类。**保留「不自动 drain」决策**：Web 端 ack 跨越订阅生命周期，自动化会遮住宿主必须显式掌握的时机
   * **`SteerExtension` 新建**：`addExtension` 内幂等注册 `/steer` 命令 + `configure` 把拦截器挂为主代理**默认拦截器**。顺序安全性已核验：`LinkedHashMap<Class, RankEntity>` 按 Class 去重，`AgentFactory` 先挂压缩/StopLoop、后轮到 extension 的 configure，天然排在上下文压缩之后；`ReActOptions.copy()` 的 `interceptors.putAll` 使请求级同 Class 挂载覆盖默认实例（不双份），故 Web 多工作区仍可保留请求级挂载。端口用 `Supplier` 惰性解析（默认工作区可能在入口绑定之前创建）
@@ -200,12 +212,12 @@
   * 测试：`HarnessInputTest` 改断 `getSelectedModel`，`InputHandleTest.mentionAwareFalseKeepsTextAsIs` → `agentAwareFalseKeepsTextAsIs`，`HitlAgentResolutionTest` 改 `selectedAgent`；harness 定向 10 类 69 例全绿
 
 * **命令渠道来源统一为值对象 `InputOrigin`**（删除 `CommandContext` 上重复的四元组）：
-  * 背景：`getSource` / `getSourceUserId` / `getReplyTarget` / `getMessageId` 在全仓以 7 种形状并存（`HarnessInput` 四字段、`CommandContext` 四 default getter、`WebCommandContext` 四 override、`BufferedCommandContextFactory` 四 override、`session.replyRoute` 裸 Map、`SessionQueueItem` 四字段、`SteerMessage` 四字段），且形成「渠道 → 入会话 → 命令 → 队列/插话箱 → 分发器 → 回到 Channel」的闭环，实为同一实体的 7 份副本。实测 28 处签名中 100% 四字段同时出现，不存在单独消费，故合并为单一实体而非拆分
+  * 背景：`getSource` / `getSourceUserId` / `getReplyTarget` / `getMessageId` 在全仓以 7 种形状并存（`HarnessInput` 四字段、`CommandContext` 四 default getter、`WebCommandContext` 四 override、`BufferedCommandContextFactory` 四 override、`session.replyRoute` 裸 Map、`QueueItem` 四字段、`SteerMessage` 四字段），且形成「渠道 → 入会话 → 命令 → 队列/插话箱 → 分发器 → 回到 Channel」的闭环，实为同一实体的 7 份副本。实测 28 处签名中 100% 四字段同时出现，不存在单独消费，故合并为单一实体而非拆分
   * 新增 `input.InputOrigin`（不可变，`NONE` 表示本地无渠道来源）：`channel` / `senderId` / `replyTarget` / `messageId`，并提供 `isEmpty` / `isIm`（收编 `WebChatInputHandler.isImSource`）/ `channelOr`（收编 `"CLI"` 与 `"command"` 两处不同兜底）/ `channelIs`（收编各处 `equalsIgnoreCase`）/ `withReplyTarget`（微信 `context_token` 刷新）/ `withChannel` / `toMap` / `fromMap`。`toMap`/`fromMap` **键名沿用历史命名**（source/sourceUserId/replyTarget/messageId），保证队列快照与 `session.replyRoute` 落盘数据向后兼容
   * `HarnessInput` 四字段合为 `origin`；新增 `origin(InputOrigin)`，旧 `route(4 参)` 转调并标 `@Deprecated`，四个旧 getter 同步转为 `origin.getXxx()` 转调
   * **`Command` 新增三参 `execute(engine, ctx, InputOrigin)` 的 default 委托**（`@since 4.2`）：仅 `/queue`、`/steer` 覆写，其余约 20 个实现零改动。`CommandDispatcher.dispatch` 增加 `origin` 参数，由 `HarnessEngine.dispatchCommand` 直接取 `input.getOrigin()` 传入——这是本次核心：删除了「工厂从 input 嗅探元数据」的第二条注入路径（`BufferedCommandContextFactory` 不再持有 `HarnessInput`）
   * 删除 `CommandContext` 的四个 getter、`soloncode-cli` 的 `WebCommandContext` 整个类（改造后无任何逻辑）、`webCommandFactory` 的四参数与匿名实现（缩为 `new BufferedCommandContextFactory(true)`）、桌面端等价匿名工厂、`CliCommandContext.getSource` 硬编码；CLI 入口改由 `CliShell.CLI_ORIGIN` 显式声明来源
-  * `SessionQueueItem` / `SteerMessage` 四字段合为 `origin`（旧 getter 转调 + `@Deprecated`），`SessionQueue.enqueue` 与 `SteerInterceptor.steer` 新增 `InputOrigin` 重载。**同时删除 `enqueue(session,text,String)` 与 `steer(...,String source,BooleanSupplier)` 两个 String 重载**：它们与 `InputOrigin` 版本在传 null 时无法区分（编译期 ambiguous），保留即缺陷
+  * `QueueItem` / `SteerMessage` 四字段合为 `origin`（旧 getter 转调 + `@Deprecated`），`SessionQueue.enqueue` 与 `SteerInterceptor.steer` 新增 `InputOrigin` 重载。**同时删除 `enqueue(session,text,String)` 与 `steer(...,String source,BooleanSupplier)` 两个 String 重载**：它们与 `InputOrigin` 版本在传 null 时无法区分（编译期 ambiguous），保留即缺陷
   * `WebChatInputHandler.setReplyRoute` 改为接收 `InputOrigin` 并用 `origin.toMap()` 写入 `session.replyRoute`（读取侧仍按 Map，键名不变，避免牵动约 80 处渠道测试断言）；`WebQueueDispatcher` / `WebGate` / `QueueWebController` 改用 `origin`
   * 顺带纠正（已于下一节被取代）：`CommandContext.isRemote()` 当时经核实并非死方法（`HelpCommand` 用它裁剪 `cliOnly` 命令），故保留；本轮已将其连根替换为 `isTerminal()` + `HarnessInput.terminal`，`BufferedCommandContextFactory(boolean)` 与匿名子类覆盖一并删除
   * 测试：新增 `InputOriginTest`（11 例，锁定 legacy 键名往返、渠道大小写、`isIm`、不可变刷新）；`Fakes.StubContext` 去掉四字段改为 `imOrigin()`/`localOrigin()`；`QueueCommandTest`/`SteerCommandTest`/`SessionQueueTest`/`SteerInterceptorTest`/`WebGateRejectedInputTest` 改为 origin 调用；`ImBusySteerContractTest` 源码断言同步（并修正 `indexOf` 起点，避免命中插话之前的注释）

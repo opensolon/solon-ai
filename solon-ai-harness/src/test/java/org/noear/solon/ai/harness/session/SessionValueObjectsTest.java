@@ -2,8 +2,7 @@ package org.noear.solon.ai.harness.session;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.session.queue.SessionQueueItem;
-import org.noear.solon.ai.harness.session.steer.SteerInterceptor;
+import org.noear.solon.ai.harness.session.queue.QueueItem;
 import org.noear.solon.ai.harness.session.steer.SteerResult;
 import org.noear.solon.ai.harness.session.steer.SteerStatus;
 
@@ -25,7 +24,7 @@ class SessionValueObjectsTest {
 
     @Test
     void minimalConstructorFillsDefaults() {
-        SessionQueueItem item = new SessionQueueItem("id1", "hello", "cli", 1000L, "PENDING");
+        QueueItem item = new QueueItem("id1", "hello", "cli", 1000L, "PENDING");
 
         assertEquals("id1", item.getText().equals("hello") ? "id1" : "bad");
         assertEquals("hello", item.getText());
@@ -41,37 +40,37 @@ class SessionValueObjectsTest {
 
     @Test
     void blankIdIsGeneratedNotNull() {
-        SessionQueueItem a = new SessionQueueItem(null, "t", InputOrigin.NONE, 0, null);
+        QueueItem a = new QueueItem(null, "t", InputOrigin.NONE, 0, null);
         assertNotNull(a.getId());
         assertTrue(a.getId().startsWith("q_"));
 
-        SessionQueueItem b = new SessionQueueItem("   ", "t", InputOrigin.NONE, 0, null);
+        QueueItem b = new QueueItem("   ", "t", InputOrigin.NONE, 0, null);
         assertNotNull(b.getId());
         assertTrue(b.getId().startsWith("q_"));
 
         // 非空 id 原样保留（含 trim 后判断）
-        SessionQueueItem c = new SessionQueueItem(" keep ", "t", InputOrigin.NONE, 0, null);
+        QueueItem c = new QueueItem(" keep ", "t", InputOrigin.NONE, 0, null);
         assertEquals(" keep ", c.getId());
     }
 
     @Test
     void zeroCreatedAtFallsBackToNow() {
         long before = System.currentTimeMillis();
-        SessionQueueItem item = new SessionQueueItem("i", "t", InputOrigin.NONE, 0, null);
+        QueueItem item = new QueueItem("i", "t", InputOrigin.NONE, 0, null);
         assertTrue(item.getCreatedAt() >= before);
 
-        SessionQueueItem negative = new SessionQueueItem("i", "t", InputOrigin.NONE, -5, null);
+        QueueItem negative = new QueueItem("i", "t", InputOrigin.NONE, -5, null);
         assertTrue(negative.getCreatedAt() >= before);
     }
 
     @Test
     void statusIsNormalizedToOnlyTwoValues() {
-        assertEquals("RUNNING", new SessionQueueItem("i", "t", InputOrigin.NONE, 1, "running").getStatus());
-        assertEquals("RUNNING", new SessionQueueItem("i", "t", InputOrigin.NONE, 1, "RUNNING").getStatus());
-        assertEquals("PENDING", new SessionQueueItem("i", "t", InputOrigin.NONE, 1, "WHATEVER").getStatus());
-        assertEquals("PENDING", new SessionQueueItem("i", "t", InputOrigin.NONE, 1, null).getStatus());
+        assertEquals("RUNNING", new QueueItem("i", "t", InputOrigin.NONE, 1, "running").getStatus());
+        assertEquals("RUNNING", new QueueItem("i", "t", InputOrigin.NONE, 1, "RUNNING").getStatus());
+        assertEquals("PENDING", new QueueItem("i", "t", InputOrigin.NONE, 1, "WHATEVER").getStatus());
+        assertEquals("PENDING", new QueueItem("i", "t", InputOrigin.NONE, 1, null).getStatus());
 
-        SessionQueueItem item = new SessionQueueItem("i", "t", InputOrigin.NONE, 1, "PENDING");
+        QueueItem item = new QueueItem("i", "t", InputOrigin.NONE, 1, "PENDING");
         item.setStatus("running");
         assertEquals("RUNNING", item.getStatus());
         item.setStatus("bogus");
@@ -80,14 +79,14 @@ class SessionValueObjectsTest {
 
     @Test
     void nullOriginBecomesNoneInsteadOfNull() {
-        SessionQueueItem item = new SessionQueueItem("i", "t", (InputOrigin) null, 1, null);
+        QueueItem item = new QueueItem("i", "t", (InputOrigin) null, 1, null);
         assertNotNull(item.getOrigin());
         assertEquals(InputOrigin.NONE, item.getOrigin());
     }
 
     @Test
     void fullConstructorKeepsAllOptionalFields() {
-        SessionQueueItem item = new SessionQueueItem("i", "t", InputOrigin.NONE, 1, "PENDING",
+        QueueItem item = new QueueItem("i", "t", InputOrigin.NONE, 1, "PENDING",
                 "model-x", "high", "thinking", "sub-agent", true);
 
         assertEquals("model-x", item.getModel());
@@ -99,7 +98,7 @@ class SessionValueObjectsTest {
 
     @Test
     void sourceStyleConstructorBuildsOrigin() {
-        SessionQueueItem item = new SessionQueueItem("i", "t", "Feishu", 1, "PENDING",
+        QueueItem item = new QueueItem("i", "t", "Feishu", 1, "PENDING",
                 "m", "e", "th", "ag", false, "user-1", "chat-9", "msg-7");
 
         InputOrigin origin = item.getOrigin();
@@ -111,7 +110,7 @@ class SessionValueObjectsTest {
 
     @Test
     void claimedAtIsSettable() {
-        SessionQueueItem item = new SessionQueueItem("i", "t", InputOrigin.NONE, 1, "PENDING");
+        QueueItem item = new QueueItem("i", "t", InputOrigin.NONE, 1, "PENDING");
         assertNull(item.getClaimedAt());
         item.setClaimedAt(999L);
         assertEquals(999L, item.getClaimedAt());
@@ -121,7 +120,7 @@ class SessionValueObjectsTest {
 
     @Test
     void toMapExposesStableKeys() {
-        SessionQueueItem item = new SessionQueueItem("i", "text", InputOrigin.NONE, 1234L, "PENDING");
+        QueueItem item = new QueueItem("i", "text", InputOrigin.NONE, 1234L, "PENDING");
         Map<String, Object> map = item.toMap();
         assertNotNull(map);
         assertEquals("i", map.get("id"));

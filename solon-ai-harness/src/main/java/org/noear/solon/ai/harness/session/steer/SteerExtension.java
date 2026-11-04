@@ -38,7 +38,7 @@ import org.noear.solon.ai.harness.input.InputOrigin;
  * 端口注入、不需要每请求 {@code new SteerInterceptor(...)}，{@code new SteerExtension()}
  * 一个构造器适配全部宿主。</p>
  *
- * <p><b>未消费插话的持久化在 harness 内完成</b>（转 {@code SessionQueue}），
+ * <p><b>未消费插话的持久化在 harness 内完成</b>（转排队，QueueHelper），
  * 与有没有订阅者无关：CLI / Desktop 也能把残留插话转为排队任务，不会丢。</p>
  *
  * <p>插话投递（Web API / IM 命令共用）与取消直接在本类上中转。</p>
@@ -135,5 +135,143 @@ public class SteerExtension extends AbsHarnessExtension {
      */
     public java.util.List<SteerMessage> pending(AgentSession session) {
         return SteerInterceptor.pending(session);
+    }
+
+    /**
+     * 当前活跃轮次标识（由拦截器在每次请求装配时写入会话）。
+     *
+     * <p>宿主的「取消插话」需要先校验请求里的 runId 是否仍是当前轮次：
+     * 轮次已切换时旧 steerId 已无意义，必须回 TURN_CHANGED 而不是默默成功。
+     * 该值原本只能读 {@code session.attrs()} 里的内部 key（{@code web.activeRunId}），
+     * 字符串写错不会报错、只会静默失效，故收回到门面。</p>
+     *
+     * @return 当前轮次标识；无活跃轮次时为 null
+     */
+    public String activeRunId(AgentSession session) {
+        if (session == null) {
+            return null;
+        }
+
+        synchronized (session.attrs()) {
+            Object value = session.attrs().get(SteerInterceptor.ATTR_ACTIVE_RUN_ID);
+            return value instanceof String ? (String) value : null;
+        }
+    }
+
+    /**
+     * 清理上一任务的轮次标识与插话邮箱，并把未消费的插话转入排队（开流前调用）。
+     *
+     * <p>「新任务开流」必须先切断上一任务的邮箱，否则上一轮未消费的插话会在新任务第二轮被注入，
+     * 破坏任务级隔离。但残留不能静默丢弃（包括 HITL 挂起期间提交的插话）——因此本方法把
+     * 它们迁到会话队列，返回迁移结果供宿主就地广播。</p>
+     *
+     * <p>本方法把原本散在宿主里的内部约定收进 harness：此前宿主需要自己 synchronized 清两个
+     * attrs key，再调一次静态迁移方法，两处都要对应同一个内部常量。</p>
+     *
+     * @return 迁移结果（永不为 null）；调用方无须判空
+     */
+    @SuppressWarnings("unchecked")
+    public SteerHandover handover(AgentSession session) {
+        if (session == null) {
+            return SteerHandover.EMPTY;
+        }
+
+        java.util.Queue<SteerMessage> staleBox;
+        synchronized (session.attrs()) {
+            session.attrs().remove(SteerInterceptor.ATTR_ACTIVE_RUN_ID);
+            Object box = session.attrs().remove(SteerInterceptor.ATTR_STEER_BOX);
+            staleBox = box instanceof java.util.Queue ? (java.util.Queue<SteerMessage>) box : null;
+        }
+
+        if (staleBox == null || staleBox.isEmpty()) {
+            return SteerHandover.EMPTY;
+        }
+
+        java.util.List<SteerMessage> stale = new java.util.ArrayList<>(staleBox);
+        java.util.List<SteerMessage> failed = SteerInterceptor.enqueueIntoSessionQueue(session, stale);
+        java.util.List<SteerMessage> queued = new java.util.ArrayList<>(stale);
+        queued.removeAll(failed);
+
+        return new SteerHandover(queued, failed);
+    }
+
+    /**
+     * 插话交接结果（已成功转排队的 + 因队列满/超长而暂存待重试的）
+     *
+     * <p>两个列表都不为 null；均空时用 {@link #EMPTY} 表示「什么也没发生」。
+     */
+    public static final class SteerHandover {
+        private static final SteerHandover EMPTY =
+                new SteerHandover(java.util.Collections.emptyList(), java.util.Collections.emptyList());
+
+        private final java.util.List<SteerMessage> queued;
+        private final java.util.List<SteerMessage> failed;
+
+        public SteerHandover(java.util.List<SteerMessage> queued, java.util.List<SteerMessage> failed) {
+            this.queued = queued == null ? java.util.Collections.emptyList() : queued;
+            this.failed = failed == null ? java.util.Collections.emptyList() : failed;
+        }
+
+        /** 已成功转为排队任务的插话 */
+        public java.util.List<SteerMessage> getQueued() {
+            return queued;
+        }
+
+        /** 转入排队失败的插话（已回填易失邮箱，下次开流会重试） */
+        public java.util.List<SteerMessage> getFailed() {
+            return failed;
+        }
+
+        public boolean isEmpty() {
+            return queued.isEmpty() && failed.isEmpty();
+        }
+    }
+
+    // ==================== 常量（避免宿主引用内部实现常量） ====================
+
+    /** 单条插话的最大字符数（宿主做入参校验用，与拦截器实际截断口径一致） */
+    public static int maxTextLength() {
+        return SteerInterceptor.MAX_TEXT_LENGTH;
+    }
+
+    /** steerId 的最大字符数 */
+    public static int maxIdLength() {
+        return SteerInterceptor.MAX_ID_LENGTH;
+    }
+
+    /**
+     * 该消息是否为插话产物（据元数据/前缀判定）。
+     *
+     * <p>宿主展示历史时需从消息里反推「这条是插话」，此前只能自己拼
+     * {@code source=="steer"} + {@code "[用户实时补充] "} 前缀两个判断，
+     * 任一常量改名就会静默判错。</p>
+     */
+    public static boolean isSteerMessage(org.noear.solon.ai.chat.message.ChatMessage message) {
+        if (message == null) {
+            return false;
+        }
+
+        String content = message.getContent();
+        boolean marked = SteerInterceptor.STEER_SOURCE.equals(message.getMetadataAs("source"));
+        boolean prefixed = content != null && content.startsWith(SteerInterceptor.STEER_PREFIX);
+        return marked || prefixed;
+    }
+
+    /**
+     * 剥掉插话前缀（无前缀时原样返回）。
+     *
+     * <p>与 {@link #isSteerMessage} 配套：宿主展示时要去掉注入用的前缀，
+     * 但只对真有前缀的消息去——无条件按长度截断会吃掉正文。</p>
+     */
+    public static String stripSteerPrefix(String content) {
+        if (content == null) {
+            return null;
+        }
+
+        if (content.startsWith(SteerInterceptor.STEER_PREFIX)) {
+            return content.substring(SteerInterceptor.STEER_PREFIX.length());
+        }
+
+        return content;
     }
 }

@@ -23,8 +23,8 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.session.interrupt.SessionInterrupt;
-import org.noear.solon.ai.harness.session.queue.SessionQueue;
+import org.noear.solon.ai.harness.session.interrupt.InterruptHelper;
+import org.noear.solon.ai.harness.session.queue.QueueHelper;
 import org.noear.solon.ai.harness.util.TraceKeys;
 import reactor.core.Disposable;
 
@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@link SessionInterrupt} 契约（{@code engine.interrupt(session)} 与 {@code /interrupt} 的唯一实现）。
+ * {@link InterruptHelper} 契约（{@code engine.interrupt(session)} 与 {@code /interrupt} 的唯一实现）。
  *
  * <p>锁定四点：
  * <ol>
@@ -69,7 +69,7 @@ class SessionInterruptTest {
         AtomicInteger disposed = new AtomicInteger();
         SessionRuns.attach(session, countingDisposable(disposed));
 
-        assertTrue(SessionInterrupt.interrupt(session));
+        assertTrue(InterruptHelper.interrupt(session));
         assertEquals(1, disposed.get(), "框架登记的句柄必须被释放");
         assertFalse(SessionRuns.isBusy(session));
         assertEquals(1, session.getMessages().size());
@@ -77,14 +77,14 @@ class SessionInterruptTest {
 
     @Test
     void nullSessionIsSafeAndReturnsFalse() {
-        assertFalse(SessionInterrupt.interrupt(null));
+        assertFalse(InterruptHelper.interrupt(null));
     }
 
     @Test
     void noRunningTaskReturnsFalseAndWritesNothing() {
         AgentSession session = InMemoryAgentSession.of();
 
-        assertFalse(SessionInterrupt.interrupt(session));
+        assertFalse(InterruptHelper.interrupt(session));
         assertTrue(session.getMessages().isEmpty(), "无任务中断不得写取消消息");
     }
 
@@ -94,7 +94,7 @@ class SessionInterruptTest {
         AtomicInteger disposed = new AtomicInteger();
         SessionRuns.attach(session, countingDisposable(disposed));
 
-        assertTrue(SessionInterrupt.interrupt(session));
+        assertTrue(InterruptHelper.interrupt(session));
         assertEquals(1, disposed.get());
         assertEquals(1, session.getMessages().size());
         assertTrue(session.getMessages().get(0) instanceof AssistantMessage);
@@ -109,7 +109,7 @@ class SessionInterruptTest {
         session.getContext().put(TraceKeys.TRACE_KEY_MAIN, trace);
         SessionRuns.attach(session, countingDisposable(new AtomicInteger()));
 
-        SessionInterrupt.interrupt(session);
+        InterruptHelper.interrupt(session);
 
         AssistantMessage last = (AssistantMessage) session.getMessages().get(session.getMessages().size() - 1);
         assertNotNull(last.getMetadataAs(AgentTrace.META_RUN_ID));
@@ -121,32 +121,32 @@ class SessionInterruptTest {
         AgentSession session = InMemoryAgentSession.of();
         SessionRuns.attach(session, countingDisposable(new AtomicInteger()));
 
-        assertTrue(SessionInterrupt.interrupt(session));
+        assertTrue(InterruptHelper.interrupt(session));
         // 第二次：句柄已被移除 → 无任务分支，不得再写消息
-        assertFalse(SessionInterrupt.interrupt(session));
+        assertFalse(InterruptHelper.interrupt(session));
         assertEquals(1, session.getMessages().size());
     }
 
     @Test
     void cancelsPendingQueueItemsSoTheyAreNotRedispatched() {
         AgentSession session = InMemoryAgentSession.of();
-        SessionQueue.enqueue(session, "排队一", InputOrigin.channel("test"));
-        SessionQueue.enqueue(session, "排队二", InputOrigin.channel("test"));
+        QueueHelper.enqueue(session, "排队一", InputOrigin.channel("test"));
+        QueueHelper.enqueue(session, "排队二", InputOrigin.channel("test"));
         SessionRuns.attach(session, countingDisposable(new AtomicInteger()));
 
-        assertTrue(SessionQueue.hasItems(session));
-        assertTrue(SessionInterrupt.interrupt(session));
-        assertFalse(SessionQueue.hasItems(session), "中断必须连带取消排队项，否则停流后又被续发");
-        assertEquals(0, SessionQueue.pendingSize(session));
+        assertTrue(QueueHelper.hasItems(session));
+        assertTrue(InterruptHelper.interrupt(session));
+        assertFalse(QueueHelper.hasItems(session), "中断必须连带取消排队项，否则停流后又被续发");
+        assertEquals(0, QueueHelper.pendingSize(session));
     }
 
     @Test
     void cancelsQueueEvenWhenNoStreamIsRunning() {
         // 关键顺序契约：先清队列，再判断流句柄。没有流但有排队项时也必须清干净。
         AgentSession session = InMemoryAgentSession.of();
-        SessionQueue.enqueue(session, "排队一", InputOrigin.channel("test"));
+        QueueHelper.enqueue(session, "排队一", InputOrigin.channel("test"));
 
-        assertFalse(SessionInterrupt.interrupt(session), "无运行流时返回 false");
-        assertEquals(0, SessionQueue.pendingSize(session), "排队项仍必须被取消");
+        assertFalse(InterruptHelper.interrupt(session), "无运行流时返回 false");
+        assertEquals(0, QueueHelper.pendingSize(session), "排队项仍必须被取消");
     }
 }

@@ -20,7 +20,7 @@ import java.util.Map;
  * <p>与宿主（CLI/Web/IM 入口）之间的运行时契约是 {@link AgentSession#attrs()} 中的
  * 短横线 key（一字不改，任何一侧不得私自重命名）：</p>
  * <ul>
- *   <li>{@code session.queue}：待执行队列本体（Deque&lt;SessionQueueItem&gt;，运行态）</li>
+ *   <li>{@code session.queue}：待执行队列本体（Deque&lt;QueueItem&gt;，运行态）</li>
  *   <li>{@code session.queue.generation}：清空代际（cancelPending 递增，用于拒绝旧代际 requeue）</li>
  *   <li>{@code session.queue.claim}：领取权（同一时刻仅一个运行者可 poll）</li>
  *   <li>{@code session.queue.inFlight}：当前运行中的任务（RUNNING 状态本体）</li>
@@ -31,8 +31,12 @@ import java.util.Map;
  * 任何队列变更后调用 {@link AgentSession#updateSnapshot()} 随会话快照一并落盘
  * ——快照即持久化，不再使用独立的 queue-tasks.json 文件。attrs 为瞬态内存，
  * 首次访问队列时从快照投影 hydrate（RUNNING 项重置为 PENDING 并恢复到队首）。</p>
+ *
+ * <p><b>宿主接入方式</b>：宿主（CLI/Web/IM 入口）应优先使用 {@link QueueExtension}
+ * 门面（经 {@code engine.getExtension(QueueExtension.class)} 获取），本类的静态方法
+ * 属于内核实现，仅供门面与测试使用，新宿主代码不应直接依赖。</p>
  */
-public final class SessionQueue {
+public final class QueueHelper {
     public static final int MAX_QUEUE_SIZE = 20;
     public static final int MAX_TEXT_LENGTH = 4096;
     private static final String ATTR_QUEUE = "session.queue";
@@ -41,35 +45,35 @@ public final class SessionQueue {
     private static final String ATTR_IN_FLIGHT = "session.queue.inFlight";
     /** 会话上下文 data() 中的持久化投影 key（List&lt;Map&gt;，运行中任务在首位）。 */
     private static final String KEY_ITEMS = "session.queue.items";
-    private SessionQueue() { }
+    private QueueHelper() { }
 
     /** 运行态队列：attrs 优先，缺失时从快照投影 hydrate（投影有内容即重建，与 create 无关）。
      *  调用方必须持有 attrs 锁。 */
     @SuppressWarnings("unchecked")
-    private static Deque<SessionQueueItem> queue(AgentSession session, boolean create) {
+    private static Deque<QueueItem> queue(AgentSession session, boolean create) {
         Object value = session == null ? null : session.attrs().get(ATTR_QUEUE);
-        if (value instanceof Deque) return (Deque<SessionQueueItem>) value;
-        Deque<SessionQueueItem> hydrated = hydrateLocked(session);
+        if (value instanceof Deque) return (Deque<QueueItem>) value;
+        Deque<QueueItem> hydrated = hydrateLocked(session);
         if (!hydrated.isEmpty()) {
             session.attrs().put(ATTR_QUEUE, hydrated);
             return hydrated;
         }
         if (!create) return null;
-        Deque<SessionQueueItem> result = new ArrayDeque<>();
+        Deque<QueueItem> result = new ArrayDeque<>();
         session.attrs().put(ATTR_QUEUE, result);
         return result;
     }
 
     /** 从会话上下文快照投影重建队列；上一次进程领取过（RUNNING）的任务恢复到队首。 */
-    private static Deque<SessionQueueItem> hydrateLocked(AgentSession session) {
-        Deque<SessionQueueItem> result = new ArrayDeque<>();
+    private static Deque<QueueItem> hydrateLocked(AgentSession session) {
+        Deque<QueueItem> result = new ArrayDeque<>();
         Object projection = session == null || session.getContext() == null
                 ? null : session.getContext().data().get(KEY_ITEMS);
         if (!(projection instanceof List)) return result;
-        List<SessionQueueItem> runnings = new ArrayList<>();
-        List<SessionQueueItem> pendings = new ArrayList<>();
+        List<QueueItem> runnings = new ArrayList<>();
+        List<QueueItem> pendings = new ArrayList<>();
         for (Object row : (List<?>) projection) {
-            SessionQueueItem item = row instanceof Map ? SessionQueueItem.fromMap((Map<String, Object>) row) : null;
+            QueueItem item = row instanceof Map ? QueueItem.fromMap((Map<String, Object>) row) : null;
             if (item == null) continue;
             if ("RUNNING".equals(item.getStatus())) {
                 // RUNNING 只代表上一次进程曾领取过；新进程没有内存中的 in-flight 时必须恢复到队首。
@@ -80,18 +84,18 @@ public final class SessionQueue {
                 pendings.add(item);
             }
         }
-        for (SessionQueueItem item : runnings) result.offerLast(item);
-        for (SessionQueueItem item : pendings) result.offerLast(item);
+        for (QueueItem item : runnings) result.offerLast(item);
+        for (QueueItem item : pendings) result.offerLast(item);
         return result;
     }
 
     /** 把队列写入会话上下文投影并保存快照（调用方必须持有 attrs 锁；空队列移除投影）。 */
-    private static void saveLocked(AgentSession session, Deque<SessionQueueItem> queue) {
+    private static void saveLocked(AgentSession session, Deque<QueueItem> queue) {
         if (session == null || session.getContext() == null) return;
         List<Map<String, Object>> rows = new ArrayList<>();
         Object inFlight = session.attrs().get(ATTR_IN_FLIGHT);
-        if (inFlight instanceof SessionQueueItem) rows.add(((SessionQueueItem) inFlight).toMap());
-        for (SessionQueueItem item : queue) if (item != null) rows.add(item.toMap());
+        if (inFlight instanceof QueueItem) rows.add(((QueueItem) inFlight).toMap());
+        for (QueueItem item : queue) if (item != null) rows.add(item.toMap());
         if (rows.isEmpty()) session.getContext().data().remove(KEY_ITEMS);
         else session.getContext().data().put(KEY_ITEMS, rows);
         session.updateSnapshot();
@@ -122,14 +126,14 @@ public final class SessionQueue {
         String normalized = text.trim();
         if (normalized.isEmpty() || normalized.length() > MAX_TEXT_LENGTH) return -1;
         synchronized (session.attrs()) {
-            Deque<SessionQueueItem> q = queue(session, true);
+            Deque<QueueItem> q = queue(session, true);
             if (q.size() >= MAX_QUEUE_SIZE) return -1;
             if (id != null) {
-                for (SessionQueueItem existing : q) if (id.equals(existing.getId())) return -1;
+                for (QueueItem existing : q) if (id.equals(existing.getId())) return -1;
                 Object running = session.attrs().get(ATTR_IN_FLIGHT);
-                if (running instanceof SessionQueueItem && id.equals(((SessionQueueItem) running).getId())) return -1;
+                if (running instanceof QueueItem && id.equals(((QueueItem) running).getId())) return -1;
             }
-            SessionQueueItem item = new SessionQueueItem(id, normalized,
+            QueueItem item = new QueueItem(id, normalized,
                     origin, System.currentTimeMillis(), "PENDING", model, reasoningEffort,
                     thinkingMode, selectedAgent, hasFiles);
             q.offerLast(item);
@@ -142,17 +146,17 @@ public final class SessionQueue {
     public static int pendingSize(AgentSession session) {
         if (session == null) return 0;
         synchronized (session.attrs()) {
-            Deque<SessionQueueItem> q = queue(session, false);
+            Deque<QueueItem> q = queue(session, false);
             return q == null ? 0 : q.size();
         }
     }
 
-    public static SessionQueueItem poll(AgentSession session) {
+    public static QueueItem poll(AgentSession session) {
         if (session == null) return null;
         synchronized (session.attrs()) {
-            Deque<SessionQueueItem> q = queue(session, false);
-            if (q == null || session.attrs().get(ATTR_IN_FLIGHT) instanceof SessionQueueItem) return null;
-            SessionQueueItem item = q.pollFirst();
+            Deque<QueueItem> q = queue(session, false);
+            if (q == null || session.attrs().get(ATTR_IN_FLIGHT) instanceof QueueItem) return null;
+            QueueItem item = q.pollFirst();
             if (item == null) return null;
             item.setStatus("RUNNING");
             item.setClaimedAt(System.currentTimeMillis());
@@ -166,8 +170,8 @@ public final class SessionQueue {
         if (session == null) return false;
         synchronized (session.attrs()) {
             if (Boolean.TRUE.equals(session.attrs().get(ATTR_CLAIM))) return false;
-            Deque<SessionQueueItem> q = queue(session, false);
-            if ((q == null || q.isEmpty()) && !(session.attrs().get(ATTR_IN_FLIGHT) instanceof SessionQueueItem)) return false;
+            Deque<QueueItem> q = queue(session, false);
+            if ((q == null || q.isEmpty()) && !(session.attrs().get(ATTR_IN_FLIGHT) instanceof QueueItem)) return false;
             session.attrs().put(ATTR_CLAIM, Boolean.TRUE); return true;
         }
     }
@@ -178,17 +182,17 @@ public final class SessionQueue {
         if (session == null || id == null) return false;
         synchronized (session.attrs()) {
             Object value = session.attrs().get(ATTR_IN_FLIGHT);
-            if (!(value instanceof SessionQueueItem) || !id.equals(((SessionQueueItem)value).getId())) return false;
+            if (!(value instanceof QueueItem) || !id.equals(((QueueItem)value).getId())) return false;
             session.attrs().remove(ATTR_IN_FLIGHT);
             saveLocked(session, queue(session, true));
             return true;
         }
     }
-    public static boolean requeueFront(AgentSession session, SessionQueueItem item, long generation) {
+    public static boolean requeueFront(AgentSession session, QueueItem item, long generation) {
         if (session == null || item == null) return false;
         synchronized (session.attrs()) {
             if (!isGenerationActive(session, generation)) return false;
-            Deque<SessionQueueItem> q = queue(session, true);
+            Deque<QueueItem> q = queue(session, true);
             // in-flight 回收不能因 pending 已满而丢失；允许短暂保留一个恢复槽位。
             if (q.size() > MAX_QUEUE_SIZE) return false;
             item.setStatus("PENDING"); item.setClaimedAt(null); q.offerFirst(item);
@@ -200,9 +204,9 @@ public final class SessionQueue {
     public static boolean cancelItem(AgentSession session, String itemId) {
         if (session == null || itemId == null) return false;
         synchronized (session.attrs()) {
-            Deque<SessionQueueItem> q = queue(session, true);
-            SessionQueueItem found = null;
-            for (SessionQueueItem item : q) {
+            Deque<QueueItem> q = queue(session, true);
+            QueueItem found = null;
+            for (QueueItem item : q) {
                 if (itemId.equals(item.getId())) { found = item; break; }
             }
             if (found == null) return false;
@@ -215,9 +219,9 @@ public final class SessionQueue {
     public static boolean promote(AgentSession session, String itemId) {
         if (session == null || itemId == null) return false;
         synchronized (session.attrs()) {
-            Deque<SessionQueueItem> q = queue(session, true);
-            SessionQueueItem found = null;
-            for (SessionQueueItem item : q) if (itemId.equals(item.getId())) { found = item; break; }
+            Deque<QueueItem> q = queue(session, true);
+            QueueItem found = null;
+            for (QueueItem item : q) if (itemId.equals(item.getId())) { found = item; break; }
             if (found == null) return false;
             q.remove(found);
             q.offerFirst(found);
@@ -229,9 +233,9 @@ public final class SessionQueue {
     public static boolean cancelPending(AgentSession session) {
         if (session == null) return false;
         synchronized (session.attrs()) {
-            Deque<SessionQueueItem> q = queue(session, true);
+            Deque<QueueItem> q = queue(session, true);
             Object inFlight = session.attrs().get(ATTR_IN_FLIGHT);
-            boolean hadItems = !q.isEmpty() || inFlight instanceof SessionQueueItem;
+            boolean hadItems = !q.isEmpty() || inFlight instanceof QueueItem;
             q.clear();
             session.attrs().remove(ATTR_IN_FLIGHT);
             session.attrs().put(ATTR_GENERATION, generation(session) + 1);
@@ -243,32 +247,32 @@ public final class SessionQueue {
     }
 
     /** 统一视图：运行中任务（若有）在首位，其余为待执行（供队列展示接口使用）。 */
-    public static List<SessionQueueItem> view(AgentSession session) {
-        List<SessionQueueItem> result = new ArrayList<>();
+    public static List<QueueItem> view(AgentSession session) {
+        List<QueueItem> result = new ArrayList<>();
         if (session == null) return result;
         synchronized (session.attrs()) {
             Object inFlight = session.attrs().get(ATTR_IN_FLIGHT);
-            if (inFlight instanceof SessionQueueItem) result.add((SessionQueueItem) inFlight);
-            Deque<SessionQueueItem> q = queue(session, false);
+            if (inFlight instanceof QueueItem) result.add((QueueItem) inFlight);
+            Deque<QueueItem> q = queue(session, false);
             if (q != null) result.addAll(q);
         }
         return result;
     }
 
-    public static List<SessionQueueItem> snapshot(AgentSession session) {
+    public static List<QueueItem> snapshot(AgentSession session) {
         if (session == null) return new ArrayList<>();
         synchronized (session.attrs()) {
-            return new ArrayList<>(queue(session, false) == null ? new ArrayDeque<SessionQueueItem>() : queue(session, false));
+            return new ArrayList<>(queue(session, false) == null ? new ArrayDeque<QueueItem>() : queue(session, false));
         }
     }
-    public static int size(AgentSession session) { if (session == null) return 0; synchronized(session.attrs()) { Deque<SessionQueueItem> q=queue(session,false); return (q == null ? 0 : q.size()) + (session.attrs().get(ATTR_IN_FLIGHT) instanceof SessionQueueItem ? 1 : 0); } }
+    public static int size(AgentSession session) { if (session == null) return 0; synchronized(session.attrs()) { Deque<QueueItem> q=queue(session,false); return (q == null ? 0 : q.size()) + (session.attrs().get(ATTR_IN_FLIGHT) instanceof QueueItem ? 1 : 0); } }
 
     /** 该会话是否有任务（含待执行与运行中）。 */
     public static boolean hasItems(AgentSession session) {
         if (session == null) return false;
         synchronized (session.attrs()) {
-            if (session.attrs().get(ATTR_IN_FLIGHT) instanceof SessionQueueItem) return true;
-            Deque<SessionQueueItem> q = queue(session, false);
+            if (session.attrs().get(ATTR_IN_FLIGHT) instanceof QueueItem) return true;
+            Deque<QueueItem> q = queue(session, false);
             return q != null && !q.isEmpty();
         }
     }
@@ -289,18 +293,18 @@ public final class SessionQueue {
     public static int importItems(AgentSession session, List<Map<String, Object>> rows) {
         if (session == null || rows == null || rows.isEmpty()) return 0;
         synchronized (session.attrs()) {
-            Deque<SessionQueueItem> q = queue(session, true);
-            List<SessionQueueItem> runnings = new ArrayList<>();
-            List<SessionQueueItem> pendings = new ArrayList<>();
+            Deque<QueueItem> q = queue(session, true);
+            List<QueueItem> runnings = new ArrayList<>();
+            List<QueueItem> pendings = new ArrayList<>();
             int total = q.size();
             for (Map<String, Object> row : rows) {
                 if (total >= MAX_QUEUE_SIZE) break;
-                SessionQueueItem item = SessionQueueItem.fromMap(row);
+                QueueItem item = QueueItem.fromMap(row);
                 if (item == null) continue;
                 boolean duplicated = false;
-                for (SessionQueueItem existing : q) if (item.getId().equals(existing.getId())) { duplicated = true; break; }
-                for (SessionQueueItem existing : runnings) if (item.getId().equals(existing.getId())) { duplicated = true; break; }
-                for (SessionQueueItem existing : pendings) if (item.getId().equals(existing.getId())) { duplicated = true; break; }
+                for (QueueItem existing : q) if (item.getId().equals(existing.getId())) { duplicated = true; break; }
+                for (QueueItem existing : runnings) if (item.getId().equals(existing.getId())) { duplicated = true; break; }
+                for (QueueItem existing : pendings) if (item.getId().equals(existing.getId())) { duplicated = true; break; }
                 if (duplicated) continue;
                 total++;
                 if ("RUNNING".equals(item.getStatus())) {
@@ -313,10 +317,41 @@ public final class SessionQueue {
             }
             // RUNNING 项恢复到队首（保持相对顺序），再接原队头与待执行项。
             for (int i = runnings.size() - 1; i >= 0; i--) q.offerFirst(runnings.get(i));
-            for (SessionQueueItem item : pendings) q.offerLast(item);
+            for (QueueItem item : pendings) q.offerLast(item);
             int imported = runnings.size() + pendings.size();
             if (imported > 0) saveLocked(session, q);
             return imported;
+        }
+    }
+
+    //==============
+
+
+    public static boolean drainOne(AgentSession session, QueueTaskRunner runner) {
+        return drainOne(session, runner, true);
+    }
+
+    /** 异步运行者在终态确认；同步运行者可在回调返回时确认。 */
+    public static boolean drainOne(AgentSession session, QueueTaskRunner runner, boolean acknowledgeOnReturn) {
+        if (session == null || runner == null || !QueueHelper.tryClaim(session)) return false;
+        QueueItem item = QueueHelper.poll(session);
+        if (item == null) {
+            QueueHelper.releaseClaim(session);
+            return false;
+        }
+        long generation = QueueHelper.generation(session);
+        try {
+            runner.run(item);
+            if (acknowledgeOnReturn && !QueueHelper.acknowledge(session, item.getId())) {
+                QueueHelper.requeueFront(session, item, generation);
+                return false;
+            }
+            return true;
+        } catch (Throwable e) {
+            QueueHelper.requeueFront(session, item, generation);
+            return false;
+        } finally {
+            QueueHelper.releaseClaim(session);
         }
     }
 }

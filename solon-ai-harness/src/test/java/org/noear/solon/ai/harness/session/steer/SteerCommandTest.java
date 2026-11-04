@@ -5,6 +5,7 @@ import org.noear.solon.ai.harness.input.InputOrigin;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.command.builtin.Fakes;
+import org.noear.solon.ai.harness.session.queue.QueueHelper;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -103,6 +104,6 @@ class SteerCommandTest {
     }
 
     private static int queuePending(AgentSession session) {
-        return org.noear.solon.ai.harness.session.queue.SessionQueue.pendingSize(session);
+        return QueueHelper.pendingSize(session);
     }
 }
