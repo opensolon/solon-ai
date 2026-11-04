@@ -150,6 +150,37 @@ public class QueueExtension extends AbsHarnessExtension {
     }
 
     /**
+     * 领取并执行队首一条（带「现在能不能接」的原子谓词）。
+     *
+     * <p>与 {@link #claimNext(AgentSession, QueueClaimHandler)} 的差别：谓词在领取权的
+     * <b>同一把会话锁内</b>求值，途中不存在「刚判完空闲、领取前已被占」的窗口，
+     * 宿主不需要再写 {@code synchronized (session.attrs())} 与代际复核。</p>
+     *
+     * @param canAccept 现在能不能接（null = 不预判）；false 时不消耗队列项、不占领取权
+     * @since 4.2.2
+     */
+    public DrainStatus claimNext(AgentSession session, java.util.function.Predicate<AgentSession> canAccept,
+                                QueueClaimHandler handler) {
+        if (isEnabled() == false) {
+            return DrainStatus.NO_TASK;
+        }
+        return QueueHelper.claimNext(session, canAccept, handler);
+    }
+
+    /**
+     * 收口当前派发事务：成功确认 / 失败回滚到队首，并注销登记。
+     *
+     * <p>无未收口派发时为空操作（幂等），故调用方无需先判空。</p>
+     *
+     * @param started true = 已正常跑起来；false = 启动失败（回滚到队首）
+     * @since 4.2.2
+     */
+    public boolean settleDispatch(AgentSession session, boolean started) {
+        QueueDispatch dispatch = QueueHelper.currentDispatch(session);
+        return dispatch != null && dispatch.settle(started);
+    }
+
+    /**
      * 连续领取直到「本轮真的一启动了任务」或「队列空」或「不能再接单」。
      *
      * <p><b>为何要有这个方法</b>：队列续发不是一个简单循环——它需要回答三个问题：
@@ -185,11 +216,13 @@ public class QueueExtension extends AbsHarnessExtension {
         // 单次调用最多续发一轮队列容量：正常情况下每条领取都会消耗一个待执行项，
         // 这里的上限只是防御「宿主 handler 把同一项反复塞回」的失控情形，不应被触达。
         for (int guard = 0; guard <= QueueHelper.MAX_QUEUE_SIZE; guard++) {
+            // 本处只是快速出口（省一次入锁构造），权威判定在 claimNext 内部与领取权同一把锁完成。
+            // 两处都判不是冗余防御，而是「能看见就早退」，不要把这里当成唯一关卡。
             if (canDrain != null && !canDrain.test(session)) {
                 return last;
             }
 
-            DrainStatus status = QueueHelper.claimNext(session, handler);
+            DrainStatus status = QueueHelper.claimNext(session, canDrain, handler);
             if (status != DrainStatus.STARTED) {
                 return status;
             }

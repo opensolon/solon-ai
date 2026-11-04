@@ -607,9 +607,9 @@ public class FullHost {
 3. **代理名必须沿用 `outcome.getAgentName()`**——它是「本轮生效代理」，由显式入参优先、会话级 `CTX_AGENT_SELECTED` 兜底解析。trace 按代理名分 key，换回主代理会取不到挂起的 `tool_calls`，表现为续跑空转。
 4. **续流时机由引擎判定，宿主只管事实**——不要用 `HITL.getPendingTasks(session)` 自己数整批是否齐备（该集合含已决策项，`isEmpty()` 在刚写入首张决策后仍为 false，用它判定会把已经齐备的批永远卡住）；该集合只用于「展示下一张未决卡」。齐备判定统一读 `outcome.getPendingHitlCount()`。
 
-### 3.6 受理控制：两个宿主常写错的地方已收归引擎
+### 3.6 受理控制：三个宿主常写错的地方已收归引擎
 
-`handle` 返回后到真正接流之间有一段「已受理、尚未登记运行流」的窗口。并发请求若各自看到空闲，会同时开流、共用一个 `ReActTrace`，表现为「刚发出就秒结束」或「两条流互相覆盖」。这段窗口与「忙态放行判定」都是宿主每次都要做的事，现已各有一个引擎入口：
+`handle` 返回后到真正接流之间有一段「已受理、尚未登记运行流」的窗口。并发请求若各自看到空闲，会同时开流、共用一个 `ReActTrace`，表现为「刚发出就秒结束」或「两条流互相覆盖」。这段窗口、HITL 挂起期的受理判定、以及「忙态放行判定」，都是宿主每次都要做的事，现已各有一个引擎入口：
 
 **① 占用与释放：`InputGate`**
 
@@ -630,7 +630,37 @@ try (InputGate.Ticket ticket = InputGate.tryAcquire(session)) {
 - **由队列派发的那一轮不要占位**：它本身就是在空闲时被领取的，再占位会让同步完成的命令误判成忙态；
 - 判定口径刻意**不含 HITL 待审批**——审批挂起时引擎里没有运行流，是否接受旁路输入属于受理策略，由宿主用 `SessionStatus.isOccupied()` 自己先判。
 
-**② 忙态放行：`isBusyBypassCommand`**
+**② HITL 挂起时不要开新回合（推荐宿主都这么做）**
+
+`handle()` 在 `pendingHitl > 0` 时不走续流分支，会把新输入当成**一条全新的普通回合**。于是新的运行流与旧的未决 trace 并存，用户随后点「同意」时 `resume(true)` 若被运行态认领拒绝，表现为「审批点了没反应」，若没被拒绝则是两条流交叉写快照。**这两种都难以诊断，所以应在受理层就拒掉。**
+
+```java
+// 受理层（入口处）：拒绝并显式提示，不要入队
+// 入队是更差的选择：审批可能永远不处理（用户走了），输入会堆积在审批之后，恢复时一次性执行一批过期指令
+if (!engine.isBusyBypassCommand(input) && engine.status(session).hasPendingHitl()) {
+    emit("hitl_pending", HitlCard.next(session));   // 把待审批工具名一并发给前端
+    return;                                         // 不 handle、不起流
+}
+```
+
+需要豁免的三类（缺一个就会把审批本身也拒掉）：
+
+| 输入 | 为何豁免 |
+|---|---|
+| 审批决策（`hitlAction` 非空） | 它本身就是来解开挂起的，拒掉就死锁 |
+| `resume(true)` 续流 | 同上，只是不带新文本的续跑 |
+| `isBusyBypassCommand(input)` | `/interrupt` 这类旁路命令必须能随时放行 |
+| 队列派发的一轮 | 派发的是审批前就已入队的任务。**两难**：不豁免则队列在审批期间凝固；豁免则有把握用户会处理审批 |
+
+口径提醒：`isBusy()` 只表示「有活跃流」，**没有**HITL。所以用 `isBusy` 做受理判定一定会漏；三者要分清：
+
+| 判定 | 含义 | 用在哪 |
+|---|---|---|
+| `isBusy()` | 有活跃流 | 流生命周期、事件编排 |
+| `isOccupied()` | 不应开新回合（含 HITL 挂起、受理窗口） | **受理判定** |
+| `hasPendingHitl()` | 有待决策的工具调用 | 提示文案、前端状态 |
+
+**③ 忙态放行：`isBusyBypassCommand`**
 
 ```java
 // 不要自己「解析命令名 → 查注册表 → 读 terminalOnly/runnableWhenBusy」
@@ -1161,16 +1191,16 @@ engine.setExtensionEnabled(queue, false);
 **首选：`claimNext`（一次领取 = 一个 `QueueClaim`）**
 
 ```java
-// 领取并启动；终态由 claim 收口，异步运行者长期持有 claim
+// 领取并启动；终态由 dispatch 收口，异步运行者长期持有它就够了
 DrainStatus status = queue.claimNext(session, claim -> {
     QueueItem item = claim.getItem();      // 领域对象由 harness 交给你，不用自己存取强转
     setReplyRoute(session, item.getOrigin());
-    startTurnAsync(session, claim);        // 把 claim 一并带下去
+    startTurnAsync(session, item);          // 宿主持有的只是纯业务参数
 });
 if (status == DrainStatus.STARTED) {
-    // 已启动：终态时（任意线程、任意时刻）
-    //   claim.acknowledge();   // 成功
-    //   claim.rollback();      // 启动/执行失败，回队首
+    // 终态时（任意线程、任意时刻），从会话取回派发事务并收口：
+    //   queue.settleDispatch(session, true);    // 成功
+    //   queue.settleDispatch(session, false);   // 启动/执行失败，回队首
 }
 ```
 
@@ -1183,16 +1213,52 @@ if (status == DrainStatus.STARTED) {
 ```java
 // 一次调用把当前能发的都发完；终止条件与 START_FAILED 不重试的规则由 harness 负责
 queue.drainLoop(session, s -> !SessionActivity.isBusy(s), claim -> {
-    registerTurn(session, claim);            // 把 claim 存下来供流终态收口
-    startTurnAsync(session, claim.getItem());
+    QueueItem item = claim.getItem();
+    startTurnAsync(session, item);
+    // 同步完成的命令（如 /status）可当场收口：
+    if (!SessionActivity.isBusy(session)) queue.settleDispatch(session, true);
 });
 ```
 
 `canDrain` 传 `null` 表示不预判，完全由队列状态决定。终止条件：谓词返回 `false`、领取结果为 `NO_TASK`、`START_FAILED`（不重试）、或启动成功后队列已空。
 
-> **为何要比 `claimNext` 多一个方法**：续发不是一个简单循环——它要同时处理「现在能不能接」（宿主自己的忙态语义，harness 无从得知）、「上一条是否真启动成功」（`START_FAILED` 时立即重试就是死循环）、「启动后还要不要继续」。此前每个宿主都得自己写一遍递归 + 三态判定，写错任何一处就是要么漏发、要么狂循环。需要逐条干涉的宿主继续用 `claimNext`。
+> 谓词在**领取权的同一把会话锁内**求值（`claimNext(session, canAccept, handler)`）。因此宿主不需要再写 `synchronized (session.attrs())` 包住派发、也不需要领完再复核一次忙态——那种写法两次判定之间必然有窗口。
+
+#### 派发事务：`QueueDispatch`（宿主零 attrs 的关键）
+
+异步任务会在别的线程结束，宿主必须回答两个问题：**本轮输入是不是队列派发？该用哪个 claim 收口？** 这两件事以前只能由宿主自建内部类 + 私有键 + 两处 `synchronized` 重新记一份，换一端就要重写。现在归 harness：
+
+```java
+// 输入入口：判断「这是一轮队列派发，不要再占受理位、不要自己入队」
+QueueDispatch turn = QueueDispatch.current(session);
+boolean dispatched = turn != null && turn.isOnDispatchThread();
+if (turn != null && turn.getItem() != null) {
+    setReplyRoute(session, turn.getOrigin());   // 回复路由也从事务里取
+}
+
+// 流终态（异步线程）：判断「启动失败后不要立即续发」，否则会无限循环
+boolean queued = QueueDispatch.current(session) != null;
+queue.settleDispatch(session, false);
+if (!queued) drainSessionQueue(session);
+```
+
+| 方法 | 语义 |
+|---|---|
+| `QueueDispatch.current(session)` | 会话当前未收口的派发事务（无则 `null`），任意线程可读。静态入口，无需先拿到扩展实例 |
+| `turn.getItem()` / `turn.getOrigin()` | 本轮任务与回复路由来源 |
+| `turn.isOnDispatchThread()` | 当前线程**就在**派发调用栈里（入口判定用） |
+| `turn.isCurrent()` | 仍是会话当前事务（跨线程判定用） |
+| `settleDispatch(session, started)` / `turn.settle(started)` | 收口并注销，幂等；无事务时为空操作 |
+
+> **收口的两条路径都必须注销登记**：`turn.settle(...)` 会先交给内核收口再注销；直接调 `claim.acknowledge()` / `claim.rollback()` 也**会**注销（注销跟着 claim 的状态迁移走，不跟着调用入口走）。后者是必需的——README 上面的终态示例就是直接确认 claim，若注销只挂在 `settle` 上，这条路径会留下永久登记，会话此后恒被视为「有未收口派发」，队列续发被自己的残留挡死。
+
+> **`isOnDispatchThread()` 与 `isCurrent()` 切勿混用**：异步订阅失败发生在 `boundedElastic` 上，用线程判定必然得到 `false`，于是「回滚到队首 → 立即续发 → 又领到同一条 → 再失败」形成死循环。入口用前者，流终态用后者。
+
+> **用户 Stop（`cancelPending`）本身就意味着「本轮作废」**：它在清队列、递增代际的同时会注销派发登记。因此 Stop 之后无论流终态走 `settle(true)` 还是 `settle(false)`，登记都不会残留。反之若注销只依赖「收口成功」，Stop 后 `acknowledge()` 必然失败（in-flight 已被清），登记就永远留着——会话恒被当作「有未收口派发」，`failStreamTurn` 的跨线程判定据此误认为这是队列派发而静默跳过续发，队列从此瞎一轮且不报错。
 
 **兼容：`drainOne`（同步语义，仅限 CLI 交互循环）**
+
+> 门面上只保留这一个 `drainOne`。历史上并存的 `drainOne(runner, false)` 异步变体已删除：它们组合起来正是上一节那个竞态的「合法用法」（宿主在终态现取代际 → 恒真 → 被 Stop 的任务复活）。异步语义一律走 `claimNext` + `QueueDispatch.settle`。
 
 ```java
 // 回调返回即认为执行完毕并确认
@@ -1212,8 +1278,11 @@ while (queue.drainOne(session, item -> runOneTurn(session, item))) {
 | `enqueue(session, text)` | 入队，返回位置（从 1 计），-1 = 失败；来源缺省为 `channel("queue")` |
 | `enqueue(session, text, origin)` | 入队，携带渠道来源（命令路径用） |
 | `enqueue(...)` 九参重载 | 带 id 去重 / model / effort / agent / files（HTTP 重试幂等） |
-| **`claimNext(session, handler)`** | **领取并启动，返回 `DrainStatus`；终态用 `QueueClaim.acknowledge/rollback` 收口** |
+| **`claimNext(session, handler)`** | **领取并启动，返回 `DrainStatus`；终态用 `settleDispatch` 收口** |
+| **`claimNext(session, canAccept, handler)`** | **同上，且「能不能接」与领取在同一锁内求值（宿主免写 synchronized）** |
 | **`drainLoop(session, canDrain, handler)`** | **连发整条队列：循环与终止条件（含 START_FAILED 不重试）由 harness 负责** |
+| **`currentDispatch(session)`** | **当前未收口的派发事务（`QueueDispatch`，无则 null）；宿主判定「是否队列派发」的唯一来源** |
+| **`settleDispatch(session, started)`** | **收口当前派发事务（成功确认 / 失败回队首），幂等** |
 | `drainOne(session, runner)` | 领取并执行队首一条（同步语义：返回即确认；异步任务请用 `claimNext`） |
 | `pendingSize` / `hasItems` | 待执行数 / 是否有任务 |
 | **`viewRows(session)`** | **展示视图（`QueueItemView`）；对外 API 的**唯一**入口** |
@@ -1314,8 +1383,11 @@ int imported = queue.importItems(session, legacyRows);   // rows 为 Map 列表�
 |---|---|
 | `session.queue` | 待执行队列本体（`Deque<QueueItem>`，运行态） |
 | `session.queue.generation` | 清空代际（`cancelPending` 递增） |
-| `session.queue.claim` | 领取权（同一时刻仅一个运行者） |
+| `session.queue.claim` | 领取权（同一时刻仅一个运行者，`claimNext` 调用栈内存活） |
 | `session.queue.inFlight` | 当前运行中的任务 |
+| `session.queue.dispatch` | **跨线程存活的派发事务**（`QueueDispatch`），到流终态收口才清 |
+
+> 宿主**不应直接读写**上表任何一个键——它们登记出来是为了「改键名时有据可查」，日常一律走 `QueueExtension` 门面。尤其是 `session.queue.dispatch`：它的两个判定（`isOnDispatchThread` / `isCurrent`）语义不同，自己实现极易混淆。
 
 ##### 命名空间规约（宿主必读）
 
@@ -1329,7 +1401,15 @@ int imported = queue.importItems(session, legacyRows);   // rows 为 Map 列表�
 
 为什么必须严格：引擎升级时若新增契约键，与宿主私货撞名会让读侧**无法区分「契约」与「私有键」**——旧值会被当成契约值解析，出错时没有任何异常，只有行为诡异。
 
-实例：soloncode 宿主曾把 `session.replyRoute`、`session.queue.executing`、`session.input.admitting` 三个私有键写进引擎命名空间，后统一改为 `cli.replyRoute` / `cli.queue.turn`，并用架构护栏测试（禁止宿主源码里出现 `"session.` 字面量）锁定防止再犯。
+实例：soloncode 宿主曾把 `session.replyRoute`、`session.queue.executing`、`session.input.admitting` 三个私有键写进引擎命名空间，后统一改为 `cli.replyRoute` / `cli.input.admitting`，并用架构护栏测试（禁止宿主源码里出现 `"session.` 字面量）锁定防止再犯。
+
+同一轮还清掉了三类「不是命名空间问题、但同样会静默失效」的裸键，建议新宿主引以为戒：
+
+| 反例 | 真实后果 |
+|---|---|
+| 宿主重抄 `"_loop_last_total_tokens"`（引擎常量定义在 `ExecutionBridge`） | 引擎改键名后宿主静默失效：loop/goal 的预算控制恒为零、熔断判定恒无工具证据。现统一走 `ExecutionBridge.reportRoundTokens/reportRoundMetrics/resetRoundToolEvidence` |
+| 宿主把 `HarnessEngine.ATTR_CWD` 当私有状态用，并硬编码默认值 `"."` | 与引擎 workspace 默认值不一致，且引擎一旦复用该键就撞车。现统一走 `engine.getSessionCwd/setSessionCwd/setSessionCwdIfAbsent` |
+| 无前缀键 `"streamDoneSent"`、写入后无人读的 `"_plan_mode"` | 前者占用共享平面，后者是纯残留（3 处写、0 处读）。前者已规范为 `web.streamDoneSent`，后者已删除 |
 
 > 建议宿主也建一份自己的 `HostAttrs` 集中登记私有键（soloncode 的做法：放在 `codecli.session` 这种中立包，供 `api.web` 与 `artifact` 等包共同依赖，避免为了一个常量新增包间反向依赖）。
 

@@ -596,6 +596,7 @@ class HarnessEngineAccessorTest {
             "addPermissionRule", "addPermissionRules",
             "addMount", "removeMount", "refreshMount", "refreshMainAgent",
             "addExtension", "removeExtension", "setExtensionEnabled",
+            "setSessionCwd", "setSessionCwdIfAbsent",
             "disallowSkill", "allowSkill", "disallowSkillReset");
 
     @Test
@@ -614,5 +615,33 @@ class HarnessEngineAccessorTest {
         org.noear.solon.ai.chat.CacheControl cc = new org.noear.solon.ai.chat.CacheControl();
         e.setCacheControl(cc);
         assertSame(cc, e.getCacheControl());
+    }
+
+    /**
+     * 会话工作目录门面：未设置时回退到工作区默认，设置/清除/仅补写三个入口语义明确。
+     *
+     * <p>此前宿主各自写 {@code attrs().getOrDefault(ATTR_CWD, ".")}：既把引擎内部键
+     * 当私有状态用，又硬编码了与工作区默认值不一致的 {@code "."}。</p>
+     */
+    @Test
+    void sessionCwdAccessorsFallBackToWorkspace() {
+        HarnessEngine e = engine();
+        AgentSession session = InMemoryAgentSession.of();
+
+        assertEquals(e.getWorkspace(), e.getSessionCwd(session), "未设置时必须回退工作区默认");
+
+        e.setSessionCwd(session, "/tmp/project-a");
+        assertEquals("/tmp/project-a", e.getSessionCwd(session));
+
+        // 仅补写：已有值不被覆盖（用户后续选择的 cwd 优先）
+        e.setSessionCwdIfAbsent(session, "/tmp/project-b");
+        assertEquals("/tmp/project-a", e.getSessionCwd(session));
+
+        // 空值 / null ⇒ 清除，回退工作区默认
+        e.setSessionCwd(session, "  ");
+        assertEquals(e.getWorkspace(), e.getSessionCwd(session));
+        e.setSessionCwd(session, "/tmp/x");
+        e.setSessionCwd(session, null);
+        assertEquals(e.getWorkspace(), e.getSessionCwd(session));
     }
 }

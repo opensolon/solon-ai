@@ -6,7 +6,10 @@ package org.noear.solon.ai.harness.session.queue;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.ai.harness.session.HarnessAttrs;
 import org.noear.solon.flow.FlowContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -37,6 +40,7 @@ import java.util.Map;
  * 属于内核实现，仅供门面与测试使用，新宿主代码不应直接依赖。</p>
  */
 public final class QueueHelper {
+    private static final Logger LOG = LoggerFactory.getLogger(QueueHelper.class);
     public static final int MAX_QUEUE_SIZE = 20;
     public static final int MAX_TEXT_LENGTH = 4096;
     private static final String ATTR_QUEUE = "session.queue";
@@ -167,11 +171,23 @@ public final class QueueHelper {
     }
 
     public static boolean tryClaim(AgentSession session) {
+        return tryClaim(session, null);
+    }
+
+    /**
+     * 领取权占位（含「现在能不能接」的原子判定）。
+     *
+     * <p>{@code canAccept} 在<b>同一把会话锁</b>内求值，与占位不可分割：宿主不再需要在
+     * 领取前后各判一次忙态（那样两次判定之间必然存在一个窗口，只能靠宿主再补一层锁 + 
+     * 代际复核去堵）。谓词为 false 时<b>不消耗队列项、不占领取权</b>。</p>
+     */
+    public static boolean tryClaim(AgentSession session, java.util.function.Predicate<AgentSession> canAccept) {
         if (session == null) return false;
         synchronized (session.attrs()) {
             if (Boolean.TRUE.equals(session.attrs().get(ATTR_CLAIM))) return false;
             Deque<QueueItem> q = queue(session, false);
             if ((q == null || q.isEmpty()) && !(session.attrs().get(ATTR_IN_FLIGHT) instanceof QueueItem)) return false;
+            if (canAccept != null && !canAccept.test(session)) return false;
             session.attrs().put(ATTR_CLAIM, Boolean.TRUE); return true;
         }
     }
@@ -240,6 +256,13 @@ public final class QueueHelper {
             session.attrs().remove(ATTR_IN_FLIGHT);
             session.attrs().put(ATTR_GENERATION, generation(session) + 1);
             session.attrs().remove(ATTR_CLAIM);
+            // Stop 意味着「正在跑的这一轮作废」：必须连派发登记一起清。
+            // 否则运行流终态的 acknowledge() 会因 in-flight 已消失而失败，登记就永远留着——
+            // 会话此后恒被视为「有未收口派发」，failStreamTurn 的跨线程判定据此误以为
+            // 「这是队列派发」而静默跳过续发，队列从此瞎一轮（不报错、不打日志）。
+            // 注销放在这里而不是 acknowledge 里：代际已递增，本会话所有在途 claim 均已失效，
+            // 无需再看某个具体 claim。
+            session.attrs().remove(HarnessAttrs.QUEUE_DISPATCH);
             // 无队列变更（本就空）时不写快照：interrupt 空队列会话不应触发落盘。
             if (hadItems) saveLocked(session, q);
             return true;
@@ -337,17 +360,37 @@ public final class QueueHelper {
      * @return STARTED / NO_TASK / START_FAILED
      */
     public static DrainStatus claimNext(AgentSession session, QueueClaimHandler handler) {
-        if (session == null || handler == null || !tryClaim(session)) return DrainStatus.NO_TASK;
+        return claimNext(session, null, handler);
+    }
+
+    /**
+     * 领取队首一条并交给 handler，附带「现在能不能接」的原子谓词。
+     *
+     * <p>{@code canAccept} 与领取权占位在同一把锁内完成（见
+     * {@link #tryClaim(AgentSession, java.util.function.Predicate)}），因此宿主无须再在
+     * 领取前后自建 synchronized 块与忙态复核。</p>
+     *
+     * <p>领取成功后登记一个跨线程存活的 {@link QueueDispatch}：handler 返回时<b>不</b>注销
+     * （异步任务还在跑，终态由宿主经 {@code dispatch.settle(..)} 收口）；handler 抛异常时
+     * 视为启动失败，注销登记并用领取瞬间的代际快照回滚到队首。</p>
+     *
+     * @return STARTED / NO_TASK / START_FAILED
+     */
+    public static DrainStatus claimNext(AgentSession session, java.util.function.Predicate<AgentSession> canAccept,
+                                       QueueClaimHandler handler) {
+        if (session == null || handler == null || !tryClaim(session, canAccept)) return DrainStatus.NO_TASK;
         QueueItem item = poll(session);
         if (item == null) {
             releaseClaim(session);
             return DrainStatus.NO_TASK;
         }
         QueueClaim claim = new QueueClaim(session, item, generation(session));
+        QueueDispatch dispatch = registerDispatch(session, claim);
         try {
             handler.run(claim);
             return DrainStatus.STARTED;
         } catch (Throwable e) {
+            unregisterDispatch(session, dispatch);
             claim.rollback();
             return DrainStatus.START_FAILED;
         } finally {
@@ -355,12 +398,52 @@ public final class QueueHelper {
         }
     }
 
-    public static boolean drainOne(AgentSession session, QueueTaskRunner runner) {
-        return drainOne(session, runner, true);
+    /** 登记派发事务（覆盖式：同一会话同一时刻只允许一个未收口派发）。 */
+    private static QueueDispatch registerDispatch(AgentSession session, QueueClaim claim) {
+        QueueDispatch dispatch = new QueueDispatch(session, claim);
+        synchronized (session.attrs()) {
+            Object previous = session.attrs().get(HarnessAttrs.QUEUE_DISPATCH);
+            if (previous instanceof QueueDispatch) {
+                // 「上一轮未收口就派发下一轮」按设计不可能发生（任一派发期间会话必为占用），
+                // 但真的发生时旧 claim 会永久 OPEN 且无任何痕迹——留一条告警以便发现。
+                LOG.warn("[Queue] dispatch overwritten without settle: {} -> {}", previous, dispatch);
+            }
+            session.attrs().put(HarnessAttrs.QUEUE_DISPATCH, dispatch);
+        }
+        return dispatch;
     }
 
-    /** 异步运行者在终态确认；同步运行者可在回调返回时确认。 */
-    public static boolean drainOne(AgentSession session, QueueTaskRunner runner, boolean acknowledgeOnReturn) {
+    /** 注销派发事务（仅当仍是它自己，避免把新派发抹掉）。 */
+    private static void unregisterDispatch(AgentSession session, QueueDispatch dispatch) {
+        synchronized (session.attrs()) {
+            if (session.attrs().get(HarnessAttrs.QUEUE_DISPATCH) == dispatch) {
+                session.attrs().remove(HarnessAttrs.QUEUE_DISPATCH);
+            }
+        }
+    }
+
+    /**
+     * 按 claim 注销它自己的派发登记（claim 收口时调用）。
+     *
+     * <p><b>为什么不只在 settle 里注销</b>：宿主可以绕过 {@code Dispatch.settle} 直接
+     * {@code claim.acknowledge()}（README 的终态示例即如此）。若注销只挂在 settle 上，那条路径
+     * 就会留下永久登记——会话此后恒被视为「有未收口派发」，队列续发被自己的残留挡死。
+     * 收口是 claim 的状态迁移，注销必须跟着状态迁移走，而不是跟着某个调用入口走。</p>
+     */
+    static void unregisterDispatchOf(AgentSession session, QueueClaim claim) {
+        if (session == null || claim == null) return;
+        QueueDispatch dispatch = QueueDispatch.current(session);
+        if (dispatch != null && dispatch.claim() == claim) {
+            unregisterDispatch(session, dispatch);
+        }
+    }
+
+    /** 当前未收口的派发事务（无则 null）。 */
+    public static QueueDispatch currentDispatch(AgentSession session) {
+        return QueueDispatch.current(session);
+    }
+
+    public static boolean drainOne(AgentSession session, QueueTaskRunner runner) {
         if (session == null || runner == null || !QueueHelper.tryClaim(session)) return false;
         QueueItem item = QueueHelper.poll(session);
         if (item == null) {
@@ -370,7 +453,7 @@ public final class QueueHelper {
         long generation = QueueHelper.generation(session);
         try {
             runner.run(item);
-            if (acknowledgeOnReturn && !QueueHelper.acknowledge(session, item.getId())) {
+            if (!QueueHelper.acknowledge(session, item.getId())) {
                 QueueHelper.requeueFront(session, item, generation);
                 return false;
             }

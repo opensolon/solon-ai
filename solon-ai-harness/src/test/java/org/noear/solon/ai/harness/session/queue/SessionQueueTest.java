@@ -126,9 +126,15 @@ class SessionQueueTest {
     void asyncDrainKeepsItemUntilTerminalAcknowledgement() {
         AgentSession session = InMemoryAgentSession.of();
         assertEquals(1, QueueHelper.enqueue(session, "task", null));
-        assertTrue(QueueHelper.drainOne(session, item -> { }, false));
+        // 异步语义只走 claimNext：handler 返回后任务仍是 RUNNING，直到终态 acknowledge
+        QueueClaim[] held = new QueueClaim[1];
+        assertEquals(DrainStatus.STARTED, QueueHelper.claimNext(session, claim -> held[0] = claim));
         assertEquals("RUNNING", QueueHelper.view(session).get(0).getStatus());
         assertNull(QueueHelper.poll(session));
+        assertNotNull(QueueDispatch.current(session), "异步任务未终态前派发事务必须仍在登记");
+        assertTrue(held[0].acknowledge(), "终态确认应成功");
+        assertNull(QueueDispatch.current(session), "收口后派发事务必须注销");
+        assertEquals(0, QueueHelper.pendingSize(session));
     }
 
     @Test

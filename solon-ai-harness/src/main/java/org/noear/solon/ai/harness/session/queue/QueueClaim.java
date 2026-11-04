@@ -87,6 +87,8 @@ public final class QueueClaim {
             return false;
         }
         state = State.ACKNOWLEDGED;
+        // 注销跟着状态迁移走：宿主绕过 QueueDispatch.settle 直接 acknowledge 时也不能留下登记
+        QueueHelper.unregisterDispatchOf(session, this);
         return true;
     }
 
@@ -101,6 +103,7 @@ public final class QueueClaim {
         }
         if (QueueHelper.requeueFront(session, item, generation)) {
             state = State.ROLLED_BACK;
+            QueueHelper.unregisterDispatchOf(session, this);
             return true;
         }
         // 回写被拒只有两种原因，处理方式相反：
@@ -109,7 +112,10 @@ public final class QueueClaim {
         if (!isValid()) {
             QueueHelper.acknowledge(session, item.getId());
             state = State.ROLLED_BACK;
+            QueueHelper.unregisterDispatchOf(session, this);
         }
+        // 回写被拒且代际仍有效（队列满）：任务保持 in-flight，派发登记也保持——
+        // 它不是「已收口」，后续仍要有人对它收口，这里注销会让任务永久无主。
         return false;
     }
 

@@ -39,9 +39,52 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class ExecutionBridge {
     private static final Logger LOG = LoggerFactory.getLogger(ExecutionBridge.class);
 
-    /** 单轮结果中由宿主写入、此处消费的会话属性。 */
+    /** 单轮结果中由宿主写入、此处消费的会话属性。宿主不要直接写本键，用
+     *  {@link #reportRoundMetrics(AgentSession, Long, Boolean)} 等写入口。 */
     public static final String ATTR_LAST_TOTAL_TOKENS = "_loop_last_total_tokens";
     public static final String ATTR_LAST_HAS_TOOL_CALLS = "_loop_last_has_tool_calls";
+
+    /**
+     * 写本轮 token 消耗与工具证据（供 loop/goal 预算与熔断判定消费）。
+     *
+     * <p>此前宿主重抄两个下横线字面量（{@code "_loop_last_total_tokens"} /
+     * {@code "_loop_last_has_tool_calls"}）：读侧在 harness、写侧在宿主，且写侧没用常量。
+     * 引擎改键名时宿主会静默失效（预算控制恒为零、熔断判定恒无工具证据）。</p>
+     *
+     * @param totalTokens  本轮累计 token（null = 不更新）
+     * @param hasToolCalls 本轮是否发生过工具调用（null = 不更新）
+     * @since 4.2.2
+     */
+    public static void reportRoundMetrics(AgentSession session, Long totalTokens, Boolean hasToolCalls) {
+        if (session == null) return;
+        if (totalTokens != null) {
+            session.attrs().put(ATTR_LAST_TOTAL_TOKENS, totalTokens);
+        }
+        if (hasToolCalls != null) {
+            session.attrs().put(ATTR_LAST_HAS_TOOL_CALLS, hasToolCalls);
+        }
+    }
+
+    /**
+     * 写本轮 token 消耗（工具证据保持不变）。
+     *
+     * <p>流式事件里 token 与工具证据由不同事件写入，不能互相覆盖——因此本重载
+     * <b>只</b>动 token。
+     *
+     * @since 4.2.2
+     */
+    public static void reportRoundTokens(AgentSession session, Long totalTokens) {
+        reportRoundMetrics(session, totalTokens, null);
+    }
+
+    /**
+     * 重置本轮工具证据（每轮开始前调，避免上一轮的 {@code true} 泄到本轮）。
+     *
+     * @since 4.2.2
+     */
+    public static void resetRoundToolEvidence(AgentSession session) {
+        reportRoundMetrics(session, null, Boolean.FALSE);
+    }
 
     private final HarnessEngine engine;
     private volatile List<TaskHandler> taskHandlers = new CopyOnWriteArrayList<>();

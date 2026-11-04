@@ -52,6 +52,18 @@ public final class HarnessAttrs {
     public static final String QUEUE_CLAIM = "session.queue.claim";
 
     /**
+     * 跨线程存活的队列派发事务（值为 {@code QueueDispatch}）。
+     *
+     * <p>与 {@link #QUEUE_CLAIM} 的差别：后者只在 {@code claimNext} 调用栈内存活（方法返回即清），
+     * 本键随异步任务一直保留到流终态收口，是宿主判定「本轮是否队列派发」「该用哪个 claim
+     * 收口」的唯一来源。宿主不要直接读写本键，用 {@code QueueDispatch#current(session)} 读 /
+     * {@code QueueDispatch#settle(boolean)} 收口。</p>
+     *
+     * @since 4.2.2
+     */
+    public static final String QUEUE_DISPATCH = "session.queue.dispatch";
+
+    /**
      * 本轮实际生效的子代理名（含 {@code @子代理} 解析结果），主代理归一为 {@code "main"}。
      *
      * <p>由 {@code HarnessEngine#handle} 在返回 TASK 时自动写入；HITL 续流与事件侧

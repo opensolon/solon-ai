@@ -366,6 +366,41 @@ public class HarnessEngine {
         return options.getWorkspace();
     }
 
+    /**
+     * 会话工作目录（宿主与工具共用的唯一口径）。
+     *
+     * <p>未显式设置时回退到 {@link #getWorkspace()}。先前宿主各自写
+     * {@code attrs().getOrDefault(ATTR_CWD, ".")}：既把引擎内部键当私有状态用，
+     * 又硬编码了与工作区默认值不一致的 {@code "."}。宿主一律改用本方法。</p>
+     *
+     * @since 4.2.2
+     */
+    public String getSessionCwd(AgentSession session) {
+        if (session == null) return getWorkspace();
+        Object value = session.attrs().get(ATTR_CWD);
+        return value == null ? getWorkspace() : String.valueOf(value);
+    }
+
+    /**
+     * 设置会话工作目录（null/空 表示清除，回退到工作区默认值）。
+     *
+     * @since 4.2.2
+     */
+    public void setSessionCwd(AgentSession session, String cwd) {
+        if (session == null) return;
+        if (cwd == null || cwd.trim().isEmpty()) {
+            session.attrs().remove(ATTR_CWD);
+        } else {
+            session.attrs().put(ATTR_CWD, cwd);
+        }
+    }
+
+    /** 会话工作目录仅在未设置时补写（首次进入时定位，不覆盖用户后续选择）。@since 4.2.2 */
+    public void setSessionCwdIfAbsent(AgentSession session, String cwd) {
+        if (session == null || cwd == null || cwd.trim().isEmpty()) return;
+        session.attrs().putIfAbsent(ATTR_CWD, cwd);
+    }
+
     public String getSystemPrompt() {
         return options.getSystemPrompt();
     }
