@@ -1,5 +1,11 @@
 ### vNEXT
 
+* **SteerInterceptor 拆分：静态内核独立为 SteerHelper，补齐 queue/steer/interrupt 三域「内核 + 门面」分层的最后一块**（零行为变更，纯机械搬移；配套 README、CODE.md 同步）:
+  * **拆分边界**：插话的投递/校验/取消/残留转排队（`steer`、`steerBox`、`pending`、`cancel`、`offer`+`OfferResult`、`drain`、`enqueueIntoSessionQueue`）与 7 个公开常量（`ATTR_STEER_BOX`/`ATTR_ACTIVE_RUN_ID`/`MAX_BOX_SIZE`/`MAX_TEXT_LENGTH`/`MAX_ID_LENGTH`/`STEER_PREFIX`/`STEER_SOURCE`）迁入 `SteerHelper`（`public final` + 私有构造，与 `QueueHelper` 同构）；`SteerInterceptor` 瘦身为纯运行时消费边界（onReasonStart 守卫注入 + onAgentEnd 残留兜底，389→142 行），拦截器内部改调 SteerHelper
+  * **刻意的取舍**：按「未承诺稳定性、直接改签名」的既定决策，拦截器上不留常量别名（曾一度写入又被删除）；`drain`/`hasOpenToolCalls` 这类仅拦截器使用的成员不外深；`OfferResult` 保持 package-private，测试同包引用随迁零改动
+  * **引用收敛**：harness 主代码 `SteerCommand`(3)/`SteerExtension`(11)/`SteerDroppedEvent`(1)；harness 测试 3 个文件 ~100 处纯前缀替换（实例调用 `interceptor.xxx` 保留，不属静态迁移范围）；cli 测试 2 个文件（SteerCommandTest、LastTraceServiceTest 的常量引用）+ import；cli 主代码零依赖（仅 5 处注释改述）；文档：README 5 处静态引用 + §12.1 模块图 steer 包补「SteerHelper：邮箱契约与投递内核；SteerInterceptor：运行时消费边界」
+  * **效果**：steer 与 queue/interrupt 结构完全对齐（内核 `*Helper` 仅供门面与测试，宿主一律走 `SteerExtension`/`engine` 门面），为 CODE.md 的 `*Helper` 分层规约补上 steer 一域的落点；拦截器单文件从双主题（运行时消费 + 静态内核 API）回归单一职责，各自并发契约更清晰
+
 * **宿主接入面收敛：Session* 内核类改名 + 引擎级门面补齐**（配套 README §5 全量同步；取代此前「静态工具类 + instanceof 遍历」的接入方式）:
   * **改名清单（零行为变更，纯重命名 + 包内迁移）**：`SessionQueue → QueueHelper`、`SessionQueueItem → QueueItem`、`SessionQueueDrainer → 并入 QueueHelper.drainOne`、`SessionInterrupt → InterruptHelper`（迁至 `session/interrupt/`）；静态方法签名与语义均未变，仅类名与归属包。规约沉淀在 harness `CODE.md`（`Session*` 前缀只留给 `AgentSession`/`SessionStatus`）
   * **新增 `HarnessEngine.getExtension(Class<T>)`**：替代 `getExtensions() + instanceof` 遍历（此前宿主取 QueueExtension/SteerExtension/GoalExtension 只能强转，WebSettingsController 的 instanceof 循环已改直取）

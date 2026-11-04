@@ -183,6 +183,8 @@ HarnessInput input = HarnessInput.of(session, "帮我看看这个 @coder")
 |---|---|
 | `selectedModel(String)` | 显式模型，优先于会话级选择，再回退默认模型 |
 | `selectedAgent(String)` | 选择器兜底子代理 |
+| `selectedSkill(String...)` | 本次请求的技能视野（收窄技能清单 + 预加载选中技能正文） |
+| `selectedMcp(String...)` | 本次请求的 MCP 服务视野（按 `addMcpServer` 的配置名匹配） |
 | `explicitAgent(String)` | 请求体显式指定，**优先级最高**（桌面端用） |
 | `attachments(InputAttachments)` | 附件装配结果（多媒体块 + 文件引用） |
 | `media(MediaBlock)` | 追加多媒体块（便捷写法） |
@@ -190,8 +192,6 @@ HarnessInput input = HarnessInput.of(session, "帮我看看这个 @coder")
 | `agentNameValidator(Predicate)` | 子代理名格式校验 |
 | `trimContent(boolean)` | 剥提及后去首尾空白（桌面端需要） |
 | `origin(InputOrigin)` | 本次输入的渠道来源身份（渠道 / 发送者 / 返回地址 / 入站关联键） |
-| `selectedSkill(String...)` | 本次请求的技能视野（收窄技能清单 + 预加载选中技能正文） |
-| `selectedMcp(String...)` | 本次请求的 MCP 服务视野（按 `addMcpServer` 的配置名匹配） |
  | `hitl(action, callId)` + `hitlOutput(text)` | 审批决策与结果改写；`action` 是 `HITLAction` 枚举（APPROVE / REJECT / SKIP），线上字符串由宿主用 `HITLAction.of(action)` 解析，脏值显式报错 |
 | `commandContextFactory(CommandContextFactory)` | 识别到命令后回执怎么落地（默认缓冲式） |
 | `commandAware(boolean)` | 是否把输入当命令识别（默认 `true`） |
