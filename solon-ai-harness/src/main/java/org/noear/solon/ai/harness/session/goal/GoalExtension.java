@@ -9,8 +9,11 @@ import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.runtime.RoundResult;
 import org.noear.solon.ai.harness.session.goal.validate.GoalValidator;
 import org.noear.solon.core.util.RunUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * Goal 一键装配扩展 —— goal 能力从头到尾只接触这一个类。
@@ -47,6 +50,8 @@ import java.util.Map;
  * @since 3.9.2
  */
 public class GoalExtension extends AbsHarnessExtension {
+    private static final Logger LOG = LoggerFactory.getLogger(GoalExtension.class);
+
     private final String workspaceId;
     private final String workspace;
     private final GoalEngine.TaskHandler taskHandler;
@@ -237,6 +242,27 @@ public class GoalExtension extends AbsHarnessExtension {
         return goalScheduler;
     }
 
+    /**
+     * 注册认领式执行器（开箱即用宿主的主要扩展点）。
+     *
+     * <p>与 {@link Builder#taskExecutor} 的区别：builder 是「装配时一次性」的，
+     * 本方法允许在 {@code addExtension} 之后再注册多个入口（如 CLI/Web/桌面各一个），
+     * 宿主不必为一次注册去取 {@link #getGoalEngine()}。</p>
+     *
+     * <p><b>认领条件由宿主保证互斥</b>：按注册顺序取首个非 null 返回值，先注册者优先。
+     * 当注册超过一个执行器时打一次 debug 提示，便于排查「会话被错误入口抢跑」。</p>
+     */
+    public GoalExtension addTaskExecutor(GoalEngine.TaskHandler handler) {
+        if (goalEngine != null && handler != null) {
+            goalEngine.addTaskExecutor(handler);
+            if (goalEngine.hasTaskHandler()) {
+                LOG.debug("Goal task executor registered; claiming order = registration order, "
+                        + "ensure session-id predicates are mutually exclusive");
+            }
+        }
+        return this;
+    }
+
     /** 读取会话 goal（无则 null）。 */
     public GoalState state(AgentSession session) {
         return goalEngine == null ? null : goalEngine.state(session);
@@ -283,6 +309,56 @@ public class GoalExtension extends AbsHarnessExtension {
         return session != null && running(session);
     }
 
+    /**
+     * 等待正在执行的那一轮安全结束（停等，不忙等，也不负责中断）。
+     *
+     * <p>编辑 goal 的时序通常是<b>暂停 → 中断在跑轮次 → 等它真的停下 → 改写</b>：
+     * 最后一步此前由宿主各写一个 {@code while (running) sleep(...)} 循环（Web 20ms×200、
+     * 桌面 10ms×200，两份副本），且轮次一跑满就要白等到超时。本方法用会话
+     * {@code attrs()} 上的 {@code wait/notify} 取代轮询，返回即代表可以安全改写。</p>
+     *
+     * <p>中断动作仍由宿主提供（{@link #pauseAndAwait} 的 {@code interrupter} 参数），
+     * 因为「怎么停流」是宿主运行时通道的职责，harness 无权假设。</p>
+     *
+     * @param timeoutMs 最长等待毫秒；≤0 只做即时判定
+     * @return true=已停稳（或无轮次在跑）；false=超时仍未停
+     */
+    public boolean awaitRoundStopped(AgentSession session, long timeoutMs) {
+        return goalEngine == null || goalEngine.awaitRoundStopped(session, timeoutMs);
+    }
+
+    /** 按 sessionId 等待轮次安全结束（会话不存在时视为已停稳）。 */
+    public boolean awaitRoundStopped(String sessionId, long timeoutMs) {
+        AgentSession session = sessionOf(sessionId);
+        return session == null || awaitRoundStopped(session, timeoutMs);
+    }
+
+    /**
+     * 暂停 + 中断 + 停等三连（编辑前的标准时序）。
+     *
+     * <p>顺序固定为 {@code pause → interrupter → awaitRoundStopped}：先摘调度再中断，
+     * 避免中断后 job 立刻又拉起一轮。{@code interrupter} 为 null 时只暂停与停等。</p>
+     *
+     * @param interrupter 宿主的「中断在跑轮次」动作（如 runtimePort.interruptSession）
+     * @param timeoutMs   停等超时毫秒
+     * @return true=已暂停且已停稳；false=未能暂停或未能停稳（调用方回 409/重试）
+     */
+    public boolean pauseAndAwait(AgentSession session, GoalState gs,
+                                 Runnable interrupter, long timeoutMs) {
+        if (!pause(session, gs)) {
+            return false;
+        }
+        if (interrupter != null) {
+            try {
+                interrupter.run();
+            } catch (Throwable e) {
+                // 中断失败不阻断停等：轮次可能已在收尾，交给超时判定
+                LOG.debug("Goal interrupter failed for session '{}': {}", session.getSessionId(), e.getMessage());
+            }
+        }
+        return awaitRoundStopped(session, timeoutMs);
+    }
+
     /** 是否存在活跃或可恢复的 goal。 */
     public boolean hasGoal(AgentSession session) {
         return goalEngine != null && goalEngine.hasGoal(session);
@@ -310,6 +386,20 @@ public class GoalExtension extends AbsHarnessExtension {
      */
     public GoalState attach(AgentSession session, GoalSpec spec) {
         return attach(session, spec.getObjective(),
+                spec.getMaxTokens(), spec.getMaxDurationMs(), spec.getMaxIterations());
+    }
+
+    /**
+     * 创建 goal（<b>不挂调度</b>），并区分「执行正文」与「展示正文」。
+     *
+     * <p>桌面端首轮流由宿主自己的流驱动，且会把附件正文拼进执行正文；
+     * 此前宿主先 {@code attach(执行正文)} 再 {@code setCondition(展示正文) + commit}，
+     * 两次落盘之间会广播一次携带附件全文的中间态。用本方法可一次成型、只广播一次。</p>
+     *
+     * @param displayObjective 展示正文（UI 列表/徽章）；null 或与执行正文相同时不覆写
+     */
+    public GoalState attach(AgentSession session, GoalSpec spec, String displayObjective) {
+        return goalEngine.attach(session, spec.getObjective(), displayObjective,
                 spec.getMaxTokens(), spec.getMaxDurationMs(), spec.getMaxIterations());
     }
 
@@ -347,6 +437,17 @@ public class GoalExtension extends AbsHarnessExtension {
     public GoalState attachAndSchedule(AgentSession session, GoalSpec spec) {
         return attachAndSchedule(session, spec.getObjective(),
                 spec.getMaxTokens(), spec.getMaxDurationMs(), spec.getMaxIterations());
+    }
+
+    /**
+     * 创建 goal 并立即挂上调度，参数对象版，且区分「执行正文」与「展示正文」。
+     *
+     * @param displayObjective 展示正文（UI 列表/徽章）；null 或与执行正文相同时不覆写
+     */
+    public GoalState attachAndSchedule(AgentSession session, GoalSpec spec, String displayObjective) {
+        GoalState gs = attach(session, spec, displayObjective);
+        scheduleNow(session.getSessionId());
+        return gs;
     }
 
     /**
@@ -398,6 +499,40 @@ public class GoalExtension extends AbsHarnessExtension {
         return true;
     }
 
+    /**
+     * 按 sessionId 暂停（免去宿主「sessionOf → state」两步判空）。
+     *
+     * @return false=无会话/无 goal 或状态不允许暂停
+     */
+    public boolean pause(String sessionId) {
+        GoalState gs = stateOf(sessionId);
+        return gs != null && pause(sessionOf(sessionId), gs);
+    }
+
+    /**
+     * 按 (sessionId, taskId) 暂停；taskId 不匹配时返回 false（混合任务列表的安全版）。
+     */
+    public boolean pause(String sessionId, String taskId) {
+        GoalState gs = find(sessionId, taskId);
+        return gs != null && pause(sessionOf(sessionId), gs);
+    }
+
+    /** 修改目标正文与预算（不改状态、不动调度）；无 goal 时返回 false。 */
+    public boolean update(String sessionId, String objective, Long maxTokens, Long maxDurationMs) {
+        GoalState gs = stateOf(sessionId);
+        if (gs == null) {
+            return false;
+        }
+        AgentSession session = sessionOf(sessionId);
+        goalEngine.update(session, objective != null ? objective : gs.getCondition(),
+                maxTokens != null ? maxTokens : gs.getMaxTokens(), gs.getMaxIterations());
+        if (maxDurationMs != null) {
+            gs.setMaxDurationMs(maxDurationMs);
+            goalEngine.commit(session, gs);
+        }
+        return true;
+    }
+
     /** 恢复（PAUSED/BLOCKED → PURSUING）并重新挂调度（立即跑一轮）。 */
     public boolean resume(AgentSession session, GoalState gs) {
         if (goalEngine == null || !goalEngine.resume(session, gs)) {
@@ -407,6 +542,18 @@ public class GoalExtension extends AbsHarnessExtension {
             goalScheduler.schedule(session.getSessionId(), true);
         }
         return true;
+    }
+
+    /** 按 sessionId 恢复（免去宿主两步判空）；无会话/无 goal 时返回 false。 */
+    public boolean resume(String sessionId) {
+        GoalState gs = stateOf(sessionId);
+        return gs != null && resume(sessionOf(sessionId), gs);
+    }
+
+    /** 按 (sessionId, taskId) 恢复；taskId 不匹配时返回 false。 */
+    public boolean resume(String sessionId, String taskId) {
+        GoalState gs = find(sessionId, taskId);
+        return gs != null && resume(sessionOf(sessionId), gs);
     }
 
     /**
@@ -460,6 +607,51 @@ public class GoalExtension extends AbsHarnessExtension {
         if (goalEngine != null) {
             goalEngine.clear(session);
         }
+    }
+
+    /** 按 sessionId 清除（免去宿主两步判空）；无会话时静默返回。 */
+    public void clear(String sessionId) {
+        AgentSession session = sessionOf(sessionId);
+        if (session != null) {
+            clear(session);
+        }
+    }
+
+    /**
+     * 重启后批量恢复活跃 goal 的调度（只挂 job、不立即跑一轮）。
+     *
+     * <p>宿主仍负责「枚举哪些 sessionId」（目录布局是宿主存储细节）与「怎么读状态」
+     * （内存会话优先、未实例化则轻读快照投影）；本方法只管 goal 侧的挂接语义：
+     * 仅活跃态才挂、终态/PAUSED/BLOCKED 跳过、已调度幂等跳过，并返回实际挂接数供宿主打日志。</p>
+     *
+     * @param sessionIds   候选会话 ID（可含无 goal 的会话，内部自行过滤）
+     * @param statusReader 状态读取器（id → {@link GoalState.Status}，无 goal 返回 null）
+     * @return 实际挂上调度的会话数
+     */
+    public int recoverActiveSchedules(Iterable<String> sessionIds,
+                                      Function<String, GoalState.Status> statusReader) {
+        if (sessionIds == null || statusReader == null || goalScheduler == null || !isEnabled()) {
+            return 0;
+        }
+        int recovered = 0;
+        for (String sessionId : sessionIds) {
+            if (sessionId == null || sessionId.isEmpty()) {
+                continue;
+            }
+            GoalState.Status status;
+            try {
+                status = statusReader.apply(sessionId);
+            } catch (Throwable e) {
+                LOG.debug("Goal recovery status read failed for session '{}': {}", sessionId, e.getMessage());
+                continue;
+            }
+            if (status == null || !status.isActive()) {
+                continue;
+            }
+            resumeScheduleOnly(sessionId);
+            recovered++;
+        }
+        return recovered;
     }
 
     /** 注册生命周期观察者（initialize 前调用即预注册，之后正常注册）。 */

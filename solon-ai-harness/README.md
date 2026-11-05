@@ -987,6 +987,31 @@ goal.addListener(l); goal.registerValidator(matcher, v);   // 扩展点
 goal.getGoalTalent().setEnabled(false);                    // 只关模型侧工具，不影响命令
 ```
 
+##### 宿主最常写的四段样板，门面已经收口
+
+下列能力都是**后补的**：它们此前是每个宿主各写一遍的胶水，写错不会报错，只会表现成「偶尔卡住」「列表闪一下」「某个入口没输出」。新宿主直接用即可，老宿主按下表逐条替换。
+
+| 宿主原本要写的代码 | 现在用 | 说明 |
+|---|---|---|
+| `for (int i = 0; goal.running(s) && i < 200; i++) Thread.sleep(20);` | `goal.awaitRoundStopped(s, 2000L)` | 基于会话 `attrs()` 的 `wait/notify`，不轮询；轮次结束立即返回，超时才 false。锁与 `runRound` 的 finally 同源，不存在漏唤醒 |
+| `goal.pause(gs); runtime.interrupt(session); 上面那个循环;` | `goal.pauseAndAwait(s, gs, () -> runtime.interrupt(session), 2000L)` | 顺序固定 `pause → 中断 → 停等`（先摘调度再中断，避免中断后立刻又被拉起一轮）。中断动作仍由宿主提供——怎么停流是宿主的运行时职责 |
+| `gs = goal.attach(obj); if (!display.equals(obj)) { gs.setCondition(display); goal.commit(gs); }` | `goal.attach(s, GoalSpec.of(obj), display)` | 执行正文（如拼了附件全文）与展示正文分离，**同一个临界区内一次落盘、只广播一次**，列表不会闪出附件全文 |
+| `goal.getGoalEngine().addTaskExecutor(h)` | `goal.addTaskExecutor(h)` | 门面直通并返回 `this`（可链式）；注册超过一个时会打 debug 提示认领顺序 |
+
+配套两个约定：
+
+- **认领谓词必须互斥**。多入口宿主（CLI/Web/桌面）各自注册一个执行器，引擎按注册顺序取首个返回非 null 者。谓词散落在各处极易改宽而静默抢跑别人的会话，建议集中成一个类（soloncode-cli 的 `SessionIdOwnership`）。
+- **按 id 操作优先于传会话**。`pause/resume/clear/update` 都有 `(sessionId)` 与 `(sessionId, taskId)` 重载：`stateOf` 免去两步判空，`(sessionId, taskId)` 版在不匹配时返回 `false`，适合「loop 任务表与 goal 行共用同一列表」的分流点。
+
+##### 重启恢复：枚举交给宿主，挂接语义交给门面
+
+```java
+// 宿主负责「哪些 sessionId」与「怎么读状态」（内存会话优先，未实例化则轻读快照投影）
+int n = goal.recoverActiveSchedules(sessionIds, id -> readStatus(id));
+```
+
+只对活跃态挂 `runNow=false` 的 job（终态/PAUSED/BLOCKED 跳过、已调度幂等跳过），返回实际挂接数供打日志。恢复期**绝不能**走 `resume()`——那是立即跑一轮。
+
 #### 创建：优先用 `GoalSpec`，而不是五个裸参
 
 编程调用的创建入口有三个形态，**推荐参数对象**：

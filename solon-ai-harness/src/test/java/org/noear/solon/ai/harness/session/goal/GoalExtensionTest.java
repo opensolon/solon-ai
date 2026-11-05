@@ -178,6 +178,171 @@ class GoalExtensionTest {
         return sessions.computeIfAbsent(id, k -> InMemoryAgentSession.of(k));
     }
 
+    // ==================== 停等 / 展示正文 / 执行器直通 ====================
+
+    /** 无轮次在跑时停等应即时返回 true（不得白等到超时）。 */
+    @Test
+    void awaitRoundStoppedReturnsImmediatelyWhenIdle() {
+        GoalExtension ext = GoalExtension.builder("ws-await").scheduler(null).build();
+        engineBuilder().extensionAdd(ext).build();
+
+        AgentSession session = InMemoryAgentSession.of("s-idle");
+        long start = System.currentTimeMillis();
+        assertTrue(ext.awaitRoundStopped(session, 5000L));
+        assertTrue(System.currentTimeMillis() - start < 1000L, "空闲时应即时返回");
+        assertTrue(ext.awaitRoundStopped("unknown-session", 5000L), "会话不存在视为已停稳");
+    }
+
+    /** 轮次运行中停等会阻塞；轮次结束后被唤醒并返回 true（靠 attrs 上的 notify，不是轮询）。 */
+    @Test
+    void awaitRoundStoppedIsWokenByRoundEnd() throws Exception {
+        java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+
+        GoalEngine engine = new GoalEngine((HarnessEngine) null, BudgetThresholds.defaults(), 3, 3, false);
+        engine.addTaskExecutor((sid, prompt) -> {
+            entered.countDown();
+            try {
+                release.await(5, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return RoundResult.ofText("done");
+        });
+
+        AgentSession session = InMemoryAgentSession.of("s-running");
+        engine.attach(session, "目标", 0, 0, 0);
+
+        Thread worker = new Thread(() -> engine.runRound(session));
+        worker.start();
+        assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS), "轮次应已开始");
+        assertTrue(engine.isRunning(session));
+
+        // 超时短于轮次时长：应返回 false
+        assertFalse(engine.awaitRoundStopped(session, 100L), "轮次未结束时应超时返回 false");
+
+        release.countDown();
+        assertTrue(engine.awaitRoundStopped(session, 5000L), "轮次结束后应被唤醒");
+        worker.join(5000L);
+        assertFalse(engine.isRunning(session), "轮次结束后标记应已清除");
+    }
+
+    /** pauseAndAwait：顺序为 pause → interrupter → 停等；中断回调必被调用。 */
+    @Test
+    void pauseAndAwaitInvokesInterrupterAfterPause() {
+        GoalExtension ext = GoalExtension.builder("ws-pa").scheduler(null).build();
+        engineBuilder().extensionAdd(ext).build();
+
+        AgentSession session = InMemoryAgentSession.of("s-pa");
+        GoalState gs = ext.attachAndSchedule(session, "目标", 0, 0, 0);
+
+        java.util.List<String> order = new java.util.ArrayList<>();
+        boolean ok = ext.pauseAndAwait(session, gs, () -> order.add("interrupt"), 1000L);
+
+        assertTrue(ok, "无在跑轮次时应即时停稳");
+        assertEquals(java.util.Collections.singletonList("interrupt"), order,
+                "中断回调应被调用一次");
+        assertEquals(GoalState.Status.PAUSED, gs.getStatus(), "pause 应先于停等生效");
+    }
+
+    /** 展示正文与执行正文分离：一次落盘、一次广播，列表不会看到附件全文的中间态。 */
+    @Test
+    void attachWithDisplayObjectiveBroadcastsOnceAndKeepsDisplayText() {
+        AtomicInteger notified = new AtomicInteger();
+        java.util.List<String> conditions = new java.util.ArrayList<>();
+        GoalExtension ext = GoalExtension.builder("ws-display")
+                .scheduler(null)
+                .listener((sid, state, removed) -> {
+                    notified.incrementAndGet();
+                    conditions.add(state.getCondition());
+                })
+                .build();
+        engineBuilder().extensionAdd(ext).build();
+
+        AgentSession session = InMemoryAgentSession.of("s-display");
+        GoalState gs = ext.attach(session, GoalSpec.of("执行正文（含附件全文）"), "展示正文");
+
+        assertEquals("展示正文", gs.getCondition(), "状态里的正文应为展示正文");
+        assertEquals(1, notified.get(), "只能广播一次（不得先广播执行正文再广播展示正文）");
+        assertEquals(java.util.Collections.singletonList("展示正文"), conditions);
+    }
+
+    /** 展示正文与执行正文相同时不覆写、行为与无展示正文的旧路径一致。 */
+    @Test
+    void attachWithSameDisplayObjectiveKeepsObjective() {
+        GoalExtension ext = GoalExtension.builder("ws-same").scheduler(null).build();
+        engineBuilder().extensionAdd(ext).build();
+
+        AgentSession session = InMemoryAgentSession.of("s-same");
+        GoalState gs = ext.attach(session, GoalSpec.of("同一个目标"), "同一个目标");
+        assertEquals("同一个目标", gs.getCondition());
+
+        AgentSession session2 = InMemoryAgentSession.of("s-same2");
+        GoalState gs2 = ext.attach(session2, GoalSpec.of("另一个目标"), null);
+        assertEquals("另一个目标", gs2.getCondition(), "null 展示正文不得覆写");
+    }
+
+    /** addTaskExecutor 门面直通：宿主无需再取 getGoalEngine()。 */
+    @Test
+    void addTaskExecutorIsAvailableOnFacade() {
+        GoalExtension ext = GoalExtension.builder("ws-exec").scheduler(null).build();
+        engineBuilder().extensionAdd(ext).build();
+
+        AtomicInteger calls = new AtomicInteger();
+        GoalExtension returned = ext.addTaskExecutor((sid, prompt) -> {
+            calls.incrementAndGet();
+            return RoundResult.ofText("claimed");
+        });
+
+        assertSame(ext, returned, "应支持链式调用");
+        assertTrue(ext.getGoalEngine().hasTaskHandler());
+
+        AgentSession session = InMemoryAgentSession.of("s-exec");
+        ext.attachAndSchedule(session, "目标", 0, 0, 0);
+        ext.getGoalEngine().runRound(session);
+        assertTrue(calls.get() > 0, "注册的执行器应被认领");
+    }
+
+    /** pause/resume/clear 的 String 重载：宿主可以完全不接触 AgentSession。 */
+    @Test
+    void stringOverloadsWorkWithoutSessionHandling() {
+        GoalExtension ext = GoalExtension.builder("ws-str").scheduler(null).build();
+        engineBuilder().extensionAdd(ext).build();
+
+        AgentSession session = session("s-str");
+        GoalState gs = ext.attachAndSchedule(session, "目标", 0, 0, 0);
+
+        assertTrue(ext.pause(session.getSessionId()));
+        assertEquals(GoalState.Status.PAUSED, ext.stateOf(session.getSessionId()).getStatus());
+        assertTrue(ext.resume(session.getSessionId()));
+        assertEquals(GoalState.Status.PURSUING, ext.stateOf(session.getSessionId()).getStatus());
+
+        // taskId 不匹配时不得误伤（混合任务列表的安全版）
+        assertFalse(ext.pause(session.getSessionId(), "not-a-goal-id"));
+        assertTrue(ext.pause(session.getSessionId(), gs.getId()));
+
+        ext.clear(session.getSessionId());
+        assertNull(ext.stateOf(session.getSessionId()));
+
+        // 未知会话一律返回 false / 静默
+        assertFalse(ext.pause("unknown"));
+        assertFalse(ext.resume("unknown"));
+        assertFalse(ext.update("unknown", "x", null, null));
+        ext.clear("unknown");
+    }
+
+    /** recoverActiveSchedules：无调度器时为 0（纯测试宿主），状态读取异常不得中断整个恢复。 */
+    @Test
+    void recoverActiveSchedulesIsNullSafeWithoutScheduler() {
+        GoalExtension ext = GoalExtension.builder("ws-rec").scheduler(null).build();
+        engineBuilder().extensionAdd(ext).build();
+
+        assertEquals(0, ext.recoverActiveSchedules(
+                java.util.Arrays.asList("a", "b"), id -> GoalState.Status.PURSUING));
+        assertEquals(0, ext.recoverActiveSchedules(null, id -> GoalState.Status.PURSUING));
+        assertEquals(0, ext.recoverActiveSchedules(java.util.Arrays.asList("a"), null));
+    }
+
     // ==================== 新增门面（宿主 41 处调用点清理配套） ====================
 
     @Test

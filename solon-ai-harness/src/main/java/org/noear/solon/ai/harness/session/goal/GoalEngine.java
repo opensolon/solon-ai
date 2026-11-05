@@ -166,6 +166,41 @@ public class GoalEngine {
         return Boolean.TRUE.equals(session.attrs().get(ATTR_RUNNING));
     }
 
+    /**
+     * 等待正在执行的那一轮安全结束（不轮询，靠 {@code attrs()} 上的 notify）。
+     *
+     * <p>锁对象就是 {@code attrs()} 本身，与 {@link #runRound} 的 CAS 段、finally 清除段
+     * 完全同一把锁，因此不存在「漏唤醒」：唯一清除 {@code ATTR_RUNNING} 的地方
+     * 在 {@code runRound} 的 finally 内，且会 {@code notifyAll}。</p>
+     *
+     * <p>语义是「给宿主一个不忙等的停等」，<b>不负责中断</b>——中断依赖宿主的运行时通道，
+     * 不属于 goal 域职责。</p>
+     *
+     * @param timeoutMs 最长等待毫秒（≤0 表示只做一次即时判定、不等待）
+     * @return true=当前无轮次在跑；false=超时仍未停稳或被中断
+     */
+    public boolean awaitRoundStopped(AgentSession session, long timeoutMs) {
+        if (session == null) {
+            return true;
+        }
+        long deadline = System.currentTimeMillis() + Math.max(0L, timeoutMs);
+        synchronized (session.attrs()) {
+            while (Boolean.TRUE.equals(session.attrs().get(ATTR_RUNNING))) {
+                long remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0) {
+                    return false;
+                }
+                try {
+                    session.attrs().wait(remaining);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     /** 注册/追加执行者（宿主覆盖；按注册顺序取首个认领者）。 */
     public void addTaskExecutor(TaskHandler handler) {
         if (handler != null) {
@@ -366,6 +401,23 @@ public class GoalEngine {
      */
     public GoalState attach(AgentSession session, String objective,
                             long maxTokens, long maxDurationMs, int maxIterations) {
+        return attach(session, objective, null, maxTokens, maxDurationMs, maxIterations);
+    }
+
+    /**
+     * 创建 goal，并允许「执行正文」与「展示正文」不同。
+     *
+     * <p>典型场景：宿主把附件正文拼进执行正文（沙箱内可读的完整上下文），
+     * 但 UI 列表与徽章应只展示用户输入的原句。此前宿主先 {@code attach(执行正文)}
+     * 再 {@code setCondition(展示正文) + commit}，两次落盘之间会广播一次中间态
+     * （列表短暂出现附件全文）。本方法在同一个临界区内完成两步并只广播一次。</p>
+     *
+     * @param displayObjective 展示正文；null 或与 objective 相同时不覆写
+     * @return 新建的 GoalState
+     * @throws IllegalStateException 已有活跃 goal
+     */
+    public GoalState attach(AgentSession session, String objective, String displayObjective,
+                            long maxTokens, long maxDurationMs, int maxIterations) {
         if (session == null) {
             throw new IllegalArgumentException("session is required");
         }
@@ -379,11 +431,25 @@ public class GoalEngine {
             gs.setMaxDurationMs(maxDurationMs);
             gs.setMaxIterations(maxIterations);
 
+            String displayed = resolveDisplayObjective(objective, displayObjective);
+            if (displayed != null) {
+                gs.setCondition(displayed);
+            }
+
             session.attrs().put(ATTR_GOAL, gs);
             saveLocked(session, gs);
             notifyChanged(session.getSessionId(), gs, false);
             return gs;
         }
+    }
+
+    /** 展示正文归一：null/空/与执行正文相同时返回 null（表示无需覆写）。 */
+    private static String resolveDisplayObjective(String objective, String displayObjective) {
+        if (displayObjective == null || displayObjective.trim().isEmpty()) {
+            return null;
+        }
+        String displayed = displayObjective.trim();
+        return displayed.equals(objective) ? null : displayed;
     }
 
     /** 读取本会话 goal（无则返回 null）。 */
@@ -585,6 +651,8 @@ public class GoalEngine {
         } finally {
             synchronized (session.attrs()) {
                 session.attrs().remove(ATTR_RUNNING);
+                // 唤醒 awaitRoundStopped 的等待者（锁对象与等待者一致，且此处是唯一移除点）
+                session.attrs().notifyAll();
             }
         }
     }
