@@ -40,6 +40,7 @@ class QueueDispatchTest {
         AtomicReference<QueueDispatch> ref = new AtomicReference<>();
         assertEquals(DrainStatus.STARTED, QueueHelper.claimNext(session, claim -> {
             ref.set(QueueDispatch.current(session));
+            return false; // 异步启动：终态由 settle 收口
         }));
 
         QueueDispatch dispatch = ref.get();
@@ -64,7 +65,10 @@ class QueueDispatchTest {
         QueueHelper.enqueue(session, "task", null);
 
         AtomicReference<QueueClaim> ref = new AtomicReference<>();
-        assertEquals(DrainStatus.STARTED, QueueHelper.claimNext(session, ref::set));
+        assertEquals(DrainStatus.STARTED, QueueHelper.claimNext(session, claim -> {
+            ref.set(claim);
+            return false;
+        }));
 
         assertNotNull(QueueHelper.currentDispatch(session));
         assertTrue(ref.get().acknowledge(), "直接确认应成功");
@@ -81,7 +85,10 @@ class QueueDispatchTest {
         QueueHelper.enqueue(session, "task", null);
 
         AtomicReference<QueueClaim> ref = new AtomicReference<>();
-        assertEquals(DrainStatus.STARTED, QueueHelper.claimNext(session, ref::set));
+        assertEquals(DrainStatus.STARTED, QueueHelper.claimNext(session, claim -> {
+            ref.set(claim);
+            return false;
+        }));
 
         assertTrue(ref.get().rollback(), "回滚应把任务放回队首");
         assertNull(QueueHelper.currentDispatch(session), "回滚也必须注销派发登记");
@@ -94,7 +101,10 @@ class QueueDispatchTest {
         QueueHelper.enqueue(session, "task", null);
 
         AtomicReference<QueueDispatch> ref = new AtomicReference<>();
-        QueueHelper.claimNext(session, claim -> ref.set(QueueDispatch.current(session)));
+        QueueHelper.claimNext(session, claim -> {
+            ref.set(QueueDispatch.current(session));
+            return false;
+        });
 
         QueueDispatch dispatch = ref.get();
         ExecutorService pool = Executors.newSingleThreadExecutor();
@@ -112,7 +122,10 @@ class QueueDispatchTest {
         AgentSession session = session();
         QueueHelper.enqueue(session, "task", null);
         AtomicReference<QueueDispatch> ref = new AtomicReference<>();
-        QueueHelper.claimNext(session, claim -> ref.set(QueueDispatch.current(session)));
+        QueueHelper.claimNext(session, claim -> {
+            ref.set(QueueDispatch.current(session));
+            return false;
+        });
 
         assertTrue(ref.get().settle(true));
         assertEquals(0, QueueHelper.size(session));
@@ -126,7 +139,10 @@ class QueueDispatchTest {
         AgentSession session = session();
         QueueHelper.enqueue(session, "task", null);
         AtomicReference<QueueDispatch> ref = new AtomicReference<>();
-        QueueHelper.claimNext(session, claim -> ref.set(QueueDispatch.current(session)));
+        QueueHelper.claimNext(session, claim -> {
+            ref.set(QueueDispatch.current(session));
+            return false;
+        });
 
         assertTrue(ref.get().settle(false));
         assertEquals("task", QueueHelper.snapshot(session).get(0).getText());
@@ -148,7 +164,10 @@ class QueueDispatchTest {
         AgentSession session = session();
         QueueHelper.enqueue(session, "task", null);
         AtomicReference<QueueDispatch> ref = new AtomicReference<>();
-        QueueHelper.claimNext(session, claim -> ref.set(QueueDispatch.current(session)));
+        QueueHelper.claimNext(session, claim -> {
+            ref.set(QueueDispatch.current(session));
+            return false;
+        });
 
         QueueHelper.cancelPending(session);
 
@@ -162,7 +181,10 @@ class QueueDispatchTest {
         AgentSession session = session();
         QueueHelper.enqueue(session, "task", null);
         AtomicReference<QueueDispatch> ref = new AtomicReference<>();
-        QueueHelper.claimNext(session, claim -> ref.set(QueueDispatch.current(session)));
+        QueueHelper.claimNext(session, claim -> {
+            ref.set(QueueDispatch.current(session));
+            return false;
+        });
 
         QueueHelper.cancelPending(session);
 
@@ -192,7 +214,10 @@ class QueueDispatchTest {
         QueueHelper.enqueue(session, "task", null);
         AtomicInteger calls = new AtomicInteger();
 
-        DrainStatus status = QueueHelper.claimNext(session, s -> false, claim -> calls.incrementAndGet());
+        DrainStatus status = QueueHelper.claimNext(session, s -> false, claim -> {
+            calls.incrementAndGet();
+            return true;
+        });
 
         assertEquals(DrainStatus.NO_TASK, status);
         assertEquals(0, calls.get());
@@ -202,7 +227,10 @@ class QueueDispatchTest {
 
         // 领取权未被占：放行后能立即领到
         AtomicReference<QueueClaim> ref = new AtomicReference<>();
-        assertEquals(DrainStatus.STARTED, QueueHelper.claimNext(session, ref::set));
+        assertEquals(DrainStatus.STARTED, QueueHelper.claimNext(session, claim -> {
+            ref.set(claim);
+            return false;
+        }));
         assertNotNull(ref.get());
     }
 
@@ -229,7 +257,7 @@ class QueueDispatchTest {
                     queue.drainLoop(session, s -> true, claim -> {
                         entered.incrementAndGet();
                         try { Thread.sleep(30); } catch (InterruptedException ignored) { }
-                        claim.acknowledge();
+                        return true; // 同步完成：内核当场收口（本用例验证并发领取互斥）
                     });
                 } catch (InterruptedException ignored) {
                 } finally {

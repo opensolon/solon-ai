@@ -205,7 +205,8 @@ public class QueueExtension extends AbsHarnessExtension {
      *
      * @param canDrain 现在能不能接单（传 null 表示不预判，完全由队列状态决定）；
      *                 同步命令会在回调返回前就结束，宿主通常在这里传「当前是否忙」
-     * @param handler  单次领取的启动者（终态收口由 {@link QueueClaim} 负责）
+     * @param handler  单次领取的启动者；返回 true = 同步完成（内核当场收口），
+     *                 false = 异步启动（终态由流终态的 {@code dispatch.settle} 收口）
      * @return 最后一次领取的结果（未发生领取时为 {@link DrainStatus#NO_TASK}）
      * @since 4.2.1
      */

@@ -5,7 +5,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.session.queue.DrainStatus;
-import org.noear.solon.ai.harness.session.queue.QueueClaimHandler;
+import org.noear.solon.ai.harness.session.queue.QueueClaim;
 import org.noear.solon.ai.harness.session.queue.QueueHelper;
 import org.noear.solon.ai.harness.session.queue.QueueItem;
 import org.noear.solon.ai.harness.session.steer.SteerMessage;
@@ -61,32 +61,36 @@ class SessionQueueSteerTest {
         assertSame(InputOrigin.NONE, m.getOrigin());
     }
 
-    // ========== 同步领取（claimNext + handler 内 acknowledge；布尔型 drainOne 已删） ==========
+    // ========== 同步领取（claimNext 返回 true = 内核当场收口；布尔型 drainOne 已删） ==========
 
     /** 入队统一走 enqueue（它负责归一化、上限与去重），不直接构造 item。 */
     private static void offer(AgentSession session, String text) {
         QueueHelper.enqueue(session, text, InputOrigin.NONE);
     }
 
-    /** 同步语义封装：回调返回即确认（与被删的布尔型 drainOne 语义一致，供下方用例复用）。 */
-    private static boolean drainSync(AgentSession session, QueueClaimHandler runner) throws Exception {
+    /** 同步语义封装：回调返回 true 即同步完成，收口由内核完成（与被删的布尔型 drainOne 语义一致）。 */
+    private static boolean drainSync(AgentSession session, SyncRunner runner) throws Exception {
         return QueueHelper.claimNext(session, claim -> {
             runner.run(claim);
-            if (!claim.acknowledge()) {
-                throw new IllegalStateException("ack failed");
-            }
+            return true;
         }) == DrainStatus.STARTED;
+    }
+
+    /** 同步回调签名（与 QueueClaimHandler 的返回值语义解耦，供 drainSync 复用）。 */
+    @FunctionalInterface
+    interface SyncRunner {
+        void run(QueueClaim claim) throws Exception;
     }
 
     @Test
     void syncDrainReturnsNoTaskWhenEmpty() {
         AgentSession s = session();
-        assertEquals(DrainStatus.NO_TASK, QueueHelper.claimNext(s, c -> { }));
+        assertEquals(DrainStatus.NO_TASK, QueueHelper.claimNext(s, c -> false));
     }
 
     @Test
     void claimNextReturnsNoTaskOnNullArgs() {
-        assertEquals(DrainStatus.NO_TASK, QueueHelper.claimNext(null, c -> { }));
+        assertEquals(DrainStatus.NO_TASK, QueueHelper.claimNext(null, c -> false));
         assertEquals(DrainStatus.NO_TASK, QueueHelper.claimNext(session(), null));
     }
 
@@ -141,7 +145,10 @@ class SessionQueueSteerTest {
         assertTrue(QueueHelper.tryClaim(s));
 
         List<String> seen = new ArrayList<>();
-        assertEquals(DrainStatus.NO_TASK, QueueHelper.claimNext(s, c -> seen.add(c.getItem().getText())));
+        assertEquals(DrainStatus.NO_TASK, QueueHelper.claimNext(s, c -> {
+            seen.add(c.getItem().getText());
+            return true;
+        }));
         assertTrue(seen.isEmpty());
     }
 

@@ -55,11 +55,11 @@ class QueueExtensionTest {
         assertEquals(2, view.size());
         assertEquals("第一条", view.get(0).getText());
 
-        // 同步 drain：回调返回即确认（claimNext + handler 内 acknowledge，布尔型 drainOne 已删）
+        // 同步 drain：返回 true 即同步完成，收口由内核完成（布尔型 drainOne 已删）
         AtomicReference<String> executed = new AtomicReference<>();
         assertEquals(DrainStatus.STARTED, queue.claimNext(session, claim -> {
             executed.set(claim.getItem().getText());
-            assertTrue(claim.acknowledge(), "同步回调内 ack 必须成功");
+            return true;
         }));
         assertEquals("第一条", executed.get());
         assertEquals(1, queue.pendingSize(session), "同步 drain 后 in-flight 已确认，不占待执行数");
@@ -91,9 +91,12 @@ class QueueExtensionTest {
         AgentSession session = InMemoryAgentSession.of();
         queue.enqueue(session, "异步任务", null);
 
-        // 异步语义：callback 只启动，收取口句柄
+        // 异步语义：回调只启动并返回 false，收口句柄留给终态
         AtomicReference<QueueClaim> ref = new AtomicReference<>();
-        assertEquals(DrainStatus.STARTED, queue.claimNext(session, ref::set));
+        assertEquals(DrainStatus.STARTED, queue.claimNext(session, claim -> {
+            ref.set(claim);
+            return false;
+        }));
         assertEquals(0, queue.pendingSize(session), "in-flight 不计待执行");
         assertEquals(1, queue.viewRows(session).size(), "viewRows 含 in-flight");
 

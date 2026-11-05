@@ -168,7 +168,7 @@ class InputGateTest {
         AtomicInteger started = new AtomicInteger();
         queue.drainLoop(session, s -> true, claim -> {
             started.incrementAndGet();
-            claim.acknowledge();
+            return true; // 同步完成：内核当场收口
         });
 
         assertEquals(3, started.get());
@@ -185,7 +185,10 @@ class InputGateTest {
         queue.enqueue(session, "a", null);
 
         AtomicInteger started = new AtomicInteger();
-        queue.drainLoop(session, s -> false, claim -> started.incrementAndGet());
+        queue.drainLoop(session, s -> false, claim -> {
+            started.incrementAndGet();
+            return true;
+        });
 
         assertEquals(0, started.get());
         assertEquals(1, queue.pendingSize(session));

@@ -358,9 +358,10 @@ public final class QueueHelper {
     /**
      * 领取队首一条并交给 handler（一次领取 = 一个 {@link QueueClaim}）。
      *
-     * <p>同步语义（回调返回即确认）由宿主在 handler 内自行 {@code claim.acknowledge()} 表达，
-     * 内核不再提供布尔型 drain 变体：两条路径曾在「ack 失败时任务去向」上各自漂移，
-     * 收敛后仅剩此一处。handler 抛异常等价于启动失败，由内核用领取时快照的代际回滚。</p>
+     * <p>收口契约由 handler 返回值表达（见 {@link QueueClaimHandler}）：返回 true = 同步完成，
+     * 内核当场 acknowledge；ack 被拒（期间被 cancelPending）则回滚丢弃并返回 START_FAILED。
+     * 返回 false = 异步启动，claim 由宿主经捕获的 {@code QueueDispatch} 在流终态收口。
+     * handler 抛异常等价启动失败，由内核用领取时快照的代际回滚。</p>
      *
      * @return STARTED / NO_TASK / START_FAILED
      */
@@ -375,9 +376,10 @@ public final class QueueHelper {
      * {@link #tryClaim(AgentSession, java.util.function.Predicate)}），因此宿主无须再在
      * 领取前后自建 synchronized 块与忙态复核。</p>
      *
-     * <p>领取成功后登记一个跨线程存活的 {@link QueueDispatch}：handler 返回时<b>不</b>注销
-     * （异步任务还在跑，终态由宿主经 {@code dispatch.settle(..)} 收口）；handler 抛异常时
-     * 视为启动失败，注销登记并用领取瞬间的代际快照回滚到队首。</p>
+     * <p>领取成功后登记一个跨线程存活的 {@link QueueDispatch}：handler 返回 false（异步启动）
+     * 时<b>不</b>注销——任务还在跑，终态由宿主经 {@code dispatch.settle(..)} 收口；
+     * handler 返回 true（同步完成）时内核当场 acknowledge 收口；handler 抛异常视为启动失败，
+     * 注销登记并用领取瞬间的代际快照回滚到队首。</p>
      *
      * @return STARTED / NO_TASK / START_FAILED
      */
@@ -392,7 +394,17 @@ public final class QueueHelper {
         QueueClaim claim = new QueueClaim(session, item, generation(session));
         QueueDispatch dispatch = registerDispatch(session, claim);
         try {
-            handler.run(claim);
+            boolean done = handler.run(claim);
+            if (!done) {
+                // 异步启动：claim 留给流终态（宿主捕获的 dispatch.settle）收口
+                return DrainStatus.STARTED;
+            }
+            // 同步完成：内核当场收口。ack 被拒（期间被 Stop）必须转为回滚丢弃 + START_FAILED——
+            // 静默吞掉会让调用方以为启动成功而继续领取下一条，把用户刚停掉的任务后续也跑完。
+            if (!claim.acknowledge()) {
+                claim.rollback();
+                return DrainStatus.START_FAILED;
+            }
             return DrainStatus.STARTED;
         } catch (Throwable e) {
             unregisterDispatch(session, dispatch);

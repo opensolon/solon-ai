@@ -1,5 +1,16 @@
 ### vNEXT
 
+* **queue 消费协议收敛：`QueueClaimHandler` 返回值化，同步收口内核化，宿主不再手写 acknowledge**（4.2.0 未发布，签名直接改，编译器收口全部调用点）:
+  * **背景**：队列机制已封装到位，但「消费队列」没有——同步宿主（CLI）必须知道「ack 失败必须抛异常」这条只活在注释里的铁律（丢弃 `acknowledge()` 返回值编译照过，后果是 Stop 被静默击败、任务无限重跑）；异步宿主（Web）必须用 `isBusy` 反推「同步命令已当场完成」再手动 `settleDispatch`。两个陷阱都是「API 允许写出看起来对、实际错的代码」
+  * **`QueueClaimHandler.run` 签名 `void` → `boolean`**：返回值即收口契约——`true` = 任务在回调返回前已同步完成，内核当场 `acknowledge()`；`false` = 异步启动，终态由宿主经捕获的 `QueueDispatch` 收口。收口时机只有两种，正好由布尔表达
+  * **内核同步收口分支**（`QueueHelper.claimNext`）：返回 true 后 ack 被拒（期间被 `cancelPending`）→ 自动接 `rollback()`（代际已变走丢弃分支）→ 返回 `START_FAILED` 让循环终止，任务不复活、后续不继续跑。静默吞掉的旧写法会让调用方以为启动成功而继续领取下一条
+  * **`WebQueueDispatcher.drainSessionQueue` 回调改返回值语义**：`return !isBusy(session)` 替代「isBusy 反推 + 手动 `settleDispatch`」——忙态从「调收口 API」降为「报告状态」，推断错时机的悬挂 claim 从写法上消失
+  * **`WebSessionRunner.failStreamTurn` 改身份化判定**：`turn != null`（订阅前捕获的本轮派发事务）替代会话态 `hasQueuedDispatch`（= `currentDispatch(session) != null`）。等价性：正常时序下二者同值（busy 期间无新派发）；Stop 竞态下队列已清，均无实际续发。`WebQueueDispatcher.hasQueuedDispatch` 删除（主代码 0 调用）
+  * **goal 恢复职责归位**：`recoverSessionGoals`（35 行 goal 域知识）从 `WebQueueDispatcher` 拆出为独立的 `WebGoalRecovery`——queue 派发器不再携带跨域知识；`WebGate.recoverSessionQueues` 统一接线
+  * **护栏**：`PackageBoundaryTest.hostMustNotOwnQueueDispatchState` 新增两条规则——宿主主代码（CliShell/WebQueueDispatcher）禁止 `claim.acknowledge(`/`claim.rollback(`（同步收口归内核）；CLI 禁 `settleDispatch(`（纯同步循环无合法用途）；Web 禁 `hasQueuedDispatch` 回潮。反向验证：改回旧手写 ack 写法，护栏准确报出「手写 claim 收口」
+  * **新增测试**：`QueueClaimTest.syncDoneDuringStopReturnsStartFailedWithoutResurrect`（同步完成 + 期间 Stop → START_FAILED、不复活、登记不残留、领取权可复用）与 `syncDoneSettlesInKernelAndClearsQueue`（同步完成正常路径内核当场收口）。反向验证：撤掉内核 ack 分支后准确报出 `expected: <START_FAILED> but was: <STARTED>`
+  * **验证**：queue 域定向 74 例全绿；harness 全量 **872 例，33F+5E** 与基线逐项一致（ToolStrategy/Web/Write 权限域 + TaskTalent/Accessor 环境域既有，stash 对照确认）；cli 全量 **1254 例 3F** 与基线逐项一致（settings/挂载域既有）；`PackageBoundaryTest` + `ImBusySteerContractTest` 20 例全绿
+
 * **queue 包收敛：同步/异步双领取路径合一，`drainOne` / `QueueTaskRunner` 删除**（4.2.0 未发布故无适配层；唯一宿主调用点 CLI 已同步改写）:
   * **背景**：`drainOne(runner)` 是 `claimNext` 的布尔型同步变体，四条分支（队空/已被占、runner 抛异常、正常完成、ack 失败）全部可由「claimNext + handler 内 acknowledge + ack 失败抛异常」表达。两条路径曾在「ack 失败时任务去向」上各自漂移（drainOne 静默 requeueFront，claimNext 走 START_FAILED），收敛后只剩一条领取路径
   * **删除清单**：`QueueTaskRunner` 接口（文件删除）、`QueueHelper.drainOne`（22 行）、`QueueExtension.drainOne` 门面；`SessionQueueSteerTest` 的 6 个 drainOne 用例改写为 claimNext 同步写法（含新增断言：启动异常返回 START_FAILED 且任务回队首，不再向外传播）
