@@ -44,6 +44,18 @@
 </dependency>
 ```
 
+需要全部会话插件（goal / queue / steer / loop）时，改用聚合包，一个依赖带齐核心与四个插件：
+
+```xml
+<dependency>
+    <groupId>org.noear</groupId>
+    <artifactId>solon-ai-harness-all</artifactId>
+    <version>${solon-ai.version}</version>
+</dependency>
+```
+
+> 聚合包**只聚合依赖、不含代码，也不自动装配**：插件上了类路径不会自己生效，仍需宿主按 §5 显式 `addExtensionIfAbsent`（goal / loop 依赖 workspaceId、执行器、存储文件等宿主参数，无法零参自动挂载）。只写插件或只需核心契约的模块，请依赖 `solon-ai-harness`，不要依赖聚合包。
+
 ### 1.2 构建引擎
 
 ```java
@@ -832,7 +844,7 @@ HarnessEngine.of("/data/work", ".solon/")
 
 **三个能力，三个类**：每个命令从装配到运行期操作宿主都只接触一个 Extension 实例（宿主侧与 harness 的交互面收敛到一个类），不再需要宿主逐个 new `GoalEngine`/`GoalScheduler`/`GoalCommand`，也不需要分别操作 `QueueHelper`。命令本身的语法与回执未变，终端用户无感知。
 
-**会话能力是独立插件模块（4.2.0+）**：`solon-ai-harness-goal` / `solon-ai-harness-queue` / `solon-ai-harness-steer` / `solon-ai-harness-loop`，按需引入。核心模块不认识它们，它们之间也互不依赖，只经核心契约协作（见 `HarnessExtension` 类注释「插件化的三种协作机制」）：
+**会话能力是独立插件模块（4.2.0+）**：`solon-ai-harness-goal` / `solon-ai-harness-queue` / `solon-ai-harness-steer` / `solon-ai-harness-loop`，按需引入（或用聚合包 `solon-ai-harness-all` 一次引齐，见 §1.1；引入不等于装配）。核心模块不认识它们，它们之间也互不依赖，只经核心契约协作（见 `HarnessExtension` 类注释「插件化的三种协作机制」）：
 
 | 契约 | 类型 | 提供方 | 消费方 |
 |---|---|---|---|

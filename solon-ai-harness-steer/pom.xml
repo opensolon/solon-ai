@@ -20,7 +20,7 @@
         <!-- 只依赖核心契约（HarnessExtension / InputBacklog / TurnDispatch），不依赖其它插件 -->
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-harness</artifactId>
+            <artifactId>solon-ai-harness-core</artifactId>
         </dependency>
 
         <dependency>

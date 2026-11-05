@@ -14,57 +14,32 @@
     <artifactId>solon-ai-harness</artifactId>
     <name>${project.artifactId}</name>
     <packaging>jar</packaging>
+    <description>solon-ai-harness 聚合包：核心 + 全部会话插件（goal / queue / steer / loop）。只聚合依赖，不含代码；插件仍需宿主显式 addExtensionIfAbsent 装配</description>
 
     <dependencies>
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-lib</artifactId>
+            <artifactId>solon-ai-harness-core</artifactId>
         </dependency>
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-talent-cli</artifactId>
+            <artifactId>solon-ai-harness-goal</artifactId>
         </dependency>
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-talent-code</artifactId>
+            <artifactId>solon-ai-harness-queue</artifactId>
         </dependency>
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-talent-web</artifactId>
+            <artifactId>solon-ai-harness-steer</artifactId>
         </dependency>
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-talent-lsp</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-ai-talent-memory</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-ai-talent-gateway</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-ai-agent</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-serialization-snack4</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <scope>provided</scope>
+            <artifactId>solon-ai-harness-loop</artifactId>
         </dependency>
 
         <dependency>
@@ -74,25 +49,4 @@
         </dependency>
     </dependencies>
 
-
-    <repositories>
-        <repository>
-            <id>sonatype-snapshots</id>
-            <name>Sonatype Snapshots</name>
-            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
-            <releases>
-                <enabled>false</enabled>
-            </releases>
-        </repository>
-    </repositories>
-    <pluginRepositories>
-        <pluginRepository>
-            <id>sonatype-snapshots</id>
-            <name>Sonatype Snapshots</name>
-            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
-            <releases>
-                <enabled>false</enabled>
-            </releases>
-        </pluginRepository>
-    </pluginRepositories>
 </project>

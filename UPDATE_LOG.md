@@ -1,5 +1,11 @@
 ### vNEXT
 
+* **新增聚合包 `solon-ai-harness-all`**（4.2.0；纯新增，零破坏）:
+  * **内容**：只有 pom，聚合 `solon-ai-harness` + `solon-ai-harness-goal` / `-queue` / `-steer` / `-loop`，一个依赖带齐核心与全部会话插件。现有模块（含 `solon-ai-harness` 本身及四个插件）不做任何改动，已有使用方与插件作者无感
+  * **为何不改名拆 core**：插件单向依赖 `solon-ai-harness`，若让主名变聚合包需先整体改名为 `-core`、四个插件与下游全部改依赖，且会让已发布的第三方扩展被动带入插件与 scheduling/cron；新增 `-all` 达到同样的「一个依赖拿全」而无迁移成本
+  * **边界**：聚合包只解决依赖引入，不自动装配——插件仍需宿主显式 `addExtensionIfAbsent`（README §1.1 / §5 已注明）。插件与只需核心契约的模块应依赖 `solon-ai-harness`，不要依赖聚合包
+  * **配套**：`__release/solon-ai-bundle1` 增加模块；`solon-parent` 的 dependencyManagement 增加 `solon-ai-harness-all`；守卫测试 `HarnessAllDependencyTest`（编译期引用四个插件，任一从 pom 漏掉即编译失败）
+
 * **子代理提及解析入口唯一化：宿主提前解析与 `handle` 内部逐字一致**（4.2.1；新增面为主）:
   * **背景**：桌面端必须**提前**拿到「剥离提及后的正文」——Goal 拦截、子代理名格式校验、规划模式文本改写三件都作用在正文上，无法等 `handle` 返回后再做。于是它自己拼了一份 `AgentMentions.Options`，而 `handle` 内部又拼一份。两份口径不同（显式分支不 trim、兜底分支 `trimContent(true)`），同一段输入被解析两次，最终生效的子代理与正文取决于哪一次先落地。README §6.1 记录的「提及路径只跳过一个字符 / 显式路径吃掉所有空白」正是这一分叉的下游现象
   * **`HarnessInput.parseMention(engine)`（新）**：把 `Options` 的构造收成一处，`handle` 内部改为调用同一方法。宿主提前解析与引擎最终解析因此**逐字一致**，不再是「两套实现碰巧看起来一样」。解析仍无副作用，可安全重复调用

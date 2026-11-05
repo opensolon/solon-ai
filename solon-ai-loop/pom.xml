@@ -35,7 +35,7 @@
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-harness</artifactId>
+            <artifactId>solon-ai-harness-core</artifactId>
         </dependency>
 
         <!-- JSON 序列化（ONode） -->

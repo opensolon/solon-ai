@@ -31,6 +31,7 @@
         <module>../../solon-ai-acp</module>
         <module>../../solon-ai-flow</module>
         <module>../../solon-ai-harness</module>
+        <module>../../solon-ai-harness-core</module>
         <module>../../solon-ai-harness-goal</module>
         <module>../../solon-ai-harness-queue</module>
         <module>../../solon-ai-harness-steer</module>
