@@ -1,5 +1,37 @@
 ### vNEXT
 
+* **子代理提及解析入口唯一化：宿主提前解析与 `handle` 内部逐字一致**（4.2.1；新增面为主）:
+  * **背景**：桌面端必须**提前**拿到「剥离提及后的正文」——Goal 拦截、子代理名格式校验、规划模式文本改写三件都作用在正文上，无法等 `handle` 返回后再做。于是它自己拼了一份 `AgentMentions.Options`，而 `handle` 内部又拼一份。两份口径不同（显式分支不 trim、兜底分支 `trimContent(true)`），同一段输入被解析两次，最终生效的子代理与正文取决于哪一次先落地。README §6.1 记录的「提及路径只跳过一个字符 / 显式路径吃掉所有空白」正是这一分叉的下游现象
+  * **`HarnessInput.parseMention(engine)`（新）**：把 `Options` 的构造收成一处，`handle` 内部改为调用同一方法。宿主提前解析与引擎最终解析因此**逐字一致**，不再是「两套实现碰巧看起来一样」。解析仍无副作用，可安全重复调用
+  * **桌面端收敛**：`DesktopInputRouter` 的两个分支合并为一处调用（`explicitAgent` 为空即等价于原兜底分支），`AgentMentions` 的 `Options` 构造从宿主消失。有意的行为变更：**请求体显式指定 agent 时也走 `trimContent(true)`**——桌面输入框允许换行与缩进，原显式分支不 trim 属不一致而非设计。其余路径（CLI/Web/ACP/headless）零变更
+  * **新测试 8 例**（`HarnessInputMentionParseTest`）：提前解析与 `handle` 结果一致、`trimContent` 两个口径、显式 agent 只剥离一次、二次解析幂等、`nameValidator` 双路径生效、`agentAware(false)` 保留程序生成文本、`selectedAgent` 仅兜底
+  * **护栏 1 条**（`PackageBoundaryTest`）：宿主主代码禁 `AgentMentions.Options.builder()` / `AgentMentions.parse(`（`PackageBoundaryTest` 16 例全绿）
+  * **验证**：harness 全量 **924 例 33F+5E**、cli 全量 **1260 例 3F**，失败域与基线逐项一致（harness：ToolStrategy/Web/Write 权限域 + TaskTalent/Accessor 环境域；cli：settings/挂载域三例）
+
+* **宿主侧接口收敛：流生命周期/受理判定/会话选择项上收，内置扩展一次装配**（4.2.1；新增面为主，旧入口保留）:
+  * **背景**：`handle` + 四态 `switch` 已让「跑一轮」很轻，但超出这一层的胶水仍由宿主持有，且**同一不变量在五端重复实现**——「取消代数在订阅前捕获、取消以 complete 收尾」只活在 README，`WebSessionRunner` 的 async/sync 两条路径各抄一遍（sync 的 `doFinally` 因此漏掉 `settleTurn`）；受理判定 55 行写在 `WebChatInputHandler` 的 `synchronized (session.attrs())` 块里，而它用到的每个原语都已在 harness；会话级选择项 `CTX_MODEL_SELECTED`/`CTX_AGENT_SELECTED` 是裸常量（全仓 25 处，四种清除写法并存），而同类的 cwd 早已有门面
+  * **`SessionTurn`（新）**：`begin(session)` 在**订阅前**捕获取消代数基准与本轮派发事务，`isCancelled()` / `settle(boolean)` / `dispatch()` / `cancelGeneration()`。「须在 stream() 之前 begin」从文档义务变成 API 形状（方法名语义 + javadoc）；`settle` 幂等，无派发时回落读当前派发。Web async/sync 与桌面端全部替换，宿主侧 `SessionRuns.cancelCount` / `QueueDispatch.current` 自捕获归零。**顺带修复**：Web sync 路径原本漏收口派发事务，收归 `SessionTurn` 后两条路径同形，该类缺陷从「靠人工对称」变为「不可能写错」
+  * **`engine.admit(session, input, hitlDecision, hitlExempt)` + `AdmitDecision`（新）**：四值 `ADMIT` / `ADMIT_BYPASS` / `QUEUE` / `REJECT`，携带 ticket、dispatch、rejectReason、rejectDetail。把六项判定（运行流、受理窗口、待审批卡、队列积压、派发身份、忙态旁路命令）收进引擎，判定与占位同临界区；忙态口径固定为 `isOccupied`（含 HITL 与积压），**宿主不得传自己的判定**——这正是历史漂移点。边界有意保留：`QUEUE` 分支仍由宿主 `enqueue`（`reasoningEffort`/`thinkingMode` 属 cli 域概念，收进引擎会让 loop 语义反向渗进 harness），`REJECT` 只给原因码、渲染归宿主
+  * **会话选择项门面**：`getSessionModel`/`setSessionModel`/`getSessionAgent`/`setSessionAgent`（对称于既有 `getSessionCwd` 系列）+ `SessionSelections`（静态读入口，供 `TraceUtil` 这类拿不到引擎实例的工具）。四种清除写法（`put("")` / `put(null)` / `remove` / 带守卫）归一为「null 与空白都等于未设置，读回恒为 null」；`CTX_*` 常量保留但不再被宿主直接引用（25 → 0，仅剩注释）
+  * **`HarnessExtensions.installDefaults(engine, goal|workspaceId)` + `Handles`（新）**：steer / queue / goal 一次装齐，顺序固定（三者 `onAttach` 都只 `register`，命令名互不冲突，顺序不承载语义，固定只为可复现），**幂等**（已挂载同类型则复用，挡住 `addExtension` 不查重导致的二次 `onAttach` 重建调度器）。宿主自有扩展（loop / manager）仍走 `addExtension` 追加，聚合入口不接管。**明确不做 builder**：queue 零旋钮零状态，加 builder 只是空壳（README 常见坑 15）；真正缺的是「三件套怎么一次装对」这个组合根职责
+  * **`QueueExtension.maxQueueSize()` / `maxTextLength()`**：静态只读访问器（对称 `SteerExtension.maxTextLength()`），供宿主前端预校验，不改变内核语义、不引入 builder
+  * **cwd 兜底注入**：`handle` 装配时按 `getSessionCwd(session)` 注入 request 级 `ATTR_CWD`。宿主四处注入**保留**——ACP 是协议请求级、Web 是前端上报、桌面是入参，「请求级覆盖」与「会话缺省」是两个来源
+  * **新测试 14 例**：`SessionTurnTest` 6（取消早于/晚于 begin 的归属、空会话无条件安全、幂等收口）、`HarnessExtensionsTest` 8（装齐、命令注册、幂等、复用已挂载、goal 缺席降级、null 引擎容错、宿主扩展不受扰、宿主配置不被丢弃）；`HarnessEngineAccessorTest` 补会话选择项归一断言
+  * **护栏 3 条**（`PackageBoundaryTest`）：禁 `SessionRuns.cancelCount` 与流路径自捕获 `QueueDispatch.current`；入口须真的调 `.admit(`（且不得回潮 `synchronized (session.attrs())` 手拼）；禁裸 `CTX_*`；禁逐行 `addExtension(new SteerExtension())` / `new QueueExtension()` / `addExtension(goalExtension)`。首跑即暴露 2 处真实残留，修复后 15 例全绿
+  * **验证**：harness 全量 **916 例 33F+5E**、cli 全量 **1259 例 3F**，失败域与基线逐项一致（harness：ToolStrategy/Web/Write 权限域 + TaskTalent/Accessor 环境域；cli：settings/挂载域三例）；`PackageBoundaryTest` 15 例全绿
+
+
+* **goal 执行器注册通道化：认领谓词显式交给引擎，重叠可告警；无调度器静默 no-op 补 warn；API 面收窄**（4.2.1；旧签名保留，编译期零破坏）:
+  * **背景**：多入口宿主（CLI/Web/桌面）各注册一个 goal 执行器，认领边界互斥靠约定——谓词内联在 handler 里，引擎不可见，写宽了就按注册顺序静默抢跑，唯一防线是一条无上下文的 debug 日志。另两处排障盲区：`.scheduler(null)` 后调度方法完全静默 no-op；`resumeAndSchedule` 与 `resume` 同义、裸参 attach 重载靠位置才能知道第四参是毫秒
+  * **`GoalEngine.addTaskExecutor(String channel, Predicate<String> claim, TaskHandler handler)`**：认领条件从 handler 的 null 返回值升级为显式谓词，引擎可在不执行 handler 的前提下静态评估互斥性——重叠时 `LOG.warn`（每命中组合一次，防批量恢复刷屏；组合集合超 64 个时停止追加防病态注册撑爆内存）。认领日志带通道名；谓词异常按不命中计；谓词是「预过滤」不是「权威判定」：命中后 handler 返 null 仍穿透到下一注册者（运行时端口暂不可用等场景依赖此回退）。旧形态注册（无谓词）继续可用但不可评估。`channelsClaiming(sessionId)` / `overlapWarnCount()` 包内观测口（测试 classpath 无 SLF4J 后端，日志捕抓不可用）
+  * **`GoalExtension.addTaskExecutor(channel, claim, handler)` 门面直通 + `Builder.taskExecutor(channel, claim, handler)` 装配时形态**（两者对称，旧单参 `taskExecutor(handler)` 保留）；宿主三注册点（CliShell / WorkspaceManager / WsGate）全部切换：`goal.addTaskExecutor("cli", SessionIdOwnership::isCli, handler)`，内联 if-return-null 谓词样板消失
+  * **`warnOnceNoScheduler`**：`scheduleNow` / `resumeScheduleOnly` / `unschedule` / `stopAll` 在无调度器时首次调用打一条 warn（AtomicBoolean 门闩，不刷屏，四方法共用一个闩）——「调了 scheduleNow 却没跑」的排障盲区消除。告警只在「确实没调度器」时触发（`sessionId == null` 或扩展停用是另一类原因，不得误报）；`onDetach` 直连内部字段而非 `stopAll()`——摘除时无调度器属正常形态，不应告警
+  * **API 收窄（弃用而非删除，下个 minor 移除）**：`GoalExtension.resumeAndSchedule`（与 `resume` 同义且与 `resumeScheduleOnly` 名字易混）、`attach` / `attachAndSchedule` 的 5 裸参重载（指向 `GoalSpec` 版，单位自描述）。门面内部互调已改走保留入口（`attachAndSchedule(spec)` → `attach(session, spec)` + `scheduleNow`），不自产弃用告警。`GoalEngine` 的裸参 attach 不弃用（门面保留入口仍委托它）
+  * **宿主死代码清理**：`WorkspaceContext.getGoalEngine()` / `getGoalScheduler()` / `attachGoal(GoalEngine, GoalScheduler)` 旧重载与 `goalEngine` / `goalScheduler` 字段删除（主代码 0 调用，属过渡期残留）；`GoalLoopEndpointTest` 的 `verify(context, never()).getGoalScheduler()` 随之删除——该意图已由编译期保证（getter 不存在即不可能绕门面）
+  * **新增测试 11 例**（`GoalChannelExecutorRegistrationTest`）：空白通道名/空谓词拒绝、旧形态不进评估、重叠每组合告警一次且注册顺序语义不变、谓词命中但 handler 返 null 穿透、抛异常谓词按不命中、门面直通、无调度器门闩恰触发一次、谓词每轮只评估一次、`stopAll` 同门闩、`onDetach` 不误报、builder 通道化按声明序生效
+  * **谓词只评估一次**：`execute` 原先把谓词跑两遍（互斥检测一遍 + 路由一遍），宿主谓词常是正则（`isDesktop = matches("\\d{1,18}")`），改为单次评估后结果复用；`channelsClaiming` 仅为测试观测口，不动
+  * **验证**：harness goal 定向（GoalChannelExecutorRegistrationTest 7 + GoalExtensionTest 20 + GoalRoundExecutionTest + GoalEngineTest + GoalCommandTest + GoalBoundaryTest）全绿；`InjectedRoundChannelContractTest` 断言升级为通道化形态（三入口各自锁定 `addTaskExecutor("cli"/"web"/"desktop", SessionIdOwnership::…)`）；cli 全量与基线一致
+
 * **steer 域宿主封装收尾：忙判定自算、严格轮次语义入内核、容量可配、批量取消**（4.2.0 未发布，重载新增无破坏）:
   * **背景**：steer 内核已收口，但宿主端到端仍要自拼四处本可上收的判定——`busyRecheck` 回调、`runId` 空值语义、入参长度校验、状态码字符串 switch。其中「忙判定」是唯一一处「有唯一正确答案却外包给宿主」的残留（答案在 `engine.status(session).isBusy()`）
   * **`SteerExtension` 持有 engine**：`onAttach` 保存引擎，新增 `defaultBusy(session)`＝`status(session).isBusy() || isAdmitting()`（与宿主 `SessionActivity.isBusy` 同口径）。新增 5 参 `steer(session, runId, steerId, text, origin)` 与 3 参 `steer(session, text, origin)` 走缺省口径；6 参全参重载保留作为「口径不同」的高级入口

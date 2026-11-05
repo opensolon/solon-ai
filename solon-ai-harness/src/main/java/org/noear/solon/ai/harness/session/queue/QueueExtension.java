@@ -258,4 +258,21 @@ public class QueueExtension extends AbsHarnessExtension {
     public int importItems(AgentSession session, List<Map<String, Object>> rows) {
         return QueueHelper.importItems(session, rows);
     }
+
+    /**
+     * 队列容量上限（与内核同源，仅供宿主做展示/预校验）。
+     *
+     * <p>宿主<b>不需要</b>用它做受理判定：{@link #enqueue} 超限会返回 {@code -1}，
+     * 宿主只映射应答即可。本方法保留给「前端先提示队列已满」这类展示用途。</p>
+     *
+     * @since 4.2.3
+     */
+    public static int maxQueueSize() {
+        return QueueHelper.MAX_QUEUE_SIZE;
+    }
+
+    /** 单条队列文本的最大字符数（与内核同源，仅供宿主展示/预校验）。@since 4.2.3 */
+    public static int maxTextLength() {
+        return QueueHelper.MAX_TEXT_LENGTH;
+    }
 }

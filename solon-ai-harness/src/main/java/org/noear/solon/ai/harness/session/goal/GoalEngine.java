@@ -37,7 +37,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 
 /**
  * Goal 引擎 —— 会话级「有终止判据的持续执行」能力。
@@ -95,8 +99,8 @@ public class GoalEngine {
     }
 
     private final HarnessEngine engine;
-    /** 宿主注册的执行者（按注册顺序取首个认领者）。 */
-    private final List<TaskHandler> taskHandlers = new CopyOnWriteArrayList<>();
+    /** 宿主注册的执行者（按注册顺序取首个认领者；通道化注册携带通道名与认领谓词）。 */
+    private final List<TaskClaim> taskHandlers = new CopyOnWriteArrayList<>();
     /**
      * 内置兜底执行者（程序生成的 prompt 同步回合）。
      *
@@ -204,9 +208,54 @@ public class GoalEngine {
     /** 注册/追加执行者（宿主覆盖；按注册顺序取首个认领者）。 */
     public void addTaskExecutor(TaskHandler handler) {
         if (handler != null) {
-            taskHandlers.add(handler);
+            taskHandlers.add(new TaskClaim(null, null, handler));
         }
     }
+
+    /**
+     * 注册带通道名与认领谓词的执行器（多入口宿主推荐形态）。
+     *
+     * <p>与 {@link #addTaskExecutor(TaskHandler)} 的差别：认领条件从 handler 的 null 返回值
+     * 升级为显式谓词，引擎因此能在<b>不执行 handler</b> 的前提下静态评估多个入口的认领边界
+     * 是否互斥——重叠时按注册顺序静默抢跑的配置错误，以前只能靠无上下文的 debug 行发现。</p>
+     *
+     * <p>谓词是「预过滤」不是「权威判定」：命中谓词后仍会调用 handler，其返回 null 依旧表示
+     * 本入口（本次）不认领（如宿主运行时端口暂不可用），语义与旧形态完全兼容。</p>
+     *
+     * @param channel 通道名（CLI/Web/桌面等；仅用于日志与互斥告警，不参与路由）
+     * @param claim   认领谓词（sessionId → 是否本通道的会话）
+     * @param handler 执行者
+     */
+    public void addTaskExecutor(String channel, Predicate<String> claim, TaskHandler handler) {
+        if (handler == null) {
+            return;
+        }
+        if (channel == null || channel.trim().isEmpty()) {
+            throw new IllegalArgumentException("channel must not be empty");
+        }
+        if (claim == null) {
+            throw new IllegalArgumentException("claim predicate must not be null "
+                    + "(legacy form: addTaskExecutor(handler))");
+        }
+        taskHandlers.add(new TaskClaim(channel.trim(), claim, handler));
+    }
+
+    /** 执行者注册项：通道名与谓词均可空（空 = 旧形态注册）。 */
+    private static final class TaskClaim {
+        final String channel;
+        final Predicate<String> claim;
+        final TaskHandler handler;
+
+        TaskClaim(String channel, Predicate<String> claim, TaskHandler handler) {
+            this.channel = channel;
+            this.claim = claim;
+            this.handler = handler;
+        }
+    }
+
+    /** 互斥告警的防重放键（按「命中通道组合」去重：配置错误是静态的，同组合只警一次）。 */
+    private final Set<String> overlapWarnKeys = ConcurrentHashMap.newKeySet();
+    private final AtomicInteger overlapWarnCount = new AtomicInteger();
 
     /**
      * 设置内置兜底执行者（只在前面的执行者全不认领时考虑）。
@@ -239,8 +288,43 @@ public class GoalEngine {
      * <p>不含任何业务判定（预算、熔断、完成条件都在调用方），只做「投递 + 取回事实」。</p>
      */
     RoundResult execute(String sessionId, String prompt) {
-        for (TaskHandler handler : taskHandlers) {
-            RoundResult result = handler.handle(sessionId, prompt);
+        // 谓词只评估一次，结果供「互斥检测」与「认领路由」复用：宿主谓词常是正则匹配
+        // （如 isDesktop = matches("\\d{1,18}")），两次遍历等于双倍编译开销。
+        TaskClaim[] claims = taskHandlers.toArray(new TaskClaim[0]);
+        boolean[] claimed = new boolean[claims.length];
+        java.util.List<String> matchedChannels = new java.util.ArrayList<>(2);
+
+        for (int i = 0; i < claims.length; i++) {
+            TaskClaim taskClaim = claims[i];
+            if (taskClaim.claim == null) {
+                claimed[i] = true;          // 旧形态注册：无谓词，恒参与
+                continue;
+            }
+            try {
+                if (taskClaim.claim.test(sessionId)) {
+                    claimed[i] = true;
+                    if (taskClaim.channel != null) {
+                        matchedChannels.add(taskClaim.channel);
+                    }
+                }
+            } catch (Throwable e) {
+                LOG.debug("Goal claim predicate failed for channel '{}': {}", taskClaim.channel, e.getMessage());
+            }
+        }
+
+        // 静态评估互斥性（仅通道化注册可评估）：多个谓词命中同一会话意味着宿主的
+        // 认领边界重叠，先注册者会静默抢跑——此前只有一条无上下文的 debug 行。
+        warnIfClaimsOverlap(sessionId, matchedChannels);
+
+        for (int i = 0; i < claims.length; i++) {
+            if (claimed[i] == false) {
+                continue;
+            }
+            TaskClaim taskClaim = claims[i];
+            if (taskClaim.claim != null) {
+                LOG.debug("Goal round for session '{}' claimed by channel '{}'", sessionId, taskClaim.channel);
+            }
+            RoundResult result = taskClaim.handler.handle(sessionId, prompt);
             if (result != null) {
                 return result;
             }
@@ -254,6 +338,58 @@ public class GoalEngine {
         // 不得静默——否则表现为「目标一直在跑却什么都不做」。
         LOG.debug("Goal round not claimed by any executor (session={}); no default executor configured", sessionId);
         return null;
+    }
+
+    /**
+     * 谓词重叠告警：同一「命中通道组合」只警一次。
+     *
+     * <p>键集上限 64：超过后**新组合不再告警**（也不计数），只保留已记录组合的防重放效力——
+     * 这是为了在病态注册（谓词组合爆炸）时不撑爆内存，代价是极端场景下会漏报。</p>
+     */
+    private void warnIfClaimsOverlap(String sessionId, java.util.List<String> matched) {
+        if (matched.size() < 2) {
+            return;
+        }
+        String key = String.join("+", matched);
+        if (overlapWarnKeys.add(key) == false) {
+            return;
+        }
+        if (overlapWarnKeys.size() > 64) {
+            overlapWarnKeys.remove(key);
+            return;
+        }
+        LOG.warn("Goal round for session '{}' matched {} channel executors [{}]; "
+                + "taking first by registration order - host claim predicates are NOT mutually exclusive",
+                sessionId, matched.size(), String.join(",", matched));
+        overlapWarnCount.incrementAndGet();
+    }
+
+    /**
+     * 命中会话的通道列表（旧形态注册不含在内；谓词异常按不命中计）。
+     *
+     * <p>测试观测口：{@link #execute} 走自己的单次评估路径，不复用本方法
+     * （避免为跑一轮多遍历一次谓词）。两者判定口径必须保持一致。</p>
+     */
+    java.util.List<String> channelsClaiming(String sessionId) {
+        java.util.List<String> matched = new java.util.ArrayList<>(2);
+        for (TaskClaim taskClaim : taskHandlers) {
+            if (taskClaim.claim == null || taskClaim.channel == null) {
+                continue;
+            }
+            try {
+                if (taskClaim.claim.test(sessionId)) {
+                    matched.add(taskClaim.channel);
+                }
+            } catch (Throwable ignored) {
+                // 谓词异常已由 execute 路径单独记录，这里只做评估
+            }
+        }
+        return matched;
+    }
+
+    /** 已发出的互斥告警条数（测试观测口）。 */
+    int overlapWarnCount() {
+        return overlapWarnCount.get();
     }
 
     /**

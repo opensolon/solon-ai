@@ -18,6 +18,7 @@ package org.noear.solon.ai.harness.input;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.chat.content.MediaBlock;
+import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.lang.Nullable;
 
 import java.util.ArrayList;
@@ -462,6 +463,33 @@ public final class HarnessInput {
 
     public boolean isAgentAware() {
         return agentAware;
+    }
+
+    /**
+     * 按 {@code handle} 的同一口径解析 {@code @} 子代理提及
+     *
+     * <p>宿主有时必须<b>提前</b>拿到解析结果才能决定后续动作——典型场景是桌面端：
+     * 它要在交给引擎之前完成 Goal 拦截、子代理名格式校验与规划模式文本改写，
+     * 这三件都作用在「剥离提及之后的正文」上。</p>
+     *
+     * <p>此前这类宿主只能自己拼一份 {@link AgentMentions.Options}，结果是同一段输入
+     * 在宿主与引擎里<b>各解析一次、口径各不相同</b>（一个 trim 一个不 trim）。
+     * 本方法存在的意义就是让那份 {@code Options} 只有一处构造：{@code handle} 内部
+     * 也走这里，宿主的提前解析因此与最终生效结果<b>逐字一致</b>。</p>
+     *
+     * <p>返回值可直接用于改写正文：宿主把 {@code mention.getText()} 作为新输入重新构造
+     * {@code HarnessInput} 并带上 {@code explicitAgent(mention.getAgentName())}，
+     * 引擎二次解析时不会重复剥离（幂等，见 {@code stripMention}）。</p>
+     */
+    public AgentMentions.Mention parseMention(HarnessEngine engine) {
+        return AgentMentions.parse(engine, text,
+                AgentMentions.Options.builder()
+                        .prefix(engine.getAgentPrefix())
+                        .explicitAgent(explicitAgent)
+                        .selectedAgent(selectedAgent)
+                        .nameValidator(agentNameValidator)
+                        .agentAware(agentAware)
+                        .trimContent(trimContent));
     }
 
     /**

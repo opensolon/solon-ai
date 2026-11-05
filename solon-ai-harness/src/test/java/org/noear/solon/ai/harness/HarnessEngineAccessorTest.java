@@ -8,6 +8,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.harness.permission.PermissionBehavior;
+import org.noear.solon.ai.harness.session.SessionSelections;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionRule;
 import org.noear.solon.ai.talents.mount.source.FileMountSource;
@@ -596,7 +597,7 @@ class HarnessEngineAccessorTest {
             "addPermissionRule", "addPermissionRules",
             "addMount", "removeMount", "refreshMount", "refreshMainAgent",
             "addExtension", "removeExtension", "setExtensionEnabled",
-            "setSessionCwd", "setSessionCwdIfAbsent",
+            "setSessionCwd", "setSessionCwdIfAbsent", "setSessionModel", "setSessionAgent",
             "disallowSkill", "allowSkill", "disallowSkillReset");
 
     @Test
@@ -643,5 +644,50 @@ class HarnessEngineAccessorTest {
         e.setSessionCwd(session, "/tmp/x");
         e.setSessionCwd(session, null);
         assertEquals(e.getWorkspace(), e.getSessionCwd(session));
+    }
+
+    /**
+     * 会话级选择项门面：模型 / 子代理的「设置、读取、清除」三态语义必须归一。
+     *
+     * <p>此前宿主直接读写 {@code CTX_MODEL_SELECTED} / {@code CTX_AGENT_SELECTED}，
+     * 同一个「清除」出现了三种写法（{@code put("")} / {@code remove} / {@code put(null)}），
+     * 读侧也各自判断，语义漂移不可枚举。本测试锁定门面口径：
+     * <b>null 与空串都等于「未设置」</b>，写入即清除。</p>
+     */
+    @Test
+    void sessionSelectionAccessorsNormalizeEmptyToUnset() {
+        HarnessEngine e = engine();
+        AgentSession session = InMemoryAgentSession.of();
+
+        // 未设置
+        assertNull(e.getSessionModel(session));
+        assertNull(e.getSessionAgent(session));
+
+        // 设置后读回
+        e.setSessionModel(session, "gpt-4o");
+        e.setSessionAgent(session, "coder");
+        assertEquals("gpt-4o", e.getSessionModel(session));
+        assertEquals("coder", e.getSessionAgent(session));
+
+        // 静态读开口与实例门面必须同口径（供拿不到引擎实例的工具使用）
+        assertEquals("gpt-4o", SessionSelections.modelOf(session));
+        assertEquals("coder", SessionSelections.agentOf(session));
+
+        // 空串 / null / 空白 ⇒ 清除，且读回统一为 null（不是 ""）
+        e.setSessionModel(session, "");
+        e.setSessionAgent(session, "   ");
+        assertNull(e.getSessionModel(session), "空串必须等同未设置，不能读出 \"\"");
+        assertNull(e.getSessionAgent(session), "空白必须等同未设置");
+
+        // 回到主代理 / 默认模型
+        e.setSessionModel(session, "gpt-4o");
+        e.setSessionModel(session, null);
+        assertNull(e.getSessionModel(session));
+
+        // 会话为 null 时全部是空操作，不得抛
+        assertNull(e.getSessionModel(null));
+        assertNull(e.getSessionAgent(null));
+        e.setSessionModel(null, "x");
+        e.setSessionAgent(null, "x");
     }
 }

@@ -842,6 +842,17 @@ SteerExtension steer = new SteerExtension();
 engine.addExtension(steer); // /steer
 ```
 
+**推荐形态：一次装齐（4.2.1+）**。上面三行分散在组合根里容易漏写（漏一行就是「命令没注册、功能静默不存在」），且 `addExtension` 不查重（重复会二次 `onAttach`）。改用聚合入口后顺序与幂等由 harness 负责，宿主只负责「goal 怎么配」：
+
+```java
+HarnessExtensions.Handles handles = HarnessExtensions.installDefaults(
+        engine, GoalExtension.builder(workspaceId).budget(70, 85).build());
+handles.goal().setEnabled(goalsEnabled);   // 句柄取回的就是生效实例
+// handles.steer() / handles.queue() 同样可直接用
+```
+
+`installDefaults(engine, workspaceId)` 是免配置简写，但它会按缺省建 `GoalScheduler`（`JobManager` 是 Solon 容器单例），**无容器宿主**（纯 JUnit / headless）请用带 `GoalExtension` 的重载并 `scheduler(null)` 关闭调度。宿主自有扩展（loop / manager 等）仍走 `engine.addExtension(...)` 追加，聚合入口不接管它们。
+
 三者共同点：`/queue` 与 `/steer` 的 `runnableWhenBusy()` 返回 `true`（宿主据此允许它们在任务执行中被受理）；`/goal` **不覆写**、保持默认 `false`（它会启动持续轮次，不能在忙时会话里重入）。注意这只是**给宿主读的声明**，引擎内部不做忙碌拦截（详见下文边界）。`/queue`、`/steer` 从 `Command.execute(engine, ctx, origin)` 的第三参拿到 `InputOrigin` 并带到投递链路，三者都**不自己开流**。
 
 **同一个动作，三条到达路径**：命令不是另一套实现，它是「文本入口」。同一能力既可以由文本进来（终端用户敲、IM 渠道转发），也可以由代码直接进门面；中间还有一条「代码把文本交给引擎」。以 `/queue` 为例三者并排：
@@ -953,12 +964,24 @@ engine.addExtension(goal);   // onAttach 内部依次完成：
                              // GoalTalent 在 onRequestAssemble 挂（每次顶层请求）
 ```
 
+多入口宿主（CLI/Web/桌面）可在 builder 上直接按通道声明，与运行期的
+`addTaskExecutor` 形态对称：
+
+```java
+GoalExtension goal = GoalExtension.builder(workspaceId)
+        .taskExecutor("cli",     SessionIdOwnership::isCli,     cliRunner)
+        .taskExecutor("web",     SessionIdOwnership::isWeb,     webRunner)
+        .taskExecutor("desktop", SessionIdOwnership::isDesktop, desktopRunner)
+        .build();
+```
+
 要点：
 
 - **`taskExecutor` 是唯一有实际意义的必选项**。最小用法是 `GoalExtension.builder(workspaceId).build()` + `addExtension`，此时走内置缺省执行器——它不是裸的 `engine.handle(...).call().getContent()`，而是带三个关键修饰：`commandAware(false)`（目标正文里的 `/xxx` 不被当命令）、`agentAware(false)`（开头的 `@name` 不被当子代理提及）、`origin(channel("goal"))`（来源标记，便于宿主分流）。即便有这些修饰，它仍不会带宿主的专属执行语义（Web 的流式通道、CLI 的终端读入），所以宿主一般仍应显式提供 `taskExecutor`。
+- **两种注册形态可选，且可混用**：builder 的 `taskExecutor(channel, claim, handler)` 适合扩展装配早于入口创建的宿主（一次性声明全部通道）；运行期的 `addTaskExecutor(channel, claim, handler)` 适合入口晚于扩展装配（如桌面端在 WS 就绪后才建）。注册顺序恒为「builder 声明先于运行期追加」。
 - **`bridge` 与 loop 共享已废止**：曾用过 `ExecutionBridge` 做跨域共享执行通道，现**已删除**。goal 的执行通道在 `GoalEngine` 内部（`addTaskExecutor` / `setDefaultTaskExecutor`），loop 的在宿主（cli 域的 `LoopScheduler.addExecutor`），两者无任何共享类型。内置兜底经 `setDefaultTaskExecutor` 单独登记，**只在前面的执行者全不认领时考虑**——不可并入 `addTaskExecutor` 列表（兜底恒认领，而扩展在入口构造之前装配，排到首位会把宿主的流式投递完全挡住，且静默）。
 - **job 名带工作区前缀**在扩展内部完成，`JobManager` 是 JVM 单例、会话 ID 不全局唯一（CLI 叫 `cli`、桌面是 `ws_<时间戳>`）——不加前缀时多个工作区会在全局注册表里互相覆盖。
-- **`.scheduler(x)` 三态**：不传 = 缺省新建；传实例 = 宿主自备；**显式传 null = 关闭调度**（纯 JUnit / 无 Solon 容器的宿主，`JobManager.getInstance()` 会 NPE，只能关）。关闭后 `hasScheduler()` 返回 `false`，`scheduleNow` / `resumeScheduleOnly` / `unschedule` / `stopAll` 全部变成**静默空操作**——这是刻意的，但排查“调了 `scheduleNow` 却没跑”时先看这里。
+- **`.scheduler(x)` 三态**：不传 = 缺省新建；传实例 = 宿主自备；**显式传 null = 关闭调度**（纯 JUnit / 无 Solon 容器的宿主，`JobManager.getInstance()` 会 NPE，只能关）。关闭后 `hasScheduler()` 返回 `false`，`scheduleNow` / `resumeScheduleOnly` / `unschedule` / `stopAll` 全部变成空操作但**首次调用会打一条 warn**（四方法共用一个 `AtomicBoolean` 门闩，不刷屏）。告警只在「确实没调度器」时触发——`sessionId == null` 或扩展停用是另一类原因，不会误报；`onDetach` 直连内部字段，摘除时无调度器属正常形态，不告警。排查“调了 `scheduleNow` 却没跑”先看这里。
 - **没有“只关命令”的开关**：`GoalExtension` 的构造器私有，builder 也不提供 `commandEnabled`。注册本身是幂等的（已有同名命令则跳过），迁移期双写安全；要整体下线用 `engine.setExtensionEnabled(goal, false)`（连带停调度，见本章引言）。
 - 存量写法是静态工厂 **`GoalExtension.of(goalEngine, engine)`**（构造器不可见）：只接管外部 GoalEngine、只挂 Talent 与门面，**不装配命令、也不建调度**（`getGoalScheduler()` 为 `null`）。它**未标 `@Deprecated`**——存量宿主可以继续用，但新代码推荐 builder。
 
@@ -996,11 +1019,11 @@ goal.getGoalTalent().setEnabled(false);                    // 只关模型侧工
 | `for (int i = 0; goal.running(s) && i < 200; i++) Thread.sleep(20);` | `goal.awaitRoundStopped(s, 2000L)` | 基于会话 `attrs()` 的 `wait/notify`，不轮询；轮次结束立即返回，超时才 false。锁与 `runRound` 的 finally 同源，不存在漏唤醒 |
 | `goal.pause(gs); runtime.interrupt(session); 上面那个循环;` | `goal.pauseAndAwait(s, gs, () -> runtime.interrupt(session), 2000L)` | 顺序固定 `pause → 中断 → 停等`（先摘调度再中断，避免中断后立刻又被拉起一轮）。中断动作仍由宿主提供——怎么停流是宿主的运行时职责 |
 | `gs = goal.attach(obj); if (!display.equals(obj)) { gs.setCondition(display); goal.commit(gs); }` | `goal.attach(s, GoalSpec.of(obj), display)` | 执行正文（如拼了附件全文）与展示正文分离，**同一个临界区内一次落盘、只广播一次**，列表不会闪出附件全文 |
-| `goal.getGoalEngine().addTaskExecutor(h)` | `goal.addTaskExecutor(h)` | 门面直通并返回 `this`（可链式）；注册超过一个时会打 debug 提示认领顺序 |
+| `goal.getGoalEngine().addTaskExecutor(h)` | `goal.addTaskExecutor(h)` | 门面直通并返回 `this`（可链式）；多入口宿主用通道化重载 `addTaskExecutor(channel, claim, handler)` |
 
 配套两个约定：
 
-- **认领谓词必须互斥**。多入口宿主（CLI/Web/桌面）各自注册一个执行器，引擎按注册顺序取首个返回非 null 者。谓词散落在各处极易改宽而静默抢跑别人的会话，建议集中成一个类（soloncode-cli 的 `SessionIdOwnership`）。
+- **认领谓词必须互斥**。多入口宿主（CLI/Web/桌面）各自注册一个执行器，引擎按注册顺序取首个返回非 null 者。**4.2.1 起推荐通道化注册**：`addTaskExecutor("cli", SessionIdOwnership::isCli, handler)` 把认领条件显式交给引擎——重叠时它会告警（每组合一次）、认领日志带通道名，不再靠静默抢跑现象排障；旧形态（谓词内联在 handler 里）继续可用但不可评估。谓词仍建议集中成一个类（soloncode-cli 的 `SessionIdOwnership`）：引擎能发现重叠，但互斥本身得靠宿主的 ID 形态设计保证。
 - **按 id 操作优先于传会话**。`pause/resume/clear/update` 都有 `(sessionId)` 与 `(sessionId, taskId)` 重载：`stateOf` 免去两步判空，`(sessionId, taskId)` 版在不匹配时返回 `false`，适合「loop 任务表与 goal 行共用同一列表」的分流点。
 
 ##### 重启恢复：枚举交给宿主，挂接语义交给门面
@@ -1770,6 +1793,28 @@ System.out.println(outcome.getAgentName());   // "bash" 或 null（主代理）
 - 名字不存在时不剥离，整段交给主代理自己判断；
 - 需要两者一致时加 `.trimContent(true)`。
 
+**需要提前拿到解析结果时**（典型：要在交给引擎前改写正文，如桌面端的 Goal 拦截、
+名字格式校验、规划模式前缀），不要自己拼 `AgentMentions.Options`——那会让同一段输入
+被解析两次且口径可能不同。用 `HarnessInput#parseMention`，它与 `handle` 内部走同一个入口：
+
+```java
+// 宿主提前解析：与 handle 内部逐字一致
+AgentMentions.Mention mention = HarnessInput.of(session, raw)
+        .explicitAgent(requestedAgent)        // 可空
+        .agentNameValidator(name -> ...)      // 可空
+        .trimContent(true)                    // 桌面端：输入框允许换行
+        .parseMention(engine);
+
+String text = mention.getText();       // 剥离提及后的正文，可安全用于改写
+String agent = mention.getAgentName(); // 无有效提及时为 null
+```
+
+改写后重新构造输入即可（二次解析幂等，不会重复剥离）：
+
+```java
+engine.handle(HarnessInput.of(session, text).explicitAgent(agent).trimContent(true));
+```
+
 ### 6.2 用引擎装配好的请求执行
 
 ```java
@@ -2297,7 +2342,7 @@ org.noear.solon.ai.harness
 20. **`GoalSpec` 的负数会被夹到 0**——`maxTokens(-1)` 不是「报错」而是「不限制」；命令行的 `--max-tokens:-1` 也一样（`Long.parseLong` 通过后交给 `GoalSpec` 再夹到 0）。想表达「非法参数」请在调用前/解析层自己校验。
 21. **三个扩展都没有「只关命令」的开关**——`QueueExtension` 只有无参构造，`SteerExtension` 只有 `()` / `builder()`，`GoalExtension` 的构造器私有且 builder 无 `commandEnabled`；`onAttach` 里一律 `register`（幂等）。要下线只有 `engine.setExtensionEnabled(ext, false)` 一条路，它是「命令 + 门面」一起关；且**未加入引擎的扩展会先被加入再直接返回**，初始状态请在 `addExtension` 前用 `ext.setEnabled(false)`。
 22. **`interrupt` 之后不要再 `steer`**——`activeRunId` 已随任务结束被清掉，此时只能拿到 `NOT_RUNNING`；「停下来重来」请直接用 `queue.enqueue`。「运行中改主意」才用 steer，两者是互斥场景而非串行步骤。
-23. **`.scheduler(null)` 之后调度类方法全是空操作**——`hasScheduler()` 为 `false`，`scheduleNow` / `resumeScheduleOnly` / `unschedule` / `stopAll` 静默返回。纯测试宿主排查「调了 `scheduleNow` 却没跑」先看这里。
+23. **`.scheduler(null)` 之后调度类方法是空操作**——`hasScheduler()` 为 `false`，`scheduleNow` / `resumeScheduleOnly` / `unschedule` / `stopAll` 直接返回（4.2.1 起四方法共用一次性 warn 门闩，首次调用会指路，不会刷屏）。纯测试宿主排查「调了 `scheduleNow` 却没跑」先看这里。
 24. **`GoalExtension.of(...)` 不建命令也不建调度**——它是存量入口（未标 `@Deprecated`），适合宿主已有 `GoalEngine`、只借 Talent 与门面的场景；`getGoalScheduler()` 为 `null`，与 builder 形态的能力不等价。
 25. **命令文本与门面调用是同一个动作，别把两者的返回值当一回事**——`engine.handle(HarnessInput.of(s, "/queue 跑测试"))` 得到的是 `Kind.REPLY` + 人读回执，`queue.enqueue(s, "跑测试")` 得到的是位置 `int`（`-1` = 失败）。宿主要程序判定就走门面，要现成文案就走文本路径；**两条都走会入队两次**（命令路径无幂等保护）。
 26. **`steer` 取消了也可能已经生效**——`cancel(session, steerId)` 返回 `false` 不代表出错，只代表那条已被推理线程 `poll` 出去了（已经或即将注入）。同理 `pending(session)` 是快照，读到的下一瞬就可能被消费；宿主不要用它做“一定还能取消”的保证，只能作为 UI 展示依据。

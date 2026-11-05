@@ -53,7 +53,11 @@ import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.input.ParsedCommand;
 import org.noear.solon.ai.harness.hitl.BashToolStrategy;
 import org.noear.solon.ai.harness.permission.PermissionContext;
+import org.noear.solon.ai.harness.input.AdmitDecision;
+import org.noear.solon.ai.harness.session.InputGate;
+import org.noear.solon.ai.harness.session.queue.QueueDispatch;
 import org.noear.solon.ai.harness.session.HarnessAttrs;
+import org.noear.solon.ai.harness.session.SessionSelections;
 import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.session.interrupt.InterruptHelper;
@@ -108,7 +112,23 @@ public class HarnessEngine {
     public final static String ATTR_CWD = "__cwd";
     private static final String BUILTIN_AGENT_MOUNT = "@harness-agents";
     private static final String BUILTIN_AGENT_PATH = "META-INF/solon/ai/harness/agents/";
+    /**
+     * 会话级模型选择键。
+     *
+     * @deprecated 宿主一律改用 {@link #getSessionModel}/{@link #setSessionModel}（会话级选择是共用口径，
+     * 不是宿主的私有状态）。直接读写本键会出现「put 空串 / remove / put null」多种漂移写法。
+     * 保留仅为存量兼容，下个 minor 移除。
+     */
+    @Deprecated
     public final static String CTX_MODEL_SELECTED = "_model_selected";
+
+    /**
+     * 会话级子代理选择键。
+     *
+     * @deprecated 宿主一律改用 {@link #getSessionAgent}/{@link #setSessionAgent}。
+     * 保留仅为存量兼容，下个 minor 移除。
+     */
+    @Deprecated
     public final static String CTX_AGENT_SELECTED = "_agent_selected";
 
     /**
@@ -399,6 +419,67 @@ public class HarnessEngine {
     public void setSessionCwdIfAbsent(AgentSession session, String cwd) {
         if (session == null || cwd == null || cwd.trim().isEmpty()) return;
         session.attrs().putIfAbsent(ATTR_CWD, cwd);
+    }
+
+    // ========== 会话级选择项（模型 / 子代理）门面 ==========
+    //
+    // 与 getSessionCwd/setSessionCwd 对称：会话级选择是引擎与宿主共用的口径，
+    // 宿主一律走本组方法，不得直接读写 CTX_MODEL_SELECTED / CTX_AGENT_SELECTED。
+    // 此前同一键出现四种写法（put 值 / put 空串 / remove / 带 isNotEmpty 守卫），
+    // 语义漂移正是这类「裸常量当私有状态用」的必然结果。
+
+    /**
+     * 会话级模型选择（未设置返回 {@code null}，调用方回退默认模型）。
+     *
+     * <p>口径：命令声明 → 会话选择 → 默认模型。本方法只读第二层。</p>
+     *
+     * @since 4.2.3
+     */
+    @Nullable
+    public String getSessionModel(@Nullable AgentSession session) {
+        return SessionSelections.modelOf(session);
+    }
+
+    /**
+     * 设置会话级模型选择；{@code null}/空 表示清除（回退默认模型）。
+     *
+     * @since 4.2.3
+     */
+    public void setSessionModel(@Nullable AgentSession session, @Nullable String name) {
+        if (session == null) return;
+        if (name == null || name.trim().isEmpty()) {
+            session.getContext().remove(CTX_MODEL_SELECTED);
+        } else {
+            session.getContext().put(CTX_MODEL_SELECTED, name);
+        }
+    }
+
+    /**
+     * 会话级子代理选择（未设置返回 {@code null}，表示主代理）。
+     *
+     * @since 4.2.3
+     */
+    @Nullable
+    public String getSessionAgent(@Nullable AgentSession session) {
+        return SessionSelections.agentOf(session);
+    }
+
+    /**
+     * 设置会话级子代理选择；{@code null}/空 表示清除（回退主代理）。
+     *
+     * <p><b>空值语义归一</b>：历史宿主对「清除」有三种写法（{@code put("")}、
+     * {@code remove(...)}、{@code put(null)}）。本方法把三者统一为「清除」，
+     * 读取侧 {@link #getSessionAgent} 也把空串视为未设置，故行为等价。</p>
+     *
+     * @since 4.2.3
+     */
+    public void setSessionAgent(@Nullable AgentSession session, @Nullable String name) {
+        if (session == null) return;
+        if (name == null || name.trim().isEmpty()) {
+            session.getContext().remove(CTX_AGENT_SELECTED);
+        } else {
+            session.getContext().put(CTX_AGENT_SELECTED, name);
+        }
     }
 
     public String getSystemPrompt() {
@@ -1586,6 +1667,17 @@ public class HarnessEngine {
         }
 
 
+        // request 级 cwd：会话工作目录是引擎已知的事实，装配时统一注入，宿主不必各写一遍。
+        // 四个入口曾各自 o.toolContextPut(ATTR_CWD, ...)（ACP 传的是协议请求级 cwd，
+        // 需按请求覆盖，属于真实差异，故它保留自己的那次写入）。
+        // options() 是 andThen 叠加语义，宿主后写的值覆盖这里的缺省值。
+        if (session != null) {
+            final String sessionCwdForTurn = getSessionCwd(session);
+            if (Assert.isNotEmpty(sessionCwdForTurn)) {
+                request.options(o -> o.toolContextPut(ATTR_CWD, sessionCwdForTurn));
+            }
+        }
+
         final String realModelName = resolveSessionModelName(session, selectedModel);
         if (realModelName != null) {
             final ChatModel chatModel = getModelOrDefInstance(realModelName);
@@ -1712,14 +1804,7 @@ public class HarnessEngine {
         //引擎不再触碰文件系统，只负责提示词装配。
         String text = input.getText();
 
-        AgentMentions.Mention mention = AgentMentions.parse(this, text,
-                AgentMentions.Options.builder()
-                        .prefix(getAgentPrefix())
-                        .explicitAgent(input.getExplicitAgent())
-                        .selectedAgent(input.getSelectedAgent())
-                        .nameValidator(input.getAgentNameValidator())
-                        .agentAware(input.isAgentAware())
-                        .trimContent(input.isTrimContent()));
+        AgentMentions.Mention mention = input.parseMention(this);
         String agentName = mention.getAgentName();
         text = attachments.withFilePrefix(mention.getText());
 
@@ -2049,6 +2134,91 @@ public class HarnessEngine {
     public boolean isBusyBypassCommand(@Nullable String input) {
         Command command = resolveCommand(input);
         return command != null && !command.terminalOnly() && command.runnableWhenBusy();
+    }
+
+    /**
+     * 输入受理判定：这条输入现在该走哪条路（原子：判定与占位同临界区）。
+     *
+     * <p><b>为什么要有它</b>：入口最易写错的一段不是「怎么装配」，而是「现在能不能接」。
+     * 它要同时看运行流、受理窗口、待审批卡、队列积压、是否队列派发、是否忙态旁路命令，
+     * 六个判定分散在三个包，宿主每次都要各查一遍并自行组合。Web 端这份判定曾长达 50 余行，
+     * 且用到的每个原语其实都已由 harness 提供。</p>
+     *
+     * <p><b>口径固定</b>：忙态一律为「有活跃流或已在受理窗口」（{@link InputGate#tryAcquire} 同口径），
+     * 待审批卡另判。宿主不得传入自己的忙判定——这正是历史上最容易漂移的一处。</p>
+     *
+     * <p><b>本方法不做</b>：不执行入队、不渲染回执、不发终态。{@link AdmitDecision.Kind#QUEUE}
+     * 由宿主调 {@code QueueExtension#enqueue}（推理强度/思考模式属于宿主域概念）；
+     * {@link AdmitDecision.Kind#REJECT} 由宿主渲染拒因。</p>
+     *
+     * <p>典型用法：</p>
+     * <pre>{@code
+     * AdmitDecision admit = engine.admit(session, input, hitlDecision, hitlExempt);
+     * switch (admit.getKind()) {
+     *     case REJECT: renderError(admit.getRejectReason(), admit.getRejectDetail()); return;
+     *     case QUEUE:  enqueueAndDrain(); return;
+     *     default:     break;  // ADMIT / ADMIT_BYPASS
+     * }
+     * try (InputGate.Ticket ticket = admit.getTicket()) {
+     *     InputOutcome outcome = engine.handle(input);
+     *     // ... 起流
+     * }
+     * }</pre>
+     *
+     * @param session      目标会话（可为 null：按空闲处理）
+     * @param input        原始输入（用于识别忙态旁路命令；可为 null）
+     * @param hitlDecision 本输入是否携带 HITL 决策（决策输入总是豁免挂起拦截）
+     * @param hitlExempt   额外豁免谓词（可为 null）。用于「续流 / 特定命令」等宿主域豁免；
+     *                     宿主不传时只按 {@code hitlDecision} 与「队列派发」判豁免
+     * @since 4.2.3
+     */
+    public AdmitDecision admit(@Nullable AgentSession session, @Nullable String input,
+                               boolean hitlDecision,
+                               java.util.function.Predicate<String> hitlExempt) {
+        if (session == null) {
+            return AdmitDecision.admit(InputGate.Ticket.NONE);
+        }
+
+        synchronized (session.attrs()) {
+            QueueDispatch dispatch = QueueDispatch.current(session);
+            boolean onDispatchThread = dispatch != null && dispatch.isOnDispatchThread();
+            boolean busyCommand = isBusyBypassCommand(input);
+
+            // 1) HITL 挂起：审批未决策前开新回合会与挂起 trace 并存，
+            //    用户点「同意」时续流被运行态认领拒绝，或两条流交叉写快照。
+            SessionStatus status = status(session);
+            if (status.hasPendingHitl()) {
+                boolean exempt = hitlDecision || onDispatchThread
+                        || (hitlExempt != null && hitlExempt.test(input));
+                if (exempt == false) {
+                    HitlCard next = HitlCard.next(session);
+                    String toolName = next == null ? null : next.getToolName();
+                    return AdmitDecision.reject("hitl_pending",
+                            toolName == null ? "请先处理待审批操作" : "请先处理待审批操作：" + toolName);
+                }
+            }
+
+            // 2) 忙态（有活跃流 / 已在受理窗口）或队列积压：应入队。
+            //    队列派发本身与忙态旁路命令除外（后者的语义是在运行中的任务旁插一脚）。
+            if ((status.isBusy() || status.isAdmitting() || status.getQueuedCount() > 0)
+                    && onDispatchThread == false && busyCommand == false) {
+                return AdmitDecision.queue();
+            }
+
+            // 3) 队列派发的一轮：天然空闲、不占位（再占位会让同步完成的命令误判成忙态）
+            if (onDispatchThread) {
+                return AdmitDecision.bypassDispatch(dispatch);
+            }
+
+            // 4) 已在真实任务上运行的旁路命令：不占启动闩、不改写回复路由
+            boolean sideCommand = busyCommand && status.isBusy();
+            if (sideCommand) {
+                return AdmitDecision.bypassSideCommand();
+            }
+
+            // 5) 正常受理：判定与占位同临界区
+            return AdmitDecision.admit(InputGate.tryAcquire(session));
+        }
     }
 
     /**

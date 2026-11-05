@@ -13,7 +13,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Goal 一键装配扩展 —— goal 能力从头到尾只接触这一个类。
@@ -63,11 +65,30 @@ public class GoalExtension extends AbsHarnessExtension {
     private final boolean schedulerDisabled;         // 显式关闭调度（scheduler(null)）
     private final GoalEngine.GoalListener listener;
 
+    /** builder 阶段声明的通道化执行者（attach 后按序注册，先于运行期追加）。 */
+    private final java.util.List<ChannelClaim> pendingChannelClaims;
+
     private GoalEngine goalEngine;
     private GoalScheduler goalScheduler;
     private GoalTalent goalTalent;
 
+    /** 「无调度器时调用调度方法」的一次性告警门闩（防批量恢复场景刷屏）。 */
+    private final AtomicBoolean noSchedulerWarned = new AtomicBoolean();
+
     private GoalCommand goalCommand;
+
+    /** 通道化注册项（仅 builder → attach 间传递，不入運行期）。 */
+    private static final class ChannelClaim {
+        final String channel;
+        final Predicate<String> claim;
+        final GoalEngine.TaskHandler handler;
+
+        ChannelClaim(String channel, Predicate<String> claim, GoalEngine.TaskHandler handler) {
+            this.channel = channel;
+            this.claim = claim;
+            this.handler = handler;
+        }
+    }
 
     private GoalExtension(Builder b) {
         this.workspaceId = b.workspaceId;
@@ -80,6 +101,7 @@ public class GoalExtension extends AbsHarnessExtension {
         this.providedScheduler = b.scheduler;
         this.schedulerDisabled = b.schedulerExplicitNull;
         this.listener = b.listener;
+        this.pendingChannelClaims = new java.util.ArrayList<>(b.channelClaims);
     }
 
     @Override
@@ -148,6 +170,10 @@ public class GoalExtension extends AbsHarnessExtension {
         if (taskHandler != null) {
             goalEngine.addTaskExecutor(taskHandler);
         }
+        // builder 阶段声明的通道化执行者：按声明顺序登记（先于 attach 后追加的运行期注册）
+        for (ChannelClaim cc : pendingChannelClaims) {
+            goalEngine.addTaskExecutor(cc.channel, cc.claim, cc.handler);
+        }
 
         // ③ 调度器（宿主自备优先；显式关闭时不建——纯 JUnit/无容器宿主 JobManager 不可用）
         if (goalScheduler == null) {
@@ -191,7 +217,11 @@ public class GoalExtension extends AbsHarnessExtension {
      */
     @Override
     public void onDetach(HarnessEngine engine) {
-        stopAll();
+        // 直连内部字段而非 stopAll()：摘除时 scheduler 为 null（纯测试宿主）属于正常形态，
+        // 走门面会打一条「没配调度器」的 warn，误导排障。
+        if (goalScheduler != null) {
+            goalScheduler.stopAll();
+        }
     }
 
     /**
@@ -259,6 +289,29 @@ public class GoalExtension extends AbsHarnessExtension {
                 LOG.debug("Goal task executor registered; claiming order = registration order, "
                         + "ensure session-id predicates are mutually exclusive");
             }
+        }
+        return this;
+    }
+
+    /**
+     * 注册带通道名与认领谓词的执行器（多入口宿主推荐形态）。
+     *
+     * <p>认领条件由内联 lambda 升级为显式谓词后，引擎可在不执行 handler 的前提下评估
+     * 各入口认领边界是否互斥，重叠时告警（每组合一次）；认领日志也会带上通道名。
+     * 宿主仍应把谓词集中到单一所有权类（如 {@code SessionIdOwnership}）——
+     * 引擎能发现重叠，但互斥本身还得靠宿主的 ID 形态设计保证。</p>
+     *
+     * <pre>{@code
+     * goal.addTaskExecutor("cli", SessionIdOwnership::isCli,
+     *         (sessionId, prompt) -> runInjectedRound(session, prompt));
+     * }</pre>
+     *
+     * @param channel 通道名（日志与互斥告警用，如 "cli" / "web" / "desktop"）
+     * @param claim   认领谓词（sessionId → 是否本通道的会话）
+     */
+    public GoalExtension addTaskExecutor(String channel, Predicate<String> claim, GoalEngine.TaskHandler handler) {
+        if (goalEngine != null) {
+            goalEngine.addTaskExecutor(channel, claim, handler);
         }
         return this;
     }
@@ -373,7 +426,11 @@ public class GoalExtension extends AbsHarnessExtension {
      * 创建 goal（<b>不挂调度</b>）。供首轮由宿主自己的流驱动、只需后续挂 job 的场景（桌面端）。
      *
      * <p>单槽校验异常原样透出（{@link IllegalStateException} 已有进行中 goal）。</p>
+     *
+     * @deprecated 自 4.2.1：裸参形态靠位置才能知道第四个是毫秒，改用
+     *             {@link #attach(AgentSession, GoalSpec)}（单位自描述），下个 minor 移除。
      */
+    @Deprecated
     public GoalState attach(AgentSession session, String objective,
                             long maxTokens, long maxDurationMs, int maxIterations) {
         return goalEngine.attach(session, objective, maxTokens, maxDurationMs, maxIterations);
@@ -385,7 +442,7 @@ public class GoalExtension extends AbsHarnessExtension {
      * <p>与 5 裸参重载同源（{@link GoalSpec} 只是载荷），单槽校验异常原样透出。</p>
      */
     public GoalState attach(AgentSession session, GoalSpec spec) {
-        return attach(session, spec.getObjective(),
+        return goalEngine.attach(session, spec.getObjective(),
                 spec.getMaxTokens(), spec.getMaxDurationMs(), spec.getMaxIterations());
     }
 
@@ -420,7 +477,10 @@ public class GoalExtension extends AbsHarnessExtension {
      *
      * <p>收敛宿主「attach + schedule」配对；{@code attach} 的单槽校验异常
      * （{@link IllegalStateException} 已有进行中 goal）原样透出，宿主据此回 409。</p>
+     *
+     * @deprecated 自 4.2.1：改用 {@link #attachAndSchedule(AgentSession, GoalSpec)}，下个 minor 移除。
      */
+    @Deprecated
     public GoalState attachAndSchedule(AgentSession session, String objective,
                                        long maxTokens, long maxDurationMs, int maxIterations) {
         GoalState gs = goalEngine.attach(session, objective, maxTokens, maxDurationMs, maxIterations);
@@ -435,8 +495,9 @@ public class GoalExtension extends AbsHarnessExtension {
      * 与宿主程序调用走的是同一条路径。</p>
      */
     public GoalState attachAndSchedule(AgentSession session, GoalSpec spec) {
-        return attachAndSchedule(session, spec.getObjective(),
-                spec.getMaxTokens(), spec.getMaxDurationMs(), spec.getMaxIterations());
+        GoalState gs = attach(session, spec);
+        scheduleNow(session.getSessionId());
+        return gs;
     }
 
     /**
@@ -559,8 +620,10 @@ public class GoalExtension extends AbsHarnessExtension {
     /**
      * 恢复（PAUSED/BLOCKED → PURSUING）并重新挂调度（立即跑一轮）。
      *
-     * <p>与 {@link #resume} 同义，命名上强调「连带挂调度」，便于宿主在编辑/接管路径选用。</p>
+     * @deprecated 自 4.2.1：与 {@link #resume(AgentSession, GoalState)} 完全同义，
+     *             且名字易与 {@link #resumeScheduleOnly}（恢复期专用，不立即跑）混淆，下个 minor 移除。
      */
+    @Deprecated
     public boolean resumeAndSchedule(AgentSession session, GoalState gs) {
         return resume(session, gs);
     }
@@ -572,23 +635,54 @@ public class GoalExtension extends AbsHarnessExtension {
      * 此时不能走 {@link #resume}（那是立刻跑一轮），否则重启会对每个活跃 goal 立即发起执行。</p>
      */
     public void resumeScheduleOnly(String sessionId) {
-        if (goalScheduler != null && sessionId != null && isEnabled()) {
+        if (goalScheduler == null) {
+            warnOnceNoScheduler("resumeScheduleOnly");
+            return;
+        }
+        if (sessionId != null && isEnabled()) {
             goalScheduler.schedule(sessionId, false);
         }
     }
 
     /** 立即挂调度并马上跑一轮（桌面端 trigger 语义）；不做状态校验，调用方前置判活跃态。 */
     public void scheduleNow(String sessionId) {
-        if (goalScheduler != null && sessionId != null && isEnabled()) {
+        if (goalScheduler == null) {
+            warnOnceNoScheduler("scheduleNow");
+            return;
+        }
+        if (sessionId != null && isEnabled()) {
             goalScheduler.schedule(sessionId, true);
         }
     }
 
     /** 注销调度（不清状态）。clear/pause 已内含此步，仅在纯停调度场景直接用。 */
     public void unschedule(String sessionId) {
-        if (goalScheduler != null && sessionId != null) {
+        if (goalScheduler == null) {
+            warnOnceNoScheduler("unschedule");
+            return;
+        }
+        if (sessionId != null) {
             goalScheduler.unschedule(sessionId);
         }
+    }
+
+    /**
+     * 无调度器（scheduler(null) 显式关闭或尚未 attach）时调度方法静默 no-op 的排障门闩：
+     * 「调了 scheduleNow 却没跑」的第一嫌疑就是这里，一条 warn 足够定位，不刷屏。
+     * <p>只由调用方在「{@code goalScheduler == null}」分支进入——{@code sessionId == null}
+     * 或扩展停用是另一类原因，不应报「没配调度器」误导排障。</p>
+     */
+    private void warnOnceNoScheduler(String method) {
+        if (noSchedulerWarned.compareAndSet(false, true)) {
+            LOG.warn("GoalExtension.{} called but no scheduler is configured "
+                    + "(builder.scheduler(null) disables scheduling entirely); goal rounds will never run",
+                    method);
+        }
+    }
+
+    /** 无调度器告警门闩是否已触发（测试观测口；测试 classpath 无 SLF4J 后端，无法捕日志）。 */
+    boolean noSchedulerWarned() {
+        return noSchedulerWarned.get();
     }
 
     /** 异步触发一轮执行（不阻塞请求线程）；调用方须前置校验活跃态。 */
@@ -675,9 +769,11 @@ public class GoalExtension extends AbsHarnessExtension {
 
     /** 停止全部 goal 调度（工作区关闭时必须调用，防 job 泄漏）。 */
     public void stopAll() {
-        if (goalScheduler != null) {
-            goalScheduler.stopAll();
+        if (goalScheduler == null) {
+            warnOnceNoScheduler("stopAll");
+            return;
         }
+        goalScheduler.stopAll();
     }
 
     // ==================== Builder ====================
@@ -687,6 +783,7 @@ public class GoalExtension extends AbsHarnessExtension {
         private final String workspaceId;
         private String workspace;                                   // 缺省 = workspaceId
         private GoalEngine.TaskHandler taskHandler;                 // 缺省 = engine.handle 模板
+        private final java.util.List<ChannelClaim> channelClaims = new java.util.ArrayList<>(2); // 通道化注册（装配时）
         private BudgetThresholds budgetThresholds = BudgetThresholds.defaults();
         private int stagnationThreshold = 3;
         private int maxConsecutiveErrors = 3;
@@ -702,6 +799,24 @@ public class GoalExtension extends AbsHarnessExtension {
         /** 任务执行者：执行一轮 prompt 并返回本轮客观事实（null = 本入口不认领）。不设则用内置缺省。 */
         public Builder taskExecutor(GoalEngine.TaskHandler handler) {
             this.taskHandler = handler;
+            return this;
+        }
+
+        /**
+         * 通道化任务执行者（装配时形态，与 {@link #addTaskExecutor(String, Predicate, GoalEngine.TaskHandler)}
+         * 运行期形态对称）。
+         *
+         * <p>多入口宿主既可选择在 builder 上一次性声明全部通道（单工作区进程，最简单），
+         * 也可在 attach 后按需追加（入口生命周期晚于扩展装配时）。两种形态可混用，
+         * 注册顺序恒为「builder 声明先于运行期追加」。</p>
+         *
+         * @param channel 通道名（日志与互斥告警用）
+         * @param claim   认领谓词（sessionId → 是否本通道的会话）
+         */
+        public Builder taskExecutor(String channel, Predicate<String> claim, GoalEngine.TaskHandler handler) {
+            if (handler != null && claim != null && channel != null && channel.trim().isEmpty() == false) {
+                channelClaims.add(new ChannelClaim(channel.trim(), claim, handler));
+            }
             return this;
         }
 
