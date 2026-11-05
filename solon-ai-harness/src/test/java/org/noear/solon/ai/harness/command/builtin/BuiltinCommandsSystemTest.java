@@ -1,5 +1,6 @@
 package org.noear.solon.ai.harness.command.builtin;
 
+import org.noear.solon.ai.harness.session.SessionSelections;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
@@ -112,7 +113,7 @@ class BuiltinCommandsSystemTest {
         assertTrue(outcome.getCommandOutput().contains(realModel().getModel()));
         assertTrue(outcome.getCommandOutput().contains("(active)"));
         // 会话级选择未被写入
-        assertNull(session.getContext().getAs(HarnessEngine.CTX_MODEL_SELECTED));
+        assertNull(SessionSelections.modelOf(session));
     }
 
     @Test
@@ -123,12 +124,12 @@ class BuiltinCommandsSystemTest {
         String modelName = realModel().getModel();
         InputOutcome ok = handle(engine, session, "/model " + modelName);
         assertEquals(InputOutcome.Kind.REPLY, ok.getKind());
-        assertEquals(modelName, session.getContext().getAs(HarnessEngine.CTX_MODEL_SELECTED));
+        assertEquals(modelName, SessionSelections.modelOf(session));
 
         InputOutcome bad = handle(engine, session, "/model no-such-model");
         assertTrue(bad.getCommandOutput().contains("Model not found"));
         // 未被改写
-        assertEquals(modelName, session.getContext().getAs(HarnessEngine.CTX_MODEL_SELECTED));
+        assertEquals(modelName, SessionSelections.modelOf(session));
     }
 
     // ---------- /rewind、/clear：会话操作命令 ----------

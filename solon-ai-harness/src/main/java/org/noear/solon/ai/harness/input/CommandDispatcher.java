@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness.input;
 
+import org.noear.solon.ai.harness.session.SessionSelections;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.AgentTaskIntent;
@@ -133,6 +134,6 @@ public final class CommandDispatcher {
      * 会话级子代理选择（命令任务的子代理口径须与普通消息一致）
      */
     private static @Nullable String selectedAgentOf(@Nullable AgentSession session) {
-        return session == null ? null : session.getContext().getAs(HarnessEngine.CTX_AGENT_SELECTED);
+        return SessionSelections.agentOf(session);
     }
 }

@@ -40,7 +40,8 @@ public final class HarnessAttrs {
     // ========== 引擎契约键（session.*）==========
 
     /*
-     * 插件自有键登记在各插件模块内（如 queue 插件的 QueueAttrs：session.queue.*），
+     * 插件自有键登记在各插件模块内（queue 的 QueueAttrs：session.queue.*；goal 的 GoalAttrs：session.goal.*；
+     * steer 的 SteerAttrs：session.steer），
      * 核心只登记引擎与「核心持有的会话事实槽位」。
      */
 
@@ -54,12 +55,6 @@ public final class HarnessAttrs {
      * @since 4.2.0
      */
     public static final String TURN_DISPATCH = "session.turn.dispatch";
-
-    /**
-     * @deprecated 派发事务已上提为核心槽位，用 {@link #TURN_DISPATCH}（本常量为其别名）
-     */
-    @Deprecated
-    public static final String QUEUE_DISPATCH = TURN_DISPATCH;
 
     /**
      * 本轮实际生效的子代理名（含 {@code @子代理} 解析结果），主代理归一为 {@code "main"}。

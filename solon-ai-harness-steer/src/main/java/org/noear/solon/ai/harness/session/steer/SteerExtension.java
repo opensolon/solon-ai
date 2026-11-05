@@ -6,7 +6,6 @@ package org.noear.solon.ai.harness.session.steer;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActOptionsAmend;
-import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.input.InputOrigin;
@@ -14,7 +13,6 @@ import org.noear.solon.ai.harness.session.InputBacklog;
 import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.lang.Nullable;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -47,12 +45,24 @@ import java.util.function.BooleanSupplier;
  * {@link InputBacklog}（按接口从引擎现取，当前由 queue 插件实现）：steer 插件不依赖 queue 插件，
  * 未装 queue 时残留按转排队失败处理（暂存并经 {@link SteerDroppedEvent} 告知）。</p>
  *
- * <p>开关语义：停用时投递返回 {@link SteerStatus#DISABLED}；撤销 / 查询类接口不受控（不得阻止撤销）。</p>
+ * <p>开关语义：停用时投递返回 {@link SteerStatus#DISABLED}；撤销 / 查询类接口与状态贡献不受控（不得阻止撤销）。</p>
+ *
+ * <p>会话属性键见 {@link SteerAttrs}；计数事实见 {@link #STATUS_PENDING}。</p>
  *
  * @author noear
  * @since 3.9.4
  */
 public class SteerExtension extends AbsHarnessExtension {
+
+    /**
+     * 会话状态事实：待生效插话数（本轮邮箱 + 转排队失败暂存；无插话时为 0）。
+     *
+     * <p>经 {@code engine.status(session).get(SteerExtension.STATUS_PENDING)} 读取，
+     * 适合徽章 / 状态栏这类只要计数的场景；要逐条撤销时用 {@link #pending}。</p>
+     *
+     * @since 4.2.0
+     */
+    public static final SessionStatus.Key<Integer> STATUS_PENDING = SessionStatus.Key.count("steer.pending");
 
     private final SteerInterceptor interceptor = new SteerInterceptor(this::backlog);
 
@@ -98,6 +108,20 @@ public class SteerExtension extends AbsHarnessExtension {
     public void onRequestAssemble(HarnessEngine engine, boolean isDelegated, String agentName, ReActOptionsAmend optionsAmend) {
         if (isDelegated == false) {
             optionsAmend.interceptorAdd(interceptor);
+        }
+    }
+
+    /**
+     * 会话状态贡献：待生效插话数（{@link #STATUS_PENDING}，本轮邮箱 + 转排队失败暂存）。
+     *
+     * <p>事实口径，不判开关；只读不创建状态（无状态即不贡献，读取方取缺省 0）。
+     * 锁序为「会话锁 → 插话状态锁」，插话状态锁内从不回取会话锁，故可在会话锁内安全调用。</p>
+     */
+    @Override
+    public void onStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
+        SteerState state = SteerState.peek(session);
+        if (state != null) {
+            status.put(STATUS_PENDING, state.size());
         }
     }
 
@@ -240,196 +264,6 @@ public class SteerExtension extends AbsHarnessExtension {
     private InputBacklog backlog() {
         HarnessEngine e = engine;
         return e == null ? null : e.getExtension(InputBacklog.class).orElse(null);
-    }
-
-    // ==================== 过渡期兼容（下一个 minor 版本移除） ====================
-
-    /**
-     * @deprecated 拦截器挂载已由扩展完成，宿主无需访问
-     */
-    @Deprecated
-    public SteerInterceptor getInterceptor() {
-        return interceptor;
-    }
-
-    /**
-     * 插话入队（自定义忙判定回调；传 null 时与引擎缺省口径一致）。
-     *
-     * @deprecated 用 {@link #steer(AgentSession, String, InputOrigin)} 或 {@link #steerOnRun}；忙判定由内核自算
-     */
-    @Deprecated
-    public SteerResult steer(AgentSession session, String runId, String steerId,
-                             String text, InputOrigin origin, BooleanSupplier busyRecheck) {
-        return doSteer(session, runId, steerId, text, origin, busyRecheck, false);
-    }
-
-    /**
-     * 插话入队（非严格轮次绑定：runId 为空时绑定当前活跃任务）。
-     *
-     * @deprecated 用 {@link #steer(AgentSession, String, InputOrigin)} 或 {@link #steerOnRun}
-     */
-    @Deprecated
-    public SteerResult steer(AgentSession session, String runId, String steerId,
-                             String text, InputOrigin origin) {
-        return doSteer(session, runId, steerId, text, origin, null, false);
-    }
-
-    /**
-     * 不比对轮次的单条撤销。
-     *
-     * @deprecated 用 {@link #cancelOnRun}（含 steerId 校验与轮次比对）
-     */
-    @Deprecated
-    public boolean cancel(AgentSession session, String steerId) {
-        SteerState state = SteerState.peek(session);
-        return state != null && steerId != null && SteerHelper.cancelAnyRun(state, steerId.trim());
-    }
-
-    /**
-     * 批量撤销，返回实际取消条数。
-     *
-     * @deprecated 用 {@link #cancelPending}（返回结果对象，并带出剩余条数）
-     */
-    @Deprecated
-    public int cancelAll(AgentSession session, Collection<String> steerIds) {
-        if (steerIds == null || steerIds.isEmpty()) {
-            return 0;
-        }
-        return cancelPending(session, steerIds).getCanceled();
-    }
-
-    /**
-     * 清空全部待生效插话，返回被移除的条目。
-     *
-     * @deprecated 用 {@code cancelPending(session, null)}
-     */
-    @Deprecated
-    public List<SteerMessage> clearPending(AgentSession session) {
-        List<SteerMessage> before = pending(session);
-        if (before.isEmpty()) {
-            return before;
-        }
-        List<String> ids = new ArrayList<>(before.size());
-        for (SteerMessage m : before) {
-            ids.add(m.getId());
-        }
-        cancelPending(session, ids);
-        return before;
-    }
-
-    /**
-     * 强制交接：清空轮次标识并把全部残留转排队，结果直接返回（不推事件）。
-     *
-     * @deprecated 交接已由拦截器在新任务 {@code onAgentStart} 自动完成（经 {@link SteerDroppedEvent} 推出）；
-     * 宿主删除调用即可。保留的实现仍可用，但会让残留走返回值与事件两条通道
-     */
-    @Deprecated
-    public SteerHandover handover(AgentSession session) {
-        SteerState state = SteerState.peek(session);
-        if (state == null) {
-            return SteerHandover.EMPTY;
-        }
-
-        List<SteerMessage> stale = state.release();
-        if (stale.isEmpty()) {
-            return SteerHandover.EMPTY;
-        }
-
-        List<SteerMessage> failed = SteerHelper.transferToBacklog(backlog(), session, stale);
-        if (failed.isEmpty() == false) {
-            state.park(failed);
-        }
-        List<SteerMessage> queued = new ArrayList<>(stale);
-        queued.removeAll(failed);
-        return new SteerHandover(queued, failed);
-    }
-
-    /**
-     * @deprecated 同 {@link #handover}：开流前义务已取消
-     */
-    @Deprecated
-    public SteerHandover beginTurn(AgentSession session) {
-        return handover(session);
-    }
-
-    /**
-     * 插话交接结果（已弃用的 {@link #handover} 的返回值）。
-     *
-     * @deprecated 残留统一经 {@link SteerDroppedEvent} 输出
-     */
-    @Deprecated
-    public static final class SteerHandover {
-        private static final SteerHandover EMPTY =
-                new SteerHandover(Collections.<SteerMessage>emptyList(), Collections.<SteerMessage>emptyList());
-
-        private final List<SteerMessage> queued;
-        private final List<SteerMessage> failed;
-
-        public SteerHandover(List<SteerMessage> queued, List<SteerMessage> failed) {
-            this.queued = queued == null ? Collections.<SteerMessage>emptyList() : queued;
-            this.failed = failed == null ? Collections.<SteerMessage>emptyList() : failed;
-        }
-
-        /** 已成功转为排队任务的插话 */
-        public List<SteerMessage> getQueued() {
-            return queued;
-        }
-
-        /** 转入排队失败的插话（已暂存，下次开轮重试；永不注入） */
-        public List<SteerMessage> getFailed() {
-            return failed;
-        }
-
-        public boolean isEmpty() {
-            return queued.isEmpty() && failed.isEmpty();
-        }
-    }
-
-    /** @deprecated 读实例配置 {@code getLimits().getMaxTextLength()} */
-    @Deprecated
-    public static int maxTextLength() {
-        return SteerHelper.MAX_TEXT_LENGTH;
-    }
-
-    /** @deprecated 读实例配置 {@code getLimits().getMaxIdLength()} */
-    @Deprecated
-    public static int maxIdLength() {
-        return SteerHelper.MAX_ID_LENGTH;
-    }
-
-    /**
-     * 该消息是否为插话产物（据元数据/前缀判定）。
-     *
-     * @deprecated 用 {@link SteerMessages#textOf}（非 null 即插话，且直接给出原话）
-     */
-    @Deprecated
-    public static boolean isSteerMessage(ChatMessage message) {
-        if (message == null) {
-            return false;
-        }
-
-        String content = message.getContent();
-        boolean marked = SteerMessages.SOURCE.equals(message.getMetadataAs("source"));
-        boolean prefixed = content != null && content.startsWith(SteerMessages.PREFIX);
-        return marked || prefixed;
-    }
-
-    /**
-     * 剥掉插话前缀（无前缀时原样返回）。
-     *
-     * @deprecated 用 {@link SteerMessages#textOf}
-     */
-    @Deprecated
-    public static String stripSteerPrefix(String content) {
-        if (content == null) {
-            return null;
-        }
-
-        if (content.startsWith(SteerMessages.PREFIX)) {
-            return content.substring(SteerMessages.PREFIX.length());
-        }
-
-        return content;
     }
 
     // ==================== Builder ====================

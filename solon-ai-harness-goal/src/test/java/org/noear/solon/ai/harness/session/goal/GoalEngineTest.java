@@ -35,7 +35,7 @@ class GoalEngineTest {
         GoalState gs = engine.attach(session, "生成报告", 1000, 0, 0);
 
         assertNotNull(gs);
-        Object projection = session.getContext().data().get(GoalEngine.KEY_GOAL);
+        Object projection = session.getContext().data().get(GoalAttrs.GOAL);
         assertTrue(projection instanceof Map, "投影必须是 Map（存储无关）");
         Map<?, ?> map = (Map<?, ?>) projection;
         assertEquals("生成报告", map.get("objective"));
@@ -93,7 +93,7 @@ class GoalEngineTest {
         engine.clear(session);
 
         assertNull(engine.state(session));
-        assertFalse(session.getContext().data().containsKey(GoalEngine.KEY_GOAL),
+        assertFalse(session.getContext().data().containsKey(GoalAttrs.GOAL),
                 "清除后投影必须移除");
         // 清除后可重新创建
         assertNotNull(engine.attach(session, "新目标", 0, 0, 0));
@@ -107,7 +107,7 @@ class GoalEngineTest {
 
         assertTrue(engine.pause(session, gs));
         assertEquals(GoalState.Status.PAUSED, gs.getStatus());
-        assertEquals("PAUSED", ((Map<?, ?>) session.getContext().data().get(GoalEngine.KEY_GOAL)).get("status"));
+        assertEquals("PAUSED", ((Map<?, ?>) session.getContext().data().get(GoalAttrs.GOAL)).get("status"));
 
         assertTrue(engine.resume(session, gs));
         assertEquals(GoalState.Status.PURSUING, gs.getStatus());

@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * SteerExtension 门面验证：一键装配、投递 / 撤销 / 查询语义、开关、容量可配、消息协议、兼容层。
  */
-@SuppressWarnings("deprecation")
 class SteerExtensionTest {
     @TempDir
     Path workspace;
@@ -319,63 +318,43 @@ class SteerExtensionTest {
         assertNull(SteerMessages.textOf(null));
     }
 
-    // ==================== 兼容层（已弃用，下个 minor 移除） ====================
+    // ==================== 状态贡献（onStatus）与键登记 ====================
 
     @Test
-    void deprecatedFacadeStillWorks() {
+    void pendingCountIsContributedToEngineStatus() {
         SteerExtension ext = new SteerExtension();
-        AgentSession session = runningSession("run-1");
-
-        SteerResult a = ext.steer(session, null, null, "a", null, null);
-        SteerResult b = ext.steer(session, "run-1", null, "b", null);
-        assertTrue(a.isSteered());
-        assertTrue(b.isSteered());
-        assertTrue(ext.cancel(session, a.getSteerId()));
-        assertFalse(ext.cancel(session, a.getSteerId()));
-        assertEquals(1, ext.cancelAll(session, Arrays.asList(b.getSteerId())));
-        assertEquals(0, ext.cancelAll(session, null), "旧语义：未指定 id 不做任何事");
-
-        ext.steer(session, "c");
-        assertEquals(1, ext.clearPending(session).size());
-        assertTrue(ext.clearPending(session).isEmpty());
-
-        assertNotNull(ext.getInterceptor());
-        assertEquals(SteerHelper.MAX_TEXT_LENGTH, SteerExtension.maxTextLength());
-        assertTrue(SteerExtension.isSteerMessage(ChatMessage.ofUser(SteerMessages.PREFIX + "x")));
-        assertEquals("x", SteerExtension.stripSteerPrefix(SteerMessages.PREFIX + "x"));
-    }
-
-    /** 已弃用的 beginTurn 仍是可用的强制交接（兼容未迁移的宿主），失败项暂存而非回填邮箱。 */
-    @Test
-    void deprecatedBeginTurnStillHandsOver() {
-        SteerExtension ext = new SteerExtension();
-        AgentSession session = runningSession("run-1");
-        ext.steer(session, "残留插话");
-
-        // 转排队目标按能力接口从引擎现取：queue 挂在 steer 之后也生效（与装配顺序无关）
         HarnessEngine engine = newEngine();
         engine.addExtension(ext);
-        engine.addExtension(new QueueExtension());
 
-        SteerExtension.SteerHandover handed = ext.beginTurn(session);
-        assertEquals(1, handed.getQueued().size(), "残留插话应转入排队");
-        assertEquals(1, QueueHelper.pendingSize(session));
-        assertNull(ext.activeRunId(session), "轮次标识应被清空");
-        assertTrue(ext.beginTurn(session).isEmpty(), "幂等");
+        AgentSession idle = InMemoryAgentSession.of();
+        assertEquals(0, (int) engine.status(idle).get(SteerExtension.STATUS_PENDING));
+        assertNull(idle.attrs().get(SteerAttrs.STEER), "读状态不得创建插话状态");
+
+        AgentSession session = runningSession("run-1");
+        // 已挂引擎时忙判定走 engine.status：登记一条活跃运行流，否则投递会回滚为 NOT_RUNNING
+        org.noear.solon.ai.agent.session.SessionRuns.attach(session, reactor.core.Disposables.single());
+        assertTrue(ext.steer(session, "a").isSteered());
+        assertTrue(ext.steer(session, "b").isSteered());
+        assertEquals(2, (int) engine.status(session).get(SteerExtension.STATUS_PENDING));
+
+        ext.setEnabled(false);
+        assertEquals(2, (int) engine.status(session).get(SteerExtension.STATUS_PENDING), "事实口径不受开关影响");
+
+        ext.cancelPending(session, null);
+        assertEquals(0, (int) engine.status(session).get(SteerExtension.STATUS_PENDING));
     }
 
-    /** 引擎上没有积压能力（未装 queue）：交接全部按失败暂存，不得绕过接口写队列。 */
     @Test
-    void handoverWithoutBacklogParksAsFailed() {
-        SteerExtension ext = new SteerExtension();
+    void stateLivesUnderRegisteredPluginKey() {
         AgentSession session = runningSession("run-1");
-        ext.steer(session, "残留插话");
-        newEngine().addExtension(ext);
+        assertTrue(session.attrs().get(SteerAttrs.STEER) instanceof SteerState);
+        assertEquals("session.steer", SteerAttrs.STEER, "插件键归 session.<插件> 命名空间");
+        assertNull(session.attrs().get("harness.steer"), "旧键不再读写");
+    }
 
-        SteerExtension.SteerHandover handed = ext.beginTurn(session);
-        assertEquals(0, handed.getQueued().size());
-        assertEquals(1, handed.getFailed().size());
-        assertEquals(0, QueueHelper.pendingSize(session));
-        assertEquals(1, ext.pending(session).size(), "失败项暂存为 orphans，仍可撤销");
+    @Test
+    void kernelIsPackagePrivate() {
+        assertFalse(java.lang.reflect.Modifier.isPublic(SteerHelper.class.getModifiers()),
+                "宿主只能经 SteerExtension 门面");
     }
 }

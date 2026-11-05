@@ -16,7 +16,7 @@ import java.util.List;
 /**
  * 会话级插话状态（包内可见，宿主不可触达）。
  *
- * <p>取代原先两个独立 attrs（{@code harness.activeRunId} + {@code harness.steerBox}）：
+ * <p>取代原先两个独立 attrs（已废弃的 {@code harness.activeRunId} + {@code harness.steerBox}）：
  * 「当前轮次」与「本轮邮箱」合并为一个对象、一把锁，从结构上保证二者不会错配，
  * 投递后的复查只需比对 {@link #epoch}。</p>
  *
@@ -25,7 +25,7 @@ import java.util.List;
  *   <li>{@link #inbox} 只属于 {@link #runId} 这一轮，只有它会被注入模型；</li>
  *   <li>{@link #orphans} 是转排队失败、等待重试的插话，<b>永不注入模型</b>
  *       （旧实现回填邮箱，会在下一任务第二轮被注入，造成跨任务串话）；</li>
- *   <li>{@link #epoch} 在每次轮次切换（开 / 收 / 强制交接）时递增。</li>
+ *   <li>{@link #epoch} 在每次轮次切换（开 / 收）时递增。</li>
  * </ul>
  *
  * <p>所有字段只在持有 {@code this} 锁时读写。</p>
@@ -35,7 +35,7 @@ import java.util.List;
  */
 final class SteerState {
     /** attrs key（transient，不落 snapshot.json）。宿主不得读写。 */
-    static final String ATTR = "harness.steer";
+    static final String ATTR = SteerAttrs.STEER;
 
     /** 当前活跃轮次；null 表示没有活跃任务 */
     String runId;
@@ -120,9 +120,9 @@ final class SteerState {
     }
 
     /**
-     * 强制交接：不看轮次，清空轮次标识并交出全部残留（仅供已弃用的 {@code beginTurn} 兼容路径）。
+     * 交出全部残留并清空轮次标识（{@link #close} 的实现）。
      */
-    synchronized List<SteerMessage> release() {
+    private List<SteerMessage> release() {
         List<SteerMessage> leftovers = takeOrphans();
         leftovers.addAll(inbox);
         inbox.clear();

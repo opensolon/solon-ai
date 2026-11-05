@@ -1,9 +1,9 @@
 package org.noear.solon.ai.harness.util;
 
 
+import org.noear.solon.ai.harness.session.SessionSelections;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.core.util.Assert;
 
 /**
@@ -24,7 +24,7 @@ public class TraceUtil {
         Object trace = null;
 
         //当前选中的代理
-        String agentVal = session.getContext().getAs(HarnessEngine.CTX_AGENT_SELECTED);
+        String agentVal = SessionSelections.agentOf(session);
         if (Assert.isNotEmpty(agentVal)) {
             trace = session.getContext().get("__" + agentVal);
         }
@@ -53,7 +53,7 @@ public class TraceUtil {
         }
 
         //当前选中的代理
-        String agentVal = session.getContext().getAs(HarnessEngine.CTX_AGENT_SELECTED);
+        String agentVal = SessionSelections.agentOf(session);
         if (Assert.isNotEmpty(agentVal)) {
             session.getContext().remove("__" + agentVal);
         }

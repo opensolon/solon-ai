@@ -47,7 +47,8 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <ol>
  *   <li>钩子 {@link HarnessExtension#onInterrupt}：用户级中断在停流之前回调、异常隔离、只停流的程序中断不回调；</li>
- *   <li>能力接口 {@link InputBacklog}：{@code getExtension(接口)} 可查、{@code status} 求和、
+ *   <li>钩子 {@link HarnessExtension#onStatus}：扩展事实经开放槽位贡献、按键合并、异常隔离、不判开关；</li>
+ *   <li>能力接口 {@link InputBacklog}：{@code getExtension(接口)} 可查、
  *       {@code admit} 忙态有积压能力 → QUEUE，没有 → REJECT(busy)；</li>
  *   <li>会话槽位 {@link TurnDispatch}：admit / SessionTurn 只认接口；</li>
  *   <li>装配 {@link HarnessEngine#addExtensionIfAbsent}：按类型幂等；</li>
@@ -81,6 +82,9 @@ class HarnessPluginContractTest {
         return disposed;
     }
 
+    /** 积压桩自定义的事实键（核心不认识它） */
+    static final SessionStatus.Key<Integer> STUB_PENDING = SessionStatus.Key.count("stub.backlog");
+
     /** 积压能力桩：只记数，不认识队列。 */
     static class StubBacklog implements HarnessExtension, InputBacklog {
         final List<String> offered = new ArrayList<>();
@@ -93,9 +97,16 @@ class HarnessPluginContractTest {
             return offered.size();
         }
 
+        /** 内核受理靠的是能力方法（类型系统保证），不是状态键 */
         @Override
-        public int size(AgentSession session) {
-            return offered.size();
+        public boolean hasPending(AgentSession session) {
+            return offered.isEmpty() == false;
+        }
+
+        /** 展示用的数量是插件自有事实：键由插件自己定义 */
+        @Override
+        public void onStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
+            status.put(STUB_PENDING, offered.size());
         }
 
         @Override
@@ -154,7 +165,8 @@ class HarnessPluginContractTest {
         assertEquals(1, backlog.interrupts);
         assertTrue(backlog.busyAtInterrupt, "必须先清积压再停流（回调时流仍在）");
         assertEquals(1, disposed.get());
-        assertEquals(0, engine.status(session).getQueuedCount());
+        assertEquals(0, (int) engine.status(session).get(STUB_PENDING));
+        assertTrue(engine.isIdle(session), "积压已清、流已停：空闲");
     }
 
     @Test
@@ -172,7 +184,7 @@ class HarnessPluginContractTest {
         busy(session);
         try (org.noear.solon.ai.harness.session.interrupt.InterruptPlan plan = engine.prepareInterrupt(session)) {
             assertEquals(2, backlog.interrupts, "两段式的第一段就回调");
-            assertEquals(0, backlog.size(session));
+            assertEquals(0, backlog.offered.size());
             assertTrue(plan.hasActiveRun());
         }
     }
@@ -219,10 +231,91 @@ class HarnessPluginContractTest {
         assertNull(engine().prepareInterrupt(null));
     }
 
+    // ==================== 钩子：onStatus（开放事实槽位） ====================
+
+    /** 插件自定义的事实键（核心不认识它） */
+    static final SessionStatus.Key<String> PLUGIN_PHASE = SessionStatus.Key.of("stub.phase", "idle");
+    static final SessionStatus.Key<Integer> PLUGIN_COUNT = SessionStatus.Key.count("stub.count");
+
+    static class StubFacts extends AbsHarnessExtension {
+        final String phase;
+        final int count;
+
+        StubFacts(String phase, int count) {
+            this.phase = phase;
+            this.count = count;
+        }
+
+        @Override
+        public void onStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
+            status.put(PLUGIN_PHASE, phase).put(PLUGIN_COUNT, count);
+        }
+    }
+
+    @Test
+    void extensionsContributeFactsThroughOpenSlots() {
+        HarnessEngine engine = engine();
+        AgentSession session = InMemoryAgentSession.of();
+
+        SessionStatus bare = engine.status(session);
+        assertEquals("idle", bare.get(PLUGIN_PHASE), "无人贡献时取键的缺省值");
+        assertEquals(0, (int) bare.get(PLUGIN_COUNT));
+        assertFalse(bare.has(PLUGIN_PHASE));
+
+        engine.addExtension(new StubFacts("running", 2));
+        engine.addExtension(new StubFacts("paused", 3));
+
+        SessionStatus status = engine.status(session);
+        assertTrue(status.has(PLUGIN_PHASE));
+        assertEquals("paused", status.get(PLUGIN_PHASE), "单一拥有者键：后写覆盖");
+        assertEquals(5, (int) status.get(PLUGIN_COUNT), "计数键：多提供者求和");
+        assertTrue(status.toString().contains("stub.count=5"), status.toString());
+
+        SessionStatus core = SessionStatus.of(session);
+        assertEquals("idle", core.get(PLUGIN_PHASE), "静态 of 只读核心事实");
+    }
+
+    @Test
+    void statusFactsIgnoreSwitchAndIsolateFailures() {
+        HarnessEngine engine = engine();
+        engine.addExtension(new HarnessExtension() {
+            @Override
+            public void onStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
+                throw new IllegalStateException("boom");
+            }
+        });
+        StubFacts disabled = new StubFacts("parked", 1);
+        disabled.setEnabled(false);
+        engine.addExtension(disabled);
+
+        SessionStatus status = engine.status(InMemoryAgentSession.of());
+        assertEquals("parked", status.get(PLUGIN_PHASE), "事实类钩子不判开关，且单个异常不影响其余");
+        assertFalse(engine.status(null).has(PLUGIN_PHASE), "null 会话不回调扩展");
+    }
+
+    @Test
+    void countKeyClampsNegativeAndIgnoresNull() {
+        SessionStatus status = SessionStatus.builder(null)
+                .put(PLUGIN_COUNT, -4)
+                .put(PLUGIN_COUNT, 2)
+                .put(PLUGIN_PHASE, null)
+                .build();
+        assertEquals(2, (int) status.get(PLUGIN_COUNT), "负数按 0 计");
+        assertFalse(status.has(PLUGIN_PHASE), "null 贡献忽略");
+    }
+
+    @Test
+    void sameNameDifferentKeysDoNotCollide() {
+        SessionStatus.Key<Integer> other = SessionStatus.Key.count("stub.count");
+        SessionStatus status = SessionStatus.builder(null).put(PLUGIN_COUNT, 1).put(other, 7).build();
+        assertEquals(1, (int) status.get(PLUGIN_COUNT), "键按实例身份区分");
+        assertEquals(7, (int) status.get(other));
+    }
+
     // ==================== 能力：InputBacklog ====================
 
     @Test
-    void capabilityLookupAndStatusSum() {
+    void capabilityLookupAndPluginOwnedFacts() {
         HarnessEngine engine = engine();
         assertFalse(engine.getExtension(InputBacklog.class).isPresent());
 
@@ -237,12 +330,48 @@ class HarnessPluginContractTest {
         b.offer(session, "2", InputOrigin.NONE);
         b.offer(session, "3", InputOrigin.NONE);
 
-        assertEquals(3, engine.status(session).getQueuedCount(), "积压数 = 各积压能力之和");
-        assertEquals(0, SessionStatus.of(session).getQueuedCount(), "静态 of 只读核心事实");
+        assertEquals(3, (int) engine.status(session).get(STUB_PENDING), "插件自有计数键：多提供者求和");
+        assertFalse(SessionStatus.of(session).has(STUB_PENDING), "静态 of 只读核心事实");
     }
 
     @Test
-    void admitQueuesWhenBusyOnlyIfBacklogPresent() {
+    void isIdleCombinesOccupancyAndAnyBacklog() {
+        HarnessEngine engine = engine();
+        AgentSession session = InMemoryAgentSession.of();
+        assertFalse(engine.isIdle(null));
+        assertTrue(engine.isIdle(session), "无积压能力、无运行流：空闲");
+
+        StubBacklog a = new StubBacklog();
+        StubBacklog b = new StubBacklog();
+        engine.addExtension(a);
+        engine.addExtension(b);
+        assertTrue(engine.isIdle(session));
+
+        b.offer(session, "排在后面的积压", InputOrigin.NONE);
+        assertFalse(engine.isIdle(session), "任一积压能力有待执行项即不空闲（不只看首个）");
+        b.offered.clear();
+
+        busy(session);
+        assertFalse(engine.isIdle(session), "有运行流：不空闲");
+    }
+
+    @Test
+    void failingBacklogIsIsolated() {
+        HarnessEngine engine = engine();
+        class Broken extends StubBacklog {
+            @Override
+            public boolean hasPending(AgentSession session) {
+                throw new IllegalStateException("boom");
+            }
+        }
+        engine.addExtension(new Broken());
+        AgentSession session = InMemoryAgentSession.of();
+        assertTrue(engine.isIdle(session), "单个积压能力异常按无积压计");
+        assertEquals(AdmitDecision.Kind.ADMIT, engine.admit(session, "hello", false, null).getKind());
+    }
+
+    @Test
+    void admitDefersWhenBusyOnlyIfBacklogPresent() {
         HarnessEngine engine = engine();
         AgentSession session = InMemoryAgentSession.of();
         busy(session);
@@ -252,18 +381,18 @@ class HarnessPluginContractTest {
         assertEquals("busy", noBacklog.getRejectReason());
 
         engine.addExtension(new StubBacklog());
-        assertEquals(AdmitDecision.Kind.QUEUE, engine.admit(session, "hello", false, null).getKind());
+        assertEquals(AdmitDecision.Kind.DEFER, engine.admit(session, "hello", false, null).getKind());
     }
 
     @Test
-    void admitQueuesWhenIdleButBacklogNotEmpty() {
+    void admitDefersWhenIdleButBacklogNotEmpty() {
         HarnessEngine engine = engine();
         StubBacklog backlog = new StubBacklog();
         engine.addExtension(backlog);
         AgentSession session = InMemoryAgentSession.of();
         backlog.offer(session, "先来的", InputOrigin.NONE);
 
-        assertEquals(AdmitDecision.Kind.QUEUE, engine.admit(session, "后来的", false, null).getKind(),
+        assertEquals(AdmitDecision.Kind.DEFER, engine.admit(session, "后来的", false, null).getKind(),
                 "有积压时空闲也要排队（先进先出）");
     }
 
@@ -281,7 +410,7 @@ class HarnessPluginContractTest {
 
         AdmitDecision admit = engine.admit(session, "派发的一轮", false, null);
         assertEquals(AdmitDecision.Kind.ADMIT_BYPASS, admit.getKind());
-        assertTrue(admit.isQueueDispatch());
+        assertTrue(admit.isDispatched());
         assertSame(dispatch, admit.getDispatch());
 
         SessionTurn turn = SessionTurn.begin(session);
@@ -350,5 +479,35 @@ class HarnessPluginContractTest {
 
         assertTrue(scanned.get(), "守卫必须真的扫描到源码（防止路径错误导致假通过）");
         assertTrue(violations.isEmpty(), "核心模块不得 import 插件包：" + violations);
+    }
+
+    /**
+     * 内核没有 queue：核心对外类型（快照、受理结论、能力接口）的公开成员与枚举值不得出现 queue 语义。
+     * 插件事实键一律由插件定义（如 QueueExtension.STATUS_PENDING），内核判定走能力接口方法。
+     */
+    @Test
+    void corePublicApiHasNoQueueVocabulary() {
+        Class<?>[] types = {SessionStatus.class, SessionStatus.Builder.class, SessionStatus.Key.class,
+                AdmitDecision.class, AdmitDecision.Kind.class, InputBacklog.class, TurnDispatch.class,
+                HarnessExtension.class, HarnessAttrs.class};
+        List<String> violations = new ArrayList<>();
+        for (Class<?> type : types) {
+            for (java.lang.reflect.Method m : type.getMethods()) {
+                if (m.getName().toLowerCase().contains("queue")) {
+                    violations.add(type.getSimpleName() + "#" + m.getName());
+                }
+            }
+            for (java.lang.reflect.Field f : type.getFields()) {
+                if (f.getName().toLowerCase().contains("queue")) {
+                    violations.add(type.getSimpleName() + "." + f.getName());
+                }
+            }
+        }
+        for (java.lang.reflect.Method m : HarnessEngine.class.getMethods()) {
+            if (m.getName().toLowerCase().contains("queue")) {
+                violations.add("HarnessEngine#" + m.getName());
+            }
+        }
+        assertTrue(violations.isEmpty(), "核心公开 API 不得含 queue 语义：" + violations);
     }
 }

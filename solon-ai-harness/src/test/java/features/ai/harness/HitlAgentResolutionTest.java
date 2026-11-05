@@ -1,5 +1,6 @@
 package features.ai.harness;
 
+import org.noear.solon.ai.harness.session.SessionSelections;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
@@ -45,7 +46,7 @@ class HitlAgentResolutionTest {
         HarnessEngine engine = engine();
         AgentSession session = InMemoryAgentSession.of();
         // 宿主在首轮已把「实际生效代理」写入会话上下文
-        session.getContext().put(HarnessEngine.CTX_AGENT_SELECTED, "coder");
+        SessionSelections.setAgent(session, "coder");
 
         InputOutcome outcome = engine.handle(HarnessInput.of(session, null)
                 .hitl(HITLAction.APPROVE, null));
@@ -58,7 +59,7 @@ class HitlAgentResolutionTest {
     void hitlPrefersExplicitAgent() {
         HarnessEngine engine = engine();
         AgentSession session = InMemoryAgentSession.of();
-        session.getContext().put(HarnessEngine.CTX_AGENT_SELECTED, "coder");
+        SessionSelections.setAgent(session, "coder");
 
         InputOutcome outcome = engine.handle(HarnessInput.of(session, null)
                 .selectedAgent("reviewer")

@@ -47,7 +47,7 @@ public class HelpCommand extends AbsCommand {
     public String[] examples() {
         return new String[]{
                 "/help",
-                "/help queue"
+                "/help interrupt"
         };
     }
 

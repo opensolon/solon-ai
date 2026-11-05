@@ -1,10 +1,10 @@
 package org.noear.solon.ai.harness.util;
 
+import org.noear.solon.ai.harness.session.SessionSelections;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
-import org.noear.solon.ai.harness.HarnessEngine;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -32,7 +32,7 @@ class TraceUtilTest {
         ReActTrace mainTrace = new ReActTrace();
         ReActTrace agentTrace = new ReActTrace();
         session.getContext().put(TraceKeys.TRACE_KEY_MAIN, mainTrace);
-        session.getContext().put(HarnessEngine.CTX_AGENT_SELECTED, "frontend");
+        SessionSelections.setAgent(session, "frontend");
         session.getContext().put("__frontend", agentTrace);
 
         assertSame(agentTrace, TraceUtil.getCurrentTrace(session));
@@ -66,7 +66,7 @@ class TraceUtilTest {
     void removeCurrentTraceClearsAllThreeSlots() {
         AgentSession session = InMemoryAgentSession.of();
         session.getContext().put(TraceKeys.TRACE_KEY_MAIN, new ReActTrace());
-        session.getContext().put(HarnessEngine.CTX_AGENT_SELECTED, "frontend");
+        SessionSelections.setAgent(session, "frontend");
         session.getContext().put("__frontend", new ReActTrace());
 
         TraceUtil.removeCurrentTrace(session);
@@ -74,7 +74,7 @@ class TraceUtilTest {
         assertNull(session.getContext().get(TraceKeys.TRACE_KEY_MAIN));
         assertNull(session.getContext().get("__frontend"));
         // removeCurrentTrace 不清选择本身（选择与会话绑定，仅 trace 随轮次消亡）
-        assertNotNull(session.getContext().getAs(HarnessEngine.CTX_AGENT_SELECTED));
+        assertNotNull(SessionSelections.agentOf(session));
     }
 
     @Test

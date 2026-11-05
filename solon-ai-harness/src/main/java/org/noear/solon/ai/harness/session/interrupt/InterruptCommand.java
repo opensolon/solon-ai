@@ -58,7 +58,6 @@ public class InterruptCommand extends AbsCommand {
     }
 
     @Override
-    @SuppressWarnings("deprecation")
     public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) throws Exception {
         AgentSession session = ctx.getSession();
 
@@ -67,8 +66,14 @@ public class InterruptCommand extends AbsCommand {
         }
 
         // 必须经引擎：插件的中断参与（先清积压再停流）只在引擎入口回调。
-        // 无引擎（纯单测手工执行）时退回核心停流。
-        boolean interrupted = engine != null ? engine.interrupt(session) : InterruptHelper.interrupt(session);
+        // 无引擎（纯单测手工执行）时只有核心语义可用：认领 + 提交（不含插件参与）。
+        boolean interrupted;
+        if (engine != null) {
+            interrupted = engine.interrupt(session);
+        } else {
+            InterruptPlan plan = InterruptHelper.claim(session);
+            interrupted = plan != null && plan.commit();
+        }
         if (interrupted) {
             ctx.println("用户已取消任务（或中断）");
         } else {

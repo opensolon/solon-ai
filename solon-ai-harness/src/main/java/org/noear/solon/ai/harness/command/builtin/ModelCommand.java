@@ -49,7 +49,7 @@ public class ModelCommand extends AbsCommand {
         String flag = ctx.argAt(0);
 
         if ("ls".equals(flag) || flag == null || flag.isEmpty()) {
-            String currentModel = ctx.getSession().getContext().getAs(HarnessEngine.CTX_MODEL_SELECTED);
+            String currentModel = engine.getSessionModel(ctx.getSession());
             currentModel = engine.getModelOrDef(currentModel).getNameOrModel();
 
             for (String line : formatModels(engine.getModels(), currentModel)) {
@@ -66,7 +66,7 @@ public class ModelCommand extends AbsCommand {
                 ctx.println(ctx.color(RED + "Model not found: " + RESET + BOLD + flag + RESET));
                 ctx.println(ctx.color(DIM + "Use '/model' to see available models." + RESET));
             } else {
-                ctx.getSession().getContext().put(HarnessEngine.CTX_MODEL_SELECTED, flag);
+                engine.setSessionModel(ctx.getSession(), flag);
                 ctx.getSession().updateSnapshot();
                 ctx.println(ctx.color(GREEN + "Model switched to: " + RESET + BOLD + flag + RESET));
             }

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness.agent;
 
+import org.noear.solon.ai.harness.session.SessionSelections;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentEvent;
@@ -350,7 +351,7 @@ public class TaskTalent extends AbsTalent {
     }
 
     private static String sessionModelOf(AgentSession parentSession) {
-        return parentSession.getContext().getAs(HarnessEngine.CTX_MODEL_SELECTED);
+        return SessionSelections.modelOf(parentSession);
     }
 
     private static FluxSink<AgentEvent> streamSinkOf(ReActTrace parentTrace) {

@@ -122,7 +122,7 @@ public final class GoalProjection {
         if (context == null) {
             return null;
         }
-        return from(context.data().get(GoalEngine.KEY_GOAL));
+        return from(context.data().get(GoalAttrs.GOAL));
     }
 
     public static GoalProjection from(Object projection) {
@@ -169,7 +169,7 @@ public final class GoalProjection {
         if (context == null) {
             return;
         }
-        context.data().put(GoalEngine.KEY_GOAL, toMap());
+        context.data().put(GoalAttrs.GOAL, toMap());
     }
 
     /** 转为投影 Map（键名即持久化契约）。 */

@@ -113,24 +113,6 @@ public class HarnessEngine {
     public final static String ATTR_CWD = "__cwd";
     private static final String BUILTIN_AGENT_MOUNT = "@harness-agents";
     private static final String BUILTIN_AGENT_PATH = "META-INF/solon/ai/harness/agents/";
-    /**
-     * 会话级模型选择键。
-     *
-     * @deprecated 宿主一律改用 {@link #getSessionModel}/{@link #setSessionModel}（会话级选择是共用口径，
-     * 不是宿主的私有状态）。直接读写本键会出现「put 空串 / remove / put null」多种漂移写法。
-     * 保留仅为存量兼容，下个 minor 移除。
-     */
-    @Deprecated
-    public final static String CTX_MODEL_SELECTED = "_model_selected";
-
-    /**
-     * 会话级子代理选择键。
-     *
-     * @deprecated 宿主一律改用 {@link #getSessionAgent}/{@link #setSessionAgent}。
-     * 保留仅为存量兼容，下个 minor 移除。
-     */
-    @Deprecated
-    public final static String CTX_AGENT_SELECTED = "_agent_selected";
 
     /**
      * 会话属性：本轮实际生效的子代理名（含 {@code @子代理} 解析结果）。
@@ -425,7 +407,7 @@ public class HarnessEngine {
     // ========== 会话级选择项（模型 / 子代理）门面 ==========
     //
     // 与 getSessionCwd/setSessionCwd 对称：会话级选择是引擎与宿主共用的口径，
-    // 宿主一律走本组方法，不得直接读写 CTX_MODEL_SELECTED / CTX_AGENT_SELECTED。
+    // 宿主一律走本组方法（存储键已收为 SessionSelections 的私有实现）。
     // 此前同一键出现四种写法（put 值 / put 空串 / remove / 带 isNotEmpty 守卫），
     // 语义漂移正是这类「裸常量当私有状态用」的必然结果。
 
@@ -447,12 +429,7 @@ public class HarnessEngine {
      * @since 4.2.3
      */
     public void setSessionModel(@Nullable AgentSession session, @Nullable String name) {
-        if (session == null) return;
-        if (name == null || name.trim().isEmpty()) {
-            session.getContext().remove(CTX_MODEL_SELECTED);
-        } else {
-            session.getContext().put(CTX_MODEL_SELECTED, name);
-        }
+        SessionSelections.setModel(session, name);
     }
 
     /**
@@ -475,12 +452,7 @@ public class HarnessEngine {
      * @since 4.2.3
      */
     public void setSessionAgent(@Nullable AgentSession session, @Nullable String name) {
-        if (session == null) return;
-        if (name == null || name.trim().isEmpty()) {
-            session.getContext().remove(CTX_AGENT_SELECTED);
-        } else {
-            session.getContext().put(CTX_AGENT_SELECTED, name);
-        }
+        SessionSelections.setAgent(session, name);
     }
 
     public String getSystemPrompt() {
@@ -2029,21 +2001,14 @@ public class HarnessEngine {
             return modelName;
         }
 
-        if (session != null) {
-            String sessionModel = session.getContext().getAs(CTX_MODEL_SELECTED);
-            if (sessionModel != null) {
-                return sessionModel;
-            }
-        }
-
-        return null;
+        return SessionSelections.modelOf(session);
     }
 
     /**
      * 解析 HITL 请求的生效子代理名：审批入参优先，其次会话级选择
      * <p>
      * Web 端审批请求通常不携带 selectedAgent，而首轮生效代理（含 {@code @子代理} 解析结果）
-     * 已由宿主写入 {@link #CTX_AGENT_SELECTED}。HITL 续流必须沿用它：trace 按代理名分 key，
+     * 已由宿主写入会话级子代理选择（{@link #setSessionAgent}）。HITL 续流必须沿用它：trace 按代理名分 key，
      * 取错代理会取不到挂起的 tool_calls，表现为续跑空转。
      */
     private String resolveHitlAgent(@Nullable AgentSession session, @Nullable String selectedAgent) {
@@ -2051,18 +2016,14 @@ public class HarnessEngine {
             return selectedAgent;
         }
 
-        if (session != null) {
-            return session.getContext().getAs(CTX_AGENT_SELECTED);
-        }
-
-        return null;
+        return SessionSelections.agentOf(session);
     }
 
 
     /**
      * 中断会话当前正在执行的任务（程序化 /interrupt）。
      *
-     * <p>收敛此前只存在于 {@code /interrupt} 命令里的内部细节：回调扩展的中断参与（如 queue 清排队项）、
+     * <p>收敛此前只存在于 {@code /interrupt} 命令里的内部细节：回调扩展的中断参与（如积压插件清待执行项）、
      * 释放运行流句柄、补写取消消息（带 runId 元数据）与快照。
      * {@code /interrupt} 命令也走本方法，不存在第二套中断逻辑。</p>
      *
@@ -2071,7 +2032,7 @@ public class HarnessEngine {
      *
      * <pre>{@code
      * if (engine.interrupt(session)) {
-     *     queue.enqueue(session, "改用 PostgreSQL 方言重写迁移脚本");
+     *     engine.handle(HarnessInput.of(session, "改用 PostgreSQL 方言重写迁移脚本"));
      * }
      * }</pre>
      *
@@ -2107,7 +2068,6 @@ public class HarnessEngine {
      * @since 4.2.0
      */
     @Nullable
-    @SuppressWarnings("deprecation")
     public InterruptPlan prepareInterrupt(@Nullable AgentSession session) {
         if (session == null) {
             return null;
@@ -2123,7 +2083,7 @@ public class HarnessEngine {
         }
 
         // ② 核心：原子认领运行句柄（停流与补收尾在 plan.commit）
-        return InterruptHelper.prepareInterrupt(session);
+        return InterruptHelper.claim(session);
     }
 
     /**
@@ -2158,34 +2118,70 @@ public class HarnessEngine {
     }
 
     /**
-     * 读取会话运行态快照（忙碌 / 待审批 / 积压数一次读全）
+     * 读取会话运行态快照（核心事实 + 各扩展贡献的事实，一次读全）
      *
-     * <p>宿主的「能不能接新输入」判定需要同时看运行流、挂起卡、积压三项。读一次快照即可，不要自己拼。
-     * 积压数是所有 {@link InputBacklog} 能力的 {@code size} 之和（没装积压插件时为 0）。</p>
+     * <p>宿主的「能不能接新输入」判定需要同时看运行流、挂起卡、积压等多项。读一次快照即可，不要自己拼。
+     * 核心事实由 {@link SessionStatus#builder} 读定，扩展事实由 {@link HarnessExtension#onStatus} 贡献
+     * （按插件自定义的 {@link SessionStatus.Key} 读取，如 {@code QueueExtension.STATUS_PENDING}）。</p>
+     *
+     * <p>只想问「现在能不能注入一轮程序任务」用 {@link #isIdle(AgentSession)}，不要自己拼。</p>
      *
      * @since 4.2.0
      */
     public SessionStatus status(@Nullable AgentSession session) {
-        return SessionStatus.of(session, backlogSize(session));
-    }
-
-    /** 所有积压能力的待执行数之和（会在会话锁内调用，实现方已约定廉价、不阻塞）。 */
-    private int backlogSize(@Nullable AgentSession session) {
-        if (session == null) {
-            return 0;
-        }
-        int total = 0;
-        for (HarnessExtension extension : options.getExtensions()) {
-            if (extension instanceof InputBacklog) {
-                total += Math.max(0, ((InputBacklog) extension).size(session));
+        SessionStatus.Builder builder = SessionStatus.builder(session);
+        if (session != null) {
+            for (HarnessExtension extension : options.getExtensions()) {
+                try {
+                    extension.onStatus(this, session, builder);
+                } catch (Throwable e) {
+                    LOG.warn("Extension onStatus failed: {}", extension.getClass().getName(), e);
+                }
             }
         }
-        return total;
+        return builder.build();
     }
 
-    /** 引擎上是否装有积压能力（决定忙态受理给 QUEUE 还是 REJECT）。 */
+    /**
+     * 会话是否完全空闲（可以注入一轮程序任务）。
+     *
+     * <p>口径：不占用（无运行流、不在受理窗口、无待审批卡，即 {@link SessionStatus#isOccupied()} 为假）
+     * <b>且</b>没有任何积压能力报告待执行输入（{@link InputBacklog#hasPending}）——有积压时注入等于插队。
+     * 两项在同一把会话锁内读取，结果一致。</p>
+     *
+     * <p>给 goal 调度、宿主定时任务等「程序代替用户发起一轮」的场景用；用户输入请用 {@link #admit}。</p>
+     *
+     * @return session 为 null 时返回 false（无从注入）
+     * @since 4.2.0
+     */
+    public boolean isIdle(@Nullable AgentSession session) {
+        if (session == null) {
+            return false;
+        }
+        synchronized (session.attrs()) {
+            return SessionStatus.of(session).isOccupied() == false && hasPendingBacklog(session) == false;
+        }
+    }
+
+    /** 引擎上是否装有积压能力（决定忙态受理给 DEFER 还是 REJECT）。 */
     private boolean hasBacklog() {
         return getExtension(InputBacklog.class).isPresent();
+    }
+
+    /** 是否有任一积压能力报告待执行输入（先进先出与空闲判定共用；逐个隔离异常）。 */
+    private boolean hasPendingBacklog(AgentSession session) {
+        for (HarnessExtension extension : options.getExtensions()) {
+            if (extension instanceof InputBacklog) {
+                try {
+                    if (((InputBacklog) extension).hasPending(session)) {
+                        return true;
+                    }
+                } catch (Throwable e) {
+                    LOG.warn("InputBacklog hasPending failed: {}", extension.getClass().getName(), e);
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -2214,26 +2210,26 @@ public class HarnessEngine {
      * 输入受理判定：这条输入现在该走哪条路（原子：判定与占位同临界区）。
      *
      * <p><b>为什么要有它</b>：入口最易写错的一段不是「怎么装配」，而是「现在能不能接」。
-     * 它要同时看运行流、受理窗口、待审批卡、队列积压、是否队列派发、是否忙态旁路命令，
+     * 它要同时看运行流、受理窗口、待审批卡、积压、是否程序派发、是否忙态旁路命令，
      * 六个判定分散在三个包，宿主每次都要各查一遍并自行组合。Web 端这份判定曾长达 50 余行，
      * 且用到的每个原语其实都已由 harness 提供。</p>
      *
      * <p><b>口径固定</b>：忙态一律为「有活跃流或已在受理窗口」（{@link InputGate#tryAcquire} 同口径），
      * 待审批卡另判。宿主不得传入自己的忙判定——这正是历史上最容易漂移的一处。</p>
      *
-     * <p><b>本方法不做</b>：不执行入队、不渲染回执、不发终态。{@link AdmitDecision.Kind#QUEUE}
-     * 由宿主调积压插件入队（如 {@code QueueExtension#enqueue}；推理强度/思考模式属于宿主域概念）；
+     * <p><b>本方法不做</b>：不执行入积压、不渲染回执、不发终态。{@link AdmitDecision.Kind#DEFER}
+     * 由宿主交给积压插件（推理强度/思考模式属于宿主域概念）；
      * {@link AdmitDecision.Kind#REJECT} 由宿主渲染拒因。</p>
      *
      * <p><b>没有积压能力时</b>（引擎上未装 {@link InputBacklog}）：忙态给 {@code REJECT("busy")}，
-     * 而不是宿主无队可入的 {@code QUEUE}。</p>
+     * 而不是宿主无处可延的 {@code DEFER}。</p>
      *
      * <p>典型用法：</p>
      * <pre>{@code
      * AdmitDecision admit = engine.admit(session, input, hitlDecision, hitlExempt);
      * switch (admit.getKind()) {
      *     case REJECT: renderError(admit.getRejectReason(), admit.getRejectDetail()); return;
-     *     case QUEUE:  enqueueAndDrain(); return;
+     *     case DEFER:  offerToBacklogAndDrain(); return;
      *     default:     break;  // ADMIT / ADMIT_BYPASS
      * }
      * try (InputGate.Ticket ticket = admit.getTicket()) {
@@ -2275,12 +2271,12 @@ public class HarnessEngine {
                 }
             }
 
-            // 2) 忙态（有活跃流 / 已在受理窗口）或有积压：应入队（保证先进先出）。
+            // 2) 忙态（有活跃流 / 已在受理窗口）或积压里还有待执行输入：应延后（保证先进先出）。
             //    程序派发本身与忙态旁路命令除外（后者的语义是在运行中的任务旁插一脚）。
-            //    没装积压能力时无队可入：拒绝（busy）。
-            if ((status.isBusy() || status.isAdmitting() || status.getQueuedCount() > 0)
-                    && onDispatchThread == false && busyCommand == false) {
-                return hasBacklog() ? AdmitDecision.queue()
+            //    没装积压能力时无处可延：拒绝（busy）。
+            if (onDispatchThread == false && busyCommand == false
+                    && (status.isBusy() || status.isAdmitting() || hasPendingBacklog(session))) {
+                return hasBacklog() ? AdmitDecision.defer()
                         : AdmitDecision.reject("busy", "当前任务正在执行，请稍后再试");
             }
 

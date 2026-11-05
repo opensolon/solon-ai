@@ -20,7 +20,7 @@ import java.util.function.Supplier;
  * <ul>
  *   <li>{@code onAgentStart}：开轮。若上一轮未收尾（interrupt / 异常时 {@code onAgentEnd} 不触发），
  *       把其残留转排队并推出 {@link SteerDroppedEvent}（{@link SteerDroppedEvent.Reason#RUN_SUPERSEDED}）。
- *       <b>这一步原先是宿主义务（{@code beginTurn}），现由框架自动完成</b>；</li>
+ *       宿主没有任何开流前义务；</li>
  *   <li>{@code onReasonStart}（消息组装前的采样边界）：排空本轮邮箱并注入工作记忆；</li>
  *   <li>{@code onAgentEnd}：收轮，残留转排队并推出 {@link SteerDroppedEvent}（{@link SteerDroppedEvent.Reason#RUN_ENDED}）。</li>
  * </ul>
@@ -45,7 +45,6 @@ import java.util.function.Supplier;
  * @author noear
  * @since 2026
  */
-@SuppressWarnings("deprecation")
 public class SteerInterceptor extends AbsReActInterceptor {
 
     private final Supplier<InputBacklog> backlogSupplier;

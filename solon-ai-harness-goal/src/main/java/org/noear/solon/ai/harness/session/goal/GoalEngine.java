@@ -24,7 +24,6 @@ import org.noear.solon.ai.harness.session.goal.validate.TestsPassValidator;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.runtime.ErrorClassifier;
 import org.noear.solon.ai.harness.runtime.RoundResult;
-import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.flow.FlowContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +46,7 @@ import java.util.function.Predicate;
  * Goal 引擎 —— 会话级「有终止判据的持续执行」能力。
  *
  * <p><b>归属</b>：Goal 属于会话，且每个会话最多一个。状态以 Map 投影存放于
- * {@link AgentSession#getContext()} 的 {@code data()}（key：{@value #KEY_GOAL}），
+ * {@link AgentSession#getContext()} 的 {@code data()}（key：{@value GoalAttrs#GOAL}），
  * 任何变更后调用 {@link AgentSession#updateSnapshot()} 随会话快照一并落盘。
  * 运行态实例存放于 {@code attrs()}（瞬态，不落盘），首次访问时从投影 hydrate。
  * 这与排队（QueueHelper）的既有分层完全一致：<b>存储介质是会话实现的细节</b>
@@ -55,7 +54,7 @@ import java.util.function.Predicate;
  *
  * <p><b>执行通道自持</b>：本类不依赖任何调度体系的具体类型，也不与 loop 共享任何执行通道。
  * 「一轮怎么执行」由宿主通过 {@link #addTaskExecutor(TaskHandler)} 注册（可覆盖），
- * 缺省走引擎自身的同步回合。「能不能执行」由会话快照单向派生（{@link SessionStatus}），
+ * 缺省走引擎自身的同步回合。「能不能执行」由引擎空闲判定单向派生（{@code HarnessEngine#isIdle}），
  * 宿主不得提供忙判定谓词——那会让引擎职责外推且必然与真实状态漂移。</p>
  *
  * @author noear
@@ -64,12 +63,12 @@ import java.util.function.Predicate;
 public class GoalEngine {
     private static final Logger LOG = LoggerFactory.getLogger(GoalEngine.class);
 
-    /** 会话上下文 data() 中的持久化投影 key（单槽：一条 goal 记录）。 */
-    public static final String KEY_GOAL = "session.goal";
-    /** 运行态实例的 attrs key（瞬态，不落盘）。 */
-    private static final String ATTR_GOAL = "session.goal.state";
-    /** 运行态防重入锁的 attrs key。 */
-    private static final String ATTR_RUNNING = "session.goal.running";
+    /** 持久化投影 key（见 {@link GoalAttrs#GOAL}）。 */
+    private static final String KEY_GOAL = GoalAttrs.GOAL;
+    /** 运行态实例的 attrs key（见 {@link GoalAttrs#GOAL_STATE}）。 */
+    private static final String ATTR_GOAL = GoalAttrs.GOAL_STATE;
+    /** 运行态防重入锁的 attrs key（见 {@link GoalAttrs#GOAL_RUNNING}）。 */
+    private static final String ATTR_RUNNING = GoalAttrs.GOAL_RUNNING;
 
     /** Goal 生命周期观察者。桌面端用它把后台多轮执行持续推回同一个对话流。 */
     @FunctionalInterface
@@ -88,10 +87,10 @@ public class GoalEngine {
      * <p>返回值同时携带 token 消耗与工具证据，因此不再需要在会话 attrs 里落
      * 「上一轮指标」这类跨模块旁路键，也就没有「轮前重置 / 读完即删」那套无人能强制的时序约定。</p>
      *
-     * <p><b>没有 agentName 参数</b>：子代理归属是<b>会话属性</b>（{@code CTX_AGENT_SELECTED}，
+     * <p><b>没有 agentName 参数</b>：子代理归属是<b>会话属性</b>（{@code engine.getSessionAgent}，
      * 由宿主／{@code /goal} 命令／自动化任务写入会话上下文），执行者从 session 读即可。
      * 旧签名带该参数，但引擎内两处调用恒传 {@code null}——宿主里「拼 {@code @agentName} 前缀」
-     * 的分支从未执行（{@code WsGate} 实际走的是 {@code CTX_AGENT_SELECTED} 回退读取）。</p>
+     * 的分支从未执行（{@code WsGate} 实际走的是会话级子代理选择的回退读取）。</p>
      */
     @FunctionalInterface
     public interface TaskHandler {
@@ -395,17 +394,15 @@ public class GoalEngine {
     /**
      * 会话是否应跳过本轮注入。
      *
-     * <p>口径为「占用或有积压」：HITL 挂起时没有活跃流，但此时注入会顶掉未决审批，
-     * 必须算作占用（{@link SessionStatus#isOccupied()} 已含此项）；队列压着任务时
-     * 注入等于插队，也一并跳过。</p>
+     * <p>口径为引擎的 {@code isIdle}（占用或有积压即不空闲）：HITL 挂起时没有活跃流，
+     * 但此时注入会顶掉未决审批；积压压着任务时注入等于插队。goal 不认识任何积压插件。</p>
      */
     boolean shouldSkipSession(String sessionId) {
         if (engine == null) return false;
         try {
             AgentSession session = engine.getSession(sessionId);
             if (session == null) return true;
-            SessionStatus status = engine.status(session);
-            return status == null || status.isOccupied() || status.getQueuedCount() > 0;
+            return engine.isIdle(session) == false;
         } catch (Throwable e) {
             LOG.debug("status check failed for session '{}': {}", sessionId, e.getMessage());
             return true;

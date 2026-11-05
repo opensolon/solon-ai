@@ -15,17 +15,14 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
-import java.util.Queue;
 import java.util.function.BooleanSupplier;
 
 /**
- * 插话（Steering）静态内核：投递校验与回滚、撤销、残留转排队的唯一实现。
+ * 插话（Steering）静态内核：投递校验与回滚、撤销、残留转排队的唯一实现（包内可见）。
  *
- * <p><b>宿主不应依赖本类</b>：一律走 {@link SteerExtension} 门面
- * （经 {@code engine.getExtension(SteerExtension.class)} 获取）；注入消息格式见
- * {@link SteerMessages}。本类将在下一个 minor 版本收窄为包内可见。</p>
+ * <p>宿主一律走 {@link SteerExtension} 门面（经 {@code engine.getExtension(SteerExtension.class)} 获取）；
+ * 注入消息格式见 {@link SteerMessages}。</p>
  *
  * <p>参考 Codex 的 steering 设计：用户在任务运行中插入的纠偏/补充消息存放在
  * {@link AgentSession#attrs()} 上的会话级状态（{@link SteerState}，transient，不落 snapshot.json，任务级易失），
@@ -46,18 +43,8 @@ import java.util.function.BooleanSupplier;
  * @author noear
  * @since 2026
  */
-public final class SteerHelper {
+final class SteerHelper {
     private static final Logger LOG = LoggerFactory.getLogger(SteerHelper.class);
-
-    /**
-     * @deprecated 轮次与邮箱已合并为包内状态 {@link SteerState}，本键不再被读写；
-     * 宿主一律经 {@link SteerExtension#pending} / {@link SteerExtension#activeRunId} 查询
-     */
-    @Deprecated
-    public static final String ATTR_STEER_BOX = "harness.steerBox";
-    /** @deprecated 同 {@link #ATTR_STEER_BOX} */
-    @Deprecated
-    public static final String ATTR_ACTIVE_RUN_ID = "harness.activeRunId";
 
     /** 缺省邮箱容量上限（Codex 建议：频繁 steer 加速上下文膨胀，高频场景应改用排队）。可经 {@link SteerLimits} 覆盖 */
     public static final int MAX_BOX_SIZE = 5;
@@ -66,38 +53,7 @@ public final class SteerHelper {
     /** 缺省插话 ID 长度上限。可经 {@link SteerLimits} 覆盖 */
     public static final int MAX_ID_LENGTH = 128;
 
-    /** @deprecated 用 {@link SteerMessages#PREFIX} */
-    @Deprecated
-    public static final String STEER_PREFIX = SteerMessages.PREFIX;
-
-    /** @deprecated 用 {@link SteerMessages#SOURCE} */
-    @Deprecated
-    public static final String STEER_SOURCE = SteerMessages.SOURCE;
-
     private SteerHelper() { }
-
-    /**
-     * 当前待生效的插话快照（本轮邮箱在前、待重试的 orphans 在后；副本，不创建状态）。
-     *
-     * @deprecated 用 {@link SteerExtension#pending(AgentSession)}
-     */
-    @Deprecated
-    public static List<SteerMessage> pending(AgentSession session) {
-        SteerState state = SteerState.peek(session);
-        return state == null ? Collections.<SteerMessage>emptyList() : state.snapshot();
-    }
-
-    /**
-     * 插话入队（不比对轮次之外的约束：缺省容量、非严格轮次绑定）。
-     *
-     * @deprecated 用 {@link SteerExtension#steer(AgentSession, String, InputOrigin)} /
-     * {@link SteerExtension#steerOnRun(AgentSession, String, String, String, InputOrigin)}
-     */
-    @Deprecated
-    public static SteerResult steer(AgentSession session, String runId, String steerId, String text,
-                                    InputOrigin origin, BooleanSupplier busyRecheck) {
-        return steer(session, runId, steerId, text, origin, busyRecheck, SteerLimits.DEFAULT, false);
-    }
 
     /**
      * 插话入队的唯一实现（Web / IM / 命令共用）。
@@ -205,14 +161,6 @@ public final class SteerHelper {
         }
     }
 
-    /** 不比对轮次的单条撤销（已弃用门面 {@code cancel(session, id)} 的兼容实现） */
-    static boolean cancelAnyRun(SteerState state, String steerId) {
-        synchronized (state) {
-            return SteerState.removeById(state.inbox, steerId)
-                    || SteerState.removeById(state.orphans, steerId);
-        }
-    }
-
     /**
      * 批量撤销（steerIds 为 null 或空表示清空全部；不比对轮次——「清空」本就跨轮生效）。
      */
@@ -236,24 +184,6 @@ public final class SteerHelper {
             int after = state.inbox.size() + state.orphans.size();
             return SteerCancelResult.canceled(null, before - after, after);
         }
-    }
-
-    /**
-     * 在给定队列中按 ID 撤销（纯函数，与会话状态无关）。
-     *
-     * @deprecated 邮箱已不对外暴露；用 {@link SteerExtension#cancelOnRun} / {@link SteerExtension#cancelPending}
-     */
-    @Deprecated
-    public static boolean cancel(Queue<SteerMessage> box, String steerId) {
-        if (box == null || steerId == null) {
-            return false;
-        }
-        for (SteerMessage item : box) {
-            if (steerId.equals(item.getId())) {
-                return box.remove(item);
-            }
-        }
-        return false;
     }
 
     /**

@@ -29,7 +29,7 @@ import org.noear.solon.lang.Nullable;
  * <ul>
  *   <li>{@link #getSession()}：目标任务会话；为空表示当前上下文会话（跨会话命令如 {@code /continue <id>} 才有值）</li>
  *   <li>{@link #getPrompt()}：任务正文；<b>为空表示续流</b>（如 {@code /continue}，按挂起的 trace 继续）</li>
- *   <li>{@link #getModel()}：命令声明的模型；为空走会话级回退（{@code CTX_MODEL_SELECTED} → 默认）</li>
+ *   <li>{@link #getModel()}：命令声明的模型；为空走会话级回退（{@code engine.getSessionModel} → 默认）</li>
  * </ul>
  *
  * @author noear

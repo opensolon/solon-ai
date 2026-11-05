@@ -20,12 +20,13 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.input.HarnessInput;
+import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.lang.Preview;
 
 /**
  * Harness 扩展接口
  *
- * <p>把「引擎生命周期、代理装配、输入入口、请求装配、会话中断」切成 6 个回调点，扩展只需覆写自己要用的那几个。
+ * <p>把「引擎生命周期、代理装配、输入入口、请求装配、会话中断、会话状态」切成 7 个回调点，扩展只需覆写自己要用的那几个。
  * 按发生顺序排列：</p>
  *
  * <pre>
@@ -39,12 +40,15 @@ import org.noear.solon.lang.Preview;
  *
  * 用户级中断       ──onInterrupt───────&gt; [先于停流：清积压等]
  *
+ * 读取会话状态     ──onStatus──────────&gt; [贡献插件自定义的事实键]
+ *
  * remove/shutdown  ──onDetach─────────&gt; [引擎级清理]
  * </pre>
  *
  * <h3>插件化的三种协作机制（各管一类，不要混用）</h3>
  * <ol>
- *     <li><b>引擎通知所有扩展 → 用本接口的钩子</b>（一对多广播，如 {@link #onInterrupt}）。</li>
+ *     <li><b>引擎通知或征集所有扩展 → 用本接口的钩子</b>（一对多广播，如 {@link #onInterrupt}；
+ *         一对多汇集，如 {@link #onStatus}）。</li>
  *     <li><b>一个扩展向引擎或另一个扩展提供服务 → 用核心定义的能力接口</b>，实现类同时实现它，
  *         消费方用 {@code engine.getExtension(能力接口.class)} 查找（如
  *         {@link org.noear.solon.ai.harness.session.InputBacklog}）。不要把领域能力做成本接口的
@@ -52,11 +56,16 @@ import org.noear.solon.lang.Preview;
  *     <li><b>需要在会话锁内或无引擎场景读取的会话事实 → 用核心持有的 attrs 槽位</b>
  *         （如 {@link org.noear.solon.ai.harness.session.TurnDispatch}）。</li>
  *     <li><b>核心的静态 API 只读核心事实</b>；扩展贡献的事实一律经引擎读取
- *         （如积压数只在 {@code engine.status(session)} 里，不在 {@code SessionStatus.of(session)} 里）。</li>
+ *         （插件事实只在 {@code engine.status(session)} 里，不在 {@code SessionStatus.of(session)} 里）。</li>
+ *     <li><b>内核不定义插件事实键</b>：事实键由拥有它的插件定义。内核自己的判定若要依赖插件，
+ *         走能力接口的类型化方法（如受理的先进先出走 {@code InputBacklog#hasPending}），而不是「实现方必须贡献某个键」
+ *         这种编译器查不到的约定。</li>
  * </ol>
+ * <p>插件自有的会话属性键登记在各自模块的 {@code XxxAttrs}（{@code session.<插件>.*}），
+ * 核心 {@code HarnessAttrs} 只登记引擎自己的键与核心持有的槽位。</p>
  * <p>核心模块不得 import 任何插件包；插件之间也不互相 import，只经核心契约协作。</p>
  *
- * <h3>开关（{@link #isEnabled()}）语义：四个不看，两个看</h3>
+ * <h3>开关（{@link #isEnabled()}）语义：五个不看，两个看</h3>
  * <table border="1">
  *     <caption>各钩子是否受 {@link #isEnabled()} 控制</caption>
  *     <tr><th>钩子</th><th>是否判 {@code isEnabled()}</th><th>原因</th></tr>
@@ -69,13 +78,15 @@ import org.noear.solon.lang.Preview;
  *         <td>清理不得被开关阻止，否则停用前占用的资源永远无法释放</td></tr>
  *     <tr><td>{@link #onInterrupt}</td><td><b>否</b></td>
  *         <td>同属清理类：停用前积压的任务也必须随用户停止一起作废</td></tr>
+ *     <tr><td>{@link #onStatus}</td><td><b>否</b></td>
+ *         <td>事实类：停用不代表已有的事实消失（停用前已入队的任务仍在队列里）</td></tr>
  *     <tr><td>{@link #onInput}</td><td>是</td><td>纯运行期钩子，停用即不参与本次输入</td></tr>
  *     <tr><td>{@link #onRequestAssemble}</td><td>是</td><td>纯运行期钩子，停用即不参与本次请求</td></tr>
  * </table>
  *
  * <h3>实现约定</h3>
  * <ul>
- *     <li>六个钩子<b>全部 default</b>：只覆写自己需要的那几个，不必实现空方法。</li>
+ *     <li>七个钩子<b>全部 default</b>：只覆写自己需要的那几个，不必实现空方法。</li>
  *     <li>需要运行期开关能力时继承 {@link AbsHarnessExtension}（已实现 {@link #isEnabled()}/
  *         {@link #setEnabled(Boolean)}）；直接 {@code implements} 时 {@link AiSwitchable} 的默认实现是
  *         {@code isEnabled() = true} 且 {@code setEnabled} 空操作——即恒启用且无法关闭，
@@ -260,6 +271,30 @@ public interface HarnessExtension extends AiSwitchable {
      * @since 4.2.0
      */
     default void onInterrupt(HarnessEngine engine, AgentSession session) {
+
+    }
+
+    /**
+     * 读取会话状态（事实贡献）
+     *
+     * <p><b>调用点</b>：{@code HarnessEngine.status(session)}（{@code admit} 受理判定也经此）。
+     * 引擎先读定核心事实（运行流 / HITL / 受理窗口），再逐个回调本钩子收集扩展事实。</p>
+     *
+     * <p><b>典型用途</b>：插件用自己定义的 {@link SessionStatus.Key} 常量贡献自有事实
+     * （如积压数 {@code QueueExtension.STATUS_PENDING}、待生效插话数 {@code SteerExtension.STATUS_PENDING}、
+     * goal 状态 {@code GoalExtension.STATUS_GOAL}），宿主按键读取，核心无需修改。
+     * 这些事实只供展示与宿主业务使用，内核不读。</p>
+     *
+     * <p><b>注意</b>：不判 {@code isEnabled()}（事实类）；可能在 {@code synchronized (session.attrs())}
+     * 内被调用，实现必须<b>廉价、不阻塞、无副作用</b>；若需获取自有锁，持有自有锁期间
+     * 不得再取会话锁（锁序固定为「会话锁 → 自有锁」）。引擎逐个 try/catch，单个扩展的异常只记告警。</p>
+     *
+     * @param engine  引擎
+     * @param session 会话（非 null）
+     * @param status  快照组装器（经 {@link SessionStatus.Builder#put} 贡献事实）
+     * @since 4.2.0
+     */
+    default void onStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
 
     }
 }

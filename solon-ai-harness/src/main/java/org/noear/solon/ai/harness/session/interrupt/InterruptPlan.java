@@ -18,7 +18,7 @@ package org.noear.solon.ai.harness.session.interrupt;
 /**
  * 已准备但尚未提交的中断（两段式中断的第二段入口）。
  *
- * <p>{@link InterruptHelper#prepareInterrupt} 完成第一段（清队列 + 原子认领运行句柄 +
+ * <p>{@code HarnessEngine#prepareInterrupt} 完成第一段（扩展中断参与 + 原子认领运行句柄 +
  * 推进取消代数），本接口承载第二段（补取消消息 + 真正停流）。两段之间是<b>宿主的编排窗口</b>：
  * 需要自定义终态时序的宿主（如 Web 要求「先落库 → 发 error 帧 → 发 done → 最后停流」，
  * 停流提前会让本轮流终结、前端收尾并丢掉后续帧）在此窗口内自由发送渠道事件，
@@ -31,7 +31,7 @@ package org.noear.solon.ai.harness.session.interrupt;
  * 已提交过的 close 是空操作。</p>
  *
  * <pre>{@code
- * try (InterruptPlan plan = InterruptHelper.prepareInterrupt(session)) {
+ * try (InterruptPlan plan = engine.prepareInterrupt(session)) {
  *     if (plan == null || !plan.hasActiveRun()) {
  *         // 无活跃流：走宿主自己的空态出口（如兜底 done）
  *     } else {

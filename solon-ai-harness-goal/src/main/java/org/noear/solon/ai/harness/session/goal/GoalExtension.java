@@ -7,6 +7,7 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.runtime.RoundResult;
+import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.ai.harness.session.goal.validate.GoalValidator;
 import org.noear.solon.core.util.RunUtil;
 import org.slf4j.Logger;
@@ -33,7 +34,7 @@ import java.util.function.Predicate;
  *
  * <p>不传 {@code taskExecutor} 时使用内置缺省：经 {@code engine.handle} + 同步取回最终文本
  * （README §5.1 的模板实现）。<b>忙判定不由宿主提供</b>：一律由会话快照派生
- * （{@code SessionStatus.isOccupied()}），HITL 挂起与队列积压均算占用。</p>
+ * （{@code engine.isIdle(session)}），HITL 挂起与积压待执行均算不空闲。</p>
  *
  * <p><b>与 loop 无共享</b>：loop 是宿主调度能力（cli 域），goal 是引擎能力（harness 域），
  * 二者各持自己的执行通道与自己的宿。曾共用的 {@code ExecutionBridge} 已删除——
@@ -52,6 +53,16 @@ import java.util.function.Predicate;
  * @since 3.9.2
  */
 public class GoalExtension extends AbsHarnessExtension {
+
+    /**
+     * 会话状态事实：当前 goal 的状态（无 goal 时为 null）。
+     *
+     * <p>经 {@code engine.status(session).get(GoalExtension.STATUS_GOAL)} 读取，与运行流 / 积压等事实一次读全，
+     * 宿主不必再单独查 goal 门面拼装徽章。</p>
+     *
+     * @since 4.2.0
+     */
+    public static final SessionStatus.Key<GoalState.Status> STATUS_GOAL = SessionStatus.Key.of("goal.status", null);
     private static final Logger LOG = LoggerFactory.getLogger(GoalExtension.class);
 
     private final String workspaceId;
@@ -102,6 +113,24 @@ public class GoalExtension extends AbsHarnessExtension {
         this.schedulerDisabled = b.schedulerExplicitNull;
         this.listener = b.listener;
         this.pendingChannelClaims = new java.util.ArrayList<>(b.channelClaims);
+    }
+
+    /**
+     * 会话状态贡献：goal 状态（{@link #STATUS_GOAL}）。
+     *
+     * <p>事实口径，不判开关（停用不代表 goal 消失）；与 goal 运行态同用会话锁（可重入），
+     * 首次读取时从投影 hydrate 并缓存运行态，此外无副作用。</p>
+     */
+    @Override
+    public void onStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
+        GoalEngine ge = goalEngine;
+        if (ge == null) {
+            return;
+        }
+        GoalState gs = ge.state(session);
+        if (gs != null) {
+            status.put(STATUS_GOAL, gs.getStatus());
+        }
     }
 
     @Override
@@ -423,23 +452,10 @@ public class GoalExtension extends AbsHarnessExtension {
     }
 
     /**
-     * 创建 goal（<b>不挂调度</b>）。供首轮由宿主自己的流驱动、只需后续挂 job 的场景（桌面端）。
-     *
-     * <p>单槽校验异常原样透出（{@link IllegalStateException} 已有进行中 goal）。</p>
-     *
-     * @deprecated 自 4.2.1：裸参形态靠位置才能知道第四个是毫秒，改用
-     *             {@link #attach(AgentSession, GoalSpec)}（单位自描述），下个 minor 移除。
-     */
-    @Deprecated
-    public GoalState attach(AgentSession session, String objective,
-                            long maxTokens, long maxDurationMs, int maxIterations) {
-        return goalEngine.attach(session, objective, maxTokens, maxDurationMs, maxIterations);
-    }
-
-    /**
      * 创建 goal（<b>不挂调度</b>），参数对象版。
      *
-     * <p>与 5 裸参重载同源（{@link GoalSpec} 只是载荷），单槽校验异常原样透出。</p>
+     * <p>单槽校验异常（{@link IllegalStateException} 已有进行中 goal）原样透出。供首轮由宿主自己的流驱动、
+     * 只需后续挂 job 的场景（桌面端）。</p>
      */
     public GoalState attach(AgentSession session, GoalSpec spec) {
         return goalEngine.attach(session, spec.getObjective(),
@@ -470,22 +486,6 @@ public class GoalExtension extends AbsHarnessExtension {
     /** 是否装配了调度器（无容器测试宿主可能显式关闭）。 */
     public boolean hasScheduler() {
         return goalScheduler != null;
-    }
-
-    /**
-     * 创建 goal 并立即挂上调度（{@code runNow=true}）。
-     *
-     * <p>收敛宿主「attach + schedule」配对；{@code attach} 的单槽校验异常
-     * （{@link IllegalStateException} 已有进行中 goal）原样透出，宿主据此回 409。</p>
-     *
-     * @deprecated 自 4.2.1：改用 {@link #attachAndSchedule(AgentSession, GoalSpec)}，下个 minor 移除。
-     */
-    @Deprecated
-    public GoalState attachAndSchedule(AgentSession session, String objective,
-                                       long maxTokens, long maxDurationMs, int maxIterations) {
-        GoalState gs = goalEngine.attach(session, objective, maxTokens, maxDurationMs, maxIterations);
-        scheduleNow(session.getSessionId());
-        return gs;
     }
 
     /**
@@ -615,17 +615,6 @@ public class GoalExtension extends AbsHarnessExtension {
     public boolean resume(String sessionId, String taskId) {
         GoalState gs = find(sessionId, taskId);
         return gs != null && resume(sessionOf(sessionId), gs);
-    }
-
-    /**
-     * 恢复（PAUSED/BLOCKED → PURSUING）并重新挂调度（立即跑一轮）。
-     *
-     * @deprecated 自 4.2.1：与 {@link #resume(AgentSession, GoalState)} 完全同义，
-     *             且名字易与 {@link #resumeScheduleOnly}（恢复期专用，不立即跑）混淆，下个 minor 移除。
-     */
-    @Deprecated
-    public boolean resumeAndSchedule(AgentSession session, GoalState gs) {
-        return resume(session, gs);
     }
 
     /**

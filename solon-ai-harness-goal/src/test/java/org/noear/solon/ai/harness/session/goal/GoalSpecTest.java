@@ -134,7 +134,7 @@ class GoalSpecTest {
         GoalExtension ext = newExtension();
 
         GoalState viaSpec = ext.attach(newSession(), GoalSpec.of("目标").maxTokens(7).maxIterations(2));
-        GoalState viaRaw = ext.attach(newSession(), "目标", 7, 0, 2);
+        GoalState viaRaw = ext.getGoalEngine().attach(newSession(), "目标", 7, 0, 2);
 
         assertEquals(viaRaw.getCondition(), viaSpec.getCondition());
         assertEquals(viaRaw.getMaxTokens(), viaSpec.getMaxTokens());

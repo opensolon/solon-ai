@@ -234,7 +234,7 @@ class GoalExtensionTest {
         engineBuilder().extensionAdd(ext).build();
 
         AgentSession session = InMemoryAgentSession.of("s-pa");
-        GoalState gs = ext.attachAndSchedule(session, "目标", 0, 0, 0);
+        GoalState gs = ext.attachAndSchedule(session, GoalSpec.of("目标"));
 
         java.util.List<String> order = new java.util.ArrayList<>();
         boolean ok = ext.pauseAndAwait(session, gs, () -> order.add("interrupt"), 1000L);
@@ -298,7 +298,7 @@ class GoalExtensionTest {
         assertTrue(ext.getGoalEngine().hasTaskHandler());
 
         AgentSession session = InMemoryAgentSession.of("s-exec");
-        ext.attachAndSchedule(session, "目标", 0, 0, 0);
+        ext.attachAndSchedule(session, GoalSpec.of("目标"));
         ext.getGoalEngine().runRound(session);
         assertTrue(calls.get() > 0, "注册的执行器应被认领");
     }
@@ -310,7 +310,7 @@ class GoalExtensionTest {
         engineBuilder().extensionAdd(ext).build();
 
         AgentSession session = session("s-str");
-        GoalState gs = ext.attachAndSchedule(session, "目标", 0, 0, 0);
+        GoalState gs = ext.attachAndSchedule(session, GoalSpec.of("目标"));
 
         assertTrue(ext.pause(session.getSessionId()));
         assertEquals(GoalState.Status.PAUSED, ext.stateOf(session.getSessionId()).getStatus());
@@ -351,7 +351,7 @@ class GoalExtensionTest {
         engineBuilder().extensionAdd(ext).build();
 
         AgentSession session = session("s-find");
-        GoalState gs = ext.attachAndSchedule(session, "目标", 0, 0, 0);
+        GoalState gs = ext.attachAndSchedule(session, GoalSpec.of("目标"));
 
         assertNull(ext.find("session-x", gs.getId()), "未知会话返回 null");
         assertNull(ext.find(session.getSessionId(), "not-a-goal-id"), "taskId 不匹配返回 null");
@@ -367,7 +367,7 @@ class GoalExtensionTest {
         engineBuilder().extensionAdd(ext).build();
 
         AgentSession session = InMemoryAgentSession.of();
-        GoalState gs = ext.attachAndSchedule(session, "旧目标", 100L, 5000L, 7);
+        GoalState gs = ext.attachAndSchedule(session, GoalSpec.of("旧目标").maxTokens(100L).maxDurationMs(5000L).maxIterations(7));
 
         // maxDurationMs 传 null：只能改正文与 token，时长与轮次不得被清空
         ext.updateAndReschedule(session, gs, "新目标", 200L, null, false);
@@ -389,7 +389,7 @@ class GoalExtensionTest {
         engineBuilder().extensionAdd(ext).build();
 
         AgentSession session = InMemoryAgentSession.of();
-        ext.attachAndSchedule(session, "目标", 0, 0, 0);
+        ext.attachAndSchedule(session, GoalSpec.of("目标"));
         assertNotNull(ext.state(session));
 
         ext.clear(session);
@@ -405,7 +405,7 @@ class GoalExtensionTest {
         engineBuilder().extensionAdd(ext).build();
 
         AgentSession session = InMemoryAgentSession.of();
-        ext.attachAndSchedule(session, "目标", 0, 0, 0);
+        ext.attachAndSchedule(session, GoalSpec.of("目标"));
         ext.resumeScheduleOnly(session.getSessionId());
         ext.scheduleNow(session.getSessionId());
         ext.unschedule(session.getSessionId());
@@ -444,5 +444,41 @@ class GoalExtensionTest {
         assertNull(engine.getCommandRegistry().find("goal"), "禁用后命令不可见");
         assertNotNull(engine.getCommandRegistry().get("goal"), "禁用后仍可区分“已停用”");
         assertFalse(ext.isEnabled());
+    }
+
+    // ==================== 状态贡献（onStatus）与键登记 ====================
+
+    /** goal 状态经开放事实槽位进入 engine.status，宿主无需单独查门面；不判开关。 */
+    @Test
+    void goalStatusIsContributedToEngineStatus() {
+        GoalExtension ext = GoalExtension.builder("ws-status").scheduler(null).build();
+        HarnessEngine engine = engineBuilder().extensionAdd(ext).build();
+        AgentSession session = InMemoryAgentSession.of("s-status");
+
+        assertNull(engine.status(session).get(GoalExtension.STATUS_GOAL), "无 goal 时为 null");
+
+        GoalState gs = ext.attach(session, GoalSpec.of("目标"));
+        assertEquals(GoalState.Status.PURSUING, engine.status(session).get(GoalExtension.STATUS_GOAL));
+
+        ext.pause(session, gs);
+        ext.setEnabled(false);
+        assertEquals(GoalState.Status.PAUSED, engine.status(session).get(GoalExtension.STATUS_GOAL),
+                "事实口径不受开关影响");
+
+        ext.clear(session);
+        assertNull(engine.status(session).get(GoalExtension.STATUS_GOAL));
+    }
+
+    /** 插件键集中登记在 GoalAttrs，持久化键值不变（改值会丢存量 goal）。 */
+    @Test
+    void goalKeysAreRegisteredInGoalAttrs() {
+        assertEquals("session.goal", GoalAttrs.GOAL);
+        GoalExtension ext = GoalExtension.builder("ws-attrs").scheduler(null).build();
+        engineBuilder().extensionAdd(ext).build();
+        AgentSession session = InMemoryAgentSession.of("s-attrs");
+        ext.attach(session, GoalSpec.of("目标"));
+
+        assertTrue(session.getContext().data().get(GoalAttrs.GOAL) instanceof java.util.Map, "投影落在 GoalAttrs.GOAL");
+        assertTrue(session.attrs().get(GoalAttrs.GOAL_STATE) instanceof GoalState, "运行态落在 GoalAttrs.GOAL_STATE");
     }
 }

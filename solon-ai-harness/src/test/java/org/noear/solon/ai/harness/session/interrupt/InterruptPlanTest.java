@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>锁定四点（对应宿主 Web 端的编排诉求）：</p>
  * <ol>
- *   <li>两段等价性：prepare + commit 与一步式 {@link InterruptHelper#interrupt} 副作用一致；</li>
+ *   <li>两段等价性：prepare + commit 与一步式中断（claim + commit）副作用一致；</li>
  *   <li>认领原子性：两个并发 prepare 只有一者拿到 {@code hasActiveRun()==true}；</li>
  *   <li>commit 幂等：重复 commit / close 不重复停流、不重复写取消消息；</li>
  *   <li>close 兜底：宿主忘记 commit 时，凭证闭合仍会停流（不泄漏孤儿流）。</li>
@@ -43,7 +43,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>扩展的中断参与（如清队列）由引擎在第一段之前回调，见 {@code HarnessPluginContractTest}。</p>
  */
-@SuppressWarnings("deprecation")
 class InterruptPlanTest {
 
     private static Disposable countingDisposable(AtomicInteger counter) {
@@ -66,7 +65,7 @@ class InterruptPlanTest {
         AtomicInteger disposed = new AtomicInteger();
         SessionRuns.attach(session, countingDisposable(disposed));
 
-        InterruptPlan plan = InterruptHelper.prepareInterrupt(session);
+        InterruptPlan plan = InterruptHelper.claim(session);
         assertTrue(plan != null && plan.hasActiveRun());
 
         // 编排窗口内：流尚未停，取消消息尚未写
@@ -94,7 +93,7 @@ class InterruptPlanTest {
                 try {
                     ready.countDown();
                     go.await();
-                    InterruptPlan plan = InterruptHelper.prepareInterrupt(session);
+                    InterruptPlan plan = InterruptHelper.claim(session);
                     if (plan != null && plan.hasActiveRun()) {
                         activeClaims.incrementAndGet();
                         plan.commit();
@@ -123,7 +122,7 @@ class InterruptPlanTest {
         AtomicInteger disposed = new AtomicInteger();
         SessionRuns.attach(session, countingDisposable(disposed));
 
-        InterruptPlan plan = InterruptHelper.prepareInterrupt(session);
+        InterruptPlan plan = InterruptHelper.claim(session);
         assertTrue(plan.commit());
         assertFalse(plan.commit(), "重复 commit 必须返回 false 且无副作用");
         assertEquals(1, disposed.get());
@@ -140,7 +139,7 @@ class InterruptPlanTest {
         AtomicInteger disposed = new AtomicInteger();
         SessionRuns.attach(session, countingDisposable(disposed));
 
-        InterruptPlan plan = InterruptHelper.prepareInterrupt(session);
+        InterruptPlan plan = InterruptHelper.claim(session);
         // 宿主编排中抛异常、忘记 commit：try-with-resources 的 close 仍会停流
         plan.close();
 
@@ -153,7 +152,7 @@ class InterruptPlanTest {
     void noActiveRunPlanGoesEmptyPath() {
         AgentSession session = InMemoryAgentSession.of();
 
-        InterruptPlan plan = InterruptHelper.prepareInterrupt(session);
+        InterruptPlan plan = InterruptHelper.claim(session);
 
         assertTrue(plan != null);
         assertFalse(plan.hasActiveRun(), "无活跃流：宿主应走空态出口（如兜底 done）");
@@ -163,7 +162,7 @@ class InterruptPlanTest {
 
     @Test
     void nullSessionReturnsNull() {
-        assertNull(InterruptHelper.prepareInterrupt(null));
+        assertNull(InterruptHelper.claim(null));
     }
 
     @Test
@@ -172,7 +171,7 @@ class InterruptPlanTest {
         AgentSession session = InMemoryAgentSession.of();
         SessionRuns.attach(session, countingDisposable(new AtomicInteger()));
 
-        try (InterruptPlan plan = InterruptHelper.prepareInterrupt(session)) {
+        try (InterruptPlan plan = InterruptHelper.claim(session)) {
             assertTrue(plan.hasActiveRun());
         }
 
@@ -188,7 +187,7 @@ class InterruptPlanTest {
         AtomicInteger disposed = new AtomicInteger();
         SessionRuns.attach(session, countingDisposable(disposed));
 
-        InterruptPlan plan = InterruptHelper.prepareInterrupt(session);
+        InterruptPlan plan = InterruptHelper.claim(session);
         assertTrue(plan.writeCancelEarly(), "窗口内早写：首次应真正写入");
         assertFalse(plan.writeCancelEarly(), "重复早写：幂等返回 false");
         assertEquals(1, session.getMessages().size(), "早写恰好落一条取消消息");
@@ -201,7 +200,7 @@ class InterruptPlanTest {
     @Test
     void writeCancelEarlyIsNoopWithoutActiveRun() {
         AgentSession session = InMemoryAgentSession.of();
-        InterruptPlan plan = InterruptHelper.prepareInterrupt(session);
+        InterruptPlan plan = InterruptHelper.claim(session);
 
         assertFalse(plan.writeCancelEarly(), "无活跃流不得写取消消息（空会话不被污染）");
         assertTrue(session.getMessages().isEmpty());

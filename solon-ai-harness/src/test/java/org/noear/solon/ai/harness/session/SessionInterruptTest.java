@@ -46,8 +46,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>「先清积压再停流」已上提为引擎的扩展钩子（{@code HarnessExtension#onInterrupt}），
  * 顺序契约见 {@code HarnessPluginContractTest}，队列语义见 queue 插件的 {@code QueueInterruptTest}。</p>
  */
-@SuppressWarnings("deprecation")
 class SessionInterruptTest {
+
+    /** 核心一步式中断（= 认领 + 提交，不含插件参与；引擎入口另有 onInterrupt 回调） */
+    private static boolean interrupt(AgentSession session) {
+        org.noear.solon.ai.harness.session.interrupt.InterruptPlan plan = InterruptHelper.claim(session);
+        return plan != null && plan.commit();
+    }
+
 
     private static Disposable countingDisposable(AtomicInteger counter) {
         return new Disposable() {
@@ -70,7 +76,7 @@ class SessionInterruptTest {
         AtomicInteger disposed = new AtomicInteger();
         SessionRuns.attach(session, countingDisposable(disposed));
 
-        assertTrue(InterruptHelper.interrupt(session));
+        assertTrue(interrupt(session));
         assertEquals(1, disposed.get(), "框架登记的句柄必须被释放");
         assertFalse(SessionRuns.isBusy(session));
         assertEquals(1, session.getMessages().size());
@@ -78,14 +84,14 @@ class SessionInterruptTest {
 
     @Test
     void nullSessionIsSafeAndReturnsFalse() {
-        assertFalse(InterruptHelper.interrupt(null));
+        assertFalse(interrupt(null));
     }
 
     @Test
     void noRunningTaskReturnsFalseAndWritesNothing() {
         AgentSession session = InMemoryAgentSession.of();
 
-        assertFalse(InterruptHelper.interrupt(session));
+        assertFalse(interrupt(session));
         assertTrue(session.getMessages().isEmpty(), "无任务中断不得写取消消息");
     }
 
@@ -95,7 +101,7 @@ class SessionInterruptTest {
         AtomicInteger disposed = new AtomicInteger();
         SessionRuns.attach(session, countingDisposable(disposed));
 
-        assertTrue(InterruptHelper.interrupt(session));
+        assertTrue(interrupt(session));
         assertEquals(1, disposed.get());
         assertEquals(1, session.getMessages().size());
         assertTrue(session.getMessages().get(0) instanceof AssistantMessage);
@@ -110,7 +116,7 @@ class SessionInterruptTest {
         session.getContext().put(TraceKeys.TRACE_KEY_MAIN, trace);
         SessionRuns.attach(session, countingDisposable(new AtomicInteger()));
 
-        InterruptHelper.interrupt(session);
+        interrupt(session);
 
         AssistantMessage last = (AssistantMessage) session.getMessages().get(session.getMessages().size() - 1);
         assertNotNull(last.getMetadataAs(AgentTrace.META_RUN_ID));
@@ -122,9 +128,9 @@ class SessionInterruptTest {
         AgentSession session = InMemoryAgentSession.of();
         SessionRuns.attach(session, countingDisposable(new AtomicInteger()));
 
-        assertTrue(InterruptHelper.interrupt(session));
+        assertTrue(interrupt(session));
         // 第二次：句柄已被移除 → 无任务分支，不得再写消息
-        assertFalse(InterruptHelper.interrupt(session));
+        assertFalse(interrupt(session));
         assertEquals(1, session.getMessages().size());
     }
 }

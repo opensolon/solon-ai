@@ -23,15 +23,20 @@ import org.noear.solon.lang.Nullable;
  *
  * <p>{@link org.noear.solon.ai.harness.HarnessEngine} 的实例方法
  * {@code getSessionModel/setSessionModel/getSessionAgent/setSessionAgent} 是宿主的主入口；
- * 本类服务于<b>拿不到引擎实例</b>的场景（如宿主侧的静态 trace 工具），使那类代码
- * 不必直接读写 {@code CTX_MODEL_SELECTED} / {@code CTX_AGENT_SELECTED} 裸常量。</p>
+ * 本类服务于<b>拿不到引擎实例</b>的场景（如宿主侧的静态 trace 工具）。</p>
  *
- * <p>实现只有一份：引擎实例方法委托到本类，因此两处口径永远一致。</p>
+ * <p>实现只有一份：引擎实例方法与核心内部读写全部委托到本类，存储键是本类的私有实现
+ * （写在会话上下文里随快照持久化，<b>键值不可变</b>），宿主无从也无须触达。</p>
  *
  * @author noear
  * @since 4.2.3
  */
 public final class SessionSelections {
+    /** 会话级模型选择的存储键（会话上下文，随快照持久化；键值不可变） */
+    private static final String KEY_MODEL = "_model_selected";
+    /** 会话级子代理选择的存储键（会话上下文，随快照持久化；键值不可变） */
+    private static final String KEY_AGENT = "_agent_selected";
+
     private SessionSelections() {
     }
 
@@ -39,7 +44,7 @@ public final class SessionSelections {
     @Nullable
     public static String modelOf(@Nullable AgentSession session) {
         if (session == null) return null;
-        Object value = session.getContext().get(org.noear.solon.ai.harness.HarnessEngine.CTX_MODEL_SELECTED);
+        Object value = session.getContext().get(KEY_MODEL);
         return (value == null || value.toString().trim().isEmpty()) ? null : value.toString();
     }
 
@@ -47,7 +52,26 @@ public final class SessionSelections {
     @Nullable
     public static String agentOf(@Nullable AgentSession session) {
         if (session == null) return null;
-        Object value = session.getContext().get(org.noear.solon.ai.harness.HarnessEngine.CTX_AGENT_SELECTED);
+        Object value = session.getContext().get(KEY_AGENT);
         return (value == null || value.toString().trim().isEmpty()) ? null : value.toString();
+    }
+
+    /** 设置会话级模型选择；{@code null}/空 表示清除（回退默认模型）。 */
+    public static void setModel(@Nullable AgentSession session, @Nullable String name) {
+        put(session, KEY_MODEL, name);
+    }
+
+    /** 设置会话级子代理选择；{@code null}/空 表示清除（回退主代理）。 */
+    public static void setAgent(@Nullable AgentSession session, @Nullable String name) {
+        put(session, KEY_AGENT, name);
+    }
+
+    private static void put(@Nullable AgentSession session, String key, @Nullable String name) {
+        if (session == null) return;
+        if (name == null || name.trim().isEmpty()) {
+            session.getContext().remove(key);
+        } else {
+            session.getContext().put(key, name);
+        }
     }
 }

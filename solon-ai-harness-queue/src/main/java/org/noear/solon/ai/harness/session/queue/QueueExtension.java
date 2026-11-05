@@ -10,6 +10,7 @@ import org.noear.solon.flow.FlowContext;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.session.InputBacklog;
+import org.noear.solon.ai.harness.session.SessionStatus;
 
 import java.util.List;
 import java.util.Map;
@@ -35,14 +36,25 @@ import java.util.Map;
  * {@code claimNext} 的 handler 内自行 {@code claim.acknowledge()} 表达，
  * 队列执行从此只剩一条领取路径。</p>
  *
- * <p><b>与核心的协作</b>（核心不认识队列，只认契约）：实现 {@link InputBacklog}（引擎忙态受理、
- * 状态快照积压数、steer 残留转排队都经它）；覆写 {@link #onInterrupt}（用户停止时先清队列再停流）；
- * 派发事务登记在核心槽位 {@code TurnDispatch}。</p>
+ * <p><b>与核心的协作</b>（核心不认识队列，只认契约）：实现能力接口 {@link InputBacklog}
+ * （引擎忙态受理与先进先出、空闲判定、steer 残留转排队都经它）；覆写 {@link #onStatus} 贡献
+ * 自有事实键 {@link #STATUS_PENDING}；
+ * 覆写 {@link #onInterrupt}（用户停止时先清队列再停流）；派发事务登记在核心槽位 {@code TurnDispatch}。</p>
  *
  * @author noear
  * @since 3.9.4
  */
 public class QueueExtension extends AbsHarnessExtension implements InputBacklog {
+    /**
+     * 会话状态事实：待执行的排队任务数（不含正在执行的那条；= {@link #pendingSize}）。
+     *
+     * <p>经 {@code engine.status(session).get(QueueExtension.STATUS_PENDING)} 读取，与运行流 / HITL / 插话等事实
+     * 一次读全。事实口径：停用不影响（停用前已入队的任务仍在队列里）。内核不读它——内核的受理判定走
+     * {@link #hasPending}。</p>
+     *
+     * @since 4.2.0
+     */
+    public static final SessionStatus.Key<Integer> STATUS_PENDING = SessionStatus.Key.count("queue.pending");
 
     private final QueueCommand queueCommand = new QueueCommand();
 
@@ -73,10 +85,22 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         return enqueue(session, text, origin == null ? InputOrigin.NONE : origin);
     }
 
-    /** 积压数（= {@link #pendingSize}，事实口径，不受开关影响）。 */
+    /**
+     * 是否有待执行的排队任务（核心受理的先进先出与 {@code engine.isIdle} 依赖它）。
+     *
+     * <p>事实口径，不受开关影响；只读内存态、不加载快照，可在会话锁内安全调用。</p>
+     */
     @Override
-    public int size(AgentSession session) {
-        return QueueHelper.pendingSize(session);
+    public boolean hasPending(AgentSession session) {
+        return QueueHelper.pendingSize(session) > 0;
+    }
+
+    /**
+     * 会话状态贡献：{@link #STATUS_PENDING}（事实口径，不受开关影响；只读内存态，可在会话锁内调用）。
+     */
+    @Override
+    public void onStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
+        status.put(STATUS_PENDING, QueueHelper.pendingSize(session));
     }
 
     /**
