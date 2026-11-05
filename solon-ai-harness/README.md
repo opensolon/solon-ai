@@ -880,10 +880,20 @@ LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder(workspace
         .sessionAlive(id -> sessionExists(id))           // 加载时孤儿清理；缺省恒 true
         .maxErrors(() -> 3)                              // 任务级连续失败阈值（实时读）
         .build());
-loop.addExecutor("web", id -> id.startsWith("web-"), myLoopRunner); // 执行器只有这一种注册方式
+// 执行器只有这一种注册方式；返回三态结论（不注册则走缺省执行器 engine.handle(...).call()）
+loop.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) ->
+        runtimeReady() ? LoopOutcome.done(run(sid, prompt))      // 抛异常 = 失败（计错误、退避、达阈值停用）
+                       : LoopOutcome.skip("runtime not ready")); // 跳过：不计错误
+
+// 宿主增删改查：请求参数原样传入（null = 未设置 / 保持原值），校验由插件统一完成（IllegalArgumentException）
+LoopTask t = loop.schedule(sid, LoopSpec.of(prompt).everyMinutes(interval).cron(cron).runNow(runNow));
+loop.schedule(sid, LoopSpec.of("remind").at(LocalDateTime.of(2026, 9, 5, 18, 0)));  // 一次性
+loop.update(sid, t.getId(), LoopPatch.create().prompt(newPrompt).cron(""));     // cron 空串 = 回到固定间隔
+loop.pause(sid, t.getId()); loop.resume(sid, t.getId());
+Map<String, Object> view = t.toMap();                                            // 标准展示视图
 ```
 
-loop（会话定时任务）与 goal（会话目标）的区别：goal 每会话一个、由状态驱动续轮、有预算与完成判定；loop 可多条、按时间表独立触发、只记最终文本。loop 的开关（`setEnabled`）只关模型工具 `loop_*`，`/loop` 命令与已有定时任务照常；tasks.json 里不认识的条目与任务上的宿主扩展字段（`getExtra`/`putExtra`）一律原样写回；整个文件读不懂时先备份为 `tasks.json.corrupt-<时间戳>`，读不出来时本进程不写盘；扩展摘除后不再写盘。`LoopTask` 对宿主只读（可写的只有扩展字段），改定义走 `copyWithUpdate` + `loop.update`：新版本与在途一轮共享运行锁，不会并发。
+loop（会话定时任务）与 goal（会话目标）的区别：goal 每会话一个、由状态驱动续轮、有预算与完成判定；loop 可多条、按时间表独立触发、只记最终文本。loop 的开关（`setEnabled`）只关模型工具 `loop_*`，`/loop` 命令与已有定时任务照常；tasks.json 里不认识的条目与任务上的宿主扩展字段（`LoopSpec.extra`/`LoopPatch.extra` 写、`getExtra` 读）一律原样写回；整个文件读不懂时先备份为 `tasks.json.corrupt-<时间戳>`，读不出来时本进程不写盘；扩展摘除后不再写盘。`LoopTask` 对宿主完全只读（无公开构造器与修改方法），改定义走 `loop.update(sid, id, LoopPatch)`：新版本与在途一轮共享运行锁，不会并发。会话忙由插件在调用执行器前统一判定（`engine.isIdle`），执行器只管本通道此刻能不能跑（如 CLI 终端是否空闲→`skip`）；执行器返回 null 按失败计。`hasActiveTasks()` 只算启用任务（只剩暂停任务的工作区可闲置回收）。未显式 `jobManager(null)` 却取不到 JobManager 时会告警（任务只存不跑）。
 
 三者共同点：`/queue` 与 `/steer` 的 `runnableWhenBusy()` 返回 `true`（宿主据此允许它们在任务执行中被受理）；`/goal` **不覆写**、保持默认 `false`（它会启动持续轮次，不能在忙时会话里重入）。注意这只是**给宿主读的声明**，引擎内部不做忙碌拦截（详见下文边界）。`/queue`、`/steer` 从 `Command.execute(engine, ctx, origin)` 的第三参拿到 `InputOrigin` 并带到投递链路，三者都**不自己开流**。
 

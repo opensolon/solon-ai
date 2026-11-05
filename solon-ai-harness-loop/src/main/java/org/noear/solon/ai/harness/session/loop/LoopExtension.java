@@ -38,13 +38,23 @@ import java.util.function.UnaryOperator;
  * <p><b>注意</b>：本模块是 harness 的「会话定时任务」（/loop、loop_* 工具），与会话目标（goal 插件）无关。</p>
  *
  * <pre>{@code
+ * // 最简：一行装配，缺省执行器经 engine.handle(...) 同步跑一轮
+ * engine.addExtensionIfAbsent(LoopExtension.builder(workspaceId).storeFile(dataDir.resolve("tasks.json")).build());
+ *
+ * // 完整：
  * LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder(workspaceId) // job 名：loop-<workspaceId>:<taskId>
  *         .storeFile(dataDir.resolve("tasks.json"))                // 缺省 null = 只在内存
  *         .sessionAlive(id -> Files.isDirectory(sessionsRoot.resolve(id)))   // 孤儿清理；缺省恒 true
  *         .maxErrors(() -> 3)                                      // 任务级连续失败阈值；每次实时读
  *         .triggerWrapper(r -> withLogScope(r))                    // 调度线程包装；缺省原样执行
  *         .build());                                               // onAttach 内注册 /loop 并加载 tasks.json
- * loop.addExecutor("web", id -> id.startsWith("web-"), webHandler);
+ * loop.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) -> LoopOutcome.done(runRound(sid, prompt)));
+ *
+ * // 宿主的增删改查（请求参数原样传入，null = 未设置/保持）：
+ * LoopTask t = loop.schedule(sid, LoopSpec.of(prompt).everyMinutes(interval).cron(cron).runNow(runNow));
+ * loop.update(sid, t.getId(), LoopPatch.create().prompt(newPrompt).cron(newCron));
+ * loop.pause(sid, t.getId()); loop.resume(sid, t.getId()); loop.remove(sid, t.getId());
+ * Map<String, Object> view = t.toMap();
  * }</pre>
  *
  * <p><b>钩子</b>：{@code onAttach} 绑定引擎、注册 /loop、加载并调度 tasks.json；{@code onRequestAssemble}
@@ -55,9 +65,11 @@ import java.util.function.UnaryOperator;
  * <p><b>开关语义</b>：{@link #setEnabled} 只关模型工具（引擎对停用扩展不回调 {@code onRequestAssemble}）；
  * /loop 命令与已有定时任务照常运行。</p>
  *
- * <p><b>执行器</b>：按注册顺序取首个认领者（谓词命中且返回非 null）；全部不认领时走缺省执行器
+ * <p><b>执行器</b>：按注册顺序取首个认领者（谓词命中且结论不是 {@link LoopOutcome#pass()}）；全部不认领时走缺省执行器
  * （{@code engine.handle(...).call()}，来源 {@code channel("loop")}；可 {@link Builder#defaultExecutor(boolean)} 关闭）；
- * 仍无认领则只记日志跳过本轮，绝不记成成功。</p>
+ * 仍无认领则只记日志跳过本轮。结论语义见 {@link LoopOutcome}：done 记成功、skip 不计错误、
+ * failed/抛异常记失败（退避重试，连续达到阈值自动停用）。会话忙由插件在调用执行器之前统一判定
+ * （{@code engine.isIdle}），执行器只管「我这个通道此刻能不能跑」（如终端是否空闲）。</p>
  *
  * @author noear
  * @since 4.2.0
@@ -83,6 +95,13 @@ public class LoopExtension extends AbsHarnessExtension {
 
     private LoopExtension(Builder b) {
         IJobManager jm = b.jobManagerSet ? b.jobManager : resolveJobManager();
+        if (jm == null && !b.jobManagerSet) {
+            // 未显式关闭调度却取不到 JobManager：任务「看起来在、实际不跑」，必须让宿主看见
+            org.slf4j.LoggerFactory.getLogger(LoopExtension.class).warn(
+                    "[Loop] No JobManager available (is solon-scheduling-simple started?); "
+                            + "loop tasks of workspace '{}' will be stored but never fire. "
+                            + "Use builder.jobManager(null) to disable scheduling explicitly.", b.workspaceId);
+        }
         this.scheduler = new LoopScheduler(new LoopStore(b.storeFile), jm, b.workspaceId,
                 b.maxTasks, b.maxErrors, b.sessionAlive, b.triggerWrapper);
         this.loopTalent = new LoopTalent(scheduler);
@@ -139,12 +158,12 @@ public class LoopExtension extends AbsHarnessExtension {
     private static LoopExecutor defaultExecutor(HarnessEngine engine) {
         return (sessionId, prompt) -> {
             try {
-                return engine.handle(HarnessInput.of(engine.getSession(sessionId), prompt)
+                return LoopOutcome.done(engine.handle(HarnessInput.of(engine.getSession(sessionId), prompt)
                                 .commandAware(false)
                                 .agentAware(false)
                                 .origin(InputOrigin.channel("loop")))
                         .call()
-                        .getContent();
+                        .getContent());
             } catch (RuntimeException | Error e) {
                 throw e;
             } catch (Throwable e) {
@@ -157,13 +176,14 @@ public class LoopExtension extends AbsHarnessExtension {
     // ==================== 运行期门面 ====================
 
     /**
-     * 注册任务并开始调度。
+     * 新建任务并开始调度。
      *
-     * @throws IllegalArgumentException cron 无法解析，或已无未来触发时刻
+     * @return 新任务（{@code getId()} 即 taskId）
+     * @throws IllegalArgumentException 规格不合法（见 {@link LoopSpec}；含 cron 无法解析或已无未来触发时刻）
      * @throws IllegalStateException    工作区任务数已达上限
      */
-    public LoopTask schedule(String sessionId, LoopTask task) {
-        return scheduler.schedule(sessionId, task);
+    public LoopTask schedule(String sessionId, LoopSpec spec) {
+        return scheduler.schedule(sessionId, spec);
     }
 
     /** 删除任务。@return false 表示不存在 */
@@ -176,14 +196,25 @@ public class LoopExtension extends AbsHarnessExtension {
         return scheduler.toggle(sessionId, taskId);
     }
 
+    /** 暂停（保留记录、停止调度；已暂停则不动）。@return false 表示不存在 */
+    public boolean pause(String sessionId, String taskId) {
+        return scheduler.setEnabled(sessionId, taskId, false);
+    }
+
+    /** 恢复调度（清零错误计数；已启用则不动）。@return false 表示不存在 */
+    public boolean resume(String sessionId, String taskId) {
+        return scheduler.setEnabled(sessionId, taskId, true);
+    }
+
     /**
-     * 以新定义替换（通常来自 {@link LoopTask#copyWithUpdate}，启停状态随之保留）。
+     * 按补丁修改（null 字段保持原值；启停、迭代、一次性属性随之保留）。
      * 任务正在执行时也可修改：新版本不会与在途那一轮并发，本轮结果记到新版本上。
      *
-     * @return false 表示不存在
+     * @return 修改后的任务；null 表示不存在
+     * @throws IllegalArgumentException 补丁不合法（见 {@link LoopPatch}），此时原任务不变
      */
-    public boolean update(String sessionId, String taskId, LoopTask newTask) {
-        return scheduler.update(sessionId, taskId, newTask);
+    public LoopTask update(String sessionId, String taskId, LoopPatch patch) {
+        return scheduler.update(sessionId, taskId, patch);
     }
 
     /** 立即异步执行一轮（不消耗 oneShot 配额）。@return false 表示不存在 */
@@ -210,7 +241,11 @@ public class LoopExtension extends AbsHarnessExtension {
         scheduler.stopAll(sessionId);
     }
 
-    /** 是否存在任务（工作区闲置回收判定用）。 */
+    /**
+     * 是否存在会自动触发的任务（启用且未取消；已暂停的不算）。
+     *
+     * <p>工作区闲置回收判定用：只剩暂停任务的工作区可以回收（记录保留，下次挂接时恢复）。</p>
+     */
     public boolean hasActiveTasks() {
         return scheduler.hasActiveTasks();
     }
@@ -219,17 +254,11 @@ public class LoopExtension extends AbsHarnessExtension {
      * 注册通道化执行器（按注册顺序认领，先于缺省执行器）。
      *
      * @param channel 通道名（日志用，如 "cli" / "web"）
-     * @param claim   认领谓词（sessionId → 是否本通道的会话）；null = 认领全部。
-     *                命中后 handler 返 null 仍穿透到下一注册者；谓词抛异常按不命中计
+     * @param claim   认领谓词（sessionId → 是否本通道的会话）；null = 认领全部。谓词抛异常按不命中计
+     * @param handler 执行器；通道此刻不能跑（如终端被占）返回 {@link LoopOutcome#skip}，失败抛异常即可
      */
     public LoopExtension addExecutor(String channel, Predicate<String> claim, LoopExecutor handler) {
         scheduler.addExecutor(channel, claim, handler);
-        return this;
-    }
-
-    /** 注入屏障（如 CLI 终端所有权）；缺省恒开。 */
-    public LoopExtension setInjectionGate(InjectionGate gate) {
-        scheduler.setInjectionGate(gate);
         return this;
     }
 

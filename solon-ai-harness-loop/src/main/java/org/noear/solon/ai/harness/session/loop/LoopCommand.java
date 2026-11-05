@@ -145,13 +145,9 @@ final class LoopCommand implements Command {
             ctx.println(ctx.color(RED + "Usage: /loop " + verb + " <id>" + RESET));
             return;
         }
-        LoopTask task = tasks.get(sessionId, taskId);
-        if (task == null) {
+        if (!tasks.setEnabled(sessionId, taskId, resume)) {
             ctx.println(ctx.color(RED + "Loop task '" + taskId + "' not found." + RESET));
             return;
-        }
-        if (task.isEnabled() != resume) {
-            tasks.toggle(sessionId, taskId);
         }
         ctx.println(ctx.color(GREEN + "Loop task '" + taskId + "' " + (resume ? "resumed." : "paused.") + RESET));
     }

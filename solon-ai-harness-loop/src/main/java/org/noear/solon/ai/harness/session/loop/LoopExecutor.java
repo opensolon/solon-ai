@@ -5,7 +5,16 @@
 package org.noear.solon.ai.harness.session.loop;
 
 /**
- * loop 一轮的执行器：执行 prompt，返回最终文本（null = 本入口不认领，穿透到下一注册者）。
+ * loop 一轮的执行器：执行 prompt，返回本轮结论 {@link LoopOutcome}。
+ *
+ * <pre>{@code
+ * loop.addExecutor("cli", "cli"::equals, (sessionId, prompt) -> {
+ *     if (!terminalIdle()) {
+ *         return LoopOutcome.skip("terminal busy");   // 不计错误
+ *     }
+ *     return LoopOutcome.done(runRound(prompt));       // 抛异常 = 失败（计错误、退避重试）
+ * });
+ * }</pre>
  *
  * <p>loop 只需最终文本（轮次计数与 lastResult），不需要 token / 工具证据，因此不与 goal 共用签名。</p>
  *
@@ -14,5 +23,9 @@ package org.noear.solon.ai.harness.session.loop;
  */
 @FunctionalInterface
 public interface LoopExecutor {
-    String handle(String sessionId, String prompt);
+    /**
+     * @return 本轮结论（不得为 null）
+     * @throws Exception 执行失败（等价于 {@link LoopOutcome#failed}）
+     */
+    LoopOutcome handle(String sessionId, String prompt) throws Exception;
 }

@@ -34,14 +34,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>本类只承载「按时间表触发的独立任务」：固定间隔（{@code intervalMinutes}）或 cron。
  * 会话目标（goal）是另一个插件，二者不共享模型。</p>
  *
+ * <p><b>对宿主完全只读</b>：新建用 {@link LoopSpec}，修改用 {@link LoopPatch}，启停/删除/触发走
+ * {@link LoopExtension} 门面。宿主拿到的 LoopTask 只用来读（含 {@link #toMap()} 标准展示视图）。</p>
+ *
  * <p><b>扩展字段（extras）</b>：宿主可在任务上挂自有元数据（如 soloncode 的自动任务覆盖层
- * {@code "automation"}），经 {@link #getExtra}/{@link #putExtra} 读写。反序列化时所有不认识的
- * 顶层字段一律收进 extras 并原样写回——插件不认识宿主概念，但绝不吞掉宿主数据。</p>
+ * {@code "automation"}），经 {@link LoopSpec#extra}/{@link LoopPatch#extra} 写入、{@link #getExtra} 读取。
+ * 反序列化时所有不认识的顶层字段一律收进 extras 并原样写回——插件不认识宿主概念，但绝不吞掉宿主数据。</p>
  *
- * <p><b>对宿主只读</b>：运行时状态（运行锁、迭代、最近结果、启停、错误计数）只由调度器变更，
- * 宿主经 {@link LoopExtension} 门面操作任务；可写的只有扩展字段。</p>
- *
- * <p><b>运行锁随任务身份</b>：{@link #copyWithUpdate} 产出的新版本与旧版本共享同一把运行锁与错误计数——
+ * <p><b>运行锁随任务身份</b>：修改产出的新版本与旧版本共享同一把运行锁与错误计数——
  * 修改正在执行的任务时，新版本不会与在途那一轮并发执行。</p>
  *
  * @author noear
@@ -49,8 +49,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class LoopTask {
 
-    private static final int MIN_INTERVAL = 1;
-    private static final int MAX_INTERVAL = 1440; // 24h
+    static final int MIN_INTERVAL = 1;
+    static final int MAX_INTERVAL = 1440; // 24h
 
     /** 由本类解析的顶层字段（其余字段进 extras）。{@code sessionId} 属存储层定位键。 */
     static final Set<String> RESERVED_KEYS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
@@ -83,18 +83,8 @@ public class LoopTask {
     /** 宿主扩展字段（保持插入顺序，保证往返序列化稳定）。 */
     private final Map<String, ONode> extras = Collections.synchronizedMap(new LinkedHashMap<>());
 
-    /** 固定间隔构造 */
-    public LoopTask(String prompt, int intervalMinutes) {
-        this(prompt, intervalMinutes, null, false);
-    }
-
-    /** cron 表达式构造 */
-    public LoopTask(String prompt, String cron) {
-        this(prompt, 0, cron, false);
-    }
-
-    /** 便捷构造（固定间隔 + cron + runNow） */
-    public LoopTask(String prompt, int intervalMinutes, String cron, boolean runNow) {
+    /** 包内构造（宿主新建任务用 {@link LoopSpec}）；间隔静默收敛到合法区间。 */
+    LoopTask(String prompt, int intervalMinutes, String cron, boolean runNow) {
         this.id = UUID.randomUUID().toString().substring(0, 8);
         this.prompt = prompt;
         // 间隔收敛在 [MIN_INTERVAL, MAX_INTERVAL]，不存在 0 间隔（cron 模式忽略该值）
@@ -134,11 +124,11 @@ public class LoopTask {
     }
 
     /**
-     * 基于当前任务复制出一份更新后的任务定义，保留任务身份、运行时状态（含启停）与扩展字段。
+     * 基于当前任务复制出一份更新后的任务定义，保留任务身份、运行时状态（含启停）与扩展字段（宿主用 {@link LoopPatch}）。
      *
      * <p>新旧版本共享运行锁与错误计数：在途那一轮结束时释放的是同一把锁。</p>
      */
-    public LoopTask copyWithUpdate(String prompt, int intervalMinutes, String cron, Boolean runNow) {
+    LoopTask copyWithUpdate(String prompt, int intervalMinutes, String cron, Boolean runNow) {
         LoopTask task = new LoopTask(
                 this.id,
                 prompt,
@@ -185,20 +175,21 @@ public class LoopTask {
 
     // ==================== 扩展字段 ====================
 
-    /** 宿主扩展字段（不存在为 null）。返回的是内部节点，修改后需 {@link #putExtra} 回写才算定义变更。 */
+    /** 宿主扩展字段（不存在为 null）。只读：修改请走 {@link LoopPatch#extra}。 */
     public ONode getExtra(String key) {
         return key == null ? null : extras.get(key);
     }
 
-    /**
-     * 写入宿主扩展字段（value 为 null 表示删除）。
-     *
-     * @throws IllegalArgumentException key 为空或与核心字段同名
-     */
-    public void putExtra(String key, ONode value) {
+    /** @throws IllegalArgumentException key 为空或与核心字段同名 */
+    static void requireExtraKey(String key) {
         if (key == null || key.isEmpty() || RESERVED_KEYS.contains(key)) {
             throw new IllegalArgumentException("Invalid extra key: " + key);
         }
+    }
+
+    /** 写入扩展字段（value 为 null 表示删除）。包内：宿主经 LoopSpec/LoopPatch 写入。 */
+    void putExtra(String key, ONode value) {
+        requireExtraKey(key);
         if (value == null) {
             extras.remove(key);
         } else {
@@ -241,6 +232,31 @@ public class LoopTask {
     int recordError() { return errorStreak.incrementAndGet(); }
 
     void resetErrors() { errorStreak.set(0); }
+
+    // ==================== 展示视图 ====================
+
+    /**
+     * 标准展示视图（不含扩展字段），宿主列表/详情接口直接用，再按需追加自己的字段（如 type、sessionId）。
+     *
+     * <p>字段：id、prompt、intervalMinutes、cron（仅 cron 模式）、oneShot、runNow、enabled、cancelled、running、
+     * currentIteration、lastResult（有则出）、lastExecutedAt（ISO-8601，有则出）。</p>
+     */
+    public Map<String, Object> toMap() {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", id);
+        item.put("prompt", prompt);
+        item.put("intervalMinutes", intervalMinutes);
+        if (isCronMode()) item.put("cron", cron);
+        item.put("oneShot", oneShot);
+        item.put("runNow", runNow);
+        item.put("enabled", enabled);
+        item.put("cancelled", cancelled);
+        item.put("running", running.get());
+        item.put("currentIteration", currentIteration);
+        if (lastResult != null) item.put("lastResult", lastResult);
+        if (lastExecutedAt != null) item.put("lastExecutedAt", lastExecutedAt.toString());
+        return item;
+    }
 
     // ==================== 序列化 ====================
 

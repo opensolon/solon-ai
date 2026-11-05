@@ -23,8 +23,8 @@ import lombok.Getter;
  * <p>不含任何业务判定语义，仅承载一次执行的客观事实：是否有结果、是否有工具调用证据、
  * 消耗的 token、最终文本。完成与否的解释权在使用方（{@code GoalEngine.executeRound}）。</p>
  *
- * <p>注意：{@code loop} 执行通道只取最终文本，不使用本类型（{@code LoopScheduler.LoopExecutor}
- * 直接返回 String）——两个执行域各自定义通道，不共享返回类型。</p>
+ * <p>注意：{@code loop} 执行通道不使用本类型（{@code LoopExecutor} 返回自己的三态结论
+ * {@code LoopOutcome}）——两个执行域各自定义通道，不共享返回类型。</p>
  *
  * @author noear
  * @since 3.9.4

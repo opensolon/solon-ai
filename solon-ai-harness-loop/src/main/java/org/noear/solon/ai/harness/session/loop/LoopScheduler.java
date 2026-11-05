@@ -39,7 +39,7 @@ import java.util.function.UnaryOperator;
 /**
  * 定时任务调度器（插件内部实现，宿主只经 {@link LoopExtension} 门面交互）。
  *
- * <p>职责：任务注册/移除、IJobManager 动态调度、触发守卫（禁用/忙/注入屏障）、执行器认领、
+ * <p>职责：任务注册/移除、IJobManager 动态调度、触发守卫（摘除/版本/禁用/忙）、执行器认领、
  * 任务级连续错误处理、tasks.json 持久化（经 {@link LoopStore}）。</p>
  *
  * <p><b>版本与身份</b>：同一 id 的任务可能被 {@link #update} 替换成新版本。触发守卫只放行「当前版本」，
@@ -54,7 +54,7 @@ import java.util.function.UnaryOperator;
 final class LoopScheduler {
     private static final Logger LOG = LoggerFactory.getLogger(LoopScheduler.class);
 
-    /** 通道化执行器注册项（claim 为 null = 无谓词，由 handler 返 null 表达不认领）。 */
+    /** 通道化执行器注册项（claim 为 null = 认领全部）。 */
     private static final class ExecutorEntry {
         final String channel;
         final Predicate<String> claim;
@@ -77,7 +77,6 @@ final class LoopScheduler {
 
     private volatile HarnessEngine engine;
     private volatile LoopExecutor defaultExecutor;
-    private volatile InjectionGate injectionGate = () -> true;
 
     private final ConcurrentHashMap<String, List<LoopTask>> sessionTasks = new ConcurrentHashMap<>();
     private final List<ExecutorEntry> executors = new CopyOnWriteArrayList<>();
@@ -127,13 +126,18 @@ final class LoopScheduler {
         }
     }
 
-    void setInjectionGate(InjectionGate gate) {
-        if (gate != null) {
-            this.injectionGate = gate;
-        }
-    }
-
     // ==================== 任务注册 ====================
+
+    /**
+     * @throws IllegalArgumentException 规格不合法（见 {@link LoopSpec}）
+     * @throws IllegalStateException    工作区任务数已达上限
+     */
+    LoopTask schedule(String sessionId, LoopSpec spec) {
+        if (sessionId == null || sessionId.isEmpty()) {
+            throw new IllegalArgumentException("sessionId 不能为空");
+        }
+        return schedule(sessionId, spec.toTask());
+    }
 
     /**
      * @throws IllegalArgumentException cron 无法解析，或已无未来触发时刻
@@ -182,10 +186,19 @@ final class LoopScheduler {
 
     boolean toggle(String sessionId, String taskId) {
         LoopTask t = get(sessionId, taskId);
+        return t != null && setEnabled(sessionId, t, !t.isEnabled());
+    }
+
+    /** 置为指定启停状态（已是目标状态时不动）。@return false 表示不存在 */
+    boolean setEnabled(String sessionId, String taskId, boolean enabled) {
+        LoopTask t = get(sessionId, taskId);
         if (t == null) {
             return false;
         }
-        boolean newEnabled = !t.isEnabled();
+        return t.isEnabled() == enabled || setEnabled(sessionId, t, enabled);
+    }
+
+    private boolean setEnabled(String sessionId, LoopTask t, boolean newEnabled) {
         t.setEnabled(newEnabled);
         if (newEnabled) {
             t.resetErrors();
@@ -198,29 +211,33 @@ final class LoopScheduler {
     }
 
     /**
-     * 以新版本替换（新版本通常来自 {@link LoopTask#copyWithUpdate}，与旧版本共享运行锁）。
+     * 按补丁产出新版本并替换（新版本与旧版本共享运行锁）。
      *
      * <p>任务正在执行时也允许修改：在途那一轮跑完，结果记到新版本上；共享的运行锁保证新版本不会与它并发。</p>
+     *
+     * @return 新版本；null 表示不存在
+     * @throws IllegalArgumentException 补丁不合法（见 {@link LoopPatch}）
      */
-    boolean update(String sessionId, String taskId, LoopTask newTask) {
-        List<LoopTask> tasks = sessionTasks.get(sessionId);
-        if (tasks == null) return false;
+    LoopTask update(String sessionId, String taskId, LoopPatch patch) {
+        List<LoopTask> tasks = sessionId == null || taskId == null ? null : sessionTasks.get(sessionId);
+        if (tasks == null) return null;
 
         synchronized (tasks) {
             for (int i = 0; i < tasks.size(); i++) {
                 LoopTask t = tasks.get(i);
                 if (t.getId().equals(taskId)) {
+                    LoopTask newTask = patch.applyTo(t); // 先校验、后替换：非法补丁不动旧版本
                     unregisterJob(t);
                     tasks.set(i, newTask);
                     if (newTask.isEnabled() && !newTask.isCancelled()) {
                         registerJob(sessionId, newTask, false);
                     }
                     persistAll();
-                    return true;
+                    return newTask;
                 }
             }
         }
-        return false;
+        return null;
     }
 
     boolean trigger(String sessionId, String taskId) {
@@ -275,10 +292,16 @@ final class LoopScheduler {
         return tasks == null ? 0 : tasks.size();
     }
 
+    /** 是否有会自动触发的任务（启用且未取消；已暂停的不算）。 */
     boolean hasActiveTasks() {
         for (List<LoopTask> tasks : sessionTasks.values()) {
-            if (tasks != null && !tasks.isEmpty()) {
-                return true;
+            if (tasks == null) continue;
+            synchronized (tasks) {
+                for (LoopTask t : tasks) {
+                    if (t.isEnabled() && !t.isCancelled()) {
+                        return true;
+                    }
+                }
             }
         }
         return false;
@@ -452,17 +475,24 @@ final class LoopScheduler {
         }
 
         try {
-            String finalResult = execute(sessionId, task.getPrompt());
+            LoopOutcome outcome = execute(sessionId, task.getPrompt());
             // 执行期间任务可能被修改成新版本：结果与错误计数记到最新版本上
             LoopTask target = latestOf(sessionId, task);
-            if (finalResult != null) {
-                target.updateLastExecution(finalResult);
-                target.incrementIteration();
-                target.resetErrors();
-                persistAll();
-            } else {
-                // 无执行器认领 = 配置错误。绝不能记 "ok"：那会让定时任务看起来一直在跑、实际什么也没做
-                LOG.warn("Loop task '{}' skipped: no executor claimed session '{}'", task.getId(), sessionId);
+            switch (outcome.kind()) {
+                case DONE:
+                    target.updateLastExecution(outcome.getText());
+                    target.incrementIteration();
+                    target.resetErrors();
+                    persistAll();
+                    break;
+                case FAILED:
+                    handleExecutionError(sessionId, target, new IllegalStateException(
+                            outcome.getText() != null ? outcome.getText() : "executor reported failure"));
+                    break;
+                default:
+                    // skip / 无人认领：本轮放弃，不计错误。绝不能记成功：那会让任务看起来一直在跑、实际什么也没做
+                    LOG.info("Loop task '{}' skipped for session '{}': {}", task.getId(), sessionId, outcome.getText());
+                    break;
             }
         } catch (Exception e) {
             handleExecutionError(sessionId, latestOf(sessionId, task), e);
@@ -503,10 +533,6 @@ final class LoopScheduler {
         }
         if (shouldSkipSession(sessionId)) {
             LOG.info("Loop task '{}' skipped: session '{}' not idle", task.getId(), sessionId);
-            return false;
-        }
-        if (!injectionGate.canInject()) {
-            LOG.info("Loop task '{}' skipped: injection gate closed", task.getId());
             return false;
         }
         return true;
@@ -556,11 +582,12 @@ final class LoopScheduler {
     // ==================== 执行 ====================
 
     /**
-     * 执行一轮：按注册顺序取首个认领者（谓词命中且 handler 返非 null）；全部不认领时走缺省执行器。
+     * 执行一轮：按注册顺序取首个认领者（谓词命中且结论不是 pass）；全部不认领时走缺省执行器。
      *
-     * @return 最终文本；无认领时返回 null
+     * @return 本轮结论（不为 null）；无人认领时为 skip
+     * @throws Exception 执行器失败
      */
-    String execute(String sessionId, String prompt) {
+    LoopOutcome execute(String sessionId, String prompt) throws Exception {
         for (ExecutorEntry entry : executors) {
             if (entry.claim != null) {
                 boolean hit;
@@ -573,23 +600,32 @@ final class LoopScheduler {
                     continue;
                 }
             }
-            String result = entry.handler.handle(sessionId, prompt);
-            if (result != null) {
+            LoopOutcome outcome = invoke(entry.channel, entry.handler, sessionId, prompt);
+            if (!outcome.isPassed()) {
                 if (entry.channel != null) {
-                    LOG.debug("[Loop] session '{}' claimed by channel '{}'", sessionId, entry.channel);
+                    LOG.debug("[Loop] session '{}' claimed by channel '{}': {}", sessionId, entry.channel, outcome);
                 }
-                return result;
+                return outcome;
             }
         }
         LoopExecutor fallback = defaultExecutor;
         if (fallback != null) {
-            String result = fallback.handle(sessionId, prompt);
-            if (result != null) {
-                return result;
+            LoopOutcome outcome = invoke("default", fallback, sessionId, prompt);
+            if (!outcome.isPassed()) {
+                return outcome;
             }
         }
         LOG.warn("[Loop] no executor claimed session '{}', round skipped", sessionId);
-        return null;
+        return LoopOutcome.skip("no executor claimed");
+    }
+
+    /** 返回 null 是执行器的编程错误：按失败计，让它在 lastResult 与自动停用上可见，而不是静默跳过。 */
+    private static LoopOutcome invoke(String channel, LoopExecutor handler, String sessionId, String prompt) throws Exception {
+        LoopOutcome outcome = handler.handle(sessionId, prompt);
+        if (outcome == null) {
+            return LoopOutcome.failed("loop executor '" + channel + "' returned null (must return LoopOutcome)");
+        }
+        return outcome;
     }
 
     /**

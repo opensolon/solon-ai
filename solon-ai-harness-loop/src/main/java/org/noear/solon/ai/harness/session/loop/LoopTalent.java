@@ -84,7 +84,7 @@ public class LoopTalent extends AbsTalent {
 
         boolean oneShotVal = oneShot != null && oneShot;
         String cronVal = cron;
-        int interval = intervalMinutes != null ? intervalMinutes : 5;
+        Integer interval = intervalMinutes;
 
         // ---- at 糖参数：转 7 位 cron（带年份，天然只命中一次），并强制 oneShot ----
         if (Assert.isNotEmpty(at)) {
@@ -102,7 +102,7 @@ public class LoopTalent extends AbsTalent {
                     atTime.getMinute(), atTime.getHour(),
                     atTime.getDayOfMonth(), atTime.getMonthValue(), atTime.getYear());
             oneShotVal = true;
-            interval = 0;
+            interval = null;
         }
 
         if (oneShotVal) {
@@ -124,11 +124,14 @@ public class LoopTalent extends AbsTalent {
             }
         }
 
-        LoopTask task = new LoopTask(prompt, interval, cronVal, runNow != null && runNow);
-        task.setOneShot(oneShotVal);
-
+        // 与宿主同一套规格校验（上面的前置检查只为给模型更具体的纠正指引）
+        LoopTask task;
         try {
-            loopTasks.schedule(__sessionId, task);
+            task = loopTasks.schedule(__sessionId, LoopSpec.of(prompt)
+                    .everyMinutes(interval)
+                    .cron(cronVal)
+                    .oneShot(oneShotVal)
+                    .runNow(runNow));
         } catch (IllegalArgumentException | IllegalStateException e) {
             return "ERROR: 新增定时任务失败: " + e.getMessage();
         }
@@ -225,12 +228,8 @@ public class LoopTalent extends AbsTalent {
             return "ERROR: taskId 不能为空。";
         }
 
-        LoopTask task = loopTasks.get(__sessionId, taskId);
-        if (task == null) {
+        if (!loopTasks.setEnabled(__sessionId, taskId, resume)) {
             return "ERROR: 定时任务不存在，taskId=" + taskId + "（可用 loop_list 查询当前任务）";
-        }
-        if (task.isEnabled() != resume) {
-            loopTasks.toggle(__sessionId, taskId);
         }
 
         ONode root = okNode();

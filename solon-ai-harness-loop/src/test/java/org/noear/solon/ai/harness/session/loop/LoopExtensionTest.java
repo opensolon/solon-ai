@@ -81,7 +81,7 @@ class LoopExtensionTest {
     void jobNameCarriesSanitizedWorkspacePrefix() {
         FakeJobManager jm = new FakeJobManager();
         LoopExtension loop = builder(jm).build();
-        LoopTask t = loop.schedule("s1", new LoopTask("p", 5));
+        LoopTask t = loop.schedule("s1", LoopSpec.of("p").everyMinutes(5));
 
         String name = loop.scheduler().jobName(t);
         assertEquals("loop-ws_1:" + t.getId(), name, "JobManager 是 JVM 单例，job 名必须带工作区前缀");
@@ -98,8 +98,8 @@ class LoopExtensionTest {
         AgentSession s = engine.getSession("s1");
 
         assertEquals(0, engine.status(s).get(LoopExtension.STATUS_TASKS).intValue());
-        loop.schedule("s1", new LoopTask("a", 5));
-        LoopTask b = loop.schedule("s1", new LoopTask("b", 5));
+        loop.schedule("s1", LoopSpec.of("a").everyMinutes(5));
+        LoopTask b = loop.schedule("s1", LoopSpec.of("b").everyMinutes(5));
         loop.toggle("s1", b.getId()); // 暂停的也计入
         assertEquals(2, engine.status(s).get(LoopExtension.STATUS_TASKS).intValue());
     }
@@ -110,7 +110,7 @@ class LoopExtensionTest {
         FakeJobManager jm = new FakeJobManager();
         LoopExtension loop = builder(jm).storeFile(store).build();
         HarnessEngine engine = engine(loop);
-        loop.schedule("s1", new LoopTask("p", 5));
+        loop.schedule("s1", LoopSpec.of("p").everyMinutes(5));
         assertEquals(1, jm.jobs.size());
 
         engine.shutdown();
@@ -130,7 +130,7 @@ class LoopExtensionTest {
         // 停用扩展 = 引擎不再回调 onRequestAssemble（模型工具不挂），其余照常
         assertFalse(loop.isEnabled());
         assertTrue(loop.command().isEnabled(), "/loop 命令不受开关影响");
-        assertNotNull(loop.schedule("s1", new LoopTask("p", 5)), "已有/新建定时任务照常");
+        assertNotNull(loop.schedule("s1", LoopSpec.of("p").everyMinutes(5)), "已有/新建定时任务照常");
     }
 
     // ==================== D2：任务级连续错误 ====================
@@ -139,8 +139,8 @@ class LoopExtensionTest {
     void errorStreakIsPerTaskAndResetsOnSuccess() {
         FakeJobManager jm = new FakeJobManager();
         LoopExtension loop = builder(jm).maxErrors(() -> 2).build();
-        LoopTask a = loop.schedule("s1", new LoopTask("a", 5));
-        LoopTask b = loop.schedule("s1", new LoopTask("b", 5));
+        LoopTask a = loop.schedule("s1", LoopSpec.of("a").everyMinutes(5));
+        LoopTask b = loop.schedule("s1", LoopSpec.of("b").everyMinutes(5));
 
         loop.scheduler().handleErrorForTest("s1", a, new RuntimeException("x"));
         assertEquals(1, a.getErrorStreak());
@@ -150,7 +150,7 @@ class LoopExtensionTest {
         assertTrue(a.isEnabled() && b.isEnabled(), "两个任务各失败一次都不应被停用（旧实现共用计数会停掉 B）");
 
         // A 成功一轮 → 清零
-        loop.addExecutor("any", null, (sid, p) -> "ok");
+        loop.addExecutor("any", null, (sid, p) -> LoopOutcome.done("ok"));
         loop.scheduler().doTrigger("s1", a, false);
         assertEquals(0, a.getErrorStreak(), "成功一轮必须清零");
 
@@ -173,10 +173,10 @@ class LoopExtensionTest {
         loop.addExecutor("any", null, (sid, p) -> {
             entered.countDown();
             await(release);
-            return "done";
+            return LoopOutcome.done("done");
         });
-        LoopTask t = loop.schedule("s1", new LoopTask("keep-me", 5));
-        loop.schedule("s2", new LoopTask("keep-me-too", 5));
+        LoopTask t = loop.schedule("s1", LoopSpec.of("keep-me").everyMinutes(5));
+        loop.schedule("s2", LoopSpec.of("keep-me-too").everyMinutes(5));
 
         Thread round = new Thread(() -> loop.scheduler().doTrigger("s1", t, false));
         round.start();
@@ -197,12 +197,12 @@ class LoopExtensionTest {
         Path store = workspace.resolve("tasks.json");
         LoopExtension loop = builder(null).storeFile(store).build();
         HarnessEngine first = engine(loop);
-        loop.schedule("s1", new LoopTask("a", 5));
+        loop.schedule("s1", LoopSpec.of("a").everyMinutes(5));
         first.shutdown();
 
         engine(loop);               // 同一实例重新挂接
         assertEquals(1, loop.list("s1").size(), "重新挂接必须重新加载");
-        loop.schedule("s1", new LoopTask("b", 5));
+        loop.schedule("s1", LoopSpec.of("b").everyMinutes(5));
         String json = new String(Files.readAllBytes(store), "UTF-8");
         assertTrue(json.contains("\"b\""), "重新挂接后恢复写盘：" + json);
     }
@@ -219,16 +219,16 @@ class LoopExtensionTest {
             executions.incrementAndGet();
             entered.countDown();
             await(release);
-            return "result of " + p;
+            return LoopOutcome.done("result of " + p);
         });
-        LoopTask old = loop.schedule("s1", new LoopTask("v1", 5));
+        LoopTask old = loop.schedule("s1", LoopSpec.of("v1").everyMinutes(5));
 
         Thread round = new Thread(() -> loop.scheduler().doTrigger("s1", old, false));
         round.start();
         assertTrue(entered.await(3, TimeUnit.SECONDS));
 
-        assertTrue(loop.update("s1", old.getId(), old.copyWithUpdate("v2", 10, null, null)));
-        LoopTask updated = loop.get("s1", old.getId());
+        LoopTask updated = loop.update("s1", old.getId(), LoopPatch.create().prompt("v2").everyMinutes(10));
+        assertSame(updated, loop.get("s1", old.getId()));
         assertTrue(updated.isRunning(), "新版本必须继承在途一轮的运行标记");
 
         loop.scheduler().doTrigger("s1", updated, false);
@@ -250,16 +250,14 @@ class LoopExtensionTest {
         loop.addExecutor("any", null, (sid, p) -> {
             entered.countDown();
             await(release);
-            return "ok";
+            return LoopOutcome.done("ok");
         });
-        LoopTask old = new LoopTask("once", 0, "0 0 18 * * ?", false);
-        old.setOneShot(true);
-        loop.schedule("s1", old);
+        LoopTask old = loop.schedule("s1", LoopSpec.of("once").cron("0 0 18 * * ?").oneShot(true));
 
         Thread round = new Thread(() -> loop.scheduler().doTrigger("s1", old, true));
         round.start();
         assertTrue(entered.await(3, TimeUnit.SECONDS));
-        loop.update("s1", old.getId(), old.copyWithUpdate("once, edited", 0, "0 0 20 * * ?", null));
+        loop.update("s1", old.getId(), LoopPatch.create().prompt("once, edited").cron("0 0 20 * * ?"));
         release.countDown();
         round.join(3000);
 
@@ -275,10 +273,10 @@ class LoopExtensionTest {
         AtomicInteger executions = new AtomicInteger();
         loop.addExecutor("any", null, (sid, p) -> {
             executions.incrementAndGet();
-            return "ok";
+            return LoopOutcome.done("ok");
         });
-        LoopTask old = loop.schedule("s1", new LoopTask("v1", 5));
-        loop.update("s1", old.getId(), old.copyWithUpdate("v2", 5, null, null));
+        LoopTask old = loop.schedule("s1", LoopSpec.of("v1").everyMinutes(5));
+        loop.update("s1", old.getId(), LoopPatch.create().prompt("v2"));
 
         loop.scheduler().doTrigger("s1", old, false); // 旧版本的错误重试 / 迟到回调
         assertEquals(0, executions.get(), "已被替换的旧版本不得再执行旧提示词");
@@ -300,7 +298,7 @@ class LoopExtensionTest {
         LoopExtension loop = builder(null).build();
         HarnessEngine engine = engine(loop);
         AgentSession s = engine.getSession("s1");
-        LoopTask t = loop.schedule("s1", new LoopTask("p", 5));
+        LoopTask t = loop.schedule("s1", LoopSpec.of("p").everyMinutes(5));
 
         StubContext ctx = new StubContext(s, "pause", t.getId());
         loop.command().execute(engine, ctx, InputOrigin.NONE);
@@ -322,12 +320,12 @@ class LoopExtensionTest {
         HarnessEngine engine = engine(loop, probe);
         AgentSession s = engine.getSession("s1");
 
-        LoopTask idle = loop.schedule("s1", new LoopTask("idle", 5));
+        LoopTask idle = loop.schedule("s1", LoopSpec.of("idle").everyMinutes(5));
         loop.command().execute(engine, new StubContext(s, "stop", idle.getId()), InputOrigin.NONE);
         assertNull(loop.get("s1", idle.getId()));
         assertEquals(0, probe.count.get(), "任务空闲时停止不得打断用户当前这一轮");
 
-        LoopTask busy = loop.schedule("s1", new LoopTask("busy", 5));
+        LoopTask busy = loop.schedule("s1", LoopSpec.of("busy").everyMinutes(5));
         assertTrue(busy.tryStart());
         loop.command().execute(engine, new StubContext(s, "stop", busy.getId()), InputOrigin.NONE);
         assertEquals(1, probe.count.get(), "任务正在执行时停止必须中断那一轮");
@@ -340,12 +338,12 @@ class LoopExtensionTest {
         HarnessEngine engine = engine(loop, probe);
         AgentSession s = engine.getSession("s1");
 
-        loop.schedule("s1", new LoopTask("a", 5));
+        loop.schedule("s1", LoopSpec.of("a").everyMinutes(5));
         loop.command().execute(engine, new StubContext(s, "stop-all"), InputOrigin.NONE);
         assertTrue(loop.list("s1").isEmpty());
         assertEquals(0, probe.count.get());
 
-        LoopTask b = loop.schedule("s1", new LoopTask("b", 5));
+        LoopTask b = loop.schedule("s1", LoopSpec.of("b").everyMinutes(5));
         b.tryStart();
         loop.command().execute(engine, new StubContext(s, "stop-all"), InputOrigin.NONE);
         assertEquals(1, probe.count.get());

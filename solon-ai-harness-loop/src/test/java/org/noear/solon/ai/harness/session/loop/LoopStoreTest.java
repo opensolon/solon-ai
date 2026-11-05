@@ -72,7 +72,7 @@ class LoopStoreTest {
         assertTrue(ext.list("s2").isEmpty(), "解析失败的条目不参与调度");
 
         // 触发一次修改 → 整体落盘
-        ext.schedule("s1", new LoopTask("new", 10));
+        ext.schedule("s1", LoopSpec.of("new").everyMinutes(10));
 
         List<ONode> after = entries(readFile());
         assertEquals(5, after.size(), "原 4 条 + 新增 1 条，外来条目一条不能少");
@@ -145,7 +145,7 @@ class LoopStoreTest {
     void memoryModeNeverTouchesDisk() {
         LoopExtension ext = LoopExtension.builder("ws").jobManager(null).build();
         ext.scheduler().load();
-        ext.schedule("s1", new LoopTask("p", 5));
+        ext.schedule("s1", LoopSpec.of("p").everyMinutes(5));
         assertFalse(Files.exists(tasksFile()));
         assertEquals(1, ext.list("s1").size());
     }
@@ -180,7 +180,7 @@ class LoopStoreTest {
         assertEquals(broken, new String(Files.readAllBytes(backups.get(0)), StandardCharsets.UTF_8),
                 "备份必须是原文件逐字节内容（可人工救回）");
 
-        ext.schedule("s1", new LoopTask("after", 5)); // 之后照常写新文件
+        ext.schedule("s1", LoopSpec.of("after").everyMinutes(5)); // 之后照常写新文件
         assertTrue(new String(Files.readAllBytes(tasksFile()), StandardCharsets.UTF_8).contains("after"));
         assertEquals(broken, new String(Files.readAllBytes(backups.get(0)), StandardCharsets.UTF_8));
     }
@@ -189,7 +189,7 @@ class LoopStoreTest {
     void wrongShapeIsTreatedAsCorrupt() throws Exception {
         writeFile("[1,2,3]");
         LoopExtension ext = loaded(id -> true);
-        ext.schedule("s1", new LoopTask("p", 5));
+        ext.schedule("s1", LoopSpec.of("p").everyMinutes(5));
         assertEquals(1, corruptBackups().size(), "结构不对同样不能被空快照覆盖");
     }
 
@@ -209,7 +209,7 @@ class LoopStoreTest {
         try {
             assumeFalse(Files.isReadable(tasksFile()), "以 root 运行时权限不生效");
             LoopExtension ext = loaded(id -> true);
-            ext.schedule("s1", new LoopTask("p", 5));
+            ext.schedule("s1", LoopSpec.of("p").everyMinutes(5));
         } finally {
             Files.setPosixFilePermissions(tasksFile(), PosixFilePermissions.fromString("rw-r--r--"));
         }

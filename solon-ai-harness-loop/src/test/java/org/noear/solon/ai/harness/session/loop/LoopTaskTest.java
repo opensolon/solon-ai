@@ -82,7 +82,7 @@ class LoopTaskTest {
 
     @Test
     void putExtraRejectsReservedAndRemovesOnNull() {
-        LoopTask task = new LoopTask("t", 5);
+        LoopTask task = new LoopTask("t", 5, null, false);
         assertThrows(IllegalArgumentException.class, () -> task.putExtra("prompt", new ONode()));
         assertThrows(IllegalArgumentException.class, () -> task.putExtra("sessionId", new ONode()));
 
@@ -94,7 +94,7 @@ class LoopTaskTest {
 
     @Test
     void serializationIsStableForUntouchedTask() {
-        LoopTask task = new LoopTask("p", 5);
+        LoopTask task = new LoopTask("p", 5, null, false);
         task.putExtra("automation", new ONode().set("id", "a1").set("name", "n"));
         String first = task.toONode().toJson();
         String second = LoopTask.fromONode(ONode.ofJson(first)).toONode().toJson();
