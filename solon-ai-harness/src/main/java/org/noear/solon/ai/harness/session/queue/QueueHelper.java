@@ -43,12 +43,12 @@ public final class QueueHelper {
     private static final Logger LOG = LoggerFactory.getLogger(QueueHelper.class);
     public static final int MAX_QUEUE_SIZE = 20;
     public static final int MAX_TEXT_LENGTH = 4096;
-    private static final String ATTR_QUEUE = "session.queue";
-    private static final String ATTR_GENERATION = "session.queue.generation";
-    private static final String ATTR_CLAIM = "session.queue.claim";
-    private static final String ATTR_IN_FLIGHT = "session.queue.inFlight";
+    private static final String ATTR_QUEUE = HarnessAttrs.QUEUE;
+    private static final String ATTR_GENERATION = HarnessAttrs.QUEUE_GENERATION;
+    private static final String ATTR_CLAIM = HarnessAttrs.QUEUE_CLAIM;
+    private static final String ATTR_IN_FLIGHT = HarnessAttrs.QUEUE_IN_FLIGHT;
     /** 会话上下文 data() 中的持久化投影 key（List&lt;Map&gt;，运行中任务在首位）。 */
-    private static final String KEY_ITEMS = "session.queue.items";
+    private static final String KEY_ITEMS = HarnessAttrs.QUEUE_ITEMS;
     private QueueHelper() { }
 
     /** 运行态队列：attrs 优先，缺失时从快照投影 hydrate（投影有内容即重建，与 create 无关）。
@@ -113,14 +113,6 @@ public final class QueueHelper {
      */
     public static int enqueue(AgentSession session, String text, InputOrigin origin) {
         return enqueue(session, text, origin, null, null, null, null, null, false);
-    }
-
-    public static int enqueue(AgentSession session, String text, String source,
-                              String sourceUserId, String replyTarget, String messageId,
-                              String id, String model, String reasoningEffort,
-                              String thinkingMode, String selectedAgent, boolean hasFiles) {
-        return enqueue(session, text, InputOrigin.of(source, sourceUserId, replyTarget, messageId),
-                id, model, reasoningEffort, thinkingMode, selectedAgent, hasFiles);
     }
 
     public static int enqueue(AgentSession session, String text, InputOrigin origin,
@@ -282,12 +274,25 @@ public final class QueueHelper {
         return result;
     }
 
+    /**
+     * 测试专用：待执行队列快照（不含 in-flight）。
+     *
+     * <p>主代码读侧一律用 {@link #view()}（含 in-flight）或 {@link #pendingSize()}；
+     * 本方法仅供测试直接断言队列内容，展示层禁止使用（会用掉 in-flight 语义）。</p>
+     */
     public static List<QueueItem> snapshot(AgentSession session) {
         if (session == null) return new ArrayList<>();
         synchronized (session.attrs()) {
             return new ArrayList<>(queue(session, false) == null ? new ArrayDeque<QueueItem>() : queue(session, false));
         }
     }
+
+    /**
+     * 测试专用：任务总数（待执行 + in-flight）。
+     *
+     * <p>主代码用 {@link #hasItems(AgentSession)}（布尔判定）或 {@link #pendingSize(AgentSession)}
+     * （不含 in-flight 的容量口径）；本计数仅供测试断言总量。</p>
+     */
     public static int size(AgentSession session) { if (session == null) return 0; synchronized(session.attrs()) { Deque<QueueItem> q=queue(session,false); return (q == null ? 0 : q.size()) + (session.attrs().get(ATTR_IN_FLIGHT) instanceof QueueItem ? 1 : 0); } }
 
     /** 该会话是否有任务（含待执行与运行中）。 */
@@ -353,9 +358,9 @@ public final class QueueHelper {
     /**
      * 领取队首一条并交给 handler（一次领取 = 一个 {@link QueueClaim}）。
      *
-     * <p>与 {@link #drainOne} 的差别：代际在领取瞬间绑定到 claim，宿主终态不再现取
-     * （现取会让代际防线恒真，导致被 cancelPending 清空的任务重新入队）。handler 抛异常
-     * 等价于启动失败，由内核用领取时快照的代际回滚。</p>
+     * <p>同步语义（回调返回即确认）由宿主在 handler 内自行 {@code claim.acknowledge()} 表达，
+     * 内核不再提供布尔型 drain 变体：两条路径曾在「ack 失败时任务去向」上各自漂移，
+     * 收敛后仅剩此一处。handler 抛异常等价于启动失败，由内核用领取时快照的代际回滚。</p>
      *
      * @return STARTED / NO_TASK / START_FAILED
      */
@@ -441,28 +446,5 @@ public final class QueueHelper {
     /** 当前未收口的派发事务（无则 null）。 */
     public static QueueDispatch currentDispatch(AgentSession session) {
         return QueueDispatch.current(session);
-    }
-
-    public static boolean drainOne(AgentSession session, QueueTaskRunner runner) {
-        if (session == null || runner == null || !QueueHelper.tryClaim(session)) return false;
-        QueueItem item = QueueHelper.poll(session);
-        if (item == null) {
-            QueueHelper.releaseClaim(session);
-            return false;
-        }
-        long generation = QueueHelper.generation(session);
-        try {
-            runner.run(item);
-            if (!QueueHelper.acknowledge(session, item.getId())) {
-                QueueHelper.requeueFront(session, item, generation);
-                return false;
-            }
-            return true;
-        } catch (Throwable e) {
-            QueueHelper.requeueFront(session, item, generation);
-            return false;
-        } finally {
-            QueueHelper.releaseClaim(session);
-        }
     }
 }

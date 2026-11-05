@@ -1,5 +1,15 @@
 ### vNEXT
 
+* **queue 包收敛：同步/异步双领取路径合一，`drainOne` / `QueueTaskRunner` 删除**（4.2.0 未发布故无适配层；唯一宿主调用点 CLI 已同步改写）:
+  * **背景**：`drainOne(runner)` 是 `claimNext` 的布尔型同步变体，四条分支（队空/已被占、runner 抛异常、正常完成、ack 失败）全部可由「claimNext + handler 内 acknowledge + ack 失败抛异常」表达。两条路径曾在「ack 失败时任务去向」上各自漂移（drainOne 静默 requeueFront，claimNext 走 START_FAILED），收敛后只剩一条领取路径
+  * **删除清单**：`QueueTaskRunner` 接口（文件删除）、`QueueHelper.drainOne`（22 行）、`QueueExtension.drainOne` 门面；`SessionQueueSteerTest` 的 6 个 drainOne 用例改写为 claimNext 同步写法（含新增断言：启动异常返回 START_FAILED 且任务回队首，不再向外传播）
+  * **`CliShell.drainCliQueue` 改写**：`while (queue.claimNext(...claim.acknowledge()...)) == STARTED)`，**ack 失败必须抛异常**——否则与旧 drainOne 在「Stop 后继续跑下一条」上产生偏差（静默吞掉会让 while 停不下来）
+  * **契约键登记收敛**：`QueueHelper` 四个 attrs 键字面量改引用 `HarnessAttrs` 常量（双处登记消除）；补登记 `HarnessAttrs.QUEUE`（`session.queue` 本体键，此前四个键登记了它却缺席）
+  * **死代码删除**：`QueueHelper.enqueue` 13 参重载（主代码 0 调用，唯一用户是自身委托链）、`QueueItem.fromMap(map, fallbackSource)` 双参版本（fallback 分支不可达：唯一调用传 null）
+  * **`QueueCommand` 去 CLI 硬编码**：命令层不再兜底伪造 `"CLI"` 渠道——分发器透传宿主 origin（CLI/Web/IM 各自带渠道身份），本地 NONE 是合法值，展示层用 `channelOr` 自行降级。`localSourceDefaultsToCli` 用例改为锁定新契约（channel 存 null、channelOr 由消费方决定）
+  * **`snapshot` / `size` 标注测试专用**：主代码读侧一律 `view()`/`hasItems()`/`pendingSize()`，两者仅供测试断言（javadaoc 已注明），不删（被 6 个测试类 30+ 处使用）
+  * **验证**：queue 域定向 68 例全绿；harness 全量 870 例 33F+5E 与基线逐项一致（ToolStrategy/Web/Write 权限域既有）；cli 全量 1254 例 3F 与基线逐项一致（settings/挂载域既有）；README 六处 drainOne 段落同步
+
 * **执行通道归属复位：`ExecutionBridge` 删除，goal 自持通道；补回 CLI / Web 的 goal 流式投递**（破坏性 API 变更，4.2.0 未发布故无适配层）:
   * **删除 `runtime.ExecutionBridge`**（唯一个同时被 harness 的 `GoalEngine` 与宿主 loop 调度器使用的类）。它把五件不相干的东西装在一起：执行投递、忙判定、轮次度量、session 解析、`_loop_*` 键定义。跨域共享 → 两个域都不愿意拥有它 → 只能不停往上挂东西，这就是通用轮次度量被命名为 `_loop_*` 的原因
   * **`GoalEngine` 自持执行通道**：`List<TaskHandler> taskHandlers` + `setDefaultTaskExecutor`（**单独字段**，不靠_注册顺序_保证「宿主优先」）+ `addTaskExecutor` / `hasTaskHandler` / `execute`（包内）/ `sessionOf`。替代 `ExecutionBridge` 的对应能力，无交叉兜底

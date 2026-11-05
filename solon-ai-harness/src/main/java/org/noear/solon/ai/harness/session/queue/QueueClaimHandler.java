@@ -7,9 +7,10 @@ package org.noear.solon.ai.harness.session.queue;
 /**
  * 领取一条队列任务的运行者。
  *
- * <p>与 {@link QueueTaskRunner} 的区别是「上下文完整性」：这里拿到的是
- * {@link QueueClaim}，它自带领取时的代际快照与收口方法（{@code acknowledge} /
- * {@code rollback}），宿主不再需要自己记住 item id、也不需要在终态现取代际。</p>
+ * <p>「上下文完整性」是它存在的理由：拿到的是 {@link QueueClaim}，自带领取时的代际快照
+ * 与收口方法（{@code acknowledge} / {@code rollback}），宿主不再需要自己记住 item id、
+ * 也不需要在终态现取代际。历史上还有一个只拿 {@code QueueItem} 的布尔型同步变体
+ * （{@code QueueTaskRunner}），已随双路径收敛删除。</p>
  *
  * <p><b>语义</b>：handler 只负责「启动」。同步运行者可在返回前自行
  * {@code claim.acknowledge()}（一次性任务）；异步运行者直接返回，等任务真正

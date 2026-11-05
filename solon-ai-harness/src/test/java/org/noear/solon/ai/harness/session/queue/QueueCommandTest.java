@@ -6,6 +6,7 @@ import org.noear.solon.ai.harness.command.builtin.Fakes;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+
 /**
  * /queue 命令编排层测试（直连 SessionQueue，engine 传 null 同既有口径）。
  * 入队结果与容量/长度上限文案由领域类事实锁定。
@@ -35,11 +36,14 @@ class QueueCommandTest {
     }
 
     @Test
-    void localSourceDefaultsToCli() {
+    void localSourceStaysNoneInsteadOfHardcodedChannel() {
+        // 渠道兜底已删：命令层不再硬编码 "CLI"，本地无渠道来源（NONE）是合法值，
+        // 展示层用 channelOr 自行降级。origin 携带什么就存什么。
         Fakes.StubContext ctx = Fakes.StubContext.local("接着跑测试");
         command.execute(null, ctx, Fakes.StubContext.localOrigin());
         QueueItem item = QueueHelper.snapshot(ctx.getSession()).get(0);
-        assertEquals("CLI", item.getOrigin().getChannel());
+        assertNull(item.getOrigin().getChannel(), "本地入队不得被伪造渠道标识");
+        assertEquals("CLI", item.getOrigin().channelOr("CLI"), "展示层降级由消费方决定");
     }
 
     @Test

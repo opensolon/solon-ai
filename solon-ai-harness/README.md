@@ -1169,7 +1169,7 @@ engine.addExtension(queue);                    // onAttach 内部注册 /queue �
 engine.setExtensionEnabled(queue, false);
 ```
 
-停用后命令回 `REPLY`（`/queue 已停用…`），`enqueue` / `drainOne` / `claimNext` / `drainLoop` 返回失败，但清理类接口照常可用（见下方“受控/不受控”）。
+停用后命令回 `REPLY`（`/queue 已停用…`），`enqueue` / `claimNext` / `drainLoop` 返回失败，但清理类接口照常可用（见下方“受控/不受控”）。
 
 ```
 用户：/queue 接着帮我把文档也更新一下
@@ -1255,18 +1255,25 @@ if (!queued) drainSessionQueue(session);
 
 > **用户 Stop（`cancelPending`）本身就意味着「本轮作废」**：它在清队列、递增代际的同时会注销派发登记。因此 Stop 之后无论流终态走 `settle(true)` 还是 `settle(false)`，登记都不会残留。反之若注销只依赖「收口成功」，Stop 后 `acknowledge()` 必然失败（in-flight 已被清），登记就永远留着——会话恒被当作「有未收口派发」，`failStreamTurn` 的跨线程判定据此误认为这是队列派发而静默跳过续发，队列从此瞎一轮且不报错。
 
-**兼容：`drainOne`（同步语义，仅限 CLI 交互循环）**
+**同步语义的写法（回调返回即确认，CLI 交互循环）**
 
-> 门面上只保留这一个 `drainOne`。历史上并存的 `drainOne(runner, false)` 异步变体已删除：它们组合起来正是上一节那个竞态的「合法用法」（宿主在终态现取代际 → 恒真 → 被 Stop 的任务复活）。异步语义一律走 `claimNext` + `QueueDispatch.settle`。
+> 门面上没有专门的布尔型同步 drain（历史上的 {@code drainOne} 已删除）：同步语义由宿主在
+> {@code claimNext} 的 handler 内自行 {@code claim.acknowledge()} 表达，队列执行只剩这一条领取路径。
+> 两条路径曾在「ack 失败时任务去向」上各自漂移，收敛后不再可能。
 
 ```java
-// 回调返回即认为执行完毕并确认
-while (queue.drainOne(session, item -> runOneTurn(session, item))) {
-    // claim / poll / ack / requeue 全部由 drainOne 负责，宿主不要自己 poll
+// 同步：回调返回即任务跑完，就地确认；启动异常由内核自动回滚到队首
+while (queue.claimNext(session, claim -> {
+    runOneTurn(session, claim.getItem());          // 真正跑完才返回
+    if (!claim.acknowledge()) {                     // 期间被 Stop 等：ack 失败
+        throw new IllegalStateException("ack failed"); // 必须抛！交给内核回滚，静默吞掉会把后续任务也跑完
+    }
+}) == DrainStatus.STARTED) {
+    // claim / poll / ack / requeue 由内核负责
 }
 ```
 
-> 只适用于**回调返回时任务真的跑完**的场景（CLI 交互循环、`/status` 这类同步命令）。回调若只是「启动一个异步任务就返回」，必须用 `claimNext`——`drainOne` 会在启动瞬间就把任务确认为完成，异步失败将永远无法回滚。
+> 只适用于**回调返回时任务真的跑完**的场景（CLI 交互循环、`/status` 这类同步命令）。回调若只是「启动一个异步任务就返回」，不要在 handler 内 ack，等流终态再收口。
 >
 > **历史上还有一条 `drainOne(runner, false)` 异步路径（配 `ack(itemId)` / `generation()` / `isGenerationActive()` / `requeueFront()`）已整体移除**：它要求宿主在终态「现取」代际，而 `cancelPending` 会递代，现取必然拿到新代际 → 代际防线恒真 → 被 Stop 的任务重新入队。这些能力已全部收敛进 `QueueClaim`。
 
@@ -1282,7 +1289,6 @@ while (queue.drainOne(session, item -> runOneTurn(session, item))) {
 | **`drainLoop(session, canDrain, handler)`** | **连发整条队列：循环与终止条件（含 START_FAILED 不重试）由 harness 负责** |
 | **`currentDispatch(session)`** | **当前未收口的派发事务（`QueueDispatch`，无则 null）；宿主判定「是否队列派发」的唯一来源** |
 | **`settleDispatch(session, started)`** | **收口当前派发事务（成功确认 / 失败回队首），幂等** |
-| `drainOne(session, runner)` | 领取并执行队首一条（同步语义：返回即确认；异步任务请用 `claimNext`） |
 | `pendingSize` / `hasItems` | 待执行数 / 是否有任务 |
 | **`viewRows(session)`** | **展示视图（`QueueItemView`）；对外 API 的**唯一**入口** |
 | **`isPersisted(context)`** | 快照探测（不实例化会话）；静态方法，供宿主在无扩展实例时使用 |
@@ -1326,7 +1332,7 @@ int pos = queue.enqueue(session, "跑完顺便把文档也更新一下");
 
 这也是 §5.4 场景 A 的降级目标：`steer` 返回 `BOX_FULL` 或 `NOT_RUNNING` 时改走 `enqueue`，语义上就是从「注入当前任务」变成「排在它后面」。
 
-`claimNext` 内部顺序：`tryClaim`（同一时刻只允许一个运行者 poll）→ `poll`（队首出队并置为 RUNNING + 记为 in-flight）→ **领取瞬间绑定代际快照** → 回调 → 异常则 `rollback()` → `releaseClaim`。`drainOne` 是同一流程的同步语义变体（回调返回即确认）。
+`claimNext` 内部顺序：`tryClaim`（同一时刻只允许一个运行者 poll）→ `poll`（队首出队并置为 RUNNING + 记为 in-flight）→ **领取瞬间绑定代际快照** → 回调 → 异常则 `rollback()` → `releaseClaim`。同步/异步只是收口时机不同（前者在 handler 内 ack、后者在流终态），领取流程只有这一条。
 
 **`claimNext` / `drainLoop` 的返回值（`DrainStatus`）**：
 
@@ -1336,20 +1342,11 @@ int pos = queue.enqueue(session, "跑完顺便把文档也更新一下");
 | 回调抛异常 | 内核用领取瞬间的代际自动 `rollback()` | `START_FAILED` |
 | `tryClaim` 失败（已有 in-flight）/ 队首为空 | 不执行，失败时 `releaseClaim` | `NO_TASK` |
 
-**`drainOne` 的返回（`boolean`，同步语义）**：
-
-| 情形 | 行为 | 返回值 |
-|---|---|---|
-| 回调正常返回且 `acknowledge` 成功 | 出队完成 | `true` |
-| `acknowledge` 失败（in-flight 身份已变） | `requeueFront`（受代际保护） | `false` |
-| 回调抛异常 | `requeueFront`（受代际保护） | `false` |
-| `tryClaim` 失败 / 队首为空 | 不执行，失败时 `releaseClaim` | `false` |
-
 **受控 / 不受控（停用后行为不同）**：
 
 | 类别 | 方法 | `setEnabled(false)` 后 |
 |---|---|---|
-| 受控 | `enqueue` / `drainOne` / `claimNext` / `drainLoop` | 不再接单、不再续发（返回 `-1` / `false` / `NO_TASK`） |
+| 受控 | `enqueue` / `claimNext` / `drainLoop` | 不再接单、不再续发（返回 `-1` / `NO_TASK`） |
 | 不受控 | `ack` / `cancelItem` / `promote` / `cancelPending` / `pendingSize` 等 | 照常可用——否则停用前已入队的项将永远无法取消 |
 
 三条容易踩的语义：

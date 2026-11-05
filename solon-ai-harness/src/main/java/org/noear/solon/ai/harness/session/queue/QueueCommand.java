@@ -75,12 +75,9 @@ public class QueueCommand extends AbsCommand {
         }
 
         AgentSession session = ctx.getSession();
-        // 渠道标识统一在此处兜底（原 CLI 硬编码已移出，避免两端各一套默认值）
+        // 渠道标识由宿主透传的 origin 承载（分发器已把 CLI/Web/IM 各自的渠道身份带进命令）；
+        // 此处不再兜底硬编码渠道名——本地无渠道来源（NONE）是合法值，展示层用 channelOr 自行降级。
         InputOrigin resolved = origin == null ? InputOrigin.NONE : origin;
-        if (resolved.getChannel() == null || resolved.getChannel().isEmpty()) {
-            resolved = InputOrigin.of("CLI", resolved.getSenderId(),
-                    resolved.getReplyTarget(), resolved.getMessageId());
-        }
 
         int n = QueueHelper.enqueue(session, text, resolved);
         if (n < 0) {

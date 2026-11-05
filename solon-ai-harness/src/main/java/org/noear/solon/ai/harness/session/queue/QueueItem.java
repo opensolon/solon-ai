@@ -107,18 +107,11 @@ public final class QueueItem {
     }
 
     static QueueItem fromMap(Map<String, Object> map) {
-        return fromMap(map, null);
-    }
-
-    static QueueItem fromMap(Map<String, Object> map, String fallbackSource) {
         if (map == null) return null;
         String text = value(map.get("text"));
         if (text == null || text.trim().isEmpty() || text.trim().length() > QueueHelper.MAX_TEXT_LENGTH) return null;
         String id = value(map.get("id"));
         InputOrigin origin = InputOrigin.fromMap(map);
-        if (origin.getChannel() == null && fallbackSource != null) {
-            origin = origin.withChannel(fallbackSource);
-        }
         QueueItem item = new QueueItem(id, text.trim(), origin,
                 number(map.get("createdAt"), System.currentTimeMillis()), value(map.get("status")),
                 value(map.get("model")), value(map.get("reasoningEffort")), value(map.get("thinkingMode")),

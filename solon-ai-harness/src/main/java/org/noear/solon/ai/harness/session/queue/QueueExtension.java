@@ -28,8 +28,11 @@ import java.util.Map;
  * <p>历史上曾有一组「异步 drain + 宿主自管代际」的接口
  * （{@code drainOne(runner, false)} / {@code ack} / {@code generation} /
  * {@code isGenerationActive} / {@code requeueFront}）：宿主要在终态<b>现取</b>代际，
- * 而 {@code cancelPending} 会递代，现取必然拿到新代际 → 代际防线弧真 →
- * 被用户 Stop 的任务会重新入队继续执行。这些方法已随 {@link QueueClaim} 落地全部移除。</p>
+ * 而 {@code cancelPending} 会递代，现取必然拿到新代际 → 代际防线恒真 →
+ * 被用户 Stop 的任务会重新入队继续执行。这些方法已随 {@link QueueClaim} 落地全部移除，
+ * 最后一条布尔型同步变体 {@code drainOne(runner)} 也已删除：同步语义由宿主在
+ * {@code claimNext} 的 handler 内自行 {@code claim.acknowledge()} 表达，
+ * 队列执行从此只剩一条领取路径。</p>
  *
  * @author noear
  * @since 3.9.4
@@ -52,7 +55,7 @@ public class QueueExtension extends AbsHarnessExtension {
     /**
      * 开关语义（与命令层一致）：
      * <ul>
-     *   <li>受控：{@link #enqueue} 与 {@link #drainOne}/{@link #claimNext}/{@link #drainLoop}
+     *   <li>受控：{@link #enqueue} 与 {@link #claimNext}/{@link #drainLoop}
      *       —— 停用后不再接单、不再续发；</li>
      *   <li>不受控：cancelItem / promote / cancelPending 等清理类接口 —— 开关不得阻止清理，
      *       否则停用前已入队的项将永远无法取消。</li>
@@ -233,23 +236,6 @@ public class QueueExtension extends AbsHarnessExtension {
             }
         }
         return last;
-    }
-
-    /**
-     * 领取并执行队首一条（同步语义：回调返回即确认）。
-     *
-     * <p><b>只适用于同步回调</b>：命令类任务（如 {@code /status}）在回调返回前就跑完了。
-     * 回调若只是「启动一个异步任务就返回」，必须用 {@link #claimNext}——本方法会在启动瞬间
-     * 就把任务确认为完成，异步失败将永远无法回滚。</p>
-     *
-     * @return true = 已领取并执行；false = 无任务或领取失败
-     * @see #claimNext(AgentSession, QueueClaimHandler)
-     */
-    public boolean drainOne(AgentSession session, QueueTaskRunner runner) {
-        if (isEnabled() == false) {
-            return false;
-        }
-        return QueueHelper.drainOne(session, runner);
     }
 
     /** 取消单条待执行任务。 */

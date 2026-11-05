@@ -111,7 +111,7 @@ class SessionQueueTest {
     @Test
     void snapshotRoundTripPreservesExecutionOptions() {
         AgentSession session = InMemoryAgentSession.of();
-        assertEquals(1, QueueHelper.enqueue(session, "run", null, null, null, null,
+        assertEquals(1, QueueHelper.enqueue(session, "run", null,
                 "q-1", "model-a", "high", "on", "agent-a", true));
         // 手工模拟一次快照序列化/反序列化往返（FlowContext.toJson/fromJson 口径）
         AgentSession restarted = InMemoryAgentSession.of(
@@ -152,9 +152,9 @@ class SessionQueueTest {
     @Test
     void duplicateIdIsRejected() {
         AgentSession session = InMemoryAgentSession.of();
-        assertEquals(1, QueueHelper.enqueue(session, "first", null, null, null, null,
+        assertEquals(1, QueueHelper.enqueue(session, "first", null,
                 "same", null, null, null, null, false));
-        assertEquals(-1, QueueHelper.enqueue(session, "second", null, null, null, null,
+        assertEquals(-1, QueueHelper.enqueue(session, "second", null,
                 "same", null, null, null, null, false));
     }
 

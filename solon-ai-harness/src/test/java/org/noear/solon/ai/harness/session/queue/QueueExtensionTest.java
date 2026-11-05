@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * QueueExtension 一键装配验证：
  * 1. addExtension 后 /queue 命令自动注册；
- * 2. 门面操作与静态实现行为一致（enqueue/view/pendingSize/drainOne/ack 语义透传）；
+ * 2. 门面操作与静态实现行为一致（enqueue/view/pendingSize/claimNext 语义透传）；
  * 3. 命令注册幂等；扩展停用后命令不可见（查找时过滤）且不再接单。
  */
 class QueueExtensionTest {
@@ -55,11 +55,14 @@ class QueueExtensionTest {
         assertEquals(2, view.size());
         assertEquals("第一条", view.get(0).getText());
 
-        // 同步 drain：回调返回即确认
+        // 同步 drain：回调返回即确认（claimNext + handler 内 acknowledge，布尔型 drainOne 已删）
         AtomicReference<String> executed = new AtomicReference<>();
-        assertTrue(queue.drainOne(session, item -> executed.set(item.getText())));
+        assertEquals(DrainStatus.STARTED, queue.claimNext(session, claim -> {
+            executed.set(claim.getItem().getText());
+            assertTrue(claim.acknowledge(), "同步回调内 ack 必须成功");
+        }));
         assertEquals("第一条", executed.get());
-        assertEquals(1, queue.pendingSize(session), "drainOne 后 in-flight 已确认，不占待执行数");
+        assertEquals(1, queue.pendingSize(session), "同步 drain 后 in-flight 已确认，不占待执行数");
     }
 
     @Test
