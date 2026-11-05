@@ -1,20 +1,30 @@
 package org.noear.solon.ai.harness.session.steer;
 
+import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.input.InputOrigin;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.command.builtin.Fakes;
 import org.noear.solon.ai.harness.session.queue.QueueHelper;
 
+import java.nio.file.Path;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * /steer 命令编排层测试（直连 SteerHelper，engine 传 null 同既有口径）。
- * 场景：需要先在 attrs 中建立 activeRunId（模拟运行中任务），未建立时为 NOT_RUNNING。
+ * /steer 命令编排层测试。
+ *
+ * <p>命令经 {@link SteerExtension} 门面投递：engine 传 null 时回落无引擎门面（缺省约束、忙判定放行）；
+ * 需要先开轮（模拟运行中任务），未开轮时为 NOT_RUNNING。</p>
  */
 class SteerCommandTest {
     private final SteerCommand command = new SteerCommand();
+
+    @TempDir
+    Path workspace;
 
     @Test
     void emptyArgsPrintsUsage() {
@@ -36,7 +46,7 @@ class SteerCommandTest {
         Fakes.StubContext ctx = Fakes.StubContext.im("补充要求");
         AgentSession session = ctx.getSession();
         withActiveRun(session, "run-1");
-        SteerHelper.steer(session, null, null, "第一条", InputOrigin.channel("command"), null);
+        new SteerExtension().steer(session, "第一条", InputOrigin.channel("command"));
         command.execute(null, ctx, Fakes.StubContext.imOrigin());
         assertTrue(ctx.output().contains("待生效 2 条"));
     }
@@ -46,9 +56,9 @@ class SteerCommandTest {
         Fakes.StubContext ctx = Fakes.StubContext.im("补充要求");
         AgentSession session = ctx.getSession();
         withActiveRun(session, "run-1");
+        SteerExtension ext = new SteerExtension();
         for (int i = 0; i < SteerHelper.MAX_BOX_SIZE; i++) {
-            SteerResult r = SteerHelper.steer(session, null, null, "seed-" + i, InputOrigin.channel("command"), null);
-            assertEquals(SteerStatus.STEERED, r.getStatus());
+            assertEquals(SteerStatus.STEERED, ext.steer(session, "seed-" + i).getStatus());
         }
         command.execute(null, ctx, Fakes.StubContext.imOrigin());
         assertTrue(ctx.output().contains("插话邮箱已满（上限 " + SteerHelper.MAX_BOX_SIZE + " 条），可用 /queue 排队"));
@@ -58,7 +68,7 @@ class SteerCommandTest {
     @Test
     void notRunningAdvisesQueueWithoutDegrading() {
         Fakes.StubContext ctx = Fakes.StubContext.im("补充要求");
-        command.execute(null, ctx, Fakes.StubContext.imOrigin()); // 无 activeRunId
+        command.execute(null, ctx, Fakes.StubContext.imOrigin()); // 未开轮
         assertTrue(ctx.output().contains("当前无正在执行的任务可插话，可直接发送或用 /queue 排队"));
         assertTrue(ctx.tasks.isEmpty());
         assertEquals(0, queuePending(ctx.getSession()));
@@ -79,7 +89,7 @@ class SteerCommandTest {
         AgentSession session = ctx.getSession();
         withActiveRun(session, "run-1");
         command.execute(null, ctx, Fakes.StubContext.localOrigin());
-        SteerMessage msg = SteerHelper.steerBox(session).poll();
+        SteerMessage msg = firstPending(session);
         assertNotNull(msg);
         assertEquals("command", msg.getOrigin().getChannel());
         assertEquals("补充要求", msg.getText());
@@ -91,7 +101,7 @@ class SteerCommandTest {
         AgentSession session = ctx.getSession();
         withActiveRun(session, "run-1");
         command.execute(null, ctx, Fakes.StubContext.imOrigin());
-        SteerMessage msg = SteerHelper.steerBox(session).poll();
+        SteerMessage msg = firstPending(session);
         assertNotNull(msg);
         assertEquals("Feishu", msg.getOrigin().getChannel());
         assertEquals("user-1", msg.getOrigin().getSenderId());
@@ -99,8 +109,45 @@ class SteerCommandTest {
         assertEquals("message-1", msg.getOrigin().getMessageId());
     }
 
+    /** 经门面投递：所属扩展停用时返回 DISABLED（旧实现直连内核，开关不生效）。 */
+    @Test
+    void ownerDisabledReportsDisabled() {
+        SteerExtension ext = new SteerExtension();
+        SteerCommand owned = new SteerCommand(ext);
+        ext.setEnabled(false);
+
+        Fakes.StubContext ctx = Fakes.StubContext.im("补充要求");
+        withActiveRun(ctx.getSession(), "run-1");
+        owned.execute(null, ctx, Fakes.StubContext.imOrigin());
+
+        assertTrue(ctx.output().contains("插话能力已停用"));
+        assertNull(firstPending(ctx.getSession()));
+    }
+
+    /** 经门面投递：引擎判定会话不忙（任务已异常退出但轮次未收）时回滚，不投进不会再运行的邮箱。 */
+    @Test
+    void attachedEngineNotBusyRollsBack() {
+        HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
+                .sessionProvider(InMemoryAgentSession::of)
+                .build();
+        SteerExtension ext = SteerExtension.builder().maxBoxSize(7).build();
+        engine.addExtension(ext);
+
+        Fakes.StubContext ctx = Fakes.StubContext.im("补充要求");
+        withActiveRun(ctx.getSession(), "run-1");
+        new SteerCommand().execute(engine, ctx, Fakes.StubContext.imOrigin());
+
+        assertTrue(ctx.output().contains("当前无正在执行的任务可插话"));
+        assertNull(firstPending(ctx.getSession()), "回滚后不得残留");
+    }
+
     private static void withActiveRun(AgentSession session, String runId) {
-        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, runId);
+        SteerState.of(session).open(runId);
+    }
+
+    private static SteerMessage firstPending(AgentSession session) {
+        SteerState state = SteerState.peek(session);
+        return state == null || state.size() == 0 ? null : state.snapshot().get(0);
     }
 
     private static int queuePending(AgentSession session) {

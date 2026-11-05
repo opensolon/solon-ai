@@ -35,10 +35,24 @@ import org.noear.solon.core.util.Assert;
  * 由用户自行决定是否改用 /queue 排队或直接发送——与 /web/chat/steer 的 409 纯语义对齐
  * （Web 端同样是失败后由前端决策转排队/普通发送，后端不代为降级）。</p>
  *
+ * <p><b>经门面投递</b>：与 Web / IM 同一条路径（{@link SteerExtension#steer(AgentSession, String, InputOrigin)}），
+ * 因此开关（DISABLED）与忙判定复查口径一致——任务异常退出后不会再把插话投进一个不会再运行的邮箱。</p>
+ *
  * @author noear
  * @since 2026.11
  */
 public class SteerCommand extends AbsCommand {
+    /** 所属门面（由 {@link SteerExtension} 创建时注入）；独立 new 时为 null，执行期从引擎解析 */
+    private final SteerExtension owner;
+
+    /** 独立注册用：执行期从引擎取 {@link SteerExtension}，取不到时用缺省约束的无引擎门面 */
+    public SteerCommand() {
+        this(null);
+    }
+
+    SteerCommand(SteerExtension owner) {
+        this.owner = owner;
+    }
 
     @Override
     public String name() {
@@ -64,13 +78,21 @@ public class SteerCommand extends AbsCommand {
     }
 
     /**
-     * 读取本引擎上 Steer 扩展的实际约束（builder 可能放宽过上限）。
+     * 解析投递门面：优先所属扩展，其次引擎上装配的扩展，都没有时回落无引擎门面。
      *
-     * <p>提示文案必须与投递实际使用的那一份同源，否则「上限 5 条」的提示会与实际不符。</p>
+     * <p>提示文案读同一个门面的 {@link SteerExtension#getLimits()}，与投递实际使用的约束同源。</p>
      */
-    private static SteerLimits limitsOf(HarnessEngine engine) {
-        SteerExtension steer = engine == null ? null : engine.getExtension(SteerExtension.class).orElse(null);
-        return steer == null ? SteerLimits.DEFAULT : steer.getLimits();
+    private SteerExtension facade(HarnessEngine engine) {
+        if (owner != null) {
+            return owner;
+        }
+        SteerExtension attached = engine == null ? null : engine.getExtension(SteerExtension.class).orElse(null);
+        return attached != null ? attached : Detached.INSTANCE;
+    }
+
+    /** 无引擎门面（缺省约束、忙判定放行），惰性创建 */
+    private static final class Detached {
+        static final SteerExtension INSTANCE = new SteerExtension();
     }
 
     @Override
@@ -88,22 +110,23 @@ public class SteerCommand extends AbsCommand {
                     resolved.getReplyTarget(), resolved.getMessageId());
         }
 
-        SteerResult result = SteerHelper.steer(session, null, null, text, resolved, null,
-                limitsOf(engine), false);
+        SteerExtension steer = facade(engine);
+        SteerLimits limits = steer.getLimits();
+        SteerResult result = steer.steer(session, text, resolved);
 
         switch (result.getStatus()) {
             case STEERED:
                 ctx.println("已插话，将在下一步注入当前任务（待生效 " + result.getQueued() + " 条）");
                 break;
             case BOX_FULL:
-                ctx.println("插话邮箱已满（上限 " + limitsOf(engine).getMaxBoxSize() + " 条），可用 /queue 排队");
+                ctx.println("插话邮箱已满（上限 " + limits.getMaxBoxSize() + " 条），可用 /queue 排队");
                 break;
             case NOT_RUNNING:
             case TURN_CHANGED:
                 ctx.println("当前无正在执行的任务可插话，可直接发送或用 /queue 排队");
                 break;
             case TEXT_TOO_LONG:
-                ctx.println("插话内容过长（上限 " + limitsOf(engine).getMaxTextLength() + " 字符）");
+                ctx.println("插话内容过长（上限 " + limits.getMaxTextLength() + " 字符）");
                 break;
             case DISABLED:
                 ctx.println("插话能力已停用，可直接发送或使用 /queue 排队");
