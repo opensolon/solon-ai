@@ -828,15 +828,16 @@ HarnessEngine.of("/data/work", ".solon/")
 | `/queue` | 会话级排队队列 | `QueueExtension` + `addExtension`，任务终态调 `queue.drainLoop(...)` / `claimNext(...)` | 命令能入队，但队列永远不动 |
 | `/steer` | 当前任务的插话邮箱 | `SteerExtension` + `addExtension`（拦截器由扩展挂载） | 命令能入队，但永不注入 |
 | `/interrupt` | 无状态（只停） | 无（现成的 `engine.interrupt(session)` 即可） | 不装命令就只能由宿主自带停止按钮 |
+| `/loop` | 会话定时任务（间隔 / cron，可多条） | `LoopExtension.builder(workspaceId)` + `addExtensionIfAbsent`，宿主按通道注册执行器 | 任务能建、到点跳过（无认领只记日志，绝不记成成功） |
 
 **三个能力，三个类**：每个命令从装配到运行期操作宿主都只接触一个 Extension 实例（宿主侧与 harness 的交互面收敛到一个类），不再需要宿主逐个 new `GoalEngine`/`GoalScheduler`/`GoalCommand`，也不需要分别操作 `QueueHelper`。命令本身的语法与回执未变，终端用户无感知。
 
-**三个能力是三个独立插件模块（4.2.0+）**：`solon-ai-harness-goal` / `solon-ai-harness-queue` / `solon-ai-harness-steer`，按需引入。核心模块不认识它们，它们之间也互不依赖，只经核心契约协作（见 `HarnessExtension` 类注释「插件化的三种协作机制」）：
+**会话能力是独立插件模块（4.2.0+）**：`solon-ai-harness-goal` / `solon-ai-harness-queue` / `solon-ai-harness-steer` / `solon-ai-harness-loop`，按需引入。核心模块不认识它们，它们之间也互不依赖，只经核心契约协作（见 `HarnessExtension` 类注释「插件化的三种协作机制」）：
 
 | 契约 | 类型 | 提供方 | 消费方 |
 |---|---|---|---|
 | `HarnessExtension#onInterrupt` | 钩子（广播） | 引擎 `interrupt` / `prepareInterrupt` 先于停流回调 | queue 清队列 |
-| `HarnessExtension#onStatus` | 钩子（汇集） | 引擎 `status` 读快照时回调 | 各插件贡献**自己定义**的键：queue `QueueExtension.STATUS_PENDING`、steer `SteerExtension.STATUS_PENDING`、goal `GoalExtension.STATUS_GOAL`（只供展示/宿主业务，内核不读） |
+| `HarnessExtension#onStatus` | 钩子（汇集） | 引擎 `status` 读快照时回调 | 各插件贡献**自己定义**的键：queue `QueueExtension.STATUS_PENDING`、steer `SteerExtension.STATUS_PENDING`、goal `GoalExtension.STATUS_GOAL`、loop `LoopExtension.STATUS_TASKS`（只供展示/宿主业务，内核不读） |
 | `session.InputBacklog` | 能力接口（`offer` / `hasPending`） | queue | 引擎 `admit`（有无积压能力、`hasPending` 保先进先出）、`engine.isIdle`、steer 残留转积压（`getExtension(InputBacklog.class)`） |
 | `session.TurnDispatch` | 会话槽位（`session.turn.dispatch`） | queue 派发 | 引擎 `admit`、`SessionTurn` |
 
@@ -862,7 +863,15 @@ GoalExtension goal = engine.addExtensionIfAbsent(
         GoalExtension.builder(workspaceId).taskExecutor(myRunner).build()); // /goal
 QueueExtension queue = engine.addExtensionIfAbsent(new QueueExtension()); // /queue
 SteerExtension steer = engine.addExtensionIfAbsent(new SteerExtension()); // /steer
+LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder(workspaceId)  // /loop
+        .storeFile(dataDir.resolve("tasks.json"))        // 缺省 null = 只在内存
+        .sessionAlive(id -> sessionExists(id))           // 加载时孤儿清理；缺省恒 true
+        .maxErrors(() -> 3)                              // 任务级连续失败阈值（实时读）
+        .build());
+loop.addExecutor("web", id -> id.startsWith("web-"), myLoopRunner); // 执行器只有这一种注册方式
 ```
+
+loop（会话定时任务）与 goal（会话目标）的区别：goal 每会话一个、由状态驱动续轮、有预算与完成判定；loop 可多条、按时间表独立触发、只记最终文本。loop 的开关（`setEnabled`）只关模型工具 `loop_*`，`/loop` 命令与已有定时任务照常；tasks.json 里不认识的条目与任务上的宿主扩展字段（`getExtra`/`putExtra`）一律原样写回；整个文件读不懂时先备份为 `tasks.json.corrupt-<时间戳>`，读不出来时本进程不写盘；扩展摘除后不再写盘。`LoopTask` 对宿主只读（可写的只有扩展字段），改定义走 `copyWithUpdate` + `loop.update`：新版本与在途一轮共享运行锁，不会并发。
 
 三者共同点：`/queue` 与 `/steer` 的 `runnableWhenBusy()` 返回 `true`（宿主据此允许它们在任务执行中被受理）；`/goal` **不覆写**、保持默认 `false`（它会启动持续轮次，不能在忙时会话里重入）。注意这只是**给宿主读的声明**，引擎内部不做忙碌拦截（详见下文边界）。`/queue`、`/steer` 从 `Command.execute(engine, ctx, origin)` 的第三参拿到 `InputOrigin` 并带到投递链路，三者都**不自己开流**。
 
@@ -990,7 +999,7 @@ GoalExtension goal = GoalExtension.builder(workspaceId)
 
 - **`taskExecutor` 是唯一有实际意义的必选项**。最小用法是 `GoalExtension.builder(workspaceId).build()` + `addExtension`，此时走内置缺省执行器——它不是裸的 `engine.handle(...).call().getContent()`，而是带三个关键修饰：`commandAware(false)`（目标正文里的 `/xxx` 不被当命令）、`agentAware(false)`（开头的 `@name` 不被当子代理提及）、`origin(channel("goal"))`（来源标记，便于宿主分流）。即便有这些修饰，它仍不会带宿主的专属执行语义（Web 的流式通道、CLI 的终端读入），所以宿主一般仍应显式提供 `taskExecutor`。
 - **两种注册形态可选，且可混用**：builder 的 `taskExecutor(channel, claim, handler)` 适合扩展装配早于入口创建的宿主（一次性声明全部通道）；运行期的 `addTaskExecutor(channel, claim, handler)` 适合入口晚于扩展装配（如桌面端在 WS 就绪后才建）。注册顺序恒为「builder 声明先于运行期追加」。
-- **`bridge` 与 loop 共享已废止**：曾用过 `ExecutionBridge` 做跨域共享执行通道，现**已删除**。goal 的执行通道在 `GoalEngine` 内部（`addTaskExecutor` / `setDefaultTaskExecutor`），loop 的在宿主（cli 域的 `LoopScheduler.addExecutor`），两者无任何共享类型。内置兜底经 `setDefaultTaskExecutor` 单独登记，**只在前面的执行者全不认领时考虑**——不可并入 `addTaskExecutor` 列表（兜底恒认领，而扩展在入口构造之前装配，排到首位会把宿主的流式投递完全挡住，且静默）。
+- **`bridge` 与 loop 共享已废止**：曾用过 `ExecutionBridge` 做跨域共享执行通道，现**已删除**。goal 的执行通道在 `GoalEngine` 内部（`addTaskExecutor` / `setDefaultTaskExecutor`），loop 的在 loop 插件（`LoopExtension.addExecutor(channel, claim, handler)`），两者无任何共享类型。内置兜底经 `setDefaultTaskExecutor` 单独登记，**只在前面的执行者全不认领时考虑**——不可并入 `addTaskExecutor` 列表（兜底恒认领，而扩展在入口构造之前装配，排到首位会把宿主的流式投递完全挡住，且静默）。
 - **job 名带工作区前缀**在扩展内部完成，`JobManager` 是 JVM 单例、会话 ID 不全局唯一（CLI 叫 `cli`、桌面是 `ws_<时间戳>`）——不加前缀时多个工作区会在全局注册表里互相覆盖。
 - **`.scheduler(x)` 三态**：不传 = 缺省新建；传实例 = 宿主自备；**显式传 null = 关闭调度**（纯 JUnit / 无 Solon 容器的宿主，`JobManager.getInstance()` 会 NPE，只能关）。关闭后 `hasScheduler()` 返回 `false`，`scheduleNow` / `resumeScheduleOnly` / `unschedule` / `stopAll` 全部变成空操作但**首次调用会打一条 warn**（四方法共用一个 `AtomicBoolean` 门闩，不刷屏）。告警只在「确实没调度器」时触发——`sessionId == null` 或扩展停用是另一类原因，不会误报；`onDetach` 直连内部字段，摘除时无调度器属正常形态，不告警。排查“调了 `scheduleNow` 却没跑”先看这里。
 - **没有“只关命令”的开关**：`GoalExtension` 的构造器私有，builder 也不提供 `commandEnabled`。注册本身是幂等的（已有同名命令则跳过），迁移期双写安全；要整体下线用 `engine.setExtensionEnabled(goal, false)`（连带停调度，见本章引言）。

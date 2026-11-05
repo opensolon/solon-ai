@@ -468,7 +468,7 @@ class HarnessPluginContractTest {
                         scanned.set(true);
                         try {
                             String src = new String(Files.readAllBytes(p), StandardCharsets.UTF_8);
-                            return src.matches("(?s).*import\\s+(static\\s+)?org\\.noear\\.solon\\.ai\\.harness\\.session\\.(queue|steer|goal)\\..*");
+                            return src.matches("(?s).*import\\s+(static\\s+)?org\\.noear\\.solon\\.ai\\.harness\\.session\\.(queue|steer|goal|loop)\\..*");
                         } catch (Exception e) {
                             throw new RuntimeException(e);
                         }
