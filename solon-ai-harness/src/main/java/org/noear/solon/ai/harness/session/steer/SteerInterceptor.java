@@ -7,38 +7,34 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Queue;
 
 /**
- * 运行中插话拦截器（Steering）：邮箱的消费边界。
+ * 运行中插话拦截器（Steering）：轮次的开/收边界 + 邮箱的消费边界。
  *
- * <p>插话的投递、校验、取消与残留转排队由静态内核 {@link SteerHelper} 提供，
- * 宿主接入走 {@link SteerExtension} 门面。本类只负责在 ReAct 生命周期边界上
- * 消费邮箱：{@code onReasonStart}（消息组装前的采样边界）排空并注入工作记忆、
- * {@code onAgentEnd} 清理本任务残留。不打断进行中的模型流与工具调用；
- * 注入的消息只进当前任务的工作记忆，任务结束即失效。</p>
+ * <p>插话的投递、校验、取消由静态内核 {@link SteerHelper} 提供，宿主接入走 {@link SteerExtension} 门面。
+ * 本类在 ReAct 生命周期边界上：</p>
+ * <ul>
+ *   <li>{@code onAgentStart}：开轮。若上一轮未收尾（interrupt / 异常时 {@code onAgentEnd} 不触发），
+ *       把其残留转排队并推出 {@link SteerDroppedEvent}（{@link SteerDroppedEvent.Reason#RUN_SUPERSEDED}）。
+ *       <b>这一步原先是宿主义务（{@code beginTurn}），现由框架自动完成</b>；</li>
+ *   <li>{@code onReasonStart}（消息组装前的采样边界）：排空本轮邮箱并注入工作记忆；</li>
+ *   <li>{@code onAgentEnd}：收轮，残留转排队并推出 {@link SteerDroppedEvent}（{@link SteerDroppedEvent.Reason#RUN_ENDED}）。</li>
+ * </ul>
  *
  * <p>守卫体系（对齐 Codex 已踩过的坑）：</p>
  * <ul>
- *   <li>守卫 1：首轮 reason 不注入，确保本轮原始 prompt 先被采样，不篡改初始意图；</li>
+ *   <li>守卫 1：首轮 reason 不注入，确保本轮原始 prompt 先被采样，不篡改初始意图
+ *       （也是 {@link SteerMessages} 对外承诺的位置保证）；</li>
  *   <li>守卫 3：工作记忆尾部存在未闭合 tool_calls（HITL 挂起恢复窄窗）时跳过，
  *       避免 user 消息打断 tool_use/tool_result 配对导致部分模型报错；</li>
- *   <li>压缩共存：请求级挂载（LinkedHashMap 插入序）天然排在默认的
- *       ContextCompressionInterceptor 之后，向压缩产物尾部追加，不破坏消息序列；</li>
- *   <li>无悬挂：{@code onAgentEnd} 检查残留并广播 steer_dropped，前端转为排队消息，
+ *   <li>压缩共存：请求级挂载天然排在默认的 ContextCompressionInterceptor 之后，向压缩产物尾部追加；</li>
+ *   <li>无悬挂：残留一律转排队，转排队失败的暂存为 orphans 并永不注入，
  *       绝不允许"已接受但永不生效"（Codex issue #15842 教训）。</li>
  * </ul>
  *
- * <p><b>输出走 AgentEvent</b>：两个出口都以 {@link ReActTrace#pushAgentEvent} 推出
- * {@link SteerAppliedEvent} / {@link SteerDroppedEvent}，与 HITL、上下文压缩、Run 起止
- * 同一范式。harness 不认识任何宿主类型，宿主按事件类型映射为自身协议
- * （Web 映射为 {@code system.steer_applied}/{@code system.steer_dropped}），
- * 不认识的宿主零成本忽略。</p>
- *
- * <p><b>展示与持久化分离</b>：未消费插话转排队（QueueHelper）在 harness 内完成
- * （{@link SteerHelper#enqueueIntoSessionQueue}），不看有没有订阅者；事件只负责展示。
- * 因此「已接受但永不生效」的兜底在任何宿主下都成立，且非流式运行时不会丢插话。</p>
+ * <p><b>展示与持久化分离</b>：转排队在推事件之前完成，不看有没有订阅者；事件只负责展示。</p>
  *
  * @author noear
  * @since 2026
@@ -50,22 +46,27 @@ public class SteerInterceptor extends AbsReActInterceptor {
     }
 
     @Override
+    public void onAgentStart(ReActTrace trace) {
+        AgentSession session = trace.getSession();
+        if (session == null) {
+            return;
+        }
+
+        SteerState state = SteerState.of(session);
+        settle(trace, session, state, state.open(trace.getRunId()), SteerDroppedEvent.Reason.RUN_SUPERSEDED);
+    }
+
+    @Override
     public void onReasonStart(ReActTrace trace, StringBuilder systemPromptBuf) {
         AgentSession session = trace.getSession();
         if (session == null) {
             return;
         }
 
-        // 记录本次任务的 runId（getRunId 惰性且幂等，与事件流的 runId 同源）。
-        // 与 onAgentEnd 使用同一短临界区，避免旧任务结束时摘走新任务刚建立的邮箱。
-        Queue<SteerMessage> box;
-        synchronized (session.attrs()) {
-            session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, trace.getRunId());
-            box = SteerHelper.steerBox(session);
-        }
-        if (box == null || box.isEmpty()) {
-            return;
-        }
+        // 防御性开轮：拦截器若在任务中途才启用，onAgentStart 不会被回调。
+        // 轮次已一致时零行为（不重试 orphans，避免每回合重复推失败事件）
+        SteerState state = SteerState.of(session);
+        settle(trace, session, state, state.ensureOpen(trace.getRunId()), SteerDroppedEvent.Reason.RUN_SUPERSEDED);
 
         // 守卫 1：首轮不注入——原始 prompt 必须先被采样
         if (trace.getTurnCount() <= 1) {
@@ -77,21 +78,18 @@ public class SteerInterceptor extends AbsReActInterceptor {
             return;
         }
 
-        List<SteerMessage> messages = SteerHelper.drain(box);
+        List<SteerMessage> messages = state.drainFor(trace.getRunId());
         if (messages.isEmpty()) {
             return;
         }
 
         for (SteerMessage steer : messages) {
-            ChatMessage message = ChatMessage.ofUser(SteerHelper.STEER_PREFIX + steer.getText());
-            message.addMetadata("source", SteerHelper.STEER_SOURCE);
-            trace.getWorkingMemory().addMessage(message);
+            trace.getWorkingMemory().addMessage(SteerMessages.toChatMessage(steer));
         }
 
-        // 不追加 systemPrompt 说明：注入消息自带 STEER_PREFIX 已足够表意，避免重复提示
+        // 不追加 systemPrompt 说明：注入消息自带前缀已足够表意，避免重复提示
 
         // 必须广播 applied：它是「注入已生效」的唯一信号。前端据此清除待生效态并落气泡；
-        // 客户端不会用超时猜测终态，避免把已执行过的插话再次入队。
         // 无 sink（非流式 / 订阅已取消）时 pushAgentEvent 静默丢弃——本事件无副作用，可以丢。
         trace.pushAgentEvent(new SteerAppliedEvent(trace, messages));
     }
@@ -103,31 +101,33 @@ public class SteerInterceptor extends AbsReActInterceptor {
             return;
         }
 
-        // 仅结束属于本 trace 的邮箱。旧 trace 的迟到回调不得摘走新任务的 runId 或邮箱。
-        Queue<SteerMessage> box;
-        synchronized (session.attrs()) {
-            if (!trace.getRunId().equals(session.attrs().get(SteerHelper.ATTR_ACTIVE_RUN_ID))) {
-                return;
-            }
-            @SuppressWarnings("unchecked")
-            Queue<SteerMessage> currentBox = (Queue<SteerMessage>) session.attrs().remove(SteerHelper.ATTR_STEER_BOX);
-            box = currentBox;
-            session.attrs().remove(SteerHelper.ATTR_ACTIVE_RUN_ID, trace.getRunId());
+        SteerState state = SteerState.peek(session);
+        if (state == null) {
+            return;
         }
 
-        if (box != null && !box.isEmpty()) {
-            // 残留兜底：任务已结束（单轮直接回答、守卫持续跳过后 END 等），
-            // 未消费的插话绝不能静默丢弃。
-            List<SteerMessage> dropped = SteerHelper.drain(box);
-            if (!dropped.isEmpty()) {
-                // 先落盘再广播：持久化不看有没有订阅者，事件只做展示。
-                List<SteerMessage> failed = SteerHelper.enqueueIntoSessionQueue(session, dropped);
-                List<SteerMessage> queued = new java.util.ArrayList<>(dropped);
-                queued.removeAll(failed);
+        // 仅收属于本 trace 的轮次：旧 trace 的迟到回调不得摘走新任务的状态
+        settle(trace, session, state, state.close(trace.getRunId()), SteerDroppedEvent.Reason.RUN_ENDED);
+    }
 
-                trace.pushAgentEvent(new SteerDroppedEvent(trace, queued, failed));
-            }
+    /**
+     * 残留的唯一出口：先落队列，再推事件。转排队失败的暂存为 orphans（永不注入，下次开轮/收轮重试）。
+     */
+    private static void settle(ReActTrace trace, AgentSession session, SteerState state,
+                               List<SteerMessage> leftovers, SteerDroppedEvent.Reason reason) {
+        if (leftovers.isEmpty()) {
+            return;
         }
+
+        List<SteerMessage> failed = SteerHelper.enqueueIntoSessionQueue(session, leftovers);
+        if (failed.isEmpty() == false) {
+            state.park(failed);
+        }
+
+        List<SteerMessage> queued = new ArrayList<>(leftovers);
+        queued.removeAll(failed);
+
+        trace.pushAgentEvent(new SteerDroppedEvent(trace, queued, failed, reason));
     }
 
     private static boolean hasOpenToolCalls(ReActTrace trace) {

@@ -67,7 +67,7 @@ import org.noear.solon.ai.harness.session.steer.SteerExtension;
  * 本类只承诺「harness 内置三件套一次性装好」。</p>
  *
  * @author noear
- * @since 4.2.1
+ * @since 4.2.0
  */
 public final class HarnessExtensions {
 
