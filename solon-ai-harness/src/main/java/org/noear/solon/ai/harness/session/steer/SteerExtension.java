@@ -52,15 +52,47 @@ public class SteerExtension extends AbsHarnessExtension {
 
     private final SteerCommand steerCommand = new SteerCommand();
 
+    /** 容量 / 长度约束（缺省 {@link SteerLimits#DEFAULT}，可经 {@link #builder()} 覆盖） */
+    private final SteerLimits limits;
+
     /**
-     * 唯一构造器：输出走 AgentEvent，无需注入任何宿主端口。
+     * 宿主引擎（{@link #onAttach} 时注入）。
+     *
+     * <p>持有点的作用是让「忙判定」有唯一权威口径：此前 {@code steer(..., busyRecheck)}
+     * 把回调外包给宿主，而答案明明就在 {@code engine.status(session).isBusy()}
+     * （{@link org.noear.solon.ai.harness.session.SessionStatus}）。宿主因此要传一个
+     * 与自己无关的 lambda，且两处宿主的口径还可能漂移。现改为缺省自算，
+     * 回调保留给「口径确实不同」的高级场景。</p>
+     *
+     * <p>未 attach 时为 null（纯单测直接 new 出来的门面），此时忙判定不过滤。</p>
+     */
+    private HarnessEngine engine;
+
+    /**
+     * 缺省构造器：输出走 AgentEvent，无需注入任何宿主端口。
      */
     public SteerExtension() {
+        this(SteerLimits.DEFAULT);
+    }
+
+    private SteerExtension(SteerLimits limits) {
+        this.limits = limits == null ? SteerLimits.DEFAULT : limits;
+    }
+
+    /** 构建器：仅用于覆盖容量 / 长度约束，其余全有缺省。 */
+    public static Builder builder() {
+        return new Builder();
     }
 
     @Override
     public void onAttach(HarnessEngine engine) {
+        this.engine = engine;
         engine.getCommandRegistry().register(steerCommand);
+    }
+
+    /** 本扩展生效的容量 / 长度约束 */
+    public SteerLimits getLimits() {
+        return limits;
     }
 
     @Override
@@ -92,23 +124,48 @@ public class SteerExtension extends AbsHarnessExtension {
     /**
      * 插话入队（唯一实现的中转，与 Web /web/chat/steer、/steer 命令同源）。
      *
+     * <p><b>推荐宿主使用 {@link #steer(AgentSession, String, String, String, InputOrigin)}
+     * 这个 5 参重载</b>：忙判定由内核按 {@code engine.status(session).isBusy()} 自算。
+     * 本重载保留给「忙判定口径与引擎不一致」的高级场景（例如宿主还想把「输入正在受理窗口」
+     * 也算作忙），传 null 表示不做 offer 后复查。</p>
+     *
      * @see SteerHelper#steer(AgentSession, String, String, String, InputOrigin, java.util.function.BooleanSupplier)
      */
     public SteerResult steer(AgentSession session, String runId, String steerId,
                                               String text, InputOrigin origin,
                                               java.util.function.BooleanSupplier busyRecheck) {
-        if (isEnabled() == false) {
-            // 停用后仍投递会一直积压在邮箱（消费方拦截器已停用），必须当场拒绝。
-            return new SteerResult(SteerStatus.DISABLED, steerId, 0);
-        }
-        return SteerHelper.steer(session, runId, steerId, text, origin, busyRecheck);
+        return steer(session, runId, steerId, text, origin, busyRecheck, false);
+    }
+
+    /**
+     * 插话入队（忙判定用内核缺省口径）。
+     *
+     * <p>{@code busyRecheck} 从「必填的宿主 lambda」降级为可选：不传时用
+     * {@code engine.status(session).isBusy()}——这是 {@link org.noear.solon.ai.harness.session.SessionStatus}
+     * 定义的权威口径，宿主再拼一遍只会产生漂移。</p>
+     */
+    public SteerResult steer(AgentSession session, String runId, String steerId,
+                             String text, InputOrigin origin) {
+        return steer(session, runId, steerId, text, origin, null, false);
+    }
+
+    /**
+     * 严格轮次绑定投递：{@code runId} 必填，空即 {@link SteerStatus#TURN_CHANGED}。
+     *
+     * <p>Web 场景首选。任务的首个事件到达前无法确认归属，此时放行会让插话落入
+     * 「任务结束 / 轮次切换」的窄窗，成为无人消费的孤儿。该语义此前由宿主机拼
+     * （{@code ChatWebController} 里一条 if），既无类型提示也无从复用，故收归门面。</p>
+     */
+    public SteerResult steerOnRun(AgentSession session, String runId, String steerId,
+                                  String text, InputOrigin origin) {
+        return steer(session, runId, steerId, text, origin, null, true);
     }
 
     /**
      * 向当前活跃任务插话（省略 runId / steerId / busyRecheck 三个高级参数）。
      *
      * <p>「投给现在这条任务」是最常见语义：runId、steerId 均传 null 表示不比对轮次、
-     * 由框架生成 id；busyRecheck 供宿主做二次忙判定，绝大多数调用方不需要。</p>
+     * 由框架生成 id。</p>
      *
      * <p>来源缺省为 {@link InputOrigin#NONE}；需保留渠道身份时用三参重载。
      * 结果仍用 {@code isSteered/isBoxFull/isNotRunning()} 判断，本方法不做降级。</p>
@@ -119,12 +176,76 @@ public class SteerExtension extends AbsHarnessExtension {
 
     /** 向当前活跃任务插话，携带来源身份（runId / steerId / busyRecheck 省略）。 */
     public SteerResult steer(AgentSession session, String text, InputOrigin origin) {
-        return steer(session, null, null, text, origin == null ? InputOrigin.NONE : origin, null);
+        return steer(session, null, null, text, origin == null ? InputOrigin.NONE : origin);
+    }
+
+    private SteerResult steer(AgentSession session, String runId, String steerId, String text,
+                              InputOrigin origin, java.util.function.BooleanSupplier busyRecheck,
+                              boolean requireRunId) {
+        if (isEnabled() == false) {
+            // 停用后仍投递会一直积压在邮箱（消费方拦截器已停用），必须当场拒绝。
+            return new SteerResult(SteerStatus.DISABLED, steerId, 0);
+        }
+
+        java.util.function.BooleanSupplier busy = busyRecheck == null
+                ? () -> defaultBusy(session) : busyRecheck;
+        return SteerHelper.steer(session, runId, steerId, text, origin, busy, limits, requireRunId);
+    }
+
+    /**
+     * 缺省忙判定：与 {@code SessionActivity.isBusy} 同口径（活跃流 或 输入受理窗口）。
+     *
+     * <p>未 attach（无 engine）时一律放行——纯单测 / 手工 new 的门面没有引擎可查，
+     * 此时若返回 true 会把所有投递判成 NOT_RUNNING，与「无引擎即无忙概念」相悖。</p>
+     */
+    private boolean defaultBusy(AgentSession session) {
+        if (engine == null) {
+            return true;
+        }
+        return engine.status(session).isBusy() || engine.status(session).isAdmitting();
     }
 
     /** 取消仍留在邮箱中的插话（消费线程已 poll 出则返回 false，不得宣称取消成功）。 */
     public boolean cancel(AgentSession session, String steerId) {
         return SteerHelper.cancel(SteerHelper.steerBox(session), steerId);
+    }
+
+    /**
+     * 批量取消仍留在邮箱中的插话，返回实际取消条数。
+     *
+     * <p>前端「清空待生效插话」此前要逐条发 {@code /web/chat/steer/cancel}，
+     * 既多轮往返，也在中途失败时留下半截状态。已被消费的（不在邮箱中）不计入返回值。</p>
+     */
+    public int cancelAll(AgentSession session, java.util.Collection<String> steerIds) {
+        java.util.Queue<SteerMessage> box = SteerHelper.steerBox(session);
+        if (box == null || steerIds == null || steerIds.isEmpty()) {
+            return 0;
+        }
+
+        int canceled = 0;
+        for (String steerId : steerIds) {
+            if (SteerHelper.cancel(box, steerId)) {
+                canceled++;
+            }
+        }
+        return canceled;
+    }
+
+    /**
+     * 清空全部待生效插话，返回被移除的条目。
+     *
+     * <p>与 {@link #cancelAll} 的差别是语义：本方法不做任何「降级到哪里」的决定，
+     * 只把邮箱交还调用方。调用方可自行决定转排队 / 丢弃 / 提示，避免框架替宿主做取舍。</p>
+     */
+    public java.util.List<SteerMessage> clearPending(AgentSession session) {
+        java.util.Queue<SteerMessage> box = SteerHelper.steerBox(session);
+        if (box == null) {
+            return java.util.Collections.emptyList();
+        }
+
+        synchronized (box) {
+            return SteerHelper.drain(box);
+        }
     }
 
     /**
@@ -142,8 +263,8 @@ public class SteerExtension extends AbsHarnessExtension {
      *
      * <p>宿主的「取消插话」需要先校验请求里的 runId 是否仍是当前轮次：
      * 轮次已切换时旧 steerId 已无意义，必须回 TURN_CHANGED 而不是默默成功。
-     * 该值原本只能读 {@code session.attrs()} 里的内部 key（{@code web.activeRunId}），
-     * 字符串写错不会报错、只会静默失效，故收回到门面。</p>
+     * 该值原本只能读 {@code session.attrs()} 里的内部 key，字符串写错不会报错、
+     * 只会静默失效，故收回到门面。</p>
      *
      * @return 当前轮次标识；无活跃轮次时为 null
      */
@@ -159,14 +280,15 @@ public class SteerExtension extends AbsHarnessExtension {
     }
 
     /**
-     * 清理上一任务的轮次标识与插话邮箱，并把未消费的插话转入排队（开流前调用）。
+     * 插话交接：清理上一任务的轮次标识与邮箱，并把未消费的插话转入排队。
      *
-     * <p>「新任务开流」必须先切断上一任务的邮箱，否则上一轮未消费的插话会在新任务第二轮被注入，
-     * 破坏任务级隔离。但残留不能静默丢弃（包括 HITL 挂起期间提交的插话）——因此本方法把
-     * 它们迁到会话队列，返回迁移结果供宿主就地广播。</p>
+     * <p><b>宿主义务</b>：每次「新任务开流」前必须调用一次（Web 侧在
+     * {@code WebSessionRunner.beginStreamTurn}）。否则上一轮未消费的插话会在新任务
+     * 第二轮被注入，破坏任务级隔离。框架无法可靠代办：{@code onAgentEnd} 在
+     * interrupt / 异常路径不触发，正是这些路径最需要交接。</p>
      *
-     * <p>本方法把原本散在宿主里的内部约定收进 harness：此前宿主需要自己 synchronized 清两个
-     * attrs key，再调一次静态迁移方法，两处都要对应同一个内部常量。</p>
+     * <p>为保证这条义务不被漏掉，{@link #beginTurn} 是本方法的显式命名别名——
+     * 宿主只需记住「开流前 beginTurn」。</p>
      *
      * @return 迁移结果（永不为 null）；调用方无须判空
      */
@@ -193,6 +315,16 @@ public class SteerExtension extends AbsHarnessExtension {
         queued.removeAll(failed);
 
         return new SteerHandover(queued, failed);
+    }
+
+    /**
+     * 开流前交接（{@link #handover} 的语义化别名）。
+     *
+     * <p>两次命名并存是刻意的：{@code handover} 描述「做什么」，{@code beginTurn}
+     * 描述「何时做」。宿主接入文档只需说明「每次新任务开流前调 beginTurn」。</p>
+     */
+    public SteerHandover beginTurn(AgentSession session) {
+        return handover(session);
     }
 
     /**
@@ -229,12 +361,18 @@ public class SteerExtension extends AbsHarnessExtension {
 
     // ==================== 常量（避免宿主引用内部实现常量） ====================
 
-    /** 单条插话的最大字符数（宿主做入参校验用，与拦截器实际截断口径一致） */
+    /**
+     * 缺省的单条插话最大字符数。
+     *
+     * <p>宿主<b>不需要</b>用它做入参校验：投递内核会以同一份约束返回
+     * {@link SteerStatus#TEXT_TOO_LONG}，宿主只映射应答码即可。本方法保留给
+     * 「前端先行提示字数」这类展示用途，实际约束请读 {@link #getLimits()}。</p>
+     */
     public static int maxTextLength() {
         return SteerHelper.MAX_TEXT_LENGTH;
     }
 
-    /** steerId 的最大字符数 */
+    /** 缺省的 steerId 最大字符数（实际约束请读 {@link #getLimits()}） */
     public static int maxIdLength() {
         return SteerHelper.MAX_ID_LENGTH;
     }
@@ -273,5 +411,39 @@ public class SteerExtension extends AbsHarnessExtension {
         }
 
         return content;
+    }
+
+    // ==================== Builder ====================
+
+    /** 构建器：只覆盖容量 / 长度约束，其余全有缺省（等价于 {@code new SteerExtension()}）。 */
+    public static final class Builder {
+        private int maxBoxSize = SteerHelper.MAX_BOX_SIZE;
+        private int maxTextLength = SteerHelper.MAX_TEXT_LENGTH;
+        private int maxIdLength = SteerHelper.MAX_ID_LENGTH;
+
+        private Builder() {
+        }
+
+        /** 邮箱容量上限（缺省 5）。频繁 steer 会加速上下文膨胀，高频场景应改用排队。 */
+        public Builder maxBoxSize(int size) {
+            this.maxBoxSize = size;
+            return this;
+        }
+
+        /** 单条插话文本长度上限（缺省 4096）。 */
+        public Builder maxTextLength(int length) {
+            this.maxTextLength = length;
+            return this;
+        }
+
+        /** steerId 长度上限（缺省 128）。 */
+        public Builder maxIdLength(int length) {
+            this.maxIdLength = length;
+            return this;
+        }
+
+        public SteerExtension build() {
+            return new SteerExtension(new SteerLimits(maxBoxSize, maxTextLength, maxIdLength));
+        }
     }
 }

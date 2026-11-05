@@ -1,5 +1,20 @@
 ### vNEXT
 
+* **steer 域宿主封装收尾：忙判定自算、严格轮次语义入内核、容量可配、批量取消**（4.2.0 未发布，重载新增无破坏）:
+  * **背景**：steer 内核已收口，但宿主端到端仍要自拼四处本可上收的判定——`busyRecheck` 回调、`runId` 空值语义、入参长度校验、状态码字符串 switch。其中「忙判定」是唯一一处「有唯一正确答案却外包给宿主」的残留（答案在 `engine.status(session).isBusy()`）
+  * **`SteerExtension` 持有 engine**：`onAttach` 保存引擎，新增 `defaultBusy(session)`＝`status(session).isBusy() || isAdmitting()`（与宿主 `SessionActivity.isBusy` 同口径）。新增 5 参 `steer(session, runId, steerId, text, origin)` 与 3 参 `steer(session, text, origin)` 走缺省口径；6 参全参重载保留作为「口径不同」的高级入口
+  * **`steerOnRun(...)`**：runId 必填，空即 `TURN_CHANGED`。Web 端「任务首个事件到达前不放行」从 `ChatWebController` 的一条 if 收归门面（`SteerHelper.steer(..., requireRunId)` 实现，拒绝时不生成 steerId、不碰邮箱）
+  * **`SteerLimits` + `builder()`**：邮箱容量/文本长度/ID 长度由 `public static final` 常量升级为可注入值对象；`new SteerExtension()` 等价 `SteerLimits.DEFAULT`，`SteerHelper` 的常量保留为缺省值（6 个测试类引用不破）。`getLimits()` 供宿主读实例配置而非静态缺省
+  * **`cancelAll(ids)` / `clearPending()`**：前端「清空待生效插话」从此前的逐条 `cancel` 循环（N 轮往返 + 中途失败半截状态）改为一次收口；`clearPending` 只交还条目、不替宿主决定降级去向
+  * **`beginTurn(session)`**：`handover` 的语义化别名——宿主只需记住「新任务开流前 beginTurn」。该义务仍是硬义务（`onAgentEnd` 在 interrupt/异常路径不触发，正是最需要交接的路径），但命名让遗漏更难发生
+  * **attrs 键更名 `web.steerBox`/`web.activeRunId` → `harness.steerBox`/`harness.activeRunId`**：原前缀违反 `HarnessAttrs` 命名空间规约（`web.*` 归宿主私有）。attrs 是 transient、不落 snapshot，同一 JVM 内读写同源，无跳版兼容问题，故直接更名不做双读
+  * **宿主侧删除**：`ChatWebController` 的入参校验（11 行，与内核完全重叠）、`runId` 空判（3 行）、忙判定 lambda；`WebChatInputHandler` 的 `busyRecheck` lambda。状态码 switch 由字符串字面量改为 `SteerStatus` 枚举分支（新增态至少编译期提示，不会静默落 409）。忙态**预判**保留在宿主——它是协议语义（`NOT_RUNNING` 回落普通发送 vs `TURN_CHANGED` 转排队），不是重复判定
+  * **`WorkspaceContext.getExtension` 修假 `@Nullable`**：实现由 `Optional.get()`（永不返回 null，导致调用方判空全成死代码，而真正会抛 NPE 处无保护）改为 `orElse(null)`；三处 steer 门面调用随之显式判空，未装配时回 `503 STEER_UNAVAILABLE`/`STEER_DISABLED` 而不是 `NoSuchElementException`
+  * **新端点 `/web/chat/steer/cancelAll`**：`steerIds` 逗号分隔，省略即清空；返回实际取消条数（已消费的不计）。前端 `discardPendingSteers` 改一次请求，未确认的一律置 `unknown` 等终态事件收口，不猜测
+  * **护栏**：`PackageBoundaryTest` 新增两条——宿主主代码禁止 `import SteerHelper`、禁止硬编码 `web.steerBox`/`web.activeRunId`。现状零违规（`LastTraceService`/`ChatWebController` 的 javadoc 引用已同步改为门面/拦截器）
+  * **新增测试（10 例）**：`steerWithoutBusyRecheckUsesEngineDefault` / `detachedExtensionDoesNotBlockSteer` / `explicitBusyRecheckOverridesEngineDefault` / `steerOnRunRequiresRunId` / `steerOnRunRejectsForeignRunId` / `builderLimitsAreEnforced` / `defaultConstructorUsesDefaultLimits` / `cancelAllCountsOnlyActuallyRemoved` / `clearPendingReturnsItemsAndEmptiesBox` / `beginTurnIsHandoverAlias`。`ImBusySteerContractTest` 两条源码契约同步改为锁定新形态（并反向断言 `() -> SessionActivity.isBusy(session)` 不得回潮）
+  * **验证**：harness steer 定向 **69 例全绿**（19 例 `SteerExtensionTest` 全过，含源码契约 75-86 未改动）；harness 全量 **882 例 33F+5E** 与基线逐项一致（ToolStrategy/Web/Write 权限域 + TaskTalent/Accessor 环境域既有，steer 域零失败）；cli 全量 **1254 例 3F** 与基线逐项一致（settings/挂载域既有）；cli steer 相关定向 27 例全绿
+
 * **queue 消费协议收敛：`QueueClaimHandler` 返回值化，同步收口内核化，宿主不再手写 acknowledge**（4.2.0 未发布，签名直接改，编译器收口全部调用点）:
   * **背景**：队列机制已封装到位，但「消费队列」没有——同步宿主（CLI）必须知道「ack 失败必须抛异常」这条只活在注释里的铁律（丢弃 `acknowledge()` 返回值编译照过，后果是 Stop 被静默击败、任务无限重跑）；异步宿主（Web）必须用 `isBusy` 反推「同步命令已当场完成」再手动 `settleDispatch`。两个陷阱都是「API 允许写出看起来对、实际错的代码」
   * **`QueueClaimHandler.run` 签名 `void` → `boolean`**：返回值即收口契约——`true` = 任务在回调返回前已同步完成，内核当场 `acknowledge()`；`false` = 异步启动，终态由宿主经捕获的 `QueueDispatch` 收口。收口时机只有两种，正好由布尔表达

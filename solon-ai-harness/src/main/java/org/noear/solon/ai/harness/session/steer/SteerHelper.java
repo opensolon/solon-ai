@@ -38,11 +38,15 @@ import java.util.function.BooleanSupplier;
  * 当前 AI 流式气泡内部，属纯客户端呈现。与上游 Codex 的差异：Codex 双写
  * （response_item + event_msg）且进模型上下文、重启后仍保留，我们不做。</p>
  *
- * <p>与宿主之间的运行时契约是 {@link AgentSession#attrs()} 中的短横线 key
- * （一字不改，任何一侧不得私自重命名）：{@code web.steerBox}（插话邮箱）、
- * {@code web.activeRunId}（当前运行任务 runId，供 steer API 比对，防跨任务错投）。</p>
+ * <p>与宿主之间的运行时契约是 {@link AgentSession#attrs()} 中的 key
+ * （一字不改，任何一侧不得私自重命名）：{@code harness.steerBox}（插话邮箱）、
+ * {@code harness.activeRunId}（当前运行任务 runId，供 steer API 比对，防跨任务错投）。</p>
  *
- * <p><b>邮箱契约</b>：容量上限 {@link #MAX_BOX_SIZE}（频繁 steer 加速上下文膨胀，
+ * <p>这两个 key 原先叫 {@code web.steerBox} / {@code web.activeRunId}，属历史包袱：本包不依赖任何
+ * Web 宿主，该前缀违反 {@code HarnessAttrs} 的命名空间规约（{@code web.*} 归宿主私有）。
+ * 因 attrs 是 transient、不落 snapshot.json，同一 JVM 内读写同源，不存在跳版兼容问题，故直接更名。</p>
+ *
+ * <p><b>邮箱契约</b>：容量上限由 {@link SteerLimits} 给出（缺省 {@link #MAX_BOX_SIZE}；频繁 steer 加速上下文膨胀，
  * 高频场景应改用排队）；容量校验、ID 去重与入队在同一邮箱的短临界区内完成；
  * 投递后复查任务与邮箱身份，异常时回滚本次投递（但不清空仍有内容的邮箱）；
  * 残留兜底绝不静默丢弃（Codex issue #15842 教训）——转入失败时回填易失邮箱待下次开流重试。</p>
@@ -54,14 +58,14 @@ public final class SteerHelper {
     private static final Logger LOG = LoggerFactory.getLogger(SteerHelper.class);
 
     /** 会话级插话邮箱 key（attrs 为 transient Map，不落 snapshot.json） */
-    public static final String ATTR_STEER_BOX = "web.steerBox";
+    public static final String ATTR_STEER_BOX = "harness.steerBox";
     /** 当前运行任务 runId（供 steer API 比对，防跨任务错投） */
-    public static final String ATTR_ACTIVE_RUN_ID = "web.activeRunId";
-    /** 邮箱容量上限（Codex 建议：频繁 steer 加速上下文膨胀，高频场景应改用排队） */
+    public static final String ATTR_ACTIVE_RUN_ID = "harness.activeRunId";
+    /** 缺省邮箱容量上限（Codex 建议：频繁 steer 加速上下文膨胀，高频场景应改用排队）。可经 {@link SteerLimits} 覆盖 */
     public static final int MAX_BOX_SIZE = 5;
-    /** 单条插话长度上限 */
+    /** 缺省单条插话长度上限。可经 {@link SteerLimits} 覆盖 */
     public static final int MAX_TEXT_LENGTH = 4096;
-    /** 前端生成的插话 ID 长度上限 */
+    /** 缺省插话 ID 长度上限。可经 {@link SteerLimits} 覆盖 */
     public static final int MAX_ID_LENGTH = 128;
 
     /** 注入到工作记忆的消息前缀，向模型标识这是运行中的用户补充。
@@ -108,8 +112,13 @@ public final class SteerHelper {
         return new ArrayList<>(box);
     }
 
-    /** 容量校验、ID 去重与入队必须在同一邮箱的短临界区内完成。 */
+    /** 容量校验、ID 去重与入队必须在同一邮箱的短临界区内完成（缺省容量上限）。 */
     static OfferResult offer(Queue<SteerMessage> box, SteerMessage steer) {
+        return offer(box, steer, SteerLimits.DEFAULT);
+    }
+
+    /** 容量校验、ID 去重与入队必须在同一邮箱的短临界区内完成。 */
+    static OfferResult offer(Queue<SteerMessage> box, SteerMessage steer, SteerLimits limits) {
         synchronized (box) {
             // 先判重再判容量：满邮箱中的同 ID 重试仍应返回准确的重复结果，
             // 不能误报 BOX_FULL 后被前端降级为普通任务而造成重复执行。
@@ -118,7 +127,7 @@ public final class SteerHelper {
                     return OfferResult.DUPLICATE_ID;
                 }
             }
-            if (box.size() >= MAX_BOX_SIZE) {
+            if (box.size() >= limits.getMaxBoxSize()) {
                 return OfferResult.BOX_FULL;
             }
             return box.offer(steer) ? OfferResult.OFFERED : OfferResult.BOX_FULL;
@@ -143,6 +152,20 @@ public final class SteerHelper {
      */
     public static SteerResult steer(AgentSession session, String runId, String steerId, String text,
                                     InputOrigin origin, BooleanSupplier busyRecheck) {
+        return steer(session, runId, steerId, text, origin, busyRecheck, SteerLimits.DEFAULT, false);
+    }
+
+    /**
+     * 插话入队的唯一实现（含容量约束与严格轮次绑定开关）。
+     *
+     * @param requireRunId 为 true 时 runId 必填：空即 {@link SteerStatus#TURN_CHANGED}。
+     *                     Web 端必须绑定明确 runId——任务首个事件到达前尚不能确认归属，
+     *                     放行会让请求落入任务结束/切换的窄窗成为无人消费的孤儿插话。
+     *                     该语义原由宿主机拼（ChatWebController），收归内核后宿主只剩协议映射。
+     */
+    public static SteerResult steer(AgentSession session, String runId, String steerId, String text,
+                                    InputOrigin origin, BooleanSupplier busyRecheck,
+                                    SteerLimits limits, boolean requireRunId) {
         if (session == null) {
             return new SteerResult(SteerStatus.NOT_RUNNING, null, 0);
         }
@@ -151,15 +174,20 @@ public final class SteerHelper {
         }
 
         text = text.trim();
-        if (text.length() > MAX_TEXT_LENGTH) {
+        if (text.length() > limits.getMaxTextLength()) {
             return new SteerResult(SteerStatus.TEXT_TOO_LONG, null, 0);
+        }
+
+        if (requireRunId && (runId == null || runId.trim().isEmpty())) {
+            // 严格轮次绑定：runId 是必填参数，先于 id 生成拒绝，避免调用方拿到一个无意义的 steerId
+            return new SteerResult(SteerStatus.TURN_CHANGED, null, 0);
         }
 
         if (steerId == null || steerId.trim().isEmpty()) {
             steerId = "s_" + Utils.uuid();
         } else {
             steerId = steerId.trim();
-            if (steerId.length() > MAX_ID_LENGTH) {
+            if (steerId.length() > limits.getMaxIdLength()) {
                 return new SteerResult(SteerStatus.INVALID_STEER_ID, null, 0);
             }
         }
@@ -184,7 +212,7 @@ public final class SteerHelper {
             Queue<SteerMessage> currentBox = (Queue<SteerMessage>) session.attrs()
                     .computeIfAbsent(ATTR_STEER_BOX, k -> new ConcurrentLinkedQueue<SteerMessage>());
             box = currentBox;
-            offerResult = offer(box, steer);
+            offerResult = offer(box, steer, limits);
         }
         if (offerResult == OfferResult.BOX_FULL) {
             return new SteerResult(SteerStatus.BOX_FULL, steerId, box.size());

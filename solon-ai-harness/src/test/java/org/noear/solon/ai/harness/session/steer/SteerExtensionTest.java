@@ -187,4 +187,168 @@ class SteerExtensionTest {
         SteerExtension ext = new SteerExtension();
         assertNotNull(ext.getInterceptor());
     }
+
+    // ==================== 宿主封装度：忙判定自算 ====================
+
+    /**
+     * 5 参重载不传 busyRecheck 时，忙判定由引擎缺省口径给出。
+     *
+     * <p>此前的契约是「宿主必须传 lambda」，而答案就在 {@code engine.status(session)}。
+     * 这里锁定「attach 过引擎且会话无活跃流 → 投递被判 NOT_RUNNING 并被回滚」，
+     * 证明宿主不再需要自己拼这个判断。</p>
+     */
+    @Test
+    void steerWithoutBusyRecheckUsesEngineDefault() {
+        HarnessEngine engine = newEngine();
+        SteerExtension ext = new SteerExtension();
+        engine.addExtension(ext);
+
+        AgentSession session = InMemoryAgentSession.of();
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, "run-1");
+
+        // 引擎里没有活跃流 → 缺省忙判定为 false → offer 后复查回滚
+        SteerResult r = ext.steer(session, null, null, "补充", null);
+        assertEquals(SteerStatus.NOT_RUNNING, r.getStatus(), "无活跃流时应被回滚");
+        assertTrue(ext.pending(session).isEmpty(), "回滚后邮箱不得残留");
+    }
+
+    /** 未 attach 引擎（纯单测门面）时忙判定一律放行，避免把所有投递判成 NOT_RUNNING。 */
+    @Test
+    void detachedExtensionDoesNotBlockSteer() {
+        SteerExtension ext = new SteerExtension();
+        AgentSession session = InMemoryAgentSession.of();
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, "run-1");
+
+        SteerResult r = ext.steer(session, null, null, "补充", null);
+        assertTrue(r.isSteered(), "无引擎即无忙概念，应放行");
+    }
+
+    /** 显式传入的 busyRecheck 仍然优先（高级场景：宿主口径与引擎不同）。 */
+    @Test
+    void explicitBusyRecheckOverridesEngineDefault() {
+        HarnessEngine engine = newEngine();
+        SteerExtension ext = new SteerExtension();
+        engine.addExtension(ext);
+
+        AgentSession session = InMemoryAgentSession.of();
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, "run-1");
+
+        // 显式声明「仍然忙」→ 不复查回滚
+        SteerResult r = ext.steer(session, "run-1", null, "补充", null, () -> true);
+        assertTrue(r.isSteered());
+    }
+
+    // ==================== 严格轮次绑定（原宿主 if 语句收归内核） ====================
+
+    /**
+     * {@code steerOnRun} 的 runId 必填：空即 TURN_CHANGED，不生成 steerId、不碰邮箱。
+     *
+     * <p>Web 端「任务首个事件到达前不放行」原先写死在 Controller 里
+     * （ChatWebController 的一条 if），既无类型提示也无从复用。</p>
+     */
+    @Test
+    void steerOnRunRequiresRunId() {
+        SteerExtension ext = new SteerExtension();
+        AgentSession session = InMemoryAgentSession.of();
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, "run-1");
+
+        SteerResult blank = ext.steerOnRun(session, "  ", null, "补充", null);
+        assertEquals(SteerStatus.TURN_CHANGED, blank.getStatus());
+        assertNull(blank.getSteerId(), "被拒绝的投递不得生成 steerId");
+        assertTrue(ext.pending(session).isEmpty());
+
+        assertEquals(SteerStatus.TURN_CHANGED, ext.steerOnRun(session, null, null, "补充", null).getStatus());
+
+        // 非严格形态（IM / CLI）同一会话下仍然允许省略 runId
+        assertTrue(ext.steer(session, "补充").isSteered());
+    }
+
+    /** 严格模式下 runId 与当前轮次不一致仍按 TURN_CHANGED（沿用内核既有语义）。 */
+    @Test
+    void steerOnRunRejectsForeignRunId() {
+        SteerExtension ext = new SteerExtension();
+        AgentSession session = InMemoryAgentSession.of();
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, "run-1");
+
+        assertEquals(SteerStatus.TURN_CHANGED,
+                ext.steerOnRun(session, "run-2", null, "补充", null).getStatus());
+        assertTrue(ext.steerOnRun(session, "run-1", null, "补充", null).isSteered());
+    }
+
+    // ==================== 容量可配 ====================
+
+    /** builder 设置的容量上限生效：第 3 条返回 BOX_FULL。 */
+    @Test
+    void builderLimitsAreEnforced() {
+        SteerExtension ext = SteerExtension.builder().maxBoxSize(2).maxTextLength(8).build();
+        assertEquals(2, ext.getLimits().getMaxBoxSize());
+
+        AgentSession session = InMemoryAgentSession.of();
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, "run-1");
+
+        assertTrue(ext.steer(session, "a").isSteered());
+        assertTrue(ext.steer(session, "b").isSteered());
+        assertTrue(ext.steer(session, "c").isBoxFull(), "超过 builder 上限应 BOX_FULL");
+
+        assertEquals(SteerStatus.TEXT_TOO_LONG, ext.steer(session, "123456789").getStatus(),
+                "超过 builder 文本上限应 TEXT_TOO_LONG");
+    }
+
+    /** 缺省构造器等价于 SteerLimits.DEFAULT。 */
+    @Test
+    void defaultConstructorUsesDefaultLimits() {
+        SteerExtension ext = new SteerExtension();
+        assertEquals(SteerHelper.MAX_BOX_SIZE, ext.getLimits().getMaxBoxSize());
+        assertEquals(SteerHelper.MAX_TEXT_LENGTH, ext.getLimits().getMaxTextLength());
+        assertEquals(SteerHelper.MAX_ID_LENGTH, ext.getLimits().getMaxIdLength());
+    }
+
+    // ==================== 批量取消 / 清空 ====================
+
+    /** cancelAll 只统计真正从邮箱移除的条目，已被消费的不计入。 */
+    @Test
+    void cancelAllCountsOnlyActuallyRemoved() {
+        SteerExtension ext = new SteerExtension();
+        AgentSession session = InMemoryAgentSession.of();
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, "run-1");
+
+        SteerResult a = ext.steer(session, "第一条");
+        SteerResult b = ext.steer(session, "第二条");
+        // 模拟消费线程已取走 a
+        SteerHelper.steerBox(session).removeIf(m -> m.getId().equals(a.getSteerId()));
+
+        int canceled = ext.cancelAll(session, java.util.Arrays.asList(a.getSteerId(), b.getSteerId()));
+        assertEquals(1, canceled, "已被消费的不应计入");
+        assertTrue(ext.pending(session).isEmpty());
+    }
+
+    /** clearPending 交还全部条目且清空邮箱，不做任何降级决定。 */
+    @Test
+    void clearPendingReturnsItemsAndEmptiesBox() {
+        SteerExtension ext = new SteerExtension();
+        AgentSession session = InMemoryAgentSession.of();
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, "run-1");
+
+        ext.steer(session, "第一条");
+        ext.steer(session, "第二条");
+
+        List<SteerMessage> cleared = ext.clearPending(session);
+        assertEquals(2, cleared.size());
+        assertEquals("第一条", cleared.get(0).getText(), "按投递顺序返回");
+        assertTrue(ext.pending(session).isEmpty());
+        assertTrue(ext.clearPending(session).isEmpty(), "空邮箱返回空集合而非 null");
+    }
+
+    /** beginTurn 与 handover 是同一语义（开流前义务的显式命名）。 */
+    @Test
+    void beginTurnIsHandoverAlias() {
+        SteerExtension ext = new SteerExtension();
+        AgentSession session = InMemoryAgentSession.of();
+        session.attrs().put(SteerHelper.ATTR_ACTIVE_RUN_ID, "run-1");
+        ext.steer(session, "残留插话");
+
+        SteerExtension.SteerHandover handed = ext.beginTurn(session);
+        assertEquals(1, handed.getQueued().size(), "残留插话应转入排队");
+        assertNull(ext.activeRunId(session), "轮次标识应被清空");
+    }
 }

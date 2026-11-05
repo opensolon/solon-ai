@@ -63,6 +63,16 @@ public class SteerCommand extends AbsCommand {
         return true;
     }
 
+    /**
+     * 读取本引擎上 Steer 扩展的实际约束（builder 可能放宽过上限）。
+     *
+     * <p>提示文案必须与投递实际使用的那一份同源，否则「上限 5 条」的提示会与实际不符。</p>
+     */
+    private static SteerLimits limitsOf(HarnessEngine engine) {
+        SteerExtension steer = engine == null ? null : engine.getExtension(SteerExtension.class).orElse(null);
+        return steer == null ? SteerLimits.DEFAULT : steer.getLimits();
+    }
+
     @Override
     public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
         String text = ctx.getArgsJoined();
@@ -78,21 +88,22 @@ public class SteerCommand extends AbsCommand {
                     resolved.getReplyTarget(), resolved.getMessageId());
         }
 
-        SteerResult result = SteerHelper.steer(session, null, null, text, resolved, null);
+        SteerResult result = SteerHelper.steer(session, null, null, text, resolved, null,
+                limitsOf(engine), false);
 
         switch (result.getStatus()) {
             case STEERED:
                 ctx.println("已插话，将在下一步注入当前任务（待生效 " + result.getQueued() + " 条）");
                 break;
             case BOX_FULL:
-                ctx.println("插话邮箱已满（上限 " + SteerHelper.MAX_BOX_SIZE + " 条），可用 /queue 排队");
+                ctx.println("插话邮箱已满（上限 " + limitsOf(engine).getMaxBoxSize() + " 条），可用 /queue 排队");
                 break;
             case NOT_RUNNING:
             case TURN_CHANGED:
                 ctx.println("当前无正在执行的任务可插话，可直接发送或用 /queue 排队");
                 break;
             case TEXT_TOO_LONG:
-                ctx.println("插话内容过长（上限 " + SteerHelper.MAX_TEXT_LENGTH + " 字符）");
+                ctx.println("插话内容过长（上限 " + limitsOf(engine).getMaxTextLength() + " 字符）");
                 break;
             case DISABLED:
                 ctx.println("插话能力已停用，可直接发送或使用 /queue 排队");
