@@ -3,10 +3,10 @@ package features.ai.harness.all;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessExtension;
-import org.noear.solon.ai.harness.session.goal.GoalExtension;
-import org.noear.solon.ai.harness.session.loop.LoopExtension;
-import org.noear.solon.ai.harness.session.queue.QueueExtension;
-import org.noear.solon.ai.harness.session.steer.SteerExtension;
+import org.noear.solon.ai.harness.extension.goal.GoalExtension;
+import org.noear.solon.ai.harness.extension.loop.LoopExtension;
+import org.noear.solon.ai.harness.extension.queue.QueueExtension;
+import org.noear.solon.ai.harness.extension.steer.SteerExtension;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 

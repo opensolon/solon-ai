@@ -4,11 +4,11 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.session.queue.DrainStatus;
-import org.noear.solon.ai.harness.session.queue.QueueClaim;
-import org.noear.solon.ai.harness.session.queue.QueueHelper;
-import org.noear.solon.ai.harness.session.queue.QueueItem;
-import org.noear.solon.ai.harness.session.steer.SteerMessage;
+import org.noear.solon.ai.harness.extension.queue.DrainStatus;
+import org.noear.solon.ai.harness.extension.queue.QueueClaim;
+import org.noear.solon.ai.harness.extension.queue.QueueHelper;
+import org.noear.solon.ai.harness.extension.queue.QueueItem;
+import org.noear.solon.ai.harness.extension.steer.SteerMessage;
 
 import java.util.ArrayList;
 import java.util.List;

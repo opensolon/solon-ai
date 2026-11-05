@@ -1,8 +1,8 @@
 package org.noear.solon.ai.harness.session;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.ai.harness.session.steer.SteerResult;
-import org.noear.solon.ai.harness.session.steer.SteerStatus;
+import org.noear.solon.ai.harness.extension.steer.SteerResult;
+import org.noear.solon.ai.harness.extension.steer.SteerStatus;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
