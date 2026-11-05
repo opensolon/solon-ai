@@ -40,7 +40,7 @@ import org.noear.solon.core.util.Assert;
  * @author noear
  * @since 2026.11
  */
-public class SteerCommand extends AbsCommand {
+class SteerCommand extends AbsCommand {
     /** 所属门面（由 {@link SteerExtension} 创建时注入）；独立 new 时为 null，执行期从引擎解析 */
     private final SteerExtension owner;
 

@@ -9,7 +9,7 @@ import org.noear.solon.ai.harness.command.builtin.ContinueCommand;
 import org.noear.solon.ai.harness.command.builtin.RerunCommand;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
-import org.noear.solon.ai.harness.util.TraceKeys;
+import org.noear.solon.ai.harness.util.TraceUtil;
 import reactor.core.publisher.Flux;
 
 import java.nio.file.Path;
@@ -124,7 +124,7 @@ class HarnessEngineLlmIT {
         assertEquals(InputOutcome.Kind.TASK, first.getKind());
         String firstAnswer = drain(first);
         assertTrue(firstAnswer != null && !firstAnswer.isEmpty());
-        assertNotNull(session.getContext().get(TraceKeys.TRACE_KEY_MAIN), "一轮完成后应有主轨迹");
+        assertNotNull(session.getContext().get(TraceUtil.TRACE_KEY_MAIN), "一轮完成后应有主轨迹");
 
         // /continue：END 轨迹重置回思考点 + 续流意图 → 二段装配 → 真实续跑
         InputOutcome resume = engine.handle(HarnessInput.of(session, "/continue"));

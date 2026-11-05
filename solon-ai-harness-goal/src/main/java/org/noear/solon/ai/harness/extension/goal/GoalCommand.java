@@ -35,7 +35,7 @@ import org.noear.solon.ai.harness.input.InputOrigin;
  *
  * @author noear
  */
-public class GoalCommand extends AbsCommand {
+class GoalCommand extends AbsCommand {
     private static final String BOLD = "\033[1m";
     private static final String DIM = "\033[2m";
     private static final String GREEN = "\033[32m";

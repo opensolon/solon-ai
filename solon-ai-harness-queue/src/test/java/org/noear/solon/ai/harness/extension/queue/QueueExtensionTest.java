@@ -57,7 +57,7 @@ class QueueExtensionTest {
 
         // 同步 drain：返回 true 即同步完成，收口由内核完成（布尔型 drainOne 已删）
         AtomicReference<String> executed = new AtomicReference<>();
-        assertEquals(DrainStatus.STARTED, queue.claimNext(session, claim -> {
+        assertEquals(QueueClaimStatus.STARTED, queue.claimNext(session, claim -> {
             executed.set(claim.getItem().getText());
             return true;
         }));
@@ -93,7 +93,7 @@ class QueueExtensionTest {
 
         // 异步语义：回调只启动并返回 false，收口句柄留给终态
         AtomicReference<QueueClaim> ref = new AtomicReference<>();
-        assertEquals(DrainStatus.STARTED, queue.claimNext(session, claim -> {
+        assertEquals(QueueClaimStatus.STARTED, queue.claimNext(session, claim -> {
             ref.set(claim);
             return false;
         }));

@@ -33,9 +33,9 @@ import org.noear.solon.lang.Nullable;
  */
 public final class SessionSelections {
     /** 会话级模型选择的存储键（会话上下文，随快照持久化；键值不可变） */
-    private static final String KEY_MODEL = "_model_selected";
+    private static final String KEY_MODEL = HarnessAttrs.LEGACY_MODEL_SELECTED;
     /** 会话级子代理选择的存储键（会话上下文，随快照持久化；键值不可变） */
-    private static final String KEY_AGENT = "_agent_selected";
+    private static final String KEY_AGENT = HarnessAttrs.LEGACY_AGENT_SELECTED;
 
     private SessionSelections() {
     }

@@ -6,13 +6,13 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.input.AdmitDecision;
+import org.noear.solon.ai.harness.turn.AdmitDecision;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
-import org.noear.solon.ai.harness.session.InputBacklog;
-import org.noear.solon.ai.harness.session.TurnDispatch;
-import org.noear.solon.ai.harness.session.interrupt.InterruptPlan;
+import org.noear.solon.ai.harness.turn.InputBacklog;
+import org.noear.solon.ai.harness.turn.TurnDispatch;
+import org.noear.solon.ai.harness.turn.InterruptPlan;
 import reactor.core.Disposable;
 
 import java.nio.file.Path;
@@ -101,7 +101,7 @@ class QueueEngineIntegrationTest {
     @Test
     void interruptCommandGoesThroughEngineAndClearsQueue() {
         HarnessEngine engine = engine();
-        engine.getCommandRegistry().register(new org.noear.solon.ai.harness.session.interrupt.InterruptCommand());
+        engine.getCommandRegistry().register(new org.noear.solon.ai.harness.command.builtin.InterruptCommand());
         AgentSession session = InMemoryAgentSession.of();
         QueueHelper.enqueue(session, "排队一", InputOrigin.channel("test"));
 

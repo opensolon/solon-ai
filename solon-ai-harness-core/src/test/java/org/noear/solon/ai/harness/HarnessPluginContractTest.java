@@ -20,13 +20,13 @@ import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.session.SessionRuns;
-import org.noear.solon.ai.harness.input.AdmitDecision;
+import org.noear.solon.ai.harness.turn.AdmitDecision;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.session.HarnessAttrs;
-import org.noear.solon.ai.harness.session.InputBacklog;
+import org.noear.solon.ai.harness.turn.InputBacklog;
 import org.noear.solon.ai.harness.session.SessionStatus;
-import org.noear.solon.ai.harness.session.SessionTurn;
-import org.noear.solon.ai.harness.session.TurnDispatch;
+import org.noear.solon.ai.harness.turn.SessionTurn;
+import org.noear.solon.ai.harness.turn.TurnDispatch;
 import reactor.core.Disposable;
 
 import java.nio.charset.StandardCharsets;
@@ -182,7 +182,7 @@ class HarnessPluginContractTest {
 
         backlog.offer(session, "排队二", InputOrigin.NONE);
         busy(session);
-        try (org.noear.solon.ai.harness.session.interrupt.InterruptPlan plan = engine.prepareInterrupt(session)) {
+        try (org.noear.solon.ai.harness.turn.InterruptPlan plan = engine.prepareInterrupt(session)) {
             assertEquals(2, backlog.interrupts, "两段式的第一段就回调");
             assertEquals(0, backlog.offered.size());
             assertTrue(plan.hasActiveRun());

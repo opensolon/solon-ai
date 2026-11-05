@@ -42,27 +42,26 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandRegistry;
+import org.noear.solon.ai.harness.command.BufferedCommandContextFactory;
+import org.noear.solon.ai.harness.command.CommandDispatcher;
+import org.noear.solon.ai.harness.command.CommandContextFactory;
+import org.noear.solon.ai.harness.command.ParsedCommand;
 import org.noear.solon.ai.harness.input.AgentMentions;
-import org.noear.solon.ai.harness.input.BufferedCommandContextFactory;
-import org.noear.solon.ai.harness.input.CommandDispatcher;
-import org.noear.solon.ai.harness.input.CommandContextFactory;
 import org.noear.solon.ai.harness.input.HarnessInput;
-import org.noear.solon.ai.harness.input.HitlCard;
 import org.noear.solon.ai.harness.input.InputAttachments;
 import org.noear.solon.ai.harness.input.InputOutcome;
-import org.noear.solon.ai.harness.input.ParsedCommand;
 import org.noear.solon.ai.harness.hitl.BashToolStrategy;
+import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.ai.harness.permission.PermissionContext;
-import org.noear.solon.ai.harness.input.AdmitDecision;
-import org.noear.solon.ai.harness.session.InputGate;
-import org.noear.solon.ai.harness.session.InputBacklog;
-import org.noear.solon.ai.harness.session.TurnDispatch;
+import org.noear.solon.ai.harness.turn.AdmitDecision;
+import org.noear.solon.ai.harness.turn.InputGate;
+import org.noear.solon.ai.harness.turn.InputBacklog;
+import org.noear.solon.ai.harness.turn.TurnDispatch;
+import org.noear.solon.ai.harness.turn.InterruptPlan;
 import org.noear.solon.ai.harness.session.HarnessAttrs;
 import org.noear.solon.ai.harness.session.SessionSelections;
 import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
-import org.noear.solon.ai.harness.session.interrupt.InterruptHelper;
-import org.noear.solon.ai.harness.session.interrupt.InterruptPlan;
 
 import org.noear.solon.ai.harness.permission.PermissionRule;
 import org.noear.solon.ai.harness.permission.ToolPermission;
@@ -110,7 +109,7 @@ import java.util.function.Consumer;
 public class HarnessEngine {
     private static final Logger LOG = LoggerFactory.getLogger(HarnessEngine.class);
 
-    public final static String ATTR_CWD = "__cwd";
+    public final static String ATTR_CWD = HarnessAttrs.LEGACY_CWD;
     private static final String BUILTIN_AGENT_MOUNT = "@harness-agents";
     private static final String BUILTIN_AGENT_PATH = "META-INF/solon/ai/harness/agents/";
 
@@ -956,14 +955,7 @@ public class HarnessEngine {
         options.getTools().add(toolName);
 
         // 权限变更需要重建 Agent 以重新生成工具集
-        agentLock.lock();
-        try {
-            if (this.mainAgent != null) {
-                this.mainAgent = createMainAgent();
-            }
-        } finally {
-            agentLock.unlock();
-        }
+        rebuildMainAgentIfBuilt();
     }
 
     public void allowToolReset(Collection<String> tools) {
@@ -973,14 +965,7 @@ public class HarnessEngine {
         }
 
         // 权限变更需要重建 Agent 以重新生成工具集
-        agentLock.lock();
-        try {
-            if (this.mainAgent != null) {
-                this.mainAgent = createMainAgent();
-            }
-        } finally {
-            agentLock.unlock();
-        }
+        rebuildMainAgentIfBuilt();
     }
 
     /**
@@ -998,14 +983,7 @@ public class HarnessEngine {
             options.getDisallowedTools().addAll(disallowedTools);
         }
 
-        agentLock.lock();
-        try {
-            if (this.mainAgent != null) {
-                this.mainAgent = createMainAgent();
-            }
-        } finally {
-            agentLock.unlock();
-        }
+        rebuildMainAgentIfBuilt();
     }
 
     /**
@@ -1019,14 +997,7 @@ public class HarnessEngine {
         options.getTools().remove(toolName);
         options.getDisallowedTools().add(toolName);
 
-        agentLock.lock();
-        try {
-            if (this.mainAgent != null) {
-                this.mainAgent = createMainAgent();
-            }
-        } finally {
-            agentLock.unlock();
-        }
+        rebuildMainAgentIfBuilt();
     }
 
     public void disallowToolReset(Collection<String> disallowedTools) {
@@ -1036,14 +1007,7 @@ public class HarnessEngine {
         }
 
         // 权限变更需要重建 Agent 以重新生成工具集
-        agentLock.lock();
-        try {
-            if (this.mainAgent != null) {
-                this.mainAgent = createMainAgent();
-            }
-        } finally {
-            agentLock.unlock();
-        }
+        rebuildMainAgentIfBuilt();
     }
 
 
@@ -1166,14 +1130,7 @@ public class HarnessEngine {
         lspManager.registerServer(name, lspServer);
 
         // LSP 工具的增减会影响 Agent 的可用工具集，需重建 Agent
-        agentLock.lock();
-        try {
-            if (this.mainAgent != null) {
-                this.mainAgent = createMainAgent();
-            }
-        } finally {
-            agentLock.unlock();
-        }
+        rebuildMainAgentIfBuilt();
     }
 
     /**
@@ -1187,14 +1144,7 @@ public class HarnessEngine {
         options.getLspServers().remove(name);
         lspManager.unregisterServer(name);
 
-        agentLock.lock();
-        try {
-            if (this.mainAgent != null) {
-                this.mainAgent = createMainAgent();
-            }
-        } finally {
-            agentLock.unlock();
-        }
+        rebuildMainAgentIfBuilt();
     }
 
 
@@ -1224,14 +1174,7 @@ public class HarnessEngine {
         }
 
         //开关影响才能/拦截器装配，必须重建主代理（命令与拦截器的运行期判定本身即时生效）
-        agentLock.lock();
-        try {
-            if (this.mainAgent != null) {
-                this.mainAgent = createMainAgent();
-            }
-        } finally {
-            agentLock.unlock();
-        }
+        rebuildMainAgentIfBuilt();
     }
 
     /**
@@ -1279,14 +1222,7 @@ public class HarnessEngine {
         //嵌套调用安全：agentLock 可重入，且 mainAgent 尚未构建时重建分支会跳过。
         extension.onAttach(this);
 
-        agentLock.lock();
-        try {
-            if (this.mainAgent != null) {
-                this.mainAgent = createMainAgent();
-            }
-        } finally {
-            agentLock.unlock();
-        }
+        rebuildMainAgentIfBuilt();
     }
 
     /**
@@ -1301,6 +1237,16 @@ public class HarnessEngine {
         extension.onDetach(this);
 
         // 重建 mainAgent 以应用变更，使用 agentLock 保证线程安全
+        rebuildMainAgentIfBuilt();
+    }
+
+    /**
+     * 主代理已构建时重建它，让装配期下发的工具集 / 才能 / 拦截器变更生效；尚未构建（懒加载）时跳过，
+     * 首次 {@code getMainAgent} 自然会用最新配置构建。
+     *
+     * <p>agentLock 可重入：在扩展回调等嵌套路径里调用是安全的。</p>
+     */
+    private void rebuildMainAgentIfBuilt() {
         agentLock.lock();
         try {
             if (this.mainAgent != null) {
@@ -2083,7 +2029,7 @@ public class HarnessEngine {
         }
 
         // ② 核心：原子认领运行句柄（停流与补收尾在 plan.commit）
-        return InterruptHelper.claim(session);
+        return HarnessInterrupts.claim(session);
     }
 
     /**
@@ -2094,13 +2040,13 @@ public class HarnessEngine {
      * 会在会话历史里留下「用户已取消」的假象，与真实的用户取消混淆。</p>
      *
      * <p>返回 {@code false} 同样不代表什么都没发生：取消代数依然推进（见
-     * {@link InterruptHelper#interruptStreamOnly(AgentSession)}）。</p>
+     * {@link HarnessInterrupts#interruptStreamOnly(AgentSession)}）。</p>
      *
      * @return true = 确有运行中的流被停掉；false = 调用时没有已登记的活跃流
      * @since 4.2.0
      */
     public boolean interruptStream(@Nullable AgentSession session) {
-        return InterruptHelper.interruptStreamOnly(session);
+        return HarnessInterrupts.interruptStreamOnly(session);
     }
 
     /**
@@ -2114,7 +2060,7 @@ public class HarnessEngine {
      * @since 4.2.0
      */
     public boolean interruptStreamActive(@Nullable AgentSession session) {
-        return InterruptHelper.interruptStreamActive(session);
+        return HarnessInterrupts.interruptStreamActive(session);
     }
 
     /**

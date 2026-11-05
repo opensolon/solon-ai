@@ -15,8 +15,6 @@
  */
 package org.noear.solon.ai.harness.extension.goal;
 
-import org.noear.solon.ai.harness.runtime.RoundResult;
-
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -66,14 +64,14 @@ class GoalFingerprintTest {
 
     @Test
     void fingerprintEmptyTextReturnsEmpty() {
-        RoundResult empty = RoundResult.ofText("");
+        GoalRoundResult empty = GoalRoundResult.ofText("");
         assertEquals("empty", GoalEngine.computeFingerprint(empty));
     }
 
     @Test
     void fingerprintFormatHasThreeDimensions() {
         // 200 字以内 → lenBucket=0, 1 行 → lineBucket=0, 无工具调用 → "0"
-        RoundResult shortText = RoundResult.ofText("short reply");
+        GoalRoundResult shortText = GoalRoundResult.ofText("short reply");
         String fp = GoalEngine.computeFingerprint(shortText);
         assertTrue(fp.matches("\\d+:\\d+:\\d+"),
                 "fingerprint should have 3 colon-separated dimensions, got: " + fp);
@@ -84,9 +82,9 @@ class GoalFingerprintTest {
     @Test
     void fingerprintDistinguishesToolCallPresence() {
         // 短文本（<200字），无工具调用
-        RoundResult noTool = RoundResult.ofText("analysis result");
+        GoalRoundResult noTool = GoalRoundResult.ofText("analysis result");
         // 长文本（>20字自动判为 hasToolCalls=true），有工具调用
-        RoundResult withTool = RoundResult.ofText(
+        GoalRoundResult withTool = GoalRoundResult.ofText(
                 repeat("x", 21) + "\ncommand output");
 
         String fpNoTool = GoalEngine.computeFingerprint(noTool);
@@ -100,9 +98,9 @@ class GoalFingerprintTest {
     @Test
     void fingerprintDistinguishesDifferentLengthBuckets() {
         // 199 字 → lenBucket=0
-        RoundResult shortText = RoundResult.ofText(repeat("x", 199));
+        GoalRoundResult shortText = GoalRoundResult.ofText(repeat("x", 199));
         // 201 字 → lenBucket=1（不同桶）
-        RoundResult longerText = RoundResult.ofText(repeat("x", 201));
+        GoalRoundResult longerText = GoalRoundResult.ofText(repeat("x", 201));
 
         String fpShort = GoalEngine.computeFingerprint(shortText);
         String fpLonger = GoalEngine.computeFingerprint(longerText);
@@ -122,8 +120,8 @@ class GoalFingerprintTest {
         String text11Lines = "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11";
         text11Lines = text11Lines + repeat(" ", Math.max(0, 200 - text11Lines.length()));
 
-        RoundResult result9 = RoundResult.ofText(text9Lines);
-        RoundResult result11 = RoundResult.ofText(text11Lines);
+        GoalRoundResult result9 = GoalRoundResult.ofText(text9Lines);
+        GoalRoundResult result11 = GoalRoundResult.ofText(text11Lines);
 
         String fp9 = GoalEngine.computeFingerprint(result9);
         String fp11 = GoalEngine.computeFingerprint(result11);
@@ -136,8 +134,8 @@ class GoalFingerprintTest {
     void fingerprintSameForSameContent() {
         String content = "same content\nwith tool calls\nand three lines";
 
-        RoundResult r1 = RoundResult.ofText(content);
-        RoundResult r2 = RoundResult.ofText(content);
+        GoalRoundResult r1 = GoalRoundResult.ofText(content);
+        GoalRoundResult r2 = GoalRoundResult.ofText(content);
 
         assertEquals(GoalEngine.computeFingerprint(r1), GoalEngine.computeFingerprint(r2),
                 "same content should produce same fingerprint");

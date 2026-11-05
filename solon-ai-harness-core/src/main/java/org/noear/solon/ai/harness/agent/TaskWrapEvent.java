@@ -20,6 +20,11 @@ import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 
 /**
+ * 子代理（任务）事件包装：{@link TaskTalent} 委派出去的子代理每产生一个事件，都包成本事件转发到父代理的事件流。
+ *
+ * <p>宿主据此把子任务的输出挂到父轮次下展示：{@link #getParentRunId()} 定位父轮次，
+ * {@link #getTaskId()} / {@link #getTaskIndex()} 区分同一批里的各个子任务，
+ * {@link #getRealEvent()} 是子代理原始事件。</p>
  *
  * @author noear
  * @since 4.0.4

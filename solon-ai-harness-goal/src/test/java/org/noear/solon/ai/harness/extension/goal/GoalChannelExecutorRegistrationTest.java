@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>多入口宿主（CLI/Web/桌面）各注册一个执行器，认领边界互斥靠约定——
  * 写宽了就按注册顺序静默抢跑，此前只有一条无上下文的 debug 行。通道化注册
- * （{@code addTaskExecutor(channel, claim, handler)}）把认领条件显式交给引擎，
+ * （{@code addExecutor(channel, claim, handler)}）把认领条件显式交给引擎，
  * 引擎可在不执行 handler 的前提下静态评估互斥性并告警。</p>
  *
  * <p>观测口用包内方法而非日志捕抓：测试 classpath 无 SLF4J 后端（NOP），
@@ -31,22 +31,22 @@ class GoalChannelExecutorRegistrationTest {
         GoalEngine ge = engine();
 
         assertThrows(IllegalArgumentException.class,
-                () -> ge.addTaskExecutor("  ", id -> true, (id, p) -> null),
+                () -> ge.addExecutor("  ", id -> true, (id, p) -> null),
                 "空白通道名应拒绝");
 
         assertThrows(IllegalArgumentException.class,
-                () -> ge.addTaskExecutor("web", null, (id, p) -> null),
+                () -> ge.addExecutor("web", null, (id, p) -> null),
                 "无谓词应拒绝（那是旧形态的职责，混用会退化回不可评估）");
 
-        ge.addTaskExecutor("cli", id -> true, (id, p) -> null);
+        ge.addExecutor("cli", id -> true, (id, p) -> null);
         assertEquals(1, ge.channelsClaiming("any").size(), "合法注册应生效");
     }
 
     @Test
     void legacyRegistrationIsNotEvaluatedForOverlap() {
         GoalEngine ge = engine();
-        ge.addTaskExecutor((id, p) -> null);  // 旧形态：无谓词可评
-        ge.addTaskExecutor("web", id -> true, (id, p) -> null);
+        ge.addExecutor((id, p) -> null);  // 旧形态：无谓词可评
+        ge.addExecutor("web", id -> true, (id, p) -> null);
 
         assertEquals(java.util.Collections.singletonList("web"), ge.channelsClaiming("any"),
                 "channelsClaiming 只评估通道化注册，旧形态不得被重复计入");
@@ -57,14 +57,14 @@ class GoalChannelExecutorRegistrationTest {
     @Test
     void overlappingClaimsWarnExactlyOncePerCombination() {
         GoalEngine ge = engine();
-        ge.addTaskExecutor("cli", id -> id.startsWith("cli"), (id, p) ->
-                org.noear.solon.ai.harness.runtime.RoundResult.ofText("from-cli"));
-        ge.addTaskExecutor("web", id -> id.contains("cli"), (id, p) ->
-                org.noear.solon.ai.harness.runtime.RoundResult.ofText("from-web"));
+        ge.addExecutor("cli", id -> id.startsWith("cli"), (id, p) ->
+                org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("from-cli"));
+        ge.addExecutor("web", id -> id.contains("cli"), (id, p) ->
+                org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("from-web"));
         // 两个谓词都命中 "cli-1"：边界重叠
 
-        org.noear.solon.ai.harness.runtime.RoundResult r1 = ge.execute("cli-1", "p");
-        org.noear.solon.ai.harness.runtime.RoundResult r2 = ge.execute("cli-1", "p");
+        org.noear.solon.ai.harness.extension.goal.GoalRoundResult r1 = ge.execute("cli-1", "p");
+        org.noear.solon.ai.harness.extension.goal.GoalRoundResult r2 = ge.execute("cli-1", "p");
 
         assertEquals("from-cli", r1.getFinalResult(), "仍按注册顺序取首个认领者（语义不变）");
         assertEquals("from-cli", r2.getFinalResult());
@@ -81,9 +81,9 @@ class GoalChannelExecutorRegistrationTest {
         // 谓词是预过滤不是权威判定：命中谓词后 handler 仍可返回 null（本次不认领），
         // 由下一个注册者接管——运行时端口暂不可用等场景依赖此回退。
         GoalEngine ge = engine();
-        ge.addTaskExecutor("cli", id -> true, (id, p) -> null);
-        ge.addTaskExecutor("web", id -> true, (id, p) ->
-                org.noear.solon.ai.harness.runtime.RoundResult.ofText("from-web"));
+        ge.addExecutor("cli", id -> true, (id, p) -> null);
+        ge.addExecutor("web", id -> true, (id, p) ->
+                org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("from-web"));
 
         assertEquals("from-web", ge.execute("s", "p").getFinalResult(),
                 "谓词命中但 handler 返 null 时应穿透到下一注册者");
@@ -92,10 +92,10 @@ class GoalChannelExecutorRegistrationTest {
     @Test
     void throwingPredicateIsSkippedNotFatal() {
         GoalEngine ge = engine();
-        ge.addTaskExecutor("bad", id -> { throw new IllegalStateException("boom"); },
-                (id, p) -> org.noear.solon.ai.harness.runtime.RoundResult.ofText("bad"));
-        ge.addTaskExecutor("web", id -> true, (id, p) ->
-                org.noear.solon.ai.harness.runtime.RoundResult.ofText("from-web"));
+        ge.addExecutor("bad", id -> { throw new IllegalStateException("boom"); },
+                (id, p) -> org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("bad"));
+        ge.addExecutor("web", id -> true, (id, p) ->
+                org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("from-web"));
 
         assertEquals("from-web", ge.execute("s", "p").getFinalResult(),
                 "谓词异常按不命中处理，不得击穿轮次");
@@ -108,8 +108,8 @@ class GoalChannelExecutorRegistrationTest {
         // 谓词只评估一次：互斥检测与认领路由复用同一份结果（宿主谓词常是正则，两次遍历=双倍开销）
         java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
         GoalEngine ge = engine();
-        ge.addTaskExecutor("cli", id -> { calls.incrementAndGet(); return true; },
-                (id, p) -> org.noear.solon.ai.harness.runtime.RoundResult.ofText("from-cli"));
+        ge.addExecutor("cli", id -> { calls.incrementAndGet(); return true; },
+                (id, p) -> org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("from-cli"));
 
         ge.execute("s", "p");
 
@@ -127,8 +127,8 @@ class GoalChannelExecutorRegistrationTest {
                         .extensionAdd(ext)
                         .build();
 
-        GoalExtension returned = ext.addTaskExecutor("desktop", id -> id.matches("\\d+"),
-                (id, p) -> org.noear.solon.ai.harness.runtime.RoundResult.ofText("from-desktop"));
+        GoalExtension returned = ext.addExecutor("desktop", id -> id.matches("\\d+"),
+                (id, p) -> org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("from-desktop"));
 
         assertEquals(ext, returned, "门面保持链式");
         assertEquals(java.util.Collections.singletonList("desktop"), ext.getGoalEngine().channelsClaiming("123456"));
@@ -196,10 +196,10 @@ class GoalChannelExecutorRegistrationTest {
     void builderChannelClaimsRegisteredInDeclarationOrder() {
         GoalExtension ext = GoalExtension.builder("ws-builder")
                 .scheduler(null)
-                .taskExecutor("cli", id -> id.startsWith("cli"), (id, p) ->
-                        org.noear.solon.ai.harness.runtime.RoundResult.ofText("from-cli"))
-                .taskExecutor("desktop", id -> id.matches("\\d+"), (id, p) ->
-                        org.noear.solon.ai.harness.runtime.RoundResult.ofText("from-desktop"))
+                .executor("cli", id -> id.startsWith("cli"), (id, p) ->
+                        org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("from-cli"))
+                .executor("desktop", id -> id.matches("\\d+"), (id, p) ->
+                        org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("from-desktop"))
                 .build();
         org.noear.solon.ai.harness.HarnessEngine.of("ws", "home")
                 .sessionProvider(id -> org.noear.solon.ai.agent.session.InMemoryAgentSession.of(id))

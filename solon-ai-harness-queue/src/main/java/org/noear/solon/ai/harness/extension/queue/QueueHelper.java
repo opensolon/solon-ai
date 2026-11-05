@@ -6,7 +6,7 @@ package org.noear.solon.ai.harness.extension.queue;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.session.TurnDispatch;
+import org.noear.solon.ai.harness.turn.TurnDispatch;
 import org.noear.solon.flow.FlowContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,7 +39,7 @@ import java.util.Map;
  * 门面（经 {@code engine.getExtension(QueueExtension.class)} 获取），本类的静态方法
  * 属于内核实现，仅供门面与测试使用，新宿主代码不应直接依赖。</p>
  */
-public final class QueueHelper {
+final class QueueHelper {
     private static final Logger LOG = LoggerFactory.getLogger(QueueHelper.class);
     public static final int MAX_QUEUE_SIZE = 20;
     public static final int MAX_TEXT_LENGTH = 4096;
@@ -369,7 +369,7 @@ public final class QueueHelper {
      *
      * @return STARTED / NO_TASK / START_FAILED
      */
-    public static DrainStatus claimNext(AgentSession session, QueueClaimHandler handler) {
+    public static QueueClaimStatus claimNext(AgentSession session, QueueClaimHandler handler) {
         return claimNext(session, null, handler);
     }
 
@@ -387,13 +387,13 @@ public final class QueueHelper {
      *
      * @return STARTED / NO_TASK / START_FAILED
      */
-    public static DrainStatus claimNext(AgentSession session, java.util.function.Predicate<AgentSession> canAccept,
+    public static QueueClaimStatus claimNext(AgentSession session, java.util.function.Predicate<AgentSession> canAccept,
                                        QueueClaimHandler handler) {
-        if (session == null || handler == null || !tryClaim(session, canAccept)) return DrainStatus.NO_TASK;
+        if (session == null || handler == null || !tryClaim(session, canAccept)) return QueueClaimStatus.NO_TASK;
         QueueItem item = poll(session);
         if (item == null) {
             releaseClaim(session);
-            return DrainStatus.NO_TASK;
+            return QueueClaimStatus.NO_TASK;
         }
         QueueClaim claim = new QueueClaim(session, item, generation(session));
         QueueDispatch dispatch = registerDispatch(session, claim);
@@ -401,19 +401,19 @@ public final class QueueHelper {
             boolean done = handler.run(claim);
             if (!done) {
                 // 异步启动：claim 留给流终态（宿主捕获的 dispatch.settle）收口
-                return DrainStatus.STARTED;
+                return QueueClaimStatus.STARTED;
             }
             // 同步完成：内核当场收口。ack 被拒（期间被 Stop）必须转为回滚丢弃 + START_FAILED——
             // 静默吞掉会让调用方以为启动成功而继续领取下一条，把用户刚停掉的任务后续也跑完。
             if (!claim.acknowledge()) {
                 claim.rollback();
-                return DrainStatus.START_FAILED;
+                return QueueClaimStatus.START_FAILED;
             }
-            return DrainStatus.STARTED;
+            return QueueClaimStatus.STARTED;
         } catch (Throwable e) {
             unregisterDispatch(session, dispatch);
             claim.rollback();
-            return DrainStatus.START_FAILED;
+            return QueueClaimStatus.START_FAILED;
         } finally {
             releaseClaim(session);
         }

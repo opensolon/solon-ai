@@ -16,6 +16,8 @@
 package org.noear.solon.ai.harness.input;
 
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.harness.command.BufferedCommandContextFactory;
+import org.noear.solon.ai.harness.command.CommandContextFactory;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.chat.content.MediaBlock;
 import org.noear.solon.ai.harness.HarnessEngine;

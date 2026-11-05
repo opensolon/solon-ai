@@ -9,7 +9,7 @@ import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.session.InputBacklog;
+import org.noear.solon.ai.harness.turn.InputBacklog;
 import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.lang.Nullable;
 
@@ -29,7 +29,7 @@ import java.util.function.BooleanSupplier;
  * </ol>
  * <p>没有开流前义务：上一任务被 interrupt / 异常终止后的残留，由拦截器在新任务 {@code onAgentStart}
  * 自动转排队并推出 {@link SteerDroppedEvent}。需要「可撤销」UI 时再用
- * {@link #cancelOnRun} / {@link #cancelPending} / {@link #pending}；回放历史用 {@link SteerMessages#textOf}。</p>
+ * {@link #cancelOnRun} / {@link #cancelPending} / {@link #pending}；回放历史用 {@link SteerProtocol#textOf}。</p>
  *
  * <p><b>为何走请求级挂载（而非默认拦截器）</b>：面板/提及选中的子代理也是一个顶层请求，
  * 此时目标代理不是主代理，挂在主代理默认拦截器上的组件根本不会生效，就会出现

@@ -61,7 +61,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 子代理才能：把子代理暴露为 {@code task} / {@code multitask} 工具。
+ * 子代理（任务）才能：把子代理暴露为 {@code task} / {@code multitask} 工具。
  *
  * <p><b>并发契约</b>：上限<b>按调用</b>生效，取当前会话所选模型的 {@code AiConfig#concurrency}
  * （0 = 未设置）优先，否则取 {@link #DEFAULT_CONCURRENCY}，上界 {@link #MAX_CONCURRENCY}。
@@ -370,7 +370,7 @@ public class TaskTalent extends AbsTalent {
      */
     private void dispatchQueued(List<TaskPlan> plans, List<CompletableFuture<String>> futures,
                                 MultitaskContext ctx, FluxSink<AgentEvent> sink, int cap) {
-        boolean submitted = TaskDispatcher.submit(plans.size(), futures, cap, taskExecutor,
+        boolean submitted = SubTaskScheduler.submit(plans.size(), futures, cap, taskExecutor,
                 () -> isCancelled(sink),
                 i -> runTask(ctx, plans.get(i), true, Utils.uuid()),
                 i -> plans.get(i).invalidReason != null

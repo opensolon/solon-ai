@@ -38,7 +38,7 @@ class QueueDispatchTest {
         QueueHelper.enqueue(session, "task", null);
 
         AtomicReference<QueueDispatch> ref = new AtomicReference<>();
-        assertEquals(DrainStatus.STARTED, QueueHelper.claimNext(session, claim -> {
+        assertEquals(QueueClaimStatus.STARTED, QueueHelper.claimNext(session, claim -> {
             ref.set(QueueDispatch.current(session));
             return false; // 异步启动：终态由 settle 收口
         }));
@@ -65,7 +65,7 @@ class QueueDispatchTest {
         QueueHelper.enqueue(session, "task", null);
 
         AtomicReference<QueueClaim> ref = new AtomicReference<>();
-        assertEquals(DrainStatus.STARTED, QueueHelper.claimNext(session, claim -> {
+        assertEquals(QueueClaimStatus.STARTED, QueueHelper.claimNext(session, claim -> {
             ref.set(claim);
             return false;
         }));
@@ -85,7 +85,7 @@ class QueueDispatchTest {
         QueueHelper.enqueue(session, "task", null);
 
         AtomicReference<QueueClaim> ref = new AtomicReference<>();
-        assertEquals(DrainStatus.STARTED, QueueHelper.claimNext(session, claim -> {
+        assertEquals(QueueClaimStatus.STARTED, QueueHelper.claimNext(session, claim -> {
             ref.set(claim);
             return false;
         }));
@@ -198,11 +198,11 @@ class QueueDispatchTest {
         AgentSession session = session();
         QueueHelper.enqueue(session, "task", null);
 
-        DrainStatus status = QueueHelper.claimNext(session, claim -> {
+        QueueClaimStatus status = QueueHelper.claimNext(session, claim -> {
             throw new IllegalStateException("boom");
         });
 
-        assertEquals(DrainStatus.START_FAILED, status);
+        assertEquals(QueueClaimStatus.START_FAILED, status);
         assertNull(QueueHelper.currentDispatch(session), "启动失败不得残留派发事务");
         assertEquals("task", QueueHelper.snapshot(session).get(0).getText());
     }
@@ -214,12 +214,12 @@ class QueueDispatchTest {
         QueueHelper.enqueue(session, "task", null);
         AtomicInteger calls = new AtomicInteger();
 
-        DrainStatus status = QueueHelper.claimNext(session, s -> false, claim -> {
+        QueueClaimStatus status = QueueHelper.claimNext(session, s -> false, claim -> {
             calls.incrementAndGet();
             return true;
         });
 
-        assertEquals(DrainStatus.NO_TASK, status);
+        assertEquals(QueueClaimStatus.NO_TASK, status);
         assertEquals(0, calls.get());
         assertEquals(1, QueueHelper.pendingSize(session), "队列项必须原样保留");
         assertNull(QueueHelper.currentDispatch(session));
@@ -227,7 +227,7 @@ class QueueDispatchTest {
 
         // 领取权未被占：放行后能立即领到
         AtomicReference<QueueClaim> ref = new AtomicReference<>();
-        assertEquals(DrainStatus.STARTED, QueueHelper.claimNext(session, claim -> {
+        assertEquals(QueueClaimStatus.STARTED, QueueHelper.claimNext(session, claim -> {
             ref.set(claim);
             return false;
         }));

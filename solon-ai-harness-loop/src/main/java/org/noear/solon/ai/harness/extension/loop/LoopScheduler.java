@@ -17,7 +17,7 @@ package org.noear.solon.ai.harness.extension.loop;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.runtime.ErrorClassifier;
+import org.noear.solon.ai.harness.util.ErrorClassifier;
 import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.scheduling.ScheduledAnno;
 import org.noear.solon.scheduling.scheduled.manager.IJobManager;

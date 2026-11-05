@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.command.builtin.Fakes;
-import org.noear.solon.ai.harness.extension.queue.QueueHelper;
 
 import java.nio.file.Path;
 
@@ -151,6 +150,6 @@ class SteerCommandTest {
     }
 
     private static int queuePending(AgentSession session) {
-        return QueueHelper.pendingSize(session);
+        return new org.noear.solon.ai.harness.extension.queue.QueueExtension().pendingSize(session);
     }
 }

@@ -17,7 +17,7 @@ package org.noear.solon.ai.harness.session;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.SessionRuns;
-import org.noear.solon.ai.harness.input.HitlCard;
+import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.lang.Nullable;
 
 import java.util.Collections;
@@ -32,7 +32,7 @@ import java.util.function.BinaryOperator;
  * <p>快照由两部分组成：</p>
  * <ul>
  *     <li><b>核心事实</b>（固定字段）：运行流（{@link SessionRuns}）、待审批挂起卡（{@link HitlCard}）、
- *         输入受理窗口（{@link InputGate}）、取消代数。漏查任何一个都会导致真实故障：
+ *         输入受理窗口（{@link org.noear.solon.ai.harness.turn.InputGate}）、取消代数。漏查任何一个都会导致真实故障：
  *         漏查 HITL 会把审批中的会话判成空闲、新输入直接顶掉挂起任务。</li>
  *     <li><b>扩展事实</b>（开放槽位）：由插件经 {@code HarnessExtension#onStatus} 贡献，按 {@link Key} 读取。
  *         核心不预设插件有哪些事实——新增插件事实不需要修改本类。</li>
@@ -48,7 +48,7 @@ import java.util.function.BinaryOperator;
  * 内核没有 queue。插件事实一律由插件自己定义 {@link Key} 常量（如 queue 的
  * {@code QueueExtension.STATUS_PENDING}、steer 的 {@code SteerExtension.STATUS_PENDING}），
  * 宿主按键读取。内核自己的判定若依赖插件（如受理的先进先出），走核心定义的能力接口
- * （{@link InputBacklog#hasPending}），不走本快照。</p>
+ * （{@link org.noear.solon.ai.harness.turn.InputBacklog#hasPending}），不走本快照。</p>
  *
  * <p><b>注意 busy 的口径</b>：{@link #isBusy()} 只表示「有活跃运行流」。
  * 「不能接新输入」通常是 {@link #isOccupied()}（忙碌或待审批），两者刻意分开——
@@ -154,7 +154,7 @@ public final class SessionStatus {
     /**
      * 是否正处在「输入已受理、运行流尚未登记」的窗口内。
      *
-     * @see InputGate
+     * @see org.noear.solon.ai.harness.turn.InputGate
      * @since 4.2.1
      */
     public boolean isAdmitting() {
@@ -264,7 +264,8 @@ public final class SessionStatus {
                 this.busy = activeRunCount > 0;
                 this.pendingHitl = HitlCard.pendingCount(session);
                 this.cancelGeneration = SessionRuns.cancelCount(session);
-                this.admitting = InputGate.isAdmitting(session);
+                // 与 turn.InputGate#isAdmitting 同口径；直接读核心登记键，避免 session 反向依赖 turn
+                this.admitting = Boolean.TRUE.equals(session.attrs().get(HarnessAttrs.INPUT_ADMITTING));
             }
         }
 

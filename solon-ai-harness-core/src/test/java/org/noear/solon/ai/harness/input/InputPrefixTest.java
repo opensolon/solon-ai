@@ -16,6 +16,7 @@
 package org.noear.solon.ai.harness.input;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.harness.command.ParsedCommand;
 
 import java.util.Collections;
 

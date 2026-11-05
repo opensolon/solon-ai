@@ -19,9 +19,12 @@ package org.noear.solon.ai.harness.extension.steer;
  * @author noear
  * @since 4.2.0
  */
-public interface SteerAttrs {
+public final class SteerAttrs {
+    private SteerAttrs() {
+    }
+
     /**
      * 会话级插话状态（值为包内 {@code SteerState}：当前轮次 + 本轮邮箱 + 转排队失败暂存，transient）
      */
-    String STEER = "session.steer";
+    public static final String STEER = "session.steer";
 }

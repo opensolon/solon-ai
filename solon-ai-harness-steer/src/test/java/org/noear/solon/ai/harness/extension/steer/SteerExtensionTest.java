@@ -42,7 +42,7 @@ class SteerExtensionTest {
 
     private static String src(String file) throws Exception {
         return new String(Files.readAllBytes(Paths.get(
-                "src/main/java/org/noear/solon/ai/harness/session/steer/" + file)), StandardCharsets.UTF_8);
+                "src/main/java/org/noear/solon/ai/harness/extension/steer/" + file)), StandardCharsets.UTF_8);
     }
 
     // ==================== 装配 ====================
@@ -299,21 +299,21 @@ class SteerExtensionTest {
 
     @Test
     void steerMessagesTextOfRecognizesBothMarks() {
-        ChatMessage injected = SteerMessages.toChatMessage(new SteerMessage("s1", "别改测试"));
-        assertEquals("别改测试", SteerMessages.textOf(injected));
+        ChatMessage injected = SteerProtocol.toChatMessage(new SteerMessage("s1", "别改测试"));
+        assertEquals("别改测试", SteerProtocol.textOf(injected));
 
         // metadata 在快照往返中丢失：前缀兜底
-        assertEquals("换个思路", SteerMessages.textOf(ChatMessage.ofUser(SteerMessages.PREFIX + "换个思路")));
+        assertEquals("换个思路", SteerProtocol.textOf(ChatMessage.ofUser(SteerProtocol.PREFIX + "换个思路")));
 
         // 只有 metadata：原样返回
         ChatMessage marked = ChatMessage.ofUser("无前缀");
-        marked.addMetadata("source", SteerMessages.SOURCE);
-        assertEquals("无前缀", SteerMessages.textOf(marked));
+        marked.addMetadata("source", SteerProtocol.SOURCE);
+        assertEquals("无前缀", SteerProtocol.textOf(marked));
 
-        assertNull(SteerMessages.textOf(ChatMessage.ofUser("普通提问")));
-        assertNull(SteerMessages.textOf(ChatMessage.ofAssistant(SteerMessages.PREFIX + "x")), "只认 UserMessage");
-        assertNull(SteerMessages.textOf(ChatMessage.ofUser("")));
-        assertNull(SteerMessages.textOf(null));
+        assertNull(SteerProtocol.textOf(ChatMessage.ofUser("普通提问")));
+        assertNull(SteerProtocol.textOf(ChatMessage.ofAssistant(SteerProtocol.PREFIX + "x")), "只认 UserMessage");
+        assertNull(SteerProtocol.textOf(ChatMessage.ofUser("")));
+        assertNull(SteerProtocol.textOf(null));
     }
 
     // ==================== 状态贡献（onStatus）与键登记 ====================

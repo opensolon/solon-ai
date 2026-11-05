@@ -51,10 +51,10 @@ import org.noear.solon.lang.Preview;
  *         一对多汇集，如 {@link #onStatus}）。</li>
  *     <li><b>一个扩展向引擎或另一个扩展提供服务 → 用核心定义的能力接口</b>，实现类同时实现它，
  *         消费方用 {@code engine.getExtension(能力接口.class)} 查找（如
- *         {@link org.noear.solon.ai.harness.session.InputBacklog}）。不要把领域能力做成本接口的
+ *         {@link org.noear.solon.ai.harness.turn.InputBacklog}）。不要把领域能力做成本接口的
  *         default 方法——那会让每个扩展都继承与自己无关的语义。</li>
  *     <li><b>需要在会话锁内或无引擎场景读取的会话事实 → 用核心持有的 attrs 槽位</b>
- *         （如 {@link org.noear.solon.ai.harness.session.TurnDispatch}）。</li>
+ *         （如 {@link org.noear.solon.ai.harness.turn.TurnDispatch}）。</li>
  *     <li><b>核心的静态 API 只读核心事实</b>；扩展贡献的事实一律经引擎读取
  *         （插件事实只在 {@code engine.status(session)} 里，不在 {@code SessionStatus.of(session)} 里）。</li>
  *     <li><b>内核不定义插件事实键</b>：事实键由拥有它的插件定义。内核自己的判定若要依赖插件，

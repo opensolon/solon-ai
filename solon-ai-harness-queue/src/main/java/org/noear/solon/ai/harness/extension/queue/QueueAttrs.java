@@ -15,31 +15,34 @@ package org.noear.solon.ai.harness.extension.queue;
  * @author noear
  * @since 4.2.0
  */
-public interface QueueAttrs {
+public final class QueueAttrs {
+    private QueueAttrs() {
+    }
+
 
 
     /**
      * 队列本体（attrs 中存活的运行态 Deque&lt;QueueItem&gt;，未持久化）
      */
-    String QUEUE = "session.queue";
+    public static final String QUEUE = "session.queue";
 
     /**
      * 队列项快照投影（FlowContext.data 的持久化 key，值为 List&lt;Map&gt;）
      */
-    String QUEUE_ITEMS = "session.queue.items";
+    public static final String QUEUE_ITEMS = "session.queue.items";
 
     /**
      * 队列在飞项（运行中任务的队列项，drain 暂存）
      */
-    String QUEUE_IN_FLIGHT = "session.queue.inFlight";
+    public static final String QUEUE_IN_FLIGHT = "session.queue.inFlight";
 
     /**
      * 队列代际（cancelPending 递增，用于拒绝旧代际的 requeue）
      */
-    String QUEUE_GENERATION = "session.queue.generation";
+    public static final String QUEUE_GENERATION = "session.queue.generation";
 
     /**
      * 队列领取标记（claimNext 期间的原子占位，方法返回即释放）
      */
-    String QUEUE_CLAIM = "session.queue.claim";
+    public static final String QUEUE_CLAIM = "session.queue.claim";
 }

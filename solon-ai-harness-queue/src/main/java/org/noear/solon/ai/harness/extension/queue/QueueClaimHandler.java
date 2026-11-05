@@ -16,7 +16,7 @@ package org.noear.solon.ai.harness.extension.queue;
  * <ul>
  *   <li>{@code true}：任务在回调返回前<b>已同步完成</b>（如同步命令），内核当场
  *       {@code acknowledge()} 收口；若确认被拒（期间被 Stop），内核改走回滚丢弃
- *       并返回 {@link DrainStatus#START_FAILED}，循环自然终止；</li>
+ *       并返回 {@link QueueClaimStatus#START_FAILED}，循环自然终止；</li>
  *   <li>{@code false}：任务只是<b>异步启动</b>（如 Agent 流），终态由宿主在流终态
  *       调 {@code turn.settle(..)} 收口（turn = 回调里捕获的 {@link QueueDispatch}）。</li>
  * </ul>

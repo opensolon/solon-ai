@@ -10,7 +10,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.util.TraceKeys;
+import org.noear.solon.ai.harness.util.TraceUtil;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -56,7 +56,7 @@ public class ContinueCommandTest {
     void emptyShellTraceOriginalPromptEmptyIsRejected() throws Exception {
         // __main 存在但从未跑过任务（originalPrompt 为空）：空壳轨迹，同样拒绝
         AgentSession session = Fakes.newSession();
-        session.getContext().put(TraceKeys.TRACE_KEY_MAIN, new ReActTrace());
+        session.getContext().put(TraceUtil.TRACE_KEY_MAIN, new ReActTrace());
         Fakes.StubContext ctx = new Fakes.StubContext(session, new ArrayList<>());
         command.execute(null, ctx, InputOrigin.NONE);
 
@@ -74,7 +74,7 @@ public class ContinueCommandTest {
         trace.setRoute(ReActAgent.ID_END);
         trace.setFinalAnswer("done", false);
         trace.getWorkingMemory().addMessage(ChatMessage.ofAssistant("工作记忆里的尾部 ai"));
-        session.getContext().put(TraceKeys.TRACE_KEY_MAIN, trace);
+        session.getContext().put(TraceUtil.TRACE_KEY_MAIN, trace);
 
         // 会话尾部两条 Assistant + 一条 User（不应被弹出）
         session.addMessage(ChatMessage.ofUser("帮我修个 bug"));
@@ -110,7 +110,7 @@ public class ContinueCommandTest {
         ReActTrace trace = newTrace(session);
         setOriginalPrompt(trace, Prompt.of("跑到一半的任务"));
         trace.setRoute(ReActAgent.ID_REASON);
-        session.getContext().put(TraceKeys.TRACE_KEY_MAIN, trace);
+        session.getContext().put(TraceUtil.TRACE_KEY_MAIN, trace);
 
         session.addMessage(ChatMessage.ofUser("跑到一半的任务"));
         session.addMessage(ChatMessage.ofAssistant("中途回答"));

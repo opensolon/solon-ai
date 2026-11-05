@@ -9,7 +9,7 @@ import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.session.InputBacklog;
+import org.noear.solon.ai.harness.turn.InputBacklog;
 import org.noear.solon.ai.harness.session.SessionStatus;
 
 import java.util.List;
@@ -196,9 +196,9 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      * @see QueueHelper#claimNext(AgentSession, QueueClaimHandler)
      * @since 4.2.1
      */
-    public DrainStatus claimNext(AgentSession session, QueueClaimHandler handler) {
+    public QueueClaimStatus claimNext(AgentSession session, QueueClaimHandler handler) {
         if (isEnabled() == false) {
-            return DrainStatus.NO_TASK;
+            return QueueClaimStatus.NO_TASK;
         }
         return QueueHelper.claimNext(session, handler);
     }
@@ -213,10 +213,10 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      * @param canAccept 现在能不能接（null = 不预判）；false 时不消耗队列项、不占领取权
      * @since 4.2.2
      */
-    public DrainStatus claimNext(AgentSession session, java.util.function.Predicate<AgentSession> canAccept,
+    public QueueClaimStatus claimNext(AgentSession session, java.util.function.Predicate<AgentSession> canAccept,
                                 QueueClaimHandler handler) {
         if (isEnabled() == false) {
-            return DrainStatus.NO_TASK;
+            return QueueClaimStatus.NO_TASK;
         }
         return QueueHelper.claimNext(session, canAccept, handler);
     }
@@ -239,15 +239,15 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      *
      * <p><b>为何要有这个方法</b>：队列续发不是一个简单循环——它需要回答三个问题：
      * 现在能不能接（宿主自己的占位闩语义，harness 无从得知）、上一条是否真的启动成功
-     * （{@link DrainStatus#START_FAILED} 时立即重试会形成死循环）、启动后还要不要继续。
+     * （{@link QueueClaimStatus#START_FAILED} 时立即重试会形成死循环）、启动后还要不要继续。
      * 此前每个宿主都得自己写一遍递归 + 三态判定，写错任何一处就是要么漏发、要么狂循环。
      * 本方法把循环与终止条件收归 harness，只把「能不能接」作为谓词留给宿主。</p>
      *
      * <p>终止条件（任一成立即返回）：
      * <ul>
      *   <li>{@code canDrain} 返回 false（会话忙/被占）——返回上一次状态；</li>
-     *   <li>领取结果为 {@link DrainStatus#START_FAILED}——任务已回队首，<b>不立即重试</b>；</li>
-     *   <li>领取结果为 {@link DrainStatus#NO_TASK}（队空）；</li>
+     *   <li>领取结果为 {@link QueueClaimStatus#START_FAILED}——任务已回队首，<b>不立即重试</b>；</li>
+     *   <li>领取结果为 {@link QueueClaimStatus#NO_TASK}（队空）；</li>
      *   <li>启动成功后队列已无待执行项（运行中的那条不占容量，不必再发）。</li>
      * </ul>
      *
@@ -258,16 +258,16 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      *                 同步命令会在回调返回前就结束，宿主通常在这里传「当前是否忙」
      * @param handler  单次领取的启动者；返回 true = 同步完成（内核当场收口），
      *                 false = 异步启动（终态由流终态的 {@code dispatch.settle} 收口）
-     * @return 最后一次领取的结果（未发生领取时为 {@link DrainStatus#NO_TASK}）
+     * @return 最后一次领取的结果（未发生领取时为 {@link QueueClaimStatus#NO_TASK}）
      * @since 4.2.1
      */
-    public DrainStatus drainLoop(AgentSession session, java.util.function.Predicate<AgentSession> canDrain,
+    public QueueClaimStatus drainLoop(AgentSession session, java.util.function.Predicate<AgentSession> canDrain,
                                 QueueClaimHandler handler) {
         if (isEnabled() == false || session == null || handler == null) {
-            return DrainStatus.NO_TASK;
+            return QueueClaimStatus.NO_TASK;
         }
 
-        DrainStatus last = DrainStatus.NO_TASK;
+        QueueClaimStatus last = QueueClaimStatus.NO_TASK;
         // 单次调用最多续发一轮队列容量：正常情况下每条领取都会消耗一个待执行项，
         // 这里的上限只是防御「宿主 handler 把同一项反复塞回」的失控情形，不应被触达。
         for (int guard = 0; guard <= QueueHelper.MAX_QUEUE_SIZE; guard++) {
@@ -277,8 +277,8 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
                 return last;
             }
 
-            DrainStatus status = QueueHelper.claimNext(session, canDrain, handler);
-            if (status != DrainStatus.STARTED) {
+            QueueClaimStatus status = QueueHelper.claimNext(session, canDrain, handler);
+            if (status != QueueClaimStatus.STARTED) {
                 return status;
             }
 

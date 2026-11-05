@@ -5,7 +5,6 @@ import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.runtime.RoundResult;
 
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -42,9 +41,9 @@ class GoalExtensionTest {
     void builderAssemblesFullChainAndRegistersCommand() {
         AtomicInteger executed = new AtomicInteger();
         GoalExtension ext = GoalExtension.builder("ws-test")
-                .taskExecutor((sid, prompt) -> {
+                .executor((sid, prompt) -> {
                     executed.incrementAndGet();
-                    return RoundResult.ofText("done");
+                    return GoalRoundResult.ofText("done");
                 })
                 .scheduler(null)   // 纯 JUnit 无 Solon 容器：JobManager.getInstance() 会 NPE，显式关闭
                 .build();
@@ -69,9 +68,9 @@ class GoalExtensionTest {
         AtomicInteger calls = new AtomicInteger();
 
         GoalExtension ext = GoalExtension.builder("ws-share")
-                .taskExecutor((sid, prompt) -> {
+                .executor((sid, prompt) -> {
                     calls.incrementAndGet();
-                    return RoundResult.ofText("ok");
+                    return GoalRoundResult.ofText("ok");
                 })
                 .scheduler(null)
                 .build();
@@ -94,19 +93,19 @@ class GoalExtensionTest {
     void hostExecutorWinsOverDefaultFallback() {
         AtomicInteger fallbackCalls = new AtomicInteger();
         GoalExtension ext = GoalExtension.builder("ws-priority")
-                .taskExecutor((sid, prompt) -> RoundResult.ofText("host"))
+                .executor((sid, prompt) -> GoalRoundResult.ofText("host"))
                 .scheduler(null)
                 .build();
         engineBuilder().extensionAdd(ext).build();
 
         GoalEngine ge = ext.getGoalEngine();
         // 模拟内置兑底（恒认领）——即使它先于宿主执行器存在，也不得抢走回合
-        ge.setDefaultTaskExecutor((sid, prompt) -> {
+        ge.setDefaultExecutor((sid, prompt) -> {
             fallbackCalls.incrementAndGet();
-            return RoundResult.ofText("fallback");
+            return GoalRoundResult.ofText("fallback");
         });
 
-        RoundResult r = ge.execute("any", "p");
+        GoalRoundResult r = ge.execute("any", "p");
 
         assertEquals("host", r.getFinalResult(), "宿主执行器必须优先");
         assertEquals(0, fallbackCalls.get(), "兑底不得被调用");
@@ -119,7 +118,7 @@ class GoalExtensionTest {
                 .build();
         engineBuilder().extensionAdd(ext).build();
 
-        assertTrue(ext.getGoalEngine().hasTaskHandler(),
+        assertTrue(ext.getGoalEngine().hasExecutor(),
                 "宿主未提供执行者时必须装入内置缺省，否则单测/无宿主场景无法跑轮次");
     }
 
@@ -149,7 +148,7 @@ class GoalExtensionTest {
                 new GoalCommand(manualExt));
 
         GoalExtension ext = GoalExtension.builder("ws-dup")
-                .taskExecutor((sid, p) -> RoundResult.ofText("x"))
+                .executor((sid, p) -> GoalRoundResult.ofText("x"))
                 .scheduler(null)
                 .build();
         engine.addExtension(ext);
@@ -199,14 +198,14 @@ class GoalExtensionTest {
         java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
 
         GoalEngine engine = new GoalEngine((HarnessEngine) null, BudgetThresholds.defaults(), 3, 3, false);
-        engine.addTaskExecutor((sid, prompt) -> {
+        engine.addExecutor((sid, prompt) -> {
             entered.countDown();
             try {
                 release.await(5, java.util.concurrent.TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            return RoundResult.ofText("done");
+            return GoalRoundResult.ofText("done");
         });
 
         AgentSession session = InMemoryAgentSession.of("s-running");
@@ -281,20 +280,20 @@ class GoalExtensionTest {
         assertEquals("另一个目标", gs2.getCondition(), "null 展示正文不得覆写");
     }
 
-    /** addTaskExecutor 门面直通：宿主无需再取 getGoalEngine()。 */
+    /** addExecutor 门面直通：宿主无需再取 getGoalEngine()。 */
     @Test
-    void addTaskExecutorIsAvailableOnFacade() {
+    void addExecutorIsAvailableOnFacade() {
         GoalExtension ext = GoalExtension.builder("ws-exec").scheduler(null).build();
         engineBuilder().extensionAdd(ext).build();
 
         AtomicInteger calls = new AtomicInteger();
-        GoalExtension returned = ext.addTaskExecutor((sid, prompt) -> {
+        GoalExtension returned = ext.addExecutor((sid, prompt) -> {
             calls.incrementAndGet();
-            return RoundResult.ofText("claimed");
+            return GoalRoundResult.ofText("claimed");
         });
 
         assertSame(ext, returned, "应支持链式调用");
-        assertTrue(ext.getGoalEngine().hasTaskHandler());
+        assertTrue(ext.getGoalEngine().hasExecutor());
 
         AgentSession session = InMemoryAgentSession.of("s-exec");
         ext.attachAndSchedule(session, GoalSpec.of("目标"));

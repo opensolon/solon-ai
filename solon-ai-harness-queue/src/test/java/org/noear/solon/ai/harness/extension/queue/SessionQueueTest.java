@@ -128,7 +128,7 @@ class SessionQueueTest {
         assertEquals(1, QueueHelper.enqueue(session, "task", null));
         // 异步语义只走 claimNext：handler 返回 false 后任务仍是 RUNNING，直到终态 acknowledge
         QueueClaim[] held = new QueueClaim[1];
-        assertEquals(DrainStatus.STARTED, QueueHelper.claimNext(session, claim -> {
+        assertEquals(QueueClaimStatus.STARTED, QueueHelper.claimNext(session, claim -> {
             held[0] = claim;
             return false;
         }));

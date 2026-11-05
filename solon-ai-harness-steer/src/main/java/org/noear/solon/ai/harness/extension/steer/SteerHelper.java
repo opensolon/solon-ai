@@ -7,7 +7,7 @@ package org.noear.solon.ai.harness.extension.steer;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.session.InputBacklog;
+import org.noear.solon.ai.harness.turn.InputBacklog;
 import org.noear.solon.lang.Nullable;
 
 import org.slf4j.Logger;
@@ -22,7 +22,7 @@ import java.util.function.BooleanSupplier;
  * 插话（Steering）静态内核：投递校验与回滚、撤销、残留转排队的唯一实现（包内可见）。
  *
  * <p>宿主一律走 {@link SteerExtension} 门面（经 {@code engine.getExtension(SteerExtension.class)} 获取）；
- * 注入消息格式见 {@link SteerMessages}。</p>
+ * 注入消息格式见 {@link SteerProtocol}。</p>
  *
  * <p>参考 Codex 的 steering 设计：用户在任务运行中插入的纠偏/补充消息存放在
  * {@link AgentSession#attrs()} 上的会话级状态（{@link SteerState}，transient，不落 snapshot.json，任务级易失），

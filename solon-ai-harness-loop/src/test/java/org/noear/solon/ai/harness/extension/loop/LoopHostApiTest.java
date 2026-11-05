@@ -36,7 +36,7 @@ class LoopHostApiTest {
     @Test
     void publicSurfaceIsSmall() throws Exception {
         Set<String> publicTypes = new HashSet<>();
-        Path root = Paths.get("src/main/java/org/noear/solon/ai/harness/session/loop");
+        Path root = Paths.get("src/main/java/org/noear/solon/ai/harness/extension/loop");
         List<Path> files;
         try (Stream<Path> s = Files.list(root)) {
             files = s.filter(p -> p.toString().endsWith(".java")).collect(Collectors.toList());
@@ -44,7 +44,7 @@ class LoopHostApiTest {
         assertTrue(files.size() >= 8, "守卫必须真的扫描到源码，实际 " + files.size());
         for (Path f : files) {
             String name = f.getFileName().toString().replace(".java", "");
-            Class<?> c = Class.forName("org.noear.solon.ai.harness.session.loop." + name);
+            Class<?> c = Class.forName("org.noear.solon.ai.harness.extension.loop." + name);
             if (Modifier.isPublic(c.getModifiers())) {
                 publicTypes.add(name);
             }

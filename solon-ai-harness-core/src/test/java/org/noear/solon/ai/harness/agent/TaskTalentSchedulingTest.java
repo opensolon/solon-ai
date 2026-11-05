@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * multitask 调度契约测试：取消后聚合不挂住、坏条目不拖垮整批。
  *
  * <p>这两点的共同特点是「错了也不报错」——永久等待、整批被一个幻觉名字带崩，
- * 都只会表现为难排查的怪现象，因此单独锁定。队列调度的语义见 {@link TaskDispatcherTest}。</p>
+ * 都只会表现为难排查的怪现象，因此单独锁定。队列调度的语义见 {@link SubtaskSchedulerTest}。</p>
  *
  * @author bai
  * @since 4.2

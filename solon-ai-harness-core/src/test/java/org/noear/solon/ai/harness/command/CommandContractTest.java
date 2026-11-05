@@ -3,8 +3,6 @@ package org.noear.solon.ai.harness.command;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
-import org.noear.solon.ai.harness.input.BufferedCommandContext;
-import org.noear.solon.ai.harness.input.ParsedCommand;
 
 import java.util.Arrays;
 import java.util.Collections;

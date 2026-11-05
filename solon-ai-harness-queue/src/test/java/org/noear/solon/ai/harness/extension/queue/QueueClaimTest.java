@@ -37,12 +37,12 @@ class QueueClaimTest {
         QueueHelper.enqueue(session, "task", null);
 
         AtomicReference<QueueClaim> ref = new AtomicReference<>();
-        DrainStatus status = QueueHelper.claimNext(session, claim -> {
+        QueueClaimStatus status = QueueHelper.claimNext(session, claim -> {
             ref.set(claim);
             return false; // 异步启动：不收口，终态由宿主收
         });
 
-        assertEquals(DrainStatus.STARTED, status);
+        assertEquals(QueueClaimStatus.STARTED, status);
         QueueClaim claim = ref.get();
         assertNotNull(claim.getItem());
         assertEquals("task", claim.getItem().getText());
@@ -136,13 +136,13 @@ class QueueClaimTest {
         QueueHelper.enqueue(session, "task", null);
         QueueHelper.enqueue(session, "next", null);
 
-        DrainStatus status = QueueHelper.claimNext(session, claim -> {
+        QueueClaimStatus status = QueueHelper.claimNext(session, claim -> {
             // 同步命令已跑完；恰好此时用户 Stop（模拟同步完成前被 cancelPending）
             QueueHelper.cancelPending(session);
             return true;
         });
 
-        assertEquals(DrainStatus.START_FAILED, status, "Stop 后 ack 必被拒，不得报 STARTED 让循环继续");
+        assertEquals(QueueClaimStatus.START_FAILED, status, "Stop 后 ack 必被拒，不得报 STARTED 让循环继续");
         assertEquals(0, QueueHelper.size(session), "被取消的任务不得复活（含已入队的 next，Stop 清空一切）");
         assertNull(session.getContext().data().get("session.queue.items"), "落盘投影也应为空");
         // 派发登记不得残留（否则续发被自己的残留挡死）
@@ -163,12 +163,12 @@ class QueueClaimTest {
         QueueHelper.enqueue(session, "task", null);
 
         java.util.concurrent.atomic.AtomicBoolean seen = new java.util.concurrent.atomic.AtomicBoolean(false);
-        DrainStatus status = QueueHelper.claimNext(session, claim -> {
+        QueueClaimStatus status = QueueHelper.claimNext(session, claim -> {
             seen.set(claim.getItem() != null);
             return true;
         });
 
-        assertEquals(DrainStatus.STARTED, status);
+        assertEquals(QueueClaimStatus.STARTED, status);
         assertTrue(seen.get());
         assertEquals(0, QueueHelper.size(session), "同步完成后任务即从队列消失（内核已收口）");
         assertNull(QueueHelper.currentDispatch(session), "派发登记不得残留");
@@ -189,14 +189,14 @@ class QueueClaimTest {
             pool.submit(() -> {
                 try {
                     start.await();
-                    DrainStatus s = QueueHelper.claimNext(session, claim -> {
+                    QueueClaimStatus s = QueueHelper.claimNext(session, claim -> {
                         winner.set(claim);
                         started.incrementAndGet();
                         // 慢一点，制造真实的并发窗口
                         try { Thread.sleep(50); } catch (InterruptedException ignored) { }
                         return false; // 异步启动：保留 claim 不立即收口，模拟异步运行
                     });
-                    if (s == DrainStatus.STARTED) {
+                    if (s == QueueClaimStatus.STARTED) {
                         // 保留 claim 不立即收口，模拟异步运行
                     }
                 } catch (InterruptedException ignored) {
@@ -218,11 +218,11 @@ class QueueClaimTest {
         AgentSession session = session();
         QueueHelper.enqueue(session, "task", null);
 
-        DrainStatus status = QueueHelper.claimNext(session, claim -> {
+        QueueClaimStatus status = QueueHelper.claimNext(session, claim -> {
             throw new IllegalStateException("boom");
         });
 
-        assertEquals(DrainStatus.START_FAILED, status);
+        assertEquals(QueueClaimStatus.START_FAILED, status);
         assertEquals("task", QueueHelper.snapshot(session).get(0).getText(), "启动失败的任务回到队首");
         assertEquals("PENDING", QueueHelper.snapshot(session).get(0).getStatus());
     }
@@ -230,7 +230,7 @@ class QueueClaimTest {
     @Test
     void emptyQueueReturnsNoTask() {
         AgentSession session = session();
-        assertEquals(DrainStatus.NO_TASK, QueueHelper.claimNext(session, claim -> false));
+        assertEquals(QueueClaimStatus.NO_TASK, QueueHelper.claimNext(session, claim -> false));
     }
 
     @Test
@@ -241,7 +241,7 @@ class QueueClaimTest {
         queue.enqueue(session, "task", null);
 
         AtomicReference<QueueClaim> ref = new AtomicReference<>();
-        assertEquals(DrainStatus.STARTED, queue.claimNext(session, claim -> {
+        assertEquals(QueueClaimStatus.STARTED, queue.claimNext(session, claim -> {
             ref.set(claim);
             return false;
         }));
@@ -256,7 +256,7 @@ class QueueClaimTest {
         queue.setEnabled(false);
         QueueHelper.enqueue(session, "task", null);
 
-        assertEquals(DrainStatus.NO_TASK, queue.claimNext(session, claim -> false));
+        assertEquals(QueueClaimStatus.NO_TASK, queue.claimNext(session, claim -> false));
         assertEquals(1, QueueHelper.pendingSize(session), "停用后不接单，队列原样保留");
     }
 }

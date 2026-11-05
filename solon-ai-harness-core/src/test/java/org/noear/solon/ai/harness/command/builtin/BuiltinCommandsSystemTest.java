@@ -11,8 +11,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
-import org.noear.solon.ai.harness.session.interrupt.InterruptCommand;
-import org.noear.solon.ai.harness.util.TraceKeys;
+import org.noear.solon.ai.harness.util.TraceUtil;
 
 import java.nio.file.Path;
 
@@ -187,7 +186,7 @@ class BuiltinCommandsSystemTest {
                 ContinueCommandTest.newTrace(session);
         ContinueCommandTest.setOriginalPrompt(trace, org.noear.solon.ai.chat.prompt.Prompt.of("跑完的任务"));
         trace.setRoute(org.noear.solon.ai.agent.react.ReActAgent.ID_END);
-        session.getContext().put(TraceKeys.TRACE_KEY_MAIN, trace);
+        session.getContext().put(TraceUtil.TRACE_KEY_MAIN, trace);
 
         InputOutcome outcome = handle(engine, session, "/continue");
 

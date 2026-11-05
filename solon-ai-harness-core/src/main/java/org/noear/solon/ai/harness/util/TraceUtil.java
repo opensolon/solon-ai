@@ -7,11 +7,19 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.core.util.Assert;
 
 /**
+ * 会话轨迹（ReActTrace）读取工具
+ *
+ * <p>轨迹按「当前选中代理」→「调用方给定键」→「主代理」的顺序查找。</p>
  *
  * @author noear 2026/8/28 created
  *
  */
 public class TraceUtil {
+    /**
+     * 主代理轨迹在会话上下文中的键
+     */
+    public static final String TRACE_KEY_MAIN = "__main";
+
     public static ReActTrace getCurrentTrace(AgentSession session) {
         return getCurrentTrace(session, null);
     }
@@ -37,7 +45,7 @@ public class TraceUtil {
 
         if (trace == null) {
             //主代理
-            trace = session.getContext().get(TraceKeys.TRACE_KEY_MAIN);
+            trace = session.getContext().get(TRACE_KEY_MAIN);
         }
 
         return trace instanceof ReActTrace ? (ReActTrace) trace : null;
@@ -63,6 +71,6 @@ public class TraceUtil {
         }
 
         //主代理
-        session.getContext().remove(TraceKeys.TRACE_KEY_MAIN);
+        session.getContext().remove(TRACE_KEY_MAIN);
     }
 }

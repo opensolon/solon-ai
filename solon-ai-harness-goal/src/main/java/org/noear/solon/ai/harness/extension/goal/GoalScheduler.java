@@ -38,7 +38,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author noear
  * @since 3.9.4
  */
-public class GoalScheduler {
+class GoalScheduler {
     private static final Logger LOG = LoggerFactory.getLogger(GoalScheduler.class);
 
     private final GoalEngine goalEngine;

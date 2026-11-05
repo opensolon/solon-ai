@@ -30,7 +30,7 @@ package org.noear.solon.ai.harness.extension.goal;
  * @author noear
  * @since 3.9.3
  */
-public class GoalPromptBuilder {
+class GoalPromptBuilder {
 
     private final int stagnationThreshold;
 

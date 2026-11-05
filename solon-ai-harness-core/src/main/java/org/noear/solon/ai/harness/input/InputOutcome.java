@@ -16,6 +16,8 @@
 package org.noear.solon.ai.harness.input;
 
 import org.noear.solon.ai.agent.AgentEvent;
+import org.noear.solon.ai.harness.command.ParsedCommand;
+import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.chat.prompt.Prompt;

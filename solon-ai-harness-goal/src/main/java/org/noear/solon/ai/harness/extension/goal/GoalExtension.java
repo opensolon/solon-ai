@@ -6,8 +6,8 @@ import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.runtime.RoundResult;
 import org.noear.solon.ai.harness.session.SessionStatus;
+import org.noear.solon.ai.harness.extension.goal.validate.ConditionMatcher;
 import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator;
 import org.noear.solon.core.util.RunUtil;
 import org.slf4j.Logger;
@@ -67,14 +67,14 @@ public class GoalExtension extends AbsHarnessExtension {
 
     private final String workspaceId;
     private final String workspace;
-    private final GoalEngine.TaskHandler taskHandler;
+    private final GoalExecutor taskHandler;
     private final BudgetThresholds budgetThresholds;
     private final int stagnationThreshold;
     private final int maxConsecutiveErrors;
     private final boolean validatorEnabled;
     private final GoalScheduler providedScheduler;   // 宿主自备调度器（可空；高级用法）
     private final boolean schedulerDisabled;         // 显式关闭调度（scheduler(null)）
-    private final GoalEngine.GoalListener listener;
+    private final GoalListener listener;
 
     /** builder 阶段声明的通道化执行者（attach 后按序注册，先于运行期追加）。 */
     private final java.util.List<ChannelClaim> pendingChannelClaims;
@@ -92,9 +92,9 @@ public class GoalExtension extends AbsHarnessExtension {
     private static final class ChannelClaim {
         final String channel;
         final Predicate<String> claim;
-        final GoalEngine.TaskHandler handler;
+        final GoalExecutor handler;
 
-        ChannelClaim(String channel, Predicate<String> claim, GoalEngine.TaskHandler handler) {
+        ChannelClaim(String channel, Predicate<String> claim, GoalExecutor handler) {
             this.channel = channel;
             this.claim = claim;
             this.handler = handler;
@@ -163,9 +163,11 @@ public class GoalExtension extends AbsHarnessExtension {
      * <p>适用于宿主自己管理 GoalEngine 生命周期、只借用本类的「Talent 挂载 + 运行期门面」的场景；
      * 新代码请用 {@link #builder(String)} 一键装配。</p>
      *
-     * <p>该形态下不注册 /goal 命令（命令依赖内部装配的调度器），{@link #getGoalScheduler()} 为 null。</p>
+     * <p>该形态下不注册 /goal 命令（命令依赖内部装配的调度器），调度器为 null。</p>
+     *
+     * <p>包内可见（4.2 收口）：{@link GoalEngine} 已是实现细节，宿主一律用 {@link #builder(String)}。</p>
      */
-    public static GoalExtension of(GoalEngine goalEngine, HarnessEngine engine) {
+    static GoalExtension of(GoalEngine goalEngine, HarnessEngine engine) {
         GoalExtension ext = builder(null).scheduler(null).build();
         ext.goalEngine = goalEngine;
         ext.goalTalent = goalEngine == null ? null : new GoalTalent(goalEngine, engine);
@@ -195,13 +197,13 @@ public class GoalExtension extends AbsHarnessExtension {
 
         // 宿主未提供执行者时，缺省走引擎同步回合（程序生成的 prompt 不解析命令与 @提及）。
         // 作为编底单独设置：若宿主提供了执行者，它必须优先于同步回合被考虑。
-        goalEngine.setDefaultTaskExecutor(defaultTaskExecutor(engine));
+        goalEngine.setDefaultExecutor(defaultTaskExecutor(engine));
         if (taskHandler != null) {
-            goalEngine.addTaskExecutor(taskHandler);
+            goalEngine.addExecutor(taskHandler);
         }
         // builder 阶段声明的通道化执行者：按声明顺序登记（先于 attach 后追加的运行期注册）
         for (ChannelClaim cc : pendingChannelClaims) {
-            goalEngine.addTaskExecutor(cc.channel, cc.claim, cc.handler);
+            goalEngine.addExecutor(cc.channel, cc.claim, cc.handler);
         }
 
         // ③ 调度器（宿主自备优先；显式关闭时不建——纯 JUnit/无容器宿主 JobManager 不可用）
@@ -260,7 +262,7 @@ public class GoalExtension extends AbsHarnessExtension {
      * 不再要求宿主往会话 attrs 里写「上一轮指标」再读回来——旁路方案下 CLI/Web 因未写键而
      * 恒无工具证据，等于完成校验静默失效。</p>
      */
-    private static GoalEngine.TaskHandler defaultTaskExecutor(HarnessEngine engine) {
+    private static GoalExecutor defaultTaskExecutor(HarnessEngine engine) {
         return (sessionId, prompt) -> {
             AgentSession session = engine.getSession(sessionId);
             if (session == null) {
@@ -277,9 +279,9 @@ public class GoalExtension extends AbsHarnessExtension {
                 boolean hasToolCalls = response.getTrace() != null
                         && response.getTrace().getToolCallCount() > 0;
                 long tokens = response.getMetrics() != null ? response.getMetrics().getTotalTokens() : 0L;
-                return RoundResult.of(hasToolCalls, tokens, text);
+                return GoalRoundResult.of(hasToolCalls, tokens, text);
             } catch (Throwable e) {
-                return RoundResult.ofText("error: " + (e.getMessage() != null ? e.getMessage() : e.toString()));
+                return GoalRoundResult.ofText("error: " + (e.getMessage() != null ? e.getMessage() : e.toString()));
             }
         };
     }
@@ -291,30 +293,29 @@ public class GoalExtension extends AbsHarnessExtension {
         return goalTalent;
     }
 
-    /** 组装好的 GoalEngine（initialize 之后非空）；供确需细粒度访问的宿主。 */
-    public GoalEngine getGoalEngine() {
+    /** 组装好的 GoalEngine（attach 之后非空）。包内可见：宿主一律走本门面。 */
+    GoalEngine getGoalEngine() {
         return goalEngine;
     }
 
-    /** 组装好的 GoalScheduler（initialize 之后非空，除非显式关闭）；供恢复/停机等高级场景。 */
-    public GoalScheduler getGoalScheduler() {
+    /** 组装好的 GoalScheduler（attach 之后非空，除非显式关闭）。包内可见：宿主一律走本门面。 */
+    GoalScheduler getGoalScheduler() {
         return goalScheduler;
     }
 
     /**
      * 注册认领式执行器（开箱即用宿主的主要扩展点）。
      *
-     * <p>与 {@link Builder#taskExecutor} 的区别：builder 是「装配时一次性」的，
-     * 本方法允许在 {@code addExtension} 之后再注册多个入口（如 CLI/Web/桌面各一个），
-     * 宿主不必为一次注册去取 {@link #getGoalEngine()}。</p>
+     * <p>与 {@link Builder#executor} 的区别：builder 是「装配时一次性」的，
+     * 本方法允许在 {@code addExtension} 之后再注册多个入口（如 CLI/Web/桌面各一个）。</p>
      *
      * <p><b>认领条件由宿主保证互斥</b>：按注册顺序取首个非 null 返回值，先注册者优先。
      * 当注册超过一个执行器时打一次 debug 提示，便于排查「会话被错误入口抢跑」。</p>
      */
-    public GoalExtension addTaskExecutor(GoalEngine.TaskHandler handler) {
+    public GoalExtension addExecutor(GoalExecutor handler) {
         if (goalEngine != null && handler != null) {
-            goalEngine.addTaskExecutor(handler);
-            if (goalEngine.hasTaskHandler()) {
+            goalEngine.addExecutor(handler);
+            if (goalEngine.hasExecutor()) {
                 LOG.debug("Goal task executor registered; claiming order = registration order, "
                         + "ensure session-id predicates are mutually exclusive");
             }
@@ -331,16 +332,16 @@ public class GoalExtension extends AbsHarnessExtension {
      * 引擎能发现重叠，但互斥本身还得靠宿主的 ID 形态设计保证。</p>
      *
      * <pre>{@code
-     * goal.addTaskExecutor("cli", SessionIdOwnership::isCli,
+     * goal.addExecutor("cli", SessionIdOwnership::isCli,
      *         (sessionId, prompt) -> runInjectedRound(session, prompt));
      * }</pre>
      *
      * @param channel 通道名（日志与互斥告警用，如 "cli" / "web" / "desktop"）
      * @param claim   认领谓词（sessionId → 是否本通道的会话）
      */
-    public GoalExtension addTaskExecutor(String channel, Predicate<String> claim, GoalEngine.TaskHandler handler) {
+    public GoalExtension addExecutor(String channel, Predicate<String> claim, GoalExecutor handler) {
         if (goalEngine != null) {
-            goalEngine.addTaskExecutor(channel, claim, handler);
+            goalEngine.addExecutor(channel, claim, handler);
         }
         return this;
     }
@@ -738,14 +739,14 @@ public class GoalExtension extends AbsHarnessExtension {
     }
 
     /** 注册生命周期观察者（initialize 前调用即预注册，之后正常注册）。 */
-    public void addListener(GoalEngine.GoalListener l) {
+    public void addListener(GoalListener l) {
         if (goalEngine != null) {
             goalEngine.addListener(l);
         }
     }
 
     /** 注册带条件匹配的验证器（多次注册按 AND 语义）。 */
-    public void registerValidator(GoalEngine.ConditionMatcher matcher, GoalValidator validator) {
+    public void registerValidator(ConditionMatcher matcher, GoalValidator validator) {
         if (goalEngine != null) {
             goalEngine.registerValidator(matcher, validator);
         }
@@ -771,7 +772,7 @@ public class GoalExtension extends AbsHarnessExtension {
     public static class Builder {
         private final String workspaceId;
         private String workspace;                                   // 缺省 = workspaceId
-        private GoalEngine.TaskHandler taskHandler;                 // 缺省 = engine.handle 模板
+        private GoalExecutor taskHandler;                 // 缺省 = engine.handle 模板
         private final java.util.List<ChannelClaim> channelClaims = new java.util.ArrayList<>(2); // 通道化注册（装配时）
         private BudgetThresholds budgetThresholds = BudgetThresholds.defaults();
         private int stagnationThreshold = 3;
@@ -779,20 +780,20 @@ public class GoalExtension extends AbsHarnessExtension {
         private boolean validatorEnabled = true;
         private GoalScheduler scheduler;                            // 缺省 = initialize 时新建
         private boolean schedulerExplicitNull = false;              // 显式关闭调度三态标记
-        private GoalEngine.GoalListener listener;
+        private GoalListener listener;
 
         private Builder(String workspaceId) {
             this.workspaceId = workspaceId;
         }
 
         /** 任务执行者：执行一轮 prompt 并返回本轮客观事实（null = 本入口不认领）。不设则用内置缺省。 */
-        public Builder taskExecutor(GoalEngine.TaskHandler handler) {
+        public Builder executor(GoalExecutor handler) {
             this.taskHandler = handler;
             return this;
         }
 
         /**
-         * 通道化任务执行者（装配时形态，与 {@link #addTaskExecutor(String, Predicate, GoalEngine.TaskHandler)}
+         * 通道化任务执行者（装配时形态，与 {@link #addExecutor(String, Predicate, GoalExecutor)}
          * 运行期形态对称）。
          *
          * <p>多入口宿主既可选择在 builder 上一次性声明全部通道（单工作区进程，最简单），
@@ -802,7 +803,7 @@ public class GoalExtension extends AbsHarnessExtension {
          * @param channel 通道名（日志与互斥告警用）
          * @param claim   认领谓词（sessionId → 是否本通道的会话）
          */
-        public Builder taskExecutor(String channel, Predicate<String> claim, GoalEngine.TaskHandler handler) {
+        public Builder executor(String channel, Predicate<String> claim, GoalExecutor handler) {
             if (handler != null && claim != null && channel != null && channel.trim().isEmpty() == false) {
                 channelClaims.add(new ChannelClaim(channel.trim(), claim, handler));
             }
@@ -840,14 +841,14 @@ public class GoalExtension extends AbsHarnessExtension {
         }
 
         /** 自备调度器（高级用法）；显式传 null 表示不建调度（纯测试宿主，JobManager 不可用场景），不传则缺省新建。 */
-        public Builder scheduler(GoalScheduler own) {
+        Builder scheduler(GoalScheduler own) {
             this.scheduler = own;
             this.schedulerExplicitNull = (own == null);
             return this;
         }
 
         /** 预注册生命周期观察者。 */
-        public Builder listener(GoalEngine.GoalListener l) {
+        public Builder listener(GoalListener l) {
             this.listener = l;
             return this;
         }

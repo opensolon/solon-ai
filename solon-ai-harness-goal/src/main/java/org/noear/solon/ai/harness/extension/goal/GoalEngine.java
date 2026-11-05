@@ -18,12 +18,12 @@ package org.noear.solon.ai.harness.extension.goal;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.talents.cli.TodoTalent;
 import org.noear.solon.ai.harness.extension.goal.validate.BuildPassValidator;
+import org.noear.solon.ai.harness.extension.goal.validate.ConditionMatcher;
 import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator;
 import org.noear.solon.ai.harness.extension.goal.validate.NoopValidator;
 import org.noear.solon.ai.harness.extension.goal.validate.TestsPassValidator;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.runtime.ErrorClassifier;
-import org.noear.solon.ai.harness.runtime.RoundResult;
+import org.noear.solon.ai.harness.util.ErrorClassifier;
 import org.noear.solon.flow.FlowContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,14 +53,14 @@ import java.util.function.Predicate;
  * （文件 / 内存 / Redis / JDBC），本类只依赖 {@link AgentSession} 接口。</p>
  *
  * <p><b>执行通道自持</b>：本类不依赖任何调度体系的具体类型，也不与 loop 共享任何执行通道。
- * 「一轮怎么执行」由宿主通过 {@link #addTaskExecutor(TaskHandler)} 注册（可覆盖），
+ * 「一轮怎么执行」由宿主通过 {@link #addExecutor(GoalExecutor)} 注册（可覆盖），
  * 缺省走引擎自身的同步回合。「能不能执行」由引擎空闲判定单向派生（{@code HarnessEngine#isIdle}），
  * 宿主不得提供忙判定谓词——那会让引擎职责外推且必然与真实状态漂移。</p>
  *
  * @author noear
  * @since 3.9.4
  */
-public class GoalEngine {
+class GoalEngine {
     private static final Logger LOG = LoggerFactory.getLogger(GoalEngine.class);
 
     /** 持久化投影 key（见 {@link GoalAttrs#GOAL}）。 */
@@ -69,33 +69,6 @@ public class GoalEngine {
     private static final String ATTR_GOAL = GoalAttrs.GOAL_STATE;
     /** 运行态防重入锁的 attrs key（见 {@link GoalAttrs#GOAL_RUNNING}）。 */
     private static final String ATTR_RUNNING = GoalAttrs.GOAL_RUNNING;
-
-    /** Goal 生命周期观察者。桌面端用它把后台多轮执行持续推回同一个对话流。 */
-    @FunctionalInterface
-    public interface GoalListener {
-        /**
-         * @param sessionId 会话
-         * @param state     变更后的状态（removed=true 时仍为清除前的快照）
-         * @param removed   是否因清除而移除
-         */
-        void onChanged(String sessionId, GoalState state, boolean removed);
-    }
-
-    /**
-     * 执行者：执行一轮 prompt 并返回本轮客观事实（null = 本入口不认领）。
-     *
-     * <p>返回值同时携带 token 消耗与工具证据，因此不再需要在会话 attrs 里落
-     * 「上一轮指标」这类跨模块旁路键，也就没有「轮前重置 / 读完即删」那套无人能强制的时序约定。</p>
-     *
-     * <p><b>没有 agentName 参数</b>：子代理归属是<b>会话属性</b>（{@code engine.getSessionAgent}，
-     * 由宿主／{@code /goal} 命令／自动化任务写入会话上下文），执行者从 session 读即可。
-     * 旧签名带该参数，但引擎内两处调用恒传 {@code null}——宿主里「拼 {@code @agentName} 前缀」
-     * 的分支从未执行（{@code WsGate} 实际走的是会话级子代理选择的回退读取）。</p>
-     */
-    @FunctionalInterface
-    public interface TaskHandler {
-        RoundResult handle(String sessionId, String prompt);
-    }
 
     private final HarnessEngine engine;
     /** 宿主注册的执行者（按注册顺序取首个认领者；通道化注册携带通道名与认领谓词）。 */
@@ -107,7 +80,7 @@ public class GoalEngine {
      * 兜底恒认领，若排在首位则宿主注册的执行者永远轮不到（装配顺序上扩展先于入口构造，
      * 靠「宿主后注册」是不成立的外部不变量）。现在兜底只能是最后一个被考虑的。</p>
      */
-    private volatile TaskHandler defaultTaskHandler;
+    private volatile GoalExecutor defaultTaskHandler;
     private final List<GoalListener> listeners = new CopyOnWriteArrayList<>();
     private final BudgetThresholds budgetThresholds;
     private final GoalPromptBuilder promptBuilder;
@@ -205,7 +178,7 @@ public class GoalEngine {
     }
 
     /** 注册/追加执行者（宿主覆盖；按注册顺序取首个认领者）。 */
-    public void addTaskExecutor(TaskHandler handler) {
+    public void addExecutor(GoalExecutor handler) {
         if (handler != null) {
             taskHandlers.add(new TaskClaim(null, null, handler));
         }
@@ -214,7 +187,7 @@ public class GoalEngine {
     /**
      * 注册带通道名与认领谓词的执行器（多入口宿主推荐形态）。
      *
-     * <p>与 {@link #addTaskExecutor(TaskHandler)} 的差别：认领条件从 handler 的 null 返回值
+     * <p>与 {@link #addExecutor(GoalExecutor)} 的差别：认领条件从 handler 的 null 返回值
      * 升级为显式谓词，引擎因此能在<b>不执行 handler</b> 的前提下静态评估多个入口的认领边界
      * 是否互斥——重叠时按注册顺序静默抢跑的配置错误，以前只能靠无上下文的 debug 行发现。</p>
      *
@@ -225,7 +198,7 @@ public class GoalEngine {
      * @param claim   认领谓词（sessionId → 是否本通道的会话）
      * @param handler 执行者
      */
-    public void addTaskExecutor(String channel, Predicate<String> claim, TaskHandler handler) {
+    public void addExecutor(String channel, Predicate<String> claim, GoalExecutor handler) {
         if (handler == null) {
             return;
         }
@@ -234,7 +207,7 @@ public class GoalEngine {
         }
         if (claim == null) {
             throw new IllegalArgumentException("claim predicate must not be null "
-                    + "(legacy form: addTaskExecutor(handler))");
+                    + "(legacy form: addExecutor(handler))");
         }
         taskHandlers.add(new TaskClaim(channel.trim(), claim, handler));
     }
@@ -243,9 +216,9 @@ public class GoalEngine {
     private static final class TaskClaim {
         final String channel;
         final Predicate<String> claim;
-        final TaskHandler handler;
+        final GoalExecutor handler;
 
-        TaskClaim(String channel, Predicate<String> claim, TaskHandler handler) {
+        TaskClaim(String channel, Predicate<String> claim, GoalExecutor handler) {
             this.channel = channel;
             this.claim = claim;
             this.handler = handler;
@@ -259,14 +232,14 @@ public class GoalEngine {
     /**
      * 设置内置兜底执行者（只在前面的执行者全不认领时考虑）。
      *
-     * <p>与 {@link #addTaskExecutor} 分开，才能保证「宿主注册的总是优先」不依赖装配顺序。</p>
+     * <p>与 {@link #addExecutor} 分开，才能保证「宿主注册的总是优先」不依赖装配顺序。</p>
      */
-    public void setDefaultTaskExecutor(TaskHandler handler) {
+    public void setDefaultExecutor(GoalExecutor handler) {
         this.defaultTaskHandler = handler;
     }
 
     /** 是否已有可用执行者（宿主注册或内置兜底任一）。 */
-    public boolean hasTaskHandler() {
+    public boolean hasExecutor() {
         return !taskHandlers.isEmpty() || defaultTaskHandler != null;
     }
 
@@ -286,7 +259,7 @@ public class GoalEngine {
      *
      * <p>不含任何业务判定（预算、熔断、完成条件都在调用方），只做「投递 + 取回事实」。</p>
      */
-    RoundResult execute(String sessionId, String prompt) {
+    GoalRoundResult execute(String sessionId, String prompt) {
         // 谓词只评估一次，结果供「互斥检测」与「认领路由」复用：宿主谓词常是正则匹配
         // （如 isDesktop = matches("\\d{1,18}")），两次遍历等于双倍编译开销。
         TaskClaim[] claims = taskHandlers.toArray(new TaskClaim[0]);
@@ -323,12 +296,12 @@ public class GoalEngine {
             if (taskClaim.claim != null) {
                 LOG.debug("Goal round for session '{}' claimed by channel '{}'", sessionId, taskClaim.channel);
             }
-            RoundResult result = taskClaim.handler.handle(sessionId, prompt);
+            GoalRoundResult result = taskClaim.handler.handle(sessionId, prompt);
             if (result != null) {
                 return result;
             }
         }
-        TaskHandler fallback = defaultTaskHandler;
+        GoalExecutor fallback = defaultTaskHandler;
         if (fallback != null) {
             return fallback.handle(sessionId, prompt);
         }
@@ -410,12 +383,6 @@ public class GoalEngine {
     }
 
     // ==================== 验证器（实例级注册表） ====================
-
-    /** 条件匹配器：返回 true 表示应应用该验证器。 */
-    @FunctionalInterface
-    public interface ConditionMatcher {
-        boolean matches(String conditionLowercase);
-    }
 
     private static final class ValidatorRegistration {
         final ConditionMatcher matcher;
@@ -753,7 +720,7 @@ public class GoalEngine {
         if (gs == null || !gs.getStatus().isActive()) {
             return false;
         }
-        if (!hasTaskHandler()) {
+        if (!hasExecutor()) {
             // 无执行者 = 装配错误（GoalExtension 恒会装入缺省执行者），不得计入迭代
             LOG.debug("Goal round skipped: no task executor registered");
             return false;
@@ -840,7 +807,7 @@ public class GoalEngine {
         // 置空后本轮读取恒为 null（提示性校验放行），权威判定交给下方结果复核。
         gs.setLastHasToolCalls(null);
 
-        RoundResult result = execute(sessionId, effectivePrompt);
+        GoalRoundResult result = execute(sessionId, effectivePrompt);
 
         if (result == null) {
             // 无执行器认领 = 装配/环境问题，不是「本轮成功但无产出」。
@@ -992,7 +959,7 @@ public class GoalEngine {
     // ==================== 判定辅助 ====================
 
     /** 计算执行指纹（用于无进展检测）。 */
-    static String computeFingerprint(RoundResult result) {
+    static String computeFingerprint(GoalRoundResult result) {
         if (result == null) return "null";
         String text = result.getFinalResult();
         if (text == null || text.isEmpty()) return "empty";

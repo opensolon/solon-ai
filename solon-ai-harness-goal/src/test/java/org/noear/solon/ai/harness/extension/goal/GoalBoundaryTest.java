@@ -47,8 +47,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class GoalBoundaryTest {
 
-    private static final Path GOAL_DIR = Paths.get("src/main/java/org/noear/solon/ai/harness/session/goal");
-    private static final Path COMMAND = Paths.get("src/main/java/org/noear/solon/ai/harness/session/goal/GoalCommand.java");
+    private static final Path GOAL_DIR = Paths.get("src/main/java/org/noear/solon/ai/harness/extension/goal");
+    private static final Path COMMAND = Paths.get("src/main/java/org/noear/solon/ai/harness/extension/goal/GoalCommand.java");
 
     @Test
     void goalPackageMustNotImportHostPackages() throws IOException {

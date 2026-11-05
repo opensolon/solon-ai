@@ -25,7 +25,7 @@ package org.noear.solon.ai.harness.extension.goal;
  * @author noear
  * @since 3.9.4
  */
-public final class BudgetThresholds {
+final class BudgetThresholds {
     private static final BudgetThresholds DEFAULT = new BudgetThresholds(70, 85);
 
     private final int warningPercent;

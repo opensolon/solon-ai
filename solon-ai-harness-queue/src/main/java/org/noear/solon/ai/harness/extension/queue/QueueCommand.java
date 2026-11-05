@@ -36,7 +36,7 @@ import org.noear.solon.core.util.Assert;
  * @author noear
  * @since 2026.11
  */
-public class QueueCommand extends AbsCommand {
+class QueueCommand extends AbsCommand {
 
     @Override
     public String name() {

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness.session;
 
+
 /**
  * 会话属性的<b>契约键</b>登记（引擎与宿主共享的唯一清单）。
  *
@@ -46,11 +47,11 @@ public final class HarnessAttrs {
      */
 
     /**
-     * 程序派发的一轮（值为 {@link TurnDispatch}，transient，未持久化）。
+     * 程序派发的一轮（值为 {@link org.noear.solon.ai.harness.turn.TurnDispatch}，transient，未持久化）。
      *
      * <p>随异步任务一直保留到流终态收口，是「本轮是否程序派发」「该用哪个事务收口」的唯一来源。
-     * 宿主与插件不要直接读写本键：读用 {@link TurnDispatch#current}，登记/注销用
-     * {@link TurnDispatch#bind} / {@link TurnDispatch#unbind}。</p>
+     * 宿主与插件不要直接读写本键：读用 {@link org.noear.solon.ai.harness.turn.TurnDispatch#current}，登记/注销用
+     * {@link org.noear.solon.ai.harness.turn.TurnDispatch#bind} / {@link org.noear.solon.ai.harness.turn.TurnDispatch#unbind}。</p>
      *
      * @since 4.2.0
      */
@@ -73,4 +74,30 @@ public final class HarnessAttrs {
      * @since 4.2.1
      */
     public static final String INPUT_ADMITTING = "session.input.admitting";
+
+    // ========== 历史例外键（早于 session.* 规约，已落盘/已发布，键值不可改）==========
+
+    /**
+     * 会话工作目录（{@code attrs()} 与工具上下文共用）。
+     *
+     * <p>与已发布常量 {@code HarnessEngine.ATTR_CWD} 同值。宿主读写一律走
+     * {@code HarnessEngine#getSessionCwd} / {@code setSessionCwd}，不要直接访问本键。</p>
+     *
+     * @since 4.2.0
+     */
+    public static final String LEGACY_CWD = "__cwd";
+
+    /**
+     * 会话选中的模型（{@code FlowContext} 持久化键）。读写走 {@link SessionSelections}。
+     *
+     * @since 4.2.0
+     */
+    public static final String LEGACY_MODEL_SELECTED = "_model_selected";
+
+    /**
+     * 会话选中的代理（{@code FlowContext} 持久化键）。读写走 {@link SessionSelections}。
+     *
+     * @since 4.2.0
+     */
+    public static final String LEGACY_AGENT_SELECTED = "_agent_selected";
 }

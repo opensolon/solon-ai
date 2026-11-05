@@ -16,6 +16,7 @@
 package org.noear.solon.ai.harness.input;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.harness.command.CommandContextFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -135,7 +136,8 @@ class InputBoundaryTest {
     @Test
     void commandContextFactoryMustStayHostImplemented() throws IOException {
         //上下文构造留给宿主：CLI 需要实时写终端并读 reader（/help 交互、/model 选择器）
-        Path factory = INPUT_DIR.resolve("CommandContextFactory.java");
+        //4.2 起命令上下文工厂归 command 包（与 CommandContext 同包）
+        Path factory = INPUT_DIR.resolveSibling("command").resolve("CommandContextFactory.java");
         assertTrue(Files.exists(factory), "CommandContextFactory 源码必须存在");
 
         String content = new String(Files.readAllBytes(factory), StandardCharsets.UTF_8);

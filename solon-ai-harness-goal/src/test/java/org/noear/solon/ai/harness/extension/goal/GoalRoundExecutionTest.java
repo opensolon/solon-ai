@@ -3,7 +3,6 @@ package org.noear.solon.ai.harness.extension.goal;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
-import org.noear.solon.ai.harness.runtime.RoundResult;
 import org.noear.solon.ai.harness.extension.goal.validate.BuildPassValidator;
 import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator;
 import org.noear.solon.ai.harness.extension.goal.validate.NoopValidator;
@@ -23,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * GoalEngine 轮次执行与验证器链。
  *
- * <p>用真实执行通道（{@link GoalEngine#addTaskExecutor}）+ 内存会话驱动 runRound，覆盖守卫、预算收尾、
+ * <p>用真实执行通道（{@link GoalEngine#addExecutor}）+ 内存会话驱动 runRound，覆盖守卫、预算收尾、
  * 完成复核、异常分级熔断与验证器链，不依赖 JobManager。</p>
  */
 class GoalRoundExecutionTest {
@@ -31,12 +30,12 @@ class GoalRoundExecutionTest {
     /** 记录每轮 prompt 并返回可编排结果的执行者。 */
     private static class FakeBridge {
         final List<String> prompts = new ArrayList<>();
-        RoundResult next = RoundResult.ofText("ok");
+        GoalRoundResult next = GoalRoundResult.ofText("ok");
         Exception failure;
         /** 轮次内回调：模拟 goal_update(complete) 在工具执行中把状态置为 ACHIEVED。 */
         Runnable duringRound;
 
-        final GoalEngine.TaskHandler handler = (sessionId, prompt) -> {
+        final GoalExecutor handler = (sessionId, prompt) -> {
             prompts.add(prompt);
             if (duringRound != null) {
                 duringRound.run();
@@ -49,11 +48,11 @@ class GoalRoundExecutionTest {
         };
     }
 
-    private static GoalEngine engine(GoalEngine.TaskHandler handler, int maxErrors) {
+    private static GoalEngine engine(GoalExecutor handler, int maxErrors) {
         GoalEngine e = new GoalEngine((org.noear.solon.ai.harness.HarnessEngine) null,
                 BudgetThresholds.defaults(), 3, maxErrors, false);
         if (handler != null) {
-            e.addTaskExecutor(handler);
+            e.addExecutor(handler);
         }
         return e;
     }
@@ -111,14 +110,14 @@ class GoalRoundExecutionTest {
     @Test
     void runRoundExecutesAndIncrementsIteration() {
         FakeBridge fb = new FakeBridge();
-        fb.next = RoundResult.ofText("完成了第一步");
+        fb.next = GoalRoundResult.ofText("完成了第一步");
         GoalEngine e = engine(fb.handler, 3);
         AgentSession s = session();
         GoalState gs = e.attach(s, "目标", 0, 0, 0);
 
         assertTrue(e.runRound(s));
         assertEquals(1, gs.getCurrentIteration());
-        // 执行者返回真实 RoundResult，token 直接来自结果（不再靠文本长度估算）
+        // 执行者返回真实 GoalRoundResult，token 直接来自结果（不再靠文本长度估算）
         assertTrue(gs.getConsumedTokens() > 0);
         assertEquals("完成了第一步", gs.getLastResult());
         assertEquals(1, fb.prompts.size());
@@ -135,7 +134,7 @@ class GoalRoundExecutionTest {
 
         e.runRound(s);
         long afterFirst = gs.getConsumedTokens();
-        fb.next = RoundResult.ofText("第二轮的文本明显更长一些用于累计验证");
+        fb.next = GoalRoundResult.ofText("第二轮的文本明显更长一些用于累计验证");
         e.runRound(s);
 
         assertTrue(afterFirst > 0);
@@ -153,7 +152,7 @@ class GoalRoundExecutionTest {
     @Test
     void runRoundRecordsStagnationOnRepeatedFingerprint() {
         FakeBridge fb = new FakeBridge();
-        fb.next = RoundResult.ofText(text(60));
+        fb.next = GoalRoundResult.ofText(text(60));
         GoalEngine e = engine(fb.handler, 3);
         AgentSession s = session();
         GoalState gs = e.attach(s, "目标", 0, 0, 0);
@@ -172,9 +171,9 @@ class GoalRoundExecutionTest {
         GoalState gs = e.attach(s, "目标", 0, 0, 0);
 
         // 指纹按长度分桶（每 200 字符一档），两轮必须落在不同桶才判定"有进展"
-        fb.next = RoundResult.ofText(text(30));
+        fb.next = GoalRoundResult.ofText(text(30));
         e.runRound(s);
-        fb.next = RoundResult.ofText(text(120));
+        fb.next = GoalRoundResult.ofText(text(120));
         e.runRound(s);
 
         assertEquals(0, gs.getStagnationCount());
@@ -197,7 +196,7 @@ class GoalRoundExecutionTest {
     void completionRejectedWithoutToolEvidenceForActionGoal() {
         FakeBridge fb = new FakeBridge();
         // 执行型目标 + 本轮无工具调用 → 完成声明被拒
-        fb.next = RoundResult.ofText("我做完了");
+        fb.next = GoalRoundResult.ofText("我做完了");
         GoalEngine e = engine(fb.handler, 3);
         AgentSession s = session();
         GoalState gs = e.attach(s, "创建一份文件", 0, 0, 0);
@@ -212,7 +211,7 @@ class GoalRoundExecutionTest {
     @Test
     void completionAcceptedWithToolEvidenceForActionGoal() {
         FakeBridge fb = new FakeBridge();
-        fb.next = RoundResult.of(true, 10, "已创建文件");
+        fb.next = GoalRoundResult.of(true, 10, "已创建文件");
         GoalEngine e = engine(fb.handler, 3);
         AgentSession s = session();
         GoalState gs = e.attach(s, "创建一份文件", 0, 0, 0);
@@ -225,7 +224,7 @@ class GoalRoundExecutionTest {
     @Test
     void nonActionGoalNeedsNoEvidence() {
         FakeBridge fb = new FakeBridge();
-        fb.next = RoundResult.ofText("分析完毕");
+        fb.next = GoalRoundResult.ofText("分析完毕");
         GoalEngine e = engine(fb.handler, 3);
         AgentSession s = session();
         GoalState gs = e.attach(s, "分析现状", 0, 0, 0);
@@ -246,7 +245,7 @@ class GoalRoundExecutionTest {
     @Test
     void actionEvidenceComesFromHandlerResultNotSessionAttrs() {
         FakeBridge fb = new FakeBridge();
-        fb.next = RoundResult.of(true, 7, "已写入");
+        fb.next = GoalRoundResult.of(true, 7, "已写入");
         GoalEngine e = engine(fb.handler, 3);
         AgentSession s = session();
         e.attach(s, "创建一份文件", 0, 0, 0);
@@ -268,7 +267,7 @@ class GoalRoundExecutionTest {
     @Test
     void previousRoundEvidenceMustNotLeakIntoCurrentRound() {
         FakeBridge fb = new FakeBridge();
-        fb.next = RoundResult.of(true, 5, "第一轮确实执行了工具");
+        fb.next = GoalRoundResult.of(true, 5, "第一轮确实执行了工具");
         GoalEngine e = engine(fb.handler, 3);
         AgentSession s = session();
         e.attach(s, "创建一份文件", 0, 0, 0);
@@ -278,7 +277,7 @@ class GoalRoundExecutionTest {
 
         // 第二轮：无工具调用；在 handler 执行期间读取，模拟 goal_update 在工具阶段取值
         Boolean[] duringRound = new Boolean[1];
-        fb.next = RoundResult.of(false, 5, "本轮只说了说，没有实际动手");
+        fb.next = GoalRoundResult.of(false, 5, "本轮只说了说，没有实际动手");
         fb.duringRound = () -> duringRound[0] = e.currentRoundHasActionEvidence(s);
         e.runRound(s);
 
@@ -292,7 +291,7 @@ class GoalRoundExecutionTest {
     @Test
     void absentToolEvidenceYieldsFalseNotNull() {
         FakeBridge fb = new FakeBridge();
-        fb.next = RoundResult.ofText("我只说了说");
+        fb.next = GoalRoundResult.ofText("我只说了说");
         GoalEngine e = engine(fb.handler, 3);
         AgentSession s = session();
         e.attach(s, "创建一份文件", 0, 0, 0);
@@ -308,7 +307,7 @@ class GoalRoundExecutionTest {
     @Test
     void tokenBudgetExceededTriggersWrapUpAndStops() {
         FakeBridge fb = new FakeBridge();
-        fb.next = RoundResult.ofText("最终总结");
+        fb.next = GoalRoundResult.ofText("最终总结");
         GoalEngine e = engine(fb.handler, 3);
         AgentSession s = session();
         GoalState gs = e.attach(s, "分析现状", 100, 0, 0);
@@ -374,7 +373,7 @@ class GoalRoundExecutionTest {
         // 换成「不认领」的执行器：返回 null 表示本入口不管这个会话
         GoalEngine noClaim = new GoalEngine((org.noear.solon.ai.harness.HarnessEngine) null,
                 BudgetThresholds.defaults(), 3, 99, false);
-        noClaim.addTaskExecutor((sessionId, prompt) -> null);
+        noClaim.addExecutor((sessionId, prompt) -> null);
         AgentSession s2 = session();
         GoalState gs2 = noClaim.attach(s2, "分析现状", 0, 0, 0);
 

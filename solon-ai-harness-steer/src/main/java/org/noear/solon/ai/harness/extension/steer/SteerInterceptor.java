@@ -5,7 +5,7 @@ import org.noear.solon.ai.agent.react.AbsReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.harness.session.InputBacklog;
+import org.noear.solon.ai.harness.turn.InputBacklog;
 import org.noear.solon.core.util.Assert;
 
 import java.util.ArrayList;
@@ -28,7 +28,7 @@ import java.util.function.Supplier;
  * <p>守卫体系（对齐 Codex 已踩过的坑）：</p>
  * <ul>
  *   <li>守卫 1：首轮 reason 不注入，确保本轮原始 prompt 先被采样，不篡改初始意图
- *       （也是 {@link SteerMessages} 对外承诺的位置保证）；</li>
+ *       （也是 {@link SteerProtocol} 对外承诺的位置保证）；</li>
  *   <li>守卫 3：工作记忆尾部存在未闭合 tool_calls（HITL 挂起恢复窄窗）时跳过，
  *       避免 user 消息打断 tool_use/tool_result 配对导致部分模型报错；</li>
  *   <li>压缩共存：请求级挂载天然排在默认的 ContextCompressionInterceptor 之后，向压缩产物尾部追加；</li>
@@ -105,7 +105,7 @@ public class SteerInterceptor extends AbsReActInterceptor {
         }
 
         for (SteerMessage steer : messages) {
-            trace.getWorkingMemory().addMessage(SteerMessages.toChatMessage(steer));
+            trace.getWorkingMemory().addMessage(SteerProtocol.toChatMessage(steer));
         }
 
         // 不追加 systemPrompt 说明：注入消息自带前缀已足够表意，避免重复提示

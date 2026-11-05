@@ -6,7 +6,7 @@ package org.noear.solon.ai.harness.extension.queue;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.session.TurnDispatch;
+import org.noear.solon.ai.harness.turn.TurnDispatch;
 import org.noear.solon.lang.Nullable;
 
 /**
