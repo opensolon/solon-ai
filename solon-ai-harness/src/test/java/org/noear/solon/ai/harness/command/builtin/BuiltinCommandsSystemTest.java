@@ -10,14 +10,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
-import org.noear.solon.ai.harness.session.goal.BudgetThresholds;
-import org.noear.solon.ai.harness.session.goal.GoalCommand;
-import org.noear.solon.ai.harness.session.goal.GoalEngine;
-import org.noear.solon.ai.harness.session.goal.GoalExtension;
 import org.noear.solon.ai.harness.session.interrupt.InterruptCommand;
-import org.noear.solon.ai.harness.session.queue.QueueCommand;
-import org.noear.solon.ai.harness.session.queue.QueueHelper;
-import org.noear.solon.ai.harness.session.steer.SteerCommand;
 import org.noear.solon.ai.harness.util.TraceKeys;
 
 import java.nio.file.Path;
@@ -31,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 内置命令引擎级系统测试：完整引擎构建 + 全部 10 个内置命令注册 + engine.handle 全链路。
+ * 内置命令引擎级系统测试：完整引擎构建 + 全部 7 个核心内置命令注册 + engine.handle 全链路。
  * <p>
  * 命令层行为（execute 语义）已由同包各 CommandTest 单独覆盖；本类验证的是
  * 「命令注册 → ParsedCommand 解析 → CommandDispatcher 分发 → 回执/意图二段装配」
@@ -44,13 +37,9 @@ class BuiltinCommandsSystemTest {
     @TempDir
     Path workspace;
 
-    /** 宿主式构建：注册全部内置命令（框架自身不注册，宿主按需装配——与真实宿主一致）。
-     *  goal 传（真 GoalEngine, null Scheduler）：GoalScheduler 依赖 solon 容器的 JobManager 单例，
-     *  纯 JUnit 环境无容器会初始化失败；无目标会话的状态/子命令路径不触达 scheduler */
+    /** 宿主式构建：注册全部核心内置命令（框架自身不注册，宿主按需装配——与真实宿主一致）。
+     *  /queue、/steer、/goal 随插件模块独立，其引擎链路测试在各插件模块内（XxxCommandEngineTest）。 */
     private HarnessEngine engineWithBuiltins() {
-        GoalEngine goalEngine = new GoalEngine((org.noear.solon.ai.harness.HarnessEngine) null,
-                BudgetThresholds.defaults(), 3, 3, false);
-
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
                 .sessionProvider(InMemoryAgentSession::of)
                 .modelAdd(realModel())
@@ -64,9 +53,6 @@ class BuiltinCommandsSystemTest {
         engine.getCommandRegistry().register(new RewindCommand());
         engine.getCommandRegistry().register(new InterruptCommand());
         engine.getCommandRegistry().register(new ModelCommand());
-        engine.getCommandRegistry().register(new QueueCommand());
-        engine.getCommandRegistry().register(new SteerCommand());
-        engine.getCommandRegistry().register(new GoalCommand(GoalExtension.of(goalEngine, engine)));
         return engine;
     }
 
@@ -98,8 +84,8 @@ class BuiltinCommandsSystemTest {
         assertEquals(InputOutcome.Kind.REPLY, outcome.getKind());
         assertEquals("help", outcome.getCommandName());
         assertTrue(outcome.getCommandOutput().contains("/continue"));
-        assertTrue(outcome.getCommandOutput().contains("/goal"));
-        assertTrue(outcome.getCommandOutput().contains("/queue"));
+        assertTrue(outcome.getCommandOutput().contains("/interrupt"));
+        assertTrue(outcome.getCommandOutput().contains("/rewind"));
         assertNull(outcome.getRequest());
     }
 
@@ -240,58 +226,6 @@ class BuiltinCommandsSystemTest {
 
         assertEquals(InputOutcome.Kind.REPLY, outcome.getKind());
         assertTrue(outcome.getCommandOutput().contains("当前没有正在执行的任务"));
-    }
-
-    @Test
-    void queueEnqueuesThroughEngineAndReplyTexts() {
-        HarnessEngine engine = engineWithBuiltins();
-        AgentSession session = InMemoryAgentSession.of();
-
-        InputOutcome outcome = handle(engine, session, "/queue 排队的消息");
-
-        assertEquals(InputOutcome.Kind.REPLY, outcome.getKind());
-        assertTrue(outcome.getCommandOutput().contains("已加入队列（第 1 位）"));
-        assertEquals(1, QueueHelper.pendingSize(session));
-    }
-
-    @Test
-    void queueWithoutArgsShowsUsage() {
-        HarnessEngine engine = engineWithBuiltins();
-        InputOutcome outcome = handle(engine, InMemoryAgentSession.of(), "/queue");
-
-        assertEquals(InputOutcome.Kind.REPLY, outcome.getKind());
-        assertTrue(outcome.getCommandOutput().contains("用法：/queue"));
-    }
-
-    @Test
-    void steerWithoutRunningTaskSuggestsQueue() {
-        HarnessEngine engine = engineWithBuiltins();
-        InputOutcome outcome = handle(engine, InMemoryAgentSession.of(), "/steer 补充一下");
-
-        assertEquals(InputOutcome.Kind.REPLY, outcome.getKind());
-        assertTrue(outcome.getCommandOutput().contains("当前无正在执行的任务可插话"));
-    }
-
-    // ---------- /goal：命令链路（goal 引擎为 null 时的安全路径） ----------
-
-    @Test
-    void goalWithoutArgsShowsNoGoalStatus() {
-        HarnessEngine engine = engineWithBuiltins();
-        InputOutcome outcome = handle(engine, InMemoryAgentSession.of(), "/goal");
-
-        assertEquals(InputOutcome.Kind.REPLY, outcome.getKind());
-        assertTrue(outcome.getCommandOutput().contains("No goal in this session."));
-    }
-
-    @Test
-    void goalSubcommandsOnGoallessSessionAllSafe() {
-        // pause/resume/clear 在无目标会话上均走 gs==null 早退分支，不触达 scheduler（null）
-        HarnessEngine engine = engineWithBuiltins();
-        AgentSession session = InMemoryAgentSession.of();
-
-        assertTrue(handle(engine, session, "/goal pause").getCommandOutput().contains("No goal in this session."));
-        assertTrue(handle(engine, session, "/goal resume").getCommandOutput().contains("No goal in this session."));
-        assertTrue(handle(engine, session, "/goal clear").getCommandOutput().contains("No goal in this session."));
     }
 
     // ---------- terminalOnly 契约经引擎 ----------

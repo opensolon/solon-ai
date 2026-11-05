@@ -22,7 +22,6 @@ import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.ai.agent.session.SessionRuns.Claim;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.harness.session.queue.QueueHelper;
 import org.noear.solon.ai.harness.util.TraceUtil;
 import org.noear.solon.lang.Nullable;
 
@@ -30,18 +29,16 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * 会话中断的唯一实现。
+ * 会话中断的核心实现（停流 + 补收尾）。
  *
  * <p>此前中断逻辑只存在于 {@code /interrupt} 命令里，程序宿主想中断只能拼命令文本，
  * 或自己复刻 {@code attrs().remove("disposable") + dispose()} 这套内部约定。
- * 本类把它收敛为一处，由 {@code HarnessEngine#interrupt(AgentSession)}、
- * {@code /interrupt} 命令、以及 loop 的取消路径共同调用。</p>
+ * 本类把它收敛为一处，由 {@code HarnessEngine#interrupt(AgentSession)} 调用。</p>
  *
- * <p><b>顺序是有意的</b>：先清队列，再停当前流。停流后宿主常在终态回调里续发队首，
- * 若等到那时才清队列，会把刚被「停掉」的任务重新推起来。</p>
- *
- * <p>不依赖 {@code HarnessEngine}：中断只需要会话与运行时句柄，纯单测宿主（engine 为 null）
- * 也要能走通。</p>
+ * <p><b>只管核心语义</b>：本类不认识任何插件。用户级中断的插件参与（如 queue 清积压）由引擎在调用本类
+ * <b>之前</b>回调 {@code HarnessExtension#onInterrupt}，以此维持「先清积压再停流」的顺序。
+ * 因此宿主<b>必须</b>经引擎中断；直接调本类的 {@link #interrupt} / {@link #prepareInterrupt}
+ * 只停流、不会清积压。</p>
  *
  * @author noear
  * @since 4.2
@@ -54,10 +51,10 @@ public final class InterruptHelper {
     }
 
     /**
-     * 中断会话当前正在执行的任务。
+     * 中断会话当前正在执行的任务（仅核心语义）。
      *
-     * <p>三步：清队列（待执行与已被 drain 暂存的消息）→ 停运行流（框架自行登记过的句柄）
-     * → 补收尾（取消消息 + 快照）。</p>
+     * <p>两步：停运行流（框架自行登记过的句柄）→ 补收尾（取消消息 + 快照）。
+     * <b>不含插件参与</b>（不清积压），宿主请用 {@code engine.interrupt(session)}。</p>
      *
      * <p>运行句柄的登记已上收到 {@code ReActRequest}（经 {@link SessionRuns}），
      * 宿主无需再往 {@code session.attrs()} 里写 key。</p>
@@ -68,7 +65,9 @@ public final class InterruptHelper {
      * 返回 {@code false} 只意味着「调用时没有已登记的活跃流」，不是「用户可以重试」。</p>
      *
      * @return true = 确有运行中的任务被中断；false = 调用时没有已登记的活跃流（但取消代数已推进）
+     * @deprecated 不含插件参与（不再清队列），用 {@code HarnessEngine#interrupt(AgentSession)}
      */
+    @Deprecated
     public static boolean interrupt(AgentSession session) {
         InterruptPlan plan = prepareInterrupt(session);
         if (plan == null) {
@@ -78,32 +77,31 @@ public final class InterruptHelper {
     }
 
     /**
-     * 两段式中断的第一段：清队列 + 原子认领运行句柄（不停流、不写取消消息）。
+     * 两段式中断的第一段：原子认领运行句柄（不停流、不写取消消息；不含插件参与）。
      *
      * <p>与 {@link #interrupt(AgentSession)} 的差别是给宿主留出<b>编排窗口</b>：
      * 在停流之前发送渠道事件（如 Web 的「error → trace → done」包序），
      * 结束时用 {@link InterruptPlan#commit()} 提交。时序要求见 {@link InterruptPlan}。</p>
      *
-     * <p>内部顺序与 {@link #interrupt} 一致（先清队列再认领）。「判定忙碌」与「摘下句柄」
+     * <p>插件参与（清积压）由引擎在调用本方法之前完成。「判定忙碌」与「摘下句柄」
      * 由 {@link SessionRuns#claim(AgentSession)} 在同一临界区完成：两个并发的停止只会有一者
      * 拿到 {@code hasActiveRun()==true} 的 plan，不会重复写取消消息、重复领终态。</p>
      *
      * <p>会话为 null 时返回 null（安全，无副作用）。</p>
      *
      * @return 中断计划；null 仅当会话为 null。无活跃流时返回 {@code hasActiveRun()==false}
-     *         的 plan（队列与取消代数已处理完，宿主走空态出口即可）
+     *         的 plan（取消代数已推进，宿主走空态出口即可）
      * @since 4.2.0
+     * @deprecated 不含插件参与（不再清队列），用 {@code HarnessEngine#prepareInterrupt(AgentSession)}
      */
+    @Deprecated
     @Nullable
     public static InterruptPlan prepareInterrupt(AgentSession session) {
         if (session == null) {
             return null;
         }
 
-        // ① 清排队：无论当前流句柄是否还在，排队项都必须取消（否则停流后又被续发）
-        QueueHelper.cancelPending(session);
-
-        // ② 原子认领：摘下句柄与推进取消代数是同一临界区，并发停止只一者成功
+        // 原子认领：摘下句柄与推进取消代数是同一临界区，并发停止只一者成功
         Claim claim = SessionRuns.claim(session);
 
         return new InterruptPlanImpl(claim, session);

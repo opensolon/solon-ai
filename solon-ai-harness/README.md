@@ -831,27 +831,24 @@ HarnessEngine.of("/data/work", ".solon/")
 
 **三个能力，三个类**：每个命令从装配到运行期操作宿主都只接触一个 Extension 实例（宿主侧与 harness 的交互面收敛到一个类），不再需要宿主逐个 new `GoalEngine`/`GoalScheduler`/`GoalCommand`，也不需要分别操作 `QueueHelper`。命令本身的语法与回执未变，终端用户无感知。
 
+**三个能力是三个独立插件模块（4.2.0+）**：`solon-ai-harness-goal` / `solon-ai-harness-queue` / `solon-ai-harness-steer`，按需引入。核心模块不认识它们，它们之间也互不依赖，只经核心契约协作（见 `HarnessExtension` 类注释「插件化的三种协作机制」）：
+
+| 契约 | 类型 | 提供方 | 消费方 |
+|---|---|---|---|
+| `HarnessExtension#onInterrupt` | 钩子（广播） | 引擎 `interrupt` / `prepareInterrupt` 先于停流回调 | queue 清队列 |
+| `session.InputBacklog` | 能力接口（`engine.getExtension(InputBacklog.class)`） | queue | 引擎 `status`/`admit`、steer 残留转排队 |
+| `session.TurnDispatch` | 会话槽位（`session.turn.dispatch`） | queue 派发 | 引擎 `admit`、`SessionTurn` |
+
+没装 queue 时：`admit` 忙态给 `REJECT("busy")`（无队可入）；steer 残留按转排队失败处理（暂存并推 `SteerDroppedEvent`）。
+
+装配用 `addExtensionIfAbsent`（按类型幂等，返回实际生效的实例；`addExtension` 不查重，重复会二次 `onAttach`）：
+
 ```java
-GoalExtension goal = GoalExtension.builder(workspaceId).taskExecutor(myRunner).build();
-engine.addExtension(goal); // /goal
-
-QueueExtension queue = new QueueExtension();
-engine.addExtension(queue); // /queue
-
-SteerExtension steer = new SteerExtension();
-engine.addExtension(steer); // /steer
+GoalExtension goal = engine.addExtensionIfAbsent(
+        GoalExtension.builder(workspaceId).taskExecutor(myRunner).build()); // /goal
+QueueExtension queue = engine.addExtensionIfAbsent(new QueueExtension()); // /queue
+SteerExtension steer = engine.addExtensionIfAbsent(new SteerExtension()); // /steer
 ```
-
-**推荐形态：一次装齐（4.2.1+）**。上面三行分散在组合根里容易漏写（漏一行就是「命令没注册、功能静默不存在」），且 `addExtension` 不查重（重复会二次 `onAttach`）。改用聚合入口后顺序与幂等由 harness 负责，宿主只负责「goal 怎么配」：
-
-```java
-HarnessExtensions.Handles handles = HarnessExtensions.installDefaults(
-        engine, GoalExtension.builder(workspaceId).budget(70, 85).build());
-handles.goal().setEnabled(goalsEnabled);   // 句柄取回的就是生效实例
-// handles.steer() / handles.queue() 同样可直接用
-```
-
-`installDefaults(engine, workspaceId)` 是免配置简写，但它会按缺省建 `GoalScheduler`（`JobManager` 是 Solon 容器单例），**无容器宿主**（纯 JUnit / headless）请用带 `GoalExtension` 的重载并 `scheduler(null)` 关闭调度。宿主自有扩展（loop / manager 等）仍走 `engine.addExtension(...)` 追加，聚合入口不接管它们。
 
 三者共同点：`/queue` 与 `/steer` 的 `runnableWhenBusy()` 返回 `true`（宿主据此允许它们在任务执行中被受理）；`/goal` **不覆写**、保持默认 `false`（它会启动持续轮次，不能在忙时会话里重入）。注意这只是**给宿主读的声明**，引擎内部不做忙碌拦截（详见下文边界）。`/queue`、`/steer` 从 `Command.execute(engine, ctx, origin)` 的第三参拿到 `InputOrigin` 并带到投递链路，三者都**不自己开流**。
 

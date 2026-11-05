@@ -17,7 +17,6 @@ package org.noear.solon.ai.harness.session;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.SessionRuns;
-import org.noear.solon.ai.harness.session.queue.QueueDispatch;
 import org.noear.solon.lang.Nullable;
 
 /**
@@ -25,14 +24,14 @@ import org.noear.solon.lang.Nullable;
  *
  * <p><b>为什么需要它</b>：异步宿主的「开一轮流」包含两件必须<b>在订阅之前</b>完成的事——
  * 取取消代数基准（否则调度窗口内的 interrupt 会造出一条取消不掉的幽灵流）、
- * 捕获本轮所属的队列派发事务（终态必须收「这一条流自己的」claim，而不是「会话当前」的）。
+ * 捕获本轮所属的程序派发事务（终态必须收「这一条流自己的」事务，而不是「会话当前」的）。
  * 这两件事此前由每个宿主各自抄一遍，且必然漏抄：Web 的 async 与 sync 两条路径各写一份
  * （sync 那份连收口都漏了），桌面端再写一份，三处不一致的「取消以 complete 收尾」
  * 不变量只能靠 README 记住。</p>
  *
  * <p>本类把这份「一轮」的身份收归 harness：{@link #begin} 一次捕获，{@link #isCancelled()}
- * 判取消，{@link #settle(boolean)} 收口派发。宿主不再接触 {@link SessionRuns} 与
- * {@link QueueDispatch}。</p>
+ * 判取消，{@link #settle(boolean)} 收口派发。宿主不再接触 {@link SessionRuns} 与派发实现
+ * （派发事务经核心槽位 {@link TurnDispatch} 读取，不认识具体插件）。</p>
  *
  * <p><b>使用规约（必须遵守）</b>：</p>
  * <pre>{@code
@@ -47,7 +46,7 @@ import org.noear.solon.lang.Nullable;
  *     }
  *     request.stream()
  *            .doFinally(s -> {
- *                turn.settle(true);   // 幂等；非队列输入时是空操作
+ *                turn.settle(true);   // 幂等；非程序派发的输入时是空操作
  *                emitDoneOnce();
  *                drainQueue();
  *            })
@@ -68,11 +67,11 @@ import org.noear.solon.lang.Nullable;
 public final class SessionTurn {
     private final AgentSession session;
     private final int cancelGeneration;
-    private final QueueDispatch dispatch;
+    private final TurnDispatch dispatch;
     private boolean settled;
     private boolean settleResult;
 
-    private SessionTurn(@Nullable AgentSession session, int cancelGeneration, @Nullable QueueDispatch dispatch) {
+    private SessionTurn(@Nullable AgentSession session, int cancelGeneration, @Nullable TurnDispatch dispatch) {
         this.session = session;
         this.cancelGeneration = cancelGeneration;
         this.dispatch = dispatch;
@@ -92,7 +91,7 @@ public final class SessionTurn {
         }
         return new SessionTurn(session,
                 SessionRuns.cancelCount(session),
-                QueueDispatch.current(session));
+                TurnDispatch.current(session));
     }
 
     /**
@@ -113,16 +112,16 @@ public final class SessionTurn {
     }
 
     /**
-     * 本轮所属的派发事务（非队列派发的一轮为 {@code null}）。
+     * 本轮所属的派发事务（非程序派发的一轮为 {@code null}）。
      *
-     * <p>宿主用它做<b>输入入口</b>的判定：「我是不是由队列派发而来」，也可以用
-     * {@link QueueDispatch#getOrigin()} 取回复路由来源。</p>
+     * <p>宿主用它做<b>输入入口</b>的判定：「我是不是由程序派发而来」，也可以用
+     * {@link TurnDispatch#getOrigin()} 取回复路由来源。</p>
      *
      * <p><b>不要</b>用它做「当前线程是否在派发调用栈里」的判定——那要看
-     * {@link QueueDispatch#isOnDispatchThread()}（异步线程上恒为 false）。</p>
+     * {@link TurnDispatch#isOnDispatchThread()}（异步线程上恒为 false）。</p>
      */
     @Nullable
-    public QueueDispatch dispatch() {
+    public TurnDispatch dispatch() {
         return dispatch;
     }
 
@@ -143,7 +142,7 @@ public final class SessionTurn {
         if (dispatch != null) {
             settleResult = dispatch.settle(started);
         } else {
-            QueueDispatch current = QueueDispatch.current(session);
+            TurnDispatch current = TurnDispatch.current(session);
             settleResult = current != null && current.settle(started);
         }
         return settleResult;

@@ -597,6 +597,7 @@ class HarnessEngineAccessorTest {
             "addPermissionRule", "addPermissionRules",
             "addMount", "removeMount", "refreshMount", "refreshMainAgent",
             "addExtension", "removeExtension", "setExtensionEnabled",
+            "addExtensionIfAbsent" /* HarnessPluginContractTest */,
             "setSessionCwd", "setSessionCwdIfAbsent", "setSessionModel", "setSessionAgent",
             "disallowSkill", "allowSkill", "disallowSkillReset");
 

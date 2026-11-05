@@ -18,13 +18,14 @@ package org.noear.solon.ai.harness;
 import org.noear.solon.ai.AiSwitchable;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActOptionsAmend;
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.lang.Preview;
 
 /**
  * Harness 扩展接口
  *
- * <p>把「引擎生命周期、代理装配、输入入口、请求装配」切成 5 个回调点，扩展只需覆写自己要用的那几个。
+ * <p>把「引擎生命周期、代理装配、输入入口、请求装配、会话中断」切成 6 个回调点，扩展只需覆写自己要用的那几个。
  * 按发生顺序排列：</p>
  *
  * <pre>
@@ -36,10 +37,26 @@ import org.noear.solon.lang.Preview;
  *
  * 每次请求装配     ──onRequestAssemble─&gt; [ReActRequest]
  *
+ * 用户级中断       ──onInterrupt───────&gt; [先于停流：清积压等]
+ *
  * remove/shutdown  ──onDetach─────────&gt; [引擎级清理]
  * </pre>
  *
- * <h3>开关（{@link #isEnabled()}）语义：三个不看，两个看</h3>
+ * <h3>插件化的三种协作机制（各管一类，不要混用）</h3>
+ * <ol>
+ *     <li><b>引擎通知所有扩展 → 用本接口的钩子</b>（一对多广播，如 {@link #onInterrupt}）。</li>
+ *     <li><b>一个扩展向引擎或另一个扩展提供服务 → 用核心定义的能力接口</b>，实现类同时实现它，
+ *         消费方用 {@code engine.getExtension(能力接口.class)} 查找（如
+ *         {@link org.noear.solon.ai.harness.session.InputBacklog}）。不要把领域能力做成本接口的
+ *         default 方法——那会让每个扩展都继承与自己无关的语义。</li>
+ *     <li><b>需要在会话锁内或无引擎场景读取的会话事实 → 用核心持有的 attrs 槽位</b>
+ *         （如 {@link org.noear.solon.ai.harness.session.TurnDispatch}）。</li>
+ *     <li><b>核心的静态 API 只读核心事实</b>；扩展贡献的事实一律经引擎读取
+ *         （如积压数只在 {@code engine.status(session)} 里，不在 {@code SessionStatus.of(session)} 里）。</li>
+ * </ol>
+ * <p>核心模块不得 import 任何插件包；插件之间也不互相 import，只经核心契约协作。</p>
+ *
+ * <h3>开关（{@link #isEnabled()}）语义：四个不看，两个看</h3>
  * <table border="1">
  *     <caption>各钩子是否受 {@link #isEnabled()} 控制</caption>
  *     <tr><th>钩子</th><th>是否判 {@code isEnabled()}</th><th>原因</th></tr>
@@ -50,13 +67,15 @@ import org.noear.solon.lang.Preview;
  *             「挂上但停用」比「不挂」更容易在运行期恢复</td></tr>
  *     <tr><td>{@link #onDetach}</td><td><b>否</b></td>
  *         <td>清理不得被开关阻止，否则停用前占用的资源永远无法释放</td></tr>
+ *     <tr><td>{@link #onInterrupt}</td><td><b>否</b></td>
+ *         <td>同属清理类：停用前积压的任务也必须随用户停止一起作废</td></tr>
  *     <tr><td>{@link #onInput}</td><td>是</td><td>纯运行期钩子，停用即不参与本次输入</td></tr>
  *     <tr><td>{@link #onRequestAssemble}</td><td>是</td><td>纯运行期钩子，停用即不参与本次请求</td></tr>
  * </table>
  *
  * <h3>实现约定</h3>
  * <ul>
- *     <li>五个钩子<b>全部 default</b>：只覆写自己需要的那几个，不必实现空方法。</li>
+ *     <li>六个钩子<b>全部 default</b>：只覆写自己需要的那几个，不必实现空方法。</li>
  *     <li>需要运行期开关能力时继承 {@link AbsHarnessExtension}（已实现 {@link #isEnabled()}/
  *         {@link #setEnabled(Boolean)}）；直接 {@code implements} 时 {@link AiSwitchable} 的默认实现是
  *         {@code isEnabled() = true} 且 {@code setEnabled} 空操作——即恒启用且无法关闭，
@@ -218,6 +237,29 @@ public interface HarnessExtension extends AiSwitchable {
      * @since 4.2.0
      */
     default void onRequestAssemble(HarnessEngine engine, boolean isDelegated, String agentName, ReActOptionsAmend optionsAmend) {
+
+    }
+
+    /**
+     * 用户级会话中断（中断参与）
+     *
+     * <p><b>调用点</b>：{@code HarnessEngine.interrupt(session)} / {@code prepareInterrupt(session)}
+     * （{@code /interrupt} 命令也经此）。仅用户级完整中断会回调；只停流的程序行为
+     * （{@code interruptStream} / {@code interruptStreamActive}，如新轮次顶掉旧轮次）<b>不</b>回调。</p>
+     *
+     * <p><b>时序保证</b>：引擎在认领并停止运行流<b>之前</b>回调。停流后宿主常在终态回调里续发积压，
+     * 若等到那时才清理，会把刚被停掉的任务重新推起来（「先清积压再停流」）。</p>
+     *
+     * <p><b>典型用途</b>：积压类插件清空待执行项（queue）。</p>
+     *
+     * <p><b>注意</b>：不判 {@code isEnabled()}（清理类）；运行在调用线程，<b>不得阻塞</b>；
+     * 引擎逐个 try/catch，单个扩展的异常只记告警、不会阻止停流（中断必须总能生效）。</p>
+     *
+     * @param engine  引擎
+     * @param session 被中断的会话（非 null）
+     * @since 4.2.0
+     */
+    default void onInterrupt(HarnessEngine engine, AgentSession session) {
 
     }
 }

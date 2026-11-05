@@ -20,8 +20,6 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.ai.chat.message.AssistantMessage;
-import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.session.queue.QueueHelper;
 import reactor.core.Disposable;
 
 import java.util.concurrent.CountDownLatch;
@@ -42,7 +40,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>commit 幂等：重复 commit / close 不重复停流、不重复写取消消息；</li>
  *   <li>close 兜底：宿主忘记 commit 时，凭证闭合仍会停流（不泄漏孤儿流）。</li>
  * </ol>
+ *
+ * <p>扩展的中断参与（如清队列）由引擎在第一段之前回调，见 {@code HarnessPluginContractTest}。</p>
  */
+@SuppressWarnings("deprecation")
 class InterruptPlanTest {
 
     private static Disposable countingDisposable(AtomicInteger counter) {
@@ -62,15 +63,13 @@ class InterruptPlanTest {
     @Test
     void prepareThenCommitMatchesOneStepInterrupt() {
         AgentSession session = InMemoryAgentSession.of();
-        QueueHelper.enqueue(session, "排队一", InputOrigin.channel("test"));
         AtomicInteger disposed = new AtomicInteger();
         SessionRuns.attach(session, countingDisposable(disposed));
 
         InterruptPlan plan = InterruptHelper.prepareInterrupt(session);
         assertTrue(plan != null && plan.hasActiveRun());
 
-        // 编排窗口内：队列已清（否则停流后又被续发），流尚未停，取消消息尚未写
-        assertEquals(0, QueueHelper.pendingSize(session), "第一段就必须清掉排队项");
+        // 编排窗口内：流尚未停，取消消息尚未写
         assertEquals(0, disposed.get(), "第一段不得停流（窗口内宿主还要发事件）");
         assertTrue(session.getMessages().isEmpty(), "第一段不得写取消消息（落库时机归宿主）");
 
@@ -153,7 +152,6 @@ class InterruptPlanTest {
     @Test
     void noActiveRunPlanGoesEmptyPath() {
         AgentSession session = InMemoryAgentSession.of();
-        QueueHelper.enqueue(session, "排队一", InputOrigin.channel("test"));
 
         InterruptPlan plan = InterruptHelper.prepareInterrupt(session);
 
@@ -161,7 +159,6 @@ class InterruptPlanTest {
         assertFalse(plan.hasActiveRun(), "无活跃流：宿主应走空态出口（如兜底 done）");
         assertFalse(plan.commit(), "无活跃流的 commit 返回 false");
         assertTrue(session.getMessages().isEmpty(), "空态不得写取消消息（避免污染空会话）");
-        assertEquals(0, QueueHelper.pendingSize(session), "排队项仍必须被取消");
     }
 
     @Test
@@ -170,18 +167,15 @@ class InterruptPlanTest {
     }
 
     @Test
-    void queuedItemsCancelledBeforeCommitWithoutDuplication() {
-        // 回归锁：两段式与一步式的队列语义一致（cancelPending 幂等、取消消息与队列清理无重复副作用）
+    void tryWithResourcesClosesWithoutDuplication() {
+        // 回归锁：try-with-resources 闭合与一步式等价，取消消息无重复副作用
         AgentSession session = InMemoryAgentSession.of();
-        QueueHelper.enqueue(session, "排队一", InputOrigin.channel("test"));
-        QueueHelper.enqueue(session, "排队二", InputOrigin.channel("test"));
         SessionRuns.attach(session, countingDisposable(new AtomicInteger()));
 
         try (InterruptPlan plan = InterruptHelper.prepareInterrupt(session)) {
             assertTrue(plan.hasActiveRun());
         }
 
-        assertEquals(0, QueueHelper.pendingSize(session));
         assertEquals(1, session.getMessages().size());
         assertTrue(session.getMessages().get(0) instanceof AssistantMessage);
         assertEquals("用户已取消任务.", session.getMessages().get(0).getContent());

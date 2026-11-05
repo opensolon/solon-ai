@@ -18,7 +18,6 @@ package org.noear.solon.ai.harness.session;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.ai.harness.input.HitlCard;
-import org.noear.solon.ai.harness.session.queue.QueueHelper;
 import org.noear.solon.lang.Nullable;
 
 /**
@@ -26,12 +25,15 @@ import org.noear.solon.lang.Nullable;
  *
  * <p>宿主的「这条会话现在能不能接新输入」判定，实际上要同时看三件事：
  * 有没有活跃流（{@link SessionRuns}）、有没有待审批的挂起卡（{@link HitlCard}）、
- * 队列里还压着几条（{@link QueueHelper}）。三者散在三个包，宿主每次都要各查一遍——
- * 漏查任何一个都会导致真实故障：漏查 HITL 会把审批中的会话判成空闲、新输入直接顶掉挂起任务；
- * 漏查队列会重复 drain。</p>
+ * 积压里还压着几条（{@link InputBacklog}）。漏查任何一个都会导致真实故障：
+ * 漏查 HITL 会把审批中的会话判成空闲、新输入直接顶掉挂起任务；漏查积压会重复 drain。</p>
  *
- * <p>本类是这三项事实的<b>只读快照</b>，不做缓存、不订阅变更：每次 {@link #of} 都是现读，
+ * <p>本类是这些事实的<b>只读快照</b>，不做缓存、不订阅变更：每次都是现读，
  * 因此不会出现「快照过期」的坑。宿主要判断「现在」能不能接单，调一次即可。</p>
+ *
+ * <p><b>一律用 {@code engine.status(session)}</b>：积压数由插件贡献，只有引擎知道装了哪些插件。
+ * 静态的 {@link #of(AgentSession)} 只读核心事实（运行流 / HITL / 受理窗口），
+ * 其 {@link #getQueuedCount()} 恒为 0。</p>
  *
  * <p><b>注意 busy 的口径</b>：{@link #isBusy()} 只表示「有活跃运行流」。
  * 「不能接新输入」通常是 {@link #isOccupied()}（忙碌或待审批），两者刻意分开——
@@ -59,16 +61,27 @@ public final class SessionStatus {
     }
 
     /**
-     * 读取会话当前运行态（session 为 null 时返回全空闲快照）
+     * 读取会话当前的<b>核心</b>运行态（session 为 null 时返回全空闲快照）。
+     *
+     * <p>不含插件贡献的事实：{@link #getQueuedCount()} 恒为 0。宿主请用 {@code engine.status(session)}。</p>
      */
     public static SessionStatus of(@Nullable AgentSession session) {
+        return of(session, 0);
+    }
+
+    /**
+     * 读取会话当前运行态，并补入插件贡献的积压数（供引擎组装；宿主用 {@code engine.status}）。
+     *
+     * @param queuedCount 各 {@link InputBacklog#size} 之和
+     * @since 4.2.0
+     */
+    public static SessionStatus of(@Nullable AgentSession session, int queuedCount) {
         if (session == null) {
             return new SessionStatus(false, 0, 0, 0, 0, false);
         }
 
         int activeRunCount = SessionRuns.activeCount(session);
         int pendingHitl = HitlCard.pendingCount(session);
-        int queuedCount = QueueHelper.pendingSize(session);
         int cancelGeneration = SessionRuns.cancelCount(session);
 
         return new SessionStatus(activeRunCount > 0, activeRunCount, pendingHitl,
@@ -104,7 +117,7 @@ public final class SessionStatus {
     }
 
     /**
-     * 队列中待执行的任务数（不含正在执行的那条）
+     * 积压中待执行的任务数（不含正在执行的那条；仅 {@code engine.status} 的快照含此事实）
      */
     public int getQueuedCount() {
         return queuedCount;

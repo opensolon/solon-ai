@@ -39,32 +39,27 @@ public final class HarnessAttrs {
 
     // ========== 引擎契约键（session.*）==========
 
-    /** 队列本体（attrs 中存活的运行态 Deque&lt;QueueItem&gt;，未持久化） */
-    public static final String QUEUE = "session.queue";
-
-    /** 队列项快照投影（FlowContext.data 的持久化 key，值为 List&lt;Map&gt;） */
-    public static final String QUEUE_ITEMS = "session.queue.items";
-
-    /** 队列在飞项（运行中任务的队列项，drain 暂存） */
-    public static final String QUEUE_IN_FLIGHT = "session.queue.inFlight";
-
-    /** 队列代际（cancelPending 递增，用于拒绝旧代际的 requeue） */
-    public static final String QUEUE_GENERATION = "session.queue.generation";
-
-    /** 队列领取标记（claimNext 期间的原子占位，方法返回即释放） */
-    public static final String QUEUE_CLAIM = "session.queue.claim";
+    /*
+     * 插件自有键登记在各插件模块内（如 queue 插件的 QueueAttrs：session.queue.*），
+     * 核心只登记引擎与「核心持有的会话事实槽位」。
+     */
 
     /**
-     * 跨线程存活的队列派发事务（值为 {@code QueueDispatch}）。
+     * 程序派发的一轮（值为 {@link TurnDispatch}，transient，未持久化）。
      *
-     * <p>与 {@link #QUEUE_CLAIM} 的差别：后者只在 {@code claimNext} 调用栈内存活（方法返回即清），
-     * 本键随异步任务一直保留到流终态收口，是宿主判定「本轮是否队列派发」「该用哪个 claim
-     * 收口」的唯一来源。宿主不要直接读写本键，用 {@code QueueDispatch#current(session)} 读 /
-     * {@code QueueDispatch#settle(boolean)} 收口。</p>
+     * <p>随异步任务一直保留到流终态收口，是「本轮是否程序派发」「该用哪个事务收口」的唯一来源。
+     * 宿主与插件不要直接读写本键：读用 {@link TurnDispatch#current}，登记/注销用
+     * {@link TurnDispatch#bind} / {@link TurnDispatch#unbind}。</p>
      *
-     * @since 4.2.2
+     * @since 4.2.0
      */
-    public static final String QUEUE_DISPATCH = "session.queue.dispatch";
+    public static final String TURN_DISPATCH = "session.turn.dispatch";
+
+    /**
+     * @deprecated 派发事务已上提为核心槽位，用 {@link #TURN_DISPATCH}（本常量为其别名）
+     */
+    @Deprecated
+    public static final String QUEUE_DISPATCH = TURN_DISPATCH;
 
     /**
      * 本轮实际生效的子代理名（含 {@code @子代理} 解析结果），主代理归一为 {@code "main"}。

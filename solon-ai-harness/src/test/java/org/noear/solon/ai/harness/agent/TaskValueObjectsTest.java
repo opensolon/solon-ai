@@ -5,7 +5,6 @@ import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
-import org.noear.solon.ai.harness.session.goal.validate.GoalValidator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -124,22 +123,5 @@ class TaskValueObjectsTest {
     void taskOpDefaults() {
         TaskTalent.MultiTaskOp op = new TaskTalent.MultiTaskOp();
         assertEquals(1, op.index, "index 默认 1");
-    }
-
-    // ---------- ValidationResult ----------
-
-    @Test
-    void passedResultCarriesEmptyDetail() {
-        GoalValidator.ValidationResult r = GoalValidator.ValidationResult.passed();
-        assertTrue(r.isPassed());
-        assertEquals("", r.detail());
-    }
-
-    @Test
-    void failedResultCarriesDetail() {
-        GoalValidator.ValidationResult r = GoalValidator.ValidationResult.failed("测试未通过：3 个用例失败");
-        assertFalse(r.isPassed());
-        assertNotNull(r.detail());
-        assertTrue(r.detail().contains("3 个用例失败"));
     }
 }

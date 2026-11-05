@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.noear</groupId>
+        <artifactId>solon-ai-parent</artifactId>
+        <version>4.2.0-SNAPSHOT</version>
+        <relativePath>../solon-ai-parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>solon-ai-harness-steer</artifactId>
+    <name>${project.artifactId}</name>
+    <packaging>jar</packaging>
+    <description>solon-ai-harness 插件：运行中插话（/steer；残留插话经核心 InputBacklog 转排队，不依赖 queue 插件）</description>
+
+    <dependencies>
+        <!-- 只依赖核心契约（HarnessExtension / InputBacklog / TurnDispatch），不依赖其它插件 -->
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-ai-harness</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- 仅测试：用真实积压实现验证「残留转排队」（main 代码不依赖 queue 插件） -->
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-ai-harness-queue</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+
+    <repositories>
+        <repository>
+            <id>sonatype-snapshots</id>
+            <name>Sonatype Snapshots</name>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+        </repository>
+    </repositories>
+    <pluginRepositories>
+        <pluginRepository>
+            <id>sonatype-snapshots</id>
+            <name>Sonatype Snapshots</name>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+        </pluginRepository>
+    </pluginRepositories>
+</project>

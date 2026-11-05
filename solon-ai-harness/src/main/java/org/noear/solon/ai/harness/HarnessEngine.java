@@ -55,7 +55,8 @@ import org.noear.solon.ai.harness.hitl.BashToolStrategy;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.input.AdmitDecision;
 import org.noear.solon.ai.harness.session.InputGate;
-import org.noear.solon.ai.harness.session.queue.QueueDispatch;
+import org.noear.solon.ai.harness.session.InputBacklog;
+import org.noear.solon.ai.harness.session.TurnDispatch;
 import org.noear.solon.ai.harness.session.HarnessAttrs;
 import org.noear.solon.ai.harness.session.SessionSelections;
 import org.noear.solon.ai.harness.session.SessionStatus;
@@ -577,28 +578,32 @@ public class HarnessEngine {
     }
 
     /**
-     * 按类型取已挂载的扩展（宿主取用扩展门面的唯一方式）
+     * 按类型取已挂载的扩展或扩展提供的能力（宿主与插件取用扩展门面的唯一方式）
      *
      * <p>在 {@link #getExtensions()} 之上补一个类型化取用入口：扩展在 {@code addExtension} 之后
      * 原本只能通过遍历 + {@code instanceof} 找回，宿主每写一个扩展就要写一遍这段样板，
      * 且取不到时无统一口径可依。</p>
      *
+     * <p><b>也用于能力查找</b>：{@code type} 可以是核心定义的能力接口（如
+     * {@link InputBacklog}），返回首个实现了它的扩展。插件之间应按能力接口查找，
+     * 而不是按对方的实现类查找（否则两个插件模块就耦合在一起了）。</p>
+     *
      * <pre>{@code
-     * QueueExtension queue = engine.getExtension(QueueExtension.class);
-     * if (queue != null) {
-     *     queue.enqueue(session, "接着改文档");
-     * }
+     * engine.getExtension(QueueExtension.class)
+     *       .ifPresent(queue -> queue.enqueue(session, "接着改文档"));
+     *
+     * InputBacklog backlog = engine.getExtension(InputBacklog.class).orElse(null);
      * }</pre>
      *
      * <p>多个同类实例时返回<b>首个</b>（与 {@code removeExtension} 只移除首个同口径）；
-     * 未挂载或类型不匹配时返回 {@code null}（不抛异常——「没有这个能力」是正常状态，
+     * 未挂载或类型不匹配时返回 {@link Optional#empty()}（不抛异常——「没有这个能力」是正常状态，
      * 宿主据此决定是否降级，不该被迫用异常做分支）。</p>
      *
-     * @param type 扩展类型
-     * @return 已挂载的扩展实例；未挂载时为 null
+     * @param type 扩展类型或能力接口
+     * @return 已挂载的扩展实例；未挂载时为 {@link Optional#empty()}
      * @since 4.2.0
      */
-    public <T extends HarnessExtension> Optional<T> getExtension(Class<T> type) {
+    public <T> Optional<T> getExtension(Class<T> type) {
         if (type == null) {
             return Optional.empty();
         }
@@ -1252,6 +1257,41 @@ public class HarnessEngine {
             if (this.mainAgent != null) {
                 this.mainAgent = createMainAgent();
             }
+        } finally {
+            agentLock.unlock();
+        }
+    }
+
+    /**
+     * 按类型幂等挂载扩展：引擎上已有同类型（{@code extension.getClass()} 的实例）时不再添加。
+     *
+     * <p>{@link #addExtension} 不查重，重复添加会二次回调 {@code onAttach}（重复注册、重复建调度器）。
+     * 组合根装配插件时用本方法，重复装配拿到的是<b>已挂载</b>的那个实例：</p>
+     *
+     * <pre>{@code
+     * engine.addExtensionIfAbsent(new SteerExtension());
+     * engine.addExtensionIfAbsent(new QueueExtension());
+     * GoalExtension goal = engine.addExtensionIfAbsent(GoalExtension.builder(id).build());
+     * }</pre>
+     *
+     * @param extension 待挂载的扩展（null 时返回 null）
+     * @return 实际生效的实例（已有则为已挂载者，否则为入参）
+     * @since 4.2.0
+     */
+    @SuppressWarnings("unchecked")
+    public <T extends HarnessExtension> T addExtensionIfAbsent(T extension) {
+        if (extension == null) {
+            return null;
+        }
+
+        agentLock.lock();
+        try {
+            Optional<? extends HarnessExtension> mounted = getExtension(extension.getClass());
+            if (mounted.isPresent()) {
+                return (T) mounted.get();
+            }
+            addExtension(extension);
+            return extension;
         } finally {
             agentLock.unlock();
         }
@@ -2022,13 +2062,12 @@ public class HarnessEngine {
     /**
      * 中断会话当前正在执行的任务（程序化 /interrupt）。
      *
-     * <p>收敛此前只存在于 {@code /interrupt} 命令里的内部细节：清空排队项、释放宿主订阅时
-     * 存入 {@code session.attrs("disposable")} 的流句柄、补写取消消息（带 runId 元数据）与快照。
-     * 命令实现与本方法同源（{@link InterruptHelper}），不存在第二套中断逻辑。</p>
+     * <p>收敛此前只存在于 {@code /interrupt} 命令里的内部细节：回调扩展的中断参与（如 queue 清排队项）、
+     * 释放运行流句柄、补写取消消息（带 runId 元数据）与快照。
+     * {@code /interrupt} 命令也走本方法，不存在第二套中断逻辑。</p>
      *
-     * <p><b>先清队列再停流</b>：停流后宿主常在终态回调里续发队首，顺序颠倒会把刚被停掉的任务
-     * 重新推起来。queue / steer 的干预闭环因此是完整的：
-     * {@code interrupt} 停、{@code steer} 改、{@code queue} 重排。</p>
+     * <p><b>先清积压再停流</b>：{@link HarnessExtension#onInterrupt} 保证在认领/停流之前回调。
+     * 停流后宿主常在终态回调里续发队首，顺序颠倒会把刚被停掉的任务重新推起来。</p>
      *
      * <pre>{@code
      * if (engine.interrupt(session)) {
@@ -2039,11 +2078,12 @@ public class HarnessEngine {
      * @return true = 已中断；false = 当前无正在执行的任务（会话为 null 时也返回 false）
      */
     public boolean interrupt(@Nullable AgentSession session) {
-        return InterruptHelper.interrupt(session);
+        InterruptPlan plan = prepareInterrupt(session);
+        return plan != null && plan.commit();
     }
 
     /**
-     * 两段式中断的第一段：清队列 + 原子认领运行句柄（不停流、不写取消消息）。
+     * 两段式中断的第一段：扩展中断参与（清积压等）+ 原子认领运行句柄（不停流、不写取消消息）。
      *
      * <p>给需要自定义终态时序的宿主（如 Web 的「先落库 → error → done → 最后停流」）留出
      * 编排窗口；编排完调用 {@link InterruptPlan#commit()} 提交。不需要自定义时序的宿主
@@ -2063,11 +2103,26 @@ public class HarnessEngine {
      * }</pre>
      *
      * @return 中断计划；null 仅当会话为 null。无活跃流时返回 {@code hasActiveRun()==false}
-     *         的计划（队列与取消代数已处理，宿主走空态出口）
+     *         的计划（积压与取消代数已处理，宿主走空态出口）
      * @since 4.2.0
      */
     @Nullable
+    @SuppressWarnings("deprecation")
     public InterruptPlan prepareInterrupt(@Nullable AgentSession session) {
+        if (session == null) {
+            return null;
+        }
+
+        // ① 扩展中断参与（先于停流）：逐个隔离异常，任何扩展都不能阻止中断生效
+        for (HarnessExtension extension : options.getExtensions()) {
+            try {
+                extension.onInterrupt(this, session);
+            } catch (Throwable e) {
+                LOG.warn("Extension onInterrupt failed: {}", extension.getClass().getName(), e);
+            }
+        }
+
+        // ② 核心：原子认领运行句柄（停流与补收尾在 plan.commit）
         return InterruptHelper.prepareInterrupt(session);
     }
 
@@ -2103,15 +2158,34 @@ public class HarnessEngine {
     }
 
     /**
-     * 读取会话运行态快照（忙碌 / 待审批 / 排队数一次读全）
+     * 读取会话运行态快照（忙碌 / 待审批 / 积压数一次读全）
      *
-     * <p>宿主的「能不能接新输入」判定需要同时看运行流、挂起卡、队列三项，
-     * 三者原本散在三个包里。读一次快照即可，不要自己拼。</p>
+     * <p>宿主的「能不能接新输入」判定需要同时看运行流、挂起卡、积压三项。读一次快照即可，不要自己拼。
+     * 积压数是所有 {@link InputBacklog} 能力的 {@code size} 之和（没装积压插件时为 0）。</p>
      *
      * @since 4.2.0
      */
     public SessionStatus status(@Nullable AgentSession session) {
-        return SessionStatus.of(session);
+        return SessionStatus.of(session, backlogSize(session));
+    }
+
+    /** 所有积压能力的待执行数之和（会在会话锁内调用，实现方已约定廉价、不阻塞）。 */
+    private int backlogSize(@Nullable AgentSession session) {
+        if (session == null) {
+            return 0;
+        }
+        int total = 0;
+        for (HarnessExtension extension : options.getExtensions()) {
+            if (extension instanceof InputBacklog) {
+                total += Math.max(0, ((InputBacklog) extension).size(session));
+            }
+        }
+        return total;
+    }
+
+    /** 引擎上是否装有积压能力（决定忙态受理给 QUEUE 还是 REJECT）。 */
+    private boolean hasBacklog() {
+        return getExtension(InputBacklog.class).isPresent();
     }
 
     /**
@@ -2148,8 +2222,11 @@ public class HarnessEngine {
      * 待审批卡另判。宿主不得传入自己的忙判定——这正是历史上最容易漂移的一处。</p>
      *
      * <p><b>本方法不做</b>：不执行入队、不渲染回执、不发终态。{@link AdmitDecision.Kind#QUEUE}
-     * 由宿主调 {@code QueueExtension#enqueue}（推理强度/思考模式属于宿主域概念）；
+     * 由宿主调积压插件入队（如 {@code QueueExtension#enqueue}；推理强度/思考模式属于宿主域概念）；
      * {@link AdmitDecision.Kind#REJECT} 由宿主渲染拒因。</p>
+     *
+     * <p><b>没有积压能力时</b>（引擎上未装 {@link InputBacklog}）：忙态给 {@code REJECT("busy")}，
+     * 而不是宿主无队可入的 {@code QUEUE}。</p>
      *
      * <p>典型用法：</p>
      * <pre>{@code
@@ -2180,7 +2257,7 @@ public class HarnessEngine {
         }
 
         synchronized (session.attrs()) {
-            QueueDispatch dispatch = QueueDispatch.current(session);
+            TurnDispatch dispatch = TurnDispatch.current(session);
             boolean onDispatchThread = dispatch != null && dispatch.isOnDispatchThread();
             boolean busyCommand = isBusyBypassCommand(input);
 
@@ -2198,14 +2275,16 @@ public class HarnessEngine {
                 }
             }
 
-            // 2) 忙态（有活跃流 / 已在受理窗口）或队列积压：应入队。
-            //    队列派发本身与忙态旁路命令除外（后者的语义是在运行中的任务旁插一脚）。
+            // 2) 忙态（有活跃流 / 已在受理窗口）或有积压：应入队（保证先进先出）。
+            //    程序派发本身与忙态旁路命令除外（后者的语义是在运行中的任务旁插一脚）。
+            //    没装积压能力时无队可入：拒绝（busy）。
             if ((status.isBusy() || status.isAdmitting() || status.getQueuedCount() > 0)
                     && onDispatchThread == false && busyCommand == false) {
-                return AdmitDecision.queue();
+                return hasBacklog() ? AdmitDecision.queue()
+                        : AdmitDecision.reject("busy", "当前任务正在执行，请稍后再试");
             }
 
-            // 3) 队列派发的一轮：天然空闲、不占位（再占位会让同步完成的命令误判成忙态）
+            // 3) 程序派发的一轮：天然空闲、不占位（再占位会让同步完成的命令误判成忙态）
             if (onDispatchThread) {
                 return AdmitDecision.bypassDispatch(dispatch);
             }

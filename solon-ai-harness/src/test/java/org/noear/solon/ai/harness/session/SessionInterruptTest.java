@@ -22,9 +22,7 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.ai.chat.message.AssistantMessage;
-import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.session.interrupt.InterruptHelper;
-import org.noear.solon.ai.harness.session.queue.QueueHelper;
 import org.noear.solon.ai.harness.util.TraceKeys;
 import reactor.core.Disposable;
 
@@ -36,16 +34,19 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@link InterruptHelper} 契约（{@code engine.interrupt(session)} 与 {@code /interrupt} 的唯一实现）。
+ * {@link InterruptHelper} 核心契约（停流 + 补收尾）。
  *
- * <p>锁定四点：
+ * <p>锁定三点：
  * <ol>
  *   <li>停流恰一次 + 补取消消息 + 补 runId 元数据；</li>
  *   <li>无运行任务时返回 false，且不写消息（避免空会话被污染）；</li>
- *   <li><b>先清队列再停流</b>：排队项必须一并取消，否则停流后又被续发；</li>
  *   <li>null 会话安全。</li>
  * </ol>
+ *
+ * <p>「先清积压再停流」已上提为引擎的扩展钩子（{@code HarnessExtension#onInterrupt}），
+ * 顺序契约见 {@code HarnessPluginContractTest}，队列语义见 queue 插件的 {@code QueueInterruptTest}。</p>
  */
+@SuppressWarnings("deprecation")
 class SessionInterruptTest {
 
     private static Disposable countingDisposable(AtomicInteger counter) {
@@ -125,28 +126,5 @@ class SessionInterruptTest {
         // 第二次：句柄已被移除 → 无任务分支，不得再写消息
         assertFalse(InterruptHelper.interrupt(session));
         assertEquals(1, session.getMessages().size());
-    }
-
-    @Test
-    void cancelsPendingQueueItemsSoTheyAreNotRedispatched() {
-        AgentSession session = InMemoryAgentSession.of();
-        QueueHelper.enqueue(session, "排队一", InputOrigin.channel("test"));
-        QueueHelper.enqueue(session, "排队二", InputOrigin.channel("test"));
-        SessionRuns.attach(session, countingDisposable(new AtomicInteger()));
-
-        assertTrue(QueueHelper.hasItems(session));
-        assertTrue(InterruptHelper.interrupt(session));
-        assertFalse(QueueHelper.hasItems(session), "中断必须连带取消排队项，否则停流后又被续发");
-        assertEquals(0, QueueHelper.pendingSize(session));
-    }
-
-    @Test
-    void cancelsQueueEvenWhenNoStreamIsRunning() {
-        // 关键顺序契约：先清队列，再判断流句柄。没有流但有排队项时也必须清干净。
-        AgentSession session = InMemoryAgentSession.of();
-        QueueHelper.enqueue(session, "排队一", InputOrigin.channel("test"));
-
-        assertFalse(InterruptHelper.interrupt(session), "无运行流时返回 false");
-        assertEquals(0, QueueHelper.pendingSize(session), "排队项仍必须被取消");
     }
 }
